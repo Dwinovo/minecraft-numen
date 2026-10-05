@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.script.ErrorKind;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
@@ -50,6 +49,9 @@ final class Meter implements Consumer<LoopEvent> {
 
     private final Set<String> failedCalls = new HashSet<>();
 
+    /** 刚结束的那段程序怎么结束的(先于它的结果到);下一个工具结果读过就清掉,不是程序的工具没有。 */
+    private LoopEvent.ProgramEnded ending;
+
     /** 按函数记的账,按第一次调用的先后。 */
     private final Map<String, Use> uses = new LinkedHashMap<>();
     /** {@code numen.api.help} 查过的名字,按先后。 */
@@ -85,6 +87,7 @@ final class Meter implements Consumer<LoopEvent> {
                 toolCalls++;
                 transcript.write("tool_call", "tool", started.call().name(), "args", started.call().arguments());
             }
+            case LoopEvent.ProgramEnded ended -> ending = ended;
             case LoopEvent.ToolFinished finished -> finished(finished.call(), finished.resultJson());
             case LoopEvent.ApiCalled api -> called(api.called());
             case LoopEvent.TurnFailed failed -> {
@@ -140,12 +143,14 @@ final class Meter implements Consumer<LoopEvent> {
     }
 
     private void finished(LlmToolCall call, String result) {
+        LoopEvent.ProgramEnded program = ending;
+        ending = null;
         boolean failed = failed(result);
-        String errorKind = failed ? errorKind(result) : "";
+        String errorKind = failed ? errorKind(program) : "";
         String errorClass = failed ? errorClass(errorKind) : "";
         transcript.write("tool_result", "tool", call.name(), "success", String.valueOf(!failed),
-                "error_class", errorClass, "error_kind", errorKind, "calls", String.valueOf(calls(result)),
-                "result", result);
+                "error_class", errorClass, "error_kind", errorKind,
+                "calls", String.valueOf(program == null ? 0 : program.calls()), "result", result);
         if (!failed) {
             return;
         }
@@ -160,26 +165,18 @@ final class Meter implements Consumer<LoopEvent> {
     }
 
     /**
-     * 一个失败的程序停在哪一种错误上:回执数据里错误值的 {@code kind}({@link ErrorKind#wire});被主人说话、急件停在调用之间的
-     * 是 {@code stopped}。读不出(不是程序的回执)是 {@code runtime}。
+     * 一个失败的程序停在哪一种错误上:程序结局里错误值的种类({@link ErrorKind#wire});被主人说话、急件停在调用之间或到了上限的是
+     * {@code stopped}。不是程序的工具失败是 {@code runtime}。
      */
-    static String errorKind(String result) {
-        JsonElement json;
-        try {
-            json = JsonParser.parseString(result);
-        } catch (JsonParseException notJson) {
+    static String errorKind(LoopEvent.ProgramEnded program) {
+        if (program == null) {
             return ErrorKind.RUNTIME.wire();
         }
-        JsonObject receipt = json.isJsonObject() ? json.getAsJsonObject() : new JsonObject();
-        JsonObject data = receipt.has("data") && receipt.get("data").isJsonObject()
-                ? receipt.getAsJsonObject("data") : new JsonObject();
-        if (data.has("status") && data.get("status").getAsString().equals("stopped")) {
+        if (program.ending().status() == ScriptCall.Status.STOPPED) {
             return "stopped";
         }
-        JsonObject error = data.has("error") && data.get("error").isJsonObject() ? data.getAsJsonObject("error") : null;
-        return error != null && error.has("kind") ? error.get("kind").getAsString() : ErrorKind.RUNTIME.wire();
+        return program.ending().errorKind() != null ? program.ending().errorKind() : ErrorKind.RUNTIME.wire();
     }
-
     /**
      * 种类归成五类:{@code syntax} 读不成,{@code api_args} 一次 API 调用写错了(参数、没有这个函数),{@code runtime} 程序自己的
      * 运行错,{@code stopped} 被主人说话、急件或上限停下,其余是 {@code api_failed}——一次 API 调用(或库函数 raise 的)做了但没做成。
@@ -199,20 +196,6 @@ final class Meter implements Consumer<LoopEvent> {
         }
         return "api_failed";
     }
-
-    /** 这段程序做了几次 API 调用(回执的 {@code data.calls});读不出是 0。 */
-    static int calls(String result) {
-        try {
-            JsonElement json = JsonParser.parseString(result);
-            JsonObject data = json.isJsonObject() && json.getAsJsonObject().has("data")
-                    && json.getAsJsonObject().get("data").isJsonObject()
-                    ? json.getAsJsonObject().getAsJsonObject("data") : null;
-            return data != null && data.has("calls") ? data.get("calls").getAsInt() : 0;
-        } catch (JsonParseException | IllegalStateException | UnsupportedOperationException | NumberFormatException e) {
-            return 0;
-        }
-    }
-
     /** 结果说自己失败了:{@code "success": false}。不带 success 的查询结果、读不成 JSON 的都不算失败。 */
     static boolean failed(String result) {
         try {

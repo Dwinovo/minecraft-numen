@@ -40,6 +40,7 @@ class ToolOutcomeTest {
         assertFalse(ToolOutcome.failed("{\"success\":\"false\"}")); // 字符串不是布尔,不认
     }
 
+    /** 旧档里的程序回执还带着 data;模型读到的只有文字。 */
     private static final String RECEIPT = "{\"success\":false,\"message\":\"The script stopped at line 2\\nstderr:\\nline 2 f: boom\","
             + "\"data\":{\"status\":\"error\",\"calls\":2,\"returned\":[1,2,3]}}";
 
@@ -57,14 +58,5 @@ class ToolOutcomeTest {
         assertEquals("{\"success\":\"yes\",\"message\":\"m\"}", ToolOutcome.modelText("{\"success\":\"yes\",\"message\":\"m\"}"));
         assertEquals("{\"success\":", ToolOutcome.modelText("{\"success\":"), "半截 JSON");
         assertEquals(null, ToolOutcome.modelText(null));
-    }
-
-    @Test
-    void theHistoryKeepsSuccessAndMessageAndDropsTheData() {
-        assertEquals(ToolOutcome.failure("The script stopped at line 2\nstderr:\nline 2 f: boom"), ToolOutcome.kept(RECEIPT));
-        assertTrue(ToolOutcome.failed(ToolOutcome.kept(RECEIPT)), "成败还认得出");
-        assertEquals("技能正文", ToolOutcome.kept("技能正文"));
-        assertEquals(ToolOutcome.modelText(RECEIPT), ToolOutcome.modelText(ToolOutcome.kept(RECEIPT)),
-                "进历史的和交给模型的是同一份文字");
     }
 }

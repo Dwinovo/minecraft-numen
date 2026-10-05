@@ -63,13 +63,24 @@ public final class Program {
     /**
      * 一段程序跑完了。
      *
-     * @param receipt 整张回执({@code success}、{@code message}、{@code data})
+     * @param receipt 回执:成败与文字({@code success}、{@code message}),交给模型的全部
+     * @param ending  怎么结束的(跑完、出错、被停下),出错时错误值的种类;客户端与评测读它,不读回执的文字
      * @param calls   每次 API 调用的结局,按先后
      * @param used    用到的每个模块和这段程序的结局
      * @param stoppedFor 程序是被叫停的(主人开口、急件、切断)时,为什么停,一句话,含等着的那件活怎样了("your owner spoke; t8 keeps
      *                   running");别的结局是 null。客户端据此给同一批里没执行的调用写原因,不去读回执的文字
+     * @param returned   程序 {@code return} 的值原样;只在程序跑的进程里有(同进程的测试与工具读),不上网线,从线上读回来的是 null
+     * @param failure    出错时完整的错误值({@code kind}、{@code message}、{@code hint}、{@code fn}、{@code data});同 {@code returned},不上网线
      */
-    public record Outcome(String receipt, List<ScriptCall.Called> calls, List<Used> used, String stoppedFor) {}
+    public record Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
+                          String stoppedFor, Object returned, java.util.Map<String, Object> failure) {
+
+        /** 从线上读回来的结局:没有 {@code returned} 与 {@code failure}。 */
+        public Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
+                       String stoppedFor) {
+            this(receipt, ending, calls, used, stoppedFor, null, null);
+        }
+    }
 
     private final String id;
     private final String code;
@@ -192,6 +203,7 @@ public final class Program {
                 if (!done) {
                     done = true;
                     ended.accept(new Outcome(ToolOutcome.failure("the program could not be run: " + broke),
+                            new ScriptCall.Ending(ScriptCall.Status.ERROR, ErrorKind.FAILED.wire()),
                             List.copyOf(calls), List.copyOf(used), null));
                 }
             } finally {
@@ -217,7 +229,7 @@ public final class Program {
                         port.dispatch(callId, d.invocation(), json -> confined(() -> lineResult(callId, json)));
                     }
                     case ScriptCall.Next.Await a -> awaiting = a.task();
-                    case ScriptCall.Next.Done d -> end(d.receipt());
+                    case ScriptCall.Next.Done d -> end(d.end());
                 }
             }
         } finally {
@@ -255,14 +267,15 @@ public final class Program {
         }
     }
 
-    private void end(String receipt) {
-        end(receipt, null);
+    private void end(ScriptCall.End end) {
+        end(end, null);
     }
 
-    private void end(String receipt, String stoppedFor) {
+    private void end(ScriptCall.End end, String stoppedFor) {
         collect();
         done = true;
-        ended.accept(new Outcome(receipt, List.copyOf(calls), List.copyOf(used), stoppedFor));
+        ended.accept(new Outcome(end.receipt(), end.ending(), List.copyOf(calls), List.copyOf(used), stoppedFor,
+                end.returned(), end.failure()));
     }
 
     /**

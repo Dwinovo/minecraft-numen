@@ -131,7 +131,7 @@ class SerialCallsTest {
         assertEquals(List.of("interrupt p: an urgent owner_hurt event arrived"), told, "同一次只说一遍");
         assertTrue(results.isEmpty(), "程序是服务端在停,这里等它交回结局");
 
-        pending.remove("p").accept(new SerialCalls.Settled("{\"success\":false}", List.of(
+        pending.remove("p").accept(new SerialCalls.Settled("{\"success\":false}", null, List.of(
                 new ScriptCall.Called("numen.move.go", "numen.move.go()", null, null)),
                 "an urgent owner_hurt event arrived; t3 keeps running"));
 

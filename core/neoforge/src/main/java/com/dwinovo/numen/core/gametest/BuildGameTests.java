@@ -2321,8 +2321,7 @@ public class BuildGameTests {
                 .thenExecute(() -> left.set(lua(companion, "return numen.build.diff(" + cells + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(left.get().receipt() != null, "numen.build.diff has not finished"))
                 .thenExecute(() -> {
-                    var got = com.google.gson.JsonParser.parseString(left.get().receipt()).getAsJsonObject()
-                            .getAsJsonObject("data").getAsJsonObject("returned");
+                    var got = left.get().data().getAsJsonObject("returned");
                     helper.assertTrue(got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
                                     && got.get("unheld").getAsInt() == 1
                                     && got.get("next").equals(posJson(support)),
@@ -2400,8 +2399,7 @@ public class BuildGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(left.ranToTheEnd(), "numen.build.diff failed: " + left.receipt());
                     String r = left.receipt();
-                    var got = com.google.gson.JsonParser.parseString(r).getAsJsonObject().getAsJsonObject("data")
-                            .getAsJsonObject("returned");
+                    var got = left.data().getAsJsonObject("returned");
                     helper.assertTrue(got.get("left").getAsInt() == 9 && got.get("reach").getAsInt() == 0
                                     && got.get("far").getAsInt() == 9 && got.get("next").isJsonObject(),
                             "numen.build.diff does not say nine left, none within reach, nine far and where next: " + r);
@@ -2769,8 +2767,7 @@ public class BuildGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(file.receipt() != null, "numen.build.blueprint has not answered");
-            var got = com.google.gson.JsonParser.parseString(file.receipt()).getAsJsonObject().getAsJsonObject("data")
-                    .getAsJsonObject("returned");
+            var got = file.data().getAsJsonObject("returned");
             helper.assertTrue(file.ranToTheEnd() && got.get("cells").getAsInt() == cells
                             && got.get("blueprint").getAsString().equals("fixture_read")
                             && got.get("origin").equals(posJson(at))

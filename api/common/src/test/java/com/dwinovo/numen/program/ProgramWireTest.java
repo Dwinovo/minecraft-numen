@@ -74,7 +74,8 @@ class ProgramWireTest {
 
     @Test
     void theReceiptComesDownWithEveryCallsOutcomeAndTheModulesUsed() {
-        Program.Outcome outcome = new Program.Outcome("{\"success\":true,\"message\":\"The script ran to the end\"}",
+        Program.Outcome outcome = new Program.Outcome("{\"success\":false,\"message\":\"The script stopped at line 2\"}",
+                new ScriptCall.Ending(ScriptCall.Status.STOPPED, null),
                 List.of(new ScriptCall.Called("numen.work.dig", "numen.work.dig(7, \"x\", {count = 2})", null, null),
                         new ScriptCall.Called("numen.api.help", "numen.api.help(\"numen.work\")", "numen.work", "no_path")),
                 List.of(new Program.Used("numen.work", new ScriptCall.Tally(false, 3, "boom"))),
@@ -82,7 +83,20 @@ class ProgramWireTest {
         ProgramResultPayload down = new ProgramResultPayload(A, "call_1", new RunResult.Ended(outcome).toJson());
         ProgramResultPayload back = wire(ProgramResultPayload.STREAM_CODEC, down);
         assertEquals(new RunResult.Ended(outcome), RunResult.fromJson(back.resultJson()),
-                "each call keeps its recorded text, its first name and its kind; the stop keeps its reason");
+                "each call keeps its recorded text, its first name and its kind; the stop keeps its reason and how it ended");
+    }
+
+    @Test
+    void theReturnedValueAndTheFullErrorStayOnTheServer() {
+        Program.Outcome ran = new Program.Outcome("{\"success\":false,\"message\":\"The script stopped at line 1\"}",
+                new ScriptCall.Ending(ScriptCall.Status.ERROR, "no_path"), List.of(), List.of(), null,
+                List.of(1L, 2L, 3L), Map.of("kind", "no_path", "message", "m", "hint", "h"));
+        Program.Outcome arrived = ((RunResult.Ended) RunResult.fromJson(new RunResult.Ended(ran).toJson())).outcome();
+        assertEquals(ran.receipt(), arrived.receipt());
+        assertEquals(new ScriptCall.Ending(ScriptCall.Status.ERROR, "no_path"), arrived.ending());
+        assertEquals(null, arrived.returned(), "the returned value is not sent up");
+        assertEquals(null, arrived.failure(), "nor the full error value");
+        assertFalse(new RunResult.Ended(ran).toJson().contains("returned"));
     }
 
     @Test
@@ -101,10 +115,9 @@ class ProgramWireTest {
         }
         String receipt = "y".repeat(com.dwinovo.numen.agent.script.ScriptLimits.STDERR_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
-                + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_DATA_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.PRINTED_CHARS);
         ProgramResultPayload worst = new ProgramResultPayload(A, "call_9", new RunResult.Ended(
-                new Program.Outcome(receipt, calls, List.of(new Program.Used("numen.work",
+                new Program.Outcome(receipt, new ScriptCall.Ending(ScriptCall.Status.OK, null), calls, List.of(new Program.Used("numen.work",
                         new ScriptCall.Tally(false, 3, "boom"))), "your owner spoke; t1 keeps running")).toJson());
         int size = Wire.size(ProgramResultPayload.STREAM_CODEC, worst, Unpooled::buffer);
         assertTrue(size < Wire.TO_CLIENT.bytes() / 2, "the worst receipt is " + size + " bytes");

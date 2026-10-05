@@ -189,7 +189,8 @@ class ProgramTest {
                 """);
         answerLast(value(Map.of("name", "Aria", "pos", Map.of("x", 1.5, "y", 64, "z", -3))));
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
-        assertEquals(64, receipt().getAsJsonObject("data").get("returned").getAsInt());
+        assertEquals(64L, outcome.returned(), "the value as the program returned it, for readers in the same process");
+        assertFalse(outcome.receipt().contains("returned\":"), "and not inside the receipt");
     }
 
     @Test
@@ -222,7 +223,8 @@ class ProgramTest {
         assertFalse(receipt().get("success").getAsBoolean());
         assertTrue(message().startsWith("The script stopped at line 2 after 1 call: lua:2: could not dig: work.dig: "
                 + "failed — error: out of reach\nusage: work.dig(place)\nhint: walk"), message());
-        assertEquals("runtime", receipt().getAsJsonObject("data").getAsJsonObject("error").get("kind").getAsString());
+        assertEquals(new ScriptCall.Ending(ScriptCall.Status.ERROR, "runtime"), outcome.ending());
+        assertEquals("runtime", outcome.failure().get("kind"));
         assertEquals("failed", outcome.calls().get(0).kind());
     }
 
@@ -299,6 +301,21 @@ class ProgramTest {
     }
 
     @Test
+    void theEndingSaysHowTheProgramEndedWithoutTheReceiptsWords() {
+        run("return 1");
+        assertEquals(new ScriptCall.Ending(ScriptCall.Status.OK, null), outcome.ending());
+        outcome = null;
+        run("error(\"boom\", 0)");
+        assertEquals(new ScriptCall.Ending(ScriptCall.Status.ERROR, "runtime"), outcome.ending());
+        assertFalse(receipt().get("success").getAsBoolean());
+        outcome = null;
+        Program program = run("move.go(\"ores\")");
+        answerLast(job("t1"));
+        program.interrupt("your owner spoke");
+        assertEquals(new ScriptCall.Ending(ScriptCall.Status.STOPPED, null), outcome.ending());
+    }
+
+    @Test
     void aProgramThatEndsOnItsOwnWasNotStoppedForAnything() {
         run("return 1");
         assertNull(outcome.stoppedFor());
@@ -318,7 +335,6 @@ class ProgramTest {
         }
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
         assertTrue(outcome.receipt().length() < ScriptLimits.STDERR_CHARS + ScriptLimits.RETURNED_CHARS
-                + ScriptLimits.RETURNED_DATA_CHARS
                 + ScriptLimits.PRINTED_CHARS + 2_000, "receipt is " + outcome.receipt().length());
         assertTrue(message().contains("more characters of this entry left out]"), "a job's account is cut, and says by how much");
         assertTrue(message().contains("more stderr entries ("), "the entries past the budget are left out, and counted");
@@ -326,6 +342,7 @@ class ProgramTest {
         assertTrue(message().contains("\n[stdout cut at " + ScriptLimits.PRINTED_CHARS + " characters; "
                 + (20_001 - ScriptLimits.PRINTED_CHARS) + " more were not shown"), message());
         assertEquals(150, outcome.calls().size());
+        assertEquals(100_000, ((String) outcome.returned()).length(), "the program's own value is whole, the model's text is cut");
     }
 
     @Test
@@ -411,7 +428,7 @@ class ProgramTest {
         answerLast(job("t1"));
         program.taskFinished(finished("t1 done dug"));
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
-        assertEquals(4, receipt().getAsJsonObject("data").get("returned").getAsInt());
+        assertEquals(4L, outcome.returned());
         assertEquals(List.of(new Program.Used("pit", new ScriptCall.Tally(true, 0, null))), outcome.used());
     }
 
@@ -465,8 +482,7 @@ class ProgramTest {
                 error("手边没有合成台", 0)
                 """);
         assertTrue(message().contains("手边没有合成台") && message().contains("stdout:\n砍了 3 棵"), message());
-        assertEquals("手边没有合成台", receipt().getAsJsonObject("data").getAsJsonObject("error").get("message")
-                .getAsString());
+        assertEquals("手边没有合成台", outcome.failure().get("message"));
     }
 
     /** 假执行口当场回结果的:几百次调用不递归、不爆栈。 */

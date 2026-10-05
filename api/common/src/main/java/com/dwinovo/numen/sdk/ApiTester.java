@@ -230,27 +230,27 @@ public final class ApiTester {
     // ---- 进程内跑一段程序 ----
 
     /**
-     * 跑完的一段程序:整张回执,与它派出的每次调用的结果,按先后。
+     * 跑完的一段程序:服务端交出的结局(同进程,所以带着 {@code return} 的值原样),与它派出的每次调用的结果,按先后。
      *
-     * @param receipt 整张回执({@code success}、{@code message}、{@code data})
+     * @param outcome 程序的结局;回执在 {@code outcome.receipt()}
      * @param replies 每次调用的结果({@link com.dwinovo.numen.agent.script.ApiReply} 的那一份)
      */
-    public record Run(JsonObject receipt, List<String> replies) {
+    public record Run(com.dwinovo.numen.agent.script.Program.Outcome outcome, List<String> replies) {
 
         /** 跑到了最后。 */
         public boolean ok() {
-            return receipt.get("success").getAsBoolean();
+            return outcome.ending().status() == com.dwinovo.numen.agent.script.ScriptCall.Status.OK;
         }
 
         /** 回执那段话。 */
         public String message() {
-            return receipt.get("message").getAsString();
+            return RunResult.messageOf(outcome.receipt());
         }
 
         /** 程序 {@code return} 的值(JSON);没有是 null。 */
         public com.google.gson.JsonElement returned() {
-            JsonObject data = receipt.getAsJsonObject("data");
-            return data == null ? null : data.get(com.dwinovo.numen.agent.script.ScriptCall.RETURNED);
+            return outcome.returned() == null ? null
+                    : com.dwinovo.numen.agent.script.JsonValues.toJson(outcome.returned());
         }
 
         /** 最后一次调用的结果;一次都没派出是 null。 */
@@ -274,10 +274,17 @@ public final class ApiTester {
     public static Run run(NumenPlayer her, UUID companion, String code, java.util.function.Function<UUID, Modules> modules) {
         List<String> replies = new java.util.concurrent.CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<RunResult> result = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.agent.script.Program.Outcome> outcome =
+                new java.util.concurrent.atomic.AtomicReference<>();
         new LoopbackClient(uuid -> her, modules).run(companion, "test-" + UUID.randomUUID(), code, new CallObserver() {
             @Override
             public void replied(String callId, String reply) {
                 replies.add(reply);
+            }
+
+            @Override
+            public void ended(com.dwinovo.numen.agent.script.Program.Outcome ended) {
+                outcome.set(ended);
             }
         }, result::set);
         // 程序在自己的线程上跑,调用在这里推进;闲着又没有调用可执行,就是停在等身体的活或主人的答复上了
@@ -293,6 +300,9 @@ public final class ApiTester {
             throw new IllegalStateException("the program did not end at once: it waits for a body job or an answer; "
                     + "run it in a GameTest");
         }
-        return new Run(JsonParser.parseString(ended.outcome().receipt()).getAsJsonObject(), List.copyOf(replies));
+        if (outcome.get() == null) {
+            throw new IllegalStateException("the program did not run: " + RunResult.messageOf(ended.outcome().receipt()));
+        }
+        return new Run(outcome.get(), List.copyOf(replies));
     }
 }

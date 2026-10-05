@@ -1,6 +1,7 @@
 package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.agent.script.Invocation;
+import com.dwinovo.numen.agent.script.Program;
 
 /**
  * 看着一段程序的每次调用派出去、回来。GameTest 与重启后再跑那一行据此认出每次调用派下的活、它的回执;不看就用 {@link #NONE}。
@@ -18,6 +19,13 @@ public interface CallObserver {
 
     /** 回来了。 */
     default void replied(String callId, String reply) {
+    }
+
+    /**
+     * 程序结束了,在服务端主线程上,先于答复交给客户端。这里的结局带着程序 {@code return} 的值原样和完整的错误值——它们不上网线,
+     * 同进程的测试与工具从这里读。
+     */
+    default void ended(Program.Outcome outcome) {
     }
 
     /** 什么都不看。 */

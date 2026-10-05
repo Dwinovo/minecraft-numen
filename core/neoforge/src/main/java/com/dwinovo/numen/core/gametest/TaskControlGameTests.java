@@ -484,7 +484,7 @@ public class TaskControlGameTests {
             Vec3 at = round.startedAt(look);
             double off = Math.hypot(at.x - (far.getX() + 0.5), at.z - (far.getZ() + 0.5));
             helper.assertTrue(off < 1.5, "status self ran " + off + " blocks from where the walk ends");
-            helper.assertTrue(round.result(look).contains("\"pos\""), "status self did not answer: "
+            helper.assertTrue(round.result(look).contains("pos = {"), "status self did not answer: "
                     + round.result(look));
             outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

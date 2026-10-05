@@ -38,6 +38,14 @@ public interface ToolPort {
 
         void finished(LlmToolCall call, String resultJson);
 
+        /**
+         * 程序 {@code program} 怎么结束的、它每次 API 调用的结局(结构化的,不在回执的文字里;评测读它)。在 {@link #finished} 之前;
+         * 不是程序的工具不调,不看就不管。
+         */
+        default void ended(LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Ending ending,
+                           java.util.List<com.dwinovo.numen.agent.script.ScriptCall.Called> calls) {
+        }
+
         void settled();
 
         /** 程序 {@code program} 里的一次 API 调用有了结局(服务端把每次调用的结局随回执送回来;评测按函数统计用);不看就不管。 */

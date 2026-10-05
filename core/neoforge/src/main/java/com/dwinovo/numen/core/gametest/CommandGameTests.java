@@ -246,9 +246,7 @@ public class CommandGameTests {
                     String receipt = ((com.dwinovo.numen.program.RunResult.Ended) result.get()).outcome().receipt();
                     JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
                     helper.assertTrue(data.get("success").getAsBoolean(), "the program failed: " + receipt);
-                    helper.assertTrue(receipt.length() < com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
-                                    + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_DATA_CHARS
-                                    + com.dwinovo.numen.agent.script.ScriptLimits.STDERR_CHARS,
+                    helper.assertTrue(receipt.length() < com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS + 500,
                             "the receipt is not bounded: " + receipt.length() + " characters");
                     helper.assertTrue(data.get("message").getAsString().contains("[returned value cut at "
                                     + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS + " characters; it was "

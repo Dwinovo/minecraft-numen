@@ -178,7 +178,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     /** 服务端交回的程序结局:回执、每次调用的结局、是不是被叫停的。 */
     private static SerialCalls.Settled settled(RunResult result) {
         RunResult.Ended ended = (RunResult.Ended) result;
-        return new SerialCalls.Settled(ended.outcome().receipt(), ended.outcome().calls(), ended.outcome().stoppedFor());
+        return new SerialCalls.Settled(ended.outcome().receipt(), ended.outcome().ending(), ended.outcome().calls(),
+                ended.outcome().stoppedFor());
     }
 
     /** 一个调用的回报口:记一笔,交给 {@code done};在飞时它也是 {@link #failInFlight} 用的那一个。 */

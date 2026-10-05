@@ -415,10 +415,21 @@ public final class GameTestKit {
         return value == null ? com.google.gson.JsonNull.INSTANCE : JsonValues.toJson(value);
     }
 
-    /** 一段程序回执里的数据({@code status}、{@code calls}、{@code returned}、{@code error});没带是空表。 */
-    static com.google.gson.JsonObject receiptData(String receipt) {
-        com.google.gson.JsonObject o = JsonParser.parseString(receipt).getAsJsonObject();
-        return o.has("data") ? o.getAsJsonObject("data") : new com.google.gson.JsonObject();
+    /**
+     * 一段程序的结构化结局读成 JSON({@code status}、{@code calls}、{@code returned}、{@code error}),给用例看。这些不在回执里、不上网线:
+     * 用例和程序同在服务端进程,从服务端交出的结局对象读({@link com.dwinovo.numen.program.CallObserver#ended})。
+     */
+    static com.google.gson.JsonObject dataOf(com.dwinovo.numen.agent.script.Program.Outcome outcome) {
+        com.google.gson.JsonObject data = new com.google.gson.JsonObject();
+        data.addProperty("status", outcome.ending().status().wire());
+        data.addProperty("calls", outcome.calls().size());
+        if (outcome.returned() != null) {
+            data.add("returned", JsonValues.toJson(outcome.returned()));
+        }
+        if (outcome.failure() != null) {
+            data.add("error", JsonValues.toJson(outcome.failure()));
+        }
+        return data;
     }
 
     /** 一次调用交回的那张表,见 {@link #valueIn};不是一张表是空表。 */
@@ -760,6 +771,11 @@ public final class GameTestKit {
             call.look(body);
             call.replied.set(reply);
         }
+
+        @Override
+        public void ended(com.dwinovo.numen.agent.script.Program.Outcome outcome) {
+            run.outcome.set(outcome);
+        }
     }
 
     /**
@@ -790,7 +806,7 @@ public final class GameTestKit {
         public void invoke(LlmToolCall call, java.util.function.Consumer<com.dwinovo.numen.agent.loop.SerialCalls.Settled> done) {
             runProgram(body, call.id(), com.dwinovo.numen.agent.tool.ScriptTool.code(call.arguments()), run,
                     outcome -> done.accept(new com.dwinovo.numen.agent.loop.SerialCalls.Settled(outcome.receipt(),
-                            outcome.calls(), outcome.stoppedFor())));
+                            outcome.ending(), outcome.calls(), outcome.stoppedFor())));
         }
 
         @Override
@@ -859,6 +875,11 @@ public final class GameTestKit {
          */
         String programReceipt() {
             return run.receipt.get();
+        }
+
+        /** 最近那段程序的结构化结局,见 {@link GameTestKit#dataOf}。 */
+        com.google.gson.JsonObject data() {
+            return run.data();
         }
     }
 
@@ -930,6 +951,8 @@ public final class GameTestKit {
         private final String code;
         private final List<Call> calls = new java.util.concurrent.CopyOnWriteArrayList<>();
         final AtomicReference<String> receipt = new AtomicReference<>();
+        /** 服务端交出的程序结局(同进程,带着 return 的值与完整的错误值);程序还没结束是 null。 */
+        final AtomicReference<com.dwinovo.numen.agent.script.Program.Outcome> outcome = new AtomicReference<>();
 
         ToolRun(String code) {
             this.code = code;
@@ -1025,6 +1048,11 @@ public final class GameTestKit {
             return receipt.get();
         }
 
+        /** 整段程序的结构化结局,见 {@link #dataOf};还在跑是 null。 */
+        com.google.gson.JsonObject data() {
+            return dataOf(outcome.get());
+        }
+
         /** 整段程序跑完了,而且跑到了最后。 */
         boolean ranToTheEnd() {
             String r = receipt.get();
@@ -1108,14 +1136,9 @@ public final class GameTestKit {
             if (p != null) {
                 return p.ok() || p.error().get(key) == null ? null : String.valueOf(p.error().get(key));
             }
-            String r = receipt.get();
-            if (r == null) {
-                return null;
-            }
-            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
-            JsonObject data = o.has("data") ? o.getAsJsonObject("data") : null;
-            JsonObject error = data != null && data.has("error") ? data.getAsJsonObject("error") : null;
-            return error != null && error.has(key) ? error.get(key).getAsString() : null;
+            com.dwinovo.numen.agent.script.Program.Outcome ended = outcome.get();
+            return ended == null || ended.failure() == null || ended.failure().get(key) == null ? null
+                    : String.valueOf(ended.failure().get(key));
         }
 
         /** 结论是成功:受理了活的看收尾,别的看回执。 */

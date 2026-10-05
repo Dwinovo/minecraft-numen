@@ -737,7 +737,7 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "route plan has not replied");
-            com.google.gson.JsonObject p = receiptData(plan.receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject p = plan.data().getAsJsonObject("returned");
             helper.assertTrue(plan.ranToTheEnd() && !p.get("ok").getAsBoolean()
                             && p.get("why").getAsString().contains("place = true"),
                     "the plan does not point at the knob that opens a way: " + plan.receipt());
@@ -757,7 +757,7 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "route plan has not replied");
-            com.google.gson.JsonObject p = receiptData(plan.receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject p = plan.data().getAsJsonObject("returned");
             helper.assertTrue(!p.get("ok").getAsBoolean() && p.get("why").getAsString().contains("max_changes = 1")
                             && p.get("why").getAsString().contains("costs = {max_changes = "),
                     "the plan does not say the limit ruled the routes out: " + plan.receipt());

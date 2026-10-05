@@ -140,7 +140,10 @@ public final class ServerPrograms {
                     // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉
                     client.close();
                     // 回执先排进车道、再摘掉登记:从外面看"没有程序在跑"时,它的回执一定已经排着了
-                    running.lane.post(() -> done.accept(new RunResult.Ended(outcome)));
+                    running.lane.post(() -> {
+                        observer.ended(outcome);
+                        done.accept(new RunResult.Ended(outcome));
+                    });
                     running.lane.close();
                     RUNNING.remove(companion, running);
                 });

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.agent.script;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
+import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -18,7 +17,7 @@ import java.util.List;
  * 哪一行为什么。之后是三条管道:{@code stderr}(API 与运行时主动报告的事,{@link Stderr})、脚本 {@code return} 的值
  * {@code returned},和 {@code stdout}(她 {@code print} 的字)。API 调用本身不逐次进回执:返回值是给程序用的,只读的查询没什么可报告的就
  * 什么也不写,每次调用的完整记录({@link Called})留在结构化数据里,给评测和日志用。程序等着收尾的身体活,它整段实际账(路上挖了、放了什么)
- * 写成 stderr 的一条——这件活的收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
+ * 写成 stderr 的一条——这件活的收尾只在这里说,不另发事件。结构化的结局({@link End})另放:怎么结束的、{@code return} 的值原样、出错时完整的错误值,不在回执里。
  */
 public final class ScriptCall {
 
@@ -69,8 +68,8 @@ public final class ScriptCall {
         /** 那次调用留下了一件还在跑的身体活:等它的收尾,交回 {@link #finished}。 */
         record Await(String task) implements Next {}
 
-        /** 脚本结束了,这是这次调用的结果。 */
-        record Done(String receipt) implements Next {}
+        /** 脚本结束了,这是它的结局。 */
+        record Done(End end) implements Next {}
     }
 
     /**
@@ -84,10 +83,27 @@ public final class ScriptCall {
      */
     public record Called(String function, String call, String first, String kind) {}
 
-    /** 回执数据里程序 {@code return} 的那个值。 */
-    public static final String RETURNED = "returned";
+    /** 一段程序怎么结束的:跑到了最后、出错停在某一行、被停下(叫停、上限)。 */
+    public enum Status {
+        OK, ERROR, STOPPED;
 
-    private static final Gson GSON = new Gson();
+        public String wire() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+
+    /**
+     * 结构化的结局里能上网线的部分,给客户端和评测读(不进模型的文字,那是回执):怎么结束的,出错时错误值的种类
+     * ({@link ErrorKind#wire});没出错是 null。
+     */
+    public record Ending(Status status, String errorKind) {}
+
+    /**
+     * 一段程序结束了。{@code receipt} 是交给模型的全部(成败与文字);{@code returned} 与 {@code failure} 是程序 {@code return} 的值和出错时
+     * 完整的错误值({@code kind}、{@code message}、{@code hint}、{@code fn}、{@code data}),只存在于程序跑的那个进程里,给同进程的测试和工具读,
+     * 不上网线。
+     */
+    public record End(String receipt, Ending ending, Object returned, java.util.Map<String, Object> failure) {}
 
     private final Host host;
     private final long started;
@@ -173,7 +189,7 @@ public final class ScriptCall {
      *
      * @param why 为什么停,一句话(含那件还在跑的活怎样了)
      */
-    public String stop(String why) {
+    public End stop(String why) {
         tally(new Tally(false, pending == null ? 0 : pending.call.line(), why));
         run.close();
         return stopped(why);
@@ -192,7 +208,7 @@ public final class ScriptCall {
         while (true) {
             if (step instanceof ScriptRun.Done done) {
                 tally(done.ok() ? new Tally(true, 0, null) : new Tally(false, done.line(), done.error()));
-                return new Next.Done(finalReceipt(done));
+                return new Next.Done(finalEnd(done));
             }
             ScriptRun.Call call = (ScriptRun.Call) step;
             if (calls >= ScriptLimits.COMMANDS) {
@@ -271,7 +287,7 @@ public final class ScriptCall {
         return out;
     }
 
-    private String finalReceipt(ScriptRun.Done done) {
+    private End finalEnd(ScriptRun.Done done) {
         String head;
         if (done.ok()) {
             head = "ok · " + calls + " call" + (calls == 1 ? "" : "s") + " · " + seconds() + " s";
@@ -279,41 +295,33 @@ public final class ScriptCall {
             head = name() + " stopped at line " + done.line() + " after " + calls + " call" + (calls == 1 ? "" : "s")
                     + ": " + done.error();
         }
-        return receipt(done.ok() ? "ok" : "error", head, done.value(), done.failure());
+        return end(done.ok() ? Status.OK : Status.ERROR, head, done.value(), done.failure());
     }
 
-    /** 停下的回执。 */
-    private String stopped(String why) {
+    /** 停下的结局。 */
+    private End stopped(String why) {
         String at = pending == null ? "" : " at " + where(pending.call.line()) + " ("
                 + pending.call.function() + ")";
         String head = name() + " stopped" + at + " after " + calls + " call" + (calls == 1 ? "" : "s")
                 + ": " + why + ". Nothing after that ran.";
-        return receipt("stopped", head, null, null);
+        return end(Status.STOPPED, head, null, null);
     }
 
     /**
-     * 回执:结局一行,再是 stderr、返回值、stdout 三栏,哪栏没有东西就不出现。
+     * 结局:回执是结局一行,再是 stderr、返回值、stdout 三栏,哪栏没有东西就不出现;成败与文字就是交给模型的全部。结构化的部分(怎么结束的、
+     * 返回值原样、完整的错误值)另放在 {@link End} 里,不拼进文字。
      *
-     * @param failure 出错时的错误值,进数据的 {@code error};别的是 null
+     * @param failure 出错时的错误值;别的是 null
      */
-    private String receipt(String status, String head, Object returned, java.util.Map<String, Object> failure) {
-        boolean ok = "ok".equals(status);
+    private End end(Status status, String head, Object returned, java.util.Map<String, Object> failure) {
         StringBuilder msg = new StringBuilder(head);
         if (!stderr.isEmpty()) {
             msg.append("\nstderr:\n").append(stderr.text());
         }
-        JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
-        if (value != null) {
-            // 一段文字原样写,别的值写成给模型读的样子(缩略的判据和 print 同一处);太长的截掉并说明。数据里的 returned 是
-            // 给程序读的原值,另有一个大得多的上限,超出的换成精确写法的头部
+        if (returned != null) {
+            // 一段文字原样写,别的值写成给模型读的样子(缩略的判据和 print 同一处);太长的截掉并说明
             String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.display(returned);
             int whole = shown.length();
-            if (value.toString().length() > ScriptLimits.RETURNED_DATA_CHARS) {
-                String exact = ScriptEngine.IN_USE.value(returned);
-                value = new com.google.gson.JsonPrimitive(exact.substring(0, Math.min(exact.length(),
-                        ScriptLimits.RETURNED_DATA_CHARS)) + "\n[returned value cut at "
-                        + ScriptLimits.RETURNED_DATA_CHARS + " characters; it was " + exact.length() + "]");
-            }
             if (whole > ScriptLimits.RETURNED_CHARS) {
                 shown = shown.substring(0, ScriptLimits.RETURNED_CHARS) + "\n[returned value cut at "
                         + ScriptLimits.RETURNED_CHARS + " characters; it was " + whole + "]";
@@ -328,20 +336,9 @@ public final class ScriptCall {
                                 + "before you print]");
             }
         }
-        JsonObject data = new JsonObject();
-        data.addProperty("status", status);
-        data.addProperty("calls", calls);
-        if (value != null) {
-            data.add(RETURNED, value);
-        }
-        if (failure != null) {
-            data.add("error", GSON.toJsonTree(failure));
-        }
-        JsonObject result = new JsonObject();
-        result.addProperty("success", ok);
-        result.addProperty("message", msg.toString());
-        result.add("data", data);
-        return result.toString();
+        String kind = failure == null ? null : String.valueOf(failure.getOrDefault(ScriptRun.KIND, ErrorKind.RUNTIME.wire()));
+        String receipt = status == Status.OK ? ToolOutcome.success(msg.toString()) : ToolOutcome.failure(msg.toString());
+        return new End(receipt, new Ending(status, kind), returned, failure);
     }
     private String name() {
         return "The script";

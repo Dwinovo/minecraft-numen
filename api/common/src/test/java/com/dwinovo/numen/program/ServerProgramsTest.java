@@ -1,6 +1,7 @@
 package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.agent.script.ApiReply;
+import com.dwinovo.numen.agent.script.Program;
 import com.dwinovo.numen.script.Modules;
 import com.dwinovo.numen.sdk.ApiTester;
 import com.dwinovo.numen.sdk.ClientCall;
@@ -107,16 +108,17 @@ class ServerProgramsTest {
         final String id = "p-" + UUID.randomUUID();
         final AtomicReference<RunResult> result = new AtomicReference<>();
 
-        String receipt() {
-            return ((RunResult.Ended) result.get()).outcome().receipt();
+        Program.Outcome outcome() {
+            return ((RunResult.Ended) result.get()).outcome();
         }
 
-        JsonObject json() {
-            return JsonParser.parseString(receipt()).getAsJsonObject();
+        /** 程序 {@code return} 的值:同进程,从结局对象读,不经线。 */
+        JsonElement returned() {
+            return com.dwinovo.numen.agent.script.JsonValues.toJson(outcome().returned());
         }
 
         String message() {
-            return json().get("message").getAsString();
+            return RunResult.messageOf(outcome().receipt());
         }
     }
 
@@ -195,11 +197,11 @@ class ServerProgramsTest {
 
         Started first = start(UUID.randomUUID(), owner, "return my.cached.seven()", none, whole);
         pumpUntil(() -> first.result.get() != null);
-        assertEquals(7, first.json().getAsJsonObject("data").get("returned").getAsInt());
+        assertEquals(7, first.returned().getAsInt());
 
         Started second = start(UUID.randomUUID(), owner, "return my.cached.seven()", none, manifestOnly);
         pumpUntil(() -> second.result.get() != null);
-        assertEquals(7, second.json().getAsJsonObject("data").get("returned").getAsInt(), "found by its fingerprint");
+        assertEquals(7, second.returned().getAsInt(), "found by its fingerprint");
 
         Started stranger = start(UUID.randomUUID(), UUID.randomUUID(), "return my.cached.seven()", none, manifestOnly);
         assertEquals(new RunResult.Missing(List.of(hash)), stranger.result.get(),
@@ -257,7 +259,7 @@ class ServerProgramsTest {
             waiting(more, owner, held);
         }
         Started over = start(UUID.randomUUID(), owner, "return 1", held, ModuleSet.factory());
-        assertFalse(over.json().get("success").getAsBoolean());
+        assertEquals(com.dwinovo.numen.agent.script.ScriptCall.Status.ERROR, over.outcome().ending().status());
         assertTrue(over.message().contains("the most one owner may have at a time"), over.message());
 
         ServerPrograms.ownerLeft(owner);
@@ -458,8 +460,7 @@ class ServerProgramsTest {
                 return err.kind .. "|" .. err.message
                 """, NetworkTransport.INSTANCE, ModuleSet.factory());
         pumpUntil(() -> program.result.get() != null);
-        JsonElement returned = program.json().getAsJsonObject("data").get("returned");
         assertEquals("failed|gt.gt_mix.twice runs on your owner's client, and its owner is not connected",
-                returned.getAsString());
+                program.returned().getAsString());
     }
 }

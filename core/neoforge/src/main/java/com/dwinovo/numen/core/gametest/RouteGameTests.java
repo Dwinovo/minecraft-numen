@@ -49,7 +49,7 @@ public class RouteGameTests {
 
     /** 整段程序返回的那个值(表)。 */
     private static JsonObject returned(ToolRun run) {
-        JsonElement value = receiptData(run.receipt()).get("returned");
+        JsonElement value = run.data().get("returned");
         return value != null && value.isJsonObject() ? value.getAsJsonObject() : new JsonObject();
     }
 
@@ -491,7 +491,7 @@ public class RouteGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
                 .thenExecute(() -> {
-                    String id = receiptData(plan.receipt()).get("returned").getAsString();
+                    String id = plan.data().get("returned").getAsString();
                     walk[0] = lua(companion, "numen.move.go({id = \"" + id + "\"})");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not replied"))

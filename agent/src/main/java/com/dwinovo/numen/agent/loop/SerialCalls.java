@@ -30,12 +30,14 @@ import java.util.function.Consumer;
  */
 public final class SerialCalls {
 
-    /** 一个调用的结局。 */
-    public record Settled(String result, List<ScriptCall.Called> calls, String stoppedFor) {
+    /**
+     * 一个调用的结局。{@code ending} 是程序怎么结束的(结构化的,给评测读);不是程序的调用是 null。
+     */
+    public record Settled(String result, ScriptCall.Ending ending, List<ScriptCall.Called> calls, String stoppedFor) {
 
         /** 一个工具的结果:没有程序里的调用,不是被叫停的。 */
         public static Settled of(String result) {
-            return new Settled(result, List.of(), null);
+            return new Settled(result, null, List.of(), null);
         }
     }
 
@@ -166,6 +168,9 @@ public final class SerialCalls {
             return;   // 已经被放弃,或者重复、迟到的结果
         }
         inFlight = null;
+        if (settled.ending() != null) {
+            sink.ended(call, settled.ending(), settled.calls());
+        }
         sink.finished(call, settled.result());
         for (ScriptCall.Called called : settled.calls()) {
             sink.called(call, called);

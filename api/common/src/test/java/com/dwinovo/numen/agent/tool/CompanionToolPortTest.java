@@ -4,6 +4,7 @@ import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.script.Program;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.RunProgramPayload;
 import com.dwinovo.numen.network.payload.StopProgramPayload;
@@ -65,7 +66,8 @@ class CompanionToolPortTest {
     }
 
     private static RunResult ended(String receipt) {
-        return new RunResult.Ended(new Program.Outcome(receipt, List.of(), List.of(), null));
+        return new RunResult.Ended(new Program.Outcome(receipt,
+                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null));
     }
 
     @Test

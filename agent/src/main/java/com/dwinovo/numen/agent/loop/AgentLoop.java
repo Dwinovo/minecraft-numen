@@ -397,8 +397,7 @@ public final class AgentLoop {
                 if (!current(id)) {
                     return;
                 }
-                // 历史里存的是交给模型的那份内容(成败与文字);结构化的 data 只随事件给界面与评测
-                transcript.addToolResult(call.id(), com.dwinovo.numen.agent.llm.ToolOutcome.kept(resultJson));
+                transcript.addToolResult(call.id(), resultJson);
                 emit(new LoopEvent.ToolFinished(id, call, resultJson));
             }
 
@@ -406,6 +405,14 @@ public final class AgentLoop {
             public void settled() {
                 if (current(id)) {
                     turn(true);   // 工具结果等着回应
+                }
+            }
+
+            @Override
+            public void ended(LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Ending ending,
+                              java.util.List<com.dwinovo.numen.agent.script.ScriptCall.Called> calls) {
+                if (current(id)) {
+                    emit(new LoopEvent.ProgramEnded(id, program, ending, calls.size()));
                 }
             }
 

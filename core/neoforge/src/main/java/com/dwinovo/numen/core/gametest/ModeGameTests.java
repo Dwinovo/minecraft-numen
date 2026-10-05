@@ -334,7 +334,7 @@ public class ModeGameTests {
                         + "return {mode = mode, dug = r.dug, drops = #r.drops}");
             }
             helper.assertTrue(runs[0].done(), "the creative dig has not finished");
-            com.google.gson.JsonObject creative = receiptData(runs[0].receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject creative = runs[0].data().getAsJsonObject("returned");
             helper.assertTrue(creative.get("mode").getAsString().equals("creative")
                             && creative.get("dug").getAsInt() == 1 && creative.get("drops").getAsInt() == 0
                             && level.getBlockState(first).isAir(),
@@ -348,7 +348,7 @@ public class ModeGameTests {
                         + "return {mode = mode, dug = ok, why = ok and \"\" or err.message}");
             }
             helper.assertTrue(runs[1].done(), "the survival dig has not finished");
-            com.google.gson.JsonObject survival = receiptData(runs[1].receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject survival = runs[1].data().getAsJsonObject("returned");
             helper.assertTrue(survival.get("mode").getAsString().equals("survival")
                             && !survival.get("dug").getAsBoolean()
                             && survival.get("why").getAsString().contains("my tools can't harvest")

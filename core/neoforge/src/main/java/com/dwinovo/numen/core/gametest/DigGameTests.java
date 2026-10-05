@@ -887,8 +887,7 @@ public class DigGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "the program has not ended");
             helper.assertTrue(run.ranToTheEnd(), "the program failed: " + run.receipt());
-            helper.assertTrue(com.google.gson.JsonParser.parseString(run.receipt()).getAsJsonObject()
-                    .getAsJsonObject("data").get("returned").getAsInt() == expected,
+            helper.assertTrue(run.data().get("returned").getAsInt() == expected,
                     "the scan did not hand over every cell: " + run.receipt());
             CompanionFactory.despawn(level.getServer(), companion);
         });

@@ -57,14 +57,8 @@ public final class ScriptLimits {
      */
     public static final int STDERR_CHARS = 12_000;
 
-    /** 回执文字里 {@code return} 的值最多多少字,超出的截掉并说明(和 {@link #PRINTED_CHARS} 同一类:给模型读的)。 */
+    /** 回执文字里 {@code return} 的值最多多少字,超出的截掉并说明(和 {@link #PRINTED_CHARS} 同一类:给模型读的;程序的返回值原样只在服务端进程里,不上网线)。 */
     public static final int RETURNED_CHARS = 6_000;
-
-    /**
-     * 回执数据里 {@code returned}(给程序和评测读的原值)最大的 JSON 长度,超出的换成截过的文字。比 {@link #RETURNED_CHARS} 大得多——
-     * 一组函数的完整类型签名这样的值要整段拿得到——但仍远小于一个下行包,回执按构造有界。
-     */
-    public static final int RETURNED_DATA_CHARS = 200_000;
 
     /**
      * 评测按函数统计时,每次调用写成的文字最多多少字:超出的头部留下、尾部换成整段文字的摘要,所以"和之前一字不差"照样认得出,

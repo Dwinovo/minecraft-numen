@@ -187,12 +187,9 @@
 - **returned**:`return` 的值。
 - **stdout**:她 `print` 的字。
 
-框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。每次调用的完整记录(`ScriptCall.Called`:写成的调用、
-哪个函数、失败的种类)照样留在结构化数据里,评测按函数统计和调试日志读它,不进给模型的文字。数据里有 `status`(ok / error / stopped)、
-`calls`、`returned`(返回值本身,是表就是 JSON 对象,给程序和评测读的原值)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
-`script`。
+框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。
 
-**模型只读 `message`**:回执是一个信封 `{success, message, data}`,交给模型的只有 `message`(成败在文字第一行),规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。进对话历史的是 `ToolOutcome.kept`:成败加文字,`data` 不进历史,界面据成败画标记、从成功的 `todo` 画清单。`data`(`returned` 原值、`calls`、`error`)只留给程序、界面、评测与日志。历史文件格式不变:旧档里带 `data` 的工具结果照旧读得进,送给模型时同样只剩 `message`。
+**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些上网线(`RunResult`);程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不上网线**,只在服务端进程里的结局对象上,同进程的 GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
 
 **有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
 多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
@@ -729,7 +726,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 ### 包
 
-`RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, calls, used, stopped_for}`);
+`RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, status, error_kind, calls, used, stopped_for}`,回执只有成败与文字,`return` 的值原样不在里面);
 `StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
 她的模块时带上新清单与新正文)。单包上限上行 32767 字节、下行 1 MB,超过的程序、反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,`Wire` 与 `Fragments`,见 `docs/cli.md` 附录 H)。
 
@@ -756,7 +753,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 ### 回执:给模型读的,按构造有界
 
 回执在生成它的地方就有界(`ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`(超出的整行省略并写明还有多少字)、整栏至多 `STDERR_CHARS`(超出的写明
-另外几条、几个字),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长)、在数据里(给程序和评测读的原值)至多 `RETURNED_DATA_CHARS`,stdout 至多 `PRINTED_CHARS`(写明少了
+另外几条、几个字),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长),stdout 至多 `PRINTED_CHARS`(写明少了
 多少字);大表在进这些栏之前先经渲染器缩略(§四"回执");每次调用的结局只带写成的文字(超长的头部加摘要)。
 所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
 身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。

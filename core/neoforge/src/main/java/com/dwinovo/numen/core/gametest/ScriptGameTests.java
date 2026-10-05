@@ -271,7 +271,7 @@ public class ScriptGameTests {
                     helper.assertTrue(round[0].hasSettled(), "numen.work.mine has not finished");
                     String msg = message(round[0], run);
                     helper.assertTrue(msg.startsWith("ok · "), msg);
-                    helper.assertTrue(receipt(round[0], run).getAsJsonObject("data").get("returned").getAsInt()
+                    helper.assertTrue(round[0].data().get("returned").getAsInt()
                             >= ores.size(), "numen.work.mine did not return the cells it dug: " + msg);
                     for (BlockPos ore : ores) {
                         helper.assertTrue(!level.getBlockState(ore).is(Blocks.IRON_ORE),
@@ -460,7 +460,7 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             JsonObject receipt = receipt(round, script);
             helper.assertTrue(receipt.get("success").getAsBoolean(), "the script failed: " + receipt);
-            helper.assertTrue(receipt.getAsJsonObject("data").get("returned").toString().equals("[1,1]"),
+            helper.assertTrue(round.data().get("returned").toString().equals("[1,1]"),
                     "the two digs did not hand back one cell each as data: " + receipt);
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "a block handed on as it was is still standing: " + receipt);
@@ -491,7 +491,7 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             JsonObject receipt = receipt(round, script);
             helper.assertTrue(receipt.get("success").getAsBoolean()
-                            && receipt.getAsJsonObject("data").get("returned").getAsInt() == cow.getId(),
+                            && round.data().get("returned").getAsInt() == cow.getId(),
                     "the walk to the cow failed: " + receipt);
             helper.assertTrue(her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
             EventOutbox.get(level.getServer()).forget(her.getUUID());
@@ -526,7 +526,7 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             JsonObject receipt = receipt(round, script);
             helper.assertTrue(receipt.get("success").getAsBoolean(), "the script did not catch the errors: " + receipt);
-            JsonObject got = receipt.getAsJsonObject("data").getAsJsonObject("returned");
+            JsonObject got = round.data().getAsJsonObject("returned");
             var farErr = got.getAsJsonArray("far");
             helper.assertTrue("out_of_reach".equals(farErr.get(0).getAsString())
                             && farErr.get(1).getAsString().equals("numen.move.to(" + xyz(far) + ", {arrive = \"dig\"})\n"
@@ -584,8 +584,8 @@ public class ScriptGameTests {
                     String receipt = ((RunResult.Ended) result.get()).outcome().receipt();
                     JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
                     helper.assertTrue(data.get("success").getAsBoolean()
-                                    && data.getAsJsonObject("data").get("returned").getAsString()
-                                    .equals("gametest_wire:help"), "the program did not run over the wire: " + receipt);
+                                    && data.get("message").getAsString().endsWith("\nreturned: gametest_wire:help"),
+                            "the program did not run over the wire: " + receipt);
                     helper.assertTrue(((RunResult.Ended) result.get()).outcome().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
                     leave(owner);
@@ -805,7 +805,7 @@ public class ScriptGameTests {
         String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
         helper.assertTrue(run.ranToTheEnd(), msg);
         helper.assertTrue(msg.matches("(?s)ok · 120 calls · \\d+ s\nstdout:\ncoal seen\t600"), msg);
-        helper.assertTrue(receiptData(run.receipt()).get("calls").getAsInt() == 120, "the data lost the call count");
+        helper.assertTrue(run.data().get("calls").getAsInt() == 120, "the call count is not in the structured ending");
         sample("120 inventory queries", run);
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         helper.succeed();
@@ -870,8 +870,8 @@ public class ScriptGameTests {
     }
 
     /**
-     * 程序 return 一个大值:回执的 data 里是给程序读的原值(整团的每一格),模型读到的只有 message——缩略过的那份文字,成败在第一行,
-     * 没有 data。
+     * 程序 return 一个大值:模型读到的只有回执的文字(缩略过的那份,成败在第一行);程序的原值整团的每一格只在服务端进程里(结局对象),
+     * 不在回执里、不上网线——下行的包里没有它。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
     public static void a_big_returned_value_reaches_the_model_only_as_the_shortened_message(GameTestHelper helper) {
@@ -887,18 +887,17 @@ public class ScriptGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the scan has not finished");
             String receipt = run.receipt();
-            helper.assertTrue(receiptData(receipt).getAsJsonArray("returned").get(0).getAsJsonObject()
-                            .getAsJsonArray("blocks").size() == 36, "the program lost the raw value: " + receipt);
+            helper.assertTrue(run.data().getAsJsonArray("returned").get(0).getAsJsonObject()
+                            .getAsJsonArray("blocks").size() == 36, "the program lost the raw value: " + run.data());
             String heard = com.dwinovo.numen.agent.llm.ToolOutcome.modelText(receipt);
             helper.assertTrue(heard.startsWith("ok · 1 call · ") && heard.contains("…(36 items in all;")
-                            && !heard.contains("\"returned\"") && !heard.contains("\"data\""),
-                    "the model would read something other than the shortened message: " + heard);
-            Constants.LOG.info("[numen-sample] a big returned value: the receipt is {} characters, the model reads {}",
-                    receipt.length(), heard.length());
+                            && !receipt.contains("\"data\"") && !receipt.contains("\"returned\""),
+                    "the receipt carries more than its shortened message: " + receipt);
+            Constants.LOG.info("[numen-sample] a big returned value: the receipt on the wire is {} characters, the model "
+                    + "reads {}", receipt.length(), heard.length());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
-
     /**
      * 她 print 一团扫描结果:一团里的方块多了,只显示首尾几个并写明一共多少、怎么看更多——不静默地截断;返回的数照实在 returned 里。
      */

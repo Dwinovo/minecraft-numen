@@ -393,8 +393,7 @@ public class PerceptionGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(seen.receipt() != null, "numen.scan.sight has not answered");
             helper.assertTrue(seen.ranToTheEnd(), "numen.scan.sight failed: " + seen.receipt());
-            var got = com.google.gson.JsonParser.parseString(seen.receipt()).getAsJsonObject().getAsJsonObject("data")
-                    .getAsJsonObject("returned");
+            var got = seen.data().getAsJsonObject("returned");
             helper.assertTrue(got.getAsJsonObject("open").get("visible").getAsBoolean()
                             && !got.getAsJsonObject("open").has("blocked_by"),
                     "the gold block right in front of her is not seen: " + got);

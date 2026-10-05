@@ -117,7 +117,7 @@ public class PermissionGameTests {
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
                 .thenExecute(() -> {
-                    com.google.gson.JsonObject p = receiptData(plan[0].receipt()).getAsJsonObject("returned");
+                    com.google.gson.JsonObject p = plan[0].data().getAsJsonObject("returned");
                     helper.assertTrue(p.get("ok").getAsBoolean() && p.getAsJsonArray("asks").size() > 0
                                     && p.getAsJsonArray("asks").toString().contains("oak_planks")
                                     && p.getAsJsonArray("asks").toString().contains("why"),

@@ -44,24 +44,11 @@ public final class ToolOutcome {
     /**
      * 交给模型的那份文字——规则只此一处:把工具结果交给模型的出口(对话历史变成请求时的 {@code ProtocolView}、外接智能体拿到的工具结果)
      * 都问这里。结果是信封({@code success} 与 {@code message})就是它的 {@code message},成败已在文字第一行;不是信封的(技能正文、远端 MCP
-     * 工具的文字)原样。信封里的 {@code data} 等结构化字段是给程序、界面、评测与日志的,不进模型的上下文。
+     * 工具的文字)原样。历史里存的就是信封(界面据 {@code success} 画成败),模型读到的只有它的文字;程序的结构化结局不在信封里,在 {@code Program.Outcome}。
      */
     public static String modelText(String result) {
         JsonObject envelope = envelope(result);
         return envelope == null ? result : envelope.get("message").getAsString();
-    }
-
-    /**
-     * 进对话历史的样子:信封只留成败与文字({@code message}),界面据此画成败和计划清单,{@code data} 等结构化字段不进历史;不是信封的原样。
-     * 历史里存的和 {@link #modelText} 交给模型的是同一份内容。
-     */
-    public static String kept(String result) {
-        JsonObject envelope = envelope(result);
-        if (envelope == null) {
-            return result;
-        }
-        String message = envelope.get("message").getAsString();
-        return envelope.get("success").getAsBoolean() ? success(message) : failure(message);
     }
 
     /** 结果是 {@code {"success": 布尔, "message": 字符串, …}} 的信封就是它;不是是 null。 */
