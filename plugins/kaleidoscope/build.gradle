@@ -1,0 +1,26 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'numen-plugin'
+}
+
+// 森罗物语:厨房在这个 MC 版本上有 Forge 版(Fabric 版 1.0.1 之后停发),而本联动要直接调它的方块实体
+// (IPot/IStockpot)与品质评估器,编译对着 Forge。Fabric 上装不上森罗,那边没有这个联动,也不需要有。
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+}
+
+repositories {
+    // 森罗只发 CurseForge;代码 BSD-3-Clause,不混淆,所以可以直接编译依赖拿真类型。
+    exclusiveContent {
+        forRepository { maven { name = 'CurseMaven'; url = 'https://cursemaven.com' } }
+        filter { includeGroup 'curse.maven' }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // 瘦 api jar 取 Forge 那份:本联动本来就只跑在 Forge 上
+    compileOnly files(project(':api:forge').tasks.named('apiJar'))
+    // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
+    compileOnly "curse.maven:kaleidoscope-cookery-1309203:${kaleidoscope_version}"
+}
