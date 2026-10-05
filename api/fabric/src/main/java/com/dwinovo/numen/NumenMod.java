@@ -26,6 +26,14 @@ public class NumenMod implements ModInitializer {
                     com.dwinovo.numen.entity.Companions.syncRosterToOwner(server, player);
                 });
 
+        // 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。
+        net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
+                (handler, server) -> {
+                    if (!(handler.getPlayer() instanceof com.dwinovo.numen.entity.NumenPlayer)) {
+                        com.dwinovo.numen.program.ServerPrograms.ownerLeft(handler.getPlayer().getUUID());
+                    }
+                });
+
         // The companion crossed a portal on its own — tell its brain (ambient world event).
         net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
                 (player, origin, destination) -> {

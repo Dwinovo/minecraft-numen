@@ -1,7 +1,5 @@
 package com.dwinovo.numen.core.build;
 
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
-
 import net.minecraft.world.level.block.AirBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -17,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Shared block-state validity rules for construction scans, placement, and path costs. */
+/** Shared block-state validity rules for construction scans and placement; the knobs are {@link BuildSettings}. */
 public final class BuildValidity {
 
     private static final Set<Property<?>> ORIENTATION_PROPERTIES = Set.copyOf(List.of(
@@ -76,7 +74,7 @@ public final class BuildValidity {
         if (desired == null) {
             return true;
         }
-        NavSettings settings = NavSettings.get();
+        BuildSettings settings = BuildSettings.get();
         if (current.getBlock() instanceof LiquidBlock && settings.okIfWater) {
             return true;
         }
@@ -106,7 +104,7 @@ public final class BuildValidity {
         if (first.getBlock() != second.getBlock()) {
             return false;
         }
-        NavSettings settings = NavSettings.get();
+        BuildSettings settings = BuildSettings.get();
         List<String> ignoredProps = settings.buildIgnoreProperties();
         // 栅栏门的朝向会被"开门"这个动作本身改写:原版里从门朝向的反面推门,
         // 门会翻转过来面向你。所以对栅栏门而言朝向不是工程量,是开关的副作用,

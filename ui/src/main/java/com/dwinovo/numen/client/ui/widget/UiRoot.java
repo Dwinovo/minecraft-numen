@@ -27,6 +27,8 @@ public final class UiRoot {
     private final List<Widget> widgets = new ArrayList<>();
     private Widget focused;
     private Overlay overlay;
+    /** 已经放手、还在画退场的浮层(见 {@link Overlay#renderLeaving}):不接事件,只画到它说画完。 */
+    private final List<Overlay> leaving = new ArrayList<>();
 
     private java.util.function.BiFunction<String, Consumer<String>, TextInput> inputFactory;
     private Supplier<String> clipboardGet = () -> "";
@@ -49,6 +51,12 @@ public final class UiRoot {
 
         /** root 侧关闭通知(点浮层外/ESC)。 */
         void closeOverlay();
+
+        /**
+         * 退场:浮层通道放手之后(不论哪条路关的)root 仍逐帧调它,直到它返回 false。
+         * 事件已经不给它了,它只管画淡出那几帧;默认没有退场,当场消失。
+         */
+        default boolean renderLeaving(IDrawSurface s, NumenTheme.Colors c, long nowMs) { return false; }
     }
 
     public <T extends Widget> T add(T widget) {
@@ -60,6 +68,7 @@ public final class UiRoot {
         return widget;
     }
 
+    /** 清控件与浮层;还在退场的照样画完——它只是几帧画面,和控件树无关。 */
     public void clear() {
         focused = null;
         overlay = null;
@@ -92,10 +101,19 @@ public final class UiRoot {
 
     public void copyToClipboard(String text) { clipboardSet.accept(text); }
 
-    public void openOverlay(Overlay o) { overlay = o; }
+    public void openOverlay(Overlay o) {
+        leaving.remove(o);   // 淡出途中又开:收回来,不再当退场画
+        overlay = o;
+    }
 
     public void closeOverlay(Overlay o) {
-        if (overlay == o) overlay = null;
+        if (overlay == o) release();
+    }
+
+    /** 浮层通道放手:事件不再给它,画面转进退场。 */
+    private void release() {
+        if (!leaving.contains(overlay)) leaving.add(overlay);
+        overlay = null;
     }
 
     public boolean hasOverlay() { return overlay != null; }
@@ -113,6 +131,7 @@ public final class UiRoot {
     }
 
     public void renderOverlayLayer(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        leaving.removeIf(o -> !o.renderLeaving(s, c, nowMs));   // 退场的压在下面,新开的浮层在上
         if (overlay != null) overlay.renderOverlay(s, c, mouseX, mouseY, nowMs);
     }
 
@@ -126,7 +145,7 @@ public final class UiRoot {
             Overlay o = overlay;
             if (o.overlayClicked(mx, my, button)) return true;
             o.closeOverlay();
-            overlay = null;
+            if (overlay == o) release();
             return true;   // 浮层外的点击只负责关浮层,不下传
         }
         for (int i = widgets.size() - 1; i >= 0; i--) {
@@ -167,8 +186,9 @@ public final class UiRoot {
 
     public boolean keyPressed(int keyCode, int modifiers) {
         if (overlay != null && keyCode == com.dwinovo.numen.client.ui.KeyCodes.ESCAPE) {
-            overlay.closeOverlay();
-            overlay = null;
+            Overlay o = overlay;
+            o.closeOverlay();
+            if (overlay == o) release();
             return true;
         }
         return focused != null && focused.keyPressed(keyCode, modifiers);

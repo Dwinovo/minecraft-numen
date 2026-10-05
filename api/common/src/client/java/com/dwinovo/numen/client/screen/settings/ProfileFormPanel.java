@@ -13,6 +13,7 @@ import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
+import com.dwinovo.numen.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.platform.Services;
@@ -46,18 +47,14 @@ public final class ProfileFormPanel {
         public String proxy = "";
     }
 
-    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
+    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
     private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
 
-    // ---- 滚动机制:记录各行基线纵坐标,滚动=整体位移 ----
-    private final java.util.Map<com.dwinovo.numen.client.ui.widget.Widget, Integer> baseYs =
-            new java.util.HashMap<>();
-    private int scrollY;
-    private int contentH;
-    private int viewH;
+    /** 表单行装不下卡片时整体上下位移(记账在 {@link ScrollBox})。 */
+    private final ScrollBox scroll = new ScrollBox();
 
     private Draft draft = new Draft();
     private List<ProviderRegistry.Provider> sites = List.of();
@@ -90,15 +87,12 @@ public final class ProfileFormPanel {
         this.draft = d;
     }
 
-    private int formX, formY, formW;
+    private int formW;
 
     public void build(int x, int y, int w, int h, int viewportBottom) {
-        this.formX = x;
-        this.formY = y;
         this.formW = w;
         ui.clear();
         fixedUi.clear();
-        baseYs.clear();
         ui.setViewportHeight(viewportBottom);
 
         sites = new ArrayList<>(ProviderRegistry.providers());
@@ -109,7 +103,7 @@ public final class ProfileFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, "numen.provider.form_name");
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).underlined(true).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -122,7 +116,8 @@ public final class ProfileFormPanel {
 
         Label keyLabel = labelWidget(x, ry, "numen.gui.settings.api_key");
         ry += NumenStyle.LABEL_PITCH;
-        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true).withLabel(keyLabel));
+        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true).underlined(true)
+                .withLabel(keyLabel));
         keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -131,14 +126,14 @@ public final class ProfileFormPanel {
         ry = label(x, ry, "numen.gui.settings.model");
         modelDropdown = ui.add(new Dropdown(List.of(), 0, this::onModelDropdownPicked));
         modelDropdown.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        modelField = ui.add(new TextField(draft.model, v -> draft.model = v));
+        modelField = ui.add(new TextField(draft.model, v -> draft.model = v).underlined(true));
         modelField.setBounds(x, ry, w - 17, NumenStyle.CONTROL_H);
         modelBackBtn = ui.add(new Button("▾", Button.Style.NORMAL, this::onModelBackToPresets));
         modelBackBtn.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.base_url");
-        baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
+        baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v).underlined(true));
         baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -146,14 +141,14 @@ public final class ProfileFormPanel {
         // 压缩闸门与面板水位都按这个窗口算——填错太小会提前压缩,填错太大会顶爆上游。
         ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_CTX);
         ctxField = ui.add(new TextField(draft.ctx, v -> draft.ctx = v).numeric()
-                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_CTX_HINT)));
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_CTX_HINT)).underlined(true));
         ctxField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 代理按档案走:国内外站点常需不同走线,留空跟随全局(/numen 里设)。
         ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_PROXY);
         proxyField = ui.add(new TextField(draft.proxy, v -> draft.proxy = v)
-                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_PROXY_HINT)));
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_PROXY_HINT)).underlined(true));
         proxyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -165,58 +160,30 @@ public final class ProfileFormPanel {
         thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
         thinkingPick.setBounds(x, ry, 110, NumenStyle.CONTROL_H);
 
-        // ---- 滚动记账:内容高、视口高(按钮行之上),各行基线快照 ----
-        contentH = (ry + NumenStyle.CONTROL_H) - y;
-        viewH = h - 20;
-        scrollY = Math.min(scrollY, maxScroll());
-        for (com.dwinovo.numen.client.ui.widget.Widget rw : ui.widgetsView()) {
-            baseYs.put(rw, rw.y());
-        }
-        reposition();
+        // ---- 滚动记账:视口到收尾行上方为止,内容高按最后一行的底边算 ----
+        scroll.measure(ui, x, y, w,
+                NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y,
+                (ry + NumenStyle.CONTROL_H) - y);
 
-        // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
-        Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-
-        int by = y + h - 16;
+        // ---- 固定层:结果胶囊/按钮行——不随滚动 ----
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        checkButton = fixedUi.add(new Button(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK),
-                Button.Style.NORMAL, this::runConnectivityCheck));
-        checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
-        Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, by, 54, 15);
+        checkButton = DialogButtons.left(fixedUi, x, y, h, this::runConnectivityCheck,
+                t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK), t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
+        DialogButtons.cancelSave(fixedUi, x, y, w, h, onCancel, this::save);
 
         refreshSiteDependent();
-    }
-
-    private int maxScroll() {
-        return Math.max(0, contentH - viewH);
-    }
-
-    /** 滚动=全部行控件按基线整体位移(布局账只算一次,滚动只挪 y)。 */
-    private void reposition() {
-        for (var e : baseYs.entrySet()) {
-            var rw = e.getKey();
-            rw.setBounds(rw.x(), e.getValue() - scrollY, rw.w(), rw.h());
-        }
     }
 
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         // 表单行进裁剪区(滚出视口的部分不画);下拉弹层与固定层在裁剪区外。
-        s.pushScissor(formX, formY, formW + 2, viewH);
+        scroll.beginClip(s);
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
-        s.popScissor();
-        if (maxScroll() > 0) {   // 滚动拇指:内容装不下时提示"下面还有"
-            int thumbH = Math.max(10, viewH * viewH / contentH);
-            int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
-            s.fillRoundRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH,
-                    NumenStyle.RADIUS_SMALL, c.divider());
-        }
+        scroll.endClip(s);
+        scroll.renderThumb(s, c);
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
     }
@@ -225,20 +192,12 @@ public final class ProfileFormPanel {
         if (ui.hasOverlay()) return ui.mouseClicked(mx, my, button);   // 弹层优先(可越出视口)
         if (fixedUi.mouseClicked(mx, my, button)) return true;
         // 视口外的行控件虽被裁掉,坐标上仍在——点击按可视区域裁决。
-        if (my >= formY && my < formY + viewH) {
-            return ui.mouseClicked(mx, my, button);
-        }
-        return false;
+        return scroll.inside(my) && ui.mouseClicked(mx, my, button);
     }
 
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (ui.mouseScrolled(mx, my, delta)) return true;   // 下拉弹层滚动优先
-        if (maxScroll() > 0 && my >= formY && my < formY + viewH) {
-            scrollY = Math.max(0, Math.min(maxScroll(), scrollY - (int) (delta * 14)));
-            reposition();
-            return true;
-        }
-        return false;
+        return scroll.scrolled(my, delta);
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
@@ -423,7 +382,8 @@ public final class ProfileFormPanel {
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
                 draft.baseUrl, proxy, "auto");
         NumenLlmClient.forEndpoint(ep)
-                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
+                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "",
+                        new com.dwinovo.numen.agent.http.CancelToken(), null)
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);

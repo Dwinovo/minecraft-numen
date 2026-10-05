@@ -1,0 +1,146 @@
+package com.dwinovo.numen.permission;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.world.level.block.Blocks;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
+/**
+ * 放置记录的记与清:记了就有,抹了就没;查到格子已是空气视为无记号并顺手清掉;跨区块各记各的;
+ * 存档来回不丢。模式存档也来回一趟。
+ */
+@Tag("mc")
+class PlacedBlocksTest {
+
+    // 1.21.5 起存储层直接驱动 CODEC:整份读不出来落回构造器。这里走同一条路。
+    private static CompoundTag save(PlacedBlocks placed) {
+        return (CompoundTag) PlacedBlocks.CODEC.encodeStart(NbtOps.INSTANCE, placed).result().orElseThrow();
+    }
+
+    private static CompoundTag save(PermissionStore store) {
+        return (CompoundTag) PermissionStore.CODEC.encodeStart(NbtOps.INSTANCE, store).result().orElseThrow();
+    }
+
+    private static PlacedBlocks load(CompoundTag tag) {
+        return PlacedBlocks.CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(PlacedBlocks::new);
+    }
+
+    private static final PlacedBlocks.Placer STEVE =
+            new PlacedBlocks.Placer(java.util.UUID.fromString("00000000-0000-0000-0000-0000000000aa"), "Steve");
+
+    private static boolean booted;
+
+    @BeforeAll
+    static void boot() {
+        booted = FakeWorld.boot();
+    }
+
+    @BeforeEach
+    void setUp() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过放置记录钉桩");
+    }
+
+    @Test
+    void recordForgetAndAirClearsItself() {
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos a = new BlockPos(5, 64, 5);
+        assertFalse(placed.isPlaced(a, Blocks.STONE.defaultBlockState()));
+        placed.record(a, STEVE);
+        assertTrue(placed.isPlaced(a, Blocks.STONE.defaultBlockState()));
+        assertEquals(1, placed.size());
+        // 格子已是空气:视为无记号,并顺手清掉
+        assertFalse(placed.isPlaced(a, Blocks.AIR.defaultBlockState()));
+        assertEquals(0, placed.size());
+        assertFalse(placed.isPlaced(a, Blocks.STONE.defaultBlockState()), "清掉后再放的东西不是玩家放的");
+        placed.record(a, STEVE);
+        placed.forget(a);
+        assertEquals(0, placed.size());
+    }
+
+    /** 双格方块的主半带出另一半:门的下半 → 正上方,床脚 → 朝向那一格;上半、床头与单格方块没有。 */
+    @Test
+    void theOtherHalfOfATwoBlockPlacement() {
+        BlockPos a = new BlockPos(5, 64, 5);
+        var door = Blocks.OAK_DOOR.defaultBlockState();
+        assertEquals(a.above(), PlacedBlocks.otherHalfOf(a, door));
+        assertEquals(null, PlacedBlocks.otherHalfOf(a, door.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)));
+        var bed = Blocks.RED_BED.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING,
+                net.minecraft.core.Direction.EAST);
+        assertEquals(a.east(), PlacedBlocks.otherHalfOf(a, bed));
+        assertEquals(null, PlacedBlocks.otherHalfOf(a, Blocks.STONE.defaultBlockState()));
+    }
+
+    @Test
+    void chunksAreIndependentAndNeighbourhoodQueryReadsTheView() {
+        PlacedBlocks placed = new PlacedBlocks();
+        FakeWorld world = new FakeWorld();
+        BlockPos a = new BlockPos(15, 64, 15);
+        BlockPos b = new BlockPos(16, 64, 16);   // 隔壁区块
+        world.set(a, Blocks.STONE.defaultBlockState());
+        world.set(b, Blocks.STONE.defaultBlockState());
+        placed.record(a, STEVE);
+        placed.record(b, STEVE);
+        assertTrue(placed.isPlaced(a, world.getBlockState(a)));
+        assertTrue(placed.isPlaced(b, world.getBlockState(b)));
+        assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, null));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world, null));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, STEVE.id()),
+                "放的人自己不算:邻域里只有他放的");
+        // 邻域查询也按视图清空气
+        world.set(a, Blocks.AIR.defaultBlockState());
+        world.set(b, Blocks.AIR.defaultBlockState());
+        assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world, null));
+        assertEquals(0, placed.size());
+    }
+
+    @Test
+    void survivesASaveLoadCycle() {
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos a = new BlockPos(-7, 12, 99);
+        placed.record(a, STEVE);
+        PlacedBlocks back = load(save(placed));
+        assertTrue(back.isPlaced(a, Blocks.STONE.defaultBlockState()));
+        assertEquals(STEVE, back.placerAt(a, Blocks.STONE.defaultBlockState()), "是谁放的跟着存档来回");
+        assertEquals(1, back.size());
+        assertEquals(0, load(new CompoundTag()).size(), "坏档退回空记录,不炸");
+    }
+
+    @Test
+    void cellsFromBeforePlacersWereKeptAreStillPlacedBySomeoneUnknown() {
+        BlockPos a = new BlockPos(1, 70, 1);
+        CompoundTag old = new CompoundTag();
+        net.minecraft.nbt.ListTag cells = new net.minecraft.nbt.ListTag();
+        cells.add(net.minecraft.nbt.LongTag.valueOf(a.asLong()));
+        old.put("cells", cells);
+
+        PlacedBlocks back = load(old);
+        assertTrue(back.isPlaced(a, Blocks.STONE.defaultBlockState()), "旧存档记下的格子照样算玩家放的");
+        assertFalse(back.placerAt(a, Blocks.STONE.defaultBlockState()).known(), "只是不知道是谁放的");
+    }
+
+    @Test
+    void modesSurviveASaveLoadCycle() {
+        PermissionStore store = new PermissionStore();
+        UUID companion = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        assertEquals(Mode.ASK, store.modeOf(companion), "没设过就是 ask");
+        store.setMode(companion, Mode.OBSERVE);
+        PermissionStore back = PermissionStore.CODEC.parse(NbtOps.INSTANCE, save(store)).result().orElseThrow();
+        assertEquals(Mode.OBSERVE, back.modeOf(companion));
+        assertEquals(Mode.ASK, back.modeOf(UUID.randomUUID()));
+    }
+}

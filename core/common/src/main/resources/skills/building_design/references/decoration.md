@@ -11,14 +11,16 @@ furniture stands against a wall, and every level gets furnished.
 
 Trapdoors are the most useful detail block in the game — measured at 397 of 941
 furnishing cells on a hand-built compound, in seven different woods. They are the
-only thin block you can put in every orientation, so learn all four states:
+only thin block you can put in every orientation, so learn all three shapes:
 
-| properties | reads as |
+| state | reads as |
 | --- | --- |
-| `half=bottom, open=true` | a vertical panel: screen, shutter, cupboard front, railing infill |
+| `open=true` | a full-height vertical panel against the cell edge opposite `facing`: screen, shutter, cupboard front, railing infill |
 | `half=top, open=false` | a shelf hanging under a beam; a ceiling panel |
 | `half=bottom, open=false` | a low ledge: a step, a hearth lip, a platform edge |
-| `half=top, open=true` | a panel hanging down from above; a valance under an eave |
+
+An open trapdoor is the same panel whatever its `half`; `half` only decides
+whether it shuts to a shelf at the top or a ledge at the bottom.
 
 Mix wood types across one room — spruce, oak, dark_oak, jungle, bamboo — and the
 fittings read as separate pieces of furniture instead of one repeated part.
@@ -29,7 +31,7 @@ Three or four props make a room's purpose legible. More than that and it turns
 into a shop display.
 
 - **kitchen** — `smoker` + `cauldron` + a run of `barrel` + `campfire`
-  (`signal_fire=false`); a `composter` in the corner
+  (`campfire[signal_fire=false]`); a `composter` in the corner
 - **study** — `lectern` facing a chair, a wall of `bookshelf` /
   `chiseled_bookshelf`, `candle` on a `half=top` trapdoor shelf
 - **storeroom** — `barrel` and `chest` in a grid two or three high, `hay_block`
@@ -79,12 +81,14 @@ that the rooms still have shadows.
 
 - **windows** — trapdoor shutters flanking the opening; a `flower_pot` or lantern
   on the sill; panes set back one cell into the wall so the opening has depth
-- **doorstep** — one stone step, two lanterns flanking, and a `scatter` path of
-  `dirt_path` / `gravel` / `coarse_dirt` leading away
-- **garden** — `scatter` `short_grass` plus two or three flower types at density
-  0.15-0.3; a single tree off-axis beats a symmetrical pair
+- **doorstep** — one stone step, two lanterns flanking, and a path of
+  `dirt_path` / `gravel` / `coarse_dirt` leading away: one `layer` grid, drawn
+  wandering rather than ruler-straight
+- **garden** — a `layer` grid of `short_grass` with two or three flower types
+  mixed in, roughly one cell in four; a single tree off-axis beats a
+  symmetrical pair
 - **chimney** — a 1x1 column past the ridge with a `campfire` on top for smoke
-- **fence yard** — a `walls`-shaped fence rect with a gap or a `set` fence_gate
+- **fence yard** — a `layer` ring of `oak_fence` with a gap, or an `oak_fence_gate` in it
 - **roof interest** — a `bell` or `lightning_rod` near the ridge; lanterns hung
   under the eave corners
 - **rafter ends** — a full block poking out under the eave every 2 cells, which

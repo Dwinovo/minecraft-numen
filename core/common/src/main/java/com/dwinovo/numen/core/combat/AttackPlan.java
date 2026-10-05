@@ -6,6 +6,10 @@ import com.dwinovo.numen.core.combat.Battlefield.Foe;
  * 这一刻该做什么、对谁做。<b>本能派的仗与模型派的 {@code attack} 问的是同一个函数</b>
  * ——爬行者该退多远,不该在反射里写一遍、在工具里再写一遍。
  *
+ * <h2>打不过就跑,不归这里</h2>
+ * 判据只回答<b>怎么打</b>:用弓还是走位、打谁。扛不住时脱离接触是逃跑本能({@code FleeChain})的事:它问
+ * {@link #breakOff},抢过身体跑开;跑不掉时它让出身体,这场仗照样打——退不掉就打。
+ *
  * <h2>输入是整个局面,不是一个目标</h2>
  * 见 {@link Battlefield}。"该不该躲"是全场的事,"打谁"也要看全场(挑最近的、跳过打不了的、
  * 记得上一刻打的那只)。把这些挂在单目标的描述上,每加一个考量就多一个字段,而且顺序一乱
@@ -38,8 +42,6 @@ public final class AttackPlan {
          * 一点点蹭 —— 那就是只给弓和箭时"边缘抖动"的来历。
          */
         BOW,
-        /** 脱离接触:打不过,跑。 */
-        DISENGAGE,
         /** 没什么可打的了。 */
         DONE
     }
@@ -48,8 +50,7 @@ public final class AttackPlan {
      * 决定。
      *
      * @param action 做什么
-     * @param foeId  对谁做;{@link Action#DISENGAGE}、{@link Action#DONE}
-     *               是对全场的,此时为 {@link #NO_FOE}
+     * @param foeId  对谁做;{@link Action#DONE} 与没有目标的走位是对全场的,此时为 {@link #NO_FOE}
      */
     public record Move(Action action, int foeId) {}
 
@@ -71,38 +72,36 @@ public final class AttackPlan {
     }
 
     /**
+     * 该不该脱离接触:扛不住了(有效血量见 {@link #outmatched}),或者手上没有能打的东西而有东西在追她——赤手对上会还手的
+     * 东西不是一条出路。逃跑本能只问这一处;空手就一路跑,不跟着距离线在跑和打之间换。
+     *
+     * @param armed  有近战武器或能立刻用的弓弩
+     * @param chased 有东西正在针对她
+     */
+    public static boolean breakOff(double effectiveHealth, boolean armed, boolean chased) {
+        return outmatched(effectiveHealth) || !armed && chased;
+    }
+
+    /**
      * @param last 上一刻的决定;第一次传 {@code null}
      */
     public static Move decide(Battlefield b, Move last) {
-        // ① 扛不住 —— 一切"怎么打"的讨论都以她还站得住为前提。
-        if (outmatched(b.effectiveHealth()) && !b.cornered()) {
-            return new Move(Action.DISENGAGE, NO_FOE);
-        }
-        // 「会炸的贴太近了」也不在这儿判。点着的爬行者<b>危险半径就是它的爆炸波及范围</b>
+        // 「会炸的贴太近了」不在这儿判。点着的爬行者<b>危险半径就是它的爆炸波及范围</b>
         // (6.71 格),走位环的内沿自然把她顶到那之外 —— 曾经它是一个独立动作(AVOID),
         // 于是"躲爆炸"和"走位"成了互斥的两个状态,躲的那一支还不还手。
         //
-        // ③ 手上没有能打的东西:赤手对上会还手的东西不是一条出路,退开。
-        //
-        //    空手就该一路走脱离这一支,不该跟着距离线在两个动作之间换。
-        if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b) && !b.cornered()) {
-            return new Move(Action.DISENGAGE, NO_FOE);
-        }
         // 「太近了」不在这儿判。它是<b>寻路的事</b>:战斗的走位目标是一个环 —— 内沿是目标
         // 够不着她,外沿是别跟丢,太近自然往外走、太远自然往回走。曾经它是一个独立动作
         // (AVOID),于是"拉开"和"走位"成了互斥的两个状态,而拉开那一支还不挥刀。
         //
-        // 判据只回答两件事:<b>还打不打得过</b>(打不过就跑),以及<b>用弓还是走位</b>。
+        // 判据只回答<b>用弓还是走位</b>、打谁;打不打得过是 {@link #breakOff} 的事。
         Foe foe = pick(b, last);
         if (foe != null) {
             return new Move(actionAgainst(b, foe), foe.id());
         }
         // 挑不出目标,但还有东西在追她 —— <b>这不是"打不过"</b>。她照样走位:环退化成
         // "离每一只威胁都出了它的危险半径",引信熄了、或者别的怪凑上来,下一刻自会有目标。
-        //
-        // 这里曾经判 DISENGAGE。于是场上只剩一只点着的爬行者时,拿着下界合金剑的满血玩家
-        // 直接跑三十二格 —— 明明退七格引信就倒退了。<b>顶层只判打不过</b>:血量撑不住,
-        // 或者手上没有任何武器。"眼前这只暂时不能打"不属于那两条。
+        // 场上只剩一只点着的爬行者时退七格引信就倒退了,用不着跑三十二格。
         if (anyEngaging(b)) {
             return new Move(Action.SKIRMISH, NO_FOE);
         }

@@ -17,26 +17,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * do_not_break 默认成员的回归钉,打在唯一真源({@link ModBlockTagData})上。
- * 成员的入选判据见那边的注释;这里只保证"设施类默认受硬保护"不被悄悄改掉。
- * 标签→INF 的机制另由 ProtectionPinsTest 钉。
+ * safe_block_entity_data 默认成员的回归钉,打在唯一真源({@link ModBlockTagData})上:
+ * 这个标签就是"图纸可以印出哪些方块实体数据"的授权,多一个容器就是凭空造物,
+ * 所以默认只能是牌子和旗帜。
  *
  * <p>纯 JVM:录制假 Appender,只经手 TagKey,不触碰注册表、不需要引导。
  */
 class ModBlockTagDataTest {
 
     @Test
-    void doNotBreakDefaultsToFacilityTags() {
+    void safeBlockEntityDataDefaultsToSignsAndBanners() {
         Map<TagKey<Block>, List<TagKey<Block>>> tagRefs = new HashMap<>();
         Map<TagKey<Block>, List<Block>> directAdds = new HashMap<>();
         ModBlockTagData.addBlockTags(key -> ModItemTagData.appender(
                 b -> directAdds.computeIfAbsent(key, k -> new ArrayList<>()).add(b),
                 t -> tagRefs.computeIfAbsent(key, k -> new ArrayList<>()).add(t)));
 
-        assertEquals(
-                List.of(BlockTags.BEDS, BlockTags.DOORS, BlockTags.TRAPDOORS, BlockTags.FENCE_GATES),
-                tagRefs.get(InitTag.DO_NOT_BREAK));
+        assertEquals(List.of(BlockTags.ALL_SIGNS, BlockTags.BANNERS),
+                tagRefs.get(InitTag.SAFE_BLOCK_ENTITY_DATA));
         // 全部走原版标签引用:成员随版本自动跟上,不逐个列
-        assertNull(directAdds.get(InitTag.DO_NOT_BREAK));
+        assertNull(directAdds.get(InitTag.SAFE_BLOCK_ENTITY_DATA));
+        // 只剩这一个标签:哪些方块能不能挖是权限层规则表的事,不是标签的事
+        assertEquals(1, tagRefs.size());
     }
 }

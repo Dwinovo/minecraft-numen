@@ -1,0 +1,6 @@
+{
+  "_note": "每百万 token 的单价,键是 服务商/模型(与 -Dbench.provider、-Dbench.model 拼出来的一样)。miss = 缓存未命中的输入,hit = 缓存命中的输入,output = 输出。DeepSeek 的价按 2026-09-30 官网(api-docs.deepseek.com/zh-cn/quick_start/pricing)的闲时价;北京时间工作日 9-12、14-18 点是峰时,三项都翻倍。deepseek-v4-flash 是旧名,按 Flash 计价。",
+  "deepseek/deepseek-v4-flash": { "currency": "CNY", "miss": 1.0, "hit": 0.02, "output": 4.0 },
+  "deepseek/deepseek-flash": { "currency": "CNY", "miss": 1.0, "hit": 0.02, "output": 4.0 },
+  "deepseek/deepseek-v4-pro": { "currency": "CNY", "miss": 4.5, "hit": 0.15, "output": 13.5 }
+}

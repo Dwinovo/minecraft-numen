@@ -72,22 +72,39 @@ final class McpAccessPrompt {
 
                 - Every tool takes a `companion` argument (name or id), so each call targets one body. \
                 There is no take-control handshake — just call tools.
-                - You are the companion's brain, so keep a `get_events(companion, wait_seconds)` loop \
-                running: it long-polls and returns the moment something urgent happens. The player \
-                speaking to the companion in-game arrives as a `<query>`; world happenings and task \
-                completions arrive as `<event>`s. Events are consumed on read and nothing is lost \
-                between calls.
+                - You are the companion's brain, so call `get_events(companion)` about every 2 seconds \
+                while you drive it: it waits 2 seconds by default and returns at once when something \
+                urgent lands. The player speaking to the companion in-game arrives as a `<query>`; \
+                world happenings arrive as `<event>`s. Events are consumed on read and nothing is lost \
+                between calls. Raise `wait_seconds` (up to 50) only to park and wait for the player.
                 - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
-                - Action tools (`goto`, `mine`, `build`, `fish`, …) are BACKGROUND tasks: they \
-                return a task id immediately. Their completions land in `get_events`; `task_status` \
-                answers "what is it doing right now", `task_stop` cancels.
-                - One body runs one task at a time. If you get a "body is busy" refusal, either wait for \
-                that task or `task_stop` it.
-                - You're blind between calls: perceive with `get_self_status` / `scan_blocks` / \
-                `scan_nearby_entities` before and after acting.
-                - It's survival mode — the tools do only what a real player can. No give, no setblock.
+                - Besides list_companions, create_companion, delete_companion, get_events and say there \
+                is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore")`, \
+                `numen.move.to({x = 120, y = 12, z = -35}, {arrive = "dig"})`, `numen.work.dig({x = 120, y = 12, z = -35})`, \
+                `numen.fight.attack(184)`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
+                `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
+                when a next step depends on what a call returned, write the steps as one program \
+                (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c) end`).
+                - A program waits for each body task it starts and returns one receipt when it ends: how \
+                it ended (on an error: the line, the call's error, usage and hint), then stderr (what the body \
+                did and what failed, one entry per call that had something to say; a body task's entry is its account \
+                of what it changed), what it returned and stdout (what it printed). A \
+                program stopped while a task runs leaves it running; that task's end arrives in `get_events` as a \
+                task_finished event. `numen.task.stop()` cancels the body's task.
+                - %s
+                - You're blind between calls: perceive with `numen.status.self()` / `numen.scan.blocks` / \
+                `numen.scan.entities` before and after acting.
+                - `numen.scan.blocks` returns the clusters of touching blocks it found, nearest first, each \
+                with its `blocks` (every Block, nearest first), its `nearest` Block and its `count`. Nothing is \
+                kept: the world is the state, so scan again to see what is left. `numen.work.dig` takes a \
+                cluster (or its blocks) as it is and digs the cells that still hold what the scan saw; cells ({x, y, z}) are dug \
+                whatever they hold. It digs only what the hand reaches from where the body stands, never walks and \
+                never picks up: `numen.move.to` the same cluster with arrive "dig" first (it stands where the hand \
+                reaches the most of it), then `numen.work.dig`, then `numen.work.collect()` for the drops. The \
+                built-in module function `numen.work.mine(cluster)` does all of that until the cluster is gone.
+                - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \
                 instructions are in English.""".formatted(
@@ -100,6 +117,8 @@ final class McpAccessPrompt {
                         auth.isBlank()
                                 ? "\"-y\", \"mcp-remote\", \"" + endpoint + "\""
                                 : "\"-y\", \"mcp-remote\", \"" + endpoint + "\", \"--header\", "
-                                        + "\"Authorization: Bearer " + auth + "\"");
+                                        + "\"Authorization: Bearer " + auth + "\"",
+                        com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
+                        McpServer.ONE_BODY);
     }
 }

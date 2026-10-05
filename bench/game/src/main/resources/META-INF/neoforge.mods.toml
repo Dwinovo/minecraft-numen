@@ -1,0 +1,17 @@
+# 评测模组:只在评测的运行配置里加载(见 bench/build.gradle 与 docs/bench.md),不发布。
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0"
+
+[[mods]]
+modId = "numen_bench"
+version = "0"
+displayName = "Numen Bench"
+description = '''真模型评测:在 GameTest 服务器里用产品的大脑与提示词接真实模型跑场景。'''
+
+[[dependencies.numen_bench]]
+modId = "numen"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"

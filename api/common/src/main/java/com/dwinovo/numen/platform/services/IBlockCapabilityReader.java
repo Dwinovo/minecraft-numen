@@ -3,6 +3,8 @@ package com.dwinovo.numen.platform.services;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
+import java.util.List;
+
 /**
  * Reads the item / fluid / energy a block <em>holds</em>, through the loader's
  * standard capability system — NeoForge's {@code IItemHandler} /
@@ -23,14 +25,15 @@ import net.minecraft.world.level.Level;
  * the {@code null} context and on every face (some machines only expose
  * per-side), de-duplicate handlers by identity, and format what they find.
  *
- * <p>{@link #describe} returns a multi-line, LLM-facing summary of the
- * items/fluids/energy found, or {@code null} when the block exposes no standard
- * storage/energy capability on any side (a decorative/menu-only block, or a
- * loader with no implementation yet). A storage-network terminal (AE2/RS) will
+ * <p>{@link #describe} returns the LLM-facing lines of what it found — a heading
+ * per handler, one line per non-empty item slot, per tank, and the energy — every
+ * one of them; the caller pages them by the output budget. It is empty when the
+ * block exposes no standard storage/energy capability on any side (a
+ * decorative/menu-only block, or a loader with no implementation yet). A storage-network terminal (AE2/RS) will
  * show only its local buffer here, never the whole network — that needs the
  * dedicated network reader (T3).
  */
 public interface IBlockCapabilityReader {
 
-    String describe(Level level, BlockPos pos);
+    List<String> describe(Level level, BlockPos pos);
 }

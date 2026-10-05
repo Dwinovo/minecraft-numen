@@ -1,61 +1,75 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.core.scan.BlockGroups;
+import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.scan.BlockScanner;
-import com.dwinovo.numen.core.scan.BlockSearch;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.server.level.ServerLevel;
+import com.dwinovo.numen.sdk.BlockAt;
+import com.dwinovo.numen.sdk.Doc;
+import com.dwinovo.numen.sdk.Methods;
+import com.dwinovo.numen.sdk.Pending;
 import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
+import com.dwinovo.numen.core.scan.BlockSearch;
 
 /**
- * The {@code scan_blocks} implementation — the business half of
- * {@code ScanBlocksTool}. It is an async (budget-sliced) server job: the method
- * takes the live entity plus a reply {@link Consumer} and returns void — the
- * result arrives on a later tick through the callback.
+ * {@code numen.scan.blocks} 的实现(登记在 {@link com.dwinovo.numen.core.tools.perception.ScanApi})。看是按刻分片的
+ * ({@link BlockScan}),看完的那一刻才有值。
+ *
+ * <p>结果是一串团({@link Cluster}):相连的命中格(对角也算)成一团,由近及远;每团带着它的每一格(方块与位置,近的在前)、最近的那一格与格数。
+ * 只是看,什么也不存:要再用,程序就拿着这份结果,或再看一次。
  */
 public final class ScanOps {
 
     private static final int MIN_RADIUS = 1;
-    private static final int MAX_RADIUS = 192;
-    private static final int MAX_RESULTS = 32;
 
-    public void scanBlocks(
-int radius,
-List<String> block_ids,
-            NumenPlayer self, Consumer<String> reply) {
-        int r = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
-        Set<Block> targets = ToolParse.parseBlocks(block_ids);
-        if (targets.isEmpty()) {
-            throw new IllegalArgumentException("no valid block_ids provided");
-        }
-        if (!(self.level() instanceof ServerLevel sl)) {
-            throw new IllegalArgumentException("not on a server level");
-        }
-        BlockPos center = self.blockPosition();
-        BlockSearch.start(self.getUUID(), sl, center, r, MAX_RESULTS, targets,
-                result -> reply.accept(buildResult(result, r, center)));
+    private ScanOps() {}
+
+    /** 一团:扫描找到的相连的方块。方法(filter、minus)写在模块 {@code numen.scan} 里。 */
+    @Doc("Touching blocks a scan found (diagonals count): every block, nearest first.")
+    @Methods("numen.scan")
+    public record Cluster(@Doc("Every block of it, nearest first.") List<BlockAt> blocks,
+                          @Doc("The block nearest to where you stood.") BlockAt nearest,
+                          @Doc("How many blocks.") int count) {}
+
+    /**
+     * 看一次,看完那一刻有值:全部的团,由近及远。没看全时(没加载的区块、搜到上限)那句话随值交回,写进程序的回执:只交一串团,
+     * 分不清"半径里没有铁"和"半径里大半没看",她每次都会读成前一种。
+     */
+    public static Pending<List<Cluster>> scan(NumenPlayer self, int radius, Set<Block> targets) {
+        Pending<List<Cluster>> out = Pending.create();
+        BlockScan.start(self, Math.clamp(radius, MIN_RADIUS, BlockScan.MAX_RADIUS), targets, found -> {
+            String note = coverageNote(found.coverage());
+            if (note != null) {
+                out.report("Only part of the radius was read: " + note + ".");
+            }
+            out.complete(found.groups().stream().map(ScanOps::cluster).toList());
+        });
+        return out;
+    }
+
+    /** 一团:每一格是一个 Block(近的在前),最近的那一格,格数。 */
+    static Cluster cluster(BlockGroups.Group group) {
+        List<BlockAt> blocks = new ArrayList<>();
+        group.cells().forEach((pos, state) -> blocks.add(BlockAt.of(pos, state)));
+        return new Cluster(blocks, BlockAt.of(group.nearest(), group.cells().get(group.nearest())),
+                group.cells().size());
     }
 
     /**
-     * What the scan actually covered, in the model's words — {@code null} when it
-     * covered everything asked for. A hit list on its own can't distinguish "no
-     * iron within 192 blocks" from "most of that sphere was never looked at", and
-     * the model will read the first meaning into silence every time.
+     * 这次看实际看到了哪些,说给她的话——看全了是 null。
      */
     static String coverageNote(BlockSearch.ScanResult res) {
-        List<String> notes = new ArrayList<>(2);
-        if (res.deadlineHit()) {
-            notes.add("time budget hit after " + res.columnsScanned() + "/" + res.columnsTotal()
-                    + " chunk columns — what came back is the area nearest you; "
-                    + "retry for fresh coverage or scan smaller");
+        List<String> notes = new ArrayList<>(3);
+        String capped = res.sectionCapNote();
+        if (capped != null) {
+            notes.add(capped);
+        }
+        if (res.collectCapHit()) {
+            notes.add("stopped at " + BlockSearch.MAX_COLLECT + " matching blocks — only the part nearest you "
+                    + "was read and clusters at its edge may be cut off; scan a smaller radius");
         }
         if (res.columnsUnloaded() > 0) {
             notes.add(res.columnsUnloaded() + " of " + res.columnsTotal() + " chunk columns in this "
@@ -64,46 +78,4 @@ List<String> block_ids,
         }
         return notes.isEmpty() ? null : String.join("; ", notes);
     }
-
-    private static String buildResult(BlockSearch.ScanResult res, int radius, BlockPos center) {
-        List<BlockScanner.Hit> matches = res.matches();
-        int limit = Math.min(matches.size(), MAX_RESULTS);
-        JsonArray out = new JsonArray();
-        for (int i = 0; i < limit; i++) {
-            BlockScanner.Hit s = matches.get(i);
-            JsonObject o = new JsonObject();
-            o.addProperty("x", s.pos().getX());
-            o.addProperty("y", s.pos().getY());
-            o.addProperty("z", s.pos().getZ());
-            o.addProperty("block", BuiltInRegistries.BLOCK.getKey(s.state().getBlock()).toString());
-            o.addProperty("distance", s.distance());
-            // Source vs flowing is THE decision bit for fluids: obsidian casting
-            // and bucket-filling both demand a source cell.
-            if (!s.state().getFluidState().isEmpty()) {
-                o.addProperty("source", s.state().getFluidState().isSource());
-            }
-            out.add(o);
-        }
-        JsonObject root = new JsonObject();
-        root.add("matches", out);
-        // A count only when the walk actually covered the sphere. Cut short — proved its
-        // quota, hit the deadline, skipped unloaded ground — whatever it saw is an artifact
-        // of stopping, and a number in this slot gets read as "that is how much is there".
-        if (res.coveredEverything()) {
-            root.addProperty("total_in_radius", matches.size());
-        }
-        root.addProperty("truncated", matches.size() > MAX_RESULTS || !res.coveredEverything());
-        root.addProperty("radius_searched", radius);
-        String note = coverageNote(res);
-        if (note != null) {
-            root.addProperty("note", note);
-        }
-        JsonObject centerJson = new JsonObject();
-        centerJson.addProperty("x", center.getX());
-        centerJson.addProperty("y", center.getY());
-        centerJson.addProperty("z", center.getZ());
-        root.add("center", centerJson);
-        return root.toString();
-    }
-
 }
