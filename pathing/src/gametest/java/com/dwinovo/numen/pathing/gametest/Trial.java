@@ -186,7 +186,8 @@ final class Trial {
 
     /**
      * 只搜不走:从这具身体脚下规划,有了结论交给 {@code then}(在世界线程上,那一刻)。规划期间身体原地不动,{@code then}
-     * 可以接着 {@link #go} 开走,或自己断言后 {@code helper.succeed()}。
+     * 可以接着 {@link #go} 开走,或自己断言后 {@code helper.succeed()}。搜索在工作线程上按墙钟跑,刻不等墙钟:这一刻等它
+     * 回来再往下,用例的时限就不被机器忙不忙吃掉。
      */
     void plan(TestBody body, PlanQuery query, Consumer<PlanResult> then) {
         if (!recorded) {
@@ -199,12 +200,23 @@ final class Trial {
             if (done[0]) {
                 return;
             }
-            PlanResult result = planning.poll();
-            if (result != null) {
-                done[0] = true;
-                then.accept(result);
+            PlanResult result;
+            while ((result = planning.poll()) == null) {
+                nap();
             }
+            done[0] = true;
+            then.accept(result);
         });
+    }
+
+    /** 等一小会儿,让工作线程上的搜索往下跑。 */
+    private static void nap() {
+        try {
+            Thread.sleep(1);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GameTestAssertException("等搜索的结论时被打断");
+        }
     }
 
     /** {@code ticks} 刻之后做 {@code action}(可以在里面开走)。 */
@@ -325,6 +337,8 @@ final class Trial {
         private boolean passed;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
+        /** 搜索按墙钟自己跑、刻不等它;默认每刻在等搜索的结论时等它回来。 */
+        private boolean realTime;
         /**
          * 拉起身体之后等这么多刻才开走:原版玩家进世界后有 60 刻的出生无敌,这期间摔落不掉血,掉没掉血就看不出来。
          */
@@ -402,11 +416,30 @@ final class Trial {
         }
 
         /**
-         * 每刻至少占 {@code millis} 毫秒墙钟。测试服务器的刻不等墙钟(一刻做完就接着下一刻),而搜索在工作线程上按墙钟跑:
-         * 一次要几百毫秒的搜索在这里会占去上千刻,期限与"提前搜下一段来得及"就都失去了意义。搜索吃重的用例按它定个节奏,
-         * 让刻与搜索的快慢比接近真实服务器(真实服务器一刻五十毫秒)。
+         * 搜索按墙钟自己跑,刻不等它:用例要看的正是搜索与刻的快慢比(搜索迟到、提前搜下一段来不来得及、接着走时有没有去搜)
+         * 时用,要等搜索回来的那一刻自己调 {@link #awaitSearch}。不调它,一刻里导航在等搜索的结论,这一刻就等它回来再往下:
+         * 测试服务器的刻不等墙钟(一刻做完就接着下一刻),一次要几百毫秒的搜索在这里会占去上千刻,按刻写的时限就被机器忙不忙
+         * 吃掉了。
+         */
+        Run realTime() {
+            realTime = true;
+            return this;
+        }
+
+        /** 导航此刻在等搜索的结论的话,等它回来、接着推到不再等为止。 */
+        void awaitSearch() {
+            while (navigation.waiting()) {
+                nap();
+                status = navigation.tick();
+            }
+        }
+
+        /**
+         * 每刻至少占 {@code millis} 毫秒墙钟,搜索按墙钟自己跑({@link #realTime}):让刻与搜索的快慢比接近真实服务器
+         * (真实服务器一刻五十毫秒),"提前搜下一段来得及"才有意义。
          */
         Run paced(long millis) {
+            realTime = true;
             everyTick.add(r -> {
                 try {
                     Thread.sleep(millis);
@@ -438,6 +471,9 @@ final class Trial {
                 }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 status = navigation.tick();
+                if (!realTime) {
+                    awaitSearch();
+                }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 highestRise = Math.max(highestRise, body.getDeltaMovement().y);
                 highestFeet = Math.max(highestFeet, body.getY() - trial.origin.getY());
