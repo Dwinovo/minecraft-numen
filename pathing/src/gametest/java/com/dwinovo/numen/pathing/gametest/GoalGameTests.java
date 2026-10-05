@@ -336,7 +336,7 @@ public class GoalGameTests {
             });
         }
         boolean[] pushed = {false};
-        t.go(body, Goals.within(Goals.at(t.at(12, 1, 5)), 0, 2), RouteSpec.defaults()).within(500)
+        t.go(body, Goals.within(Goals.at(t.at(12, 1, 5)), 0, 2), RouteSpec.defaults()).within(500).realTime()
                 .passive((before, now) -> before.is(Blocks.STONE_PRESSURE_PLATE) && now.is(Blocks.STONE_PRESSURE_PLATE))
                 .during(r -> {
                     if (!pushed[0]) {
@@ -345,6 +345,8 @@ public class GoalGameTests {
                         r.body.hurtMarked = true;
                     } else if (r.body.onGround() && r.body.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6) {
                         release.countDown();
+                        // 放行之后搜索回来的那一刻与她报到的那一刻之间不靠墙钟:等它回来
+                        r.awaitSearch();
                     }
                 })
                 .arrives();
