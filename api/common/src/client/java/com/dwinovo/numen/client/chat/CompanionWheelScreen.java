@@ -1,21 +1,27 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.client.ui.mc.GuiAlpha;
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.client.NumenKeys;
-import com.dwinovo.numen.client.agent.KnownSkins;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.hud.TalkHint;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
+import com.dwinovo.numen.client.screen.chat.ConversationPreview;
+import com.dwinovo.numen.client.screen.chat.UnreadBadge;
 import com.dwinovo.numen.client.ui.Anim;
-import com.dwinovo.numen.client.ui.RoundRect;
+import com.dwinovo.numen.client.ui.NumenStyle;
+import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import com.dwinovo.numen.client.skin.CompanionFace;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import com.dwinovo.numen.client.skin.ConversationFaces;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -24,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.List;
 
 /**
- * 同伴转盘:抽奖转盘的操作模型——顶槽固定(金环 + 指针 ▼),滚轮转动
+ * 同伴转盘(盘上是会话:就他俩是她的脸,群是群头像):抽奖转盘的操作模型——顶槽固定(选中色底座 + 指针 ▼),滚轮转动
  * 整个轮盘把人送进顶槽,点击别处的头像沿最短路径转过去,点击顶槽头像
  * 确认,松开轮盘键也确认(对讲机手感),Esc 放弃不改选。悬浮任意头像
  * 在光标旁浮名字;确认关盘后准星下方闪一行「按 [键] 对话 · 按住 [键]
@@ -33,6 +39,10 @@ import java.util.List;
  * <p>动效:旋转角走欠阻尼弹簧(拨过去带一丝回弹,拨盘手感),顶槽
  * 住客的尺寸用帧率无关指数趋近柔滑放大,呼吸是慢周期浮点正弦叠在
  * pose 缩放上;开盘 170ms 从圆心 easeOutCubic 弹出。
+ *
+ * <p>配色照 Telegram 的左栏:顶槽底座与指针是选中行的颜色({@code active}),头像框常态是分隔线色、
+ * 指针停上去 100ms 过渡到选中色;有未读的头像右下角挂左栏同一枚未读角标;名牌是窗口底色的浮起小框,
+ * 换人时旧名上滑淡出、新名自下淡入。
  */
 public class CompanionWheelScreen extends Screen {
 
@@ -45,9 +55,16 @@ public class CompanionWheelScreen extends Screen {
     private static final float SPRING_K = 260f;       // 旋转弹簧刚度
     private static final float SPRING_DAMP = 0.78f;   // 阻尼比(<1:一丝回弹)
     private static final long FLASH_MS = 3200;        // 关盘教学提示时长
+    private static final long PLATE_MS = 150;         // 名牌换人的过渡(Telegram 的快动效)
 
-    private final List<NumenRoster.Entry> entries;
+    private final List<Conversation> entries;
     private final float[] sizePx;
+    /** 每个头像的悬停进度:框从分隔线色过渡到选中色。 */
+    private final float[] hoverT;
+    /** 名牌上此刻的人,和换人前的那个(-1 = 没有在换)、换的时刻。 */
+    private int plateIndex;
+    private int plateFrom = -1;
+    private long plateAt;
     private final long openedAtMs = System.currentTimeMillis();
     private long lastFrameNanos = System.nanoTime();
 
@@ -58,18 +75,20 @@ public class CompanionWheelScreen extends Screen {
     private float rotVel;
 
     public CompanionWheelScreen() {
-        super(Component.literal("Numen companion wheel"));
-        this.entries = NumenRoster.instance().entries();
+        super(Component.translatable(Keys.WHEEL_TITLE));
+        this.entries = Conversations.instance().all();
         this.index = 0;
-        var current = SelectedCompanion.get();
+        Conversation current = SelectedCompanion.get();
         for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i).uuid().equals(current)) {
+            if (current != null && entries.get(i).id().equals(current.id())) {
                 this.index = i;
                 break;
             }
         }
         this.rotDeg = targetRotFor(index);   // 开盘即对位,不空转
         this.sizePx = new float[entries.size()];
+        this.hoverT = new float[entries.size()];
+        this.plateIndex = index;
         for (int i = 0; i < sizePx.length; i++) {
             sizePx[i] = i == index ? AVATAR + SELECTED_PX : AVATAR;
         }
@@ -170,15 +189,15 @@ public class CompanionWheelScreen extends Screen {
         float rNow = r * open;
         UiTheme th = UiTheme.current();
 
-        // 顶槽底座:固定的金环 + 指针 ▼(先画,头像转进来压在上面)
+        // 顶槽底座:固定的选中色方座 + 指针 ▼(先画,头像转进来压在上面)
         int topX = cx;
         int topY = cy - Math.round(rNow);
         int ringHalf = AVATAR / 2 + 5;
-        RoundRect.fill(g, topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, 5,
-                th.cta());
+        g.fill(topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, th.active());
         Nb.text(g, this.font, "▼", topX - this.font.width("▼") / 2,
-                topY - ringHalf - 12, th.cta());
+                topY - ringHalf - 12, th.active());
 
+        long dtMs = Math.round(dt * 1000f);
         int hovered = -1;
         for (int i = 0; i < entries.size(); i++) {
             boolean atTop = i == index;
@@ -188,9 +207,11 @@ public class CompanionWheelScreen extends Screen {
             double ang = slotAngle(i);
             float ax = cx + (float) (Math.cos(ang) * rNow);
             float ay = cy + (float) (Math.sin(ang) * rNow);
-            if (hitAvatar(mouseX, mouseY, ax, ay)) {
+            boolean over = hitAvatar(mouseX, mouseY, ax, ay);
+            if (over) {
                 hovered = i;
             }
+            hoverT[i] = NumenStyle.hoverStep(hoverT[i], over && !atTop, dtMs);
 
             float breath = atTop
                     ? 1f + BREATH_AMP * (0.5f + 0.5f * (float) Math.sin(
@@ -203,31 +224,63 @@ public class CompanionWheelScreen extends Screen {
             g.pose().scale(scale, scale, 1f);
             int half = AVATAR / 2;
             if (!atTop) {
-                RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
+                g.fill(-half - 2, -half - 2, half + 2, half + 2,
+                        NumenStyle.mixColor(th.border(), th.active(), hoverT[i]));
             }
-            CompanionFace.draw(g, entries.get(i).uuid(), KnownSkins.of(entries.get(i).uuid()),
-                    -half, -half, AVATAR);
+            ConversationFaces.draw(g, entries.get(i), -half, -half, AVATAR);
             g.pose().popPose();
+
+            // 未读角标:Telegram 窄栏的画法,贴头像右下角。画在缩放之外——像素字缩放一点点就糊
+            Conversation c = entries.get(i);
+            int unread = ConversationPreview.unread(c, Conversations.instance().lastSeen(c));
+            if (unread > 0 && open > 0.4f) {
+                String n = UnreadBadge.label(unread);
+                int corner = Math.round((half + 2) * scale);
+                UnreadBadge.draw(g, this.font, n, Math.round(ax) + corner - UnreadBadge.width(this.font, n),
+                        Math.round(ay) + corner - UnreadBadge.H, th.cta(), th.onCta());
+            }
         }
 
         if (open > 0.4f) {
-            // 顶槽名牌:当前选中 xxx
-            String label = "当前选中  " + entries.get(index).name();
-            int tw = this.font.width(label);
-            int nx = cx - tw / 2;
+            // 名牌:顶槽住客的名字,窗口底色的浮起小框(Telegram 抬头的配色)。换人时框宽跟着缓动,
+            // 旧名上滑淡出、新名自下淡入,不硬切
+            if (index != plateIndex) {
+                plateFrom = plateIndex;
+                plateIndex = index;
+                plateAt = nowMs;
+            }
+            float k = Anim.easeOutCubic((nowMs - plateAt) / (float) PLATE_MS);
+            if (k >= 1f) plateFrom = -1;
+            String cur = name(plateIndex);
+            String prev = plateFrom >= 0 ? name(plateFrom) : null;
+            int curW = this.font.width(cur);
+            int tw = prev == null ? curW : Math.round(this.font.width(prev) + (curW - this.font.width(prev)) * k);
             int ny = cy - r - 46;
-            RoundRect.card(g, nx - 10, ny - 6, nx + tw + 10, ny + 14, 4, th.aiFill(), th.border());
-            Nb.text(g, this.font, label, nx, ny, th.text());
+            int bx = cx - tw / 2 - 10;
+            NumenStyle.box(new McDrawSurface(g, this.font), bx, ny - 6, tw + 20, 20, th.band(), th.aiBorder());
+            g.enableScissor(bx + 1, ny - 5, bx + tw + 19, ny + 13);
+            if (prev != null) {
+                GuiAlpha.set(g, Math.max(0.05f, 1f - k));
+                Nb.text(g, this.font, prev, cx - this.font.width(prev) / 2, ny - Math.round(6 * k), th.onBand());
+            }
+            GuiAlpha.set(g, Math.max(0.05f, prev == null ? 1f : k));
+            Nb.text(g, this.font, cur, cx - curW / 2, ny + (prev == null ? 0 : Math.round(6 * (1f - k))), th.onBand());
+            GuiAlpha.set(g, 1f);
+            g.disableScissor();
 
-            String hint = "滚轮转盘 · 点击送到顶槽 · 点顶槽或松开确认 · Esc 取消";
+            // 直接压在游戏画面上的操作提示:白字半透明,和原版 HUD 字一样对比世界背景,不跟主题
+            String hint = I18n.get(Keys.WHEEL_HINT);
             Nb.text(g, this.font, hint, cx - this.font.width(hint) / 2, cy + r + 30, 0xB0FFFFFF);
         }
 
-        // 悬浮名字:光标旁小字(顶槽住客的名字已在名牌上,不重复)
+        // 悬浮名字:和面板里的悬停提示同一个样子(顶槽住客的名字已在名牌上,不重复)
         if (hovered >= 0 && hovered != index) {
-            String name = entries.get(hovered).name();
-            Nb.text(g, this.font, name, mouseX + 10, mouseY - 4, 0xE0FFFFFF);
+            g.renderTooltip(this.font, Component.literal(name(hovered)), mouseX, mouseY);
         }
+    }
+
+    private String name(int i) {
+        return entries.get(i).displayName(NumenRoster.instance()::name);
     }
 
     private boolean hitAvatar(double mx, double my, float ax, float ay) {
@@ -288,13 +341,11 @@ public class CompanionWheelScreen extends Screen {
     }
 
     private void confirm() {
-        NumenRoster.Entry chosen = entries.get(index);
-        SelectedCompanion.set(chosen.uuid());
+        SelectedCompanion.set(entries.get(index));
         // 关盘教学:下一步怎么跟它说话
-        TalkHint.flash("已选中 " + chosen.name()
-                + " · 按 [" + NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString()
-                + "] 对话 · 按住 [" + NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()
-                + "] 说话", FLASH_MS);
+        TalkHint.flash(I18n.get(Keys.WHEEL_SELECTED, name(index),
+                NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString(),
+                NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()), FLASH_MS);
         onClose();
     }
 

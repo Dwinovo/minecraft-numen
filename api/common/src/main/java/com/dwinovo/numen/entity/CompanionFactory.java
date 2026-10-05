@@ -60,11 +60,15 @@ public final class CompanionFactory {
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
         // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
-        // to its owner. Same-level setPos via moveTo — NOT the teleportTo(ServerLevel,…) dimension-travel
+        // to its owner. Same-level teleportTo — NOT the teleportTo(ServerLevel,…) dimension-travel
         // overload, which fires EntityTravelToDimensionEvent (tripping some world-protection mods) even for a
         // same-level move. A respawn from dormancy passes null and keeps exactly what the .dat restored.
+        //
+        // 走 teleportTo 而不是裸 moveTo:玩家的位置基线在网络层(awaitingPosition / lastGood),
+        // placeNewPlayer 内部刚按加入点记过一次。裸 moveTo 只挪身体不动基线,下一刻
+        // {@link FakeClient} 交还传送回执时,原版会照着旧基线把她拽回加入点。
         if (pos != null) {
-            player.moveTo(pos.x, pos.y, pos.z, player.getYRot(), player.getXRot());
+            player.teleportTo(pos.x, pos.y, pos.z);
         }
         // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
         // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。

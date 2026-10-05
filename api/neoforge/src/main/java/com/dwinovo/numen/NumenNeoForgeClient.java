@@ -53,7 +53,7 @@ public class NumenNeoForgeClient {
         // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
         com.dwinovo.numen.api.NumenPlugins.bindClient(
                 root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::enqueue);
+                com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
@@ -63,11 +63,12 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
-        modBus.addListener(NumenNeoForgeClient::registerShaders);
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenRendered);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenMousePressed);
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
@@ -77,6 +78,8 @@ public class NumenNeoForgeClient {
         if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                    event.getPoseStack(), event.getCamera());
+            com.dwinovo.numen.client.consent.ConsentOutlines.render(
                     event.getPoseStack(), event.getCamera());
         }
     }
@@ -99,6 +102,23 @@ public class NumenNeoForgeClient {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "message_notices"),
+                (g, delta) -> com.dwinovo.numen.client.notify.MessageNotices.renderHud(g));
+    }
+
+    /** 消息通知开着界面时画在界面上面。 */
+    static void onScreenRendered(net.neoforged.neoforge.client.event.ScreenEvent.Render.Post event) {
+        com.dwinovo.numen.client.notify.MessageNotices.renderOver(
+                event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
+    }
+
+    /** 点在消息通知上的那一下归通知,界面不再处理。 */
+    static void onScreenMousePressed(net.neoforged.neoforge.client.event.ScreenEvent.MouseButtonPressed.Pre event) {
+        if (com.dwinovo.numen.client.notify.MessageNotices.click(
+                event.getMouseX(), event.getMouseY(), event.getButton())) {
+            event.setCanceled(true);
+        }
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
@@ -113,18 +133,12 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.data.ClientNumenState.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-        com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.chat.ChatLines.clearLive();
         com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
         com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
-    }
-
-    static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
-        // GUI 圆角 SDF shader——1.21.2+ 只注册 ShaderProgram 键,编译由 ShaderManager
-        // 随资源加载完成;RoundRect 每次绘制经键查编译实例,查不到自动降级方角 fill。
-        event.registerShader(com.dwinovo.numen.client.ui.RoundRect.PROGRAM);
+        com.dwinovo.numen.client.consent.ConsentCards.clear();
     }
 
     static void registerReloadListeners(AddClientReloadListenersEvent event) {

@@ -21,9 +21,8 @@ import java.util.function.Consumer;
  * 开口延迟 ≈ LLM 首句时延 + 单句 TTS 时延。
  *
  * <h2>代际失效（generation）</h2>
- * 与 {@code EntityAgentLoop.turnGeneration} 同一思路：每次
- * {@link #beginTurn} / {@link #interrupt} 递增 {@link #generation}；
- * 分发时捕获的 gen 随着 chunk 回调、合成完成回调一路携带,落地时对不上号
+ * 每次 {@link #beginTurn} / {@link #interrupt} 递增 {@link #generation}；
+ * 开轮时捕获的 gen 随着增量去处、合成完成回调一路携带,落地时对不上号
  * 即整体丢弃。主人夺话的新 turn、主人打断（Stop）、同伴死亡立即停播清队;
  * 事件触发的新 turn 只清未播段,正在播的句子说完再接(句界衔接)。
  * 同伴不在世（客户端解析不到实体）时只清不播。
@@ -31,8 +30,7 @@ import java.util.function.Consumer;
  * <h2>线程模型</h2>
  * 所有可变状态只在客户端主线程上碰：
  * <ul>
- *   <li>chunk 回调发生在 HTTP executor 线程 → {@code Minecraft.execute}
- *       蹦回主线程（FIFO,顺序保持）再喂 divider;</li>
+ *   <li>正文增量随循环内核的事件在主线程到达,直接喂 divider;</li>
  *   <li>合成完成同样蹦回主线程落格;</li>
  *   <li>{@link #tick} / {@link #interrupt} 本来就在主线程。</li>
  * </ul>
@@ -90,19 +88,12 @@ public final class VoicePipeline {
     }
 
     /**
-     * 供 {@code chatStreaming(..., onChunk)} 用的 chunk 回调。从 provider 原始
-     * chunk JSON 里只取 {@code choices[0].delta.content} 的文本增量——
-     * {@code reasoning_content}、{@code tool_calls} 增量都不进语音。
-     * 回调在 HTTP 线程触发,内部蹦回主线程。
+     * 这一轮正文增量的去处——思考、工具调用增量不进语音。主线程调用;轮次已被打断或换掉的增量直接丢。
      */
-    public Consumer<JsonObject> chunkSink(int gen) {
-        return chunk -> {
-            String delta = extractContentDelta(chunk);
-            if (delta == null || delta.isEmpty()) return;
-            Minecraft.getInstance().execute(() -> {
-                if (gen != generation) return;
-                enqueue(divider.feed(delta));
-            });
+    public Consumer<String> deltaSink(int gen) {
+        return delta -> {
+            if (gen != generation || delta.isEmpty()) return;
+            enqueue(divider.feed(delta));
         };
     }
 

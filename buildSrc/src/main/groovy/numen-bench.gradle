@@ -1,0 +1,144 @@
+/**
+ * 真模型评测的场景源码集与运行配置(设计与用法见 docs/bench.md),原版(core/neoforge)与各联动共用这一份。
+ *
+ * <p>场景写在本项目的 {@code src/bench},和评测的机器({@code :bench}、{@code :bench:game})一起组成模组
+ * {@code numen_bench},只在 {@code runBench} 这一次运行里加载:发行 jar 只收 main,本项目别的运行只加载 {@code numen}。
+ *
+ * <pre>
+ * ./gradlew :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+ * ./gradlew :core:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+ * </pre>
+ *
+ * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen}。
+ * 本项目在 {@code benchImplementation} 里补上场景要的目标模组(车万女仆这类)。
+ */
+
+/** 评测的参数:{@code -P} 或 {@code -D} 给 Gradle 都认,原样转成游戏进程的系统属性;没给的传空串,由评测按默认值处理。 */
+def benchParameters = ['bench.scenarios', 'bench.repeats', 'bench.provider', 'bench.model', 'bench.baseUrl',
+                       'bench.reasoning']
+
+/** 跑的是哪个提交;工作区有改动时带 +dirty。只在真要跑评测时才去问 git。 */
+def benchCommit = providers.exec { commandLine 'git', 'rev-parse', '--short=9', 'HEAD' }.standardOutput.asText
+        .zip(providers.exec { commandLine 'git', 'status', '--porcelain', '--untracked-files=no' }.standardOutput.asText,
+                { head, status -> head.trim() + (status.trim().isEmpty() ? '' : '+dirty') })
+
+sourceSets {
+    bench {}
+}
+
+dependencies {
+    // 场景只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
+    benchCompileOnly project(':bench:game')
+    // 整个引擎:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
+    benchImplementation project(':api:neoforge')
+}
+
+def coreNeoForge = project(':core:neoforge')
+
+neoForge {
+    addModdingDependenciesTo(sourceSets.bench)
+    mods {
+        numen_bench {
+            sourceSet project(':bench').sourceSets.main
+            sourceSet project(':bench:game').sourceSets.main
+            sourceSet sourceSets.bench
+        }
+    }
+    runs {
+        configureEach {
+            if (it.name != 'bench') {
+                loadedMods = [mods.numen]
+            }
+        }
+        bench {
+            type = 'gameTestServer'
+            ideName = "NeoForge Bench (${project.path})"
+            sourceSet = sourceSets.bench
+            loadedMods = [mods.numen, mods.numen_bench]
+            gameDirectory = project.mkdir(project.file('runs/bench'))
+            systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
+            // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 core 同步好的那一份模板目录
+            systemProperty('numen.gametest.structures',
+                    coreNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
+            systemProperty('bench.pricing', rootProject.file('bench/pricing.json').absolutePath)
+            systemProperties.put('bench.commit', benchCommit)
+            benchParameters.each { name ->
+                systemProperties.put(name, providers.gradleProperty(name).orElse(providers.systemProperty(name))
+                        .orElse(''))
+            }
+        }
+    }
+}
+
+tasks.matching { it.name == 'runBench' }.configureEach {
+    dependsOn ':bench:classes', ':bench:game:classes', ':core:neoforge:classes', ':core:neoforge:syncGameTestStructures'
+}
+
+/**
+ * 并行跑同一批场景:起几个服务器进程,每个是 runBench 那一条命令行(同样的类路径、JVM 参数、系统属性与环境),只多两个属性——
+ * {@code bench.shard=第几份/共几份}(场景按登记顺序轮流分给各份,见 Settings.mine)与 {@code bench.results}(这一份的结果目录);
+ * 各自的游戏目录在 {@code runs/bench-shards/<第几份>/}。跑完由 :bench 的 Merge 并成 {@code runs/bench/results/<时间戳>/},和串行跑出
+ * 来的一份同一个样子。
+ *
+ * <p>为什么是几个进程,不是一个服务器里几块场地:一次运行要拨的世界状态(时刻、天气、难度、规则)、图纸与设计库、大脑的几个
+ * 静态挂点(上行出口、札记与模块目录)都是整个服务器一份,同一个服务器里并行就得改产品去分开它们;分进程什么都不用改,每份
+ * 有自己的世界与目录,彼此碰不到,场地照旧隔 512 格。
+ *
+ * <p>几份由 {@code -Pbench.parallel}(或 {@code -D})给;不给按处理器数取:每份一个服务器约占四个核,最少 1 份,最多 4 份。
+ */
+tasks.register('runBenchParallel') {
+    group = 'verification'
+    description = '并行跑评测:几个服务器进程各跑一份场景,跑完并成一份结果(见 docs/bench.md)'
+    def run = tasks.named('runBench')
+    // runBench 依赖的那些(编译、模板、运行配置的参数文件),不含 runBench 本身
+    dependsOn { run.get().taskDependencies.getDependencies(run.get()) }
+    def parallelProp = providers.gradleProperty('bench.parallel').orElse(providers.systemProperty('bench.parallel'))
+    def merged = layout.projectDirectory.dir('runs/bench/results')
+    def shardsRoot = layout.projectDirectory.dir('runs/bench-shards')
+    def mergeClasspath = project(':bench').sourceSets.main.runtimeClasspath
+    dependsOn ':bench:classes'
+    doLast {
+        def game = run.get()
+        int cores = Runtime.runtime.availableProcessors()
+        int n = parallelProp.present ? parallelProp.get().toInteger() : Math.max(1, Math.min(4, cores.intdiv(4)))
+        def stamp = new Date().format('yyyyMMdd-HHmmss')
+        def results = merged.dir(stamp).asFile
+        def java = game.javaLauncher.get().executablePath.asFile.absolutePath
+        def jvm = game.allJvmArgs
+        def cp = game.classpathProvider.asPath
+        def main = game.mainClass.get()
+        def env = new HashMap<String, String>(System.getenv())
+        env.putAll(game.environmentProperty.get())
+        long started = System.currentTimeMillis()
+        logger.lifecycle("[numen-bench] 并行 ${n} 份,结果并到 ${results}")
+        def processes = (0..<n).collect { i ->
+            def dir = shardsRoot.dir("$i").asFile
+            dir.mkdirs()
+            def command = [java] + jvm + ["-Dbench.shard=$i/$n".toString(),
+                    "-Dbench.results=${new File(results, "shards/$i")}".toString()] +
+                    (cp.isEmpty() ? [] : ['-cp', cp]) + [main] + game.args
+            def builder = new ProcessBuilder(command.collect { it.toString() }).directory(dir)
+                    .redirectErrorStream(true).redirectOutput(new File(dir, 'bench.log'))
+            builder.environment().clear()
+            builder.environment().putAll(env)
+            builder.start()
+        }
+        def codes = processes.collect { it.waitFor() }
+        def merge = new ProcessBuilder(java, '-Dstdout.encoding=UTF-8', '-cp', mergeClasspath.asPath,
+                'com.dwinovo.numen.bench.report.Merge', results.absolutePath).inheritIO().start()
+        if (merge.waitFor() != 0) {
+            throw new GradleException("并结果没成:${results}")
+        }
+        logger.lifecycle("[numen-bench] 并行 ${n} 份跑完,墙钟 ${(System.currentTimeMillis() - started).intdiv(1000)} 秒;"
+                + "各份的日志在 ${shardsRoot.asFile}/<第几份>/bench.log")
+        def failed = codes.withIndex().findAll { code, i -> code != 0 }.collect { code, i -> "第 $i 份退出码 $code" }
+        if (!failed.isEmpty()) {
+            throw new GradleException("评测有几份没跑通:" + failed.join(';') + "(看各份的 bench.log)")
+        }
+    }
+}
+
+// 场景跟着构建一起编译:产品的接口改了,评测当场编不过,而不是等下次跑评测才发现
+tasks.named('check') {
+    dependsOn 'benchClasses'
+}

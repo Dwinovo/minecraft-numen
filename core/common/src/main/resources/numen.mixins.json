@@ -5,7 +5,14 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "FishingHookAccessor",
-    "ServerLevelBlockChangeMixin"
+    "ItemEntityAccessor",
+    "CraftingMenuAccessor",
+    "ServerLevelBlockChangeMixin",
+    "ServerPlayerGameModeAccessor",
+    "ServerPlayerGameModeDropsMixin",
+    "ServerLevelDropsMixin",
+    "ItemEntityDropsMixin",
+    "LivingEntityTakeMixin"
   ],
   "client": [],
   "server": [],

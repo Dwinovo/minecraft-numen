@@ -50,16 +50,20 @@ repositories {
     }
 }
 
+// 协议文本随 jar 发出:根目录的 LICENSE(LGPL-3.0),licenses/ 下 LGPL 所依托的 GPL 全文与美术资源的授权;
+// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀标明是哪个 mod 的
+def licenseTexts = copySpec {
+    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_name}" } }
+    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_name}" } }
+    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_name}" } }
+}
+
 sourcesJar {
-    from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
-    }
+    with licenseTexts
 }
 
 jar {
-    from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
-    }
+    with licenseTexts
 
     manifest {
         attributes([
@@ -136,8 +140,12 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
     include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
+    include 'com/dwinovo/numen/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
+    include 'com/dwinovo/numen/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
     include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
-    include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...and its input surface (look/press keys)
+    include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...its own facing, looking and boat steering
+    include 'com/dwinovo/numen/entity/BodyDelta*.class'     // what an action changed on the body: carried items, health, riding, broken gear
+    include 'com/dwinovo/numen/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
     include 'com/dwinovo/numen/entity/package-info.class'
     include 'com/dwinovo/numen/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
     include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'
@@ -150,13 +158,18 @@ tasks.register('apiJar', Jar) {
     // 任何 loom 插件 id:各分支上它叫 fabric-loom / fabric-loom-remap /
     // net.fabricmc.fabric-loom 三种名字,盯 id 必然漏。
     include 'fabric.mod.json'
-    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
-    // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
+    // 协议文本随成品 jar 进来(见上面 jar 块),瘦 jar 发给第三方开发者,一样要带
+    include 'LICENSE*'
+    include 'COPYING*'
+    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们本该迁去 core 自己的网络层,迁移前先如实纳入契约
     include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
     include 'com/dwinovo/numen/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages
     exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
     exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    // API 的派发与程序的执行:引擎内部,插件只写函数
+    exclude 'com/dwinovo/numen/sdk/Dispatcher*.class'
+    exclude 'com/dwinovo/numen/sdk/Consents*.class'
     // scheduler internals: implementation of the task machine, not its contract
     exclude 'com/dwinovo/numen/task/TaskQueue*.class'
     exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'
