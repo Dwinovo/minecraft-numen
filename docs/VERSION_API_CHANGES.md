@@ -42,8 +42,8 @@ loader 依赖 build.gradle 里的 `numen-api-*-<mc>` 坐标也要同步成目标
 
 ## 1.21.1 → 1.21（向下，本分支的那一档）
 
-零代码改动——两版同属一个 API 纪元（blitSprite 纪元 1.20.6–1.21.1），NeoForge 21.0↔21.1
-对我们碰的面无破坏。只有旋钮 📦：
+游戏代码零改动——两版同属一个 API 纪元（blitSprite 纪元 1.20.6–1.21.1），MC 与 NeoForge 21.0↔21.1
+对我们碰的面无破坏。要改的是旋钮 📦、NeoForge 21.0 自带的 MixinExtras 太旧（见下）、联动插件能不能带（见下）：
 
 | 键 | 1.21.1 | 1.21 |
 |---|---|---|
@@ -60,6 +60,36 @@ loader 依赖 build.gradle 里的 `numen-api-*-<mc>` 坐标也要同步成目标
   fabric 依赖照模板展开、306 个语言键（含 MCP 失联播报新键）在 jar 里；
 - gametests 裁决行见 CI/提交说明；
 - 蓝图调色板无需扫描：1.21↔1.21.1 方块集完全一致。
+
+### 对齐 1.21.1@7a3d3e251 时新碰到的（2026-10）
+
+**NeoForge 21.0 自带 MixinExtras 0.3.5，没有 `@WrapMethod`**（0.4.0 起才有；21.1 自带 0.4.1）❗🔁
+本树有三处 mixin 用它（api 的 `PlayerAdvancementsRewardMixin`、core 的 `ItemEntityDropsMixin`、
+`ServerPlayerGameModeDropsMixin`）。最险的是**运行期静默失效**：旧服务不认的注解只是被当成一个没人调的方法，
+不报错，同伴的掉落归属、进度奖励全不出事件（GameTest 里表现为“Nothing dropped”）。做法是让游戏里跑的是 0.5.3，
+源码一字不改：
+- 编译：`api/neoforge`、`core/neoforge` 各加 `compileOnly mixinextras-neoforge:0.5.3`（Gradle 同坐标取高版本，顶掉 NeoForge 带来的 0.3.5）；
+- 成品：`core/neoforge` 的 `jarJar` 内嵌 `mixinextras-neoforge`（范围 `[0.5.3,)`）；FML 的内嵌选择让高版本顶替 NeoForge 自带的那份，
+  日志里是 `MixinExtrasServiceImpl(version=0.5.3)`；
+- 开发期运行（GameTest/datagen）没有成品 jar，内嵌带不进去：`core/neoforge` 的 `devJarJar` 源码集把同一份按内嵌布局
+  （`META-INF/jarjar/metadata.json` + jar）摆成目录，挂成 `numen` 模组的一部分。**别**走 `additionalRuntimeClasspath`
+  或根工程的 `resolutionStrategy`：前者在模块层里和 NeoForge 自带那份撞名（`reads more than one module named mixinextras.neoforge`），
+  后者管不到 MDG 自己解析的游戏类路径，运行时仍是 0.3.5。
+Fabric 不受影响（fabric-loader 0.18.1 自带 0.5.0）。
+
+**NeoForge 数据附件在 21.0 没有 `sync`**（`AttachmentType.Builder.sync(StreamCodec)`、`getExistingDataOrNull` 都是 21.1 才有）：
+这一代的 TLM 外观 `Outfit` 要自己发包同步。本分支没有 TLM 联动，见下，没有落地。
+
+**联动插件：本分支只带 ysm**。逐个查过：
+- `tlm`：车万女仆所有 NeoForge 构建（1.4.1、1.5.3，Modrinth）的 `neoforge.mods.toml` 写死 `minecraft [1.21.1,1.21.2)`，在 MC 1.21 上 FML 就不让加载；
+  Modrinth 把 1.4.1 标成“1.21”但同样写 `[1.21.1,1.21.2)`，且缺插件用到的 `TabIndex.BAUBLE/CURIOS`、`TaskManager.getNotHiddenTaskList`。
+- `kaleidoscope`：CurseForge 项目 1309203 全部文件只有 1.21.1 与 1.20.1。
+- `curios`：maven.theillusivec4.top 上 `curios-neoforge` 没有 1.21.0 的构建（8.1.0+1.20.6 之后直接是 9.2.0+1.21.1）。
+- `ftbquests`：maven.ftb.dev 有 2100.1.x（1.21.0），但缺插件用到的 `Quest.isSearchable(TeamData)`、`TeamData.getCannotStartReason`、
+  `Chapter.isHideTextUntilComplete`、`BaseQuestFile.getTeamData(Player)`——不是换个名字，是功能还没有。
+- `ysm`：只用命令与 NBT 键，不引用 YSM 的类，原样带。
+随之 `core/neoforge/neoforge.mods.toml` 去掉 `numen_tlm.mixins.json`，`gradle.properties` 去掉联动版本键。api 里
+`ArchitecturyPlayerHooksMixin` 与它的配置照旧（只在 Architectury 在场时挂，不依赖联动）。
 
 ---
 
