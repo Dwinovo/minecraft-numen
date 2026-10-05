@@ -330,14 +330,14 @@ dev 服务器起不来(`Mod File main needs language provider javafml:4`)。本�
 
 **NeoForge 数据附件**:本代的 `AttachmentType.Builder.sync` 也没有(与 21.0 同),但本分支没有依赖附件同步的联动(见下)。
 
-**联动插件:本分支带 ysm、curios,不带 tlm、kaleidoscope、ftbquests**。逐个查过:
+**联动插件:本分支只带 curios,不带 tlm、kaleidoscope、ftbquests、ysm**。逐个查过:
 - `tlm`:Modrinth 上车万女仆没有 1.20.6 的任何构建(只有 1.16.5 / 1.18~1.20.1 / 1.21.1 的各代)。
 - `kaleidoscope`:CurseForge 项目 1309203 全部文件只有 1.21.1 与 1.20.1。
 - `ftbquests`:maven.ftb.dev 的 `ftb-quests-neoforge` 有 2004.x(1.20.4)与 2111.x,没有 2006.x。
 - `curios`:maven.theillusivec4.top 有 `8.1.0+1.20.6`,编译通过一处改动——Curios 8 的 `ICuriosItemHandler` 没有"槽位停用"
   (`isSlotActive`,9.x 才有),格子在就是启用的,`CurioGearSlot` 去掉停用判断。
-- `ysm`:不引用 YSM 的类,只用命令与 NBT 键,原样带;但 YSM 本身没有 1.20.6 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),
-  装得上 YSM 的环境不存在,联动闸门恒关——留着是因为它零依赖、与 1.21.1 逐字一致,联动机制(`Builtin`/`Gate`)在 Fabric 侧只有它在用。
+- `ysm`:YSM 本身没有 1.20.6 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),装得上 YSM 的环境不存在,不带。
+  Fabric 侧的联动只有它,所以 `core/fabric` 的 `Builtin` 与 `plugins/ysm` 一起去掉,与 1.21.4 一档一样 Fabric 侧没有联动。
 `core/neoforge/neoforge.mods.toml` 去掉 `numen_tlm.mixins.json`,`gradle.properties` 只留 `curios_version`。
 
 ## 1.20.6 → 1.20.4 / 1.20.4 → 1.20.2 / 1.20.2 → 1.20.1

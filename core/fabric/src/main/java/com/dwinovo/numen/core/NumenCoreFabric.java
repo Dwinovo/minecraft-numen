@@ -20,9 +20,6 @@ public class NumenCoreFabric implements ModInitializer {
     public void onInitialize() {
         NumenCore.init();
 
-        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
-        com.dwinovo.numen.plugins.Builtin.registerAll();
-
         // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录(玩家在
         // config/numen/skills 下放同名目录就能盖过它)。技能喂的是主人客户端上的大脑,门在客户端接上时
         // 才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
