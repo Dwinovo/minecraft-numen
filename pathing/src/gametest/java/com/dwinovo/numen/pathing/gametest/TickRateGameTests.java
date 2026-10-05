@@ -77,7 +77,7 @@ public class TickRateGameTests {
             }
             Bill planned = plan.candidates().get(0).bill();
             Backlog backlog = new Backlog();
-            t.go(body, request).within(1800).during(backlog::tick).arrives().then(r -> {
+            t.go(body, request).within(1800).realTime().during(backlog::tick).arrives().then(r -> {
                 Bill actual = r.report.bill();
                 if (!actual.digs().equals(planned.digs()) || !actual.places().equals(planned.places())) {
                     throw NumenAssertion.failed("与规划的不一样:规划挖 " + planned.digs() + " 放 " + planned.places()
@@ -116,7 +116,7 @@ public class TickRateGameTests {
         t.fill(8, 1, 2, 8, 2, 10, Blocks.STONE);
         TestBody body = t.body(4, 1, 6);
         Backlog backlog = new Backlog();
-        t.go(body, Goals.at(t.at(12, 1, 6)), RouteSpec.defaults()).within(1800).during(backlog::tick).arrives()
+        t.go(body, Goals.at(t.at(12, 1, 6)), RouteSpec.defaults()).within(1800).realTime().during(backlog::tick).arrives()
                 .then(Scenes::unaltered);
     }
 }
