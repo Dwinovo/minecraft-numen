@@ -274,5 +274,59 @@ CrossbowItem.getChargeDuration(stack, entity) → getChargeDuration(stack)
 (蓝图告示牌/旗帜、爬塔跟随、创造徒手垫路),报错口吻全是"标签空/无路可走",
 看着像寻路回归,其实是 `:core:neoforge:runData` 没跑。
 
+### 对齐 1.21.1@7a3d3e251 时新碰到的(2026-10)
+
+0.1.3 之后 1.21.1 新增了 `pathing/`(只依赖原版的寻路模块)、联动插件、`bench/`、客户端函数反向请求等。上面各节里
+已记的条目照旧适用(`ResourceLocation` 工厂、`getServerDirectory().toPath()`、气泡手性、`DisconnectionDetails`、
+战斗类签名、附魔回等级查询、锻造空容器、标签目录复数、`DataVersion` 3839),下面只记**新碰到的**:
+
+**寻路模块的身体快照读 1.21 才有的属性**❗(`pathing/body/Snapshots`、`Controls`、`plan/DigTime`)——本代没有
+`MINING_EFFICIENCY`、`SUBMERGED_MINING_SPEED`、`WATER_MOVEMENT_EFFICIENCY`、`OXYGEN_BONUS`、`SNEAKING_SPEED`,这几样是附魔直接
+起的作用。快照的字段与曲线不动,只换取值的来源:
+```java
+水下移动效率  Math.min(1.0, EnchantmentHelper.getDepthStrider(body) / 3.0)      // 与 1.21 属性同一条曲线
+水下挖掘速度  EnchantmentHelper.hasAquaAffinity(body) ? 1.0 : 0.2                // 原版 0.2,水下速掘提到 1
+氧气加成      EnchantmentHelper.getRespiration(body)                              // 每级 1,扣氧 1/(b+1) 的概率不变
+迅捷潜行      Mth.clamp(0.3F + EnchantmentHelper.getSneakingSpeedBonus(body), 0, 1)
+冰霜行者      EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FROST_WALKER, 靴子) > 0
+挖掘效率      身体别处没有这一份,记 0;手上那件按附魔等级 L 加 L² + 1(DigTime.efficiency),不再摘"手上那件的修饰符"
+```
+
+**`LivingEntity.onEquippedItemBroken` 本代没有**❗(`NumenPlayer`)——装备碎掉时本代调的是
+`broadcastBreakEvent(EquipmentSlot)`,且在 `shrink` 之前,那一格里此刻放的就是碎掉的那件:覆写它,
+`getItemBySlot(slot).getItem()` 取物品。
+
+**`CraftingMenu.slotChangedCraftingGrid` 少最后一个参数**❗(`CraftingMenuAccessor`、`CraftOps`)——1.21 起可以把已知配方
+当 hint 传进去免查表,本代是五个参数、自己按格局查配方:去掉 hint,调用点同步去掉。
+
+**`Pig.equipSaddle` 只收 `SoundSource`**(gametest)、**`ServerPlayer.changeDimension` 要 `ITeleporter` 给落点**(gametest,
+没有 `DimensionTransition`):
+```java
+pig.equipSaddle(new ItemStack(Items.SADDLE), SoundSource.NEUTRAL) → pig.equipSaddle(SoundSource.NEUTRAL)
+companion.changeDimension(new DimensionTransition(nether, pos, …)) → companion.changeDimension(nether, new ITeleporter() {
+    getPortalInfo(…) { return new PortalInfo(pos, Vec3.ZERO, 0, 0); } })
+```
+`ItemStack.enchant`、`ItemEnchantments.getLevel` 在本代收 `Enchantment` 本体,gametest 里的 `registry.getHolderOrThrow(key)` 一并去掉。
+单测夹具绑标签:`Registries.tagsDirPath(key)` → `TagManager.getTagDir(key)`。
+
+**`WorldBorder.isWithinBounds(BlockPos)` 语义不同**🔁——本代是"这一格与边界相交就算在界内",1.21 起改成"这一格的角点在界内"。寻路里
+判世界边界只此一处且直接问原版(`Bounds.allowsEdit`),所以代码不用动;但 `does_not_place_on_the_world_border` 的前提
+("身体站得进那一排,那一排的格子却不在界内")在本代**构造不出来**:身体碰撞盒与那一格相交,这一格就必然在界内。该用例连同它的
+`pathing_border` 批次在本分支不适用,删去。
+
+**NeoForge 20.6.139 自带 MixinExtras 0.4.1**——已有 `@WrapMethod`,不需要像 1.21 分支那样内嵌新版。
+
+**NeoForge 数据附件**:本代的 `AttachmentType.Builder.sync` 也没有(与 21.0 同),但本分支没有依赖附件同步的联动(见下)。
+
+**联动插件:本分支带 ysm、curios,不带 tlm、kaleidoscope、ftbquests**。逐个查过:
+- `tlm`:Modrinth 上车万女仆没有 1.20.6 的任何构建(只有 1.16.5 / 1.18~1.20.1 / 1.21.1 的各代)。
+- `kaleidoscope`:CurseForge 项目 1309203 全部文件只有 1.21.1 与 1.20.1。
+- `ftbquests`:maven.ftb.dev 的 `ftb-quests-neoforge` 有 2004.x(1.20.4)与 2111.x,没有 2006.x。
+- `curios`:maven.theillusivec4.top 有 `8.1.0+1.20.6`,编译通过一处改动——Curios 8 的 `ICuriosItemHandler` 没有"槽位停用"
+  (`isSlotActive`,9.x 才有),格子在就是启用的,`CurioGearSlot` 去掉停用判断。
+- `ysm`:不引用 YSM 的类,只用命令与 NBT 键,原样带;但 YSM 本身没有 1.20.6 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),
+  装得上 YSM 的环境不存在,联动闸门恒关——留着是因为它零依赖、与 1.21.1 逐字一致,联动机制(`Builtin`/`Gate`)在 Fabric 侧只有它在用。
+`core/neoforge/neoforge.mods.toml` 去掉 `numen_tlm.mixins.json`,`gradle.properties` 只留 `curios_version`。
+
 ## 1.20.6 → 1.20.4 / 1.20.4 → 1.20.2 / 1.20.2 → 1.20.1
 _待移植时填写_
