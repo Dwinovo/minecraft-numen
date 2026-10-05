@@ -8,11 +8,11 @@
 
 [**English**](README_EN.md) · [简体中文](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.2-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
+![Java](https://img.shields.io/badge/Java-17-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.20.2%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
 
@@ -142,14 +142,14 @@ repositories {
 dependencies {
     // Fabric: the slim jar carries intermediary names, same as the full jar. Use
     // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.2:<version>:api"
 
     // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.20.2:<version>:api"
 }
 ```
 
-Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. Use the latest version from the badge at the top for `<version>`. This branch builds `1.21.1` on Java 21.
+Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. Use the latest version from the badge at the top for `<version>`. This branch builds `1.20.2` on Java 17.
 
 `numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
 
@@ -158,10 +158,10 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
+    modImplementation "com.dwinovo.numen:numen-fabric-1.20.2:<version>"
 
     // NeoForge / Forge (there is no modImplementation there — that's a Loom keyword)
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
+    // implementation "com.dwinovo.numen:numen-neoforge-1.20.2:<version>"
 }
 ```
 
@@ -191,7 +191,7 @@ Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod
 **Releasing is one click on GitHub:** Actions → Publish → Run workflow, pick the branch (that is, the MC version) and the channel (beta / release). From the command line:
 
 ```bash
-gh workflow run publish.yml --ref 1.21.1 -f channel=beta
+gh workflow run publish.yml --ref 1.20.2 -f channel=beta
 ```
 
 One run covers both audiences: it builds once; pushes the artifacts to numen-maven for developers and tags `v<version>-<mc>[-beta]` to pin that version to this commit; uploads the jars to Modrinth and CurseForge for players; and finally creates the GitHub Release. The changelog is the `feat` / `fix` commits since the previous version. If this version was already released on this MC, or this commit's Build is not green, it stops before touching anything. If something fails halfway, use Re-run failed jobs on that run — only the failed parts run again.
