@@ -29,8 +29,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Generate resources and build Forge jar
-        run: ./gradlew datagenAll :core:forge:reobfJarJar --no-daemon -x javadoc
+      - name: Generate resources
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      - name: Build Forge jar
+        run: ./gradlew :core:forge:reobfJarJar --no-daemon -x javadoc
 
       - name: Upload Forge mod
         uses: actions/upload-artifact@v4
