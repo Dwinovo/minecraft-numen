@@ -122,6 +122,8 @@ dependencies {
     // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
     // 类与资源由下面的 jar 块平铺进发行 jar。
     compileOnly project(':plugins:ysm')
+    compileOnly project(':plugins:curios')
+    compileOnly project(':plugins:ftbquests')
 
     // 开发运行里的 api 模组:Forge 49 的 dev 运行只认"自带 mods.toml 的类路径条目"是模组,mods 块合并多个源码集
     // 不再生效,所以 api 与平铺进它的兄弟模块要作为一个 jar(内容同发行 jar,official 名)上运行 classpath,
@@ -156,7 +158,7 @@ dependencies {
 
 // 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
 tasks.named('check') {
-    dependsOn(':plugins:ysm:test')
+    dependsOn(':plugins:ysm:test', ':plugins:ftbquests:test')
 }
 
 jar.finalizedBy('reobfJar')
@@ -224,5 +226,16 @@ tasks.named("jar", Jar) {
 // 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
 tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
     it.from({ project(':plugins:ysm').sourceSets.main.output })
+    it.from({ project(':plugins:curios').sourceSets.main.output })
+    it.from({ project(':plugins:ftbquests').sourceSets.main.output })
 }
 
+// 联动经目标模组的类型调用原版方法:reobf 要知道那些类型的继承关系,才能把调用点的方法名翻成 SRG 名,认不出来的调用点留着官方名、
+// 线上就是 NoSuchMethodError。所以把各联动的编译期类路径(目标模组的 jar 在里面)一并交给 reobf 当库。
+tasks.matching { it.name == 'reobfJar' || it.name == 'reobfJarJar' }.configureEach {
+    libraries.from({
+        [':plugins:curios', ':plugins:ftbquests'].collect {
+            project(it).configurations.compileClasspath
+        }
+    })
+}

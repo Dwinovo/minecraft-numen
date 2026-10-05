@@ -1,0 +1,39 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'numen-plugin'
+}
+
+// 只接 Forge:本联动直接订阅 FTB Quests / FTB Teams 的 Architectury 事件、读它们的队伍与进度,
+// 编译对着 Forge 那份。
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+}
+
+repositories {
+    // FTB 全家与 Architectury 各自只从自己的仓库取,两个仓库也截不走别的坐标
+    exclusiveContent {
+        forRepository { maven { name = 'FTB'; url = 'https://maven.ftb.dev/releases' } }
+        filter { includeGroup 'dev.ftb.mods' }
+    }
+    exclusiveContent {
+        forRepository { maven { name = 'Architectury'; url = 'https://maven.architectury.dev/' } }
+        filter { includeGroup 'dev.architectury' }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // 瘦 api jar 取 Forge 那份:本联动本来就只跑在 Forge 上
+    compileOnly files(project(':api:forge').tasks.named('apiJar'))
+    // FTB 全家是 All Rights Reserved:只在编译期引用,运行时由玩家自己装的那份提供,
+    // 本模块不携带、不复制它们一个字节。Architectury 是 FTB 的事件总线所在。
+    def ftb = ["dev.ftb.mods:ftb-quests-forge:${ftb_quests_version}",
+               "dev.ftb.mods:ftb-teams-forge:${ftb_teams_version}",
+               "dev.ftb.mods:ftb-library-forge:${ftb_library_version}",
+               "dev.architectury:architectury-forge:${architectury_version}"]
+    // 不取它们的传递依赖(JEI、Patchouli 之类):只对着本联动用到的那几个类编译
+    ftb.each { compileOnly(it) { transitive = false } }
+    // 防漂移测试登记 ftbquests 组时,动作的处理函数(读任务书的 ClientBook 等)要连上 FTB 的类:只加载、不运行,
+    // 同样不进任何产物
+    ftb.each { testRuntimeOnly(it) { transitive = false } }
+}
