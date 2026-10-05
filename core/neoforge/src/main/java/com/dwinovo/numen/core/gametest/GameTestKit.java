@@ -75,7 +75,7 @@ public final class GameTestKit {
     private static final int CLEAR_WEATHER_TICKS = 24000;
 
     /**
-     * 批次开场把世界定下来:难度、时刻、晴天,并关掉自然刷怪、随机刻与火的蔓延。每个批次都自己定,不继承上一批留下的——批次按名字的
+     * 批次开场把世界定下来:难度、时刻、晴天,并关掉自然刷怪、随机刻与火的蔓延(见 Worlds.pin)。每个批次都自己定,不继承上一批留下的——批次按名字的
      * 哈希排序,谁在谁前面跑说不准;和平难度会把战斗用例里的僵尸当场收走,那条用例就成了空转。
      */
     static void settleWorld(ServerLevel level, Difficulty difficulty, long dayTime) {
@@ -84,10 +84,7 @@ public final class GameTestKit {
         level.dimensionTypeRegistration().value().defaultClock()
                 .ifPresent(clock -> level.clockManager().setTotalTicks(clock, dayTime));
         level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
-        // 场地里的方块不在用例手外自己变:随机刻让盖在屋下的草皮枯成泥土、耕地失水,火在有玩家的区域里按刻变老(身体是玩家);
-        // 用例对账看的正是"除了她动过的,一格都没变"
-        level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, level.getServer());
-        level.getGameRules().set(GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0, level.getServer());
+        com.dwinovo.numen.pathing.gametest.Worlds.pin(level);
         level.getServer().setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
     }
 

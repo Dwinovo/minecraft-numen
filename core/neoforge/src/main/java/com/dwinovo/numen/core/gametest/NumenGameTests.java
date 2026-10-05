@@ -18,7 +18,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforgespi.language.ModFileScanData;
 
@@ -32,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 
 /**
@@ -87,6 +90,26 @@ public final class NumenGameTests {
         envTypes.register(modBus);
 
         modBus.addListener(NumenGameTests::onRegisterGameTests);
+        if (GameTestKit.numenTestsEnabled()) {
+            NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post e) -> pace());
+        }
+    }
+
+    /** 一刻至少这么久(纳秒):2 毫秒,一秒最多 500 刻。 */
+    private static final long MIN_TICK_NANOS = 2_000_000L;
+    private static long lastTickNanos;
+
+    /**
+     * 补足每刻的最短时长。GameTest 服务器的一刻不等下一刻,而 26.1 的一刻只要几十微秒:用例的时限按刻写、搜索与诊断按墙钟算,
+     * 几百刻的时限几十毫秒就到,搜索线程还没来得及交回结果。补到 2 毫秒一刻,时限与异步的活的比例就和 1.21.1 上实际的节奏
+     * (一秒约 600 刻)相当。
+     */
+    private static void pace() {
+        long wait = lastTickNanos + MIN_TICK_NANOS - System.nanoTime();
+        if (wait > 0) {
+            LockSupport.parkNanos(wait);
+        }
+        lastTickNanos = System.nanoTime();
     }
 
     /** 解码回调:按名取回用例体。 */
