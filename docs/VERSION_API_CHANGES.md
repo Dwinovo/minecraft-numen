@@ -1211,3 +1211,17 @@ api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、ga
 勘探主武器从 mappings diff 换成 **javap 两版 client jar + comm 类表 diff**(26.1+
 原生 Mojang 名,jar 即真相);一次工具假阴性(jar tf 管道偶发空输出,gizmo 包被误判
 不存在)靠先落盘 tf 全表再 grep 排掉——类表 diff 一律以落盘文件为准。
+
+## 26.2 对齐 1.21.1 @7a3d3e251（接在 origin/26.2 之上）
+做法:整树落成 1.21.1 的树,26.1.2 对齐里的平台适配(上一节)原样带过来,再把 origin/26.2 相对 origin/26.1.2 的差异重放一遍。
+- **渲染**:26.2 原有的适配(Gizmos 取代立即模式调试线、`gui.setScreen/screen()/hud.isHidden()/toastManager()`、`Language.has`、圆角 shader 退役)
+  照 origin/26.2。新代码里的 `ConsentOutlines` 改成与 `PathDebugRenderer` 同一条 gizmo 通道(`emit()`,两个加载器的挂点各加一行);
+  `ToastManagerAccessor` 还在、`toastManager()` 挪到 `Gui`。
+- **按颜色分的方块与物品**:`Blocks.RED_BED` → `Blocks.BED.red()` 一类(`ColorCollection`),`EntityType.PIG` → `EntityTypes.PIG`,`getCenter()` → `Vec3.atCenterOf`。
+- **其它**:`DripstoneThickness` → `SpeleothemThickness`,`CriteriaTriggers` 搬进 `advancements.triggers`,`I18n.setLanguage` 没了(单测的语言夹具改成只 `Language.inject`,
+  挪出 `net.minecraft` 包)。
+- **联动**:YSM 联动没有这个版本,不建;Curios `16.0.0+26.2`;FTB Quests 没做(同上节)。
+- **和平难度拒刷怪**:`EntityTypes.X.create(level, reason)` 带生成检查;本档的战斗用例批次定的是非和平难度,实测通过,没有另加 `EntitySpawnRequest`。
+- **MixinExtras**:GameTest 日志 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.3 内嵌 `mixinextras-fabric-0.5.4.jar`。够用,不内嵌。
+- **已知红**:同 26.1.2 对齐一节的 `build_japanese_cottage`;另有 `dig_a_scanned_cluster_digs_what_still_holds_the_scanned_block` 偶发(挖第三块铜矿时
+  准星落在别的格上拉不出射线,约三次里一次,两个版本都有)。
