@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -46,17 +47,24 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
         // StreamCodec.composite 上限 11 字段(1.21.10),装下本 record 的 9 个;线格式与
         // 逐字段手写完全一致(同序同码,writeUtf(256) ≡ stringUtf8(256))。
         static final StreamCodec<RegistryFriendlyByteBuf, Snapshot> CODEC =
-                StreamCodec.composite(
-                        UUIDUtil.STREAM_CODEC, Snapshot::uuid,
-                        ByteBufCodecs.BOOL, Snapshot::found,
-                        ByteBufCodecs.BOOL, Snapshot::loaded,
-                        ByteBufCodecs.DOUBLE, Snapshot::x,
-                        ByteBufCodecs.DOUBLE, Snapshot::y,
-                        ByteBufCodecs.DOUBLE, Snapshot::z,
-                        ByteBufCodecs.stringUtf8(256), Snapshot::dimension,
-                        ByteBufCodecs.FLOAT, Snapshot::hp,
-                        ByteBufCodecs.FLOAT, Snapshot::maxHp,
-                        Snapshot::new);
+                StreamCodec.of(
+                        (buf, s) -> {
+                            UUIDUtil.STREAM_CODEC.encode(buf, s.uuid());
+                            buf.writeBoolean(s.found());
+                            buf.writeBoolean(s.loaded());
+                            buf.writeDouble(s.x());
+                            buf.writeDouble(s.y());
+                            buf.writeDouble(s.z());
+                            Wire.TO_CLIENT.text().encode(buf, s.dimension());
+                            buf.writeFloat(s.hp());
+                            buf.writeFloat(s.maxHp());
+                        },
+                        buf -> new Snapshot(
+                                UUIDUtil.STREAM_CODEC.decode(buf),
+                                buf.readBoolean(), buf.readBoolean(),
+                                buf.readDouble(), buf.readDouble(), buf.readDouble(),
+                                Wire.TO_CLIENT.text().decode(buf),
+                                buf.readFloat(), buf.readFloat()));
     }
 
     public static final Type<NumenLocationsPayload> TYPE = new Type<>(

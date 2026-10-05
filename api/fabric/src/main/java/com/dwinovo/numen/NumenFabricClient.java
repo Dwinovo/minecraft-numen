@@ -38,7 +38,7 @@ public class NumenFabricClient implements ClientModInitializer {
         // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
         com.dwinovo.numen.api.NumenPlugins.bindClient(
                 root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::enqueue);
+                com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
@@ -73,10 +73,7 @@ public class NumenFabricClient implements ClientModInitializer {
                     }
                 });
 
-        // GUI 圆角 SDF shader:1.21.5 改代码定义的 RenderPipeline,首次使用时懒编译,
-        // fabric 侧无需(也已无)注册 API——RoundRect 自持管线即可。
-
-        // N → companion roster panel (chat entry + settings/reset live in there).
+        // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
         // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);
@@ -89,7 +86,17 @@ public class NumenFabricClient implements ClientModInitializer {
                 (g, delta) -> {
                     com.dwinovo.numen.client.hud.TalkHint.render(g);
                     com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
+                    com.dwinovo.numen.client.notify.MessageNotices.renderHud(g);
                 });
+        // 消息通知开着界面时画在界面上面、接点击(界面的事件每次 init 重置,所以在 init 之后挂)
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+            net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.afterRender(screen).register(
+                    (s, g, mouseX, mouseY, delta) ->
+                            com.dwinovo.numen.client.notify.MessageNotices.renderOver(g, mouseX, mouseY));
+            net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.allowMouseClick(screen).register(
+                    (s, click) ->
+                            !com.dwinovo.numen.client.notify.MessageNotices.click(click.x(), click.y(), click.button()));
+        });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();
@@ -104,22 +111,25 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.data.ClientNumenState.clear();
                     com.dwinovo.numen.client.agent.KnownSkins.clear();
                     com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-                    com.dwinovo.numen.client.chat.SelectedCompanion.clear();
                     com.dwinovo.numen.client.chat.QuickVoice.clear();
                     com.dwinovo.numen.client.chat.ChatLines.clearLive();
                     com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
                     com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
+                    com.dwinovo.numen.client.consent.ConsentCards.clear();
                 });
 
         // 寻路调试覆盖层:世界空间画线。挂 BEFORE_DEBUG_RENDER(原版调试线
         // 的绘制点,语义一致),相机走 gameRenderer.getMainCamera()。
-        // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
+        // 头顶气泡不在这里——它走玩家实体渲染的提交入口(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_DEBUG_RENDER
                 .register(context -> {
                     if (context.matrices() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                                context.matrices(),
+                                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
+                        com.dwinovo.numen.client.consent.ConsentOutlines.render(
                                 context.matrices(),
                                 net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
                     }

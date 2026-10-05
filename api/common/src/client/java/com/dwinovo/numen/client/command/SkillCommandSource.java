@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.skill.SkillInfo;
 import com.dwinovo.numen.agent.skill.SkillInjection;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
@@ -47,28 +49,17 @@ final class SkillCommandSource implements CommandSource {
         public String description() {
             String desc = SkillRegistry.instance().get(skill)
                     .map(SkillInfo::description).orElse(null);
-            return desc == null || desc.isBlank() ? "技能" : desc;
+            return desc == null || desc.isBlank() ? I18n.get(Keys.CMD_SKILL) : desc;
         }
 
         @Override
         public String argHint() {
-            return "[要求]";
+            return I18n.get(Keys.CMD_SKILL_ARGS);
         }
 
         @Override
         public boolean touchesContext() {
             return true;
-        }
-
-        /**
-         * 这条命令是要发给模型的,所以没绑模型/没填 key 时它就是用不了的。
-         *
-         * <p>放在这儿而不是执行时再报:补全列表里当场灰掉并写出理由,主人打之前就知道,
-         * 不会按下回车之后什么都没发生。
-         */
-        @Override
-        public String unavailable(EntityAgentLoop loop) {
-            return loop == null ? null : loop.endpointProblem();
         }
 
         /**
@@ -82,7 +73,7 @@ final class SkillCommandSource implements CommandSource {
         public String run(EntityAgentLoop loop, String args) {
             SkillInfo info = SkillRegistry.instance().get(skill).orElse(null);
             if (info == null) {
-                return "技能 " + skill + " 已经不在了(被关掉或删掉了)。";
+                return I18n.get(Keys.CMD_SKILL_GONE, skill);
             }
             loop.submitCommand(ChatCommands.PREFIX + skill + (args.isBlank() ? "" : " " + args),
                     SkillInjection.body(info, args));

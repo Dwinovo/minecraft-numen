@@ -1,0 +1,24 @@
+// numen-gametest:游戏内用例的登记处(1.21.5 起 GameTest 是数据驱动的,注解入口已删,见 NumenGameTests)。
+//
+// 用例本身在各自的模块里(core:neoforge 的 gametest 包、pathing 的 src/gametest、bench:game),写法仍是"类上一个注解、
+// 方法上一个注解";这里只管把它们登记成 minecraft:test_instance 条目。不发布、不进发行 jar:登记类由开发运行配置里的
+// 模组 numen 带进来,发行包里没有这个模块,用例类上的注解在那里是个读不到的名字,不起任何作用。
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+group = 'com.dwinovo.numen'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+neoForge {
+    version = neoforge_version
+}

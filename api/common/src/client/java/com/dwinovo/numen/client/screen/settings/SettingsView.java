@@ -9,6 +9,7 @@ import com.dwinovo.numen.client.screen.Dropdown;
 import com.dwinovo.numen.client.screen.LlmProviders;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
+import com.dwinovo.numen.client.ui.mc.GuiAlpha;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.persona.PersonaLibrary;
@@ -19,7 +20,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -55,8 +55,6 @@ public final class SettingsView {
         /** Left edge of the companion rail — the delete-confirm scrim covers rail + panel. */
         int railX();
         UUID uuid();
-        /** Bump the transient warn timer (text untouched — matches the old {@code warnUntil} pokes). */
-        void warnPulse();
         /** Collect a hovered-row tooltip; the screen draws it last, above everything. */
         void tip(List<Component> lines, int x, int y);
         /** Re-read the screen's palette statics after a theme switch. */
@@ -73,13 +71,6 @@ public final class SettingsView {
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
     private static final int HEADER_H = 22;
-    private static final int FIELD_INSET_X = 5;
-    private static final int FIELD_INSET_Y = 4;
-    private static final int SET_SP = 33;     // form row pitch (5 rows + Save must fit)
-    private static final int NAV_W = 74;      // left sub-nav column width
-    private static final int NAV_SP = 20;     // sub-nav row pitch
-    private static final int LIST_ROW = 24;   // list row height(两行内容 9+9 加呼吸,贴行显挤)
-    private static final int TOG_W = 18, TOG_H = 10;
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
 
     private final Host host;
@@ -87,7 +78,24 @@ public final class SettingsView {
     // ---- palette: re-read from the CURRENT theme on every public entry (theme switch = live) ----
     private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
 
-    private Section section = Section.PROVIDER;
+    /** 在哪个分区;null = 设置首页(分区列表)。 */
+    private Section section;
+    /** 退回首页的途中:分区页正往右滑出去,滑完才把 {@link #section} 置空。 */
+    private boolean leaving;
+    /** 分区页推进来多少像素(0 = 在首页,panelW = 整页进来);按趋近走。 */
+    private float pushPx;
+    private long lastPushMs;
+
+    /**
+     * 设置首页的分组(Telegram 设置那一列一组一组的):她本身(模型、人设、声线、语音输入、皮肤)、
+     * 她能用的(技能、工具扩展、外接大脑)、界面(主题)。
+     */
+    private static final Section[][] GROUPS = {
+            {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT, Section.SKIN},
+            {Section.SKILLS, Section.MCP, Section.BRAIN},
+            {Section.THEME}};
+    private static final int ITEM_H = 20;
+    private static final int GROUP_GAP = 7;
     /** 未被模态屏蔽的真实鼠标坐标(表单卡内的 NumenUI 悬停用)。 */
     private int rawMouseX = -10000, rawMouseY = -10000;
 
@@ -110,7 +118,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.agent.llm.ProviderLibrary.Entry> profileList() {
         if (profileList == null) {
             profileList = new LibraryListPanel<>(
-                    ModLanguageData.Keys.PROVIDER_TITLE, ModLanguageData.Keys.PROVIDER_ADD,
+                    ModLanguageData.Keys.PROVIDER_ADD,
                     ModLanguageData.Keys.PROVIDER_EMPTY,
                     () -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list(),
                     e -> {
@@ -118,7 +126,7 @@ public final class SettingsView {
                         String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                                 + (nb(e.model()) ? e.model() : "?")
                                 + (hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
-                        // 行首绑定点:● = 当前同伴走这份档案(召唤后也能换,即时生效)
+                        // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome
                                         .binding(host.uuid()).providerId());
@@ -144,13 +152,13 @@ public final class SettingsView {
         return profileList;
     }
 
-    // ---- 声线列表:同一底盘,加标题行全局开关与行首绑定 ● ----
+    // ---- 声线列表:同一底盘,加标题行全局开关与绑定 ----
     private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel;
 
     private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel() {
         if (voiceListPanel == null) {
             voiceListPanel = new LibraryListPanel<>(
-                    ModLanguageData.Keys.VOICE_TITLE, ModLanguageData.Keys.VOICE_ADD,
+                    ModLanguageData.Keys.VOICE_ADD,
                     ModLanguageData.Keys.VOICE_EMPTY,
                     () -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list(),
                     e -> {
@@ -160,7 +168,7 @@ public final class SettingsView {
                         else detail = nb(e.model()) ? e.model() : "?";
                         String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                                 + " · vol " + Math.round(e.volume() * 5.0f);
-                        // 行首绑定点:● = 本同伴正在用的声线;○ 点击换绑,再点 ● 解绑(闭嘴)。
+                        // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome.binding(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta, false, marked);
@@ -245,17 +253,7 @@ public final class SettingsView {
     private McpFormPanel mcpForm;
     private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
-    // ---- 左侧子导航:NumenUI NavPanel(选中胶囊+竖条,悬停动效随 ListView) ----
-    private NavPanel navPanel;
-
-    private NavPanel navPanel() {
-        if (navPanel == null) {
-            navPanel = new NavPanel(i -> selectSection(Section.values()[i]));
-        }
-        return navPanel;
-    }
-
-    /** 子导航标签:与 Section 声明顺序严格对应。 */
+    /** 分区名:与 Section 声明顺序严格对应。 */
     private static List<String> navLabels() {
         return List.of(
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
@@ -303,14 +301,28 @@ public final class SettingsView {
     private int panelH() { return host.panelH(); }
     private Font font() { return host.font(); }
 
-    /** Left x of the section content area (right of the sub-nav column + divider). */
-    private int secX() { return left() + PAD + NAV_W + 8; }
+    /*
+     * 设置页的格子:首页与分区页都占满整页宽,直接铺在页面底色上,没有外框。
+     * 首页的行、分区的抬头标题与按钮、列表的边沿都落在同一圈内边距 INNER 上,不各算各的。
+     */
+    /** 内容区离面板左右与底边内缩这么多,顶边在抬头下方。 */
+    private static final int SURFACE_INSET = 5;
+    /** 内容区边缘到里面东西的距离。 */
+    private static final int INNER = com.dwinovo.numen.client.ui.NumenStyle.PAD;
+    private int surfaceY() { return top() + HEADER_H + 2; }
+    private int innerLeft() { return left() + SURFACE_INSET + 1; }
+    private int innerRight() { return left() + panelW() - SURFACE_INSET - 1; }
+    private int innerTop() { return surfaceY() + 1; }
+    private int innerBottom() { return top() + panelH() - SURFACE_INSET - 1; }
+    /** Left x of the section content area(分区页整页宽)。 */
+    private int secX() { return innerLeft() + INNER; }
     /** Width of the section content area. */
-    private int secW() { return panelW() - PAD - NAV_W - 8 - PAD; }
-    /** Top y of section content (below the header). */
-    private int secY0() { return top() + HEADER_H + 8; }
+    private int secW() { return innerRight() - INNER - secX(); }
+    /** Top y of section content;首页第一行与分区抬头行同一条顶边。 */
+    private int secY0() { return innerTop() + INNER; }
     /** Bottom y a list row may reach. */
-    private int secBottom() { return top() + panelH() - PAD; }
+    private int secBottom() { return innerBottom() - INNER; }
+    private int secH() { return secBottom() - secY0(); }
 
     // ---- form modal (add/edit forms float on a card over the dimmed list) ----
 
@@ -319,7 +331,7 @@ public final class SettingsView {
         return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp;
     }
 
-    /** Esc while a form modal is up: close it back to the list (same semantics as the ✕ button). */
+    /** Esc while a form modal is up: close it back to the list (same as the card's 取消). */
     public boolean cancelForm() {
         if (!formActive()) return false;
         addingProvider = false; providerEditId = null;
@@ -334,7 +346,7 @@ public final class SettingsView {
     }
 
     // 表单卡:面板区域内缩 10px 的近全幅卡——小面板下可用面积本就紧张,弹层感
-    // 靠四周暗边 + 圆角传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
+    // 靠四周暗边 + 描边传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
     private int cardX0() { return left() + 10; }
     private int cardY0() { return top() + 10; }
     private int cardX1() { return left() + panelW() - 10; }
@@ -343,35 +355,60 @@ public final class SettingsView {
     private int fx() { return cardX0() + 10; }
     /** Width of form content inside the card. */
     private int fw() { return cardX1() - cardX0() - 20; }
+    /** 卡顶标题的顶边(Telegram 对话框:左上角一行加粗标题)。 */
+    private int cardTitleY() { return cardY0() + 8; }
     /** Top y of form content (below the card's title row). */
-    private int fy0() { return cardY0() + 18; }
-    /** Right edge form buttons align to. */
-    private int fRight() { return cardX1() - 10; }
-    /** Bottom edge the form's save row sits above. */
-    private int fBottom() { return cardY1() - 10; }
+    private int fy0() { return cardTitleY() + 16; }
+    /** Bottom edge the form's button row sits on:纯字钮贴近卡底,和 Telegram 对话框底部那排一样。 */
+    private int fBottom() { return cardY1() - 6; }
 
-    /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题。 */
+    /** 表单卡的出入场照 Telegram 对话框:开卡淡入,收卡淡出。 */
+    private static final int CARD_SHOW_MS = 200;
+    private static final int CARD_HIDE_MS = 150;
+    /** 上一帧表单卡在不在场;在场与否一变,就记下开卡或收卡的时刻。 */
+    private boolean cardUp;
+    private long cardShownAt, cardHiddenAt;
+    /** 最近画过的那张卡:收卡后淡出的那几帧还要照它画(表单面板的控件在下次开卡前原样留着)。 */
+    private Component cardTitle;
+    private CardBody cardBody;
+
+    /** 卡里的表单:五个表单面板的 render 签名都是这个。 */
+    private interface CardBody {
+        void render(com.dwinovo.numen.client.ui.IDrawSurface s, com.dwinovo.numen.client.ui.NumenTheme.Colors c,
+                    int mouseX, int mouseY, long nowMs);
+    }
+
+    /** 表单卡在场时,分区列表画完后压上这张卡(按开卡后过了多久淡入)。 */
+    private void formCard(GuiGraphics g, Component title, CardBody body) {
+        cardTitle = title;
+        cardBody = body;
+        float p = Math.min(1f, (System.currentTimeMillis() - cardShownAt) / (float) CARD_SHOW_MS);
+        drawCard(g, com.dwinovo.numen.client.ui.Anim.easeOutCubic(p), rawMouseX, rawMouseY);
+    }
+
+    /** 暗幕 + 近全幅的卡 + 卡里的表单,整体乘上 {@code alpha}。 */
+    private void drawCard(GuiGraphics g, float alpha, int mouseX, int mouseY) {
+        GuiAlpha.set(Math.max(0.05f, alpha));
+        formModal(g, cardTitle);
+        cardBody.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        GuiAlpha.set(1f);
+    }
+
+    /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。卡底是窗口底色(Telegram 对话框的 boxBg = windowBg)。 */
     private void formModal(GuiGraphics g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
                 (t.border() & 0xFFFFFF) | 0x99000000);
-        com.dwinovo.numen.client.ui.RoundRect.card(g, cardX0(), cardY0(), cardX1(), cardY1(),
-                6, t.aiFill(), t.aiBorder());
-        txt(g, title, fx(), cardY0() + 6, TXT);
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), cardX0(), cardY0(),
+                cardX1() - cardX0(), cardY1() - cardY0(), t.band(), t.aiBorder());
+        txt(g, title.copy().withStyle(net.minecraft.ChatFormatting.BOLD), fx(), cardTitleY(), TXT);
     }
 
     // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
 
     private void txt(GuiGraphics g, Component c, int x, int y, int color) {
         Nb.text(g, font(), c, x, y, color);
-    }
-
-    /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
-    private void placeholder(GuiGraphics g, EditBox f, String text) {
-        if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
-                && text != null && !text.isEmpty()) {
-            txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
-        }
     }
 
     private static boolean nb(String s) {
@@ -388,15 +425,47 @@ public final class SettingsView {
     public void clearWidgets() {
     }
 
+    /** 首页点了一个分区:它从右边推进来。 */
     private void selectSection(Section s) {
-        if (s == section) return;
         section = s;
+        leaving = false;
+        pushPx = 0f;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
-        if (brainPanel != null) brainPanel.reseed();   // 回概览页,丢掉没保存的草稿
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
         }
+        resetSectionState();
+        host.rebuild();
+    }
+
+    /** 面板抬头写什么:在分区里是分区名(Telegram 子页),在首页是"设置"。 */
+    public String title() {
+        return inSection() ? navLabels().get(section.ordinal()) : I18n.get("numen.tab.settings");
+    }
+
+    /** 在某个分区里(不算正在退出去的)——← 和 Esc 先退回首页。 */
+    public boolean inSection() {
+        return section != null && !leaving;
+    }
+
+    /** 退回首页:分区页往右滑出去,滑完才换。表单开着时先由 {@link #cancelForm} 收。 */
+    public void leaveSection() {
+        if (inSection()) leaving = true;
+    }
+
+    /** 开设置页时从首页开始,不带动画。 */
+    public void showList() {
+        if (section == null) return;
+        section = null;
+        leaving = false;
+        pushPx = 0f;
+        resetSectionState();
+    }
+
+    /** 各分区的表单与在途回调:换分区、退回首页都清掉。 */
+    private void resetSectionState() {
+        cardBody = null;   // 表单卡随分区一起离开,不在别的分区上淡出
         addingMcp = false;
         addingPersona = false;
         personaEditId = null;
@@ -407,7 +476,6 @@ public final class SettingsView {
         if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
         addingSkin = false;
         if (skinForm != null) skinForm.cancelPending();   // 离开皮肤表单:在途 MineSkin 签名回调作废
-        host.rebuild();
     }
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
@@ -415,49 +483,47 @@ public final class SettingsView {
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     public void buildWidgets() {
         loadPalette();
-        navPanel().build(left() + PAD - 4, secY0() - 3, NAV_W, secBottom() - secY0() + 3,
-                navLabels(), section.ordinal());
+        if (section == null) return;   // 首页是手画的一列,没有控件
         switch (section) {
-            case SKILLS -> skillsListPanel().build(secX(), secY0() - 2, secW(),
-                    secBottom() - secY0() + 2, left(), top(), panelW(), panelH());
+            case SKILLS -> skillsListPanel().build(secX(), secY0(), secW(), secH(),
+                    left(), top(), panelW(), panelH());
             case MCP -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                mcpListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                mcpListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingMcp) buildMcpForm();
             }
             case PERSONA -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                personaListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                personaListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingPersona) buildPersonaForm();
             }
             case PROVIDER -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                profileList().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                profileList().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingProvider) buildProviderFormNew();
             }
             case VOICE -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                voiceListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                voiceListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingVoice) buildVoiceForm();
             }
             case SKIN -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                skinListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                skinListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingSkin) buildSkinForm();
             }
             case BRAIN -> {
                 // 换令牌的确认卡要盖住整个设置面板,不是只盖这个分区
                 brainPanel().setDimBounds(left(), top(), panelW(), panelH());
-                brainPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
+                brainPanel().build(secX(), secY0(), secW(), secH());
             }
-            case STT -> sttPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
-            case THEME -> themePanel().build(secX(), secY0() - 2, secW(),
-                    secBottom() - secY0() + 2);
+            case STT -> sttPanel().build(secX(), secY0(), secW(), secH());
+            case THEME -> themePanel().build(secX(), secY0(), secW(), secH());
         }
     }
 
@@ -530,18 +596,9 @@ public final class SettingsView {
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingVoice) {
-            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上。
-            voiceListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
-            voiceForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        voiceListPanel().render(surface, HostThemeColors.current(),
+        voiceListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingVoice) formCard(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
     }
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
@@ -580,19 +637,19 @@ public final class SettingsView {
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
-    // ---- 人格列表:通用 LibraryListPanel + 预设行 ⧉ 克隆 + 标题行 ↻ 重扫 ----
+    // ---- 人格列表:通用 LibraryListPanel + 克隆(预设行点了就是克隆)+ 标题行 ↻ 重扫 ----
     private LibraryListPanel<PersonaLibrary.Persona> personaListPanel;
 
     private LibraryListPanel<PersonaLibrary.Persona> personaListPanel() {
         if (personaListPanel == null) {
             personaListPanel = new LibraryListPanel<>(
-                    "numen.persona.title", "numen.persona.add", "numen.persona.empty",
+                    "numen.persona.add", "numen.persona.empty",
                     () -> PersonaLibrary.instance().list(),
                     p -> {
                         String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
                         String meta = (badge + p.text()).replace('\n', ' ');
-                        // 行首绑定点:● = 本同伴的人设;预设行同样可绑
+                        // 行尾勾 = 本同伴的人设;预设行同样可绑
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome
                                         .binding(host.uuid()).personaId());
@@ -619,7 +676,7 @@ public final class SettingsView {
                                     AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
-                    .withPresetClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
+                    .withClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
                     .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
         }
@@ -691,7 +748,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel() {
         if (mcpListPanel == null) {
             mcpListPanel = new LibraryListPanel<>(
-                    "numen.mcp.title", "numen.mcp.add", "numen.mcp.empty",
+                    "numen.mcp.add", "numen.mcp.empty",
                     com.dwinovo.numen.mcp.client.McpClientManager::servers,
                     h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
                             h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED, null),
@@ -704,7 +761,7 @@ public final class SettingsView {
                     },
                     h -> beginEditMcp(h.name()))
                     .withRowIcon(8, (s, h, ix, iy, size) ->
-                            s.fillRoundRect(ix + 1, iy + 1, 6, 6, 3, mcpDotColor(h.status())))
+                            s.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h.status())))
                     .withRowToggle(
                             h -> h.toggledOn(),
                             h -> {
@@ -794,20 +851,20 @@ public final class SettingsView {
         return java.util.Map.copyOf(out);
     }
 
-    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除) ----
+    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除,一行一个技能,整行点了就翻开关) ----
     private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel;
 
     private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel() {
         if (skillsListPanel == null) {
             skillsListPanel = new LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo>(
-                    "numen.skill.title", null, "numen.skill.empty",
+                    null, "numen.skill.empty",
                     () -> new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all()),
                     sk -> {
                         String desc = sk.description() == null
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, sk -> { }, () -> { }, sk -> { })
+                    null, null, null, null)
                     .withRowToggle(
                             sk -> !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
                             sk -> {
@@ -851,7 +908,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.client.skin.SkinLibrary.Entry> skinListPanel() {
         if (skinListPanel == null) {
             skinListPanel = new LibraryListPanel<>(
-                    ModLanguageData.Keys.SKIN_TITLE, ModLanguageData.Keys.SKIN_ADD,
+                    ModLanguageData.Keys.SKIN_ADD,
                     ModLanguageData.Keys.SKIN_EMPTY,
                     () -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list(),
                     e -> {
@@ -905,7 +962,7 @@ public final class SettingsView {
                                     ModLanguageData.Keys.SKIN_SIGN_OK, signedName).getString());
                         }
                     },
-                    () -> {   // ✕ 关闭
+                    () -> {   // 取消
                         addingSkin = false;
                         skinForm.cancelPending();
                         host.rebuild();
@@ -927,17 +984,9 @@ public final class SettingsView {
     }
 
     private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingSkin) {
-            skinListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE));
-            skinForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        skinListPanel().render(surface, HostThemeColors.current(),
+        skinListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingSkin) formCard(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), skinForm()::render);
     }
 
     /** 皮肤 png 从系统拖进游戏窗口(皮肤表单打开时)。64×64 或旧版 64×32。 */
@@ -976,7 +1025,98 @@ public final class SettingsView {
 
     public void render(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行/导航
+        long now = System.currentTimeMillis();
+        float dt = lastPushMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPushMs) / 1000f);
+        lastPushMs = now;
+        int w = panelW();
+        boolean up = formActive();
+        if (up != cardUp) {
+            cardUp = up;
+            if (up) cardShownAt = now; else cardHiddenAt = now;
+        }
+        pushPx = com.dwinovo.numen.client.ui.Anim.approach(pushPx, inSection() ? w : 0f, 16f, dt);
+        if (leaving && pushPx <= 0f) {
+            section = null;
+            leaving = false;
+            resetSectionState();
+            host.rebuild();
+        }
+        int bodyTop = surfaceY(), bodyBottom = top() + panelH() - 3;
+        if (pushPx < w) {
+            // 首页:分区页推进来时它往左让出四分之一、压暗(Telegram 一层盖一层的样子)
+            int dx = -Math.round(pushPx * 0.25f);
+            g.pose().pushMatrix();
+            g.pose().translate(dx, 0);
+            renderList(g, section == null ? mouseX - dx : -10000, mouseY);
+            g.pose().popMatrix();
+            int a = Math.round(0x70 * pushPx / w);
+            if (a > 0) g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, a << 24);
+        }
+        if (section != null) {
+            int dx = Math.round(w - pushPx);
+            g.pose().pushMatrix();
+            g.pose().translate(dx, 0);
+            g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, UiTheme.current().band());
+            renderSection(g, leaving ? -10000 : mouseX - dx, mouseY);
+            g.pose().popMatrix();
+        }
+    }
+
+    /** 设置首页:一行一个分区,图标 + 名字,组与组之间一道线。 */
+    private void renderList(GuiGraphics g, int mouseX, int mouseY) {
+        UiTheme t = UiTheme.current();
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        List<String> labels = navLabels();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) {
+                g.fill(x, y + GROUP_GAP / 2, right, y + GROUP_GAP / 2 + 1, t.surfaceBorder());
+                y += GROUP_GAP;
+            }
+            for (Section s : GROUPS[gi]) {
+                boolean hot = mouseX >= x && mouseX < right && mouseY >= y && mouseY < y + ITEM_H;
+                if (hot) g.fill(x, y, right, y + ITEM_H, t.over());
+                int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g, iconOf(s), x + INNER, y + (ITEM_H - size) / 2, size,
+                        hot ? TXT : TXT_MUTED);
+                txt(g, Component.literal(labels.get(s.ordinal())), x + INNER + size + 10,
+                        y + (ITEM_H - font().lineHeight) / 2 + 1, TXT);
+                y += ITEM_H;
+            }
+        }
+    }
+
+    /** 首页指针下那一行是哪个分区;不在行上是 null。 */
+    private Section listAt(double mx, double my) {
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) y += GROUP_GAP;
+            for (Section s : GROUPS[gi]) {
+                if (mx >= x && mx < right && my >= y && my < y + ITEM_H) return s;
+                y += ITEM_H;
+            }
+        }
+        return null;
+    }
+
+    private static net.minecraft.resources.ResourceLocation iconOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> com.dwinovo.numen.client.ui.mc.Sprites.CPU;
+            case MCP -> com.dwinovo.numen.client.ui.mc.Sprites.PLUG;
+            case BRAIN -> com.dwinovo.numen.client.ui.mc.Sprites.ROBOT;
+            case SKILLS -> com.dwinovo.numen.client.ui.mc.Sprites.BOOK;
+            case PERSONA -> com.dwinovo.numen.client.ui.mc.Sprites.PERSONA;
+            case VOICE -> com.dwinovo.numen.client.ui.mc.Sprites.VOLUME;
+            case SKIN -> com.dwinovo.numen.client.ui.mc.Sprites.SHIRT;
+            case STT -> com.dwinovo.numen.client.ui.mc.Sprites.MIC;
+            case THEME -> com.dwinovo.numen.client.ui.mc.Sprites.BRUSH;
+        };
+    }
+
+    /** 分区页本身。 */
+    private void renderSection(GuiGraphics g, int mouseX, int mouseY) {
+        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行
         // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
         // 但表单卡自己是活的:真实坐标另存一份,供卡内的 NumenUI 表单用
         // (否则表单里的下拉/按钮悬停被误杀)。
@@ -986,16 +1126,6 @@ public final class SettingsView {
             mouseX = -10000;
             mouseY = -10000;
         }
-        // 内容底板:比地面亮一档的"纸面"垫住整个设置区(导航+正文),文字不再直接
-        // 铺在点纹地面上——点纹退成底板四周的氛围纹理,层级和对比度都立起来。
-        UiTheme th = UiTheme.current();
-        com.dwinovo.numen.client.ui.RoundRect.card(g,
-                left() + 5, top() + HEADER_H + 2, left() + panelW() - 5, top() + panelH() - 5,
-                6, th.surface(), th.surfaceBorder());
-        navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-        int dx = left() + PAD + NAV_W + 3;
-        g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> {
@@ -1005,28 +1135,31 @@ public final class SettingsView {
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
-            case BRAIN -> brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+            case BRAIN -> {
+                brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                        HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                // 图标按钮悬停说的那句:tooltip 要画在最上面,所以交给屏幕,不在这儿画。
+                String tip = brainPanel().tooltipAt(mouseX, mouseY);
+                if (tip != null) {
+                    host.tip(List.of(Component.literal(tip)), mouseX, mouseY);
+                }
+            }
             case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             case THEME -> themePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
         }
+        // 刚收起的表单卡:照最后那一帧再画几帧,淡出(卡已不接指针)
+        long sinceHidden = System.currentTimeMillis() - cardHiddenAt;
+        if (!cardUp && cardBody != null && sinceHidden < CARD_HIDE_MS) {
+            drawCard(g, 1f - sinceHidden / (float) CARD_HIDE_MS, -10000, -10000);
+        }
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingProvider) {
-            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
-            profileList().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
-            providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        profileList().render(surface, HostThemeColors.current(),
+        profileList().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingProvider) formCard(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), providerForm()::render);
     }
 
     private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
@@ -1057,18 +1190,13 @@ public final class SettingsView {
     // ---- MCP section: external server list with a live on/off switch per row ----
 
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
+        mcpListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
         if (addingMcp) {
-            mcpListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable("numen.mcp.title"));
-            mcpForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+            formCard(g, Component.translatable("numen.mcp.title"), mcpForm()::render);
             return;
         }
-        mcpListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
-        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾动作热区上不弹)。
+        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾开关上不弹)。
         var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
         if (hovered != null) {
             host.tip(mcpTooltip(hovered), mouseX, mouseY);
@@ -1115,17 +1243,9 @@ public final class SettingsView {
     // ---- Persona section render + hit-test ----
 
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingPersona) {
-            personaListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable("numen.persona.title"));
-            personaForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        personaListPanel().render(surface, HostThemeColors.current(),
+        personaListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingPersona) formCard(g, Component.translatable("numen.persona.title"), personaForm()::render);
     }
 
     private void beginEditPersona(PersonaLibrary.Persona p) {
@@ -1141,16 +1261,27 @@ public final class SettingsView {
     // ---- input (called from the screen's mouseClicked / mouseScrolled) ----
 
     /** The Settings tab's whole click chain — dropdown routing first (open lists overlay
-     *  the fields), then the sub-nav / theme rows / per-row toggles. Returns true = consumed. */
-    public boolean mouseClicked(double mouseX, double mouseY) {
+     *  the fields), then theme rows / per-row toggles; on the home page, the section rows. Returns true = consumed. */
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         loadPalette();
+        if (button != 0) {
+            // 右键只有条目库的行认(弹出编辑/克隆/删除菜单);首页、退出途中、表单开着时都不接
+            LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
+            return lib != null && lib.mouseClicked(mouseX, mouseY, button);
+        }
+        if (section == null) {   // 首页:点一行进那个分区
+            Section s = listAt(mouseX, mouseY);
+            if (s != null) selectSection(s);
+            return s != null;
+        }
+        if (leaving) return true;   // 正在退出去的那页不接点击
         // 模型配置表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
         if (section == Section.PROVIDER && addingProvider
                 && providerForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         // NumenUI 列表面板:删除确认卡开着时面板吃掉一切(模态);
-        // 平时接行/图标/开关/新建,没命中就放行给子导航。
+        // 平时接行/开关/新建,没命中就往下放行。
         if (section == Section.PROVIDER && !addingProvider
                 && profileList().mouseClicked(mouseX, mouseY, 0)) {
             return true;
@@ -1206,11 +1337,20 @@ public final class SettingsView {
         if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        // 子导航(NumenUI):表单模态时在暗幕之下不放行。
-        if (!formActive() && navPanel().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
         return false;
+    }
+
+    /** 这个分区是不是条目库(列表页);不是的给 null。 */
+    private LibraryListPanel<?> libraryOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> profileList();
+            case VOICE -> voiceListPanel();
+            case PERSONA -> personaListPanel();
+            case SKIN -> skinListPanel();
+            case MCP -> mcpListPanel();
+            case SKILLS -> skillsListPanel();
+            case BRAIN, STT, THEME -> null;
+        };
     }
 
     /** Open the add-form PRE-FILLED with {@code name}'s current spec — saving REPLACES the entry. */
@@ -1279,6 +1419,9 @@ public final class SettingsView {
         }
         if (section == Section.SKIN && !addingSkin
                 && skinListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.BRAIN && brainPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
         if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {

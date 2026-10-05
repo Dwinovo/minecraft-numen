@@ -30,14 +30,14 @@ public final class SpeakingLookChain implements Task, Reflex {
     public TaskState tick(NumenPlayer companion) {
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner == null) return TaskState.RUNNING;
-        InputDriver.halt(companion);
+        companion.controls().stop();
         InputDriver.lookAt(companion, owner.getEyePosition());
         return TaskState.RUNNING;
     }
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        InputDriver.halt(companion);
+        companion.controls().stop();
     }
 
     @Override

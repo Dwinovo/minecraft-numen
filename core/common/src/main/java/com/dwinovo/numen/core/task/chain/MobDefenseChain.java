@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.task.combat.AttackCompanionTask;
 import com.dwinovo.numen.core.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
@@ -83,9 +82,9 @@ public final class MobDefenseChain implements Task, Reflex {
     @Override
     public boolean canRun(NumenPlayer companion) {
         long now = companion.level().getGameTime();
-        // 有人正在替这条本能干活(模型派的 attack),就别抢 —— 除非她已经扛不住,
-        // 那一档只有本能看得见。按住的是本能不是目标,所以会分裂的怪不会让它失效。
-        if (fight == null && companion.reflexPaused(ID) && !Menace.outmatched(companion)) {
+        // 有人正在替这条本能干活(模型派的 attack),就别抢。按住的是本能不是目标,所以会分裂的怪不会让它失效。
+        // 扛不住时跑是逃跑本能的事(FleeChain,排在这条之前),跑不掉它让出身体,这里照常打。
+        if (fight == null && companion.reflexPaused(ID)) {
             return false;
         }
         if (fight != null) {
@@ -126,7 +125,7 @@ public final class MobDefenseChain implements Task, Reflex {
     private void begin(NumenPlayer companion) {
         long now = companion.level().getGameTime();
         AttackTaskRecord record = new AttackTaskRecord(
-                "reflex-" + now, now + NO_DEADLINE, List.of(), true);
+                ID, "reflex-" + now, now + NO_DEADLINE, List.of(), true);
         fight = new AttackCompanionTask(companion, record);
         fight.start(companion);
         com.dwinovo.numen.Constants.LOG.info("[numen-defense] 自动接管 —— 身边 {} 个危险",
@@ -140,12 +139,11 @@ public final class MobDefenseChain implements Task, Reflex {
         String line = fight.result(state).message();
         fight = null;
         dangerLastSeenTick = NEVER;
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
         com.dwinovo.numen.Constants.LOG.info("[numen-defense] 收场 {} —— {}", state, line);
         // <b>不急</b>:她的后台任务照跑,黄了自有 task_finished 报。这条只是让主人翻聊天流时
         // 看得懂她刚才为什么打了一架、或者挪了二十格。攒着搭下一轮的车就够。
-        com.dwinovo.numen.event.NumenEvents.body(companion,
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this,
                 "hit danger and handled it on instinct — " + line);
     }
 
@@ -155,8 +153,7 @@ public final class MobDefenseChain implements Task, Reflex {
             // 被更急的链抢走(摔落、换气):只松开身体,这场仗的状态一个不动,回来接着打。
             fight.stop(companion, why);
         }
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
     }
 
     @Override
@@ -173,7 +170,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "身边有危险就自动开打,打法与她自己派的 attack 完全一致";
+        return "身边有危险就自动开打,打法与她自己派的 `numen.fight.attack` 完全一致";
     }
 
     // ---- 什么算危险 ----
@@ -184,14 +181,19 @@ public final class MobDefenseChain implements Task, Reflex {
      * <p>只算正在针对她的——防守不是挑衅,一只路过的僵尸猪灵不该被"防御"链招惹。还没逼近的
      * 那些也不进来:模型看得见它们,该由它决定要不要动手。
      *
-     * <p>模型自己派的 {@code attack} 已经认领的目标同样不算:那场仗有人管了。但她扛不住时
-     * 一律接管——那一档只有本能看得见。
+     * <p>模型自己派的 {@code attack} 已经认领的目标同样不算:那场仗有人管了。
      */
     private List<Mob> dangersNear(NumenPlayer companion) {
         LivingEntity attacker = companion.getLastHurtByMob();
         List<Mob> near = new ArrayList<>();
         for (Mob m : Menace.hostilesAround(companion, SCAN_RADIUS)) {
             if (m != attacker && m.getTarget() != companion) {
+                continue;
+            }
+            // 本能开打也要过权限层:一只有名字的僵尸追着她,没有主人点头就不是一场能打的仗
+            // ——开了也是 attack 在局面里把它剔掉、当场收场、下一刻再开,循环打转。
+            if (!com.dwinovo.numen.permission.Permission.judge(companion,
+                    com.dwinovo.numen.permission.Action.attack(m)).allowed()) {
                 continue;
             }
 

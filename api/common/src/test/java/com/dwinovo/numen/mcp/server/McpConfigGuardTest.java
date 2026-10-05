@@ -94,11 +94,11 @@ class McpConfigGuardTest {
 
     @Test
     void eachWitherLeavesTheRestAlone() {
-        McpConfig base = new McpConfig(true, "127.0.0.1", 8765, "tok", 300, List.of("todowrite"), false);
+        McpConfig base = new McpConfig(true, "127.0.0.1", 8765, "tok", 300, List.of("todo"), false);
 
         McpConfig moved = base.withEndpoint("0.0.0.0", 9000, 60);
         assertEquals("tok", moved.token());
-        assertEquals(List.of("todowrite"), moved.hiddenTools());
+        assertEquals(List.of("todo"), moved.hiddenTools());
         assertTrue(moved.enabled());
 
         McpConfig retokened = base.withToken("new");

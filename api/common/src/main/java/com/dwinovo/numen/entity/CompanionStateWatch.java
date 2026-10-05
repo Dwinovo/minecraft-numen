@@ -2,7 +2,7 @@ package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.network.payload.NumenStatePayload;
 import com.dwinovo.numen.network.payload.RequestStatePayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * 同伴身上的状态一变就推一份给主人的客户端,让 agent 循环不必花一整轮
- * {@code get_self_status} 去重新发现自己带着什么、身上有什么效果。
+ * {@code status_self} 去重新发现自己带着什么、身上有什么效果。
  *
  * <h2>为什么非推不可</h2>
  * 渲染那块提示词的代码在<b>客户端</b>,而 companion 的 36 格从不同步给客户端——原版只同步
@@ -35,12 +35,16 @@ import java.util.UUID;
  *
  * <h2>只认"什么物品、几个"</h2>
  * 耐久、附魔、其它组件一概不进比较。否则她每挥一镐都算变了。模型读的是"我有什么、几个",
- * 要精确到槽位和附魔时才调 {@code inspect_gui}。
+ * 要精确到槽位和附魔时才用 {@code gui view}。
  *
  * <h2>效果同理:只认"有哪些、几级"</h2>
  * <b>剩余时间不进比较</b> —— 它每 tick 都在减,拿它当变化判据就是每 tick 推一个包。
  * 时长照发,由客户端按收到的时刻自己往下扣:效果是确定性的倒计时,推算出来的秒数和真值
  * 一致,而重推只发生在"多了一种、少了一种、升了级"这三件真事上。
+ *
+ * <h2>身体状态片段一并算</h2>
+ * 身体状态片段(打头的 {@code <worn>} 与插件经 {@code NumenApi.contributeBodyState} 读的那段)也是身体此刻的样子,
+ * 在这里和背包一起检查:整段字符串和上次不同才推。所以片段里不能有每 tick 都在变的值。
  */
 public final class CompanionStateWatch {
 
@@ -65,10 +69,13 @@ public final class CompanionStateWatch {
     private java.util.Set<String> lastEffects = java.util.Set.of();
     /** 上次见到的载具实体 id;-1 = 没骑。上下船是模型必须实时知道的身体事实。 */
     private int lastVehicleId = -1;
+    /** 上次见到的身体状态片段(拼好的整段);空串 = 一段都没有。 */
+    private String lastBodyState = "";
     private long lastSentTick;
     private boolean everSent;
 
-    private CompanionStateWatch() {}
+    // 包内可见:单测直接验"片段相同不推、变了推"。
+    CompanionStateWatch() {}
 
     /** 每服务端 tick、每个同伴调一次(见 {@code CompanionTickDispatcher})。 */
     public static void tick(NumenPlayer companion, long serverTick) {
@@ -102,22 +109,25 @@ public final class CompanionStateWatch {
         boolean invChanged = changedSince(companion.getInventory());
         boolean effectsChanged = effectsChangedSince(companion);
         boolean vehicleChanged = vehicleChangedSince(companion);
-        if (!invChanged && !effectsChanged && !vehicleChanged) {
+        boolean bodyStateChanged = bodyStateChangedSince(
+                com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(companion));
+        if (!invChanged && !effectsChanged && !vehicleChanged && !bodyStateChanged) {
             return;
         }
         lastSentTick = serverTick;
         boolean first = !everSent;
         everSent = true;
         NumenStatePayload payload = RequestStatePayload.snapshot(companion);
-        Services.NETWORK.sendToPlayer(owner, payload);
+        NumenNetwork.sendToPlayer(owner, payload);
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志已经害过我们一次。
         com.dwinovo.numen.Constants.LOG.info(
-                "[numen-state] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}, 效果 {}{}{}",
+                "[numen-state] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}, 效果 {}{}{}{}",
                 companion.getName().getString(), kinds(payload), usedSlots(payload),
                 slotName(payload.selectedSlot(), payload.items()), name(payload.offhand()),
                 payload.effects().size(),
                 payload.vehicleId() >= 0 ? ", 骑 " + payload.vehicleType() : "",
+                payload.bodyState().isEmpty() ? "" : ", 插件片段 " + payload.bodyState().length() + " 字符",
                 first ? " (首次)" : "");
     }
 
@@ -159,6 +169,15 @@ public final class CompanionStateWatch {
             return false;
         }
         lastEffects = now;
+        return true;
+    }
+
+    /** 插件片段这一趟拼出来的整段和上次比,顺便把镜像更新到最新。返回"有没有变"。 */
+    boolean bodyStateChangedSince(String now) {
+        if (now.equals(lastBodyState)) {
+            return false;
+        }
+        lastBodyState = now;
         return true;
     }
 

@@ -25,6 +25,53 @@ public final class ToolOutcome {
 
     private ToolOutcome() {}
 
+    /** 一条成功结果 {@code {"success":true,"message":…}}:只管大脑自己的事的工具(技能、计划、札记)回的就是这个形状。 */
+    public static String success(String message) {
+        JsonObject result = new JsonObject();
+        result.addProperty("success", true);
+        result.addProperty("message", message);
+        return result.toString();
+    }
+
+    /** 一条失败结果 {@code {"success":false,"message":…}}:不是工具自己回的、由循环替它写下的结果都是这个形状。 */
+    public static String failure(String message) {
+        JsonObject result = new JsonObject();
+        result.addProperty("success", false);
+        result.addProperty("message", message);
+        return result.toString();
+    }
+
+    /**
+     * 交给模型的那份文字——规则只此一处:把工具结果交给模型的出口(对话历史变成请求时的 {@code ProtocolView}、外接智能体拿到的工具结果)
+     * 都问这里。结果是信封({@code success} 与 {@code message})就是它的 {@code message},成败已在文字第一行;不是信封的(技能正文、远端 MCP
+     * 工具的文字)原样。历史里存的就是信封(界面据 {@code success} 画成败),模型读到的只有它的文字;程序的结构化结局不在信封里,在 {@code Program.Outcome}。
+     */
+    public static String modelText(String result) {
+        JsonObject envelope = envelope(result);
+        return envelope == null ? result : envelope.get("message").getAsString();
+    }
+
+    /** 结果是 {@code {"success": 布尔, "message": 字符串, …}} 的信封就是它;不是是 null。 */
+    private static JsonObject envelope(String result) {
+        if (result == null || !result.stripLeading().startsWith("{")) {
+            return null;
+        }
+        try {
+            JsonElement parsed = JsonParser.parseString(result);
+            if (!parsed.isJsonObject()) {
+                return null;
+            }
+            JsonObject obj = parsed.getAsJsonObject();
+            JsonElement success = obj.get("success");
+            JsonElement message = obj.get("message");
+            boolean envelope = success != null && success.isJsonPrimitive() && success.getAsJsonPrimitive().isBoolean()
+                    && message != null && message.isJsonPrimitive() && message.getAsJsonPrimitive().isString();
+            return envelope ? obj : null;
+        } catch (RuntimeException notJson) {
+            return null;
+        }
+    }
+
     /** 这条工具结果是否宣告了失败。 */
     public static boolean failed(String content) {
         if (content == null || content.isBlank()) {

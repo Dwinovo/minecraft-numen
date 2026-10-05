@@ -1,8 +1,9 @@
 package com.dwinovo.numen.core.task.build;
-import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
-import com.dwinovo.numen.core.pathing.execute.AimProcessor;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.pathing.body.Aim;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -15,9 +16,12 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * 施工的演出层:转头、蹲起、挥手、手到落点的粒子、落位声。
- * 只管"看起来像有人在干活",不碰任何施工判定与账目——删掉整个类,
+ * 施工的演出:转头、蹲起、挥手、手到落点的粒子、落位声。只管"看起来像有人在干活",不碰任何施工判定与账目——删掉整个类,
  * 房子照样盖得出来,只是看着像作弊。
+ *
+ * <h2>表演不改变世界</h2>
+ * 它手里只有身体的输入(转头、挥手、蹲)和一份只读的视图:没有挖掘器,没有导航,没有放置的入口,也不挪身体——她站在原地放
+ * 够得着的格,走到哪儿是脚本的事。
  */
 final class BuildShowmanship {
 
@@ -28,13 +32,11 @@ final class BuildShowmanship {
     /** 每批最多冒几处粒子——整栋房子逐格发粒子会把客户端打垮。 */
     private static final int PARTICLE_BUDGET_PER_BATCH = 3;
 
-    private static final AimProcessor AIM = new AimProcessor();
-
     private final NumenPlayer player;
     private final BuildInventory inv;
 
     private int swingCooldown;
-    /** 当前该不该蹲(由落位批次的高度决定,跨 tick 保持)。 */
+    /** 落位批次的高度要她蹲下(跨 tick 保持)。 */
     private boolean crouching;
 
     BuildShowmanship(NumenPlayer player, BuildInventory inv) {
@@ -42,9 +44,13 @@ final class BuildShowmanship {
         this.inv = inv;
     }
 
-    /** 施工分支决定的蹲姿,由任务在每 tick 施加(批次之间保持,不然她会抖)。 */
-    boolean crouching() {
-        return crouching;
+    /**
+     * 站住不走。站着时蹲不蹲由落位批次的高度定,而且每刻都照这个定:落位只在批次刻发生,若别的刻复位成站立,
+     * 她会一蹲一起地抖。
+     */
+    void stand() {
+        player.controls().stop();
+        player.controls().set(Controls.Key.SNEAK, crouching);
     }
 
     /**
@@ -70,7 +76,7 @@ final class BuildShowmanship {
         if (sample != null) {
             int slot = inv.findSlot(sample.getBlock().asItem(), true);
             if (slot >= 0) {
-                player.holdInHand(slot);
+                Hotbar.hold(player, slot);
             }
         }
         if (!(player.level() instanceof ServerLevel level) || sample == null) {
@@ -120,14 +126,8 @@ final class BuildShowmanship {
         }
     }
 
-    /** 视角按 AimProcessor 的像素量化步进转向目标点(和寻路同一套转头手感)。 */
+    /** 视角按鼠标像素取整转向目标点(和寻路同一套转头,{@link Aim#look})。 */
     private void applySteppedAim(Vec3 point) {
-        Vec3 eye = player.getEyePosition();
-        float yaw = AimGeometry.yawTo(eye, point);
-        float pitch = AimGeometry.pitchTo(eye, point);
-        AimProcessor.Rotation next = AIM.step(player.getYRot(), player.getXRot(), yaw, pitch);
-        player.setYRot(next.yaw());
-        player.setYHeadRot(next.yaw());
-        player.setXRot(next.pitch());
+        Aim.look(player, point);
     }
 }

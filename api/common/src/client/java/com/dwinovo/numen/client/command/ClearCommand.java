@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 
 /**
@@ -17,7 +19,7 @@ final class ClearCommand implements ChatCommand {
 
     @Override
     public String description() {
-        return "清空上下文重新开始(聊天记录保留)";
+        return I18n.get(Keys.CMD_CLEAR);
     }
 
     @Override

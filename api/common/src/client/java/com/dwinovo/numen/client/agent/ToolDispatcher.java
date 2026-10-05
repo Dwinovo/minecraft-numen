@@ -1,215 +1,105 @@
 package com.dwinovo.numen.client.agent;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.loop.ToolPort;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ClientToolContext;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.agent.tool.ToolInvocation;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.api.CompanionEvent;
-import com.dwinovo.numen.entity.CompanionEvents;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.agent.tool.CompanionToolPort;
 import net.minecraft.client.player.AbstractClientPlayer;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
- * Executes one agent turn's tool calls and hands the results back — the entire
- * "run a tool call, get a result" concern, lifted out of {@link EntityAgentLoop}
- * so the loop stays pure conversation/turn management.
- *
- * <h2>One synchronous serial queue</h2>
- * Calls run strictly one at a time: the next is dispatched only when the current
- * one's result lands (one body, one brain, one thing at a time — no async, no
- * concurrency). A tool reports its result through {@link ToolCall#complete},
- * synchronously or much later from any thread; the dispatcher is blind to how.
- *
- * <p>It reports back to its owner through the {@link Sink}: each landed result
- * via {@link Sink#onResult}, and {@link Sink#onAllSettled} once the turn's calls
- * are all done.
+ * The loop kernel's {@link ToolPort} for one companion on the owner's client. How the calls run — in order,
+ * one at a time, each bound to this companion — is {@link CompanionToolPort}'s, the same one the bench brain
+ * uses; the tool context here carries the live client-side body. What only the owner's client has is the
+ * backstop: a call that never replies is failed after {@link #TOOL_BACKSTOP_MILLIS}, unless the body is
+ * waiting on the owner's consent card.
  */
-public final class ToolDispatcher {
-
-    /** The dispatcher's only line back to the agent loop. */
-    public interface Sink {
-        /** A result landed for {@code inv} — record it into the conversation. */
-        void onResult(ToolInvocation inv, String resultJson);
-        /** Every call this turn has settled — the loop may start the next LLM turn. */
-        void onAllSettled();
-        /** The live client-side body (for client-run tools); may be null when out of view. */
-        AbstractClientPlayer entity();
-    }
+public final class ToolDispatcher implements ToolPort {
 
     /**
-     * Wall-clock backstop (epoch millis) for the single in-flight call, 0 when idle.
-     * Only rescues a dead-server / never-replying tool — deliberately generous, so a
-     * core tool (always answered by the server) never trips it.
+     * Wall-clock backstop for the single in-flight call: the longest a program may run
+     * ({@link com.dwinovo.numen.agent.script.ScriptLimits#WALL_MILLIS}, which the server enforces itself) plus five
+     * minutes of slack. It only rescues a result that was lost — a server that died, a connection that dropped — so
+     * a program that is merely long never trips it.
      */
-    private static final long TOOL_BACKSTOP_MILLIS = 15 * 60 * 1000L;
+    private static final long TOOL_BACKSTOP_MILLIS =
+            com.dwinovo.numen.agent.script.ScriptLimits.WALL_MILLIS + 5 * 60 * 1000L;
 
     private final UUID entityUuid;
-    private final Sink sink;
+    private final CompanionToolPort tools;
 
-    /** This turn's remaining calls, drained one at a time. */
-    private final Deque<ToolInvocation> queue = new ArrayDeque<>();
-    /** The single in-flight call (id → invocation); ≤1 under the serial model. */
-    private final Map<String, ToolInvocation> inFlight = new HashMap<>();
-    /** Reentrancy guard so a synchronously-completing tool keeps the drain iterative. */
-    /** 本批允许调用的工具名(见 {@link #dispatch})。 */
-    private java.util.Set<String> callable = java.util.Set.of();
-
-    private boolean advancing = false;
+    /** The in-flight call the backstop is timing, and when it runs out (epoch millis); null when idle. */
+    private LlmToolCall timed;
     private long deadlineMillis = 0;
 
-    public ToolDispatcher(UUID entityUuid, Sink sink) {
+    /** @param entity the live client-side body (for client-run tools); may resolve to null when out of view */
+    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity, CompanionToolPort.AfterCut afterCut) {
         this.entityUuid = entityUuid;
-        this.sink = sink;
+        this.tools = new CompanionToolPort(entityUuid, () -> new ClientToolContext(entity.get(), entityUuid), afterCut);
     }
 
-    /** Anything outstanding (in flight or still queued)? */
-    public boolean busy() {
-        return !inFlight.isEmpty() || !queue.isEmpty();
+    /** Is this call still outstanding (in flight or still queued), i.e. can its result still arrive? */
+    public boolean holds(String callId) {
+        return tools.holds(callId);
     }
 
-    /** 在飞那一件的工具名(串行模型下 ≤1),空闲返回 null——头顶气泡的副文本取它。 */
+    /** 手上这一件的工具名(在飞的,没有就是下一个要派的),空闲返回 null——头顶气泡的副文本取它。 */
     public String currentToolName() {
-        for (ToolInvocation inv : inFlight.values()) {
-            return inv.name();
-        }
-        ToolInvocation next = queue.peek();
-        return next == null ? null : next.name();
+        return tools.currentToolName();
     }
 
-    /** Run this turn's tool calls, serially. */
-    /**
-     * 收下这一批调用。{@code callable} 是<b>这一批发出时模型能看见定义的工具</b>——
-     * 常驻的加上对话里还留着展开块的那些(见 {@code ToolDisclosure})。随批次传进来
-     * 而不是存成字段:它描述的是一个瞬间,存起来下一批就是陈账。
-     */
-    public void dispatch(List<ToolInvocation> calls, java.util.Set<String> callable) {
-        this.callable = callable == null ? java.util.Set.of() : callable;
-        queue.addAll(calls);
-        drainNext();
+    /** 收下这一批调用,按顺序执行。 */
+    @Override
+    public void run(List<LlmToolCall> batch, Sink sink) {
+        tools.run(batch, sink);
     }
 
-    /** Per-tick backstop: fail a never-replying in-flight call so the loop can't wedge. */
-    public void tick() {
-        if (deadlineMillis == 0 || inFlight.isEmpty()) return;
-        if (System.currentTimeMillis() < deadlineMillis) return;
-        ToolInvocation inv = inFlight.values().iterator().next();
-        Constants.LOG.warn("[numen-dispatch#{}] tool {} id={} hit backstop timeout — failing it",
-                entityUuid, inv.name(), inv.id());
-        complete(inv, TaskResult.fail("tool timed out (no result returned)").toJson());
+    @Override
+    public void arrived(EventQueue.Entry entry, boolean urgent) {
+        tools.arrived(entry, urgent);
     }
 
     /**
-     * Abandon everything outstanding (in flight + queued) and return their ids so the
-     * caller can heal the conversation. Used on owner-interrupt and on death.
-     */
-    public List<String> cancelAndDrain() {
-        return cancelAndDrain(true);
-    }
-
-    /**
-     * 收掉所有未决调用,返回它们的 id(调用方据此合成取消结果,保住协议)。
+     * Per-tick backstop: fail a never-replying in-flight call so the loop can't wedge. The clock starts the
+     * first tick a call is seen in flight.
      *
-     * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要({@code true}——他要她
-     *                 立刻住手);<b>断线登出</b>不要({@code false})——她的身体还在
-     *                 服务器里,任务照样该跑完,收尾走离线出箱。而且此刻连接已经没了,
-     *                 那个包根本发不出去——硬发会抛 NPE,把登出清理的后半段整个打断。
+     * <p>这具身体挂着一条等主人点头的征询时不算:服务端活着、正在等人,在飞的那件同步动作
+     * (use block 左键、inv drop)就是悬着等这个答复,由服务端按游戏刻超时收尾。兜底时钟
+     * 从答复之后重新起算。等身体任务收尾不在这里:那件活有自己的期限,到点以 timeout 收尾。
      */
-    public List<String> cancelAndDrain(boolean stopBody) {
-        List<String> ids = new ArrayList<>(inFlight.keySet());
-        for (ToolInvocation inv : queue) ids.add(inv.id());
-        inFlight.clear();
-        queue.clear();
-        deadlineMillis = 0;
-        advancing = false;
-        if (stopBody) {
-            CompanionEvents.fire(CompanionEvent.ABORT, entityUuid);   // 内容包据此停掉自己那边的活
-        } else {
-            // 不叫停身体，但停在传输层的调用还是得忘掉：它们属于一个已经结束
-            // 的会话，结果再也回不来。
-            com.dwinovo.numen.agent.tool.ServerToolTransport.forget(entityUuid);
+    public void tick() {
+        LlmToolCall call = tools.inFlight();
+        if (call == null) {
+            timed = null;
+            return;
         }
-        return ids;
+        long now = System.currentTimeMillis();
+        if (call != timed || com.dwinovo.numen.client.consent.ConsentCards.pending(entityUuid) != null) {
+            timed = call;
+            deadlineMillis = now + TOOL_BACKSTOP_MILLIS;
+            return;
+        }
+        if (now < deadlineMillis) return;
+        Constants.LOG.warn("[numen-dispatch#{}] tool {} id={} hit backstop timeout — failing it",
+                entityUuid, call.name(), call.id());
+        tools.failInFlight("tool timed out (no result returned)");
     }
 
     /**
-     * Drain the serial queue: dispatch the next call, or — when the queue is empty
-     * and nothing is in flight — signal the turn is settled. Exactly one call
-     * occupies the in-flight slot at a time; {@link #complete} re-enters here to
-     * advance. The {@link #advancing} guard keeps a synchronously-completing tool
-     * draining iteratively instead of recursing.
+     * 收掉这批所有未决调用(在飞 + 排着),返回它们的 id。
+     *
+     * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要——他要她立刻住手;死亡、断线登出、
+     *                 外接接管、遣散不要——死了不必叫,登出时她的身体还在服务器里、任务照样该跑完,
+     *                 而且那一刻连接已经没了,叫停包根本发不出去
      */
-    private void drainNext() {
-        if (advancing) return;
-        advancing = true;
-        try {
-            while (inFlight.isEmpty()) {
-                ToolInvocation inv = queue.poll();
-                if (inv == null) {
-                    sink.onAllSettled();
-                    return;
-                }
-                NumenTool tool = ToolRegistry.resolve(inv.name());
-                if (tool != null && !callable.contains(tool.name())) {
-                    // 定义没在她眼前,参数只能是猜的——挡下来并告诉她怎么补,
-                    // 比让一次瞎填的调用真的动身体便宜。
-                    Constants.LOG.info("[numen-dispatch#{}] tool '{}' not expanded yet (id={})",
-                            entityUuid, inv.name(), inv.id());
-                    sink.onResult(inv, TaskResult.fail(
-                            com.dwinovo.numen.agent.tool.ToolDisclosure.notExpanded(tool.name())).toJson());
-                    continue;
-                }
-                if (tool == null) {
-                    Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
-                            entityUuid, inv.name(), inv.id());
-                    sink.onResult(inv, TaskResult.fail("unknown tool: " + inv.name()).toJson());
-                    continue;   // nothing in flight — drain the next queued call
-                }
-                inFlight.put(inv.id(), inv);
-                deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
-                ToolCall call = new ToolCall(inv.id(), inv.name(), inv.argsJson(),
-                        new ClientToolContext(sink.entity(), entityUuid),
-                        json -> complete(inv, json));
-                Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
-                        entityUuid, inv.name(), inv.id(), truncate(inv.argsJson()));
-                try {
-                    tool.invoke(call);
-                } catch (RuntimeException ex) {
-                    Constants.LOG.warn("[numen-dispatch#{}] tool {} threw (id={}): {}",
-                            entityUuid, inv.name(), inv.id(), ex.getMessage());
-                    complete(inv, TaskResult.fail(ex.getMessage()).toJson());
-                }
-                // Client tool: complete() cleared the slot → loop drains the next.
-                // Server tool: slot occupied → exit and wait for deliver().
-            }
-        } finally {
-            advancing = false;
-        }
-    }
-
-    private void complete(ToolInvocation inv, String resultJson) {
-        if (inFlight.remove(inv.id()) == null) {
-            return;   // already settled by cancel/timeout, or a duplicate/late reply
-        }
-        deadlineMillis = 0;
-        Constants.LOG.info("[numen-dispatch#{}] tool_result id={} tool={} (queued={}) → {}",
-                entityUuid, inv.id(), inv.name(), queue.size(), truncate(resultJson));
-        sink.onResult(inv, resultJson);
-        // Advance unless drainNext is already looping (it picks up the next itself).
-        if (!advancing) drainNext();
-    }
-
-    private static String truncate(String s) {
-        if (s == null) return "";
-        return s.length() <= 200 ? s : s.substring(0, 200) + "...";
+    @Override
+    public List<String> cancel(boolean stopBody) {
+        timed = null;
+        return tools.cancel(stopBody);
     }
 }

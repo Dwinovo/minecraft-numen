@@ -1,44 +1,45 @@
 package com.dwinovo.numen.core.task.combat;
 
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.combat.AttackPlan;
 import com.dwinovo.numen.core.combat.Battlefield;
 import com.dwinovo.numen.core.combat.Loadout;
-import com.dwinovo.numen.core.combat.Haven;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.plan.Threat;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.BooleanSupplier;
-import java.util.function.Supplier;
 
 /**
  * {@code attack}:打掉指定的实体,<b>近战还是远程由身体判,不由模型判</b>。
@@ -59,12 +60,6 @@ import java.util.function.Supplier;
  */
 public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord> {
 
-    private enum Phase { COMBAT, LOOT }
-
-    private static final double CHASE_SPEED = 1.2;
-    /** 退避的寻路连续失败几次算"退不掉"。 */
-    private static final int MAX_RETREAT_FAILURES = 3;
-
     // 弹道常数:箭的物理与两种发射器的初速。
     private static final double MAX_FIRING_RANGE = 32.0;
     private static final double ARROW_GRAVITY = 0.05;
@@ -78,12 +73,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private static final double RANGED_MIN_DISTANCE = 5.0;
     /** 组装局面看多远:势场要绕开谁、无差别模式打谁,都取这个半径。 */
     private static final double FIELD_RADIUS = 12.0;
-
-    /**
-     * 逃跑时扫多远。必须<b>大于</b> {@link Menace#FLEE_DISTANCE},否则她一边跑一边有新的怪
-     * 进入视野,目标每几刻换一次,等于没有目标。
-     */
-    private static final double FLEE_SCAN_RADIUS = 40.0;
 
     /**
      * 弓战斗的环内沿:比这更近就拉不开弓 —— 弹道压得平,而且白白挨打。
@@ -103,20 +92,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double BOW_MAX_DISTANCE = 12.0;
 
-    /** 离落点这么近就算到了,该重新挑下一个。 */
-    private static final double HAVEN_ARRIVED = 2.0;
-
-    /**
-     * 逃跑路上多久重算一次路线(刻)。
-     *
-     * <p><b>落点不变,只重算路线</b>:重算时这一刻的怪会折进边成本,路径拐开而方向不变。
-     * 不重算的话整段路只算一次——她起跑之后路上冒出来的怪一只都看不见,直接撞过去。
-     *
-     * <p>二十刻(一秒)是怪走四五格的量级。再密就是把路径反复拆了重建,疾跑的加速起不来。
-     */
-    private static final int FLEE_REPLAN_TICKS = 20;
-
-    private Phase phase = Phase.COMBAT;
     private Entity target;
     private Vec3 lastTargetPosition;
     /**
@@ -133,17 +108,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private final java.util.Set<Integer> noPath = new java.util.HashSet<>();
 
-    private final Map<Item, Integer> inventoryBaseline = new HashMap<>();
-    private final LootSweep loot;
 
     /**
      * 这一场经手过的 id。无差别模式没有事先的名单,不记下来就无处结算战果
      * ——它打倒的东西会因为"不在请求清单里"而被整场吞掉。
      */
     private final java.util.Set<Integer> touchedIds = new java.util.LinkedHashSet<>();
-
-    /** 退避的寻路连续失败次数。够了就是"退不掉",判据据此改判背水一战。 */
-    private int retreatFailures;
 
     /** 上一行站位日志。数字没变就不再打,免得每 tick 一行把别的全冲掉。 */
     private String lastStandoffLog;
@@ -155,25 +125,39 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 上一刻的决定。判据靠它做迟滞与承诺,见 {@link AttackPlan#decide}。 */
     private AttackPlan.Move lastMove;
 
-    /**
-     * 逃跑的<b>落点</b>。一次挑定,跑到才换 —— 方向的连续性就是不绕圈的全部原因。
-     *
-     * <p>路径本身仍然每次重规划都重算,新冒出来的怪由边成本({@code Avoidance.forGoal})
-     * 折进去,路线会拐开而<b>目标不变</b>。以前重算连方向一起重掷,所以既反应了也绕圈了。
-     */
-    private BlockPos haven;
-
-    /** 这一段逃跑路线是哪一刻算的。到点就重算,见 {@link #FLEE_REPLAN_TICKS}。 */
-    private long havenPlannedAt;
-
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
-        this.loot = new LootSweep(player);
+    }
+
+    /**
+     * 受理之前:点名的目标里还在的,权限层对每一只都说不许打,这件活就开始不了——和开打后一只都没打成时说的是同一句话
+     * ({@link #refusedSummary}),当场回。要问主人的不算开始不了,开打后问;无差别清场的对手是开打那一刻谁在追她,这里不判。
+     */
+    @Override
+    protected Preparation preparation() {
+        if (r.indiscriminate) {
+            return Preparation.READY;
+        }
+        var gate = Permission.gateFor(player);
+        List<String> denied = new ArrayList<>();
+        for (int id : r.entityIds) {
+            Entity e = liveEntity(id);
+            if (e == null) {
+                continue;   // 找不到的照旧交给任务记成丢失
+            }
+            Verdict verdict = gate.judgeLive(Action.attack(e), player.level());
+            if (verdict.kind() != Verdict.Kind.DENY) {
+                return Preparation.READY;
+            }
+            denied.add(refusal(id, verdict.reason()));
+        }
+        return denied.isEmpty() ? Preparation.READY
+                : Preparation.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.DENIED,
+                        "could not attack: " + String.join("; ", denied), null));
     }
 
     @Override
     protected void onStart() {
-        snapshotInventory(inventoryBaseline);
         // 这场仗归我管了 —— 本能链别再为同一件事抢身体。空闲时自动解除,不必显式还。
         player.pauseReflex(MobDefenseChain.ID);
     }
@@ -181,7 +165,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     @Override
     protected TaskState onTick() {
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
-        if (phase == Phase.LOOT) return tickLoot();
 
         Battlefield field = surveyField();
         for (var f : field.foes()) {
@@ -190,9 +173,24 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             }
         }
         settleFinishedTargets();
+        // 扛不住的时候跑是逃跑本能的事(FleeChain):它抢过身体跑开,跑开了把身体交还这里。回来时她还扛不住、也没有谁
+        // 在追她,就不再回去打——收工说清楚,下一步是程序的事
+        if (Menace.outmatched(player) && field.foes().stream().noneMatch(Battlefield.Foe::engaging)
+                && field.foes().stream().anyMatch(Battlefield.Foe::authorized)) {
+            stopNav();
+            abortShot();
+            fail("too hurt to go back to the fight (effective health "
+                    + Math.round(Menace.effectiveHealth(player)) + "); heal first (numen.inv.eat), then attack again",
+                    FailureType.HAZARD);
+            return TaskState.FAILED;
+        }
         AttackPlan.Move move = AttackPlan.decide(field, lastMove);
         lastMove = move;
         logMove(move, field);
+        if (move.action() == AttackPlan.Action.DONE && awaitingOwner) {
+            player.controls().stop();   // 没别的可打,等主人点头
+            return TaskState.RUNNING;
+        }
 
         Entity chosen = move.foeId() == AttackPlan.NO_FOE ? null : liveEntity(move.foeId());
         if (chosen != target) {
@@ -202,16 +200,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         if (target != null) {
             lastTargetPosition = target.position();
-            loot.rememberPreexisting(BlockPos.containing(lastTargetPosition));
         }
         // 攻击与移动<b>正交</b>:每刻先问一次"冷却好了吗、够得着谁吗",够得着就打 ——
         // 不管这一刻在靠近、在拉开、还是站着。攻击不影响寻路,最多让她回个头。
         tickShield();
         tickWeapon(field);
-        if (move.action() != AttackPlan.Action.DISENGAGE && haven != null) {
-            haven = null;   // 不再逃跑了:落点作废,下次要跑再重新挑
-            stopNav();
-        }
         return switch (move.action()) {
             case SKIRMISH -> {
                 bowFighting = false;
@@ -221,7 +214,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 bowFighting = true;
                 yield bowFight();
             }
-            case DISENGAGE -> tickFlee();
             case DONE -> finish();
         };
     }
@@ -233,16 +225,45 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      *
      * <p>点名模式下"被授权"是模型给的那份清单;无差别模式下是"这一刻在追我的"——会分裂的怪
      * 裂出来的新 id 因此自动进场,而点名的清单一裂开就作废了。
+     *
+     * <p>进场之前先过权限层({@link #cleared}):攻击层"够得着就打"只看局面,所以门必须开在这里,
+     * 一处。要问的这一刻不进局面,一张卡问主人,主人点头下一刻进场;不许的记进账本,回执说清是谁、
+     * 为什么。自卫换目标时新冒出来的要问的,同样再问。
      */
     private Battlefield surveyField() {
         hostiles = Menace.hostilesAround(player, FIELD_RADIUS);
-        List<Battlefield.Foe> foes = new ArrayList<>();
+        List<Entity> candidates = new ArrayList<>();
         for (var mob : hostiles) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
+            if (authorized && !r.terminal(mob.getId())) {
+                candidates.add(mob);
+            }
+        }
+        if (!r.indiscriminate) {
+            for (int id : r.entityIds) {
+                Entity e = r.terminal(id) ? null : liveEntity(id);
+                if (e != null && !candidates.contains(e)) {
+                    candidates.add(e);
+                }
+            }
+        }
+        java.util.Set<Integer> cleared = cleared(candidates);
+        List<Battlefield.Foe> foes = new ArrayList<>();
+        for (var mob : hostiles) {
+            // 点名的一场仗只看点名的那几只:打完了就收工,下一只打不打、打哪只是程序的事(numen.fight.clear),路上被别的
+            // 贴脸是本能的事(反击链)。别的怪不进局面,也就不会被顺手砍、不会把这场仗拖着不收
+            if (!r.indiscriminate && !r.entityIds.contains(mob.getId())) {
+                continue;
+            }
+            boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
+            boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
+            if (authorized && !r.terminal(mob.getId()) && !cleared.contains(mob.getId())) {
+                authorized = false;   // 在等主人点头:在场,但这一刻不是目标
+            }
             if (r.terminal(mob.getId())) {
-                // 打完了、丢了、或者走不到又射不到的:<b>整只移出局面</b>。留着当"还有东西在
-                // 追我"的话,判据会永远喊走位 —— 一只在悬崖对面射她的骷髅就能把任务钉死。
+                // 打完了、丢了、走不到又射不到、或者不许打的:<b>整只移出局面</b>。留着当"还有
+                // 东西在追我"的话,判据会永远喊走位 —— 一只在悬崖对面射她的骷髅就能把任务钉死。
                 // 躲它归寻路的势场管,那一层看的是场上的怪,不是这份名单。
                 continue;
             }
@@ -262,7 +283,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     continue;
                 }
                 Entity e = liveEntity(id);
-                if (e != null) {
+                if (e != null && cleared.contains(id)) {
                     foes.add(new Battlefield.Foe(id, player.distanceTo(e),
                             Menace.explodes(e), Menace.armed(e),
                             false, reachable(id), true));
@@ -273,9 +294,36 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return new Battlefield(
                 Menace.effectiveHealth(player),
                 reachToTarget(),
-                loadout.hasMelee(), loadout.hasRanged(),
-                retreatFailures >= MAX_RETREAT_FAILURES, foes);
+                loadout.hasMelee(), loadout.hasRanged(), foes);
     }
+
+    /**
+     * 这一批要打的交给权限层:放行的进场;要问的合成一张卡、等主人答复期间不进场;不许的(主人拒绝、
+     * 规则、模式、外部强制)记进账本,从此不在局面里。
+     *
+     * @return 这一刻放行的实体 id
+     */
+    private java.util.Set<Integer> cleared(List<Entity> candidates) {
+        List<Action> attacks = new ArrayList<>(candidates.size());
+        for (Entity e : candidates) {
+            attacks.add(Action.attack(e));
+        }
+        List<Permit> permits = permitAll(attacks);
+        java.util.Set<Integer> cleared = new java.util.HashSet<>();
+        awaitingOwner = false;
+        for (int i = 0; i < candidates.size(); i++) {
+            int id = candidates.get(i).getId();
+            switch (permits.get(i).state()) {
+                case ALLOWED -> cleared.add(id);
+                case REFUSED -> r.refused(id, permits.get(i).refusal());
+                case WAITING -> awaitingOwner = true;
+            }
+        }
+        return cleared;
+    }
+
+    /** 这一刻有要打的在等主人点头:局面里没别的可打也不收场。 */
+    private boolean awaitingOwner;
 
     private static boolean containsId(List<Battlefield.Foe> foes, int id) {
         for (var f : foes) {
@@ -303,13 +351,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             if (e == null || e.isRemoved()) {
                 if (r.strikes(id) > 0) {
                     r.defeated(id);
-                    beginLoot(lastTargetPosition);
                 } else {
                     r.lost(id);
                 }
             } else if (e instanceof LivingEntity living && living.isDeadOrDying()) {
                 r.defeated(id);
-                beginLoot(lastTargetPosition);
             }
         }
     }
@@ -344,14 +390,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /** 打完了 —— 名单清空(点名),或没人再追她(无差别)。 */
     private TaskState finish() {
-        InputDriver.halt(player);
+        player.controls().stop();
         stopNav();
         if (r.indiscriminate || !r.defeated().isEmpty()) {
             succeed();
             return TaskState.SUCCESS;
         }
+        if (!r.refused().isEmpty() && r.refused().size() + r.lost().size() + r.unreachable().size()
+                >= r.entityIds.size()) {
+            // 一只都没打:不是找不到,是不许打。让模型去问主人,别换个法子再试。
+            fail("could not attack: " + refusedSummary(), FailureType.REFUSED);
+            return TaskState.FAILED;
+        }
         fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
         return TaskState.FAILED;
+    }
+
+    /** {@code entity 12 needs the owner's consent (has an owner); entity 15 ...}。 */
+    private String refusedSummary() {
+        List<String> parts = new ArrayList<>();
+        r.refused().forEach((id, why) -> parts.add(refusal(id, why)));
+        return String.join("; ", parts);
+    }
+
+    /** 不许打的一只怎么说:{@code entity 12 denied by rule …}。 */
+    private static String refusal(int id, String why) {
+        return "entity " + id + " " + why;
     }
 
     private void logMove(AttackPlan.Move move, Battlefield field) {
@@ -469,18 +533,20 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 这里曾经"没有近战武器就直接返回" —— 那是按"打怪"写的前提(赤手对上会还手的
         // 东西不是出路),模型让她打一只鸡时那个前提不成立,她会走到跟前站着不动。
         Loadout loadout = Loadout.forTarget(player, player);
+        Feet here = Feet.of(player);
+        if (here == null) {
+            return;   // 悬在半空:没有站着的那一格,够不够得着无从按站位判
+        }
         Entity victim = null;
         double best = Double.MAX_VALUE;
         for (var f : field.foes()) {
-            // <b>名单只决定去打谁,不决定砍不砍眼前的。</b>"够得着就打"本来就是攻击层的
-            // 定义,掺进"这只在不在名单里"就又把两层耦上了 —— 而且点名模式下路上被贴脸
-            // 也不还手,得挨完一路才到目标。
-            if (f.armed() || f.distance() >= best) {
+            // 只砍这场仗里过了权限的:够得着的别的东西不是她该替自己决定去打的,也没过权限层
+            if (!f.authorized() || f.armed() || f.distance() >= best) {
                 continue;   // 引信在走的不碰:打它等于自己引爆
             }
+            // 够不够得着与走位的到达问同一个目标(reachOf):走位说站到了,这里就挥得出去
             Entity e = liveEntity(f.id());
-            if (e != null && f.distance() <= Swing.reachTo(
-                    player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), e.getBbWidth())) {
+            if (e != null && here.in(reachOf(e))) {
                 victim = e;
                 best = f.distance();
             }
@@ -490,7 +556,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         ItemStack before = player.getMainHandItem();
         if (loadout.hasMelee()) {
-            player.holdInHand(loadout.melee().slot());
+            Hotbar.hold(player, loadout.melee().slot());
         }
         boolean weaponChanged = player.getMainHandItem() != before;
         if (!Swing.mayStrike(weaponChanged, victim instanceof LivingEntity hurt && hurt.hurtTime > 0,
@@ -534,24 +600,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>{@code MELEE} 与 {@code CLOSE_IN} 共用这一段 —— 它们只差"要不要挥",站位是一样的。
      * 分开写的时候,姿态一变就会拆掉刚算好的路径,而击退每砍一刀就让姿态变一次。
      */
-    private PlayerNav.Status driveApproach() {
-        if (nav == null) {
-            // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
-            // 东西追她),那时该退开等机会 —— 这里曾经第一行就 {@code target == null} 早退,
-            // 于是判据每刻正确地喊"走位"、执行层每刻安静地什么都不做,日志看着一切正常,
-            // 直到她被苦力怕炸死。什么时候不用走由 standoffGoal 说(既无目标也无怪才返回 null)。
-            //
-            // 目标会动:要 trackGoal 而不是 toGoal —— 后者一旦到达就永久 ARRIVED,
-            // 她会站在原地不再跟位,别的怪就能从容贴上来。
-            nav = PlayerNav.trackGoal(player, this::standoffGoal, CHASE_SPEED, () -> false);
+    private void driveApproach() {
+        // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
+        // 东西追她),那时该退开等机会。什么时候不用走由 standoffGoal 说(既无目标也无怪才返回 null)。
+        Goal goal = standoffGoal();
+        if (goal == null) {
+            stopNav();
+            return;
         }
-        PlayerNav.Status status = nav.tick();
+        BlockPos toward = target != null && !target.isRemoved() ? target.blockPosition() : player.blockPosition();
+        if (nav == null) {
+            nav = Trip.to(player, goal, RouteSpec.defaults(), toward);
+        } else {
+            // 目标与怪每刻都在挪:每刻把这一刻的站位交给在走的这一趟,停点还算数就照走
+            nav.retarget(goal, toward);
+        }
+        Trip.Status status = nav.tick();
+        if (status == Trip.Status.ARRIVED) {
+            // 站到位了。这一趟走完就收,下一刻按那时的站位再开一趟——一直站着不跟位,别的怪就能从容贴上来
+            stopNav();
+        }
         // <b>只有真 NO-PATH 才算够不着</b>:搜索烧完整个预算也没找出路线。目标丢了、被围死、
         // 重规划抖动都是另外的事,拿它们当够不着会把两格外的普通僵尸也判死。
-        boolean noRoute = status == PlayerNav.Status.FAILED
+        boolean noRoute = status == Trip.Status.FAILED
                 && (nav.failType() == FailureType.NO_PATH
                         || nav.failType() == FailureType.TERRAIN_BLOCKED);
-        if (status == PlayerNav.Status.FAILED) {
+        if (status == Trip.Status.FAILED) {
             // 别的失败也要留声:走位导航当刻就失败、下一刻重建,在日志里是一片安静的
             // SKIRMISH——站着不动却什么都没说,排查时只能靠猜。
             if (!noRoute) {
@@ -568,7 +642,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 noPath.remove(target.getId());
             }
         }
-        return status;
     }
 
     /**
@@ -580,15 +653,42 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 这一刻走的是弓那一套吗。环的内外沿、以及攻击层用什么,都看它。 */
     private boolean bowFighting;
 
-    /** 走位环的外沿:剑是够到距离,弓是 {@link #BOW_MAX_DISTANCE}。 */
+    /**
+     * 走位环的外沿,按离它的中心距:剑是够到距离({@link Swing#reachTo},用来判内沿还剩不剩一条带、打站位日志;剑的环本身由
+     * {@link #reachOf} 判),弓是 {@link #BOW_MAX_DISTANCE}。
+     */
     private double skirmishOuter() {
         return bowFighting ? BOW_MAX_DISTANCE : reachToTarget();
     }
 
-    /** 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。 */
+    /**
+     * 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。它够得比她的外沿还远(大史莱姆、点着的苦力怕)时,
+     * 打得着又挨不着的那条带本来就不存在,内沿归零:环退成"走进够得着的地方"。
+     */
     private double skirmishInner() {
-        return bowFighting ? BOW_MIN_DISTANCE
+        double inner = bowFighting ? BOW_MIN_DISTANCE
                 : target == null ? 0.0 : Menace.rawDangerRadius(target, player);
+        return inner < skirmishOuter() ? inner : 0.0;
+    }
+
+    /**
+     * 站在哪一格手够得着 {@code e}:眼睛到它此刻的碰撞箱小于她的实体交互距离(第 0 层 {@link Goals#touch})。走位的到达与攻击层
+     * 出手都问它,按她此刻站的那一格判({@link Feet#in})。
+     */
+    private Goal reachOf(Entity e) {
+        return Goals.touch(e.getBoundingBox(), Snapshots.stats(player),
+                Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE)));
+    }
+
+    /** 剑的走位环:够得着它,而且出了它够得着她的距离(内沿为零时只要够得着)。 */
+    private Goal swordRing() {
+        Goal reach = reachOf(target);
+        double inner = skirmishInner();
+        if (inner <= 0) {
+            return reach;
+        }
+        return Goals.allOf(List.of(reach,
+                Goals.awayFrom(List.of(new Threat(target.getX(), target.getY(), target.getZ(), inner)))));
     }
 
     private double reachToTarget() {
@@ -609,22 +709,24 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>光靠这一条还不够:目标是开路那一刻的<b>快照</b>。真正每刻重问的是判据那一侧
      * 这里管的是"落脚点别选在人家嘴边"。
      *
-     * <h2>目标自己也在势场里</h2>
-     * 它当然也会打她,所以不需要另画一条内沿:吸引项把她拉进够到距离,它自己的危险半径把她
-     * 顶在够不着的地方,中间那条缝就是拉扯的位置。缝宽是原版碰撞箱给的 —— 僵尸 3.30 对 2.73,
-     * 半格出头。
+     * <h2>目标自己由环管</h2>
+     * 它当然也会打她:环的外沿把她拉进够到距离,内沿就是它自己的危险半径,把她顶在够不着的地方,
+     * 中间那条缝就是拉扯的位置。缝宽是原版碰撞箱给的 —— 僵尸 3.30 对 2.73,半格出头。躲避场只收
+     * 别的怪;它够得比她还远时内沿归零,她只能走进它的范围去打。
      *
      * <h2>被围住的时候</h2>
-     * 没有合格的格子也不会失败:引擎的七档 {@code bestSoFar} 会交出这次搜索里最好的一段。
+     * 没有合格的格子时,搜索交出离目标最近的那一段先走着,走完再搜。
      */
-    private NavGoal standoffGoal() {
+    private Goal standoffGoal() {
         // 躲避场只收敌对生物:它们才有危险半径。目标本身归下面的环管——点名的猪牛鸡不是
         // 敌对生物,不在这份名单里,但照样是要走过去打的目标。"有没有目标"与"附近有没有怪"
         // 是两个问题,这里早退只看前者是否也为空:既无目标也无怪,才真的没处可站。
         // 两份材料都引用本刻的判断:目标是判据选的那一只,怪是 surveyField 扫的那一份。
         var field = hostiles;
+        // 威胁场只收此刻还活着的:"场上有没有怪"与"远离谁"问的是同一份名单,不然扫到的那只这一刻刚死,名单就空了
+        List<Threat> threats = Menace.field(player, field);
         boolean haveTarget = target != null && !target.isRemoved();
-        if (!haveTarget && field.isEmpty()) {
+        if (!haveTarget && threats.isEmpty()) {
             return null;
         }
         logStandoff(field);
@@ -632,27 +734,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             // <b>没有目标也照样走位</b>:环退化成"离每一只都出了它的危险半径"。
             // 场上只剩一只点着的爬行者(她没弓打不了)时走的就是这一支 —— 退开等引信熄,
             // 而不是跑三十二格。
-            return NavGoal.avoid(Menace.AVOID_PENALTY, Menace.field(player, field));
+            return Goals.awayFrom(threats);
         }
-        // 走位是<b>一个环</b>:外沿别跟丢,内沿是每一只都够不着她。太近自然往外走,太远
+        // 走位是<b>一个环</b>:外沿别跟丢,内沿是它够不着她(别的怪由躲避场管)。太近自然往外走,太远
         // 自然往回走 —— "拉开"不是另一个动作。
         //
-        // 外沿<b>就是她的够到距离</b>。寻路不负责"打",但必须把她送进打得到的范围,否则
-        // 攻击层一辈子没机会 —— 外沿放宽到 4.73 那一版,她走到 4.7 就"到位"停下,而够到
-        // 距离只有 3.30,于是站在那儿挨打,实测有效血量 8 掉到 5。
+        // 剑的外沿<b>就是攻击层出手的那个判据</b>(reachOf:站在这一格眼睛够得着它此刻的碰撞箱),同一个目标、
+        // 同一套站位坐标。走位说到了,攻击层就挥得出去;它挪出去了,这一格就不再算到,下一趟接着往前走。
         //
-        // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
-        // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
-        return NavGoal.approachAvoiding(
-                NavGoal.ring(target.blockPosition(), skirmishInner(), skirmishOuter()),
-                Menace.AVOID_PENALTY,
-                bowFighting
-                        ? Menace.field(player, field).stream()
-                                .map(x -> x.withClearance(
-                                        Math.max(x.clearance(), BOW_MIN_DISTANCE)))
-                                .toList()
-                        : Menace.field(player, field));
+        // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿,从格心量到它此刻的位置。带宽约 1.28 格,比格量化误差
+        // 0.71 宽出一截。弓的环在 8~12 格,问的是拉不拉得开弓,按它所在的那一列量。
+        Goal ring = bowFighting
+                ? Goals.within(Goals.column(target.getBlockX(), target.getBlockZ()), skirmishInner(), skirmishOuter())
+                : swordRing();
+        // 要打的这一只离多远由环管(内沿就是它够不着她的距离),躲避场只收别的怪:再把它放进去,它够得比她还远时
+        // "够得着它"与"出了它的危险半径"两头都要,就没有一格站得下
+        List<Threat> others = Menace.field(player, field.stream().filter(mob -> mob != target).toList());
+        if (others.isEmpty()) {
+            return ring;
+        }
         // 弓那一套的内沿对<b>每一只</b>都成立:她要跟所有怪保持五格,不只是当前目标。
+        List<Threat> keepOff = bowFighting
+                ? others.stream()
+                        .map(t -> new Threat(t.x(), t.y(), t.z(), Math.max(t.radius(), BOW_MIN_DISTANCE)))
+                        .toList()
+                : others;
+        return Goals.allOf(List.of(ring, Goals.awayFrom(keepOff)));
     }
 
     /** 站位日志只在数字真的变了时打一行——每 tick 一行会把别的全冲掉。 */
@@ -710,7 +817,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
 
         ItemStack before = player.getMainHandItem();
-        player.holdInHand(weapon.slot());
+        Hotbar.hold(player, weapon.slot());
         if (player.getMainHandItem() != before && shot == null) {
             return TaskState.RUNNING;   // 这一刻只换手,下一刻才起手
         }
@@ -743,137 +850,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 : crossbow ? CROSSBOW_SPEED : BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15);
     }
 
-    // ==================== 躲避 ====================
-
-    /**
-     * 脱离接触:她扛不住了,先活下来。
-     *
-     * <p>终止条件就是那 {@link Menace#FLEE_DISTANCE} 格 —— 与逃跑目标的到达条件同一个数。
-     */
-    /**
-     * 逃跑这一刻做什么:跑向落点。
-     *
-     * <p><b>它不是一个"状态"。</b>顶层每刻重判"还打不打得过",打不过就再走一次这里,
-     * 血回来了下一刻自然回到战斗——曾经这里是一个闩锁({@code fleeing}),进去就把判据
-     * 整个短路,于是血回满了也一直跑,实测一次 DISENGAGE 配四十七行逃跑采样。
-     *
-     * <p>三十二格是<b>跑的目标</b>,不是状态的出口:跑到了就没什么可跑的,判据自会改口。
-     */
-    private TaskState tickFlee() {
-        var around = Menace.hostilesAround(player, Menace.FLEE_DISTANCE);
-        if (around.isEmpty()) {
-            clearHaven();
-            InputDriver.halt(player);
-            Constants.LOG.info("[numen-attack] 脱离成功 —— {} 格内没有敌对生物",
-                    (int) Menace.FLEE_DISTANCE);
-            fail(Menace.outmatched(player)
-                            ? "broke off — too hurt to keep fighting; nothing is near you now"
-                            : "broke off — nothing here can be fought with what you carry "
-                                    + "(explosive, or out of reach with no bow); you are clear now",
-                    FailureType.TARGET_LOST);
-            return TaskState.FAILED;
-        }
-        if (haven == null || player.blockPosition().closerThan(haven, HAVEN_ARRIVED)) {
-            haven = Haven.awayFrom(player, Menace.hostilesAround(player, FLEE_SCAN_RADIUS));
-            stopNav();
-            Constants.LOG.info("[numen-attack] 逃向 {} —— {} 格内 {} 只",
-                    haven, (int) Menace.FLEE_DISTANCE, around.size());
-        }
-        if (haven == null) {
-            Constants.LOG.info("[numen-attack] 没有可跑的方向");
-            return TaskState.RUNNING;
-        }
-        long now = player.level().getGameTime();
-        if (nav != null && now - havenPlannedAt >= FLEE_REPLAN_TICKS) {
-            stopNav();   // 到点重算:落点不变,只让这一刻的怪进边成本
-        }
-        if (nav == null) {
-            BlockPos landing = haven;
-            havenPlannedAt = now;
-            nav = PlayerNav.toGoal(player, () -> NavGoal.approachAvoiding(
-                            NavGoal.nearGround(landing, HAVEN_ARRIVED),
-                            Menace.AVOID_PENALTY, roadHazards()),
-                    CHASE_SPEED, () -> false);
-        }
-        PlayerNav.Status status = nav.tick();
-        if (status == PlayerNav.Status.FAILED) {
-            stopNav();
-            haven = null;   // 这个方向走不通,下一刻换一个
-            retreatFailures++;
-        } else {
-            if (status == PlayerNav.Status.ARRIVED) {
-                stopNav();
-                haven = null;
-            }
-            retreatFailures = 0;
-        }
-        return TaskState.RUNNING;
-    }
-
-    /** 丢掉落点与导航。跑到了、跑不动了、或者判据改口不跑了,都过这里。 */
-    private void clearHaven() {
-        haven = null;
-        stopNav();
-    }
-
-    /**
-     * 路上要绕开谁。<b>间距给零</b>:它们只让经过的格子变贵(边成本 ×4)与影响估价,
-     * 不参与"到没到"——落点旁边站着一只怪也算到了,不然她永远到不了、也就永远不换落点。
-     */
-    private java.util.List<com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities.Threat>
-            roadHazards() {
-        return Menace.field(player, Menace.hostilesAround(player, FLEE_SCAN_RADIUS)).stream()
-                .map(t -> t.withClearance(0.0))
-                .toList();
-    }
-
-    /**
-     * 脱离接触:她扛不住了,先活下来。
-     *
-     * <p>终止条件就是那 {@link Menace#FLEE_DISTANCE} 格 —— 与逃跑目标的到达条件同一个数。
-     *
-     * <p>势场收当前<b>所有</b>敌对生物:逃跑路上撞进第二只怪,是旧的单点逃离目标最典型的死法。
-     */
-
-
-
     // ==================== 拾荒 ====================
-
-    private void beginLoot(Vec3 where) {
-        stopNav();
-        abortShot();
-        InputDriver.halt(player);
-        loot.begin(BlockPos.containing(where != null ? where : player.position()));
-        target = null;
-        lastMove = null;   // 目标没了,承诺一并作废
-        phase = Phase.LOOT;
-    }
-
-    private TaskState tickLoot() {
-        loot.discover();
-        if (loot.settling()) {
-            InputDriver.halt(player);
-            return TaskState.RUNNING;
-        }
-        loot.prune();
-        if (loot.live().isEmpty()) {
-            stopNav();
-            loot.finish();
-            phase = Phase.COMBAT;
-            return TaskState.RUNNING;
-        }
-        if (nav == null) {
-            nav = PlayerNav.toGoal(player, loot::goal, 1.0, () -> loot.live().isEmpty());
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { }
-            case ARRIVED, FAILED -> {
-                loot.noteApproachFailure();
-                stopNav();
-            }
-        }
-        return TaskState.RUNNING;
-    }
 
     // ==================== 收尾与回执 ====================
 
@@ -884,76 +861,52 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
     }
 
-    private void snapshotInventory(Map<Item, Integer> out) {
-        out.clear();
-        Inventory inventory = player.getInventory();
-        for (ItemStack stack : inventory.getNonEquipmentItems()) {
-            if (!stack.isEmpty()) out.merge(stack.getItem(), stack.getCount(), Integer::sum);
-        }
-    }
-
-    private Map<String, Integer> lootGained() {
-        Map<Item, Integer> now = new HashMap<>();
-        snapshotInventory(now);
-        Map<String, Integer> gained = new LinkedHashMap<>();
-        now.forEach((item, count) -> {
-            int delta = count - inventoryBaseline.getOrDefault(item, 0);
-            if (delta > 0) gained.put(BuiltInRegistries.ITEM.getKey(item).toString(), delta);
-        });
-        return gained;
-    }
-
     @Override
     protected void cleanup() {
         abortShot();
-        InputDriver.halt(player);
-        player.setShiftKeyDown(false);
+        player.controls().releaseAll();
         super.cleanup();
     }
 
+    /**
+     * 每只经手过的(编号、怎样了、挨了几下):点名的那一只总在里面;一共出手几下。经手过的要全列,不能只列点名的——无差别那一种
+     * 点名清单是空的,只列它会把整场战果吞掉。
+     */
     @Override
-    protected Map<String, Object> resultData() {
-        // 逐个报账要覆盖<b>所有经手过的 id</b>,不能只遍历请求清单 —— 无差别模式那份是空的,
-        // 照旧遍历会把整场战果吞掉。
+    protected Fought value() {
         java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(r.entityIds);
         touched.addAll(r.defeated());
         touched.addAll(r.lost());
         touched.addAll(r.unreachable());
-        Map<String, Object> byEntity = new LinkedHashMap<>();
+        touched.addAll(r.refused().keySet());
+        List<Fought.Foe> fought = new java.util.ArrayList<>();
         for (int id : touched) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("status", r.status(id));
-            entry.put("strikes", r.strikes(id));
-            byEntity.put(String.valueOf(id), entry);
+            fought.add(new Fought.Foe(id, r.status(id), r.strikes(id)));
         }
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("mode", r.indiscriminate ? "nearby_hostiles" : "named_ids");
-        data.put("requested_entity_ids", r.entityIds);
-        data.put("defeated_entity_ids", r.defeated());
-        data.put("lost_entity_ids", r.lost());
-        data.put("unreachable_entity_ids", r.unreachable());
-        data.put("strikes", r.strikes());
-        data.put("combat_by_entity", byEntity);
-        data.put("loot_gained", lootGained());
-        data.put("unreachable_drop_count", loot.unreachableCount());
-        return data;
+        return new Fought(fought, r.strikes());
     }
 
     private String tally() {
-        return (r.indiscriminate
+        return r.indiscriminate
                 ? r.defeated().size() + " hostiles"
-                : r.defeated().size() + "/" + r.entityIds.size() + " requested entities")
-                + ", collected " + lootGained();
+                : r.defeated().size() + "/" + r.entityIds.size() + " requested entities";
+    }
+
+    /** 打倒了什么,它掉的东西留在地上:捡是 {@code numen.work.collect} 的事。 */
+    private String drops() {
+        return r.defeated().isEmpty() ? "" : "; what they dropped lies on the ground: `numen.work.collect()` picks it up";
     }
 
     @Override
     protected String successMessage() {
+        String refusedNote = r.refused().isEmpty() ? "" : "; left alone: " + refusedSummary();
         if (r.indiscriminate) {
-            return "fought off " + tally() + "; nothing is coming after you any more";
+            return "fought off " + tally() + "; nothing is coming after you any more" + refusedNote + drops();
         }
         int incomplete = r.lost().size() + r.unreachable().size();
         return "defeated " + tally()
-                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)");
+                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)")
+                + refusedNote + drops();
     }
 
     @Override

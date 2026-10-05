@@ -41,19 +41,16 @@ import java.util.Map;
  */
 public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityReader {
 
-    /** Cap on listed non-empty item slots per handler, so a huge modded inventory can't blow up the reply. */
-    private static final int MAX_SLOT_LINES = 64;
-
     @Override
-    public String describe(Level level, BlockPos pos) {
-        StringBuilder sb = new StringBuilder();
-        appendItems(level, pos, sb);
-        appendFluids(level, pos, sb);
-        appendEnergy(level, pos, sb);
-        return sb.length() == 0 ? null : sb.toString();
+    public List<String> describe(Level level, BlockPos pos) {
+        List<String> out = new ArrayList<>();
+        appendItems(level, pos, out);
+        appendFluids(level, pos, out);
+        appendEnergy(level, pos, out);
+        return out;
     }
 
-    private void appendItems(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendItems(Level level, BlockPos pos, List<String> out) {
         Map<ResourceHandler<ItemResource>, List<String>> byHandler = new IdentityHashMap<>();
         collect(byHandler, level.getCapability(Capabilities.Item.BLOCK, pos, null), "all");
         for (Direction d : Direction.values()) {
@@ -63,29 +60,23 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
         int idx = 0;
         for (Map.Entry<ResourceHandler<ItemResource>, List<String>> e : byHandler.entrySet()) {
             ResourceHandler<ItemResource> h = e.getKey();
-            sb.append("items").append(byHandler.size() > 1 ? " #" + idx : "")
-                    .append(" (sides: ").append(String.join(",", e.getValue())).append("), ")
-                    .append(h.size()).append(" slots:\n");
-            int shown = 0;
+            out.add("items" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
+                    + String.join(",", e.getValue()) + "), " + h.size() + " slots:");
             boolean any = false;
             for (int s = 0; s < h.size(); s++) {
                 ItemResource res = h.getResource(s);
                 if (res.isEmpty()) continue;
                 any = true;
-                if (shown++ >= MAX_SLOT_LINES) continue;
-                sb.append("  slot ").append(s).append(": ")
-                        .append(itemId(res)).append(" x").append(h.getAmountAsLong(s)).append("\n");
+                out.add("  slot " + s + ": " + itemId(res) + " x" + h.getAmountAsLong(s));
             }
             if (!any) {
-                sb.append("  (all ").append(h.size()).append(" slots empty)\n");
-            } else if (shown > MAX_SLOT_LINES) {
-                sb.append("  … and ").append(shown - MAX_SLOT_LINES).append(" more non-empty slots\n");
+                out.add("  (all " + h.size() + " slots empty)");
             }
             idx++;
         }
     }
 
-    private void appendFluids(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendFluids(Level level, BlockPos pos, List<String> out) {
         Map<ResourceHandler<FluidResource>, List<String>> byHandler = new IdentityHashMap<>();
         collect(byHandler, level.getCapability(Capabilities.Fluid.BLOCK, pos, null), "all");
         for (Direction d : Direction.values()) {
@@ -95,23 +86,18 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
         int idx = 0;
         for (Map.Entry<ResourceHandler<FluidResource>, List<String>> e : byHandler.entrySet()) {
             ResourceHandler<FluidResource> h = e.getKey();
-            sb.append("fluids").append(byHandler.size() > 1 ? " #" + idx : "")
-                    .append(" (sides: ").append(String.join(",", e.getValue())).append("):\n");
+            out.add("fluids" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
+                    + String.join(",", e.getValue()) + "):");
             for (int t = 0; t < h.size(); t++) {
                 FluidResource res = h.getResource(t);
-                sb.append("  tank ").append(t).append(": ");
-                if (res.isEmpty()) {
-                    sb.append("empty");
-                } else {
-                    sb.append(fluidId(res)).append(" ").append(h.getAmountAsLong(t));
-                }
-                sb.append("/").append(h.getCapacityAsLong(t, res)).append(" mB\n");
+                out.add("  tank " + t + ": " + (res.isEmpty() ? "empty" : fluidId(res) + " " + h.getAmountAsLong(t))
+                        + "/" + h.getCapacityAsLong(t, res) + " mB");
             }
             idx++;
         }
     }
 
-    private void appendEnergy(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendEnergy(Level level, BlockPos pos, List<String> out) {
         EnergyHandler en = level.getCapability(Capabilities.Energy.BLOCK, pos, null);
         if (en == null) {
             for (Direction d : Direction.values()) {
@@ -120,18 +106,15 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
             }
         }
         if (en == null) return;
-        sb.append("energy: ").append(en.getAmountAsLong()).append("/").append(en.getCapacityAsLong())
-                .append(" FE");
-        // The reworked EnergyHandler dropped canReceive()/canExtract(); probe the
-        // direction by simulating a max insert/extract inside a transaction we
-        // never commit, so the block's state is untouched.
         List<String> io = new ArrayList<>();
+        // 重写后的 EnergyHandler 没有 canReceive()/canExtract():在永不提交的事务里
+        // 模拟一次最大量的灌入/抽出来探方向,方块状态不受影响。
         try (Transaction tx = Transaction.openRoot()) {
             if (en.insert(Integer.MAX_VALUE, tx) > 0) io.add("accepts");
             if (en.extract(Integer.MAX_VALUE, tx) > 0) io.add("provides");
         }
-        if (!io.isEmpty()) sb.append(" (").append(String.join("/", io)).append(")");
-        sb.append("\n");
+        out.add("energy: " + en.getAmountAsLong() + "/" + en.getCapacityAsLong() + " FE"
+                + (io.isEmpty() ? "" : " (" + String.join("/", io) + ")"));
     }
 
     /** Record a non-null handler under the side that exposed it, de-duplicating by identity. */
