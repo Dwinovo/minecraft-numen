@@ -187,4 +187,44 @@ public class BlockGameTests {
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(10, 2, 5)), RouteSpec.defaults()).arrives();
     }
+
+    /** 两道墙夹着的走廊里横着一扇开着的活板门(贴着格子东边的一块一格高的薄板),两边地面一样高:撞上去起跳,翻过去。 */
+    @NumenTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void jumps_a_thin_plate_between_level_floors(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(3, 1, 4, 10, 3, 4, Blocks.STONE);
+        t.fill(3, 1, 6, 10, 3, 6, Blocks.STONE);
+        t.set(6, 1, 5, trapdoor(Blocks.OAK_TRAPDOOR, Direction.WEST, Half.BOTTOM, true));
+        TestBody body = t.body(4, 1, 5);
+        t.go(body, Goals.at(t.at(9, 1, 5)), RouteSpec.defaults()).arrives().then(r -> {
+            if (r.highestRise < 0.3) {
+                throw NumenAssertion.failed("没起跳就过了薄板:往上的速度最大 " + r.highestRise);
+            }
+        });
+    }
+
+    /**
+     * 一扇开着的活板门(贴着格子东边的一块一格高的薄板)后面是一块下半砖:跳过薄板、落在板顶或半砖上,脚已经不比落点低了
+     * 就不再起跳,走下去站在半砖上。
+     */
+    @NumenTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void stops_jumping_once_over_a_thin_plate_onto_a_lower_slab(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(3, 1, 4, 10, 3, 4, Blocks.STONE);
+        t.fill(3, 1, 6, 10, 3, 6, Blocks.STONE);
+        t.set(6, 1, 5, trapdoor(Blocks.OAK_TRAPDOOR, Direction.WEST, Half.BOTTOM, true));
+        t.set(7, 1, 5, slab(SlabType.BOTTOM));
+        TestBody body = t.body(5, 1, 5);
+        // 半砖顶面是 1.5:脚到了这个高度之后(板顶 2.0 更高),再有往上的速度就是又起跳了
+        boolean[] over = {false};
+        t.go(body, Goals.at(t.at(7, 1, 5)), RouteSpec.defaults())
+                .during(r -> {
+                    double feet = r.body.getY() - t.origin.getY();
+                    if (over[0] && r.body.getDeltaMovement().y > 0.3) {
+                        throw NumenAssertion.failed("已经到了落点的高度,却又起跳了:脚高 " + feet);
+                    }
+                    over[0] |= r.body.onGround() && feet > 1.49;
+                })
+                .arrives();
+    }
 }
