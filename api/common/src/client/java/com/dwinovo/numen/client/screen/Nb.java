@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen;
 
+import com.dwinovo.numen.client.ui.mc.Fade;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -24,23 +25,28 @@ public final class Nb {
     }
 
     public static void text(GuiGraphicsExtractor g, Font font, String s, int x, int y, int color) {
-        g.text(font, colored(s, color), x, y, -1, false);
+        g.text(font, colored(s, color), x, y, Fade.argb(-1), false);
     }
 
     public static void text(GuiGraphicsExtractor g, Font font, Component c, int x, int y, int color) {
-        g.text(font, c.copy().withStyle(st -> st.withColor(TextColor.fromRgb(color & 0xFFFFFF))), x, y, -1, false);
+        g.text(font, c.copy().withStyle(st -> st.withColor(TextColor.fromRgb(color & 0xFFFFFF))), x, y, Fade.argb(-1), false);
     }
 
     /** Shadowless split-line draw — the colour must already be baked into the sequence's Style. */
     public static void text(GuiGraphicsExtractor g, Font font, FormattedCharSequence seq, int x, int y) {
-        g.text(font, seq, x, y, -1, false);
+        g.text(font, seq, x, y, Fade.argb(-1), false);
+    }
+
+    /** 截短到 {@code maxW} 像素放得下,截了就补一个省略号;就是 {@link com.dwinovo.numen.client.ui.TextClip},量宽用 MC 字体。 */
+    public static String clip(Font font, String s, int maxW) {
+        return com.dwinovo.numen.client.ui.TextClip.fit(font::width, s, maxW);
     }
 
     /** Square thick border = four filled edge rects (no rounded corners). */
     public static void border(GuiGraphicsExtractor g, int x, int y, int w, int h, int t, int color) {
-        g.fill(x, y, x + w, y + t, color);
-        g.fill(x, y + h - t, x + w, y + h, color);
-        g.fill(x, y, x + t, y + h, color);
-        g.fill(x + w - t, y, x + w, y + h, color);
+        g.fill(x, y, x + w, y + t, Fade.argb(color));
+        g.fill(x, y + h - t, x + w, y + h, Fade.argb(color));
+        g.fill(x, y, x + t, y + h, Fade.argb(color));
+        g.fill(x + w - t, y, x + w, y + h, Fade.argb(color));
     }
 }

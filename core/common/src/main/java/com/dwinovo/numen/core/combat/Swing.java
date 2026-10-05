@@ -37,7 +37,8 @@ public final class Swing {
      * {@code entityInteractionRange() + distance} 就是这个意思)。
      *
      * <p>差别不小:大史莱姆宽 2.04,光半宽就一格出头。按 3.0 硬比会把它判成"够不着",
-     * 而原版玩家是打得到的——判据与站位都要这个数,不是那个 3.0。
+     * 而原版玩家是打得到的。出手与站位按碰撞箱判(第 0 层 {@code Goals.touch}),这个中心距只给要拿距离比的地方:
+     * 走位环的内沿还剩不剩一条带。
      */
     public static double reachTo(double nativeInteractionRange, double targetWidth) {
         return reachOf(nativeInteractionRange) + targetWidth / 2.0;

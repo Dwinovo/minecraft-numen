@@ -4,14 +4,18 @@
   "package": "com.dwinovo.numen.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BlockItemPlaceMixin",
     "BoatAccessor",
     "ChunkMapCompanionMixin",
+    "ItemEntityTouchMixin",
+    "PlayerAdvancementsRewardMixin",
     "MenuDataSlotsAccessor",
     "MixinEntityVehicleControl",
     "MixinServerCommonPacketListener"
   ],
   "client": [
     "ChatComponentAccessor",
+    "ToastManagerAccessor",
     "MixinKeyboardInput",
     "MixinLivingEntityRenderer"
   ],

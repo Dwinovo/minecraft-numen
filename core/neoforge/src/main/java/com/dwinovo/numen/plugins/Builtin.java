@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins;
 
+import com.dwinovo.numen.core.ModJar;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.minecraft.server.MinecraftServer;
@@ -28,8 +29,8 @@ public final class Builtin {
 
     private Builtin() {}
 
-    public static void registerAll(IEventBus modBus) {   // modBus 留着:下一个联动多半要用
-        Gate gate = new Gate(ModList.get()::isLoaded);
+    public static void registerAll(IEventBus modBus) {
+        Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnNeoForge.install(skills));
         // 车万女仆不支持这个 MC 版本(它封顶 1.21.1),所以这条分支上没有那个联动模块。
     }

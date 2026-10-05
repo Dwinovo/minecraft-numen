@@ -1,5 +1,7 @@
 package com.dwinovo.numen.persona;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.Constants;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -121,7 +123,7 @@ public final class PersonaLibrary {
     public Persona clonePersona(String id) {
         Persona src = personas.get(id);
         if (src == null) return null;
-        return create(src.name() + " 副本", src.text());
+        return create(I18n.get(ModLanguageData.Keys.PERSONA_COPY, src.name()), src.text());
     }
 
     // ---- pending summon assignment ----
@@ -260,7 +262,7 @@ public final class PersonaLibrary {
         }
         try {
             Files.writeString(dir.resolve(INIT_MARKER),
-                    "删除此文件后,下次启动会从模组内恢复内置示例人设(不覆盖已存在的同名文件)。\n",
+                    I18n.get(ModLanguageData.Keys.PERSONA_INIT_MARKER) + "\n",
                     StandardCharsets.UTF_8);
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] .init 哨兵写入失败: {}", ex.toString());

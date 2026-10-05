@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api;
 
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import net.minecraft.client.Minecraft;
@@ -13,12 +14,14 @@ import java.util.UUID;
  *
  * <h2>Deliberately unspecialized</h2>
  * This is the abstract "start()" on the base class: numen-api defines one
- * verb — <em>enqueue a string for a companion</em> — and every integration
- * decides for itself what that string is. Provenance tags, rate limiting,
- * translation, permission checks: all caller-side. The message lands in the
- * same owner-prompt queue the chat GUI uses and is spliced into the
- * conversation at the next protocol-valid point, exactly as if the owner had
- * typed it.
+ * verb — <em>emit an input of a type for a companion</em>, the same verb as
+ * {@link NumenApi#emit(UUID, String, String)} — and every integration decides
+ * for itself what the string is. Provenance tags, rate limiting,
+ * translation, permission checks: all caller-side. The input lands in the
+ * companion's one event queue — the queue the chat GUI and the server's
+ * events use — and is spliced into the conversation at the next
+ * protocol-valid point: the owner's words exactly as if the owner had typed
+ * them, a world event exactly like one the server sent.
  *
  * <h2>Outbound is not here — and never will be</h2>
  * Replies leave the companion through tools, not callbacks: register a
@@ -32,7 +35,7 @@ import java.util.UUID;
  * <h2>Client-side API</h2>
  * Companions are driven by their owner's game client (the owner's API key
  * pays for the tokens), so this must be called in the owner's client process.
- * Safe from any thread — the enqueue itself is marshalled onto the client
+ * Safe from any thread — the emit itself is marshalled onto the client
  * main thread. Companion UUIDs come from the entity
  * ({@code entity.getUUID()}).
  */
@@ -42,8 +45,13 @@ public final class NumenGateway {
 
 
     /**
-     * Queue {@code message} for {@code companion}, verbatim. If the companion
-     * is idle this starts a turn immediately; if it is mid-task the message is
+     * Queue {@code text} for {@code companion}, verbatim, as an input of {@code type}: either the owner's
+     * words ({@link EventTypes#QUERY}) or a registered world event coming from this client — a bridge
+     * relaying what someone else said, a live-stream comment. World events are wrapped as
+     * {@code <event kind="type">} with the in-game time, exactly like the server's; how urgent they are
+     * is that type's row. Things that happen to the body live on the server and go out through the body's
+     * {@link NumenApi#emit(com.dwinovo.numen.entity.NumenPlayer, String, java.util.Map, String, boolean)}.
+     * If the companion is idle this starts a turn immediately; if it is mid-task the message is
      * seen by the model at the next tool-batch boundary (queued messages merge
      * into one user message).
      *
@@ -58,24 +66,32 @@ public final class NumenGateway {
      * 所以这几个值今天没有任何界面在读;它们是给外部集成的汇报,该说实话。
      *
      * @param companion the companion entity's UUID
-     * @param message   delivered exactly as given — formatting is the caller's business
+     * @param type      {@link EventTypes#QUERY}, or a type registered as a world event
+     * @param text      delivered exactly as given — formatting is the caller's business
+     * @throws IllegalArgumentException {@code type} is neither the owner's words nor a registered world event
      */
-    public static Delivery enqueue(UUID companion, String message) {
-        if (companion == null || message == null || message.isBlank()) return Delivery.REJECTED;
+    public static Delivery emit(UUID companion, String type, String text) {
+        com.dwinovo.numen.event.NumenEvents.requireClientInput(type);
+        boolean ownerWords = EventTypes.QUERY.equals(type);
+        if (companion == null || text == null || text.isBlank()) return Delivery.REJECTED;
         boolean known = AgentLoopRegistry.get(companion).isPresent()
                 || com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion) != null;
         if (!known) return Delivery.REJECTED;
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread()) {
-            mc.execute(() -> AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
+            mc.execute(() -> submit(AgentLoopRegistry.getOrCreate(companion), ownerWords, type, text));
             return Delivery.HANDED_OFF;
         }
         EntityAgentLoop loop = AgentLoopRegistry.getOrCreate(companion);
-        boolean pressed = loop.submitPrompt(message);
+        boolean pressed = submit(loop, ownerWords, type, text);
         // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
-        // 判据取自 isExternallyDriven() 这一处真源,不另猜。
-        if (loop.isExternallyDriven()) return Delivery.TO_EXTERNAL_BRAIN;
+        // 判据取自驾驶席本身这一处真源,不另猜。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) return Delivery.TO_EXTERNAL_BRAIN;
         return pressed ? Delivery.QUEUED : Delivery.SEEN;
+    }
+
+    private static boolean submit(EntityAgentLoop loop, boolean ownerWords, String type, String text) {
+        return ownerWords ? loop.submitPrompt(text) : loop.submitEvent(type, text);
     }
 
     /**

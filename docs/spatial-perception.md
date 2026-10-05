@@ -1,14 +1,14 @@
 # 空间感知：把体素世界喂给 LLM 的表征设计
 
-> 设计文档。目标：让驱动同伴的 LLM 具备"空间感"——理解周围地形/障碍/落差/危险的排布，而不是靠逐格 `inspect_block` 盲戳。
+> 设计文档。目标：让驱动同伴的 LLM 具备"空间感"——理解周围地形/障碍/落差/危险的排布，而不是靠逐格 `scan_block` 盲戳。
 
 ## 1. 问题
 
 同伴的世界感知原本只有**扁平坐标列表**：
 - `scan_blocks` → 按方块 id 过滤的 `[{x,y,z,block,distance}]`（还有上限截断）；
-- `inspect_block` → 单格属性探测。
+- `scan_block` → 单格属性探测。
 
-实测日志里单次任务出现 **38 次 `inspect_block`** —— LLM"看不见"空间，只能一格一格戳来重建几何。大模型恰恰最不擅长从坐标元组列表里重建 3D 结构：无相对/拓扑关系、无可视化、token 重。
+实测日志里单次任务出现 **38 次 `scan_block`** —— LLM"看不见"空间，只能一格一格戳来重建几何。大模型恰恰最不擅长从坐标元组列表里重建 3D 结构：无相对/拓扑关系、无可视化、token 重。
 
 ## 2. 结论（两份调研）
 
@@ -27,9 +27,9 @@
 - **Costmap（ROS Nav2）**：喂规划器的是**每格代价 + 分层合成 + 危险膨胀（inflation）+ egocentric 滚动窗口**。→ 喂 LLM 的应是**语义/代价**而非原始方块 id；对危险格做**膨胀缓冲**让模型天然远离岩浆边缘。
 - **喂 LLM 的格式**：稀疏对象（车/障碍）用**结构化列表 + 坐标**（GPT-Driver、Talk2BEV）；稠密局部几何用**紧凑 ASCII 网格 + VoT 草稿**。二者分工。[GPT-Driver](https://arxiv.org/abs/2310.01415) · [Nav2 costmap](https://docs.nav2.org/configuration/packages/configuring-costmaps.html)
 
-## 3. `look_around` 工具设计
+## 3. `scan_around` 工具设计
 
-**定位**：AD"稠密网格 + 稀疏列表"分工里的**稠密近场网格**那半。稀疏远物（矿/箱/怪）交给已有的 `scan_blocks` / `scan_nearby_entities`。
+**定位**：AD"稠密网格 + 稀疏列表"分工里的**稠密近场网格**那半。稀疏远物（矿/箱/怪）交给已有的 `scan_blocks` / `scan_entities`。
 
 **返回**：一整块纯文本——自我中心俯视字符网格（`@` 居中，N 朝上，E 朝右，1 格=1 方块）+ 图例 + 路由提示。默认半径 8（17×17），可选 4–16。
 
@@ -49,7 +49,7 @@
 | `T` | 树（原木/树叶阻挡） |
 | `?` | 未加载 |
 
-**取用现成能力**：世界读取 `LoadedOnlyView`（未加载=`?`，绝不同步生成）；每格由 `MovementHelper.canWalkOn / fullyPassable / isLava` 真算（与寻路同口径）；圆心用寻路口径 `PathExecutor.playerFeet`。
+**取用现成能力**：每格都问她身边的地形 `Terrain`（适配层 `core/nav`：寻路模块第 0 层的几何与语义，按她的身体、在活世界上回答）——只读已加载的区块（未加载=`?`，绝不同步生成）；能不能站是 `standingSpot`（站得住、是站着、脚头脚下都不是出厂规格排除的种类），身体放不放得下是 `fits`，岩浆是语义种类 `LAVA`，与寻路规划、执行判一步同一份几何；圆心是她脚的高度归在的那一格 `Feet.cell`，与寻路定节点同一条规则。
 
 **VoT 引导**：图例末尾提示"逐格 trace 路径"，鼓励模型在网格上做 Visualization-of-Thought 式推理。
 

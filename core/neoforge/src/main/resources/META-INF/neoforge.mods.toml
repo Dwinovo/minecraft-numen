@@ -11,6 +11,10 @@ authors = "${mod_author}" #optional
 description = '''${description}''' #mandatory (Supports multiline text)
 [[mixins]]
 config = "${mod_id}.mixins.json"
+# 车万女仆联动(plugins/tlm)的 mixin,只在车万女仆在场时挂:它注入车万女仆的类,没有车万女仆就没有可注入的东西
+[[mixins]]
+config = "numen_tlm.mixins.json"
+requiredMods = ["touhou_little_maid"]
 [[dependencies.${mod_id}]] #optional
 modId = "numen_api" #mandatory — core supplies tools to the numen-api engine
 type="required" #mandatory

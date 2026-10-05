@@ -21,10 +21,10 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class PathDebugRenderer {
 
-    private static final float[] RED = {1.0f, 0.15f, 0.15f};
-    private static final float[] MAGENTA = {1.0f, 0.25f, 1.0f};
-    private static final float[] BLUE = {0.25f, 0.45f, 1.0f};
-    private static final float[] GREEN = {0.15f, 1.0f, 0.15f};
+    private static final float[] RED = {1.0f, 0.15f, 0.15f, 0.9f};
+    private static final float[] MAGENTA = {1.0f, 0.25f, 1.0f, 0.9f};
+    private static final float[] BLUE = {0.25f, 0.45f, 1.0f, 0.9f};
+    private static final float[] GREEN = {0.15f, 1.0f, 0.15f, 0.9f};
 
     private PathDebugRenderer() {}
 
@@ -85,12 +85,17 @@ public final class PathDebugRenderer {
         }
     }
 
-    /** 线框盒:12 条棱走 {@link #seg}(本代 ShapeRenderer 不提供 renderLineBox)。 */
+    /** 一格方块里缩进一点的线框盒。 */
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
-        PoseStack.Pose pose = poseStack.last();
-        double x0 = pos.getX() + 0.02, y0 = pos.getY() + 0.02, z0 = pos.getZ() + 0.02;
-        double x1 = pos.getX() + 0.98, y1 = pos.getY() + 0.98, z1 = pos.getZ() + 0.98;
+        box(vc, poseStack.last(),
+                pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02,
+                pos.getX() + 0.98, pos.getY() + 0.98, pos.getZ() + 0.98, color);
+    }
+
+    /** 线框盒:12 条棱走 {@link #seg}(本代 ShapeRenderer 不提供 renderLineBox)。{@code color} 是 RGBA。 */
+    public static void box(VertexConsumer vc, PoseStack.Pose pose,
+                           double x0, double y0, double z0, double x1, double y1, double z1, float[] color) {
         seg(vc, pose, x0, y0, z0, x1, y0, z0, color);
         seg(vc, pose, x1, y0, z0, x1, y0, z1, color);
         seg(vc, pose, x1, y0, z1, x0, y0, z1, color);
@@ -120,10 +125,10 @@ public final class PathDebugRenderer {
         float ny = dy / len;
         float nz = dz / len;
         vc.addVertex(pose, (float) x1, (float) y1, (float) z1)
-                .setColor(color[0], color[1], color[2], 0.9f)
+                .setColor(color[0], color[1], color[2], color[3])
                 .setNormal(pose, nx, ny, nz);
         vc.addVertex(pose, (float) x2, (float) y2, (float) z2)
-                .setColor(color[0], color[1], color[2], 0.9f)
+                .setColor(color[0], color[1], color[2], color[3])
                 .setNormal(pose, nx, ny, nz);
     }
 }

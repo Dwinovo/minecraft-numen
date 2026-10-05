@@ -16,6 +16,10 @@ description = '''${description}''' #mandatory (Supports multiline text)
 config = "${mod_id}.mixins.json"
 [[mixins]]
 config = "${mod_id}.neoforge.mixins.json"
+# 只在 Architectury 在场时挂:它的 mixin 注入 Architectury 的类,没有 Architectury 就没有可注入的东西
+[[mixins]]
+config = "${mod_id}.architectury.mixins.json"
+requiredMods = ["architectury"]
 [[dependencies.${mod_id}]] #optional
 modId = "neoforge" #mandatory
 type="required" #mandatory (Can be one of "required", "optional", "incompatible" or "discouraged")

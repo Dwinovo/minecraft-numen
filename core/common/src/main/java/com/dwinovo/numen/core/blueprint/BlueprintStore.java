@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.blueprint;
 
+import com.dwinovo.numen.core.build.Layout;
+import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 
 import net.minecraft.core.BlockPos;
@@ -14,7 +16,6 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.io.IOException;
@@ -29,8 +30,7 @@ import java.util.Locale;
  * 蓝图仓库:{@code schematics/} 目录下的结构文件。
  *
  * <p>目录名取社区通用的那个:玩家下载来的图纸本来就躺在那儿,不必再为我们
- * 单独搬一次家。旧的 {@code config/numen/blueprints} 继续兜底读取,已经放
- * 进去的图纸不会失踪。
+ * 单独搬一次家。图纸只从这一个目录读。
  *
  * <p>支持两种载体,同一数据形态(原版结构 NBT:size + palette/palettes + blocks):
  * <ul>
@@ -50,23 +50,10 @@ public final class BlueprintStore {
     /** 单张蓝图的格数上限(防误载巨图把任务撑爆)。 */
     private static final int MAX_CELLS = 32768;
 
-    /**
-     * 展开结果:目标格集 + 旋转后的占地尺寸 + 方块实体数据 + 待生成的摆设实体
-     * + <b>加载时就掉掉的格数</b>。
-     *
-     * <p>最后那个数不是给日志看的:掉格必须有账。不记的话,一张一千格的图纸掉了两百
-     * 格,任务会报"八百格全部达标",而缺的那五分之一无人知晓。
-     */
-    public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size,
-                         java.util.Map<Long, CompoundTag> blockEntityData,
-                         List<BuildTaskRecord.EntitySpawn> entities,
-                         java.util.Map<Long, List<BuildTaskRecord.CellNeed>> cellNeeds,
-                         int dropped) {}
-
     /** 支持的图纸扩展名。 */
     private static final List<String> EXTENSIONS = List.of(".nbt", ".snbt", ".litematic", ".schem");
 
-    /** 主目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
+    /** 图纸目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
     public static Path dir(MinecraftServer server) {
         Path dir = server.getServerDirectory().resolve("schematics");
         try {
@@ -77,37 +64,23 @@ public final class BlueprintStore {
         return dir;
     }
 
-    /** 查找顺序:主目录优先,旧目录兜底(只读,不自动创建)。 */
-    private static List<Path> searchRoots(MinecraftServer server) {
-        List<Path> roots = new ArrayList<>(2);
-        roots.add(dir(server));
-        // 字面量,不用 Constants.CONFIG_ROOT:这是"蓝图曾经放在哪"的历史事实,
-        // 配置根将来若改名,这条兜底路径不该跟着改——那样就找不到老蓝图了。
-        Path legacy = server.getServerDirectory().resolve("config").resolve("numen").resolve("blueprints");
-        if (Files.isDirectory(legacy)) {
-            roots.add(legacy);
-        }
-        return roots;
-    }
-
-    /** 列出可用蓝图名(不含扩展名,排序稳定;同名以主目录为准)。 */
+    /** 列出可用蓝图名(不含扩展名,排序稳定;同一个名字几种格式都有时只列一次)。 */
     public static List<String> list(MinecraftServer server) {
         java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        for (Path root : searchRoots(server)) {
-            try (var stream = Files.list(root)) {
-                stream.forEach(path -> {
-                    String file = path.getFileName().toString();
-                    String lower = file.toLowerCase(Locale.ROOT);
-                    for (String ext : EXTENSIONS) {
-                        if (lower.endsWith(ext)) {
-                            names.add(file.substring(0, file.lastIndexOf('.')));
-                            return;
-                        }
+        Path root = dir(server);
+        try (var stream = Files.list(root)) {
+            stream.forEach(path -> {
+                String file = path.getFileName().toString();
+                String lower = file.toLowerCase(Locale.ROOT);
+                for (String ext : EXTENSIONS) {
+                    if (lower.endsWith(ext)) {
+                        names.add(file.substring(0, file.lastIndexOf('.')));
+                        return;
                     }
-                });
-            } catch (IOException e) {
-                throw new RuntimeException("cannot list blueprint directory " + root, e);
-            }
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException("cannot list blueprint directory " + root, e);
         }
         List<String> sorted = new ArrayList<>(names);
         sorted.sort(Comparator.naturalOrder());
@@ -122,12 +95,13 @@ public final class BlueprintStore {
     }
 
     /**
-     * 展开蓝图为目标格集。
+     * 展开蓝图为目标格集,摆法同设计({@link Placement}):图纸自己的原点(文件里的 0,0,0,也就是它的最小角)落在
+     * {@code anchor},整张绕原点顺时针转 {@code rotationQuarters} 个 90°。
      *
-     * @param anchor           落位基点 = 旋转后结构的最小角(x/y/z 最小处)
      * @param rotationQuarters 顺时针旋转的四分之一圈数(0-3)
      */
-    public static Loaded load(ServerLevel level, String name, BlockPos anchor, int rotationQuarters) {
+    public static Layout load(ServerLevel level, String name, BlockPos anchor, int rotationQuarters) {
+        Placement at = new Placement(anchor, rotationQuarters);
         CompoundTag tag = readTag(level.getServer(), name);
         ListTag sizeTag = tag.getListOrEmpty("size");
         int sx = sizeTag.getIntOr(0, 0);
@@ -142,15 +116,9 @@ public final class BlueprintStore {
             paletteTag = tag.getListOrEmpty("palette");
         }
         List<BlockState> palette = new ArrayList<>(paletteTag.size());
-        Rotation rotation = switch (Math.floorMod(rotationQuarters, 4)) {
-            case 1 -> Rotation.CLOCKWISE_90;
-            case 2 -> Rotation.CLOCKWISE_180;
-            case 3 -> Rotation.COUNTERCLOCKWISE_90;
-            default -> Rotation.NONE;
-        };
         for (int i = 0; i < paletteTag.size(); i++) {
-            palette.add(NbtUtils.readBlockState(
-                    level.holderLookup(Registries.BLOCK), paletteTag.getCompoundOrEmpty(i)).rotate(rotation));
+            palette.add(at.turn(NbtUtils.readBlockState(
+                    level.holderLookup(Registries.BLOCK), paletteTag.getCompoundOrEmpty(i))));
         }
 
         ListTag blocks = tag.getListOrEmpty("blocks");
@@ -158,7 +126,6 @@ public final class BlueprintStore {
             throw new IllegalArgumentException("blueprint " + name + " has " + blocks.size()
                     + " cells, exceeding the " + MAX_CELLS + " cap");
         }
-        int quarters = Math.floorMod(rotationQuarters, 4);
         // 按位置去重:多区域的 litematic 可以在同一世界坐标给出两条(常见于一个
         // 区域填空气、另一个填墙)。不去重的话 targetByPos 只留最后一条而 targets
         // 两条都在——报价翻倍、分母虚高,而且必有一条永远对不上,最后以"她站不住"
@@ -192,14 +159,6 @@ public final class BlueprintStore {
             if (com.dwinovo.numen.core.build.BuildStates.isSecondaryHalf(state)) {
                 continue;
             }
-            int rx;
-            int rz;
-            switch (quarters) {
-                case 1 -> { rx = sz - 1 - z; rz = x; }
-                case 2 -> { rx = sx - 1 - x; rz = sz - 1 - z; }
-                case 3 -> { rx = z; rz = sx - 1 - x; }
-                default -> { rx = x; rz = z; }
-            }
             // 记账用的物品与工具那条入口共用同一张表(耕地/土径算土,高草算矮草)。
             // 推不出物品的方块(带花的花盆之类)整格跳过——留着只会是一个永远付不起
             // 的格子:预检数不到空气,逐格闸门也过不去,最后报"还差 air x37"。
@@ -212,7 +171,7 @@ public final class BlueprintStore {
             // 洞穴藤蔓答发光浆果、竹笋答竹子、连枝的瓜藤答瓜种。此前这里靠一张十三行
             // 的对照表,每行都是被咬过一次才补上的,而且只认原版——模组的作物一个都不认。
             BlockState placed = com.dwinovo.numen.core.build.BuildStates.normalize(state);
-            BlockPos world = anchor.offset(rx, y, rz);
+            BlockPos world = at.cell(new BlockPos(x, y, z));
             // 探针给<b>这一格自己的坐标</b>,不是锚点。给锚点的话所有格共用同一个探针点,
             // 而方块自述里有几种会去读那一格的方块实体——续建时锚点格本身就立着图纸放的
             // 东西,一面红旗就能把整张图纸的记账物品带偏。(带方块实体的方块已经在
@@ -228,8 +187,7 @@ public final class BlueprintStore {
             beData.remove(world.asLong());
             needs.remove(world.asLong());
             byPos.put(world.asLong(), new BuildTaskRecord.Target(state, payItem, world,
-                    state.getBlock().builtInRegistryHolder().key().identifier().getPath(),
-                    null, null, null));
+                    state.getBlock().builtInRegistryHolder().key().identifier().getPath()));
             // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹);容器内容一律
             // 不搬——图纸是文件,照搬等于凭空造物品
             CompoundTag safe = null;
@@ -260,55 +218,44 @@ public final class BlueprintStore {
             if (safe == null) {
                 continue;
             }
-            ListTag at = e.getListOrEmpty("pos");
-            if (at.size() != 3) {
+            ListTag where = e.getListOrEmpty("pos");
+            if (where.size() != 3) {
                 continue;
             }
-            double ex = at.getDoubleOr(0, 0);
-            double ey = at.getDoubleOr(1, 0);
-            double ez = at.getDoubleOr(2, 0);
-            double rx;
-            double rz;
-            switch (quarters) {
-                case 1 -> { rx = sz - ez; rz = ex; }
-                case 2 -> { rx = sx - ex; rz = sz - ez; }
-                case 3 -> { rx = ez; rz = sx - ex; }
-                default -> { rx = ex; rz = ez; }
-            }
-            spawns.add(new BuildTaskRecord.EntitySpawn(
-                    anchor.getX() + rx, anchor.getY() + ey, anchor.getZ() + rz, rotation, safe));
+            net.minecraft.world.phys.Vec3 point = at.point(new net.minecraft.world.phys.Vec3(
+                    where.getDoubleOr(0, 0), where.getDoubleOr(1, 0), where.getDoubleOr(2, 0)));
+            spawns.add(new BuildTaskRecord.EntitySpawn(point.x, point.y, point.z, at.rotation(), safe));
         }
         List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
-        Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
-        return new Loaded(targets, size, beData, spawns, needs, dropped);
+        Vec3i size = (at.quarters() % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
+        return new Layout(targets, size, beData, spawns, needs, dropped);
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {
-        for (Path base : searchRoots(server)) {
-            Path nbt = base.resolve(name + ".nbt");
-            Path snbt = base.resolve(name + ".snbt");
-            Path litematic = base.resolve(name + ".litematic");
-            Path schem = base.resolve(name + ".schem");
-            try {
-                if (Files.exists(nbt)) {
-                    return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
-                }
-                if (Files.exists(snbt)) {
-                    return NbtUtils.snbtToStructure(Files.readString(snbt));
-                }
-                // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
-                if (Files.exists(litematic)) {
-                    return BlueprintFormats.fromLitematic(
-                            NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
-                }
-                if (Files.exists(schem)) {
-                    return BlueprintFormats.fromSchem(
-                            NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
-                }
-            } catch (Exception e) {
-                throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
+        Path base = dir(server);
+        Path nbt = base.resolve(name + ".nbt");
+        Path snbt = base.resolve(name + ".snbt");
+        Path litematic = base.resolve(name + ".litematic");
+        Path schem = base.resolve(name + ".schem");
+        try {
+            if (Files.exists(nbt)) {
+                return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
             }
+            if (Files.exists(snbt)) {
+                return NbtUtils.snbtToStructure(Files.readString(snbt));
+            }
+            // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
+            if (Files.exists(litematic)) {
+                return BlueprintFormats.fromLitematic(
+                        NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
+            }
+            if (Files.exists(schem)) {
+                return BlueprintFormats.fromSchem(
+                        NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
         }
-        throw new IllegalArgumentException("blueprint " + name + " not found; use blueprint_list first");
+        throw new IllegalArgumentException("there is no blueprint file named " + name + " in the schematics folder");
     }
 }

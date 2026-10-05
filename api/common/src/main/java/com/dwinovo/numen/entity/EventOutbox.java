@@ -1,6 +1,6 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.event.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
@@ -24,9 +24,9 @@ import java.util.UUID;
  *
  * <h2>跟客户端是同一个队列</h2>
  * 同一个 {@link EventQueue} 类、同一张类型表、同一个 {@value EventQueue#DEFAULT_CAP}
- * 上限、同样的"丢最老的并记账"。区别只在两处:落盘走存档而不是 JSONL(所以注入
+ * 上限、同样的"满了先让捎带的走,并记账"。区别只在两处:落盘走存档而不是 JSONL(所以注入
  * {@link EventQueue.Journal#NONE},整份状态交给 {@link SavedData});以及它不问
- * {@code shouldDrain} —— 它的排空时机只有一个,主人回来了。
+ * {@code ripeness} —— 它的排空时机只有一个,主人回来了。
  *
  * <p>服务端专用。
  */
@@ -90,9 +90,9 @@ public final class EventOutbox extends SavedData {
         return queues.computeIfAbsent(companionUuid, k -> new EventQueue(EventQueue.Journal.NONE));
     }
 
-    /** 攒一条。 */
-    public void put(UUID companionUuid, String type, String text, long now, boolean urgent) {
-        queue(companionUuid).push(type, text, now, urgent);
+    /** 攒一条;一件身体活收尾的那条带着它的结果(在等它的程序读的就是它),结果不落盘。 */
+    public void put(UUID companionUuid, EventQueue.Entry entry) {
+        queue(companionUuid).push(entry.type(), entry.text(), entry.ts(), entry.urgent(), entry.result());
         setDirty();
     }
 

@@ -2,11 +2,14 @@ package com.dwinovo.numen.core.task.chain;
 
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.WorkProfile;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Crosshair;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
@@ -33,9 +36,10 @@ import net.minecraft.world.phys.Vec3;
  * 所以窗口卡死在 {@link #RECLAIM_TICKS} ——装桶、看向、点右键统共三五刻,到点无条件放手。
  *
  * <h2>够不够得着由桶自己说</h2>
- * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次:从眼睛沿视线打
- * {@code blockInteractionRange}。够得着才点,而且必须真的瞄在那一格上 —— 判据与真正
- * 执行的是同一条射线,不会出现"以为够得着、点下去什么也没发生"。
+ * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次(寻路模块身体机制的
+ * {@link Crosshair#itemRay}):从眼睛沿视线打 {@code blockInteractionRange}。够得着才点,
+ * 而且必须真的瞄在那一格上 —— 判据与真正执行的是同一条射线,不会出现"以为够得着、
+ * 点下去什么也没发生"。
  *
  * <h2>探落点用五条射线</h2>
  * 她的碰撞箱宽 0.6,单一条竖直射线会从格缝里漏下去。中心加四角各打一条、取最近的那个落点,
@@ -72,11 +76,18 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         return falling(companion) || reclaiming(companion);
     }
 
-    /** 正在快速下落,而且身上有能救自己的东西。 */
+    /**
+     * 正在快速下落,而且身上有能救自己的东西。在走的路线里计划好的坠落不算:落差与接住的办法寻路规划时已经算过、
+     * 执行时自己接,这条链只接计划外的。
+     */
     private static boolean falling(NumenPlayer companion) {
+        Trip trip = Trip.current(companion);
+        if (trip != null && trip.plannedFall()) {
+            return false;
+        }
         boolean grounded = companion.onGround() || companion.isInWater()
                 || companion.isSwimming() || companion.onClimbable();
-        boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
+        boolean canSave = carries(companion, Items.WATER_BUCKET) || softBlock(companion) != null;
         return SurvivalDecisions.mlgTriggered(grounded,
                 companion.getDeltaMovement().y, canSave);
     }
@@ -86,7 +97,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         if (placed == null || reclaimTicks <= 0) {
             return false;
         }
-        if (slotWith(companion, Items.BUCKET) < 0 || waterBucketSlot(companion) >= 0) {
+        if (!carries(companion, Items.BUCKET) || carries(companion, Items.WATER_BUCKET)) {
             return false;   // 没空桶可装,或者已经收到手了
         }
         BlockState state = companion.level().getBlockState(placed);
@@ -118,29 +129,24 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
         InputDriver.lookAt(companion, Vec3.atCenterOf(ground));
 
-        BlockHitResult aim = bucketRay(companion, ClipContext.Fluid.NONE);
+        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.NONE);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(ground)) {
             return TaskState.RUNNING;   // 还够不着,或者这一刻没瞄准 —— 下一刻更近
         }
 
-        // 下界的水一倒就蒸发,倒下去只是白扔一个桶。判据与原版倒桶同源:
-        // 落点处的 WATER_EVAPORATES 环境属性(BucketItem 蒸发分支即此查询)。
-        int bucket = companion.level().environmentAttributes().getValue(
-                        net.minecraft.world.attribute.EnvironmentAttributes.WATER_EVAPORATES, ground)
-                ? -1 : waterBucketSlot(companion);
-        if (bucket >= 0) {
-            companion.holdInHand(bucket);
+        // 下界的水一倒就蒸发,倒下去只是白扔一个桶。
+        if (!companion.level().environmentAttributes().getValue(
+                net.minecraft.world.attribute.EnvironmentAttributes.WATER_EVAPORATES, ground) && carries(companion, Items.WATER_BUCKET)) {
+            InteractionHand hand = Hotbar.grip(companion, Items.WATER_BUCKET).hand();
             placed = waterLandsAt(companion, aim);
             reclaimTicks = RECLAIM_TICKS;
-            Interaction.useInAir(companion, InteractionHand.MAIN_HAND,
-                    Interaction.Timing.once()).tick();
+            Interaction.useInAir(companion, hand, Interaction.Timing.once()).tick();
             noteSave(companion, "a water bucket");
             return TaskState.RUNNING;
         }
-        int block = softBlockSlot(companion);
-        if (block >= 0) {
-            companion.holdInHand(block);
-            Interaction.useBlock(companion, aim, InteractionHand.MAIN_HAND).tick();
+        net.minecraft.world.item.Item block = softBlock(companion);
+        if (block != null) {
+            Interaction.useBlock(companion, aim, Hotbar.grip(companion, block).hand()).tick();
             noteSave(companion, "a soft block");
         }
         return TaskState.RUNNING;
@@ -153,14 +159,12 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
         InputDriver.lookAt(companion, Vec3.atCenterOf(placed));
         // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种。
-        BlockHitResult aim = bucketRay(companion, ClipContext.Fluid.SOURCE_ONLY);
+        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.SOURCE_ONLY);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {
             return TaskState.RUNNING;
         }
-        int empty = slotWith(companion, Items.BUCKET);
-        if (empty >= 0) {
-            companion.holdInHand(empty);
-            Interaction.useInAir(companion, InteractionHand.MAIN_HAND,
+        if (carries(companion, Items.BUCKET)) {
+            Interaction.useInAir(companion, Hotbar.grip(companion, Items.BUCKET).hand(),
                     Interaction.Timing.once()).tick();
         }
         return TaskState.RUNNING;
@@ -170,7 +174,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
     private void noteSave(NumenPlayer companion, String means) {
         if (notedThisFall) return;
         notedThisFall = true;
-        com.dwinovo.numen.event.NumenEvents.body(companion, "broke a fall with " + means);
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this, "broke a fall with " + means);
     }
 
     @Override
@@ -199,18 +203,6 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
     @Override
     public String describe() {
         return "高处坠落时会用水桶或软方块自救,落地后把水收回来";
-    }
-
-    /**
-     * 原版 {@code BucketItem} 自己那条射线:从眼睛沿视线打 {@code blockInteractionRange}。
-     * 判"够不够得着"和真正执行用的是同一条,所以不会有点了没反应的情况。
-     */
-    private static BlockHitResult bucketRay(NumenPlayer companion, ClipContext.Fluid fluids) {
-        Vec3 eye = companion.getEyePosition();
-        Vec3 end = eye.add(companion.calculateViewVector(companion.getXRot(), companion.getYRot())
-                .scale(companion.blockInteractionRange()));
-        return companion.level().clip(new ClipContext(
-                eye, end, ClipContext.Block.OUTLINE, fluids, companion));
     }
 
     /** 水会落在哪一格 —— 与 {@code BucketItem.use} 同一个算法(可含水的方块就地灌,否则贴面)。 */
@@ -250,25 +242,22 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         return best;
     }
 
-    private static int waterBucketSlot(NumenPlayer companion) {
-        return slotWith(companion, Items.WATER_BUCKET);
-    }
-
-    private static int slotWith(NumenPlayer companion, net.minecraft.world.item.Item item) {
+    /** 身上(主背包或副手)带着 {@code item}。 */
+    private static boolean carries(NumenPlayer companion, net.minecraft.world.item.Item item) {
         Inventory inv = companion.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            if (inv.getItem(i).is(item)) return i;
+            if (inv.getItem(i).is(item)) return true;
         }
-        return -1;
+        return false;
     }
 
-    /** Slot of a placeable fall-dampening block (hay / slime), or -1. */
-    private static int softBlockSlot(NumenPlayer companion) {
+    /** A placeable fall-dampening block (hay / slime) she carries, or null. */
+    private static net.minecraft.world.item.Item softBlock(NumenPlayer companion) {
         Inventory inv = companion.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
-            if (s.is(Items.HAY_BLOCK) || s.is(Items.SLIME_BLOCK)) return i;
+            if (s.is(Items.HAY_BLOCK) || s.is(Items.SLIME_BLOCK)) return s.getItem();
         }
-        return -1;
+        return null;
     }
 }

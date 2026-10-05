@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.mixin.ChatComponentAccessor;
 
@@ -20,7 +21,7 @@ import java.util.UUID;
  * <pre>
  * 你 → sadasdas:帮我看看矿洞          (整行暗灰;语音带「(语音)」记号)
  * sadasdas:我看看…▌                    (流式行:边生成边长,完成后定格)
- * ⚙ sadasdas · goto                    (工具调用,最暗的状态行)
+ * ⚙ sadasdas · move_goto               (工具调用,最暗的状态行)
  * sadasdas:到了,矿洞在这边……          (回复全文,不折叠)
  * </pre>
  *
@@ -50,8 +51,7 @@ public final class ChatLines {
      * 干什么,面板把还没被消费的那条画成 ⌛ 泡。
      */
     public static void owner(String companionName, String text, boolean voice) {
-        add(Component.literal(
-                "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text)
+        add(Component.translatable(voice ? Keys.CHAT_OWNER_VOICE : Keys.CHAT_OWNER, companionName, text)
                 .withColor(OWN));
     }
 

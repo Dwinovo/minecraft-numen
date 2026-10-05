@@ -82,7 +82,7 @@ class AnthropicProviderTest {
         extras.addProperty(AnthropicProvider.SIGNATURE_KEY, "sig123");
         AssistantTurn turn = new AssistantTurn("好的",
                 List.of(new LlmToolCall("tu1", "move_to", "{\"x\":1}")), extras, "先想想");
-        JsonArray blocks = P.assistantToRequestMessage(turn).getAsJsonArray("content");
+        JsonArray blocks = P.assistantToRequestItems(turn).get(0).getAsJsonArray("content");
         assertEquals("thinking", blocks.get(0).getAsJsonObject().get("type").getAsString());
         assertEquals("先想想", blocks.get(0).getAsJsonObject().get("thinking").getAsString());
         assertEquals("sig123", blocks.get(0).getAsJsonObject().get("signature").getAsString());
@@ -96,7 +96,7 @@ class AnthropicProviderTest {
     void thinkingBlockWithoutSignatureIsDropped() {
         // 缺签名的思考块会被拒收:宁可不发思考块,不能发残块。
         AssistantTurn turn = new AssistantTurn("好的", List.of(), null, "无签名的思考");
-        JsonArray blocks = P.assistantToRequestMessage(turn).getAsJsonArray("content");
+        JsonArray blocks = P.assistantToRequestItems(turn).get(0).getAsJsonArray("content");
         assertEquals(1, blocks.size());
         assertEquals("text", blocks.get(0).getAsJsonObject().get("type").getAsString());
     }

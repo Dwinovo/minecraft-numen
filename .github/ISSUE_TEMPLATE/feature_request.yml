@@ -1,0 +1,10 @@
+name: 功能建议 / Feature request
+description: 你希望同伴能做什么 / What you'd like the companion to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你的想法 / Your idea
+    validations:
+      required: true

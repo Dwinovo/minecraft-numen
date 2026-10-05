@@ -27,7 +27,7 @@ import java.util.stream.Stream;
  *   chat.jsonl     会话日志
  *   stats.json     token 账
  *   inbox.jsonl    待发消息
- *   blocks.json    工作方块记忆
+ *   memory/        她自己写的札记(一条一个 .md)
  *   world          她属于哪个存档(对账用,见 {@link #reconcile})
  * </pre>
  *
@@ -81,9 +81,14 @@ public final class CompanionHome {
     private static final String CHAT = "chat.jsonl";
     private static final String STATS = "stats.json";
     private static final String INBOX = "inbox.jsonl";
+    /** 落点只剩迁移在用:工作方块记忆已经并进札记,搬进来的旧文件随遣散一起消失。 */
     private static final String BLOCKS = "blocks.json";
+    private static final String MEMORY = "memory";
+    private static final String CONVERSATIONS = "conversations.json";
     private static final String GOAL = "goal.json";
     private static final String WORLD = "world";
+    /** 主人那一份 Lua 模块的根:{@code lua/<主人 UUID>/}。 */
+    private static final String LUA = "lua";
 
     /** 同伴数据的根;由各 loader 的客户端入口注入,见 {@link #init}。 */
     private static Path root;
@@ -100,6 +105,19 @@ public final class CompanionHome {
      */
     public static void init(Path numenConfigRoot) {
         root = numenConfigRoot;
+        // 札记的落点由这里给:目录布局的知识只住在本类,NoteBook 自己不拼路径。
+        // 天数是懒取的——要到她真的记一条时才问 Minecraft,所以这里没有时序问题。
+        com.dwinovo.numen.agent.memory.NoteBook.init(CompanionHome::memory, CompanionHome::gameDay);
+        // 她的 Lua 模块按主人放,不按同伴:同一主人的同伴共用一个目录 lua/<主人>/。主人就是这台客户端登录的那个账号,
+        // 用到时才问,和天数同样没有时序问题。
+        com.dwinovo.numen.script.Modules.init(companion -> numenRoot().resolve(LUA)
+                .resolve(net.minecraft.client.Minecraft.getInstance().getUser().getProfileId().toString()));
+    }
+
+    /** 现在是游戏第几天;没进世界(主菜单、datagen)算第 0 天。 */
+    private static int gameDay() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        return mc == null || mc.level == null ? 0 : (int) (mc.level.getOverworldClockTime() / 24000L);
     }
 
     // ---- 路径 ----
@@ -147,8 +165,20 @@ public final class CompanionHome {
         return dir(entityUuid).resolve(INBOX);
     }
 
-    public static Path blocks(UUID entityUuid) {
-        return dir(entityUuid).resolve(BLOCKS);
+    /** 她札记的落点;布局的知识只住在这里,{@code NoteBook} 只接受这个目录。 */
+    public static Path memory(UUID entityUuid) {
+        return dir(entityUuid).resolve(MEMORY);
+    }
+
+    /**
+     * 会话名册的落点:{@code companions/conversations.json}。
+     *
+     * <p>它不跟模型配置库、声线库放在一起,因为那几个库<b>只装配置、不装绑定</b>——正因如此
+     * 才能原样分享给别人。而一个会话就是一串同伴 UUID,是彻头彻尾的绑定,只能住在
+     * {@code companions/} 下面,跟着这台机器上的这些同伴。
+     */
+    public static Path conversations() {
+        return numenRoot().resolve(DIR).resolve(CONVERSATIONS);
     }
 
     // ---- 长期目标 ----

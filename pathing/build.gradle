@@ -1,0 +1,41 @@
+// numen-pathing:寻路模块,设计稿见 docs/pathing.md。
+//
+// 和 api/common 一样对着原版编译(NeoForm),不含加载器代码;classpath 上只有 Minecraft 与它自带的库
+// (fastutil、slf4j),没有 ai / agent / api / core——往 Numen 伸手的 import 在编译期就过不去,边界由编译器守。
+// Numen 经端口接入;成品随 core 的两个加载器 jar 平铺发出,见 multiloader-loader.gradle。
+plugins {
+    id 'multiloader-common'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    neoFormVersion = neo_form_version
+}
+
+sourceSets {
+    // 单测跑在原版环境里:引导注册表、用真实的 BlockState,所以测试的类路径就是主源码集的那一份原版。
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+    // 模块自己的 GameTest:用一个不是同伴的普通假玩家真走,只看模块与原版。由 core:neoforge 的 GameTest 服务器
+    // 一起跑(见 core/neoforge/build.gradle),所以不进发行 jar;模板在 src/gametest/structures。
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // GameTest 服务器只登记挂着 NeoForge 的 @GameTestHolder 的类:用例要看见这一个注解;另外只借它的事件总线,在用例里
+    // 扮演"别的模组取消了破坏事件"。模块自己的代码一个 NeoForge 类不用
+    gametestCompileOnly "net.neoforged:neoforge:${neoforge_version}:universal"
+    gametestCompileOnly 'net.neoforged:bus:8.0.5'
+}
+
+test {
+    useJUnitPlatform()
+}
