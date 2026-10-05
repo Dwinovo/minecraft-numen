@@ -371,12 +371,12 @@ class ServerProgramsTest {
         tick(1);
         pumpUntil(() -> program.result.get() != null);
 
-        assertEquals("timeout|2", program.json().getAsJsonObject("data").get("returned").getAsString(),
+        assertEquals("timeout|2", program.returned().getAsString(),
                 "the call failed as a timeout, and the next line ran");
         assertEquals(List.of(held.held.get(0).callId()), held.cancelled, "the transport was told to drop it");
         held.answer(0, 2);
         ServerPrograms.pump();
-        assertEquals("timeout|2", program.json().getAsJsonObject("data").get("returned").getAsString(),
+        assertEquals("timeout|2", program.returned().getAsString(),
                 "a late answer is ignored");
     }
 
@@ -395,7 +395,7 @@ class ServerProgramsTest {
         assertEquals("your owner's client did not answer gt.gt_mix.twice within "
                         + ProgramLimits.CLIENT_ANSWER_TICKS / 20 + " seconds. A client function only reads, so the same "
                         + "call is safe to run again.|gt.gt_mix.twice(7)",
-                program.json().getAsJsonObject("data").get("returned").getAsString());
+                program.returned().getAsString());
     }
 
     @Test
@@ -410,7 +410,7 @@ class ServerProgramsTest {
         pumpUntil(() -> program.result.get() != null);
         tick(ProgramLimits.CLIENT_ANSWER_TICKS);
 
-        assertEquals("answered|2", program.json().getAsJsonObject("data").get("returned").getAsString());
+        assertEquals("answered|2", program.returned().getAsString());
         assertTrue(held.cancelled.isEmpty(), "an answered call has nothing left to drop: " + held.cancelled);
     }
 

@@ -17,10 +17,10 @@ import java.util.UUID;
  * every call and the modules it used, or the list of module texts the server still needs ({@link RunResult}).
  *
  * <h2>Bounded by construction</h2>
- * The receipt is read by the model, so the program bounds it where it writes it ({@code ScriptLimits}: the call lines,
- * each job's account, the returned value, the printed text, each call's recorded text), and every call's outcome is a
- * short text. The payload is therefore far under {@link Wire#TO_CLIENT}; one that is not is a bug in whatever filled it
- * and {@link Wire#fit} throws.
+ * The receipt is read by the model, so the program bounds it where it writes it ({@code ScriptLimits}: each stderr
+ * record and the whole stderr, the returned value, the printed text, each call's recorded text), and every call's
+ * outcome is a short text. The payload is therefore far under {@link Wire#TO_CLIENT}; one that is not is a bug in
+ * whatever filled it and {@link Wire#fit} throws.
  */
 public record ProgramResultPayload(UUID entityUuid, String programId, String resultJson)
         implements CustomPacketPayload {
