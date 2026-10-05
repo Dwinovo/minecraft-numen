@@ -57,7 +57,7 @@ public final class ScriptCall {
      * @param task   编号
      * @param status {@code done}、{@code failed}、{@code timeout}、{@code stopped}、{@code interrupted}
      * @param words  它交代的话
-     * @param result 它的结果({@link ApiReply#ended} 写的那一份),随事件一起到;没带(重启前派的活补发的收尾)是 null
+     * @param result 它的结果({@link ApiReply#value}/{@link ApiReply#error} 写的那一份),随事件一起到;没带(重启前派的活补发的收尾)是 null
      */
     public record Finish(String task, String status, String words, JsonObject result) {}
 
