@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 
 /**
  * 反向请求走网络:请求作为 {@link ClientCallPayload} 发给她的主人,主人的客户端答 {@link ClientCallResultPayload}。
- * 主人不在线、请求装不下一个下行的包,或主人在等答复时断线,都是这次调用的一条失败,程序按失败往下走。
+ * 主人不在线、请求连整条消息的上限都装不下,或主人在等答复时断线,都是这次调用的一条失败,程序按失败往下走。
  */
 public final class NetworkTransport implements ClientTransport {
 
@@ -32,8 +32,8 @@ public final class NetworkTransport implements ClientTransport {
             return;
         }
         int size = request.size();
-        if (!Wire.TO_CLIENT.holds(size)) {
-            done.accept(new Answer(ApiReply.error(ErrorKind.FAILED, Wire.TO_CLIENT.tooBig("This call", size)
+        if (!Wire.TO_CLIENT.carries(size)) {
+            done.accept(new Answer(ApiReply.error(ErrorKind.FAILED, Wire.TO_CLIENT.tooBigMessage("This call", size)
                     + ", so it was not sent. Give it less at a time.", null, null).toString(), null));
             return;
         }

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.network;
 
+import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.payload.FragmentPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.LocateNumenPayload;
@@ -8,6 +10,7 @@ import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.platform.Services;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -15,6 +18,8 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -26,73 +31,153 @@ import java.util.function.Consumer;
  * platform implementation handles the loader-specific timing.
  *
  * <h2>Sending</h2>
- * {@link #sendToPlayer} and {@link #sendToServer} measure the payload with its own
- * codec against {@link Wire} before handing it to the loader: what goes on the wire
- * always fits, so no length can make netty drop the connection. Payloads going to
- * the server carry nothing from the registries, so their codecs are written over a
- * plain {@link ByteBuf} and measure without one.
+ * {@link #sendToPlayer} and {@link #sendToServer} hand the payload to {@link Fragments#packets} with its own
+ * codec and {@link Wire} before giving anything to the loader: what goes on the wire always fits one packet, so no
+ * length can make netty drop the connection. A payload that grows with data and declares {@link Wire.Fragmentable}
+ * goes as fragments when it does not fit one packet; the receiving side's {@link #fragmentFromClient} /
+ * {@link #fragmentFromServer} put it back together and give it to the handler registered for it, which cannot tell.
  *
  * <h2>Adding a new payload</h2>
  * <ol>
  *   <li>Define a record under {@code com.dwinovo.numen.network.payload}
  *       implementing {@code CustomPacketPayload} with a public {@code Type}
  *       and {@code StreamCodec}; text whose length the payload does not control
- *       uses {@link Wire#text()}, and a payload whose content grows with data
- *       implements {@link Wire.Oversized}.</li>
+ *       uses {@link Wire#text()}, a payload whose content grows with data
+ *       implements {@link Wire.Oversized} (shrinks to fit one packet) or {@link Wire.Fragmentable} (goes as
+ *       fragments).</li>
  *   <li>Add one {@code toServer(...)} or {@code toClient(...)} call here.</li>
  * </ol>
  */
 public final class NumenNetwork {
 
-    /** 每种下行包按它的类型登记的编解码器;表里的编解码器只拿去编登记时那一种包。 */
-    private static final Map<CustomPacketPayload.Type<?>, StreamCodec<? super RegistryFriendlyByteBuf,
-            CustomPacketPayload>> TO_CLIENT = new HashMap<>();
-    /** 每种上行包的编解码器,同上。 */
-    private static final Map<CustomPacketPayload.Type<?>, StreamCodec<ByteBuf, CustomPacketPayload>> TO_SERVER =
+    /** 一种包的编解码器与处理器。编解码器按"能写在注册表缓冲上的"记:上行的编解码器写在 {@code ByteBuf} 上,同样接得住。 */
+    private record Route<H>(StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload> codec, H handler) {}
+
+    /** 每种下行包按它的类型登记的路径;表里的编解码器只拿去编登记时那一种包。 */
+    private static final Map<CustomPacketPayload.Type<?>, Route<Consumer<CustomPacketPayload>>> TO_CLIENT =
             new HashMap<>();
+    /** 每种上行包的路径,同上。 */
+    private static final Map<CustomPacketPayload.Type<?>, Route<BiConsumer<CustomPacketPayload, ServerPlayer>>>
+            TO_SERVER = new HashMap<>();
+
+    /** 客户端从服务端收到的、拼装中的分片消息。 */
+    private static final Fragments.Inbox FROM_SERVER = new Fragments.Inbox(Wire.TO_CLIENT);
+    /** 服务端从各位玩家的客户端收到的、拼装中的分片消息,一个连接一份。 */
+    private static final Map<UUID, Fragments.Inbox> FROM_CLIENTS = new ConcurrentHashMap<>();
 
     private NumenNetwork() {}
 
-    /** 发给一位玩家的客户端:量过、装得下的那个才交给加载器(见 {@link Wire#fit})。 */
+    /** 发给一位玩家的客户端:量过、装得下一个包的才交给加载器,超过的可分片的包分成片(见 {@link Fragments#packets})。 */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        Services.NETWORK.sendToPlayer(player, Wire.TO_CLIENT.fit(codec(TO_CLIENT, payload), payload,
-                () -> new RegistryFriendlyByteBuf(Unpooled.buffer(), player.registryAccess())));
+        for (CustomPacketPayload packet : Fragments.packets(Wire.TO_CLIENT, route(TO_CLIENT, payload).codec(), payload,
+                () -> new RegistryFriendlyByteBuf(Unpooled.buffer(), player.registryAccess()))) {
+            Services.NETWORK.sendToPlayer(player, packet);
+        }
     }
 
-    /** 发给服务端:量过、装得下的那个才交给加载器(见 {@link Wire#fit})。 */
+    /** 发给服务端:同 {@link #sendToPlayer}。 */
     public static void sendToServer(CustomPacketPayload payload) {
-        Services.NETWORK.sendToServer(Wire.TO_SERVER.fit(codec(TO_SERVER, payload), payload, Unpooled::buffer));
+        for (CustomPacketPayload packet : Fragments.packets(Wire.TO_SERVER, route(TO_SERVER, payload).codec(), payload,
+                NumenNetwork::registryFreeBuffer)) {
+            Services.NETWORK.sendToServer(packet);
+        }
     }
 
-    private static <C> C codec(Map<CustomPacketPayload.Type<?>, C> table, CustomPacketPayload payload) {
-        C codec = table.get(payload.type());
-        if (codec == null) {
+    /** 上行的包不带注册表里的东西,量它们用空的注册表。 */
+    private static RegistryFriendlyByteBuf registryFreeBuffer() {
+        return new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    }
+
+    private static <R> R route(Map<CustomPacketPayload.Type<?>, R> table, CustomPacketPayload payload) {
+        R route = table.get(payload.type());
+        if (route == null) {
             throw new IllegalArgumentException(payload.type().id() + " is not registered in this direction");
         }
-        return codec;
+        return route;
+    }
+
+    /** 服务端收到一片:这位玩家的收件箱收齐了,就把原包交给它登记的处理器。 */
+    public static void fragmentFromClient(FragmentPayload fragment, ServerPlayer from) {
+        CustomPacketPayload whole = assembled(FROM_CLIENTS.computeIfAbsent(from.getUUID(),
+                id -> new Fragments.Inbox(Wire.TO_SERVER)), fragment);
+        if (whole != null) {
+            route(TO_SERVER, whole).handler().accept(whole, from);
+        }
+    }
+
+    /** 客户端收到一片:同 {@link #fragmentFromClient}。 */
+    public static void fragmentFromServer(FragmentPayload fragment) {
+        CustomPacketPayload whole = assembled(FROM_SERVER, fragment);
+        if (whole != null) {
+            route(TO_CLIENT, whole).handler().accept(whole);
+        }
+    }
+
+    /**
+     * 这一片放进收件箱;这条消息因此收齐了就解出原包,没收齐是 null。不合规矩的片(见 {@link Fragments})、原包不是登记过的
+     * 可分片的包,拒收并丢弃,日志里写明——对端不是正当的 Numen,没有谁可答复。
+     */
+    public static CustomPacketPayload assembled(Fragments.Inbox inbox, FragmentPayload fragment) {
+        switch (inbox.accept(fragment)) {
+            case Fragments.Pending pending -> {
+                return null;
+            }
+            case Fragments.Rejected rejected -> {
+                Constants.LOG.warn("[numen-net] dropped a fragmented message: {}", rejected.why());
+                return null;
+            }
+            case Fragments.Complete whole -> {
+                CustomPacketPayload.Type<?> kind = new CustomPacketPayload.Type<>(whole.kind());
+                Route<?> route = inbox.direction() == Wire.TO_SERVER ? TO_SERVER.get(kind) : TO_CLIENT.get(kind);
+                CustomPacketPayload payload = route == null ? null : Fragments.decode(route.codec(), whole.bytes());
+                if (!(payload instanceof Wire.Fragmentable)) {
+                    Constants.LOG.warn("[numen-net] dropped a fragmented {}: not a payload that goes as fragments",
+                            whole.kind());
+                    return null;
+                }
+                return payload;
+            }
+        }
+    }
+
+    /** 这位玩家断线了:他连接上没收完的残片丢掉。 */
+    public static void disconnected(UUID player) {
+        Fragments.Inbox inbox = FROM_CLIENTS.remove(player);
+        if (inbox != null) {
+            inbox.clear();
+        }
+    }
+
+    /** 这个客户端从服务端断线了:没收完的残片丢掉。 */
+    public static void disconnectedFromServer() {
+        FROM_SERVER.clear();
     }
 
     /** 登记进表时抹掉包的具体类型:取出来时按 {@link CustomPacketPayload#type()} 对回同一种。 */
     @SuppressWarnings("unchecked")
-    private static <C> C erased(StreamCodec<?, ?> codec) {
-        return (C) codec;
+    private static <C> C erased(Object value) {
+        return (C) value;
     }
 
     private static <T extends CustomPacketPayload> void toClient(CustomPacketPayload.Type<T> type,
                                                                  StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
                                                                  Consumer<T> handler) {
-        TO_CLIENT.put(type, erased(codec));
+        TO_CLIENT.put(type, new Route<>(erased(codec), erased(handler)));
         Services.NETWORK.registerServerToClient(type, codec, handler);
     }
 
     private static <T extends CustomPacketPayload> void toServer(CustomPacketPayload.Type<T> type,
                                                                  StreamCodec<ByteBuf, T> codec,
                                                                  BiConsumer<T, ServerPlayer> handler) {
-        TO_SERVER.put(type, erased(codec));
+        TO_SERVER.put(type, new Route<>(erased(codec), erased(handler)));
         Services.NETWORK.registerClientToServer(type, codec, handler);
     }
 
     public static void register() {
+        // 两个方向上一条超过单包上限的消息的片(见 Fragments):对端收齐拼回,交给原来的处理器。
+        toServer(FragmentPayload.TO_SERVER, FragmentPayload.TO_SERVER_CODEC, NumenNetwork::fragmentFromClient);
+        toClient(FragmentPayload.TO_CLIENT, FragmentPayload.TO_CLIENT_CODEC, NumenNetwork::fragmentFromServer);
+
         // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).
         toServer(
                 com.dwinovo.numen.network.payload.RunProgramPayload.TYPE,

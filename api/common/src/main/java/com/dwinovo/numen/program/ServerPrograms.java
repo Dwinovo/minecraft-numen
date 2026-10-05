@@ -8,6 +8,7 @@ import com.dwinovo.numen.agent.script.SerialExecutor;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
+import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.platform.ServerLifecycle;
 
 import java.util.Map;
@@ -252,11 +253,12 @@ public final class ServerPrograms {
         }
     }
 
-    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,缓存清掉。 */
+    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,缓存清掉,没收完的分片消息丢掉。 */
     public static void ownerLeft(UUID owner) {
         RUNNING.values().stream().filter(r -> r.owner.equals(owner)).forEach(r -> r.program.cancel(false));
         NetworkTransport.INSTANCE.ownerLeft(owner);
         CACHE.drop(owner);
+        NumenNetwork.disconnected(owner);
     }
 
     /** 服务器停了:所有程序收掉,排着的调用作废。 */

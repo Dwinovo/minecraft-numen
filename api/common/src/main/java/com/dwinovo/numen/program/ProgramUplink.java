@@ -54,7 +54,7 @@ public final class ProgramUplink {
     }
 
     /**
-     * 把一段程序送去服务端跑。答复经 {@code done} 恰好交回一次:跑完的回执,或者(装不下一个包、服务端要的正文还是给不全)
+     * 把一段程序送去服务端跑。答复经 {@code done} 恰好交回一次:跑完的回执,或者(连整条消息的上限都装不下、服务端要的正文还是给不全)
      * 一张没跑成的失败回执。
      *
      * @param programId 这段程序的编号,调用方保证不重
@@ -136,7 +136,7 @@ public final class ProgramUplink {
         RunProgramPayload payload = new RunProgramPayload(companion, programId, w.code(),
                 sync.pack(modules.apply(companion).sources()));
         int size = payload.size();
-        if (!Wire.TO_SERVER.holds(size)) {
+        if (!Wire.TO_SERVER.carries(size)) {
             sync.lost(payload.modules().bodies().keySet());
             waiting.remove(programId);
             w.done().accept(RunResult.refused(RunProgramPayload.tooBigWords(size)));

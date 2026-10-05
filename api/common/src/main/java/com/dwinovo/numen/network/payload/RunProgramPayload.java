@@ -33,13 +33,15 @@ import java.util.UUID;
  *
  * <h2>Wire format</h2>
  * Every string is {@link Wire#text()}: the program and the module texts are the model's and the owner's, not ours to
- * bound. The whole payload is measured against {@link Wire#TO_SERVER} before it leaves the client, and a program that
- * does not fit is answered there ({@link #tooBig}) instead of being sent.
+ * bound. The payload is {@link Wire.Fragmentable}: past one upward packet it goes as fragments and the server puts it
+ * back together before {@link #handle} sees it. The whole payload is measured against {@link Wire#MESSAGE_BYTES}
+ * before it leaves the client, and a program that does not fit even that is answered there ({@link #tooBigWords})
+ * instead of being sent.
  *
  * @param programId the program's id; the n-th call inside it is {@code <programId>#<n>}
  */
 public record RunProgramPayload(UUID entityUuid, String programId, String code, ModuleSet modules)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Fragmentable {
 
     public static final Type<RunProgramPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "run_program"));
@@ -57,9 +59,9 @@ public record RunProgramPayload(UUID entityUuid, String programId, String code, 
         return Wire.size(STREAM_CODEC, this, Unpooled::buffer);
     }
 
-    /** 这段程序装不下一个上行的包:不送,就地给模型的话。说清多大、上限多少、怎么办。 */
+    /** 这段程序连整条消息的上限都装不下:不送,就地给模型的话。说清多大、上限多少、怎么办。 */
     public static String tooBigWords(int bytes) {
-        return Wire.TO_SERVER.tooBig("This program with the modules it needs", bytes) + ", so it was not sent. Make "
+        return Wire.TO_SERVER.tooBigMessage("This program with the modules it needs", bytes) + ", so it was not sent. Make "
                 + "the program shorter: a long list or grid goes in a module you save once with numen.module.save and "
                 + "then call by name.";
     }

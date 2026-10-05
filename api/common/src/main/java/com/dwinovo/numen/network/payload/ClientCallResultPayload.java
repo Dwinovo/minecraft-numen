@@ -20,10 +20,11 @@ import java.util.UUID;
  * Client-to-server payload: the answer to a {@link ClientCallPayload}, the call's result in the shape every API call
  * returns ({@code ApiReply}). When the function changed her modules (a {@code numen.module.save}), the client's new
  * module list rides along as {@code modules}, so the program that is still running sees the new text the next time it
- * uses the module and the client stays the only source of truth.
+ * uses the module and the client stays the only source of truth. A result can be as long as what the function read
+ * (a module's code) and the new module texts ride along, so the payload is {@link Wire.Fragmentable}.
  */
 public record ClientCallResultPayload(UUID entityUuid, String callId, String replyJson, Optional<ModuleSet> modules)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Fragmentable {
 
     public static final Type<ClientCallResultPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_call_result"));

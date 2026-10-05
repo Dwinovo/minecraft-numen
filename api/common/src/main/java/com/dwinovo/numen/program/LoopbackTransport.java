@@ -1,6 +1,7 @@
 package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.Fragments;
 import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.network.payload.ClientCallPayload;
 import com.dwinovo.numen.network.payload.ClientCallResultPayload;
@@ -12,7 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * 没有真客户端的进程里(GameTest、单测、评测)反向请求的传输:请求和答复各编码成线上的字节再解出来,交给同一个客户端执行体
+ * 没有真客户端的进程里(GameTest、单测、评测)反向请求的传输:请求和答复各经过线上的样子({@link Fragments#crossed}),交给同一个客户端执行体
  * ({@link ClientEndpoint}),和网络上走的是同一条路,只是不出进程。
  */
 public final class LoopbackTransport implements ClientTransport {
@@ -33,7 +34,7 @@ public final class LoopbackTransport implements ClientTransport {
     @Override
     public void request(NumenPlayer her, ClientCallPayload request, Consumer<Answer> done) {
         table.expect(request.callId(), request.entityUuid(), done);
-        endpoint.handle(RoundTrip.of(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, request));
+        endpoint.handle(Fragments.crossed(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, request));
     }
 
     @Override
@@ -51,7 +52,8 @@ public final class LoopbackTransport implements ClientTransport {
         if (silent) {
             return;
         }
-        ClientCallResultPayload result = RoundTrip.of(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, (ClientCallResultPayload) payload);
+        ClientCallResultPayload result = Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC,
+                (ClientCallResultPayload) payload);
         table.complete(result.callId(), result.entityUuid(),
                 new Answer(result.replyJson(), result.modules().orElse(null)));
     }

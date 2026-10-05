@@ -1,6 +1,7 @@
 package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.Fragments;
 import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.network.payload.ProgramResultPayload;
 import com.dwinovo.numen.network.payload.RunProgramPayload;
@@ -17,7 +18,7 @@ import java.util.function.Function;
 /**
  * 一个在本进程里扮主人客户端的"客户端":没有真客户端的地方(GameTest、单测、评测)用它把程序送进服务端的入口。送程序、停程序、
  * 收回执、答反向请求用的都是产品里的同一批部件({@link ProgramUplink}、{@link ClientEndpoint}、{@link ModuleSync}),上行与下行的包
- * 各编码再解码一遍,只是不出进程;服务端那头直接是 {@link ServerPrograms}(省掉"认出是哪具身体、是不是主人"那一步网络层的校验)。
+ * 经过线上的样子({@link Fragments#crossed}:超过单包上限的切成片再拼回、各编码再解码一遍),只是不出进程;服务端那头直接是 {@link ServerPrograms}(省掉"认出是哪具身体、是不是主人"那一步网络层的校验)。
  */
 public final class LoopbackClient {
 
@@ -75,17 +76,17 @@ public final class LoopbackClient {
     private void toServer(CustomPacketPayload payload) {
         switch (payload) {
             case RunProgramPayload run -> {
-                RunProgramPayload sent = RoundTrip.of(Wire.TO_SERVER, RunProgramPayload.STREAM_CODEC, run);
+                RunProgramPayload sent = Fragments.crossed(Wire.TO_SERVER, RunProgramPayload.STREAM_CODEC, run);
                 ServerPrograms.run(bodies.apply(sent.entityUuid()), sent.entityUuid(), sent.entityUuid(),
                         new ServerPrograms.Request(sent.programId(), sent.code(), sent.modules(), true), transport,
                         observers.getOrDefault(sent.programId(), CallObserver.NONE), result -> {
-                            ProgramResultPayload back = RoundTrip.of(Wire.TO_CLIENT, ProgramResultPayload.STREAM_CODEC,
+                            ProgramResultPayload back = Fragments.crossed(Wire.TO_CLIENT, ProgramResultPayload.STREAM_CODEC,
                                     new ProgramResultPayload(sent.entityUuid(), sent.programId(), result.toJson()));
                             uplink.deliver(back.programId(), RunResult.fromJson(back.resultJson()));
                         });
             }
             case StopProgramPayload stop -> {
-                StopProgramPayload sent = RoundTrip.of(Wire.TO_SERVER, StopProgramPayload.STREAM_CODEC, stop);
+                StopProgramPayload sent = Fragments.crossed(Wire.TO_SERVER, StopProgramPayload.STREAM_CODEC, stop);
                 if (sent.cutOff()) {
                     ServerPrograms.cutOff(sent.entityUuid(), sent.programId(), sent.stopBody());
                 } else {

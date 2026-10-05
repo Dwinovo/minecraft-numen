@@ -53,12 +53,29 @@ class WireTest {
         com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS = brigadierWords;
     }
 
-    /** 下行的数就是原版给自定义载荷定的那个;改了版本这里先红。 */
+    /** 下行一个包的数就是原版给自定义载荷定的那个;改了版本这里先红。 */
     @Test
     void theDownlinkBudgetIsVanillasCustomPayloadLimit() throws ReflectiveOperationException {
         Field field = ClientboundCustomPayloadPacket.class.getDeclaredField("MAX_PAYLOAD_SIZE");
         field.setAccessible(true);
         assertEquals(field.getInt(null), Wire.TO_CLIENT.bytes());
+    }
+
+    /** 上行的数是各加载器与 CC: Tweaked 共同的安全线 32767,1.20.1 的原版对所有上行自定义载荷就卡它。 */
+    @Test
+    void theUplinkBudgetIsTheSafeLineEveryLoaderSplitsAt() {
+        assertEquals(32767, Wire.TO_SERVER.bytes());
+    }
+
+    /**
+     * 一条消息的总上限要大过正当消息的最大值:服务端为一位主人缓存的模块正文至多 4 MB,缺了整批重送时加上程序与清单也装得下。
+     */
+    @Test
+    void aMessageCanCarryAWholeModuleCachePlusAProgram() {
+        assertTrue(Wire.MESSAGE_BYTES >= com.dwinovo.numen.program.ProgramLimits.MODULE_CACHE_BYTES * 2);
+        assertTrue(Wire.TO_SERVER.carries(Wire.MESSAGE_BYTES));
+        assertFalse(Wire.TO_SERVER.carries(Wire.MESSAGE_BYTES + 1));
+        assertFalse(Wire.TO_SERVER.holds(Wire.TO_SERVER.bytes() + 1));
     }
 
     /**
@@ -124,12 +141,15 @@ class WireTest {
         assertTrue(e.getMessage().startsWith("numen_api:companion_list came to "), e.getMessage());
     }
 
-    /** 收的一方以整包上限为防线:一个字段比整包还长,那不是 Numen 发的。 */
+    /** 收的一方以整条消息的上限为防线:一个字段比整条消息还长,那不是 Numen 发的;比一个包长的字段(分片的消息里)读得下。 */
     @Test
-    void aReceivedTextLongerThanTheWholeBudgetIsRejected() {
+    void aReceivedTextLongerThanTheWholeMessageIsRejectedButOneLongerThanAPacketIsRead() {
         ByteBuf buf = Unpooled.buffer();
         Wire.TO_SERVER.text().encode(buf, "q".repeat(Wire.TO_SERVER.bytes() + 1));
-        assertThrows(DecoderException.class, () -> Wire.TO_SERVER.text().decode(buf));
+        assertEquals(Wire.TO_SERVER.bytes() + 1, Wire.TO_SERVER.text().decode(buf).length());
+        ByteBuf over = Unpooled.buffer();
+        Wire.TO_SERVER.text().encode(over, "q".repeat(Wire.MESSAGE_BYTES + 1));
+        assertThrows(DecoderException.class, () -> Wire.TO_SERVER.text().decode(over));
     }
 
     private static <T extends net.minecraft.network.protocol.common.custom.CustomPacketPayload> T fit(T payload) {

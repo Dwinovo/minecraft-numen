@@ -53,11 +53,11 @@ public final class ClientEndpoint {
         ClientCallResultPayload result = new ClientCallResultPayload(request.entityUuid(), request.callId(), reply,
                 changed);
         int size = result.size();
-        if (!Wire.TO_SERVER.holds(size)) {
+        if (!Wire.TO_SERVER.carries(size)) {
             // 模块这一刻没送出去:下次重新带
             changed.ifPresent(m -> sync.lost(m.bodies().keySet()));
             result = new ClientCallResultPayload(request.entityUuid(), request.callId(),
-                    ApiReply.error(ErrorKind.FAILED, Wire.TO_SERVER.tooBig("The result of this call", size)
+                    ApiReply.error(ErrorKind.FAILED, Wire.TO_SERVER.tooBigMessage("The result of this call", size)
                             + ", so it was not sent. Ask for less of it at a time.", null, null).toString(),
                     Optional.empty());
         }

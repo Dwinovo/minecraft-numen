@@ -20,10 +20,11 @@ import java.util.UUID;
  * modelled on (MCP sampling, LSP {@code workspace/configuration}).
  *
  * <p>{@code function} is the function's full name, {@code argumentsJson} the arguments the program's call was read into
- * on the server; the client reads them again with the same codecs before running the function.
+ * on the server; the client reads them again with the same codecs before running the function. The arguments can be
+ * as long as the program that wrote them, so the payload is {@link Wire.Fragmentable}.
  */
 public record ClientCallPayload(UUID entityUuid, String callId, String function, String argumentsJson)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Fragmentable {
 
     public static final Type<ClientCallPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_call"));

@@ -57,13 +57,18 @@ class ProgramWireTest {
         assertTrue(Wire.TO_SERVER.holds(run.size()));
     }
 
+    /** 超过一个包、没超过整条消息上限的程序照样送(分成片),只有连整条消息都装不下的才由客户端就地回失败。 */
     @Test
-    void aProgramThatDoesNotFitOneUpwardPayloadIsAnsweredOnTheClientWithHowBigItWas() {
-        RunProgramPayload huge = new RunProgramPayload(A, "call_2", "-- " + "x".repeat(Wire.TO_SERVER.bytes()), modules());
-        assertFalse(Wire.TO_SERVER.holds(huge.size()));
+    void aProgramBeyondOnePacketIsStillCarriedAndOnlyOneBeyondTheWholeMessageIsAnsweredOnTheClient() {
+        RunProgramPayload long_ = new RunProgramPayload(A, "call_2", "-- " + "x".repeat(Wire.TO_SERVER.bytes()), modules());
+        assertFalse(Wire.TO_SERVER.holds(long_.size()));
+        assertTrue(Wire.TO_SERVER.carries(long_.size()));
+
+        RunProgramPayload huge = new RunProgramPayload(A, "call_3", "-- " + "x".repeat(Wire.MESSAGE_BYTES), modules());
+        assertFalse(Wire.TO_SERVER.carries(huge.size()));
         String words = RunProgramPayload.tooBigWords(huge.size());
         assertTrue(words.startsWith("This program with the modules it needs came to "), words);
-        assertTrue(words.contains("more than the 1048576 bytes one message to the server can carry, so it was not sent."),
+        assertTrue(words.contains("more than the 8388608 bytes one message to the server can carry, so it was not sent."),
                 words);
     }
 
