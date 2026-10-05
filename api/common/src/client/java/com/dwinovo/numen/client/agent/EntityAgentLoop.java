@@ -195,6 +195,12 @@ public final class EntityAgentLoop {
     private AgentTurnPause turnPause = AgentTurnPause.NONE;
     /** One turn-level re-run per failure has been spent (reset when that turn settles). */
     private boolean turnRetried = false;
+    /** Prevent a model from spinning forever on a tool-call chain. */
+    private static final int MAX_TOOL_TURNS = 24;
+    private static final int MAX_REPEATED_TOOL_BATCHES = 3;
+    private int consecutiveToolTurns = 0;
+    private int repeatedToolBatches = 0;
+    private String lastToolBatchSignature;
 
     /**
      * Set while an external driver (an MCP client / Claude) holds this body via
@@ -1239,9 +1245,9 @@ public final class EntityAgentLoop {
         parts.addAll(EventQueue.render(text, now));
         String merged = String.join("\n", parts);
         convo.addUser(merged);
-        // A fresh owner directive starts a new tool-chain: restart the turn
-        // counter (just log numbering now that the hard cap is gone).
+        // A fresh owner directive starts a new tool-chain.
         convo.resetTurnCount();
+        resetToolLoopGuard();
         return false;
     }
 
@@ -1289,10 +1295,6 @@ public final class EntityAgentLoop {
         // 排空可能自己接管这一次(整理记忆):那就到此为止,别再叠一次普通请求上去。
         if (drainInbox()) return;
         if (convo.snapshot().isEmpty()) return;
-        // No hard cap on tool-call turns and no loop guard — a capable agent
-        // legitimately chains many tasks, and resuming a timed-out move_to
-        // repeats the exact same call. Runaways are stopped by the owner's
-        // interrupt.
         // Endpoint check against THIS companion's selected provider entry — error-driven
         // guidance, no fallback, no crash: a missing binding or keyless entry says
         // exactly what to do (same words the chat screen shows via endpointProblem()).
@@ -1329,10 +1331,10 @@ public final class EntityAgentLoop {
         convo.incrementTurn();
         awaitingLlmResponse = true;
 
-        // 只发常驻工具:其余的在系统提示的 <deferred_tools> 目录里留一行摘要,
-        // 模型调 find_tools 才取回完整定义(见 ToolDisclosure)。
-        var tools = ToolRegistry.resident();
         var snapshot = modelContextSnapshot();
+        // Send resident tools plus deferred tools whose definitions are still in context.
+        // OpenAI-compatible APIs only allow structured calls to tools in this array.
+        var tools = visibleTools(snapshot);
         String systemPrompt = composeSystemPrompt();
 
         Constants.LOG.info("[numen-entity#{}] turn {}: convo={} msgs, tools={}",
@@ -1800,6 +1802,7 @@ public final class EntityAgentLoop {
         // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
         // one-retry allowance rather than inheriting the exhausted budget from this turn.
         turnRetried = false;
+        resetToolLoopGuard();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
         // 失败必须让主人看见——沉进日志就是"已读不回"
         String why = lastTurnError == null ? "连接中断" : lastTurnError;
@@ -1870,7 +1873,8 @@ public final class EntityAgentLoop {
                 final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn(ownerSpokeThisTurn);   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
                 NumenLlmClient llm2 = client();
-                llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.resident(),
+                List<ConvoState.Msg> retrySnapshot = modelContextSnapshot();
+                llm2.chatStreaming(retrySnapshot, visibleTools(retrySnapshot),
                                 composeSystemPrompt(),
                                 presenter.tapForUi(gen2, vt2.sink(), llm2.provider()::extractReasoningDelta))
                         .whenComplete((r2, e2) -> {
@@ -1908,9 +1912,8 @@ public final class EntityAgentLoop {
         // 目标的账单:主人得看得见这个目标到现在烧了多少。
         if (goal != null) goal.addTokens(res.freshTokens());
 
-        convo.addAssistant(turn);
-
         if (!turn.hasToolCalls()) {
+            convo.addAssistant(turn);
             // Final text reply — spoken to the owner. Chain settles; the next
             // prompt resumes the same conversation with a fresh turn count.
             if (!turn.content().isEmpty()) {
@@ -1935,6 +1938,7 @@ public final class EntityAgentLoop {
                         presenter.speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
             }
             convo.resetTurnCount();
+            resetToolLoopGuard();
             // A prompt that arrived during this final turn was buffered; now that
             // the chain has settled, start a fresh turn to answer it.
             if (hasQueuedPrompts()) tryStartTurn();
@@ -1943,6 +1947,21 @@ public final class EntityAgentLoop {
             steerToGoal();
             return;
         }
+
+        if (toolLoopDetected(turn)) {
+            convo.addAssistant(turn);
+            for (LlmToolCall tc : turn.toolCalls()) {
+                convo.addToolResult(tc.id(), TaskResult.fail(
+                        "tool-call loop stopped by client").toJson());
+            }
+            lastTurnError = "模型重复调用工具，已停止本轮";
+            Constants.LOG.warn("[numen-entity#{}] stopping repeated tool-call loop: turns={}, repeats={}, tools={}",
+                    entityUuid, consecutiveToolTurns, repeatedToolBatches, turn.toolCalls().size());
+            failTurnKeepQueue();
+            return;
+        }
+
+        convo.addAssistant(turn);
 
         // 开工前的顺嘴一句(tool_calls 旁附的 content):是话就上气泡+字幕行;
         // 没话说就 SETTLE——只收思考泡,上一句正文泡留着走完生命周期,
@@ -1975,6 +1994,33 @@ public final class EntityAgentLoop {
         for (com.dwinovo.numen.agent.tool.NumenTool t : ToolRegistry.resident()) ok.add(t.name());
         ok.addAll(com.dwinovo.numen.agent.tool.ToolDisclosure.expandedIn(modelContextSnapshot()));
         return ok;
+    }
+
+    private List<com.dwinovo.numen.agent.tool.NumenTool> visibleTools(List<ConvoState.Msg> conversation) {
+        return com.dwinovo.numen.agent.tool.ToolDisclosure.visibleTools(
+                ToolRegistry.resident(), ToolRegistry.deferred(), conversation);
+    }
+
+    private boolean toolLoopDetected(AssistantTurn turn) {
+        consecutiveToolTurns++;
+        String signature = turn.toolCalls().stream()
+                .map(tc -> tc.name() + "\n" + tc.arguments())
+                .sorted()
+                .collect(java.util.stream.Collectors.joining("\n---\n"));
+        if (signature.equals(lastToolBatchSignature)) {
+            repeatedToolBatches++;
+        } else {
+            lastToolBatchSignature = signature;
+            repeatedToolBatches = 1;
+        }
+        return consecutiveToolTurns > MAX_TOOL_TURNS
+                || repeatedToolBatches >= MAX_REPEATED_TOOL_BATCHES;
+    }
+
+    private void resetToolLoopGuard() {
+        consecutiveToolTurns = 0;
+        repeatedToolBatches = 0;
+        lastToolBatchSignature = null;
     }
 
     private static String truncate(String s, int max) {

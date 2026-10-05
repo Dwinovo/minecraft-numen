@@ -79,6 +79,30 @@ public final class ToolDisclosure {
         return out;
     }
 
+    /**
+     * Build the tool definitions visible to the model for one request.
+     * Deferred tools stay out of the request until their definition has been
+     * fetched, then remain visible while the expansion block is in context.
+     */
+    public static <T extends IToolSpec> List<T> visibleTools(
+            Collection<? extends T> resident,
+            Collection<? extends T> deferred,
+            Collection<ConvoState.Msg> conversation) {
+        Set<String> expanded = expandedIn(conversation);
+        List<T> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (T tool : resident) {
+            if (tool != null && seen.add(tool.name())) out.add(tool);
+        }
+        if (expanded.isEmpty()) return out;
+        for (T tool : deferred) {
+            if (tool != null && expanded.contains(tool.name()) && seen.add(tool.name())) {
+                out.add(tool);
+            }
+        }
+        return out;
+    }
+
     /** 一段文本里所有展开块标记的名字。同一条消息里可能有多个块。 */
     static void collectNames(String text, Set<String> out) {
         int from = 0;

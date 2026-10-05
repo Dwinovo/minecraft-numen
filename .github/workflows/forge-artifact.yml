@@ -1,0 +1,44 @@
+name: Forge Artifact
+
+on:
+  push:
+    branches: ["1.20.1"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read target JDK from gradle.properties
+        id: props
+        shell: bash
+        run: echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate resources
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      - name: Build Forge jar
+        run: ./gradlew :core:forge:reobfJarJar --no-daemon -x javadoc
+
+      - name: Upload Forge mod
+        uses: actions/upload-artifact@v4
+        with:
+          name: numen-forge-1.20.1-${{ github.sha }}
+          path: core/forge/build/libs/*-all.jar
+          if-no-files-found: error
+          retention-days: 14
