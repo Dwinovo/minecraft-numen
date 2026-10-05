@@ -404,7 +404,7 @@ controlBoat/dataSlots/allMessages+refreshTrimmedMessages/nibble)目标逐一对�
 1.21.5 字节码,全部还在。
 
 
-## 1.21.5 → 1.21.8 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3）
+## 1.21.5 → 1.21.8 ✓（已验证:对齐 1.21.1@7a3d3e251 后的并仓树双 loader 编译 + 出包 + datagen + 1799 单测 + 564 条游戏内用例(仅 build_japanese_cottage 红,见已知未解) + 评测自检）
 
 
 **跨过 1.21.6/1.21.7**，含 1.21.6 的 GUI 深绘制 + IO 大改。构建旋钮：MC `1.21.8` / range `[1.21.8, 1.21.9)` /
@@ -646,12 +646,25 @@ artifactId 要逐个核对,不是只核对版本号。
   狼的主人 `setOwnerUUID` → `setOwnerReference(new EntityReference<>(uuid))`;`ServerPlayer.teleportTo(level, x, y, z, yaw, pitch)` → 带 `Set<Relative>` 与 `boolean` 的八参版。
 - 单测夹具:冻结后的注册表拒绝直写标签,标签一律 `prepareTagReload(new TagLoader.LoadResult<>(key, tags)).apply()`(五处夹具);
   `Inventory(player, equipment)` 要把同一个 `EntityEquipment` 种进 `LivingEntity.equipment`。
-- 环境随机刻:`settleWorld`/`Worlds.settle` 把 `randomTickSpeed` 设 0(耕地湿度、屋顶下的草退化会在判据背后改世界)。
+- 环境规则:1.21.5 之前 `GameTestServer` 自带一套规则(不刷怪、不换天气、随机刻 0、火不 tick);数据驱动之后原版的默认环境是空的。
+  `NumenTestEnvironment.setup` 在批次方法之前补两条会在判据背后改世界的:随机刻停摆(耕地湿度、屋顶下的草退化)、`doFireTick` 关
+  (`fluidgametests.passes_cactus_fire_berries_and_magma_unhurt` 里下界岩上的火每三十来刻老化一次,红在"实际账与世界不符")。
+  规则只在这一处定,`settleWorld`/`Worlds.settle` 里不再写随机刻。没把"不换天气"补进环境:各批次的 `settleWorld` 已按用例需要重定天气与刷怪;
+  补上 `doWeatherCycle=false` 之后 `diggametests.dig_a_scanned_cluster_digs_what_still_holds_the_scanned_block` 稳定变红
+  ("dug 2 cell(s) of copper_ore; not dug: 1 gave no clear shot"),去掉就稳定绿——这条用例对环境里随机数的消耗顺序敏感。
 
 **联动(plugins/)**
 - 本代只移植 Curios(NeoForge,`curios-neoforge:12.0.0+1.21.8`,maven.theillusivec4.top,公开 API 与 1.21.1 的 9.5.1 同形,代码零改动)。
   不移植的:TLM(Modrinth 上只有 1.21/1.21.1 的 NeoForge 版)、YSM(Modrinth 只有 1.21/1.21.1 与 26.1.2)、
   森罗物语厨房(CurseForge 上只有 1.21.1 的 NeoForge 版)、FTB Quests(maven.ftb.dev 只有 2101.x、2111.x 与 26.1.2.x,没有 1.21.8 的构建)。
+
+**已知未解**
+- `buildgametests.build_japanese_cottage` 在 1.21.8 上稳定红,回执是
+  `building japanese_cottage is stuck: 159 cell(s) left, 0 within reach … kept ending up back where the step before it started`。
+  取证(在 1.21.10 档上用临时探针做的,同一份代码):她被引到一扇朝西开着的活板门(碰撞箱是靠东边的 3/16 厚薄板、一格高)后面一格的下半砖上,
+  规划给的是"走进活板门格、跳过薄板、落到下半砖"(`Stepping.between` 对这一步答 JUMP,足高 -48 → -47.5);执行时她跳过薄板后收不住,
+  在下半砖与再后面的脚手架(顶面 -47)之间连蹦带返,落不到下半砖上,最后落回前一步的起点,记 FELL_BACK 三次后收场。
+  这条在 1.21.1 上是绿的;规划那一步的答案与执行层的收脚对不上,疑在寻路的跳跃落点控制,不在建造;根因没有查实,本次没动。
 
 ## 1.21.8 → 1.21.10
 _待移植时填写_
