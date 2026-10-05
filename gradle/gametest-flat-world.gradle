@@ -1,4 +1,4 @@
-// 跑批世界必须是<b>超平坦</b>,而且每次从头生成。由每个带 GameTestServer 运行配置的模块 apply(core:forge、plugins:tlm)。
+// 跑批世界必须是<b>超平坦</b>,而且每次从头生成。由带 GameTestServer 运行配置的模块 apply(core:forge)。
 //
 // 本 loader 的无头跑批入口是普通专用服务器,不建世界就默认开一个正常主世界:
 // 用例场地被埋在深板岩里,四周还散布着天然矿脉。而用例里"种四块金矿石然后
