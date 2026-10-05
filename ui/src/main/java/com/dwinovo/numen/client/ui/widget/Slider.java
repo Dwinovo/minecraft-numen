@@ -33,11 +33,11 @@ public final class Slider extends Widget {
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         int trackY = y + h / 2 - 1;
-        s.fillRoundRect(x, trackY, w, 2, 1, c.inputBorder());
+        s.fillRect(x, trackY, w, 2, c.inputBorder());
         int fillW = (int) Math.round((value - min) / (max - min) * w);
-        s.fillRoundRect(x, trackY, fillW, 2, 1, enabled ? c.accent() : c.textMuted());
+        s.fillRect(x, trackY, fillW, 2, enabled ? c.accent() : c.textMuted());
         int knob = 6;
-        s.fillRoundRect(x + fillW - knob / 2, y + h / 2 - knob / 2, knob, knob, knob / 2,
+        s.fillRect(x + fillW - knob / 2, y + h / 2 - knob / 2, knob, knob,
                 enabled ? 0xFFFFFFFF : c.textMuted());
         String label = labelFn.apply(value);
         s.drawText(label, x + w + 6, y + (h - s.lineHeight()) / 2 + 1, c.textSecondary(), false);

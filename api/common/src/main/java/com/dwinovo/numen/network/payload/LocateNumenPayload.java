@@ -1,9 +1,11 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.CompanionRegistry;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -29,8 +31,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
     /** Roster panels are small; cap defends against garbage input. */
     public static final int MAX_UUIDS = 16;
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "locate_numen");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "locate_numen");
 
     @Override
     public ResourceLocation id() {
@@ -39,20 +40,11 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
 
     @Override
     public void write(FriendlyByteBuf buf) {
-        int n = Math.min(entityUuids.size(), MAX_UUIDS);
-        buf.writeVarInt(n);
-        for (int i = 0; i < n; i++) {
-            buf.writeUUID(entityUuids.get(i));
-        }
+        buf.writeCollection(entityUuids, (b, id) -> b.writeUUID(id));
     }
 
     public static LocateNumenPayload read(FriendlyByteBuf buf) {
-        int n = Math.min(buf.readVarInt(), MAX_UUIDS);
-        List<UUID> list = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            list.add(buf.readUUID());
-        }
-        return new LocateNumenPayload(list);
+        return new LocateNumenPayload(Wire.readList(buf, MAX_UUIDS, b -> b.readUUID()));
     }
 
     /** Handler invoked on the server main thread. */
@@ -82,6 +74,6 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
             }
             out.add(NumenLocationsPayload.Snapshot.notFound(uuid));
         }
-        Services.NETWORK.sendToPlayer(player, new NumenLocationsPayload(out));
+        NumenNetwork.sendToPlayer(player, new NumenLocationsPayload(out));
     }
 }

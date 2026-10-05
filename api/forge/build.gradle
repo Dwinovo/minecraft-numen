@@ -32,7 +32,10 @@ minecraft {
                 modClientRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -44,7 +47,10 @@ minecraft {
                 modServerRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -57,7 +63,10 @@ minecraft {
                 modDataRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -116,6 +125,7 @@ configurations.named('runtimeClasspath') {
     exclude module: 'ai'
     exclude module: 'ui'
 }
+
 
 // mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，
 // 生产环境 SRG 运行时 mixin 按官方名找不到目标直接拒启（开发期 disableRefMap 照不出）。

@@ -68,8 +68,8 @@ public final class ForgeNumenConfig implements INumenConfig {
 
         b.pop();
         b.comment("Behaviour tuning.").push("agent");
-        // Deliberately short. The planning behaviour (use todowrite for
-        // multi-step tasks, load_skill to fetch detailed workflows) emerges
+        // Deliberately short. The planning behaviour (the todo tool for
+        // multi-step tasks, the skill tool to fetch detailed workflows) emerges
         // entirely from those tools' own descriptions plus the runtime-injected
         // <available_skills> XML block — adding rules here just dilutes
         // attention. Mirrors opencode's default.txt minimalist style.

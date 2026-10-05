@@ -30,11 +30,11 @@ import java.util.function.Supplier;
  * A parent's {@code onTick} runs the current rung's task and, on a terminal
  * failure, asks the ladder whether to continue:
  * {@snippet :
- * TaskState st = runChild(ladder.current());
- * if (st == null) return TaskState.RUNNING;          // rung still working
- * if (st != TaskState.FAILED) return st;             // rung succeeded / non-fail terminal
+ * TaskResult rung = runChild(ladder.current());
+ * if (rung == null) return TaskState.RUNNING;        // rung still working
+ * if (rung.success()) return TaskState.SUCCESS;      // rung succeeded
  * if (ladder.advance(lastFailure())) return TaskState.RUNNING;   // retry / next rung
- * fail(doneReason(), lastFailure());                 // ladder exhausted
+ * fail(rung.message(), lastFailure());               // ladder exhausted
  * return TaskState.FAILED;
  * }
  *

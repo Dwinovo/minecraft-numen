@@ -25,13 +25,8 @@ public final class HostThemeColors {
         return cached;
     }
 
-    private static boolean isDark(UiTheme th) {
-        int g = th.ground();
-        return (((g >> 16) & 0xFF) * 3 + ((g >> 8) & 0xFF) * 6 + (g & 0xFF)) / 10 < 96;
-    }
-
     private static NumenTheme.Colors bridge(UiTheme th) {
-        boolean dark = isDark(th);
+        boolean dark = th.isDark();
         return new NumenTheme.Colors(
                 th.surface(),                          // panelBg(下拉弹层底=宿主纸面)
                 th.cardFill(), th.surfaceBorder(),     // sectionBg / divider

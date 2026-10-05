@@ -1,9 +1,11 @@
 package com.dwinovo.numen.agent.llm;
 
 import com.dwinovo.numen.ai.AiLog;
+import com.dwinovo.numen.agent.http.CancelToken;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.OpenAIResponsesProvider;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 
 import com.dwinovo.numen.agent.provider.AnthropicProvider;
@@ -130,6 +132,11 @@ public final class NumenLlmClient {
      * agent loop's auto-compaction triggers on (no client-side token estimation
      * needed). Zero when the backend sent no usage frame.
      */
+    /** 这一局的出处戳:{@code 服务商类/模型}。回合带着它落盘,换绑之后认得出哪些私货不是自家的。 */
+    private String origin() {
+        return provider.getClass().getSimpleName() + "/" + model;
+    }
+
     public record ChatResult(AssistantTurn turn, Usage usage) {
 
         /** 提示词的完整体量——自动压缩的触发判据(API 数的,不用客户端估)。 */
@@ -153,27 +160,40 @@ public final class NumenLlmClient {
      * {@link ChatResult} — the {@link AssistantTurn} built up from all SSE
      * chunks via the provider's accumulator, plus reported token usage.
      *
-     * @param messages       conversation history (provider translates to wire)
+     * @param messages       conversation history as recorded (Halts, dangling tool calls and
+     *                       adjacent user messages included); {@link ProtocolView#forWire}
+     *                       makes it provider-valid, then the provider translates it to wire
      * @param tools          tool list (provider serialises to wire shape;
      *                       empty = no tools field, e.g. for summarization calls)
      * @param systemPrompt   prepended automatically — pass empty / null to skip
+     * @param cancel         cancelling it closes the stream: {@code onChunk} is not called again,
+     *                       nothing is retried, and the future fails with
+     *                       {@link java.util.concurrent.CancellationException}
      * @param onChunk        optional per-chunk callback (e.g. for live UI).
      *                       Receives the raw provider chunk JSON. May be null.
      */
     public CompletableFuture<ChatResult> chatStreaming(List<ConvoState.Msg> messages,
                                                        Collection<? extends IToolSpec> tools,
                                                        String systemPrompt,
+                                                       CancelToken cancel,
                                                        Consumer<JsonObject> onChunk) {
-        // -- 1. Build wire-format messages and tool list via provider.
-        List<JsonObject> wire = new ArrayList<>(messages.size());
-        for (ConvoState.Msg m : messages) {
-            // Java 17:类型模式 switch 是预览特性,改 if/else instanceof(密封层级不变)
+        // -- 1. Build wire-format messages and tool list via provider. The recorded history goes
+        //        through ProtocolView first — this is the only place a history becomes a request,
+        //        so tool-call pairing, cut-off turns and adjacent user messages are settled here once.
+        List<ConvoState.Msg> sendable = ProtocolView.forWire(messages);
+        List<JsonObject> wire = new ArrayList<>(sendable.size());
+        for (ConvoState.Msg m : sendable) {
             if (m instanceof ConvoState.Msg.User u) {
                 wire.add(provider.buildUserMessage(u.content()));
             } else if (m instanceof ConvoState.Msg.Assistant a) {
-                wire.add(provider.assistantToRequestMessage(a.turn()));
+                // 上一家的私货(思考签名、reasoning_content)只有产它的那家认:换过模型就脱掉再发。
+                // 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
+                wire.addAll(provider.assistantToRequestItems(
+                        a.turn().sameOrigin(origin()) ? a.turn() : a.turn().withoutProviderPrivateFields()));
             } else if (m instanceof ConvoState.Msg.Tool t) {
                 wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
+            } else if (m instanceof ConvoState.Msg.Halt h) {
+                throw new IllegalStateException("ProtocolView.forWire never emits Halt: " + h.reason());
             }
         }
         JsonArray toolList = provider.buildToolList(tools);
@@ -208,8 +228,8 @@ public final class NumenLlmClient {
             } catch (RuntimeException ex) {
                 AiLog.LOG.warn("[numen-llm] accumulator failed on chunk: {}", ex.getMessage());
             }
-        }).thenApply(v -> {
-            AssistantTurn turn = provider.finalizeStream(acc);
+        }, cancel).thenApply(v -> {
+            AssistantTurn turn = provider.finalizeStream(acc).withOrigin(origin());
             logCallSummary(t0, acc, turn);
             return new ChatResult(turn, provider.usage(acc.usage));
         });
@@ -284,8 +304,14 @@ public final class NumenLlmClient {
         if (id.equals(DeepSeekProvider.NAME)) return new DeepSeekProvider();
         if (id.equals(MoonshotProvider.NAME)) return new MoonshotProvider();
         if (id.equals(OpenAIProvider.NAME)) return new OpenAIProvider();
+        if (id.equals(OpenAIResponsesProvider.NAME)) return new OpenAIResponsesProvider();
         if (ProviderRegistry.has(id)) {
             String baseUrl = ProviderRegistry.baseUrl(id);
+            // 线格式由站点的 protocol 决定,不按型号猜:responses 是条目流,anthropic 是块,其余走 OpenAI 兼容
+            if ("responses".equals(ProviderRegistry.protocol(id))) {
+                return new OpenAIResponsesProvider(id,
+                        baseUrl == null || baseUrl.isBlank() ? OpenAIResponsesProvider.DEFAULT_BASE_URL : baseUrl);
+            }
             if ("anthropic".equals(ProviderRegistry.protocol(id))) {
                 return new AnthropicProvider(id,
                         baseUrl == null || baseUrl.isBlank() ? AnthropicProvider.DEFAULT_BASE_URL : baseUrl,

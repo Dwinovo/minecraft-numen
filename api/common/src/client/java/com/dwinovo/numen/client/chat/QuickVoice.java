@@ -1,7 +1,11 @@
 package com.dwinovo.numen.client.chat;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.stt.VoiceInputController;
 import com.dwinovo.numen.platform.Services;
@@ -11,7 +15,7 @@ import net.minecraft.client.Minecraft;
 /**
  * 快捷语音:对讲机式按住说话,松开把最终转写直接发给当前交互对象
  * ({@link SelectedCompanion#resolveTarget()}),走与文字完全相同的
- * {@link NumenGateway#enqueue} 管线。录音期间准星提示层显示实时增量,
+ * {@link NumenGateway#emit} 管线。录音期间准星提示层显示实时增量,
  * 目标在按下那一刻锁定——说到一半转头不换收件人。
  */
 public final class QuickVoice {
@@ -19,7 +23,7 @@ public final class QuickVoice {
     private static boolean recording;
     /** 松开到转写结果落地之间的等待态(批量后端要跑一趟 HTTP)。 */
     private static boolean transcribing;
-    private static NumenRoster.Entry target;
+    private static Conversation target;
     private static String livePartial = "";
     private static String notice;
     private static long noticeUntilMs;
@@ -32,9 +36,9 @@ public final class QuickVoice {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        NumenRoster.Entry t = SelectedCompanion.resolveTarget();
+        Conversation t = SelectedCompanion.resolveTarget();
         if (t == null) {
-            flash("先按轮盘键选一位同伴,或把准星对准它");
+            flash(I18n.get(Keys.QUICKVOICE_PICK_FIRST));
             return;
         }
         target = t;
@@ -59,21 +63,20 @@ public final class QuickVoice {
     }
 
     private static void deliver(String text) {
-        NumenRoster.Entry t = target;
+        Conversation t = target;
         target = null;
         livePartial = "";
         recording = false;
         transcribing = false;
         String said = text == null ? "" : text.trim();
         if (t == null || said.isEmpty()) {
-            if (said.isEmpty()) flash("没听清,再试一次");
+            if (said.isEmpty()) flash(I18n.get(Keys.QUICKVOICE_UNHEARD));
             return;
         }
-        Delivery sent = NumenGateway.enqueue(t.uuid(), said);
-        if (sent != Delivery.REJECTED) {
-            ChatLines.owner(t.name(), said, true);
+        if (Conversations.instance().say(t, said).reached()) {
+            ChatLines.owner(name(t), said, true);
         } else {
-            flash(t.name() + " 没能收到——它可能不在线");
+            flash(I18n.get(Keys.CHAT_NOT_RECEIVED, name(t)));
         }
     }
 
@@ -88,15 +91,19 @@ public final class QuickVoice {
             // 脉冲圆点:让"正在听"看起来活着
             String dot = System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○";
             String live = livePartial.isBlank() ? "" : ":" + livePartial;
-            return dot + " 正在听" + live + "  (松开发给 " + target.name() + ")";
+            return I18n.get(Keys.QUICKVOICE_LISTENING, dot, live, name(target));
         }
         if (transcribing && target != null) {
-            return "◌ 转写中…  (马上发给 " + target.name() + ")";
+            return I18n.get(Keys.QUICKVOICE_TRANSCRIBING, name(target));
         }
         if (notice != null && System.currentTimeMillis() < noticeUntilMs) {
             return notice;
         }
         return null;
+    }
+
+    private static String name(Conversation c) {
+        return c.displayName(NumenRoster.instance()::name);
     }
 
     private static void flash(String text) {

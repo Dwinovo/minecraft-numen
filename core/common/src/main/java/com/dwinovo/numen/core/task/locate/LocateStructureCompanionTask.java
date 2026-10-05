@@ -26,14 +26,13 @@ import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStruct
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * Goal for {@code locate_structure}: find the nearest instance of a structure
+ * Goal for {@code locate structure}: find the nearest instance of a structure
  * (by id) or structure family (by {@code #tag}) in the entity's CURRENT
  * dimension — vanilla {@code /locate structure} semantics, but <b>time-sliced
  * across ticks instead of one synchronous call</b>.
@@ -58,6 +57,11 @@ import java.util.Optional;
  * </ul>
  * 于是这个搜索对服务端的全部成本就是 {@link SearchBudget} 框住的那点 CPU:
  * 最坏情况是答案晚几 tick,而不是主线程卡在世界生成上等到看门狗把服务器杀掉。
+ *
+ * <h2>收工看环数,不看时间</h2>
+ * 搜多远由 {@link #SEARCH_RADIUS_RINGS} 定,每刻搜多少由 {@link SearchBudget} 定(机器慢、存档读得慢就少搜几个)。
+ * 身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走——所以结论只取决于世界和问法:
+ * 找到的就是环内最近的,找不到就是环内没有,不会因为机器慢而变成"搜到一半超时"。
  */
 public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord> {
 
@@ -65,8 +69,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
      * Search radius in placement-region RINGS, exactly vanilla /locate's
      * radius unit (one ring = one region = {@code spacing} chunks, so the
      * covered distance scales with the structure's rarity: fortress ≈ 43k
-     * blocks, village ≈ 54k). The global budget + the task deadline bound the
-     * actual work; a search that exhausts its deadline reports how far it got.
+     * blocks, village ≈ 54k). This bounds the work; the global budget only paces it.
      */
     private static final int SEARCH_RADIUS_RINGS = 100;
 
@@ -183,8 +186,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             var set = registry.get(TagKey.create(Registries.STRUCTURE, tagId));
             if (set.isEmpty()) {
                 failReason = isBiomeTag(sl, tagId)
-                        ? arg + " is a BIOME tag, not a structure tag — call "
-                                + "locate_biome(biome=\"" + arg + "\") instead"
+                        ? arg + " is a BIOME tag, not a structure tag — use "
+                                + "locate biome " + arg + " instead"
                         : "unknown structure tag: " + arg + " — try #minecraft:village "
                                 + "or an id like minecraft:fortress";
                 return null;
@@ -197,8 +200,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 : registry.get(ResourceKey.create(Registries.STRUCTURE, id));
         if (holder.isEmpty()) {
             if (id != null && isBiomeId(sl, id)) {
-                failReason = arg + " is a BIOME, not a structure — call "
-                        + "locate_biome(biome=\"" + arg + "\") instead";
+                failReason = arg + " is a BIOME, not a structure — use "
+                        + "locate biome " + arg + " instead";
                 return null;
             }
             String suggestion = IdSuggest.closest(
@@ -208,7 +211,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                             ? " — did you mean " + suggestion + "?"
                             : " — use a structure id like minecraft:fortress / "
                                     + "minecraft:stronghold, or a tag like #minecraft:village; "
-                                    + "load_skill(world_atlas) lists every id");
+                                    + "the world_atlas skill lists every id");
             return null;
         }
         out.add(holder.get());
@@ -233,25 +236,27 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
         }
         // GLOBAL budget: shared by every searching companion on the server, so
         // total per-tick search cost is a constant regardless of pet count.
-        SearchBudget.refresh(sl.getServer());
-        while (true) {
-            if (jobIndex >= jobs.size()) {
-                return TaskState.SUCCESS;
-            }
-            Job job = jobs.get(jobIndex);
-            ChunkPos candidate = pendingCandidate != null ? pendingCandidate : job.next();
-            pendingCandidate = null;
-            if (candidate == null) {
-                jobIndex++;
-                continue;
-            }
-            if (!SearchBudget.tryCheck()) {
-                pendingCandidate = candidate;   // pool drained — resume next tick
-                return TaskState.RUNNING;
-            }
-            if (checkCandidate(sl, job, candidate)) {
-                consider(job.placement.getLocatePos(candidate));
-                jobIndex++;   // ring order ⇒ first hit is this job's nearest
+        try (SearchBudget.Slice slice = SearchBudget.slice(sl.getServer())) {
+            while (true) {
+                if (jobIndex >= jobs.size()) {
+                    return TaskState.SUCCESS;
+                }
+                Job job = jobs.get(jobIndex);
+                ChunkPos candidate = pendingCandidate != null ? pendingCandidate : job.next();
+                pendingCandidate = null;
+                if (candidate == null) {
+                    jobIndex++;
+                    continue;
+                }
+                if (!SearchBudget.tryCheck()) {
+                    pendingCandidate = candidate;   // pool drained — resume next tick
+                    awaitSearch();
+                    return TaskState.RUNNING;
+                }
+                if (checkCandidate(sl, job, candidate)) {
+                    consider(job.placement.getLocatePos(candidate));
+                    jobIndex++;   // ring order ⇒ first hit is this job's nearest
+                }
             }
         }
     }
@@ -303,24 +308,9 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
     protected void cleanup() {}
 
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("structure", r.structure);
-        if (best != null) {
-            BlockPos me = player.blockPosition();
-            int dx = best.getX() - me.getX();
-            int dz = best.getZ() - me.getZ();
-            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
-            data.put("found", true);
-            data.put("x", best.getX());
-            data.put("y", best.getY());
-            data.put("z", best.getZ());
-            data.put("direction", CompassUtil.compass(dx, dz));
-            data.put("horizontal_distance", dist);
-        } else {
-            data.put("found", false);
-        }
-        return data;
+    protected Located value() {
+        String dim = player.level().dimension().location().toString();
+        return best != null ? Located.at(best, player.blockPosition(), dim) : Located.none(searchedRadiusBlocks(), dim);
     }
 
     @Override
@@ -333,8 +323,9 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). goto the x/z (pick a sensible y for the terrain), "
-                    + "then scan_blocks to find its actual blocks.";
+                    + " blocks). " + com.dwinovo.numen.core.nav.NavText.gotoCall(new com.dwinovo.numen.sdk.Place(best.getX(), null,
+                    best.getZ()), "") + " goes there (it finds the "
+                    + "height on its own), then `numen.scan.blocks` finds its actual blocks.";
         }
         String dim = player.level().dimension().location().getPath();
         int searched = searchedRadiusBlocks();
@@ -348,17 +339,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
     }
 
     @Override
-    protected String timeoutMessage() {
-        return "search deadline hit after covering ~"
-                + searchedRadiusBlocks() + " blocks outward with no " + r.structure
-                + " — it is at least that far. Retrying immediately is fine (results "
-                + "are cached, the search resumes fast), or travel toward unexplored "
-                + "land first";
-    }
-
-    @Override
     protected String cancelledMessage() {
-        return "locate_structure interrupted";
+        return r.getToolName() + " interrupted";
     }
 
     /** How far outward (blocks) the random-spread spirals have covered so far. */

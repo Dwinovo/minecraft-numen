@@ -1,11 +1,12 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,22 +49,19 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
             buf.writeDouble(x);
             buf.writeDouble(y);
             buf.writeDouble(z);
-            buf.writeUtf(dimension, 256);
+            Wire.writeText(buf, dimension);
             buf.writeFloat(hp);
             buf.writeFloat(maxHp);
         }
 
         static Snapshot read(FriendlyByteBuf buf) {
-            return new Snapshot(buf.readUUID(),
-                    buf.readBoolean(), buf.readBoolean(),
+            return new Snapshot(buf.readUUID(), buf.readBoolean(), buf.readBoolean(),
                     buf.readDouble(), buf.readDouble(), buf.readDouble(),
-                    buf.readUtf(256),
-                    buf.readFloat(), buf.readFloat());
+                    Wire.readText(buf), buf.readFloat(), buf.readFloat());
         }
     }
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "numen_locations");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "numen_locations");
 
     @Override
     public ResourceLocation id() {
@@ -72,20 +70,11 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
 
     @Override
     public void write(FriendlyByteBuf buf) {
-        int n = Math.min(snapshots.size(), LocateNumenPayload.MAX_UUIDS);
-        buf.writeVarInt(n);
-        for (int i = 0; i < n; i++) {
-            snapshots.get(i).write(buf);
-        }
+        buf.writeCollection(snapshots, (b, snapshot) -> snapshot.write(b));
     }
 
     public static NumenLocationsPayload read(FriendlyByteBuf buf) {
-        int n = Math.min(buf.readVarInt(), LocateNumenPayload.MAX_UUIDS);
-        List<Snapshot> list = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            list.add(Snapshot.read(buf));
-        }
-        return new NumenLocationsPayload(list);
+        return new NumenLocationsPayload(Wire.readList(buf, LocateNumenPayload.MAX_UUIDS, Snapshot::read));
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

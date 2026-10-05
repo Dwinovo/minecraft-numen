@@ -7,7 +7,6 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
@@ -39,49 +38,41 @@ public final class CompanionRegistry extends SavedData {
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String deathCause, long diedAt, String skinValue, String skinSig,
-                        String taskTool, String taskArgs, List<String> scaffoldMaterials) {
-        /** A live companion (not dead), no borrowed skin, idle, spending the default scaffolding. */
+                        String taskName, String taskLua, String taskOld) {
+        /** A live companion (not dead), no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "", "", "", DEFAULT_SCAFFOLD);
+            this(name, owner, dimension, pos, "", 0L, "", "", "", "", "");
         }
 
-        /** 她现在在做什么(工具名 + 当时的参数);空串 = 闲着。见 {@code TaskPersistence}。 */
-        public Entry doing(String tool, String args) {
+        /**
+         * 她现在在做什么:这件活给模型看的名字(派它的函数的全名)与重启后再跑的那一行 Lua({@code taskLua});空串 = 闲着,只有名字 =
+         * 在做、但接不回来。见 {@code TaskPersistence}。{@code taskOld} 只是读进来的:旧版本按一行命令记下的活,这一版不再跑它。
+         */
+        public Entry doing(String task, String lua) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    tool == null ? "" : tool, args == null ? "" : args, scaffoldMaterials);
+                    task == null ? "" : task, lua == null ? "" : lua, "");
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskLua, taskOld);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt,
-                    value == null ? "" : value, sig == null ? "" : sig, taskTool, taskArgs,
-                    scaffoldMaterials);
-        }
-
-        /**
-         * 她愿意拿来垫路的方块(namespaced id)。<b>存的就是清单</b>:空表意味着"一块都不许
-         * 垫",那是模型可以做的决定(背包里那些泥土留着盖房子),不是"没设过"——没设过由
-         * {@link #DEFAULT_SCAFFOLD} 在读取时兜住。
-         */
-        public Entry withScaffoldMaterials(List<String> materials) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskTool, taskArgs, materials == null ? List.of() : List.copyOf(materials));
+                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld);
         }
 
         Entry dead(String cause, long at) {
             return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskLua, taskOld);
         }
 
         Entry alive() {
             return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskLua, taskOld);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -93,26 +84,12 @@ public final class CompanionRegistry extends SavedData {
                 Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
-                Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
-                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs),
-                Codec.STRING.listOf().optionalFieldOf("scaffold", DEFAULT_SCAFFOLD)
-                        .forGetter(Entry::scaffoldMaterials)
+                Codec.STRING.optionalFieldOf("taskName", "").forGetter(Entry::taskName),
+                Codec.STRING.optionalFieldOf("taskLua", "").forGetter(Entry::taskLua),
+                // 旧版本记的那一行命令:读进来只为如实说它接不回来,写回去它已经清掉了
+                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskOld)
         ).apply(i, Entry::new));
     }
-
-    /**
-     * 新同伴、以及这个字段出现之前的老存档,拿到的垫路料清单。<b>存的就是清单</b>——空表
-     * 是"一块都不许垫"这个真实意图,不是"没设过"。
-     *
-     * <p>缺省值是一条<b>标签引用</b>而不是展开后的清单,两个理由:整合包改
-     * {@code numen:scaffolds} 就能改掉所有新同伴的起点;而标签内容来自数据包、世界加载后
-     * 才存在,静态常量比它早得多——存引用、用时再解析,才躲得开这个时序。和原版配方里
-     * 存 {@code "#minecraft:planks"}、匹配时才现查是同一个形状。
-     *
-     * <p>模型一旦改过清单(add/delete/set),存的就是具体 id,从此不再跟标签走——所以这是
-     * <b>初始</b>默认。选料判据写在消费方 {@code ScaffoldMaterials}。
-     */
-    public static final List<String> DEFAULT_SCAFFOLD = List.of("#numen:scaffolds");
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Entry.CODEC)

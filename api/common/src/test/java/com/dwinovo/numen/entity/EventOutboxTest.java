@@ -1,7 +1,7 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.event.EventQueue;
-import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
@@ -32,8 +32,8 @@ class EventOutboxTest {
     void pendingInputSurvivesAServerRestart() {
         // 多人服务器重启是常事;纯内存的话最有价值的长时段叙事恰好最容易丢
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event kind=\"body_log\" day=\"3\">吃了个面包</event>", T0, false);
-        box.put(A, EventTypes.EVENT, "<event kind=\"task_finished\">矿挖完了</event>", T0 + 5, true);
+        box.put(A, new EventQueue.Entry(EventTypes.REFLEX, "<event kind=\"reflex\" day=\"3\" reflex=\"breath\">nearly drowned</event>", T0, false));
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\">矿挖完了</event>", T0 + 5, true));
 
         EventOutbox back = roundTrip(box);
 
@@ -45,15 +45,27 @@ class EventOutboxTest {
     void takeHandsOverRawEntriesNotRenderedText() {
         // 渲染会把类型和时间戳压成一个字符串,客户端就没法知道"这是三小时前的事"了
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>一</event>", T0, true);
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>一</event>", T0, true));
 
         List<EventQueue.Entry> taken = box.take(A, T0);
 
         assertEquals(1, taken.size());
-        assertEquals(EventTypes.EVENT, taken.get(0).type());
+        assertEquals(EventTypes.TASK_FINISHED, taken.get(0).type());
         assertEquals(T0, taken.get(0).ts(), "事发时刻必须原样送到客户端");
         assertTrue(taken.get(0).urgent());
         assertTrue(box.peek(A).isEmpty(), "补发过就不能再发一次");
+    }
+
+    @Test
+    void aFinishedTaskKeepsItsResultUntilTheBoxIsSaved() {
+        // 等这件活的程序读的是结果里的数据;结果不落盘,重启后只剩那句话
+        EventOutbox box = new EventOutbox();
+        com.google.gson.JsonObject result = com.google.gson.JsonParser.parseString(
+                "{\"success\":true,\"message\":\"dug 4\",\"data\":{\"dug\":4}}").getAsJsonObject();
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0, true, result));
+
+        assertEquals(result, box.peek(A).entries().get(0).result());
+        assertEquals(null, roundTrip(box).peek(A).entries().get(0).result());
     }
 
     @Test
@@ -64,8 +76,8 @@ class EventOutboxTest {
     @Test
     void boxesAreIsolatedPerCompanion() {
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>甲的</event>", T0, false);
-        box.put(B, EventTypes.EVENT, "<event>乙的</event>", T0, false);
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>甲的</event>", T0, false));
+        box.put(B, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>乙的</event>", T0, false));
 
         box.take(A, T0);
 
@@ -78,7 +90,7 @@ class EventOutboxTest {
         EventOutbox box = new EventOutbox();
         int over = 7;
         for (int i = 0; i < EventQueue.DEFAULT_CAP + over; i++) {
-            box.put(A, EventTypes.EVENT, "<event>第" + i + "件</event>", T0, false);
+            box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", T0, false));
         }
 
         List<EventQueue.Entry> taken = box.take(A, T0);
@@ -90,9 +102,29 @@ class EventOutboxTest {
     }
 
     @Test
+    void aFullBoxOfBroadcastsDoesNotCrowdOutATaskFinished() {
+        // 主人离线时服务器上的广播(成就、进出服)一句句进来,攒满了上限;要紧的事件不能被它们挤掉
+        EventOutbox box = new EventOutbox();
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>早先那件活做完了</event>", T0, true));
+        for (int i = 0; i < EventQueue.DEFAULT_CAP; i++) {
+            box.put(A, new EventQueue.Entry(EventTypes.SERVER_MESSAGE, "<event>广播" + i + "</event>", T0 + 1 + i, false));
+        }
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0 + 1000, true));
+
+        List<EventQueue.Entry> taken = box.take(A, T0 + 2000);
+
+        List<String> finished = taken.stream().filter(e -> EventTypes.TASK_FINISHED.equals(e.type()))
+                .map(EventQueue.Entry::text).toList();
+        assertEquals(List.of("<event>早先那件活做完了</event>", "<event>矿挖完了</event>"), finished,
+                "暂存满了之后来的与之前攒着的任务收尾都在");
+        assertTrue(taken.stream().anyMatch(e -> EventTypes.DROPPED.equals(e.type()) && e.text().contains("2 件事")),
+                "让位的两句广播要记账:" + taken);
+    }
+
+    @Test
     void dismissedCompanionTakesHerBoxWithHer() {
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>没人会再收</event>", T0, false);
+        box.put(A, new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>没人会再收</event>", T0, false));
 
         box.forget(A);
 

@@ -1,11 +1,14 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: an Numen body died for good. The owner's client-side
@@ -21,15 +24,14 @@ import java.util.UUID;
  *
  * <h2>Death is recoverable (not disposed)</h2>
  * The companion respawns at its owner after a delay (see {@link NumenRespawnPayload}), so the loop
- * is SUSPENDED, not disposed: {@code onEntityDied} resolves any in-flight tool calls with the death
- * cause (so the conversation stays valid and the brain learns WHY it stopped) and latches it idle.
- * {@code cause} is the vanilla death message ("X was slain by a zombie") for that tool result.
+ * is SUSPENDED, not disposed: {@code onEntityDied} abandons any in-flight tool calls, records the
+ * cut-off turn as a Halt carrying the death cause (so the brain learns WHY it stopped) and latches it
+ * idle. {@code cause} is the vanilla death message ("X was slain by a zombie") for that Halt.
  */
 public record NumenDeathPayload(UUID entityUuid, String cause)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Oversized<NumenDeathPayload> {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "numen_death");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "numen_death");
 
     @Override
     public ResourceLocation id() {
@@ -39,11 +41,17 @@ public record NumenDeathPayload(UUID entityUuid, String cause)
     @Override
     public void write(FriendlyByteBuf buf) {
         buf.writeUUID(entityUuid);
-        buf.writeUtf(cause);
+        Wire.writeText(buf, cause);
     }
 
     public static NumenDeathPayload read(FriendlyByteBuf buf) {
-        return new NumenDeathPayload(buf.readUUID(), buf.readUtf());
+        return new NumenDeathPayload(buf.readUUID(), Wire.readText(buf));
+    }
+
+    /** 死因是原版的死亡消息,里面的名字长短不归这个包定;长到整包装不下时换成一句说明,死没死、是谁照旧。 */
+    @Override
+    public NumenDeathPayload shrunk(Predicate<NumenDeathPayload> fits, int bytes, int budget) {
+        return new NumenDeathPayload(entityUuid, Wire.TO_CLIENT.tooBig("The cause of death", bytes) + ", so it is not shown.");
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

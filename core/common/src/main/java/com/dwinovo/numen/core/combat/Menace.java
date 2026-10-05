@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.combat;
 
-import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
+import com.dwinovo.numen.pathing.plan.Threat;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.core.scan.NearbyEntities;
 
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
@@ -57,19 +59,6 @@ public final class Menace {
      * 判据与寻路会各说各话。
      */
     private static final double CELL_SLACK = Math.sqrt(2.0) / 2.0;
-
-    /**
-     * 势场强度:把"贴着一只怪走"折成"多走几格路"的汇率。
-     *
-     * <p>标定的口径是<b>绕开一只贴在危险半径上的怪,值一格半的路</b>。势能按半径的倍数算,
-     * 从半径处退开一格势能掉四成半({@code 1 - (3.04/4.04)²}),乘 15 约合 7 点成本,
-     * 而走一格约 4.6 —— 正好一格半。
-     *
-     * <p><b>不能再大了</b>:势场只进估价({@code h}),不进边成本({@code g})。估价必须是剩余
-     * 成本的下界 A* 才敢剪枝,而这一项往人堆里走时会反向增长。它盖过路程量级之后搜索会烧光
-     * 节点预算返回无路 —— 取 800 那次实测连两格的退路都算不出来。
-     */
-    public static final double AVOID_PENALTY = 15.0;
 
     /**
      * 逃跑要拉开多远才算甩掉。
@@ -213,38 +202,45 @@ public final class Menace {
 
     /** 半径内所有活着的敌对生物,不管它有没有盯上她。 */
     public static List<Mob> hostilesAround(Entity self, double radius) {
-        List<Mob> found = new ArrayList<>();
-        for (Mob m : self.level().getEntitiesOfClass(Mob.class,
-                self.getBoundingBox().inflate(radius))) {
-            if (m != self && hostile(m) && m.isAlive() && self.distanceToSqr(m) <= radius * radius) {
-                found.add(m);
-            }
-        }
-        return found;
+        return NearbyEntities.within(self, radius, Mob.class, m -> hostile(m) && m.isAlive());
     }
 
     /**
-     * 战斗走位用的威胁场:间距取<b>裸</b>危险半径(不含格量化补偿)。
+     * 战斗走位用的威胁场:半径取<b>裸</b>危险半径(不含格量化补偿),给走位目标判"离每一只都出了它够得着的距离"
+     * ({@link Goals#awayFrom})。
      *
-     * <p>这就是走位环的<b>内沿</b> —— 离每一只都出了它够得着的距离。外沿是她的够到距离,
-     * 由调用方给。带宽因此约 1.28 格,比格量化误差 0.71 宽出一截。
+     * <p>这就是走位环的<b>内沿</b>。外沿是她的够到距离,由调用方给。带宽因此约 1.28 格,比格量化误差 0.71 宽出一截。
+     * 路上经过谁的身边有多贵是另一件事,按含补偿的危险半径算({@link #dangers})。
      */
-    public static List<GoalAvoidEntities.Threat> field(LivingEntity victim,
-                                                       Iterable<? extends Entity> mobs) {
-        List<GoalAvoidEntities.Threat> threats = new ArrayList<>();
+    public static List<Threat> field(LivingEntity victim, Iterable<? extends Entity> mobs) {
+        List<Threat> threats = new ArrayList<>();
         for (Entity mob : mobs) {
             if (mob != null && mob.isAlive()) {
-                threats.add(new GoalAvoidEntities.Threat(mob.getX(), mob.getY(), mob.getZ(),
-                        dangerRadius(mob, victim), rawDangerRadius(mob, victim)));
+                threats.add(new Threat(mob.getX(), mob.getY(), mob.getZ(), rawDangerRadius(mob, victim)));
             }
         }
         return threats;
     }
 
-    /** 这一只此刻是不是已经进了它的危险半径。判据与寻路同一把尺子、同一套坐标。 */
+    /**
+     * 寻路要避开的生物:{@code radius} 内每一只敌对生物此刻的位置与它的危险半径({@link #dangerRadius},含格量化补偿,
+     * 寻路拿格心比)。开一趟路、每次派发搜索时问一次,规划把它们折成按位置的代价——走进谁的危险半径,那一格就贵。
+     */
+    public static List<Threat> dangers(LivingEntity self, double radius) {
+        List<Threat> out = new ArrayList<>();
+        for (Mob mob : hostilesAround(self, radius)) {
+            out.add(new Threat(mob.getX(), mob.getY(), mob.getZ(), dangerRadius(mob, self)));
+        }
+        return out;
+    }
+
+    /**
+     * 这一只此刻是不是已经进了它的危险半径:她脚下那一格不在"远离它"的目标里({@link Goals#awayFrom})——判据与寻路同一处、
+     * 同一套坐标(格心到它的水平距离)。远离目标只看格,不看身体怎么待着。
+     */
     public static boolean tooClose(Entity foe, LivingEntity self) {
-        return !GoalAvoidEntities.clearOf(self.getBlockX() + 0.5, self.getBlockZ() + 0.5,
-                foe.getX(), foe.getZ(), dangerRadius(foe, self));
+        Threat threat = new Threat(foe.getX(), foe.getY(), foe.getZ(), dangerRadius(foe, self));
+        return !Goals.awayFrom(List.of(threat)).contains(self.getBlockX(), self.getBlockY(), self.getBlockZ(), null);
     }
 
 }

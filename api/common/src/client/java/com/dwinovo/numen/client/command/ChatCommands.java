@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.data.ClientPrefs;
@@ -29,6 +31,15 @@ import java.util.Map;
 public final class ChatCommands {
 
     public static final char PREFIX = '/';
+
+    /**
+     * 命令作用于一只同伴的大脑(清她的上下文、给她定目标、用她的技能),前提是这个会话恰好对着
+     * 一只。不是的会话里斜杠输入仍是命令、不当话发出去,补全和回车给的都是这一句——
+     * 群里 {@code /clear} 清谁说不清,想动哪只就去和她的私聊里动。
+     */
+    public static String soloOnly() {
+        return I18n.get(Keys.CMD_SOLO_ONLY);
+    }
 
     /** 内置命令表(写死的那几条)。成批的命令走 {@link CommandSource}。 */
     private static final Map<String, ChatCommand> BUILTIN = new LinkedHashMap<>();
@@ -207,11 +218,11 @@ public final class ChatCommands {
     public static String dispatch(EntityAgentLoop loop, String text) {
         Parsed p = parse(text);
         if (p == null || p.name().isEmpty()) {
-            return "输入 " + PREFIX + " 看看有哪些命令。";
+            return I18n.get(Keys.CMD_LIST_HINT, String.valueOf(PREFIX));
         }
         ChatCommand command = find(loop, p.name());
         if (command == null) {
-            return "没有 " + PREFIX + p.name() + " 这条命令。输入 " + PREFIX + " 看看有哪些。";
+            return I18n.get(Keys.CMD_UNKNOWN, PREFIX + p.name(), String.valueOf(PREFIX));
         }
         String why = command.unavailable(loop);
         if (why != null) {
@@ -224,7 +235,7 @@ public final class ChatCommands {
             // 不是给外部输入兜底,是防自己人的失误:命令实现抛出来的话,静默失败比多一行
             // 日志难查得多,而主人还会以为命令生效了。
             Constants.LOG.warn("[numen-cmd] {}{} 抛了异常", PREFIX, p.name(), ex);
-            return PREFIX + p.name() + " 出错了:" + ex;
+            return I18n.get(Keys.CMD_CRASHED, PREFIX + p.name(), ex.toString());
         }
     }
 

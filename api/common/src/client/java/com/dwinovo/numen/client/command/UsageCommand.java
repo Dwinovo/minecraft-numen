@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.provider.CacheWaste;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
@@ -29,7 +31,7 @@ final class UsageCommand implements PopupCommand {
 
     @Override
     public String description() {
-        return "看 token 账";
+        return I18n.get(Keys.CMD_USAGE);
     }
 
     @Override
@@ -42,7 +44,7 @@ final class UsageCommand implements PopupCommand {
 
         @Override
         public String title() {
-            return "Token 账   Esc 返回";
+            return I18n.get(Keys.USAGE_TITLE);
         }
 
         /** 命中是"好"的那段,新处理是中性的。服务商不报缓存就没有构成可言。 */
@@ -60,24 +62,24 @@ final class UsageCommand implements PopupCommand {
             Usage u = loop.usageTotals();
             List<Readout.Line> out = new ArrayList<>();
             if (u.total() <= 0) {
-                out.add(Readout.Line.of("还没有用量记录", "她一轮都还没开口"));
+                out.add(Readout.Line.of(I18n.get(Keys.USAGE_NONE), I18n.get(Keys.USAGE_NONE_HINT)));
                 return out;
             }
-            out.add(Readout.Line.of("输入", group(u.promptTokens())));
+            out.add(Readout.Line.of(I18n.get(Keys.USAGE_INPUT), group(u.promptTokens())));
             if (u.reportsCache()) {
-                out.add(Readout.Line.sub("命中缓存", group(u.cacheRead()),
+                out.add(Readout.Line.sub(I18n.get(Keys.USAGE_CACHE_HIT), group(u.cacheRead()),
                         TokenFormat.percent1(u.cacheHitRate()) + "%"));
-                out.add(Readout.Line.sub("新处理", group(u.input() + u.cacheWrite()), null));
+                out.add(Readout.Line.sub(I18n.get(Keys.USAGE_FRESH), group(u.input() + u.cacheWrite()), null));
                 if (u.cacheWrite() > 0) {
-                    out.add(Readout.Line.sub("其中写入缓存", group(u.cacheWrite()), null));
+                    out.add(Readout.Line.sub(I18n.get(Keys.USAGE_CACHE_WRITE), group(u.cacheWrite()), null));
                 }
             }
-            out.add(Readout.Line.of("输出", group(u.output())));
-            out.add(Readout.Line.of("合计", group(u.total())));
+            out.add(Readout.Line.of(I18n.get(Keys.USAGE_OUTPUT), group(u.output())));
+            out.add(Readout.Line.of(I18n.get(Keys.USAGE_TOTAL), group(u.total())));
             double last = loop.lastUsage().cacheHitRate();
             if (u.reportsCache() && last >= 0) {
                 // 低了说明前缀正在被打穿——数字自己带颜色
-                out.add(Readout.Line.toned("最近一轮命中率", TokenFormat.percent1(last) + "%",
+                out.add(Readout.Line.toned(I18n.get(Keys.USAGE_LAST_HIT), TokenFormat.percent1(last) + "%",
                         last >= 0.7 ? Readout.Tone.GOOD : Readout.Tone.WARN));
             }
             return out;
@@ -88,8 +90,7 @@ final class UsageCommand implements PopupCommand {
         public String alert() {
             CacheWaste waste = loop.cacheWaste();
             if (waste.missedTokens() <= 0) return null;
-            return "⚠ 缓存重付 " + group(waste.missedTokens())
-                    + " tokens · " + waste.missCount() + " 次";
+            return I18n.get(Keys.USAGE_WASTE, group(waste.missedTokens()), waste.missCount());
         }
 
         /** 千分位:账要看得出量级,不缩写。 */
