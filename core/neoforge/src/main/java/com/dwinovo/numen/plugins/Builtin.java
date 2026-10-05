@@ -32,7 +32,8 @@ public final class Builtin {
     public static void registerAll(IEventBus modBus) {
         Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnNeoForge.install(skills));
-        // 车万女仆不支持这个 MC 版本(它封顶 1.21.1),所以这条分支上没有那个联动模块。
+        gate.open("curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
+        // 车万女仆与森罗物语:厨房都不支持这个 MC 版本(它们的 NeoForge 版封顶 1.21.1),所以这条分支上没有那两个联动模块。
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */
