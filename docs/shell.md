@@ -703,7 +703,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 `RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, calls, used, stopped_for}`);
 `StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
-她的模块时带上新清单与新正文)。上行与下行的整包上限同为 1 MB(`Wire`,见 `docs/cli.md` 附录 H)。
+她的模块时带上新清单与新正文)。单包上限上行 32767 字节、下行 1 MB,超过的程序、反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,`Wire` 与 `Fragments`,见 `docs/cli.md` 附录 H)。
 
 ### 反向请求有时限,程序结束即撤销
 

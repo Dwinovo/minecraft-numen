@@ -1197,23 +1197,34 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 
 ### 线上的上限:`Wire`
 
-- **唯一来源** `network.Wire`,按方向:两个方向都是 1048576 字节。
-- **数从哪来**(对着 1.21.1 的源码核过):下行的数是原版 `ClientboundCustomPayloadPacket` 的私有常量 `MAX_PAYLOAD_SIZE`,
-  单测(`WireTest`)反射读它,改了版本先红;原版上行同名常量是 32767,只拿来卡认不出的载荷(`DiscardedPayload`);登记过的
-  载荷,Fabric(networking-api 4.3.0)与 NeoForge(21.1.233)都不另设上限。真正的硬顶是帧:`Varint21FrameDecoder` 的
-  三字节长度前缀,一帧至多 2097151 字节(`Wire.FRAME_BYTES`);压缩时解压后至多 8388608 字节(`CompressionDecoder`)。
-  NeoForge 的 `GenericPacketSplitter` 超过帧就拆包,Fabric 不拆、直接断开。字符串字段由 `Utf8String.write` 先按字符数拦,
-  事故就是在这一步。**判据:每个方向的整包上限加上包头仍在一帧以内**(`WireTest` 测它):哪个加载器、压不压缩、单人还是联机
-  都成立。上行也取 1 MB,因为她的一整段程序(带上这个连接还没送过的模块原文)作为一个包上行。
-- **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:用包自己的编解码器编一遍量字节(下行带着那位玩家的
-  注册表)。装得下照发;内容随数据长的包实现 `Wire.Oversized`,缩成它自己给的、装得下的样子,如实说明原来多大、上限多少;
-  别的包内容本来有界,装不下是填它的代码错了,当场抛 `IllegalStateException`,不交给 netty 去断开连接。登记时每种包的
-  编解码器按方向记下(`toClient` / `toServer`),量的就是真正上线的那些字节。上行的包都不带注册表里的东西,编解码器写在
-  `ByteBuf` 上。
+- **唯一来源** `network.Wire`,按方向的**单包上限**:下行 1048576 字节,上行 32767 字节;另有一条**整条消息**的上限
+  `Wire.MESSAGE_BYTES`(8 MiB)与每个连接同时拼装的消息条数 `Wire.ASSEMBLING`(8)。
+- **单包上限从哪来**(对着 1.21.1 的源码核过):下行的数是原版 `ClientboundCustomPayloadPacket` 的私有常量 `MAX_PAYLOAD_SIZE`,
+  单测(`WireTest`)反射读它,改了版本先红。上行的数是 32767:1.20.1 的原版对客户端发来的**所有**自定义载荷硬卡它,1.20.2 起
+  只卡认不出的载荷;但 NeoForge(`GenericPacketSplitter`)、Fabric(`registerLarge`,上行分片阈值同为 32767)与 CC: Tweaked
+  (上传文件 30 KB 一片)都把它当成客户端到服务端一个包的安全线,超过就分片。真正的硬顶是帧:`Varint21FrameDecoder` 的三字节
+  长度前缀,一帧至多 2097151 字节(`Wire.FRAME_BYTES`)。**判据:每个方向的单包上限加上包头仍在一帧以内**(`WireTest` 测它)。
+- **超过单包上限:在自己的载荷层分片**(`network.Fragments` 与 `FragmentPayload`)。她的一整段程序(带上这个连接还没送过的模块原文)、
+  反向请求与它的答复长度随数据长,实现 `Wire.Fragmentable`:超过本方向单包上限的,编码后的字节切成带编号的片(消息 id、第几片、
+  共几片,第 0 片带原包的种类),除最后一片外片片等长,连续发出,不逐片等确认(连接本身有序可靠);对端每个连接一个收件箱,
+  收齐拼回原包,交给原来的处理器,处理器感觉不到分过片。没超过单包上限的消息照旧一个包,没有额外字节。
+- **为什么不用加载器的分片器、不碰 Netty 流水线**:NeoForge 与 Fabric 的分片行为不一(阈值、要不要对端协商、登记方式),Forge 1.20.1
+  没有,而且要求对端同样有它;自己的一层在 13 个分支、3 个加载器上是同一份代码,收发两端永远配套。碰 Netty 流水线要 mixin
+  `Connection`,各分支各加载器写法不同,又容易与加载器和别的模组冲突。先例是 CC: Tweaked 的 `UploadFileMessage`(消息层按 30 KB 切片)。
+- **整条消息的上限与防滥用**:`Wire.MESSAGE_BYTES` = 8 MiB,大过正当消息的最大值——模块缓存每位主人至多 4 MB
+  (`ProgramLimits.MODULE_CACHE_BYTES`),服务端报缺时要整批重送,再加程序、清单与包头。拼装中的消息超过它当场拒收并丢弃(片数声明
+  多过装满它要的、已收字节超过它、编号不连续、除最后一片外不是满的——后者防一字节一片的放大);同一个连接同时拼装的消息多过
+  `Wire.ASSEMBLING` = 8(一位主人至多同时跑 8 段程序,每段至多一条大消息在路上)拒收新的;断线清掉残片
+  (服务端 `ServerPrograms.ownerLeft`,客户端 `AgentLoopRegistry.quiesceAll`)。拒收写一行警告日志,不答复:对端不是正当的 Numen。
+- **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:交给 `Fragments.packets`,用包自己的编解码器编一遍量字节(下行带着那位玩家的
+  注册表)。装得下一个包照发;可分片的包超过则分片;内容随数据长、一个包装不下就缩的包实现 `Wire.Oversized`,缩成它自己给的、装得下的
+  样子,如实说明原来多大、上限多少;别的包内容本来有界,装不下是填它的代码错了,当场抛 `IllegalStateException`,不交给 netty 去断开连接。
+  登记时每种包的编解码器与处理器按方向记下(`toClient` / `toServer`),量的就是真正上线的那些字节,拼回的包按它登记的编解码器解、交给
+  它登记的处理器。上行的包都不带注册表里的东西,编解码器写在 `ByteBuf` 上。
 - **字段**:长度不由包自己定的文字一律用 `Wire.X.text()`——编码不另拦(整包由上面那一步量,字段再拦就是第二个判据),
-  解码以整包上限为防线。保留的语义上限只有两个,都由发送方先守:召唤的名字 16(原版的玩家名规则)、征询的附言 512
+  解码以整条消息的上限为防线。保留的语义上限只有两个,都由发送方先守:召唤的名字 16(原版的玩家名规则)、征询的附言 512
   (答复框截断)。
-- **上行的程序**不能换一个包送:`ProgramUplink` 先量,装不下不送,就地给模型一条失败——服务端根本不知道这段程序,不会有结果回来。
+- **上行的程序**连整条消息的上限都装不下才不送:`ProgramUplink` 先量(`Wire.carries`),装不下不送,就地给模型一条失败——服务端根本不知道这段程序,不会有结果回来。
   下行的回执(`ProgramResultPayload`)是内容有界的包:回执在生成处就按 `ScriptLimits` 有界(见 `docs/shell.md` §十四),装不下就是代码错,
   当场抛,不再缩。
 
@@ -1231,8 +1242,9 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 | `NumenLocationsPayload` | 下行 | 定位(至多 16 只) | 有界 |
 | `PathDebugPayload` | 下行 | 调试路径(寻路一段的格数) | 有界 |
 | `ClientUiActionPayload` | 下行 | 一个枚举 | 有界 |
-| `RunProgramPayload` | 上行 | 程序编号、程序、模块清单与没送过的正文 | 不送,客户端就地回失败 |
-| `ClientCallPayload`、`ClientCallResultPayload` | 下行、上行 | 反向请求与它的答复(答复可带新模块清单) | 请求装不下当场回失败;答复装不下换成失败 |
+| `RunProgramPayload` | 上行 | 程序编号、程序、模块清单与没送过的正文 | 超过一个包就分片;连整条消息(8 MiB)都装不下才不送,客户端就地回失败 |
+| `ClientCallPayload`、`ClientCallResultPayload` | 下行、上行 | 反向请求与它的答复(答复可带新模块清单) | 超过一个包就分片;连整条消息都装不下,请求当场回失败、答复换成失败 |
+| `FragmentPayload` | 两个方向各一种 | 一条分片消息的一片 | 每片都是满的(最后一片除外),装得进一个包 |
 | `StopProgramPayload` | 上行 | 程序编号、怎么停、原因 | 有界 |
 | `SummonRequestPayload`、`ChangeSkinPayload` | 上行 | 名字(16)、Mojang 签名的皮肤(约 1KB + 700B) | 有界 |
 | `ConsentReplyPayload` | 上行 | 答复与附言(512) | 有界 |
@@ -1241,9 +1253,9 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 模型看到的样子(`N` 是整包编码后的字节数):
 
 ```
-{"success":false,"message":"The result of this call came to N bytes, more than the 1048576 bytes one message to your client can carry, so it was not delivered. Ask for less of it at a time: a narrower range, or one page of a list with --page.","data":{"result_bytes":N,"limit_bytes":1048576}}
+The result of this call came to N bytes, more than the 8388608 bytes one message to the server can carry, so it was not sent. Ask for less of it at a time.
 
-{"success":false,"message":"This call came to N bytes, more than the 1048576 bytes one message to the server can carry, so it was not sent. Split the work into several shorter calls: a long grid or list goes in as several steps.","data":{"call_bytes":N,"limit_bytes":1048576}}
+This call came to N bytes, more than the 8388608 bytes one message to your client can carry, so it was not sent. Give it less at a time.
 ```
 
 ### 输出预算的落地
