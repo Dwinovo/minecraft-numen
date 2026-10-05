@@ -137,14 +137,25 @@ public final class Dispatcher {
         run(fn, () -> fn.invoke(new ServerCall(her, fn, values, callId), values), her, values, callId, reply);
     }
 
-    /** 线上的参数读成参数 record;读不成回一条 {@code bad_argument},返回 null。 */
-    private static Record decodeOrReply(ApiFunction fn, JsonObject args, Consumer<String> reply) {
+    /** 这次调用写成脚本里的那一行:失败的下一步是同一行再来一次。 */
+    public static String lua(Invocation invocation) {
+        ApiFunction fn = function(invocation);
+        return Call.of(fn, fn.decode(named(invocation.args())));
+    }
+
+    /** 线上的参数(参数名 → Lua 值的 JSON)读成参数名 → 值。 */
+    private static Map<String, Object> named(JsonObject args) {
         Map<String, Object> named = new LinkedHashMap<>();
         if (JsonValues.toJava(args) instanceof Map<?, ?> map) {
             map.forEach((k, v) -> named.put(String.valueOf(k), v));
         }
+        return named;
+    }
+
+    /** 线上的参数读成参数 record;读不成回一条 {@code bad_argument},返回 null。 */
+    private static Record decodeOrReply(ApiFunction fn, JsonObject args, Consumer<String> reply) {
         try {
-            return fn.decode(named);
+            return fn.decode(named(args));
         } catch (ApiFunction.BadArgument bad) {
             reply.accept(ApiReply.error(ErrorKind.BAD_ARGUMENT, bad.getMessage() + "\nusage: " + ApiDocs.usage(fn),
                     Call.help(fn.fullName()), null).toString());

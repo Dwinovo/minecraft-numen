@@ -79,14 +79,21 @@ class ServerProgramsTest {
 
     /** 反向请求停在这里,测试决定什么时候答。 */
     private static final class Held implements ClientTransport {
-        record Request(String function, Consumer<Answer> done) {}
+        record Request(String callId, String function, Consumer<Answer> done) {}
 
         final List<Request> held = new CopyOnWriteArrayList<>();
+        /** 传输被告知不再要答复的调用编号。 */
+        final List<String> cancelled = new CopyOnWriteArrayList<>();
 
         @Override
         public void request(com.dwinovo.numen.entity.NumenPlayer her,
                             com.dwinovo.numen.network.payload.ClientCallPayload request, Consumer<Answer> done) {
-            held.add(new Request(request.function(), done));
+            held.add(new Request(request.callId(), request.function(), done));
+        }
+
+        @Override
+        public void cancel(String callId) {
+            cancelled.add(callId);
         }
 
         void answer(int index, Object value) {
@@ -333,6 +340,114 @@ class ServerProgramsTest {
         held.answer(0, 2);
         ServerPrograms.pump();
         assertEquals(1, held.held.size());
+    }
+
+    // ---- 反向请求的时限与撤销 ----
+
+    /** 服务器刻前进 {@code n} 刻(程序排着的调用在每刻里照常执行)。 */
+    private static void tick(int n) {
+        for (int i = 0; i < n; i++) {
+            ServerPrograms.tick();
+        }
+    }
+
+    private static final String TWICE_THEN_UP = """
+            local ok, err = pcall(gt.gt_mix.twice, 1)
+            local after = gt.gt_mix.up(1)
+            return (ok and "answered" or err.kind) .. "|" .. after
+            """;
+
+    @Test
+    void aClientFunctionTheClientNeverAnswersFailsWhenItsTimeIsUpAndTheProgramGoesOn() {
+        UUID companion = UUID.randomUUID();
+        Held held = new Held();
+        Started program = start(companion, companion, TWICE_THEN_UP, held, ModuleSet.factory());
+        pumpUntil(() -> !held.held.isEmpty());
+
+        tick(ProgramLimits.CLIENT_ANSWER_TICKS - 1);
+        assertNull(program.result.get(), "still within its time");
+        tick(1);
+        pumpUntil(() -> program.result.get() != null);
+
+        assertEquals("timeout|2", program.json().getAsJsonObject("data").get("returned").getAsString(),
+                "the call failed as a timeout, and the next line ran");
+        assertEquals(List.of(held.held.get(0).callId()), held.cancelled, "the transport was told to drop it");
+        held.answer(0, 2);
+        ServerPrograms.pump();
+        assertEquals("timeout|2", program.json().getAsJsonObject("data").get("returned").getAsString(),
+                "a late answer is ignored");
+    }
+
+    @Test
+    void theTimeoutSaysWhoDidNotAnswerWithinHowLongAndHintsTheSameCallAgain() {
+        UUID companion = UUID.randomUUID();
+        Held held = new Held();
+        Started program = start(companion, companion, """
+                local ok, err = pcall(gt.gt_mix.twice, 7)
+                return err.message .. "|" .. err.hint
+                """, held, ModuleSet.factory());
+        pumpUntil(() -> !held.held.isEmpty());
+        tick(ProgramLimits.CLIENT_ANSWER_TICKS);
+        pumpUntil(() -> program.result.get() != null);
+
+        assertEquals("your owner's client did not answer gt.gt_mix.twice within "
+                        + ProgramLimits.CLIENT_ANSWER_TICKS / 20 + " seconds. A client function only reads, so the same "
+                        + "call is safe to run again.|gt.gt_mix.twice(7)",
+                program.json().getAsJsonObject("data").get("returned").getAsString());
+    }
+
+    @Test
+    void aClientAnswerBeforeTheTimeIsUpIsTheCallsResult() {
+        UUID companion = UUID.randomUUID();
+        Held held = new Held();
+        Started program = start(companion, companion, TWICE_THEN_UP, held, ModuleSet.factory());
+        pumpUntil(() -> !held.held.isEmpty());
+
+        tick(ProgramLimits.CLIENT_ANSWER_TICKS - 1);
+        held.answer(0, 2);
+        pumpUntil(() -> program.result.get() != null);
+        tick(ProgramLimits.CLIENT_ANSWER_TICKS);
+
+        assertEquals("answered|2", program.json().getAsJsonObject("data").get("returned").getAsString());
+        assertTrue(held.cancelled.isEmpty(), "an answered call has nothing left to drop: " + held.cancelled);
+    }
+
+    @Test
+    void whenAProgramEndsHoweverTheRequestsItWasWaitingOnAreDroppedAndLateAnswersAreIgnored() {
+        Held held = new Held();
+        UUID owner = UUID.randomUUID();
+        UUID cutOff = UUID.randomUUID();
+        UUID leaver = UUID.randomUUID();
+        Started a = start(cutOff, owner, "return gt.gt_mix.twice(1)", held, ModuleSet.factory());
+        Started b = start(leaver, owner, "return gt.gt_mix.twice(2)", held, ModuleSet.factory());
+        pumpUntil(() -> held.held.size() == 2);
+
+        ServerPrograms.cutOff(cutOff, a.id, false);
+        pumpUntil(() -> a.result.get() != null);
+        assertEquals(List.of(a.id + "#1"), held.cancelled, "the cut-off program's request was dropped");
+
+        ServerPrograms.ownerLeft(owner);
+        pumpUntil(() -> b.result.get() != null);
+        assertEquals(2, held.cancelled.size(), "the program that ended with its owner dropped its request too");
+
+        held.answer(0, 2);
+        held.answer(1, 4);
+        ServerPrograms.pump();
+        assertEquals(2, held.cancelled.size(), "late answers change nothing");
+    }
+
+    @Test
+    void aProgramThatEndsBeforeItsRequestWasSentNeverSendsIt() {
+        UUID companion = UUID.randomUUID();
+        Held held = new Held();
+        Started program = start(companion, companion, "return gt.gt_mix.twice(1)", held, ModuleSet.factory());
+        // 请求排在车道里、没有推进,程序就被切断了:等它收尾(登记摘掉)之后才推进车道
+        ServerPrograms.cutOff(companion, program.id, false);
+        while (ServerPrograms.running(companion)) {
+            Thread.onSpinWait();
+        }
+        pumpUntil(() -> program.result.get() != null);
+        assertTrue(held.held.isEmpty(), "the request of an ended program went out: " + held.held);
     }
 
     @Test

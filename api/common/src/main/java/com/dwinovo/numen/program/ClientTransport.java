@@ -26,4 +26,10 @@ public interface ClientTransport {
      * @param her 她的身体;没有世界的单测是 null
      */
     void request(NumenPlayer her, ClientCallPayload request, Consumer<Answer> done);
+
+    /**
+     * 不再要 {@code callId} 的答复(等的一方超时了、程序结束了):传输里记着的这笔撤掉,之后才到的答复被忽略,{@code done} 不会再被调。
+     * 没在等的(已经答了、从没发出去)不理。
+     */
+    void cancel(String callId);
 }

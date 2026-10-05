@@ -19,6 +19,8 @@ public final class LoopbackTransport implements ClientTransport {
 
     private final AnswerTable table = new AnswerTable();
     private final ClientEndpoint endpoint;
+    /** 这个"客户端"不再答复了(卡住了):请求照常到达、函数照常执行,答复到不了服务端。 */
+    private volatile boolean silent;
 
     /**
      * @param sync    这个"客户端"送过哪些模块正文
@@ -34,8 +36,21 @@ public final class LoopbackTransport implements ClientTransport {
         endpoint.handle(RoundTrip.of(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, request));
     }
 
+    @Override
+    public void cancel(String callId) {
+        table.cancel(callId);
+    }
+
+    /** 从此这个"客户端"的答复都到不了服务端:程序里的客户端函数只能等到时限。 */
+    void silence() {
+        silent = true;
+    }
+
     /** 客户端的答复"上行":过一遍线上的字节,交给等的一方。 */
     private void uplinked(CustomPacketPayload payload) {
+        if (silent) {
+            return;
+        }
         ClientCallResultPayload result = RoundTrip.of(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, (ClientCallResultPayload) payload);
         table.complete(result.callId(), result.entityUuid(),
                 new Answer(result.replyJson(), result.modules().orElse(null)));

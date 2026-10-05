@@ -57,6 +57,11 @@ public final class LoopbackClient {
         return uplink;
     }
 
+    /** 让这个"客户端"从此不再答复反向请求(扮一个卡住的客户端):程序里的客户端函数要等到时限才以失败结束。 */
+    public void silence() {
+        transport.silence();
+    }
+
     /** 主人开口、客户端那边来了急件:让这段程序停在调用之间。 */
     public void interrupt(UUID companion, String programId, String why) {
         uplink.interrupt(companion, programId, why);

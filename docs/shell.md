@@ -701,6 +701,19 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 `StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
 她的模块时带上新清单与新正文)。上行与下行的整包上限同为 1 MB(`Wire`,见 `docs/cli.md` 附录 H)。
 
+### 反向请求有时限,程序结束即撤销
+
+主人的客户端连着却一直不答(客户端函数卡住、客户端被改过),程序不能因此挂到被切断:每个反向请求从发出起有 `ProgramLimits.CLIENT_ANSWER_TICKS`
+(600 刻,三十秒)的期限,在服务端主线程上按刻查(`ServerPrograms.tick` → `ClientCalls.expire`),不新开线程、不阻塞定时等待。
+到期这次调用以 `timeout` 失败交回程序(`pcall` 接得住,程序往下走),`hint` 是同一行调用,同时传输撤掉它那头记的这笔
+(`ClientTransport.cancel`),之后才到的答复没有人认。三十秒的取法:客户端函数是就地只读查询,正常毫秒到几百毫秒内答复,三十秒是百倍以上,容得下
+卡顿、加载与垃圾回收;又远小于程序墙钟上限(二十分钟)与可能长时间运行的工具的量级(Anthropic 程序化工具调用约四分钟)。按刻数而不按墙钟,服务器自己
+卡住的那些刻不算客户端迟。主流的要求一致:Roblox `RemoteFunction:InvokeClient` 官方警告客户端不答服务端就永远挂着;MCP 规范要求为所有发出的请求设
+超时并设最大值。
+
+一段程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经 `ServerPrograms.run` 里 `Program` 的结局回调这一处,在那里 `ClientCalls.close`:
+它在等的反向请求全部撤掉、不再交回,排着还没发的也不发。
+
 ### 她的模块:真源只有一个
 
 真源仍是主人客户端 `config/numen/lua/<主人>/` 里的文件。服务端缓存只是内容的副本(指纹就是内容的名字,存入时核对),一段程序开跑时

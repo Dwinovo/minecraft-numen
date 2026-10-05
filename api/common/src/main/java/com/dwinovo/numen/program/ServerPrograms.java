@@ -52,14 +52,17 @@ public final class ServerPrograms {
         final UUID owner;
         final String programId;
         final MainQueue.Lane lane;
+        /** 这段程序等着的反向请求:每刻查期限、程序结束时撤掉。 */
+        final ClientCalls client;
         Program program;
         volatile String claimed;
 
-        Running(UUID companion, UUID owner, String programId, MainQueue.Lane lane) {
+        Running(UUID companion, UUID owner, String programId, MainQueue.Lane lane, ClientCalls client) {
             this.companion = companion;
             this.owner = owner;
             this.programId = programId;
             this.lane = lane;
+            this.client = client;
         }
     }
 
@@ -77,6 +80,8 @@ public final class ServerPrograms {
     private static final Map<UUID, Running> RUNNING = new ConcurrentHashMap<>();
     /** 每段程序的执行体各用虚拟线程:停在等结果上不占平台线程。 */
     private static final Executor THREADS = Executors.newVirtualThreadPerTaskExecutor();
+    /** 服务器刻数,{@link #tick} 每刻加一:反向请求的期限({@link ProgramLimits#CLIENT_ANSWER_TICKS})按它量。 */
+    private static volatile long ticks;
 
     static {
         NumenEvents.watch(ServerPrograms::watch);
@@ -109,7 +114,9 @@ public final class ServerPrograms {
             done.accept(new RunResult.Missing(opened.missing()));
             return;
         }
-        Running running = new Running(companion, owner, request.programId(), QUEUE.lane());
+        MainQueue.Lane lane = QUEUE.lane();
+        ClientCalls client = new ClientCalls(her, companion, lane, transport, opened.modules(), () -> ticks);
+        Running running = new Running(companion, owner, request.programId(), lane, client);
         String refused;
         synchronized (RUNNING) {
             refused = admit(her, companion, owner);
@@ -124,11 +131,13 @@ public final class ServerPrograms {
         }
         ProgramCalls calls = new ObservedCalls(new RoutedCalls(
                 new ServerCalls(her, running.lane, job -> running.claimed = request.reportsToModel() ? job : null),
-                new ClientCalls(her, companion, running.lane, transport, opened.modules())), observer);
+                client), observer);
         Constants.LOG.info("[numen-program] {} runs {} on the server: {}", companion, request.programId(),
                 request.code());
         running.program = new Program(request.programId(), request.code(),
                 new ProgramPort(her, opened.modules(), calls), new SerialExecutor(THREADS), outcome -> {
+                    // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉
+                    client.close();
                     // 回执先排进车道、再摘掉登记:从外面看"没有程序在跑"时,它的回执一定已经排着了
                     running.lane.post(() -> done.accept(new RunResult.Ended(outcome)));
                     running.lane.close();
@@ -188,9 +197,11 @@ public final class ServerPrograms {
         return false;
     }
 
-    /** 每个服务器刻开头调一次:在预算里执行程序排着的服务端调用。 */
+    /** 每个服务器刻开头调一次:在预算里执行程序排着的服务端调用,并让等主人客户端答复超了期限的反向请求失败。 */
     public static void tick() {
+        ticks++;
         QUEUE.drain(ProgramLimits.TICK_NANOS_ALL, ProgramLimits.TICK_NANOS_PER_PROGRAM);
+        RUNNING.values().forEach(r -> r.client.expire());
     }
 
     /**

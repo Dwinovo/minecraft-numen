@@ -36,4 +36,13 @@ public final class ProgramLimits {
      * 预算在调用之间查,一个调用一旦开始就跑完,所以一次调用本身的耗时不在这里管。
      */
     public static final long TICK_NANOS_PER_PROGRAM = 5_000_000L;
+
+    /**
+     * 主人的客户端答一次反向请求最多等多少服务器刻:600 刻(三十秒)。客户端函数是就地的只读查询(读文件、读她的循环状态),正常在毫秒到
+     * 几百毫秒内答复,三十秒是它的百倍以上,容得下客户端一次长的卡顿、加载与垃圾回收;又远小于一段程序的墙钟上限(二十分钟,
+     * {@link com.dwinovo.numen.agent.script.ScriptLimits#WALL_MILLIS}),也小于可能长时间运行的工具的量级(Anthropic 的程序化工具调用约四分钟):
+     * 一个答不出来的客户端函数只卡掉这一次调用的三十秒,不卡掉整段程序。按刻数而不按墙钟:服务器卡住的那些刻里客户端的答复也在队里等着,
+     * 不该算它迟。
+     */
+    public static final int CLIENT_ANSWER_TICKS = 30 * 20;
 }

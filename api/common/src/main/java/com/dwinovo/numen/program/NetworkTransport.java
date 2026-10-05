@@ -41,6 +41,11 @@ public final class NetworkTransport implements ClientTransport {
         NumenNetwork.sendToPlayer(owner, request);
     }
 
+    @Override
+    public void cancel(String callId) {
+        table.cancel(callId);
+    }
+
     /** 主人的客户端答了(服务端主线程)。 */
     public void answered(UUID from, ClientCallResultPayload p) {
         table.complete(p.callId(), from, new Answer(p.replyJson(), p.modules().orElse(null)));

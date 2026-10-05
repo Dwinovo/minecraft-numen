@@ -28,6 +28,11 @@ final class AnswerTable {
         w.done().accept(answer);
     }
 
+    /** 不再等 {@code callId} 的答复(等的一方超时了、程序结束了):之后才到的答复不理。没在等的不理。 */
+    void cancel(String callId) {
+        waiting.remove(callId);
+    }
+
     /** 这位主人再也答不了了(断线):等着他的每一个都以 {@code failure} 给的失败结束。 */
     void failOwner(UUID owner, Function<String, ClientTransport.Answer> failure) {
         List<String> ids = new ArrayList<>();

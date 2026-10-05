@@ -590,6 +590,36 @@ public class ScriptGameTests {
     }
 
     /**
+     * 主人的客户端卡住、不再答复:程序里的客户端函数等到时限({@code ProgramLimits.CLIENT_ANSWER_TICKS} 刻)就以 {@code timeout}
+     * 失败交回,{@code pcall} 接得住、程序往下走(服务端函数照常),回执写明哪个函数、等了多久。
+     */
+    @GameTest(template = "floor16", timeoutTicks = com.dwinovo.numen.program.ProgramLimits.CLIENT_ANSWER_TICKS + 200,
+            batch = "numen_scripts")
+    public static void a_client_function_the_client_never_answers_times_out_and_the_program_goes_on(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_mute_client", new BlockPos(2, 2, 2), false);
+        client(her).silence();
+        ToolRun run = lua(her, """
+                local ok, err = pcall(numen.module.list)
+                local me = numen.status.self()
+                return tostring(ok) .. "|" .. err.kind .. "|" .. me.name
+                """);
+        helper.assertTrue(run.receipt() == null, "the program ended without waiting for the silent client: "
+                + run.receipt());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the program is still waiting for the client's answer");
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gametest_mute_client"),
+                    "the call did not fail as a timeout with the program going on: " + run.receipt());
+            helper.assertTrue(run.receipt().contains("numen.module.list: timeout — your owner's client did not answer "
+                            + "numen.module.list within " + com.dwinovo.numen.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20
+                            + " seconds"),
+                    "the receipt does not say which function the client did not answer: " + run.receipt());
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
+    /**
      * 停止键切断一段已经挖了几格的程序:这一批作废,模型当场读不到它的回执;服务端上的程序当场停下、照常交出回执,晚到的回执作为一条
      * {@code program_stopped} 事件进她的收件箱(客户端的工具口做的),正文就是服务端写的那份回执——写明切断了、已经挖了什么、后面的没挖。
      */
