@@ -13,8 +13,7 @@
  * {@code agent.tool.api}; any server-side task execution ships in the tool pack
  * ({@code numen-core}) — not in the engine.
  *
- * <p>Internal members ({@link com.dwinovo.numen.api.Internal @Internal}):
- * {@link ToolInvocation} (the scheduler's per-call unit) and
+ * <p>Internal member ({@link com.dwinovo.numen.api.Internal @Internal}):
  * {@link ClientToolContext} (the client-side context implementation).
  */
 package com.dwinovo.numen.agent.tool;

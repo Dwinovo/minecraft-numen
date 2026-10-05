@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.ui;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.DoubleSupplier;
 import java.util.function.ToIntFunction;
 
 /**
@@ -26,10 +27,11 @@ public final class NumenToasts {
 
     // ---- 时序参数(毫秒) ----
     static final long SLIDE_MS = 200;
-    static final long VISIBLE_MIN_MS = 2_500;
-    static final long VISIBLE_MAX_MS = 6_000;
+    /** 最短停留:与原版系统 toast、成就 toast 一样长。 */
+    static final long VISIBLE_MIN_MS = 5_000;
+    static final long VISIBLE_MAX_MS = 10_000;
     /** ERROR 至少停留这么久——报错看不清等于没报。 */
-    static final long ERROR_VISIBLE_MIN_MS = 4_500;
+    static final long ERROR_VISIBLE_MIN_MS = 8_000;
     /** 每字符追加的停留时长(阅读速度补偿)。 */
     static final long PER_CHAR_MS = 35;
 
@@ -56,9 +58,21 @@ public final class NumenToasts {
     }
 
     private final Queue<Toast> queue = new ConcurrentLinkedQueue<>();
+    /** 停留时长的倍数:游戏里宿主给原版"通知显示时间"那一项(辅助功能设置),和原版 toast 同一个开关。 */
+    private final DoubleSupplier displayTimeScale;
     private Toast current;
     private State state;
     private long stateStartMs;
+
+    /** 停留时长不缩放(表单里自带的一份、测试)。 */
+    public NumenToasts() {
+        this(() -> 1.0);
+    }
+
+    /** @param displayTimeScale 停留时长的倍数,每条排版时读一次 */
+    public NumenToasts(DoubleSupplier displayTimeScale) {
+        this.displayTimeScale = displayTimeScale;
+    }
 
     /** 线程安全;可从任意线程调用(异步 LLM 回调直接用)。 */
     public void push(Severity severity, String message) {
@@ -73,9 +87,10 @@ public final class NumenToasts {
      * 顶锚定渲染(HUD 场景:右上角滑入)。时间由调用方注入,本类不读钟。
      *
      * @param screenW GUI 缩放后的屏幕宽
+     * @param top     从这一行往下排——右上角已经有别人的通知(原版的成就、配方提示)时,宿主给出它们的下沿
      */
-    public void render(IDrawSurface s, int screenW, NumenTheme.Colors c, long nowMs) {
-        renderAnchored(s, screenW - MARGIN, MARGIN, false, c, nowMs);
+    public void render(IDrawSurface s, int screenW, int top, NumenTheme.Colors c, long nowMs) {
+        renderAnchored(s, screenW - MARGIN, top + MARGIN, false, c, nowMs);
     }
 
     /**
@@ -154,9 +169,8 @@ public final class NumenToasts {
             case WARN -> c.toastWarnBg();
             case ERROR -> c.toastErrorBg();
         };
-        s.fillRoundRect(x, y, current.w, current.h, NumenStyle.RADIUS_PANEL, applyAlpha(border, alpha));
-        s.fillRoundRect(x + 1, y + 1, current.w - 2, current.h - 2,
-                NumenStyle.RADIUS_PANEL - 1, applyAlpha(bg, alpha));
+        s.fillRect(x, y, current.w, current.h, applyAlpha(border, alpha));
+        s.fillRect(x + 1, y + 1, current.w - 2, current.h - 2, applyAlpha(bg, alpha));
         if (alpha > 0.05f) {   // MC 字体渲染对极低 alpha 有怪癖,干脆不画
             int textColor = applyAlpha(c.toastText(), alpha);
             int ty = y + PAD;
@@ -182,6 +196,6 @@ public final class NumenToasts {
         t.h = Math.max(1, t.lines.size()) * lineHeight + PAD * 2;
         long dur = VISIBLE_MIN_MS + (long) t.message.length() * PER_CHAR_MS;
         if (t.severity == Severity.ERROR) dur = Math.max(dur, ERROR_VISIBLE_MIN_MS);
-        t.visibleMs = Math.min(dur, VISIBLE_MAX_MS);
+        t.visibleMs = Math.round(Math.min(dur, VISIBLE_MAX_MS) * displayTimeScale.getAsDouble());
     }
 }

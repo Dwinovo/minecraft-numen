@@ -1,6 +1,5 @@
 package com.dwinovo.numen.mcp.client;
 
-import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -118,7 +117,7 @@ public final class McpClient {
     }
 
     /**
-     * Call one tool; the future resolves to a model-facing result string (or a {@code TaskResult.fail}
+     * Call one tool; the future resolves to a model-facing result string (or a {@code ToolOutcome.failure}
      * JSON). If the server reports the session expired (HTTP 404), reconnect once and retry (spec).
      */
     public CompletableFuture<String> callTool(String toolName, JsonObject args, long timeoutMs) {
@@ -176,19 +175,19 @@ public final class McpClient {
                 : new JsonObject();
     }
 
-    /** MCP {@code tools/call} envelope → a plain string for the LLM (errors wrapped as {@code TaskResult.fail}). */
+    /** MCP {@code tools/call} envelope → a plain string for the LLM (errors wrapped as {@code ToolOutcome.failure}). */
     private static String toResultString(JsonObject resp) {
         if (resp.has("error") && resp.get("error").isJsonObject()) {
             JsonObject err = resp.getAsJsonObject("error");
             String msg = err.has("message") ? err.get("message").getAsString() : err.toString();
-            return TaskResult.fail(msg).toJson();
+            return com.dwinovo.numen.agent.llm.ToolOutcome.failure(msg);
         }
         JsonObject result = resp.has("result") && resp.get("result").isJsonObject()
                 ? resp.getAsJsonObject("result")
                 : new JsonObject();
         boolean isError = result.has("isError") && result.get("isError").getAsBoolean();
         String text = joinContent(result);
-        return isError ? TaskResult.fail(text).toJson() : text;
+        return isError ? com.dwinovo.numen.agent.llm.ToolOutcome.failure(text) : text;
     }
 
     private static String joinContent(JsonObject result) {

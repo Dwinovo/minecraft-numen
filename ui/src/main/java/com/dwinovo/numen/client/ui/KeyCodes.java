@@ -21,13 +21,24 @@ public final class KeyCodes {
     public static final int ESCAPE = 256;
     public static final int KEY_A = 65;
     public static final int KEY_C = 67;
+    public static final int KEY_F = 70;
     public static final int KEY_V = 86;
     public static final int KEY_X = 88;
 
     /** GLFW 修饰键位掩码。 */
+    public static final int MOD_SHIFT = 0x1;
     public static final int MOD_CTRL = 0x2;
+    public static final int MOD_ALT = 0x4;
 
     public static boolean ctrl(int modifiers) {
         return (modifiers & MOD_CTRL) != 0;
+    }
+
+    public static boolean shift(int modifiers) {
+        return (modifiers & MOD_SHIFT) != 0;
+    }
+
+    public static boolean alt(int modifiers) {
+        return (modifiers & MOD_ALT) != 0;
     }
 }

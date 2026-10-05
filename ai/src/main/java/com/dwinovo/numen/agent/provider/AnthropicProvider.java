@@ -27,10 +27,10 @@ import java.util.Map;
  *   <li><b>角色严格交替:</b>连续同角色消息必须并成一条(多块 content)——
  *       并行工具结果就是多个 user 块 → {@link #buildRequestBody} 的归并</li>
  *   <li><b>工具:</b>{@code input_schema} 平铺,无 function 包装;调用参数是
- *       JSON 对象不是字符串 → {@link #buildToolList} / {@link #assistantToRequestMessage}</li>
+ *       JSON 对象不是字符串 → {@link #buildToolList} / {@link #assistantToRequestItems}</li>
  *   <li><b>思考:</b>content block 形态({@code thinking} 块 + 签名),多轮
  *       必须带签名回传 → 签名存 extras 的 {@value #SIGNATURE_KEY},
- *       {@link #assistantToRequestMessage} 重建思考块</li>
+ *       {@link #assistantToRequestItems} 重建思考块</li>
  *   <li><b>流式:</b>事件按 {@code type} 分派(块级 start/delta/stop),
  *       usage 分两截(message_start 进/message_delta 出),累积时归一成
  *       OpenAI 形字段名,client 与记账下游无感 → {@link #accumulateChunk}</li>
@@ -114,7 +114,11 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     @Override
-    public JsonObject assistantToRequestMessage(AssistantTurn turn) {
+    public List<JsonObject> assistantToRequestItems(AssistantTurn turn) {
+        return List.of(assistantMessage(turn));
+    }
+
+    private JsonObject assistantMessage(AssistantTurn turn) {
         JsonArray blocks = new JsonArray();
         // 思考块必须带签名回传,缺签名的思考块会被拒收——没有签名就整块不发。
         String signature = turn.extras().has(SIGNATURE_KEY)

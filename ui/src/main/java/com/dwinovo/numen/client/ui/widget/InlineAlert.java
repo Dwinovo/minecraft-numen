@@ -100,9 +100,8 @@ public final class InlineAlert extends Widget {
         int contentH = Math.max(1, lines.size()) * s.lineHeight() + NumenStyle.PAD;
         int px = x + (w - pillW) / 2;      // 区域内左右居中
         int py = y + drop;                 // 垂直偏上:宿主给的 y 即上部锚点
-        s.fillRoundRect(px, py, pillW, contentH, NumenStyle.RADIUS_CONTROL, alpha(border, alphaF));
-        s.fillRoundRect(px + 1, py + 1, pillW - 2, contentH - 2,
-                NumenStyle.RADIUS_CONTROL - 1, alpha(bg, alphaF));
+        s.fillRect(px, py, pillW, contentH, alpha(border, alphaF));
+        s.fillRect(px + 1, py + 1, pillW - 2, contentH - 2, alpha(bg, alphaF));
         if (alphaF > 0.05f) {
             int ty = py + NumenStyle.PAD / 2 + 1;
             for (String line : lines) {

@@ -1,0 +1,27 @@
+// numen-gametest:游戏内用例的登记层(1.21.5 起原版不再按注解登记用例,见 GameTests 的说明)。核心、寻路模块与评测的用例
+// 都用它的注解与断言零件,运行时它和用例一起挂在模组 numen 名下。不发布、不进发行 jar:发行 jar 里没有任何用例的登记。
+//
+// 登记要用到 NeoForge 的事件与模组扫描,所以对着 NeoForge 编译(同 :bench:game);用例的源码集只借它的注解与断言零件。
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+group = 'com.dwinovo.numen'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = neoforge_version
+}

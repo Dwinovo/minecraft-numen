@@ -32,19 +32,16 @@ import java.util.Map;
  */
 public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityReader {
 
-    /** Cap on listed non-empty item slots per handler, so a huge modded inventory can't blow up the reply. */
-    private static final int MAX_SLOT_LINES = 64;
-
     @Override
-    public String describe(Level level, BlockPos pos) {
-        StringBuilder sb = new StringBuilder();
-        appendItems(level, pos, sb);
-        appendFluids(level, pos, sb);
-        appendEnergy(level, pos, sb);
-        return sb.length() == 0 ? null : sb.toString();
+    public List<String> describe(Level level, BlockPos pos) {
+        List<String> out = new ArrayList<>();
+        appendItems(level, pos, out);
+        appendFluids(level, pos, out);
+        appendEnergy(level, pos, out);
+        return out;
     }
 
-    private void appendItems(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendItems(Level level, BlockPos pos, List<String> out) {
         Map<IItemHandler, List<String>> byHandler = new IdentityHashMap<>();
         collect(byHandler, level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null), "all");
         for (Direction d : Direction.values()) {
@@ -54,29 +51,23 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
         int idx = 0;
         for (Map.Entry<IItemHandler, List<String>> e : byHandler.entrySet()) {
             IItemHandler h = e.getKey();
-            sb.append("items").append(byHandler.size() > 1 ? " #" + idx : "")
-                    .append(" (sides: ").append(String.join(",", e.getValue())).append("), ")
-                    .append(h.getSlots()).append(" slots:\n");
-            int shown = 0;
+            out.add("items" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
+                    + String.join(",", e.getValue()) + "), " + h.getSlots() + " slots:");
             boolean any = false;
             for (int s = 0; s < h.getSlots(); s++) {
                 ItemStack st = h.getStackInSlot(s);
                 if (st.isEmpty()) continue;
                 any = true;
-                if (shown++ >= MAX_SLOT_LINES) continue;
-                sb.append("  slot ").append(s).append(": ")
-                        .append(itemId(st)).append(" x").append(st.getCount()).append("\n");
+                out.add("  slot " + s + ": " + itemId(st) + " x" + st.getCount());
             }
             if (!any) {
-                sb.append("  (all ").append(h.getSlots()).append(" slots empty)\n");
-            } else if (shown > MAX_SLOT_LINES) {
-                sb.append("  … and ").append(shown - MAX_SLOT_LINES).append(" more non-empty slots\n");
+                out.add("  (all " + h.getSlots() + " slots empty)");
             }
             idx++;
         }
     }
 
-    private void appendFluids(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendFluids(Level level, BlockPos pos, List<String> out) {
         Map<IFluidHandler, List<String>> byHandler = new IdentityHashMap<>();
         collect(byHandler, level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null), "all");
         for (Direction d : Direction.values()) {
@@ -86,23 +77,18 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
         int idx = 0;
         for (Map.Entry<IFluidHandler, List<String>> e : byHandler.entrySet()) {
             IFluidHandler h = e.getKey();
-            sb.append("fluids").append(byHandler.size() > 1 ? " #" + idx : "")
-                    .append(" (sides: ").append(String.join(",", e.getValue())).append("):\n");
+            out.add("fluids" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
+                    + String.join(",", e.getValue()) + "):");
             for (int t = 0; t < h.getTanks(); t++) {
                 FluidStack fs = h.getFluidInTank(t);
-                sb.append("  tank ").append(t).append(": ");
-                if (fs.isEmpty()) {
-                    sb.append("empty");
-                } else {
-                    sb.append(fluidId(fs)).append(" ").append(fs.getAmount());
-                }
-                sb.append("/").append(h.getTankCapacity(t)).append(" mB\n");
+                out.add("  tank " + t + ": " + (fs.isEmpty() ? "empty" : fluidId(fs) + " " + fs.getAmount())
+                        + "/" + h.getTankCapacity(t) + " mB");
             }
             idx++;
         }
     }
 
-    private void appendEnergy(Level level, BlockPos pos, StringBuilder sb) {
+    private void appendEnergy(Level level, BlockPos pos, List<String> out) {
         IEnergyStorage en = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, null);
         if (en == null) {
             for (Direction d : Direction.values()) {
@@ -111,13 +97,11 @@ public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityRead
             }
         }
         if (en == null) return;
-        sb.append("energy: ").append(en.getEnergyStored()).append("/").append(en.getMaxEnergyStored())
-                .append(" FE");
         List<String> io = new ArrayList<>();
         if (en.canReceive()) io.add("accepts");
         if (en.canExtract()) io.add("provides");
-        if (!io.isEmpty()) sb.append(" (").append(String.join("/", io)).append(")");
-        sb.append("\n");
+        out.add("energy: " + en.getEnergyStored() + "/" + en.getMaxEnergyStored() + " FE"
+                + (io.isEmpty() ? "" : " (" + String.join("/", io) + ")"));
     }
 
     /** Record a non-null handler under the side that exposed it, de-duplicating by identity. */

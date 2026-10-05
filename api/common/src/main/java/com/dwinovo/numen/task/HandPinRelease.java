@@ -7,7 +7,7 @@ package com.dwinovo.numen.task;
  *
  * <p>Why not release on the bare {@code hasWork() true→false} edge: the client
  * ToolDispatcher is strictly serial — between two tool calls of the SAME turn
- * (equip_item result shipped, auto_mine not yet arrived) the LLM chain is
+ * (gear wear result shipped, auto_mine not yet arrived) the LLM chain is
  * momentarily idle while the model thinks, and a bare-edge release would strip
  * the pin exactly between "equip the fast-breaking tool" and "mine with it",
  * defeating the pin's whole purpose. So the completion edge is debounced: the

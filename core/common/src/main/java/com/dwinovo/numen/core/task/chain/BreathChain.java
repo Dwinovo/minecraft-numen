@@ -1,9 +1,11 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.WorkProfile;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
@@ -22,7 +24,9 @@ import net.minecraft.world.phys.Vec3;
  * executed, so a body left idle in deep water (a task that ended mid-swim, an
  * owner Stop, plain wandering) sinks, runs out of air, and drowns. This chain
  * polls head-submersion + air supply each tick; once air dips past
- * {@link SurvivalDecisions#LOW_AIR_TICKS} it takes the body, swims straight up
+ * {@link SurvivalDecisions#LOW_AIR_TICKS} it takes the body (unless the walk in
+ * progress planned this stretch under water — {@link Trip#plannedDive}: how long
+ * she can hold her breath there is pathing's call), swims straight up
  * until the head clears the water, then goes dormant — the wake/refill band
  * gives an idle body in deep water a natural bob cycle instead of a grave.
  *
@@ -66,6 +70,13 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
 
     @Override
     public boolean canRun(NumenPlayer companion) {
+        Trip trip = Trip.current(companion);
+        if (trip != null && trip.plannedDive()) {
+            // 在走的路线里计划好的一段水下:憋多久寻路规划时已按她的氧气算过,每一刻再按真实氧气判剩下的这一段撑不撑得到,
+            // 撑不到的那一刻起就不再是计划内的(寻路停下那一步)。这条本能只接管计划外的,不在计划内的水下半路把她拽上去。
+            submergedTicks = 0;
+            return false;
+        }
         // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条反射是假玩家唯一的
         // 漂浮本能,不能跟着休眠(否则闲置沉底就永远留在水底)。改按
         // "眼在水下持续 N tick"触发,窗口对齐生存的低氧阈值。
@@ -92,8 +103,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
     public TaskState tick(NumenPlayer companion) {
         episodeActive = true;
         worstAir = Math.min(worstAir, companion.getAirSupply());
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
         // Straight up is the cheap common rescue (open water). Only a sealed column
         // engages the lateral hunt: swim through connected water toward the nearest
         // opening with air above it (an ice hole, the cave mouth), still stroking up.
@@ -109,10 +119,11 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
                 }
             }
             if (airColumn != null) {
-                InputDriver.stepToward(companion, Vec3.atCenterOf(airColumn), false);
+                InputDriver.face(companion, Vec3.atCenterOf(airColumn));
+                companion.controls().press(Controls.Key.FORWARD);
             }
         }
-        InputDriver.jump(companion);   // in water this is the per-tick swim-up stroke
+        companion.controls().press(Controls.Key.JUMP);   // 在水里按住跳就是往上游
         return TaskState.RUNNING;
     }
 
@@ -185,7 +196,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
     private void noteTrapped(NumenPlayer companion) {
         if (trappedNoted) return;
         trappedNoted = true;
-        com.dwinovo.numen.event.NumenEvents.body(companion, "drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this, "drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
                 + "s of air — no opening within " + AIR_SEARCH_RADIUS
                 + " blocks of connected water; I need an air hole dug or a way out");
     }
@@ -198,7 +209,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
         airColumn = null;
         retargetCooldown = 0;
         trappedNoted = false;
-        com.dwinovo.numen.event.NumenEvents.body(companion, "nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this, "nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
     }
 
     @Override

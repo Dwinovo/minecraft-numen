@@ -121,7 +121,12 @@ public class OpenAIProvider implements LlmProvider {
     }
 
     @Override
-    public JsonObject assistantToRequestMessage(AssistantTurn turn) {
+    public List<JsonObject> assistantToRequestItems(AssistantTurn turn) {
+        return List.of(assistantMessage(turn));
+    }
+
+    /** chat/completions 家族里,一条助手回合就是一条消息。方言差异覆写这里。 */
+    protected JsonObject assistantMessage(AssistantTurn turn) {
         JsonObject m = new JsonObject();
         m.addProperty("role", "assistant");
         // Content can be null in OpenAI assistant turns when there are only

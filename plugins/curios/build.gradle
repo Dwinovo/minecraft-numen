@@ -1,0 +1,18 @@
+plugins { id 'numen-plugin' }
+
+// Curios 在这个 MC 版本上接的是 NeoForge 版;Fabric 那边对应的是 Trinkets / Accessories,另起联动。
+neoForge { version = neoforge_version }
+
+repositories {
+    exclusiveContent {
+        forRepository { maven { name = 'Curios'; url = 'https://maven.theillusivec4.top/' } }
+        filter { includeGroup 'top.theillusivec4.curios' }
+    }
+}
+
+dependencies {
+    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
+    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    // 只对着 Curios 的公开 API 编译;运行时由玩家自己装的那份提供,本模块不携带它一个字节。
+    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
+}

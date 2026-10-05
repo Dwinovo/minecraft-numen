@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.hud;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.NumenKeys;
 import com.dwinovo.numen.client.chat.CompanionChatScreen;
 import com.dwinovo.numen.client.screen.UiTheme;
@@ -60,8 +62,7 @@ public final class TalkHint {
         }
         String talk = NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString();
         String voice = NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString();
-        draw(g, mc, "按 [" + talk + "] 与 " + name + " 对话 · 按住 [" + voice + "] 说话",
-                0xFFFFFFFF);
+        draw(g, mc, I18n.get(Keys.TALK_HINT, talk, name, voice), 0xFFFFFFFF);
     }
 
     private static void draw(GuiGraphics g, Minecraft mc, String text, int color) {

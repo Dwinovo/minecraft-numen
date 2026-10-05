@@ -1,21 +1,34 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.gear.GearSlot;
+import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.entity.CompanionEvents;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.event.NumenEvents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.UUID;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * 插件的登记处:{@code NumenPlugins.register(numen -> …)}。
+ * 插件的登记处:{@code NumenPlugins.register("mymod", numen -> …)}。
+ *
+ * <h2>名字空间由登记者给出</h2>
+ * 插件登记时写自己的 id(一般就是 mod id 或它的简写:{@code tlm}、{@code ftbquests}),拿到的那扇门只往这个名字空间里登记:组
+ * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。引擎自己的内容用 {@link #NUMEN}。
  *
  * <h2>时机不必你操心</h2>
  * 插件在自己模组的构造期登记就行。引擎内部该就绪的东西各有各的时机(工具注册表在
@@ -32,35 +45,58 @@ public final class NumenPlugins {
 
     /** 客户端接上来的那几样;专用服务器上一直是 null,于是相关调用自然成空操作。 */
     private static volatile Consumer<Path> skills;
-    private static volatile BiFunction<UUID, String, Delivery> enqueue;
+    private static volatile ClientInput clientInput;
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
 
-    private static final NumenApi API = new Impl();
+    /** 引擎自己的名字空间:core 与引擎登记的组与模块都在它下面。 */
+    public static final String NUMEN = "numen";
 
     private NumenPlugins() {}
 
-    /** 登记一个插件。可在任何时候调用,通常在你模组的构造期。 */
-    public static void register(NumenPlugin plugin) {
+    /**
+     * 登记一个插件。可在任何时候调用,通常在你模组的构造期。
+     *
+     * <p>登记里有一处会破坏系统(名字写不出来、组已经有主、函数绑定不了……),异常原样抛出,启动就此失败;那句话写着是哪个函数、
+     * 哪一条。写法上的问题不拦,看 {@code ApiTester.lint} 的报告。
+     *
+     * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
+     */
+    public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
-        try {
-            plugin.setup(API);
-        } catch (RuntimeException e) {
-            Constants.LOG.error("[numen] 插件登记失败,它挂的东西可能只生效了一半", e);
-        }
+        com.dwinovo.numen.sdk.ApiRegistry.checkNamespace(namespace);
+        plugin.setup(new Impl(namespace));
+    }
+
+    /** 主人客户端那一侧的输入口,形状与 {@link NumenApi#emit(UUID, String, String)} 相同。 */
+    @FunctionalInterface
+    public interface ClientInput {
+        Delivery emit(UUID companion, String type, String text);
     }
 
     /**
      * 客户端起来时把只在客户端存在的能力接上来。<b>引擎内部调用</b>,插件不该碰。
      */
-    public static void bindClient(Consumer<Path> skillSink,
-                                  BiFunction<UUID, String, Delivery> enqueueFn) {
+    public static void bindClient(Consumer<Path> skillSink, ClientInput input) {
         skills = skillSink;
-        enqueue = enqueueFn;
+        clientInput = input;
         clientReady = true;
         for (Runnable r : PENDING) runClientBlock(r);
-        for (Path root : PENDING_SKILLS) skillSink.accept(root);
         PENDING.clear();
+        flushSkills(skillSink);
+    }
+
+    /**
+     * 只接技能这一样,不算客户端起来了:没有客户端、却要照主人客户端的样子组装提示词的进程(评测)用它。
+     * 插件的 {@code onClient} 块照旧攒着不跑。<b>引擎内部调用</b>,插件不该碰。
+     */
+    public static void bindSkills(Consumer<Path> skillSink) {
+        skills = skillSink;
+        flushSkills(skillSink);
+    }
+
+    private static void flushSkills(Consumer<Path> skillSink) {
+        for (Path root : PENDING_SKILLS) skillSink.accept(root);
         PENDING_SKILLS.clear();
     }
 
@@ -79,19 +115,91 @@ public final class NumenPlugins {
     private static final List<Function<UUID, String>> STATE = new CopyOnWriteArrayList<>();
 
     /**
-     * 汇总所有插件对这只同伴的现算片段。<b>引擎内部调用</b>。
-     *
-     * <p>某个插件算炸了不能连累整条请求——它自己那段丢掉,别人的照常挂上。
+     * 登记过的穿戴来源,按登记顺序——那也是自动选位的优先级。见 {@link NumenApi#registerGear}。
+     * 原版四件甲由 core 在加载期最先登记,所以总在最前。
      */
+    private static final List<GearSource> GEAR = new CopyOnWriteArrayList<>();
+
+    /**
+     * 身体状态片段。第一段是引擎自己从穿戴来源渲染的 {@code <worn>},其后是插件经
+     * {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
+     */
+    private static final List<Function<NumenPlayer, String>> BODY_STATE =
+            new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn));
+
+    /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>引擎内部调用</b>(服务端主线程)。 */
+    public static List<GearSlot> gearSlots(NumenPlayer body) {
+        List<GearSlot> out = new ArrayList<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.slots(body));
+        }
+        return out;
+    }
+
+    /** 各来源认为这件该戴在哪类位置,合在一起;空集 = 不是穿戴物。<b>引擎内部调用</b>(服务端主线程)。 */
+    public static Set<String> gearKinds(NumenPlayer body, ItemStack stack) {
+        Set<String> out = new LinkedHashSet<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.kindsOf(body, stack));
+        }
+        return out;
+    }
+
+    /**
+     * {@code <worn>head: minecraft:iron_helmet; chest: empty; …; curios:ring: minecraft:gold_ring, empty</worn>}
+     *
+     * <p>空位也列出:这是模型知道自己有哪些槽名的唯一来源。只写物品 id,不写耐久和组件——变化检测按整段
+     * 字符串比,耐久一掉就推包是噪声。一个位置都没有时不出这一段。
+     */
+    private static String worn(NumenPlayer body) {
+        Map<String, List<String>> byName = new LinkedHashMap<>();
+        for (GearSlot slot : gearSlots(body)) {
+            ItemStack stack = slot.worn();
+            byName.computeIfAbsent(slot.name(), ignored -> new ArrayList<>()).add(stack.isEmpty() ? "empty"
+                    : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        }
+        if (byName.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("<worn>");
+        byName.forEach((name, items) -> {
+            if (sb.length() > "<worn>".length()) sb.append("; ");
+            sb.append(name).append(": ").append(String.join(", ", items));
+        });
+        return sb.append("</worn>").toString();
+    }
+
+    /** 汇总所有插件对这只同伴的客户端现算片段。<b>引擎内部调用</b>。 */
     public static String stateFragments(UUID companion) {
-        if (STATE.isEmpty()) return "";
+        return joinFragments(STATE, companion);
+    }
+
+    /** 汇总所有插件从这具身体上读的状态片段。<b>引擎内部调用</b>(服务端)。 */
+    public static String bodyStateFragments(NumenPlayer body) {
+        return joinFragments(BODY_STATE, body);
+    }
+
+    /** 正算不出来的片段。身体片段每次状态检查都要算,一个坏插件不能每秒把日志刷二十条。 */
+    private static final Set<Function<?, String>> FAILING = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 按登记顺序拼起来,空的不占位。
+     *
+     * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。同一个片段连着出错
+     * 只在第一次记日志,算出来一次就重新计。
+     */
+    private static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
+        if (fragments.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
-        for (Function<UUID, String> f : STATE) {
+        for (Function<T, String> f : fragments) {
             try {
-                String x = f.apply(companion);
+                String x = f.apply(subject);
+                if (FAILING.remove(f)) {
+                    Constants.LOG.info("[numen] 插件的运行期状态又算得出来了");
+                }
                 if (x != null && !x.isBlank()) sb.append(x);
             } catch (RuntimeException e) {
-                Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过", e);
+                if (FAILING.add(f)) {
+                    Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过(接着出错不再重复记)", e);
+                }
             }
         }
         return sb.toString();
@@ -110,14 +218,26 @@ public final class NumenPlugins {
 
     private static final class Impl implements NumenApi {
 
+        /** 这扇门登记进的名字空间。 */
+        private final String namespace;
+
+        Impl(String namespace) {
+            this.namespace = namespace;
+        }
+
         @Override
         public <T> void on(CompanionEvent<T> event, Consumer<T> handler) {
             CompanionEvents.subscribe(event, handler);
         }
 
         @Override
-        public void registerTool(NumenTool tool) {
-            ToolRegistry.register(tool);
+        public void api(String group, String summary, Class<?> functions) {
+            com.dwinovo.numen.sdk.ApiRegistry.register(namespace, group, summary, functions);
+        }
+
+        @Override
+        public <T> void codec(Class<T> type, com.dwinovo.numen.sdk.Codec<T> codec) {
+            com.dwinovo.numen.sdk.LuaCodecs.register(type, codec);
         }
 
         @Override
@@ -125,6 +245,11 @@ public final class NumenPlugins {
             if (skillsRoot == null) return;
             Consumer<Path> sink = skills;
             if (sink != null) sink.accept(skillsRoot); else PENDING_SKILLS.add(skillsRoot);
+        }
+
+        @Override
+        public void bundleModules(Path modulesRoot) {
+            com.dwinovo.numen.script.BuiltinModules.bundle(namespace, modulesRoot);
         }
 
         @Override
@@ -139,14 +264,36 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void contributeBodyState(Function<NumenPlayer, String> fragment) {
+            if (fragment != null) BODY_STATE.add(fragment);
+        }
+
+        @Override
+        public void registerGear(GearSource source) {
+            if (source != null) GEAR.add(source);
+        }
+
+        @Override
         public Path configDir() {
             return com.dwinovo.numen.NumenPaths.config();
         }
 
         @Override
-        public Delivery enqueue(UUID companion, String message) {
-            BiFunction<UUID, String, Delivery> fn = enqueue;
-            return fn == null ? Delivery.REJECTED : fn.apply(companion, message);
+        public void registerEventType(String type, boolean alwaysUrgent) {
+            EventTypes.register(EventTypes.event(type, alwaysUrgent));
+        }
+
+        @Override
+        public void emit(NumenPlayer companion, String type, Map<String, String> attrs, String text,
+                         boolean urgent) {
+            NumenEvents.emit(companion, type, attrs, text, urgent);
+        }
+
+        @Override
+        public Delivery emit(UUID companion, String type, String text) {
+            NumenEvents.requireClientInput(type);
+            ClientInput input = clientInput;
+            return input == null ? Delivery.REJECTED : input.emit(companion, type, text);
         }
     }
 }

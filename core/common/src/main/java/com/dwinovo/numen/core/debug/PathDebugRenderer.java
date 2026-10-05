@@ -3,29 +3,20 @@ package com.dwinovo.numen.core.debug;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.dwinovo.numen.core.pathing.astar.NavPath;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
-import com.dwinovo.numen.core.pathing.execute.PathingCore;
-import com.dwinovo.numen.core.pathing.goals.Goal;
-import com.dwinovo.numen.core.pathing.goals.GoalBlock;
-import com.dwinovo.numen.core.pathing.goals.GoalComposite;
-import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
-import com.dwinovo.numen.core.pathing.goals.GoalInverted;
-import com.dwinovo.numen.core.pathing.goals.GoalTwoBlocks;
-import com.dwinovo.numen.core.pathing.goals.GoalXZ;
+import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.search.Route;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 寻路调试状态发布:每 {@link #INTERVAL} tick 把每个活跃寻路内核的
- * 状态(当前段/下一段/在飞最优路径、待挖/待放/挤身格集、目标)打包成
- * {@link PathDebugPayload} 发给同维度开了调试的主人;客户端逐帧画成
- * 世界空间的线与方框。不产生任何粒子。
+ * 寻路调试状态发布:每 {@link #INTERVAL} tick 把每个在走的同伴的状态(还没走完的那几步、路上要挖与要放的格、朝着的那一格)
+ * 打包成 {@link PathDebugPayload} 发给同维度开了调试的主人;客户端逐帧画成世界空间的线与方框。不产生任何粒子。
  */
 public final class PathDebugRenderer {
 
@@ -42,8 +33,15 @@ public final class PathDebugRenderer {
         if (++tickCounter % INTERVAL != 0) {
             return;
         }
-        for (PathingCore core : PathingCore.liveCores()) {
-            ServerLevel level = (ServerLevel) core.player().level();
+        for (ServerPlayer body : server.getPlayerList().getPlayers()) {
+            if (!(body instanceof NumenPlayer companion)) {
+                continue;
+            }
+            Trip trip = Trip.current(companion);
+            if (trip == null) {
+                continue;
+            }
+            ServerLevel level = companion.serverLevel();
             List<ServerPlayer> viewers = new ArrayList<>();
             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
                 if (PathDebug.isEnabled(p.getUUID()) && p.level() == level) {
@@ -53,74 +51,33 @@ public final class PathDebugRenderer {
             if (viewers.isEmpty()) {
                 continue;
             }
-            PathDebugPayload payload = snapshot(core);
+            PathDebugPayload payload = snapshot(companion, trip);
             for (ServerPlayer viewer : viewers) {
-                Services.NETWORK.sendToPlayer(viewer, payload);
+                NumenNetwork.sendToPlayer(viewer, payload);
             }
         }
     }
 
-    /** 采集一个内核此刻的可视状态(空状态也发,客户端据此清屏)。 */
-    private static PathDebugPayload snapshot(PathingCore core) {
-        List<Long> currentPath = new ArrayList<>();
-        List<Long> nextPath = new ArrayList<>();
-        List<Long> bestPath = new ArrayList<>();
+    /** 采集一趟路此刻的可视状态:还没走完的那几步与它们要动的格,朝着的那一格画成目标框。 */
+    private static PathDebugPayload snapshot(NumenPlayer companion, Trip trip) {
+        List<Long> path = new ArrayList<>();
         List<Long> toBreak = new ArrayList<>();
         List<Long> toPlace = new ArrayList<>();
-        List<Long> toWalkInto = new ArrayList<>();
-        List<Long> goalBoxes = new ArrayList<>();
-        List<Long> goalColumns = new ArrayList<>();
-
-        PathExecutor current = core.getCurrent();
-        if (current != null) {
-            // 与观察端习惯一致:当前段从已推进位置往前三格开始描
-            packPath(current.getPath(), Math.max(0, current.getPosition() - 3), currentPath);
-            for (BlockPos pos : current.toBreak()) {
-                toBreak.add(pos.asLong());
-            }
-            for (BlockPos pos : current.toPlace()) {
-                toPlace.add(pos.asLong());
-            }
-            for (BlockPos pos : current.toWalkInto()) {
-                toWalkInto.add(pos.asLong());
-            }
+        List<Route.Leg> legs = trip.remaining();
+        if (!legs.isEmpty()) {
+            path.add(legs.get(0).maneuver().from().asLong());
         }
-        PathExecutor next = core.getNext();
-        if (next != null) {
-            packPath(next.getPath(), 0, nextPath);
-        }
-        core.inProgressBestPath().ifPresent(best -> packPath(best, 0, bestPath));
-        packGoal(core.getGoal(), goalBoxes, goalColumns);
-
-        return new PathDebugPayload(core.player().getUUID(),
-                currentPath, nextPath, bestPath, toBreak, toPlace, toWalkInto,
-                goalBoxes, goalColumns);
-    }
-
-    private static void packPath(NavPath path, int startIndex, List<Long> out) {
-        List<BlockPos> positions = path.positions();
-        for (int i = startIndex; i < positions.size(); i++) {
-            out.add(positions.get(i).asLong());
-        }
-    }
-
-    private static void packGoal(Goal goal, List<Long> boxes, List<Long> columns) {
-        switch (goal) {
-            case null -> { }
-            case GoalBlock g -> boxes.add(g.getGoalPos().asLong());
-            case GoalTwoBlocks g -> {
-                boxes.add(g.getGoalPos().asLong());
-                boxes.add(g.getGoalPos().above().asLong());
-            }
-            case GoalGetToBlock g -> boxes.add(g.getGoalPos().asLong());
-            case GoalXZ g -> columns.add(BlockPos.asLong(g.x, 0, g.z));
-            case GoalComposite g -> {
-                for (Goal sub : g.goals()) {
-                    packGoal(sub, boxes, columns);
+        for (Route.Leg leg : legs) {
+            path.add(leg.maneuver().to().asLong());
+            for (Edit edit : leg.maneuver().edits()) {
+                switch (edit) {
+                    case Edit.Dig dig -> toBreak.add(dig.pos().asLong());
+                    case Edit.Place place -> toPlace.add(place.pos().asLong());
+                    default -> { }
                 }
             }
-            case GoalInverted g -> packGoal(g.origin, boxes, columns);
-            default -> { }
         }
+        return new PathDebugPayload(companion.getUUID(), path, List.of(), List.of(), toBreak, toPlace, List.of(),
+                List.of(trip.toward().asLong()), List.of());
     }
 }

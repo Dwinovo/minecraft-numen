@@ -14,11 +14,11 @@ import net.neoforged.neoforge.common.NeoForge;
 import java.nio.file.Path;
 
 /**
- * Client entry point. 1.21.5 merged the mod and game event buses; registering
- * registration events (key mappings / GUI layers / reload listeners) on the mod bus
- * and the tick / world-render / disconnect hooks on {@code NeoForge.EVENT_BUS} from
- * the mod constructor still compiles and behaves identically (only the
- * {@code @EventBusSubscriber(bus=…)} attribute is deprecated), mirroring {@link NumenMod}.
+ * Client entry point. 1.21.4 still has SEPARATE mod and game event buses
+ * (1.21.5 merged them), so a single {@code @EventBusSubscriber} can't carry both
+ * — registration events (key mappings / GUI layers / reload listeners) are mod-bus,
+ * the tick / world-render / disconnect hooks are game-bus. We register each on its
+ * own bus from the mod constructor, mirroring {@link NumenMod}.
  */
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
 public class NumenNeoForgeClient {
@@ -53,7 +53,7 @@ public class NumenNeoForgeClient {
         // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
         com.dwinovo.numen.api.NumenPlugins.bindClient(
                 root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::enqueue);
+                com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
@@ -63,12 +63,12 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
-        // GUI 圆角 SDF shader 无需任何注册:1.21.5 改代码定义的 RenderPipeline,
-        // 首次使用时懒编译(RegisterShadersEvent 已随 JSON shader 体系一并删除)。
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenRendered);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenMousePressed);
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
@@ -78,6 +78,8 @@ public class NumenNeoForgeClient {
         if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                    event.getPoseStack(), event.getCamera());
+            com.dwinovo.numen.client.consent.ConsentOutlines.render(
                     event.getPoseStack(), event.getCamera());
         }
     }
@@ -100,6 +102,23 @@ public class NumenNeoForgeClient {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "message_notices"),
+                (g, delta) -> com.dwinovo.numen.client.notify.MessageNotices.renderHud(g));
+    }
+
+    /** 消息通知开着界面时画在界面上面。 */
+    static void onScreenRendered(net.neoforged.neoforge.client.event.ScreenEvent.Render.Post event) {
+        com.dwinovo.numen.client.notify.MessageNotices.renderOver(
+                event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
+    }
+
+    /** 点在消息通知上的那一下归通知,界面不再处理。 */
+    static void onScreenMousePressed(net.neoforged.neoforge.client.event.ScreenEvent.MouseButtonPressed.Pre event) {
+        if (com.dwinovo.numen.client.notify.MessageNotices.click(
+                event.getMouseX(), event.getMouseY(), event.getButton())) {
+            event.setCanceled(true);
+        }
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
@@ -114,16 +133,16 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.data.ClientNumenState.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-        com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.chat.ChatLines.clearLive();
         com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
         com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
+        com.dwinovo.numen.client.consent.ConsentCards.clear();
     }
 
     static void registerReloadListeners(AddClientReloadListenersEvent event) {
-        // 1.21.4+ uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
+        // 1.21.4 uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
         // the keyed API (1.21.1 was RegisterClientReloadListenersEvent.registerReloadListener,
         // no key).
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()

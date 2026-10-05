@@ -16,7 +16,7 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class Loadout {
 
-    /** 一把武器和它所在的格子。{@code slot} 交给 {@code holdInHand}。 */
+    /** 一把武器和它所在的格子。{@code slot} 交给 {@link com.dwinovo.numen.pathing.body.Hotbar#hold}。 */
     public record Pick(int slot, ItemStack stack, double score) {}
 
     private final Pick melee;

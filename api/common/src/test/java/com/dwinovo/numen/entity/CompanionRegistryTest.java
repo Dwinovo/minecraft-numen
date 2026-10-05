@@ -18,8 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 注册表的持久化——这个类是"谁存在"的唯一权威,读档解析一旦失败,
  * 存储层会静默地退回一个<b>空</b>注册表:整个存档的同伴一次性蒸发,
  * 连报错都没有。所以每次动 codec 都必须有这一层兜着。
- * 1.21.5 起(反)序列化由 SavedDataType 的存储层直接驱动 CODEC,
- * 这里也直接对 CODEC 往返——测的就是生产在用的那一条路。
  */
 class CompanionRegistryTest {
 
@@ -32,13 +30,17 @@ class CompanionRegistryTest {
         return new CompanionRegistry.Entry(name, owner, Level.OVERWORLD, new BlockPos(1, 2, 3));
     }
 
+    // 1.21.5 起存储层直接驱动 CODEC,这里也直接对 CODEC 往返——测的就是生产在用的那一条路
     private static CompoundTag encode(CompanionRegistry reg) {
-        return (CompoundTag) CompanionRegistry.CODEC.encodeStart(NbtOps.INSTANCE, reg)
-                .result().orElseThrow();
+        return (CompoundTag) CompanionRegistry.CODEC.encodeStart(NbtOps.INSTANCE, reg).getOrThrow();
+    }
+
+    private static CompanionRegistry parse(CompoundTag tag) {
+        return CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, tag).result().orElseThrow();
     }
 
     private static CompanionRegistry roundTrip(CompanionRegistry reg) {
-        return CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, encode(reg)).result().orElseThrow();
+        return parse(encode(reg));
     }
 
     // ---- 持久化 ----
@@ -72,18 +74,45 @@ class CompanionRegistryTest {
         tag.remove("worldId");
         assertFalse(tag.contains("worldId"));
 
-        CompanionRegistry back =
-                CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, tag).result().orElseThrow();
+        CompanionRegistry back = parse(tag);
 
         assertEquals("小焰", back.find(A).name(), "老存档必须照常读出来");
         assertFalse(back.worldId().isBlank(), "缺的世界身份现补一个");
     }
 
     @Test
-    void garbageTagFailsCleanlyRatherThanCrashing() {
-        // 读档失败不该把服务器带崩。1.21.5 起兜底住在存储层:readSavedData 解析失败
-        // 记日志返 null,computeIfAbsent 落回构造器给空注册表。我们守自己这半边:
-        // 垃圾输入只能表现为"解析失败"这种可兜的结果,不许抛异常穿透读档。
+    void whatSheIsDoingSurvivesUnderItsName() {
+        // 活的名字是派它的函数,重启后再跑的是那一行 Lua:两样都得活过读档,接不回来时才说得出她受理的是什么
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope.pot.stir", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
+
+        CompanionRegistry.Entry back = roundTrip(reg).find(A);
+
+        assertEquals("kaleidoscope.pot.stir", back.taskName());
+        assertEquals("kaleidoscope.pot.stir({x = 1, y = 2, z = 3})", back.taskLua());
+        assertEquals("", back.taskOld());
+    }
+
+    @Test
+    void aTaskSavedAsACommandLineByAnOlderVersionIsReadButNotAsLua() {
+        // 旧版本按一行命令记下的活(taskArgs):照原样读进来,只为说清它没接回来,不当成一行 Lua
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope cook", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
+        CompoundTag tag = encode(reg);
+        CompoundTag saved = tag.getCompoundOrEmpty("companions").getCompoundOrEmpty(A.toString());
+        saved.remove("taskLua");
+        saved.putString("taskArgs", "{\"command\":\"kaleidoscope cook 1 2 3 x\"}");
+
+        CompanionRegistry.Entry back = parse(tag).find(A);
+
+        assertEquals("kaleidoscope cook", back.taskName());
+        assertEquals("", back.taskLua(), "an old command line is not a line of Lua");
+        assertEquals("{\"command\":\"kaleidoscope cook 1 2 3 x\"}", back.taskOld());
+    }
+
+    @Test
+    void garbageTagDegradesToEmptyRatherThanCrashing() {
+        // 读档失败不该把服务器带崩:codec 只许返回 error、不许抛,"降级为空"由存储层(readSavedData)兜
         assertTrue(CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, new CompoundTag()).isError());
     }
 
@@ -148,7 +177,7 @@ class CompanionRegistryTest {
         assertEquals("", reg.find(A).deathCause());
     }
 
-    @Test
+        @Test
     void deathStateOfAnUnknownCompanionIsANoOp() {
         CompanionRegistry reg = new CompanionRegistry();
         reg.markDead(UUID.randomUUID(), "x", 1L);

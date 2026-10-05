@@ -4,10 +4,10 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.Wire;
 
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -32,13 +32,11 @@ public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
     public static final Type<ChangeSkinPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "change_skin"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, ChangeSkinPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, ChangeSkinPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, ChangeSkinPayload::uuid,
-                    ByteBufCodecs.stringUtf8(SummonRequestPayload.MAX_SKIN_VALUE),
-                    ChangeSkinPayload::skinValue,
-                    ByteBufCodecs.stringUtf8(SummonRequestPayload.MAX_SKIN_SIG),
-                    ChangeSkinPayload::skinSig,
+                    Wire.TO_SERVER.text(), ChangeSkinPayload::skinValue,
+                    Wire.TO_SERVER.text(), ChangeSkinPayload::skinSig,
                     ChangeSkinPayload::new);
 
     @Override

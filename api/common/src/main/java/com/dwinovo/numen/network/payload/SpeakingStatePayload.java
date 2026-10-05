@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionSpeech;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -22,7 +22,7 @@ public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements
     public static final Type<SpeakingStatePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "speaking_state"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, SpeakingStatePayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, SpeakingStatePayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, SpeakingStatePayload::entityUuid,
                     ByteBufCodecs.BOOL, SpeakingStatePayload::speaking,
