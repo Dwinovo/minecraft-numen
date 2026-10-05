@@ -59,7 +59,9 @@ final class StrideControl extends Control {
         boolean climbOut = m.kind() == MoveKind.ASCEND && !m.start().grounded();
         // 站在水里起跳:原版在水里按跳是往上浮,浮到身子够高、再顶着岸边,才被水托上去——所以在水里一直按着
         boolean wadingJump = m.jump() && rig.entity.isInWater();
+        // 脚已经不比落点低(跳过一道薄板落在了板顶,落点是板后更低的半砖)就不再起跳:再跳只会一路蹦过落点
         boolean jump = climbOut || floatUp() || wadingJump || m.jump() && rig.entity.onGround()
+                && rig.entity.getY() < m.landing().feetY() - 0.01
                 && (rig.entity.horizontalCollision || ahead() >= jumpPoint());
         keys().set(Key.JUMP, jump);
         boolean flows = flows();
