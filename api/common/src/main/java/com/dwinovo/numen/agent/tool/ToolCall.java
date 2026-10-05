@@ -14,9 +14,8 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>{@link #complete(String)} — "here is the result." The one verb: a tool
  *       calls it whenever and from wherever its result is ready — synchronously
- *       on the agent (client) thread, or later after handing the work to the
- *       server body (the result then arrives via {@code TaskResultPayload} and
- *       the loop completes the call).</li>
+ *       on the agent (client) thread, or later after handing the work elsewhere
+ *       (a tool that proxies to a remote service completes when the reply lands).</li>
  * </ul>
  *
  * The agent loop neither knows nor cares <em>how</em> a tool finishes — that

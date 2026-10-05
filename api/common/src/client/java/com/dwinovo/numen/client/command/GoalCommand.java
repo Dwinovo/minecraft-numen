@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.goal.GoalPrompts;
 import com.dwinovo.numen.agent.goal.GoalState;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
@@ -22,12 +24,12 @@ final class GoalCommand implements ChatCommand {
 
     @Override
     public String description() {
-        return "长期目标:她会一轮接一轮做下去";
+        return I18n.get(Keys.CMD_GOAL);
     }
 
     @Override
     public String argHint() {
-        return "<要做什么> | clear";
+        return I18n.get(Keys.CMD_GOAL_ARGS);
     }
 
     @Override
@@ -47,13 +49,13 @@ final class GoalCommand implements ChatCommand {
         }
         if (CLEAR_WORDS.contains(args.toLowerCase(Locale.ROOT))) {
             if (goal == null) {
-                return "本来就没有目标。";
+                return I18n.get(Keys.CMD_GOAL_NONE_TO_CLEAR);
             }
             loop.clearGoal(null);
-            return "清掉了:" + goal.objective();
+            return I18n.get(Keys.CMD_GOAL_CLEARED, goal.objective());
         }
         // 换掉一个还在跑的目标不静默:旧的那句原样说出来,想找回自己再贴一遍。
-        String replaced = goal == null ? null : "换掉了原来的:" + goal.objective();
+        String replaced = goal == null ? null : I18n.get(Keys.CMD_GOAL_REPLACED, goal.objective());
         loop.setGoal(GoalState.of(args, System.currentTimeMillis()),
                 ChatCommands.PREFIX + name() + " " + args);
         // 目标本身不再复述一遍:聊天里已经有主人自己那条气泡,面板顶上也常驻一行。
@@ -63,16 +65,12 @@ final class GoalCommand implements ChatCommand {
     /** 无参时看的东西:条件、跑了多久、判了几轮、烧了多少、<b>评估器最近说还差什么</b>。 */
     private static String status(GoalState goal) {
         if (goal == null) {
-            return "还没有目标。直接说要做什么:/goal 把家门口那片林子清干净";
+            return I18n.get(Keys.CMD_GOAL_EMPTY);
         }
-        StringBuilder sb = new StringBuilder("目标:").append(goal.objective())
-                .append("\n跑了 ").append(GoalPrompts.elapsed(
-                        goal.elapsedMs(System.currentTimeMillis())))
-                .append(" · 第 ").append(goal.turnsExecuted()).append(" 轮")
-                .append(" · ").append(goal.tokensUsed()).append(" token");
-        if (goal.lastReason() != null) {
-            sb.append("\n还差:").append(goal.lastReason());
-        }
-        return sb.toString();
+        String status = I18n.get(Keys.CMD_GOAL_STATUS, goal.objective(),
+                GoalPrompts.elapsed(goal.elapsedMs(System.currentTimeMillis())), goal.turnsExecuted(),
+                goal.tokensUsed());
+        return goal.lastReason() == null ? status
+                : status + "\n" + I18n.get(Keys.CMD_GOAL_MISSING, goal.lastReason());
     }
 }

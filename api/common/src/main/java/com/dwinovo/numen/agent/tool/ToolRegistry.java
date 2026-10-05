@@ -3,6 +3,7 @@ package com.dwinovo.numen.agent.tool;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -89,7 +90,7 @@ public final class ToolRegistry {
         if (name == null) return null;
         NumenTool exact = TOOLS.get(name);
         if (exact != null) return exact;
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);   // 工具名是 ASCII 标识符,不能随系统区域变(土耳其语 I)
         if (lower.equals(name)) return null;  // already lowercase, no further fallback
         return TOOLS.get(lower);
     }
@@ -102,28 +103,6 @@ public final class ToolRegistry {
         return new ArrayList<>(TOOLS.values());
     }
 
-    /**
-     * 常驻工具——完整定义每轮随请求发出。见 {@link NumenTool#residency()}。
-     */
-    public static List<NumenTool> resident() {
-        return byResidency(NumenTool.Residency.RESIDENT);
-    }
-
-    /**
-     * 延迟工具——只在目录里留一行摘要。借来的 MCP 工具全在这一档:自家工具有界且
-     * 高频,借来的无界且描述长度不可控。
-     */
-    public static List<NumenTool> deferred() {
-        return byResidency(NumenTool.Residency.DEFERRED);
-    }
-
-    private static List<NumenTool> byResidency(NumenTool.Residency want) {
-        List<NumenTool> out = new ArrayList<>();
-        for (NumenTool t : TOOLS.values()) {
-            if (t.residency() == want) out.add(t);
-        }
-        return out;
-    }
 
     public static int size() {
         return TOOLS.size();

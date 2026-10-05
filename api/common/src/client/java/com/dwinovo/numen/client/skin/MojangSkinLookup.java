@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.skin;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.MojangSkins;
 import com.google.gson.JsonArray;
@@ -62,7 +64,7 @@ public final class MojangSkinLookup {
                 }
                 MojangSkins.Skin skin = fetchTextures(uuid);
                 if (skin == null) {
-                    return remember(playerName, new Result(null, "档案里没有皮肤数据"));
+                    return remember(playerName, new Result(null, I18n.get(ModLanguageData.Keys.SKIN_PROFILE_NO_SKIN)));
                 }
                 Constants.LOG.info("[numen-skin] 借到 {} 的皮肤", playerName);
                 return remember(playerName, new Result(skin, null));

@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.scan;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.shorts.ShortArrayList;
 import net.minecraft.core.BlockPos;
@@ -12,79 +13,87 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * 服务端目标方块索引:回答"离这里最近的 X 方块在哪"而【不做周期性全量扫描】。
+ * {@link BlockSearch} 读地形的方式:按 section 记下"这一节里每种目标方块在哪",同一片地被反复问时
+ * 不必重读。只有 {@link BlockSearch} 用它——找方块的出口只有那一个,这里是它的存储。
  *
  * <h2>形态(每维度一份,全部同伴共享)</h2>
- * {@code SectionPos → { Block → 段内位置集 }} 的倒排索引,只有含目标的 section 才有条目。
- * 三条供给让它保持新鲜:
+ * {@code SectionPos → { Block → 段内位置集 }} 的倒排索引,只有读过的 section 才有条目。三条供给让它
+ * 保持新鲜:
  * <ol>
- *   <li><b>方块变更钩子</b>——{@code ServerLevel.onBlockStateChange}(即原版 POI 系统自己的
- *       写入口)每次服务端方块变化调用 {@link #onBlockChange};无关方块两次哈希查询即返回,
- *       没有任何任务注册目标时第一行即返回。挖掉的目标实时出索引,长出的树苗实时进索引。</li>
- *   <li><b>懒构建</b>——查询碰到未建/过期的 section 时就地构建:palette 预筛(不含目标的
- *       section 几乎零成本跳过)+ 一趟计数 + 一趟收位,每次查询有构建预算封顶。</li>
- *   <li><b>驱逐</b>——{@link #serverTick} 周期清除已卸载区块的条目;最后一个任务注销时整个
- *       维度索引直接丢弃。</li>
+ *   <li><b>方块变更钩子</b>——{@code ServerLevel.onBlockStateChange}(即原版 POI 系统自己的写入口)每次
+ *       服务端方块变化调用 {@link #onBlockChange};无关方块两次哈希查询即返回,没有任何登记时第一行即返回。
+ *       挖掉的目标实时出索引,长出的树苗实时进索引。</li>
+ *   <li><b>懒构建</b>——搜索碰到没有新鲜条目的 section 时就地构建:palette 预筛(不含任何登记方块的
+ *       section 几乎零成本,直接记成空条目)+ 一趟计数 + 一趟收位。真构建由搜索按 {@link SearchBudget}
+ *       的读节配额计费。</li>
+ *   <li><b>驱逐</b>——{@link #sweep} 周期清除已卸载区块的条目;最后一个登记注销时整个维度索引直接丢弃。</li>
  * </ol>
  *
+ * <h2>谁登记、条目对谁新鲜</h2>
+ * 登记是计数式的:每次搜索在跑的那几刻登记自己的目标,要反复找的任务(mine)在整个任务期间持有登记。
+ * 一个条目只对"构建时已经登记、此后一直没断过"的方块可信——每种方块记下它这一轮登记开始的时间戳,
+ * 条目记下构建时的时间戳,前者不晚于后者才算新鲜。于是新登记一种方块只让这一种方块的旧条目作废,
+ * 别的任务攒热的缓存不受牵连。
+ *
  * <h2>丰度分级</h2>
- * 一个 section 内某目标超过 {@link #SATURATION} 个(石头/泥土这类铺天盖地的),不枚举位置,
- * 只存"饱和"标记——查询碰到饱和段时对【该一个 section】现场取位即可。稀疏目标(矿石)与
- * 成簇目标(原木)全量索引。
+ * 一个 section 内某目标超过 {@link #SATURATION} 个(石头/泥土这类铺天盖地的),不枚举位置,只存"饱和"
+ * 标记——取用时对【该一个 section】现场取位。稀疏目标(矿石)与成簇目标(原木)全量索引。
  *
  * <h2>线程契约</h2>
- * 全部状态仅服务端主线程读写。worldgen 线程途经 onBlockStateChange 的写入被直接丢弃——
- * 新生成区块首次被查询/加载时懒构建自然收录(与原版 POI 的自愈口径一致)。
+ * 全部状态仅服务端主线程读写。worldgen 线程途经 onBlockStateChange 的写入被直接丢弃——新生成区块首次
+ * 被搜索时懒构建自然收录(与原版 POI 的自愈口径一致)。
  */
-public final class TargetIndex {
+final class TargetIndex {
 
     private TargetIndex() {}
-
-    static {
-        // 这两份都描述一个具体的世界，世界没了就得跟着没。报到写在这里而不是
-        // 各 loader 的启动代码里：清理跟状态同居，就不会再出现「清单上漏了一项」。见 ServerLifecycle。
-        com.dwinovo.numen.platform.ServerLifecycle.onStopped(TargetIndex::dropAll);
-    }
 
     /** 段内某目标超过该数即记"饱和",不枚举位置(4096 格的 1/16)。 */
     private static final int SATURATION = 256;
     /** 饱和标记(位置永远非负,-1 不会与真实位置冲突)。 */
     private static final short[] SATURATED = {-1};
-    /** 驱逐清扫周期(tick)。 */
-    private static final int EVICT_SWEEP_TICKS = 200;
 
-    /** 有任何维度有注册目标时为 true——方块变更钩子的最外层免费闸门。 */
+    /** 有任何维度有登记时为 true——方块变更钩子的最外层免费闸门。 */
     private static volatile boolean anyActive;
     private static final Map<ResourceKey<Level>, LevelIndex> INDEXES = new HashMap<>();
-    private static int sweepTimer;
 
     /** 一个维度的索引。 */
     private static final class LevelIndex {
-        /** 目标方块 → 注册计数(多个任务可共享同一目标)。 */
-        final Reference2IntOpenHashMap<Block> targetRefs = new Reference2IntOpenHashMap<>();
+        /** 目标方块 → 登记计数(多个搜索与任务可共享同一目标)。 */
+        final Reference2IntOpenHashMap<Block> refs = new Reference2IntOpenHashMap<>();
+        /** 目标方块 → 它这一轮登记开始时的时间戳。 */
+        final Reference2LongOpenHashMap<Block> since = new Reference2LongOpenHashMap<>();
         /** SectionPos.asLong → 条目。 */
         final Long2ObjectOpenHashMap<SectionEntry> sections = new Long2ObjectOpenHashMap<>();
-        /** 目标集合的版本号:成员增减时自增,旧版本条目查询时懒重建。 */
-        int version = 1;
+        /** 单调递增:每有一种方块开始一轮新登记就加一,条目按它记构建时刻。 */
+        long stamp;
+
+        /** 这个条目对这些方块都可信吗。 */
+        boolean fresh(SectionEntry e, Collection<Block> targets) {
+            for (Block b : targets) {
+                if (!refs.containsKey(b) || since.getLong(b) > e.builtAt) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
-    /** 一个 section 的条目:该段内每种目标的打包位置(y<<8|z<<4|x),或饱和标记。 */
-    private static final class SectionEntry {
-        final int version;
+    /** 一个 section 的条目:该段内每种登记方块的打包位置(y<<8|z<<4|x),或饱和标记。 */
+    static final class SectionEntry {
+        final long builtAt;
         final Reference2ObjectOpenHashMap<Block, short[]> hits = new Reference2ObjectOpenHashMap<>();
 
-        SectionEntry(int version) {
-            this.version = version;
+        SectionEntry(long builtAt) {
+            this.builtAt = builtAt;
         }
 
         void add(Block b, short packed) {
@@ -109,7 +118,7 @@ public final class TargetIndex {
         void remove(Block b, short packed) {
             short[] arr = hits.get(b);
             if (arr == null || arr == SATURATED) {
-                return;   // 饱和段轻微高估无害:消费端取用时还会活世界复验
+                return;   // 饱和段不枚举位置,取用时现场取位,轻微高估无害
             }
             for (int i = 0; i < arr.length; i++) {
                 if (arr[i] == packed) {
@@ -125,59 +134,59 @@ public final class TargetIndex {
                 }
             }
         }
+
+        /** 这些目标里有没有在本段饱和的——取用它要现场读整节。 */
+        boolean saturatedAny(Collection<Block> targets) {
+            for (Block b : targets) {
+                if (hits.get(b) == SATURATED) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
-    /** 查询结果:命中(环序,近似由近及远)+ 覆盖是否完整(构建预算未耗尽即真)。 */
-    public record Result(List<BlockPos> hits, boolean complete) {}
+    // ==================== 登记 ====================
 
-    // ==================== 注册 ====================
-
-    /** 任务开始时登记其目标方块(计数式,可重入)。 */
-    public static void register(ServerLevel level, Collection<Block> blocks) {
-        LevelIndex idx = INDEXES.computeIfAbsent(level.dimension(), k -> new LevelIndex());
-        boolean changed = false;
+    static void register(ResourceKey<Level> dimension, Collection<Block> blocks) {
+        LevelIndex idx = INDEXES.computeIfAbsent(dimension, k -> new LevelIndex());
         for (Block b : blocks) {
-            if (idx.targetRefs.addTo(b, 1) == 0) {
-                changed = true;
+            if (idx.refs.addTo(b, 1) == 0) {
+                idx.since.put(b, ++idx.stamp);
             }
-        }
-        if (changed) {
-            idx.version++;
         }
         anyActive = true;
     }
 
-    /** 任务结束时注销;该维度最后一个目标注销后整个索引释放。 */
-    public static void unregister(ServerLevel level, Collection<Block> blocks) {
-        LevelIndex idx = INDEXES.get(level.dimension());
+    /** 该维度最后一个登记注销后整个索引释放。没登记过的方块不计数。 */
+    static void unregister(ResourceKey<Level> dimension, Collection<Block> blocks) {
+        LevelIndex idx = INDEXES.get(dimension);
         if (idx == null) {
             return;
         }
-        boolean changed = false;
         for (Block b : blocks) {
-            if (idx.targetRefs.addTo(b, -1) == 1) {
-                idx.targetRefs.removeInt(b);
-                changed = true;
+            int n = idx.refs.getInt(b);
+            if (n <= 1) {
+                idx.refs.removeInt(b);
+                idx.since.removeLong(b);
+            } else {
+                idx.refs.put(b, n - 1);
             }
         }
-        if (changed) {
-            idx.version++;
-        }
-        if (idx.targetRefs.isEmpty()) {
-            INDEXES.remove(level.dimension());
+        if (idx.refs.isEmpty()) {
+            INDEXES.remove(dimension);
         }
         anyActive = !INDEXES.isEmpty();
     }
 
     // ==================== 供给:方块变更钩子 ====================
 
-    /** 由 ServerLevel.onBlockStateChange 的 mixin 调用——服务端每次方块变化都会路过这里。 */
-    public static void onBlockChange(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
+    static void onBlockChange(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
         if (!anyActive) {
             return;
         }
         if (!level.getServer().isSameThread()) {
-            return;   // worldgen 线程的写入:该区块尚未被索引,加载后懒构建自然收录
+            return;   // worldgen 线程的写入:该区块尚未被读过,首次被搜索时懒构建自然收录
         }
         LevelIndex idx = INDEXES.get(level.dimension());
         if (idx == null) {
@@ -185,17 +194,18 @@ public final class TargetIndex {
         }
         Block ob = oldState.getBlock();
         Block nb = newState.getBlock();
-        boolean oldT = idx.targetRefs.containsKey(ob);
-        boolean newT = idx.targetRefs.containsKey(nb);
+        boolean oldT = idx.refs.containsKey(ob);
+        boolean newT = idx.refs.containsKey(nb);
         if ((!oldT && !newT) || ob == nb) {
             return;
         }
         long key = SectionPos.asLong(SectionPos.blockToSectionCoord(pos.getX()),
                 SectionPos.blockToSectionCoord(pos.getY()), SectionPos.blockToSectionCoord(pos.getZ()));
         SectionEntry e = idx.sections.get(key);
-        if (e == null || e.version != idx.version) {
-            return;   // 未建/已过期:下次查询重建时读的就是新状态
+        if (e == null) {
+            return;   // 没读过:下次搜索构建时读的就是新状态
         }
+        // 对这一种方块不新鲜的条目也照记:它在被用来回答这种方块之前一定会先重建
         short packed = pack(pos);
         if (oldT) {
             e.remove(ob, packed);
@@ -205,101 +215,37 @@ public final class TargetIndex {
         }
     }
 
-    // ==================== 查询 ====================
+    // ==================== 读 ====================
 
     /**
-     * 从 {@code center} 按 chebyshev 区块环由近及远收集 {@code targets} 的位置。哪一节先看、
-     * 什么时候可以不看了,判据在 {@link SearchGeometry} ——和现扫的 {@link BlockSearch} 同一份,
-     * 同一片地不会给出两种"最近"。收工是精确的:攒够的 {@code want} 个已经比下一环最近的可能
-     * 还近才停。
-     *
-     * <p>只读索引;未建条目就地构建,每次调用最多构建 {@code buildBudget} 个 section(预算耗尽
-     * 返回 {@code complete=false},调用方稍后再查,冷区域在几次查询内渐进变热)。未加载区块
-     * 跳过——索引只回答已加载世界。
+     * 不花读节配额就能拿到的条目:已有且对 {@code targets} 新鲜的,或者 palette 预筛就能断定不含任何登记
+     * 方块的(当场记成空条目——常驻加载的大片空段按真构建计价的话,配额会在空气上烧光)。
+     * 需要真读一遍才答得了时返回 null。
      */
-    public static Result query(ServerLevel level, BlockPos center, Collection<Block> targets,
-                               int want, int maxChunkRadius, int buildBudget) {
-        LevelIndex idx = INDEXES.get(level.dimension());
+    static SectionEntry cached(ResourceKey<Level> dimension, LevelChunkSection section, long key,
+                               Collection<Block> targets) {
+        LevelIndex idx = INDEXES.get(dimension);
         if (idx == null) {
-            return new Result(List.of(), true);
+            return null;
         }
-        List<BlockPos> out = new ArrayList<>();
-        int centerCx = SectionPos.blockToSectionCoord(center.getX());
-        int centerCz = SectionPos.blockToSectionCoord(center.getZ());
-        int minSection = level.getMinSection();
-        int sectionCount = level.getSectionsCount();
-        int[] sectionOrder = SearchGeometry.sectionOrder(minSection, minSection + sectionCount - 1,
-                SectionPos.blockToSectionCoord(center.getY()));
-        SearchGeometry.NearestBound bound = new SearchGeometry.NearestBound(want);
-        int fed = 0;
-        int budget = buildBudget;
-        boolean complete = true;
-
-        outer:
-        for (int r = 0; r <= maxChunkRadius; r++) {
-            for (int cx = centerCx - r; cx <= centerCx + r; cx++) {
-                for (int cz = centerCz - r; cz <= centerCz + r; cz++) {
-                    if (Math.max(Math.abs(cx - centerCx), Math.abs(cz - centerCz)) != r) {
-                        continue;   // 只走环壳
-                    }
-                    LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
-                    if (chunk == null) {
-                        continue;
-                    }
-                    LevelChunkSection[] secs = chunk.getSections();
-                    for (int sy : sectionOrder) {
-                        int si = sy - minSection;
-                        if (si < 0 || si >= secs.length) {
-                            continue;
-                        }
-                        long key = SectionPos.asLong(cx, sy, cz);
-                        SectionEntry e = idx.sections.get(key);
-                        if (e == null || e.version != idx.version) {
-                            // 预算只计两趟扫描(计数+收位)的真构建。palette 预筛排除的段
-                            // (纯空气/不含目标)是 O(palette) 的,记零成本直接落缓存——
-                            // 常驻加载的大片空段(出生区块、平坦世界)按真构建计价的话,
-                            // 预算会在空气上烧光,覆盖永远到不了头。
-                            if (triviallyEmpty(secs[si], idx)) {
-                                e = new SectionEntry(idx.version);
-                                idx.sections.put(key, e);
-                            } else {
-                                if (budget <= 0) {
-                                    complete = false;
-                                    break outer;
-                                }
-                                budget--;
-                                e = build(secs[si], idx);
-                                idx.sections.put(key, e);
-                            }
-                        }
-                        collect(e, secs[si], cx, sy, cz, targets, want, out);
-                        while (fed < out.size()) {
-                            bound.offer(Math.sqrt(out.get(fed++).distSqr(center)));
-                        }
-                    }
-                }
-            }
-            if (SearchGeometry.canStop(r, bound)) {
-                break;   // 攒够的这批已经比下一环最近的可能还近
-            }
-        }
-        return new Result(out, complete);
-    }
-
-    /** palette 预筛:这个 section 一定不含任何目标(纯空气,或调色板里就没有)。 */
-    private static boolean triviallyEmpty(LevelChunkSection section, LevelIndex idx) {
-        var targets = idx.targetRefs.keySet();
-        return section == null || section.hasOnlyAir()
-                || !section.maybeHas(state -> targets.contains(state.getBlock()));
-    }
-
-    /** 构建一个 section 的条目:palette 预筛 → 一趟计数定饱和 → 一趟收位。 */
-    private static SectionEntry build(LevelChunkSection section, LevelIndex idx) {
-        SectionEntry e = new SectionEntry(idx.version);
-        if (triviallyEmpty(section, idx)) {
+        SectionEntry e = idx.sections.get(key);
+        if (e != null && idx.fresh(e, targets)) {
             return e;
         }
-        var targets = idx.targetRefs.keySet();
+        if (triviallyEmpty(section, idx)) {
+            e = new SectionEntry(idx.stamp);
+            idx.sections.put(key, e);
+            return e;
+        }
+        return null;
+    }
+
+    /** 真读一遍建条目:一趟计数定饱和 → 一趟收位。收的是此刻登记着的全部方块。 */
+    static SectionEntry build(ResourceKey<Level> dimension, LevelChunkSection section, long key) {
+        LevelIndex idx = INDEXES.get(dimension);
+        SectionEntry e = new SectionEntry(idx.stamp);
+        idx.sections.put(key, e);
+        Set<Block> targets = idx.refs.keySet();
         Reference2IntOpenHashMap<Block> counts = new Reference2IntOpenHashMap<>();
         section.getStates().count((state, n) -> {
             Block b = state.getBlock();
@@ -339,79 +285,114 @@ public final class TargetIndex {
         return e;
     }
 
-    /** 把条目中所请求目标的位置追加进 {@code out};饱和目标对该一个 section 现场取位。 */
-    private static void collect(SectionEntry e, LevelChunkSection section,
-                                int cx, int sy, int cz, Collection<Block> targets,
-                                int want, List<BlockPos> out) {
+    /**
+     * 把条目里 {@code targets} 落在球内的格子追加进 {@code out}:状态现读,方块不再是目标的不算;
+     * 饱和的目标对这一个 section 现场取位。
+     */
+    static void collect(SectionEntry e, LevelChunkSection section, int cx, int sy, int cz,
+                        Set<Block> targets, BlockPos center, int radius, double radiusSq,
+                        List<BlockScanner.Hit> out) {
         if (e.hits.isEmpty()) {
             return;
         }
         int baseX = SectionPos.sectionToBlockCoord(cx);
         int baseY = SectionPos.sectionToBlockCoord(sy);
         int baseZ = SectionPos.sectionToBlockCoord(cz);
+        var states = section.getStates();
         for (Block b : targets) {
             short[] arr = e.hits.get(b);
             if (arr == null) {
                 continue;
             }
             if (arr == SATURATED) {
-                // 铺天盖地的目标:就地对这一个 section 取位,凑到 want 即止
-                var states = section.getStates();
-                for (int y = 0; y < 16 && out.size() < want; y++) {
-                    for (int z = 0; z < 16 && out.size() < want; z++) {
-                        for (int x = 0; x < 16 && out.size() < want; x++) {
-                            if (states.get(x, y, z).getBlock() == b) {
-                                out.add(new BlockPos(baseX | x, baseY + y, baseZ | z));
-                            }
+                for (int y = 0; y < 16; y++) {
+                    for (int z = 0; z < 16; z++) {
+                        for (int x = 0; x < 16; x++) {
+                            offer(states.get(x, y, z), b, baseX + x, baseY + y, baseZ + z,
+                                    center, radius, radiusSq, out);
                         }
                     }
                 }
                 continue;
             }
             for (short p : arr) {
-                out.add(new BlockPos(baseX | (p & 15), baseY + (p >> 8 & 15), baseZ | (p >> 4 & 15)));
+                int x = p & 15;
+                int y = p >> 8 & 15;
+                int z = p >> 4 & 15;
+                offer(states.get(x, y, z), b, baseX + x, baseY + y, baseZ + z, center, radius, radiusSq, out);
             }
         }
     }
 
-    // ==================== 生命周期 ====================
-
-    /** 每服务端 tick 调用(各 loader 的 tick 钩子);周期性驱逐已卸载区块的条目。 */
-    public static void serverTick(MinecraftServer server) {
-        if (INDEXES.isEmpty() || ++sweepTimer < EVICT_SWEEP_TICKS) {
+    private static void offer(BlockState state, Block wanted, int x, int y, int z,
+                              BlockPos center, int radius, double radiusSq, List<BlockScanner.Hit> out) {
+        if (state.getBlock() != wanted) {
             return;
         }
-        sweepTimer = 0;
+        int dx = x - center.getX();
+        int dy = y - center.getY();
+        int dz = z - center.getZ();
+        if (dx < -radius || dx > radius || dy < -radius || dy > radius || dz < -radius || dz > radius) {
+            return;
+        }
+        double distSq = (double) dx * dx + (double) dy * dy + (double) dz * dz;
+        if (distSq > radiusSq) {
+            return;
+        }
+        out.add(new BlockScanner.Hit(new BlockPos(x, y, z), state, Math.sqrt(distSq)));
+    }
+
+    /** palette 预筛:这个 section 一定不含任何登记方块(纯空气,或调色板里就没有)。 */
+    private static boolean triviallyEmpty(LevelChunkSection section, LevelIndex idx) {
+        var targets = idx.refs.keySet();
+        return section == null || section.hasOnlyAir()
+                || !section.maybeHas(state -> targets.contains(state.getBlock()));
+    }
+
+    // ==================== 生命周期 ====================
+
+    /**
+     * 驱逐已卸载区块的条目,并丢掉条目里已经没人登记的方块的位置——它们不再有钩子维护,
+     * 再登记时一定先重建,留着只占内存。
+     */
+    static void sweep(MinecraftServer server) {
         for (Map.Entry<ResourceKey<Level>, LevelIndex> le : INDEXES.entrySet()) {
+            LevelIndex idx = le.getValue();
             ServerLevel level = server.getLevel(le.getKey());
             if (level == null) {
-                le.getValue().sections.clear();
+                idx.sections.clear();
                 continue;
             }
             long lastChunkKey = Long.MIN_VALUE;
             boolean lastLoaded = false;
-            var it = le.getValue().sections.long2ObjectEntrySet().fastIterator();
+            var it = idx.sections.long2ObjectEntrySet().fastIterator();
             while (it.hasNext()) {
-                long key = it.next().getLongKey();
+                var en = it.next();
+                long key = en.getLongKey();
                 int cx = SectionPos.x(key);
                 int cz = SectionPos.z(key);
                 long chunkKey = (long) cx << 32 | (cz & 0xFFFFFFFFL);
                 if (chunkKey != lastChunkKey) {
                     lastChunkKey = chunkKey;
-                    lastLoaded = level.getChunkSource().getChunkNow(cx, cz) != null;
+                    lastLoaded = BlockScanner.loadedChunk(level, cx, cz) != null;
                 }
                 if (!lastLoaded) {
                     it.remove();
+                } else if (!en.getValue().hits.isEmpty()) {
+                    en.getValue().hits.keySet().removeIf(b -> !idx.refs.containsKey(b));
                 }
             }
         }
     }
 
+    static boolean isEmpty() {
+        return INDEXES.isEmpty();
+    }
+
     /** 服务器停止时清空(别钉住旧世界)。 */
-    public static void dropAll() {
+    static void dropAll() {
         INDEXES.clear();
         anyActive = false;
-        sweepTimer = 0;
     }
 
     private static short pack(BlockPos pos) {

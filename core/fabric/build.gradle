@@ -11,6 +11,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
     // The numen-api engine, now a sibling loom project in this build. namedElements
     // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
+    //
     // api 而非 implementation:引擎的类型出现在 core 的公开签名里
     // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
     // implementation 在 POM 里落成 runtime,想扩展 core 的人拿得到 jar 却编译不了。
@@ -65,6 +66,11 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 // 目标模组不在时它一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
 tasks.named('jar', Jar) {
     from({ project(':plugins:ysm').sourceSets.main.output })
+}
+
+// 跟车发的联动,它的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:ysm:test')
 }
 
 // Implement mcgradleconventions loader attribute

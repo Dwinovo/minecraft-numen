@@ -3,9 +3,9 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.CompanionRegistry;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -35,7 +35,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
     public static final Type<LocateNumenPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "locate_numen"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, LocateNumenPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, LocateNumenPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_UUIDS)),
                     LocateNumenPayload::entityUuids,
@@ -73,6 +73,6 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
             }
             out.add(NumenLocationsPayload.Snapshot.notFound(uuid));
         }
-        Services.NETWORK.sendToPlayer(player, new NumenLocationsPayload(out));
+        NumenNetwork.sendToPlayer(player, new NumenLocationsPayload(out));
     }
 }

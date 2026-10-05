@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins;
 
+import com.dwinovo.numen.core.ModJar;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.minecraft.server.MinecraftServer;
@@ -29,10 +30,8 @@ public final class Builtin {
     private Builtin() {}
 
     public static void registerAll(IEventBus modBus) {
-        Gate gate = new Gate(ModList.get()::isLoaded);
+        Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnNeoForge.install(skills));
-        gate.open("touhou_little_maid", "tlm",
-                skills -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, skills));
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */

@@ -1,8 +1,12 @@
 package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.pathing.body.Body;
+import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.pathing.body.Physics;
 
 import com.mojang.authlib.GameProfile;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -10,9 +14,12 @@ import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,8 +38,12 @@ import java.util.UUID;
  * {@link #addAdditionalSaveData}. Owner checks are UUID comparisons — never
  * vanilla {@code isOwnedBy} (which resolves through a level and breaks across
  * dimensions).
+ *
+ * <h2>身体</h2>
+ * 她就是寻路模块的身体端口({@link Body}):一副键盘({@link Controls}),导航、本能与各件活按的都是它;每刻在自己的实体刻里
+ * 跑一次物理步进({@link Physics#step}),按着的键在那里落成输入。
  */
-public final class NumenPlayer extends ServerPlayer {
+public final class NumenPlayer extends ServerPlayer implements Body {
 
     private static final String NBT_KEY_OWNER = "NumenOwner";
 
@@ -41,6 +52,12 @@ public final class NumenPlayer extends ServerPlayer {
 
     /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
     private boolean deathHandled;
+
+    /** 她没有客户端,服务端等的那几个回执由它代答。见 {@link FakeClient}。 */
+    private final FakeClient fakeClient = new FakeClient(this);
+
+    /** 她的键盘:谁要让身体走、跳、潜行都按它,{@link Physics#step} 每刻落一次。 */
+    private final Controls controls = new Controls();
 
     /**
      * 死因,在 {@link #die} 里趁早抄下来。
@@ -133,6 +150,93 @@ public final class NumenPlayer extends ServerPlayer {
         return true;
     }
 
+    /**
+     * 这一轮"背包满了"已经说过了。背包满是持续状态,掉落物每刻都在碰她——不去抖就是每刻一条;背包里又有空格了才重新武装。
+     */
+    private boolean fullReported;
+
+    /** 因背包放不下而留在地上、还没说出去的那一件;没有是 null。 */
+    private LeftBehind leftBehind;
+
+    /** 一件因背包放不下而留在地上的东西:是什么、几个、在哪一格。 */
+    public record LeftBehind(ItemStack stack, BlockPos pos) {}
+
+    /**
+     * 一件掉落物碰到了她,原版正要往背包里放(由 {@code ItemEntityTouchMixin} 交来)。放不放得下照原版背包找格子的两步:有一格还能
+     * 叠上它({@code getSlotWithRemainingSpace}),或者有空格({@code getFreeSlot});创造模式什么都收。放不下的记下来,由
+     * {@link #pollInventoryFull} 交出去。"满了"只在这里判:挖、捡、合成这些活不各自判。
+     */
+    public void touchedItem(ItemEntity item) {
+        if (fullReported || leftBehind != null || hasInfiniteMaterials()) {
+            return;
+        }
+        Inventory inventory = getInventory();
+        ItemStack stack = item.getItem();
+        if (inventory.getSlotWithRemainingSpace(stack) != -1 || inventory.getFreeSlot() != -1) {
+            return;
+        }
+        leftBehind = new LeftBehind(stack.copy(), item.blockPosition());
+    }
+
+    /**
+     * 这一刻该不该跟主人说"背包满了、东西留在了地上"。每服务端 tick 问一次(见 {@code CompanionTickDispatcher})。<b>一轮只说
+     * 一次</b>,复位见 {@link #rearmInventoryFull}。
+     */
+    public LeftBehind pollInventoryFull() {
+        if (leftBehind == null) {
+            return null;
+        }
+        LeftBehind told = leftBehind;
+        leftBehind = null;
+        fullReported = true;
+        return told;
+    }
+
+    /**
+     * 背包里又有了空格就重新武装:有空格就什么都放得下,下一回再满、再有东西放不下时再说;还没说出去的那一件也作废。在自己的
+     * 实体刻里、捡东西之前看——腾出的那一格要是这一刻就被捡起的东西占上,事后再看就看不见它空过。
+     */
+    private void rearmInventoryFull() {
+        if (getInventory().getFreeSlot() != -1) {
+            fullReported = false;
+            leftBehind = null;
+        }
+    }
+
+    /** 一件在她身上用坏的装备:是什么、坏在哪个装备位。 */
+    public record BrokenGear(Item item, EquipmentSlot slot) {}
+
+    /** 最近用坏的装备,按先后;只留最近 {@link #BROKEN_KEPT} 件。 */
+    private final java.util.ArrayList<BrokenGear> brokenGear = new java.util.ArrayList<>();
+    /** 到现在一共用坏过几件:{@link #brokenGearMark} 读它,{@link #brokenGearSince} 拿它算新坏的是哪几件。 */
+    private long brokenGearTotal;
+    private static final int BROKEN_KEPT = 16;
+
+    /**
+     * 原版装备耐久耗尽、碎掉的那一刻(挖掘、打击、盾挡、鞘翅……都经 {@code ItemStack.hurtAndBreak} 到这里)。记下来,
+     * 干活的人事后用 {@link BodyDelta} 说给她听;这里只记流水,不替谁下结论。
+     */
+    @Override
+    public void onEquippedItemBroken(Item item, EquipmentSlot slot) {
+        super.onEquippedItemBroken(item, slot);
+        if (brokenGear.size() == BROKEN_KEPT) {
+            brokenGear.remove(0);
+        }
+        brokenGear.add(new BrokenGear(item, slot));
+        brokenGearTotal++;
+    }
+
+    /** 此刻用坏过几件的读数;之后问 {@link #brokenGearSince} 就是这个读数以来新坏的。 */
+    public long brokenGearMark() {
+        return brokenGearTotal;
+    }
+
+    /** 读数 {@code mark} 以来用坏的装备,按先后。 */
+    public List<BrokenGear> brokenGearSince(long mark) {
+        int fresh = (int) Math.min(brokenGearTotal - mark, brokenGear.size());
+        return List.copyOf(brokenGear.subList(brokenGear.size() - fresh, brokenGear.size()));
+    }
+
     /** 主人血量的看护(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */
     private final OwnerHurtWatch ownerWatch = new OwnerHurtWatch();
 
@@ -194,6 +298,20 @@ public final class NumenPlayer extends ServerPlayer {
         pausedReflexes = java.util.Set.of();
     }
 
+    /**
+     * 挂在这具身体上的同伴级状态,按类型各一份(征询登记处、等主人答复的调用之类)。
+     *
+     * <p>与 {@link #pausedReflexes} 同一原则——<b>跟着身体走,不进静态表</b>:身体没了状态
+     * 就没了,休眠回来是新身体、新状态,不用给每一种状态各配一套离场清理;引擎不认识
+     * 内容包的类型,所以按类型取、首次取时由调用方建。
+     */
+    private final java.util.Map<Class<?>, Object> bodyState = new java.util.HashMap<>();
+
+    /** 取(首次取时建)这具身体上的一份同伴级状态。 */
+    public <T> T state(Class<T> type, java.util.function.Supplier<T> init) {
+        return type.cast(bodyState.computeIfAbsent(type, k -> init.get()));
+    }
+
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
     public static NumenPlayer findByUuid(MinecraftServer server, UUID uuid) {
         return server.getPlayerList().getPlayer(uuid) instanceof NumenPlayer ap ? ap : null;
@@ -217,6 +335,26 @@ public final class NumenPlayer extends ServerPlayer {
         return ownerUuid == null ? null : level().getServer().getPlayerList().getPlayer(ownerUuid);
     }
 
+    /**
+     * The owner's name for people to read ({@link #playerName}); empty when there is no owner or the name is unknown.
+     */
+    public String ownerName() {
+        return ownerUuid == null ? "" : playerName(getServer(), ownerUuid);
+    }
+
+    /**
+     * A player's name for people to read: the online player's (a companion is one too), else the server's profile
+     * cache; empty when the name is unknown.
+     */
+    public static String playerName(net.minecraft.server.MinecraftServer server, UUID player) {
+        ServerPlayer online = server.getPlayerList().getPlayer(player);
+        return online != null ? online.getGameProfile().getName()
+                : java.util.Optional.ofNullable(server.getProfileCache())
+                        .flatMap(cache -> cache.get(player))
+                        .map(com.mojang.authlib.GameProfile::getName)
+                        .orElse("");
+    }
+
 
     /** True if {@code item} sits anywhere in the inventory (hotbar/main/offhand all count). */
     public boolean ensureInInventory(Item item) {
@@ -225,29 +363,6 @@ public final class NumenPlayer extends ServerPlayer {
             if (inv.getItem(i).is(item)) return true;
         }
         return false;
-    }
-
-    /**
-     * Hold the item in inventory slot {@code slot} in the main hand the way a real player
-     * does — a hotbar slot is simply SELECTED (number-key); a main-inventory slot is SWAPPED
-     * into the currently selected hotbar slot (item-conserving). This is the only correct way
-     * to "switch to hand": calling {@code setItemInHand(MAIN_HAND, stack)} overwrites the held
-     * item (losing it) and aliases ONE {@link net.minecraft.world.item.ItemStack} across two
-     * slots, which corrupts the inventory once the stack is consumed. No-op for {@code slot < 0}.
-     */
-    public void holdInHand(int slot) {
-        if (slot < 0) {
-            return;
-        }
-        var inv = getInventory();
-        if (net.minecraft.world.entity.player.Inventory.isHotbarSlot(slot)) {
-            inv.selected = slot;
-            return;
-        }
-        int selected = inv.selected;
-        net.minecraft.world.item.ItemStack held = inv.getItem(selected);
-        inv.setItem(selected, inv.getItem(slot));
-        inv.setItem(slot, held);
     }
 
     /**
@@ -268,21 +383,6 @@ public final class NumenPlayer extends ServerPlayer {
         return true;
     }
 
-    // ---- server tick (restore the movement pass a fake connection skips) ----
-
-    /**
-     * Drive the body's own movement physics. A real {@link ServerPlayer} runs
-     * {@code travel} (against {@code zza}/{@code xxa}), food, air and pose inside
-     * {@link #doTick()}, which the network layer invokes via
-     * {@code connection.tick()}. A fake player's connection is a no-op, so
-     * {@code doTick()} never fires and the body would only ever turn (a direct
-     * {@code setYRot} write) without walking. The entity system already calls
-     * {@code super.tick()} (menus / container / position sync), so we add the
-     * missing {@code doTick()} movement pass here in our own {@code tick()}
-     * override. Every 10 ticks we resync the
-     * connection position and let chunk loading follow the body so it never
-     * walks out of its loaded area.
-     */
     /**
      * 挨打。原样交给父类结算,只在真的掉了血之后广播一条 {@code HURT}。
      *
@@ -315,6 +415,24 @@ public final class NumenPlayer extends ServerPlayer {
         return deathMessage;
     }
 
+    /** 代她答话的那一半(她没有客户端);下行包由 {@code MixinServerCommonPacketListener} 交到这里。 */
+    @com.dwinovo.numen.api.Internal
+    public FakeClient fakeClient() {
+        return fakeClient;
+    }
+
+    // ---- 身体端口 ----
+
+    @Override
+    public ServerPlayer entity() {
+        return this;
+    }
+
+    @Override
+    public Controls controls() {
+        return controls;
+    }
+
     @Override
     public void tick() {
         // A fake player isn't auto-removed on death (no client to send a respawn packet), so it would
@@ -325,31 +443,19 @@ public final class NumenPlayer extends ServerPlayer {
             Companions.onDeath(this);
             return;
         }
-        if (level() instanceof ServerLevel sl && sl.getGameTime() % 10 == 0) {
-            this.connection.resetPosition();
-            sl.getChunkSource().move(this);
-        }
+        rearmInventoryFull();
         try {
             super.tick();
         } catch (RuntimeException ex) {
             reportTickFailure(ex);
         }
-        // 摔落结算是玩家<b>唯一</b>由客户端权威的物理:{@code Entity.move} 里那一处被
-        // {@code isLocalInstanceAuthoritative()} 挡着(Player.isClientAuthoritative()
-        // 恒为 true,服务端算出来就是 false),真正结算的是收到移动包时的
-        // {@code doCheckFallDamage}。空壳玩家的连接是空的,那个包永远不来 —— 于是她既
-        // 不掉血,{@code fallDistance} 也永远是 0。和上面补 doTick() 是同一件事:
-        // 网络层漏掉的那一趟,按原版原样补回来。
-        net.minecraft.world.phys.Vec3 before = position();
+        // 她没有客户端:按着的键落成输入、玩家自己的一刻、摔伤结算、移动统计、区块跟随,原版由客户端与网络层替真玩家
+        // 做的这一趟,由寻路模块的物理步进在这里补上,每刻一次
         try {
-            this.doTick();
+            Physics.step(this);
         } catch (RuntimeException ex) {
             reportTickFailure(ex);
         }
-        // 位移只框住上面这一段。召唤、重生、跨维度都发生在 tick 之外,下一刻 before 读到的
-        // 已经是新位置,位移天然为零 —— 不需要另写传送豁免。
-        net.minecraft.world.phys.Vec3 moved = position().subtract(before);
-        doCheckFallDamage(moved.x, moved.y, moved.z, onGround());
     }
 
     /** 同一具身体只吵一次:tick 每秒二十下,真炸起来就是每秒二十条,日志立刻没法看。 */

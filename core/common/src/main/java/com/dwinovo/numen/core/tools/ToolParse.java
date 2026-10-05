@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.core.init.InitTag;
-import com.dwinovo.numen.core.task.MouseButton;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -15,9 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 工具入口共享的参数解析件——此前 scan_blocks 与 mine 各抄一份方块 id
- * 解析、interact_at 与 interact_entity 各抄一份按键解析,在这里合一。
- * 物品 id 解析用引擎的 {@code ToolArgs.parseItem},不在此重复。
+ * 工具入口共享的参数解析件:方块 id 与标签展开成方块集。物品 id 由 SDK 的值转换读。
  */
 public final class ToolParse {
 
@@ -53,18 +50,5 @@ public final class ToolParse {
             if (b != null && b != Blocks.AIR) out.add(b);
         }
         return out;
-    }
-
-    /** 左键=攻击、右键=使用;缺参或非法值直接报参数错。 */
-    public static MouseButton parseButton(String button) {
-        if (button == null) {
-            throw new IllegalArgumentException("missing required argument: button");
-        }
-        return switch (button) {
-            case "left" -> MouseButton.LEFT;
-            case "right" -> MouseButton.RIGHT;
-            default -> throw new IllegalArgumentException(
-                    "button must be 'left' or 'right', got: " + button);
-        };
     }
 }

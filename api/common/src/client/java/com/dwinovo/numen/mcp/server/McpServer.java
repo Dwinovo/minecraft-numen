@@ -1,6 +1,8 @@
 package com.dwinovo.numen.mcp.server;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenActuator;
@@ -36,9 +38,11 @@ import java.util.concurrent.TimeoutException;
  * POST and its response goes straight back in the HTTP body.
  *
  * <h2>Tool surface</h2>
- * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set)
- * is advertised with an extra {@code companion} argument, and calls route to
- * {@link NumenActuator#invoke}. Three management tools — {@code list_companions},
+ * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set) —
+ * the script tool, the skill tool, the todo tool, plus the tools of remote MCP servers the owner connected — is
+ * advertised with an extra {@code companion} argument, and calls route to
+ * {@link NumenActuator#invoke}: a program runs through the companion's own
+ * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
  * {@code create_companion}, {@code delete_companion} — wrap the actuator's roster
  * methods. There is no take-control handshake: 模式开启期间内置大脑一轮都不开
  * (见 {@link McpMode}), 所以外部驱动者直接派活即可。Since every call is addressed
@@ -60,6 +64,14 @@ public final class McpServer {
     private static final int SUMMARY_LIMIT = 90;
 
     /**
+     * 外接大脑读的那条身体规则:内脑读的同一句({@link NumenPrompts#ONE_BODY}),接上这一侧怎么把几件活排开——外接大脑的
+     * 调用没有"同一轮",每一条当场执行,要一件做完再派下一件就自己等身体空闲。说明与接入提示词({@link McpAccessPrompt})
+     * 都用这一句。
+     */
+    static final String ONE_BODY = NumenPrompts.ONE_BODY + " A program waits for each body task it starts, so jobs "
+            + "written one after another in one program run one after another.";
+
+    /**
      * Sent to the connecting agent in the {@code initialize} handshake (MCP's
      * {@code instructions} field) — what Numen is and how to drive it, so any
      * client gets the essentials without a separately-installed skill.
@@ -72,26 +84,39 @@ public final class McpServer {
             of it. Drive the body directly — there is no 'take control' handshake.
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
-            delete_companion to dismiss one for good; (2) perceive with get_self_status / scan_blocks / \
-            scan_nearby_entities; (3) act with goto / mine / build / craft / equip_item / \
-            attack / etc. Action tools return a task_id at once — poll task_status until the body is idle, \
-            then perceive to confirm. Every action tool takes a 'companion' argument (name or id), so each \
-            call targets one companion; just drive it, there is no take-control step.
+            delete_companion to dismiss one for good; (2) everything else is one tool, %s: a program \
+            whose functions are the companion's API — perceive with numen.status.self(), numen.scan.blocks(...), \
+            numen.scan.entities(...); act with numen.move.to(...), numen.work.dig(...), numen.build.place(...), numen.fight.attack(...), \
+            numen.inv.craft(...), …; numen.api.help("numen.work") lists a group's functions and numen.api.help("numen.work.dig") gives one \
+            function's full help. A program returns one receipt when it ends: how it ended, then stderr \
+            (what the body did and what failed, one entry per call that had something to say), what it returned \
+            and stdout (what it printed). It waits for each body task it starts to finish, so a long \
+            job returns when it is done, with the task's account of what it changed in its stderr entry. Every call takes a 'companion' argument (name or id), so each call targets \
+            one companion; just drive it, there is no take-control step. The %s tool loads one of the \
+            companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
+            does not know answers with the list of the skills it can use. The %s tool writes down your plan for \
+            work of several phases (the whole plan each call, replacing the last one); the owner sees it as a \
+            checklist. The %s tool keeps the companion's own notes (remember, recall, forget); their index \
+            comes with every turn of its own brain.
 
-            Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
-            give or setblock). You are blind between calls, so perceive before and after acting. Action \
-            tools return only when the task finishes or times out. You can drive several companions in \
-            parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
+            Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
+            give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
+            drive several companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) \
+            work natively.
 
             You also carry the companion's conversation: call get_events(companion) about every 2 \
             seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
             something urgent lands, so you get the wheel back every couple of seconds and can act on \
             your own initiative instead of only reacting. The owner speaking to the companion (in-game \
-            chat or voice) arrives as a <query>; world happenings arrive as <event>s. Reply with \
+            chat or voice) arrives as a <query> and stops a running program between two calls; the task \
+            it was waiting for keeps running, and its end arrives as a task_finished <event> among the \
+            world happenings. Reply with \
             say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
-            you deliberately want to park and wait for the owner to speak.""";
+            you deliberately want to park and wait for the owner to speak.""".formatted(
+            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.agent.tool.SkillTool.NAME,
+            com.dwinovo.numen.agent.tool.TodoTool.NAME, com.dwinovo.numen.agent.tool.MemoryTool.NAME, ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();
@@ -258,7 +283,8 @@ public final class McpServer {
                 requiredStringSchema("name",
                         "The new companion's name (3–16 letters, digits, or underscore).")));
         tools.add(toolDef("delete_companion",
-                "Permanently dismiss a companion — it drops its inventory and is gone for good. Takes its name or id.",
+                "Permanently dismiss a companion — it drops its inventory, armor and accessories and is gone for good. "
+                        + "Takes its name or id.",
                 requiredStringSchema("companion",
                         "Which companion to dismiss — its name or id (see list_companions).")));
         tools.add(toolDef("get_events",
@@ -365,7 +391,7 @@ public final class McpServer {
         JsonObject schema = objectSchema("companion", true);
         JsonObject text = new JsonObject();
         text.addProperty("type", "string");
-        text.addProperty("description", "What the companion says, in its own voice/persona.");
+        text.addProperty("description", "What the companion says out loud.");
         schema.getAsJsonObject("properties").add("text", text);
         schema.getAsJsonArray("required").add("text");
         return schema;
@@ -483,7 +509,7 @@ public final class McpServer {
             return content("no such companion — call list_companions to see valid names/ids", true);
         }
         boolean ok = NumenActuator.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return content(ok ? "dismissed " + target + " — it dropped its inventory and is gone for good"
+        return content(ok ? "dismissed " + target + " — it drops its inventory, armor and accessories and is gone for good"
                 : "could not dismiss " + target, !ok);
     }
 
@@ -538,14 +564,8 @@ public final class McpServer {
         toolArgs.remove("companion");
         String result = NumenActuator.invoke(target, toolName, toolArgs.toString())
                 .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
-        boolean isError = false;
-        try {
-            JsonObject r = JsonParser.parseString(result).getAsJsonObject();
-            isError = r.has("success") && !r.get("success").getAsBoolean();
-        } catch (RuntimeException ignored) {
-            // non-JSON result — treat as plain text, not an error
-        }
-        return content(result, isError);
+        // the external agent reads what the built-in brain reads: the result's message, never its structured data
+        return content(ToolOutcome.modelText(result), ToolOutcome.failed(result));
     }
 
     /** Resolve the {@code companion} argument (name or UUID) to a live companion's UUID, or null. */

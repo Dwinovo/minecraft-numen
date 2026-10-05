@@ -5,6 +5,7 @@ import com.dwinovo.numen.core.Constants;
 import java.nio.file.Path;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * 内嵌联动的闸门:<b>目标模组在场才装,不在就当不存在</b>。
@@ -16,8 +17,9 @@ import java.util.function.Predicate;
  * 只有瘦 api jar,引擎内部类够不着(见 buildSrc 的 numen-plugin.gradle)。
  *
  * <h2>分工</h2>
- * 目标模组在不在,只有加载器答得上;本类是三个加载器共用的那部分——判、装、定位技能。
- * 清单在各加载器模块的 {@code Builtin} 里,它同时替联动做那几件加载器各不相同的事。
+ * 目标模组在不在、jar 里的一条路径对应哪个 {@link Path},只有加载器答得上,两样都由
+ * 构造时注入;本类是三个加载器共用的那部分——判、装、定位技能。清单在各加载器模块的
+ * {@code Builtin} 里,它同时替联动做那几件加载器各不相同的事。
  *
  * <h2>为什么要多套一层</h2>
  * 直接传 {@code Runnable} 的话,{@code NumenTlm::install} 这个方法引用在<b>创建
@@ -30,21 +32,44 @@ import java.util.function.Predicate;
 public final class Gate {
 
     private final Predicate<String> modLoaded;
+    private final Function<String, Path> inJar;
 
-    /** @param modLoaded 问加载器:这个 mod id 装了没 */
-    public Gate(Predicate<String> modLoaded) {
+    /**
+     * @param modLoaded 问加载器:这个 mod id 装了没
+     * @param inJar     问加载器:本模组 jar 里的这条路径对应哪个 {@link Path},没有这条路径给 null。
+     *                  各加载器模块的 {@code ModJar.find}——core 自己的 skills 根也从那里取
+     */
+    public Gate(Predicate<String> modLoaded, Function<String, Path> inJar) {
         this.modLoaded = modLoaded;
+        this.inJar = inJar;
     }
 
     /**
+     * 带技能的联动。
+     *
      * @param modId   目标模组;不在就整块跳过
      * @param plugin  联动的模块名({@code plugins/} 下的目录名),用来定位它自带的技能
      * @param body    延迟到判据为真之后才求值——理由见类注释
      */
     public void open(String modId, String plugin, Function<Path, Runnable> body) {
         if (!modLoaded.test(modId)) return;
+        install(modId, () -> body.apply(skillsRoot(plugin)).run());
+    }
+
+    /**
+     * 不带技能的联动(它补的是已有的能力,用法由那个能力自己的描述讲清,比如穿戴来源):不去找技能目录,
+     * 也就不会为"没有技能"报警。
+     *
+     * @param body 延迟到判据为真之后才求值——理由见类注释
+     */
+    public void open(String modId, Supplier<Runnable> body) {
+        if (!modLoaded.test(modId)) return;
+        install(modId, () -> body.get().run());
+    }
+
+    private void install(String modId, Runnable run) {
         try {
-            body.apply(skillsRoot(plugin)).run();
+            run.run();
             Constants.LOG.info("[numen] 联动已接上:{}", modId);
         } catch (Throwable t) {
             // 一个联动接不上不能带倒整个模组,也不能带倒别的联动
@@ -53,7 +78,8 @@ public final class Gate {
     }
 
     /**
-     * 一个联动自带的技能根:{@code plugins/<模块名>/skills/}。
+     * 一个带技能的联动自带的技能根:{@code plugins/<模块名>/skills/};jar 里没有就 null,联动照装、
+     * 只是不带技能——留一条 warn,说好要带的不能悄悄少了。
      *
      * <p>目录就叫 {@code skills},但必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,
      * 源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。直接放 {@code skills/} 的话会和
@@ -64,15 +90,12 @@ public final class Gate {
      * <p>给的是整个 {@code skills/} 根而不是某一篇,所以一个联动想带几篇就带几篇,
      * 不用回来改这里。
      */
-    private static Path skillsRoot(String plugin) {
-        // 经类加载器取,不用加载器的 mod-file 口——那些口跨 MC 版本一直在变
-        // (NeoForge 26.x 上 getModFileById(...).getFile() 就没了),而资源 URL 在哪个版本、
-        // 哪个加载器都成立。core 自己声明 skills/ 用的也是这条路。
-        try {
-            java.net.URL url = Gate.class.getResource("/plugins/" + plugin + "/skills");
-            return url == null ? null : Path.of(url.toURI());
-        } catch (Exception ignored) {
-            return null;   // 找不到就不带技能,工具照常能用
+    private Path skillsRoot(String plugin) {
+        String path = "plugins/" + plugin + "/skills";
+        Path root = inJar.apply(path);
+        if (root == null) {
+            Constants.LOG.warn("[numen] 联动 {} 的技能目录 {} 不在 jar 里,工具照常、技能不带", plugin, path);
         }
+        return root;
     }
 }

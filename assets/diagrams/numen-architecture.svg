@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440" width="900" height="440" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3A3F45"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="440" fill="#FFFFFF"/>
+
+  <!-- LLM -->
+  <rect x="60" y="24" width="780" height="78" rx="8" fill="#EEE8F5" stroke="#7B5EA7" stroke-width="1.5"/>
+  <text x="450" y="63" text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="700" fill="#1F2328">Large Language Model (LLM)</text>
+
+  <!-- arrows LLM -> APIs -->
+  <line x1="368" y1="102" x2="368" y2="172" stroke="#3A3F45" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="380" y="141" font-size="12.5" font-style="italic" fill="#1F2328">via a Lua script</text>
+
+  <line x1="763" y1="102" x2="763" y2="172" stroke="#3A3F45" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="753" y="141" text-anchor="end" font-size="12.5" font-style="italic" fill="#1F2328">direct tool call</text>
+
+  <!-- Lua API (80%) -->
+  <rect x="60" y="176" width="616" height="110" rx="8" fill="#E3EDF7" stroke="#3E6FA8" stroke-width="1.5"/>
+  <text x="80" y="204" font-size="16" font-weight="700" fill="#1F2328">Lua API</text>
+  <text x="80" y="223" font-size="12" fill="#555B62">atomic actions, composed freely in a sandboxed Lua program</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="11" fill="#1F2328" text-anchor="middle" dominant-baseline="central">
+    <rect x="80"  y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="149" y="253">numen.scan</text>
+    <rect x="226" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="295" y="253">numen.move</text>
+    <rect x="372" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="441" y="253">tlm.maid</text>
+    <rect x="518" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><circle cx="579" cy="253" r="1.8" fill="#1F2328"/><circle cx="587" cy="253" r="1.8" fill="#1F2328"/><circle cx="595" cy="253" r="1.8" fill="#1F2328"/>
+  </g>
+
+  <!-- Java API (20%) -->
+  <rect x="686" y="176" width="154" height="110" rx="8" fill="#FBEBDD" stroke="#C0712C" stroke-width="1.5"/>
+  <text x="702" y="204" font-size="16" font-weight="700" fill="#1F2328">Java API</text>
+  <text x="702" y="223" font-size="12" fill="#555B62">tool calls</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="11" fill="#1F2328" text-anchor="middle" dominant-baseline="central">
+    <rect x="702" y="240" width="58" height="26" rx="4" fill="#FFFFFF" stroke="#E2B68E"/><text x="731" y="253">skill</text>
+    <rect x="766" y="240" width="58" height="26" rx="4" fill="#FFFFFF" stroke="#E2B68E"/><circle cx="788" cy="253" r="1.8" fill="#1F2328"/><circle cx="795" cy="253" r="1.8" fill="#1F2328"/><circle cx="802" cy="253" r="1.8" fill="#1F2328"/>
+  </g>
+
+  <!-- Lua API <-> Minecraft -->
+  <line x1="368" y1="290" x2="368" y2="332" stroke="#3A3F45" stroke-width="1.6" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="380" y="316" font-size="12.5" font-style="italic" fill="#1F2328">perceive · act</text>
+
+  <!-- Minecraft -->
+  <rect x="60" y="336" width="780" height="80" rx="8" fill="#E7F0E3" stroke="#5E8F55" stroke-width="1.5"/>
+  <text x="450" y="371" text-anchor="middle" font-size="18" font-weight="700" fill="#1F2328">Minecraft</text>
+  <text x="450" y="395" text-anchor="middle" font-size="12" fill="#555B62">your Minecraft instance · a real player</text>
+</svg>

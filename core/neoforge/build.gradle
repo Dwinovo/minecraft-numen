@@ -6,6 +6,7 @@ plugins {
 dependencies {
     // The numen-api engine, now a sibling moddev project in this build.
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
+    //
     // api 而非 implementation:引擎的类型出现在 core 的公开签名里
     // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
     // implementation 在 POM 里落成 runtime,想扩展 core 的人拿得到 jar 却编译不了。
@@ -17,10 +18,43 @@ dependencies {
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
     // (它们不发布——没人需要依赖我们的联动代码)。
     compileOnly project(':plugins:ysm')
-    compileOnly project(':plugins:tlm')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
+    // 本引擎与本模块的 mixin 用 WrapMethod(MixinExtras 0.4.0 起才有),NeoForge 21.0 自带的是 0.3.5。编译对着 0.5.3;
+    // 发行 jar 里内嵌一份(开发期的运行见下面 devJarJar),FML 的内嵌选择让高版本顶替 NeoForge 自带的那份。
+    compileOnly 'io.github.llamalad7:mixinextras-neoforge:0.5.3'
+    jarJar('io.github.llamalad7:mixinextras-neoforge') {
+        version { strictly '[0.5.3,)'; prefer '0.5.3' }
+    }
 }
+
+// GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
+// 模板目录,运行前把两处同步进构建目录里的一处,运行配置指向它。
+def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
+def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
+    from 'gameteststructures'
+    from project(':pathing').file('src/gametest/structures')
+    into gameTestStructures
+}
+
+// 开发期的运行没有成品 jar,内嵌带不进去:把同一份 MixinExtras 按内嵌的布局摆成一个目录,作为 numen 模组的一部分挂进去,
+// FML 看到的就和成品一样(NeoForge 自带 0.3.5 没有 WrapMethod,同伴掉落归属、进度奖励都靠它)。
+configurations.create('devJarJar') { canBeConsumed = false; canBeResolved = true }
+dependencies { devJarJar 'io.github.llamalad7:mixinextras-neoforge:0.5.3' }
+def devJarJarDir = layout.buildDirectory.dir('devJarJar')
+def stageDevJarJar = tasks.register('stageDevJarJar', Sync) {
+    from(configurations.devJarJar)
+    into devJarJarDir.map { it.dir('META-INF/jarjar') }
+    doLast {
+        def jar = destinationDir.listFiles().find { it.name.endsWith('.jar') }
+        new File(destinationDir, 'metadata.json').text = groovy.json.JsonOutput.toJson([jars: [[
+                identifier  : [group: 'io.github.llamalad7', artifact: 'mixinextras-neoforge'],
+                version     : [range: '[0.5.3,)', artifactVersion: '0.5.3'],
+                path        : "META-INF/jarjar/${jar.name}".toString(),
+                isObfuscated: false]]])
+    }
+}
+sourceSets { devJarJar { resources.srcDir(stageDevJarJar.map { devJarJarDir.get().asFile }) } }
 
 neoForge {
     version = neoforge_version
@@ -32,9 +66,9 @@ neoForge {
     runs {
         configureEach {
             systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
-            // 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
-            // /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
-            systemProperty('numen.gametest.structures', file('gameteststructures').absolutePath)
+            // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
+            // /test run <用例> 现场围观也用(见 GameTestKit 静态块)。
+            systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
         }
         client {
@@ -61,8 +95,17 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
+            sourceSet sourceSets.devJarJar
+            // 寻路模块本身随 numen-api 来(api 依赖它);这里只挂它自己的 GameTest 用例
+            sourceSet project(':pathing').sourceSets.gametest
         }
     }
+}
+
+tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
+    dependsOn syncGameTestStructures
+    dependsOn ':pathing:gametestClasses'
+    dependsOn 'processDevJarJarResources'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -90,5 +133,13 @@ sourceSets.configureEach {
 // 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
 tasks.named('jar', Jar) {
     from({ project(':plugins:ysm').sourceSets.main.output })
-    from({ project(':plugins:tlm').sourceSets.main.output })
 }
+
+// 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:ysm:test')
+}
+
+// 真模型评测:原版的场景在 src/bench,:core:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 放在末尾:它要用到上面定义好的模组 numen。
+apply plugin: 'numen-bench'
