@@ -174,11 +174,21 @@ public final class LuaEngine implements ScriptEngine {
         return literal(value);
     }
 
+    @Override
+    public String display(Object value) {
+        return LuaDisplay.of(value);
+    }
+
+    /** 一段文字写成 Lua 的字符串字面量。 */
+    static String quote(String s) {
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+    }
+
     /** 一个值写成 Lua 的字面量;名字到值的表按迭代顺序写,键不是合法名字的写成 {@code ["键"] = 值}。 */
     private static String literal(Object value) {
         return switch (value) {
             case null -> "nil";
-            case String s -> "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+            case String s -> quote(s);
             case Double d -> LuaSandbox.number(d);
             case Number n -> String.valueOf(n);
             case Boolean b -> String.valueOf(b);
@@ -193,7 +203,7 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /** 表的一个键:合法的名字原样,别的写成 {@code ["键"]}。 */
-    private static String key(String k) {
+    static String key(String k) {
         return k.matches("[A-Za-z_][A-Za-z0-9_]*") && !LuaSandbox.KEYWORDS.contains(k) ? k : "[" + literal(k) + "]";
     }
 
@@ -758,7 +768,7 @@ public final class LuaEngine implements ScriptEngine {
         public Step start() {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
                     .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
-                    .show(LuaEngine::literal).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
+                    .show(LuaDisplay::of).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
                     .modules(source(catalog.modules()));
             catalog.groups().forEach((group, functions) -> functions.keySet().forEach(name ->
                     sandbox.function(pathName(group), functionName(name), in -> ask(group, name, in))));

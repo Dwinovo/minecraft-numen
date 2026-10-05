@@ -344,9 +344,9 @@ public final class ScriptCall {
         }
         JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
         if (value != null) {
-            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样;太长的截掉并说明。数据里的 returned 是给程序读的原值,
-            // 另有一个大得多的上限
-            String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.value(returned);
+            // 一段文字原样写,别的值写成给模型读的样子(缩略的判据和 print 同一处);太长的截掉并说明。数据里的 returned 是
+            // 给程序读的原值,另有一个大得多的上限
+            String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.display(returned);
             int whole = shown.length();
             if (value.toString().length() > ScriptLimits.RETURNED_DATA_CHARS) {
                 value = new com.google.gson.JsonPrimitive(shown.substring(0, Math.min(whole,

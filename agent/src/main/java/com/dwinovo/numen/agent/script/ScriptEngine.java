@@ -61,6 +61,12 @@ public interface ScriptEngine {
      */
     String value(Object value);
 
+    /**
+     * 一个值写成给模型读的样子:同 {@link #value} 的写法,大的缩略(长列表只显示首尾几项并写明总数,深嵌套写成 {@code {...}},长文字截断并写明
+     * 总长),缩略处说怎么看更多。回执里的 {@code print}、{@code return} 的值都经它;{@link #value} 是精确的,提示里的"改好的那一行"用它。
+     */
+    String display(Object value);
+
     // ---- 签名:帮助与系统提示里的类型注解 ----
 
     /** 一个类型写成这种语言的类型注解:{@code Pos|string}、{@code {count?: integer}}。 */

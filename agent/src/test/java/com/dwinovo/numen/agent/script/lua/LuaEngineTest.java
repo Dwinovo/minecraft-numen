@@ -286,6 +286,15 @@ class LuaEngineTest {
         assertEquals(List.of("{x = -10537096.5, y = 64, z = 0.00001}"), printed, "数不写成科学计数法");
     }
 
+    /** print 一张大表走显示的缩略:只显示首尾几项并写明总数;一段文字原样。 */
+    @Test
+    void printShortensABigTableAndSaysHowBigItWas() {
+        assertTrue(assertInstanceOf(ScriptRun.Done.class,
+                run("local t = {}\nfor i = 1, 950 do t[i] = i end\nprint(t)\nprint(\"plain \" .. #t)").start()).ok());
+        assertEquals(List.of("{1, 2, 3, …(950 items in all; index one with t[i], or filter in the program before you "
+                + "print), 948, 949, 950}", "plain 950"), printed);
+    }
+
     /**
      * 返回值按声明的类型标出带方法的值:声明返回一串 Pos、Pos 的方法写在模块 geo.shape 里,返回的每个 Pos 都能调那里的方法;
      * 帮助里类的声明带着这些方法的签名。

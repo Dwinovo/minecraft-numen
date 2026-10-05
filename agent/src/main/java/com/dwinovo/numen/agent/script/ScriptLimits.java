@@ -69,4 +69,24 @@ public final class ScriptLimits {
      * 而一次带上千格参数的调用不会让每次调用的结局跟着变大。
      */
     public static final int CALL_TEXT_CHARS = 240;
+
+    // ---- 显示一个值(print、return、stderr 里的值共用,见 LuaDisplay) ----
+    // 照 NumPy 的 printoptions(threshold = 1000,edgeitems = 3:数组超过一千个数才缩略,缩略时首尾各三个)和 pandas 的
+    // display.max_rows = 60(超过六十行只显示首尾各五行)。它们的元素是一个数;我们的元素是一张表(一个方块 {block, pos}、一只实体),
+    // 一项就是一百来个字,所以阈值小得多:二十项以内全部显示(背包的二十来种东西、一页查询结果能整个读完),再多就只显示首尾各三项并
+    // 写明总数。
+
+    /** 一个列表或一张表超过多少项就缩略成首尾几项。 */
+    public static final int DISPLAY_THRESHOLD = 20;
+
+    /** 缩略时首尾各显示几项。 */
+    public static final int DISPLAY_EDGE_ITEMS = 3;
+
+    /**
+     * 表里套表最多显示几层,更深的写成 {@code {...}}。五层够一个"团的列表":列表、团、方块的列表、方块、方块的位置。
+     */
+    public static final int DISPLAY_DEPTH = 5;
+
+    /** 表里一段文字最多显示多少字,超出的截掉开头以后的部分并写明总长。 */
+    public static final int DISPLAY_STRING_CHARS = 200;
 }
