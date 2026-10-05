@@ -401,7 +401,7 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) 
   不能在里面跑真实游戏逻辑。
 - **mixin**:这一代 Fabric Loader 0.15.3 自带的 MixinExtras 没有 `@WrapMethod`(要 ≥ 0.4,更旧的静默不生效);同 1.20.1,四处都是 `@Inject` 成对写法,源码里没有 `@WrapMethod`,
   成品不内嵌 MixinExtras。`MixinPlayerInfo` 在仓库任何分支的历史里都不存在,没有可保留的。`numen_api.fabric.architectury.mixins.json` 的 Fabric 一份照旧。
-- **联动**:ysm 三个加载器都在;curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
+- **联动**:YSM 没有 1.20.4 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),不带;Fabric 侧的联动只有它,`core/fabric` 的 `Builtin` 一并去掉。curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
   这一代的 FTB Quests 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`:看不看得见改用 `Quest.isVisible(team)`,"为什么还不能开始"由插件自己点名还没完成的前置任务
   (`QuestBook.cannotStartReason`)。车万女仆、森罗厨房没有这一版(只有 1.20.1 与 1.21.1),不接;Fabric 上 Curios/FTB Quests 同 1.21.1 不接。
 
@@ -417,5 +417,5 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) 
   `StructureUtils` 的形状同 1.20.1(`spawnStructure`,只钉起点周围几格区块),`StructureFenceMixin` 因此与 1.20.1 一样既围屏障又钉整块场地的区块。
 - **Forge 48 的开发运行**:`MOD_CLASSES`(mods 块合并多个源码集)仍然生效,所以与 1.20.1 一样,pathing 与兄弟模块经 mods 块并进 numen 的两个模组;
   没有 1.20.4 那套 `devJar` / 寻路 GameTest 模组(那是 Forge 49 才需要的)。`:api:forge:Data` 不排除兄弟 jar 也能起,origin 里那段 ai/ui 的排除原样留着。
-- **联动**:ysm、curios(Forge,Curios 6.1.0+1.20.2:`CuriosApi.getSlots()` 无参、`getItemStackSlots(stack, entity)`)。FTB Quests 没有 1.20.2 的版本(只有 1.20.1 的 2001 与 1.20.4 的 2004),
+- **联动**:YSM 没有 1.20.2 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),不带;Fabric 侧的联动只有它,`core/fabric` 的 `Builtin` 一并去掉。curios(Forge,Curios 6.1.0+1.20.2:`CuriosApi.getSlots()` 无参、`getItemStackSlots(stack, entity)`)。FTB Quests 没有 1.20.2 的版本(只有 1.20.1 的 2001 与 1.20.4 的 2004),
   不接;车万女仆、森罗厨房同 1.20.4,没有这一版。

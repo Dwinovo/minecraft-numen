@@ -1,15 +1,7 @@
 package com.dwinovo.numen.plugins;
 
 import com.dwinovo.numen.core.ModJar;
-import com.dwinovo.numen.plugins.ysm.Ysm;
-import com.dwinovo.numen.plugins.ysm.YsmHost;
-import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.fml.ModList;
-
-import java.nio.file.Path;
-import java.util.function.Consumer;
 
 /**
  * 本加载器内嵌了哪些联动、各自要谁——以及加载器替它们做的那几件事。
@@ -17,6 +9,8 @@ import java.util.function.Consumer;
  * <p>清单在这里,不做扫描:内嵌联动是<b>闭合集合</b>,数量由我们自己定;扫描是给开放
  * 集合用的。列在一处,"现在内嵌了哪些、各自要谁"一眼答得完。闸门本身三个加载器共用,
  * 见 {@link Gate}。
+ *
+ * <p>YSM 在本 MC 版本上没有构建,不在清单里。
  *
  * <h2>联动的类型只许出现在嵌套类里</h2>
  * 本类自己的方法(含 lambda 编译出来的合成方法)一个都不能提联动的类型:校验器为了核对
@@ -30,27 +24,6 @@ public final class Builtin {
 
     public static void registerAll() {
         Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
-        gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnForge.install(skills));
         gate.open("curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
-    }
-
-    /** YSM 联动只写原版;它要的加载器专属的两件事,Forge 的答案在这里。 */
-    private static final class YsmOnForge implements YsmHost {
-        static void install(Path skills) {
-            com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnForge(), skills);
-        }
-
-        @Override
-        public void onServerTick(Consumer<MinecraftServer> listener) {
-            MinecraftForge.EVENT_BUS.addListener((TickEvent.ServerTickEvent e) -> {
-                // Forge 的 tick 事件一 tick 发两次(START/END),不判 phase 会跑两遍
-                if (e.phase == TickEvent.Phase.END) listener.accept(e.getServer());
-            });
-        }
-
-        @Override
-        public Ysm.Storage storage() {
-            return Ysm.Storage.FORGE;
-        }
     }
 }
