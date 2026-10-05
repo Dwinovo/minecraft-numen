@@ -314,6 +314,10 @@ companion.changeDimension(new DimensionTransition(nether, pos, …)) → compani
 ("身体站得进那一排,那一排的格子却不在界内")在本代**构造不出来**:身体碰撞盒与那一格相交,这一格就必然在界内。该用例连同它的
 `pathing_border` 批次在本分支不适用,删去。
 
+**评测模组 `bench/game` 的 `neoforge.mods.toml` 把 `loaderVersion` 写死成 `[4,)`**(1.21 一代的 FML)📦——本代 FML 是 javafml 3,
+dev 服务器起不来(`Mod File main needs language provider javafml:4`)。本分支改成 `[2,)`,与 `gradle.properties` 的
+`neoforge_loader_version_range` 同值;这是个没有跟着旋钮走的字面量,逐分支都要改。
+
 **NeoForge 20.6.139 自带 MixinExtras 0.4.1**——已有 `@WrapMethod`,不需要像 1.21 分支那样内嵌新版。
 
 **NeoForge 数据附件**:本代的 `AttachmentType.Builder.sync` 也没有(与 21.0 同),但本分支没有依赖附件同步的联动(见下)。
