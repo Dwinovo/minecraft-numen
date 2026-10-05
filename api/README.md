@@ -8,11 +8,11 @@
 
 [English](README_EN.md) · [**简体中文**](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.4-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
+![Java](https://img.shields.io/badge/Java-17-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.20.4%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -143,14 +143,14 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.4:<version>:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.20.4:<version>:api"
 }
 ```
 
-按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。`<version>` 填顶上徽章显示的最新版本。本分支基于 Java 21 构建 `1.21.1`。
+按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。`<version>` 填顶上徽章显示的最新版本。本分支基于 Java 17 构建 `1.20.4`。
 
 `numen-ai`（模型接入与用量核算）、`numen-agent`（同伴大脑的循环内核、收件箱与长期目标）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
@@ -159,10 +159,10 @@ dependencies {
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
+    modImplementation "com.dwinovo.numen:numen-fabric-1.20.4:<version>"
 
     // NeoForge / Forge（没有 modImplementation 这个关键字，那是 Loom 的）
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
+    // implementation "com.dwinovo.numen:numen-neoforge-1.20.4:<version>"
 }
 ```
 
@@ -192,7 +192,7 @@ core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引
 **发版在 GitHub 上点一下**：Actions → Publish → Run workflow，选分支（就是 MC 版本）和渠道（beta / release）。命令行等价于：
 
 ```bash
-gh workflow run publish.yml --ref 1.21.1 -f channel=beta
+gh workflow run publish.yml --ref 1.20.4 -f channel=beta
 ```
 
 一次运行把两头发完：构建一次；制品推到 numen-maven 给开发者，打上 `v<版本>-<MC>[-beta]` 的 tag 把这个版本钉在这个提交上；jar 传到 Modrinth 和 CurseForge 给玩家；最后建 GitHub Release。更新日志取上一个版本以来的 `feat` / `fix` 提交。这个版本在这个 MC 上发过、或者这个提交的 Build 不是绿的，都会在动手之前停下。中途失败就在那次运行上点 Re-run failed jobs，只重跑失败的那几路。
