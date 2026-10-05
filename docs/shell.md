@@ -558,6 +558,10 @@ public final class LocateApi {                         // 一组:一个公开类
   不占任务槽;`Job<R>` 占身体、进任务槽,受理回活的编号,程序等它的 task_finished;要的样子此刻已经是了(`build.place` 的格都对了)
   是 `Job.done(值)`,不派活。`R` 是 record、枚举、`List`、`Map<String, T>`、Minecraft 的值(`BlockPos`、`Item`、`Block`……)或
   `void`;只有一个字段的结果直接交那个值(`inv.count` 是整数、`work.fish` 是一串字)。
+- **客户端函数的约定**(指导,登记时不检查;好写法由评测的分数说话):① 只读查询、不产生副作用——主人的客户端在
+  `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
+  权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,服务端发 `NumenEventPayload`),不走反向请求;
+  ④ 一次收一批键、在客户端就地过滤只回小结果,别在循环里逐条问(N+1)。`ClientCall` 的 Javadoc 是这条的全文。
 - **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.to", pos,
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
   同一种 `bad_argument`(附用法与帮助的写法)。
