@@ -12,6 +12,15 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(java_version)
 }
 
+// 加载器版本范围与别的模组一样出自 gradle.properties,不在 toml 里写字面量
+processResources {
+    var expandProps = ['neoforge_loader_version_range': neoforge_loader_version_range]
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand expandProps
+    }
+    inputs.properties(expandProps)
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs.add('-parameters')
