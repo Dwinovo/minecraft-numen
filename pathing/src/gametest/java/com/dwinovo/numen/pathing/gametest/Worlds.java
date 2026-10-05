@@ -14,7 +14,5 @@ final class Worlds {
         level.setDayTime(6000);
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
         level.setWeatherParameters(24000, 0, false, false);
-        // 随机刻停摆:耕地的湿度、草的退化这类随机刻变化会在判据背后改世界,而判据要的是"账上记的就是世界变的"
-        level.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, level.getServer());
     }
 }

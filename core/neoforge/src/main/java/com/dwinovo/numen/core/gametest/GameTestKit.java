@@ -83,9 +83,6 @@ public final class GameTestKit {
         level.setDayTime(dayTime);
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
-        // 随机刻停摆:判据全是"世界最终长这样",而随机刻会在判据背后改世界(图纸里的草格被盖上屋顶后随机刻退化成泥土,
-        // 「所有格同时就位」那一瞬就永远等不到)——和上面几样同类,排除与被测行为无关的环境随机性
-        level.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, level.getServer());
     }
 
     // ------------------------------------------------------------------
