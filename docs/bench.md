@@ -5,7 +5,7 @@ pass^k、轮数、token、每次成功的成本与失败类型。每次改命令
 
 它是独立的模块,不进发行 jar、不改产品行为:插件能给自己的联动加场景,别人也能换一个模型来比。
 
-> **本分支(Forge 1.20.4)只有纯 JVM 的 `:bench`**(记录、统计、对比;`:bench:test` 照跑)。游戏里那一半(`:bench:game`、
+> **本分支(Forge 1.20.2)只有纯 JVM 的 `:bench`**(记录、统计、对比;`:bench:test` 照跑)。游戏里那一半(`:bench:game`、
 > `runBench`、`runBenchParallel`、场景源码集)依赖 NeoForge 的无头服务器,只在 NeoForge 分支上有;下文的命令与路径照那些分支读。
 
 ---

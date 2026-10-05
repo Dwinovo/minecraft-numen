@@ -404,3 +404,18 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) 
 - **联动**:ysm 三个加载器都在;curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
   这一代的 FTB Quests 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`:看不看得见改用 `Quest.isVisible(team)`,"为什么还不能开始"由插件自己点名还没完成的前置任务
   (`QuestBook.cannotStartReason`)。车万女仆、森罗厨房没有这一版(只有 1.20.1 与 1.21.1),不接;Fabric 上 Curios/FTB Quests 同 1.21.1 不接。
+
+### 1.20.2(Forge 48.0.49 / Fabric 0.15.0):相对上一节 1.20.4 的差异
+
+源码与 1.20.4 几乎一样,只有这几处不同:
+- **NBT IO**:`NbtIo` 只有 `File` 形态(`readCompressed(File)`、`writeCompressed(CompoundTag, File)`);`Path` 加 `NbtAccounter` 是 1.20.3 起的。`readCompressed(File)` 内部不设限额,等同 `unlimitedHeap`。
+- **花盆**:`FlowerPotBlock.getContent()`(`getPotted()` 只在 1.20.3 / 1.20.4 这一窗口)。**草**:`Blocks.GRASS`(`SHORT_GRASS` 是 1.20.3 起)。
+- **没有 `TickRateManager`**(1.20.3 起才有):寻路日志不写刻速,`TickRateGameTests` 的 3 条没有搬。
+- **Brigadier 1.0.18**:没有 `ContextChain` 与 `CommandResultCallback`,命令回执用 `ResultConsumer` 与 `CommandSourceStack.withCallback`(`Echo`、`McApi`、`OnHer`);
+  `GameTestHelper.getBounds()` 是私有的,`Trial` 遍历场地里的格子量大小。
+- **GameTest**:结构模板 `DataVersion` 3578;注解、模板与批次的写法同 1.20.4(`@GameTestHolder(namespace)` + `@GameTestDontPrefix`、`GameTestKit` 把 SNBT 喂进存档 `generated`)。
+  `StructureUtils` 的形状同 1.20.1(`spawnStructure`,只钉起点周围几格区块),`StructureFenceMixin` 因此与 1.20.1 一样既围屏障又钉整块场地的区块。
+- **Forge 48 的开发运行**:`MOD_CLASSES`(mods 块合并多个源码集)仍然生效,所以与 1.20.1 一样,pathing 与兄弟模块经 mods 块并进 numen 的两个模组;
+  没有 1.20.4 那套 `devJar` / 寻路 GameTest 模组(那是 Forge 49 才需要的)。`:api:forge:Data` 不排除兄弟 jar 也能起,origin 里那段 ai/ui 的排除原样留着。
+- **联动**:ysm、curios(Forge,Curios 6.1.0+1.20.2:`CuriosApi.getSlots()` 无参、`getItemStackSlots(stack, entity)`)。FTB Quests 没有 1.20.2 的版本(只有 1.20.1 的 2001 与 1.20.4 的 2004),
+  不接;车万女仆、森罗厨房同 1.20.4,没有这一版。
