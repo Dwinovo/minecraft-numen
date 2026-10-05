@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
@@ -488,6 +489,36 @@ public class DigGameTests {
                         throw NumenAssertion.failed("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
                     }
                 });
+    }
+
+    /**
+     * 要挖的矿在她斜前方隔着奇数格(身体中心到矿中心的直线中点正落在格子的角上),那条线擦着一块挡路的石头的棱而过。转头取整到
+     * 鼠标像素,视线与那条直线差不到半个像素,差的这一点点就决定擦没擦进石头里:先前朝着哪儿(取整落在哪个偏差上)都不该让准星
+     * 落不到要挖的那一格上。
+     */
+    @NumenTest(template = ARENA, batch = BATCH, timeoutTicks = 100)
+    public static void aims_where_the_turned_view_really_lands(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.set(8, 2, 6, Blocks.STONE);
+        t.set(9, 1, 7, Blocks.COPPER_ORE);
+        BlockPos ore = t.at(9, 1, 7);
+        TestBody body = t.body(6, 1, 6);
+        for (int yaw = 0; yaw < 12; yaw++) {
+            for (int pitch = 0; pitch < 12; pitch++) {
+                float before = yaw * 0.0125F;
+                body.setYRot(before);
+                body.setXRot(pitch * 0.0125F);
+                Vec3 point = Aim.point(body, ore);
+                if (point == null) {
+                    throw NumenAssertion.failed("朝着 " + before + " 度时找不到瞄点");
+                }
+                Aim.look(body, point);
+                if (Crosshair.on(body, ore) == null) {
+                    throw NumenAssertion.failed("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + Crosshair.pick(body));
+                }
+            }
+        }
+        helper.succeed();
     }
 
     /**
