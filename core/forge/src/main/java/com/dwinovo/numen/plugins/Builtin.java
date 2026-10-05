@@ -31,6 +31,7 @@ public final class Builtin {
     public static void registerAll() {
         Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnForge.install(skills));
+        gate.open("curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,Forge 的答案在这里。 */

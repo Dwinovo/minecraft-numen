@@ -152,6 +152,7 @@ dependencies {
     // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
     // 类与资源由下面的 jar 块平铺进发行 jar。
     compileOnly project(':plugins:ysm')
+    compileOnly project(':plugins:curios')
 
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
@@ -258,5 +259,15 @@ tasks.named("jar", Jar) {
 // 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
 tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
     it.from({ project(':plugins:ysm').sourceSets.main.output })
+    it.from({ project(':plugins:curios').sourceSets.main.output })
 }
 
+// 联动经目标模组的类型调用原版方法:reobf 要知道那些类型的继承关系,才能把调用点的方法名翻成 SRG 名,认不出来的调用点留着官方名、
+// 线上就是 NoSuchMethodError。所以把各联动的编译期类路径(目标模组的 jar 在里面)一并交给 reobf 当库。
+tasks.matching { it.name == 'reobfJar' || it.name == 'reobfJarJar' }.configureEach {
+    libraries.from({
+        [':plugins:curios'].collect {
+            project(it).configurations.compileClasspath
+        }
+    })
+}

@@ -1,0 +1,24 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'numen-plugin'
+}
+
+// Curios 在这个 MC 版本上接的是 Forge 版;Fabric 那边对应的是 Trinkets / Accessories,另起联动。
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+}
+
+repositories {
+    exclusiveContent {
+        forRepository { maven { name = 'Curios'; url = 'https://maven.theillusivec4.top/' } }
+        filter { includeGroup 'top.theillusivec4.curios' }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // 瘦 api jar 取 Forge 那份:本联动本来就只跑在 Forge 上
+    compileOnly files(project(':api:forge').tasks.named('apiJar'))
+    // 只对着 Curios 的公开 API 编译;运行时由玩家自己装的那份提供,本模块不携带它一个字节。
+    compileOnly "top.theillusivec4.curios:curios-forge:${curios_version}:api"
+}
