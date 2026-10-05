@@ -23,18 +23,12 @@ public final class McDrawSurface implements IDrawSurface {
 
     @Override
     public void fillRect(int x, int y, int w, int h, int argb) {
-        g.fill(x, y, x + w, y + h, argb);
-    }
-
-    @Override
-    public void fillRoundRect(int x, int y, int w, int h, int radius, int argb) {
-        // 真圆角:SDF shader(RoundRect),注册失败时它自己降级方角——两级兜底。
-        com.dwinovo.numen.client.ui.RoundRect.fill(g, x, y, x + w, y + h, radius, argb);
+        g.fill(x, y, x + w, y + h, Fade.argb(argb));
     }
 
     @Override
     public void drawText(String text, int x, int y, int argb, boolean shadow) {
-        g.text(font, text, x, y, argb, shadow);
+        g.text(font, text, x, y, Fade.argb(argb), shadow);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.skin;
 
 import com.dwinovo.numen.api.CompanionPortrait;
+import com.dwinovo.numen.client.ui.mc.Fade;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -39,7 +40,7 @@ public final class CompanionFace {
     public static void draw(GuiGraphicsExtractor g, UUID companion, PlayerSkin skin,
                             int x, int y, int size) {
         if (drawnByPlugin(g, companion, x, y, size)) return;
-        PlayerFaceExtractor.extractRenderState(g, skin, x, y, size);
+        PlayerFaceExtractor.extractRenderState(g, skin, x, y, size, Fade.argb(-1));
     }
 
     /** 按注册顺序问,第一个认领的胜出。 */

@@ -61,4 +61,11 @@ class TextClipTest {
     void exactBoundaryIsNotClipped() {
         assertTrue(TextClip.fit(S, "abcde", 30).equals("abcde"), "恰好等宽不该动");
     }
+
+    @Test
+    void aWidthFunctionClipsTheSameWayAsASurface() {
+        // 手里只有字体的地方给量宽函数:和给画布截出来的一模一样
+        java.util.function.ToIntFunction<String> sixEach = t -> t.length() * 6;   // 和 S 同一种假度量
+        assertEquals(TextClip.fit(S, "hello world", 40), TextClip.fit(sixEach, "hello world", 40));
+    }
 }

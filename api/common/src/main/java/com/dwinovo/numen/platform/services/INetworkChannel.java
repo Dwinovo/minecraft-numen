@@ -21,16 +21,18 @@ import java.util.function.Consumer;
  *   <li>Define a record implementing {@link CustomPacketPayload} with a
  *       public {@code Type<T>} and {@code StreamCodec}.</li>
  *   <li>Call {@link #registerClientToServer} once from {@code NumenNetwork.register}.</li>
- *   <li>Client sends via {@link #sendToServer}; handler runs on the server
- *       main thread.</li>
+ *   <li>Client sends via {@code NumenNetwork.sendToServer}, which measures the
+ *       payload ({@code Wire}) and then calls {@link #sendToServer}; handler
+ *       runs on the server main thread.</li>
  * </ol>
  *
  * <h2>Payload lifecycle (S→C)</h2>
  * <ol>
  *   <li>Same payload definition.</li>
  *   <li>Call {@link #registerServerToClient} once from {@code NumenNetwork.register}.</li>
- *   <li>Server sends via {@link #sendToPlayer}; handler runs on the client
- *       main thread.</li>
+ *   <li>Server sends via {@code NumenNetwork.sendToPlayer}, which measures the
+ *       payload ({@code Wire}) and then calls {@link #sendToPlayer}; handler
+ *       runs on the client main thread.</li>
  * </ol>
  *
  * <h2>Threading guarantee</h2>

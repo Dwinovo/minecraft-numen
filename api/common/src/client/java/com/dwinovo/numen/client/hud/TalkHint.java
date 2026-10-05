@@ -1,8 +1,10 @@
 package com.dwinovo.numen.client.hud;
 
+import com.dwinovo.numen.client.ui.mc.Fade;
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.NumenKeys;
 import com.dwinovo.numen.client.chat.CompanionChatScreen;
-import com.dwinovo.numen.client.screen.UiTheme;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -60,14 +62,13 @@ public final class TalkHint {
         }
         String talk = NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString();
         String voice = NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString();
-        draw(g, mc, "按 [" + talk + "] 与 " + name + " 对话 · 按住 [" + voice + "] 说话",
-                0xFFFFFFFF);
+        draw(g, mc, I18n.get(Keys.TALK_HINT, talk, name, voice), 0xFFFFFFFF);
     }
 
     private static void draw(GuiGraphicsExtractor g, Minecraft mc, String text, int color) {
         Font font = mc.font;
         int x = (g.guiWidth() - font.width(text)) / 2;
         int y = g.guiHeight() / 2 + 16;   // 准星正下方一点,不挡视线焦点
-        g.text(font, text, x, y, color, true);
+        g.text(font, text, x, y, Fade.argb(color), true);
     }
 }

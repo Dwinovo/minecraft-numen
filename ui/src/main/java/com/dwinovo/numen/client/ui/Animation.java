@@ -21,6 +21,13 @@ public final class Animation {
         return 1f + c3 * inv * inv * inv + c1 * inv * inv;
     }
 
+    /** 圆弧减速:起步比 cubic 更猛、收尾更缓(Telegram 的 anim::easeOutCirc,对话框暗幕用它)。 */
+    public static float easeOutCirc(float t) {
+        t = clamp01(t);
+        float inv = 1.0f - t;
+        return (float) Math.sqrt(1.0f - inv * inv);
+    }
+
     /** 退场加速:慢起快走(离场不值得注目)。 */
     public static float easeInCubic(float t) {
         t = clamp01(t);

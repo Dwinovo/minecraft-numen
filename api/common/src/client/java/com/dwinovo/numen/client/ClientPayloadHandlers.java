@@ -46,17 +46,14 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.currentTask = p ->
                 com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(p.entityUuid())
                         .onCurrentTask(p);
+        ClientPayloadSink.consent = com.dwinovo.numen.client.consent.ConsentCards::accept;
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
         // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
         // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。
         ClientPayloadSink.event = p ->
-                AgentLoopRegistry.getOrCreate(p.entityUuid())
-                        .pushEvent(p.entryType(), p.text(), p.ts(), p.urgent());
+                AgentLoopRegistry.getOrCreate(p.entityUuid()).pushEvents(p.entries());
         ClientPayloadSink.state = p ->
-                ClientNumenState.update(p.uuid(), new ClientNumenState.Snapshot(
-                        p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
-                        p.selectedSlot(), p.offhand(), p.effects(),
-                        p.vehicleType(), p.vehicleId(),
+                ClientNumenState.update(p.uuid(), com.dwinovo.numen.agent.request.BodySnapshot.of(p,
                         System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
@@ -65,8 +62,8 @@ public final class ClientPayloadHandlers {
     }
 
     private static void handleCompanionList(CompanionListPayload p) {
-        java.util.Set<UUID> before = new java.util.HashSet<>();
-        for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.add(e.uuid());
+        java.util.Map<UUID, String> before = new java.util.HashMap<>();
+        for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.put(e.uuid(), e.name());
 
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
         java.util.Set<UUID> onRoster = new java.util.LinkedHashSet<>();
@@ -83,9 +80,11 @@ public final class ClientPayloadHandlers {
         if (swept > 0) {
             Constants.LOG.info("[numen-net] 对账清理了 {} 只已遣散同伴的数据", swept);
         }
-        for (UUID gone : before) {
+        for (UUID gone : before.keySet()) {
             if (!onRoster.contains(gone)) {
                 AgentLoopRegistry.dispose(gone);   // 大脑先停,免得在飞的回合写回已删的家
+                // 和她同过会话的其他成员得知道她走了——她的日志没了,别人记得的她说过的话还在
+                com.dwinovo.numen.client.agent.Conversations.instance().left(gone, before.get(gone));
             }
         }
         // 反过来的一半:名册说她存在,她就该有大脑。
@@ -110,7 +109,7 @@ public final class ClientPayloadHandlers {
         // A newly-arrived companion may have a persona the owner picked at summon (resolved by name here,
         // since the UUID wasn't known client-side until now). Apply it as the starting persona.
         for (CompanionListPayload.Entry e : p.companions()) {
-            if (before.contains(e.uuid())) continue;   // not new
+            if (before.containsKey(e.uuid())) continue;   // not new
             String personaId = com.dwinovo.numen.persona.PersonaLibrary.takePendingSummon(e.name());
             if (personaId != null) {
                 var persona = com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);

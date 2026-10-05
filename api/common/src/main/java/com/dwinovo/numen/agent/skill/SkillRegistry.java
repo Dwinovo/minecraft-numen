@@ -24,15 +24,15 @@ import java.util.stream.Stream;
 
 /**
  * Client-side registry of skills. Skills are markdown directories the LLM can
- * load on demand via the {@code load_skill} tool, deferring long "how to do X"
+ * load on demand via the {@code skill} tool, deferring long "how to do X"
  * instructions out of the system prompt and into the tool-call conversation
  * only when relevant.
  *
  * <h2>Why client-side only</h2>
  * Skills feed the LLM, and the LLM runs on the player's client (each player
  * pays their own tokens). Dedicated servers don't even instantiate this
- * registry — {@code load_skill} is an {@code isLocal} tool so its execute
- * path never crosses the network.
+ * registry — the {@code skill} tool answers on the owner's client, so its
+ * execute path never crosses the network.
  *
  * <h2>Two sources, scanned in place and merged</h2>
  * Following the same model as Claude Code and opencode, skills are read from
@@ -70,7 +70,7 @@ import java.util.stream.Stream;
  * {@link #formatXml()} produces, every turn, a block of the form
  * <pre>
  * Skills provide specialized instructions and workflows for specific tasks.
- * Use the load_skill tool to load a skill when a task matches its description.
+ * Use the skill tool to load a skill when a task matches its description.
  * &lt;available_skills&gt;
  *   &lt;skill&gt;
  *     &lt;name&gt;build_hut&lt;/name&gt;
@@ -104,7 +104,7 @@ public final class SkillRegistry {
 
     /**
      * Names the player has switched off from the panel. Filtered out of both the
-     * {@code <available_skills>} listing and {@link #get} (so {@code load_skill}
+     * {@code <available_skills>} listing and {@link #get} (so the {@code skill} tool
      * refuses a disabled skill even if the model guesses its name). Persisted to a
      * sidecar {@code skills_state.json} — a bundled skill lives inside the mod jar
      * and can't carry an {@code enabled:false} flag in its own {@code SKILL.md}, so
@@ -238,13 +238,24 @@ public final class SkillRegistry {
     }
 
     public Optional<SkillInfo> get(String name) {
-        // A disabled skill is invisible to load_skill too, not just the listing.
+        // A disabled skill is invisible to the skill tool too, not just the listing.
         if (name != null && disabled.contains(name)) return Optional.empty();
         return Optional.ofNullable(skills.get(name));
     }
 
     public Collection<SkillInfo> all() {
         return skills.values();
+    }
+
+    /**
+     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),主人在面板里关掉的不算。系统提示的
+     * {@code <available_skills>} 索引与点错名字时列出的"有哪些"都是这一份。
+     */
+    public List<SkillInfo> available() {
+        return skills.values().stream()
+                .filter(s -> s.description() != null && !s.description().isBlank())
+                .filter(s -> !disabled.contains(s.name()))
+                .toList();
     }
 
     public int size() {
@@ -305,18 +316,13 @@ public final class SkillRegistry {
      * and the LLM doesn't need).
      */
     public String formatXml() {
-        // Mirror opencode: only show skills with a description (the LLM can't
-        // pick something it knows nothing about). Skills the player switched off
-        // in the panel are hidden here too, so the brain stops loading them.
-        var described = skills.values().stream()
-                .filter(s -> s.description() != null && !s.description().isBlank())
-                .filter(s -> !disabled.contains(s.name()))
-                .toList();
+        List<SkillInfo> described = available();
         if (described.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder(256);
         sb.append("Skills provide specialized instructions and workflows for specific tasks.\n");
-        sb.append("Use the load_skill tool to load a skill when a task matches its description.\n");
+        sb.append("Use the ").append(com.dwinovo.numen.agent.tool.SkillTool.NAME)
+                .append(" tool to load a skill when a task matches its description.\n");
         sb.append("<available_skills>\n");
         for (SkillInfo s : described) {
             sb.append("  <skill>\n");

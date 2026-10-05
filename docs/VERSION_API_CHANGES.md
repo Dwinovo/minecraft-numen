@@ -1018,6 +1018,62 @@ fix(未加载区块身体休眠 + 四条用例补 despawn)。双 loader 出包 +
 RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样五分钟的事,最后一个吃掉
 了本档大半排障时间,也推翻了上一档的一条旧结论。
 
+## 26.1.2 对齐 1.21.1 @7a3d3e251（0.1.3 功能面：程序执行、网络包、FakeClient、外观、背包装备、bench）
+方法:整树落成 1.21.1 的树,再把本分支的平台差异按 B26(`ddc705e63`)补回去,编译器与 GameTest 点名。
+本档**新**碰到的(旧并仓树里没有这些代码):
+
+### 代码侧
+- **SavedData 的新代码全走 `SavedDataType`**:`PlacedBlocks`(`numen:placed`)、`PermissionStore`(`numen:permissions_<uuid>`)、
+  `Built`(`numen:built`)各带一份 `CODEC`;单测与 GameTest 的"往返"走它,不再 `save`/`load(CompoundTag)`。
+- **`Inventory` 主背包私有化、副手/盔甲迁进 `EntityEquipment`**:`items` → `getNonEquipmentItems()`、`offhand` →
+  `setItem(Inventory.SLOT_OFFHAND, …)`、`selected` → `getSelectedSlot()/setSelectedSlot()`。**机械替换会误伤 Lua 文本**:
+  `numen.inv.items()` 这类字符串里的 `.items` 也被换成 `getNonEquipmentItems()`,GameTest 才抓得到。
+  单测里自造 `Inventory` 要和实体共用同一个 `EntityEquipment`(反射写 `equipment` 字段)。
+- **权限换成权限集**(`CommandSourceStack` 构造、`hasPermission`):`LevelBasedPermissionSet.OWNER/ALL/forLevel(…)`、
+  `permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)`。`OpList` 条目是 `NameAndId` + 权限集。
+- **环境属性**:`DimensionType.ultraWarm()` 没了,`WATER_EVAPORATES` 要位置才能查;"这个维度水会不会蒸发"读
+  `dimensionType().attributes().applyModifier(attribute, attribute.defaultValue())`(`pathing` 的 `Semantics.waterEvaporates`)。
+- **`ServerPlayer` 继承成员类型 `WaypointTransmitter.Connection`**:在 `ServerPlayer` 子类里写 `Connection` 解析到它,
+  不是 `net.minecraft.network.Connection`,要写全名。
+- **mixin 目标全部对着 26.1.2 反编译源核对过**:`ServerCommonPacketListenerImpl.send(Packet, ChannelFutureListener)`、
+  `ItemEntity.hurtServer`、`CraftingMenu` 的 `slotChangedCraftingGrid`(`ServerLevel` 参数)、`ToastManager` 访问器改名。
+- **`ConfigSync.syncPendingConfigs` 要求非内存连接有待同步登记**:没有客户端的模拟主人连接(GameTest 的 `OwnerLine`、bench 的
+  `OwnerConnection`)必须报 `isMemoryConnection() == true`。
+- **客户端没有全局着色器颜色**:界面淡入淡出走 `Fade`(环境 alpha),在 `McDrawSurface`/`Nb`/`Sprites` 与直接 `g.fill/text/blitSprite`
+  的几处收口;`Sprites.draw` 用完把 `Fade` 复位。聊天链接点击走 `clickUrlAction`,`ChatView` 用 `ClickableStyleFinder` 找链接。
+- **NeoForge FML 11**:内嵌资源根经 `IModFile.getContents().getContentRoots()` 找(`findFile` 不返回目录,`ModJar`);GameTest 登记
+  经 `RegisterGameTestsEvent`,只在 `GameTestHooks.isGametestEnabled()` 时挂。
+- **`Hotbar`**:`handlePickItem` 包没了,换成 `pickSlot` 一类的服务端入口。
+
+### 测试侧
+- **GameTest 数据化**(1.21.5 起):`@GameTest`/`@BeforeBatch`/`@GameTestHolder` 全删。用例类上自带三枚注解
+  (`NumenTest`/`NumenBeforeBatch`/`NumenAfterBatch`,住在寻路的 GameTest 源码集),`NumenGameTests` 经 FML 注解扫描登记成
+  `NumenTestInstance`,批次的开场收尾包成 `NumenTestEnvironment`;同批次仍同批跑。**自带 test_instance 类型,不用原版
+  `FunctionGameTestInstance`**(`TEST_FUNCTION` 注册表在引导时冻结)。用例名 `numen:<类名小写>.<方法名>`。
+- **结构模板**放 `data/<ns>/structure/` 资源包布局,而且 **helper 的原点在模板第 1 层**(模板在原点下一层):1.21.1 的地板模板要在底下
+  再垫一层(`size.y+1`、全部方块 y+1、原 y0 层再复制成新 y0),否则整个场地矮一格。
+- **批次开场钉住场地**:`RANDOM_TICK_SPEED=0`、`FIRE_SPREAD_RADIUS_AROUND_PLAYER=0`(26.1 的火在有玩家的区域里按刻变老,身体是玩家;
+  随机刻让草皮枯成泥土、耕地失水——用例对账看"除了她动过的一格都没变")。
+- **服务器每刻补足 2 毫秒**(`NumenGameTests.pace`):GameTest 服务器不限速,26.1 的一刻只要几十微秒(实测每秒两万多刻,1.21.1 约 600),
+  按刻写的时限比异步搜索/诊断(按墙钟)先到。`setTickRate` 压不住(`GameTestServer.waitUntilNextTick` 直接跑任务,不等)。
+- **评测(bench)**同样数据化:`Bench.suite` 返回 `Optional<Bench.Run>`,场景类的方法标 `@BenchSuite`,`NumenBench` 在
+  `RegisterGameTestsEvent` 里扫出来、每组登记一条 `BenchTestInstance`(模板借核心的 `numen:floor16`);世界时间走世界时钟、
+  `GameRules.ADVANCE_TIME/ADVANCE_WEATHER/SPAWN_MOBS`。
+
+### 联动
+- **车万女仆、森罗物语:厨房**:NeoForge 版封顶 1.21.1,这条分支不建这两个联动模块。**Curios**:`15.0.0+26.1.2`(Curios 自家 maven),
+  只有 `ItemStack.getTags()` → `typeHolder().tags()` 一处要改。**FTB Quests**:`26.1.2.8` 存在(maven.ftb.dev),但 26.1 的事件 API
+  整个换了(`api/event/*Event` + `Data`,`events.ObjectCompletedEvent`/`TeamEvent` 没了,`ServerQuestFile.INSTANCE` 私有),联动要重写,
+  这一档没做。
+
+### MixinExtras
+1.21.1 有四处 mixin 用 `@WrapMethod`(要 MixinExtras ≥ 0.4,版本过旧时静默不生效)。26.1.2 上:NeoForge 的 GameTest 日志
+`MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.2 的 jar 内嵌 `mixinextras-fabric-0.5.4.jar`。两边都够,不用内嵌。
+
+### 已知红
+`build_japanese_cottage`(核心 GameTest):盖到屋顶时她走过厨房柜台那排"开着的活板门 + 半砖"去够屋顶格,WALK 越过活板门板子靠起跳,落过头(落在
+隔壁的脚手架上)再被拉回,三次"落回起点"后 `numen.build.raise` 以 `no_path` 收场(159 格没盖)。1.21.1 同一份代码同一份图纸过(它上屋顶走的是垫柱);
+本档没找到分叉点——寻路的步骤执行与规划都是 1.21.1 的原样,图纸里 1.21.5 才有的方块(wildflowers/leaf_litter)换成空气也一样失败。
 ---
 
 ## 26.1.2 → 26.2 ✓（已验证：双 loader 编译 + 出包 + datagen 四路零漂移 + 867 单测零跳过 + 65 条游戏内用例 ×3;渲染第五震:Vulkan 化管线 + 屏幕/HUD 拆家 + 立即模式终结）

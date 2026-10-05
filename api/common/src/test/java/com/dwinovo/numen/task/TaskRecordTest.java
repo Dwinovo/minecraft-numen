@@ -53,35 +53,41 @@ class TaskRecordTest {
     }
 
     @Test
-    void aSleepingTaskStillGrowsOld() {
-        // 「刚受理」这道闸门是给"模型在同一批工具调用里连派两件活"准备的,判据必须是
-        // <b>记录多老</b>,不能拿「任务被 tick 过几刻」当代理:follow 在主人身边时会休眠
-        // (canRun 返 false),槽轮不到 tick —— 用代理量的话,一个跟了你十分钟的跟随任务
-        // 会永远自称"刚受理",你让她顺手捡个掉落物都被拒,而拒绝话术还让模型去等一个
-        // 常驻任务永远不会发的 task_finished。
-        //
-        // 判据必须问「记录多老」,那跟它跑没跑过无关。
-        Fake sleeping = new Fake(TaskRecord.NO_DEADLINE);
-        sleeping.markStarted(100L);
-
-        assertTrue(sleeping.acceptedThisTick(100L), "受理的那一刻,是刚受理");
-        assertFalse(sleeping.acceptedThisTick(101L), "下一刻就不是了 —— 哪怕它一刻都没跑过");
-        assertFalse(sleeping.acceptedThisTick(100L + 20 * 600L), "十分钟后更不是");
-    }
-
-    @Test
-    void anUnstartedRecordIsNotFresh() {
-        // markStarted 还没叫过(startedGameTime = -1):不该因为"-1 比谁都小"就
-        // 意外命中,也不该反过来把整个世界都判成刚受理。
-        assertFalse(new Fake(1000L).acceptedThisTick(0L));
-    }
-
-    @Test
     void deadlinesOnlyEverMoveLater() {
         // 冻结用的是"只往后不往前"的语义:一次抢占不该把别人已经争取到的宽限抹掉
         Fake bounded = new Fake(1000L);
         bounded.extendDeadlineTo(2000L);
         bounded.extendDeadlineTo(1500L);
         org.junit.jupiter.api.Assertions.assertEquals(2000L, bounded.getDeadlineGameTime());
+    }
+
+    @Test
+    void aStopRemembersWhoStoppedIt() {
+        // 任务不知道谁叫停的它;记录记下来,结算时写进模型读到的那句话
+        Fake running = new Fake(1000L);
+        running.setState(TaskState.RUNNING);
+        running.stop(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(TaskState.CANCELLED, running.getState());
+        org.junit.jupiter.api.Assertions.assertEquals(TaskRecord.StopCause.OWNER, running.getStopCause());
+    }
+
+    @Test
+    void aFinishedTaskIsNotReStoppedByALateStop() {
+        // 已经干完的活,晚到一步的停止不改它的结局,也不冒充是谁停的
+        Fake done = new Fake(1000L);
+        done.setState(TaskState.SUCCESS);
+        done.stop(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(TaskState.SUCCESS, done.getState());
+        org.junit.jupiter.api.Assertions.assertNull(done.getStopCause());
+    }
+
+    @Test
+    void theStopCauseHeadsTheMessageAndKeepsTheRest() {
+        TaskResult stopped = TaskResult.cancelled("interrupted after I dug 1/5 named cells of oak_log")
+                .stoppedBy(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "the owner pressed Stop — interrupted after I dug 1/5 named cells of oak_log", stopped.message());
+        assertTrue(stopped.interrupted());
+        assertFalse(stopped.success());
     }
 }

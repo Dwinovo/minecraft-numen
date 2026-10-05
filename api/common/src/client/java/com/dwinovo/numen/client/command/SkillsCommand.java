@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.skill.SkillInfo;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
@@ -23,7 +25,7 @@ final class SkillsCommand implements PopupCommand {
 
     @Override
     public String description() {
-        return "技能开关";
+        return I18n.get(Keys.CMD_SKILLS);
     }
 
     @Override
@@ -36,7 +38,7 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public String title() {
-            return "技能   ↑↓ 选择 · 回车开关 · Esc 返回";
+            return I18n.get(Keys.CMD_SKILLS_TITLE);
         }
 
         @Override
@@ -49,8 +51,7 @@ final class SkillsCommand implements PopupCommand {
                 out.add(new SelectPanel.Row(info.name(), desc, !reg.isDisabled(info.name())));
             }
             if (out.isEmpty()) {
-                out.add(new SelectPanel.Row("(还没有技能)",
-                        "往 config/numen/skills 放一个带 SKILL.md 的目录", null));
+                out.add(new SelectPanel.Row(I18n.get(Keys.CMD_SKILLS_EMPTY), I18n.get(Keys.CMD_SKILLS_EMPTY_HINT), null));
             }
             return out;
         }
