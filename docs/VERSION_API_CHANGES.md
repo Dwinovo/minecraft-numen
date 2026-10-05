@@ -182,6 +182,42 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
   方块/物品名无需改。
 - 验收数字：单测 867 全绿（0 跳过）,gametest 65/65 连续 3 轮全绿。
 
+### 1.21.4 二次对齐(0.1.3 → 1.21.1@7a3d3e251)
+
+整树对齐新增 agent/lua/pathing/bench/插件框架之后,新代码碰到的 1.21.2+ 差异(上面没有的),逐条:
+
+**注册表与配方**
+- `Registry.asLookup()` 没了:注册表自己就是 `HolderLookup`,直接传 `BuiltInRegistries.BLOCK`。`registryAccess().registryOrThrow` → `lookupOrThrow`,`getHolderOrThrow` → `getOrThrow`。
+- 配方:`level.getRecipeManager()` → `level.recipeAccess()`;`byKey` 吃 `ResourceKey<Recipe<?>>`(`ResourceKey.create(Registries.RECIPE, id)`);**`RecipeHolder.id()` 现在是 ResourceKey,取原来的字符串要 `.id().location()`**(直接 `toString()` 编得过、值错);静态配料清单走 `placementInfo()`,`Ingredient.items()` 是 `Stream<Holder<Item>>`,熔炼/切石 `input()`/`cookingTime()`。
+- `CraftingMenu.slotChangedCraftingGrid` 的 level 参数是 `ServerLevel`(CraftingMenuAccessor 的 @Invoker 描述符要跟)。
+
+**玩家与服务端**
+- ❗ **`ServerPlayer.hasClientLoaded()`**:为假时服务端不收任何动作包(挖/放/用)且玩家不受伤;原版靠客户端发 `ServerboundPlayerLoadedPacket`,60 刻后兜底。假玩家走真包路径的操作(寻路模块的 `PlayerHands`)头 60 刻会被静默吞掉(症状是挖掘全报"服务端没让挖")。FakeClient 在收到下行 `ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START` 时晚一刻替她回 `handleAcceptPlayerLoad`,与回传送编号同一套。
+- `ClientboundPlayerPositionPacket.getId()` → `id()`;`MinecraftServer.tell` → `schedule`;`Item.getDescription()` → `getName()`;`ServerPlayer.shouldInformAdmins()` 不再对外(玩家的指令来源恒为 true,McApi 直接传 true);`isInvulnerableTo(ServerLevel, DamageSource)`;`teleportTo(level, x,y,z, yaw, pitch)` → `teleportTo(level, x,y,z, Set<Relative>, yaw, pitch, setCamera)`;`changeDimension(DimensionTransition)` → `teleport(TeleportTransition)`。
+- 背包:`ServerboundPickItemPacket` 拆成按方块/按实体两个包,背包深处换进快捷栏改直接 `inventory.pickSlot(slot)` + `ClientboundSetHeldSlotPacket` + `inventoryMenu.broadcastChanges()`(与原版 `tryPickItem` 收尾同三步);`setPickedItem` → `addAndPickItem`。
+- `InteractionResult` 成密封接口:`shouldSwing()` → `result instanceof Success s && s.swingSource() == SwingSource.SERVER`。
+- 高度:`LevelHeightAccessor.getMinBuildHeight()` 抽象方法换成 `getMinY()`(自家 `WorldView`/`SearchView` 的实现与单测夹具一并改);`getMaxBuildHeight()`(不含端)→ `getMaxY()`(含端),要保持"上界不含端"的写成 `getMaxY() + 1`;`getMinSection` → `getMinSectionY`。
+- `Direction`:`getNormal` → `getUnitVec3i`;`getNearest(double×3)` → `getApproximateNearest`(同一套点积算法);`getNearest(int×3)` 补兜底参 `Direction.NORTH`;`fromDelta` 没了,同样走 `getNearest(..., NORTH)`。
+
+**mixin(无头测不到,逐个对源码核过签名)**
+- `ItemEntity.hurt` → `hurtServer(ServerLevel, DamageSource, float)`(ItemEntityDropsMixin)。
+- 船族上移 `AbstractBoat`;`EntityType.BOAT` → `OAK_BOAT`,`NavText` 报"下了 oak_boat"(单测断言跟随)。`MoveToCompanionTask`/`Planning` 里的 `instanceof Boat` 必须改 `AbstractBoat`,否则木筏/箱船静默漏判。
+- 气泡 mixin 沿用 `MixinLivingEntityRenderer`,挂载点改 HEAD(与 1.21.1 的理由一致:接管渲染的插件取消渲染前置事件时 TAIL 不会跑)。
+- `ToastComponent` → `ToastManager`,`getToasts()` → `getToastManager()`(ToastComponentAccessor 的目标随之换,类名未动)。
+- MixinExtras `@WrapMethod` 要 ≥ 0.4:NeoForge 21.4.123 自带 0.4.1(GameTest 日志 `MixinExtrasServiceImpl(version=0.4.1` 实证),Fabric loader 0.18.1 自带 0.5.0(jar 内 `META-INF/jars/mixinextras-fabric-0.5.0.jar` 实证,Fabric 侧无头测不到)。够用,不内嵌。
+
+**客户端渲染**
+- 1.21.2+ `GuiGraphics` 没有 `setColor`,画下去的东西先攒进缓冲、`flush()` 才真画,画的那一刻用 `RenderSystem` 着色器颜色。整块画面的不透明度走 `GuiAlpha.set(g, alpha)`(先 flush 再设着色器颜色);`Sprites.draw` 的着色走 `blitSprite(RenderType::guiTextured, …, argb)` 的顶点色并在贴完 flush,与 1.21.1 "tint 覆盖着色器颜色、贴完复位"同语义。
+- `LevelRenderer.renderLineBox` → `ShapeRenderer.renderLineBox`;`blitSprite` 补 `RenderType::guiTextured`。NumenUI 的圆角 shader 已随 1.21.1 删除,本分支不再有 shader 注册。
+
+**GameTest / 单测夹具**
+- `EntityType.create(level)` 补 `EntitySpawnReason.STRUCTURE`;`new Boat(...)`/`new Minecart(...)` → `create` + `setInitialPos`。
+- 冻结注册表拒绝直写标签:`MappedRegistry.bindTags` 夹具(RuleTest、GateTerrainTest、ThrowawayTagTestSupport、pathing 的 Vanilla)改走 `Registry#prepareTagReload(new TagLoader.LoadResult<>(key, tags)).apply()`,它会整体换掉标签集,所以"清空"也写成空 map。
+- 模板垫底(`floor16/20/52`):size y+1、data 整体 y+1、原 y0 层复刻为新底层。pathing 的三个空模板只有尺寸,不用垫。
+- 寻路 StrideControl:脚已经不比落点低就不再起跳。1.21.4 上日式小屋用例稳定复现:开着的活板门(整高薄板)后面是半砖,她跳过薄板落在板顶,落点比板顶低,原逻辑落地后又 `onGround && 前沿贴近` 地再跳,一路蹦过落点,再回头走又被"落回前一步起点"判为 FELL_BACK,三次后整段收场。1.21.1 上同一用例过,是因为两版施工的先后在第 1491 条规划起出现平局分歧、没走到这一处;这是共用代码里的缺口,不是 1.21.4 的物理差异(逐刻轨迹的起跳、落地与 1.21.1 的原版公式一致)。
+
+**插件**:1.21.4 NeoForge 上只有 Curios(Maven `10.0.x+1.21.4`)。车万女仆、YSM、森罗物语在 Modrinth 上只有 1.21/1.21.1 版;FTB Quests 的 maven 里只有 2004/2100/2101/2111/26.1.2 五档(没有 1.21.4)。故 `plugins/` 只留 curios,Builtin 只列它,Fabric 侧没有联动(Curios 只有 NeoForge 版),不建 `core/fabric` 的 Builtin。
+
 ---
 
 ## 1.21.4 → 1.21.5
