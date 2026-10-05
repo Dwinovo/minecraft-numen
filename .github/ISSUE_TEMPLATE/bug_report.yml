@@ -1,0 +1,51 @@
+name: Bug 报告 / Bug report
+description: 同伴行为不对、报错、崩溃 / Wrong behavior, errors or crashes
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么 / What happened
+      description: "尽量详细：你对同伴说了什么、它做了什么、你觉得本来应该怎样 / As much detail as you can: what you told the companion, what it did, and what you expected"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mc-version
+    attributes:
+      label: Minecraft 版本 / Minecraft version
+      options:
+        - "1.20.1"
+        - "1.20.2"
+        - "1.20.4"
+        - "1.20.6"
+        - "1.21"
+        - "1.21.1"
+        - "1.21.4"
+        - "1.21.5"
+        - "1.21.8"
+        - "1.21.10"
+        - "1.21.11"
+        - "26.1.2"
+        - "26.2"
+
+  - type: dropdown
+    id: loader
+    attributes:
+      label: 加载器 / Mod loader
+      options:
+        - Fabric
+        - NeoForge
+        - Forge
+
+  - type: input
+    id: numen-version
+    attributes:
+      label: Numen 版本 / Numen version
+      placeholder: "0.1.3"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（可选）/ Logs (optional)
+      description: 有的话把 `logs/latest.log` 拖进来 / If you have it, drag `logs/latest.log` here

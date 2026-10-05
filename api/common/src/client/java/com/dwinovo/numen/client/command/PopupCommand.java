@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.ui.widget.Popup;
 
@@ -29,6 +31,6 @@ public interface PopupCommand extends ChatCommand {
      */
     @Override
     default String run(EntityAgentLoop loop, String args) {
-        return ChatCommands.PREFIX + name() + " 要在聊天面板里用。";
+        return I18n.get(Keys.CMD_POPUP_ONLY, ChatCommands.PREFIX + name());
     }
 }

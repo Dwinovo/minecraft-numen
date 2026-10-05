@@ -11,11 +11,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-/** {@code drop_items} on the player body — toss items forward, natively. One-tick. */
+/**
+ * {@code inv drop} on the player body — toss items forward, natively. One tick when the permission
+ * layer allows it; otherwise the call waits for the owner's answer.
+ */
 public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTaskRecord> {
 
     private int dropped;
@@ -37,13 +38,29 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
 
     @Override
     protected void onStart() {
+        tryDrop();
+    }
+
+    /**
+     * 丢之前交给权限层(出厂规则每次都问):放行就丢、当刻收场;要问就等主人点头,这次调用悬着;
+     * 不许就带着理由收场。
+     */
+    private TaskState tryDrop() {
+        Permit permit = permit(com.dwinovo.numen.permission.Action.drop(r.item));
+        if (permit.state() == PermitState.WAITING) {
+            return TaskState.RUNNING;
+        }
+        if (permit.state() == PermitState.REFUSED) {
+            fail("did not drop " + r.label + ": " + permit.refusal(), FailureType.REFUSED);
+            return TaskState.FAILED;
+        }
         Inventory inv = player.getInventory();
         int have = PlayerInv.count(inv, r.item);
         dropped = Math.min(r.count, have);
 
         // 丢的是背包里<b>真实的那几叠</b>:从格子里拆出来的栈带着自己的全部组件
         // (附魔/耐久/改名/容器内容物)。曾经按数量销毁再 new ItemStack 重造,附魔镐
-        // 丢出来变白板——凭空重造只属于创造模式的 take_items,不属于这里。
+        // 丢出来变白板——凭空重造只属于创造模式的 creative give,不属于这里。
         // Toss like a real player: native Player.drop(stack, false) throws each stack in the facing
         // direction with vanilla motion + pickup delay and fires the drop event (mods watching item
         // tosses see it) — instead of hand-building an ItemEntity with a made-up velocity.
@@ -59,24 +76,24 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         doneMessage = "dropped " + dropped + "x " + r.label
                 + (dropped < r.count ? " (only had " + dropped + ")" : "");
         succeed();   // work is done — finalize this same tick, before a Stop can mislabel it
+        return TaskState.SUCCESS;
     }
 
     @Override
     protected TaskState onTick() {
-        return TaskState.SUCCESS;
+        return tryDrop();
     }
 
     /** No nav / overlay to release. */
     @Override
     protected void cleanup() {}
 
+    /** 丢了几件、还剩几件:{@code numen.inv.drop} 交回的值。 */
+    public record Dropped(String item, int dropped, int remainingInInventory) {}
+
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("item", r.label);
-        data.put("dropped", dropped);
-        data.put("remaining_in_inventory", PlayerInv.count(player.getInventory(), r.item));
-        return data;
+    protected Dropped value() {
+        return new Dropped(r.label, dropped, PlayerInv.count(player.getInventory(), r.item));
     }
 
     @Override

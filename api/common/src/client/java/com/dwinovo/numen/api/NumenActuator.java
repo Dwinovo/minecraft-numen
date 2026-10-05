@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api;
 
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ClientToolContext;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
@@ -7,11 +8,10 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.agent.tool.ScriptTool;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.network.payload.SummonRequestPayload;
-import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>Actuator vs {@link NumenGateway}</h2>
  * Two deliberately separate doors:
  * <ul>
- *   <li>{@link NumenGateway#enqueue} feeds a message to the companion's
+ *   <li>{@link NumenGateway#emit} feeds a message to the companion's
  *       <em>built-in brain</em>, which then decides what to do. The brain stays
  *       in charge (chat, QQ, stream relays use this).</li>
  *   <li>{@code NumenActuator} lets an <em>external</em> brain skip the built-in
@@ -70,6 +70,10 @@ public final class NumenActuator {
 
     /** Synthetic tool-call ids for headless invocations, disjoint from the LLM's ids. */
     private static final AtomicLong SEQ = new AtomicLong();
+    /** Ids of programs an external brain runs, disjoint from the LLM's ids. */
+    private static final String PROGRAM_PREFIX = "ext-";
+    /** Ids of the other tools an external brain calls (tools of remote MCP servers), disjoint from the LLM's ids. */
+    private static final String TOOL_PREFIX = "mcp-";
 
     private NumenActuator() {}
 
@@ -110,15 +114,15 @@ public final class NumenActuator {
                 return;
             }
             String n = name == null ? "" : name.trim();
-            Services.NETWORK.sendToServer(new SummonRequestPayload(n, "", "", false));
+            NumenNetwork.sendToServer(new SummonRequestPayload(n, "", "", false));
             f.complete(true);
         });
         return f;
     }
 
     /**
-     * Permanently dismiss a companion — its body drops its whole inventory (like
-     * death), then it's gone for good — exactly the panel's ✕. The roster updates
+     * Permanently dismiss a companion — its body drops its whole inventory, armor and
+     * accessories (like death), then it's gone for good — exactly the panel's ✕. The roster updates
      * asynchronously; confirm via {@link #companions()}.
      *
      * @return true once the request was sent; false if not currently in a world
@@ -134,28 +138,12 @@ public final class NumenActuator {
                 f.complete(false);
                 return;
             }
-            Services.NETWORK.sendToServer(new DismissRequestPayload(companion));
+            NumenNetwork.sendToServer(new DismissRequestPayload(companion));
             f.complete(true);
         });
         return f;
     }
 
-    /**
-     * Run one tool for {@code companion} directly — the same tools the built-in
-     * brain uses (see {@link ToolRegistry#all()} for the catalogue), invoked
-     * without the LLM. Perception tools resolve fast; world-action tools resolve
-     * when the body finishes the task.
-     *
-     * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
-     * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
-     * the tool's result as a {@link TaskResult} JSON string; failures (unknown tool,
-     * bad args, a thrown tool) come back as a {@code TaskResult.fail} JSON, never an
-     * exceptional future.
-     *
-     * @param companion the body to act with
-     * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})
-     * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
-     */
     /**
      * Take whatever events are pending right now (the owner speaking arrives as a
      * {@code <query>}, world happenings as {@code <event>}s — same wire text the
@@ -244,28 +232,60 @@ public final class NumenActuator {
         return f;
     }
 
+    /**
+     * Run one tool for {@code companion} directly — the same tools the built-in
+     * brain uses (see {@link ToolRegistry#all()} for the catalogue), invoked
+     * without the LLM.
+     *
+     * <p>The script tool runs a program through the companion's own dispatcher
+     * ({@code EntityAgentLoop#runExternal}): the same one the built-in brain uses, so
+     * it waits for each body task to finish, stops between calls on an urgent event,
+     * and the future completes with the program's receipt when it ends. A task's end goes
+     * to the program that waits for it and into that receipt; a task left running when the
+     * program stops ends as a task_finished event in get_events. Other tools
+     * (the skill tool, tools of remote MCP servers) are invoked as they are.
+     *
+     * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
+     * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
+     * the tool's result as a {@code ToolOutcome} JSON string; failures (unknown tool,
+     * bad args, a thrown tool) come back as a {@code ToolOutcome.failure} JSON, never an
+     * exceptional future.
+     *
+     * @param companion the body to act with
+     * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})
+     * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
+     */
     public static CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
-            f.complete(TaskResult.fail("companion and toolName are required").toJson());
+            f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("companion and toolName are required"));
             return f;
         }
         Minecraft.getInstance().execute(() -> {
             try {
                 NumenTool tool = ToolRegistry.resolve(toolName);
                 if (tool == null) {
-                    f.complete(TaskResult.fail("unknown tool: " + toolName).toJson());
+                    f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("unknown tool: " + toolName));
+                    return;
+                }
+                String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
+                if (tool instanceof ScriptTool) {
+                    ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
+                    LlmToolCall program = new LlmToolCall(PROGRAM_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
+                    if (!AgentLoopRegistry.getOrCreate(companion).runExternal(program, f::complete)) {
+                        f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("a program is already running for this companion, or its "
+                                + "built-in brain is acting; wait for it to end"));
+                    }
                     return;
                 }
                 AbstractClientPlayer body = ClientNumenLookup.resolve(companion);
-                String id = TaskRecord.EXTERNAL_CALL_PREFIX + SEQ.incrementAndGet();
-                String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
+                String id = TOOL_PREFIX + SEQ.incrementAndGet();
                 ToolCall call = new ToolCall(id, toolName, args,
                         new ClientToolContext(body, companion),
                         f::complete);
                 tool.invoke(call);
             } catch (RuntimeException ex) {
-                f.complete(TaskResult.fail(ex.getMessage()).toJson());
+                f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure(ex.getMessage()));
             }
         });
         return f;

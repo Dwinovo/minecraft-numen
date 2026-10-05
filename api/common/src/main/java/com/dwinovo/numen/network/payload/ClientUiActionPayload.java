@@ -17,8 +17,7 @@ public record ClientUiActionPayload(Action action) implements CustomPacketPayloa
 
     public enum Action { OPEN_SETTINGS, RESET_LOOPS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "client_ui_action");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "client_ui_action");
 
     @Override
     public ResourceLocation id() {
@@ -27,11 +26,11 @@ public record ClientUiActionPayload(Action action) implements CustomPacketPayloa
 
     @Override
     public void write(FriendlyByteBuf buf) {
-        buf.writeVarInt(action.ordinal());
+        buf.writeEnum(action);
     }
 
     public static ClientUiActionPayload read(FriendlyByteBuf buf) {
-        return new ClientUiActionPayload(Action.values()[buf.readVarInt()]);
+        return new ClientUiActionPayload(buf.readEnum(Action.class));
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

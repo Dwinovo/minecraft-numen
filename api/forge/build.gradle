@@ -32,7 +32,10 @@ minecraft {
                 modClientRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -44,7 +47,10 @@ minecraft {
                 modServerRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -57,7 +63,10 @@ minecraft {
                 modDataRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -108,13 +117,20 @@ sourceSets.each {
 // 消费方(如 :core:forge:compileJava)拿到目录时两类内容都已就位,不再竞态。
 tasks.named('compileJava') { dependsOn tasks.named('processResources') }
 
-// Forge 49 起 dev 启动为 GAME 模块层做 JPMS 校验:ai/ui 兄弟 jar 若上了运行
-// classpath,会以自动模块身份与聚合进 numen_api 模组模块(runs 的 mods 块)的
-// 同名包冲突,直接拒启。从运行用的 runtimeClasspath 里排除这两个工件——
-// 它们的类经 MOD_CLASSES(源码集输出)进运行,一个不少;编译、打包不受影响。
-configurations.named('runtimeClasspath') {
-    exclude module: 'ai'
-    exclude module: 'ui'
+// Forge 49 起 dev 运行的 classpath 上不许有兄弟模块的 jar:见 gradle/forge-run-classpath.gradle
+apply from: rootProject.file('gradle/forge-run-classpath.gradle')
+
+// core 的开发运行用的 api 模组:内容与发行 jar 相同(api 自己的类加上平铺进来的兄弟模块,official 名,未经 reobf)。
+// Forge 49 的 dev 运行只把"自带 mods.toml 的类路径条目"当模组,目录之外的兄弟模块由应用类加载器加载,
+// 它们与 api 的类共用 gson 等原版自带的库时就是 LinkageError;打成一个 jar,api 与兄弟模块同处游戏层。
+// (取 jar 的文件树而不是 with(jar) 共用它的拷贝规格:MixinGradle 的 addMixinsToJar 在执行期往 jar 的规格里加输入,共用就是改了
+// 已经开始执行的任务。)
+tasks.register('devJar', Zip) {
+    from({ tasks.named('jar').get().source })
+    archiveClassifier = 'dev'
+    archiveExtension = 'jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE   // 文件树不带 jar 里的改名,几份 LICENSE 同名
+    destinationDirectory = layout.buildDirectory.dir('devjars')
 }
 
 // mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，

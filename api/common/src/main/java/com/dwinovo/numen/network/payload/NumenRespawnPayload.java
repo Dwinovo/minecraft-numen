@@ -1,11 +1,14 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: a companion has respawned at the owner's side after dying — both the same-session
@@ -14,10 +17,10 @@ import java.util.UUID;
  * in-memory death state. The owner's {@link com.dwinovo.numen.client.agent.EntityAgentLoop} is created
  * if needed and reawakened with a death {@code <event>}.
  */
-public record NumenRespawnPayload(UUID entityUuid, String cause) implements CustomPacketPayload {
+public record NumenRespawnPayload(UUID entityUuid, String cause)
+        implements CustomPacketPayload, Wire.Oversized<NumenRespawnPayload> {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "numen_respawn");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "numen_respawn");
 
     @Override
     public ResourceLocation id() {
@@ -27,11 +30,17 @@ public record NumenRespawnPayload(UUID entityUuid, String cause) implements Cust
     @Override
     public void write(FriendlyByteBuf buf) {
         buf.writeUUID(entityUuid);
-        buf.writeUtf(cause);
+        Wire.writeText(buf, cause);
     }
 
     public static NumenRespawnPayload read(FriendlyByteBuf buf) {
-        return new NumenRespawnPayload(buf.readUUID(), buf.readUtf());
+        return new NumenRespawnPayload(buf.readUUID(), Wire.readText(buf));
+    }
+
+    /** 死因是原版的死亡消息,里面的名字长短不归这个包定;长到整包装不下时换成一句说明,死没死、是谁照旧。 */
+    @Override
+    public NumenRespawnPayload shrunk(Predicate<NumenRespawnPayload> fits, int bytes, int budget) {
+        return new NumenRespawnPayload(entityUuid, Wire.TO_CLIENT.tooBig("The cause of death", bytes) + ", so it is not shown.");
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that).

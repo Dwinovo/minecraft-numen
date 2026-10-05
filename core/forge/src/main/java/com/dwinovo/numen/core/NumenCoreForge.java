@@ -1,17 +1,12 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
-import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.loading.FMLEnvironment;
 
 import java.nio.file.Path;
 
@@ -31,35 +26,41 @@ public class NumenCoreForge {
     public NumenCoreForge() {
         NumenCore.init();
 
-        // 游戏内用例的注册走<b>模组总线</b>,不是游戏总线:Forge 1.20.4 不像高版本
-        // 那样扫描 @GameTestHolder 自动收集,得在 RegisterGameTestsEvent 里把持有
-        // 类交出去。跑批时由 -Dforge.enabledGameTestNamespaces 决定跑不跑。
-        net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
-                .addListener((net.minecraftforge.event.RegisterGameTestsEvent e) ->
-                        e.register(com.dwinovo.numen.core.gametest.CompanionGameTests.class));
+        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
+        com.dwinovo.numen.plugins.Builtin.registerAll();
 
         MinecraftForge.EVENT_BUS.addListener(NumenCoreForge::onServerTickPost);
         // Debug verbs merged into the /numen root registered by the engine mod.
         MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));
 
-        // Client-only: declare core's built-in skills, read in place from the
-        // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
-        // this never runs on a dedicated server.
-        if (FMLEnvironment.dist == Dist.CLIENT) {
-            declareBundledSkills();
-        }
+        // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
+        // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
+        declareBundledSkills();
+        declareBundledModules();
 
         Constants.LOG.info("numen-core initialised on Forge.");
     }
 
     private static void declareBundledSkills() {
-        Path root = ModList.get().getModFileById(Constants.MOD_ID).getFile().findResource("skills");
+        Path root = ModJar.find("skills");
         if (root != null) {
-            SkillRegistry.instance().declareBundled(root);
+            com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(root));
         } else {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
+    }
+
+    /**
+     * core 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
+     * GameTest 在服务端),所以直接登记,不等客户端。
+     */
+    private static void declareBundledModules() {
+        Path root = ModJar.find("modules");
+        if (root == null) {
+            throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
+        }
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(root));
     }
 
     private static void onServerTickPost(TickEvent.ServerTickEvent event) {
@@ -69,9 +70,8 @@ public class NumenCoreForge {
         MinecraftServer server = event.getServer();
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         BlockSearch.tick(server);
-        PathCaches.serverTick(server);
-        // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
-        com.dwinovo.numen.core.scan.TargetIndex.serverTick(server);
+        // Route plans (route plan): poll finished searches and reply.
+        com.dwinovo.numen.core.nav.RouteQueries.serverTick(server);
         // Debug particles for pathing state, sent only to players with debug on.
         PathDebugRenderer.serverTick(server);
     }

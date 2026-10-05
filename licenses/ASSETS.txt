@@ -1,0 +1,89 @@
+Numen — Art & Assets license (All Rights Reserved)
+
+Copyright (c) 2026 Dwinovo. All rights reserved.
+
+The source code of Numen is licensed under LGPL-3.0 (see LICENSE, and
+licenses/GPL-3.0.txt for the GNU GPL it builds on).
+This file covers the project's original art instead, collectively the "Assets":
+
+  - the in-game textures under
+    `api/common/src/main/resources/assets/numen_api/textures/`;
+  - the mod icons `api/common/src/main/resources/numen_api.png` and
+    `core/common/src/main/resources/numen.png`;
+  - the logos and branding images under `assets/branding/` and
+    `api/docs/branding/`;
+  - the source artwork the textures are made from, i.e. the image files
+    under `tools/ui-textures/` and `api/tools/ui-textures/`.
+
+Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
+-------------------------------------------------------------------------------
+
+These files may be shared and adapted, including commercially, under the
+Creative Commons Attribution 4.0 International license
+(https://creativecommons.org/licenses/by/4.0/), with attribution to
+"Numen (言出法随) by Dwinovo, https://github.com/Dwinovo/minecraft-numen":
+
+  - the screenshots under `assets/showcase/`;
+  - the demo animation `assets/numen-demo.gif`;
+  - the diagrams under `assets/diagrams/`.
+
+This covers the project's own rights only. Minecraft content shown in the
+screenshots and the demo remains subject to Mojang's and Microsoft's terms.
+
+Third-party art (NOT covered by the reservation below)
+------------------------------------------------------
+
+These icon sprites are not the project's art. They are converted from
+pixelarticons (https://github.com/halfmage/pixelarticons) with
+`api/tools/ui-textures/pixelarticons.py`, and stay under their own licence:
+
+  - `api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
+    icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
+    `icon_flag.png`, `icon_menu.png`, `icon_back.png`,
+    `icon_more.png`, `icon_user.png`, `icon_users.png`, `icon_user_plus.png`,
+    `icon_settings.png`, `icon_search.png`, `icon_cpu.png`, `icon_plug.png`,
+    `icon_robot.png`, `icon_book.png`, `icon_persona.png`, `icon_volume.png`,
+    `icon_shirt.png`, `icon_brush.png`, `icon_map_pin.png`,
+    `icon_backpack.png`, `icon_message.png`, `icon_reply.png`, `icon_pin.png`,
+    `icon_read.png`, `icon_user_x.png`,
+    `icon_moon.png`, `icon_sun.png`,
+    `icon_folder.png`, `icon_folder_plus.png`, `icon_check.png`,
+    `icon_cancel.png`
+
+    MIT License
+
+    Copyright (c) 2019 Gerrit Halfmann
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+The Assets are NOT covered by the LGPL-3.0. All rights to the Assets are
+reserved by the copyright holder. You may NOT copy, redistribute, modify, or
+use the Assets, in whole or in part, in any other project or product (free or
+commercial), except:
+
+  1. as they are distributed and used inside an unmodified official build of
+     Numen; or
+  2. with prior written permission from the copyright holder.
+
+The names "Numen" and "言出法随", and the project's branding, are reserved and
+may not be used to identify, advertise, or pass off derivative or third-party
+distributions as the official project.
+
+Asset license requests: open an issue at
+https://github.com/Dwinovo/minecraft-numen/issues

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import com.dwinovo.numen.entity.CompanionSpeech;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -16,8 +17,7 @@ import java.util.UUID;
  */
 public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements CustomPacketPayload {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "speaking_state");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "speaking_state");
 
     @Override
     public ResourceLocation id() {

@@ -92,7 +92,9 @@ class CompanionHomeTest {
         Files.writeString(CompanionHome.chat(A), "{}\n", StandardCharsets.UTF_8);
         Files.writeString(CompanionHome.stats(A), "{}", StandardCharsets.UTF_8);
         Files.writeString(CompanionHome.inbox(A), "{}\n", StandardCharsets.UTF_8);
-        Files.writeString(CompanionHome.blocks(A), "{}", StandardCharsets.UTF_8);
+        Files.createDirectories(CompanionHome.memory(A));
+        Files.writeString(CompanionHome.memory(A).resolve("base.md"), "note",
+                StandardCharsets.UTF_8);
         CompanionHome.bind(B, CompanionHome.Binding.EMPTY.withVoice("voice_1"));
 
         CompanionHome.delete(A);
@@ -211,7 +213,8 @@ class CompanionHomeTest {
         assertEquals("chat-a\n", Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8));
         assertEquals("{\"t\":1}", Files.readString(CompanionHome.stats(A), StandardCharsets.UTF_8));
         assertEquals("inbox-a\n", Files.readString(CompanionHome.inbox(A), StandardCharsets.UTF_8));
-        assertEquals("{\"b\":1}", Files.readString(CompanionHome.blocks(A), StandardCharsets.UTF_8));
+        assertEquals("{\"b\":1}", Files.readString(
+                CompanionHome.dir(A).resolve("blocks.json"), StandardCharsets.UTF_8));
         assertEquals("old-format\n", Files.readString(
                 CompanionHome.dir(A).resolve("chat.jsonl.v1.bak"), StandardCharsets.UTF_8));
         assertFalse(Files.exists(conv.resolve(A + ".jsonl")), "搬走就不该留在原地");

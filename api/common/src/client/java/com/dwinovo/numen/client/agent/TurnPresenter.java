@@ -1,43 +1,49 @@
 package com.dwinovo.numen.client.agent;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
+import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.loop.Hold;
+import com.dwinovo.numen.agent.loop.LoopEvent;
+import com.dwinovo.numen.agent.loop.LoopStatus;
+import com.dwinovo.numen.agent.loop.Phase;
+import com.dwinovo.numen.agent.loop.RunEnd;
+import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.client.chat.ChatLines;
+import com.dwinovo.numen.client.hud.NumenHudToasts;
+import com.dwinovo.numen.client.hud.SpeechBubbles;
+import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.client.voice.VoicePipeline;
-import com.dwinovo.numen.platform.Services;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.mcp.server.McpTranscript;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
-import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /**
- * 一个 agent loop 的<b>表现层</b>:聊天框打字机、头顶气泡、说话状态上报、
- * 流式语音(TTS)的接线与在飞文本缓冲。只管"她看/听起来在说话",不碰
- * 会话状态与回合机——那是 {@link EntityAgentLoop} 的事;删掉这一层,
- * 对话照常进行,只是又聋又哑。
+ * 一只同伴的<b>表现层</b>:聊天框打字机、头顶气泡、聊天栏的话与提示、错误 toast、说话状态上报、
+ * 流式语音(TTS)的接线与在飞文本缓冲。
+ *
+ * <p>它直接订阅循环内核的 {@link LoopEvent}({@link #on}),内核只管什么时候调模型、派工具、停下来,
+ * 不碰界面;这里只管"她看/听起来在干什么",不碰会话与队列。删掉这一层,对话照常进行,只是又聋又哑。
  */
 final class TurnPresenter {
 
     /**
-     * 一次 LLM 分发的语音接线:chunk 回调 + 收尾动作打包。语音未配置时是
-     * {@link #SILENT_VOICE}(sink 为 null、finish 是空操作),chatStreaming
-     * 收到 null onChunk 即走无语音那条路。
+     * 一次调模型的语音接线:正文增量的去处 + 收尾动作打包。语音未配置时是
+     * {@link #SILENT_VOICE}(两样都是空操作)。
      */
-    record VoiceTurn(Consumer<JsonObject> sink, Runnable finish) {}
+    private record VoiceTurn(Consumer<String> sink, Runnable finish) {}
 
-    private static final VoiceTurn SILENT_VOICE = new VoiceTurn(null, () -> {});
+    private static final VoiceTurn SILENT_VOICE = new VoiceTurn(delta -> {}, () -> {});
 
     private final UUID entityUuid;
-    /** 在飞回复流式中(打字机与说话位的数据源之一)。 */
-    private final BooleanSupplier streamingActive;
-    /** 大脑在输出(思考/生成/跑工具)——说话位取它与语音播报的并集。 */
-    private final BooleanSupplier turnBusy;
-    /** 当前回合代际(乱序 chunk 丢弃判据)。 */
-    private final IntSupplier generation;
+    /** 内核此刻的快照:打字机看"是不是在等模型",说话位看"是不是在输出"。 */
+    private final Supplier<LoopStatus> status;
     /** 人设名(可空);说话人显示名的第一优先。 */
     private final Supplier<String> personaName;
 
@@ -46,27 +52,56 @@ final class TurnPresenter {
      * 绑定时才 new。未绑定 = 永远 null = 零开销。
      */
     private VoicePipeline voice;
+    /** 这一次调模型的语音接线;{@link #beginTurn} 换上,{@link #endTurn} 收尾。 */
+    private VoiceTurn voiceTurn = SILENT_VOICE;
 
-    /** 在飞回复的已到 content 增量(流式打字机的数据源)。主线程读写:chunk 在
-     *  HTTP 线程到达后经 {@code Minecraft.execute} 蹦回来追加,代际不符直接丢;
-     *  回复落库/打断/死亡时清空——committed 消息接管显示,永不双份。 */
+    /** 在飞回复的已到 content 增量(流式打字机的数据源)。增量随内核的事件到达,只来自当前这次调用;
+     *  回复落库/失败/切断时清空——committed 消息接管显示,永不双份。 */
     private final StringBuilder livePartial = new StringBuilder();
     /** 在飞回合的思考流(推理模型的 reasoning 增量)。与 {@link #livePartial} 同一套
-     *  生命周期:同代际到达才追加,落库/打断/死亡一起清——落库后由 AssistantTurn
-     *  里那份 reasoning 接管显示,永不双份。 */
+     *  生命周期,落库后由 AssistantTurn 里那份 reasoning 接管显示,永不双份。 */
     private final StringBuilder liveReasoning = new StringBuilder();
     /** 上次刷进聊天框流式行的文本(变了才重刷,不逐 tick 折腾聊天框)。 */
     private String lastStreamedPartial = "";
     /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
     private boolean lastSpeakingSent;
 
-    TurnPresenter(UUID entityUuid, BooleanSupplier streamingActive, BooleanSupplier turnBusy,
-                  IntSupplier generation, Supplier<String> personaName) {
+    TurnPresenter(UUID entityUuid, Supplier<LoopStatus> status, Supplier<String> personaName) {
         this.entityUuid = entityUuid;
-        this.streamingActive = streamingActive;
-        this.turnBusy = turnBusy;
-        this.generation = generation;
+        this.status = status;
         this.personaName = personaName;
+    }
+
+    /** 内核的事件在这里变成主人看得见、听得见的东西。 */
+    void on(LoopEvent event) {
+        if (event instanceof LoopEvent.TurnStarted turn) {
+            beginTurn(turn.ownerSpoke());
+        } else if (event instanceof LoopEvent.ModelDelta delta) {
+            delta(delta.content(), delta.reasoning());
+        } else if (event instanceof LoopEvent.AssistantMessage message) {
+            showReply(message.turn());
+        } else if (event instanceof LoopEvent.RunEnded ended) {
+            if (!(ended.end() instanceof RunEnd.Done)) {
+                endTurn();   // 失败或被切断:半截文字作废、语音收尾(说完了的回复在落库时已经收过)
+            }
+        } else if (event instanceof LoopEvent.TurnFailed failed) {
+            showFailure(failed.words());
+        } else if (event instanceof LoopEvent.HoldChanged changed) {
+            if (changed.hold() == Hold.BLOCKED) {
+                showBlocked(changed.reason());
+            }
+        } else if (event instanceof LoopEvent.Halted) {
+            // 切断不管当时有没有 run 都会来:闲时按停止同样要让语音闭嘴、收起头顶的思考/残句
+            interruptVoice();
+            SpeechBubbles.clear(entityUuid);
+        } else if (event instanceof LoopEvent.RunStarted) {
+        } else if (event instanceof LoopEvent.ToolStarted) {
+        } else if (event instanceof LoopEvent.ToolFinished) {
+        } else if (event instanceof LoopEvent.ApiCalled) {
+        } else if (event instanceof LoopEvent.ProgramEnded) {
+        } else if (event instanceof LoopEvent.ModelUsed) {
+        } else if (event instanceof LoopEvent.TranscriptBoundary) {
+        }
     }
 
     /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
@@ -79,12 +114,6 @@ final class TurnPresenter {
         return liveReasoning.toString();
     }
 
-    /** 半截打字作废(打断/死亡/回复落库时):正文与思考流一起清。 */
-    void clearPartial() {
-        livePartial.setLength(0);
-        liveReasoning.setLength(0);
-    }
-
     /** 每 client tick:语音管线推进、说话状态上报、聊天框打字机。 */
     void tick() {
         if (voice != null) voice.tick();
@@ -92,92 +121,20 @@ final class TurnPresenter {
         streamToChat();
     }
 
-    /** onChunk 接线:content delta 直通 UI 的 live-partial,原始 chunk 原样继续喂语音。 */
-    Consumer<JsonObject> tapForUi(int gen, Consumer<JsonObject> voiceSink) {
-        return tapForUi(gen, voiceSink, null);
-    }
-
     /**
-     * 带思考流分接头的版本:reasoningDelta(provider 的方言解码)抽出的思考
-     * 增量喂头顶思考泡的本地流——主人能看见她在想什么,不只是省略号。
-     */
-    Consumer<JsonObject> tapForUi(int gen, Consumer<JsonObject> voiceSink,
-                                  java.util.function.Function<JsonObject, String> reasoningDelta) {
-        return chunk -> {
-            String delta = VoicePipeline.extractContentDelta(chunk);
-            if (delta != null && !delta.isEmpty()) {
-                Minecraft.getInstance().execute(() -> {
-                    if (gen == generation.getAsInt()) livePartial.append(delta);
-                });
-            }
-            if (reasoningDelta != null) {
-                String r = reasoningDelta.apply(chunk);
-                if (r != null && !r.isEmpty()) {
-                    Minecraft.getInstance().execute(() -> {
-                        if (gen == generation.getAsInt()) liveReasoning.append(r);
-                    });
-                }
-            }
-            if (voiceSink != null) voiceSink.accept(chunk);
-        };
-    }
-
-    /**
-     * 为即将发出的 chat 请求开启一轮语音(若该同伴绑定了声线)。每次分发都
-     * 重新 resolve——声线库/绑定的编辑下一轮生效;开新轮会打断上一轮还在
-     * 播的残句(新内容优先,与打断语义一致)。
-     */
-    /** {@code ownerBargeIn} = 本轮由主人夺话触发(硬停上一轮);否则句界衔接。 */
-    VoiceTurn beginVoiceTurn(boolean ownerBargeIn) {
-        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
-        if (cfg == null) {
-            if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
-            return SILENT_VOICE;
-        }
-        if (voice == null) {
-            voice = new VoicePipeline(entityUuid);
-        }
-        final var vp = voice;
-        final int vgen = vp.beginTurn(cfg, ownerBargeIn);
-        return new VoiceTurn(vp.chunkSink(vgen), () -> vp.endTurn(vgen));
-    }
-
-    /** 语音闭嘴:停播 + 清队列(打断/死亡)。 */
-    void interruptVoice() {
-        if (voice != null) voice.interrupt();
-    }
-
-    /**
-     * 外接大脑的整段发声(say):按当前绑定现取声线,整段排到播放队尾——
-     * 不开新轮、不清存量,连续的 say 自然连播。未绑声线 = 静默(气泡与聊天行照旧)。
+     * 外接大脑替她说话(say 工具):头顶气泡 + 聊天栏定格行 + 外接现场记录 + 语音,走的全是内脑说话的
+     * 同一套画法。语音按当前绑定现取声线,整段排到播放队尾——不开新轮、不清存量,连续的 say 自然连播;
+     * 主人的停止键照样一刀切停。未绑声线 = 静默(气泡与聊天行照旧)。
      */
     void sayExternal(String text) {
+        String shown = ChatDisplayModes.current().assistantText(text);
+        if (shown.isBlank()) shown = text;   // 全是动作记号也别无声吞掉——原样示人
+        McpTranscript.say(entityUuid, shown);
+        spoke(shown);
         VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
         if (cfg == null) return;
         if (voice == null) voice = new VoicePipeline(entityUuid);
         voice.sayAppend(cfg, text);
-    }
-
-    /** 聊天框的打字机:在飞回复逐 tick 长出来——不开面板也能实时看她说话。 */
-    private void streamToChat() {
-        if (!streamingActive.getAsBoolean() || livePartial.length() == 0) {
-            return;
-        }
-        String filtered = ChatDisplayModes.current()
-                .assistantText(livePartial.toString());
-        if (filtered.isBlank() || filtered.equals(lastStreamedPartial)) {
-            return;
-        }
-        lastStreamedPartial = filtered;
-        ChatLines.streaming(entityUuid, speakerName(), filtered);
-    }
-
-    /** 流式行收尾:摘掉在飞行(定格行由各分支自己补)。 */
-    void finishStreamLine() {
-        if (!lastStreamedPartial.isEmpty()) {
-            lastStreamedPartial = "";
-            ChatLines.streamingDone(entityUuid);
-        }
     }
 
     /** 说话人显示名:人设名优先,否则花名册名。 */
@@ -188,7 +145,125 @@ final class TurnPresenter {
                 : String.valueOf(NumenRoster.instance().name(entityUuid));
     }
 
-    /** 大脑在输出(思考/生成/跑工具/语音在播)→ 告诉身体,好在说话期间注视主人。 */
+    // ---- 一次调模型 ----
+
+    /**
+     * 要调一次模型了:清掉上一次的半截文字,开一轮语音(若该同伴绑定了声线)。每次都
+     * 重新 resolve——声线库/绑定的编辑下一次生效;开新轮会打断上一轮还在播的残句。
+     *
+     * @param ownerBargeIn 主人的话还没被回应(硬停上一轮);否则句界衔接
+     */
+    private void beginTurn(boolean ownerBargeIn) {
+        clearPartial();
+        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
+        if (cfg == null) {
+            if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
+            voiceTurn = SILENT_VOICE;
+            return;
+        }
+        if (voice == null) {
+            voice = new VoicePipeline(entityUuid);
+        }
+        final var vp = voice;
+        final int vgen = vp.beginTurn(cfg, ownerBargeIn);
+        voiceTurn = new VoiceTurn(vp.deltaSink(vgen), () -> vp.endTurn(vgen));
+    }
+
+    /** 流式回复长出来一段:正文进打字机和语音,思考进思考流——主人能看见她在想什么,不只是省略号。 */
+    private void delta(String content, String reasoning) {
+        if (!content.isEmpty()) {
+            livePartial.append(content);
+            voiceTurn.sink().accept(content);
+        }
+        liveReasoning.append(reasoning);
+    }
+
+    /** 这次调模型结束了(回复落库、失败或被切断):语音收尾,半截文字作废,聊天框摘掉在飞行。 */
+    private void endTurn() {
+        voiceTurn.finish().run();
+        voiceTurn = SILENT_VOICE;
+        clearPartial();
+        finishStreamLine();
+    }
+
+    /** 模型的一条回复落地:头顶气泡是回复的主显示(附近玩家都看得见),聊天框回显一份当日志。 */
+    private void showReply(AssistantTurn turn) {
+        endTurn();   // committed 消息接管显示,半截打字与在飞行摘掉
+        String shown = ChatDisplayModes.current().assistantText(turn.content());
+        if (!turn.hasToolCalls()) {
+            Constants.LOG.info("[numen-entity#{}] assistant (final): {}", entityUuid, turn.content());
+        }
+        // 最终回复和开工前的顺嘴一句(tool_calls 旁附的 content)同一个画法:是话就上气泡 + 字幕行,
+        // 超长折叠,悬停看全文,完整记录在 G 面板。开工前没话说就不动气泡——上一句正文泡留着走完
+        // 生命周期,身体动起来本身就是反馈;最终回复滤完为空(全是动作记号)时收起思考泡。
+        if (!shown.isBlank()) {
+            spoke(shown);
+        } else if (!turn.hasToolCalls()) {
+            SpeechBubbles.clear(entityUuid);
+        }
+    }
+
+    /**
+     * 她说出口了——<b>唯一的一处</b>。头顶气泡是主显示,聊天框回显一份当日志,
+     * 同一个会话里的其他同伴旁听到一份。
+     *
+     * <p>内脑回复与外脑 say 走同一条——"她说了什么"只能有一个出处,
+     * 否则旁听到的和主人听见的会开始对不上。
+     */
+    private void spoke(String shown) {
+        SpeechBubbles.say(entityUuid, shown);
+        ChatLines.companion(speakerName(), shown);
+        com.dwinovo.numen.client.agent.Conversations.instance().heard(entityUuid, shown);
+        com.dwinovo.numen.client.notify.MessageNotices.spoke(entityUuid, shown);
+    }
+
+    /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */
+    private void showFailure(String words) {
+        SpeechBubbles.clear(entityUuid);
+        ChatLines.notice(speakerName(), I18n.get(Keys.TURN_FAILED, truncate(words, 90)));
+        // HUD toast:玩家多半没开面板(Y/V 快捷对话),这是唯一接得住他的通道。
+        NumenHudToasts.push(NumenToasts.Severity.ERROR, speakerName() + ": " + truncate(words, 90));
+    }
+
+    /** 端点不可用:配置问题不能静默——快捷键用户不开面板,聊天栏警示行是唯一出口。 */
+    private void showBlocked(String problem) {
+        ChatLines.notice(speakerName(), truncate(problem, 160));
+        SpeechBubbles.clear(entityUuid);
+    }
+
+    /** 语音闭嘴:停播 + 清队列(打断/死亡)。 */
+    private void interruptVoice() {
+        if (voice != null) voice.interrupt();
+    }
+
+    /** 半截打字作废:正文与思考流一起清。 */
+    private void clearPartial() {
+        livePartial.setLength(0);
+        liveReasoning.setLength(0);
+    }
+
+    /** 聊天框的打字机:在飞回复逐 tick 长出来——不开面板也能实时看她说话。 */
+    private void streamToChat() {
+        if (status.get().phase() != Phase.MODEL || livePartial.length() == 0) {
+            return;
+        }
+        String filtered = ChatDisplayModes.current().assistantText(livePartial.toString());
+        if (filtered.isBlank() || filtered.equals(lastStreamedPartial)) {
+            return;
+        }
+        lastStreamedPartial = filtered;
+        ChatLines.streaming(entityUuid, speakerName(), filtered);
+    }
+
+    /** 流式行收尾:摘掉在飞行(定格行由回复落地时补)。 */
+    private void finishStreamLine() {
+        if (!lastStreamedPartial.isEmpty()) {
+            lastStreamedPartial = "";
+            ChatLines.streamingDone(entityUuid);
+        }
+    }
+
+    /** 大脑在输出(思考/生成/跑工具/语音在播)→ 告诉身体,好在说话期间注视主人。整理记忆不算说话。 */
     private void syncSpeakingState() {
         // 退出游戏的最后几个 client tick 里连接已拆——此时发包会在
         // PacketDistributor.sendToServer 里 NPE 崩掉客户端。断线期不发,
@@ -196,12 +271,17 @@ final class TurnPresenter {
         if (Minecraft.getInstance().getConnection() == null) {
             return;
         }
-        boolean speaking = turnBusy.getAsBoolean() || (voice != null && voice.isSpeaking());
+        Phase phase = status.get().phase();
+        boolean speaking = phase == Phase.MODEL || phase == Phase.TOOLS || (voice != null && voice.isSpeaking());
         if (speaking != lastSpeakingSent) {
             lastSpeakingSent = speaking;
-            Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SpeakingStatePayload(
+            NumenNetwork.sendToServer(new com.dwinovo.numen.network.payload.SpeakingStatePayload(
                     entityUuid, speaking));
         }
     }
 
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
 }

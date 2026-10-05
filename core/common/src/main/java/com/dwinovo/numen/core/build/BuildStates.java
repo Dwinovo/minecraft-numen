@@ -28,6 +28,39 @@ public final class BuildStates {
 
     private BuildStates() {}
 
+    /** 一格要放的方块,读好了:方块状态、记账用的物品、回执里的名字。 */
+    public record Resolved(BlockState state, net.minecraft.world.item.Item item, String label) {}
+
+    /**
+     * 读一格要放的方块,写法和原版 {@code /setblock} 一字不差({@code oak_stairs[facing=east,half=top]}),由原版的
+     * {@link net.minecraft.commands.arguments.blocks.BlockStateParser} 读——朝向、上下半、台阶三态都是它的事,不另立一套键名,
+     * "文本 → 方块状态"全仓只有这一处。<b>按方块注册表查,不按物品</b>:{@code air} 是"把这一格挖空",按物品查会被当成未知物品拒掉。
+     * 能不能建和图纸入口走同一个判据({@link #unbuildableReason}):这边拿它当拒绝理由,那边拿它当跳过条件。
+     *
+     * @throws IllegalArgumentException 读不通(原版解析器的原话照转)、或这种方块盖不了(液体这类,说清是能力边界)
+     */
+    public static Resolved resolve(String written) {
+        String trimmed = written.trim();
+        BlockState state;
+        try {
+            state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(), trimmed, false).blockState();
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException bad) {
+            // 原版解析器的话已经足够具体("Unknown block type"、"does not have property"),原样转述,不再翻译一遍
+            throw new IllegalArgumentException(trimmed + " — " + bad.getMessage());
+        }
+        String no = unbuildableReason(state);
+        if (no != null) {
+            throw new IllegalArgumentException(trimmed + " — " + no);
+        }
+        net.minecraft.world.item.Item item = materialItem(state.getBlock());
+        if (item == net.minecraft.world.item.Items.AIR && !state.isAir()) {
+            throw new IllegalArgumentException(trimmed + " is not a placeable block");
+        }
+        String name = trimmed.contains("[") ? trimmed.substring(0, trimmed.indexOf('[')).trim() : trimmed;
+        return new Resolved(state, item, name.contains(":") ? name.split(":", 2)[1] : name);
+    }
+
     /**
      * 落位前的归一。同一份状态,建造与图纸走同一条。
      *

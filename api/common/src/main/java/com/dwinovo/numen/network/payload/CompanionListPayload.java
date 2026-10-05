@@ -1,11 +1,12 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,10 +32,19 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
      *  ≥0 是死了、还有这么久复活。{@code creative} 是此刻的游戏模式(不在场按生存),
      *  编辑卡的模式格用它显示当前值。 */
     public record Entry(UUID uuid, String name, long respawnInMs, boolean creative) {
+        void write(FriendlyByteBuf buf) {
+            buf.writeUUID(uuid);
+            Wire.writeText(buf, name);
+            buf.writeVarLong(respawnInMs);
+            buf.writeBoolean(creative);
+        }
+
+        static Entry read(FriendlyByteBuf buf) {
+            return new Entry(buf.readUUID(), Wire.readText(buf), buf.readVarLong(), buf.readBoolean());
+        }
     }
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "companion_list");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "companion_list");
 
     @Override
     public ResourceLocation id() {
@@ -43,27 +53,12 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
 
     @Override
     public void write(FriendlyByteBuf buf) {
-        buf.writeUtf(worldId, 64);
-        int n = Math.min(companions.size(), MAX);
-        buf.writeVarInt(n);
-        for (int i = 0; i < n; i++) {
-            Entry e = companions.get(i);
-            buf.writeUUID(e.uuid());
-            buf.writeUtf(e.name(), 256);
-            buf.writeVarLong(e.respawnInMs());
-            buf.writeBoolean(e.creative());
-        }
+        Wire.writeText(buf, worldId);
+        buf.writeCollection(companions, (b, entry) -> entry.write(b));
     }
 
     public static CompanionListPayload read(FriendlyByteBuf buf) {
-        String worldId = buf.readUtf(64);
-        int n = Math.min(buf.readVarInt(), MAX);
-        List<Entry> list = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            list.add(new Entry(buf.readUUID(), buf.readUtf(256), buf.readVarLong(),
-                    buf.readBoolean()));
-        }
-        return new CompanionListPayload(worldId, list);
+        return new CompanionListPayload(Wire.readText(buf), Wire.readList(buf, MAX, Entry::read));
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

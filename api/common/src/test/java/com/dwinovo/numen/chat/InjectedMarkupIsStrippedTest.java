@@ -1,8 +1,8 @@
 package com.dwinovo.numen.chat;
 
 import com.dwinovo.numen.client.chat.OwnerWordsMode;
-import com.dwinovo.numen.event.EventQueue;
-import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 队列<b>发</b>什么记号,面板就得<b>剥</b>掉什么记号。
  *
  * <h2>为什么把这两边绑在一条测试里</h2>
- * 它们住在两个模块、各写各的:{@link EventQueue#drain} 拼协议记号,
+ * 它们住在两个模块、各写各的:{@link EventQueue#render} 拼协议记号,
  * {@link OwnerWordsMode} 用一串正则把记号剥掉只留主人的原话。
  * 加一个新标签只改一边,另一边不会报错——只会在面板上漏出半截尖括号。
  *
@@ -51,6 +51,15 @@ class InjectedMarkupIsStrippedTest {
         assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "续跑那句漏出来了");
     }
 
+    /** 场合挂在 {@code <query>} 外面(见 {@code EntityAgentLoop.audienceLine}):模型看得到,面板只画标记里的话。 */
+    @Test
+    void theAudienceAfterAQueryStaysOutOfTheChatFlow() {
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+        q.push(EventTypes.QUERY, "<query>去挖铁</query>\n<audience turn=\"17\">阿岚、小梅</audience>", T0, true);
+
+        assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)), "谁在听不是主人说的话");
+    }
+
     @Test
     void ownerWordsSurviveAGoalInjectionInTheSameBatch() {
         // 同一条消息里既有目标注入又有主人的话:剥掉前者,后者一个字不能少
@@ -67,8 +76,8 @@ class InjectedMarkupIsStrippedTest {
     void aPureEventBatchShowsNothingToTheOwner() {
         // 全是世界发生的事,主人一个字都没说 —— 面板上不该出现任何东西
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>", T0, true);
-        q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
+        q.push(EventTypes.DEATH, "<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>", T0, true);
+        q.push(EventTypes.REFLEX, "<event kind=\"reflex\" day=\"0\" t=\"06:44\" reflex=\"mlg\">broke a fall with a water bucket</event>", T0, false);
 
         String shown = new OwnerWordsMode().userText(render(q));
 
@@ -78,7 +87,7 @@ class InjectedMarkupIsStrippedTest {
     @Test
     void ownerWordsSurviveEventsAroundThem() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
+        q.push(EventTypes.REFLEX, "<event kind=\"reflex\" day=\"0\" t=\"06:44\" reflex=\"mlg\">broke a fall with a water bucket</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>你在干嘛</query>", T0, true);
 
         assertEquals("你在干嘛", new OwnerWordsMode().userText(render(q)));
@@ -88,8 +97,8 @@ class InjectedMarkupIsStrippedTest {
     void noStrayAngleBracketsSurviveAnything() {
         // 兜底:不论队列里装的是什么组合,剥完都不该剩下尖括号
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"task_finished\" id=\"t1\">挖完了</event>", T0, false);
-        q.push(EventTypes.EVENT, "<event kind=\"dimension_change\"/>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\" id=\"t1\">挖完了</event>", T0, false);
+        q.push(EventTypes.DIMENSION_CHANGE, "<event kind=\"dimension_change\"/>", T0, false);
         q.push(EventTypes.QUERY, "<query>好</query>", T0, true);
 
         String shown = new OwnerWordsMode().userText(render(q));

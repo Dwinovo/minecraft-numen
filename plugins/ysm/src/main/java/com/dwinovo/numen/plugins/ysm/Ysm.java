@@ -1,0 +1,182 @@
+package com.dwinovo.numen.plugins.ysm;
+
+import com.dwinovo.numen.sdk.OnHer;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.ChatFormatting;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 本插件对接 YSM 的那一面——<b>唯一</b>知道 YSM 存在的地方。
+ *
+ * <h2>为什么只走命令与 NBT,不碰 YSM 的类</h2>
+ * YSM 是闭源且混淆的:2.6.5 里模型选择界面叫
+ * {@code com.elfmcys.yesstevemodel.O0o0Oo0Oo0Ooo0oO000o0OOO},下一个版本就换名字。
+ * 引用它等于把本插件绑死在某一个 YSM 版本上。
+ *
+ * <p>这里只用三样混淆改不动的东西:
+ * <ul>
+ *   <li><b>命令</b>——{@code ysm model set} / {@code ysm play} / {@code ysm auth} 是 YSM
+ *       对外的公开面,三个加载器上一字不差,而且目标参数用的是原版的
+ *       {@code EntityArgument.players()},所以同伴(服务端假玩家)在玩家列表里就打得中。
+ *       已在 1.21.1 + YSM 2.6.5 真机验过。</li>
+ *   <li><b>命令补全</b>——有哪些模型、某个模型有哪些贴图,都问命令树的
+ *       补全({@code ysm model set <玩家> <Tab>})。这是 YSM 自己维护的清单:目录里的、
+ *       {@code .ysm} 打包的、zip 里的模型全在,格式和目录规则一概不用我们认,
+ *       2.4.1 与 2.6.5 都挂了补全提供者。
+ *       动作名不问补全:{@code ysm play} 的动作补全不看目标是谁(2.6.5 反编译所见),专用服务器上一律是空的,
+ *       单人游戏里列的是主人客户端上那份兜底模型的动作——哪一边都不是她此刻这身模型的,所以一个模型有哪些
+ *       动作,服务端无从知道。</li>
+ *   <li><b>NBT 键名</b>——它们是源码里的字符串字面量,混淆器不改字符串。存在哪一层
+ *       随加载器而异,见 {@link Storage}。</li>
+ * </ul>
+ *
+ * <h2>以谁的权威执行 YSM 的命令</h2>
+ * YSM 的命令要权限等级 2,能作用于任何玩家。她的动作(看清单、换装、做动作)借服务器的权威,只经 {@link OnHer}:
+ * 动作在声明里写明({@code Authority.SERVER_ON_HER}),目标由它写成她,这里只写目标前后的那两截。授权镜像
+ * ({@link OwnerSync})不是她的动作,是服务器自己的对账,以服务器自己的来源执行。
+ */
+public final class Ysm {
+
+    /**
+     * YSM 在各加载器上把玩家数据存在 NBT 的哪里。
+     *
+     * <p>三个加载器的持久化机制不同,YSM 各用各的:NeoForge 是 data attachment,Forge 是
+     * capability,Fabric 没有这类机制、YSM 自己往实体 NBT 里写。外层键、以及内层键带不带
+     * 命名空间前缀,都随之而异。本加载器是哪一种由宿主说({@link YsmHost#storage()})。
+     */
+    public enum Storage {
+        /** 真机 dump 确认(1.21.1,YSM 2.6.5)。 */
+        NEOFORGE("neoforge:attachments", "yes_steve_model:"),
+        /** 真机确认(1.20.1,YSM 2.6.5):换装后回读到了新模型。 */
+        FORGE("ForgeCaps", "yes_steve_model:"),
+        /** 从 YSM 2.6.5 Fabric 版的字节码读出:实体存档时 {@code tag.put("ysm", …)},内层按 capability 名直接放,不带前缀。 */
+        FABRIC("ysm", "");
+
+        private final String root;
+        private final String prefix;
+
+        Storage(String root, String prefix) {
+            this.root = root;
+            this.prefix = prefix;
+        }
+    }
+
+    private static final String MODEL_INFO = "model_id";
+
+    /**
+     * 主人被授权的模型集合。
+     *
+     * <p><b>这一条尚未真机确认</b>:同一层里还有 {@code star_models},测试时两者都是空的
+     * (用的模型不需要授权),分不出哪个是授权表、哪个是收藏夹。判据很简单——给自己授权
+     * 一个模型,再 {@code /data get entity @s} 看哪个列表多了东西。
+     * 认错了也不会放行越权:{@link #setModel} 不传 ignore_auth,YSM 自己会拦。
+     */
+    private static final String AUTH_MODELS = "own_models";
+
+    private static final String MODEL_SET = "ysm model set";
+    private static final String PLAY = "ysm play";
+    private static final String AUTH = "ysm auth";
+
+    private static final String KEY_MODEL = "model_id";
+    private static final String KEY_TEXTURE = "select_texture";
+
+    private final Storage storage;
+
+    public Ysm(Storage storage) {
+        this.storage = storage;
+    }
+
+    // ---- 读:玩家现在穿什么(NBT) ----
+
+    /** 一个玩家的 NBT 里 YSM 那一块;YSM 没给这个玩家写过时是空的。 */
+    private CompoundTag data(ServerPlayer player) {
+        CompoundTag all = new CompoundTag();
+        player.saveWithoutId(all);
+        return all.getCompound(storage.root);
+    }
+
+    /** 一个玩家当前的模型与贴图;YSM 没给这个玩家写过时返回 null。 */
+    public Look readLook(ServerPlayer player) {
+        CompoundTag info = data(player).getCompound(storage.prefix + MODEL_INFO);
+        if (info.isEmpty()) return null;
+        String model = info.getString(KEY_MODEL);
+        return model.isEmpty() ? null : new Look(model, info.getString(KEY_TEXTURE));
+    }
+
+    /** 一个玩家被授权的模型集合。读不到就是空集——空集意味着"什么都不镜像",不是"放行一切"。 */
+    public Set<String> readAuthorized(ServerPlayer player) {
+        ListTag list = data(player).getList(storage.prefix + AUTH_MODELS, Tag.TAG_STRING);
+        Set<String> out = new LinkedHashSet<>();
+        for (int i = 0; i < list.size(); i++) out.add(list.getString(i));
+        return out;
+    }
+
+    // ---- 读:YSM 认哪些 id(命令补全) ----
+
+    /** YSM 认的全部模型 id:{@code ysm model set <她> <Tab>}。 */
+    public List<String> models(OnHer her) {
+        return her.next(MODEL_SET);
+    }
+
+    /**
+     * 某个模型的贴图 id:{@code ysm model set <她> <模型> <Tab>}。补全按字母排,第一张未必是作者在模型里定的默认;
+     * YSM 认 {@code -}(用默认贴图)的版本会把它也列出来,它排在最前。
+     */
+    public List<String> textures(OnHer her, String model) {
+        return her.next(MODEL_SET, model);
+    }
+
+    // ---- 写:走命令 ----
+
+    /**
+     * 给她换模型。<b>刻意不传 ignore_auth</b>——省略时 YSM 默认按授权检查,
+     * 同伴要不到主人没有的模型是 YSM 在拦,不是本插件写 if 拦。
+     *
+     * <p>贴图由调用方从 {@link #textures} 里挑好再传,这里不补占位符:{@code -} 只有 2.6 起
+     * 才认,2.4.1 会把它当贴图名原样存下、模型渲染成紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
+     *
+     * @return YSM 对这条命令说的话(换好了、要授权、没有这个模型……),去掉颜色码;它在几种情况下什么都不说
+     */
+    public List<String> setModel(OnHer her, Look look) {
+        return her.run(MODEL_SET, look.model(), look.texture()).stream()
+                .map(ChatFormatting::stripFormatting).toList();
+    }
+
+    public void playAnimation(OnHer her, String animation) {
+        her.run(PLAY, animation);
+    }
+
+    public void stopAnimation(OnHer her) {
+        her.run(PLAY, "stop");
+    }
+
+    /** 清空一个玩家的授权表。授权镜像的对账用,以服务器自己的来源执行(见类注释)。 */
+    public void authClear(MinecraftServer server, String playerName) {
+        asServer(server, AUTH + " " + arg(playerName) + " clear");
+    }
+
+    /** 给一个玩家的授权表加一个模型。同上。 */
+    public void authAdd(MinecraftServer server, String playerName, String modelId) {
+        asServer(server, AUTH + " " + arg(playerName) + " add " + arg(modelId));
+    }
+
+    private static void asServer(MinecraftServer server, String command) {
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+    }
+
+    /** 模型 id 带斜杠(misc/1_alex),名字可能带空格——交给 Brigadier 自己决定要不要加引号。 */
+    private static String arg(String raw) {
+        return StringArgumentType.escapeIfRequired(raw);
+    }
+
+    /** 一个玩家的外观:模型 + 贴图。 */
+    public record Look(String model, String texture) {}
+}

@@ -8,9 +8,8 @@ import net.minecraft.util.Mth;
  * "由近及远"的两条判据,全仓找方块的地方共用:<b>哪一节先看</b>,和
  * <b>什么时候可以不看了</b>。
  *
- * <p>两条都只是几何,与"现扫一遍"还是"查索引"无关——所以现扫的
- * {@link BlockSearch}、建索引的 {@link TargetIndex} 和 {@link BlockScanner} 的环形扫
- * 读的是同一个答案,同一片地不会给出两种"最近"。
+ * <p>两条都只是几何,与这一节是读索引还是现读无关。全仓找方块只走 {@link BlockSearch} 这一个出口,
+ * 同一片地不会给出两种"最近"。
  *
  * <p>纯函数,不碰世界,不碰线程。
  */
@@ -49,6 +48,18 @@ public final class SearchGeometry {
             }
         }
         return out;
+    }
+
+    /**
+     * 以 {@code (centerX, centerZ)} 为中心、半径 {@code radius} 的范围要走到第几个 chunk 环(切比雪夫环号)。
+     * X 与 Z 两个方向都要算:中心贴着哪条 chunk 边,哪一边的邻居就在范围里。
+     */
+    public static int maxRing(int centerX, int centerZ, int radius) {
+        int cx = Math.floorDiv(centerX, CHUNK);
+        int cz = Math.floorDiv(centerZ, CHUNK);
+        return Math.max(
+                Math.max(Math.floorDiv(centerX + radius, CHUNK) - cx, cx - Math.floorDiv(centerX - radius, CHUNK)),
+                Math.max(Math.floorDiv(centerZ + radius, CHUNK) - cz, cz - Math.floorDiv(centerZ - radius, CHUNK)));
     }
 
     /**

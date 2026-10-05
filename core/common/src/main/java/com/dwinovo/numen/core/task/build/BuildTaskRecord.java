@@ -1,64 +1,41 @@
 package com.dwinovo.numen.core.task.build;
 import com.dwinovo.numen.core.build.BuildValidity;
+import com.dwinovo.numen.core.build.Built;
+import com.dwinovo.numen.core.build.Layout;
 
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.core.Direction;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.Half;
-import net.minecraft.world.level.block.state.properties.SlabType;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** Typed descriptor for a bounded multi-block construction job. */
+/**
+ * 一件多格施工的活:一份摆到世界里的施工图({@link Layout})交给执行器去砌。原语当场执行、按设计或蓝图文件
+ * {@code build at},派的都是它。
+ */
 public final class BuildTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "build";
-
     public final List<Target> targets;
-    /**
-     * 目标格上已经有东西时怎么办(四档见 {@link ReplaceMode})。
-     *
-     * <p>工具层现在只发两种:让路的走 {@link ReplaceMode#REPLACE_EMPTY}(顶掉挡路的,
-     * 并把图纸里的空气格当清空指令),不让路的走 {@code replaceExisting=false} 那条
-     * <b>开工前置</b>——那不是这四档里的任何一档:它是整单拒绝,不是逐格跳过。
-     * 中间两档已经实现并受测,等图纸层把档位开放给玩家时直接可用。
-     */
-    public final ReplaceMode replaceMode;
-    /**
-     * 允许盖掉<b>带方块实体</b>的方块吗——默认不允许。
-     *
-     * <p>箱子、木桶、熔炉、告示牌、酿造台都带方块实体,而它们往里装着玩家的东西。
-     * 让路的档位管的是"石头挡路要不要顶掉",这一条管的是"玩家的箱子要不要动",
-     * 两件事的答案不该绑在一起:少砌一格墙是遗憾,清掉一箱子东西是事故。
-     *
-     * <p>双格方块要连另一半一起看:床的另一半、门的上半,任一半带方块实体就都不动。
-     *
-     * <p>与让路的中间两档一样,当前两条工具入口都发 {@code false}(保护),开放给
-     * 玩家是后面版本的事。留成构造参数而不是硬编码的常量,是为了别把一个恒假的
-     * 分支伪装成可配开关——读代码的人会以为它有别的取值。
-     */
-    public final boolean replaceBlockEntities;
-    public final boolean replaceExisting;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
     /**
      * 料不齐时允许分段施工:<b>能建多少建多少</b>,收工报还差什么。
      *
-     * <p>按调用入口分,不一刀切。小活(手写格集)背包装得下,整批拒绝的原子性
-     * 更值钱——半成品比没开工糟。整幢图纸装不下:满背包 36 格顶天两千来块,而
-     * 一栋房子上百种方块、几千格,<b>一趟本来就运不完</b>,拒绝等于永远开不了工。
+     * <p>按施工图的来源分,不一刀切。原语与设计是她自己写的一栋,整份一次预检、缺料一格不放更值钱——半成品比没开工糟。
+     * 蓝图文件装不下:满背包 36 格顶天两千来块,而一栋房子上百种方块、几千格,<b>一趟本来就运不完</b>,拒绝等于永远开不了工。
      *
-     * <p>分段之所以不留废墟,是因为续建是精确的:每一遍的待建集都从"图纸与世界
-     * 当下的差集"重算,已经建对的格自动跳过。补齐材料后原样再发一次同一个调用,
-     * 就从断点接上——不需要记住计划,因为世界本身就是计划的进度。
+     * <p>分段之所以不留废墟,是因为续建是精确的:每一遍的待建集都从"图纸与世界当下的差集"重算,已经建对的格自动跳过。
+     * 补齐材料后原样再发一次同一行 {@code build at},就从断点接上——不需要记住计划,因为世界本身就是计划的进度。
      */
     public final boolean allowPartial;
     /**
@@ -79,71 +56,76 @@ public final class BuildTaskRecord extends TaskRecord {
      * 墙得先有。
      */
     public final List<EntitySpawn> entities;
+    /**
+     * 按位置索引的<b>逐格料单</b>:这一格不是"一件某物",而是这几叠。
+     *
+     * <p>一格一件是特例而不是通则,这一点容易想反。带花的花盆是<b>花盆加那株花两件
+     * 东西</b>——正因如此它没有自己的物品,而"按方块的物品收一件"这条路在这里没有答案。
+     * 通行的做法之一是就此整格丢掉(建出来院子里少二十一个花盆);另一条是老老实实收
+     * 两件。后者才对。旗帜是同一条路的另一头:一叠,但要求组件一致。
+     *
+     * <p>这张表<b>整个盖过</b>默认的"{@code item() × materialCount()}"。放在边表而不是
+     * {@code Target} 里,理由和方块实体数据一样:只有极少数格用得上,为它给每一个构造点
+     * 加一个字段是让百分之一的情形去改百分之百的代码。
+     */
+    public final Map<Long, List<CellNeed>> cellNeeds;
+    /**
+     * 摆图时就落不了地、根本没进目标集的格数(流体、活塞头、推不出物品的方块)。
+     *
+     * <p>要单独记一笔并交代出去,理由和"跳过的格从分母去掉"是同一条:一张一千格的
+     * 图纸掉了二百格,若这二百格连目标集都没进,任务会理直气壮地报"八百格全部达标",
+     * 而设计缺了五分之一,没有一个字提到过。摆图时的掉格也是掉格。
+     */
+    public final int droppedAtLoad;
+    /**
+     * 这件活盖的是哪一栋({@code build at} 派的);当场执行的原语不是一栋房子,是 null。放下与拆掉的每一格随手记进
+     * 这一栋的记录({@link Built}),活怎么收场、服务器停不停,记下的都是世界里真发生的。
+     */
+    public final Built.Site site;
+
+    /** 按格找目标({@link #targetAt});第一次问时建。 */
+    private Map<Long, Target> byCell;
 
     private int placed;
+    private int replaced;
     private int broken;
+    private int removed;
     private int completed;
-    private int droppedAtLoad;
-    private Map<Long, java.util.List<CellNeed>> cellNeeds = Map.of();
 
     // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
     // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
     // 的旋钮——比缺一个功能更糟,故一并撤除。
 
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime,
-                           List<Target> targets, boolean replaceExisting) {
-        this(toolCallId, deadlineGameTime, targets, replaceExisting, true, false);
+    /** 一次调用派的活:名字与调用 id 取自那次调用。 */
+    public BuildTaskRecord(ServerCall call, long deadlineGameTime, Layout layout, boolean consumeMaterials,
+                           boolean allowPartial, Built.Site site) {
+        this(call.fn(), call.callId(), deadlineGameTime, layout, consumeMaterials, allowPartial, site);
     }
 
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           boolean replaceExisting, boolean consumeMaterials) {
-        this(toolCallId, deadlineGameTime, targets, replaceExisting, consumeMaterials, false);
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           boolean replaceExisting, boolean consumeMaterials, boolean allowPartial) {
-        this(toolCallId, deadlineGameTime, targets,
-                replaceExisting ? ReplaceMode.REPLACE_EMPTY : ReplaceMode.DONT_REPLACE,
-                replaceExisting, consumeMaterials, allowPartial);
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           ReplaceMode replaceMode, boolean replaceExisting,
-                           boolean consumeMaterials, boolean allowPartial) {
-        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
-                consumeMaterials, allowPartial, Map.of());
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           ReplaceMode replaceMode, boolean replaceExisting,
-                           boolean consumeMaterials, boolean allowPartial,
-                           Map<Long, CompoundTag> blockEntityData) {
-        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
-                consumeMaterials, allowPartial, blockEntityData, List.of());
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           ReplaceMode replaceMode, boolean replaceExisting,
-                           boolean consumeMaterials, boolean allowPartial,
-                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
-        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
-                consumeMaterials, allowPartial, blockEntityData, entities, false);
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           ReplaceMode replaceMode, boolean replaceExisting,
-                           boolean consumeMaterials, boolean allowPartial,
-                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities,
-                           boolean replaceBlockEntities) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
-        this.replaceBlockEntities = replaceBlockEntities;
-        this.entities = List.copyOf(entities);
-        this.targets = promotePlainCells(targets, blockEntityData);
-        this.replaceMode = replaceMode;
-        this.replaceExisting = replaceExisting;
+    /**
+     * @param name 这件活叫什么(任务记录、{@code task_finished} 里写的名字)
+     */
+    public BuildTaskRecord(String name, String toolCallId, long deadlineGameTime, Layout layout,
+                           boolean consumeMaterials, boolean allowPartial, Built.Site site) {
+        super(name, toolCallId, deadlineGameTime);
+        this.entities = layout.entities();
+        this.targets = promotePlainCells(layout.targets(), layout.blockEntityData());
         this.consumeMaterials = consumeMaterials;
         this.allowPartial = allowPartial;
-        this.blockEntityData = Map.copyOf(blockEntityData);
+        this.blockEntityData = layout.blockEntityData();
+        this.cellNeeds = layout.cellNeeds();
+        this.droppedAtLoad = layout.dropped();
+        this.site = site;
+    }
+
+    /** 这一格的目标;不在这件活里是 null。 */
+    public Target targetAt(BlockPos pos) {
+        if (byCell == null) {
+            Map<Long, Target> index = new java.util.HashMap<>(targets.size() * 2);
+            targets.forEach(t -> index.put(t.pos().asLong(), t));
+            byCell = index;
+        }
+        return byCell.get(pos.asLong());
     }
 
     /**
@@ -166,27 +148,28 @@ public final class BuildTaskRecord extends TaskRecord {
                     // 原生放置只给空盆,盆+花两件的料单格必须留在直写道。
                     && t.item() instanceof net.minecraft.world.item.BlockItem bi
                     && bi.getBlock() == t.desiredState().getBlock();
-            out.add(plain
-                    ? new Target(t.desiredState(), t.item(), t.pos(), t.label(),
-                            t.facing(), t.axis(), t.topHalf(), true)
-                    : t);
+            out.add(plain ? t.asItemPlace() : t);
         }
         return List.copyOf(out);
     }
 
     /**
-     * 加载图纸时就落不了地、根本没进目标集的格数(流体、活塞头、推不出物品的方块)。
-     *
-     * <p>要单独记一笔并交代出去,理由和"跳过的格从分母去掉"是同一条:一张一千格的
-     * 图纸掉了二百格,若这二百格连目标集都没进,任务会理直气壮地报"八百格全部达标",
-     * 而设计缺了五分之一,没有一个字提到过。加载期的掉格也是掉格。
+     * 建完让世界落定之后,与图纸不同的格数——站不住掉了的,和形状按真实邻居重算了的。
+     * 允许不同,但不许无声不同:这个数进回执。
      */
-    public int droppedAtLoad() {
-        return droppedAtLoad;
+    private int settledAway;
+
+    public int settledAway() {
+        return settledAway;
     }
 
-    public void droppedAtLoad(int count) {
-        this.droppedAtLoad = count;
+    public void settledAway(int count) {
+        this.settledAway = count;
+    }
+
+    /** 这些目标里有没有哪一格的档位会顶掉挡路的东西——建造寻路问的是这一句(拆一块钻出去许不许)。 */
+    public boolean mayReplace() {
+        return targets.stream().anyMatch(t -> t.mode().mayReplace());
     }
 
     /**
@@ -207,40 +190,38 @@ public final class BuildTaskRecord extends TaskRecord {
         }
     }
 
-    /**
-     * 按位置索引的<b>逐格料单</b>:这一格不是"一件某物",而是这几叠。
-     *
-     * <p>一格一件是特例而不是通则,这一点容易想反。带花的花盆是<b>花盆加那株花两件
-     * 东西</b>——正因如此它没有自己的物品,而"按方块的物品收一件"这条路在这里没有答案。
-     * 通行的做法之一是就此整格丢掉(建出来院子里少二十一个花盆);另一条是老老实实收
-     * 两件。后者才对。旗帜是同一条路的另一头:一叠,但要求组件一致。
-     *
-     * <p>这张表<b>整个盖过</b>默认的"{@code item() × materialCount()}"。放在边表而不是
-     * {@code Target} 里,理由和方块实体数据一样:只有极少数格用得上,为它给每一个构造点
-     * 加一个字段是让百分之一的情形去改百分之百的代码。
-     */
-    public Map<Long, java.util.List<CellNeed>> cellNeeds() {
-        return cellNeeds;
-    }
-
-    public void cellNeeds(Map<Long, java.util.List<CellNeed>> needs) {
-        this.cellNeeds = Map.copyOf(needs);
-    }
-
     public int placed() {
         return placed;
     }
 
-    public void placedOne() {
+    /** 放下一格;{@code replacing} 是先拆掉了挡着的东西再放。 */
+    public void placedOne(boolean replacing) {
         placed++;
+        if (replacing) {
+            replaced++;
+        }
+    }
+
+    /** 放下的格里,先拆掉挡着的东西才放的有几格。 */
+    public int replaced() {
+        return replaced;
     }
 
     public int broken() {
         return broken;
     }
 
-    public void brokeOne() {
+    /** 拆掉一格;{@code removal} 是拆掉这一栋从前由她放下、设计里已经没有的那一格。 */
+    public void brokeOne(boolean removal) {
         broken++;
+        if (removal) {
+            removed++;
+        }
+    }
+
+    /** 拆掉的格里,拆的是这一栋从前由她放下、设计里已经没有的有几格。 */
+    public int removed() {
+        return removed;
     }
 
     public int completed() {
@@ -252,18 +233,10 @@ public final class BuildTaskRecord extends TaskRecord {
     }
 
     /**
-     * {@code task_status} 的进度面:<b>只报进度,不报状况</b>。
-     *
-     * <p>进度是"还剩多少"——单调、有分母、幂等,拉多少次都是同一个答案。状况是
-     * "出了什么事"(有人在拆、材料见底)——离散、有时效、错过就没了,该走事件
-     * 队列推给她,不该等人来问。两者混在一格里,进度会变得不可预测,状况会丢掉
-     * 时序,而且只有轮询才拿得到——偏偏状况最不该等人问。
+     * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、{@code task status} 印的都是它。只报进度,不报状况:
+     * 进度是"还剩多少"——单调、有分母、幂等;状况是"出了什么事"(有人在拆、材料见底),该走事件队列推给她。
      */
     @Override
-    /**
-     * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、task_status 印的都是它。
-     * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
-     */
     public String describe() {
         return "搭建 " + completed + "/" + targets.size();
     }
@@ -305,21 +278,42 @@ public final class BuildTaskRecord extends TaskRecord {
 
     /**
      * @param itemPlace 原生车道:这一格由<b>物品自己</b>像真右键那样落位,而不是照图直写。
-     *                  只给没提任何摆放要求的单格 set——那是"放一个工作台"这类玩家动作,
+     *                  只给 {@code build place}——那是"放一个工作台"这类玩家动作,
      *                  朝向随她的视线,模组钩在物品放置上的转换照常发生。
+     * @param mask      这一格自己的让路档位;没写是 null,按 {@link ReplaceMode#REPLACE_EMPTY}(见 {@link #mode})
+     * @param removes   拆除格:这一栋从前由她在这里放下的那种方块。只有世界里这一格现在仍是它才拆,别人换过的不碰;
+     *                  不是拆除格是 null
      */
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
-                         Direction facing, Direction.Axis axis, Boolean topHalf,
-                         boolean itemPlace) {
-        public Target(BlockState desiredState, Item item, BlockPos pos, String label,
-                      Direction facing, Direction.Axis axis, Boolean topHalf) {
-            this(desiredState, item, pos, label, facing, axis, topHalf, false);
+                         boolean itemPlace, ReplaceMode mask, Block removes) {
+
+        public Target(BlockState desiredState, Item item, BlockPos pos, String label) {
+            this(desiredState, item, pos, label, false, null, null);
         }
 
-        public Target(Block block, Item item, BlockPos pos, String label,
-                      Direction facing, Direction.Axis axis, Boolean topHalf) {
-            this(applyHints(block.defaultBlockState(), facing, axis, topHalf),
-                    item, pos, label, facing, axis, topHalf);
+        public Target(Block block, Item item, BlockPos pos, String label) {
+            this(block.defaultBlockState(), item, pos, label, false, null, null);
+        }
+
+        /** 拆掉这一栋从前由她放下的 {@code block}:目标是空气,清场的那一档,只在它还是 {@code block} 时动手。 */
+        public static Target removal(BlockPos pos, Block block) {
+            return new Target(Blocks.AIR.defaultBlockState(), Items.AIR, pos, "air", false,
+                    ReplaceMode.REPLACE_EMPTY, block);
+        }
+
+        /** 这一格自己的让路档位。 */
+        public Target withMask(ReplaceMode mask) {
+            return new Target(desiredState, item, pos, label, itemPlace, mask, removes);
+        }
+
+        /** 让路档位:自己写了的那一档,没写是"连空也清"——原语不写 {@code --mask} 就是 {@code carve}。 */
+        public ReplaceMode mode() {
+            return mask != null ? mask : ReplaceMode.REPLACE_EMPTY;
+        }
+
+        /** 同一格摆到别处:位置与方块换成摆好之后的,别的(记账物品、车道、档位)照旧。 */
+        public Target placed(BlockPos at, BlockState state) {
+            return new Target(state, item, at, label, itemPlace, mask, removes);
         }
 
         /**
@@ -332,29 +326,17 @@ public final class BuildTaskRecord extends TaskRecord {
                     || !(item instanceof net.minecraft.world.item.BlockItem)) {
                 return this;
             }
-            return new Target(desiredState, item, pos, label, facing, axis, topHalf, true);
+            return new Target(desiredState, item, pos, label, true, mask, removes);
         }
 
         public Target {
             desiredState = Objects.requireNonNull(desiredState, "desiredState");
-            // 归一在这一处做完:每一个目标格无论从工具还是从图纸来,都必须过这道口,
+            // 归一在这一处做完:每一个目标格无论从原语还是从图纸来,都必须过这道口,
             // 所以运行态(作物生长阶段、含水、活塞伸出、堆肥进度、锅里装的东西)
             // 在这里一次清干净,而不是让每条入口各清各的。
             desiredState = com.dwinovo.numen.core.build.BuildStates.normalize(desiredState);
             item = Objects.requireNonNull(item, "item");
             pos = Objects.requireNonNull(pos, "pos").immutable();
-            if (facing != null && facingOf(desiredState) == null) {
-                throw new IllegalArgumentException(desiredState.getBlock().getName().getString()
-                        + " does not support facing");
-            }
-            if (axis != null && axisOf(desiredState) == null) {
-                throw new IllegalArgumentException(desiredState.getBlock().getName().getString()
-                        + " does not support axis");
-            }
-            if (topHalf != null && topHalfOf(desiredState) == null) {
-                throw new IllegalArgumentException(desiredState.getBlock().getName().getString()
-                        + " does not support top/bottom half");
-            }
             label = label == null || label.isBlank()
                     ? desiredState.getBlock().getName().getString()
                     : label;
@@ -458,64 +440,4 @@ public final class BuildTaskRecord extends TaskRecord {
         }
     }
 
-    private static BlockState applyHints(BlockState state, Direction facing,
-                                         Direction.Axis axis, Boolean topHalf) {
-        if (facing != null) {
-            if (state.hasProperty(BlockStateProperties.FACING)) {
-                state = state.setValue(BlockStateProperties.FACING, facing);
-            } else if (facing.getAxis().isHorizontal()
-                    && state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-                state = state.setValue(BlockStateProperties.HORIZONTAL_FACING, facing);
-            }
-        }
-        if (axis != null) {
-            if (state.hasProperty(BlockStateProperties.AXIS)) {
-                state = state.setValue(BlockStateProperties.AXIS, axis);
-            } else if (axis.isHorizontal() && state.hasProperty(BlockStateProperties.HORIZONTAL_AXIS)) {
-                state = state.setValue(BlockStateProperties.HORIZONTAL_AXIS, axis);
-            }
-        }
-        if (topHalf != null) {
-            if (state.hasProperty(BlockStateProperties.SLAB_TYPE)) {
-                state = state.setValue(BlockStateProperties.SLAB_TYPE,
-                        topHalf ? SlabType.TOP : SlabType.BOTTOM);
-            }
-            if (state.hasProperty(BlockStateProperties.HALF)) {
-                state = state.setValue(BlockStateProperties.HALF,
-                        topHalf ? Half.TOP : Half.BOTTOM);
-            }
-        }
-        return state;
-    }
-
-    private static Direction facingOf(BlockState s) {
-        if (s.hasProperty(BlockStateProperties.FACING)) {
-            return s.getValue(BlockStateProperties.FACING);
-        }
-        if (s.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-            return s.getValue(BlockStateProperties.HORIZONTAL_FACING);
-        }
-        return null;
-    }
-
-    private static Direction.Axis axisOf(BlockState s) {
-        if (s.hasProperty(BlockStateProperties.AXIS)) {
-            return s.getValue(BlockStateProperties.AXIS);
-        }
-        if (s.hasProperty(BlockStateProperties.HORIZONTAL_AXIS)) {
-            return s.getValue(BlockStateProperties.HORIZONTAL_AXIS);
-        }
-        return null;
-    }
-
-    private static Boolean topHalfOf(BlockState s) {
-        if (s.hasProperty(BlockStateProperties.SLAB_TYPE)) {
-            SlabType t = s.getValue(BlockStateProperties.SLAB_TYPE);
-            return t == SlabType.DOUBLE ? null : t == SlabType.TOP;
-        }
-        if (s.hasProperty(BlockStateProperties.HALF)) {
-            return s.getValue(BlockStateProperties.HALF) == Half.TOP;
-        }
-        return null;
-    }
 }

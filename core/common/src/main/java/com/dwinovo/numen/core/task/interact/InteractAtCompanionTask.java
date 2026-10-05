@@ -2,54 +2,55 @@ package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.act.PressReceipt;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.base.GoToThenDoTask;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Terrain;
+import com.dwinovo.numen.core.task.move.GotoReminders;
+import com.dwinovo.numen.core.task.base.InReachTask;
+import com.dwinovo.numen.pathing.body.Crosshair;
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import com.dwinovo.numen.pathing.body.BodyCompat;
 
 /**
- * {@code interact_at} on the player body — the point-aimed native interaction (BLOCK + AIR).
- * Walk within reach of the aim (if one is given), look at it, fire ONE native crosshair
- * raytrace ({@link Interaction#nativeRaytrace}) and press the requested mouse button on
- * whatever it resolves to ({@link Interaction#forHit}): break / activate the block hit, or —
- * on a clear-air aim — use the held item in that direction (throw / eat / draw). The mouse
- * model is the two record fields {@code button} (left/right) × {@code holdTicks} (tap/hold).
+ * {@code numen.use.block} / {@code use item} on the player body — the point-aimed native interaction (BLOCK + AIR).
+ * It does not travel: the body must already be within reach of the aim (if one is given).
+ *
+ * <p>左键是一次纯按键:朝那一格的中心看过去,准星落在谁就按谁({@link Crosshair#pick}),手上是什么就用什么,点一下就松手
+ * (一下就碎的方块碎了,别的只是开了个头)——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
+ * 挖东西(挑工具、清开视线、捡掉落)是 {@code numen.work.dig} 的事。
+ *
+ * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code numen.move.to(…, {arrive = "use"})} 同一个视线函数),
+ * 准星落在谁就点谁({@link Interaction#forHit}):激活方块,或——对着空气——用手里的东西(扔、吃、拉弓)。视线上挡着的(箱子前的
+ * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code numen.work.dig} 挖掉它或从另一面点。The mouse model is the two record fields
+ * {@code button} (left/right) × {@code holdTicks} (tap/hold).
  */
-public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTaskRecord> {
-
-    private static final double REACH = 4.5;
-    private static final double REACH_SQR = REACH * REACH;
-    private static final double WALK_SPEED = 1.0;
-    /** Reposition-rung stance radius: any feet cell this close to the aim (< {@link #REACH},
-     *  so an accepted stance is still within interact reach). Never wider than the goal. */
+public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord> {
 
     private Interaction interaction;
     /** 按键前的世界快照,收尾时对账出"真发生了什么"(见 {@link PressReceipt})。 */
     private PressReceipt receipt;
     private java.util.List<String> changes = List.of();
-    // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
-    //      picks straight back up: the counter and the rebuilt nav both survive) ----
-    /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
     private String successMsg = "done";
     // A right-click that activated a real block (a station's GUI): captured so the
-    // result can report it and the agent loop can remember it in <known_blocks>.
+    // result names it — whether that station is worth a note is hers to decide.
     private net.minecraft.core.BlockPos activatedBlock;
     private String activatedBlockId;
+    /** 准星没落在瞄的那一格上、落在了别的东西上:回执里说按的是谁;落在瞄的那一格上为 null。 */
+    private String landedElsewhere;
 
     public InteractAtCompanionTask(NumenPlayer player, InteractAtTaskRecord record) {
         super(player, record);
@@ -65,14 +66,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     @Override
-    protected PlayerNav buildNav() {
-        // 本任务不自带到场导航:身体须已在触及距离内(基座在 reached()==false
-        // 且无导航时直接教学失败,旅行归 goto)。
-        return null;
-    }
-
-    @Override
-    protected net.minecraft.core.BlockPos gotoFirstTarget() {
+    protected net.minecraft.core.BlockPos target() {
         return r.aim;
     }
 
@@ -86,30 +80,20 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         // Resolve the crosshair once we're in position, then drive the action.
         if (interaction == null) {
             if (r.item != null) {
-                player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
+                Hotbar.grip(player, r.item);
             }
+            // 右键点可点的目标:看向它看得见的那一面(与 numen.move.to 的 arrive = "use" 同一个视线函数),哪一面都看不见就看格心。
+            // 左键、空气与流体都看格心;对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船),落点不另说。
+            // 两个键都是纯按键:准星落在谁就按谁,挡在前面的不清,回执照实说
+            boolean clickable = r.aim != null && Terrain.of(player).clickable(r.aim);
             if (r.aim != null) {
-                InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
+                com.dwinovo.numen.pathing.world.Sight.Trace seen =
+                        button() == Interaction.Button.USE && clickable ? Aim.use(player, r.aim) : null;
+                InputDriver.lookAt(player, seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
             }
-            HitResult hit = Interaction.nativeRaytrace(player, REACH);
-            // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
-            // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
-            // 目标格是空气或流体的瞄点保持准星穿透语义——流体本来就不该被准星
-            // 点中,对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船)。
-            if (r.aim != null
-                    && !player.level().getBlockState(r.aim).isAir()
-                    && !(player.level().getBlockState(r.aim).getBlock()
-                            instanceof net.minecraft.world.level.block.LiquidBlock)
-                    && hit instanceof net.minecraft.world.phys.BlockHitResult blockedHit
-                    && !blockedHit.getBlockPos().equals(r.aim)) {
-                var blocker = blockedHit.getBlockPos();
-                String blockerId = BuiltInRegistries.BLOCK
-                        .getKey(player.level().getBlockState(blocker).getBlock()).getPath();
-                fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
-                        + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
-                        + blocker.getZ() + " instead. break_block that blocker, or goto the"
-                        + " target's open side, then retry.", FailureType.OCCLUDED);
-                return TaskState.FAILED;
+            HitResult hit = Crosshair.pick(player);
+            if (r.aim != null && (button() == Interaction.Button.ATTACK || clickable)) {
+                landedElsewhere = elsewhere(hit);
             }
             // A consumable / ender pearl used in the AIR is body-bound (would feed or teleport the
             // fake player) — refuse even when it's just whatever happened to be in hand.
@@ -120,10 +104,26 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     return TaskState.FAILED;
                 }
             }
+            // 按下去之前:这一下要做的事交给权限层(见 proposedActions)。不许就带着理由收场,
+            // 要问就站着等主人
+            List<com.dwinovo.numen.permission.Action> proposed = proposedActions(hit);
+            if (!proposed.isEmpty()) {
+                List<Permit> permits = permitAll(proposed);
+                for (int i = 0; i < permits.size(); i++) {
+                    if (permits.get(i).state() == PermitState.REFUSED) {
+                        fail("cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),
+                                FailureType.REFUSED);
+                        return TaskState.FAILED;
+                    }
+                }
+                if (permits.stream().anyMatch(p -> p.state() == PermitState.WAITING)) {
+                    player.controls().stop();
+                    return TaskState.RUNNING;
+                }
+            }
             // A right-click landing on a block activates it (opens a station's GUI,
-            // flips a switch, …). Remember the block we touched so <known_blocks> can
-            // walk us back to stations we've used, not just ones we placed. The harvest
-            // filters to tracked station types; doors/buttons fall away there.
+            // flips a switch, …). Capture what we touched so the receipt can name it:
+            // she reads it and decides for herself whether to remember the place.
             if (button() == Interaction.Button.USE && hit instanceof net.minecraft.world.phys.BlockHitResult bhr) {
                 activatedBlock = bhr.getBlockPos();
                 activatedBlockId = BuiltInRegistries.BLOCK
@@ -135,7 +135,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = PressReceipt.before(player, r.aim);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak);
             if (interaction == null) {       // left-click on air — a swing, nothing to do
                 successMsg = "nothing under the aim (left-click in the air)";
                 return TaskState.SUCCESS;
@@ -157,20 +157,41 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(interaction.failReason(), FailureType.UNKNOWN);
+                fail(interaction.failReason(), interaction.failType());
                 yield TaskState.FAILED;
             }
             case RUNNING -> TaskState.RUNNING;
         };
     }
 
-
-    /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
-    private static boolean repositionable(FailureType type) {
-        return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
-                || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
+    /**
+     * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
+     * 手里的东西,两只手里会往世界里放东西的({@link Interaction#placementOf})也一并算上。
+     */
+    private List<com.dwinovo.numen.permission.Action> proposedActions(HitResult hit) {
+        boolean left = button() == Interaction.Button.ATTACK;
+        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
+            var state = player.level().getBlockState(bh.getBlockPos());
+            if (left) {
+                return List.of(com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(), state));
+            }
+            List<com.dwinovo.numen.permission.Action> out = new java.util.ArrayList<>();
+            out.add(com.dwinovo.numen.permission.Action.useBlock(bh.getBlockPos(), state));
+            for (var hand : net.minecraft.world.InteractionHand.values()) {
+                var placing = Interaction.placementOf(player.level(), bh, player.getItemInHand(hand));
+                if (placing != null) {
+                    out.add(placing);
+                }
+            }
+            return out;
+        }
+        if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
+            return List.of(left ? com.dwinovo.numen.permission.Action.attack(eh.getEntity())
+                    : com.dwinovo.numen.permission.Action.useEntity(eh.getEntity()));
+        }
+        return List.of();
     }
+
 
     private Interaction.Button button() {
         return r.button == MouseButton.LEFT
@@ -178,7 +199,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private boolean withinReach() {
-        return bodySettled() && player.distanceToSqr(Vec3.atCenterOf(r.aim)) <= REACH_SQR;
+        return bodySettled() && BodyCompat.canReachBlock(player, r.aim, 0.0);
     }
 
     private String aimLabel() {
@@ -187,7 +208,35 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
 
     private String describeDone() {
         String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
-        return verb + (r.aim != null ? " " + aimLabel() : " (forward)");
+        String what = landedElsewhere != null ? " " + landedElsewhere
+                : r.aim != null ? " " + aimLabel() : " (forward)";
+        return verb + what + (r.sneak ? " while sneaking" : "");
+    }
+
+    /**
+     * 准星落着的不是瞄的那一格时,回执里说按的是谁:{@code short_grass at 1,65,2 — the crosshair landed there, not on
+     * 1,64,2};右键落在别的格上,再写出够到它的两条路:挖掉挡着的那一格,或走到看得见它另一面的地方。落在瞄的那一格上
+     * (或什么都没落着)为 null。
+     */
+    private String elsewhere(HitResult hit) {
+        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
+            var pos = bh.getBlockPos();
+            if (pos.equals(r.aim)) {
+                return null;
+            }
+            String landed = NavText.name(player.level().getBlockState(pos)) + " at " + pos.getX() + "," + pos.getY()
+                    + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
+            return button() == Interaction.Button.ATTACK ? landed
+                    : landed + ". To click " + aimLabel() + ": `numen.work.dig(" + com.dwinovo.numen.sdk.LuaCodecs.literal(pos)
+                            + ")` clears it out of the way, or "
+                            + GotoReminders.call(r.aim, "arrive = \"use\"")
+                            + " stands where another face of it is in sight";
+        }
+        if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
+            return eh.getEntity().getName().getString() + " (entity " + eh.getEntity().getId()
+                    + ") — the crosshair landed on it, not on " + aimLabel();
+        }
+        return null;
     }
 
     /**
@@ -198,8 +247,8 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     private String settle() {
         changes = receipt == null ? List.of() : receipt.diff(player);
         if (changes.isEmpty()) {
-            return " — but nothing visibly changed (hands, aimed block, nearby entities all "
-                    + "as before). If you expected an effect, reposition or rethink.";
+            return " — but nothing visibly changed (inventory, health, riding, aimed block, nearby "
+                    + "entities all as before). If you expected an effect, reposition or rethink.";
         }
         return " — " + String.join("; ", changes);
     }
@@ -211,27 +260,23 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         super.cleanup();
     }
 
+    /**
+     * 右键打开了一个界面(箱子、熔炉、机器),交回的就是那个 Window,和 {@code numen.gui.view()} 读到的一样,外加点开它的那一格;
+     * 别的点击交回按了哪个键、瞄哪一格、变了什么。
+     */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
-        if (r.aim != null) {
-            data.put("x", r.aim.getX());
-            data.put("y", r.aim.getY());
-            data.put("z", r.aim.getZ());
+    protected com.dwinovo.numen.core.tools.Clicks.Pressed value() {
+        // 点开的那个工位(与它确切的位置,比瞄的那一格准):她只记得住我们告诉过她的地方
+        java.util.Optional<com.dwinovo.numen.sdk.BlockAt> station = activatedBlock == null ? java.util.Optional.empty()
+                : java.util.Optional.of(new com.dwinovo.numen.sdk.BlockAt(activatedBlockId, activatedBlock));
+        boolean opened = r.button == MouseButton.RIGHT && player.containerMenu != player.inventoryMenu;
+        if (opened) {
+            com.dwinovo.numen.core.tools.GuiOps.Window window = com.dwinovo.numen.core.tools.GuiOps.window(player);
+            return station.map(window::openedAt).orElse(window);
         }
-        // Report the activated station (and its exact position, authoritative over the
-        // raw aim) so the agent loop can harvest it into <known_blocks>.
-        if (activatedBlock != null) {
-            data.put("block", activatedBlockId);
-            data.put("x", activatedBlock.getX());
-            data.put("y", activatedBlock.getY());
-            data.put("z", activatedBlock.getZ());
-        }
-        if (!changes.isEmpty()) {
-            data.put("changes", changes);
-        }
-        return data;
+        return new com.dwinovo.numen.core.tools.Clicks.Clicked(r.button == MouseButton.LEFT
+                ? com.dwinovo.numen.core.tools.Clicks.Button.LEFT : com.dwinovo.numen.core.tools.Clicks.Button.RIGHT,
+                java.util.Optional.ofNullable(r.aim), station, java.util.List.copyOf(changes));
     }
 
     @Override
@@ -246,6 +291,6 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
 
     @Override
     protected String cancelledMessage() {
-        return "interact_at interrupted";
+        return r.getToolName() + " interrupted";
     }
 }

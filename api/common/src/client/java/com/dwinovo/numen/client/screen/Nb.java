@@ -36,6 +36,11 @@ public final class Nb {
         g.drawString(font, seq, x, y, -1, false);
     }
 
+    /** 截短到 {@code maxW} 像素放得下,截了就补一个省略号;就是 {@link com.dwinovo.numen.client.ui.TextClip},量宽用 MC 字体。 */
+    public static String clip(Font font, String s, int maxW) {
+        return com.dwinovo.numen.client.ui.TextClip.fit(font::width, s, maxW);
+    }
+
     /** Square thick border = four filled edge rects (no rounded corners). */
     public static void border(GuiGraphics g, int x, int y, int w, int h, int t, int color) {
         g.fill(x, y, x + w, y + t, color);

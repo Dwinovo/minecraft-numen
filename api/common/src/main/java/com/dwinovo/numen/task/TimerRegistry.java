@@ -39,11 +39,11 @@ import java.util.UUID;
  * ({@link SavedData}),跟 {@code EventOutbox} / {@link CompanionRegistry} 同一制式。
  *
  * <p>也<b>不能</b>走 {@link TaskPersistence}——它靠重放那次工具调用来恢复,
- * 而重放 {@code set_timer(after_s=60)} 等于把表按回 60 秒重新计时。
+ * 而重放 {@code task timer … --after 60} 等于把表按回 60 秒重新计时。
  *
  * <h2>到点之后</h2>
  * 一句 {@link NumenEvents#emit} 就够:主人在线立刻送达并开一轮,主人离线进出箱等他回来,
- * 她死着则队列锁住、复活解锁时一起走。这三件事各自已有归属,这里不重复实现。
+ * 她死着则停牌不开 run、复活时一起走。这三件事各自已有归属,这里不重复实现。
  *
  * <p>服务端专用。
  */
@@ -181,7 +181,7 @@ public final class TimerRegistry extends SavedData {
                 }
                 continue;
             }
-            NumenEvents.emit(body, NumenEvents.Kind.TIMER, Map.of("id", t.id()),
+            NumenEvents.emit(body, com.dwinovo.numen.agent.inbox.EventTypes.TIMER, Map.of("id", t.id()),
                     "你定的表到点了:" + t.reason()
                             + "。表只负责提醒,不代表那件事已经完成——先看清现在的状况再决定下一步。",
                     true);

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,8 +28,7 @@ public record PathDebugPayload(UUID companionId,
                                List<Long> goalBoxes, List<Long> goalColumns)
         implements CustomPacketPayload {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "path_debug");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "path_debug");
 
     @Override
     public ResourceLocation id() {
@@ -37,16 +37,15 @@ public record PathDebugPayload(UUID companionId,
 
     @Override
     public void write(FriendlyByteBuf buf) {
-        PathDebugPayload p = this;
-        buf.writeUUID(p.companionId);
-        writeLongs(buf, p.currentPath);
-        writeLongs(buf, p.nextPath);
-        writeLongs(buf, p.bestPath);
-        writeLongs(buf, p.toBreak);
-        writeLongs(buf, p.toPlace);
-        writeLongs(buf, p.toWalkInto);
-        writeLongs(buf, p.goalBoxes);
-        writeLongs(buf, p.goalColumns);
+        buf.writeUUID(companionId);
+        writeLongs(buf, currentPath);
+        writeLongs(buf, nextPath);
+        writeLongs(buf, bestPath);
+        writeLongs(buf, toBreak);
+        writeLongs(buf, toPlace);
+        writeLongs(buf, toWalkInto);
+        writeLongs(buf, goalBoxes);
+        writeLongs(buf, goalColumns);
     }
 
     public static PathDebugPayload read(FriendlyByteBuf buf) {

@@ -5,14 +5,18 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "numen_api.refmap.json",
   "mixins": [
+    "BlockItemPlaceMixin",
     "BoatAccessor",
     "ChunkMapCompanionMixin",
+    "ItemEntityTouchMixin",
+    "PlayerAdvancementsRewardMixin",
     "MenuDataSlotsAccessor",
     "MixinEntityVehicleControl",
     "MixinServerCommonPacketListener"
   ],
   "client": [
     "ChatComponentAccessor",
+    "ToastComponentAccessor",
     "MixinKeyboardInput",
     "MixinPlayerRenderer"
   ],

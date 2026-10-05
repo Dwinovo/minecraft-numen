@@ -1,8 +1,9 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -27,8 +28,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     /** The 36 main backpack slots (hotbar + storage); equipment is already client-synced. */
     public static final int MAIN_SLOTS = 36;
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "request_state");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "request_state");
 
     @Override
     public ResourceLocation id() {
@@ -48,16 +48,16 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     public static void handle(RequestStatePayload p, ServerPlayer player) {
         NumenPlayer numen = NumenPlayer.findByUuid(player.level().getServer(), p.uuid());
         if (numen == null || !numen.isOwnedByPlayer(player.getUUID())) {
-            Services.NETWORK.sendToPlayer(player, absent(p.uuid()));
+            NumenNetwork.sendToPlayer(player, absent(p.uuid()));
             return;
         }
-        Services.NETWORK.sendToPlayer(player, snapshot(numen));
+        NumenNetwork.sendToPlayer(player, snapshot(numen));
     }
 
     /** 身体不在(睡在未加载区块 / 不是你的):没有内容可给。 */
     public static NumenStatePayload absent(java.util.UUID uuid) {
         return new NumenStatePayload(uuid, false, List.of(), List.of(), 0, 0f,
-                0, ItemStack.EMPTY, List.of(), "", -1);
+                0, ItemStack.EMPTY, List.of(), "", -1, "");
     }
 
     /**
@@ -81,7 +81,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
         for (var live : numen.getActiveEffects()) {
             effects.add(new net.minecraft.world.effect.MobEffectInstance(live));
         }
-        // 骑乘随身照:类型按注册路径报,id 给 interact_entity 直接可用的实体号
+        // 骑乘随身照:类型按注册路径报,id 给 use entity 直接可用的实体号
         net.minecraft.world.entity.Entity vehicle = numen.getVehicle();
         String vehicleType = vehicle == null ? ""
                 : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
@@ -89,6 +89,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
         return new NumenStatePayload(numen.getUUID(), true, items, craft,
                 numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel(),
                 inv.selected, numen.getOffhandItem().copy(), effects,
-                vehicleType, vehicle == null ? -1 : vehicle.getId());
+                vehicleType, vehicle == null ? -1 : vehicle.getId(),
+                com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(numen));
     }
 }

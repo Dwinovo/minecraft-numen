@@ -6,6 +6,8 @@ import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.custom.DiscardedPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.ChannelBuilder;
 import net.minecraftforge.network.PacketDistributor;
@@ -41,8 +43,10 @@ public final class ForgeNetworkChannel implements INetworkChannel {
 
     private static final int PROTOCOL_VERSION = 1;
 
+    private static final ResourceLocation CHANNEL_ID = new ResourceLocation(Constants.MOD_ID, "main");
+
     private static final SimpleChannel CHANNEL = ChannelBuilder
-            .named(new ResourceLocation(Constants.MOD_ID, "main"))
+            .named(CHANNEL_ID)
             .networkProtocolVersion(PROTOCOL_VERSION)
             .acceptedVersions((status, version) -> true)
             .simpleChannel();
@@ -106,6 +110,22 @@ public final class ForgeNetworkChannel implements INetworkChannel {
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         CHANNEL.send(new Envelope(payload.id(), serialise(payload)), PacketDistributor.PLAYER.with(player));
+    }
+
+    /**
+     * 下行的一个包里装的 Numen 载荷;不是这条通道发的就是 null。没有真网线的地方(GameTest 里扮主人客户端的连接)用它读下行的包,
+     * 与客户端收包走同一张解码表。
+     */
+    public CustomPacketPayload payloadOf(net.minecraft.network.protocol.Packet<?> packet) {
+        if (!(packet instanceof ClientboundCustomPayloadPacket custom)
+                || !(custom.payload() instanceof DiscardedPayload raw) || !raw.id().equals(CHANNEL_ID)) {
+            return null;
+        }
+        FriendlyByteBuf data = new FriendlyByteBuf(raw.data().duplicate());
+        data.readVarInt();   // SimpleChannel 的消息序号
+        Envelope env = decodeEnvelope(data);
+        S2C<?> reg = s2c.get(env.id());
+        return reg == null ? null : reg.decoder().apply(reader(env.data()));
     }
 
     // ---- receiving (already on the main thread) ----

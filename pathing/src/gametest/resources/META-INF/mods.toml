@@ -1,0 +1,8 @@
+modLoader = "lowcodefml"
+loaderVersion = "[49,)"
+license = "LGPL-3.0"
+[[mods]]
+modId = "numen_pathing_gametest"
+version = "0.0.0"
+displayName = "Numen pathing GameTests"
+description = '''The pathing module's own GameTests; only ever on the GameTest server's class path.'''

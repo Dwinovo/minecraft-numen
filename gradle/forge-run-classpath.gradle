@@ -1,0 +1,17 @@
+// api 自己的开发运行(Client / Server / Data)在 Forge 49 下的 classpath:兄弟模块 ai / agent / lua / ui / pathing 的类经 mods 块里
+// 的源码集输出目录进来,它们的 jar 不许再上运行 classpath——jar 会以自动模块身份与 api 的同名包(ai 与 api 同有 agent.llm,
+// agent 与 api 同有 agent.memory,ui 与 api 同有 client.ui)冲突,JPMS 校验直接拒启。编译、打包不受影响。
+// (这几个运行只做数据生成与冒烟;要跑游戏逻辑的 core 运行走 api 的 devJar,见 api/forge/build.gradle。)
+//
+// jar 有两条路进运行 classpath(ForgeGradle 把 mods 块里每个源码集的 runtimeClasspath 整个并进去):
+//  1. 本模块自己的 runtimeClasspath(api 依赖这些兄弟模块);
+//  2. 兄弟源码集自己的 runtimeClasspath:agent 依赖 ai 与 lua,别的兄弟没有互相依赖。
+def siblings = ['ai', 'agent', 'lua', 'ui', 'pathing']
+configurations.named('runtimeClasspath') { config ->
+    siblings.each { config.exclude module: it }
+}
+project(':agent').plugins.withId('java-library') {
+    project(':agent').configurations.named('runtimeClasspath') { config ->
+        ['ai', 'lua'].each { config.exclude module: it }
+    }
+}

@@ -12,6 +12,15 @@ mixin {
     config("${mod_id}.mixins.json")
 }
 
+// GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
+// 模板目录,运行前把两处同步进构建目录里的一处,运行配置指向它。
+def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
+def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
+    from 'gameteststructures'
+    from project(':pathing').file('src/gametest/structures')
+    into gameTestStructures
+}
+
 minecraft {
     mappings channel: 'official', version: minecraft_version
     copyIdeResources = true // Calls processResources when in dev
@@ -30,11 +39,6 @@ minecraft {
             taskName 'Client'
             mods {
                 modClientRun { source sourceSets.main }
-                modClientApiRun {
-                    source project(':api:forge').sourceSets.main
-                    source project(':ai').sourceSets.main
-                    source project(':ui').sourceSets.main
-                }
             }
             // See the data run: the api mod's SRG refmap vs. official-named runtime.
             property 'mixin.env.disableRefMap', 'true'
@@ -45,11 +49,6 @@ minecraft {
             taskName 'Server'
             mods {
                 modServerRun { source sourceSets.main }
-                modServerApiRun {
-                    source project(':api:forge').sourceSets.main
-                    source project(':ai').sourceSets.main
-                    source project(':ui').sourceSets.main
-                }
             }
             property 'mixin.env.disableRefMap', 'true'
         }
@@ -60,11 +59,6 @@ minecraft {
             taskName 'Data'
             mods {
                 modDataRun { source sourceSets.main }
-                modDataApiRun {
-                    source project(':api:forge').sourceSets.main
-                    source project(':ai').sourceSets.main
-                    source project(':ui').sourceSets.main
-                }
             }
             // In-repo sibling projects are official-named in dev, and their mixin sources
             // are written against official names too — skipping the refmap makes them apply.
@@ -75,16 +69,18 @@ minecraft {
             ideaModule "${rootProject.name}.core.${project.name}.main"
             taskName 'GameTestServer'
             mods {
-                modGameTestServerRun { source sourceSets.main }
-                modGameTestServerApiRun {
-                    source project(':api:forge').sourceSets.main
-                    source project(':ai').sourceSets.main
-                    source project(':ui').sourceSets.main
+                modGameTestServerRun {
+                    source sourceSets.main
+                    // 寻路模块本身随 numen-api 来(api 依赖它);这里只挂它自己的 GameTest 用例
+                    source project(':pathing').sourceSets.gametest
                 }
             }
             property 'mixin.env.disableRefMap', 'true'
-            // 只跑本模组命名空间下的用例,别把原版那几百个也拖进来。
-            property 'forge.enabledGameTestNamespaces', mod_id
+            // 不设 forge.enabledGameTestNamespaces:Forge 49 拿它去按"批次名前缀"筛用例,而我们的批次名不带前缀
+            // (用例类标 @GameTestDontPrefix,让 @BeforeBatch 的批次名与用例的批次名一致);登记进来的本来就只有
+            // 带 @GameTestHolder 的我们自己的类。
+            // 给场地围上屏障,照高版本原版的样子:寻路用例把场地当孤岛(见 StructureFenceMixin)
+            args '--mixin.config', 'numen_gametest.mixins.json'
             // 模板喂进存档 generated 目录的开闸口令(见 CompanionGameTests 静态块):
             // 只有无头跑批需要——IDE 运行走 testStructuresDir 那个来源。
             property 'numen.gametest.generated', 'world/generated/numen/structures'
@@ -92,46 +88,28 @@ minecraft {
     }
 }
 
-// 所有运行配置都指向仓库内的 SNBT 模板目录:开发客户端里 /test run <用例>
-// 现场围观用,用例按路径读夹具也用(见 CompanionGameTests 静态块)。无头跑批
-// 的模板另由静态块转成 NBT 喂进存档 generated 目录——本代测试模板目录这个来源
-// 只在 IS_RUNNING_IN_IDE 为真时才登记。
+// 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
+// /test run <用例> 现场围观也用(见 GameTestKit 静态块)。本代无头跑批的模板另由静态块转成 NBT 喂进存档
+// generated 目录(见上面 numen.gametest.generated)——"测试模板目录"这个来源只在 IS_RUNNING_IN_IDE 为真时才登记。
 minecraft.runs.configureEach {
-    property 'numen.gametest.structures', file('gameteststructures').absolutePath
+    property 'numen.gametest.structures', gameTestStructures.get().asFile.absolutePath
     // api 以同仓源码集进运行(不是带 MANIFEST 的 mod jar),它的 mixin 配置没人替它
     // 声明——发行物里由 api jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
     args '--mixin.config', 'numen_api.mixins.json'
     args '--mixin.config', 'numen_api.forge.mixins.json'
 }
 
-// 跑批世界必须是<b>超平坦</b>,而且每次从头生成。
-//
-// 本 loader 的无头跑批入口是普通专用服务器,不建世界就默认开一个正常主世界:
-// 用例场地被埋在深板岩里,四周还散布着天然矿脉。而用例里"种四块金矿石然后
-// 让她挖掉"这类断言默认场地周围没有同种方块——搜索半径一撑开就够到天然矿,
-// 免耗材画像又允许垫柱上行,于是同伴垫着方块爬五十格去挖别人的矿,种下的
-// 那四块一块没动。高版本的跑批入口自带超平坦世界,不会碰到这一出。
-//
-// 这里把世界配平,而不是去改用例:场地悬空、没有天然矿、没有结构,断言才
-// 是在测它自己声称要测的东西。level.dat 会记住生成器,所以旧世界一并删掉。
-tasks.matching { it.name == 'GameTestServer' }.configureEach {
-    doFirst {
-        def runDir = file('runs/gametestserver')
-        runDir.mkdirs()
-        delete fileTree(dir: new File(runDir, 'world'))
-        new File(runDir, 'server.properties').text = [
-                'level-type=minecraft\\:flat',
-                'generate-structures=false',
-                'level-seed=numen',
-                'spawn-monsters=false',
-                'spawn-npcs=false',
-                'spawn-animals=false',
-                'online-mode=false',
-                'sync-chunk-writes=false',
-        ].join('\n') + '\n'
-        new File(runDir, 'eula.txt').text = 'eula=true\n'
-    }
+tasks.matching { it.name in ['Client', 'Server', 'Data', 'GameTestServer'] }.configureEach {
+    dependsOn syncGameTestStructures
+    // 运行 classpath 里的 api 模组 jar 要先打出来
+    dependsOn ':api:forge:devJar'
 }
+// ForgeGradle 在本项目里按名字找运行配置里每个源码集的 classes 任务;寻路模块的 gametest 源码集不在本项目,
+// 这里放一个同名的替身,指向真的那一个。
+tasks.register('gametestClasses') { dependsOn ':pathing:gametestClasses' }
+
+// 跑批世界配成超平坦、每次从头生成:见 gradle/gametest-flat-world.gradle
+apply from: rootProject.file('gradle/gametest-flat-world.gradle')
 
 // Package this module's own datagen output (`./gradlew :core:forge:Data` writes it there).
 sourceSets.main.resources.srcDir 'src/generated/resources'
@@ -141,6 +119,15 @@ sourceSets.main.resources.exclude '.cache/**'
 jarJar.enable()
 
 dependencies {
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar。
+    compileOnly project(':plugins:ysm')
+
+    // 开发运行里的 api 模组:Forge 49 的 dev 运行只认"自带 mods.toml 的类路径条目"是模组,mods 块合并多个源码集
+    // 不再生效,所以 api 与平铺进它的兄弟模块要作为一个 jar(内容同发行 jar,official 名)上运行 classpath,
+    // 见 api/forge/build.gradle 的 devJar。运行时才要,编译用上面 compileOnlyApi 的那份。
+    runtimeOnly files({ project(':api:forge').tasks.named('devJar') })
+
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
     // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸(与 api 的 forge 模块同款声明)。
@@ -165,6 +152,11 @@ dependencies {
         transitive = false
         jarJar.ranged(it, '[0.0.0,)')
     }
+}
+
+// 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:ysm:test')
 }
 
 jar.finalizedBy('reobfJar')
@@ -206,14 +198,6 @@ sourceSets.each {
 
 
 
-// Forge 49 起 dev 启动为 GAME 模块层做 JPMS 校验:ai/ui 兄弟 jar 若上了运行
-// classpath,会以自动模块身份与聚合进 numen_api 模组模块(runs 的 mods 块)的
-// 同名包冲突,直接拒启。从运行用的 runtimeClasspath 里排除这两个工件——
-// 它们的类经 MOD_CLASSES(源码集输出)进运行,一个不少;编译、打包不受影响。
-configurations.named('runtimeClasspath') {
-    exclude module: 'ai'
-    exclude module: 'ui'
-}
 
 // mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，
 // 生产环境 SRG 运行时 mixin 按官方名找不到目标直接拒启（开发期 disableRefMap 照不出）。
@@ -231,3 +215,14 @@ tasks.named("jar", Jar) {
         } finally { zf.close() }
     }
 }
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+//
+// jar 和 jarJar 都要:Forge 这边真正发出去的是 jarJar 产的 -all(它把引擎嵌进
+// META-INF/jarjar/),而它<b>不继承 jar 的内容配置</b>。只加在 jar 上的话,-all 里
+// 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
+tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
+    it.from({ project(':plugins:ysm').sourceSets.main.output })
+}
+
