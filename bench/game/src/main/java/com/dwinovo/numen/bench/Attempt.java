@@ -16,9 +16,13 @@ import com.dwinovo.numen.bench.report.Variant;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.Fragments;
+import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
+import com.dwinovo.numen.network.payload.FragmentPayload;
 import com.dwinovo.numen.network.payload.ClientCallPayload;
 import com.dwinovo.numen.network.payload.ClientCallResultPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
@@ -75,7 +79,8 @@ import java.util.stream.Stream;
  *
  * <h2>上行与下行</h2>
  * 整段程序经 {@link ProgramUplink#wire} 直接交给服务端真实入口 {@link RunProgramPayload#handle}(停止、客户端函数的答复同样),发送者是
- * 模拟主人,上行的包按网络上的样子编解码一遍;发给主人的模组载荷由 {@link OwnerConnection} 截下,也编解码一遍,再照主人客户端的
+ * 模拟主人,上行的包按网络上的样子过一遍({@link Fragments#crossed}:超过单包上限的切成片再拼回、编解码);发给主人的模组载荷由
+ * {@link OwnerConnection} 截下,分片的消息进主人的收件箱拼回({@link NumenNetwork#assembled}),也编解码一遍,再照主人客户端的
  * 处理方式交给大脑:程序的回执与每次调用的结局给上行部件、服务端要客户端执行的函数交给客户端执行体、当前任务与身体状态给运行期状态、
  * 世界事件进收件箱、征询由剧本答复、死亡切断循环。
  */
@@ -109,6 +114,8 @@ final class Attempt {
     private final BlockPos origin;
     /** 主线程的信箱:模型的回调、截下的下行包都先进这里,每刻开头取出来执行。 */
     private final Queue<Runnable> mail = new ConcurrentLinkedQueue<>();
+    /** 服务端发来的、拼装中的分片消息:主人客户端的收件箱。 */
+    private final Fragments.Inbox fromServer = new Fragments.Inbox(Wire.TO_CLIENT);
 
     private Path home;
     private Transcript transcript;
@@ -383,11 +390,14 @@ final class Attempt {
 
     private void uplink(CustomPacketPayload payload) {
         switch (payload) {
-            case RunProgramPayload p -> RunProgramPayload.handle(wire(RunProgramPayload.STREAM_CODEC, p), owner);
-            case StopProgramPayload p -> StopProgramPayload.handle(wire(StopProgramPayload.STREAM_CODEC, p), owner);
-            case ClientCallResultPayload p ->
-                    ClientCallResultPayload.handle(wire(ClientCallResultPayload.STREAM_CODEC, p), owner);
-            case CancelTasksPayload p -> CancelTasksPayload.handle(wire(CancelTasksPayload.STREAM_CODEC, p), owner);
+            case RunProgramPayload p ->
+                    RunProgramPayload.handle(Fragments.crossed(Wire.TO_SERVER, RunProgramPayload.STREAM_CODEC, p), owner);
+            case StopProgramPayload p ->
+                    StopProgramPayload.handle(Fragments.crossed(Wire.TO_SERVER, StopProgramPayload.STREAM_CODEC, p), owner);
+            case ClientCallResultPayload p -> ClientCallResultPayload.handle(
+                    Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, p), owner);
+            case CancelTasksPayload p ->
+                    CancelTasksPayload.handle(Fragments.crossed(Wire.TO_SERVER, CancelTasksPayload.STREAM_CODEC, p), owner);
             default -> throw new IllegalStateException("评测的上行只有程序、叫停、客户端函数的答复,来了 "
                     + payload.type().id());
         }
@@ -397,6 +407,12 @@ final class Attempt {
     private void downlink(CustomPacketPayload payload) {
         UUID uuid = her.getUUID();
         switch (payload) {
+            case FragmentPayload p -> {
+                CustomPacketPayload whole = NumenNetwork.assembled(fromServer, wire(FragmentPayload.TO_CLIENT_CODEC, p));
+                if (whole != null) {
+                    downlink(whole);
+                }
+            }
             case ProgramResultPayload p when p.entityUuid().equals(uuid) ->
                     ProgramResultPayload.handle(wire(ProgramResultPayload.STREAM_CODEC, p));
             case ClientCallPayload p when p.entityUuid().equals(uuid) ->

@@ -5,8 +5,12 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.Fragments;
+import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.network.payload.ClientCallPayload;
 import com.dwinovo.numen.network.payload.ClientCallResultPayload;
+import com.dwinovo.numen.network.payload.FragmentPayload;
 import com.dwinovo.numen.network.payload.ProgramResultPayload;
 import com.dwinovo.numen.network.payload.RunProgramPayload;
 import com.dwinovo.numen.program.ClientEndpoint;
@@ -18,6 +22,8 @@ import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.task.TaskRecord;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -583,6 +589,107 @@ public class ScriptGameTests {
                                     .equals("gametest_wire:help"), "the program did not run over the wire: " + receipt);
                     helper.assertTrue(((RunResult.Ended) result.get()).outcome().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
+                    leave(owner);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
+                })
+                .thenSucceed();
+    }
+
+    /** 几百 KB 的模块正文:合法的 Lua,第一行注释说它做什么,后面是填充,最后返回一张表。 */
+    private static String bigModule(int lines) {
+        return "-- A big one.\nlocal M = {}\n---Give the answer.\nfunction M.answer() return 42 end\n"
+                + "-- filler filler filler filler filler filler filler filler filler\n".repeat(lines) + "return M\n";
+    }
+
+    /**
+     * 带着几百 KB 模块的程序上送:程序加模块正文远超一个上行的包(32767 字节),切成片、过线上的编解码、服务端的收件箱拼回,
+     * 交给服务端的入口,程序用到这个模块并跑到最后。走的是回环客户端,和产品里同一批部件。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    public static void a_program_with_a_module_of_several_hundred_kilobytes_goes_up_in_fragments_and_runs(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_big_module", new BlockPos(2, 2, 2), true);
+        String module = bigModule(7_000);
+        Modules.of(her.getUUID()).save("my.gt_big", module);
+        helper.assertTrue(module.length() > 10 * Wire.TO_SERVER.bytes(), "the module is not bigger than ten packets");
+
+        ToolRun run = lua(her, "return my.gt_big.answer()");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: 42"),
+                    "the program with the big module did not run: " + run.receipt());
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
+    /**
+     * 一个客户端函数交回的结果超过一个上行的包:{@code numen.module.show} 读出几百 KB 的模块正文,答复经分片送回服务端,
+     * 程序拿到的是完整的正文。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    public static void a_client_function_result_over_one_packet_comes_back_to_the_program_in_fragments(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_big_result", new BlockPos(2, 2, 2), true);
+        String module = bigModule(7_000);
+        Modules.of(her.getUUID()).save("my.gt_big", module);
+
+        ToolRun run = lua(her, "return #numen.module.show(\"my.gt_big\").code");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: " + module.length()),
+                    "the program did not get the whole text back: " + run.receipt());
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
+    /**
+     * 下行也分片:程序存一个 1.5 MB 的模块,反向请求({@code ClientCallPayload})超过一个下行的包(1 MB),真实的
+     * {@code NumenNetwork.sendToPlayer} 把它切成片经主人的连接({@code OwnerLine})发出;这里扮主人的客户端,收件箱拼回、
+     * 交给客户端执行体,答复(带着新模块正文,同样超过一个上行的包)经分片上送。模块存进了她的目录,程序跑到最后。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    public static void a_request_over_one_downward_packet_reaches_the_owners_client_in_fragments(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_big_request", new BlockPos(2, 2, 2), false);
+        ServerPlayer owner = presentOwner(helper, her, "gametest_big_request_owner");
+        String module = bigModule(24_000);
+        helper.assertTrue(module.length() > Wire.TO_CLIENT.bytes(), "the module is not bigger than a downward packet");
+        ModuleSync sync = new ModuleSync();
+        ClientEndpoint endpoint = new ClientEndpoint(sync, payload -> ClientCallResultPayload.handle(
+                Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, (ClientCallResultPayload) payload),
+                owner), Modules::of);
+        ProgramUplink uplink = new ProgramUplink(sync, payload -> RunProgramPayload.handle(
+                Fragments.crossed(Wire.TO_SERVER, RunProgramPayload.STREAM_CODEC, (RunProgramPayload) payload), owner),
+                Modules::of);
+        Fragments.Inbox inbox = new Fragments.Inbox(Wire.TO_CLIENT);
+        AtomicReference<RunResult> result = new AtomicReference<>();
+        int[] fragments = new int[1];
+        uplink.run(her.getUUID(), "big-" + UUID.randomUUID(), "numen.module.save([==[\n" + module
+                + "]==], {name = \"my.gt_huge\"})\nreturn \"saved\"", result::set);
+
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    for (CustomPacketPayload payload : received(owner)) {
+                        if (payload instanceof FragmentPayload piece) {
+                            fragments[0]++;
+                            ByteBuf wire = Unpooled.buffer();
+                            FragmentPayload.TO_CLIENT_CODEC.encode(wire, piece);
+                            payload = NumenNetwork.assembled(inbox, FragmentPayload.TO_CLIENT_CODEC.decode(wire));
+                        }
+                        if (payload instanceof ClientCallPayload call) {
+                            endpoint.handle(call);
+                        } else if (payload instanceof ProgramResultPayload answer) {
+                            uplink.deliver(answer.programId(), RunResult.fromJson(answer.resultJson()));
+                        }
+                    }
+                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    String receipt = ((RunResult.Ended) result.get()).outcome().receipt();
+                    helper.assertTrue(fragments[0] > 1, "the request did not come down as fragments: " + fragments[0]);
+                    helper.assertTrue(receipt.contains("returned: saved"), "the program did not run to the end: " + receipt);
+                    helper.assertTrue(module.equals(Modules.of(her.getUUID()).code("my.gt_huge")),
+                            "the module was not saved whole");
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
