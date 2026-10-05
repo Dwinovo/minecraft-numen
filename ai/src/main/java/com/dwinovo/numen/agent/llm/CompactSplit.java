@@ -58,7 +58,7 @@ public final class CompactSplit {
     public static int estimateTokens(ConvoState.Msg msg) {
         String text = switch (msg) {
             case ConvoState.Msg.User u -> u.content();
-            case ConvoState.Msg.Tool t -> t.content();
+            case ConvoState.Msg.Tool t -> ToolOutcome.modelText(t.content());
             case ConvoState.Msg.Halt h -> h.reason();
             case ConvoState.Msg.Assistant a -> {
                 StringBuilder sb = new StringBuilder(

@@ -192,6 +192,8 @@
 `calls`、`returned`(返回值本身,是表就是 JSON 对象,给程序和评测读的原值)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
 `script`。
 
+**模型只读 `message`**:回执是一个信封 `{success, message, data}`,交给模型的只有 `message`(成败在文字第一行),规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。进对话历史的是 `ToolOutcome.kept`:成败加文字,`data` 不进历史,界面据成败画标记、从成功的 `todo` 画清单。`data`(`returned` 原值、`calls`、`error`)只留给程序、界面、评测与日志。历史文件格式不变:旧档里带 `data` 的工具结果照旧读得进,送给模型时同样只剩 `message`。
+
 **有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
 多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
 (`ScriptEngine.display`,`LuaDisplay`),判据只有这一处,照 NumPy 的 printoptions(`threshold`、`edgeitems`)与 pandas 的 `max_rows`:

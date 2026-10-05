@@ -1,6 +1,7 @@
 package com.dwinovo.numen.mcp.server;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
@@ -563,14 +564,8 @@ public final class McpServer {
         toolArgs.remove("companion");
         String result = NumenActuator.invoke(target, toolName, toolArgs.toString())
                 .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
-        boolean isError = false;
-        try {
-            JsonObject r = JsonParser.parseString(result).getAsJsonObject();
-            isError = r.has("success") && !r.get("success").getAsBoolean();
-        } catch (RuntimeException ignored) {
-            // non-JSON result — treat as plain text, not an error
-        }
-        return content(result, isError);
+        // the external agent reads what the built-in brain reads: the result's message, never its structured data
+        return content(ToolOutcome.modelText(result), ToolOutcome.failed(result));
     }
 
     /** Resolve the {@code companion} argument (name or UUID) to a live companion's UUID, or null. */

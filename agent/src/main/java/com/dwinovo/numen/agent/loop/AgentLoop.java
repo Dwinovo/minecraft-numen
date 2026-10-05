@@ -397,7 +397,8 @@ public final class AgentLoop {
                 if (!current(id)) {
                     return;
                 }
-                transcript.addToolResult(call.id(), resultJson);
+                // 历史里存的是交给模型的那份内容(成败与文字);结构化的 data 只随事件给界面与评测
+                transcript.addToolResult(call.id(), com.dwinovo.numen.agent.llm.ToolOutcome.kept(resultJson));
                 emit(new LoopEvent.ToolFinished(id, call, resultJson));
             }
 

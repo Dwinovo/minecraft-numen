@@ -13,10 +13,10 @@ import java.util.List;
  * 合法序列只在这里、在 {@link NumenLlmClient#chatStreaming} 转线格式之前现算一次——正常一轮、
  * 压缩、目标评估都经过那个出口,所以谁也绕不过去。
  *
- * <p>三条规则:
+ * <p>四条规则:
  * <ol>
  *   <li><b>悬空的工具调用补结果。</b>assistant 的 tool_calls 到下一条 assistant、user、Halt 或结尾
- *       为止没等到结果的,补一条 {@code {"success":false,"message":"<原因>"}}(上游见到没有结果的
+ *       为止没等到结果的,补一条结果,文字就是原因(上游见到没有结果的
  *       调用会直接 400)。原因取紧随其后的那条 Halt;没有 Halt 说明游戏在结果回来前被直接关掉了,
  *       用 {@link #CLOSED_BEFORE_RESULT}。</li>
  *   <li><b>Halt 本身不发。</b>它切断的若是一次模型回复(那一刻没有悬空调用),在下一条 user 消息
@@ -24,6 +24,8 @@ import java.util.List;
  *       之前模型又回过话,那次切断就已经翻篇,不再提。</li>
  *   <li><b>相邻 user 合并。</b>失败后又来一句话、运行期状态块、切断说明,都可能造出连续的 user,
  *       有的服务商直接拒;合成一条,中间空一行。</li>
+ *   <li><b>工具结果只发文字。</b>交给模型的是结果里的 {@code message}({@link ToolOutcome#modelText}),
+ *       结构化的 {@code data} 不进请求。</li>
  * </ol>
  *
  * <p>纯函数:不改入参,也不碰落盘。
@@ -52,7 +54,7 @@ public final class ProtocolView {
                 }
                 case ConvoState.Msg.Tool t -> {
                     open.removeIf(call -> call.id().equals(t.toolCallId()));
-                    out.add(t);
+                    out.add(new ConvoState.Msg.Tool(t.toolCallId(), ToolOutcome.modelText(t.content())));
                 }
                 case ConvoState.Msg.Halt h -> {
                     if (open.isEmpty()) {
@@ -79,7 +81,7 @@ public final class ProtocolView {
     /** 给还没结果的调用各补一条失败结果,补完清空。 */
     private static void answer(List<ConvoState.Msg> out, List<LlmToolCall> open, String reason) {
         for (LlmToolCall call : open) {
-            out.add(new ConvoState.Msg.Tool(call.id(), ToolOutcome.failure(reason)));
+            out.add(new ConvoState.Msg.Tool(call.id(), reason));
         }
         open.clear();
     }

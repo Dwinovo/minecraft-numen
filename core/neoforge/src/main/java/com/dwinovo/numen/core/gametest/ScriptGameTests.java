@@ -870,6 +870,36 @@ public class ScriptGameTests {
     }
 
     /**
+     * 程序 return 一个大值:回执的 data 里是给程序读的原值(整团的每一格),模型读到的只有 message——缩略过的那份文字,成败在第一行,
+     * 没有 data。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
+    public static void a_big_returned_value_reaches_the_model_only_as_the_shortened_message(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 5; x < 11; x++) {
+            for (int z = 5; z < 11; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.GOLD_BLOCK.defaultBlockState());
+            }
+        }
+        NumenPlayer her = spawnAt(helper, "gametest_lua_returner", new BlockPos(2, 2, 2), false);
+        ToolRun run = lua(her, "return numen.scan.blocks(\"minecraft:gold_block\", {radius = 12})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the scan has not finished");
+            String receipt = run.receipt();
+            helper.assertTrue(receiptData(receipt).getAsJsonArray("returned").get(0).getAsJsonObject()
+                            .getAsJsonArray("blocks").size() == 36, "the program lost the raw value: " + receipt);
+            String heard = com.dwinovo.numen.agent.llm.ToolOutcome.modelText(receipt);
+            helper.assertTrue(heard.startsWith("ok · 1 call · ") && heard.contains("…(36 items in all;")
+                            && !heard.contains("\"returned\"") && !heard.contains("\"data\""),
+                    "the model would read something other than the shortened message: " + heard);
+            Constants.LOG.info("[numen-sample] a big returned value: the receipt is {} characters, the model reads {}",
+                    receipt.length(), heard.length());
+            CompanionFactory.despawn(level.getServer(), her);
+        });
+    }
+
+    /**
      * 她 print 一团扫描结果:一团里的方块多了,只显示首尾几个并写明一共多少、怎么看更多——不静默地截断;返回的数照实在 returned 里。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")

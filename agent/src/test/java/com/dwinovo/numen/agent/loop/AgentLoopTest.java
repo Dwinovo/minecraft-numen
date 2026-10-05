@@ -474,6 +474,18 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void aToolResultEntersTheHistoryAsItsSuccessAndMessageWithoutItsStructuredData() {
+            ownerSays("数一数");
+            model.last().callTools(tool("c1"));
+            tools.finish(tools.sink, "c1", "{\"success\":true,\"message\":\"ok · 1 call · 0 s\\nreturned: 36\","
+                    + "\"data\":{\"status\":\"ok\",\"returned\":[1,2,3,4,5,6,7,8,9]}}");
+
+            List<ConvoState.Msg> sent = model.last().request().messages();
+            ConvoState.Msg.Tool kept = assertInstanceOf(ConvoState.Msg.Tool.class, sent.get(sent.size() - 1));
+            assertEquals("{\"success\":true,\"message\":\"ok · 1 call · 0 s\\nreturned: 36\"}", kept.content());
+        }
+
+        @Test
         void goalFollowUpJoinsOnlyWhenTheRunWouldEnd() {
             ownerSays("挖 64 个铁");
             model.last().callTools(tool("c1"));

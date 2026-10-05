@@ -2,6 +2,7 @@ package com.dwinovo.numen.agent.llm;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,5 +38,33 @@ class ToolOutcomeTest {
         assertFalse(ToolOutcome.failed("   "));
         assertFalse(ToolOutcome.failed("{\"success\":"));          // 半截 JSON
         assertFalse(ToolOutcome.failed("{\"success\":\"false\"}")); // 字符串不是布尔,不认
+    }
+
+    private static final String RECEIPT = "{\"success\":false,\"message\":\"The script stopped at line 2\\nstderr:\\nline 2 f: boom\","
+            + "\"data\":{\"status\":\"error\",\"calls\":2,\"returned\":[1,2,3]}}";
+
+    @Test
+    void theModelReadsAnEnvelopesMessageAndNothingElse() {
+        assertEquals("The script stopped at line 2\nstderr:\nline 2 f: boom", ToolOutcome.modelText(RECEIPT));
+        assertEquals("plans written", ToolOutcome.modelText(ToolOutcome.success("plans written")));
+    }
+
+    @Test
+    void whatIsNotAnEnvelopeIsHandedOverAsItIs() {
+        assertEquals("技能正文\n第二行", ToolOutcome.modelText("技能正文\n第二行"));
+        assertEquals("{\"items\":[]}", ToolOutcome.modelText("{\"items\":[]}"), "没有 success 与 message 的 JSON 不是信封");
+        assertEquals("{\"success\":true}", ToolOutcome.modelText("{\"success\":true}"));
+        assertEquals("{\"success\":\"yes\",\"message\":\"m\"}", ToolOutcome.modelText("{\"success\":\"yes\",\"message\":\"m\"}"));
+        assertEquals("{\"success\":", ToolOutcome.modelText("{\"success\":"), "半截 JSON");
+        assertEquals(null, ToolOutcome.modelText(null));
+    }
+
+    @Test
+    void theHistoryKeepsSuccessAndMessageAndDropsTheData() {
+        assertEquals(ToolOutcome.failure("The script stopped at line 2\nstderr:\nline 2 f: boom"), ToolOutcome.kept(RECEIPT));
+        assertTrue(ToolOutcome.failed(ToolOutcome.kept(RECEIPT)), "成败还认得出");
+        assertEquals("技能正文", ToolOutcome.kept("技能正文"));
+        assertEquals(ToolOutcome.modelText(RECEIPT), ToolOutcome.modelText(ToolOutcome.kept(RECEIPT)),
+                "进历史的和交给模型的是同一份文字");
     }
 }

@@ -2,8 +2,6 @@ package com.dwinovo.numen.agent.llm;
 
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -48,9 +46,20 @@ class ProtocolViewTest {
         return new ConvoState.Msg.Halt(reason);
     }
 
-    private static JsonObject json(ConvoState.Msg msg) {
-        return JsonParser.parseString(assertInstanceOf(ConvoState.Msg.Tool.class, msg).content())
-                .getAsJsonObject();
+    private static String text(ConvoState.Msg msg) {
+        return assertInstanceOf(ConvoState.Msg.Tool.class, msg).content();
+    }
+
+    // ---- 规则四:工具结果只发文字 ----
+
+    @Test
+    void aToolResultGoesOutAsItsMessageAndNeverCarriesItsStructuredData() {
+        String receipt = "{\"success\":true,\"message\":\"ok · 1 call · 0 s\\nreturned: 36\",\"data\":{\"status\":\"ok\","
+                + "\"returned\":[1,2,3,4,5,6,7,8,9]}}";
+        List<ConvoState.Msg> wire = ProtocolView.forWire(List.of(user("数一数"), calls("c1", "c2"),
+                new ConvoState.Msg.Tool("c1", receipt), new ConvoState.Msg.Tool("c2", "技能正文,不是信封")));
+        assertEquals("ok · 1 call · 0 s\nreturned: 36", text(wire.get(2)));
+        assertEquals("技能正文,不是信封", text(wire.get(3)), "不是信封的原样");
     }
 
     // ---- 规则一:悬空调用补结果 ----
@@ -64,8 +73,7 @@ class ProtocolViewTest {
         assertEquals("c1", ((ConvoState.Msg.Tool) wire.get(2)).toolCallId(), "真结果原样在前");
         ConvoState.Msg.Tool filled = assertInstanceOf(ConvoState.Msg.Tool.class, wire.get(3));
         assertEquals("c2", filled.toolCallId());
-        assertFalse(json(filled).get("success").getAsBoolean());
-        assertEquals("被主人打断", json(filled).get("message").getAsString());
+        assertEquals("被主人打断", text(filled), "补的结果就是原因这句话");
         assertEquals("回来", ((ConvoState.Msg.User) wire.get(4)).content(),
                 "原因已经写进补的结果,user 不再挂切断说明");
     }
@@ -74,15 +82,15 @@ class ProtocolViewTest {
     void danglingCallsWithoutAHaltWereCutByClosingTheGame() {
         List<ConvoState.Msg> atEnd = ProtocolView.forWire(List.of(user("去挖铁"), calls("c1")));
         assertEquals(3, atEnd.size());
-        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, json(atEnd.get(2)).get("message").getAsString());
+        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, text(atEnd.get(2)));
 
         List<ConvoState.Msg> beforeUser = ProtocolView.forWire(List.of(calls("c1"), user("在吗")));
         assertEquals("c1", ((ConvoState.Msg.Tool) beforeUser.get(1)).toolCallId());
-        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, json(beforeUser.get(1)).get("message").getAsString());
+        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, text(beforeUser.get(1)));
         assertInstanceOf(ConvoState.Msg.User.class, beforeUser.get(2));
 
         List<ConvoState.Msg> beforeAssistant = ProtocolView.forWire(List.of(calls("c1"), reply("好")));
-        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, json(beforeAssistant.get(1)).get("message").getAsString());
+        assertEquals(ProtocolView.CLOSED_BEFORE_RESULT, text(beforeAssistant.get(1)));
     }
 
     @Test

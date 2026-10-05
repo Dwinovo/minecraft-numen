@@ -41,6 +41,50 @@ public final class ToolOutcome {
         return result.toString();
     }
 
+    /**
+     * 交给模型的那份文字——规则只此一处:把工具结果交给模型的出口(对话历史变成请求时的 {@code ProtocolView}、外接智能体拿到的工具结果)
+     * 都问这里。结果是信封({@code success} 与 {@code message})就是它的 {@code message},成败已在文字第一行;不是信封的(技能正文、远端 MCP
+     * 工具的文字)原样。信封里的 {@code data} 等结构化字段是给程序、界面、评测与日志的,不进模型的上下文。
+     */
+    public static String modelText(String result) {
+        JsonObject envelope = envelope(result);
+        return envelope == null ? result : envelope.get("message").getAsString();
+    }
+
+    /**
+     * 进对话历史的样子:信封只留成败与文字({@code message}),界面据此画成败和计划清单,{@code data} 等结构化字段不进历史;不是信封的原样。
+     * 历史里存的和 {@link #modelText} 交给模型的是同一份内容。
+     */
+    public static String kept(String result) {
+        JsonObject envelope = envelope(result);
+        if (envelope == null) {
+            return result;
+        }
+        String message = envelope.get("message").getAsString();
+        return envelope.get("success").getAsBoolean() ? success(message) : failure(message);
+    }
+
+    /** 结果是 {@code {"success": 布尔, "message": 字符串, …}} 的信封就是它;不是是 null。 */
+    private static JsonObject envelope(String result) {
+        if (result == null || !result.stripLeading().startsWith("{")) {
+            return null;
+        }
+        try {
+            JsonElement parsed = JsonParser.parseString(result);
+            if (!parsed.isJsonObject()) {
+                return null;
+            }
+            JsonObject obj = parsed.getAsJsonObject();
+            JsonElement success = obj.get("success");
+            JsonElement message = obj.get("message");
+            boolean envelope = success != null && success.isJsonPrimitive() && success.getAsJsonPrimitive().isBoolean()
+                    && message != null && message.isJsonPrimitive() && message.getAsJsonPrimitive().isString();
+            return envelope ? obj : null;
+        } catch (RuntimeException notJson) {
+            return null;
+        }
+    }
+
     /** 这条工具结果是否宣告了失败。 */
     public static boolean failed(String content) {
         if (content == null || content.isBlank()) {
