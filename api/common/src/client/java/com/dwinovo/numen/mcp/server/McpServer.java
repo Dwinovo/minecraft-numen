@@ -87,9 +87,10 @@ public final class McpServer {
             whose functions are the companion's API — perceive with numen.status.self(), numen.scan.blocks(...), \
             numen.scan.entities(...); act with numen.move.to(...), numen.work.dig(...), numen.build.place(...), numen.fight.attack(...), \
             numen.inv.craft(...), …; numen.api.help("numen.work") lists a group's functions and numen.api.help("numen.work.dig") gives one \
-            function's full help. A program returns one receipt when it ends: how it ended, one line per API \
-            call, what it returned and printed. It waits for each body task it starts to finish, so a long \
-            job returns when it is done, with the task's account of what it changed in its line. Every call takes a 'companion' argument (name or id), so each call targets \
+            function's full help. A program returns one receipt when it ends: how it ended, then stderr \
+            (what the body did and what failed, one entry per call that had something to say), what it returned \
+            and stdout (what it printed). It waits for each body task it starts to finish, so a long \
+            job returns when it is done, with the task's account of what it changed in its stderr entry. Every call takes a 'companion' argument (name or id), so each call targets \
             one companion; just drive it, there is no take-control step. The %s tool loads one of the \
             companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
             does not know answers with the list of the skills it can use. The %s tool writes down your plan for \

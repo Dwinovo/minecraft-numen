@@ -91,7 +91,7 @@ class ProgramWireTest {
         assertEquals(missing, RunResult.fromJson(missing.toJson()));
     }
 
-    /** 按构造有界:最坏的一段(两百次调用,每次一整行,带着最长的调用文字,几件活的账写满)远小于一个下行包。 */
+    /** 按构造有界:最坏的一段(两百次调用带着最长的调用文字,stderr、返回值、stdout 都写满)远小于一个下行包。 */
     @Test
     void theWorstReceiptThatCanBeWrittenIsUnderHalfOfOneDownwardPayload() {
         String longest = "x".repeat(com.dwinovo.numen.agent.script.ScriptLimits.CALL_TEXT_CHARS + 20);
@@ -99,7 +99,7 @@ class ProgramWireTest {
         for (int i = 0; i < com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS; i++) {
             calls.add(new ScriptCall.Called("numen.build.place", longest, longest, "bad_argument"));
         }
-        String receipt = "y".repeat(com.dwinovo.numen.agent.script.ScriptLimits.RECEIPT_LINES_CHARS
+        String receipt = "y".repeat(com.dwinovo.numen.agent.script.ScriptLimits.STDERR_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_DATA_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.PRINTED_CHARS);

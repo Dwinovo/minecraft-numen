@@ -85,7 +85,7 @@ public class CollectGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
-            helper.assertTrue(returned(collect, 0) && collect.receipt().contains(": 1 call in"),
+            helper.assertTrue(returned(collect, 0) && collect.receipt().contains("ok · 1 call · "),
                     "a sweep with nothing on the ground did more than one look: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

@@ -92,10 +92,9 @@ public class ScriptGameTests {
             helper.assertTrue(receipt(round, script).get("success").getAsBoolean(), "the script failed: " + msg);
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "not both cells were cleared: " + msg);
-            helper.assertTrue(msg.startsWith("The script ran to the end: 2 calls"), msg);
-            helper.assertTrue(msg.matches("(?s).*line 1 numen\\.build\\.place: ok — t\\d+ done.*")
-                            && msg.matches("(?s).*line 2 numen\\.build\\.place: ok — t\\d+ done.*"),
-                    "a line did not wait for its task to finish: " + msg);
+            helper.assertTrue(msg.startsWith("ok · 2 calls"), msg);
+            helper.assertTrue(msg.matches("(?s).*\nstderr:\nline 1 numen\\.build\\.place: .*\nline 2 numen\\.build\\.place: .*"),
+                    "a line did not wait for its task to finish and report its account: " + msg);
             outbox.forget(her.getUUID());
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -127,7 +126,8 @@ public class ScriptGameTests {
             // 库函数 numen.move.to 里 numen.move.go 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因";规划本身不抛
             helper.assertTrue(msg.startsWith("The script stopped at line 2 after 2 calls: could not get there: "
                     + "numen.move.go: no_path — "), msg);
-            helper.assertTrue(msg.contains("line 1 numen.route.plan: ok") && msg.contains("line 1 numen.move.go: no_path — "), msg);
+            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.move.go: no_path — ") && !msg.contains("line 1 numen.route.plan"),
+                    "the failed call is in stderr, the plan that only returned data is not: " + msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -233,7 +233,7 @@ public class ScriptGameTests {
                     String msg = message(round[0], script);
                     helper.assertTrue(receipt(round[0], script).get("success").getAsBoolean(),
                             "the script failed: " + msg);
-                    helper.assertTrue(msg.contains("printed:\n" + near.getX() + "\t" + near.getZ() + "\n" + far.getX()
+                    helper.assertTrue(msg.contains("stdout:\n" + near.getX() + "\t" + near.getZ() + "\n" + far.getX()
                                     + "\t" + far.getZ()), "it did not go through both clusters, near first: " + msg);
                     helper.assertTrue(!level.getBlockState(near).is(Blocks.IRON_ORE)
                             && !level.getBlockState(far).is(Blocks.IRON_ORE), "not both clusters were dug: " + msg);
@@ -270,7 +270,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> {
                     helper.assertTrue(round[0].hasSettled(), "numen.work.mine has not finished");
                     String msg = message(round[0], run);
-                    helper.assertTrue(msg.startsWith("The script ran to the end"), msg);
+                    helper.assertTrue(msg.startsWith("ok · "), msg);
                     helper.assertTrue(receipt(round[0], run).getAsJsonObject("data").get("returned").getAsInt()
                             >= ores.size(), "numen.work.mine did not return the cells it dug: " + msg);
                     for (BlockPos ore : ores) {
@@ -388,8 +388,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
                 .thenExecute(() -> {
                     String msg = message(first, run);
-                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("numen.build.place: ok"),
-                            msg);
+                    helper.assertTrue(msg.startsWith("ok · ") && msg.contains("\nline 1 numen.build.place: "), msg);
                     helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
                     // 第一次的收尾事件已经读过;下一轮从空出箱读起,和主人客户端上取走即清一样
@@ -771,7 +770,7 @@ public class ScriptGameTests {
                     String receipt = afterwards.get(0);
                     helper.assertTrue(handedToTheModel.isEmpty(), "the void batch was handed a result: " + handedToTheModel);
                     helper.assertTrue(receipt.contains("this turn was cut off"), receipt);
-                    helper.assertTrue(receipt.matches("(?s).*line \\d+ numen\\.work\\.dig: ok — .*"),
+                    helper.assertTrue(receipt.matches("(?s).*\nstderr:\nline \\d+ numen\\.work\\.dig: .*"),
                             "the receipt does not say what was dug: " + receipt);
                     helper.assertTrue(level.getBlockState(cells.get(cells.size() - 1)).is(Blocks.STONE),
                             "the cut-off program kept digging");
@@ -782,5 +781,121 @@ public class ScriptGameTests {
                     CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
+    }
+
+    private static void sample(String what, ToolRun run) {
+        Constants.LOG.info("[numen-sample] {} ({} characters of message) -> {}", what,
+                JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString().length(),
+                run.receipt());
+    }
+
+    /**
+     * 循环里查一百多遍背包:每次调用只返回值,没什么可报告的,所以回执里没有逐次的流水——只有结局一行和她 print 的 stdout;
+     * 每次调用的记录照样在数据里(调用数 120)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
+    public static void a_loop_of_queries_leaves_no_line_per_call_in_the_receipt(GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_lua_loop", new BlockPos(2, 2, 2), false);
+        her.getInventory().add(new ItemStack(Items.COAL, 5));
+        ToolRun run = lua(her, """
+                local total = 0
+                for i = 1, 120 do total = total + numen.inv.count("minecraft:coal") end
+                print("coal seen", total)
+                """);
+        String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
+        helper.assertTrue(run.ranToTheEnd(), msg);
+        helper.assertTrue(msg.matches("(?s)ok · 120 calls · \\d+ s\nstdout:\ncoal seen\t600"), msg);
+        helper.assertTrue(receiptData(run.receipt()).get("calls").getAsInt() == 120, "the data lost the call count");
+        sample("120 inventory queries", run);
+        CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        helper.succeed();
+    }
+
+    /**
+     * 一段挖矿的程序:挖的那一次往 stderr 写挖了什么、手里的镐用坏了;紧跟着只返回值的查询什么也不写;她 print 的在 stdout。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    public static void a_mining_program_says_what_it_dug_and_what_wore_out_on_stderr(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
+        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer her = spawnAt(helper, "gametest_lua_miner", new BlockPos(3, 2, 5), false);
+        ItemStack pick = new ItemStack(Items.STONE_PICKAXE);
+        pick.setDamageValue(pick.getMaxDamage() - 1);
+        her.getInventory().add(pick);
+        ToolRun run = lua(her, """
+                numen.work.dig(%s)
+                print("cobblestone", numen.inv.count("minecraft:cobblestone"))
+                """.formatted(xyz(stone)));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the program has not finished");
+            String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
+            helper.assertTrue(run.ranToTheEnd() && msg.startsWith("ok · 2 calls · "), msg);
+            helper.assertTrue(level.getBlockState(stone).isAir(), "the stone was not dug: " + msg);
+            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.work.dig: ")
+                            && msg.contains("your minecraft:stone_pickaxe broke while it was in your main hand"),
+                    "stderr does not say what was dug and that the pickaxe broke: " + msg);
+            helper.assertTrue(!msg.contains("numen.inv.count") && msg.contains("\nstdout:\ncobblestone\t"),
+                    "the query that only returned a value wrote to stderr, or stdout is missing: " + msg);
+            sample("a mining program", run);
+            CompanionFactory.despawn(level.getServer(), her);
+        });
+    }
+
+    /**
+     * 一个失败的调用即使程序用 pcall 接住了也写进 stderr(同 Unix:失败的程序照样往 stderr 写);没接住的,停在哪一行是结局,stderr 里还是那一条。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
+    public static void a_failed_call_is_on_stderr_whether_or_not_the_program_caught_it(GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_lua_failing", new BlockPos(2, 2, 2), false);
+        ToolRun caught = lua(her, """
+                local ok, err = pcall(numen.fight.attack, 999999)
+                print(ok, err.kind)
+                """);
+        String msg = JsonParser.parseString(caught.receipt()).getAsJsonObject().get("message").getAsString();
+        helper.assertTrue(caught.ranToTheEnd() && msg.startsWith("ok · 1 call · "), msg);
+        helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.fight.attack: not_found — ")
+                && msg.contains("\nstdout:\nfalse\tnot_found"), "the caught failure is not on stderr: " + msg);
+        sample("a failure the program caught", caught);
+
+        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(999999)\n");
+        String stopped = JsonParser.parseString(uncaught.receipt()).getAsJsonObject().get("message").getAsString();
+        helper.assertTrue(!uncaught.ranToTheEnd() && stopped.startsWith("The script stopped at line 2 after 2 calls: "
+                + "numen.fight.attack: not_found — ") && stopped.contains("\nhint: ")
+                && stopped.contains("\nstderr:\nline 2 numen.fight.attack: not_found — "), stopped);
+        sample("a failure that stopped the program", uncaught);
+        CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        helper.succeed();
+    }
+
+    /**
+     * 她 print 一团扫描结果:一团里的方块多了,只显示首尾几个并写明一共多少、怎么看更多——不静默地截断;返回的数照实在 returned 里。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
+    public static void printing_a_big_scan_shortens_it_and_says_how_big_it_was(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 5; x < 11; x++) {
+            for (int z = 5; z < 11; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.GOLD_BLOCK.defaultBlockState());
+            }
+        }
+        NumenPlayer her = spawnAt(helper, "gametest_lua_scanner", new BlockPos(2, 2, 2), false);
+        ToolRun run = lua(her, """
+                local clusters = numen.scan.blocks("minecraft:gold_block", {radius = 12})
+                print(clusters)
+                return clusters[1].count
+                """);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the scan has not finished");
+            String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
+            helper.assertTrue(run.ranToTheEnd() && msg.contains("\nreturned: 36"), msg);
+            helper.assertTrue(msg.contains("…(36 items in all; index one with t[i], or filter in the program before you "
+                    + "print)"), "the scan was printed whole or cut without saying so: " + msg);
+            helper.assertTrue(msg.length() < 2_500, "the printed scan is " + msg.length() + " characters");
+            sample("printing a scan of 36 blocks", run);
+            CompanionFactory.despawn(level.getServer(), her);
+        });
     }
 }

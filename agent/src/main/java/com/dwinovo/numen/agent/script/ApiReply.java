@@ -17,8 +17,8 @@ import java.util.Map;
  *   <li>{@code {"ok": true, "job": "t12"}}:占身体的活受理了,它的收尾是一条 task_finished,程序等那一条。</li>
  *   <li>{@code {"ok": false, "error": {"kind": …, "message": …, "hint": …, "data": …}}}:失败,错误值的字段见 {@link ScriptRun#failure}。</li>
  * </ul>
- * 一件活收尾时(task_finished 带的结果)是前一种或后一种,另带 {@code account}:它做了什么的实际账,整段写进程序的回执。等了一会儿
- * 才有的值(一件短身体活、主人点了头)同样可以带 {@code account}。
+ * 等了一会儿才有的值(一件短身体活、主人点了头)可以另带 {@code stderr}:身体在等的这段时间里做了什么、出了什么事,API 自己报告的话,
+ * 程序的回执把它写进 stderr 一栏。一件活收尾时(task_finished 带的结果)是前一种或后一种,它的实际账是事件正文,不在这里。
  */
 public final class ApiReply {
 
@@ -26,7 +26,7 @@ public final class ApiReply {
     static final String VALUE = "value";
     static final String JOB = "job";
     static final String ERROR = "error";
-    static final String ACCOUNT = "account";
+    static final String STDERR = "stderr";
 
     private ApiReply() {}
 
@@ -70,10 +70,10 @@ public final class ApiReply {
         return out;
     }
 
-    /** 一件活收尾时(或等到的值)的结果:{@code reply} 是 {@link #value} 或 {@link #error} 写的那一份,加上它的实际账。 */
-    public static JsonObject ended(JsonObject reply, String account) {
+    /** 等到的值连同 API 对这次调用的报告:{@code reply} 是 {@link #value} 写的那一份,加上它往 stderr 说的话。 */
+    public static JsonObject withStderr(JsonObject reply, String stderr) {
         JsonObject out = reply.deepCopy();
-        out.addProperty(ACCOUNT, account == null ? "" : account);
+        out.addProperty(STDERR, stderr);
         return out;
     }
 
@@ -83,9 +83,9 @@ public final class ApiReply {
      * @param value   成功时的值(Lua 值:null、布尔、数、字符串、列表、名字到值的表);没有是 null
      * @param job     受理的活的编号;不是受理是 null
      * @param error   失败时的错误值(至少 {@code kind} 与 {@code message});成功是 null
-     * @param account 收尾时的实际账;不是收尾是 null
+     * @param stderr  API 对这次调用的报告;没有是 null
      */
-    public record Parsed(boolean ok, Object value, String job, Map<String, Object> error, String account) {}
+    public record Parsed(boolean ok, Object value, String job, Map<String, Object> error, String stderr) {}
 
     /**
      * 读一份结果。
@@ -107,10 +107,10 @@ public final class ApiReply {
         if (!(o.get(OK) instanceof JsonElement ok) || !ok.isJsonPrimitive()) {
             throw new IllegalArgumentException("not an API reply: " + o);
         }
-        String account = o.has(ACCOUNT) ? o.get(ACCOUNT).getAsString() : null;
+        String stderr = o.has(STDERR) ? o.get(STDERR).getAsString() : null;
         if (ok.getAsBoolean()) {
             return new Parsed(true, JsonValues.toJava(o.get(VALUE)), o.has(JOB) ? o.get(JOB).getAsString() : null,
-                    null, account);
+                    null, stderr);
         }
         Map<String, Object> error = new LinkedHashMap<>();
         if (JsonValues.toJava(o.get(ERROR)) instanceof Map<?, ?> fields) {
@@ -119,6 +119,6 @@ public final class ApiReply {
         if (!(error.get(ScriptRun.KIND) instanceof String)) {
             throw new IllegalArgumentException("an API error without a kind: " + o);
         }
-        return new Parsed(false, null, null, error, account);
+        return new Parsed(false, null, null, error, stderr);
     }
 }

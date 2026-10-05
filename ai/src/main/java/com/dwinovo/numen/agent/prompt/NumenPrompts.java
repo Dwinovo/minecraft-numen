@@ -65,9 +65,10 @@ public final class NumenPrompts {
               can't start (no path, nothing to dig, no rod) fails right there with
               the reason, and whatever the body was doing goes on. A program waits
               for each job it starts to end before its next line runs, and returns
-              one receipt when it ends: each job's line holds how it ended (done /
-              failed / timeout — timeout reports progress; the same call again
-              resumes) and its account of what it changed. A standing job
+              one receipt when it ends: each job has an entry in its stderr with its
+              account of what it changed; a job that failed or timed out names
+              the kind first (timeout reports progress; the same call again
+              resumes). A standing job
               (numen.move.follow without seconds) has no end, so the program goes on
               past it. If your owner speaks or something urgent happens, the
               program stops between two calls and its receipt says where; a job it

@@ -191,7 +191,7 @@ public final class Dispatcher {
             case VALUE -> reply.accept(value(fn, result).toString());
             case PENDING -> {
                 Pending<?> pending = (Pending<?>) result;
-                pending.whenDone(v -> reply.accept(withAccount(value(fn, v), pending.account()).toString()),
+                pending.whenDone(v -> reply.accept(withStderr(value(fn, v), pending.stderr()).toString()),
                         failed -> reply.accept(error(failed).toString()));
             }
             case JOB -> accept(fn, (Job<?>) result, her, args, reply);
@@ -214,9 +214,9 @@ public final class Dispatcher {
                 () -> reply.accept(ApiReply.job(record.publicId()).toString()));
     }
 
-    /** 等到的值连同身体在等的这段时间里做了什么;什么都没做就只是值。 */
-    private static JsonObject withAccount(JsonObject reply, String account) {
-        return account.isEmpty() ? reply : ApiReply.ended(reply, account);
+    /** 等到的值连同 API 对这次调用的报告;没什么可报告的就只是值。 */
+    private static JsonObject withStderr(JsonObject reply, String stderr) {
+        return stderr.isEmpty() ? reply : ApiReply.withStderr(reply, stderr);
     }
 
     /** 成功,值按函数的返回类型写成脚本的值。 */
@@ -244,14 +244,13 @@ public final class Dispatcher {
     }
 
     /**
-     * 一件活收尾时交回的结果:成功是它的值(按派它的函数的返回类型写),失败是它说的失败;都带上它的实际账。不出自 API 函数的活
-     * ({@code fn} 是 null)没有值。task_finished 带的就是它。
+     * 一件活收尾时交回的结果:成功是它的值(按派它的函数的返回类型写),失败是它说的失败。不出自 API 函数的活({@code fn} 是 null)没有值。
+     * task_finished 带的就是它;它的实际账是事件的正文,不在这里重复。
      */
     public static JsonObject ended(TaskResult result, ApiFunction fn) {
-        JsonObject reply = result.success()
+        return result.success()
                 ? (fn == null ? ApiReply.value(null) : value(fn, result.value()))
                 : failure(result);
-        return ApiReply.ended(reply, result.message());
     }
 
     private static ApiFunction function(Invocation invocation) {

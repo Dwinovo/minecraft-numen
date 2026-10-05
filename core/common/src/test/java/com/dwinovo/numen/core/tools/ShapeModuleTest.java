@@ -27,7 +27,7 @@ class ShapeModuleTest {
         ApiTester.Run run = ApiTester.run(null, UUID.randomUUID(), code);
         assertTrue(run.ok(), run.message());
         String message = run.message();
-        return message.substring(message.indexOf("printed:\n") + "printed:\n".length());
+        return message.substring(message.indexOf("stdout:\n") + "stdout:\n".length());
     }
 
     @Test

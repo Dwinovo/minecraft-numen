@@ -39,21 +39,23 @@ public final class ScriptLimits {
     public static final long STRING_BYTES = 64L << 20;
 
     /**
-     * {@code print} 写进回执的文字最多多少字;超出的截掉并说明。API 返回的是数据,要看就得 print:一组函数的类型签名
+     * {@code print} 写进回执 stdout 一栏的文字最多多少字;超出的截掉,写明截了多少。API 返回的是数据,要看就得 print:一组函数的类型签名
      * ({@code numen.api.help("numen.build")})与一页查询结果要装得下,再多就该在脚本里筛过再打。
      */
     public static final int PRINTED_CHARS = 6_000;
 
     /**
-     * 回执里每次调用那一行以外的部分的预算(字符):所有调用行(一件占身体的活收尾的那一行带它的整段实际账)合起来最多这么多,
-     * 超出的调用行在回执里按先后保留头部、写明"另外 N 行省略",回执第一行(结局)、返回值、打印的字不省。回执是给模型读的——
-     * 它进模型的上下文,所以预算按模型读得下定,不是按线能送多大;六万字约一万五千个词元,够 200 次调用各一行再加几件活的账。
-     * 回执因此按构造远小于一个下行包({@code Wire}),不靠"装不下再缩"。
+     * 回执 stderr 一栏里一条最多多少字:一件占身体的活的整段实际账(挖了什么、放了什么、路上改了什么)写成一条,超出的整行丢掉,写明
+     * 还有多少字没显示。
      */
-    public static final int RECEIPT_LINES_CHARS = 60_000;
+    public static final int STDERR_RECORD_CHARS = 4_000;
 
-    /** 一件占身体的活的整段实际账在回执里最多多少字:超出的整行丢掉,写明"另外 N 行省略"。 */
-    public static final int ACCOUNT_CHARS = 4_000;
+    /**
+     * 回执 stderr 一栏合起来最多多少字,超出的条按先后保留头部、写明"另外 N 条省略"。回执是给模型读的——它进模型的上下文,所以预算按模型
+     * 读得下定,不是按线能送多大;一万两千字约三千个词元,够几十件活各写一两百字的账。连续相同的条先合并成一条,所以循环里重复的话
+     * 只占一条。回执因此按构造远小于一个下行包({@code Wire}),不靠"装不下再缩"。
+     */
+    public static final int STDERR_CHARS = 12_000;
 
     /** 回执文字里 {@code return} 的值最多多少字,超出的截掉并说明(和 {@link #PRINTED_CHARS} 同一类:给模型读的)。 */
     public static final int RETURNED_CHARS = 6_000;

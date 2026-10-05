@@ -306,8 +306,7 @@ public class TaskControlGameTests {
             helper.assertTrue(recorded.taskName().equals("gt.gt_long.linger"),
                     "the task is recorded under another name: " + recorded.taskName());
             // 程序等着的这件活的收尾写在它的回执里,不另发事件
-            helper.assertTrue(linger.receipt() != null && linger.receipt().contains("gt.gt_long.linger: ok — "
-                            + linger.task().publicId() + " done"),
+            helper.assertTrue(linger.receipt() != null && linger.receipt().contains("line 1 gt.gt_long.linger: stood for 20 ticks"),
                     "the receipt does not name the task's end: " + linger.receipt());
             outbox.forget(body.getUUID());
             Companions.dismiss(server, body);

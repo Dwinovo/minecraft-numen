@@ -248,7 +248,7 @@ public class CommandGameTests {
                     helper.assertTrue(data.get("success").getAsBoolean(), "the program failed: " + receipt);
                     helper.assertTrue(receipt.length() < com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
                                     + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_DATA_CHARS
-                                    + com.dwinovo.numen.agent.script.ScriptLimits.RECEIPT_LINES_CHARS,
+                                    + com.dwinovo.numen.agent.script.ScriptLimits.STDERR_CHARS,
                             "the receipt is not bounded: " + receipt.length() + " characters");
                     helper.assertTrue(data.get("message").getAsString().contains("[returned value cut at "
                                     + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS + " characters; it was "
@@ -534,7 +534,7 @@ public class CommandGameTests {
                     "the reply names another task: " + run.reply());
             // 程序等着的这件活的收尾写在它的回执里(编号就是受理时回的那个),不另发事件
             helper.assertTrue(run.receipt() != null
-                            && run.receipt().contains("gt.gt_long.linger: ok — " + id + " done"),
+                            && run.receipt().contains("line 1 gt.gt_long.linger: stood for 10 ticks"),
                     "the receipt does not answer the reply with the task's end: " + run.receipt());
             outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -566,7 +566,7 @@ public class CommandGameTests {
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == programs.size(), "drive did not answer every program: " + heard);
             for (int i : new int[]{0, 2}) {
-                helper.assertTrue(heard.get(i).startsWith(name + ": The script ran to the end: 1 call"),
+                helper.assertTrue(heard.get(i).startsWith(name + ": ok · 1 call"),
                         "drive did not run " + programs.get(i) + " to the end: " + heard.get(i));
             }
             helper.assertTrue(heard.get(1).startsWith(name + ": The script stopped at line 1")
@@ -619,8 +619,8 @@ public class CommandGameTests {
         succeedWhen(helper, () -> {
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == 1, "drive did not hear exactly one receipt: " + heard);
-            helper.assertTrue(heard.get(0).startsWith(name + ": The script ran to the end")
-                            && heard.get(0).contains("gt.gt_sync.hold: ok — held for 5 ticks"),
+            helper.assertTrue(heard.get(0).startsWith(name + ": ok · ")
+                            && heard.get(0).contains("line 1 gt.gt_sync.hold: held for 5 ticks"),
                     "drive did not hear the short action's account: " + heard.get(0));
             CompanionFactory.despawn(server, companion);
         });
@@ -654,7 +654,7 @@ public class CommandGameTests {
             }
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == 1, "drive did not hear exactly one receipt: " + heard);
-            helper.assertTrue(heard.get(0).startsWith(name + ": The script ran to the end")
+            helper.assertTrue(heard.get(0).startsWith(name + ": ok · ")
                             && heard.get(0).contains("the owner allowed"),
                     "drive heard another receipt, or it lacks the owner's allowance: " + heard.get(0));
             helper.assertTrue(level.getBlockState(helper.absolutePos(target)).is(Blocks.STONE), "no stone was set");

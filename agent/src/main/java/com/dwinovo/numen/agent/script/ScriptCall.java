@@ -13,11 +13,12 @@ import java.util.List;
  * 上限或被打断时写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管程序走到哪、回执怎么写。模块里的函数是程序的一部分,
  * 它们的 API 调用照样一次一次地交出来;程序结束时,用到的每个模块记一次战绩。
  *
- * <h2>回执</h2>
- * 第一行一句话说结局(跑完、出错在哪一行与那个错误值的文字、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、
- * {@code ok} 与它返回的值写成的字面量(截断),或失败的种类与错误的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。
- * 脚本拿到的是值,给她看的那一行由同一个值写成,没有第二份文字。程序等着收尾的身体活,那一行是它的编号、结局与整段实际账(路上挖了、
- * 放了什么)——这件活的收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
+ * <h2>回执:标准管道加结局</h2>
+ * 第一行是结局,像进程的退出状态:跑完是 {@code ok · N calls · T s};出错写停在哪一行与那个错误值的文字(种类、消息、hint),被停下写停在
+ * 哪一行为什么。之后是三条管道:{@code stderr}(API 与运行时主动报告的事,{@link Stderr})、脚本 {@code return} 的值
+ * {@code returned},和 {@code stdout}(她 {@code print} 的字)。API 调用本身不逐次进回执:返回值是给程序用的,只读的查询没什么可报告的就
+ * 什么也不写,每次调用的完整记录({@link Called})留在结构化数据里,给评测和日志用。程序等着收尾的身体活,它整段实际账(路上挖了、放了什么)
+ * 写成 stderr 的一条——这件活的收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
  */
 public final class ScriptCall {
 
@@ -86,16 +87,16 @@ public final class ScriptCall {
     /** 回执数据里程序 {@code return} 的那个值。 */
     public static final String RETURNED = "returned";
 
-    private static final int SAID = 160;
     private static final Gson GSON = new Gson();
 
     private final Host host;
     private final long started;
     private final ScriptRun run;
-    /** 每次 API 调用一行,按先后。 */
-    private final List<String> log = new ArrayList<>();
+    /** API 与运行时主动报告的事,按先后。 */
+    private final Stderr stderr = new Stderr();
     private final StringBuilder printed = new StringBuilder();
-    private boolean printedCut;
+    /** 超过 {@link ScriptLimits#PRINTED_CHARS} 之后没能写进 stdout 的字数。 */
+    private int printedCut;
     private int calls;
     /** 交出去、还没有结局的那一次。 */
     private Pending pending;
@@ -129,22 +130,19 @@ public final class ScriptCall {
         }
         Pending p = pending;
         pending = null;
+        settled(p, reply.ok() ? null : (String) reply.error().get(ScriptRun.KIND));
         if (reply.ok()) {
-            // 等的这段时间里身体做了什么,整段写进这一行;没做什么的,写交回的值
-            if (reply.account() != null && !reply.account().isBlank()) {
-                logWhole(p, null, reply.account().strip());
-            } else {
-                log(p, null, reply.value() == null ? "" : ScriptEngine.IN_USE.value(reply.value()));
-            }
+            // API 对这次调用的报告(身体在等的这段时间里做了什么);没有就什么也不写,值只给程序
+            stderr.write(p.call.line(), p.call.function(), reply.stderr());
             return advance(run.resume(ScriptRun.Result.ok(reply.value())));
         }
-        log(p, (String) reply.error().get(ScriptRun.KIND), String.valueOf(reply.error().get(ScriptRun.MESSAGE)));
+        failed(p.call, (String) reply.error().get(ScriptRun.KIND), String.valueOf(reply.error().get(ScriptRun.MESSAGE)));
         return advance(run.resume(ScriptRun.Result.failed(reply.error())));
     }
 
     /**
      * 等的那件身体活收尾了:{@code done} 算成功,程序拿到它的值;失败的种类是结果说的那一种,被叫停是 {@link ErrorKind#INTERRUPTED}、
-     * 到了期限是 {@link ErrorKind#TIMEOUT}。整段实际账写进这一行:这件活的收尾只在这张回执里说。
+     * 到了期限是 {@link ErrorKind#TIMEOUT}。整段实际账写成 stderr 的一条:这件活的收尾只在这张回执里说。
      */
     public Next finished(Finish finish) {
         Pending p = pending;
@@ -157,8 +155,9 @@ public final class ScriptCall {
             default -> reply != null && !reply.ok() ? (String) reply.error().get(ScriptRun.KIND)
                     : ErrorKind.FAILED.wire();
         };
-        logWhole(p, kind, finish.task() + " " + finish.status()
-                + (finish.words().isBlank() ? "" : ": " + finish.words().strip()));
+        settled(p, kind);
+        String words = finish.words().strip();
+        stderr.write(p.call.line(), p.call.function(), ok ? words : kind + (words.isEmpty() ? "" : " — " + words));
         if (ok) {
             return advance(run.resume(ScriptRun.Result.ok(reply == null ? null : reply.value())));
         }
@@ -209,9 +208,8 @@ public final class ScriptCall {
             try {
                 invocation = host.invocation(call);
             } catch (ApiError wrong) {
-                log.add(where(call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
-                        + firstLine(wrong.getMessage()));
                 called.add(called(call, wrong.kind().wire()));
+                failed(call, wrong.kind().wire(), wrong.getMessage());
                 step = run.refuse(wrong);
                 continue;
             }
@@ -221,53 +219,23 @@ public final class ScriptCall {
         }
     }
 
+    /** stdout:她 {@code print} 的字。满了之后放不下的部分不写、只数着,回执里写明少了多少。 */
     private void print(String line) {
-        if (printedCut) {
+        String text = line + '\n';
+        int room = ScriptLimits.PRINTED_CHARS - printed.length();
+        if (text.length() <= room) {
+            printed.append(text);
             return;
         }
-        if (printed.length() + line.length() + 1 > ScriptLimits.PRINTED_CHARS) {
-            printedCut = true;
-            printed.append("[print output cut at ").append(ScriptLimits.PRINTED_CHARS).append(" characters]\n");
-            return;
-        }
-        printed.append(line).append('\n');
+        printed.append(text, 0, room);   // 放得下的头部留下
+        printedCut += text.length() - room;
     }
 
     // ---- 记录与回执 ----
 
-    /**
-     * 一次调用的那一行:{@code kind} 是失败的种类,成功是 null(写 {@code ok});{@code text} 是返回值的字面量或错误的话,只留第一行、
-     * 截断。
-     */
-    private void log(Pending p, String kind, String text) {
-        settled(p, kind);
-        String said = firstLine(text);
-        log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
-                + (said.isEmpty() ? "" : " — " + said));
-    }
-
-    /**
-     * 一件身体活收尾的那一行:整段交代原样写上,第二行起缩进两格,读得出还是这一行。交代长过 {@link ScriptLimits#ACCOUNT_CHARS}
-     * 的,留下放得下的整行,其余写明"另外 N 行省略"。
-     */
-    private void logWhole(Pending p, String kind, String text) {
-        settled(p, kind);
-        log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind) + " — "
-                + bounded(text).replace("\n", "\n  "));
-    }
-
-    /** 按整行留下 {@link ScriptLimits#ACCOUNT_CHARS} 以内的部分(第一行总留),其余的行数写出来。 */
-    private static String bounded(String text) {
-        if (text.length() <= ScriptLimits.ACCOUNT_CHARS) {
-            return text;
-        }
-        String[] lines = text.split("\n", -1);
-        StringBuilder kept = new StringBuilder(lines[0]);
-        int shown = 1;
-        while (shown < lines.length && kept.length() + 1 + lines[shown].length() <= ScriptLimits.ACCOUNT_CHARS) {
-            kept.append('\n').append(lines[shown++]);
-        }
-        return kept + "\n[" + (lines.length - shown) + " more line(s) of this account left out]";
+    /** 一次调用失败:不管程序接没接住,都往 stderr 写它的种类与错误的第一行(全文在错误值里,接住了的程序自己读)。 */
+    private void failed(ScriptRun.Call call, String kind, String message) {
+        stderr.write(call.line(), call.function(), kind + " — " + firstLine(message));
     }
 
     /** 交出去的那一次有了结局。 */
@@ -306,8 +274,7 @@ public final class ScriptCall {
     private String finalReceipt(ScriptRun.Done done) {
         String head;
         if (done.ok()) {
-            head = name() + " ran to the end: " + calls + " call" + (calls == 1 ? "" : "s") + " in " + seconds()
-                    + " s.";
+            head = "ok · " + calls + " call" + (calls == 1 ? "" : "s") + " · " + seconds() + " s";
         } else {
             head = name() + " stopped at line " + done.line() + " after " + calls + " call" + (calls == 1 ? "" : "s")
                     + ": " + done.error();
@@ -324,34 +291,28 @@ public final class ScriptCall {
         return receipt("stopped", head, null, null);
     }
 
-    /** @param failure 出错时的错误值,进数据的 {@code error};别的是 null */
+    /**
+     * 回执:结局一行,再是 stderr、返回值、stdout 三栏,哪栏没有东西就不出现。
+     *
+     * @param failure 出错时的错误值,进数据的 {@code error};别的是 null
+     */
     private String receipt(String status, String head, Object returned, java.util.Map<String, Object> failure) {
         boolean ok = "ok".equals(status);
         StringBuilder msg = new StringBuilder(head);
-        int spent = 0;
-        int cut = 0;
-        for (String line : log) {
-            if (spent + line.length() + 1 > ScriptLimits.RECEIPT_LINES_CHARS) {
-                cut++;
-                continue;
-            }
-            spent += line.length() + 1;
-            msg.append('\n').append(line);
-        }
-        if (cut > 0) {
-            msg.append("\n[").append(cut).append(" more call line(s) left out: the receipt keeps the first ")
-                    .append(ScriptLimits.RECEIPT_LINES_CHARS).append(" characters of them]");
+        if (!stderr.isEmpty()) {
+            msg.append("\nstderr:\n").append(stderr.text());
         }
         JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
         if (value != null) {
             // 一段文字原样写,别的值写成给模型读的样子(缩略的判据和 print 同一处);太长的截掉并说明。数据里的 returned 是
-            // 给程序读的原值,另有一个大得多的上限
+            // 给程序读的原值,另有一个大得多的上限,超出的换成精确写法的头部
             String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.display(returned);
             int whole = shown.length();
             if (value.toString().length() > ScriptLimits.RETURNED_DATA_CHARS) {
-                value = new com.google.gson.JsonPrimitive(shown.substring(0, Math.min(whole,
+                String exact = ScriptEngine.IN_USE.value(returned);
+                value = new com.google.gson.JsonPrimitive(exact.substring(0, Math.min(exact.length(),
                         ScriptLimits.RETURNED_DATA_CHARS)) + "\n[returned value cut at "
-                        + ScriptLimits.RETURNED_DATA_CHARS + " characters; it was " + whole + "]");
+                        + ScriptLimits.RETURNED_DATA_CHARS + " characters; it was " + exact.length() + "]");
             }
             if (whole > ScriptLimits.RETURNED_CHARS) {
                 shown = shown.substring(0, ScriptLimits.RETURNED_CHARS) + "\n[returned value cut at "
@@ -360,7 +321,12 @@ public final class ScriptCall {
             msg.append("\nreturned: ").append(shown);
         }
         if (!printed.isEmpty()) {
-            msg.append("\nprinted:\n").append(printed.toString().stripTrailing());
+            msg.append("\nstdout:\n").append(printed.toString().stripTrailing());
+            if (printedCut > 0) {
+                msg.append("\n[stdout cut at ").append(ScriptLimits.PRINTED_CHARS).append(" characters; ")
+                        .append(printedCut).append(" more were not shown — print less, or filter in the program "
+                                + "before you print]");
+            }
         }
         JsonObject data = new JsonObject();
         data.addProperty("status", status);
@@ -377,7 +343,6 @@ public final class ScriptCall {
         result.add("data", data);
         return result.toString();
     }
-
     private String name() {
         return "The script";
     }
@@ -392,8 +357,7 @@ public final class ScriptCall {
     }
 
     private static String firstLine(String text) {
-        String line = text == null ? "" : text.strip().split("\n", 2)[0];
-        return line.length() <= SAID ? line : line.substring(0, SAID) + "...";
+        return text == null ? "" : text.strip().split("\n", 2)[0];
     }
 
     // ---- 小件 ----

@@ -128,6 +128,11 @@ class ProgramTest {
         return ApiReply.value(new com.google.gson.Gson().toJsonTree(value)).toString();
     }
 
+    /** 等到的值连同 API 往 stderr 报告的话。 */
+    private static String withStderr(String reply, String words) {
+        return ApiReply.withStderr(JsonParser.parseString(reply).getAsJsonObject(), words).toString();
+    }
+
     private static String error(String message) {
         return ApiReply.error(ErrorKind.FAILED, message, null, null).toString();
     }
@@ -157,19 +162,19 @@ class ProgramTest {
 
         answerLast(job("t1"));
         assertEquals(1, lines.size(), "t1 has not ended: the next call is not sent");
-        program.taskFinished(finished("t1 done"));
+        program.taskFinished(finished("t1 done walked 12 blocks"));
         assertEquals("work.dig ores", lines.get(1));
 
-        answerLast(value(Map.of("dug", 4)));
+        answerLast(withStderr(value(Map.of("dug", 4)), "dug 4 stone"));
         assertEquals("work.collect", lines.get(2));
         answerLast(job("t2"));
         assertNull(outcome, "the last job is waited for too");
         program.taskFinished(finished("t2 done"));
 
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
-        assertTrue(message().startsWith("The script ran to the end: 3 calls"), message());
-        assertTrue(message().contains("\nline 1 move.go: ok — t1 done\nline 2 work.dig: ok — {dug = 4}\n"
-                + "line 3 work.collect: ok — t2 done\nreturned: all done"), message());
+        assertEquals("ok · 3 calls · 0 s\nstderr:\nline 1 move.go: walked 12 blocks\nline 2 work.dig: dug 4 stone\n"
+                + "returned: all done", message(), "a call that had nothing to report (work.collect) writes nothing, "
+                + "and what a call returned is not echoed");
         assertEquals(3, outcome.calls().size());
         assertEquals("work.dig", outcome.calls().get(1).function());
         assertNull(outcome.calls().get(1).kind());
@@ -197,9 +202,9 @@ class ProgramTest {
         assertEquals(List.of("work.dig ores"), lines, "the call that did not read was not sent");
         answerLast(job("t1"));
         program.taskFinished(finished("t1 done"));
-        assertTrue(message().startsWith("The script ran to the end: 1 call"), message());
-        assertTrue(message().contains("line 1 work.dig: bad_argument — there is no option bad; usage: work.dig(place)"),
-                message());
+        assertTrue(message().startsWith("ok · 1 call · 0 s\nstderr:\n"), message());
+        assertTrue(message().contains("\nline 1 work.dig: bad_argument — there is no option bad; usage: work.dig(place)"),
+                "a failed call is in stderr although the program caught it: " + message());
         assertEquals(java.util.Arrays.asList("bad_argument", null), outcome.calls().stream().map(ScriptCall.Called::kind).toList(),
                 "a call refused at its line counts as a call with its kind");
     }
@@ -232,7 +237,7 @@ class ProgramTest {
         answerLast(job("t2"));
         program.interrupt("your owner spoke");
 
-        assertTrue(message().contains("\nline 1 move.go: ok — t1 done: walked there\n  broke 2 stone on the way"),
+        assertTrue(message().contains("\nstderr:\nline 1 move.go: walked there\n  broke 2 stone on the way"),
                 message());
     }
 
@@ -303,23 +308,50 @@ class ProgramTest {
     void aReceiptIsBoundedHoweverMuchTheCallsAndTheirAccountsSay() {
         Program program = run("""
                 for i = 1, 150 do work.dig("ores") end
+                print(string.rep("p", 20000))
                 return string.rep("x", 100000)
                 """);
-        String account = ("a long account of what was done, one line of it\n").repeat(400);
         for (int i = 1; i <= 150; i++) {
             answerLast(job("t" + i));
-            program.taskFinished(finished("t" + i + " done " + account));
+            program.taskFinished(finished("t" + i + " done call " + i + "\n"
+                    + "a long account of what was done, one line of it\n".repeat(400)));
         }
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
-        assertTrue(outcome.receipt().length() < ScriptLimits.RECEIPT_LINES_CHARS + ScriptLimits.RETURNED_CHARS
+        assertTrue(outcome.receipt().length() < ScriptLimits.STDERR_CHARS + ScriptLimits.RETURNED_CHARS
                 + ScriptLimits.RETURNED_DATA_CHARS
                 + ScriptLimits.PRINTED_CHARS + 2_000, "receipt is " + outcome.receipt().length());
-        assertTrue(message().contains("more line(s) of this account left out]"), "a job's account is cut at whole lines");
-        assertTrue(message().contains("more call line(s) left out"), "the call lines are cut at the budget");
+        assertTrue(message().contains("more characters of this entry left out]"), "a job's account is cut, and says by how much");
+        assertTrue(message().contains("more stderr entries ("), "the entries past the budget are left out, and counted");
         assertTrue(message().contains("[returned value cut at " + ScriptLimits.RETURNED_CHARS + " characters; it was 100000]"));
+        assertTrue(message().contains("\n[stdout cut at " + ScriptLimits.PRINTED_CHARS + " characters; "
+                + (20_001 - ScriptLimits.PRINTED_CHARS) + " more were not shown"), message());
         assertEquals(150, outcome.calls().size());
     }
 
+    @Test
+    void whatACallReturnedIsNotEchoedAndACallWithNothingToReportWritesNothing() {
+        run("""
+                for i = 1, 120 do area.has("ores") end
+                return 1
+                """);
+        for (int i = 0; i < 120; i++) {
+            answerLast(value(i));
+        }
+        assertEquals("ok · 120 calls · 0 s\nreturned: 1", message());
+        assertEquals(120, outcome.calls().size(), "every call is still recorded, in the data");
+    }
+
+    @Test
+    void theSameThingSaidAgainAndAgainInALoopIsOneEntryWithACount() {
+        Program program = run("""
+                for i = 1, 5 do work.dig("ores") end
+                """);
+        for (int i = 1; i <= 5; i++) {
+            answerLast(job("t" + i));
+            program.taskFinished(finished("t" + i + " done dug 1 stone"));
+        }
+        assertEquals("ok · 5 calls · 0 s\nstderr:\nline 1 work.dig: dug 1 stone (×5)", message());
+    }
     @Test
     void aCallsOutcomeStaysSmallHoweverBigItsArguments() {
         run("work.dig(string.rep('x', 50000))");
@@ -432,7 +464,7 @@ class ProgramTest {
                 print("砍了 3 棵")
                 error("手边没有合成台", 0)
                 """);
-        assertTrue(message().contains("手边没有合成台") && message().contains("printed:\n砍了 3 棵"), message());
+        assertTrue(message().contains("手边没有合成台") && message().contains("stdout:\n砍了 3 棵"), message());
         assertEquals("手边没有合成台", receipt().getAsJsonObject("data").getAsJsonObject("error").get("message")
                 .getAsString());
     }

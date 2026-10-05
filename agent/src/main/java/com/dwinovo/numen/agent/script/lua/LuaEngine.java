@@ -148,7 +148,7 @@ public final class LuaEngine implements ScriptEngine {
                 + "`err.kind` says what kind "
                 + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
                 + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
-                + "table) or `return x`; the receipt shows one line per call and what you printed or returned. A module "
+                + "table) or `return x`; the receipt shows what you printed (stdout) or returned, a long table shortened with its size; what your body did and any call that failed are in its stderr. A module "
                 + "is used by its name like a group, with no require: `numen.work.collect()`, `my.lumber.chop(t)`. "
                 + "`numen.api.help(\"numen.work\")` lists a group's or a module's typed signatures, "
                 + "`numen.api.help(\"numen.work.dig\")` explains one.";

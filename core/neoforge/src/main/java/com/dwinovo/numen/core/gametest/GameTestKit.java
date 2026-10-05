@@ -1080,7 +1080,7 @@ public final class GameTestKit {
             if (!p.ok()) {
                 return String.valueOf(p.error().get("message"));
             }
-            return p.account() != null && !p.account().isBlank() ? p.account() : ScriptEngine.IN_USE.value(p.value());
+            return p.stderr() != null && !p.stderr().isBlank() ? p.stderr() : ScriptEngine.IN_USE.value(p.value());
         }
 
         /** 失败的种类({@code out_of_reach}…):受理了活的是收尾结果的,别的是回执里的;成功或还没结论是 null。 */

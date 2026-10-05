@@ -87,7 +87,7 @@ public class RouteGameTests {
                             && leg.getAsJsonArray("breaks").toString().contains("oak_planks"),
                     "the plan does not list the planks it would break: " + p);
             helper.assertTrue(!leg.has("path"), "the path is printed with the plan: " + leg);
-            helper.assertTrue(plan.receipt().contains("printed:\\n") && plan.receipt().contains("\\twalk"),
+            helper.assertTrue(plan.receipt().contains("stdout:\\n") && plan.receipt().contains("\\twalk"),
                     "the path is not there to read: " + plan.receipt());
             helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");

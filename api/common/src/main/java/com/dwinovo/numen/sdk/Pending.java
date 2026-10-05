@@ -10,8 +10,9 @@ import java.util.function.Function;
  * 等一会儿才有的值:等主人答复(过权限层)、等下一刻(按刻分片的搜索)、等一件有界的短身体活({@link ServerCall#sync})。不占任务槽,
  * 程序在这次调用上等着,值或失败到了才往下走。只在服务端线程上完成。
  *
- * <p>身体在等的这段时间里做了什么(短活的实际账、主人点头允许了什么)随值一起交回({@link #report}),写进程序的回执:身体动过的事
- * 都要让她知道。
+ * <p>API 往 stderr 报告的唯一入口是 {@link #report}(占身体的活是 {@link Job},它的实际账是任务收尾的话):身体在等的这段时间里做了什么
+ * (短活的实际账、主人点头允许了什么)、一次查询没看全哪里,随值一起交回,写进程序回执的 stderr 一栏——身体动过的事都要让她知道。
+ * 像命令行工具自己决定往 stderr 写什么:返回值是给程序用的,只读的查询通常什么都不报告,查到的东西在值里。
  *
  * <pre>{@code
  * Pending<Found> p = Pending.create();
@@ -28,8 +29,8 @@ public final class Pending<R> {
     private boolean done;
     private R value;
     private ApiError error;
-    /** 等的这段时间里身体做了什么、主人允许了什么;什么都没有是空串。 */
-    private String account = "";
+    /** 等的这段时间里 API 报告的话;什么都没有是空串。 */
+    private String stderr = "";
 
     private Pending() {}
 
@@ -89,7 +90,7 @@ public final class Pending<R> {
                 out.fail(failed);
                 return;
             }
-            out.account = account;
+            out.stderr = stderr;
             out.complete(s);
         }, out::fail);
         return out;
@@ -107,7 +108,7 @@ public final class Pending<R> {
                 return;
             }
             then.whenDone(s -> {
-                out.account = joined(account, then.account);
+                out.stderr = joined(stderr, then.stderr);
                 out.complete(s);
             }, out::fail);
         }, out::fail);
@@ -115,16 +116,16 @@ public final class Pending<R> {
     }
 
     /**
-     * 记下这段等待里要让她知道的事:身体做了什么、主人允许了什么、没看全哪里。随值交回,写进程序的回执。在 {@link #complete} 之前记;
-     * 再记一次换掉前一次。
+     * 往 stderr 报告这段等待里要让她知道的事:身体做了什么、主人允许了什么、没看全哪里。随值交回,写进程序的回执。在 {@link #complete}
+     * 之前报告;再报告一次换掉前一次。
      */
     public synchronized void report(String words) {
-        account = words == null ? "" : words.strip();
+        stderr = words == null ? "" : words.strip();
     }
 
-    /** 这段等待里身体做了什么;什么都没有是空串。 */
-    synchronized String account() {
-        return account;
+    /** 这段等待里 API 报告的话;什么都没有是空串。 */
+    synchronized String stderr() {
+        return stderr;
     }
 
     private static String joined(String a, String b) {
