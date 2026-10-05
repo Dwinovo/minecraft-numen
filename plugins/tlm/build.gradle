@@ -3,16 +3,19 @@ plugins {
     id 'numen-plugin'
 }
 
-// 车万女仆在这个 MC 版本上只有 Forge 版,本联动直接用 Forge 的事件(玩家渲染、客户端 tick),
+// 车万女仆在这个 MC 版本上只有 Forge 版,本联动直接用 Forge 的事件(玩家渲染、客户端 tick)、能力与频道,
 // 编译对着 Forge。Fabric 上装不上车万女仆,那边没有这个联动,也不需要有。
 minecraft {
     mappings channel: 'official', version: minecraft_version
 }
 
 repositories {
-    exclusiveContent {
-        forRepository { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
-        filter { includeGroup 'maven.modrinth' }
+    // 车万女仆发在 Modrinth;代码部分 MIT,不混淆类名,所以可以直接编译依赖拿真模型对象。
+    // 不用 exclusiveContent:ForgeGradle 的 fg.deobf 从项目的仓库列表里找原件,认不得那一层包装
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
     }
 }
 
@@ -23,3 +26,78 @@ dependencies {
     // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
+
+/*
+ * 车万女仆在场时的 GameTest:用例在 src/gametest,单开一次跑批 `./gradlew :plugins:tlm:GameTestServer`。
+ *
+ * 不挂进 core 那一次(:core:forge:GameTestServer):车万女仆带着一堆 mixin,挂上去全部用例的环境都跟着变,那一次测的
+ * 就不再是"只有本体"的样子。这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里)、联动的用例同在 numen 这一个
+ * 模组里,车万女仆由运行时类路径带进来,和玩家装它一样被当成模组加载(开发环境里要先翻成官方名,所以走 fg.deobf)。
+ *
+ * 用例和 core 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 core 的输出。
+ * 它们挂自己的命名空间 numen_tlm,这一次只跑这个命名空间:core 的用例类照样被加载(同一个模组),但一条都不跑。
+ * 结构模板用 core 同步好的那一份目录。
+ */
+sourceSets {
+    gametest {}
+}
+
+def coreForge = project(':core:forge')
+
+configurations {
+    gametestCompileOnly.extendsFrom compileOnly
+    gametestImplementation.extendsFrom implementation
+}
+
+dependencies {
+    gametestCompileOnly files({ coreForge.sourceSets.main.output })
+    // 用例直接读她身上的外观(Outfit),不绕客户端
+    gametestCompileOnly sourceSets.main.output
+    // 整个引擎(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 core 的用例一样
+    gametestCompileOnly project(':api:forge')
+    // 跑批的运行时类路径取主源码集那一份
+    runtimeOnly fg.deobf("maven.modrinth:touhou-little-maid:${tlm_version}")
+}
+
+minecraft {
+    runs {
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.plugins.${project.name}.main"
+            taskName 'GameTestServer'
+            mods {
+                modTlmGameTestRun {
+                    source coreForge.sourceSets.main
+                    source sourceSets.main
+                    source sourceSets.gametest
+                    // 场地围栏(StructureFenceMixin)住在寻路模块的 GameTest 源码集里;它的用例在 numen 命名空间,这一次不跑
+                    source project(':pathing').sourceSets.gametest
+                }
+                modTlmGameTestApiRun {
+                    source project(':api:forge').sourceSets.main
+                    source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
+                    source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
+                }
+            }
+            property 'mixin.env.disableRefMap', 'true'
+            property 'forge.enabledGameTestNamespaces', 'numen_tlm'
+            property 'numen.gametest.structures', coreForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath
+            // 本体、引擎与本联动以同仓源码集进运行(不是带 MANIFEST 的 mod jar),它们的 mixin 配置没人替它们声明:
+            // 发行物里由 jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
+            args '--mixin.config', 'numen.mixins.json'
+            args '--mixin.config', 'numen_api.mixins.json'
+            args '--mixin.config', 'numen_api.forge.mixins.json'
+            args '--mixin.config', 'numen_tlm.mixins.json'
+            args '--mixin.config', 'numen_gametest.mixins.json'
+        }
+    }
+}
+
+tasks.matching { it.name == 'GameTestServer' }.configureEach {
+    dependsOn ':core:forge:classes', ':core:forge:syncGameTestStructures', ':pathing:gametestClasses'
+}
+// 跑批世界与 core 那一次同一份配置:超平坦、从头生成
+apply from: rootProject.file('gradle/gametest-flat-world.gradle')

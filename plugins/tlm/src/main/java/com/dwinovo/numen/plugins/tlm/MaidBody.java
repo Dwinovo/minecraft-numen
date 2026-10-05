@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
 import com.github.tartaricacid.touhoulittlemaid.client.renderer.entity.EntityMaidRenderer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraftforge.client.event.EntityRenderersEvent;
@@ -67,20 +68,26 @@ public final class MaidBody {
         for (MaidPuppet p : PUPPETS.values()) p.advanceWalk();
     }
 
+    /** 客户端世界里这个 UUID 的玩家;不在视野里(走远了、换了维度)返回 null。 */
+    static AbstractClientPlayer player(UUID id) {
+        var level = Minecraft.getInstance().level;
+        if (level == null) return null;
+        for (var p : level.players()) {
+            if (p.getUUID().equals(id)) return p;
+        }
+        return null;
+    }
+
     /**
      * 玩家渲染的入口。不是同伴、或这只同伴没穿女仆模型,就原样放行——
-     * 一次 map 查询,对所有真人玩家零开销。
+     * 一次附件查询,对所有真人玩家几乎零开销。穿的模型这个客户端没有时,车万女仆的渲染器自己怎么处理就怎么处理。
      */
     public static void render(RenderPlayerEvent.Pre event) {
-        if (renderer == null || Wardrobe.empty()) return;
+        if (renderer == null) return;
 
         AbstractClientPlayer player = (AbstractClientPlayer) event.getEntity();
-        String modelId = Wardrobe.worn(player.getUUID());
+        String modelId = Outfit.worn(player);
         if (modelId == null) return;
-
-        // 模型包被玩家删了/改名了:当作没穿,别把同伴画成一团空气。
-        // 判据见 Tlm.exists——问元信息表,不能问 Bedrock 模型表。
-        if (!Tlm.exists(modelId)) return;
 
         MaidPuppet puppet = PUPPETS.computeIfAbsent(player.getUUID(), id -> new MaidPuppet(player.level()));
         puppet.mirror(player, modelId);
