@@ -9,6 +9,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
  */
 public final class LineBox {
 
+    /** 线宽,与原版 gizmo 画线的默认值相同:lines 管线的顶点格式逐顶点带线宽,不写就缺元素。 */
+    private static final float LINE_WIDTH = 3.0f;
+
     private LineBox() {}
 
     /** 线框:12 条棱,坐标是 {@code pose} 所在空间里的绝对位置。 */
@@ -29,7 +32,7 @@ public final class LineBox {
         seg(vc, pose, x0, y0, z1, x0, y1, z1, r, g, b, a);
     }
 
-    /** 一条线段(法线取线段方向,lines 渲染管线要求)。 */
+    /** 一条线段(法线取线段方向、线宽逐顶点写,lines 渲染管线要求)。 */
     public static void seg(VertexConsumer vc, PoseStack.Pose pose,
                            double x1, double y1, double z1, double x2, double y2, double z2,
                            float r, float g, float b, float a) {
@@ -43,7 +46,9 @@ public final class LineBox {
         float nx = dx / len;
         float ny = dy / len;
         float nz = dz / len;
-        vc.addVertex(pose, (float) x1, (float) y1, (float) z1).setColor(r, g, b, a).setNormal(pose, nx, ny, nz);
-        vc.addVertex(pose, (float) x2, (float) y2, (float) z2).setColor(r, g, b, a).setNormal(pose, nx, ny, nz);
+        vc.addVertex(pose, (float) x1, (float) y1, (float) z1).setColor(r, g, b, a).setNormal(pose, nx, ny, nz)
+                .setLineWidth(LINE_WIDTH);
+        vc.addVertex(pose, (float) x2, (float) y2, (float) z2).setColor(r, g, b, a).setNormal(pose, nx, ny, nz)
+                .setLineWidth(LINE_WIDTH);
     }
 }
