@@ -653,7 +653,7 @@ artifactId 要逐个核对,不是只核对版本号。
   不移植的:TLM(Modrinth 上只有 1.21/1.21.1 的 NeoForge 版)、YSM(Modrinth 只有 1.21/1.21.1 与 26.1.2)、
   森罗物语厨房(CurseForge 上只有 1.21.1 的 NeoForge 版)、FTB Quests(maven.ftb.dev 只有 2101.x、2111.x 与 26.1.2.x,没有 1.21.8 的构建)。
 
-## 1.21.8 → 1.21.10 ✓（已验证:对齐 1.21.1@7a3d3e251 后的并仓树双 loader 编译 + 出包 + datagen + 1799 单测 + 564 条游戏内用例 ×3(仅 build_japanese_cottage 红,见已知未解) + 评测自检;跳过 1.21.9）
+## 1.21.8 → 1.21.10 ✓（已验证:对齐 1.21.1@7a3d3e251 后的并仓树双 loader 编译 + 出包 + datagen + 1799 单测 + 567 条游戏内用例 ×3 + 评测自检;跳过 1.21.9）
 
 含 1.21.9 的**输入 API 重构 + NeoForge Transfer 重写 + authlib 9**。构建旋钮：MC `1.21.10` /
 range `[1.21.10, 1.21.11)` / NeoForm `1.21.10-20251010.172816` / Fabric `0.138.4+1.21.10` / NeoForge `21.10.64`。
@@ -866,17 +866,8 @@ Category 注册两头同改,生成物核对含新键。
   `NumenTestEnvironment.setup` 在批次方法之前补两条会在判据背后改世界的:随机刻停摆(耕地湿度、屋顶下的草退化)、`doFireTick` 关
   (`fluidgametests.passes_cactus_fire_berries_and_magma_unhurt` 里下界岩上的火每三十来刻老化一次,红在"实际账与世界不符")。
   规则只在这一处定,`settleWorld`/`Worlds.settle` 里不再写随机刻。
-- 没把"不换天气"补进环境:各批次的 `settleWorld` 已按用例需要重定天气与刷怪;补上 `doWeatherCycle=false` 之后
-  `diggametests.dig_a_scanned_cluster_digs_what_still_holds_the_scanned_block` 稳定变红("dug 2 cell(s) of copper_ore; not dug: 1 gave no clear shot"),
-  去掉就稳定绿——这条用例对环境里随机数的消耗顺序敏感,见下面的已知未解。
+- 没把"不换天气"补进环境:各批次的 `settleWorld` 已按用例需要重定天气与刷怪。
 
-**已知未解**
-- `buildgametests.build_japanese_cottage` 在 1.21.8、1.21.10 上稳定红(1.21.10 连跑三次,隔离单跑也复现),回执是
-  `building japanese_cottage is stuck: 159 cell(s) left, 0 within reach … kept ending up back where the step before it started`。
-  取证(临时探针,已撤):她被引到一扇朝西开着的活板门(碰撞箱是靠东边的 3/16 厚薄板、一格高)后面一格的下半砖上,规划给的是
-  "走进活板门格、跳过薄板、落到下半砖"(`Stepping.between` 对这一步答 JUMP,足高 -48 → -47.5);执行时她跳过薄板后收不住,
-  在下半砖与再后面的脚手架(顶面 -47)之间连蹦带返,落不到下半砖上,最后落回前一步的起点,记 FELL_BACK 三次后收场。
-  这条在 1.21.1 上是绿的,26.1.2 一档的执行者报告了同样的回执;规划那一步的答案与执行层的收脚对不上,疑在寻路的跳跃落点控制,不在建造;根因没有查实,本次没动。
 
 ## 1.21.10 → 1.21.11
 _待移植时填写_
