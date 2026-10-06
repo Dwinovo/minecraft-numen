@@ -1054,8 +1054,7 @@ RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样�
   再垫一层(`size.y+1`、全部方块 y+1、原 y0 层再复制成新 y0),否则整个场地矮一格。
 - **批次开场钉住场地**:`RANDOM_TICK_SPEED=0`、`FIRE_SPREAD_RADIUS_AROUND_PLAYER=0`(26.1 的火在有玩家的区域里按刻变老,身体是玩家;
   随机刻让草皮枯成泥土、耕地失水——用例对账看"除了她动过的一格都没变")。
-- **服务器每刻补足 2 毫秒**(`NumenGameTests.pace`):GameTest 服务器不限速,26.1 的一刻只要几十微秒(实测每秒两万多刻,1.21.1 约 600),
-  按刻写的时限比异步搜索/诊断(按墙钟)先到。`setTickRate` 压不住(`GameTestServer.waitUntilNextTick` 直接跑任务,不等)。
+- **GameTest 服务器不限速**:26.1 的一刻只要几十微秒(实测每秒两万多刻,1.21.1 约 600),`setTickRate` 压不住(`GameTestServer.waitUntilNextTick` 直接跑任务,不等)。按刻写的时限与异步搜索(按墙钟)的快慢比不靠补刻节奏:寻路用例的夹具在导航等搜索时这一刻等它回来(`Trial.Run.awaitSearch`)。
 - **评测(bench)**同样数据化:`Bench.suite` 返回 `Optional<Bench.Run>`,场景类的方法标 `@BenchSuite`,`NumenBench` 在
   `RegisterGameTestsEvent` 里扫出来、每组登记一条 `BenchTestInstance`(模板借核心的 `numen:floor16`);世界时间走世界时钟、
   `GameRules.ADVANCE_TIME/ADVANCE_WEATHER/SPAWN_MOBS`。
@@ -1070,10 +1069,6 @@ RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样�
 1.21.1 有四处 mixin 用 `@WrapMethod`(要 MixinExtras ≥ 0.4,版本过旧时静默不生效)。26.1.2 上:NeoForge 的 GameTest 日志
 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.2 的 jar 内嵌 `mixinextras-fabric-0.5.4.jar`。两边都够,不用内嵌。
 
-### 已知红
-`build_japanese_cottage`(核心 GameTest):盖到屋顶时她走过厨房柜台那排"开着的活板门 + 半砖"去够屋顶格,WALK 越过活板门板子靠起跳,落过头(落在
-隔壁的脚手架上)再被拉回,三次"落回起点"后 `numen.build.raise` 以 `no_path` 收场(159 格没盖)。1.21.1 同一份代码同一份图纸过(它上屋顶走的是垫柱);
-本档没找到分叉点——寻路的步骤执行与规划都是 1.21.1 的原样,图纸里 1.21.5 才有的方块(wildflowers/leaf_litter)换成空气也一样失败。
 ---
 
 ## 26.1.2 → 26.2 ✓（已验证：双 loader 编译 + 出包 + datagen 四路零漂移 + 867 单测零跳过 + 65 条游戏内用例 ×3;渲染第五震:Vulkan 化管线 + 屏幕/HUD 拆家 + 立即模式终结）
@@ -1223,5 +1218,3 @@ api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、ga
 - **联动**:YSM 联动没有这个版本,不建;Curios `16.0.0+26.2`;FTB Quests 没做(同上节)。
 - **和平难度拒刷怪**:`EntityTypes.X.create(level, reason)` 带生成检查;本档的战斗用例批次定的是非和平难度,实测通过,没有另加 `EntitySpawnRequest`。
 - **MixinExtras**:GameTest 日志 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.3 内嵌 `mixinextras-fabric-0.5.4.jar`。够用,不内嵌。
-- **已知红**:同 26.1.2 对齐一节的 `build_japanese_cottage`;另有 `dig_a_scanned_cluster_digs_what_still_holds_the_scanned_block` 偶发(挖第三块铜矿时
-  准星落在别的格上拉不出射线,约三次里一次,两个版本都有)。
