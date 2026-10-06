@@ -318,13 +318,7 @@ companion.changeDimension(new DimensionTransition(nether, pos, …)) → compani
 走的途中自己长一级,`passes_cactus_fire_berries_and_magma_unhurt` 的"账与世界对得上"就稳定挂(每次都挂,与机器负载无关)。
 `Worlds.settle`(寻路用例的批次开场)自己把 `doFireTick` 关掉。
 
-**机器满载时寻路用例会成片"时限内没收场"**(不是回归):GameTest 服务器不限速地跑刻,规划在另一个线程池里,线程池排不上队
-(日志里"排队 xxxms")时刻数先耗光。同一份代码,别的任务占着 95% CPU 时连跑五次分别挂 11 / 8 / 15 / 7 / 43 条,把游戏进程调成高优先级
-(Windows:`(Get-Process -Id <pid>).PriorityClass = 'High'`)后只剩上面那一条真问题,修掉之后全绿。
-
-**评测模组 `bench/game` 的 `neoforge.mods.toml` 把 `loaderVersion` 写死成 `[4,)`**(1.21 一代的 FML)📦——本代 FML 是 javafml 3,
-dev 服务器起不来(`Mod File main needs language provider javafml:4`)。本分支改成 `[2,)`,与 `gradle.properties` 的
-`neoforge_loader_version_range` 同值;这是个没有跟着旋钮走的字面量,逐分支都要改。
+**评测模组 `bench/game` 的 `neoforge.mods.toml` 的 `loaderVersion`** 由 `gradle.properties` 的 `neoforge_loader_version_range` 展开,本代是 `[2,)`(FML 是 javafml 3,写成 `[4,)` 的话 dev 服务器起不来:`Mod File main needs language provider javafml:4`)。
 
 **NeoForge 20.6.139 自带 MixinExtras 0.4.1**——已有 `@WrapMethod`,不需要像 1.21 分支那样内嵌新版。
 
