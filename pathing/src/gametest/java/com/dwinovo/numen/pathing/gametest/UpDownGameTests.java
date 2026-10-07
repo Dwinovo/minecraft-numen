@@ -301,7 +301,7 @@ public class UpDownGameTests {
         TestBody low = t.body(21, 4, 5);
         low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
         t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
-            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.pathing.body.BodyAction.Held h
+            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
                     && h.item() == Items.WATER_BUCKET);
             if (held) {
                 throw new GameTestAssertException("摔不疼的一跳也备了水桶");

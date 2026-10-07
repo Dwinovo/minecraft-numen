@@ -2,7 +2,7 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.PlayerInv;
 
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.InputDriver;
 

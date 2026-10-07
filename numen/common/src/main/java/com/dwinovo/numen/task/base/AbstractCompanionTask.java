@@ -525,7 +525,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * 这件活替目标之外挖掉的一格记进旅程账(比如为了拉出射线挖掉的遮挡物)。回执末尾和导航挖的一起交代,
      * {@link #brokeOnTheWay} 也认它。
      */
-    protected final void recordAction(com.dwinovo.numen.pathing.body.BodyAction action) {
+    protected final void recordAction(com.dwinovo.numen.api.entity.BodyAction action) {
         journey.did(action);
     }
 

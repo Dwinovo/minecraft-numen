@@ -4,7 +4,7 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
 
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 

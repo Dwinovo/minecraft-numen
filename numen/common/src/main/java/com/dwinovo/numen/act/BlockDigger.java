@@ -5,7 +5,7 @@ import java.util.function.Predicate;
 
 import com.dwinovo.numen.nav.CompanionHands;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
 import com.dwinovo.numen.pathing.body.Aim;

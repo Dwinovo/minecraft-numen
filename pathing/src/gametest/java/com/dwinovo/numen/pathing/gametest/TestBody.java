@@ -3,8 +3,8 @@ package com.dwinovo.numen.pathing.gametest;
 import java.util.UUID;
 
 import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.body.Controls;
-import com.dwinovo.numen.pathing.body.Physics;
+import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Physics;
 
 import com.mojang.authlib.GameProfile;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -68,7 +68,7 @@ final class TestBody extends ServerPlayer implements Body {
     @Override
     public void tick() {
         super.tick();
-        Physics.step(this);
+        Physics.step(this, controls);
     }
 
     /** 没有对端的连接:下行包全丢。 */

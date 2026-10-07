@@ -1,9 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.CompanionEvent;
-import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.body.Controls;
-import com.dwinovo.numen.pathing.body.Physics;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
@@ -40,10 +37,10 @@ import java.util.UUID;
  * dimensions).
  *
  * <h2>身体</h2>
- * 她就是寻路模块的身体端口({@link Body}):一副键盘({@link Controls}),导航、本能与各件活按的都是它;每刻在自己的实体刻里
- * 跑一次物理步进({@link Physics#step}),按着的键在那里落成输入。
+ * 她有一副键盘({@link Controls}),导航、本能与各件活按的都是它;每刻在自己的实体刻里跑一次物理步进
+ * ({@link Physics#step}),按着的键在那里落成输入。
  */
-public final class NumenPlayer extends ServerPlayer implements Body {
+public final class NumenPlayer extends ServerPlayer {
 
     private static final String NBT_KEY_OWNER = "NumenOwner";
 
@@ -421,14 +418,9 @@ public final class NumenPlayer extends ServerPlayer implements Body {
         return fakeClient;
     }
 
-    // ---- 身体端口 ----
+    // ---- 键盘 ----
 
-    @Override
-    public ServerPlayer entity() {
-        return this;
-    }
-
-    @Override
+    /** 她的键盘。 */
     public Controls controls() {
         return controls;
     }
@@ -450,9 +442,9 @@ public final class NumenPlayer extends ServerPlayer implements Body {
             reportTickFailure(ex);
         }
         // 她没有客户端:按着的键落成输入、玩家自己的一刻、摔伤结算、移动统计、区块跟随,原版由客户端与网络层替真玩家
-        // 做的这一趟,由寻路模块的物理步进在这里补上,每刻一次
+        // 做的这一趟,由物理步进在这里补上,每刻一次
         try {
-            Physics.step(this);
+            Physics.step(this, controls);
         } catch (RuntimeException ex) {
             reportTickFailure(ex);
         }

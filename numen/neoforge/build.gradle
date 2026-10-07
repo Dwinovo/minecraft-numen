@@ -74,7 +74,9 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
-            // 寻路模块本身随 Numen API 来(Numen API 依赖它);这里只挂它自己的 GameTest 用例
+            // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明;
+            // 另外挂它自己的 GameTest 用例
+            sourceSet project(':pathing').sourceSets.main
             sourceSet project(':pathing').sourceSets.gametest
         }
     }

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.body;
+package com.dwinovo.numen.api.entity;
 
 import java.util.EnumSet;
 
@@ -11,7 +11,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 一具服务端假玩家的键盘,一具身体一副({@link Body#controls})。键按下就一直按着,直到松开;每刻由 {@link Physics#step}
+ * 一具服务端假玩家的键盘,一具身体一副(同伴的是 {@link NumenPlayer#controls})。键按下就一直按着,直到松开;每刻由 {@link Physics#step}
  * 在身体的物理步进之前落一次,照原版客户端把按键变成身体输入的那一套({@code KeyboardInput.tick} 与
  * {@code LocalPlayer.aiStep})落到身体上——假玩家没有客户端,服务端缺的就是这一段:
  * <ul>

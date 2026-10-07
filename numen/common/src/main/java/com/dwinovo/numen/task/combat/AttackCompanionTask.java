@@ -15,7 +15,7 @@ import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.chain.MobDefenseChain;
 import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;

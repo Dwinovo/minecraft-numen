@@ -1,6 +1,6 @@
 package com.dwinovo.numen.task.chain;
 
-import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.task.reflex.Reflex;
 import com.dwinovo.numen.api.entity.InputDriver;
 

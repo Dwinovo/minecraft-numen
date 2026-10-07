@@ -3,7 +3,7 @@ import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.FailureType;
 
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.mixin.BoatAccessor;
-import com.dwinovo.numen.pathing.body.Controls;
 
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,7 +10,7 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 同伴自己的朝向、看向与驾船。走、跳、潜行、停是按她的键盘({@link NumenPlayer#controls},寻路模块的 {@link Controls}),
+ * 同伴自己的朝向、看向与驾船。走、跳、潜行、停是按她的键盘({@link NumenPlayer#controls},{@link Controls}),
  * 不在这里;看向一格方块上的哪一点、怎么转过去由寻路模块的瞄准({@code Aim})管,这里管的是她自己的事:看着说话的人、
  * 看着要打要用的实体、转身朝一个方向,以及坐在船里压舵。
  */

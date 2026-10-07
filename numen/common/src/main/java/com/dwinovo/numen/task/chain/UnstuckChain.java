@@ -2,7 +2,7 @@ package com.dwinovo.numen.task.chain;
 
 
 import com.dwinovo.numen.nav.Trip;
-import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.NumenPlayer;

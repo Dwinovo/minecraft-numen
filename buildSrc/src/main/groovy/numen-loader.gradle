@@ -18,6 +18,9 @@ dependencies {
             attribute(loaderAttribute, 'common')
         }
     }
+    // 寻路(只依赖原版)是 Numen 的内容,不是 Numen API 的:编译期看得见,发行 jar 里由下方 jar 块平铺进来、不作为依赖进 POM
+    // (它不发布)。Loom 的开发运行类路径上另外补一份(localRuntime 不进 POM);NeoForge 的开发运行靠模组的 sourceSet。
+    compileOnly project(':pathing')
     commonJava project(path: ':numen:common', configuration: 'commonJava')
     commonResources project(path: ':numen:common', configuration: 'commonResources')
 }
@@ -42,4 +45,11 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+    from({ project(':pathing').sourceSets.main.allSource })
+}
+
+// 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
+// intermediary 名,NeoForge 上原样发出。
+tasks.named('jar', Jar) {
+    from({ project(':pathing').sourceSets.main.output })
 }

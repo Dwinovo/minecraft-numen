@@ -2,7 +2,7 @@ package com.dwinovo.numen.pathing.api;
 
 import java.util.List;
 
-import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 

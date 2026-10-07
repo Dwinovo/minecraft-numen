@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.sdk.Doc;
 
 import net.minecraft.core.registries.BuiltInRegistries;

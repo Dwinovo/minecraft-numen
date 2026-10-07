@@ -1,7 +1,7 @@
 package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.pathing.body.Controls.Key;
+import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 
 import net.minecraft.world.phys.Vec3;

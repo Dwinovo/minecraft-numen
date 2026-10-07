@@ -358,7 +358,7 @@ public class InteractGameTests {
                     }
                     helper.assertTrue(placed && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
                             "no cobblestone went onto the chest: " + run.get().outcome());
-                    helper.assertTrue(!companion.controls().held(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK),
+                    helper.assertTrue(!companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK),
                             "she still holds sneak after the click");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))

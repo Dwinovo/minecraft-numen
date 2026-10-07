@@ -5,8 +5,8 @@ import java.util.Collections;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.body.BodyAction;
-import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Materials;

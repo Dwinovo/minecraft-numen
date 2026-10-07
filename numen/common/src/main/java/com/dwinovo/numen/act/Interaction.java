@@ -293,7 +293,7 @@ public final class Interaction {
      *
      * <p>原版服务端判"按着潜行"读的是 {@code isShiftKeyDown}(方块与物品让不让潜行右键越过方块自己的反应,走的是
      * {@code isSecondaryUseActive},就是它);身体的姿态({@code isCrouching})要等下一次身体 tick 才跟上,有的模组看的是
-     * 姿态。所以先按下潜行键,等服务端看到她按着({@link com.dwinovo.numen.pathing.body.Controls} 在身体的物理步进里把键落到
+     * 姿态。所以先按下潜行键,等服务端看到她按着({@link com.dwinovo.numen.api.entity.Controls} 在身体的物理步进里把键落到
      * {@code setShiftKeyDown}),再多等一刻让姿态跟上,才点——和真玩家先按住 Shift 再点一样。按键每刻都按一下:被抢占时
      * 身体的键全松了,回来接着点之前重新蹲好。{@code Controls.stop()} 只松移动键,潜行一直按到 {@link #stop}。
      */
@@ -301,7 +301,7 @@ public final class Interaction {
         if (!sneak) {
             return true;
         }
-        player.controls().press(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK);
+        player.controls().press(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
         if (!player.isShiftKeyDown()) {
             crouchSettled = false;
             return false;
@@ -495,6 +495,6 @@ public final class Interaction {
         if (button == Button.ATTACK && block != null) CompanionHands.of(player).release();
         if (player.isUsingItem()) player.releaseUsingItem();
         player.controls().stop();
-        if (sneak) player.controls().release(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK);
+        if (sneak) player.controls().release(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
     }
 }

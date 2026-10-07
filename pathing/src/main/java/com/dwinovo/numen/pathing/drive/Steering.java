@@ -1,8 +1,8 @@
 package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.pathing.body.Controls;
-import com.dwinovo.numen.pathing.body.Controls.Key;
+import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Controls.Key;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;

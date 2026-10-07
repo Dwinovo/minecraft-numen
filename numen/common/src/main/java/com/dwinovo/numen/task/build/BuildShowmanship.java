@@ -1,8 +1,8 @@
 package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Controls;
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.Aim;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;

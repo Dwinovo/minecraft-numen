@@ -7,8 +7,8 @@ import java.util.Map;
 
 import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.body.BodyAction;
-import com.dwinovo.numen.pathing.body.Controls.Key;
+import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Maneuver;

@@ -2,7 +2,7 @@ package com.dwinovo.numen.pathing.drive;
 
 import java.util.List;
 
-import com.dwinovo.numen.pathing.body.Controls.Key;
+import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -131,7 +131,7 @@ abstract class Control {
     /** 浮在水里时脚低于那一格底上这么多就按跳。 */
     static final double FLOAT = 0.3;
 
-    final com.dwinovo.numen.pathing.body.Controls keys() {
+    final com.dwinovo.numen.api.entity.Controls keys() {
         return rig.keys;
     }
 

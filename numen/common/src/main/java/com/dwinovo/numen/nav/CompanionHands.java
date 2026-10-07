@@ -2,9 +2,9 @@ package com.dwinovo.numen.nav;
 
 import com.dwinovo.numen.act.Interaction;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Effector;
-import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.ToolChoice;

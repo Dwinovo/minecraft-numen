@@ -5,7 +5,7 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import java.util.Optional;
 
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.body.BodyAction;
+import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.search.Goals;

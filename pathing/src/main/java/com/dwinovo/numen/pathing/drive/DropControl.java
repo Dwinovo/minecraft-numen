@@ -1,6 +1,6 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Controls.Key;
+import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 
@@ -33,7 +33,7 @@ final class DropControl extends Control {
     private Beat water() {
         boolean up = rig.entity.getY() > m.landing().feetY() + DROPPED;
         if (up && rig.entity.onGround()) {
-            rig.act(com.dwinovo.numen.pathing.body.Hotbar.grip(rig.entity,
+            rig.act(com.dwinovo.numen.api.entity.Hotbar.grip(rig.entity,
                     net.minecraft.world.item.Items.WATER_BUCKET).action());
             return Beat.IDLE;
         }

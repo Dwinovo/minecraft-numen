@@ -35,7 +35,7 @@ public final class CompanionPorts {
 
     /** 她的寻路门面,避开 {@code threats},垫路从 {@code materials} 里挑。 */
     public static Navigator navigator(NumenPlayer player, Threats threats, List<Item> materials) {
-        return Navigator.of(player, new Ports(CompanionHands.of(player), terrain(player), materials(player, materials),
+        return Navigator.of(new CompanionBody(player), new Ports(CompanionHands.of(player), terrain(player), materials(player, materials),
                 threats));
     }
 
