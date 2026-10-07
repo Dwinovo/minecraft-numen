@@ -34,7 +34,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 许不许改地形:不许改时绕行或报"要改地形";许改时挖穿、垫柱、搭桥、向下挖;许可拒绝的格不碰、要问的格列进账单;
+ * 许不许改地形:不许改时绕行或报"要改地形";许改时挖穿、垫柱、搭桥、向下挖;许可拒绝的格不碰、要问的格带着凭据列进路线;
  * 能绕就不挖;桥位上有单层雪时块放进那一格;不挖托着自己的那一格;改动预算不够;世界边界;按种类禁挖;不挖要去用的工作台。
  */
 @GameTestHolder("numen")
@@ -200,7 +200,7 @@ public class AlterGameTests {
     }
 
     /**
-     * 关在泥土小屋里,屋子许可答"要问":把要问的格算能走时挖出去,实际账单里列出挖的每一格与许可给的凭据;
+     * 关在泥土小屋里,屋子许可答"要问":把要问的格算能走时挖出去,路线里列出挖的每一格与许可给的凭据;
      * 要问的格当墙时,结局是"把要问的格算能走才有路"。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)

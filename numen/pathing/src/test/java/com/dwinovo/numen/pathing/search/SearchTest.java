@@ -341,7 +341,7 @@ class SearchTest {
         SearchResult result = search(world, anyModel, START, goal);
         assertTrue(result.arrived());
         assertTrue(result.route().edits().stream().filter(Edit::alters)
-                .allMatch(e -> ((Edit.Dig) e).permit() instanceof Permit.Ask), "账单里带着要问的凭据");
+                .allMatch(e -> ((Edit.Dig) e).permit() instanceof Permit.Ask), "路线里带着要问的凭据");
     }
 
     @Test

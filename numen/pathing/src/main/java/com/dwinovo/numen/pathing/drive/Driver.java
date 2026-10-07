@@ -130,7 +130,7 @@ public final class Driver {
 
     /**
      * @param budget 每次搜索最多展开几个节点
-     * @param seed    先照这条路走(调用方从候选里挑的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
+     * @param seed    先照这条路走(调用方给的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
      * @param passing 路过这个目标:走进去就算到了,不停稳
      */
     public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,

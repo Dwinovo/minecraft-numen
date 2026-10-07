@@ -6,7 +6,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 一步在执行时要对世界做的一件事:挖掉一格、放下一块、开关一扇门、下落时倒一桶水接住自己。规划把它们作为数据交出,
- * 执行的控制器照着做,账单照着记;任何一种走法都可以带上它们。
+ * 执行的控制器照着做;任何一种走法都可以带上它们。
  */
 public sealed interface Edit {
 

@@ -21,12 +21,12 @@ import net.minecraft.world.level.BlockGetter;
  *   <li><b>动作代价</b>——放置、挖掘、起跳、涉水四项罚分。</li>
  * </ol>
  *
- * <p>服主总开关是上限,规格只能在其内收紧;规格里的每一项都要能在账单里看出它起了什么作用。{@link #defaults()} 是
+ * <p>服主总开关是上限,规格只能在其内收紧;规格里的每一项都要能在规划结果里看出它起了什么作用。{@link #defaults()} 是
  * "只走不改"的出厂值,改动走 {@link #edit()}。
  *
  * @param dig                  这一趟可以挖:挖开挡路的格、向下挖;罚分是 {@code breakPenalty}
  * @param place                这一趟可以放方块:垫柱、搭桥、倒水接坠落;罚分是 {@code placeCost}
- * @param consent              许可答"要问"的格算能走:进路线、列进账单,执行到那一格时由宿主问主人;不算就是墙
+ * @param consent              许可答"要问"的格算能走:进路线,执行到那一格时由宿主问主人;不算就是墙
  * @param consentMultiplier    要问的格挖或放的价钱乘几倍:有限,这样的路才搜得到;要贵到长度相当的不用问的路线都胜出
  * @param parkour              可以跑酷:越过一到三格的空隙
  * @param maxFallHeightNoWater 下面没有水时愿意跳下的最大落差;身体快照按血量给出摔得起的上限,这里只能比它更紧

@@ -20,8 +20,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 寻路的门面:一具身体加宿主的端口。规划是查询——{@link #plan} 只搜不走,不占身体、不碰世界,交出路线与预算账;
- * 执行是任务——{@link #drive} 交出一次在走的导航。请求、结局、账单都是数据,
+ * 寻路的门面:一具身体加宿主的端口。规划是查询——{@link #plan} 只搜不走,不占身体、不碰世界,交出路线与预算;
+ * 执行是任务——{@link #drive} 交出一次在走的导航。请求、结局都是数据,
  * 模块里没有给模型或玩家看的话。
  *
  * <p>只在世界所在的线程上调用;搜索在工作线程上跑,读的是派发那一刻在世界线程上拷下的快照。
@@ -75,7 +75,7 @@ public final class Navigator {
         ServerPlayer entity = body.entity();
         PathLog.debug("{} 出发 去 {} {} 预算 {}{} 刻速 {} {}", PathLog.who(entity), request.goal(),
                 PathLog.spec(request.spec()), request.budget(),
-                request.route() != null ? " 先照候选 " + PathLog.route(request.route()) : "",
+                request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Driver(body, ports.terrain(), ports.materials(), ports.threats(),
                 request.goal(), request.spec(), request.budget(), request.route(), request.through()), entity);
