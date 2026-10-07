@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.tools.BlockActionOps;
 import com.dwinovo.numen.tools.Clicks;
+import com.dwinovo.numen.tools.GuiOps;
 import com.dwinovo.numen.tools.SleepOps;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
@@ -132,10 +133,16 @@ public final class UseApi {
     @SeeAlso({"numen.use.block", "numen.use.entity"})
     public static Pending<Clicks.Hit> hit(ServerCall call, Hit args) {
         CellOrEntity target = args.target();
-        return target.cell() != null
-                ? call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
-                : call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, idOf(call, target.entity()), 0, null,
-                        false));
+        if (target.cell() == null) {
+            return call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, idOf(call, target.entity()), 0, null,
+                    false));
+        }
+        // 点一格和右键共用一件活,它交回的类型是 Pressed(Window | Clicked);这里按类型逐种接成 Hit
+        return call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
+                .then(pressed -> switch (pressed) {
+                    case GuiOps.Window window -> window;
+                    case Clicks.Clicked clicked -> clicked;
+                });
     }
 
     /** 点名的那只按运行期编号认;按 UUID 写的(重启后再跑)换成它此刻的编号,不在了照编号交给活,由活如实说它不在。 */

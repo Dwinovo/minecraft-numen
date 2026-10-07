@@ -91,7 +91,7 @@ public class CombatGameTests {
                         companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
                 "this slime does not outreach her, the scene tests nothing");
         float startHealth = slime.getHealth();
-        TaskRecord record = lua(companion, "numen.fight.attack(" + slime.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + slime.getId() + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
@@ -233,7 +233,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,

@@ -27,7 +27,7 @@ import net.minecraft.world.item.Items;
  * -1 = hold until the action self-completes or the task times out.
  * {@code sneak}: hold sneak while pressing ({@code --sneak}).
  */
-public final class InteractAtTaskRecord extends TaskRecord {
+public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Pressed> {
 
     /** Covers walking to the aim. */
     private static final long TIMEOUT_TICKS = 30 * 20;

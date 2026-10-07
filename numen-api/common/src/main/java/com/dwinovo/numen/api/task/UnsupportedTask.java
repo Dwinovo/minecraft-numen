@@ -11,7 +11,7 @@ public final class UnsupportedTask implements Task {
 
     private final String toolName;
 
-    public UnsupportedTask(TaskRecord record) {
+    public UnsupportedTask(TaskRecord<?> record) {
         this.toolName = record.getToolName();
     }
 

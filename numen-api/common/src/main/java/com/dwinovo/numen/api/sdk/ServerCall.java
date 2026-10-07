@@ -136,20 +136,19 @@ public final class ServerCall {
     }
 
     /**
-     * 一件有界的短身体活(几秒内保证做完):这次调用等它做完,不进任务槽、不顶掉手上的活,排在手上那件之上。活交回的值必须是 {@code R};
-     * 失败是它说的那一种。
+     * 一件有界的短身体活(几秒内保证做完):这次调用等它做完,不进任务槽、不顶掉手上的活,排在手上那件之上。活交回的值是
+     * {@code R} 或它的一种({@link TaskRecord} 的类型参数);失败是它说的那一种。
      */
-    public <R> Pending<R> sync(TaskRecord record) {
+    public <R> Pending<R> sync(TaskRecord<? extends R> record) {
         Pending<R> out = Pending.create();
-        TaskDispatch.runSync(her, record, result -> settle(out, result));
+        TaskDispatch.runSync(her, record, result -> settle(out, record, result));
         return out;
     }
 
-    @SuppressWarnings("unchecked")
-    static <R> void settle(Pending<R> out, TaskResult result) {
+    private static <R> void settle(Pending<R> out, TaskRecord<? extends R> record, TaskResult result) {
         if (result.success()) {
             out.report(result.message());
-            out.complete((R) result.value());
+            out.complete(record.valueOf(result));
         } else {
             out.fail(new ApiError(result.kind(), result.message(), result.hint(), result.value()));
         }

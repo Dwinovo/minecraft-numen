@@ -18,12 +18,12 @@ import java.util.function.Consumer;
  */
 final class TaskSlot {
 
-    private final Consumer<TaskRecord> outbox;
+    private final Consumer<TaskRecord<?>> outbox;
 
     private Task task;
-    private TaskRecord record;
+    private TaskRecord<?> record;
 
-    TaskSlot(Consumer<TaskRecord> outbox) {
+    TaskSlot(Consumer<TaskRecord<?>> outbox) {
         this.outbox = outbox;
     }
 
@@ -31,7 +31,7 @@ final class TaskSlot {
         return record == null;
     }
 
-    TaskRecord record() {
+    TaskRecord<?> record() {
         return record;
     }
 
@@ -44,7 +44,7 @@ final class TaskSlot {
      * 放一个新任务进来,{@code runner} 是跑它的那个任务。槽里原来那个按<b>被换掉</b>结算并送结果——不能让它悄悄
      * 消失:模型手上握着它的 tool_call,那条调用要么有结果要么永远悬着。
      */
-    void put(NumenPlayer companion, TaskRecord rec, Task runner) {
+    void put(NumenPlayer companion, TaskRecord<?> rec, Task runner) {
         if (record != null) {
             task.stop(companion, Task.StopReason.REPLACED);
             record.stop(TaskRecord.StopCause.REPLACED);

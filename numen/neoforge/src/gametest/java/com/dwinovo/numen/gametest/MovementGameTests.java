@@ -60,7 +60,7 @@ public class MovementGameTests {
                 "gametest_scout", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
-        TaskRecord record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
@@ -85,7 +85,7 @@ public class MovementGameTests {
         boolean[] stopped = {false};
 
         succeedWhen(helper, () -> {
-            TaskRecord record = walk.task();
+            TaskRecord<?> record = walk.task();
             if (!stopped[0]) {
                 helper.assertTrue(record != null && record.getState() == com.dwinovo.numen.api.task.TaskState.RUNNING,
                         "goto is not running yet");
@@ -132,7 +132,7 @@ public class MovementGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
@@ -678,7 +678,7 @@ public class MovementGameTests {
                     helper.assertTrue(second[0] != null, "the body was not rebuilt");
                 })
                 .thenWaitUntil(() -> {
-                    TaskRecord now = com.dwinovo.numen.api.task.CompanionTickDispatcher.currentTaskFor(uuid);
+                    TaskRecord<?> now = com.dwinovo.numen.api.task.CompanionTickDispatcher.currentTaskFor(uuid);
                     helper.assertTrue(now instanceof com.dwinovo.numen.task.move.FollowTaskRecord f
                                     && pig.getUUID().equals(f.target),
                             "the replayed follow is not after the same pig: " + now);

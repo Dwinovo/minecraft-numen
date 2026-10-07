@@ -23,7 +23,7 @@ import java.util.Objects;
  * 一件多格施工的活:一份摆到世界里的施工图({@link Layout})交给执行器去砌。原语当场执行、按设计或蓝图文件
  * {@code build at},派的都是它。
  */
-public final class BuildTaskRecord extends TaskRecord {
+public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed> {
 
     public final List<Target> targets;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */

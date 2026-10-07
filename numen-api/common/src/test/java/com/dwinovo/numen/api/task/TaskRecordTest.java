@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TaskRecordTest {
 
-    private static final class Fake extends TaskRecord {
+    private static final class Fake extends TaskRecord<Void> {
         Fake(long deadline) {
             super("fake", "call-1", deadline);
         }

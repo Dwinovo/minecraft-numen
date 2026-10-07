@@ -19,7 +19,7 @@ import net.minecraft.world.item.ItemStack;
  * 整叠挪到另一边,只要一部分就放进另一边一格空的或同样东西的格。从容器里拿出来的那一步点下去之前交给权限层,和 {@code gui quick}
  * 一样。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
  */
-public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsTaskRecord> {
+public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsTaskRecord, Integer> {
 
     private final ContainerOps ops = new ContainerOps();
     private int moved;

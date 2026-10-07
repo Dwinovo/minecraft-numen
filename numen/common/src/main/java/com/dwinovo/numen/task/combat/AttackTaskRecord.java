@@ -14,7 +14,7 @@ import java.util.Set;
  * <p>近战与远程曾是两个工具、两份账本,差别只在措辞("defeated/hits" 对 "destroyed/shots"),
  * 为此有三个抽象的词汇钩子。现在只有一个工具,措辞也就只有一套,钩子跟着消失。
  */
-public final class AttackTaskRecord extends TaskRecord {
+public final class AttackTaskRecord extends TaskRecord<Fought> {
 
     public final List<Integer> entityIds;
 

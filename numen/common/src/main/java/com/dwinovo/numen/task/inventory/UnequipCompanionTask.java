@@ -11,7 +11,7 @@ import com.dwinovo.numen.api.task.TaskState;
  * 摘不摘得下、背包放不放得下、腾主手怎么腾都在那里;这里只把结论交进回执。
  * One-tick (all work in {@link #onStart()}).
  */
-public final class UnequipCompanionTask extends AbstractCompanionTask<UnequipTaskRecord> {
+public final class UnequipCompanionTask extends AbstractCompanionTask<UnequipTaskRecord, com.dwinovo.numen.gear.Wardrobe.Change> {
 
     private Wardrobe.Outcome outcome;
 

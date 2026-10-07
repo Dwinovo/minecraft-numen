@@ -581,6 +581,8 @@ public final class LocateApi {                         // 一组:一个公开类
   不占任务槽;`Job<R>` 占身体、进任务槽,受理回活的编号,程序等它的 task_finished;要的样子此刻已经是了(`build.place` 的格都对了)
   是 `Job.done(值)`,不派活。`R` 是 record、枚举、`List`、`Map<String, T>`、Minecraft 的值(`BlockPos`、`Item`、`Block`……)或
   `void`;只有一个字段的结果直接交那个值(`inv.count` 是整数、`work.fish` 是一串字)。
+  活的记录是 `TaskRecord<R>`,`R` 是它成功时交回的值:`call.sync(record)`、`Job.of(record)` 按它定函数的返回类型,对不上编译不过;
+  Numen 的任务基类 `AbstractCompanionTask<记录, R>` 的 `value()` 也按同一个 `R` 写。
 - **客户端函数的约定**(指导,登记时不检查;好写法由评测的分数说话):① 只读查询、不产生副作用——主人的客户端在
   `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
   权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,服务端发 `NumenEventPayload`),不走反向请求;
@@ -657,7 +659,7 @@ public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entiti
 public static Job<Fought> attack(ServerCall call, Attack args) {
     Entity target = call.entity(args.entity());
     AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(), ..., List.of(target.getId()), false);
-    return Job.<Fought>of(record).replayedAs(new Attack(EntityRef.of(target)));
+    return Job.of(record).replayedAs(new Attack(EntityRef.of(target)));
 }
 ```
 

@@ -14,7 +14,7 @@ import com.dwinovo.numen.api.task.TaskState;
  * <p>Nothing is "used" (right-clicked) here: equipping moves an item between the backpack and the
  * body, so it never pours a bucket or throws a snowball.
  */
-public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRecord> {
+public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRecord, com.dwinovo.numen.gear.Wardrobe.Change> {
 
     private Wardrobe.Outcome outcome;
 

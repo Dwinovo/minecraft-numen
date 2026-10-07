@@ -13,7 +13,7 @@ import net.minecraft.world.item.Item;
  * from {@code gear hold}) or a name from {@code <worn>}. Slot names depend on the
  * body (mods add slots), so they are resolved when the task runs, not here.
  */
-public final class EquipTaskRecord extends TaskRecord {
+public final class EquipTaskRecord extends TaskRecord<com.dwinovo.numen.gear.Wardrobe.Change> {
 
     /** 穿脱都是当场的事,期限只防卡死,给得宽一点。{@link UnequipTaskRecord} 用同一个。 */
     static final long TIMEOUT_TICKS = 5 * 20;

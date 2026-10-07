@@ -38,7 +38,7 @@ final class CompanionBrain {
     private static final int HAND_PIN_GRACE_TICKS = 600;
 
     /** 结算完等着送回主人的记录。 */
-    private final Deque<TaskRecord> outbox = new ArrayDeque<>();
+    private final Deque<TaskRecord<?>> outbox = new ArrayDeque<>();
 
     /** 回合挂着等的同步动作。 */
     final TaskSlot sync = new TaskSlot(outbox::addLast);
@@ -120,7 +120,7 @@ final class CompanionBrain {
      * 往当前任务槽派一件新活({@code runner} 是跑它的任务,准备过的就是准备它的那一个)——派活只有这一个入口。重启前留下、
      * 还没接回来的那件由它顶替,和槽里原有的活被换掉一样告诉她。
      */
-    void assign(NumenPlayer companion, TaskRecord record, Task runner) {
+    void assign(NumenPlayer companion, TaskRecord<?> record, Task runner) {
         TaskPersistence.LeftOver superseded = takeLeftOver();
         if (superseded != null) {
             TaskPersistence.superseded(companion, superseded);
@@ -197,7 +197,7 @@ final class CompanionBrain {
      * 同一条消息。客户端不推断,只照抄——它看不见重放起来的活。
      */
     private void syncCurrentTask(NumenPlayer companion) {
-        TaskRecord rec = current.record();
+        TaskRecord<?> rec = current.record();
         String id = rec == null ? "" : rec.publicId();
         String desc = rec == null ? "" : rec.describe();
         ticksSinceTaskPush++;
@@ -303,13 +303,13 @@ final class CompanionBrain {
     }
 
     /** 这次调用派下来的那件活:两个槽里在跑的,或者已经结算、还排着没送出去的;都没有是 null。 */
-    TaskRecord recordOf(String toolCallId) {
-        for (TaskRecord r : new TaskRecord[] {sync.record(), current.record()}) {
+    TaskRecord<?> recordOf(String toolCallId) {
+        for (TaskRecord<?> r : new TaskRecord<?>[] {sync.record(), current.record()}) {
             if (r != null && toolCallId.equals(r.getToolCallId())) {
                 return r;
             }
         }
-        for (TaskRecord r : outbox) {
+        for (TaskRecord<?> r : outbox) {
             if (toolCallId.equals(r.getToolCallId())) {
                 return r;
             }
@@ -327,7 +327,7 @@ final class CompanionBrain {
      */
     private void shipResults(NumenPlayer companion) {
         while (!outbox.isEmpty()) {
-            TaskRecord rec = outbox.pollFirst();
+            TaskRecord<?> rec = outbox.pollFirst();
             TaskResult result = rec.getResult();
             if (rec.isAsync()) {
                 String status = switch (rec.getState()) {

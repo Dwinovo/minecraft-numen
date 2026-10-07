@@ -51,7 +51,7 @@ import java.util.Optional;
  * {@link BuildFixtures},演出在 {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder},收不了尾时的缺格清单在
  * {@link BuildOutstanding}。
  */
-public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord> {
+public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord, BuildCompanionTask.Placed> {
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}

@@ -13,7 +13,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
  * 在她打开的界面里搬一次东西。这一步要是从容器里拿东西({@link ContainerOps#taking}),点下去之前交给权限层:放行就搬,
  * 要等主人就挂在这一步上,拒绝就不搬并带上理由。其余一刻就完。
  */
-public final class TransferCompanionTask extends AbstractCompanionTask<TransferTaskRecord> {
+public final class TransferCompanionTask extends AbstractCompanionTask<TransferTaskRecord, Void> {
 
     private final ContainerOps ops = new ContainerOps();
     private String doneMessage = "done";

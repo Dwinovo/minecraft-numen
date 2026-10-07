@@ -27,11 +27,15 @@ import java.util.function.Consumer;
  * is enqueued, so the happens-before is established by the executor's queue —
  * no fields need to be {@code volatile}.
  *
+ * <h2>交回的值</h2>
+ * {@code V} 是这件活成功时交给程序的值的类型。{@link ServerCall#sync}、{@code Job.of} 按它定函数的返回类型,所以函数声明的
+ * 和活交回的对不上时编译不过。干这件活的任务也按同一个 {@code V} 写值(Numen 的任务基类 {@code value()} 返回 {@code V})。
+ *
  * <h2>Why not a record (Java {@code record} keyword)</h2>
  * State transitions ({@link TaskState}, {@link TaskResult}) need to be
  * mutable. Subclass-style {@code class} fits.
  */
-public abstract class TaskRecord {
+public abstract class TaskRecord<V> {
 
     private static final AtomicLong ID_SOURCE = new AtomicLong();
 
@@ -101,6 +105,15 @@ public abstract class TaskRecord {
     public final long getDeadlineGameTime() { return deadlineGameTime; }
     public final TaskState getState() { return state; }
     public final TaskResult getResult() { return result; }
+
+    /**
+     * 这件活成功结算的值。{@link TaskResult} 装的是各种活的值,类型在这里还给它这件活声明的 {@code V}:写这个值的任务和读它的
+     * 函数都按同一个 {@code V} 编译过,这一处只是把两头接上。
+     */
+    @SuppressWarnings("unchecked")
+    public final V valueOf(TaskResult done) {
+        return (V) done.value();
+    }
 
     /** Push the deadline later (never earlier). Tick-thread only, like all reads. */
     public final void extendDeadlineTo(long gameTime) {

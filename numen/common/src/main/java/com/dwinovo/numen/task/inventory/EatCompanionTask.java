@@ -25,7 +25,7 @@ import java.util.List;
  * with a live {@code FoodData}, so eating works exactly as it does for a real player (full hunger →
  * it simply won't eat, which we detect and report).
  */
-public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRecord> {
+public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRecord, EatCompanionTask.Ate> {
 
     private Interaction eat;
     private int beforeCount;

@@ -63,7 +63,7 @@ import java.util.Optional;
  * 身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走——所以结论只取决于世界和问法:
  * 找到的就是环内最近的,找不到就是环内没有,不会因为机器慢而变成"搜到一半超时"。
  */
-public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord> {
+public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord, Located> {
 
     /**
      * Search radius in placement-region RINGS, exactly vanilla /locate's

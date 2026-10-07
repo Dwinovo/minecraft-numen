@@ -36,7 +36,7 @@ import java.util.List;
  * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code numen.work.dig} 挖掉它或从另一面点。The mouse model is the two record fields
  * {@code button} (left/right) × {@code holdTicks} (tap/hold).
  */
-public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord> {
+public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord, com.dwinovo.numen.tools.Clicks.Pressed> {
 
     private Interaction interaction;
     /** 按键前的世界快照,收尾时对账出"真发生了什么"(见 {@link PressReceipt})。 */

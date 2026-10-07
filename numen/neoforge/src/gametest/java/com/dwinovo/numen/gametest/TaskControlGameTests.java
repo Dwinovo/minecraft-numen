@@ -78,7 +78,7 @@ public class TaskControlGameTests {
     }
 
     /** 夹具的活:站着数够刻数就算干完。名字与调用 id 取自派它的那次调用。 */
-    private static final class LingerRecord extends TaskRecord {
+    private static final class LingerRecord extends TaskRecord<Void> {
         final int ticks;
 
         LingerRecord(ServerCall call, int ticks) {
@@ -333,12 +333,12 @@ public class TaskControlGameTests {
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventOutbox outbox = EventOutbox.get(server);
-        AtomicReference<TaskRecord> restored = new AtomicReference<>();
+        AtomicReference<TaskRecord<?>> restored = new AtomicReference<>();
 
         steps(helper)
                 .thenWaitUntil(() -> {
                     helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
-                    TaskRecord now = CompanionTickDispatcher.currentTaskFor(uuid);
+                    TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(uuid);
                     helper.assertTrue(now != null && now != before.task(), "the task was not replayed");
                     restored.set(now);
                 })
@@ -502,7 +502,7 @@ public class TaskControlGameTests {
         Round round = round(helper, companion, follow, look);
         boolean[] following = new boolean[1];
         helper.onEachTick(() -> {
-            TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+            TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
             following[0] |= now != null && now.getToolName().equals("numen.move.follow");
         });
 
@@ -543,7 +543,7 @@ public class TaskControlGameTests {
                                         && result.contains("your owner spoke") && result.contains("keeps running"),
                                 "a call left unrun does not say why: " + result);
                     }
-                    TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+                    TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.go"),
                             "the walk is no longer running: " + now);
                     outbox.forget(companion.getUUID());
@@ -623,7 +623,7 @@ public class TaskControlGameTests {
                     helper.assertTrue(reply.contains("without changing terrain") && reply.contains("costs = {dig = true, place = true}")
                                     && !reply.contains("task_id"),
                             "the refusal does not say why and what to change, or carries a task id: " + reply);
-                    TaskRecord inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+                    TaskRecord<?> inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
                     helper.assertTrue(inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,
                             "the refused call interrupted the work in hand: " + inHand);
                 })

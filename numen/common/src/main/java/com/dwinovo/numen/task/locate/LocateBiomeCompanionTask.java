@@ -52,7 +52,7 @@ import java.util.function.Predicate;
  * <p>收工看环数,不看时间:身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走,
  * 机器慢只是答案晚几刻,不会变成"搜到一半超时"。
  */
-public final class LocateBiomeCompanionTask extends AbstractCompanionTask<LocateBiomeTaskRecord> {
+public final class LocateBiomeCompanionTask extends AbstractCompanionTask<LocateBiomeTaskRecord, Located> {
 
     /** Sample grid pitch — NC's default (16 × biome size 4). Vanilla /locate uses 32. */
     private static final int SAMPLE_STEP_BLOCKS = 64;

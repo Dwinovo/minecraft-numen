@@ -17,7 +17,7 @@ import java.util.UUID;
  * <p>跟着走<b>从不改地形</b>(出厂路线规格,不挖不放,没有开关):跟不上时任务以失败收场,说要改几格才过得去,
  * 模型先 {@code numen.move.to} 一条开路再接着跟。
  */
-public final class FollowTaskRecord extends TaskRecord {
+public final class FollowTaskRecord extends TaskRecord<FollowCompanionTask.Followed> {
 
     /** 跟到这么近就算到位(米)。 */
     public final double keepWithin;

@@ -47,7 +47,7 @@ import net.minecraft.world.phys.Vec3;
  * Arrival is the goal's own membership, decided by the pathing module. Results always echo the ACTUAL position reached
  * (and the real ground height) so the model learns the terrain.
  */
-public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskRecord> {
+public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskRecord, MoveToCompanionTask.Walked> {
 
     private static final long TICKS_PER_BLOCK = 20;
     private static final long MAX_EXTRA_TICKS = 5 * 60 * 20;

@@ -30,17 +30,17 @@ public final class TaskFactory {
 
     /** Builds the {@link Task} that runs a record of the registered type. */
     @FunctionalInterface
-    public interface Runner<R extends TaskRecord> {
+    public interface Runner<R extends TaskRecord<?>> {
         Task create(NumenPlayer player, R record);
     }
 
-    private static final Map<Class<? extends TaskRecord>, Runner<? extends TaskRecord>> RUNNERS =
+    private static final Map<Class<? extends TaskRecord<?>>, Runner<? extends TaskRecord<?>>> RUNNERS =
             new ConcurrentHashMap<>();
 
     private TaskFactory() {}
 
     /** Register the runner for a concrete record type. Tick-thread + init safe. */
-    public static <R extends TaskRecord> void register(Class<R> type, Runner<R> runner) {
+    public static <R extends TaskRecord<?>> void register(Class<R> type, Runner<R> runner) {
         RUNNERS.put(type, runner);
     }
 
@@ -50,8 +50,8 @@ public final class TaskFactory {
     }
 
     @SuppressWarnings("unchecked")
-    public static Task create(NumenPlayer player, TaskRecord record) {
-        Runner<TaskRecord> runner = (Runner<TaskRecord>) RUNNERS.get(record.getClass());
+    public static Task create(NumenPlayer player, TaskRecord<?> record) {
+        Runner<TaskRecord<?>> runner = (Runner<TaskRecord<?>>) RUNNERS.get(record.getClass());
         return runner != null ? runner.create(player, record) : new UnsupportedTask(record);
     }
 }

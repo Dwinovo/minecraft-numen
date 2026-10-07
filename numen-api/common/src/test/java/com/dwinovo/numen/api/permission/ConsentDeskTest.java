@@ -42,7 +42,7 @@ class ConsentDeskTest {
         @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
     }
 
-    private static final class Task extends TaskRecord {
+    private static final class Task extends TaskRecord<Void> {
         Task() {
             super("mine", "call", Long.MAX_VALUE / 4);
         }

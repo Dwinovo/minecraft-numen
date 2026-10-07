@@ -50,7 +50,7 @@ import java.util.Set;
  * <p>受理 = 此刻真能开始:受理之前({@link #preparation})判有没有手够得着、挖得成、工具收得到、许挖的格;一格都没有就当场拒,说清楚
  * 够不着的在哪、下一步怎么写,没有任务编号。
  */
-public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord> {
+public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord, DigCompanionTask.Dug> {
 
     /**
      * 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable}:站位说够得着,可射线始终成不了(挡在中间的挖不得、瞄准量化)。

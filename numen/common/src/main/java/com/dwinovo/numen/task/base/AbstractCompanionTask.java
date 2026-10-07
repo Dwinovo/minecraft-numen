@@ -68,8 +68,9 @@ import java.util.List;
  *
  * @param <R> the concrete {@link TaskRecord} subtype carrying this task's typed
  *            input fields.
+ * @param <V> 成功时交给程序的值的类型,就是 {@code R} 这个记录声明的类型参数;{@link #value()} 按它写。
  */
-public abstract class AbstractCompanionTask<R extends TaskRecord>
+public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         implements Task {
 
     /** The body this task drives. */
@@ -457,7 +458,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * 交给程序的值:类型是派它的 API 函数声明的返回类型({@code Job<R>} 的 {@code R});失败时它是错误值的 {@code data}(做到了哪)。
      * 不交回值是 null(默认)。
      */
-    protected Object value() {
+    protected V value() {
         return null;
     }
 
@@ -581,7 +582,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         if (child != c) {
             child = c;
             childStarted = false;
-            if (c instanceof AbstractCompanionTask<?> a) {
+            if (c instanceof AbstractCompanionTask<?, ?> a) {
                 a.consentScope = scope();
             }
         }
@@ -590,7 +591,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             childStarted = true;
         }
         TaskState st = child.tick(player);
-        if (!st.isTerminal() && child instanceof AbstractCompanionTask<?> a
+        if (!st.isTerminal() && child instanceof AbstractCompanionTask<?, ?> a
                 && player.level().getGameTime() >= a.r.getDeadlineGameTime()) {
             st = TaskState.TIMEOUT;
         }
@@ -602,7 +603,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         Task ended = child;
         child = null;
         childStarted = false;
-        if (!(ended instanceof AbstractCompanionTask<?> a)) {
+        if (!(ended instanceof AbstractCompanionTask<?, ?> a)) {
             return ended.result(st);
         }
         a.cleanup();

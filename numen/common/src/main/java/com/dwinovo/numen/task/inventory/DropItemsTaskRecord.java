@@ -8,7 +8,7 @@ import net.minecraft.world.item.Item;
  * Typed task descriptor for {@code inv drop}: toss {@code count} of
  * {@code item} out of the entity's inventory onto the ground.
  */
-public final class DropItemsTaskRecord extends TaskRecord {
+public final class DropItemsTaskRecord extends TaskRecord<DropCompanionTask.Dropped> {
 
     private static final long TIMEOUT_TICKS = 10 * 20;
 

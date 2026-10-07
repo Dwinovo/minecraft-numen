@@ -28,7 +28,7 @@ import java.util.List;
  * {@code numen.move.to} to copy. LEFT+hold repeats the native attack until the hold ends, the target dies, or the task
  * times out.
  */
-public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord> {
+public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.tools.Clicks.EntityClicked> {
 
     private Entity entity;
     private Interaction interaction;

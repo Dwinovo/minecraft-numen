@@ -71,7 +71,7 @@ public final class CompanionTickDispatcher {
     }
 
     /** 换掉她现在在做的事(首次使用时建脑),见 {@link CompanionBrain#assign}。 */
-    static void assign(NumenPlayer companion, TaskRecord record, Task runner) {
+    static void assign(NumenPlayer companion, TaskRecord<?> record, Task runner) {
         brainFor(companion.getUUID()).assign(companion, record, runner);
     }
 
@@ -197,7 +197,7 @@ public final class CompanionTickDispatcher {
     }
 
     /** 她现在在做的那件事,null = 槽空(她站着)。task status 用。 */
-    public static TaskRecord currentTaskFor(UUID companionUuid) {
+    public static TaskRecord<?> currentTaskFor(UUID companionUuid) {
         CompanionBrain brain = BRAINS.get(companionUuid);
         return brain == null ? null : brain.current.record();
     }
@@ -207,7 +207,7 @@ public final class CompanionTickDispatcher {
      * 结算、结果还没送出去的,都认得出(一步就干完的活受理那一刻就结算离槽了)。查询类工具不派活、派的时候
      * 被拒、或者结果已经送走,都是 null。
      */
-    public static TaskRecord taskOf(UUID companionUuid, String toolCallId) {
+    public static TaskRecord<?> taskOf(UUID companionUuid, String toolCallId) {
         CompanionBrain brain = BRAINS.get(companionUuid);
         return brain == null ? null : brain.recordOf(toolCallId);
     }
@@ -217,10 +217,10 @@ public final class CompanionTickDispatcher {
      * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
      * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。
      */
-    public static TaskRecord stopActive(NumenPlayer player, TaskRecord.StopCause cause) {
+    public static TaskRecord<?> stopActive(NumenPlayer player, TaskRecord.StopCause cause) {
         CompanionBrain brain = BRAINS.get(player.getUUID());
         if (brain == null) return null;
-        TaskRecord target = brain.current.record();
+        TaskRecord<?> target = brain.current.record();
         if (target == null) return null;
         brain.current.cancel(cause);
         TaskSessionHooks.fireSessionEnd(player);

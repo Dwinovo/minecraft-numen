@@ -58,7 +58,7 @@ import java.util.List;
  * 能打到它而不触发。点着了再退也来得及——引信 30 刻,而爆炸伤害到 6 格就归零,从 3 格退出去
  * 疾跑只要十来刻。末影水晶不适用:它没有引信,一打就炸。详见 {@link Menace}。
  */
-public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord> {
+public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord, Fought> {
 
     // 弹道常数:箭的物理与两种发射器的初速。
     private static final double MAX_FIRING_RANGE = 32.0;

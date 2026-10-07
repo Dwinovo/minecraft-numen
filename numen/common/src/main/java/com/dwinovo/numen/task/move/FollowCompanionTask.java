@@ -51,7 +51,7 @@ import java.util.List;
  * <p><b>目标跟着挪</b>:他走出上次定下的落脚点两格外,就把新目标交给在走的这一趟({@link Trip#retarget}),
  * 在走的路还算数就照走,不算数才重搜——挪多远才值得换在这里定。
  */
-public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {
+public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord, FollowCompanionTask.Followed> {
 
     /** 跟到之后,他比 {@code keepWithin} 多走出这么远才重新起步,免得在临界距离上抖着走走停停。 */
     private static final double RESUME_MARGIN = 2.0;

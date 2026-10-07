@@ -35,7 +35,7 @@ import java.util.List;
  * 咬钩,就如实失败;再抛一竿、钓几条是程序里一圈一圈调它。收线时原版把战果甩向她,落在半路的留在地上,{@code numen.work.collect}
  * 去捡;它不去追。
  */
-public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord> {
+public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord, List<String>> {
 
     private enum Phase { PREPARE, AIM, WAIT }
 

@@ -10,7 +10,7 @@ import net.minecraft.world.item.Item;
  * <p>按 {@link #slot}(一个槽名,或 {@code armor} 指四件甲)摘,或按 {@link #item} 从戴着它的格子摘;
  * 两个都给就只摘这些槽里戴着这件的。槽名随身体而定,执行时才解析。
  */
-public final class UnequipTaskRecord extends TaskRecord {
+public final class UnequipTaskRecord extends TaskRecord<com.dwinovo.numen.gear.Wardrobe.Change> {
 
     /** 槽名;{@code null} = 按 {@link #item} 找。 */
     public final String slot;

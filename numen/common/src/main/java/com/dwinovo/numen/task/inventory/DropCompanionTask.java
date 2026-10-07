@@ -17,7 +17,7 @@ import java.util.List;
  * {@code inv drop} on the player body — toss items forward, natively. One tick when the permission
  * layer allows it; otherwise the call waits for the owner's answer.
  */
-public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTaskRecord> {
+public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTaskRecord, DropCompanionTask.Dropped> {
 
     private int dropped;
     private String doneMessage = "done";

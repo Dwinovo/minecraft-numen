@@ -6,7 +6,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
 /**
  * {@code time wait}:站着等这么多刻。期限比等的时长多一点,只防卡死。
  */
-public final class WaitTaskRecord extends TaskRecord {
+public final class WaitTaskRecord extends TaskRecord<Double> {
 
     /** 等完的那一刻(主世界游戏刻,与身体所在维度同一个钟)。 */
     public final long until;

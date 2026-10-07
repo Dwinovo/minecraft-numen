@@ -104,8 +104,8 @@ public class BuildGameTests {
         }
 
         /** 各段里调 {@code function} 派下的活,按先后。 */
-        List<com.dwinovo.numen.api.task.TaskRecord> tasks(String function) {
-            List<com.dwinovo.numen.api.task.TaskRecord> out = new ArrayList<>();
+        List<com.dwinovo.numen.api.task.TaskRecord<?>> tasks(String function) {
+            List<com.dwinovo.numen.api.task.TaskRecord<?>> out = new ArrayList<>();
             runs.forEach(run -> out.addAll(run.tasks(function)));
             return out;
         }
@@ -2279,7 +2279,7 @@ public class BuildGameTests {
         steps(helper).thenWaitUntil(() -> helper.assertTrue(raise.done(), "numen.build.raise has not finished")).thenExecute(() -> {
             helper.assertTrue(raise.last().ranToTheEnd(), "numen.build.raise failed: " + raise.last().receipt());
             // 落定在最后那一次 numen.build.place 收尾时:它盖完了整栋,世界落定一次,回执说落掉几格
-            List<com.dwinovo.numen.api.task.TaskRecord> ats = raise.tasks("numen.build.place");
+            List<com.dwinovo.numen.api.task.TaskRecord<?>> ats = raise.tasks("numen.build.place");
             BuildTaskRecord record = (BuildTaskRecord) ats.get(ats.size() - 1);
             // 契约不是"一格不差",是"一格不差,或者说清楚差在哪":建完世界要落定一次
             // (站不住的掉、形状由邻居定的重算),对不上的格数必须<b>正好等于</b>回执报的那个数。

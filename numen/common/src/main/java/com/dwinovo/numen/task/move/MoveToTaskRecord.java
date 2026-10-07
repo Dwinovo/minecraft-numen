@@ -10,7 +10,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
  * in memory; it is not saved, so a restart has nothing to walk and the task ends saying so. The deadline is handled by
  * the base class.
  */
-public final class MoveToTaskRecord extends TaskRecord {
+public final class MoveToTaskRecord extends TaskRecord<MoveToCompanionTask.Walked> {
 
     /** 基础期限:30 秒,出发后按路程再往后推(见 {@code MoveToCompanionTask})。 */
     private static final long BUDGET_TICKS = 30 * 20;

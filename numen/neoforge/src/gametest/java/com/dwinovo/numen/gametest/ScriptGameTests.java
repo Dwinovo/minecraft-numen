@@ -195,7 +195,7 @@ public class ScriptGameTests {
                     String msg = message(round, script);
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
-                    TaskRecord now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
+                    TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.go"),
                             "the walk is no longer running: " + now);
                     outbox.forget(her.getUUID());

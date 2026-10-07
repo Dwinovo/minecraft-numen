@@ -153,7 +153,7 @@ public class PermissionGameTests {
         int[] requests = new int[1];
 
         succeedWhen(helper, () -> {
-            TaskRecord record = walk.task();
+            TaskRecord<?> record = walk.task();
             if (!answered[0]) {
                 helper.assertTrue(record != null, "the walk has not set off");
                 var pending = desk(companion).pending();
@@ -208,7 +208,7 @@ public class PermissionGameTests {
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
-            TaskRecord record = walk.task();
+            TaskRecord<?> record = walk.task();
             if (!answered[0]) {
                 var pending = desk(companion).pending();
                 helper.assertTrue(pending != null, "no consent request at the wall");
@@ -652,7 +652,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};

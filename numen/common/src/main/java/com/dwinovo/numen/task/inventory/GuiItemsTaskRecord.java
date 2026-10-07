@@ -11,7 +11,7 @@ import net.minecraft.world.item.Item;
  *
  * @see GuiItemsCompanionTask
  */
-public final class GuiItemsTaskRecord extends TaskRecord {
+public final class GuiItemsTaskRecord extends TaskRecord<Integer> {
 
     public final Item item;
     /** 搬几件;null 是这一种全搬。 */

@@ -21,8 +21,11 @@ public final class Clicks {
     /** 右键一格({@code numen.use.block})的结果:打开的界面,或点了什么、变了什么。 */
     public sealed interface Pressed permits GuiOps.Window, Clicked {}
 
-    /** 左键一下({@code numen.use.hit})的结果:点一格的,或点一只实体的。 */
-    public sealed interface Hit permits Clicked, EntityClicked {}
+    /**
+     * 左键一下({@code numen.use.hit})的结果:点一格的,或点一只实体的。点一格的和右键共用一件活,它的值类型是 {@link Pressed},
+     * 所以界面也在这里(左键不会打开界面,但类型上不排除)。
+     */
+    public sealed interface Hit permits GuiOps.Window, Clicked, EntityClicked {}
 
     /** 点一格(或朝前方)的结果。 */
     @Doc("What a click did.")

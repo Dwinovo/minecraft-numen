@@ -16,8 +16,9 @@ import net.minecraft.core.BlockPos;
  * script's step, not this task's.
  *
  * @param <R> the concrete {@link TaskRecord} subtype for this task.
+ * @param <V> the value it hands the script on success (what {@code R} declares).
  */
-public abstract class InReachTask<R extends TaskRecord> extends AbstractCompanionTask<R> {
+public abstract class InReachTask<R extends TaskRecord<V>, V> extends AbstractCompanionTask<R, V> {
 
     protected InReachTask(NumenPlayer player, R record) {
         super(player, record);

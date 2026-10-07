@@ -23,7 +23,7 @@ import java.util.Map;
  *
  * <p>记录里带着格子;点名 Block 的格附带当时的方块,点名 Pos 的不带。
  */
-public final class DigTaskRecord extends TaskRecord {
+public final class DigTaskRecord extends TaskRecord<DigCompanionTask.Dug> {
 
     /**
      * 挡在前面的格清不清得掉按这份规格问:天然地形可以挖开,要主人同意的、规则不许的不挖(不问,如实说是哪一格、哪条规则)。

@@ -202,7 +202,7 @@ public final class Dispatcher {
      * (活换过参数的,是换过的那一份)。
      */
     private static void accept(ApiFunction fn, Job<?> job, NumenPlayer her, Record args, Consumer<String> reply) {
-        TaskRecord record = job.record();
+        TaskRecord<?> record = job.record();
         if (record == null) {
             reply.accept(value(fn, job.done()).toString());
             return;

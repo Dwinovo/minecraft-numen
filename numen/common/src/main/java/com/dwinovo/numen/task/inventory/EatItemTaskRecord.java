@@ -10,7 +10,7 @@ import net.minecraft.world.item.Item;
  * body's own held-use path), so hunger + saturation + consume effects apply
  * exactly as they do for a real player when the chew completes.
  */
-public final class EatItemTaskRecord extends TaskRecord {
+public final class EatItemTaskRecord extends TaskRecord<EatCompanionTask.Ate> {
 
     /** Generous — covers any food's eat duration (most ~1.6s) plus buffer. */
     private static final long TIMEOUT_TICKS = 15 * 20;

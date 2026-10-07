@@ -10,24 +10,24 @@ import com.dwinovo.numen.api.task.TaskRecord;
  * return Job.of(new AttackTaskRecord(call, ...)).replayedAs(new Attack(EntityRef.of(target)));
  * }</pre>
  *
- * <p>活收尾时交回的值({@code TaskResult} 的值)必须是 {@code R}:派发按这个函数的返回类型把它写成脚本的值。
+ * <p>活是 {@code TaskRecord<R>}(或交回 {@code R} 的一种的):它收尾时交回的值是 {@code R},派发按这个函数的返回类型把它写成脚本的值。
  *
  * @param <R> 收尾时的值
  */
 public final class Job<R> {
 
-    private final TaskRecord record;
+    private final TaskRecord<? extends R> record;
     private final Record replay;
     private final R done;
 
-    private Job(TaskRecord record, Record replay, R done) {
+    private Job(TaskRecord<? extends R> record, Record replay, R done) {
         this.record = record;
         this.replay = replay;
         this.done = done;
     }
 
     /** 这件活。 */
-    public static <R> Job<R> of(TaskRecord record) {
+    public static <R> Job<R> of(TaskRecord<? extends R> record) {
         return new Job<>(record, null, null);
     }
 
@@ -47,7 +47,7 @@ public final class Job<R> {
     }
 
     /** 这件活;{@link #done} 的是 null。 */
-    TaskRecord record() {
+    TaskRecord<? extends R> record() {
         return record;
     }
 

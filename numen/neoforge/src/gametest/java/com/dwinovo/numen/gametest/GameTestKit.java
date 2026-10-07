@@ -374,7 +374,7 @@ public final class GameTestKit {
         }
 
         /** 收场那一步派下的活;还没收场或那一步当场被拒是 null。 */
-        TaskRecord task() {
+        TaskRecord<?> task() {
             return last == null ? null : last.task();
         }
     }
@@ -933,7 +933,7 @@ public final class GameTestKit {
             final String id;
             final String function;
             final AtomicReference<String> replied = new AtomicReference<>();
-            final AtomicReference<TaskRecord> taken = new AtomicReference<>();
+            final AtomicReference<TaskRecord<?>> taken = new AtomicReference<>();
 
             private Call(String id, String function) {
                 this.id = id;
@@ -1015,19 +1015,19 @@ public final class GameTestKit {
 
         /** 最后一次调用派下去的那件活收尾时的值(它的函数声明的返回类型);还没收尾是 null。 */
         <T> T result(Class<T> type) {
-            TaskRecord task = task();
+            TaskRecord<?> task = task();
             return task == null || task.getResult() == null ? null : type.cast(task.getResult().value());
         }
 
         /** 最后一次调用派下去的那件活;还没回执、或没派活是 null。 */
-        TaskRecord task() {
+        TaskRecord<?> task() {
             Call last = last();
             return last == null ? null : last.taken.get();
         }
 
         /** 每次调用 {@code function} 派下去的活,按先后;没派活的那几次不在里面。 */
-        List<TaskRecord> tasks(String function) {
-            List<TaskRecord> out = new ArrayList<>();
+        List<TaskRecord<?>> tasks(String function) {
+            List<TaskRecord<?>> out = new ArrayList<>();
             for (Call call : calls) {
                 if (call.function.equals(function) && call.taken.get() != null) {
                     out.add(call.taken.get());
@@ -1083,7 +1083,7 @@ public final class GameTestKit {
          * 最后一次调用派下的那件活收尾了。跟随这类常驻的活不拦着程序:程序早跑完了,活还在跑——问活本身有没有结论看这里。
          */
         boolean ended() {
-            TaskRecord task = task();
+            TaskRecord<?> task = task();
             return task != null && task.getResult() != null;
         }
 
@@ -1102,7 +1102,7 @@ public final class GameTestKit {
                 return null;
             }
             if (p.job() != null) {
-                TaskRecord task = task();
+                TaskRecord<?> task = task();
                 return task == null || task.getResult() == null ? null : task.getResult().message();
             }
             if (!p.ok()) {
@@ -1114,7 +1114,7 @@ public final class GameTestKit {
         /** 失败的种类({@code out_of_reach}…):受理了活的是收尾结果的,别的是回执里的;成功或还没结论是 null。 */
         String kind() {
             if (accepted()) {
-                TaskRecord task = task();
+                TaskRecord<?> task = task();
                 return task == null || task.getResult() == null || task.getResult().kind() == null ? null
                         : task.getResult().kind().wire();
             }
@@ -1124,7 +1124,7 @@ public final class GameTestKit {
         /** 失败时能照抄的下一步,取法同 {@link #kind};没有是 null。 */
         String hint() {
             if (accepted()) {
-                TaskRecord task = task();
+                TaskRecord<?> task = task();
                 return task == null || task.getResult() == null ? null : task.getResult().hint();
             }
             return failure("hint");
@@ -1144,7 +1144,7 @@ public final class GameTestKit {
         /** 结论是成功:受理了活的看收尾,别的看回执。 */
         boolean succeeded() {
             if (accepted()) {
-                TaskRecord task = task();
+                TaskRecord<?> task = task();
                 return task != null && task.getResult() != null && task.getResult().success();
             }
             ApiReply.Parsed p = parsed();

@@ -6,7 +6,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 
 /** {@code mynav.nav.go} 派下来的那件活:走去哪一格。 */
-final class GoRecord extends TaskRecord {
+final class GoRecord extends TaskRecord<NavApi.Arrived> {
 
     /** 一分钟走不到就当超时。 */
     private static final int DEADLINE_TICKS = 60 * 20;

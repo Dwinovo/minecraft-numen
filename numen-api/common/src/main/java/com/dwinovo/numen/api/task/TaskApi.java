@@ -59,7 +59,7 @@ public final class TaskApi {
     public static Status status(ServerCall call) {
         NumenPlayer companion = call.her();
         long now = companion.level().getGameTime();
-        TaskRecord rec = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+        TaskRecord<?> rec = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
         List<Timer> timers = timers(companion, now);
         if (rec == null) {
             return new Status(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
@@ -93,7 +93,7 @@ public final class TaskApi {
         String wanted = args.taskId().map(String::strip).filter(s -> !s.isEmpty()).orElse(null);
         MinecraftServer server = companion.level().getServer();
         long now = companion.level().getGameTime();
-        TaskRecord active = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+        TaskRecord<?> active = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
         // 指名道姓的表:先在表里找,找到就撤
         if (wanted != null && server != null && TimerRegistry.get(server).cancel(companion.getUUID(), wanted)) {
             return new Stopped(Optional.empty(), Optional.of(wanted));

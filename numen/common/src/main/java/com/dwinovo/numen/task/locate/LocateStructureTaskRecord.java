@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
  * tag ({@code #minecraft:village}). Resolution happens server-side in the
  * goal, where the registry lives.
  */
-public final class LocateStructureTaskRecord extends TaskRecord {
+public final class LocateStructureTaskRecord extends TaskRecord<Located> {
 
     /** Raw structure argument as the LLM gave it: an id, or a {@code #}-prefixed tag. */
     public final String structure;

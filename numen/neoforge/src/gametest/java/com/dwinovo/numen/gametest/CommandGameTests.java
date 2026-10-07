@@ -135,7 +135,7 @@ public class CommandGameTests {
     }
 
     /** 夹具的短活:站着数够刻数就干完。名字与调用 id 取自派它的那次调用。 */
-    private static final class HoldRecord extends TaskRecord {
+    private static final class HoldRecord extends TaskRecord<Void> {
         final int ticks;
 
         HoldRecord(ServerCall call, int ticks) {

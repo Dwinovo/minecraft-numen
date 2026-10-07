@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
  * ({@code #minecraft:is_forest}). Resolution happens server-side in the goal,
  * where the registry lives.
  */
-public final class LocateBiomeTaskRecord extends TaskRecord {
+public final class LocateBiomeTaskRecord extends TaskRecord<Located> {
 
     /** Raw biome argument as the LLM gave it: an id, or a {@code #}-prefixed tag. */
     public final String biome;

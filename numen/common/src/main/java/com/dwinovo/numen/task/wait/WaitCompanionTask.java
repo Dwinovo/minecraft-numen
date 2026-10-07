@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.TaskState;
  * {@code time wait} on the body: stand where she is, hands off the keys, until the time is up. It holds the task slot
  * like any other job, so the owner's stop or a new job ends it early, and the result says how long she waited.
  */
-public final class WaitCompanionTask extends AbstractCompanionTask<WaitTaskRecord> {
+public final class WaitCompanionTask extends AbstractCompanionTask<WaitTaskRecord, Double> {
 
     private long startedAt;
 
