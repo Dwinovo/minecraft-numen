@@ -11,7 +11,7 @@
 ![QQ](https://img.shields.io/badge/QQ%E7%BE%A4-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)
 [![Discord](https://img.shields.io/badge/Discord-%E5%8A%A0%E5%85%A5-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/MDsCKtemJ)
 
-[**网站**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题)
+[**官网**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题)
 
 <img src="assets/branding/numen-hero-2560.webp" alt="Numen 言出法随" width="100%">
 
@@ -19,7 +19,7 @@
 
 言出法随是一个**运行在 Minecraft 内部的具身智能体**，*作为模组直接存在于游戏之中*，它能够不断探索 Minecraft 世界，**自主决策并采取行动完成任务**。
 
-详情请见[网站](https://numen.dwinovo.cn)。使用中遇到问题，欢迎加入 QQ 交流群 **1121662678** 或 [Discord](https://discord.gg/MDsCKtemJ)；发现 bug 或想要新功能，请提 [issue](https://github.com/Dwinovo/minecraft-numen/issues)。
+详情请见[官网](https://numen.dwinovo.cn)。使用中遇到问题，欢迎加入 QQ 交流群 **1121662678** 或 [Discord](https://discord.gg/MDsCKtemJ)；发现 bug 或想要新功能，请提 [issue](https://github.com/Dwinovo/minecraft-numen/issues)。
 
 ## 安装
 
@@ -67,11 +67,11 @@
 
 言出法随的架构自下而上分为**三层**。最底层是 **Minecraft**，智能体在其中*操纵一个真实的玩家*。中间层是开放给大语言模型的接口，主体是由**原子动作**构成的 **Lua API**，涵盖感知、移动、挖掘、建造与交互，*其他模组也能经由插件接入*；另有少量 **Java API** 以工具调用的形式提供，例如加载技能。最上层是**大语言模型**，它编写在沙箱中运行的 Lua 程序，自由组合原子动作，**一次调用即可连续完成数十个步骤**。
 
-更详细的架构见[网站](https://numen.dwinovo.cn)。
+更详细的架构见[官网](https://numen.dwinovo.cn)。
 
 ## 插件
 
-基于上述架构，**任何开发者都可以通过插件**向言出法随注册新的 Lua API，供模型调用，从而*让智能体学会使用其他模组*。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的*参考模板*，完整的开发者文档见[网站](https://numen.dwinovo.cn)。
+基于上述架构，**任何开发者都可以通过插件**向言出法随注册新的 Lua API，供模型调用，从而*让智能体学会使用其他模组*。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的*参考模板*，完整的开发者文档见[官网](https://numen.dwinovo.cn)。
 
 ## 常见问题
 
@@ -93,4 +93,4 @@
 
 ## 致谢
 
-感谢每一位关注、下载与使用言出法随的玩家，以及提交问题与代码的[贡献者](https://github.com/Dwinovo/minecraft-numen/graphs/contributors)。言出法随所借鉴的开源项目与研究工作，详情请见[网站](https://numen.dwinovo.cn)。
+感谢每一位关注、下载与使用言出法随的玩家，以及提交问题与代码的[贡献者](https://github.com/Dwinovo/minecraft-numen/graphs/contributors)。言出法随所借鉴的开源项目与研究工作，详情请见[官网](https://numen.dwinovo.cn)。
