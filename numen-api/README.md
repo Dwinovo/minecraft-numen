@@ -79,8 +79,8 @@ NumenActuator.companions().thenAccept(fleet -> {
 工具就是同伴能调用的一种能力。实现四个方法，在 mod 初始化时注册实例即可。契约上**刻意一个 Minecraft 概念都没有**——工具可以驱动身体、可以对接外部服务、可以调用某个 Web API；引擎只负责把它呈现给 LLM、把调用送达、把结果送回。
 
 ```java
-import com.dwinovo.numen.agent.tool.*;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.api.agent.tool.*;
+import com.dwinovo.numen.api.task.TaskResult;
 import java.util.Map;
 
 public final class SendQqMessageTool implements NumenTool {
@@ -116,10 +116,10 @@ ToolRegistry.register(new SendQqMessageTool());
 | 包 | 公共类型 | 作用 |
 |---|---|---|
 | `com.dwinovo.numen.api` | `NumenGateway`、`NumenActuator` | 喂输入 / 驱动同伴的两扇门 |
-| `com.dwinovo.numen.agent.tool` | `NumenTool`、`ToolRegistry`、`ToolCall` | 工具契约 + 注册 |
-| `com.dwinovo.numen.agent.tool.api` | `ToolContext` | 服务端工具的单次调用上下文 |
-| `com.dwinovo.numen.task` | `TaskResult` | 工具交回的结果信封 |
-| `com.dwinovo.numen.entity` | `NumenPlayer` | 服务端的同伴身体 |
+| `com.dwinovo.numen.api.agent.tool` | `NumenTool`、`ToolRegistry`、`ToolCall` | 工具契约 + 注册 |
+| `com.dwinovo.numen.api.agent.tool.api` | `ToolContext` | 服务端工具的单次调用上下文 |
+| `com.dwinovo.numen.api.task` | `TaskResult` | 工具交回的结果信封 |
+| `com.dwinovo.numen.api.entity` | `NumenPlayer` | 服务端的同伴身体 |
 
 其余一切——各家模型接入、对话回路、记忆、技能系统、网络、UI——都是 `@Internal`。需要一份完整的参考实现？[numen-core](https://github.com/Dwinovo/minecraft-numen) 的全部工具与技能都构建在这套 API 之上，没有走任何后门。
 

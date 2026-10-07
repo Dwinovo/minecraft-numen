@@ -1,0 +1,113 @@
+package com.dwinovo.numen.api.client.screen.settings;
+
+import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.client.screen.UiTheme;
+import com.dwinovo.numen.api.client.ui.IDrawSurface;
+import com.dwinovo.numen.api.client.ui.NumenStyle;
+import com.dwinovo.numen.api.client.ui.NumenTheme;
+import com.dwinovo.numen.api.client.ui.widget.Label;
+import com.dwinovo.numen.api.client.ui.widget.ListView;
+import com.dwinovo.numen.api.client.ui.widget.Slider;
+import com.dwinovo.numen.api.client.ui.widget.Toggle;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.client.ui.widget.UiRoot;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
+
+/**
+ * 主题分区——NumenUI 版的瓤:主题行(三色小样 + 名字 + 当前 ✔,点击即切换
+ * 并写入 ui.json)+ 快捷对话提醒、消息通知两个开关行。切主题即触发宿主调色板重读。
+ */
+public final class ThemePanel {
+
+    private static final int ROW_H = 24;
+
+    private final UiRoot ui = new UiRoot();
+    private final Runnable onThemeChanged;
+    private ListView<UiTheme> list;
+
+    public ThemePanel(Runnable onThemeChanged) {
+        this.onThemeChanged = onThemeChanged;
+    }
+
+    public void build(int x, int y, int w, int h) {
+        ui.clear();
+
+        list = ui.add(new ListView<UiTheme>(UiTheme.ALL, ROW_H, this::renderRow, null)
+                .rowClick((index, xInRow) -> {
+                    UiTheme.select(UiTheme.ALL.get(index).id());
+                    onThemeChanged.run();   // 屏幕的调色板常量重读新主题
+                    return true;
+                }));
+        int body = y;   // 这一页叫什么在面板抬头上,没有标题行
+        int listH = Math.min(UiTheme.ALL.size() * ROW_H, y + h - body - 30);
+        list.setBounds(x, body, w, listH);
+
+        // 快捷对话提醒开关行(默认开:准星指着同伴时浮「按 [键] 对话」)。
+        int hy = body + listH + 8;
+        Toggle hint = ui.add(new Toggle(com.dwinovo.numen.api.client.data.ClientPrefs.talkHint(),
+                com.dwinovo.numen.api.client.data.ClientPrefs::setTalkHint));
+        hint.setBounds(x, hy, 22, 11);
+        String label = I18n.get(ModLanguageData.Keys.THEME_TALK_HINT);
+        Label hintLabel = ui.add(new Label(label, Label.Role.SECONDARY));
+        hintLabel.setBounds(x + 28, hy + 1, Minecraft.getInstance().font.width(label), 9);
+
+        // 消息通知开关行(默认开:她说了话、主人没在面板里看着那个会话时,右下角弹一张卡)。
+        int ny = hy + NumenStyle.ROW_PITCH;
+        Toggle notices = ui.add(new Toggle(com.dwinovo.numen.api.client.data.ClientPrefs.messageNotices(),
+                com.dwinovo.numen.api.client.data.ClientPrefs::setMessageNotices));
+        notices.setBounds(x, ny, 22, 11);
+        String noticesText = t(com.dwinovo.numen.api.data.ModLanguageData.Keys.SETTINGS_MESSAGE_NOTICES);
+        Label noticesLabel = ui.add(new Label(noticesText, Label.Role.SECONDARY));
+        noticesLabel.setBounds(x + 28, ny + 1, Minecraft.getInstance().font.width(noticesText), 9);
+
+        // 主动性:她多久把攒下的世界变化说一次。这是"及时性"的旋钮,不是"话多话少"——
+        // 拉小知道得及时、token 烧得快,拉大知道得晚、省。默认 3。
+        int sy = ny + NumenStyle.ROW_PITCH;
+        String initiativeText = I18n.get(ModLanguageData.Keys.THEME_INITIATIVE);
+        Label initTitle = ui.add(new Label(initiativeText, Label.Role.SECONDARY));
+        initTitle.setBounds(x, sy + 1, Minecraft.getInstance().font.width(initiativeText), 9);
+        Slider initiative = ui.add(new Slider(
+                EventQueue.MIN_LEVEL, EventQueue.MAX_LEVEL, 1,
+                com.dwinovo.numen.api.client.data.ClientPrefs.initiativeLevel(),
+                v -> com.dwinovo.numen.api.client.data.ClientPrefs.setInitiativeLevel((int) v),
+                v -> String.valueOf((int) v)));
+        initiative.setBounds(x + 44, sy, Math.min(140, w - 44), NumenStyle.CONTROL_H);
+        String hintText = I18n.get(ModLanguageData.Keys.THEME_INITIATIVE_HINT);
+        Label initHint = ui.add(new Label(hintText, Label.Role.MUTED));
+        initHint.setBounds(x, sy + NumenStyle.CONTROL_H + 3,
+                Minecraft.getInstance().font.width(hintText), 9);
+    }
+
+    private void renderRow(IDrawSurface s, NumenTheme.Colors c, UiTheme t, int index,
+                           int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
+        boolean cur = t == UiTheme.current();   // 行悬停底由 ListView 统一画
+        // 描边环:整块底当"框",三色小样叠在内缩区上。
+        s.fillRect(rx, ry + 3, 34, 18, cur ? c.accent() : c.divider());
+        s.fillRect(rx + 2, ry + 5, 10, 14, t.ground());
+        s.fillRect(rx + 12, ry + 5, 10, 14, t.band());
+        s.fillRect(rx + 22, ry + 5, 10, 14, t.cta());
+        s.drawText(t.label(), rx + 40, ry + 8, cur ? c.textPrimary() : c.textMuted(), false);
+        if (cur) {
+            s.drawText("✔", rx + 40 + s.textWidth(t.label()) + 6, ry + 8, c.success(), false);
+        }
+    }
+
+    // ---- 宿主转发面 ----
+
+    public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        ui.render(s, c, mouseX, mouseY, nowMs);
+    }
+
+    public boolean mouseClicked(double mx, double my, int button) {
+        return ui.mouseClicked(mx, my, button);
+    }
+
+    public boolean mouseScrolled(double mx, double my, double delta) {
+        return ui.mouseScrolled(mx, my, delta);
+    }
+
+    private static String t(String key) {
+        return I18n.get(key);
+    }
+}

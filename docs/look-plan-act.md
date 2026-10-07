@@ -216,7 +216,7 @@ route reverse mine --as back                 反着的一条
 
 ### 第 1 步:area 地基与权限规则项(09-30)
 
-- **api `com.dwinovo.numen.area`**:`Cells`(一堆格子,按 16³ 小节位图,键是原版 `SectionPos.asLong`;附带的方块按节调色板,
+- **api `com.dwinovo.numen.api.area`**:`Cells`(一堆格子,按 16³ 小节位图,键是原版 `SectionPos.asLong`;附带的方块按节调色板,
   每格 `Seen(state, tick)`;构造:盒子、单点、一组格、带方块的一组格、球;运算:并、差、交、按方块筛、外扩,逐节位运算)、`Area`
   (一个维度 + 编号的部分,整块是部分的并;跨维度运算报错)、`AreaRef`(`名字`/`名字/部分`,全仓只在这里读)、`AreaStore`(按主人的
   主世界 SavedData,`numen_areas_<主人>`)。

@@ -15,11 +15,11 @@ import java.lang.annotation.Target;
  * <p>Inspired by Applied Energistics 2's convention of a clearly-delineated API
  * package: here the public API is the set of packages whose {@code package-info}
  * declares them so — the {@code @NumenAction} authoring surface
- * ({@code com.dwinovo.numen.agent.tool.api}), the tool contract / registration
- * ({@code com.dwinovo.numen.agent.tool}), the world-action task contract
- * ({@code com.dwinovo.numen.task}), the permission layer
- * ({@code com.dwinovo.numen.permission}), and {@code NumenPlayer} in
- * {@code com.dwinovo.numen.entity}. Anything outside those packages — or marked
+ * ({@code com.dwinovo.numen.api.agent.tool.api}), the tool contract / registration
+ * ({@code com.dwinovo.numen.api.agent.tool}), the world-action task contract
+ * ({@code com.dwinovo.numen.api.task}), the permission layer
+ * ({@code com.dwinovo.numen.api.permission}), and {@code NumenPlayer} in
+ * {@code com.dwinovo.numen.api.entity}. Anything outside those packages — or marked
  * with this annotation inside them — is internal.
  */
 @Documented

@@ -3,7 +3,7 @@ package com.dwinovo.numen.plugins.tlm.bench;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
-import com.dwinovo.numen.sdk.Positions;
+import com.dwinovo.numen.api.sdk.Positions;
 import com.github.tartaricacid.touhoulittlemaid.block.multiblock.MultiBlockAltar;
 import com.github.tartaricacid.touhoulittlemaid.data.PowerAttachment;
 import com.github.tartaricacid.touhoulittlemaid.entity.item.EntityTombstone;

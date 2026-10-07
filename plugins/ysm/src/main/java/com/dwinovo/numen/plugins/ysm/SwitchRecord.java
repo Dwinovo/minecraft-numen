@@ -1,8 +1,8 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.dwinovo.numen.sdk.OnHer;
-import com.dwinovo.numen.sdk.ServerCall;
-import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.api.sdk.OnHer;
+import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.task.TaskRecord;
 
 /** {@code ysm.model.switch} 派下来的一次换装:换成哪个模型、哪张贴图,以及以服务器权威、只对她执行命令的那条路。 */
 final class SwitchRecord extends TaskRecord {

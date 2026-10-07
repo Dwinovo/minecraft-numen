@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.tlm;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 /**
  * 让同伴<b>随时</b>知道自己现在穿着谁。

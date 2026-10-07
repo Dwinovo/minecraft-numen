@@ -1,0 +1,40 @@
+package com.dwinovo.numen.api.client.hud;
+
+import com.dwinovo.numen.api.client.ui.NumenTheme;
+import com.dwinovo.numen.api.client.ui.NumenToasts;
+import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
+import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+
+/**
+ * 游戏内 HUD 的 toast 宿主。玩家活在面板外(Y/V 快捷对话是对话正门),
+ * 请求挂了的那一刻多半没开任何界面——HUD toast 是唯一能接住他的通道。
+ * push 线程安全,异步失败回调直接投;渲染挂在两个 loader 的 HUD 层
+ * (TalkHint 同层)。设置屏里的 toast 是各屏自己的实例,与这里互不相干。
+ */
+public final class NumenHudToasts {
+
+    /** 停留多久跟原版"通知显示时间"(辅助功能设置)走,和原版 toast 一起调。 */
+    private static final NumenToasts TOASTS = new NumenToasts(
+            () -> Minecraft.getInstance().options.notificationDisplayTime().get());
+
+    private NumenHudToasts() {}
+
+    public static void push(NumenToasts.Severity severity, String message) {
+        TOASTS.push(severity, message);
+    }
+
+    /** loader 的 HUD 层每帧调用。 */
+    public static void render(GuiGraphics g) {
+        if (TOASTS.isIdle()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.options.hideGui) return;
+        // 原版的 toast(成就、配方……)也在右上角,一格一格往下占:排到它们占着的最后一格下面
+        int vanillaBottom = ((com.dwinovo.numen.api.mixin.ToastComponentAccessor) mc.getToasts()).numen$occupiedSlots()
+                .length() * net.minecraft.client.gui.components.toasts.Toast.SLOT_HEIGHT;
+        TOASTS.render(new McDrawSurface(g, mc.font),
+                mc.getWindow().getGuiScaledWidth(), vanillaBottom,
+                NumenTheme.DARK.colors(), Util.getMillis());
+    }
+}

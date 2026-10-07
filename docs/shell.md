@@ -550,7 +550,7 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 照主流的写法(Python 的类型注解生成工具 schema、Cloudflare Code Mode 的 TS 接口、Spring 的注解方法):**一个函数就是一个带 `@Fn`
 的静态方法,它的签名就是契约**——名字、在哪执行、怎么交回、参数(位置与选项)、返回的类型、帮助,全从签名读出来,不另写一份。命令行
 前端(Brigadier 树、把一行字读成调用)删了,脚本是唯一的入口;Numen 自己的各组与每个插件走同一扇门
-(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 `api` 的 `com.dwinovo.numen.sdk`。
+(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 `api` 的 `com.dwinovo.numen.api.sdk`。
 
 ### 写法
 

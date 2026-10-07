@@ -1,26 +1,26 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.agent.http.CancelToken;
-import com.dwinovo.numen.agent.inbox.EventQueue;
-import com.dwinovo.numen.agent.inbox.EventTypes;
-import com.dwinovo.numen.agent.llm.ConvoLog;
-import com.dwinovo.numen.agent.llm.ConvoState;
-import com.dwinovo.numen.agent.loop.AgentLoop;
-import com.dwinovo.numen.agent.loop.HaltReason;
-import com.dwinovo.numen.agent.loop.HostPort;
-import com.dwinovo.numen.agent.loop.LoopEvent;
-import com.dwinovo.numen.agent.loop.ModelOutcome;
-import com.dwinovo.numen.agent.loop.ModelPort;
-import com.dwinovo.numen.agent.loop.ModelRequest;
-import com.dwinovo.numen.agent.memory.Compactor;
-import com.dwinovo.numen.agent.memory.NoteBook;
-import com.dwinovo.numen.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.agent.request.AgentRequestContext;
-import com.dwinovo.numen.agent.request.BodySnapshot;
-import com.dwinovo.numen.agent.request.MemoryPreamble;
-import com.dwinovo.numen.agent.request.RuntimeState;
-import com.dwinovo.numen.agent.tool.CompanionToolPort;
-import com.dwinovo.numen.agent.tool.ToolAnchor;
+import com.dwinovo.numen.api.agent.http.CancelToken;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.loop.AgentLoop;
+import com.dwinovo.numen.api.agent.loop.HaltReason;
+import com.dwinovo.numen.api.agent.loop.HostPort;
+import com.dwinovo.numen.api.agent.loop.LoopEvent;
+import com.dwinovo.numen.api.agent.loop.ModelOutcome;
+import com.dwinovo.numen.api.agent.loop.ModelPort;
+import com.dwinovo.numen.api.agent.loop.ModelRequest;
+import com.dwinovo.numen.api.agent.memory.Compactor;
+import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
+import com.dwinovo.numen.api.agent.request.AgentRequestContext;
+import com.dwinovo.numen.api.agent.request.BodySnapshot;
+import com.dwinovo.numen.api.agent.request.MemoryPreamble;
+import com.dwinovo.numen.api.agent.request.RuntimeState;
+import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
+import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -74,7 +74,7 @@ final class Brain {
             @Override
             public ModelRequest turnRequest() {
                 return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), NumenPrompts.DEFAULT_PERSONA,
-                        com.dwinovo.numen.script.Modules.of(her));
+                        com.dwinovo.numen.api.script.Modules.of(her));
             }
 
             @Override
@@ -162,7 +162,7 @@ final class Brain {
 
     /** 切断后服务端交出的程序回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱(和产品里同一个做法)。 */
     private void receiptAfterCut(String program, String receipt) {
-        loop.push(List.of(com.dwinovo.numen.event.NumenEvents.programStopped(dayTime.getAsLong(), program,
-                com.dwinovo.numen.program.RunResult.messageOf(receipt), System.currentTimeMillis())));
+        loop.push(List.of(com.dwinovo.numen.api.event.NumenEvents.programStopped(dayTime.getAsLong(), program,
+                com.dwinovo.numen.api.program.RunResult.messageOf(receipt), System.currentTimeMillis())));
     }
 }

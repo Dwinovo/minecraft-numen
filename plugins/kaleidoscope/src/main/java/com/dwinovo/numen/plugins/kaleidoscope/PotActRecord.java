@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.sdk.ServerCall;
-import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 

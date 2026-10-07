@@ -1,10 +1,10 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
-import com.dwinovo.numen.agent.script.ApiError;
-import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.entity.Belongings;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.sdk.Call;
+import com.dwinovo.numen.api.agent.script.ApiError;
+import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.api.entity.Belongings;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.Call;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.QuestObjectBase;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;

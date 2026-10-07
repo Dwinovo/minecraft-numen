@@ -78,8 +78,8 @@ A headless `invoke` never touches the companion's conversation log — the exter
 A tool is any capability the companion can call. Implement four methods and register the instance during mod init. There is deliberately **nothing about Minecraft on the contract** — a tool can drive the body, hook an external service, or call a web API; the engine only presents it to the LLM, delivers the call, and routes the result back.
 
 ```java
-import com.dwinovo.numen.agent.tool.*;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.api.agent.tool.*;
+import com.dwinovo.numen.api.task.TaskResult;
 import java.util.Map;
 
 public final class SendQqMessageTool implements NumenTool {
@@ -115,10 +115,10 @@ The public API is the set of packages whose `package-info` declares them so, mir
 | Package | Public types | Role |
 |---|---|---|
 | `com.dwinovo.numen.api` | `NumenGateway`, `NumenActuator` | the two doors that feed / drive a companion |
-| `com.dwinovo.numen.agent.tool` | `NumenTool`, `ToolRegistry`, `ToolCall` | the tool contract + registration |
-| `com.dwinovo.numen.agent.tool.api` | `ToolContext` | per-call context for a server-side tool |
-| `com.dwinovo.numen.task` | `TaskResult` | the result envelope a tool hands back |
-| `com.dwinovo.numen.entity` | `NumenPlayer` | the server-side companion body |
+| `com.dwinovo.numen.api.agent.tool` | `NumenTool`, `ToolRegistry`, `ToolCall` | the tool contract + registration |
+| `com.dwinovo.numen.api.agent.tool.api` | `ToolContext` | per-call context for a server-side tool |
+| `com.dwinovo.numen.api.task` | `TaskResult` | the result envelope a tool hands back |
+| `com.dwinovo.numen.api.entity` | `NumenPlayer` | the server-side companion body |
 
 Everything else — providers, agent loop, memory, skill system, networking, UI — is `@Internal`. For a full worked reference, [numen-core](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
 

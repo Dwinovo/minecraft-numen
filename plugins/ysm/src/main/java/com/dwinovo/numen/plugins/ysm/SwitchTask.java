@@ -1,9 +1,9 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.Task;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.task.Task;
+import com.dwinovo.numen.api.task.TaskResult;
+import com.dwinovo.numen.api.task.TaskState;
 
 import java.util.List;
 

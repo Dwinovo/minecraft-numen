@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.agent.inbox.EventTypes;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
@@ -50,7 +50,7 @@ public final class NumenGateway {
      * relaying what someone else said, a live-stream comment. World events are wrapped as
      * {@code <event kind="type">} with the in-game time, exactly like the server's; how urgent they are
      * is that type's row. Things that happen to the body live on the server and go out through the body's
-     * {@link NumenApi#emit(com.dwinovo.numen.entity.NumenPlayer, String, java.util.Map, String, boolean)}.
+     * {@link NumenApi#emit(com.dwinovo.numen.api.entity.NumenPlayer, String, java.util.Map, String, boolean)}.
      * If the companion is idle this starts a turn immediately; if it is mid-task the message is
      * seen by the model at the next tool-batch boundary (queued messages merge
      * into one user message).
@@ -71,11 +71,11 @@ public final class NumenGateway {
      * @throws IllegalArgumentException {@code type} is neither the owner's words nor a registered world event
      */
     public static Delivery emit(UUID companion, String type, String text) {
-        com.dwinovo.numen.event.NumenEvents.requireClientInput(type);
+        com.dwinovo.numen.api.event.NumenEvents.requireClientInput(type);
         boolean ownerWords = EventTypes.QUERY.equals(type);
         if (companion == null || text == null || text.isBlank()) return Delivery.REJECTED;
         boolean known = AgentLoopRegistry.get(companion).isPresent()
-                || com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion) != null;
+                || com.dwinovo.numen.api.client.agent.NumenRoster.instance().name(companion) != null;
         if (!known) return Delivery.REJECTED;
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread()) {
@@ -86,7 +86,7 @@ public final class NumenGateway {
         boolean pressed = submit(loop, ownerWords, type, text);
         // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
         // 判据取自驾驶席本身这一处真源,不另猜。
-        if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) return Delivery.TO_EXTERNAL_BRAIN;
+        if (com.dwinovo.numen.api.mcp.server.McpMode.instance().driving()) return Delivery.TO_EXTERNAL_BRAIN;
         return pressed ? Delivery.QUEUED : Delivery.SEEN;
     }
 
@@ -103,6 +103,6 @@ public final class NumenGateway {
      * <p>客户端调用,通常在你的模组构造期。
      */
     public static void registerPortrait(CompanionPortrait provider) {
-        com.dwinovo.numen.client.skin.CompanionFace.register(provider);
+        com.dwinovo.numen.api.client.skin.CompanionFace.register(provider);
     }
 }

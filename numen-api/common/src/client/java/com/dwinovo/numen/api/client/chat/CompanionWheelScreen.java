@@ -1,0 +1,362 @@
+package com.dwinovo.numen.api.client.chat;
+
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import com.dwinovo.numen.api.agent.conversation.Conversation;
+import com.dwinovo.numen.api.client.NumenKeys;
+import com.dwinovo.numen.api.client.agent.Conversations;
+import com.dwinovo.numen.api.client.agent.NumenRoster;
+import com.dwinovo.numen.api.client.hud.TalkHint;
+import com.dwinovo.numen.api.client.screen.Nb;
+import com.dwinovo.numen.api.client.screen.UiTheme;
+import com.dwinovo.numen.api.client.screen.chat.ConversationPreview;
+import com.dwinovo.numen.api.client.screen.chat.UnreadBadge;
+import com.dwinovo.numen.api.client.ui.Anim;
+import com.dwinovo.numen.api.client.ui.NumenStyle;
+import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
+
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import com.dwinovo.numen.api.client.skin.ConversationFaces;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+
+import org.lwjgl.glfw.GLFW;
+
+import java.util.List;
+
+/**
+ * 同伴转盘(盘上是会话:就他俩是她的脸,群是群头像):抽奖转盘的操作模型——顶槽固定(选中色底座 + 指针 ▼),滚轮转动
+ * 整个轮盘把人送进顶槽,点击别处的头像沿最短路径转过去,点击顶槽头像
+ * 确认,松开轮盘键也确认(对讲机手感),Esc 放弃不改选。悬浮任意头像
+ * 在光标旁浮名字;确认关盘后准星下方闪一行「按 [键] 对话 · 按住 [键]
+ * 说话」教学下一步。
+ *
+ * <p>动效:旋转角走欠阻尼弹簧(拨过去带一丝回弹,拨盘手感),顶槽
+ * 住客的尺寸用帧率无关指数趋近柔滑放大,呼吸是慢周期浮点正弦叠在
+ * pose 缩放上;开盘 170ms 从圆心 easeOutCubic 弹出。
+ *
+ * <p>配色照 Telegram 的左栏:顶槽底座与指针是选中行的颜色({@code active}),头像框常态是分隔线色、
+ * 指针停上去 100ms 过渡到选中色;有未读的头像右下角挂左栏同一枚未读角标;名牌是窗口底色的浮起小框,
+ * 换人时旧名上滑淡出、新名自下淡入。
+ */
+public class CompanionWheelScreen extends Screen {
+
+    private static final int AVATAR = 26;             // 基础头像尺寸(px)
+    private static final float SELECTED_PX = 7f;      // 顶槽住客的目标增量(px)
+    private static final float APPROACH_RATE = 16f;   // 尺寸趋近速率
+    private static final float BREATH_AMP = 0.035f;   // 呼吸振幅(缩放比)
+    private static final long BREATH_PERIOD_MS = 2600;
+    private static final long OPEN_MS = 170;          // 开盘弹出时长
+    private static final float SPRING_K = 260f;       // 旋转弹簧刚度
+    private static final float SPRING_DAMP = 0.78f;   // 阻尼比(<1:一丝回弹)
+    private static final long FLASH_MS = 3200;        // 关盘教学提示时长
+    private static final long PLATE_MS = 150;         // 名牌换人的过渡(Telegram 的快动效)
+
+    private final List<Conversation> entries;
+    private final float[] sizePx;
+    /** 每个头像的悬停进度:框从分隔线色过渡到选中色。 */
+    private final float[] hoverT;
+    /** 名牌上此刻的人,和换人前的那个(-1 = 没有在换)、换的时刻。 */
+    private int plateIndex;
+    private int plateFrom = -1;
+    private long plateAt;
+    private final long openedAtMs = System.currentTimeMillis();
+    private long lastFrameNanos = System.nanoTime();
+
+    /** 顶槽目标(entries 下标);旋转角朝它的席位角趋近。 */
+    private int index;
+    /** 轮盘当前旋转角(度)与角速度——欠阻尼弹簧驱动。 */
+    private float rotDeg;
+    private float rotVel;
+
+    public CompanionWheelScreen() {
+        super(Component.translatable(Keys.WHEEL_TITLE));
+        this.entries = Conversations.instance().all();
+        this.index = 0;
+        Conversation current = SelectedCompanion.get();
+        for (int i = 0; i < entries.size(); i++) {
+            if (current != null && entries.get(i).id().equals(current.id())) {
+                this.index = i;
+                break;
+            }
+        }
+        this.rotDeg = targetRotFor(index);   // 开盘即对位,不空转
+        this.sizePx = new float[entries.size()];
+        this.hoverT = new float[entries.size()];
+        this.plateIndex = index;
+        for (int i = 0; i < sizePx.length; i++) {
+            sizePx[i] = i == index ? AVATAR + SELECTED_PX : AVATAR;
+        }
+    }
+
+    private static boolean physicallyDown(long window, KeyMapping k) {
+        if (k.isUnbound()) {
+            return false;
+        }
+        InputConstants.Key key = InputConstants.getKey(k.saveString());
+        if (key.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return InputConstants.isKeyDown(window, key.getValue());
+    }
+
+    /**
+     * 移动放行的唯一通路(由 {@code MixinKeyboardInput} 在原版采样之后
+     * 调用,两个加载器同一个点):开屏期间按键系统被闸,采出来的移动
+     * 意图全是零——这里按 GLFW 物理按键状态原样重建,奔跑不为选人断步,
+     * 开盘前就按住的 W 也无缝接上。不碰 {@code KeyMapping} 状态,键位
+     * 冲突类模组无感。鼠标视角仍锁定(被转盘征用),武器轮盘式取舍。
+     */
+    public static void feedMovement(net.minecraft.client.player.Input input,
+                                    float sneakingSpeedMultiplier) {
+        Minecraft mc = Minecraft.getInstance();
+        long window = mc.getWindow().getWindow();
+        boolean up = physicallyDown(window, mc.options.keyUp);
+        boolean down = physicallyDown(window, mc.options.keyDown);
+        boolean left = physicallyDown(window, mc.options.keyLeft);
+        boolean right = physicallyDown(window, mc.options.keyRight);
+        input.up = up;
+        input.down = down;
+        input.left = left;
+        input.right = right;
+        input.forwardImpulse = (up ? 1f : 0f) - (down ? 1f : 0f);
+        input.leftImpulse = (left ? 1f : 0f) - (right ? 1f : 0f);
+        input.jumping = physicallyDown(window, mc.options.keyJump);
+        input.shiftKeyDown = physicallyDown(window, mc.options.keyShift);
+        if (input.shiftKeyDown) {
+            input.forwardImpulse *= sneakingSpeedMultiplier;
+            input.leftImpulse *= sneakingSpeedMultiplier;
+        }
+    }
+
+    private float step() {
+        return 360f / entries.size();
+    }
+
+    /** 让 i 号坐进顶槽所需的旋转角。 */
+    private float targetRotFor(int i) {
+        return -i * step();
+    }
+
+    private int radius() {
+        return Math.clamp(Math.min(this.width, this.height) / 5, 56, 104);
+    }
+
+    /** i 号此刻的方位角(弧度,顶槽为 -90°)。 */
+    private double slotAngle(int i) {
+        return Math.toRadians(-90 + i * step() + rotDeg);
+    }
+
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+        // 崩溃护栏:轮盘渲染出错直接关盘,不带走游戏
+        if (!com.dwinovo.numen.api.client.ui.SafeUi.run("wheel-render",
+                () -> renderInner(g, mouseX, mouseY))) {
+            onClose();
+        }
+    }
+
+    private void renderInner(GuiGraphics g, int mouseX, int mouseY) {
+        if (entries.isEmpty()) {
+            onClose();
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        long nowNanos = System.nanoTime();
+        float dt = Math.min((nowNanos - lastFrameNanos) / 1.0e9f, 0.05f);
+        lastFrameNanos = nowNanos;
+        float open = Anim.easeOutCubic((nowMs - openedAtMs) / (float) OPEN_MS);
+
+        // 旋转角:欠阻尼弹簧追目标——拨过去,末端一丝回弹
+        float target = rotDeg + wrapDeg(targetRotFor(index) - rotDeg);
+        float acc = SPRING_K * (target - rotDeg)
+                - 2f * (float) Math.sqrt(SPRING_K) * SPRING_DAMP * rotVel;
+        rotVel += acc * dt;
+        rotDeg += rotVel * dt;
+        if (Math.abs(target - rotDeg) < 0.05f && Math.abs(rotVel) < 0.5f) {
+            rotDeg = target;
+            rotVel = 0f;
+        }
+
+        g.fill(0, 0, this.width, this.height, (int) (0x48 * open) << 24);
+
+        int cx = this.width / 2;
+        int cy = this.height / 2;
+        int r = radius();
+        float rNow = r * open;
+        UiTheme th = UiTheme.current();
+
+        // 顶槽底座:固定的选中色方座 + 指针 ▼(先画,头像转进来压在上面)
+        int topX = cx;
+        int topY = cy - Math.round(rNow);
+        int ringHalf = AVATAR / 2 + 5;
+        g.fill(topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, th.active());
+        Nb.text(g, this.font, "▼", topX - this.font.width("▼") / 2,
+                topY - ringHalf - 12, th.active());
+
+        long dtMs = Math.round(dt * 1000f);
+        int hovered = -1;
+        for (int i = 0; i < entries.size(); i++) {
+            boolean atTop = i == index;
+            sizePx[i] = Anim.approach(sizePx[i], atTop ? AVATAR + SELECTED_PX : AVATAR,
+                    APPROACH_RATE, dt);
+
+            double ang = slotAngle(i);
+            float ax = cx + (float) (Math.cos(ang) * rNow);
+            float ay = cy + (float) (Math.sin(ang) * rNow);
+            boolean over = hitAvatar(mouseX, mouseY, ax, ay);
+            if (over) {
+                hovered = i;
+            }
+            hoverT[i] = NumenStyle.hoverStep(hoverT[i], over && !atTop, dtMs);
+
+            float breath = atTop
+                    ? 1f + BREATH_AMP * (0.5f + 0.5f * (float) Math.sin(
+                            nowMs % BREATH_PERIOD_MS / (double) BREATH_PERIOD_MS * Math.PI * 2))
+                    : 1f;
+            float scale = sizePx[i] / AVATAR * breath * open;
+
+            g.pose().pushPose();
+            g.pose().translate(ax, ay, 0);
+            g.pose().scale(scale, scale, 1f);
+            int half = AVATAR / 2;
+            if (!atTop) {
+                g.fill(-half - 2, -half - 2, half + 2, half + 2,
+                        NumenStyle.mixColor(th.border(), th.active(), hoverT[i]));
+            }
+            ConversationFaces.draw(g, entries.get(i), -half, -half, AVATAR);
+            g.pose().popPose();
+
+            // 未读角标:Telegram 窄栏的画法,贴头像右下角。画在缩放之外——像素字缩放一点点就糊
+            Conversation c = entries.get(i);
+            int unread = ConversationPreview.unread(c, Conversations.instance().lastSeen(c));
+            if (unread > 0 && open > 0.4f) {
+                String n = UnreadBadge.label(unread);
+                int corner = Math.round((half + 2) * scale);
+                UnreadBadge.draw(g, this.font, n, Math.round(ax) + corner - UnreadBadge.width(this.font, n),
+                        Math.round(ay) + corner - UnreadBadge.H, th.cta(), th.onCta());
+            }
+        }
+
+        if (open > 0.4f) {
+            // 名牌:顶槽住客的名字,窗口底色的浮起小框(Telegram 抬头的配色)。换人时框宽跟着缓动,
+            // 旧名上滑淡出、新名自下淡入,不硬切
+            if (index != plateIndex) {
+                plateFrom = plateIndex;
+                plateIndex = index;
+                plateAt = nowMs;
+            }
+            float k = Anim.easeOutCubic((nowMs - plateAt) / (float) PLATE_MS);
+            if (k >= 1f) plateFrom = -1;
+            String cur = name(plateIndex);
+            String prev = plateFrom >= 0 ? name(plateFrom) : null;
+            int curW = this.font.width(cur);
+            int tw = prev == null ? curW : Math.round(this.font.width(prev) + (curW - this.font.width(prev)) * k);
+            int ny = cy - r - 46;
+            int bx = cx - tw / 2 - 10;
+            NumenStyle.box(new McDrawSurface(g, this.font), bx, ny - 6, tw + 20, 20, th.band(), th.aiBorder());
+            g.enableScissor(bx + 1, ny - 5, bx + tw + 19, ny + 13);
+            if (prev != null) {
+                g.setColor(1f, 1f, 1f, Math.max(0.05f, 1f - k));
+                Nb.text(g, this.font, prev, cx - this.font.width(prev) / 2, ny - Math.round(6 * k), th.onBand());
+            }
+            g.setColor(1f, 1f, 1f, Math.max(0.05f, prev == null ? 1f : k));
+            Nb.text(g, this.font, cur, cx - curW / 2, ny + (prev == null ? 0 : Math.round(6 * (1f - k))), th.onBand());
+            g.setColor(1f, 1f, 1f, 1f);
+            g.disableScissor();
+
+            // 直接压在游戏画面上的操作提示:白字半透明,和原版 HUD 字一样对比世界背景,不跟主题
+            String hint = I18n.get(Keys.WHEEL_HINT);
+            Nb.text(g, this.font, hint, cx - this.font.width(hint) / 2, cy + r + 30, 0xB0FFFFFF);
+        }
+
+        // 悬浮名字:和面板里的悬停提示同一个样子(顶槽住客的名字已在名牌上,不重复)
+        if (hovered >= 0 && hovered != index) {
+            g.renderTooltip(this.font, Component.literal(name(hovered)), mouseX, mouseY);
+        }
+    }
+
+    private String name(int i) {
+        return entries.get(i).displayName(NumenRoster.instance()::name);
+    }
+
+    private boolean hitAvatar(double mx, double my, float ax, float ay) {
+        int half = AVATAR / 2 + 3;
+        return mx >= ax - half && mx <= ax + half && my >= ay - half && my <= ay + half;
+    }
+
+    private static float wrapDeg(float a) {
+        while (a > 180f) a -= 360f;
+        while (a < -180f) a += 360f;
+        return a;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (!entries.isEmpty()) {
+            int n = entries.size();
+            index = ((index + (scrollY < 0 ? 1 : -1)) % n + n) % n;
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != 0 || entries.isEmpty()) {
+            return super.mouseClicked(mouseX, mouseY, button);
+        }
+        // 命中检测与渲染同一套席位坐标
+        int cx = this.width / 2;
+        int cy = this.height / 2;
+        float rNow = radius() * Anim.easeOutCubic(
+                (System.currentTimeMillis() - openedAtMs) / (float) OPEN_MS);
+        for (int i = 0; i < entries.size(); i++) {
+            double ang = slotAngle(i);
+            float ax = cx + (float) (Math.cos(ang) * rNow);
+            float ay = cy + (float) (Math.sin(ang) * rNow);
+            if (hitAvatar(mouseX, mouseY, ax, ay)) {
+                if (i == index) {
+                    confirm();      // 点顶槽住客:确认关盘
+                } else {
+                    index = i;      // 点别处:最短路径转过去(弹簧自己追)
+                }
+                return true;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        // 按住开、松开定:轮盘键抬起即确认(对讲机手感)
+        if (NumenKeys.COMPANION_WHEEL.matches(keyCode, scanCode) && !entries.isEmpty()) {
+            confirm();
+            return true;
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers);
+    }
+
+    private void confirm() {
+        SelectedCompanion.set(entries.get(index));
+        // 关盘教学:下一步怎么跟它说话
+        TalkHint.flash(I18n.get(Keys.WHEEL_SELECTED, name(index),
+                NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString(),
+                NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()), FLASH_MS);
+        onClose();
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+        // 刻意留空:不要菜单模糊(render 里自画一层轻压暗)
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+}

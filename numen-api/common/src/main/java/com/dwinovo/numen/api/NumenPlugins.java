@@ -1,12 +1,11 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.entity.CompanionEvents;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.event.NumenEvents;
+import com.dwinovo.numen.api.entity.CompanionEvents;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.event.NumenEvents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 
@@ -64,7 +63,7 @@ public final class NumenPlugins {
      */
     public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
-        com.dwinovo.numen.sdk.ApiRegistry.checkNamespace(namespace);
+        com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
         plugin.setup(new Impl(namespace));
     }
 
@@ -232,12 +231,12 @@ public final class NumenPlugins {
 
         @Override
         public void api(String group, String summary, Class<?> functions) {
-            com.dwinovo.numen.sdk.ApiRegistry.register(namespace, group, summary, functions);
+            com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions);
         }
 
         @Override
-        public <T> void codec(Class<T> type, com.dwinovo.numen.sdk.Codec<T> codec) {
-            com.dwinovo.numen.sdk.LuaCodecs.register(type, codec);
+        public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
+            com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec);
         }
 
         @Override
@@ -249,7 +248,7 @@ public final class NumenPlugins {
 
         @Override
         public void bundleModules(Path modulesRoot) {
-            com.dwinovo.numen.script.BuiltinModules.bundle(namespace, modulesRoot);
+            com.dwinovo.numen.api.script.BuiltinModules.bundle(namespace, modulesRoot);
         }
 
         @Override
@@ -275,7 +274,7 @@ public final class NumenPlugins {
 
         @Override
         public Path configDir() {
-            return com.dwinovo.numen.NumenPaths.config();
+            return com.dwinovo.numen.api.NumenPaths.config();
         }
 
         @Override

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.UUID;
 

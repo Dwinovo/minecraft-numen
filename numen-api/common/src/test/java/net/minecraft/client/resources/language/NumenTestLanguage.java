@@ -1,6 +1,6 @@
 package net.minecraft.client.resources.language;
 
-import com.dwinovo.numen.data.ModLanguageData;
+import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;

@@ -1,9 +1,9 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
-import com.dwinovo.numen.agent.script.ApiError;
-import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.sdk.Call;
+import com.dwinovo.numen.api.agent.script.ApiError;
+import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.Call;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.data.PartyTeam;

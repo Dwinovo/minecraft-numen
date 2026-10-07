@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.task.TaskFactory;
+import com.dwinovo.numen.api.task.TaskFactory;
 
 import java.nio.file.Path;
 

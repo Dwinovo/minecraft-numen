@@ -1,18 +1,18 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.dwinovo.numen.agent.script.ApiError;
-import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.api.agent.script.ApiError;
+import com.dwinovo.numen.api.agent.script.ErrorKind;
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.sdk.Call;
-import com.dwinovo.numen.sdk.Doc;
-import com.dwinovo.numen.sdk.Example;
-import com.dwinovo.numen.sdk.Fn;
-import com.dwinovo.numen.sdk.Note;
-import com.dwinovo.numen.sdk.OnHer;
-import com.dwinovo.numen.sdk.Omitted;
-import com.dwinovo.numen.sdk.Pending;
-import com.dwinovo.numen.sdk.SeeAlso;
-import com.dwinovo.numen.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.Call;
+import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.Example;
+import com.dwinovo.numen.api.sdk.Fn;
+import com.dwinovo.numen.api.sdk.Note;
+import com.dwinovo.numen.api.sdk.OnHer;
+import com.dwinovo.numen.api.sdk.Omitted;
+import com.dwinovo.numen.api.sdk.Pending;
+import com.dwinovo.numen.api.sdk.SeeAlso;
+import com.dwinovo.numen.api.sdk.ServerCall;
 
 import java.util.List;
 import java.util.Optional;

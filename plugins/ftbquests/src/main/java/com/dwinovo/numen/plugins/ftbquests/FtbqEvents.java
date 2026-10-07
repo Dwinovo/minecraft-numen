@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.LinkedHashMap;

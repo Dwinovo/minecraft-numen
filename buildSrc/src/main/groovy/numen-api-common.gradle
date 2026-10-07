@@ -135,22 +135,32 @@ tasks.register('apiJar', Jar) {
     // public API surface (see the package-info of each). This list is the
     // contract of record — kept in lockstep with what numen-core actually
     // compiles against, so building core against the :api jar always works.
-    include 'com/dwinovo/numen/api/**'             // @Internal marker + api meta
-    include 'com/dwinovo/numen/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
-    include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
-    include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
-    include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
-    include 'com/dwinovo/numen/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
-    include 'com/dwinovo/numen/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
-    include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
-    include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...its own facing, looking and boat steering
-    include 'com/dwinovo/numen/entity/BodyDelta*.class'     // what an action changed on the body: carried items, health, riding, broken gear
-    include 'com/dwinovo/numen/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
-    include 'com/dwinovo/numen/entity/package-info.class'
-    include 'com/dwinovo/numen/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
-    include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'
-    include 'com/dwinovo/numen/platform/Services*.class'          // cross-loader SPI locator
-    include 'com/dwinovo/numen/platform/services/**'              // (block caps for storage inspection)
+    // com.dwinovo.numen.api 这一包里属于公共 API 的类:@Internal 标记与 API 门面。同包里还住着引擎自己的入口
+    // (CommonClass、Constants 与各加载器的模组入口),所以逐个点名,不整包放行
+    include 'com/dwinovo/numen/api/CompanionEvent*.class'
+    include 'com/dwinovo/numen/api/CompanionPortrait*.class'
+    include 'com/dwinovo/numen/api/Delivery*.class'
+    include 'com/dwinovo/numen/api/Internal*.class'
+    include 'com/dwinovo/numen/api/NumenActuator*.class'
+    include 'com/dwinovo/numen/api/NumenApi*.class'
+    include 'com/dwinovo/numen/api/NumenGateway*.class'
+    include 'com/dwinovo/numen/api/NumenPlugin*.class'  // NumenPlugin 与 NumenPlugins
+    include 'com/dwinovo/numen/api/gear/**'
+    include 'com/dwinovo/numen/api/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
+    include 'com/dwinovo/numen/api/agent/tool/api/**'  // per-call tool context
+    include 'com/dwinovo/numen/api/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
+    include 'com/dwinovo/numen/api/task/**'            // task contract + the registration points a pack drives
+    include 'com/dwinovo/numen/api/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
+    include 'com/dwinovo/numen/api/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
+    include 'com/dwinovo/numen/api/entity/NumenPlayer*.class'   // the body a tool acts on
+    include 'com/dwinovo/numen/api/entity/InputDriver*.class'   // ...its own facing, looking and boat steering
+    include 'com/dwinovo/numen/api/entity/BodyDelta*.class'     // what an action changed on the body: carried items, health, riding, broken gear
+    include 'com/dwinovo/numen/api/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
+    include 'com/dwinovo/numen/api/entity/package-info.class'
+    include 'com/dwinovo/numen/api/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
+    include 'com/dwinovo/numen/api/agent/skill/SkillInfo*.class'
+    include 'com/dwinovo/numen/api/platform/Services*.class'          // cross-loader SPI locator
+    include 'com/dwinovo/numen/api/platform/services/**'              // (block caps for storage inspection)
     // Loom 只给"认得出是 mod"的 jar 做重映射,判据就是 fabric.mod.json。瘦 jar 不带
     // 它,消费者的 modCompileOnly 会原样透传:jar 里是 intermediary、消费者环境里是
     // yarn,撞在 class_3222 找不到上。无条件写——其余加载器的成品 jar 里没有这个
@@ -162,23 +172,23 @@ tasks.register('apiJar', Jar) {
     include 'LICENSE*'
     include 'COPYING*'
     // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们本该迁去 core 自己的网络层,迁移前先如实纳入契约
-    include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
-    include 'com/dwinovo/numen/network/payload/ClientUiActionPayload*.class'
+    include 'com/dwinovo/numen/api/network/payload/PathDebugPayload*.class'
+    include 'com/dwinovo/numen/api/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages
-    exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
-    exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    exclude 'com/dwinovo/numen/api/agent/tool/ToolInvocation*.class'
+    exclude 'com/dwinovo/numen/api/agent/tool/ClientToolContext*.class'
     // API 的派发与程序的执行:引擎内部,插件只写函数
-    exclude 'com/dwinovo/numen/sdk/Dispatcher*.class'
-    exclude 'com/dwinovo/numen/sdk/Consents*.class'
+    exclude 'com/dwinovo/numen/api/sdk/Dispatcher*.class'
+    exclude 'com/dwinovo/numen/api/sdk/Consents*.class'
     // scheduler internals: implementation of the task machine, not its contract
-    exclude 'com/dwinovo/numen/task/TaskQueue*.class'
-    exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'
-    exclude 'com/dwinovo/numen/task/CompanionBrain*.class'
-    exclude 'com/dwinovo/numen/task/ChainScheduler*.class'
-    exclude 'com/dwinovo/numen/task/LlmTaskChain*.class'
-    exclude 'com/dwinovo/numen/task/TaskSessionHooks*.class'
-    exclude 'com/dwinovo/numen/task/HandPinRelease*.class'
-    exclude 'com/dwinovo/numen/task/chain/**'
+    exclude 'com/dwinovo/numen/api/task/TaskQueue*.class'
+    exclude 'com/dwinovo/numen/api/task/UnsupportedCompanionTask*.class'
+    exclude 'com/dwinovo/numen/api/task/CompanionBrain*.class'
+    exclude 'com/dwinovo/numen/api/task/ChainScheduler*.class'
+    exclude 'com/dwinovo/numen/api/task/LlmTaskChain*.class'
+    exclude 'com/dwinovo/numen/api/task/TaskSessionHooks*.class'
+    exclude 'com/dwinovo/numen/api/task/HandPinRelease*.class'
+    exclude 'com/dwinovo/numen/api/task/chain/**'
 }
 
 publishing {

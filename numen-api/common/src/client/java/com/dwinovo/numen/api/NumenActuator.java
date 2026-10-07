@@ -1,17 +1,17 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.agent.tool.ClientToolContext;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.client.agent.ClientNumenLookup;
-import com.dwinovo.numen.client.agent.NumenRoster;
-import com.dwinovo.numen.agent.tool.ScriptTool;
-import com.dwinovo.numen.network.payload.DismissRequestPayload;
-import com.dwinovo.numen.network.payload.SummonRequestPayload;
-import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.api.agent.provider.LlmToolCall;
+import com.dwinovo.numen.api.agent.tool.ClientToolContext;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.agent.tool.ToolCall;
+import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.api.client.agent.NumenRoster;
+import com.dwinovo.numen.api.agent.tool.ScriptTool;
+import com.dwinovo.numen.api.network.payload.DismissRequestPayload;
+import com.dwinovo.numen.api.network.payload.SummonRequestPayload;
+import com.dwinovo.numen.api.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 
@@ -258,14 +258,14 @@ public final class NumenActuator {
     public static CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
-            f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("companion and toolName are required"));
+            f.complete(com.dwinovo.numen.api.agent.llm.ToolOutcome.failure("companion and toolName are required"));
             return f;
         }
         Minecraft.getInstance().execute(() -> {
             try {
                 NumenTool tool = ToolRegistry.resolve(toolName);
                 if (tool == null) {
-                    f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("unknown tool: " + toolName));
+                    f.complete(com.dwinovo.numen.api.agent.llm.ToolOutcome.failure("unknown tool: " + toolName));
                     return;
                 }
                 String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
@@ -273,7 +273,7 @@ public final class NumenActuator {
                     ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
                     LlmToolCall program = new LlmToolCall(PROGRAM_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
                     if (!AgentLoopRegistry.getOrCreate(companion).runExternal(program, f::complete)) {
-                        f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("a program is already running for this companion, or its "
+                        f.complete(com.dwinovo.numen.api.agent.llm.ToolOutcome.failure("a program is already running for this companion, or its "
                                 + "built-in brain is acting; wait for it to end"));
                     }
                     return;
@@ -285,7 +285,7 @@ public final class NumenActuator {
                         f::complete);
                 tool.invoke(call);
             } catch (RuntimeException ex) {
-                f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure(ex.getMessage()));
+                f.complete(com.dwinovo.numen.api.agent.llm.ToolOutcome.failure(ex.getMessage()));
             }
         });
         return f;

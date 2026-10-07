@@ -1,11 +1,11 @@
 package com.dwinovo.numen.plugins.tlm;
 
-import com.dwinovo.numen.sdk.Doc;
-import com.dwinovo.numen.sdk.Example;
-import com.dwinovo.numen.sdk.Fn;
-import com.dwinovo.numen.sdk.Note;
-import com.dwinovo.numen.sdk.SeeAlso;
-import com.dwinovo.numen.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.Example;
+import com.dwinovo.numen.api.sdk.Fn;
+import com.dwinovo.numen.api.sdk.Note;
+import com.dwinovo.numen.api.sdk.SeeAlso;
+import com.dwinovo.numen.api.sdk.ServerCall;
 
 import java.util.List;
 import java.util.Optional;

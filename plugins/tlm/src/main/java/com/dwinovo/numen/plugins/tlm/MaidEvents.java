@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;

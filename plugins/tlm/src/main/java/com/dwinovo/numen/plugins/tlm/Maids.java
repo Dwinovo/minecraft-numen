@@ -1,9 +1,9 @@
 package com.dwinovo.numen.plugins.tlm;
 
-import com.dwinovo.numen.agent.script.ApiError;
-import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.sdk.EntityInfo;
+import com.dwinovo.numen.api.agent.script.ApiError;
+import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.EntityInfo;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTombstoneEvent;

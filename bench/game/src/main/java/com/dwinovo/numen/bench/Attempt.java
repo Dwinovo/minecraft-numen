@@ -1,38 +1,38 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.agent.loop.HaltReason;
-import com.dwinovo.numen.agent.loop.LoopEvent;
-import com.dwinovo.numen.agent.loop.RunEnd;
-import com.dwinovo.numen.agent.memory.NoteBook;
-import com.dwinovo.numen.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.agent.provider.ProviderRegistry;
-import com.dwinovo.numen.agent.request.BodySnapshot;
-import com.dwinovo.numen.agent.request.SystemPromptComposer;
+import com.dwinovo.numen.api.agent.loop.HaltReason;
+import com.dwinovo.numen.api.agent.loop.LoopEvent;
+import com.dwinovo.numen.api.agent.loop.RunEnd;
+import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
+import com.dwinovo.numen.api.agent.provider.ProviderRegistry;
+import com.dwinovo.numen.api.agent.request.BodySnapshot;
+import com.dwinovo.numen.api.agent.request.SystemPromptComposer;
 import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.bench.report.FailureTag;
 import com.dwinovo.numen.bench.report.Pricing;
 import com.dwinovo.numen.bench.report.Run;
 import com.dwinovo.numen.bench.report.Variant;
-import com.dwinovo.numen.entity.CompanionFactory;
-import com.dwinovo.numen.entity.EventOutbox;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.Fragments;
-import com.dwinovo.numen.network.NumenNetwork;
-import com.dwinovo.numen.network.Wire;
-import com.dwinovo.numen.network.payload.CancelTasksPayload;
-import com.dwinovo.numen.network.payload.ConsentRequestPayload;
-import com.dwinovo.numen.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.network.payload.FragmentPayload;
-import com.dwinovo.numen.network.payload.ClientCallPayload;
-import com.dwinovo.numen.network.payload.ClientCallResultPayload;
-import com.dwinovo.numen.network.payload.NumenDeathPayload;
-import com.dwinovo.numen.network.payload.NumenEventPayload;
-import com.dwinovo.numen.network.payload.NumenStatePayload;
-import com.dwinovo.numen.network.payload.ProgramResultPayload;
-import com.dwinovo.numen.network.payload.RunProgramPayload;
-import com.dwinovo.numen.network.payload.StopProgramPayload;
-import com.dwinovo.numen.program.ProgramUplink;
-import com.dwinovo.numen.permission.ConsentDesk;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.EventOutbox;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.network.Fragments;
+import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.network.Wire;
+import com.dwinovo.numen.api.network.payload.CancelTasksPayload;
+import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
+import com.dwinovo.numen.api.network.payload.CurrentTaskPayload;
+import com.dwinovo.numen.api.network.payload.FragmentPayload;
+import com.dwinovo.numen.api.network.payload.ClientCallPayload;
+import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
+import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
+import com.dwinovo.numen.api.network.payload.NumenEventPayload;
+import com.dwinovo.numen.api.network.payload.NumenStatePayload;
+import com.dwinovo.numen.api.network.payload.ProgramResultPayload;
+import com.dwinovo.numen.api.network.payload.RunProgramPayload;
+import com.dwinovo.numen.api.network.payload.StopProgramPayload;
+import com.dwinovo.numen.api.program.ProgramUplink;
+import com.dwinovo.numen.api.permission.ConsentDesk;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -167,7 +167,7 @@ final class Attempt {
         // 里的,评测也从不读它们
         home = Files.createTempDirectory("numen-bench-");
         NoteBook.init(uuid -> home.resolve("memory"), () -> (int) (level.getDayTime() / 24000L));
-        com.dwinovo.numen.script.Modules.init(uuid -> home.resolve("lua"));
+        com.dwinovo.numen.api.script.Modules.init(uuid -> home.resolve("lua"));
         scenario.setup(scene);
         mind = switch (variant) {
             case SOLUTION -> new Mind.Scripted(scenario.solution(scene), "做好了。");
@@ -182,7 +182,7 @@ final class Attempt {
         brain.subscribe(this::onLoopEvent);
         ProgramUplink.wire = this::uplink;
         promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA,
-                com.dwinovo.numen.script.Modules.of(her.getUUID()))).substring(0, 12);
+                com.dwinovo.numen.api.script.Modules.of(her.getUUID()))).substring(0, 12);
     }
 
     /** 每个服务端 tick 一次。 */

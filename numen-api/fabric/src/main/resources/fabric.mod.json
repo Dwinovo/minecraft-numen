@@ -16,13 +16,13 @@
     "environment": "*",
     "entrypoints": {
         "main": [
-            "com.dwinovo.numen.NumenMod"
+            "com.dwinovo.numen.api.NumenMod"
         ],
         "client": [
-            "com.dwinovo.numen.NumenFabricClient"
+            "com.dwinovo.numen.api.NumenFabricClient"
         ],
         "fabric-datagen": [
-            "com.dwinovo.numen.data.FabricDataGenerators"
+            "com.dwinovo.numen.api.data.FabricDataGenerators"
         ]
     },
     "mixins": [

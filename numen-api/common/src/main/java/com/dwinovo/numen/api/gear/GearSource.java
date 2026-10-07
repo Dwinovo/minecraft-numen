@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.gear;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;

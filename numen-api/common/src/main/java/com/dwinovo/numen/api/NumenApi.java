@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.sdk.Codec;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.Codec;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -45,7 +45,7 @@ public interface NumenApi {
     /**
      * 登记一组 API 函数:她的程序里的一张表 {@code <名字空间>.<组>.<函数>(...)}。名字空间由登记者给出——你在
      * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,引擎自己的是 {@code numen}——这里只写组名。{@code functions}
-     * 里每个 {@link com.dwinovo.numen.sdk.Fn} 静态方法是一个函数,签名就是契约(见 {@code Fn}):第一个参数说在哪执行,参数 record 是它的
+     * 里每个 {@link com.dwinovo.numen.api.sdk.Fn} 静态方法是一个函数,签名就是契约(见 {@code Fn}):第一个参数说在哪执行,参数 record 是它的
      * 参数,返回类型说它怎么交回。系统提示里的 API 索引与每个函数的帮助都由这份登记生成。
      *
      * <pre>{@code
@@ -62,7 +62,7 @@ public interface NumenApi {
      *
      * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加函数——引擎自带的组和别的插件的组都够不着。登记在两侧都跑,所以
      * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。只拦会破坏系统的(见
-     * {@link com.dwinovo.numen.sdk.Binder});写法上的问题看 {@link com.dwinovo.numen.sdk.ApiTester#lint} 的报告。
+     * {@link com.dwinovo.numen.api.sdk.Binder});写法上的问题看 {@link com.dwinovo.numen.api.sdk.ApiTester#lint} 的报告。
      *
      * @param group     组名,小写英文:领域名词({@code maid}、{@code quest})
      * @param summary   一句话说明,进系统提示里的 API 索引和帮助

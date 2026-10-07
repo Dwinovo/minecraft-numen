@@ -1,6 +1,6 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.NumenPlugins;
 import net.neoforged.fml.common.Mod;
 

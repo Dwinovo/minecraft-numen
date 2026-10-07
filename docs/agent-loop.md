@@ -69,7 +69,7 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
 │          McpTranscript、显示记录                                            │
 └──────────────────────────────┬──────────────────────────────────────────────┘
                                │ 端口
-┌─ 循环内核 AgentLoop(agent 模块,com.dwinovo.numen.agent.loop,纯 Java)──────┐
+┌─ 循环内核 AgentLoop(agent 模块,com.dwinovo.numen.api.agent.loop,纯 Java)──────┐
 │  Run(阶段 + 取消令牌)、Hold(停牌)、pump()、halt()、两层循环、重试决定、       │
 │  LoopEvent 事件、LoopStatus 只读快照                                         │
 └───────┬──────────────┬───────────────┬───────────────┬──────────────────────┘
@@ -84,7 +84,7 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
 | 模块 | 内容 |
 |---|---|
 | `ai`(现有,纯 Java) | 传输、服务商、`NumenLlmClient`、`ConvoState`/`ConvoLog`/`CompactSplit`;新增 `ProtocolView` |
-| `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 api 的 `event` 包搬来,包名 `com.dwinovo.numen.agent.inbox`);长期目标 `GoalState`/`GoalPrompts`(从 api 搬来)与 `GoalSteward`;`Compactor` |
+| `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 api 的 `event` 包搬来,包名 `com.dwinovo.numen.api.agent.inbox`);长期目标 `GoalState`/`GoalPrompts`(从 api 搬来)与 `GoalSteward`;`Compactor` |
 | `api`(依赖 agent) | 同伴门面 `EntityAgentLoop`、`ToolDispatcher`、`TurnPresenter`、`SystemPromptComposer`、`RuntimeState`;`NumenEvents` 与服务端 `EventOutbox`(用到 Minecraft,留下) |
 
 - **内核单独成模块**:不放 api——api 依赖 Minecraft,"不引用 Minecraft"只能靠自觉,编译器拦不住;

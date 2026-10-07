@@ -911,7 +911,7 @@ move go home                                 占身体,task_finished 收尾
 
 ### 路线收区域:去处、禁区与路线标志(09-30)
 
-设计稿 `docs/look-plan-act.md` §七第 3 步的路线一半。"一块地方"在路线里只有区域一种写法(api `com.dwinovo.numen.area`),坐标就是
+设计稿 `docs/look-plan-act.md` §七第 3 步的路线一半。"一块地方"在路线里只有区域一种写法(api `com.dwinovo.numen.api.area`),坐标就是
 只有一格的区域:
 
 ```

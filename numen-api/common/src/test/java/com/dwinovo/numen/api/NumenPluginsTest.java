@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.agent.inbox.EventQueue;
-import com.dwinovo.numen.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -60,7 +60,7 @@ class NumenPluginsTest {
     /** 绑定不了的一组:函数的第一个参数不是调用。 */
     public static final class Broken {
 
-        @com.dwinovo.numen.sdk.Fn("Does nothing.")
+        @com.dwinovo.numen.api.sdk.Fn("Does nothing.")
         public static void act(String notACall) {
         }
     }

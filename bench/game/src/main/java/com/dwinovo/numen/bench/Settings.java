@@ -1,6 +1,6 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.agent.llm.LlmEndpoint;
+import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.bench.report.Pricing;
 
 import java.nio.file.Path;

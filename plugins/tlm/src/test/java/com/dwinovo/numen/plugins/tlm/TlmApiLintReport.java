@@ -1,9 +1,9 @@
 package com.dwinovo.numen.plugins.tlm;
 
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.core.ApiLintReport;
-import com.dwinovo.numen.core.CoreApiFixture;
-import com.dwinovo.numen.sdk.ApiTester;
+import com.dwinovo.numen.ApiLintReport;
+import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.api.sdk.ApiTester;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

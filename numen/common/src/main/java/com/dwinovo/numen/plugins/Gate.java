@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins;
 
-import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.Constants;
 
 import java.nio.file.Path;
 import java.util.function.Function;

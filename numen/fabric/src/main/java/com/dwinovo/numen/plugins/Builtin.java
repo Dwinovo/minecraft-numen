@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins;
 
-import com.dwinovo.numen.core.ModJar;
+import com.dwinovo.numen.ModJar;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
