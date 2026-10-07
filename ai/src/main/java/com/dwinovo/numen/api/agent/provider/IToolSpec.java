@@ -4,7 +4,7 @@ import java.util.Map;
 
 /**
  * 工具在 LLM 侧的只读描述面——provider 序列化 {@code tools} 数组所需的
- * 全部信息,连接层只认这三条。工具怎么执行、在哪个进程执行,是引擎侧
+ * 全部信息,连接层只认这三条。工具怎么执行、在哪个进程执行,是 Numen API 侧
  * {@code NumenTool} 的事,连接层全盲。
  */
 public interface IToolSpec {

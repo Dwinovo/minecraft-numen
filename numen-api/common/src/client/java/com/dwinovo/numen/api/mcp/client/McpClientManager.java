@@ -18,7 +18,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Wires the MCP client into the engine and owns the live enable/disable of each
+ * Wires the MCP client into Numen API and owns the live enable/disable of each
  * external server. On init it reads {@code config/numen/mcp_clients.json},
  * connects to every enabled server on a background thread, and registers the
  * tools it exposes into the global {@link ToolRegistry} — after which the

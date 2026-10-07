@@ -58,7 +58,7 @@ abstract class ArchitecturyPlayerHooksMixin {
 - **注入点选公共类 `PlayerHooks`**：类名跨加载器、跨版本不变。`…forge.PlayerHooksImpl` 这个包名是历史遗留，将来可能改。
 - **Architectury 不在场**：这条 mixin 单独一份配置，只在 Architectury 在场时挂上，不在场就不去找它的类，也就没有"找不到类"的警告。NeoForge 写在 `neoforge.mods.toml` 的 `[[mixins]]` 里（`numen_api.architectury.mixins.json`，`requiredMods = ["architectury"]`）；Fabric 的 `fabric.mod.json` 没有这种写法，由配置 `numen_api.fabric.architectury.mixins.json` 的插件 `ArchitecturyMixins` 按模组清单交出这条 mixin。`@Pseudo` 只为编译时不依赖 Architectury。
 - **目标在但签名变了**：保留 `defaultRequire: 1`，直接报错，不静默失效。
-- **放在哪**：类在 `numen-api/common`，两份配置在各自加载器的 api 模块里。"她是真玩家"是身体的身份，属于引擎机制，影响所有基于 Architectury 的模组，所以跟着 Architectury 走，不跟着 FTB 联动走。`plugins/` 没有 mixin 入口。
+- **放在哪**：类在 `numen-api/common`，两份配置在各自加载器的 Numen API 模块里。"她是真玩家"是身体的身份，属于 Numen API 机制，影响所有基于 Architectury 的模组，所以跟着 Architectury 走，不跟着 FTB 联动走。`plugins/` 没有 mixin 入口。
 - **上游**：可以给 Architectury 提 PR，让 NeoForge 端也走 `FakePlayers` 事件，和 Fabric 对齐。合并以后就能删掉这条 mixin。
 - **其它版本分支**：
   - 26.1 起，FTB 改用 FTB Library 自己的 `Platform.get().misc().isFakePlayer`（`NeoMiscImpl.java:42`），注入点要换。
@@ -174,7 +174,7 @@ plugins/ftbquests/
   skills/ftb_quests/SKILL.md
 ```
 
-- **isFake 翻转的 mixin 不放在插件里**，放在 api，见第三节。
+- **isFake 翻转的 mixin 不放在插件里**，放在 Numen API，见第三节。
 - **为什么只加一个工具**：按扩展点原则，读任务书、提交、入队都是新动词，所以做成插件工具加技能文档。工具表每轮全量下发，因此合并成一个工具，用 action 区分。
 - **详情里的"谁来完成"**：用第四、五节的表给每个条件标注，例如"她也能做 / 要她提交 / 只有主人合成才算 / 观察暂不支持"。
 - **技能文档要点**：

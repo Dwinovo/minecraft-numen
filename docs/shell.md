@@ -127,7 +127,7 @@
 ### 放在哪:`agent` 模块,程序在服务端跑
 
 - 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
-  (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎
+  (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进 Numen API
   (`numen-api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
 - **程序整段在服务端跑**(§十四):客户端只送程序文本、她的模块清单与服务端还没有的模块正文,服务端在身体与数据旁边跑完,回一张
   回执。客户端的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
@@ -361,12 +361,12 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ### 存在哪、怎么升级、怎么还原
 
-规矩只在 `api` 的 `Modules` 一处:
+规矩只在 Numen API 的 `Modules` 一处:
 
 - **名字就是路径。** 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改。模块名两段
   `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
   是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这个目录这一个来源。
-- **出厂的只是安装包,升级照 dpkg 的 conffile。** core 与插件经 `NumenApi.bundleModules` 交来的目录(core 是 jar 里的 `modules/`,
+- **出厂的只是安装包,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleModules` 交来的目录(Numen 是 jar 里的 `modules/`,
   插件挨着它的技能放在 `plugins/<插件>/modules/`)第一次用到目录时装进对应的文件,账本 `modules.json` 记下每个文件上次装进去的
   出厂指纹:没改过的换成这一版出厂的;改过的留着她的、出厂变了就标"出厂有新版";删了的尊重删除、不再装回;她新建的撞上新出厂的
   同名一份当作改过;出厂不再发的,没改过的删掉、改过的留给她。`numen.module.reset(name)` 还原成这一版出厂的。
@@ -392,7 +392,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ### 全名与名字空间
 
-- 脚本里一律写全名:引擎与 core 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
+- 脚本里一律写全名:Numen API 与 Numen 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
   (`tlm.maid.task`、`kaleidoscope.pot.fill`)。名字空间由登记者定(`NumenPlugins.register(名字空间, …)`),路线、移动等组
   不改登记代码就落在 `numen.*` 下。模块按名字空间与组放(§九),和同名的组合在一起。
 - 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 memory 工具。
@@ -457,7 +457,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 `costs` 的每一项:`dig`、`place` 是 `false`(不许,默认)、`true`(许,原价)或一个数(许,每挖/放一格另加这么多);`consent` 是
 `true`(许走要问主人的格,价钱乘 10,默认)、`false`(要问的格当墙,绕开)或一个不小于 1 的倍数;`jump`、`swim` 是每跳一下、每过一格
 水另加的价;`fall` 是脚下没水时最多跳多高;`parkour` 许不许疾跑跳过 2–4 格的空隙;`max_changes` 是整趟最多改几格。读法与翻成寻路
-规格(`RouteSpec`)只在 `core/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `Positions.cells`,
+规格(`RouteSpec`)只在 `numen/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `Positions.cells`,
 和动作收一串格的参数(`@Rest`,经 `Positions.items`:一项是一团就展开成它的每一格)同一处。
 
 权限不是描述的一项。规划时每一格自动问权限层(`GateTerrain`,与执行同一个 `Gate` 判定):拒绝的当墙,要问的照 `costs.consent`
@@ -535,7 +535,7 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
   收工前等这一挖的掉落物落定,最多 40 刻(2 秒:从被挖那一格弹起再落到底下约 10 刻、在地上滑停约 7 刻,岩浆两刻、火与仙人掌五刻
   毁掉一件,四十刻自由落体能掉二十来格;漂在水里的永远不着地,到上限就照此刻在哪说)。认领在生成那一刻:她的手挖掉一格
   (`ServerPlayerGameMode.destroyBlock`)那一段里进世界的掉落物记进这一挖的账,连带碎掉的(火把、箱子里的东西)也算;去向只在
-  `core/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
+  `numen/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
   掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
   burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
   `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
@@ -550,7 +550,7 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 照主流的写法(Python 的类型注解生成工具 schema、Cloudflare Code Mode 的 TS 接口、Spring 的注解方法):**一个函数就是一个带 `@Fn`
 的静态方法,它的签名就是契约**——名字、在哪执行、怎么交回、参数(位置与选项)、返回的类型、帮助,全从签名读出来,不另写一份。命令行
 前端(Brigadier 树、把一行字读成调用)删了,脚本是唯一的入口;Numen 自己的各组与每个插件走同一扇门
-(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 `api` 的 `com.dwinovo.numen.api.sdk`。
+(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 Numen API 的 `com.dwinovo.numen.api.sdk`。
 
 ### 写法
 
@@ -590,7 +590,7 @@ public final class LocateApi {                         // 一组:一个公开类
   同一种 `bad_argument`(附用法与帮助的写法)。
 - **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
   父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`EntityRef`、
-  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:引擎自己的
+  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:Numen API 自己的
   不带前缀(`Plan`、`Window`),插件的带名字空间(`tlm.Maid`)。
 - **够不着、用一只实体、过权限是原语**:`call.entity(ref)` 认出点名的实体(不在了是 `not_found`),`call.reach(entity, Reach.hand())`
   量够不够得着(够不着是 `out_of_reach`,`hint` 是走过去的那一行),`call.use(entity, reach, deed)` 是这三样加上权限层的
@@ -613,8 +613,8 @@ public final class LocateApi {                         // 一组:一个公开类
 - 两个类型争同一个类名。
 
 写法上的问题不拦,交给 `ApiTester.lint()` 的报告:没写说明、参数没写 `@Doc`、没写例子、例子读不通或没调到自己或参数读不成、
-`@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。core 与
-各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),core 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
+`@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。Numen 与
+各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
 与机器可读的元数据 `numen-api.json`。好写法好不好用,由评测的分数说话(见下)。
 
 ### 组成

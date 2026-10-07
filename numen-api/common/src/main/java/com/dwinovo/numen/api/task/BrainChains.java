@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * 链登记口:内容包(numen-core、第三方)把自己的竞价链工厂注册进来,引擎的
+ * 链登记口:内容包(Numen、第三方)把自己的竞价链工厂注册进来,Numen API 的
  * {@link CompanionBrain} 每同伴实例化一份。工厂无参,返回链实例;链要讲述自己干了什么,
  * 直接写 {@link com.dwinovo.numen.api.event.NumenEvents}——世界事件只有那一个入口。
  * {@code order} 决定同 tick 平局时的先后(小者先,
- * 惯例:意图越硬的越小)。引擎自带的 {@link LlmTaskChain} 与
+ * 惯例:意图越硬的越小)。Numen API 自带的 {@link LlmTaskChain} 与
  * 说话看人姿态链不经此处——它们是机器的一部分,固定排在注册链之后。
  *
  * <p>Init-time only(和 ToolRegistry/CompanionTaskFactory 同一约定):

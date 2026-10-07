@@ -4,8 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Identity constants for the {@code numen-core} tool pack. The engine
- * ({@code numen-api}) has its own {@code com.dwinovo.numen.api.Constants}; this is
+ * Identity constants for the Numen tool pack. Numen API
+ * has its own {@code com.dwinovo.numen.api.Constants}; this is
  * deliberately a separate type in a separate package so the two mods never put
  * the same fully-qualified class on the runtime classpath.
  */

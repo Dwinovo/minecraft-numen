@@ -13,7 +13,7 @@
  *       surface for instinct layers;</li>
  *   <li>{@link com.dwinovo.numen.api.task.reflex reflex} — the instinct switch
  *       roster;</li>
- *   <li>{@link TaskCommands} — the engine-owned {@code task} command group
+ *   <li>{@link TaskCommands} — the Numen API-owned {@code task} command group
  *       (status / stop / timer; stop is also the shortcut tool {@code task_stop})
  *       a pack installs alongside its own tools.</li>
  * </ul>
@@ -22,7 +22,7 @@
  * ({@code CompanionBrain}, {@code TaskQueue}, {@code ChainScheduler},
  * {@code LlmTaskChain}, {@code TaskSessionHooks}, {@code HandPinRelease},
  * {@code chain/}) — is internal and excluded from the {@code :api} jar. The
- * engine schedules; how a tool actually does its work (packet transport,
+ * Numen API schedules; how a tool actually does its work (packet transport,
  * multi-tick driving) lives in the tool pack.
  */
 package com.dwinovo.numen.api.task;

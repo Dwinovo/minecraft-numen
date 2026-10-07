@@ -13,11 +13,11 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import java.nio.file.Path;
 
 /**
- * NeoForge entry point for the numen-core tool pack. Registers the tools and
- * task runners into the numen-api engine, then wires the server-tick work its
+ * NeoForge entry point for the Numen tool pack. Registers the tools and
+ * task runners into Numen API, then wires the server-tick work its
  * tools need (budget-sliced block scans, the off-thread pathfinder's chunk
- * snapshots). The engine itself is brought up by the separate numen-api mod,
- * which core depends on.
+ * snapshots). Numen API itself is brought up by the separate Numen API mod,
+ * which Numen depends on.
  */
 @Mod(Constants.MOD_ID)
 public class NumenCoreNeoForge {
@@ -29,11 +29,11 @@ public class NumenCoreNeoForge {
         com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
 
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
-        // Debug verbs merged into the /numen root registered by the engine mod.
+        // Debug verbs merged into the /numen root registered by the Numen API mod.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));
 
-        // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
+        // Numen 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
         // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
         declareBundledSkills();
         declareBundledModules();
@@ -51,7 +51,7 @@ public class NumenCoreNeoForge {
     }
 
     /**
-     * core 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
+     * Numen 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
      * GameTest 在服务端),所以直接登记,不等客户端。
      */
     private static void declareBundledModules() {
@@ -63,7 +63,7 @@ public class NumenCoreNeoForge {
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
-        // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
+        // 排程机器的心跳随机器归了 Numen API;Numen 只 tick 自己的工具配套。
         BlockSearch.tick(event.getServer());
         // Route plans (route plan): poll finished searches and reply.
         com.dwinovo.numen.nav.RouteQueries.serverTick(event.getServer());

@@ -59,8 +59,8 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 ## 四、分层
 
 ```
-            ┌───────────────────────── Numen(core) ─────────────────────────┐
-            │ 任务 / 命令 / 感知     适配层 core/nav:端口实现、路线簿、文案渲染 │
+            ┌───────────────────────── Numen ───────────────────────────────┐
+            │ 任务 / 命令 / 感知    适配层 numen/nav:端口实现、路线簿、文案渲染 │
             └───────────────┬───────────────────────────────┬────────────────┘
                             │ 只经门面                        │ 实现端口
 ┌──────────────────────── pathing 模块(只依赖原版 MC)─────────────────────────┐
@@ -151,7 +151,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 身体快照 `BodySnapshot` 不是端口，是宿主派发时从真实身体上抄下来交进来的值;规划与执行复核读同一个形状。
 
-### Numen 适配层(`core/.../nav/`)
+### Numen 适配层(`numen/.../nav/`)
 
 - 端口的实现:`CompanionPorts`(组端口、组成本模型)、`CompanionHands`(`Effector`,连同挑工具拿到手上)、`GateTerrain`
   (`TerrainPolicy`)、`ThrowawayBlocks`(`Materials`);`Threats` 由 `Menace.dangers` 答。
@@ -160,13 +160,13 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
   同意的格时开走前先规划一条过目、问主人,实际账并进旅程账,反射看得见在走的那一趟。没路就照实收场,不替她放宽规格。
 - 说给模型:结局(连同路线上的一段没走到时改这条路线的下一步)、实际账、身体动作、计划要改的格渲染成英文、结局到 `FailureType` 的
   映射,只在 `NavText`;旅程账 `Journey`。
-- 只搜不走的规划(`route plan`)的结论交付 `RouteQueries`。路线这个名词(意图、计划、承诺)在 `core/route`,见 `look-plan-act.md`
+- 只搜不走的规划(`route plan`)的结论交付 `RouteQueries`。路线这个名词(意图、计划、承诺)在 `numen/route`,见 `look-plan-act.md`
   与 `cli.md` 附录 G"move 与 route"。
 - 第 0 层按她的身体在活世界上答:她在哪个节点 `Feet`、她身边的地形 `Terrain`(待不待得住、能不能站、身体放不放得下、
   种类、托着她的格、迈不迈得进下一列;`scan_around`、钓鱼站位、建造表演、跟随落脚都问它)。
 - 挖一格的定价 `DigQuote`(挖矿挑目标),建造工地的位置代价 `BuildSite`,船 `BoatNav`(读 `Terrain`)。
 
-core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在 `search` 包里)与身体机制(`body`:键盘、快捷栏、瞄准、准星);
+Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在 `search` 包里)与身体机制(`body`:键盘、快捷栏、瞄准、准星);
 门面交出的数据里带的下层值类型(改动 `Edit`、实际账 `EditLedger`、生物 `Threat`、格子种类 `Semantics.Kind`)照读,
 地形几何、成本模型、执行层的机器只在适配层里接。
 
@@ -174,11 +174,11 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 - 新增 Gradle 模块 `pathing`,和 `numen-api/common` 一样对着原版编译(neoForm),不含加载器代码，按 `numen-api/common`
   的方式打进两个加载器的发行包。包名 `com.dwinovo.numen.pathing`。
-- 依赖只有 Minecraft、fastutil、slf4j;不依赖 `ai`、`agent`、`api`、`core`。模块的 classpath 上没有 Numen,
+- 依赖只有 Minecraft、fastutil、slf4j;不依赖 `ai`、`agent`、Numen API、Numen。模块的 classpath 上没有 Numen,
   往外的依赖在编译期就过不去。
-- `api` 依赖 `pathing`(同伴的身体实现了身体端口),`core` 经它的依赖用上;类随 numen-api 的发行包平铺发出。
+- Numen API 依赖 `pathing`(同伴的身体实现了身体端口),Numen 经它的依赖用上;类随 Numen API 的发行包平铺发出。
   联动插件的编译类路径上另挂一份(`numen-plugin.gradle`)。模块本身还没有单独的 maven 坐标。
-- `core` 在适配层之外只经门面(`api`)、规格(`spec`)、`search` 包里的目标族与身体机制(`body`)使用寻路(见第四节 Numen 适配层)。
+- Numen 在适配层之外只经门面(`api`)、规格(`spec`)、`search` 包里的目标族与身体机制(`body`)使用寻路(见第四节 Numen 适配层)。
 - 以后单独发布时，门面与端口就是对外接口。
 
 ## 六、事实归属
@@ -331,7 +331,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 ### Numen 侧 GameTest
 
-继续在 core 里从工具入口测:goto、follow、`route plan` 与 `move go`、建造绕圈、挖矿等，验证适配层和回执措辞。
+继续在 Numen 里从工具入口测:goto、follow、`route plan` 与 `move go`、建造绕圈、挖矿等，验证适配层和回执措辞。
 
 ### 现有测试
 
@@ -403,7 +403,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 ### 第一批(09-27,`pathing-rewrite` 上 505deb86..42067cdf)
 
 - **构建**:`pathing` 模块用 `numen-common` 加 neoForm 对着原版编译;类在 `numen-loader.gradle` 的 `jar` 里平铺进两个
-  加载器的发行包(Fabric 由 remapJar 一并改名)。开发期运行的类路径和 `core` 对它的依赖，等切换那批有了使用方再接。
+  加载器的发行包(Fabric 由 remapJar 一并改名)。开发期运行的类路径和 Numen 对它的依赖，等切换那批有了使用方再接。
 - **碰撞箱入口 `Boxes`**:按 `BlockState` 缓存;原版标了 dynamic shape 的六种(脚手架、细雪、竹子、滴水石锥、潜影盒、移动中的活塞)
   不缓存，每次按坐标和"脚在这个高度的身体"现问。
 - **节点归格**:`Footing.cellOf(feetY) = floor(feetY + 1e-5)`,容差同原版 `isAbove`。灵魂沙、耕地、土径、下半砖、地毯、雪层上脚在
@@ -548,7 +548,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
   本能开关、上船对齐都留下。`InputDriver` 的走、跳、潜行、停由 `Controls` 替代(每具身体一个实例、每刻 `apply`),
   朝向与看向(模块里在 `Aim`)、船的驾驶留在 Numen。`BlockDigger` 的逐刻挖掘循环由 `PlayerHands` 替代,权限判断、
   `destroyNow`、挡路方块回退与 `DigResult` 留在 Numen。`ToolSelect` 整个由 `ToolChoice` 加 `Hotbar` 替代。
-  调用方以 core 的任务、反射与 `ExecHarness` 为主,切换时逐个改。
+  调用方以 Numen 的任务、反射与 `ExecHarness` 为主,切换时逐个改。
 - 现有寻路单测与 `MovementGameTests` 迁到新接口,逐条列去向(第八节"现有测试")。
 - 性能:许改地形时每个节点读九百次方块;若要快,先从同一次展开里各走法重复算的落脚与迈步下手,再看快照按区段解码。
 - 已知近似照旧:展开节点只叠"走到这里那一步"的改动;斜走找挡路的门按两端身体盒的包络找。
@@ -582,7 +582,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 - **没做的**:第四节原表的 `PlacementAdvice` 没有做。旧代码里建造的这条路(`BuildPlacementRegistry` 选图纸方块、
   `BuildCalculationContext` 给图纸格单独定价)实际不生效:走向外圈那条路按位置禁挖禁放全部图纸格,规划器先查这条禁令,
   图纸格上既不会规划放块,也不会走到单独定价那一步;切换后 `BuildSite` 照旧禁,端口没有调用方,不加。
-  `Limits`、`NavLog` 同样没有用到的地方。模块还没有单独的 maven 坐标:类随 numen-api 的发行包平铺发出,
+  `Limits`、`NavLog` 同样没有用到的地方。模块还没有单独的 maven 坐标:类随 Numen API 的发行包平铺发出,
   仓外插件拿不到它的依赖声明。
 - **性能**(09-28 调研,同口径):测试服务器里一个假玩家同伴,在同一片搭好的地形上从同一起点搜到同一终点,同一展开预算
   10 万、同一许可(权限层的 `Gate`)、同样的料;旧实现在 dad87b84(旧寻路与新模块并存的最后一版)上与新实现同一刻、同一份
@@ -744,7 +744,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 `WorldSnapshot.SEARCH_RADIUS`(6 个区块)的快照、展开四万个节点——远处的矿要么伸出快照(`Unloaded`),要么预算用完(`OutOfBudget`),
 挖矿任务又把这些结局压成同一句"到不了",还要同一局面撞两次才收工。寻路模块这次不动,改的是用它的一方:
 
-- **工具边界画在一次规划看得清的地方**:挖矿只在工作区(`core/nav/WorkArea`)里干——受理时她脚下为中心的球,半径上限由快照推出:
+- **工具边界画在一次规划看得清的地方**:挖矿只在工作区(`numen/nav/WorkArea`)里干——受理时她脚下为中心的球,半径上限由快照推出:
   从任何起点快照保证看得见水平 96 格,工作区直径取这么大(半径 48),区里任意两点在同一份快照里。竖直方向同一个半径;展开预算
   由第十三节切换记录里的量测估:实心石头挖 30 格隧道约一万一千个节点。区外的只报告,去不去归模型(`move_goto` 过去再挖)。
   `work collect` 的半径上限是同一个数,也改成以受理时的位置为中心。
@@ -845,12 +845,12 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 
 ### 整片禁止(09-30,`look-plan-act` 第 3 步)
 
-宿主的"一块地方"是区域(Numen api 的 `Area`,按 16³ 小节存位图,一块基地可以有几百万格)。路线标志 `--avoid area:farm`、
+宿主的"一块地方"是区域(Numen API 的 `Area`,按 16³ 小节存位图,一块基地可以有几百万格)。路线标志 `--avoid area:farm`、
 `--avoid_break area:house` 要把整块区域写进按位置的禁令,逐格展开进 `LongSet` 既慢又占地方,所以模块只加了一样数据:
 
 - **`PositionCosts.Region`**:一个函数式接口 `boolean contains(long cell)`(键是 `BlockPos.asLong`),只回答一格在不在里面。
   `Builder.forbid(Use, Region)` 把整片交进某一栏;`forbids` 先查逐格的禁令,再逐片问,再看"只许";合并时整片的禁令接在一起
-  (与逐格的一样取并集)。模块不认识区域怎么存,也不引用 Numen 的类型:宿主(`core/nav/NamedAreas.region`)拿区域的小节位图实现它,
+  (与逐格的一样取并集)。模块不认识区域怎么存,也不引用 Numen 的类型:宿主(`numen/nav/NamedAreas.region`)拿区域的小节位图实现它,
   一次查表加一次取位;区域是不可变值,搜索线程逐格问。实现要不可变或线程安全、问一格要快——这是接口的约定。
 - 去一块区域不加到达:Numen 侧用 `Goals.anyOf` 组合现成的 `at`/`use`/`within`(成员有界,见 `cli.md` 附录 G)。
 - 单测 `RouteSpecTest.aForbiddenRegionIsAskedCellByCellWithoutBeingSpelledOut`。
@@ -1034,7 +1034,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   执行时 `CompanionHands` 在活世界上再判同一格,答"要问"时不动手,交回 `Unasked`(裁决与那一格的征询项);Numen 的 `Trip` 停在
   那一格跟前、问主人,答应了接着走剩下的路,拒绝了在那里收场(`kind = "denied"`,下一步是把那一格写进描述的 `avoid` 再规划)。
   开走前整条规划一次、把要问的格一次问完的那一步删了——它唯一的理由就是权限的时机。
-- **模块没加的**:模块不认识"一趟路的描述""计划""途经点";多段、乘船、垫路料清单都在 Numen 侧(`core/route`、`core/nav`)。
+- **模块没加的**:模块不认识"一趟路的描述""计划""途经点";多段、乘船、垫路料清单都在 Numen 侧(`numen/route`、`numen/nav`)。
 
 ## 参考
 

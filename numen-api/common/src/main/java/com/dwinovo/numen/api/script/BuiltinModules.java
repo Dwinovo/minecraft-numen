@@ -14,7 +14,7 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * 随模组发布的 Lua 模块:core 与插件经 {@code NumenApi.bundleModules} 交来一个目录,里面每个 {@code <组名><扩展名>} 是一个模块
+ * 随模组发布的 Lua 模块:Numen 与插件经 {@code NumenApi.bundleModules} 交来一个目录,里面每个 {@code <组名><扩展名>} 是一个模块
  * (扩展名随脚本语言,{@link ScriptEngine#extension}),模块名是登记者的名字空间加组名({@code numen.work})。模块返回一张函数表,程序里
  * 以模块名直接用({@code numen.work.collect()});和第 ① 层的组同名的模块给那一组加函数。
  *

@@ -2,7 +2,7 @@
 
 # Numen API
 
-### The engine under the Numen mod — and the stable API addons build against
+### The layer under Numen — and the stable API addons build against
 
 *The heart of [Numen · 言出法随](https://github.com/Dwinovo/minecraft-numen): the AI companion is one cartridge; this is the console.*
 
@@ -22,12 +22,12 @@
 
 ## What it is
 
-**numen-api** is the engine that powers the [Numen](https://github.com/Dwinovo/minecraft-numen) mod, packaged as a standalone project with a **stable public API**. The Numen mod bundles this engine; addons compile against it. Everything the companion can do — think, talk, move, mine, fight, remember — lives here; the mod is just one set of tools and skills stacked on top.
+**Numen API** (mod id `numen_api`) is the layer that powers the [Numen](https://github.com/Dwinovo/minecraft-numen) mod, packaged as a standalone project with a **stable public API**. The Numen mod bundles Numen API; addons compile against it. Everything the companion can do — think, talk, move, mine, fight, remember — lives here; Numen is just one set of tools and skills stacked on top.
 
-What the engine provides:
+What Numen API provides:
 
 - **A client-side agent loop** (`EntityAgentLoop`) — hears a message, picks a tool, runs it, reads the result, decides the next move. The brain runs on the owner's own game client with the owner's own API key.
-- **A tool contract** — `NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`. A tool is any capability the companion can call; the engine schedules it and routes the result back into the conversation.
+- **A tool contract** — `NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`. A tool is any capability the companion can call; Numen API schedules it and routes the result back into the conversation.
 - **OpenAI-compatible LLM providers** — DeepSeek, DashScope (Qwen), OpenAI, Moonshot (Kimi), Zhipu (GLM), Minimax, SiliconFlow, Volcengine (Doubao). Transport is hand-rolled on the JDK's `HttpClient` + Gson, so there are **zero third-party runtime dependencies**.
 - **Conversation memory** — persists across saves and auto-compacts (Claude-Code-style) when it grows long.
 - **A companion body** — `NumenPlayer`, a server-side fake player (`ServerPlayer`). Every action runs through native player code paths, so redstone, mob AI, containers, and other mods treat it as a real player.
@@ -38,11 +38,11 @@ What the engine provides:
 
 ## Public API
 
-Addons touch the engine through three doors. Two feed a companion; one teaches it a new capability. Everything below is on the stable, published API surface.
+Addons touch Numen API through three doors. Two feed a companion; one teaches it a new capability. Everything below is on the stable, published API surface.
 
 ### Door 1 — `NumenGateway`: feed the built-in brain
 
-Hand a companion's **built-in brain** a message, verbatim. The engine splices it into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `enqueue`.
+Hand a companion's **built-in brain** a message, verbatim. Numen API splices it into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `enqueue`.
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
@@ -75,7 +75,7 @@ A headless `invoke` never touches the companion's conversation log — the exter
 
 ### Door 3 — `NumenTool` + `ToolRegistry.register`: teach a new capability
 
-A tool is any capability the companion can call. Implement four methods and register the instance during mod init. There is deliberately **nothing about Minecraft on the contract** — a tool can drive the body, hook an external service, or call a web API; the engine only presents it to the LLM, delivers the call, and routes the result back.
+A tool is any capability the companion can call. Implement four methods and register the instance during mod init. There is deliberately **nothing about Minecraft on the contract** — a tool can drive the body, hook an external service, or call a web API; Numen API only presents it to the LLM, delivers the call, and routes the result back.
 
 ```java
 import com.dwinovo.numen.api.agent.tool.*;
@@ -120,7 +120,7 @@ The public API is the set of packages whose `package-info` declares them so, mir
 | `com.dwinovo.numen.api.task` | `TaskResult` | the result envelope a tool hands back |
 | `com.dwinovo.numen.api.entity` | `NumenPlayer` | the server-side companion body |
 
-Everything else — providers, agent loop, memory, skill system, networking, UI — is `@Internal`. For a full worked reference, [numen-core](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
+Everything else — providers, agent loop, memory, skill system, networking, UI — is `@Internal`. For a full worked reference, [Numen](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
 
 ---
 
@@ -132,7 +132,7 @@ Artifacts are published to [numen-maven](https://github.com/Dwinovo/numen-maven)
 com.dwinovo.numen:numen-api-<loader>-<mcversion>:<version>
 ```
 
-Depend on the slim public-API jar (classifier `api`). At runtime the engine is **provided by the Numen mod**, which bundles it — an addon ships no engine code of its own.
+Depend on the slim public-API jar (classifier `api`). At runtime Numen API is **provided by the Numen mod**, which bundles it — an addon ships no Numen API code of its own.
 
 ```gradle
 repositories {
@@ -153,7 +153,7 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 
 `numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
 
-**To change engine mechanics themselves**, depend on core:
+**To change Numen API mechanics themselves**, depend on Numen:
 
 ```gradle
 dependencies {
@@ -165,9 +165,9 @@ dependencies {
 }
 ```
 
-core pulls the matching `numen-api-*` in with it — no second line needed. The engine's types appear in core's own public signatures (`AbstractCompanionTask<R extends TaskRecord>` and friends), so it is an `api` dependency, not a runtime one.
+Numen pulls the matching `numen-api-*` in with it — no second line needed. Numen API's types appear in Numen's own public signatures (`AbstractCompanionTask<R extends TaskRecord>` and friends), so it is an `api` dependency, not a runtime one.
 
-> Do not depend on either family's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest the engine. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
+> Do not depend on either mod's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest Numen API. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
 
 ---
 
@@ -177,8 +177,8 @@ Standard MultiLoader-Template layout (`common` + per-loader subprojects).
 
 ```bash
 ./gradlew build         # build every loader
-./gradlew datagenAll    # run data generation for both families, both loaders
-./gradlew publishAll    # publish api + core + ai + ui
+./gradlew datagenAll    # run data generation for both mods, both loaders
+./gradlew publishAll    # publish Numen API + Numen + ai + ui
 ./gradlew releaseJars   # collect the jar each loader ships to players into build/release/<loader>/
 ```
 
@@ -186,7 +186,7 @@ The target repo comes from `local_maven_url` in `gradle.properties`, which defau
 
 Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod), the slim `api`-classifier jar (what addons `compileOnly`), and sources / javadoc.
 
-**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. api, core, ai and ui all share it, so "which api goes with which mod" never comes up — mod 0.1.3 takes api 0.1.3, and it is also the version shown in game. The docs carry no concrete version: coordinates say `<version>`, and the badge at the top reads numen-maven directly.
+**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. Numen API, Numen, ai and ui all share it, so "which Numen API goes with which Numen" never comes up — Numen 0.1.3 takes Numen API 0.1.3, and it is also the version shown in game. The docs carry no concrete version: coordinates say `<version>`, and the badge at the top reads numen-maven directly.
 
 **Releasing is one click on GitHub:** Actions → Publish → Run workflow, pick the branch (that is, the MC version) and the channel (beta / release). From the command line:
 
@@ -200,7 +200,7 @@ One run covers both audiences: it builds once; pushes the artifacts to numen-mav
 
 ## Ecosystem
 
-**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. The engine (`numen-api/`), the MCP server and the mod itself all live in this one repository; the engine is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
+**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. Numen API (`numen-api/`), the MCP server and the mod itself all live in this one repository; Numen API is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
 
 Two things build on it:
 

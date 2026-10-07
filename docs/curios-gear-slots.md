@@ -25,7 +25,7 @@
 
 原版的实现也作为提供者之一,走同一扇门,不写"原版先决定、模组兜底"。
 
-## 三、接口(numen-api/common,`com.dwinovo.numen.api.gear`,在瘦 api jar 的 `api/**` 内)
+## 三、接口(numen-api/common,`com.dwinovo.numen.api.gear`,在瘦 api jar 内)
 
 ```java
 /** 一处能把东西穿戴在身上的来源:原版四件甲是一处,Curios 饰品栏是一处。
@@ -50,11 +50,11 @@ public interface GearSlot {
 ```
 
 - `NumenApi.registerGear(GearSource)` 由 `NumenPlugins` 实现,内部用 `CopyOnWriteArrayList`。登记顺序就是自动选位的优先级。
-- 引擎内部入口是 `gearSlots(body)` 和 `gearKinds(body, stack)`。
+- Numen API 内部入口是 `gearSlots(body)` 和 `gearKinds(body, stack)`。
 - 服务端要用,所以插件要在 `register` 块里直接调,不能放进 `onClient`。
 - `kindsOf` 是必需的:没有它,自动模式只能二选一——要么"没位置就拿手上"(就是现在的 bug),要么"没位置就失败"(`gear wear stone_pickaxe` 就不能用了)。
 
-## 四、原版提供者(core)
+## 四、原版提供者(Numen)
 
 - `VanillaArmor` 用 `body.inventoryMenu` 里真实的四个 `ArmorSlot`,顺序是 `ARMOR_SLOT_START + i` 对应 HEAD、CHEST、LEGS、FEET。
   - 放入用 `mayPlace`(NeoForge 改写成 `stack.canEquip`,Fabric 用原版判据),取出用 `mayPickup`(绑定诅咒),写入用 `setByPlayer`(触发 `onEquipItem`,有音效)。
@@ -78,7 +78,7 @@ public interface GearSlot {
 - 回执里的 `slot` 字段取 `target.name()`。
 
 **脱(`UnequipCompanionTask`)**
-- 按 `slot` 名,`armor` 别名在 core 里展开成四个原版名;或者按 `item_id`,从戴着它的第一格摘。
+- 按 `slot` 名,`armor` 别名在 Numen 里展开成四个原版名;或者按 `item_id`,从戴着它的第一格摘。
 - 每一格依次:先问 `refuseRemove` → 查背包有没有空位 → `swap(EMPTY)` → `inv.add`。
 - 顺带修掉绑定诅咒的问题。
 
@@ -98,7 +98,7 @@ public interface GearSlot {
 - `status_self` 的 `equipment` 只保留两只手。
 
 **第一版不加饰品变化事件。** "戴着什么"是状态;自己穿脱有回执;外部变化下一轮 `<worn>` 会如实反映。以后真要加事件:
-- 在 api 层对"槽名 → 物品 id"的快照做差分,不监听 `CurioChangeEvent`;
+- 在 Numen API 层对"槽名 → 物品 id"的快照做差分,不监听 `CurioChangeEvent`;
 - 出生第一份快照只记录、不发;
 - 自己装备任务那一刻产生的差分不发;
 - 死亡交给 death 事件。

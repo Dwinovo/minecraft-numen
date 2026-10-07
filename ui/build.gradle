@@ -1,4 +1,4 @@
-// numen-ui:游戏内 UI 组件库,纯 JVM——零 Minecraft 依赖、零 numen-api 回引。
+// numen-ui:游戏内 UI 组件库,纯 JVM——零 Minecraft 依赖、零 Numen API 回引。
 // 三层架构的中间层:上面是每版本 ~60 行的画布适配器(IDrawSurface 实现,住在
 // 各版本分支里),下面是屏幕组装层(允许 import MC)。本模块与 Minecraft 版本
 // 无关:十一个版本分支共用同一份 numen-ui,改一处全家族生效。

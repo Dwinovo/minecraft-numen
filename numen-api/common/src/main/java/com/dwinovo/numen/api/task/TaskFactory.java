@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Maps a queued {@link TaskRecord} to the {@link Task} that runs it on
  * the player body — the seam where concrete task execution plugs into the
- * engine. The base {@code numen-api} engine ships <em>no</em> task types of its
- * own; {@code numen-core} (and any third-party tool pack) registers each record
+ * Numen API. The base Numen API ships <em>no</em> task types of its
+ * own; Numen (and any third-party tool pack) registers each record
  * type with the runner that executes it, keyed by the record's concrete class.
  *
  * <p>A record whose type was never registered falls back to

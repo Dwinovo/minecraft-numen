@@ -34,7 +34,7 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // numen-api 已并入本仓 numen-api/ 子树,以 project 依赖直连——本地 maven 中转与
+    // Numen API 已并入本仓 numen-api/ 子树,以 project 依赖直连——本地 maven 中转与
     // SNAPSHOT 缓存补丁均已随之退役。
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
     exclusiveContent {
@@ -53,11 +53,11 @@ repositories {
 }
 
 // 协议文本随 jar 发出:根目录的 LICENSE(LGPL-3.0),licenses/ 下 LGPL 所依托的 GPL 全文与美术资源的授权;
-// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀标明是哪个 mod 的
+// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀是所属模组的 id
 def licenseTexts = copySpec {
-    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_name}" } }
-    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_name}" } }
-    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_name}" } }
+    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_id}" } }
+    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_id}" } }
+    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_id}" } }
 }
 
 sourcesJar {

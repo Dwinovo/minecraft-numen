@@ -27,10 +27,10 @@ import java.util.function.Function;
  *
  * <h2>名字空间由登记者给出</h2>
  * 插件登记时写自己的 id(一般就是 mod id 或它的简写:{@code tlm}、{@code ftbquests}),拿到的那扇门只往这个名字空间里登记:组
- * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。引擎自己的内容用 {@link #NUMEN}。
+ * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。Numen API 自己的内容用 {@link #NUMEN}。
  *
  * <h2>时机不必你操心</h2>
- * 插件在自己模组的构造期登记就行。引擎内部该就绪的东西各有各的时机(工具注册表在
+ * 插件在自己模组的构造期登记就行。Numen API 内部该就绪的东西各有各的时机(工具注册表在
  * 类加载时就有,技能与头像要等客户端起来),这里替你等——先登记的先跑,能跑的立刻跑,
  * 跑不了的等它就绪。
  *
@@ -48,7 +48,7 @@ public final class NumenPlugins {
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
 
-    /** 引擎自己的名字空间:core 与引擎登记的组与模块都在它下面。 */
+    /** Numen API 自己的名字空间:Numen 与 Numen API 登记的组与模块都在它下面。 */
     public static final String NUMEN = "numen";
 
     private NumenPlugins() {}
@@ -74,7 +74,7 @@ public final class NumenPlugins {
     }
 
     /**
-     * 客户端起来时把只在客户端存在的能力接上来。<b>引擎内部调用</b>,插件不该碰。
+     * 客户端起来时把只在客户端存在的能力接上来。<b>Numen API 内部调用</b>,插件不该碰。
      */
     public static void bindClient(Consumer<Path> skillSink, ClientInput input) {
         skills = skillSink;
@@ -87,7 +87,7 @@ public final class NumenPlugins {
 
     /**
      * 只接技能这一样,不算客户端起来了:没有客户端、却要照主人客户端的样子组装提示词的进程(评测)用它。
-     * 插件的 {@code onClient} 块照旧攒着不跑。<b>引擎内部调用</b>,插件不该碰。
+     * 插件的 {@code onClient} 块照旧攒着不跑。<b>Numen API 内部调用</b>,插件不该碰。
      */
     public static void bindSkills(Consumer<Path> skillSink) {
         skills = skillSink;
@@ -102,7 +102,7 @@ public final class NumenPlugins {
     /**
      * 客户端还没接上时先攒着,接上再跑。
      *
-     * <p>插件在自己的 {@code @Mod} 构造器里登记,而引擎的客户端入口也是一个
+     * <p>插件在自己的 {@code @Mod} 构造器里登记,而 Numen API 的客户端入口也是一个
      * {@code @Mod} 构造器——谁先谁后由加载器的模组排序决定。不攒的话,插件生不生效
      * 就成了排序的函数:同一份代码换个加载器、加个别的模组就可能整块静默失效,
      * 而且没有任何报错。专用服务器上没人来接,这两个表原样留着不跑,正是要的行为。
@@ -115,18 +115,18 @@ public final class NumenPlugins {
 
     /**
      * 登记过的穿戴来源,按登记顺序——那也是自动选位的优先级。见 {@link NumenApi#registerGear}。
-     * 原版四件甲由 core 在加载期最先登记,所以总在最前。
+     * 原版四件甲由 Numen 在加载期最先登记,所以总在最前。
      */
     private static final List<GearSource> GEAR = new CopyOnWriteArrayList<>();
 
     /**
-     * 身体状态片段。第一段是引擎自己从穿戴来源渲染的 {@code <worn>},其后是插件经
+     * 身体状态片段。第一段是 Numen API 自己从穿戴来源渲染的 {@code <worn>},其后是插件经
      * {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
      */
     private static final List<Function<NumenPlayer, String>> BODY_STATE =
             new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn));
 
-    /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>引擎内部调用</b>(服务端主线程)。 */
+    /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>Numen API 内部调用</b>(服务端主线程)。 */
     public static List<GearSlot> gearSlots(NumenPlayer body) {
         List<GearSlot> out = new ArrayList<>();
         for (GearSource source : GEAR) {
@@ -135,7 +135,7 @@ public final class NumenPlugins {
         return out;
     }
 
-    /** 各来源认为这件该戴在哪类位置,合在一起;空集 = 不是穿戴物。<b>引擎内部调用</b>(服务端主线程)。 */
+    /** 各来源认为这件该戴在哪类位置,合在一起;空集 = 不是穿戴物。<b>Numen API 内部调用</b>(服务端主线程)。 */
     public static Set<String> gearKinds(NumenPlayer body, ItemStack stack) {
         Set<String> out = new LinkedHashSet<>();
         for (GearSource source : GEAR) {
@@ -166,12 +166,12 @@ public final class NumenPlugins {
         return sb.append("</worn>").toString();
     }
 
-    /** 汇总所有插件对这只同伴的客户端现算片段。<b>引擎内部调用</b>。 */
+    /** 汇总所有插件对这只同伴的客户端现算片段。<b>Numen API 内部调用</b>。 */
     public static String stateFragments(UUID companion) {
         return joinFragments(STATE, companion);
     }
 
-    /** 汇总所有插件从这具身体上读的状态片段。<b>引擎内部调用</b>(服务端)。 */
+    /** 汇总所有插件从这具身体上读的状态片段。<b>Numen API 内部调用</b>(服务端)。 */
     public static String bodyStateFragments(NumenPlayer body) {
         return joinFragments(BODY_STATE, body);
     }

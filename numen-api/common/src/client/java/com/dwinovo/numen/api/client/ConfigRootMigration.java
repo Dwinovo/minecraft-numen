@@ -12,7 +12,7 @@ import java.util.List;
  * 把配置从 {@code config/numen_api/} 搬到 {@code config/numen/}——一次性,搬完即无事。
  *
  * <h2>为什么会有两个根</h2>
- * 早先用 {@link Constants#MOD_ID} 当配置根目录名,而那是引擎 jar 在加载器眼里的身份
+ * 早先用 {@link Constants#MOD_ID} 当配置根目录名,而那是 Numen API jar 在加载器眼里的身份
  * ({@code numen_api}),不是玩家眼里的产品名。于是技能和 mcp_clients.json 落进了
  * {@code config/numen_api/},而同伴、人设、皮肤落进 {@code config/numen/}——同一份配置
  * 一分为二。界面文案和文档说的一直是后者,所以玩家照提示往 {@code config/numen/skills}

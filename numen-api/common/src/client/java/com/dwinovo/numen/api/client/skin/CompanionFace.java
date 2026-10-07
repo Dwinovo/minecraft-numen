@@ -10,7 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 画一个同伴的头像——引擎里<b>唯一</b>做"用插件的还是用皮肤脸"这个判断的地方。
+ * 画一个同伴的头像——Numen API 里<b>唯一</b>做"用插件的还是用皮肤脸"这个判断的地方。
  *
  * <p>名册、轮盘、聊天气泡、HUD、设置页各处都调这里。判断只写一次,就不会出现某一处
  * 忘了问插件、于是同一个同伴在两个界面里长得不一样。
@@ -34,7 +34,7 @@ public final class CompanionFace {
      * <p>只对同伴用。主人自己的头像、皮肤库条目的预览不走这里——那些不是同伴,
      * 让改外观的插件去接管它们是错的。
      *
-     * @param skin 回退用的皮肤(引擎一直拿得到,所以回退永远可用)
+     * @param skin 回退用的皮肤(Numen API 一直拿得到,所以回退永远可用)
      */
     public static void draw(GuiGraphics g, UUID companion, PlayerSkin skin,
                             int x, int y, int size) {

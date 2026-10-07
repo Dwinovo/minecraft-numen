@@ -14,7 +14,7 @@ import java.nio.file.Path;
 /**
  * FTB Quests 联动——她和主人在同一个 FTB 队伍里一起推进任务线。
  *
- * <p>"FTB 把她当真玩家"不在这里:那是引擎对 Architectury 的回答(api 的
+ * <p>"FTB 把她当真玩家"不在这里:那是 Numen API 对 Architectury 的回答(api 的
  * {@code ArchitecturyPlayerHooksMixin}),她的击杀、持物、到场由此进了 FTB 自己的判定,算给谁由 FTB 的
  * 队伍规则决定。这个联动做的是另一半:FTB 那边因此发生在她身上的事——队伍完成了任务、奖励发到了她身上、
  * 有人邀请她入队——一件件告诉她;她自己点不了的任务书与组队按钮,经 {@code ftbquests} 的几个动作走按钮

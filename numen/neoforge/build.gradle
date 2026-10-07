@@ -4,13 +4,13 @@ plugins {
 }
 
 dependencies {
-    // The numen-api engine, now a sibling moddev project in this build.
+    // Numen API, now a sibling moddev project in this build.
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
     //
-    // api 而非 implementation:引擎的类型出现在 core 的公开签名里
+    // api 而非 implementation:Numen API 的类型出现在 Numen 的公开签名里
     // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
-    // implementation 在 POM 里落成 runtime,想扩展 core 的人拿得到 jar 却编译不了。
-    // 本模块的 datagen 需要引擎在运行时类路径上,所以是 api 而不是 compileOnlyApi
+    // implementation 在 POM 里落成 runtime,想扩展 Numen 的人拿得到 jar 却编译不了。
+    // 本模块的 datagen 需要 Numen API 在运行时类路径上,所以是 api 而不是 compileOnlyApi
     // ——Forge 那边相反,见 numen/forge/build.gradle。
     api project(':numen-api:neoforge')
 
@@ -22,7 +22,7 @@ dependencies {
     compileOnly project(':plugins:kaleidoscope')
     compileOnly project(':plugins:curios')
     compileOnly project(':plugins:ftbquests')
-    // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
+    // Bundle it into Numen's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':numen-api:neoforge'))
 }
 
@@ -74,7 +74,7 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
-            // 寻路模块本身随 numen-api 来(api 依赖它);这里只挂它自己的 GameTest 用例
+            // 寻路模块本身随 Numen API 来(Numen API 依赖它);这里只挂它自己的 GameTest 用例
             sourceSet project(':pathing').sourceSets.gametest
         }
     }

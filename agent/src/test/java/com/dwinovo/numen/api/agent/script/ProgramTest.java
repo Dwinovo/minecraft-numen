@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 停在哪一行的回执。
  *
  * <p>假的执行口把派出去的调用停在 {@link #pending} 里等测试替它回结果;task_finished 的正文是 {@code 编号 状态 交代的话}
- * (测试自己的约定,真的写法在 api 的 {@code NumenEvents})。执行体用当场执行的:同一个线程上一步一步看。
+ * (测试自己的约定,真的写法在 Numen API 的 {@code NumenEvents})。执行体用当场执行的:同一个线程上一步一步看。
  */
 class ProgramTest {
 

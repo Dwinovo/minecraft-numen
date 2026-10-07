@@ -1,6 +1,6 @@
-// numen-agent:同伴的大脑本身,纯 JVM 库——零 Minecraft 依赖、零 numen-api 回引,
+// numen-agent:同伴的大脑本身,纯 JVM 库——零 Minecraft 依赖、零 Numen API 回引,
 // 只往下依赖 numen-ai(ai → agent → api 单向三层)。循环要的零件放这里而不是 api:
-// api 的类路径上有 Minecraft,"不引用 Minecraft"只能靠自觉;放这里由编译器保证。
+// Numen API 的类路径上有 Minecraft,"不引用 Minecraft"只能靠自觉;放这里由编译器保证。
 // 代码本身与 Minecraft 版本无关,但各版本分支上的这份源码目前并不相同(功能先落
 // 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
 //

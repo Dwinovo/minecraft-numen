@@ -11,7 +11,7 @@ public class Constants {
 	/**
 	 * 玩家配置的根目录名:{@code config/numen/}。
 	 *
-	 * <p><b>刻意不等于 {@link #MOD_ID}。</b> MOD_ID 是引擎这个 jar 在加载器眼里的身份
+	 * <p><b>刻意不等于 {@link #MOD_ID}。</b> MOD_ID 是 Numen API 这个 jar 在加载器眼里的身份
 	 * ({@code numen_api});而配置目录是玩家眼里的产品名({@code numen})——同伴、人设、
 	 * 皮肤、技能、providers 全在那底下。两者是两个问题,共用一个常量的结果是配置根
 	 * 一分为二:技能和 mcp_clients 落进 config/numen_api/,其余落进 config/numen/,

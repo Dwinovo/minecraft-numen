@@ -8,11 +8,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
 /**
- * Catalogue of the datapack tags the numen-core tool pack declares. The
+ * Catalogue of the datapack tags the Numen tool pack declares. The
  * pathfinder and the loader-side data generators both reference the constants
  * here so the key's identifier exists in one place only — rename or repath in
- * this file and every consumer follows. These are core's tags (namespace
- * {@code numen}), not the engine's: pathfinding scaffolding and blueprint safety
+ * this file and every consumer follows. These are Numen's tags (namespace
+ * {@code numen}), not Numen API's: pathfinding scaffolding and blueprint safety
  * are tool-pack concerns. Which blocks the body may break is not a tag — that is
  * the permission layer's rule table ({@code com.dwinovo.numen.api.permission}).
  *

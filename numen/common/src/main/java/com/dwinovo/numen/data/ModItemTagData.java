@@ -8,7 +8,7 @@ import net.minecraft.world.item.Items;
 import java.util.function.Consumer;
 
 /**
- * Single source of truth for every item tag numen-core emits. A
+ * Single source of truth for every item tag Numen emits. A
  * {@link TagAppenderProvider} abstraction lets the Fabric and NeoForge data
  * providers feed their own native builder here, so adding a new tag entry edits
  * one place and both loaders pick it up.

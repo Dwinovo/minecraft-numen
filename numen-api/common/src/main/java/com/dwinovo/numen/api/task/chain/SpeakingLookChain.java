@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.reflex.Reflex;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 说话看人——引擎自带的唯一姿态链:大脑在输出(思考/生成/跑工具/语音在播,
+ * 说话看人——Numen API 自带的唯一姿态链:大脑在输出(思考/生成/跑工具/语音在播,
  * 客户端经 SpeakingStatePayload 报状态)且主人在近旁时,身体停下面向主人;
  * 其余时刻恒休眠。排在当前任务之下(第 4 层):任务在跑时自然让位
  * (挖着矿说话不回头,合理),任何反射更是随时抢得走。

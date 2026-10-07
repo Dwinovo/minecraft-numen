@@ -1,5 +1,5 @@
 // numen-ai:大脑与 LLM 服务商之间的连接层,纯 JVM 库——零 Minecraft 依赖、
-// 零 numen-api 回引。代码本身与 Minecraft 版本无关,但各版本分支上的这份源码
+// 零 Numen API 回引。代码本身与 Minecraft 版本无关,但各版本分支上的这份源码
 // 目前并不相同(功能先落 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
 //
 // 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、

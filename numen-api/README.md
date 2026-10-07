@@ -2,7 +2,7 @@
 
 # Numen API
 
-### Numen mod 底层的引擎，也是插件对接的稳定 API
+### Numen 的底层，也是插件对接的稳定 API
 
 *[Numen · 言出法随](https://github.com/Dwinovo/minecraft-numen) 的心脏：AI 同伴只是第一盘卡带，这里是那台游戏机。*
 
@@ -22,13 +22,13 @@
 
 ## 这是什么
 
-**numen-api** 是驱动 [Numen](https://github.com/Dwinovo/minecraft-numen) mod 的引擎，独立成一个项目，对外提供一套**稳定的公共 API**。Numen mod 把这台引擎打包在身上，插件则编译对接它。同伴会想、会说、会走、会挖、会打、会记事——这些能力全部住在引擎里；那个 mod 只是在引擎之上叠了一套工具和技能。
+**Numen API**（模组 id `numen_api`）是驱动 [Numen](https://github.com/Dwinovo/minecraft-numen) mod 的底层，独立成一个项目，对外提供一套**稳定的公共 API**。Numen mod 把 Numen API 打包在身上，插件则编译对接它。同伴会想、会说、会走、会挖、会打、会记事——这些能力全部住在 Numen API 里；Numen mod 只是在它之上叠了一套工具和技能。
 
-引擎提供这些东西：
+Numen API 提供这些东西：
 
 - **客户端对话回路**（`EntityAgentLoop`）——听一句话 → 选一个工具 → 干活 → 看结果 → 决定下一步。这条回路跑在**玩家自己的游戏客户端**上，用**玩家自己的 API key**。
 - **程序在服务端跑**——跑 Lua 的那个工具的调用是一整段程序：客户端把程序、她的模块清单与服务端还没有的模块正文发上去，服务端在身体旁边跑完、回一张回执；只有客户端才有数据的 `ClientCall` 函数由服务端向主人客户端发反向请求。详见 `docs/shell.md` §十四。
-- **工具契约**——`NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`。工具就是同伴能调用的一种能力；引擎负责调度它，并把结果送回对话。
+- **工具契约**——`NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`。工具就是同伴能调用的一种能力；Numen API 负责调度它，并把结果送回对话。
 - **兼容 OpenAI 接口的模型接入**——DeepSeek、DashScope（通义千问）、OpenAI、Moonshot（Kimi）、Zhipu（GLM）、Minimax、SiliconFlow、Volcengine（豆包）。传输层用 JDK 自带的 `HttpClient` + Gson 手搓，**不带任何第三方运行时依赖**。
 - **对话记忆**——跨存档持久化，聊长了自动摘要压缩（Claude Code 式的压缩策略）。
 - **同伴身体**——`NumenPlayer`，一个服务端的"真玩家"（`ServerPlayer`）。每个动作都走原版玩家的代码路径，所以红石、怪物、容器、别人的 mod 天生都拿它当真玩家对待。
@@ -39,11 +39,11 @@
 
 ## 公共 API
 
-插件通过三扇门接触引擎：两扇门给同伴喂输入，一扇门教它一项新能力。下面的一切都在稳定的、已发布的 API 面上。
+插件通过三扇门接触 Numen API：两扇门给同伴喂输入，一扇门教它一项新能力。下面的一切都在稳定的、已发布的 API 面上。
 
 ### 门一 —— `NumenGateway`：喂给内置大脑
 
-把一条消息原样交给同伴的**内置大脑**。引擎会在对话协议允许的下一个位置把它拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。接入外部渠道的插件就是这样工作的——QQ 插件把一条 QQ 消息变成一次 `enqueue`。
+把一条消息原样交给同伴的**内置大脑**。Numen API 会在对话协议允许的下一个位置把它拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。接入外部渠道的插件就是这样工作的——QQ 插件把一条 QQ 消息变成一次 `enqueue`。
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
@@ -76,7 +76,7 @@ NumenActuator.companions().thenAccept(fleet -> {
 
 ### 门三 —— `NumenTool` + `ToolRegistry.register`：教它一项新能力
 
-工具就是同伴能调用的一种能力。实现四个方法，在 mod 初始化时注册实例即可。契约上**刻意一个 Minecraft 概念都没有**——工具可以驱动身体、可以对接外部服务、可以调用某个 Web API；引擎只负责把它呈现给 LLM、把调用送达、把结果送回。
+工具就是同伴能调用的一种能力。实现四个方法，在 mod 初始化时注册实例即可。契约上**刻意一个 Minecraft 概念都没有**——工具可以驱动身体、可以对接外部服务、可以调用某个 Web API；Numen API 只负责把它呈现给 LLM、把调用送达、把结果送回。
 
 ```java
 import com.dwinovo.numen.api.agent.tool.*;
@@ -121,7 +121,7 @@ ToolRegistry.register(new SendQqMessageTool());
 | `com.dwinovo.numen.api.task` | `TaskResult` | 工具交回的结果信封 |
 | `com.dwinovo.numen.api.entity` | `NumenPlayer` | 服务端的同伴身体 |
 
-其余一切——各家模型接入、对话回路、记忆、技能系统、网络、UI——都是 `@Internal`。需要一份完整的参考实现？[numen-core](https://github.com/Dwinovo/minecraft-numen) 的全部工具与技能都构建在这套 API 之上，没有走任何后门。
+其余一切——各家模型接入、对话回路、记忆、技能系统、网络、UI——都是 `@Internal`。需要一份完整的参考实现？[Numen](https://github.com/Dwinovo/minecraft-numen) 的全部工具与技能都构建在这套 API 之上，没有走任何后门。
 
 ---
 
@@ -133,7 +133,7 @@ artifact 发布在 [numen-maven](https://github.com/Dwinovo/numen-maven)。坐�
 com.dwinovo.numen:numen-api-<loader>-<mcversion>:<version>
 ```
 
-依赖精简版的公共 API jar（classifier 为 `api`）。运行时引擎由 **Numen mod 提供**——它把引擎打包在身上，插件自己不携带任何引擎代码。
+依赖精简版的公共 API jar（classifier 为 `api`）。运行时 Numen API 由 **Numen mod 提供**——它把 Numen API 打包在身上，插件自己不携带任何 Numen API 代码。
 
 ```gradle
 repositories {
@@ -154,7 +154,7 @@ dependencies {
 
 `numen-ai`（模型接入与用量核算）、`numen-agent`（同伴大脑的循环内核、收件箱与长期目标）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
-**要改引擎本身的机制**，就依赖 core：
+**要改 Numen API 本身的机制**，就依赖 Numen：
 
 ```gradle
 dependencies {
@@ -166,9 +166,9 @@ dependencies {
 }
 ```
 
-core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引擎的类型出现在 core 的公开签名里（`AbstractCompanionTask<R extends TaskRecord>` 之类），所以它是 `api` scope 而非 `runtime`。
+Numen 会把对应的 `numen-api-*` 一并带出来，不用另写一行——Numen API 的类型出现在 Numen 的公开签名里（`AbstractCompanionTask<R extends TaskRecord>` 之类），所以它是 `api` scope 而非 `runtime`。
 
-> 两家的 `-common` 坐标（`numen-api-common-*` / `numen-common-*`）都别依赖。它们只有跨加载器那部分代码：没有加载器入口，`numen-api-common-*` 还没有语言文件，`numen-common-*` 也不内嵌引擎。能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
+> 两个模组的 `-common` 坐标（`numen-api-common-*` / `numen-common-*`）都别依赖。它们只有跨加载器那部分代码：没有加载器入口，`numen-api-common-*` 还没有语言文件，`numen-common-*` 也不内嵌 Numen API。能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
 
 ---
 
@@ -178,8 +178,8 @@ core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引
 
 ```bash
 ./gradlew build         # 构建每个加载器
-./gradlew datagenAll    # 跑齐两家、两个 loader 的数据生成
-./gradlew publishAll    # 发 api + core + ai + ui 的全部制品
+./gradlew datagenAll    # 跑齐两个模组、两个 loader 的数据生成
+./gradlew publishAll    # 发 Numen API + Numen + ai + ui 的全部制品
 ./gradlew releaseJars   # 把每个 loader 发给玩家的 jar 收进 build/release/<loader>/
 ```
 
@@ -187,7 +187,7 @@ core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引
 
 发布物按坐标分三类：完整 jar（运行时用，由 Numen mod 打包携带）、classifier 为 `api` 的精简 jar（插件 `compileOnly` 用），以及 sources / javadoc。
 
-**版本号全树锁步**，唯一出处是 `gradle.properties` 的 `version`——api、core、ai、ui 共用一个号，游戏里显示的也是它。所以"哪个 api 配哪个模组"不成问题：模组 0.1.3 就配 api 0.1.3。文档里不写具体版本号：坐标写成 `<version>`，顶上的徽章直接读 numen-maven。
+**版本号全树锁步**，唯一出处是 `gradle.properties` 的 `version`——Numen API、Numen、ai、ui 共用一个号，游戏里显示的也是它。所以"哪个 Numen API 配哪个 Numen"不成问题：Numen 0.1.3 就配 Numen API 0.1.3。文档里不写具体版本号：坐标写成 `<version>`，顶上的徽章直接读 numen-maven。
 
 **发版在 GitHub 上点一下**：Actions → Publish → Run workflow，选分支（就是 MC 版本）和渠道（beta / release）。命令行等价于：
 
@@ -201,7 +201,7 @@ gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 
 ## 生态
 
-**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体。引擎(`numen-api/`)、MCP 服务器与模组本体同住这一个仓,引擎另经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布,对外开放一套小巧的公共 API。
+**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体。Numen API(`numen-api/`)、MCP 服务器与模组本体同住这一个仓,Numen API 另经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布,对外开放一套小巧的公共 API。
 
 两类东西建在它之上：
 

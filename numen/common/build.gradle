@@ -13,10 +13,10 @@ neoForge {
 }
 
 dependencies {
-    // The numen-api engine (project dependency on the in-repo numen-api/ tree). compileOnly:
-    // the api classes are provided at runtime by the numen-api mod, not bundled.
+    // Numen API (project dependency on the in-repo numen-api/ tree). compileOnly:
+    // the api classes are provided at runtime by the Numen API mod, not bundled.
     compileOnly project(':numen-api:common')
-    // 单元测试要真的跑到引擎类(排程机器随 api),运行时类路径补上同一模块。
+    // 单元测试要真的跑到 Numen API 类(排程机器随 Numen API),运行时类路径补上同一模块。
     testImplementation project(':numen-api:common')
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
@@ -75,11 +75,11 @@ test {
     useJUnitPlatform()
 }
 
-// 服务端安全门:numen-core 的 common 全部是服务端代码(工具/任务/寻路/
-// 建造),客户端半边住在 numen-api。common 编译用的是合并的客户端 MC jar,
+// 服务端安全门:Numen 的 common 全部是服务端代码(工具/任务/寻路/
+// 建造),客户端半边住在 Numen API。common 编译用的是合并的客户端 MC jar,
 // 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上
 // ClassNotFound——这道检查让它在构建期就 fail。将来真要在本仓写客户端
-// 代码,参照 numen-api 的做法建 src/client/java 源码集,而不是放进 main。
+// 代码,参照 Numen API 的做法建 src/client/java 源码集,而不是放进 main。
 tasks.register('checkServerSafe') {
     group = 'verification'
     description = 'Fail if src/main references Minecraft client-only classes.'
@@ -101,7 +101,7 @@ tasks.register('checkServerSafe') {
         if (!offenders.isEmpty()) {
             throw new GradleException(
                     "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
-                    + "numen-core 的 common 应保持纯服务端;客户端功能归 numen-api:\n  "
+                    + "Numen 的 common 应保持纯服务端;客户端功能归 Numen API:\n  "
                     + offenders.join('\n  '))
         }
     }

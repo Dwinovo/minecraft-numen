@@ -14,7 +14,7 @@ import java.util.function.Supplier;
  * {@code plugins/} 下每一个都是独立的联动模组,只是被内嵌进这个 jar 一起发,省得玩家
  * 为了让同伴有张脸再去装第三个文件。登记方式和第三方插件<b>一字不差</b>——全部经
  * {@code NumenPlugins.register} 那扇门;编译期看得见的东西也一样,它们的类路径上
- * 只有瘦 api jar,引擎内部类够不着(见 buildSrc 的 numen-plugin.gradle)。
+ * 只有瘦 api jar,Numen API 内部类够不着(见 buildSrc 的 numen-plugin.gradle)。
  *
  * <h2>分工</h2>
  * 目标模组在不在、jar 里的一条路径对应哪个 {@link Path},只有加载器答得上,两样都由
@@ -37,7 +37,7 @@ public final class Gate {
     /**
      * @param modLoaded 问加载器:这个 mod id 装了没
      * @param inJar     问加载器:本模组 jar 里的这条路径对应哪个 {@link Path},没有这条路径给 null。
-     *                  各加载器模块的 {@code ModJar.find}——core 自己的 skills 根也从那里取
+     *                  各加载器模块的 {@code ModJar.find}——Numen 自己的 skills 根也从那里取
      */
     public Gate(Predicate<String> modLoaded, Function<String, Path> inJar) {
         this.modLoaded = modLoaded;
@@ -83,7 +83,7 @@ public final class Gate {
      *
      * <p>目录就叫 {@code skills},但必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,
      * 源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。直接放 {@code skills/} 的话会和
-     * core 自己那份合并,而 core 声明的是<b>整个根</b>、无条件:没装 YSM 的玩家提示词里也会
+     * Numen 自己那份合并,而 Numen 声明的是<b>整个根</b>、无条件:没装 YSM 的玩家提示词里也会
      * 出现"怎么换 YSM 模型",纯噪音,而且照做也没用。加一层命名空间是每个模组都在做的事
      * ({@code assets/<modid>/…} 同理)。
      *

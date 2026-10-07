@@ -27,7 +27,7 @@ public class PluginGameTests {
     }
 
     /**
-     * 插件经那扇门挂上的东西,和引擎自带的走同一条路:测试里登记一个假插件,它从身体上读一段状态
+     * 插件经那扇门挂上的东西,和 Numen API 自带的走同一条路:测试里登记一个假插件,它从身体上读一段状态
      * (只对这只同伴说话),再登记一种事件并发一条。{@code status_self} 里有那段状态;主人不在线,
      * 那条事件以插件登记的类型进出箱,kind 就是那个类型。
      */
@@ -49,7 +49,7 @@ public class PluginGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "status_self has not replied");
             var status = dataIn(reply.reply());
-            // 身体状态片段以引擎渲染的 <worn> 打头,之后接插件登记的片段:这个插件的那段紧跟在 <worn> 后面
+            // 身体状态片段以 Numen API 渲染的 <worn> 打头,之后接插件登记的片段:这个插件的那段紧跟在 <worn> 后面
             helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString().startsWith("<worn>")
                             && status.get("body_state").getAsString()
                             .endsWith("</worn><gametest_charm>wearing a gametest charm</gametest_charm>"),

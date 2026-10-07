@@ -14,7 +14,7 @@ package com.dwinovo.numen.api;
  * }</pre>
  *
  * <p>在你自己模组的构造期调用 {@link NumenPlugins#register} 即可,不必关心 Numen
- * 那边初始化到哪一步了——晚到的注册会在引擎就绪时补上。
+ * 那边初始化到哪一步了——晚到的注册会在 Numen API 就绪时补上。
  */
 @FunctionalInterface
 public interface NumenPlugin {

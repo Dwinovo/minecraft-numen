@@ -33,7 +33,7 @@ dependencies {
     // api 配置让下游 loader 也透视得到 widget/令牌类型。
     api project(':ui')
     // 寻路(只依赖原版):假玩家的身体机制(按键、物理步进、两只手、快捷栏)只此一份,同伴的身体
-    // NumenPlayer 用它;core 的适配层经它接入寻路。api 配置让 core 与下游 loader 透视得到。
+    // NumenPlayer 用它;Numen 的适配层经它接入寻路。api 配置让 Numen 与下游 loader 透视得到。
     api project(':pathing')
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'

@@ -28,7 +28,7 @@ import java.util.List;
  *   <li>{@code call_timeout_seconds} — how long one {@code tools/call} waits for a
  *       body action to finish before reporting a timeout;</li>
  *   <li>{@code hidden_tools} — tools NOT exposed to the external agent (by default
- *       none: the engine's tools are the script tool and the skill tool, and they are the
+ *       none: Numen API's tools are the script tool and the skill tool, and they are the
  *       external brain's as much as the built-in one's);</li>
  *   <li>{@code quiet_fallback} — when the external brain goes quiet (no request for
  *       {@link McpMode#QUIET_AFTER_MS} ms) the built-in brain takes over until it

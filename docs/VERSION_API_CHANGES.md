@@ -17,13 +17,13 @@ Fabric + NeoForge 同源。向上移植（把低版本分支的代码搬到高�
 
 `1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
-新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
+新架构（Numen API 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
 
 ---
 
 ## 每档都要改的构建旋钮 📦
 
-`gradle.properties`（core 与 api 各一份）：
+`gradle.properties`（Numen 与 api 各一份）：
 
 | 键 | 含义 |
 |---|---|
@@ -43,7 +43,7 @@ loader 依赖 build.gradle 里的 `numen-api-*-<mc>` 坐标也要同步成目标
 ## 1.21.1 → 1.21.4
 
 来源：老架构 `v0.0.2-1.21.1-beta` ↔ `v0.0.2-1.21.4-beta` 的纯 MC delta（约 30 个 java 文件）。
-新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `core/tools`），但**API 替换内容一致**。
+新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `numen/tools`），但**API 替换内容一致**。
 
 ### 注册表查询 ❗
 按 `ResourceLocation` 取值的方法整体重命名：

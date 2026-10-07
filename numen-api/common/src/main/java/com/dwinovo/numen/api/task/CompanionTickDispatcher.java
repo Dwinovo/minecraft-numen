@@ -11,15 +11,15 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * numen-core's server-tick driver of companion tasks. The engine ({@code numen-api})
- * owns the body and is a pure scheduler; <em>task execution</em> is core's, so the
+ * Numen's server-tick driver of companion tasks. Numen API
+ * owns the body and is a pure scheduler; <em>task execution</em> is Numen's, so the
  * per-companion scheduler ({@link CompanionBrain}) lives here (keyed by companion
  * UUID), not on the body.
  *
  * <p>Each tick, for every live {@link NumenPlayer}, the brain ticks the
  * highest-priority active chain and runs the server-side calls the companion's programs queued
- * ({@code ServerPrograms.tick}). Registered from core's end-of-tick hooks;
- * finalised on body removal / death / owner-abort via the engine's
+ * ({@code ServerPrograms.tick}). Registered from Numen's end-of-tick hooks;
+ * finalised on body removal / death / owner-abort via Numen API's
  * {@code CompanionLifecycle} seam.
  *
  * <p>This class is a thin, signature-preserving facade over {@link CompanionBrain}

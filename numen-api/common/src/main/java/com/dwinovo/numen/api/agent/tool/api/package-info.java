@@ -6,7 +6,7 @@
  * <p>The reflective {@code @NumenAction} / {@code @Arg} authoring layer that
  * used to live here has been removed: a tool is just a
  * {@link com.dwinovo.numen.api.agent.tool.NumenTool} (name, description, schema,
- * {@code invoke}). numen-core provides optional authoring sugar (a {@code Schema}
+ * {@code invoke}). Numen provides optional authoring sugar (a {@code Schema}
  * builder and a {@code TaskDispatch} helpers) for packs that want them.
  */
 package com.dwinovo.numen.api.agent.tool.api;

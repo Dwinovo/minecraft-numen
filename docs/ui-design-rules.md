@@ -65,5 +65,5 @@
 ## 分层
 
 - **ui 模块(纯 JVM)**:控件、样式令牌(`NumenStyle`、`NumenTheme`)、画布契约 `IDrawSurface`——只有矩形填充、文字、测量、裁剪。
-- **MC 层**(`api` 的 client 源码集):`McDrawSurface` 适配器、真输入框宿主 `McTextInput`、各个屏幕。
+- **MC 层**(Numen API 的 client 源码集):`McDrawSurface` 适配器、真输入框宿主 `McTextInput`、各个屏幕。
   屏幕画框也经 `McDrawSurface` 调 `NumenStyle.box`,不自己拼样式;只有 MC 独有的东西(物品图标、皮肤脸、世界里的轮廓)在 MC 层直接画。

@@ -1,6 +1,6 @@
 plugins { id 'numen-plugin' }
 
-// 只写原版 MC 与 numen api,三个加载器都能跑:编译对着原版(NeoForm),加载器的类物理上
+// 只写原版 MC 与 Numen API,三个加载器都能跑:编译对着原版(NeoForm),加载器的类物理上
 // 不在类路径上,想用也编译不过。加载器之间不一样的那几件事经 YsmHost 由宿主提供。
 neoForge { neoFormVersion = neo_form_version }
 

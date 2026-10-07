@@ -51,11 +51,11 @@ repositories {
 }
 
 // 协议文本随 jar 发出:根目录的 LICENSE(LGPL-3.0),licenses/ 下 LGPL 所依托的 GPL 全文与美术资源的授权;
-// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀标明是哪个 mod 的
+// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀是所属模组的 id
 def licenseTexts = copySpec {
-    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_name}" } }
-    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_name}" } }
-    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_name}" } }
+    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_id}" } }
+    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_id}" } }
+    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_id}" } }
 }
 
 sourcesJar {
@@ -133,8 +133,8 @@ tasks.register('apiJar', Jar) {
     // 成品,这里取到空集,不会引入第二套映射。
     from({ def c = sourceSets.findByName('client'); c != null ? c.output : [] })
     // public API surface (see the package-info of each). This list is the
-    // contract of record — kept in lockstep with what numen-core actually
-    // compiles against, so building core against the :api jar always works.
+    // contract of record — kept in lockstep with what Numen actually
+    // compiles against, so building Numen against the :api jar always works.
     // com.dwinovo.numen.api 这一包里属于公共 API 的类:@Internal 标记与 API 门面。同包里还住着引擎自己的入口
     // (CommonClass、Constants 与各加载器的模组入口),所以逐个点名,不整包放行
     include 'com/dwinovo/numen/api/CompanionEvent*.class'
@@ -171,7 +171,7 @@ tasks.register('apiJar', Jar) {
     // 协议文本随成品 jar 进来(见上面 jar 块),瘦 jar 发给第三方开发者,一样要带
     include 'LICENSE*'
     include 'COPYING*'
-    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们本该迁去 core 自己的网络层,迁移前先如实纳入契约
+    // 已知债:调试通道的两个 payload 被 Numen 的 debug 侧直用;它们本该迁去 Numen 自己的网络层,迁移前先如实纳入契约
     include 'com/dwinovo/numen/api/network/payload/PathDebugPayload*.class'
     include 'com/dwinovo/numen/api/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages
@@ -194,9 +194,9 @@ tasks.register('apiJar', Jar) {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            // Distinct coordinates from numen-core (which keeps "numen-…"), so core can
+            // Distinct coordinates from Numen (which keeps "numen-…"), so Numen can
             // depend on the published api as a separate artifact.
-            // groupId 显式钉死:项目内部 group 为避免与 core 同名模块冲突已改为
+            // groupId 显式钉死:项目内部 group 为避免与 Numen 同名模块冲突已改为
             // com.dwinovo.numen.api,但对外发布坐标是既有契约,保持不变。
             groupId = 'com.dwinovo.numen'
             artifactId = "numen-api-${project.name}-${minecraft_version}"

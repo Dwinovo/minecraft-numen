@@ -285,7 +285,7 @@ public final class EventTypes {
     private EventTypes() {}
 
     /**
-     * 登记一种类型(mod init 期调用)。一个 id 只能登记一次:内置的行是引擎语义的一部分(主人的话恒为急件、
+     * 登记一种类型(mod init 期调用)。一个 id 只能登记一次:内置的行是 Numen API 语义的一部分(主人的话恒为急件、
      * 控制命令由循环自己执行),插件拿同一个 id 再登记一行就会悄悄改掉它们,所以直接拒绝。
      *
      * @throws IllegalArgumentException id 为空,或者这个 id 已经登记过

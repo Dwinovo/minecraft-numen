@@ -38,7 +38,7 @@ import java.util.concurrent.TimeoutException;
  * POST and its response goes straight back in the HTTP body.
  *
  * <h2>Tool surface</h2>
- * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set) —
+ * Every Numen API tool (from {@link ToolRegistry}, minus the config's hidden set) —
  * the script tool, the skill tool, the todo tool, plus the tools of remote MCP servers the owner connected — is
  * advertised with an extra {@code companion} argument, and calls route to
  * {@link NumenActuator#invoke}: a program runs through the companion's own
@@ -350,7 +350,7 @@ public final class McpServer {
         return schema;
     }
 
-    /** An engine tool's own schema, with a required {@code companion} argument injected. */
+    /** A Numen API tool's own schema, with a required {@code companion} argument injected. */
     private JsonObject withCompanion(java.util.Map<String, Object> parameterSchema) {
         JsonObject schema = parameterSchema == null
                 ? new JsonObject()

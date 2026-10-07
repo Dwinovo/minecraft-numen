@@ -67,7 +67,7 @@ public class NumenFabricClient implements ClientModInitializer {
 
                     @Override
                     public void onResourceManagerReload(ResourceManager rm) {
-                        // The engine ships no built-in skills; pick up any SKILL.md the
+                        // Numen API ships no built-in skills; pick up any SKILL.md the
                         // player (or a tool pack) has placed under config/numen/skills.
                         SkillRegistry.instance().scan(skillsDir);
                     }

@@ -16,10 +16,10 @@ config = "${mod_id}.mixins.json"
 config = "numen_tlm.mixins.json"
 requiredMods = ["touhou_little_maid"]
 [[dependencies.${mod_id}]] #optional
-modId = "numen_api" #mandatory — core supplies tools to the numen-api engine
+modId = "numen_api" #mandatory — Numen supplies tools to Numen API
 type="required" #mandatory
 versionRange = "[0.0,)" #mandatory
-ordering = "AFTER" # load after the engine so its registries exist
+ordering = "AFTER" # load after Numen API so its registries exist
 side = "BOTH"
 [[dependencies.${mod_id}]] #optional
 modId = "neoforge" #mandatory

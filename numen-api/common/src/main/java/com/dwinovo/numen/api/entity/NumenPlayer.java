@@ -302,7 +302,7 @@ public final class NumenPlayer extends ServerPlayer implements Body {
      * 挂在这具身体上的同伴级状态,按类型各一份(征询登记处、等主人答复的调用之类)。
      *
      * <p>与 {@link #pausedReflexes} 同一原则——<b>跟着身体走,不进静态表</b>:身体没了状态
-     * 就没了,休眠回来是新身体、新状态,不用给每一种状态各配一套离场清理;引擎不认识
+     * 就没了,休眠回来是新身体、新状态,不用给每一种状态各配一套离场清理;Numen API 不认识
      * 内容包的类型,所以按类型取、首次取时由调用方建。
      */
     private final java.util.Map<Class<?>, Object> bodyState = new java.util.HashMap<>();

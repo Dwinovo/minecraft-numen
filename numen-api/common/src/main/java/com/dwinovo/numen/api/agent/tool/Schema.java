@@ -10,7 +10,7 @@ import java.util.Map;
  * {@code Map} a {@link com.dwinovo.numen.api.agent.tool.NumenTool#parameterSchema}
  * returns. No reflection, no magic: you state each field yourself and stay in
  * full control. A tool whose shape this doesn't cover just returns its own
- * {@code Map} (or a parsed JSON string) — the engine only wants the Map.
+ * {@code Map} (or a parsed JSON string) — Numen API only wants the Map.
  */
 public final class Schema {
 

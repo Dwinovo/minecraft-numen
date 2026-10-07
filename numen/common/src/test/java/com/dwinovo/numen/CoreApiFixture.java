@@ -1,8 +1,8 @@
 package com.dwinovo.numen;
 
 /**
- * core 的单测要用登记处时共用的一步:引导 MC(方块注册表,原语要认方块),再照 {@link NumenCore#init()} 同一份登记装上 core 的全部 API
- * 组,和引擎自己的工具与几组。登记处与工具表是进程级的静态表,一个进程只装一次;各测试类都经这里装,不各装各的一份——装两次会撞名。
+ * Numen 的单测要用登记处时共用的一步:引导 MC(方块注册表,原语要认方块),再照 {@link NumenCore#init()} 同一份登记装上 Numen 的全部 API
+ * 组,和 Numen API 自己的工具与几组。登记处与工具表是进程级的静态表,一个进程只装一次;各测试类都经这里装,不各装各的一份——装两次会撞名。
  */
 public final class CoreApiFixture {
 
@@ -28,7 +28,7 @@ public final class CoreApiFixture {
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
-        // 引擎自己的工具与几组(跑脚本、装技能、记计划、札记四个工具,api、mc、task、module 四组)产品里在初始化时登记,单测里同一个
+        // Numen API 自己的工具与几组(跑脚本、装技能、记计划、札记四个工具,api、mc、task、module 四组)产品里在初始化时登记,单测里同一个
         // 入口登记一次
         com.dwinovo.numen.api.CommonClass.registerTools();
         com.dwinovo.numen.api.CommonClass.registerApi();

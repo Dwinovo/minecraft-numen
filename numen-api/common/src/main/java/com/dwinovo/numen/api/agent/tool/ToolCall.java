@@ -23,13 +23,13 @@ import java.util.function.Consumer;
  * transparent to {@code EntityAgentLoop}: it dispatches a call and is notified of
  * the result, with no branch on tool category.
  *
- * <p>The engine is a scheduler, not an executor: there is exactly one verb,
+ * <p>Numen API is a scheduler, not an executor: there is exactly one verb,
  * {@link #complete(String)}. A tool does whatever it likes inside
  * {@link NumenTool#invoke} — return immediately, hop a thread, send its own
  * packets to the server body, proxy to an external service, hook a chat app — on
  * any thread, then calls {@link #complete} when the result is ready (the
  * scheduler waits, with only a backstop timeout). How and where the work happens
- * is none of the engine's business.
+ * is none of Numen API's business.
  */
 public final class ToolCall {
 

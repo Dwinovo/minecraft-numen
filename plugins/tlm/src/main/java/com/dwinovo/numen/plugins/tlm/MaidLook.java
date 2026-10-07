@@ -17,7 +17,7 @@ public final class MaidLook {
 
     private MaidLook() {}
 
-    /** 交给引擎的现算片段;没穿女仆模型就什么也不说。 */
+    /** 交给 Numen API 的现算片段;没穿女仆模型就什么也不说。 */
     public static String describe(NumenPlayer her) {
         String id = Outfit.worn(her);
         if (id == null) return "";

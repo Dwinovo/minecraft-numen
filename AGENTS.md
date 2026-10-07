@@ -8,10 +8,10 @@ Numen is a Minecraft mod: an AI companion that is a server-side fake player (`Se
 
 - `ai/` — LLM transport, pure JVM.
 - `ui/` — widget library, pure JVM, no Minecraft classes.
-- `numen-api/` — the engine: agent loop, inbox, task slot, tool transport, the companion body, the permission layer (`com.dwinovo.numen.api.permission`).
+- `numen-api/` — Numen API: agent loop, inbox, task slot, tool transport, the companion body, the permission layer (`com.dwinovo.numen.api.permission`).
 - `numen/` — content: tools, tasks, pathing, instincts, bundled skills. Loader entry points in `numen/fabric`, `numen/neoforge` or `numen/forge`.
 - `plugins/` — integrations with other mods, loaded only when the target mod is present.
-- `docs/architecture-mind-model.md` — the architecture rules. Read it before changing engine behavior.
+- `docs/architecture-mind-model.md` — the architecture rules. Read it before changing Numen API behavior.
 
 ## How to write the change
 

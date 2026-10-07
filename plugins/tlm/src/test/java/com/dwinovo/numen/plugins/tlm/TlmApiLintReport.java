@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 车万女仆联动的 lint 报告,不是守卫:{@code tlm} 名字空间下的函数的写法,与随它发的技能文档里写着的调用,对着 core 的组与本组读一遍。
+ * 车万女仆联动的 lint 报告,不是守卫:{@code tlm} 名字空间下的函数的写法,与随它发的技能文档里写着的调用,对着 Numen 的组与本组读一遍。
  * 本组经 {@link NumenPlugins} 那扇门、用联动自己登记它的那一段装上,和 {@link NumenTlm#install} 里的一样。报告写进 {@code build/reports/api-lint.txt},不让构建失败。
  */
 class TlmApiLintReport {

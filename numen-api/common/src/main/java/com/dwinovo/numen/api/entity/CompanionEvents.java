@@ -10,7 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
- * 同伴生命周期事件的总线——引擎在这边 {@link #fire},插件那边经
+ * 同伴生命周期事件的总线——Numen API 在这边 {@link #fire},插件那边经
  * {@code numen.on(事件, 处理器)} 订阅。
  *
  * <h2>为什么按事件常量分桶,而不是一个事件一个列表</h2>
@@ -33,7 +33,7 @@ public final class CompanionEvents {
     }
 
     /**
-     * 引擎侧触发。某个订阅者抛异常只记日志、不打断其余订阅者——一个插件写坏了不该
+     * Numen API 侧触发。某个订阅者抛异常只记日志、不打断其余订阅者——一个插件写坏了不该
      * 让别的插件跟着收不到事件。
      */
     @SuppressWarnings("unchecked")

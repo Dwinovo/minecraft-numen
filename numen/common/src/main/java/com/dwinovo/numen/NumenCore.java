@@ -28,17 +28,17 @@ import com.dwinovo.numen.task.move.MoveToCompanionTask;
 import com.dwinovo.numen.task.move.MoveToTaskRecord;
 
 /**
- * Loader-agnostic init for the {@code numen-core} tool pack — the worked example
- * of how a mod adds tools to the {@code numen-api} engine. Each loader entry
+ * Loader-agnostic init for the Numen tool pack — the worked example
+ * of how a mod adds tools to Numen API. Each loader entry
  * point calls {@link #init()} once (on both sides: a dedicated server runs the
  * task bodies), then registers its own server-tick hooks for the tools that need
  * per-tick server work (scans, the pathfinder caches).
  *
- * <p>Things plug into the engine here:
+ * <p>Things plug into Numen API here:
  * <ul>
  *   <li>command groups — registered through the plugin door, the same one third-party
  *       packs use; every action becomes a function of the script API, so the only model tool
- *       is the engine's script tool;</li>
+ *       is Numen API's script tool;</li>
  *   <li>task runners — each {@code TaskRecord} type an action emits is paired with the
  *       {@code CompanionTask} that runs it, via {@link TaskFactory#register};</li>
  *   <li>the survival chains ({@link com.dwinovo.numen.api.task.BrainChains}) and their
@@ -66,7 +66,7 @@ public final class NumenCore {
                 ToolRegistry.size(), TaskFactory.size());
     }
 
-    /** 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。 */
+    /** 把 Numen 的五条生存本能链插进 Numen API 的竞价调度(链登记口)。 */
     private static void registerReflexes() {
         // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例:摔落缓冲 > 换气 > 逃跑 > 自卫 > 脱困。
         // 逃跑压过自卫:扛不住时先跑,跑不掉它让出身体,自卫接着打。
@@ -87,7 +87,7 @@ public final class NumenCore {
     }
 
     /**
-     * The reflex roster (constitution §6): enlist core's instincts — the five survival
+     * The reflex roster (constitution §6): enlist Numen's instincts — the five survival
      * chains — so their one-line self-descriptions reach the prompt. Runs on BOTH sides
      * like the rest of init.
      */
@@ -96,7 +96,7 @@ public final class NumenCore {
     }
 
     /**
-     * 引擎自己的 API 组,和插件走同一扇门({@code NumenPlugins.register})。{@code route} 在 {@code move} 之前:路线描述里的几种值与
+     * Numen API 自己的 API 组,和插件走同一扇门({@code NumenPlugins.register})。{@code route} 在 {@code move} 之前:路线描述里的几种值与
      * {@code numen.move.go} 收的计划在它那里登记。
      */
     private static void registerTools() {

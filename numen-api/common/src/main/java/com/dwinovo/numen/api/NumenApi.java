@@ -23,7 +23,7 @@ import java.util.function.Function;
  *
  * <h2>为什么收成一扇门</h2>
  * 能力散在动作登记处 / {@code SkillRegistry} / 生命周期监听各处时,第三方得先猜今天这件事属于哪一派、类在哪个包、是静态方法还是单例。
- * 收到一处之后,"我要扩展 Numen"只有一个答案。引擎内部照旧用原来那些类,
+ * 收到一处之后,"我要扩展 Numen"只有一个答案。Numen API 内部照旧用原来那些类,
  * 这里只是它们对外的那一面。
  *
  * <h2>专用服务器上会安静地少几样</h2>
@@ -44,7 +44,7 @@ public interface NumenApi {
 
     /**
      * 登记一组 API 函数:她的程序里的一张表 {@code <名字空间>.<组>.<函数>(...)}。名字空间由登记者给出——你在
-     * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,引擎自己的是 {@code numen}——这里只写组名。{@code functions}
+     * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,Numen API 自己的是 {@code numen}——这里只写组名。{@code functions}
      * 里每个 {@link com.dwinovo.numen.api.sdk.Fn} 静态方法是一个函数,签名就是契约(见 {@code Fn}):第一个参数说在哪执行,参数 record 是它的
      * 参数,返回类型说它怎么交回。系统提示里的 API 索引与每个函数的帮助都由这份登记生成。
      *
@@ -60,7 +60,7 @@ public interface NumenApi {
      * numen.api("machine", "What your mod lets her do, in one sentence.", MachineApi.class);
      * }</pre>
      *
-     * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加函数——引擎自带的组和别的插件的组都够不着。登记在两侧都跑,所以
+     * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加函数——Numen API 自带的组和别的插件的组都够不着。登记在两侧都跑,所以
      * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。只拦会破坏系统的(见
      * {@link com.dwinovo.numen.api.sdk.Binder});写法上的问题看 {@link com.dwinovo.numen.api.sdk.ApiTester#lint} 的报告。
      *
@@ -79,7 +79,7 @@ public interface NumenApi {
     <T> void codec(Class<T> type, Codec<T> codec);
 
     /**
-     * 把一个目录里的技能交给引擎。就地读,不复制:你的 jar 一卸载技能跟着消失。
+     * 把一个目录里的技能交给 Numen API。就地读,不复制:你的 jar 一卸载技能跟着消失。
      * 玩家在 {@code config/numen/skills/} 放同名目录可以覆盖你这份。
      *
      * <p>通常传你自己 jar 里的 {@code skills/}。专用服务器上是空操作。
@@ -87,7 +87,7 @@ public interface NumenApi {
     void bundleSkills(Path skillsRoot);
 
     /**
-     * 把一个目录里的 Lua 模块交给引擎:每个 {@code <组名><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
+     * 把一个目录里的 Lua 模块交给 Numen API:每个 {@code <组名><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
      * {@code .lua}),模块名是你的名字空间加文件名({@code farm.lua} 是 {@code mymod.farm})。模块返回一张函数表
      * ({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用({@code mymod.farm.harvest("wheat")},
      * 第一次用到才装);和你的组同名的模块给那一组加函数,把几个原子函数组合成一件事。系统提示的 API 索引列出每个模块与它的函数,
@@ -103,7 +103,7 @@ public interface NumenApi {
     /**
      * 跑一段<b>只在客户端才有意义</b>的代码。专用服务器上整块不执行。
      *
-     * <p>界面、渲染、头像这类东西只活在玩家的客户端上,而引擎的公共部分刻意不引用
+     * <p>界面、渲染、头像这类东西只活在玩家的客户端上,而 Numen API 的公共部分刻意不引用
      * 任何客户端类(那条线是有意划的)。所以它们的注册入口在客户端那一侧
      * (如 {@code NumenGateway.registerPortrait}),你在这个块里去调:
      *
@@ -111,13 +111,13 @@ public interface NumenApi {
      * numen.onClient(() -> NumenGateway.registerPortrait(new MyPortrait()));
      * }</pre>
      *
-     * <p>"现在是不是客户端"这个判断由引擎自己回答——它每个加载器一个写法,
+     * <p>"现在是不是客户端"这个判断由 Numen API 自己回答——它每个加载器一个写法,
      * 让每个插件各写一遍就是每个插件一种写法。
      */
     void onClient(Runnable clientOnly);
 
     /**
-     * {@code config/numen/} ——引擎和插件共用的配置目录。你的持久数据放这儿,
+     * {@code config/numen/} ——Numen API 和插件共用的配置目录。你的持久数据放这儿,
      * 文件名带上自己的 mod id(如 {@code numen_<mod id>-<名字>.json})。
      *
      * <p>别自己从游戏目录往下拼:客户端、专用服务器、开发环境三种情况下拼法不同,
@@ -153,8 +153,8 @@ public interface NumenApi {
      * 服务端:从身体上读一段她此刻的状态,挂进 {@code <runtime_state>},也写进 {@code status self}。
      *
      * <p>给身体上的事实用——模组给她身上加的、背包和穿戴之外的东西。穿戴位置上戴着什么不走这里,
-     * 用 {@link #registerGear}:引擎把它渲染成 {@code <worn>},排在所有片段的最前面。它和背包、状态效果同一条路:
-     * 引擎在检查身体有没有变化时一并算,和上次不同就随状态包推给主人的客户端,于是她走远了、
+     * 用 {@link #registerGear}:Numen API 把它渲染成 {@code <worn>},排在所有片段的最前面。它和背包、状态效果同一条路:
+     * Numen API 在检查身体有没有变化时一并算,和上次不同就随状态包推给主人的客户端,于是她走远了、
      * 换了维度也照样在请求里。只有主人客户端才知道的事(客户端渲染的外观)用 {@link #contributeState};
      * 一个事实只从一边来。
      *
@@ -181,7 +181,7 @@ public interface NumenApi {
     /**
      * 登记一种事件——同伴身上会发生、她该知道的一种事(比如饰品插件的 {@code accessory_changed})。
      *
-     * <p>登记的是类型表里的一行,和引擎自带的 {@code task_finished}、{@code reflex} 同一种形状:
+     * <p>登记的是类型表里的一行,和 Numen API 自带的 {@code task_finished}、{@code reflex} 同一种形状:
      * 插话投递、原文交给模型、主人按停止也不清(那是事实)、不进聊天流。你只决定一件事——
      * 这种事是不是<b>恒为急件</b>({@code true} = 她不知道就会做错事,每一条都立刻开一轮;
      * {@code false} = 每次发的时候由你定)。
@@ -189,20 +189,20 @@ public interface NumenApi {
      * <p>服务端发出口靠它挡住没登记的种类,主人客户端的队列靠它决定怎么投递,所以<b>两侧都要登记</b>:
      * 在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
      *
-     * @throws IllegalArgumentException 这个 id 已经登记过(引擎自带的种类也算)——改不了别人的行
+     * @throws IllegalArgumentException 这个 id 已经登记过(Numen API 自带的种类也算)——改不了别人的行
      */
     void registerEventType(String type, boolean alwaysUrgent);
 
     /**
      * 服务端:她身上发生了一件事,告诉她。
      *
-     * <p>和引擎自带的事件走同一个发出口:按类型查表,盖上游戏内时间戳,拼成
+     * <p>和 Numen API 自带的事件走同一个发出口:按类型查表,盖上游戏内时间戳,拼成
      * {@code <event kind="type" …>text</event>};主人在线直接送到他的客户端,离线进出箱,
      * 等他登录时补发。
      *
      * @param type   {@link #registerEventType} 登记过的种类
      * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null
-     * @param text   这件事本身,转义由引擎做
+     * @param text   这件事本身,转义由 Numen API 做
      * @param urgent 她不知道就会做错事 → 立刻开一轮;否则攒着搭车。登记成恒为急件的种类不看它
      * @throws IllegalArgumentException 种类没登记,或者不是世界上发生的事(比如 {@code query})
      */

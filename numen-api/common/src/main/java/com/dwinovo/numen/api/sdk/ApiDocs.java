@@ -325,7 +325,7 @@ public final class ApiDocs {
 
     /**
      * 机器可读的元数据(JSON):每个函数的全名、组、在哪执行、怎么交回、参数(名字、怎么写、类型、说明)、返回类型、例子、注意、相关,
-     * 以及声明了的类。给工具读,生成别的视图;core 的 lint 报告把它与 {@link #stubs} 一起写出来。
+     * 以及声明了的类。给工具读,生成别的视图;Numen 的 lint 报告把它与 {@link #stubs} 一起写出来。
      */
     public static String metadata() {
         ScriptEngine engine = ScriptEngine.IN_USE;

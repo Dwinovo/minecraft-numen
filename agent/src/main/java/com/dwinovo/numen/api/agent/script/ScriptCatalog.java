@@ -6,7 +6,7 @@ import java.util.TreeMap;
 
 /**
  * 脚本里能调的:API 登记处的每个函数一个宿主函数 {@code 名字空间.组.函数}(第 ① 层,{@code numen.work.dig}),加上模块(用脚本语言写的
- * 库,按名字直接用:{@code my.lumber.chop(…)};和组同名的模块给那一组加函数)。目录由登记处现算交来(api 的 {@code ApiRegistry}),
+ * 库,按名字直接用:{@code my.lumber.chop(…)};和组同名的模块给那一组加函数)。目录由登记处现算交来(Numen API 的 {@code ApiRegistry}),
  * 这里不另记一份函数表。
  *
  * @param groups  组的全名({@code numen.work})→ 函数名 → 这个函数在脚本这一侧要知道的

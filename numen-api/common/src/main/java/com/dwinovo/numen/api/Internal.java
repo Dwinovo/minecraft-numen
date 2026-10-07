@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 
 /**
  * Marks a type, member, or whole package as <strong>not</strong> part of the
- * public numen-api surface that tool packs build against. Internal code may
+ * public Numen API surface that tool packs build against. Internal code may
  * change or disappear in any release without notice — depend on it at your own
  * risk.
  *

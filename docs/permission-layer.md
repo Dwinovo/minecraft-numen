@@ -57,7 +57,7 @@
 
 ## 四、概念
 
-放在 api,它是机器;core 的任务与工具是往里送动作的内容。五个零件,与 #10 提案的
+放在 Numen API,它是机器;Numen 的任务与工具是往里送动作的内容。五个零件,与 #10 提案的
 `ProtectedAction` / `ProtectionRule` 同形。
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、

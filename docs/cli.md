@@ -61,7 +61,7 @@
 ```
 
 - **执行入口**:服务端只有一个,即 `CommandRunner`,管两件事:第 1 层的服务端动作,以及第 0 层的 `/` 行。两者共用解析失败的说法、回执、长活对号和挂起征询。
-- **放在哪**:机制(两层的分派、调度器、帮助、快捷工具生成)在 `api`;原版领域的命令在 `core`;模组的命令在各自的 `plugins/*`。
+- **放在哪**:机制(两层的分派、调度器、帮助、快捷工具生成)在 Numen API;原版领域的命令在 Numen;模组的命令在各自的 `plugins/*`。
 
 ## 四、命令长什么样
 
@@ -282,14 +282,14 @@ ftbquests submit <quest>
 - `CommandGroup.serverDirect` 与帮助目录 `Action.catalog` 删掉(它们只为 `numen mc` 而开)。
 - "客户端先解析、服务端动作送去服务端再解析同一棵树"改为两棵树、一条路由规则;服务端不再有 Numen 自己的调度器,
   服务端动作在 MC 指令树上。
-- `numen` 工具由引擎登记,现在是 `command` 工具。
+- `numen` 工具由 Numen API 登记,现在是 `command` 工具。
 
-代码在 `api` 的 `com.dwinovo.numen.cli` 包。
+代码在 Numen API 的 `com.dwinovo.numen.cli` 包。
 
 - **登记写法不是裸 Brigadier。** 插件经 `NumenApi.registerCommands(组名, 一句话, 组 -> …)` 拿到自己的 `CommandGroup`,往里加 `Action`,参数用 `Param` 与 `ArgType` 声明;Brigadier 树由这一层生成。
   - 原因:帮助的说明、执行侧、可选标志、schema 都要挂在节点上,Brigadier 的节点没有这些位置;裸 builder 还能 `redirect` 或拿到别人的节点,"不许嫁接"就只能靠约定。
   - 插件手里只有自己那一组,够不着根和别的组;组名、动作名、参数名、快捷工具名撞了或不合规,都在登记的那一刻抛出。登记块返回后这一组封口。
-  - 引擎自带的 `task` 组也经这扇门登记(`TaskCommands.install`),由 core 在原来三个工具的位置调用,工具表顺序不变。
+  - Numen API 自带的 `task` 组也经这扇门登记(`TaskCommands.install`),由 Numen 在原来三个工具的位置调用,工具表顺序不变。
 - **一行命令以 `numen` 开头**:`numen` 工具的参数 `command` 是整行,如 `numen task status`。帮助里的每一行都能原样照抄。
 - **层级只有两级**:组 → 动作。设计里没有更深的需要,没做嵌套组。
   - 一组也可以直接就是一个服务端动作(`CommandGroup.serverDirect`):参数紧跟组名,没有动作名,`numen mc <command...>` 就是这样。这样的组不能再有具名动作(具名动作会和它的参数抢同一个位置),登记时就查;它的 `--help` 与写错时附的用法都是这个动作的帮助。
@@ -311,7 +311,7 @@ ftbquests submit <quest>
   - 快捷工具提升自服务端动作时,调用照身体工具的路子直接送服务端,参数在那边读,读错的回执与所有身体工具同一种说法。
 - **长活**:`ServerSource` 带着这次调用本身(`toolName`、`args`:快捷工具名和它的 JSON,或 `numen` 和 `{"command": …}`)。长活交 `TaskDispatch.setTask(source, record)`,重启后的重放记的就是这次调用,走同一个入口再来一遍。任务叫什么见附录 B。
 - **一行索引**:`NumenCli.index()` 生成 `<commands>` 块,组按名字排序,挂在系统提示的技能表之后;只随组的增减变。
-- **`numen` 工具由引擎在 `CommonClass` 登记**:插件的命令只依赖引擎,谁登记了命令都指望这个入口在。外脑(`NumenActuator` / MCP)读的就是同一张工具表,自然看到 `numen` 与各快捷工具。
+- **`numen` 工具由 Numen API 在 `CommonClass` 登记**:插件的命令只依赖 Numen API,谁登记了命令都指望这个入口在。外脑(`NumenActuator` / MCP)读的就是同一张工具表,自然看到 `numen` 与各快捷工具。
 
 ## 附录 B:第 2 步落地时定下的细节
 
@@ -373,12 +373,12 @@ ftbquests submit <quest>
 > 里她的节点、"调用上下文"、"参数类型登记",以及快捷工具经权限层裁决 alias 那一行),执行入口、征询挂起、重放、drive 留用;
 > 见附录 F。
 
-代码在 `api` 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,core 的调试开关在 `DebugCommands`。
+代码在 Numen API 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,Numen 的调试开关在 `DebugCommands`。
 
 - **一份声明,两棵树**(`CommandTree`)。主人客户端的小表(`NumenCli` 自己的调度器)与 MC 指令树 `/numen` 下她的节点,由同一个生成器从命令组声明长出来,形状相同:根下 `help`、`--help`;组下 `--help` 与每个动作;动作下 `--help`。动作的参数、标志尾巴、可执行的那一格只长在执行它的那一侧。登记时把例子按这一组的树解析一遍(第九节)用的也是这个生成器,只是那棵树上每个动作都长着参数。
 - **路由**(`NumenCli.run`)。一行先在客户端小表上解析,看解析走到的最后一个字面节点:是帮助,或是一个客户端动作,就在客户端答,这个动作写错了也当场报;停在根上、组上、服务端动作上,或者不以 `numen` 开头,原样经 `ServerToolTransport` 送服务端。服务端动作写错由服务端报,两侧报错是同一个函数(`NumenCli.problem`),一字不差。
 - **注册与可见性**(`NumenCommands`)。两个加载器的入口本来就在指令注册事件里调 `NumenCommands.register`,她的节点(`NumenCli.herNodes()`)在这里挂到 `/numen` 下,不另开平台服务。
-  - 她的节点 `requires(FOR_HER)`:来源实体是 `NumenPlayer`。玩家的管理节点(`player`、`settings`、`reset`、`permission`、`consent`、`drive`,core 的 `debug`、`profile`、`pad`)`requires(FOR_PLAYERS)`。
+  - 她的节点 `requires(FOR_HER)`:来源实体是 `NumenPlayer`。玩家的管理节点(`player`、`settings`、`reset`、`permission`、`consent`、`drive`,Numen 的 `debug`、`profile`、`pad`)`requires(FOR_PLAYERS)`。
   - 挂到 `/numen` 下的每一格都经 `NumenCommands.graft`:同名的一格已经在了就抛出。Brigadier 会把同名两格悄悄并成一格,留下先来那一格的观众。
   - 服务器建指令树的这一刻各模组的组都已登记完,相关命令(`seeAlso`)在这里一次查全,断掉的引用开服就报错;连着别人服务器的客户端不建指令树,仍在小表第一次被读时查。
   - 实测(GameTest):她在 `/numen` 下用得了的格与玩家用得了的格不相交;玩家的树里没有 Numen 自己的参数类型;她的 `help` 列出 `/numen`、不列召唤与权限。
@@ -392,7 +392,7 @@ ftbquests submit <quest>
   - 主人按停止、身体离开世界:撤掉征询,回执说被谁叫停、没有执行;她死了:撤掉征询、不回执(那条调用已由死因结算);
   - 等主人的时候身体照常做手上的事。
 - **调用上下文**(`Echo`)。`Echo` 既是她来源的回话去处(`CommandSource` 与 `CommandResultCallback`),也带着这次调用(`ServerSource`:调用 id、工具名、参数、回信口)。
-  - `CommandSourceStack` 的回话去处是私有字段,原版只给 `withSource` 换、不给读;用一个只读的访问器 mixin(`CommandSourceStackAccessor`)读回,放在 api 的公共 mixin 配置里,两个加载器共用。
+  - `CommandSourceStack` 的回话去处是私有字段,原版只给 `withSource` 换、不给读;用一个只读的访问器 mixin(`CommandSourceStackAccessor`)读回,放在 Numen API 的公共 mixin 配置里,两个加载器共用。
   - `execute` 这类改写来源的指令只换位置、朝向、实体,回话去处原样传下去,所以指令树上任何一格都取得到它。
   - `/numen` 的节点取出这次调用、绑上动作交给处理函数;处理函数正常返回,就记下"这次调用由 Numen 答了",入口不再拿回显作回执。取不到就抛出:有人绕开了执行入口。没有线程变量。
   - 长活:处理函数交 `TaskDispatch.setTask(source, record)`,记录的调用 id 与名字都取自这次调用,受理回执与 `task_finished` 对得上号(GameTest 实测)。
@@ -414,11 +414,11 @@ ftbquests submit <quest>
 > 第 7 步之后(附录 F),下文的原版 `help <指令>` 在她的一行里写作 `/help <指令>`(第 0 层),`numen gt_long …` 写作
 > `gt_long …`(第 1 层);挖法与"你是不是要写"不变。
 
-代码在 `api` 的 `com.dwinovo.numen.cli`:`BrigadierHelp` 挖别的指令的帮助,`Completions` 是补全引擎的候选与"你是不是要写"。Numen 自己命令的帮助(第九节第一小节)在第 1、6 步已经落地(附录 A,例子必填见 `Action`)。
+代码在 Numen API 的 `com.dwinovo.numen.cli`:`BrigadierHelp` 挖别的指令的帮助,`Completions` 是补全引擎的候选与"你是不是要写"。Numen 自己命令的帮助(第九节第一小节)在第 1、6 步已经落地(附录 A,例子必填见 `Action`)。
 
 - **`help <指令>` 接在哪**(`CommandRunner.perform`)。`help <指令>` 照常交给原版执行,原版说的用法由 `Echo` 收下;跑成了,回执在原版原话之后接上 `BrigadierHelp.mine` 挖出的几项。用法只有原版 `help` 这一个来源,这里不再写一遍。
   - 不在执行前截下来自己答:那样就要把原版 help 的那几步(解析、取最后一格、`getSmartUsage`)再写一遍,成了两份;也绕开了 `performPrefixedCommand`(别的模组在指令事件里拦或记指令)。
-  - 不在 core 另注册一个只给她的节点:`help` 是原版的根,往它下面挂节点就是嫁接;另起一个名字,又多一个入口、和 `numen help` 撞义。
+  - 不在 Numen 另注册一个只给她的节点:`help` 是原版的根,往它下面挂节点就是嫁接;另起一个名字,又多一个入口、和 `numen help` 撞义。
   - 认的是根名 `help` 且带了参数的一行;`help` 不带参数照旧是原版的清单。原版 help 自己失败了(没有这条指令),回执照旧是失败的回显,不接。
 - **挖什么**(`BrigadierHelp`)。
   - 参数:从解析到的最后一格往下,和 `getSmartUsage` 走同一条路(一个子节点就接着往下,几个就各列一格不深入,可执行的一格之后只列下一格,redirect 不跟),所以列的正是原版那一行用法里出现的参数;她用不了的格不列。想看更深,就像原版那样多写一截(`help give @s`)。
@@ -468,7 +468,7 @@ numen gt_long lingre 40
 
 ## 附录 F:第 7 步(分层)落地时定下的细节
 
-代码在 `api` 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,YSM 的包装在 `plugins/ysm`。
+代码在 Numen API 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,YSM 的包装在 `plugins/ysm`。
 
 - **撤回的**(附录 D 里挂进 MC `/numen` 的那一半)。
   - 删掉:`HerArgumentInfo`,平台服务的 `registerArgumentType` 与两个加载器的实现(NeoForge 的 `ARGUMENT_TYPES` 延迟注册一并删),
@@ -504,7 +504,7 @@ numen gt_long lingre 40
   - `command` 工具的描述分两段写两层(第十节)。
 - **`/numen` 只给玩家**(第六节的判断)。她的命令不在 MC 树上,第 1 层不需要"是不是她"的过滤;但她作为玩家,经第 0 层照样敲得到
   MC 树上的每一条。召唤、设置、权限、征询、drive 是给人的,她不该用,所以 `/numen` 这个根只给不是她的来源,在
-  `NumenCommands.graft` 建根时一处定下,下面每一格(含 core 的 `debug`、`profile`、`pad`)随之。她敲 `/numen …` 当场失败:
+  `NumenCommands.graft` 建根时一处定下,下面每一格(含 Numen 的 `debug`、`profile`、`pad`)随之。她敲 `/numen …` 当场失败:
   "the server does not let you use /numen",不问主人;她的 `/help` 里没有 `/numen`。
 - **权威声明**。
   - 形状只有两种:`Authority.HERS`(默认)与 `Authority.SERVER_ON_HER`。声明组合在动作上:`.authority(Authority.SERVER_ON_HER)`,
@@ -582,7 +582,7 @@ gt_long lingre 40
 
 ## 附录 G:第 4 步(核心工具迁移)落地时定下的细节
 
-代码在 core 的 `tools/*/*Commands`(各组的登记)与 `core.build`(建造的原语、设计、建成的房子);机制的增补在 api 的
+代码在 Numen 的 `tools/*/*Commands`(各组的登记)与 `numen/build`(建造的原语、设计、建成的房子);机制的增补在 Numen API 的
 `com.dwinovo.numen.cli`(标志组、只读不执行的读法、写回命令行、文字里的命令)。
 
 ### 分三批迁完
@@ -787,7 +787,7 @@ throwaway clear
 边长 13 个区块)与四万个节点;远处的矿于是被报成 "found N … could not reach any … Move me somewhere else",寻路给的准确原因
 (预算用完不能证明无路、区块未加载……)被压成一句。现在改成工作区:
 
-- **工作区**(`core/nav/WorkArea`,只写在这一处):受理那一刻她脚下那一格为中心的球,距离按两格整数坐标算,与找方块的查询同一把尺
+- **工作区**(`numen/nav/WorkArea`,只写在这一处):受理那一刻她脚下那一格为中心的球,距离按两格整数坐标算,与找方块的查询同一把尺
   (09-30 起它就是一块区域,判定只问区域,见"看与挖收区域"一节)。
   半径上限 `WorkArea.RADIUS` 由寻路一次看得清的范围推出——快照从任何起点保证看得见水平 `SEARCH_RADIUS × 16` = 96 格,
   工作区的直径取这么大,区里任意两点在同一份快照里;竖直方向用同一个半径。今天是 48 格。
@@ -825,7 +825,7 @@ throwaway clear
 - **只收坐标**:`--x --z`(一处)、`--x --y --z`(一格)、`--y`(一个高度)。`--block`(自动找最近的一种方块)
   删去,连同只为它存在的 `NearestBlockFinder`:找东西是 `scan blocks` 的事,它给坐标。
 - **`--arrive at|use|near`**(默认 `at`),`--near N` 只配 `near`。命令行只管参数的写法、帮助与写错时的提醒,参数名一一对应到
-  寻路模块的目标只在 `core/task/move/Destination` 一处:`at` 是位置(`Goals.at`/`column`/`level`;站上一块方块
+  寻路模块的目标只在 `numen/task/move/Destination` 一处:`at` 是位置(`Goals.at`/`column`/`level`;站上一块方块
   就是给它上面那一格,写错时的提醒给出那一格),`use` 是用一格方块(`Goals.use`:站在它敞开的面前、看得见、点得到),`near` 是距离范围(`Goals.within`)。路线的终点与途经点(`route new --to`、`route via`)读同一份。
 - **写错当场提醒,不去搜索、不替她改写**(`GotoReminders` 写字,判断一律问寻路模块,经适配层 `Terrain`)。受理回执是
   `invalid arguments: …`,不派活:
@@ -851,16 +851,16 @@ throwaway clear
 没路时放宽一档探路、把候选路线记进身上的路线簿(`r1`、`r2`,不落盘),`move goto --route r2` 取走即删,`move route` 只列候选。现在
 路线是存盘的名词,规划与执行分成两件事:
 
-- **路线**(`core/route`):`Itinerary` = 名字、维度、一串路段(每段是去一个途经点的那一截;途经点是 `Destination.Stop`,坐标加
+- **路线**(`numen/route`):`Itinerary` = 名字、维度、一串路段(每段是去一个途经点的那一截;途经点是 `Destination.Stop`,坐标加
   到达方式,最后一个是终点)、整条与每段的路线标志(她写的那一截原样存成文字,`RouteFlags` 经 `route spec` 那一行命令的同一棵树
   读回、经 `RouteSpecFlags` 翻成规格)、最近一次计划(`Plan`)、最近 8 次走过的记录。按主人存在主世界的 SavedData(`Routes`,
   文件名带主人 UUID,与权限层同一个做法),同一个主人的同伴共用,重启不丢。名字规矩是 `Names`,与设计名、区域名同一条。
 - **计划**(`Plan`):从哪一格、何时规划的;每段一份:走得通(几步、估几刻、停在哪)、只看清一截(停在哪、之后为什么未知:预算用完、
   伸进没加载的区块)、走不通(寻路结局的原话,下一步写成改这条路线的命令)、没规划(前面一段没走通或没看清);每段要挖的格(连同当时
   的方块)、要放的格(倒水接坠落的那一格记水)、要问主人的格(连同为什么问);与回执里说要改什么读的是同一份(`NavText.Changes`)。
-- **规划**(`core/nav/Survey`):只搜不走,从她脚下逐段一次搜索,下一段接在上一段的终点与最后一步后面(门面 `PlanQuery.after`);
+- **规划**(`numen/nav/Survey`):只搜不走,从她脚下逐段一次搜索,下一段接在上一段的终点与最后一步后面(门面 `PlanQuery.after`);
   没走到的那一段交出看清的那一截(门面 `PlanResult.partial`)。`RoutePlanning` 把途经点按此刻的世界编成目标、交给它、写成计划。
-- **执行**(`core/nav/Trip`):照一段规划好的路走(`Trip.following`),路上边走边细算;反射层(跟随、战斗走位、捡东西、钓鱼、走到
+- **执行**(`numen/nav/Trip`):照一段规划好的路走(`Trip.following`),路上边走边细算;反射层(跟随、战斗走位、捡东西、钓鱼、走到
   实体跟前、建造走外圈、挖矿)照旧 `Trip.to`,许动要主人同意的格时先规划一条过目、问过再走。失败后放宽规格探路(PROBING)删掉:
   放不放宽是她的决定,回执说要改几格、照抄哪一行。
 - **承诺**:她看过的那份计划就是 `move go` 许改的全部格子。`Plan.bind` 把它写成这一趟规格里按位置的"只许"
@@ -960,7 +960,7 @@ route spec home --avoid_break area:house                --avoid_break/_place/_st
 设计稿 `docs/look-plan-act.md` §七第 3 步的看与挖一半。"一块地方"在看与挖里也只剩区域一种写法:扫描写进区域,挖与捡点名区域,
 工作区本身是一块区域;团编号簿、`g` 编号计数、`--groups`、`in_work_area`、`box` 都删掉。
 
-**`area` 组**(`core/tools/area/AreaCommands`,实现 `AreaOps`,说法 `AreaText`):
+**`area` 组**(`numen/tools/area/AreaCommands`,实现 `AreaOps`,说法 `AreaText`):
 
 ```
 area new ores                                    在她此刻的维度建一块空区域
@@ -1002,7 +1002,7 @@ scan blocks 32 iron_ore deepslate_iron_ore --into ores   每一团加成 ores �
 scan blocks 16 #minecraft:beds --in base                 只收落在 base 里的格;半径照旧是从她脚下看多远
 ```
 
-- 找方块、逐格问权限、分团收成 `core/scan/BlockScan`(只有 `scan blocks` 用它,挖矿自己不找);看完的结果经 `Found.into` 写进
+- 找方块、逐格问权限、分团收成 `numen/scan/BlockScan`(只有 `scan blocks` 用它,挖矿自己不找);看完的结果经 `Found.into` 写进
   区域,每格附带看到的方块状态与那一刻(主世界游戏刻)。`BlockGroups.Group` 只留格子与状态、说法、最近一格:各种几格、源头几格
   由区域的格子说,包围盒由 `area show` 说。
 - `--in`:半径参数不变,范围是"从她脚下的半径"与"点名的区域"两者都要在——区域判定只问 `Area.contains`,搜索的球只是看多远。
@@ -1042,7 +1042,7 @@ work mine logs --count 16 --avoid_break area:house
 
 **没改的**:
 - `BuildSite`(建造走向外圈时的工地禁令)不改成区域:它的格子是这次施工的目标格(`BuildCompanionTask.targetByPos`),只在这一趟里交给
-  寻路的位置代价(`PositionCosts`,寻路模块不依赖 api 的区域);收成区域再展开回去只多一层转换,判定仍是寻路模块那一处。
+  寻路的位置代价(`PositionCosts`,寻路模块不依赖 Numen API 的区域);收成区域再展开回去只多一层转换,判定仍是寻路模块那一处。
 - `scan storage --in`:不做。`scan storage` 的必填位置参数是一格 `x y z`,命令行没有可省的位置参数,`--in` 要么让同一个动作有两种
   写法、要么另起一个动作;"区域里的容器装了什么"眼下没有消费方,等要用时按真实用例开。
 
@@ -1075,7 +1075,7 @@ route new ore --to ores/g3 --arrive dig --alter natural          路线的去处
 真机上 `move_goto` 受理后 0.12 秒就发 `task_finished failed`(不改地形没路):她那一轮已经对主人说了"往西边跑一趟",又被事件
 叫醒再开一轮;挖矿受理后两秒才报搜索预算用光。现在派成后台活的调用受理之前先准备,开始不了的当场回错误,不受理。
 
-- **机制只一份**(api):任务交出准备(`Task.prepare` → `Preparation`,`poll` 每刻问一次、`cancel` 作废在飞的搜索),`TaskDispatch`
+- **机制只一份**(Numen API):任务交出准备(`Task.prepare` → `Preparation`,`poll` 每刻问一次、`cancel` 作废在飞的搜索),`TaskDispatch`
   交给这具身体的准备位(`Preparing`,一具身体一件)。结论就绪才受理:换进槽里、顶掉她手上那件、落盘、回"已受理",准备查到的事实
   接在回执后面;不成就回错误结果——没有任务编号、没有 `task_finished`,她手上的活不动。不用搜索的当场回;要搜索的结论出来那一刻
   才回(调用的回信口晚一点回,和 `route plan` 一样),内脑派发器本来就等这条回执才派下一个。准备花掉的刻不算这件活的期限。
@@ -1160,9 +1160,9 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 
 ### 防漂移测试
 
-`WrittenCommandsTest`(core 单测)把写着的每一行命令按命令树读一遍,读不通就失败并指出出处、那一行和报错的第一句:
+`WrittenCommandsTest`(Numen 单测)把写着的每一行命令按命令树读一遍,读不通就失败并指出出处、那一行和报错的第一句:
 
-- **读什么**:core 随身带的每一份技能文档(`SKILL.md` 与它们按需读的参考文件)、系统提示(`NumenPrompts` 的几段与本能
+- **读什么**:Numen 随身带的每一份技能文档(`SKILL.md` 与它们按需读的参考文件)、系统提示(`NumenPrompts` 的几段与本能
   名册)、每个命令组与动作的说明、参数说明、例子与注意、工具表里每个工具的描述与参数说明(快捷工具、`command`、
   `todowrite`),以及随模组发的设计文件(`.numen`,按设计的读法读,就是同一棵树)。
 - **怎么认出一行命令**(`WrittenCommands`,约定只写在这一处):反引号里,或 ``` 代码块里的一行;以 `/` 打头,或第一个词是
@@ -1176,15 +1176,15 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   旧写法(building_design、nether_entry、stronghold_finding、tier_progression、end_game_overview、blaze_rods)、带
   占位符写不通的 `fight attack --entity_ids <id>`、`use block right <x> <y> <z> …`、不存在的 `wait`;动作注意与工具描述里
   没加反引号的命令提及(都补上了,否则读不到);系统提示的例子 `command(use block right <the furnace…>)`。
-- **插件在自己的模块里读**:每个带命令组的联动有一个同样的测试(`plugins/*/src/test`,读法共用 core 测试里的
+- **插件在自己的模块里读**:每个带命令组的联动有一个同样的测试(`plugins/*/src/test`,读法共用 Numen 测试里的
   `WrittenCommandsLint`),读它随身带的技能文档与它那一组的说明。
-  - 跑在 core 单测的原版环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来,而读命令只要原版的指令树、core 的命令组与
+  - 跑在 Numen 单测的原版环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来,而读命令只要原版的指令树、Numen 的命令组与
     联动自己的登记代码。环境由 `numen-plugin` 约定接好,插件只写一个测试类。
   - 目标模组不需要在场:测试不经 `Builtin` 的闸门、不假装模组已装,只执行联动登记命令组的那一段(同一个 `install`,经同一扇
     `NumenPlugins` 的门),产品里"模组在场才登记"这条不动。登记时动作的处理函数要连上目标模组的类的(ftbquests 读任务书
     要 FTB 的类),那个联动把模组的 jar 加进测试运行时的类路径:只加载、不运行,不进任何产物。
-  - 联动的组只进它自己那个测试进程,不混进 core 的单测(命令树是进程级的静态表,帮助的快照不受影响)。
-  - 随发行 jar 的构建一起跑:`core:neoforge` 与 `core:fabric` 的 `check` 依赖它们带上的那几个联动的测试。
+  - 联动的组只进它自己那个测试进程,不混进 Numen 的单测(命令树是进程级的静态表,帮助的快照不受影响)。
+  - 随发行 jar 的构建一起跑:`numen:neoforge` 与 `numen:fabric` 的 `check` 依赖它们带上的那几个联动的测试。
   - 先跑一遍抓到并修掉的:四份插件技能都写着 `<组> <动作> --help` 这种带占位符的写法,改成"在动作后面加 --help"并举一个
     能照抄的例子。
 
@@ -1393,7 +1393,7 @@ This call came to N bytes, more than the 8388608 bytes one message to your clien
 
 快捷工具的 JSON 走同一个读法:`{"place": "120 64 -35"}`、`{"place": ["ores/g3", "120 12 -35"]}`。
 
-### 对照表(普查过 core 与插件的全部命令,只列改了的;没列的本来就合规)
+### 对照表(普查过 Numen 与插件的全部命令,只列改了的;没列的本来就合规)
 
 | 旧 | 新 | 为什么 |
 |---|---|---|

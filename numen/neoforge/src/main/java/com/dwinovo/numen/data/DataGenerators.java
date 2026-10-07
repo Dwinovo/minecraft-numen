@@ -7,9 +7,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.data.event.GatherDataEvent;
 
 /**
- * NeoForge data-generation entry point for numen-core. Auto-registered via
+ * NeoForge data-generation entry point for Numen. Auto-registered via
  * {@link EventBusSubscriber}; runs through {@code ./gradlew :neoforge:runData}.
- * Emits core's tags (the engine generates its own GUI language separately).
+ * Emits Numen's tags (Numen API generates its own GUI language separately).
  * Outputs land in {@code neoforge/src/generated/resources/}, already wired into
  * the main resource source set by the subproject's {@code build.gradle}.
  */

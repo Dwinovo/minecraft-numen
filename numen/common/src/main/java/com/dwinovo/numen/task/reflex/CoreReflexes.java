@@ -8,7 +8,7 @@ import com.dwinovo.numen.task.chain.MobDefenseChain;
 import com.dwinovo.numen.task.chain.UnstuckChain;
 
 /**
- * numen-core's reflex roster: the five survival chains, which implement
+ * Numen's reflex roster: the five survival chains, which implement
  * {@link Reflex} themselves, registered once at {@code NumenCore.init}. The chain instances enlisted here
  * are roster representatives only (id/describe are constants); the live,
  * per-companion chain instances stay inside each {@code CompanionBrain}.

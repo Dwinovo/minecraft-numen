@@ -10,7 +10,7 @@ import com.dwinovo.numen.api.agent.provider.IToolSpec;
 public interface NumenTool extends IToolSpec {
 
     /**
-     * Run this tool for one call — the engine's ONLY entry point. 当场完成、去异步、发自己的包都由工具自便,最后经
+     * Run this tool for one call — Numen API's ONLY entry point. 当场完成、去异步、发自己的包都由工具自便,最后经
      * {@link ToolCall} 报结果。
      */
     void invoke(ToolCall call);

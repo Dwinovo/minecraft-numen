@@ -45,7 +45,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * 都从入口调(`use entity`、`tlm …` 这几行命令),女仆用代码生成。
  *
  * <p>只在挂着车万女仆的那一次跑批里跑({@code :plugins:tlm:runGameTestServer},见插件的 build.gradle),命名空间
- * {@value #NAMESPACE};core 那一次跑批里没有这些用例,也没有车万女仆。
+ * {@value #NAMESPACE};Numen 那一次跑批里没有这些用例,也没有车万女仆。
  *
  * <p>权限层照出厂规则:对她自己的女仆动手由 {@code use_entity(self_owned)} 放行,野生女仆由 {@code use_entity(!owned)}
  * 放行,都不问。只有别人的女仆那一条开 {@link Mode#BYPASS}:别人的女仆出厂规则一行都没说到,照旧要问主人,用例里的主人

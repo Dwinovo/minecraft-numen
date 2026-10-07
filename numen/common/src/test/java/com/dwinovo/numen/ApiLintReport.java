@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * core 的 lint 报告,不是守卫:登记的每个函数与随模组发的模块的写法({@link ApiTester#lint()}),技能文档、系统提示、工具说明里写着的
+ * Numen 的 lint 报告,不是守卫:登记的每个函数与随模组发的模块的写法({@link ApiTester#lint()}),技能文档、系统提示、工具说明里写着的
  * 调用({@link ApiTester#lint(List)})。报告写进 {@code build/reports/api-lint.txt} 并打印;它不让构建失败——写法好不好由评测的分数说话,
  * 读这份报告的是写 API 与技能的人;整份 API 的 LuaLS 存根与元数据挨着它写出。插件的报告经同样的 {@link #documents} 与 {@link #write}。
  */

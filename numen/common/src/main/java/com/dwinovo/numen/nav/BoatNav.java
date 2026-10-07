@@ -30,7 +30,7 @@ import java.util.Set;
  * 启发朝目标的水平投影;预算内到不了就取<b>离目标最近的已访问水格</b>当靠岸点({@link Chart#reached} 为假),开到那儿就到了——
  * 下船走路是她的下一步({@code numen.move.dismount}、再规划步行),这里不越界。
  *
- * <p>驾驶输入走 {@link InputDriver#steerVehicle}(原版桨物理);服务端能动船的前提是载具权威开关(numen-api 的
+ * <p>驾驶输入走 {@link InputDriver#steerVehicle}(原版桨物理);服务端能动船的前提是载具权威开关(Numen API 的
  * MixinEntityVehicleControl)。
  *
  * <p>哪一格是水、船过不过得去,问她身边的地形({@link Terrain},寻路模块的第 0 层):水是语义种类里的静水与流水,过得去

@@ -119,7 +119,7 @@ public interface ScriptEngine {
     /**
      * 一个名字在这种语言里能不能当模块名:两段 {@code 名字空间.组}({@code numen.work}、{@code my.lumber}),每段写得出来、不是关键字,
      * 名字空间是一个全局名,还不能撞语言自带的全局与引擎自己的全局({@code raise}、{@code require})。和第 ① 层的组同名可以(那是给这一组
-     * 加函数)。能是 null,不能是那句话。模块文件放在哪的规矩在 api 的 {@code Modules}。
+     * 加函数)。能是 null,不能是那句话。模块文件放在哪的规矩在 Numen API 的 {@code Modules}。
      */
     String moduleName(String name);
 

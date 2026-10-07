@@ -6,7 +6,7 @@
  *
  * <ul>
  *   <li><b>还打不打得过</b>({@code breakOff}) —— 有效血量撑不住,或者手上没有任何武器而有东西在追她 → 跑。
- *       问它的是逃跑本能 {@code core.task.chain.FleeChain},不是一场仗:跑是身体的反射,跑不掉就让出身体接着打</li>
+ *       问它的是逃跑本能 {@code task.chain.FleeChain},不是一场仗:跑是身体的反射,跑不掉就让出身体接着打</li>
  *   <li><b>用弓还是走位</b>({@code decide}) —— 走不到就用弓,走得到就走位</li>
  * </ul>
  *
@@ -52,7 +52,7 @@
  *   <li>{@link com.dwinovo.numen.combat.WeaponDamage} —— 哪把更疼</li>
  * </ul>
  *
- * 把这些接起来的是 {@code core.task.combat.AttackCompanionTask}:它每刻扫一遍局面、
+ * 把这些接起来的是 {@code task.combat.AttackCompanionTask}:它每刻扫一遍局面、
  * 问一次判据、跑一次攻击层、驱一次寻路层。
  */
 package com.dwinovo.numen.combat;

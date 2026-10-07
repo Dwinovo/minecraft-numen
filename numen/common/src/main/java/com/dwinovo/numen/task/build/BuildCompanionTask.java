@@ -593,7 +593,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      *
      * <p>{@code passMissing.isEmpty()} 恰好是那一次边沿,不必另记状态去重。
      * (【事件挂点】要把"她没料了"推给她时也在这里 emit,前提是先在 GameEvents.Kind
-     * 里登记一个词——那是 numen-api 的改动。)
+     * 里登记一个词——那是 Numen API 的改动。)
      *
      * <p>判据是<b>状态量</b>:剩下的待建格里,还有没有哪怕一格是她此刻付得起的。有——
      * 这一遍还能推进,照常走;一格都没有——这一遍已经证明是死的,不必再把剩下的层空翻

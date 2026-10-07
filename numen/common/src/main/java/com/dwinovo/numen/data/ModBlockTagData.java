@@ -5,7 +5,7 @@ import com.dwinovo.numen.init.InitTag;
 import net.minecraft.world.level.block.Block;
 
 /**
- * Single source of truth for every block tag numen-core emits — mirrors
+ * Single source of truth for every block tag Numen emits — mirrors
  * {@link ModItemTagData} but for the block registry. Both loaders' block-tag
  * providers forward here, so the content stays in {@code common/}.
  *

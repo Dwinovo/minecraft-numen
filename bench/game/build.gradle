@@ -35,8 +35,8 @@ neoForge {
 }
 
 dependencies {
-    // 场景的源码集编译时看得见这两样:报告的类型、引擎的类型(场景拿到的是她的身体)
+    // 场景的源码集编译时看得见这两样:报告的类型、Numen API 的类型(场景拿到的是她的身体)
     api project(':bench')
-    // 整个引擎,不是瘦 api jar:评测大脑接的是引擎内部的零件(循环内核、传输层、召唤),和 core 的 GameTest 一样
+    // 整个 Numen API,不是瘦 api jar:评测大脑接的是 Numen API 内部的零件(循环内核、传输层、召唤),和 Numen 的 GameTest 一样
     api project(':numen-api:neoforge')
 }
