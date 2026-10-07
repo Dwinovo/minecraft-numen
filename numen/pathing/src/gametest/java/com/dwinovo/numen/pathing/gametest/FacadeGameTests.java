@@ -1,5 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.drive.EditLedger;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.List;
@@ -57,7 +59,7 @@ public class FacadeGameTests {
         t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(700)
                 .during(r -> {
                     if (handed[0] == null && r.body.isShiftKeyDown()
-                            && r.navigation.report().bill().places().size() >= 2) {
+                            && r.navigation.report().ledger().entries().size() >= 2) {
                         handed[0] = r.navigation.stop();
                     }
                 })
@@ -65,19 +67,19 @@ public class FacadeGameTests {
                     if (r.body.controls().held(Controls.Key.SNEAK)) {
                         throw new GameTestAssertException("叫停之后还按着潜行");
                     }
-                    List<BlockPos> placed = handed[0].bill().places();
-                    if (placed.size() < 2 || !placed.equals(r.report.bill().places())) {
-                        throw new GameTestAssertException("叫停交出的账不对:" + placed + " / " + r.report.bill().places());
+                    List<EditLedger.Entry> handedOut = handed[0].ledger().entries();
+                    if (handedOut.size() < 2 || !handedOut.equals(r.report.ledger().entries())) {
+                        throw new GameTestAssertException("叫停交出的账不对:" + handedOut + " / " + r.report.ledger().entries());
                     }
                 });
     }
 
     /**
-     * 一道基岩墙上两个口,近的在 z = 8,远的在 z = 22:先规划几条候选,挑穿远处那个口的一条交给导航——身体就从远处那个口
-     * 穿过去,一格不改。
+     * 一道基岩墙上两个口,近的在 z = 8,远的在 z = 22:先规划一条去远处那个口的路线交给导航当第一段——身体就从远处那个口
+     * 穿过去、再往去处走,一格不改。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
-    public static void drives_the_candidate_it_picked(GameTestHelper helper) {
+    public static void drives_the_route_it_was_handed(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 10, 3, 39, Blocks.BEDROCK);
         t.fill(10, 1, 8, 10, 2, 8, Blocks.AIR);
@@ -85,26 +87,25 @@ public class FacadeGameTests {
         TestBody body = t.body(5, 1, 12);
         BlockPos far = t.at(10, 1, 22);
         NavRequest request = NavRequest.to(Goals.at(t.at(15, 1, 12)), RouteSpec.defaults());
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 3), plan -> {
-            Route picked = plan.candidates().stream().map(PlanResult.Candidate::route)
-                    .filter(route -> route.nodes().contains(far)).findFirst()
-                    .orElseThrow(() -> new GameTestAssertException("候选里没有穿远处那个口的:" + plan.candidates().size()));
-            if (plan.candidates().get(0).route() == picked) {
-                throw new GameTestAssertException("最便宜的那条就穿远处的口,场景没起作用");
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), direct -> {
+            if (direct.route() == null || direct.route().nodes().contains(far)) {
+                throw new GameTestAssertException("直接去处的路就穿远处的口,场景没起作用:" + direct.outcome());
             }
-            int[] crossedAt = {Integer.MIN_VALUE};
-            t.go(body, request.following(picked)).within(700)
-                    .during(r -> {
-                        BlockPos at = r.body.blockPosition();
-                        if (at.getX() == far.getX() && crossedAt[0] == Integer.MIN_VALUE) {
-                            crossedAt[0] = at.getZ();
-                        }
-                    })
-                    .arrives().then(Scenes::unaltered).then(r -> {
-                        if (crossedAt[0] != far.getZ()) {
-                            throw new GameTestAssertException("没从挑中的那个口穿过去:" + (crossedAt[0] - t.origin.getZ()));
-                        }
-                    });
+            t.plan(body, PlanQuery.of(Goals.at(far), request.spec()), toGap -> {
+                int[] crossedAt = {Integer.MIN_VALUE};
+                t.go(body, request.following(toGap.route())).within(700)
+                        .during(r -> {
+                            BlockPos at = r.body.blockPosition();
+                            if (at.getX() == far.getX() && crossedAt[0] == Integer.MIN_VALUE) {
+                                crossedAt[0] = at.getZ();
+                            }
+                        })
+                        .arrives().then(Scenes::unaltered).then(r -> {
+                            if (crossedAt[0] != far.getZ()) {
+                                throw new GameTestAssertException("没从给的路线穿过去:" + (crossedAt[0] - t.origin.getZ()));
+                            }
+                        });
+            });
         });
     }
 
@@ -120,8 +121,8 @@ public class FacadeGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
         body.getInventory().setItem(20, new ItemStack(Items.IRON_SHOVEL));
         Vec3 at = body.position();
-        t.plan(body, PlanQuery.of(Goals.at(t.at(15, 1, 12)), NATURAL, 3), plan -> {
-            if (plan.candidates().isEmpty() || plan.candidates().get(0).bill().digs().isEmpty()) {
+        t.plan(body, PlanQuery.of(Goals.at(t.at(15, 1, 12)), NATURAL), plan -> {
+            if (plan.route() == null || plan.route().edits().stream().noneMatch(e -> e instanceof Edit.Dig)) {
                 throw new GameTestAssertException("应当规划出挖墙的路:" + plan.outcome());
             }
             if (!body.position().equals(at)) {

@@ -219,6 +219,11 @@ final class Trial {
         });
     }
 
+    /** 同一个请求,每次搜索最多展开 {@code budget} 个节点(用例要用小预算逼出"预算用完"与分段交半程)。 */
+    static NavRequest budgeted(NavRequest request, int budget) {
+        return new NavRequest(request.goal(), request.spec(), budget, request.route(), request.through());
+    }
+
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
         return Navigator.of(body, new Ports(terrain, materials, threats));

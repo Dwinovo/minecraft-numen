@@ -1,5 +1,8 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import java.util.List;
+import java.util.ArrayList;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.world.level.block.Block;
@@ -66,9 +69,31 @@ final class Scenes {
         };
     }
 
+    /** 实际账里挖掉的格,按先后。 */
+    static List<EditLedger.Dug> dug(Trial.Run r) {
+        List<EditLedger.Dug> out = new ArrayList<>();
+        for (EditLedger.Entry e : r.report.ledger().entries()) {
+            if (e instanceof EditLedger.Dug d) {
+                out.add(d);
+            }
+        }
+        return out;
+    }
+
+    /** 实际账里放下方块的格,按先后。 */
+    static List<EditLedger.Placed> placed(Trial.Run r) {
+        List<EditLedger.Placed> out = new ArrayList<>();
+        for (EditLedger.Entry e : r.report.ledger().entries()) {
+            if (e instanceof EditLedger.Placed p) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
     /** 实际账里没有挖、没有放(开关门不算)。 */
     static void unaltered(Trial.Run r) {
-        if (r.report.ledger().alterations() != 0) {
+        if (!dug(r).isEmpty() || !placed(r).isEmpty()) {
             throw new GameTestAssertException("改了地形:" + r.report.ledger().entries());
         }
     }

@@ -8,7 +8,6 @@ import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.api.NavRequest;
-import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
@@ -236,6 +235,13 @@ class SearchTest {
     void aBodyThatCannotStandAtTheStartIsStranded() {
         SearchResult result = search(new TestWorld(), defaults(), START, Goals.at(new BlockPos(5, Y, 0)));
         assertEquals(SearchResult.Stop.STRANDED, result.stop());
+    }
+
+    /** 两条平行的走廊 z=0 与 z=4,两头连通,z=0 那条短。 */
+    private static TestWorld twoCorridors() {
+        TestWorld world = new TestWorld().floor(-1, -1, 11, 5, Y - 1);
+        world.fill(-1, Y, -1, 11, Y + 1, -1, STONE).fill(-1, Y, 5, 11, Y + 1, 5, STONE);
+        return world.fill(2, Y, 1, 8, Y + 1, 3, STONE);
     }
 
     /**
@@ -643,60 +649,18 @@ class SearchTest {
                 "停在这儿变贵了");
     }
 
-    // ==================== 候选路线、旧路打折、生物危险 ====================
+    // ==================== 旧路打折、生物危险 ====================
 
-    /** 两条平行的走廊 z=0 与 z=4,两头连通,z=0 那条短。 */
-    private static TestWorld twoCorridors() {
-        TestWorld world = new TestWorld().floor(-1, -1, 11, 5, Y - 1);
-        world.fill(-1, Y, -1, 11, Y + 1, -1, STONE).fill(-1, Y, 5, 11, Y + 1, 5, STONE);
-        return world.fill(2, Y, 1, 8, Y + 1, 3, STONE);
-    }
-
+    /** 搜索没搜到头(预算用完):交出朝目标推进的那一截——那一截看清了,之后是什么这次没看到。 */
     @Test
-    void candidateRoutesAreDistinctAndOverlappingOnesAreDropped() {
-        RoutePlanner.Plan plan = RoutePlanner.run(new RoutePlanner.Query(twoCorridors(), defaults(), START,
-                Goals.at(new BlockPos(10, Y, 0)), Fixtures.BUDGET, 3), () -> false);
-        assertNull(plan.unreached());
-        assertEquals(2, plan.candidates().size(), "只有两条走廊,第三条与前两条重叠太多被丢掉");
-        Route first = plan.candidates().get(0);
-        Route second = plan.candidates().get(1);
-        assertTrue(first.nodes().stream().anyMatch(n -> n.getZ() == 0 && n.getX() == 5));
-        assertTrue(second.nodes().stream().anyMatch(n -> n.getZ() == 4 && n.getX() == 5));
-        assertTrue(first.cost() < second.cost(), "候选按原价计,不带逼出备选的加价");
-    }
-
-    /**
-     * 要三条候选,预算只够搜出最便宜的那一条:第二次搜索(已有候选经过的格加了价,要绕开它得多展开)预算用完,规划收工——
-     * 先找到的那一条照样交出,并说出收工的那次搜索为什么停。
-     */
-    @Test
-    void aCandidateSearchThatStopsShortKeepsTheCandidatesFoundAndSaysWhy() {
-        TestWorld world = field();
-        CostModel model = defaults();
-        Goal goal = Goals.at(new BlockPos(12, Y, 0));
-        int enough = 1;
-        while (!search(world, model, START, goal, enough).arrived()) {
-            enough++;
-        }
-        Route cheapest = search(world, model, START, goal, enough).route();
-        RoutePlanner.Plan plan = RoutePlanner.run(new RoutePlanner.Query(world, model, START, goal, enough, 3), () -> false);
-        assertEquals(SearchResult.Stop.BUDGET, plan.unreached(), "第二次搜索预算用完");
-        assertEquals(1, plan.candidates().size(), "先找到的那一条留着");
-        assertEquals(cheapest.nodes(), plan.candidates().get(0).nodes());
-    }
-
-    /** 规划没搜到头(预算用完):一条候选都没有,交出朝目标推进的那一截——那一截看清了,之后是什么这次没看到。 */
-    @Test
-    void aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw() {
+    void aSearchThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw() {
         TestWorld rock = new TestWorld().fill(-4, Y - 6, -8, 40, Y + 8, 8, STONE)
                 .fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
-        RoutePlanner.Plan plan = RoutePlanner.run(new RoutePlanner.Query(rock, Fixtures.model(natural()), START,
-                Goals.at(new BlockPos(30, Y, 0)), 2000, 1), () -> false);
-        assertTrue(plan.candidates().isEmpty());
-        assertEquals(SearchResult.Stop.BUDGET, plan.unreached());
-        assertNotNull(plan.partial(), "朝目标挖过去的那一截要交出来");
-        assertEquals(START, plan.partial().start());
-        assertTrue(plan.partial().end().getX() > AStar.MIN_PARTIAL, "那一截朝目标推进:" + plan.partial().end());
+        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 2000);
+        assertEquals(SearchResult.Stop.BUDGET, result.stop());
+        assertNotNull(result.route(), "朝目标挖过去的那一截要交出来");
+        assertEquals(START, result.route().start());
+        assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "那一截朝目标推进:" + result.route().end());
     }
 
     /**
@@ -713,29 +677,13 @@ class SearchTest {
         assertNotNull(first);
         BlockPos end = first.end();
         Route.Leg last = first.legs().get(first.legs().size() - 1);
-        RoutePlanner.Plan bare = RoutePlanner.run(new RoutePlanner.Query(world, model, end, goal, 50_000, 1),
-                () -> false);
-        assertEquals(SearchResult.Stop.STRANDED, bare.unreached(), "快照里桥还没搭,起点待不住");
-        RoutePlanner.Plan next = RoutePlanner.run(new RoutePlanner.Query(world, model, end, goal, 50_000, 1, last),
-                () -> false);
-        Route continued = next.candidates().isEmpty() ? next.partial() : next.candidates().get(0);
-        assertNotNull(continued, "接着规划出了路:" + next.unreached());
+        SearchResult bare = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE), () -> false);
+        assertEquals(SearchResult.Stop.STRANDED, bare.stop(), "快照里桥还没搭,起点待不住");
+        SearchResult next = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE).after(last), () -> false);
+        Route continued = next.route();
+        assertNotNull(continued, "接着规划出了路:" + next.stop());
         assertEquals(end, continued.start());
         assertTrue(continued.end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
-    }
-
-    /** 候选条数只能是 1 到上限:要 0 条或超过上限,查询本身就不成立——搜索这一层的查询与门面的查询都一样。 */
-    @Test
-    void askingForNoCandidatesOrMoreThanTheLimitIsRefused() {
-        Goal goal = Goals.at(new BlockPos(5, Y, 0));
-        for (int wanted : new int[] {0, RoutePlanner.MAX_CANDIDATES + 1}) {
-            assertThrows(IllegalArgumentException.class,
-                    () -> new RoutePlanner.Query(field(), defaults(), START, goal, Fixtures.BUDGET, wanted), "要 " + wanted + " 条");
-            assertThrows(IllegalArgumentException.class, () -> PlanQuery.of(goal, RouteSpec.defaults(), wanted),
-                    "要 " + wanted + " 条");
-        }
-        new RoutePlanner.Query(field(), defaults(), START, goal, Fixtures.BUDGET, RoutePlanner.MAX_CANDIDATES);
-        PlanQuery.of(goal, RouteSpec.defaults(), PlanQuery.MAX_CANDIDATES);
     }
 
     @Test
@@ -746,8 +694,11 @@ class SearchTest {
         world.fill(2, Y, -1, 8, Y + 1, 1, STONE);
         CostModel model = defaults();
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
-        List<Route> both = RoutePlanner.run(new RoutePlanner.Query(world, model, START, goal, Fixtures.BUDGET, 2),
-                () -> false).candidates();
+        Route first = search(world, model, START, goal).route();
+        long firstSide = first.nodes().stream().filter(n -> n.getX() == 5).findFirst().orElseThrow().asLong();
+        RouteSpec other = RouteSpec.defaults().edit()
+                .positions(PositionCosts.builder().forbid(PositionCosts.Use.PASS, firstSide).build()).build();
+        List<Route> both = List.of(first, search(world, Fixtures.model(other), START, goal).route());
         assertEquals(2, both.size());
         for (Route old : both) {
             int side = old.nodes().stream().filter(n -> n.getX() == 5).findFirst().orElseThrow().getZ();

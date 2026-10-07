@@ -16,9 +16,4 @@ public record Report(EditLedger ledger, List<BodyAction> actions, List<DiveLog.D
         actions = List.copyOf(actions);
         dives = List.copyOf(dives);
     }
-
-    /** 实际账写成账单的格式。 */
-    public Bill bill() {
-        return Bill.of(ledger);
-    }
 }

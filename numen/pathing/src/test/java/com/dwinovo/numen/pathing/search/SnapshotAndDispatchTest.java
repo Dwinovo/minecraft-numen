@@ -75,23 +75,20 @@ class SnapshotAndDispatchTest {
                 (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 2);
         Search search = new Search(snapshot, Fixtures.model(RouteSpec.defaults()), new BlockPos(3, Y + 1, 3),
                 Goals.at(new BlockPos(40, Y + 1, 3)), Fixtures.BUDGET, Favoring.NONE);
-        SearchResult result = Searches.submit(search).join();
+        SearchResult result = Fixtures.await(Searches.submit(search));
         assertEquals(SearchResult.Stop.UNLOADED, result.stop());
         // 走进区块最东一列 x = 15 要看边外那一格伤不伤身,不知道就不走,停在它前面一列
         assertEquals(14, result.route().end().getX());
     }
 
     @Test
-    void searchesAndRouteQueriesGoThroughTheOneDispatcher() {
+    void searchesGoThroughTheOneDispatcher() {
         TestWorld world = new TestWorld().floor(-2, -2, 12, 2, Y - 1);
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
         Search search = new Search(world, Fixtures.model(RouteSpec.defaults()), new BlockPos(0, Y, 0), goal,
                 Fixtures.BUDGET, Favoring.NONE);
         Pending<SearchResult> pending = Searches.submit(search);
-        assertTrue(pending.join().arrived());
+        assertTrue(Fixtures.await(pending).arrived());
         assertTrue(pending.poll().arrived(), "跑完之后每次交出同一个结论");
-        RoutePlanner.Plan plan = Searches.submit(new RoutePlanner.Query(world, Fixtures.model(RouteSpec.defaults()),
-                new BlockPos(0, Y, 0), goal, Fixtures.BUDGET, 1)).join();
-        assertEquals(1, plan.candidates().size());
     }
 }

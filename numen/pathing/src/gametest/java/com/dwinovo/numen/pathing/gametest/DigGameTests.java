@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import com.dwinovo.numen.api.entity.Mouse;
+import static com.dwinovo.numen.pathing.gametest.Scenes.dug;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
@@ -68,16 +69,6 @@ public class DigGameTests {
     /** 横贯场地的一道墙:{@code x} 那一列,y = 1..{@code height} 都是 {@code block}。 */
     private static void wall(Trial t, int x, int height, Block block) {
         t.fill(x, 1, 0, x, height, 39, block);
-    }
-
-    private static List<EditLedger.Dug> dug(Trial.Run r) {
-        List<EditLedger.Dug> out = new ArrayList<>();
-        for (EditLedger.Entry e : r.report.ledger().entries()) {
-            if (e instanceof EditLedger.Dug d) {
-                out.add(d);
-            }
-        }
-        return out;
     }
 
     /** 挖掉的格都在 {@code z >= minZ} 那一段(相对场地)。 */
@@ -253,11 +244,11 @@ public class DigGameTests {
         DigWatch watch = new DigWatch(body);
         watch.install();
         NavRequest request = NavRequest.to(Goals.at(t.at(11, 3, 5)), NATURAL);
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("没规划出路:" + plan.outcome());
             }
-            Route route = plan.candidates().get(0).route();
+            Route route = plan.route();
             List<Edit.Dig> planned = new ArrayList<>();
             for (Edit e : route.edits()) {
                 if (e instanceof Edit.Dig d) {
@@ -540,11 +531,11 @@ public class DigGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         BlockPos ore = t.at(8, 14, 8);
         NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
             }
-            Route route = plan.candidates().get(0).route();
+            Route route = plan.route();
             for (BlockPos node : route.nodes()) {
                 if (node.getX() != ore.getX() || node.getZ() != ore.getZ()) {
                     throw new GameTestAssertException("没有直直往下挖:" + t.rel(node));
@@ -567,11 +558,11 @@ public class DigGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         BlockPos ore = t.at(16, 2, 20);
         NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
             }
-            Route route = plan.candidates().get(0).route();
+            Route route = plan.route();
             long digs = route.edits().stream().filter(e -> e instanceof Edit.Dig).count();
             if (digs == 0 || digs > 8) {
                 throw new GameTestAssertException("该从正面挖进去几格,却挖 " + digs + " 格:" + route);

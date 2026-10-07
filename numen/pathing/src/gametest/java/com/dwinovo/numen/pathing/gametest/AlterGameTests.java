@@ -1,13 +1,14 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import com.dwinovo.numen.api.entity.Mouse;
+import static com.dwinovo.numen.pathing.gametest.Scenes.dug;
+import static com.dwinovo.numen.pathing.gametest.Scenes.placed;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Permit;
@@ -72,26 +73,6 @@ public class AlterGameTests {
     private static void ditch(Trial t, int x0, int x1) {
         t.fill(0, 1, 0, x0 - 1, 4, 39, Blocks.BEDROCK);
         t.fill(x1 + 1, 1, 0, 39, 4, 39, Blocks.BEDROCK);
-    }
-
-    private static List<EditLedger.Dug> dug(Trial.Run r) {
-        List<EditLedger.Dug> out = new ArrayList<>();
-        for (EditLedger.Entry e : r.report.ledger().entries()) {
-            if (e instanceof EditLedger.Dug d) {
-                out.add(d);
-            }
-        }
-        return out;
-    }
-
-    private static List<EditLedger.Placed> placed(Trial.Run r) {
-        List<EditLedger.Placed> out = new ArrayList<>();
-        for (EditLedger.Entry e : r.report.ledger().entries()) {
-            if (e instanceof EditLedger.Placed p) {
-                out.add(p);
-            }
-        }
-        return out;
     }
 
     // ==================== 不许改地形 ====================
@@ -229,14 +210,8 @@ public class AlterGameTests {
         t.terrain = (change, pos, state, view) -> state.is(Blocks.DIRT) ? Permit.ask("hut:" + t.rel(pos)) : Permit.ALLOW;
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(400).arrives().then(r -> {
-            Bill bill = r.report.bill();
-            if (bill.consents().isEmpty() || bill.consents().size() != bill.digs().size()) {
-                throw new GameTestAssertException("挖的每一格都要列进要同意的格:" + bill);
-            }
-            for (Bill.Consent c : bill.consents()) {
-                if (!("hut:" + t.rel(c.pos())).equals(c.credential())) {
-                    throw new GameTestAssertException("凭据没有原样交还:" + c);
-                }
+            if (dug(r).isEmpty() || !dug(r).stream().allMatch(d -> d.before().is(Blocks.DIRT))) {
+                throw new GameTestAssertException("要问的格算能走时应当把泥土挖出去:" + dug(r));
             }
         });
         TestBody other = t.body(5, 1, 20);
@@ -314,13 +289,8 @@ public class AlterGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(400).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
-            if (placed.size() != 1 || placed.get(0).pos().getY() != snowRow.getY()
-                    || !placed.get(0).before().is(Blocks.SNOW) || !(placed.get(0).permit() instanceof Permit.Ask)) {
+            if (placed.size() != 1 || placed.get(0).pos().getY() != snowRow.getY() || !placed.get(0).before().is(Blocks.SNOW)) {
                 throw new GameTestAssertException("应当把块放进薄雪那一格:" + placed);
-            }
-            List<Bill.Consent> consents = r.report.bill().consents();
-            if (consents.size() != 1 || !consents.get(0).pos().equals(placed.get(0).pos())) {
-                throw new GameTestAssertException("要同意的应当是薄雪那一格:" + consents);
             }
         });
     }

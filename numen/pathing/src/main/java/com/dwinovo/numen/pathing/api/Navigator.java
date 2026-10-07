@@ -12,7 +12,6 @@ import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Origin;
 import com.dwinovo.numen.pathing.search.Route;
-import com.dwinovo.numen.pathing.search.RoutePlanner;
 import com.dwinovo.numen.pathing.search.Search;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
@@ -21,7 +20,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 寻路的门面:一具身体加宿主的端口。规划是查询——{@link #plan} 只搜不走,不占身体、不碰世界,交出候选路线与预算账;
+ * 寻路的门面:一具身体加宿主的端口。规划是查询——{@link #plan} 只搜不走,不占身体、不碰世界,交出路线与预算账;
  * 执行是任务——{@link #drive} 交出一次在走的导航。请求、结局、账单都是数据,
  * 模块里没有给模型或玩家看的话。
  *
@@ -41,7 +40,7 @@ public final class Navigator {
         return new Navigator(body, ports);
     }
 
-    /** 只搜不走:从身体脚下(或接在 {@link PlanQuery#after} 那条路线后面)出候选路线。 */
+    /** 只搜不走:从身体脚下(或接在 {@link PlanQuery#after} 那条路线后面)出路线。 */
     public Planning plan(PlanQuery query) {
         ServerPlayer entity = body.entity();
         BodySnapshot snapshot = body.snapshot();
@@ -58,7 +57,7 @@ public final class Navigator {
             if (start.isEmpty()) {
                 BlockPos at = entity.blockPosition();
                 PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
-                return new Planning(new PlanResult(List.of(),
+                return new Planning(new PlanResult(null,
                         new Outcome.Stranded(at, entity.level().getBlockState(at)), null));
             }
             from = start.get();
@@ -67,10 +66,8 @@ public final class Navigator {
         WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from);
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
         PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
-        RoutePlanner.Query planned = new RoutePlanner.Query(view, model, from, query.goal(), query.budget(),
-                query.candidates(), arrival);
-        Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(arrival);
-        return new Planning(Searches.submit(planned), probe, who);
+        Search search = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(arrival);
+        return new Planning(Searches.submit(search), search, who);
     }
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */

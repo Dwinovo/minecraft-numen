@@ -76,26 +76,26 @@ public final class Survey {
             return List.copyOf(found);
         }
         if (current == null) {
-            current = navigator.plan(PlanQuery.of(legs.get(0).goal(), legs.get(0).spec(), 1));
+            current = navigator.plan(PlanQuery.of(legs.get(0).goal(), legs.get(0).spec()));
         }
         PlanResult result = current.poll();
         if (result == null) {
             return null;
         }
         current = null;
-        if (result.candidates().isEmpty()) {
-            found.add(new Found(null, result.partial() == null ? null : result.partial().route(), result.outcome()));
+        if (result.route() == null) {
+            found.add(new Found(null, result.partial(), result.outcome()));
             done = true;
             return List.copyOf(found);
         }
-        Route route = result.candidates().get(0).route();
+        Route route = result.route();
         found.add(new Found(route, null, null));
         if (found.size() == legs.size()) {
             done = true;
             return List.copyOf(found);
         }
         Leg next = legs.get(found.size());
-        current = navigator.plan(PlanQuery.of(next.goal(), next.spec(), 1).after(route));
+        current = navigator.plan(PlanQuery.of(next.goal(), next.spec()).after(route));
         return null;
     }
 

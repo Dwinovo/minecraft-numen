@@ -1,10 +1,13 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import net.minecraft.core.BlockPos;
+import java.util.List;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -79,17 +82,20 @@ public class TickRateGameTests {
      * 先只搜不走地规划一次,再在排着队的搜索下真走:实际账里挖掉、放下的格与规划的那条路要挖、要放的一格不差,照样到。
      */
     private static void sameAsPlanned(Trial t, TestBody body, NavRequest request) {
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("没规划出路:" + plan.outcome());
             }
-            Bill planned = plan.candidates().get(0).bill();
+            List<BlockPos> plannedDigs = plan.route().edits().stream().filter(e -> e instanceof Edit.Dig).map(Edit::pos).toList();
+            List<BlockPos> plannedPlaces = plan.route().edits().stream()
+                    .filter(e -> e instanceof Edit.Place || e instanceof Edit.Catch).map(Edit::pos).toList();
             Backlog backlog = new Backlog();
             t.go(body, request).within(1800).realTime().during(backlog::tick).arrives().then(r -> {
-                Bill actual = r.report.bill();
-                if (!actual.digs().equals(planned.digs()) || !actual.places().equals(planned.places())) {
-                    throw new GameTestAssertException("与规划的不一样:规划挖 " + planned.digs() + " 放 " + planned.places()
-                            + ",实际挖 " + actual.digs() + " 放 " + actual.places());
+                List<BlockPos> digs = Scenes.dug(r).stream().map(EditLedger.Dug::pos).toList();
+                List<BlockPos> places = Scenes.placed(r).stream().map(EditLedger.Placed::pos).toList();
+                if (!digs.equals(plannedDigs) || !places.equals(plannedPlaces)) {
+                    throw new GameTestAssertException("与规划的不一样:规划挖 " + plannedDigs + " 放 " + plannedPlaces
+                            + ",实际挖 " + digs + " 放 " + places);
                 }
             });
         });

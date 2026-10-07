@@ -48,11 +48,11 @@ public class BudgetGameTests {
         t.fill(10, 1, 0, 10, 3, 33, Blocks.BEDROCK);
         TestBody body = t.body(8, 1, 15);
         NavRequest request = NavRequest.to(Goals.at(t.at(13, 1, 15)), RouteSpec.defaults());
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("出厂预算应当搜得出绕过去的路:" + plan.outcome());
             }
-            t.go(body, request.withBudget(200)).within(300).fails(Outcome.OutOfBudget.class).then(Scenes::unaltered);
+            t.go(body, Trial.budgeted(request, 200)).within(300).fails(Outcome.OutOfBudget.class).then(Scenes::unaltered);
         });
     }
 
@@ -96,14 +96,14 @@ public class BudgetGameTests {
         t.fill(6, 1, 0, 100, 14, 23, Blocks.STONE);
         TestBody body = t.body(2, 1, 12);
         body.getInventory().setItem(0, new ItemStack(Items.DIAMOND_PICKAXE));
-        NavRequest request = NavRequest.to(Goals.at(t.at(94, 1, 12)), NATURAL).withBudget(8000);
-        t.plan(body, new PlanQuery(request.goal(), request.spec(), 1, request.budget()), plan -> {
+        NavRequest request = Trial.budgeted(NavRequest.to(Goals.at(t.at(94, 1, 12)), NATURAL), 8000);
+        t.plan(body, new PlanQuery(request.goal(), request.spec(), request.budget()), plan -> {
             if (!(plan.outcome() instanceof Outcome.OutOfBudget)) {
-                throw new GameTestAssertException("一次搜索应当搜不到头:" + plan.outcome() + " " + plan.candidates().size());
+                throw new GameTestAssertException("一次搜索应当搜不到头:" + plan.outcome() + "");
             }
             t.go(body, request).within(6800).arrives().then(r -> {
-                if (r.report.bill().digs().size() < 2 * 88) {
-                    throw new GameTestAssertException("没挖出隧道:" + r.report.bill().digs().size() + " 格");
+                if (Scenes.dug(r).size() < 2 * 88) {
+                    throw new GameTestAssertException("没挖出隧道:" + Scenes.dug(r).size() + " 格");
                 }
             });
         });
@@ -227,9 +227,9 @@ public class BudgetGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(2, 1, 12);
         BlockPos start = body.blockPosition();
-        t.plan(body, PlanQuery.of(Goals.at(t.at(210, 1, 12)), RouteSpec.defaults(), 1), plan -> {
+        t.plan(body, PlanQuery.of(Goals.at(t.at(210, 1, 12)), RouteSpec.defaults()), plan -> {
             if (!(plan.outcome() instanceof Outcome.Unloaded)) {
-                throw new GameTestAssertException("结局应是未加载:" + plan.outcome() + " " + plan.candidates().size());
+                throw new GameTestAssertException("结局应是未加载:" + plan.outcome() + "");
             }
             if (!body.blockPosition().equals(start)) {
                 throw new GameTestAssertException("只搜不走,身体却动了");

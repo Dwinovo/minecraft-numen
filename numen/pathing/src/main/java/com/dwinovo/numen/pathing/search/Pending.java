@@ -25,11 +25,6 @@ public final class Pending<T> {
         return future.isDone() ? future.join() : null;
     }
 
-    /** 等它跑完并交出结论。 */
-    public T join() {
-        return future.join();
-    }
-
     public void cancel() {
         cancelled.set(true);
     }

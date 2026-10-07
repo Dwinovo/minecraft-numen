@@ -55,12 +55,12 @@ public class RecheckGameTests {
         TestBody body = t.body(4, 1, 5);
         BlockPos stone = t.at(12, 1, 5);
         NavRequest request = NavRequest.to(Goals.at(t.at(19, 1, 5)), RouteSpec.defaults());
-        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
-            if (plan.candidates().isEmpty()) {
+        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
+            if (plan.route() == null) {
                 throw new GameTestAssertException("没规划出路:" + plan.outcome());
             }
             t.change(12, 1, 5, Blocks.STONE.defaultBlockState());
-            t.go(body, request.following(plan.candidates().get(0).route())).within(400)
+            t.go(body, request.following(plan.route())).within(400)
                     .fails(Outcome.Blocked.class, o -> {
                         Blockage b = o.blockage();
                         if (!b.cell().equals(stone) || !b.block().is(Blocks.STONE) || b.move() != MoveKind.WALK

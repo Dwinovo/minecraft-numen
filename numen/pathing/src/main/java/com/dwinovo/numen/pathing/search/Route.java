@@ -94,16 +94,6 @@ public record Route(BlockPos start, Stance startStance, List<Leg> legs) {
         return n;
     }
 
-    /** 同样的步子按另一份成本模型重新定价(步子本身的前提不变,只是价钱的出处换了;憋气只看身体,照旧)。 */
-    public Route repriced(CostModel model) {
-        List<Leg> out = new ArrayList<>(legs.size());
-        for (Leg leg : legs) {
-            Maneuver m = leg.maneuver();
-            out.add(new Leg(m, Moves.of(m.kind()).cost(model, m), leg.air()));
-        }
-        return new Route(start, startStance, out);
-    }
-
     /**
      * 同样的步子,憋气从 {@code air} 起按 {@code model} 的身体一步步重算({@link Breath#after},每步的刻数是那种走法的
      * {@link com.dwinovo.numen.pathing.plan.Move#ticks});憋不住的步子照样留着,憋气扣到见底以下。诊断拿它看一条不计憋气

@@ -29,6 +29,15 @@ public final class Fixtures {
 
     /** 单测默认的展开预算。 */
     public static final int BUDGET = 20_000;
+
+    /** 等一次派发出去的搜索跑完,交出结论。 */
+    public static <T> T await(com.dwinovo.numen.pathing.search.Pending<T> pending) {
+        T result;
+        while ((result = pending.poll()) == null) {
+            Thread.onSpinWait();
+        }
+        return result;
+    }
     /** 身上带着圆石当垫路料。 */
     public static final Materials COBBLE = () -> Optional.of(Blocks.COBBLESTONE);
 

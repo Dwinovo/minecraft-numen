@@ -10,7 +10,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 /**
- * 搜索的派发口,全模块只有这一个:搜索与候选查询都经这里交给一个共享的工作线程池。
+ * 搜索的派发口,全模块只有这一个:搜索与由搜索组成的活都经这里交给一个共享的工作线程池。
  *
  * <p>池子是固定大小(处理器数减二,至少两个)、队列不设上限的守护线程池,线程优先级最低——搜索是纯计算,线程数封顶才不会
  * 同伴一多就挤占服务器与渲染线程;闲着的线程超时回收。交进来的输入里,世界是派发前在世界所在线程上拷好的快照
@@ -39,11 +39,6 @@ public final class Searches {
     /** 派发一次搜索。 */
     public static Pending<SearchResult> submit(Search search) {
         return dispatch(cancelled -> AStar.run(search, cancelled));
-    }
-
-    /** 派发一次候选查询。 */
-    public static Pending<RoutePlanner.Plan> submit(RoutePlanner.Query query) {
-        return dispatch(cancelled -> RoutePlanner.run(query, cancelled));
     }
 
     /** 一件由搜索组成的活:在工作线程上跑,{@code cancelled} 答是就尽快收手。 */
