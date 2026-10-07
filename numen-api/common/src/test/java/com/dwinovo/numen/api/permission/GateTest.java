@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.api.FakeWorld;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;

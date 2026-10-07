@@ -565,7 +565,7 @@ public final class Goals {
         }
     }
 
-    /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats)}。 */
+    /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats, Clearing)}。 */
     private record DigAny(List<Dig> members, double[] prices) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {

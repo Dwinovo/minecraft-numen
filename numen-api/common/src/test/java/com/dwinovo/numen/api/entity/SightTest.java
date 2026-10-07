@@ -1,8 +1,6 @@
-package com.dwinovo.numen.pathing.world;
+package com.dwinovo.numen.api.entity;
 
-import com.dwinovo.numen.api.entity.Sight;
-import com.dwinovo.numen.pathing.TestWorld;
-import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.api.FakeWorld;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -34,20 +32,20 @@ class SightTest {
 
     @BeforeAll
     static void boot() {
-        Vanilla.boot();
+        assertTrue(FakeWorld.boot(), "Minecraft 引导不可用");
     }
 
-    private static TestWorld withTarget() {
-        return new TestWorld().floor(-4, -4, 8, 4, Y - 1).set(TARGET, Blocks.FURNACE.defaultBlockState());
+    private static FakeWorld withTarget() {
+        return new FakeWorld().floor(-4, -4, 8, 4, Y - 1).set(TARGET, Blocks.FURNACE.defaultBlockState());
     }
 
-    private static Vec3 westFace(TestWorld world) {
+    private static Vec3 westFace(FakeWorld world) {
         return Sight.aim(world, TARGET, Direction.WEST);
     }
 
     @Test
     void anOpenLineHitsTheFaceItAimsAt() {
-        TestWorld world = withTarget();
+        FakeWorld world = withTarget();
         Sight.Trace trace = Sight.trace(world, EYE, westFace(world), TARGET);
         assertTrue(trace.reached());
         assertEquals(Direction.WEST, trace.face());
@@ -57,7 +55,7 @@ class SightTest {
 
     @Test
     void aSolidBlockInBetweenIsAHardBlocker() {
-        TestWorld world = withTarget().set(2, Y + 1, 0, Blocks.STONE.defaultBlockState())
+        FakeWorld world = withTarget().set(2, Y + 1, 0, Blocks.STONE.defaultBlockState())
                 .set(2, Y, 0, Blocks.STONE.defaultBlockState());
         Sight.Trace trace = Sight.trace(world, EYE, westFace(world), TARGET);
         assertTrue(trace.reached(), "数到目标为止,硬遮挡之后照样碰上它");
@@ -69,7 +67,7 @@ class SightTest {
     /** 高草在视线上:软遮挡,清掉就看得见。 */
     @Test
     void tallGrassInTheWayIsASoftBlocker() {
-        TestWorld world = withTarget()
+        FakeWorld world = withTarget()
                 .set(3, Y, 0, Blocks.TALL_GRASS.defaultBlockState().setValue(DoublePlantBlock.HALF, DoubleBlockHalf.LOWER))
                 .set(3, Y + 1, 0, Blocks.TALL_GRASS.defaultBlockState()
                         .setValue(DoublePlantBlock.HALF, DoubleBlockHalf.UPPER));
@@ -93,7 +91,7 @@ class SightTest {
     /** 面前一格是整块的硬方块,那一面封着;是空气、高草、下半砖,视线过得去。 */
     @Test
     void aFaceIsOpenUnlessAWholeHardBlockCoversIt() {
-        TestWorld world = withTarget().set(TARGET.north(), Blocks.STONE.defaultBlockState())
+        FakeWorld world = withTarget().set(TARGET.north(), Blocks.STONE.defaultBlockState())
                 .set(TARGET.south(), Blocks.SHORT_GRASS.defaultBlockState())
                 .set(TARGET.above(), Blocks.STONE_SLAB.defaultBlockState());
         assertFalse(Sight.open(world, TARGET, Direction.NORTH));
@@ -106,7 +104,7 @@ class SightTest {
     /** 用一面:敞开、面朝着眼睛、在交互距离内、没有硬遮挡才交出视线。 */
     @Test
     void usingAFaceNeedsItToFaceTheEyeWithinReachUnblocked() {
-        TestWorld world = withTarget();
+        FakeWorld world = withTarget();
         assertNotNull(Sight.use(world, EYE, 4.5, TARGET, Direction.WEST));
         assertNull(Sight.use(world, EYE, 4.5, TARGET, Direction.EAST), "东面背对着眼睛");
         assertNull(Sight.use(world, EYE, 3.0, TARGET, Direction.WEST), "交互距离只有三格,够不着");
@@ -117,14 +115,14 @@ class SightTest {
     /** 面前贴着整块硬方块的面不能用,哪怕从一道细缝里斜着看得到它。 */
     @Test
     void aFaceCoveredByAWholeBlockIsNotUsed() {
-        TestWorld world = withTarget().set(TARGET.above(), Blocks.GLASS.defaultBlockState());
+        FakeWorld world = withTarget().set(TARGET.above(), Blocks.GLASS.defaultBlockState());
         Vec3 high = new Vec3(0.5, Y + 3.5, 0.5);
         assertNull(Sight.use(world, high, 6, TARGET, Direction.UP));
     }
 
     @Test
     void clickableMeansAnOutline() {
-        TestWorld world = withTarget().set(0, Y, 3, Blocks.WATER.defaultBlockState());
+        FakeWorld world = withTarget().set(0, Y, 3, Blocks.WATER.defaultBlockState());
         assertTrue(Sight.clickable(world, TARGET));
         assertFalse(Sight.clickable(world, new BlockPos(0, Y + 3, 0)), "空气");
         assertFalse(Sight.clickable(world, new BlockPos(0, Y, 3)), "水");

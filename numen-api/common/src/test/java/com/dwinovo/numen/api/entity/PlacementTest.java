@@ -1,11 +1,8 @@
-package com.dwinovo.numen.pathing.world;
+package com.dwinovo.numen.api.entity;
 
-import com.dwinovo.numen.api.entity.Faces;
-import com.dwinovo.numen.api.entity.Replaceable;
 import java.util.Set;
 
-import com.dwinovo.numen.pathing.TestWorld;
-import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.api.FakeWorld;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -35,11 +32,11 @@ class PlacementTest {
 
     @BeforeAll
     static void boot() {
-        Vanilla.boot();
+        assertTrue(FakeWorld.boot(), "Minecraft 引导不可用");
     }
 
     private static Set<Direction> faces(BlockState below) {
-        return Faces.against(new TestWorld().set(TARGET.below(), below), TARGET, COBBLE);
+        return Faces.against(new FakeWorld().set(TARGET.below(), below), TARGET, COBBLE);
     }
 
     // ==================== 贴面 ====================
@@ -71,7 +68,7 @@ class PlacementTest {
 
     @Test
     void facesAreFoundOnEverySide() {
-        TestWorld world = new TestWorld();
+        FakeWorld world = new FakeWorld();
         for (Direction dir : Direction.values()) {
             world.set(TARGET.relative(dir), Blocks.STONE.defaultBlockState());
         }
@@ -80,18 +77,18 @@ class PlacementTest {
 
     @Test
     void theAimPointIsOnTheOutlineFacingTheTarget() {
-        TestWorld stone = new TestWorld().set(TARGET.below(), Blocks.STONE.defaultBlockState());
+        FakeWorld stone = new FakeWorld().set(TARGET.below(), Blocks.STONE.defaultBlockState());
         assertEquals(new Vec3(0.5, 64, 0.5), Faces.hitPoint(stone, TARGET, Direction.DOWN));
-        TestWorld slab = new TestWorld().set(TARGET.below(),
+        FakeWorld slab = new FakeWorld().set(TARGET.below(),
                 Blocks.OAK_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.BOTTOM));
         assertEquals(new Vec3(0.5, 63.5, 0.5), Faces.hitPoint(slab, TARGET, Direction.DOWN), "下半砖的顶面在半格高");
-        TestWorld side = new TestWorld().set(TARGET.north(), Blocks.STONE.defaultBlockState());
+        FakeWorld side = new FakeWorld().set(TARGET.north(), Blocks.STONE.defaultBlockState());
         assertEquals(new Vec3(0.5, 64.5, 0), Faces.hitPoint(side, TARGET, Direction.NORTH));
     }
 
     @Test
     void aimingAtAirIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> Faces.hitPoint(new TestWorld(), TARGET, Direction.DOWN));
+        assertThrows(IllegalArgumentException.class, () -> Faces.hitPoint(new FakeWorld(), TARGET, Direction.DOWN));
     }
 
     // ==================== 真实落点 ====================
@@ -99,22 +96,22 @@ class PlacementTest {
     @Test
     void clickingTallGrassOrASingleSnowLayerPlacesIntoThatCell() {
         BlockPos clicked = TARGET;
-        TestWorld grass = new TestWorld().set(clicked, Blocks.TALL_GRASS.defaultBlockState());
+        FakeWorld grass = new FakeWorld().set(clicked, Blocks.TALL_GRASS.defaultBlockState());
         assertEquals(clicked, Replaceable.landing(grass, clicked, Direction.UP, COBBLE));
-        TestWorld snow = new TestWorld().set(clicked, Blocks.SNOW.defaultBlockState());
+        FakeWorld snow = new FakeWorld().set(clicked, Blocks.SNOW.defaultBlockState());
         assertEquals(clicked, Replaceable.landing(snow, clicked, Direction.UP, COBBLE));
     }
 
     @Test
     void clickingASolidFacePlacesInFrontOfIt() {
-        TestWorld world = new TestWorld().set(TARGET, Blocks.STONE.defaultBlockState());
+        FakeWorld world = new FakeWorld().set(TARGET, Blocks.STONE.defaultBlockState());
         assertEquals(TARGET.above(), Replaceable.landing(world, TARGET, Direction.UP, COBBLE));
         assertEquals(TARGET.east(), Replaceable.landing(world, TARGET, Direction.EAST, COBBLE));
     }
 
     @Test
     void theCellInFrontMayHoldGrassOrWaterButNotASolidBlock() {
-        TestWorld world = new TestWorld().set(TARGET, Blocks.STONE.defaultBlockState())
+        FakeWorld world = new FakeWorld().set(TARGET, Blocks.STONE.defaultBlockState())
                 .set(TARGET.above(), Blocks.WATER.defaultBlockState())
                 .set(TARGET.east(), Blocks.SHORT_GRASS.defaultBlockState())
                 .set(TARGET.west(), Blocks.DIRT.defaultBlockState());
@@ -153,12 +150,12 @@ class PlacementTest {
                 .setValue(net.minecraft.world.level.block.FenceBlock.NORTH, true)
                 .setValue(net.minecraft.world.level.block.FenceBlock.WEST, true);
         Vec3 eye = new Vec3(0.5, TARGET.getY() + 1.62, -0.5);
-        TestWorld hidden = new TestWorld().set(TARGET.west(), fence)
+        FakeWorld hidden = new FakeWorld().set(TARGET.west(), fence)
                 .set(TARGET.west().north(), Blocks.COBBLESTONE.defaultBlockState())
                 .set(TARGET.west().west(), Blocks.COBBLESTONE.defaultBlockState());
         assertEquals(Set.of(Direction.WEST), Faces.against(hidden, TARGET, COBBLE), "栅栏能贴");
         assertNull(Faces.inSight(hidden, eye, 4.5, TARGET, COBBLE), "瞄的那一点被北边的圆石挡着");
-        TestWorld open = new TestWorld().set(TARGET.west(), fence.setValue(net.minecraft.world.level.block.FenceBlock.NORTH,
+        FakeWorld open = new FakeWorld().set(TARGET.west(), fence.setValue(net.minecraft.world.level.block.FenceBlock.NORTH,
                 false)).set(TARGET.west().west(), Blocks.COBBLESTONE.defaultBlockState());
         Faces.Face face = Faces.inSight(open, eye, 4.5, TARGET, COBBLE);
         assertEquals(TARGET.west(), face == null ? null : face.clicked(), "没有挡着的就点得中栅栏");

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.api.FakeWorld;
+
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
