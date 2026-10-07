@@ -65,7 +65,6 @@ public final class Semantics {
         FRAGILE
     }
 
-    private static final Kind[] KINDS = Kind.values();
     /** 只由方块状态决定的那几种,按状态缓存成位掩码。流水与活板门梯子要看邻格,不在其中。 */
     private static final ConcurrentHashMap<BlockState, Integer> STATE_KINDS = new ConcurrentHashMap<>();
 
@@ -79,18 +78,6 @@ public final class Semantics {
     /** 这一格是 {@code kinds} 里的任何一种。 */
     public static boolean isAny(BlockGetter level, BlockPos pos, Set<Kind> kinds) {
         return (mask(level, pos) & mask(kinds)) != 0;
-    }
-
-    /** 这一格的全部种类;交出的是一份新的集合。 */
-    public static Set<Kind> kinds(BlockGetter level, BlockPos pos) {
-        int bits = mask(level, pos);
-        EnumSet<Kind> out = EnumSet.noneOf(Kind.class);
-        for (Kind kind : KINDS) {
-            if ((bits & bit(kind)) != 0) {
-                out.add(kind);
-            }
-        }
-        return out;
     }
 
     /**

@@ -71,7 +71,7 @@ final class Parkour implements Move {
                 double flat = Footing.height(view, body, cx, y, cz);
                 double up = Footing.height(view, body, cx, y + 1, cz);
                 if (!Double.isNaN(up)) {
-                    if (!model.spec().parkourAscend() || d > ASCEND_SPAN || up - f0 > 1 + Footing.EPSILON || up > peak) {
+                    if (d > ASCEND_SPAN || up - f0 > 1 + Footing.EPSILON || up > peak) {
                         return Premise.fail(new BlockPos(cx, y + 1, cz), Reason.TOO_HIGH);
                     }
                     to = new BlockPos(cx, y + 1, cz);

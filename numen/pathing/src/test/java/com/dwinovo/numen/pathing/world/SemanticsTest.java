@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.EnumSet;
 import java.util.Set;
 
 import com.dwinovo.numen.pathing.TestWorld;
@@ -35,7 +36,18 @@ class SemanticsTest {
     }
 
     private static Set<Kind> kinds(BlockState state) {
-        return Semantics.kinds(new TestWorld().set(AT, state), AT);
+        return kinds(new TestWorld().set(AT, state), AT);
+    }
+
+    /** 这一格的全部种类。 */
+    private static Set<Kind> kinds(TestWorld world, BlockPos pos) {
+        Set<Kind> out = EnumSet.noneOf(Kind.class);
+        for (Kind kind : Kind.values()) {
+            if (Semantics.is(world, pos, kind)) {
+                out.add(kind);
+            }
+        }
+        return out;
     }
 
     @Test
@@ -46,7 +58,7 @@ class SemanticsTest {
                 pool.set(x, 64, z, Blocks.WATER.defaultBlockState()).set(x, 63, z, Blocks.STONE.defaultBlockState());
             }
         }
-        assertEquals(Set.of(Kind.WATER), Semantics.kinds(pool, AT));
+        assertEquals(Set.of(Kind.WATER), kinds(pool, AT));
     }
 
     @Test
@@ -55,7 +67,7 @@ class SemanticsTest {
         // 一格源头旁边是流淌的水:原版算出的水流不为零,池边的源头也在流
         TestWorld edge = new TestWorld().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), lower)
                 .set(AT.below(), Blocks.STONE.defaultBlockState()).set(AT.east().below(), Blocks.STONE.defaultBlockState());
-        assertEquals(Set.of(Kind.FLOWING_WATER), Semantics.kinds(edge, AT));
+        assertEquals(Set.of(Kind.FLOWING_WATER), kinds(edge, AT));
         assertTrue(Semantics.is(edge, AT.east(), Kind.FLOWING_WATER));
     }
 

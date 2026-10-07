@@ -84,15 +84,6 @@ class MovesTest {
         assertFalse(m.jump());
     }
 
-    /** 规格不许疾跑时,平地上走一格不疾跑,比许疾跑时贵。 */
-    @Test
-    void aSpecThatForbidsSprintingWalksAndPaysForIt() {
-        CostModel walking = Fixtures.model(RouteSpec.defaults().edit().sprint(false).build());
-        Maneuver walked = holds(MoveKind.WALK, walking, ground(), AT, EAST);
-        assertFalse(walked.sprint());
-        assertTrue(Steps.cost(walking, walked) > Steps.cost(defaults(), holds(MoveKind.WALK, defaults(), ground(), AT, EAST)));
-    }
-
     /**
      * 规格按位置禁站、禁穿过的格与按种类禁站的方块,平走一步踩上、穿过它们都不成,原因是"规格禁止",点出的是那一格;
      * 同一步没有这些禁令时照常成立。
@@ -245,14 +236,6 @@ class MovesTest {
         TestWorld corner = ground().fill(1, Y, 0, 1, Y + 1, 0, Blocks.STONE.defaultBlockState());
         assertEquals(Reason.NO_CLEARANCE, fails(MoveKind.DIAGONAL, Fixtures.model(natural()), corner, AT, NORTH_EAST).reason(),
                 "斜穿切角不许,也不为斜走挖");
-    }
-
-    @Test
-    void diagonalClimbsAreOffByDefault() {
-        TestWorld world = ground().set(1, Y, -1, Blocks.STONE.defaultBlockState());
-        assertEquals(Reason.DISABLED, fails(MoveKind.DIAGONAL, defaults(), world, AT, NORTH_EAST.withDy(1)).reason());
-        RouteSpec on = RouteSpec.defaults().edit().diagonalAscend(true).build();
-        assertEquals(new BlockPos(1, Y + 1, -1), holds(MoveKind.DIAGONAL, Fixtures.model(on), world, AT, NORTH_EAST.withDy(1)).to());
     }
 
     // ==================== 下一级与下落 ====================

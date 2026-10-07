@@ -129,7 +129,7 @@ class DiggingTest {
     // ==================== 能不能挖 ====================
 
     private static Reason check(TestWorld world, BlockPos pos) {
-        return DigRules.check(world, Fixtures.body(), pos, world.getBlockState(pos), false);
+        return DigRules.check(world, Fixtures.body(), pos, world.getBlockState(pos));
     }
 
     private static TestWorld stoneAt() {
@@ -148,9 +148,6 @@ class DiggingTest {
         BlockState falling = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3);
         TestWorld pouring = stoneAt().set(AT.east(), falling).set(AT.east().below(), Blocks.WATER.defaultBlockState());
         assertNull(check(pouring, AT), "旁边流动的水往下落进水里,不横着流过来");
-        TestWorld strict = stoneAt().set(AT.east(), falling).set(AT.east().below(), Blocks.WATER.defaultBlockState());
-        assertEquals(Reason.WOULD_FLOOD, DigRules.check(strict, Fixtures.body(), AT, strict.getBlockState(AT), true),
-                "从严时邻格有任何液体都不挖");
     }
 
     @Test
@@ -175,6 +172,6 @@ class DiggingTest {
         small.set(outside, Blocks.STONE.defaultBlockState());
         assertEquals(Reason.OUT_OF_BOUNDS, check(small, outside));
         BodySnapshot adventure = Fixtures.body(Vanilla.SURVIVAL, GameType.ADVENTURE, 20, List.of());
-        assertEquals(Reason.EDIT_RESTRICTED, DigRules.check(stoneAt(), adventure, AT, Blocks.STONE.defaultBlockState(), false));
+        assertEquals(Reason.EDIT_RESTRICTED, DigRules.check(stoneAt(), adventure, AT, Blocks.STONE.defaultBlockState()));
     }
 }

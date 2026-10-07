@@ -114,7 +114,7 @@ public final class DigQuote {
      */
     public static boolean physicallyDiggable(ServerPlayer player, BlockPos pos) {
         LiveWorld world = new LiveWorld(player.serverLevel());
-        return DigRules.check(world, Snapshots.of(player), pos, world.getBlockState(pos), false) == null;
+        return DigRules.check(world, Snapshots.of(player), pos, world.getBlockState(pos)) == null;
     }
 
     /**

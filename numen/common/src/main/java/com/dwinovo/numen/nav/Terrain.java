@@ -97,8 +97,8 @@ public final class Terrain {
         if (stance == null || !stance.grounded()) {
             return false;
         }
-        return !Semantics.isAny(world, pos, spec.excluded()) && !Semantics.isAny(world, pos.above(), spec.excluded())
-                && !Semantics.isAny(world, stance.support(pos.getX(), pos.getZ()), spec.excluded());
+        return !spec.excludes(world, pos) && !spec.excludes(world, pos.above())
+                && !spec.excludes(world, stance.support(pos.getX(), pos.getZ()));
     }
 
     /** 她站直的身体放得进脚在 {@code (x, feetY, z)} 这一格的那个位置。 */

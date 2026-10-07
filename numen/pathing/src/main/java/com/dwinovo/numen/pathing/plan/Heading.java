@@ -24,11 +24,6 @@ public record Heading(int dx, int dy, int dz) {
         }
     }
 
-    /** 同一水平方向,竖直换成 {@code dy}。 */
-    public Heading withDy(int dy) {
-        return new Heading(dx, dy, dz);
-    }
-
     public boolean horizontal() {
         return dx != 0 || dz != 0;
     }

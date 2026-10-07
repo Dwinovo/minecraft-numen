@@ -5,13 +5,16 @@ import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 
+import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.BlockGetter;
 
 /**
  * 一次导航的路线规格:每次搜索和每次执行各带一份,成本模型只认它。按次传值、不可变,搜索线程只读。四组旋钮,每组一个出处:
  * <ol>
- *   <li><b>能力开关与上限</b>——挖不挖、放不放、要问主人的格算不算能走(连同它贵几倍)、疾跑、跑酷、斜向上下、原地向下挖;
- *       无水时的最大落差、一条路最多改几格;</li>
+ *   <li><b>能力开关与上限</b>——挖不挖、放不放、要问主人的格算不算能走(连同它贵几倍)、跑酷;无水时的最大落差、一条路最多改几格;</li>
  *   <li><b>排除的格子种类</b>——{@link #excluded()}:这条路线不站上、不穿过这些语义种类的格子。每类格子只有"排除"这一种
  *       处置,不按种类另外计价;</li>
  *   <li><b>按位置与按种类</b>——{@link PositionCosts}(看坐标)与 {@link BlockBans}(看方块种类);</li>
@@ -25,13 +28,7 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  * @param place                这一趟可以放方块:垫柱、搭桥、倒水接坠落;罚分是 {@code placeCost}
  * @param consent              许可答"要问"的格算能走:进路线、列进账单,执行到那一格时由宿主问主人;不算就是墙
  * @param consentMultiplier    要问的格挖或放的价钱乘几倍:有限,这样的路才搜得到;要贵到长度相当的不用问的路线都胜出
- * @param sprint               可以疾跑
  * @param parkour              可以跑酷:越过一到三格的空隙
- * @param parkourAscend        跑酷跳上高一格的落点
- * @param diagonalAscend       可以斜着上一级
- * @param diagonalDescend      可以斜着下一级
- * @param downward             可以原地向下挖
- * @param strictLiquidCheck    挖掘时邻格有任何液体都不挖(否则只忌源头与横流)
  * @param maxFallHeightNoWater 下面没有水时愿意跳下的最大落差;身体快照按血量给出摔得起的上限,这里只能比它更紧
  * @param alterBudget          整条路挖加放最多几格,{@link #UNLIMITED} 即不限;搜索展开每一步时就按它剪枝
  * @param excluded             排除的格子种类
@@ -42,8 +39,8 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  * @param jumpPenalty          每次起跳的罚分
  * @param wadePenalty          水里走一格的罚分
  */
-public record RouteSpec(boolean dig, boolean place, boolean consent, double consentMultiplier, boolean sprint, boolean parkour, boolean parkourAscend,
-                        boolean diagonalAscend, boolean diagonalDescend, boolean downward, boolean strictLiquidCheck, int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
+public record RouteSpec(boolean dig, boolean place, boolean consent, double consentMultiplier, boolean parkour,
+                        int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
                         PositionCosts positions, BlockBans bans, double placeCost, double breakPenalty,
                         double jumpPenalty, double wadePenalty) {
 
@@ -57,11 +54,11 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
 
     /**
      * 出厂规格:只走不改(不挖、不放;要问主人的格算能走,价钱乘 {@link #CONSENT_MULTIPLIER},许挖或许放时才用得上),
-     * 可疾跑、可跑酷跳上高一格、可原地向下挖;不跑酷平跳、不斜向上下;无水落差上限 3(原版摔不疼的高度);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
+     * 不跑酷平跳;无水落差上限 3(原版摔不疼的高度);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
      * 会触发,都默认不进,规格可以放开;放置 20、挖掘另加 30(约等于多走 6.5 格:破坏是绕不开时的下策)、起跳 2、涉水 3。
      */
     private static final RouteSpec DEFAULTS = new RouteSpec(
-            false, false, true, CONSENT_MULTIPLIER, true, false, true, false, false, true, false,
+            false, false, true, CONSENT_MULTIPLIER, false,
             3, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
             PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 30.0, 2.0, 3.0);
 
@@ -94,14 +91,12 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         return DEFAULTS;
     }
 
-    /** 这条路线排除不排除这一种格子。 */
-    public boolean excludes(Kind kind) {
-        return excluded.contains(kind);
-    }
-
-    /** 一格有这些种类,这条路线排除它吗:任何一种被排除,整格就排除。 */
-    public boolean excludesAny(Set<Kind> kinds) {
-        return !Collections.disjoint(excluded, kinds);
+    /**
+     * 这一格是不是这份规格排除的种类(任何一种,整格就排除):只问"这一格"的地方——在哪儿站着干活、画周围哪儿能站——问它。
+     * 规划里一步要问几十格,成本模型({@code CostModel#excludes})按同一个集合把掩码预先算好再按位与,判据是同一个。
+     */
+    public boolean excludes(BlockGetter level, BlockPos pos) {
+        return Semantics.isAny(level, pos, excluded);
     }
 
     /** 这一趟能改地形:挖或放至少许一样。 */
@@ -125,13 +120,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         private boolean place;
         private boolean consent;
         private double consentMultiplier;
-        private boolean sprint;
         private boolean parkour;
-        private boolean parkourAscend;
-        private boolean diagonalAscend;
-        private boolean diagonalDescend;
-        private boolean downward;
-        private boolean strictLiquidCheck;
         private int maxFallHeightNoWater;
         private int alterBudget;
         private final EnumSet<Kind> excluded;
@@ -147,13 +136,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
             place = from.place;
             consent = from.consent;
             consentMultiplier = from.consentMultiplier;
-            sprint = from.sprint;
             parkour = from.parkour;
-            parkourAscend = from.parkourAscend;
-            diagonalAscend = from.diagonalAscend;
-            diagonalDescend = from.diagonalDescend;
-            downward = from.downward;
-            strictLiquidCheck = from.strictLiquidCheck;
             maxFallHeightNoWater = from.maxFallHeightNoWater;
             alterBudget = from.alterBudget;
             excluded = from.excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(from.excluded);
@@ -192,38 +175,8 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
             return this;
         }
 
-        public Builder sprint(boolean sprint) {
-            this.sprint = sprint;
-            return this;
-        }
-
         public Builder parkour(boolean parkour) {
             this.parkour = parkour;
-            return this;
-        }
-
-        public Builder parkourAscend(boolean parkourAscend) {
-            this.parkourAscend = parkourAscend;
-            return this;
-        }
-
-        public Builder diagonalAscend(boolean diagonalAscend) {
-            this.diagonalAscend = diagonalAscend;
-            return this;
-        }
-
-        public Builder diagonalDescend(boolean diagonalDescend) {
-            this.diagonalDescend = diagonalDescend;
-            return this;
-        }
-
-        public Builder downward(boolean downward) {
-            this.downward = downward;
-            return this;
-        }
-
-        public Builder strictLiquidCheck(boolean strictLiquidCheck) {
-            this.strictLiquidCheck = strictLiquidCheck;
             return this;
         }
 
@@ -280,8 +233,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         }
 
         public RouteSpec build() {
-            return new RouteSpec(dig, place, consent, consentMultiplier, sprint, parkour, parkourAscend, diagonalAscend,
-                    diagonalDescend, downward, strictLiquidCheck, maxFallHeightNoWater, alterBudget,
+            return new RouteSpec(dig, place, consent, consentMultiplier, parkour, maxFallHeightNoWater, alterBudget,
                     excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty);
         }
     }

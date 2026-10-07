@@ -5,7 +5,6 @@ import java.util.Set;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
-import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -33,7 +32,7 @@ class RouteSpecTest {
     }
 
     private static boolean excludedByDefault(BlockState state) {
-        return RouteSpec.defaults().excludesAny(Semantics.kinds(new TestWorld().set(AT, state), AT));
+        return RouteSpec.defaults().excludes(new TestWorld().set(AT, state), AT);
     }
 
     @Test
@@ -60,9 +59,8 @@ class RouteSpecTest {
         BlockState lower = Blocks.WATER.defaultBlockState().setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL, 3);
         TestWorld stream = new TestWorld().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), lower)
                 .set(AT.below(), Blocks.STONE.defaultBlockState()).set(AT.east().below(), Blocks.STONE.defaultBlockState());
-        assertTrue(RouteSpec.defaults().excludesAny(Semantics.kinds(stream, AT.east())), "流水把身体推离路线");
-        assertTrue(RouteSpec.defaults().excludes(Kind.FLOWING_WATER));
-        assertFalse(RouteSpec.defaults().edit().allow(Kind.FLOWING_WATER).build().excludes(Kind.FLOWING_WATER));
+        assertTrue(RouteSpec.defaults().excludes(stream, AT.east()), "流水把身体推离路线");
+        assertFalse(RouteSpec.defaults().edit().allow(Kind.FLOWING_WATER).build().excludes(stream, AT.east()));
     }
 
     @Test
@@ -81,10 +79,12 @@ class RouteSpecTest {
     @Test
     void aSpecCanAllowFarmlandAndExcludeWater() {
         RouteSpec farm = RouteSpec.defaults().edit().allow(Kind.FRAGILE).exclude(Kind.WATER).build();
-        assertFalse(farm.excludes(Kind.FRAGILE));
-        assertTrue(farm.excludes(Kind.WATER));
-        assertTrue(RouteSpec.defaults().excludes(Kind.FRAGILE), "改一份不动出厂值");
-        assertFalse(RouteSpec.defaults().excludes(Kind.WATER));
+        TestWorld field = new TestWorld().set(AT, Blocks.FARMLAND.defaultBlockState());
+        TestWorld pond = new TestWorld().set(AT, Blocks.WATER.defaultBlockState());
+        assertFalse(farm.excludes(field, AT));
+        assertTrue(farm.excludes(pond, AT));
+        assertTrue(RouteSpec.defaults().excludes(field, AT), "改一份不动出厂值");
+        assertFalse(RouteSpec.defaults().excludes(pond, AT));
     }
 
     @Test

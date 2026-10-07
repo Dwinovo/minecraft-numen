@@ -110,9 +110,9 @@ public final class CostModel {
         return body.bears(damage) && drop <= spec.maxFallHeightNoWater() + Footing.EPSILON;
     }
 
-    /** 这次能不能疾跑:规格开着,身体也跑得动。 */
+    /** 这次能不能疾跑:身体跑得动(饱食度够,或能飞)。 */
     public boolean maySprint() {
-        return spec.sprint() && body.canSprint();
+        return body.canSprint();
     }
 
     /** 水里走或游一格:按水下移动效率在水里的步速与陆上步速之间插值。 */
@@ -169,7 +169,7 @@ public final class CostModel {
         if (forbids(Use.DIG, pos.asLong()) || spec.bans().breaking().contains(state.getBlock())) {
             return Admission.refuse(Reason.FORBIDDEN);
         }
-        Reason physical = DigRules.check(view, body, pos, state, spec.strictLiquidCheck());
+        Reason physical = DigRules.check(view, body, pos, state);
         if (physical != null) {
             return Admission.refuse(physical);
         }

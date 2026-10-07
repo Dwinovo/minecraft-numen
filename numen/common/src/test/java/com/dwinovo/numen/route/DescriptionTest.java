@@ -123,11 +123,11 @@ class DescriptionTest {
         assertTrue(s.parkour());
         assertEquals(6, s.maxFallHeightNoWater());
         assertEquals(4, s.alterBudget());
-        assertTrue(s.excludes(Kind.WATER));
-        assertTrue(s.excludes(Kind.DOOR));
-        assertFalse(s.excludes(Kind.CLIMBABLE));
-        assertFalse(s.excludes(Kind.TRIGGER), "放开了的出厂避开");
-        assertTrue(s.excludes(Kind.FRAGILE), "没放开的出厂避开照旧");
+        assertTrue(s.excluded().contains(Kind.WATER));
+        assertTrue(s.excluded().contains(Kind.DOOR));
+        assertFalse(s.excluded().contains(Kind.CLIMBABLE));
+        assertFalse(s.excluded().contains(Kind.TRIGGER), "放开了的出厂避开");
+        assertTrue(s.excluded().contains(Kind.FRAGILE), "没放开的出厂避开照旧");
     }
 
     /** 挖、放是开关也是价钱:true 是按出厂罚分许它,false 是不许;consent = false 是把要问的格当墙。 */
@@ -169,7 +169,7 @@ class DescriptionTest {
     @Test
     void avoidingAPlaceKeepsTheBodyOutOfItAndOffIt() {
         RouteSpec s = spec(TO + ", avoid = {\"water\", {{x = -8, y = 63, z = -8}, {x = -1, y = 63, z = -1}}}");
-        assertTrue(s.excludes(Kind.WATER));
+        assertTrue(s.excluded().contains(Kind.WATER));
         long inFarm = new BlockPos(-3, 63, -3).asLong();
         assertTrue(s.positions().forbids(Use.PASS, inFarm));
         assertTrue(s.positions().forbids(Use.STAND, inFarm));

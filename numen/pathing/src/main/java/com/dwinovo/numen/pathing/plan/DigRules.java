@@ -22,7 +22,7 @@ import net.minecraft.world.level.material.FluidState;
  * 冰(生存模式挖掉后下面有东西就化成水);虫蚀方块(生存模式挖了钻出蠹虫)。挖了会出事的:
  * <ul>
  *   <li><b>漏液</b>——这一格自己含水(挖掉后水留在原地往外流);正上方有任何液体(往下灌);四个水平邻格有液体源头、
- *       会横着流过来的流动液体、或含水的方块。规格要求从严({@code strictLiquidCheck})时,水平邻格有任何液体都算。</li>
+ *       会横着流过来的流动液体、或含水的方块。</li>
  *   <li><b>塌方</b>——正上方是落沙(挖空后它掉下来);水平邻格是下面已经空着的落沙(挖这一格的方块更新会让它掉下去)。</li>
  * </ul>
  * 一步里要挖好几格时,调用方按执行的先后在叠了前面改动的视图上逐格问,"上面那格已经挖空"这种情况自然算进去。
@@ -32,7 +32,7 @@ public final class DigRules {
     private DigRules() {}
 
     /** 物理上能挖返回 null,否则返回挖不了或挖了会出事的原因。 */
-    public static Reason check(WorldView view, BodySnapshot body, BlockPos pos, BlockState state, boolean strictLiquid) {
+    public static Reason check(WorldView view, BodySnapshot body, BlockPos pos, BlockState state) {
         if (!Bounds.allowsEdit(view.border(), view, pos)) {
             return Reason.OUT_OF_BOUNDS;
         }
@@ -59,7 +59,7 @@ public final class DigRules {
         }
         for (Direction side : Direction.Plane.HORIZONTAL) {
             BlockPos neighbor = pos.relative(side);
-            if (flowsIn(view, neighbor, strictLiquid)) {
+            if (flowsIn(view, neighbor)) {
                 return Reason.WOULD_FLOOD;
             }
             if (view.getBlockState(neighbor).getBlock() instanceof FallingBlock
@@ -78,13 +78,13 @@ public final class DigRules {
     }
 
     /** 水平邻格的液体会不会流进挖空的格。 */
-    private static boolean flowsIn(WorldView view, BlockPos neighbor, boolean strict) {
+    private static boolean flowsIn(WorldView view, BlockPos neighbor) {
         BlockState state = view.getBlockState(neighbor);
         FluidState fluid = state.getFluidState();
         if (fluid.isEmpty()) {
             return false;
         }
-        if (strict || !(state.getBlock() instanceof LiquidBlock) || fluid.isSource()) {
+        if (!(state.getBlock() instanceof LiquidBlock) || fluid.isSource()) {
             // 含水的方块与液体源头都会往空格里横着流
             return true;
         }

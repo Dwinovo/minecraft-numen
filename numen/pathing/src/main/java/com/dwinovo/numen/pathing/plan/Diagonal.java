@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.plan;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -10,22 +9,10 @@ import com.dwinovo.numen.pathing.world.Stepping;
 import net.minecraft.core.BlockPos;
 
 /**
- * 斜走:进斜对角一列,平着走,或(规格开着时)斜着上一级、下一级。身体从两列的交角擦过去,两侧那两列也要让得开——
+ * 斜走:进斜对角一列(同一层上,落脚高度差由跳与落带过)。身体从两列的交角擦过去,两侧那两列也要让得开——
  * 切角挡不挡由第 0 层 {@link Stepping} 从四列的碰撞箱推导。斜走不改地形,只开关挡路的门。
  */
 final class Diagonal implements Move {
-
-    private static final List<Heading> HEADINGS;
-
-    static {
-        List<Heading> all = new ArrayList<>();
-        for (Heading h : Heading.DIAGONAL) {
-            all.add(h);
-            all.add(h.withDy(1));
-            all.add(h.withDy(-1));
-        }
-        HEADINGS = List.copyOf(all);
-    }
 
     @Override
     public MoveKind kind() {
@@ -34,15 +21,12 @@ final class Diagonal implements Move {
 
     @Override
     public List<Heading> headings() {
-        return HEADINGS;
+        return Heading.DIAGONAL;
     }
 
 
     @Override
     public Premise premise(CostModel model, WorldView view, BlockPos from, Stance stance, Heading heading) {
-        if ((heading.dy() > 0 && !model.spec().diagonalAscend()) || (heading.dy() < 0 && !model.spec().diagonalDescend())) {
-            return Premise.fail(from, Reason.DISABLED);
-        }
         if (!stance.grounded()) {
             return Premise.fail(from, Reason.WRONG_STANCE);
         }
