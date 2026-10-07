@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.entity.Faces;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -164,8 +165,7 @@ final class Work {
             return Beat.IDLE;
         }
         rig.look.at(face.point());
-        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
-                || !hit.getBlockPos().equals(face.clicked())) {
+        if (rig.mouse.itemRayOn(ClipContext.Fluid.NONE, face.clicked()) == null) {
             return Beat.IDLE;
         }
         return switch (rig.use()) {
@@ -197,7 +197,8 @@ final class Work {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
         rig.look.at(new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
-        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+        // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种
+        if (rig.mouse.itemRayOn(ClipContext.Fluid.SOURCE_ONLY, pos) == null) {
             return Beat.IDLE;
         }
         return switch (rig.use()) {

@@ -125,8 +125,8 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         }
         companion.look().at(Vec3.atCenterOf(ground));
 
-        BlockHitResult aim = companion.mouse().itemRay(ClipContext.Fluid.NONE);
-        if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(ground)) {
+        BlockHitResult aim = companion.mouse().itemRayOn(ClipContext.Fluid.NONE, ground);
+        if (aim == null) {
             return TaskState.RUNNING;   // 还够不着,或者这一刻没瞄准 —— 下一刻更近
         }
 
@@ -155,8 +155,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         }
         companion.look().at(Vec3.atCenterOf(placed));
         // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种。
-        BlockHitResult aim = companion.mouse().itemRay(ClipContext.Fluid.SOURCE_ONLY);
-        if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {
+        if (companion.mouse().itemRayOn(ClipContext.Fluid.SOURCE_ONLY, placed) == null) {
             return TaskState.RUNNING;
         }
         if (carries(companion, Items.BUCKET)) {

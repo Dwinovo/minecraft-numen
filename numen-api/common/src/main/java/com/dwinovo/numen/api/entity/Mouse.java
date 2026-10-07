@@ -214,10 +214,16 @@ public class Mouse {
      * 手里的东西在空中右键时自己沿视线打的那一条,照原版 {@code Item.getPlayerPOVHitResult}(桶倒水、舀水就用它):从眼睛沿视线
      * 打方块交互距离,按方块轮廓,液体按 {@code fluid} 的规矩算不算;不看实体。和准星那一次拾取不是同一条:桶瞄的是它自己这条。
      */
-    public BlockHitResult itemRay(ClipContext.Fluid fluid) {
+    private BlockHitResult itemRay(ClipContext.Fluid fluid) {
         Vec3 eye = body.getEyePosition();
         Vec3 end = eye.add(body.calculateViewVector(body.getXRot(), body.getYRot()).scale(body.blockInteractionRange()));
         return body.level().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, body));
+    }
+
+    /** 手里的东西沿视线自己打的那一条({@link #itemRay})正落在 {@code pos} 这一格上时交出那一下;否则为 null。桶要倒、要舀的是哪一格,问它。 */
+    public BlockHitResult itemRayOn(ClipContext.Fluid fluid, BlockPos pos) {
+        BlockHitResult hit = itemRay(fluid);
+        return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos) ? hit : null;
     }
 
     private static HitResult within(HitResult hit, Vec3 eye, double range) {
