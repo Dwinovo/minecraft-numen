@@ -476,7 +476,7 @@ public final class Driver {
         rig.keys.release(Key.SPRINT);
         rig.keys.release(Key.JUMP);
         rig.keys.set(Key.SNEAK, endStance.kind() == Stance.Kind.CLIMBING);
-        if (endStance.kind() == Stance.Kind.SWIMMING && body.getY() < end.getY() + 0.3) {
+        if (endStance.kind() == Stance.Kind.SWIMMING && body.getY() < end.getY() + Control.FLOAT) {
             rig.keys.press(Key.JUMP);
         }
         Vec3 c = Control.center(end);

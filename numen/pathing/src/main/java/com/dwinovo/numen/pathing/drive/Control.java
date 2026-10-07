@@ -106,7 +106,7 @@ abstract class Control {
         Stance.Kind kind = m.start().kind();
         if (kind == Stance.Kind.CLIMBING) {
             keys().press(Key.SNEAK);
-        } else if (kind == Stance.Kind.SWIMMING && rig.entity.getY() < m.from().getY() + 0.1) {
+        } else if (kind == Stance.Kind.SWIMMING && rig.entity.getY() < m.from().getY() + HOLD_AFLOAT) {
             keys().press(Key.JUMP);
         }
         Vec3 c = center(m.from());
@@ -128,8 +128,11 @@ abstract class Control {
                 && rig.entity.getY() < m.to().getY() + FLOAT;
     }
 
-    /** 浮在水里时脚低于那一格底上这么多就按跳。 */
+    /** 落进水里、或停在水里的终点时,脚低于那一格底上这么多就按跳浮起来:这一步落点的 {@link #floatUp} 与收场停在终点都按它。 */
     static final double FLOAT = 0.3;
+
+    /** 浮着起步、停稳在起步那一列上({@link #settle})时,脚低于那一格底上这么多就按跳:只是不往下沉,比落进水里要浮起的 {@link #FLOAT} 小。 */
+    static final double HOLD_AFLOAT = 0.1;
 
     final com.dwinovo.numen.api.entity.Controls keys() {
         return rig.keys;
