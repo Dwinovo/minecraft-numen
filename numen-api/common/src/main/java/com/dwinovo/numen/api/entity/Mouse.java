@@ -66,7 +66,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>权限</h2>
  * 身体是同伴({@link NumenPlayer})时,每一下动手之前先过权限层,这是关卡长在身体上、谁驱动她都绕不开的地方:左键换到新的一格时问
- * "能不能拆这一格",右键手上的东西会往世界里放东西({@link #placing})时问"能不能放",否则问"能不能用这一格"。不许就不动手,交回
+ * "能不能拆这一格"、打实体时问"能不能打它",右键手上的东西会往世界里放东西({@link #placing})时问"能不能放",再问"能不能用这一格或这只实体"。不许就不动手,交回
  * 裁决本身当理由;要问主人时鼠标停下,交回要问的那一条({@link Refusal.Asks}),由驱动者决定怎么问。不是同伴的普通假玩家照原版,
  * 不过权限层。服务端自己退回的挖掘如实报成被拒({@link Refusal#SERVER}),那是身体汇报,不是权限裁决。
  *
@@ -256,7 +256,7 @@ public class Mouse {
         }
         BlockPos pos = hit.getBlockPos().immutable();
         if (!pos.equals(pressing())) {
-            Refusal refusal = refusal(Action.breakBlock(pos, level.getBlockState(pos)));
+            Refusal refusal = firstRefusal(intents(hit, true));
             if (refusal != null) {
                 release();
                 return new Strike.Refused(pos, refusal);
@@ -355,6 +355,40 @@ public class Mouse {
         body.connection.handlePlayerAction(new ServerboundPlayerActionPacket(action, pos, face, ++sequence));
     }
 
+    /** 左键打一下准星落着的实体的结果。 */
+    public sealed interface Blow {
+
+        /** 打下去了。 */
+        record Landed(Entity target) implements Blow {}
+
+        /** 没让打。 */
+        record Refused(Entity target, Refusal reason) implements Blow {}
+
+        /** 准星没落在任何一只实体上(落在方块上、或什么也没有),没有可打的。 */
+        record Missed() implements Blow {}
+
+        Blow MISSED = new Missed();
+    }
+
+    /**
+     * 左键打准星落着的那只实体:原版的一次攻击(伤害、冷却、横扫、击退都是原版的,冷却由原版的攻击计时器管,驱动者自己挑什么时候出手)。
+     * 疾跑会让原版取消暴击判定,所以出手前停跑。身体是同伴时先过权限层。
+     */
+    public Blow attack() {
+        if (!(pick() instanceof EntityHitResult hit)) {
+            return Blow.MISSED;
+        }
+        Entity target = hit.getEntity();
+        Refusal refusal = firstRefusal(intents(hit, true));
+        if (refusal != null) {
+            return new Blow.Refused(target, refusal);
+        }
+        body.setSprinting(false);
+        body.attack(target);
+        body.swing(InteractionHand.MAIN_HAND);
+        return new Blow.Landed(target);
+    }
+
     // ==================== 右键 ====================
 
     /** 右键一下准星落着的东西,方块与实体没吃掉这一下就用手里的东西:原版客户端的完整右键。 */
@@ -374,10 +408,10 @@ public class Mouse {
             return Use.WAITING;
         }
         HitResult hit = pick();
-        if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {
-            Use.Refused refused = refusedUse(block);
-            if (refused != null) {
-                return refused;
+        for (Action action : intents(hit, false)) {
+            Refusal refusal = refusal(action);
+            if (refusal != null) {
+                return new Use.Refused(action.pos() != null ? action.pos() : BlockPos.containing(hit.getLocation()), refusal);
             }
         }
         return press(hit, itemFallthrough);
@@ -497,7 +531,7 @@ public class Mouse {
 
     /**
      * 右键落在 {@code hit} 这一面、手里是 {@code stack} 时,会不会往世界里放东西、放在哪:方块物品贴着命中面放进可替换的格,
-     * 桶倒出或舀起液体,打火石与火焰弹点起火——都是一次放置,交权限层裁决。不往世界里放东西时为 null。按下右键的各处都按这一份判。
+     * 桶倒出或舀起液体,打火石与火焰弹点起火——都是一次放置,交权限层裁决。不往世界里放东西时为 null。
      */
     public static Action placing(Level level, BlockHitResult hit, ItemStack stack) {
         BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());
@@ -511,22 +545,43 @@ public class Mouse {
     }
 
     /**
-     * 右键方块之前过权限层:两只手里会往世界里放东西的各问各的放下它;都不放,问用这一格(开门、开箱)。放行为 null。
+     * 这一下按在 {@code hit} 上会做的事,权限层按它们裁决——鼠标在动手那一刻问的,驱动者在受理前预问的(任务要问主人、要先站定)是
+     * 同一张单,权限的判据只此一处:
+     * 左键是挖那一格方块或打那只实体;右键两只手里会往世界里放东西的各放一次({@link #placing}),再用那一格方块或那只实体。
+     * 准星什么也没落着,没有要问的。
      */
-    private Use.Refused refusedUse(BlockHitResult hit) {
-        for (InteractionHand hand : InteractionHand.values()) {
-            Action action = placing(body.level(), hit, body.getItemInHand(hand));
-            if (action == null) {
-                continue;
+    public List<Action> intents(HitResult hit, boolean left) {
+        if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {
+            BlockPos pos = block.getBlockPos();
+            BlockState state = body.level().getBlockState(pos);
+            if (left) {
+                return List.of(Action.breakBlock(pos, state));
             }
+            List<Action> out = new ArrayList<>();
+            for (InteractionHand hand : InteractionHand.values()) {
+                Action placing = placing(body.level(), block, body.getItemInHand(hand));
+                if (placing != null) {
+                    out.add(placing);
+                }
+            }
+            out.add(Action.useBlock(pos, state));
+            return out;
+        }
+        if (hit instanceof EntityHitResult entity) {
+            return List.of(left ? Action.attack(entity.getEntity()) : Action.useEntity(entity.getEntity()));
+        }
+        return List.of();
+    }
+
+    /** 这几件事里第一件没放行的:不许、要问;都放行为 null。 */
+    private Refusal firstRefusal(List<Action> actions) {
+        for (Action action : actions) {
             Refusal refusal = refusal(action);
             if (refusal != null) {
-                return new Use.Refused(action.pos(), refusal);
+                return refusal;
             }
         }
-        BlockPos clicked = hit.getBlockPos();
-        Refusal refusal = refusal(Action.useBlock(clicked, body.level().getBlockState(clicked)));
-        return refusal == null ? null : new Use.Refused(clicked.immutable(), refusal);
+        return null;
     }
 
     /** 这一下过权限层:放行(或身体不是同伴,不过权限层)为 null;拒绝是裁决;要问是连同要问的那一条。 */

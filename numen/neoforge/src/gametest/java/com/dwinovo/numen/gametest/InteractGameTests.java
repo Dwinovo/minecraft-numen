@@ -187,6 +187,36 @@ public class InteractGameTests {
         });
     }
 
+    /** 鼠标左键打实体先过权限层,谁驱动她都绕不开:只许看的模式下直接 mouse().attack() 被拒、牛一滴血没掉;放行了才打下去。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_interact")
+    public static void the_mouse_asks_the_permission_layer_before_hitting_an_entity(GameTestHelper helper) {
+        net.minecraft.world.entity.animal.Cow cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.setNoAi(true);
+        helper.getLevel().addFreshEntity(cow);
+        NumenPlayer companion = spawnAt(helper, "gametest_swinger", new BlockPos(6, 2, 8), false);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.OBSERVE);
+
+        steps(helper)
+                .thenExecute(() -> companion.look().at(cow.getEyePosition()))
+                .thenExecute(() -> {
+                    var blow = companion.mouse().attack();
+                    helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
+                                    && cow.getHealth() == cow.getMaxHealth(),
+                            "the mouse hit the cow in observe mode: " + blow);
+                    com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+                })
+                .thenExecute(() -> {
+                    var blow = companion.mouse().attack();
+                    helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Landed
+                                    && cow.getHealth() < cow.getMaxHealth(),
+                            "the allowed hit did not land: " + blow);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.to(…, {arrive = "use"}),那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {

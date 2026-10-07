@@ -41,6 +41,16 @@ public final class Look {
         rotate(toward(body.getEyePosition(), point));
     }
 
+    /**
+     * 转过去看 {@code box}(一只实体的碰撞箱)上离眼睛最近的一点,离棱留一点边。够得着一只实体是眼睛到它碰撞箱的最近距离
+     * ({@link Reach}),真人对准它挥拳的那一点就是这一点:沿视线进箱子的位置不比它近,看着箱子中心会把斜着够得着的目标看成够不着。
+     */
+    public void atNearest(AABB box) {
+        Vec3 eye = body.getEyePosition();
+        at(new Vec3(clampInside(eye.x, box.minX, box.maxX), clampInside(eye.y, box.minY, box.maxY),
+                clampInside(eye.z, box.minZ, box.maxZ)));
+    }
+
     /** 转到朝 {@code yaw}、俯仰 {@code pitch}(按鼠标像素取整)。 */
     public void turn(float yaw, float pitch) {
         rotate(turned(body.getYRot(), body.getXRot(), yaw, pitch));

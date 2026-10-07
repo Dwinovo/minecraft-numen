@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.permission.Verdict;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -339,15 +338,6 @@ public final class Interaction {
 
     private boolean fireAttackEntity() {
         if (entity == null || !entity.isAlive()) return false;
-        // 攻击落点:宠物、有名字的、村民,主人没点头就不出手
-        com.dwinovo.numen.api.permission.Verdict verdict = com.dwinovo.numen.api.permission.Permission.judge(
-                player, com.dwinovo.numen.api.permission.Action.attack(entity));
-        if (!verdict.allowed()) {
-            failReason = "cannot attack " + entity.getName().getString() + ": " + verdict.reason();
-            failType = FailureType.REFUSED;
-            hardFail = true;
-            return false;
-        }
         player.controls().stop();
         player.look().at(entity.getEyePosition());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
@@ -357,10 +347,18 @@ public final class Interaction {
                 false, recovering, player.getAttackStrengthScale(0.0f))) {
             return false;
         }
-        player.setSprinting(false);                    // 疾跑会让原版取消暴击判定
-        player.attack(entity);                         // native damage / cooldown / sweep / knockback (resets the ticker itself)
-        player.swing(InteractionHand.MAIN_HAND);
-        return true;
+        // 打准星落着的那只:原版的伤害、冷却、横扫、击退;宠物、有名字的、村民,主人没点头鼠标就不出手
+        return switch (player.mouse().attack()) {
+            case Mouse.Blow.Landed landed -> true;
+            case Mouse.Blow.Missed missed -> false;       // 准星还没落在它身上,下一刻再来
+            case Mouse.Blow.Refused refused -> {
+                Verdict verdict = refused.reason().verdict();
+                failReason = "cannot attack " + refused.target().getName().getString() + ": " + verdict.reason();
+                failType = FailureType.REFUSED;
+                hardFail = true;
+                yield false;
+            }
+        };
     }
 
     /** 右键方块或实体:转过去看着,按一下准星落着的东西。 */

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task.combat;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.FailureType;
@@ -561,12 +562,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 player.getAttackStrengthScale(0.0f))) {
             return;
         }
-        player.look().at(victim.getEyePosition());
-        // 疾跑会让原版取消暴击判定(Player.attack 里 flag1 带 !isSprinting)。
-        player.setSprinting(false);
-        player.attack(victim);
-        player.swing(InteractionHand.MAIN_HAND);
-        r.strike(victim.getId());
+        player.look().atNearest(victim.getBoundingBox());
+        // 朝它碰撞箱上离眼睛最近的一点看,和"够得着"(眼睛到碰撞箱)是同一个距离;打准星落着的那只(疾跑停跑、权限、挥手都在
+        // 鼠标里),准星没落在它身上这一刻不算出手,下一刻再来
+        if (player.mouse().attack() instanceof Mouse.Blow.Landed landed) {
+            r.strike(landed.target().getId());
+        }
     }
 
     private boolean targetRecovering() {

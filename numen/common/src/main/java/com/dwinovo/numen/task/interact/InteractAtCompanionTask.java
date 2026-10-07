@@ -99,9 +99,10 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
                     return TaskState.FAILED;
                 }
             }
-            // 按下去之前:这一下要做的事交给权限层(见 proposedActions)。不许就带着理由收场,
+            // 按下去之前:这一下要做的事交给权限层(`Mouse.intents`:鼠标在动手那一刻问的是同一张单)。不许就带着理由收场,
             // 要问就站着等主人
-            List<com.dwinovo.numen.api.permission.Action> proposed = proposedActions(hit);
+            List<com.dwinovo.numen.api.permission.Action> proposed =
+                    player.mouse().intents(hit, button() == Interaction.Button.ATTACK);
             if (!proposed.isEmpty()) {
                 List<Permit> permits = permitAll(proposed);
                 for (int i = 0; i < permits.size(); i++) {
@@ -158,35 +159,6 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             case RUNNING -> TaskState.RUNNING;
         };
     }
-
-    /**
-     * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
-     * 手里的东西,两只手里会往世界里放东西的({@link com.dwinovo.numen.api.entity.Mouse#placing})也一并算上。
-     */
-    private List<com.dwinovo.numen.api.permission.Action> proposedActions(HitResult hit) {
-        boolean left = button() == Interaction.Button.ATTACK;
-        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
-            var state = player.level().getBlockState(bh.getBlockPos());
-            if (left) {
-                return List.of(com.dwinovo.numen.api.permission.Action.breakBlock(bh.getBlockPos(), state));
-            }
-            List<com.dwinovo.numen.api.permission.Action> out = new java.util.ArrayList<>();
-            out.add(com.dwinovo.numen.api.permission.Action.useBlock(bh.getBlockPos(), state));
-            for (var hand : net.minecraft.world.InteractionHand.values()) {
-                var placing = com.dwinovo.numen.api.entity.Mouse.placing(player.level(), bh, player.getItemInHand(hand));
-                if (placing != null) {
-                    out.add(placing);
-                }
-            }
-            return out;
-        }
-        if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
-            return List.of(left ? com.dwinovo.numen.api.permission.Action.attack(eh.getEntity())
-                    : com.dwinovo.numen.api.permission.Action.useEntity(eh.getEntity()));
-        }
-        return List.of();
-    }
-
 
     private Interaction.Button button() {
         return r.button == MouseButton.LEFT

@@ -122,8 +122,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             // 按下去之前交给权限层:左键是打它(宠物、有名字的、村民),右键是右键它(有主人的)。
             // 要问就站着等主人,不许就带着理由收场
             boolean left = r.button == MouseButton.LEFT;
-            Permit permit = permit(left ? com.dwinovo.numen.api.permission.Action.attack(entity)
-                    : com.dwinovo.numen.api.permission.Action.useEntity(entity));
+            Permit permit = permit(player.mouse().intents(hit, left).get(0));
             if (permit.state() == PermitState.WAITING) {
                 player.controls().stop();
                 return TaskState.RUNNING;
