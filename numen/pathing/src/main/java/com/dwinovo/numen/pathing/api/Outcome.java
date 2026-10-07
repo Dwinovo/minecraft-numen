@@ -31,8 +31,7 @@ public sealed interface Outcome {
 
     /**
      * 规格许的改动不够:放开之后才有路,那条路要做 {@code changes} 这几件改地形的事(挖哪几格、放哪几格,连同许可的答复)。
-     * 缺的是哪几样从改动本身读:有挖({@link #digs})要许挖,有放({@link #places})要许放,有许可答"要问"的格({@link #asks})
-     * 要把要问的格算能走。
+     * 缺的是哪几样从改动本身读:有许可答"要问"的格({@link #asks})要把要问的格算能走。
      */
     record NeedsChanges(List<Edit> changes) implements Outcome {
 
@@ -43,16 +42,6 @@ public sealed interface Outcome {
         /** 那条路要改几格。 */
         public int alterations() {
             return changes.size();
-        }
-
-        /** 那条路要挖。 */
-        public boolean digs() {
-            return changes.stream().anyMatch(e -> e instanceof Edit.Dig);
-        }
-
-        /** 那条路要放方块(倒水接坠落也算)。 */
-        public boolean places() {
-            return changes.stream().anyMatch(e -> e instanceof Edit.Place || e instanceof Edit.Catch);
         }
 
         /** 那条路上有许可答"要问"的格。 */

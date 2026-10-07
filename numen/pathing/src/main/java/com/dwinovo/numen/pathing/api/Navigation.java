@@ -113,10 +113,6 @@ public final class Navigation {
         };
     }
 
-    public NavStatus status() {
-        return status;
-    }
-
     /** 叫停:在飞的搜索作废,松开所有键(包括潜行),交出实际账。 */
     public Report stop() {
         if (diagnosis != null) {

@@ -270,11 +270,6 @@ public final class Goals {
 
     // ==================== 估价 ====================
 
-    /** 从 {@code (x, y, z)} 到 {@code (tx, ty, tz)} 的估价:水平八方向距离按走,竖直往上按跳、往下按落。 */
-    static double point(int x, int y, int z, int tx, int ty, int tz) {
-        return horizontal(Math.abs(tx - x), Math.abs(tz - z)) + vertical(ty - y);
-    }
-
     private static double horizontal(double dx, double dz) {
         return (Math.min(dx, dz) * Math.sqrt(2) + Math.abs(dx - dz)) * ActionCosts.ESTIMATE_PER_BLOCK;
     }
@@ -284,7 +279,7 @@ public final class Goals {
     }
 
     /**
-     * 眼睛(按脚在这一格的底算)挪进 {@code target} 那一格的交互距离以内,最少要付多少:与 {@link #point} 同一套分轴的价,
+     * 眼睛(按脚在这一格的底算)挪进 {@code target} 那一格的交互距离以内,最少要付多少:同一套分轴的价(水平八方向距离按走,竖直往上按跳、往下按落),
      * 水平每格按走、往上按跳、往下按落。眼睛离那一格水平差 {@code a}、竖直差 {@code b},交互距离是 {@code r},挪完之后剩下的
      * 水平差 {@code u}、竖直差 {@code v} 要满足 {@code u² + v² < r²};在这些里取价钱最省的一处。
      *
