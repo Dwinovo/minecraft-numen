@@ -9,9 +9,12 @@
 内容,经四个登记口插入(BrainChains 链、CompanionTaskFactory 任务执行器、
 ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen 地位平等。
 
-**寻路是独立模块,Numen 经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖原版,
-设计稿见 `docs/pathing.md`。同伴的身体就是它的身体端口(`NumenPlayer implements Body`:一副键盘、
-每刻一次物理步进);手、许可、垫路料、要避开的生物四个端口由 Numen 的适配层 `numen/nav` 实现。
+**寻路是 Numen(Numen API 的第一个插件)的内容,独立成模块,经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖
+原版与 Numen API 公开的那部分(瘦 api jar),随 Numen 的加载器 jar 发出,Numen API 不依赖它。设计稿见 `docs/pathing.md`。
+她缺的那半个客户端——一副键盘 `Controls`、每刻一次的物理步进 `Physics`、换手 `Hotbar` 与它留下的记录 `BodyAction`——是
+Numen API 的公开部分(`com.dwinovo.numen.api.entity`),`NumenPlayer.controls()` 给出键盘,第三方想自己写一套寻路,按它们让她走;
+寻路模块的身体端口 `Body` 在寻路这一侧,Numen 的适配层 `numen/nav` 的 `CompanionBody` 把同伴接进去(无状态:寻路只经
+`entity()`、`controls()`、`snapshot()` 用身体,不按身体对象存状态);手、许可、垫路料、要避开的生物四个端口也由适配层实现。
 Numen 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
 只在适配层里接;结局与实际账说给模型听只在 `NavText` 一处。
 

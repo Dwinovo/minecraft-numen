@@ -378,7 +378,7 @@ ftbquests submit <quest>
 - **一份声明,两棵树**(`CommandTree`)。主人客户端的小表(`NumenCli` 自己的调度器)与 MC 指令树 `/numen` 下她的节点,由同一个生成器从命令组声明长出来,形状相同:根下 `help`、`--help`;组下 `--help` 与每个动作;动作下 `--help`。动作的参数、标志尾巴、可执行的那一格只长在执行它的那一侧。登记时把例子按这一组的树解析一遍(第九节)用的也是这个生成器,只是那棵树上每个动作都长着参数。
 - **路由**(`NumenCli.run`)。一行先在客户端小表上解析,看解析走到的最后一个字面节点:是帮助,或是一个客户端动作,就在客户端答,这个动作写错了也当场报;停在根上、组上、服务端动作上,或者不以 `numen` 开头,原样经 `ServerToolTransport` 送服务端。服务端动作写错由服务端报,两侧报错是同一个函数(`NumenCli.problem`),一字不差。
 - **注册与可见性**(`NumenCommands`)。两个加载器的入口本来就在指令注册事件里调 `NumenCommands.register`,她的节点(`NumenCli.herNodes()`)在这里挂到 `/numen` 下,不另开平台服务。
-  - 她的节点 `requires(FOR_HER)`:来源实体是 `NumenPlayer`。玩家的管理节点(`player`、`settings`、`reset`、`permission`、`consent`、`drive`,Numen 的 `debug`、`profile`、`pad`)`requires(FOR_PLAYERS)`。
+  - 她的节点 `requires(FOR_HER)`:来源实体是 `NumenPlayer`。玩家的管理节点(`player`、`settings`、`reset`、`permission`、`consent`、`drive`、`debug`、`pad`,以及插件经 `NumenApi.command` 挂的,如 Numen 的 `path`)`requires(FOR_PLAYERS)`。
   - 挂到 `/numen` 下的每一格都经 `NumenCommands.graft`:同名的一格已经在了就抛出。Brigadier 会把同名两格悄悄并成一格,留下先来那一格的观众。
   - 服务器建指令树的这一刻各模组的组都已登记完,相关命令(`seeAlso`)在这里一次查全,断掉的引用开服就报错;连着别人服务器的客户端不建指令树,仍在小表第一次被读时查。
   - 实测(GameTest):她在 `/numen` 下用得了的格与玩家用得了的格不相交;玩家的树里没有 Numen 自己的参数类型;她的 `help` 列出 `/numen`、不列召唤与权限。
@@ -504,7 +504,7 @@ numen gt_long lingre 40
   - `command` 工具的描述分两段写两层(第十节)。
 - **`/numen` 只给玩家**(第六节的判断)。她的命令不在 MC 树上,第 1 层不需要"是不是她"的过滤;但她作为玩家,经第 0 层照样敲得到
   MC 树上的每一条。召唤、设置、权限、征询、drive 是给人的,她不该用,所以 `/numen` 这个根只给不是她的来源,在
-  `NumenCommands.graft` 建根时一处定下,下面每一格(含 Numen 的 `debug`、`profile`、`pad`)随之。她敲 `/numen …` 当场失败:
+  `NumenCommands.graft` 建根时一处定下,下面每一格(含 `debug`、`pad`,以及插件经 `NumenApi.command` 挂的,如 Numen 的 `path`)随之。她敲 `/numen …` 当场失败:
   "the server does not let you use /numen",不问主人;她的 `/help` 里没有 `/numen`。
 - **权威声明**。
   - 形状只有两种:`Authority.HERS`(默认)与 `Authority.SERVER_ON_HER`。声明组合在动作上:`.authority(Authority.SERVER_ON_HER)`,
@@ -1240,7 +1240,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 | `ConsentRequestPayload` | 下行 | 征询清单(按种类归堆)、记住的规则行、轮廓(至多 256 格、32 只) | 有界(按方块与实体种类) |
 | `CompanionListPayload` | 下行 | 名册(至多 64 只) | 有界 |
 | `NumenLocationsPayload` | 下行 | 定位(至多 16 只) | 有界 |
-| `PathDebugPayload` | 下行 | 调试路径(寻路一段的格数) | 有界 |
+| `PathDebugPayload`(Numen 自己的) | 下行 | 调试路径(寻路一段的格数) | 有界 |
 | `ClientUiActionPayload` | 下行 | 一个枚举 | 有界 |
 | `RunProgramPayload` | 上行 | 程序编号、程序、模块清单与没送过的正文 | 超过一个包就分片;连整条消息(8 MiB)都装不下才不送,客户端就地回失败 |
 | `ClientCallPayload`、`ClientCallResultPayload` | 下行、上行 | 反向请求与它的答复(答复可带新模块清单) | 超过一个包就分片;连整条消息都装不下,请求当场回失败、答复换成失败 |

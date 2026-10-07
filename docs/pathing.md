@@ -139,7 +139,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 | 端口 | 模块向宿主要什么 | Numen 的实现 |
 |---|---|---|
-| `Body` | 身体实体(服务端玩家)、它的那一副键盘(`Controls`)、此刻的身体快照 | `NumenPlayer implements Body`:键盘每刻在它自己的实体刻里经 `Physics.step` 落一次 |
+| `Body` | 身体实体(服务端玩家)、它的那一副键盘(`Controls`,Numen API 的)、此刻的身体快照 | `CompanionBody`(无状态的适配器):键盘是 `NumenPlayer.controls()`,每刻在她自己的实体刻里经 `Physics.step`(Numen API 的)落一次 |
 | `TerrainPolicy` | 这一格能不能挖或放:放行 / 要问(带一个模块不解读的凭据)/ 拒绝 | `GateTerrain`:权限层 `Gate` 快照;凭据就是 `ConsentItem` |
 | `Materials` | 下一块垫路料用哪个(没有就是没料;规划建成本模型时问一次) | `ThrowawayBlocks.next` |
 | `Threats` | 此刻要避开的生物与各自的危险半径(规划建成本模型时问一次) | `Menace.dangers` |
@@ -172,12 +172,12 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 
 ## 五、模块与构建
 
-- 新增 Gradle 模块 `pathing`,和 `numen-api/common` 一样对着原版编译(neoForm),不含加载器代码，按 `numen-api/common`
-  的方式打进两个加载器的发行包。包名 `com.dwinovo.numen.pathing`。
-- 依赖只有 Minecraft、fastutil、slf4j;不依赖 `ai`、`agent`、Numen API、Numen。模块的 classpath 上没有 Numen,
-  往外的依赖在编译期就过不去。
-- Numen API 依赖 `pathing`(同伴的身体实现了身体端口),Numen 经它的依赖用上;类随 Numen API 的发行包平铺发出。
-  联动插件的编译类路径上另挂一份(`numen-plugin.gradle`)。模块本身还没有单独的 maven 坐标。
+- Gradle 模块 `pathing` 对着原版编译(neoForm),不含加载器代码,随 Numen 的两个加载器 jar 平铺发出(`numen-loader.gradle`)。
+  包名 `com.dwinovo.numen.pathing`。
+- 依赖只有 Minecraft、fastutil、slf4j,加上 Numen API 的瘦 api jar(和插件同一扇门,编译期只看得见 Numen API 公开的那部分:
+  `Controls`、`Physics`、`Hotbar`、`BodyAction`);不依赖 `ai`、`agent`、Numen。往外的依赖在编译期就过不去。
+- Numen API 不依赖也不平铺 `pathing`;Numen 编译期依赖它(`compileOnly`),发行 jar 里平铺进去,不进 POM。联动插件不用它。
+  模块本身没有单独的 maven 坐标。
 - Numen 在适配层之外只经门面(`api`)、规格(`spec`)、`search` 包里的目标族与身体机制(`body`)使用寻路(见第四节 Numen 适配层)。
 - 以后单独发布时，门面与端口就是对外接口。
 
@@ -403,7 +403,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 ### 第一批(09-27,`pathing-rewrite` 上 505deb86..42067cdf)
 
 - **构建**:`pathing` 模块用 `numen-common` 加 neoForm 对着原版编译;类在 `numen-loader.gradle` 的 `jar` 里平铺进两个
-  加载器的发行包(Fabric 由 remapJar 一并改名)。开发期运行的类路径和 Numen 对它的依赖，等切换那批有了使用方再接。
+  加载器的发行包(Fabric 由 remapJar 一并改名)。
 - **碰撞箱入口 `Boxes`**:按 `BlockState` 缓存;原版标了 dynamic shape 的六种(脚手架、细雪、竹子、滴水石锥、潜影盒、移动中的活塞)
   不缓存，每次按坐标和"脚在这个高度的身体"现问。
 - **节点归格**:`Footing.cellOf(feetY) = floor(feetY + 1e-5)`,容差同原版 `isAbove`。灵魂沙、耕地、土径、下半砖、地毯、雪层上脚在
@@ -491,7 +491,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 
 ### 第三批(09-27,`pathing-rewrite` 之上 caccab38..e4a9e8c2)
 
-- **身体机制**(`body/`,原版口径只此一份,执行层与宿主共用):`Controls` 把按键照原版客户端变成身体输入(前后左右是
+- **身体机制**(`Controls`、`Physics`、`Hotbar`、`BodyAction` 在 Numen API 的 `api.entity`,其余在 `body/`;原版口径只此一份,执行层与宿主共用):`Controls` 把按键照原版客户端变成身体输入(前后左右是
   数字键、跳按住由原版 `aiStep` 分地面/水里/攀爬、潜行、疾跑照原版的开跑停跑条件、卡在方块里往外推);`Physics.step`
   补上网络层替真玩家做的那一趟(`doTick`、摔伤、移动统计、区块跟随),宿主的假玩家每刻在自己的实体刻里调;`PlayerHands`
   是端口 `Effector` 的原版实现(左键照 `MultiPlayerGameMode` 的挖掘循环经 `handlePlayerAction`,右键先主手后副手);
@@ -558,7 +558,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 - **适配层**:见第四节。任务、命令、感知、反射只经门面、规格、`search` 包里的目标族与身体机制用寻路;挖一格的定价(`DigQuote`)、
   她身边的地形(`Terrain`)、工地的位置代价(`BuildSite`)、挑工具拿到手上(`CompanionHands.takeToolFor`)都在适配层,
   结局、实际账、身体动作说给模型听只在 `NavText`。
-- **身体**:`NumenPlayer implements Body`,一副键盘(`Controls`),每刻在自己的实体刻里经 `Physics.step` 落一次(`apply`
+- **身体**:`NumenPlayer` 有一副键盘(`Controls`),每刻在自己的实体刻里经 `Physics.step(她, 键盘)` 落一次(`apply`
   只给它调);导航、本能、各件活按的都是这一副。走、跳、潜行、停都改按键盘,`InputDriver` 只剩她自己的朝向、看向与驾船;
   `holdInHand` 删去,拿东西到手统一走 `Hotbar`(`hold` 认副手、`grip` 交回拿在哪只手);`Aim` 移进 `body` 包,执行层与
   宿主共用。每十刻一次的 `connection.resetPosition` 删去:它记下的位置只给移动包校验与连接自己的 tick 用,假玩家两样都
@@ -582,8 +582,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 - **没做的**:第四节原表的 `PlacementAdvice` 没有做。旧代码里建造的这条路(`BuildPlacementRegistry` 选图纸方块、
   `BuildCalculationContext` 给图纸格单独定价)实际不生效:走向外圈那条路按位置禁挖禁放全部图纸格,规划器先查这条禁令,
   图纸格上既不会规划放块,也不会走到单独定价那一步;切换后 `BuildSite` 照旧禁,端口没有调用方,不加。
-  `Limits`、`NavLog` 同样没有用到的地方。模块还没有单独的 maven 坐标:类随 Numen API 的发行包平铺发出,
-  仓外插件拿不到它的依赖声明。
+  `Limits`、`NavLog` 同样没有用到的地方。模块没有单独的 maven 坐标:类随 Numen 的发行包平铺发出。
 - **性能**(09-28 调研,同口径):测试服务器里一个假玩家同伴,在同一片搭好的地形上从同一起点搜到同一终点,同一展开预算
   10 万、同一许可(权限层的 `Gate`)、同样的料;旧实现在 dad87b84(旧寻路与新模块并存的最后一版)上与新实现同一刻、同一份
   地形里交替跑,各先预热 8 次,再交替跑 20 次(隧道 10 次)取中位数。许改自然地形的两个场景两边都不放块,动作集一样。
