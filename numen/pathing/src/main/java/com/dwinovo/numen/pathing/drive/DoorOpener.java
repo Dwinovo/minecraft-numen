@@ -42,7 +42,7 @@ final class DoorOpener {
         rig.entity.setShiftKeyDown(sneaking);
         return switch (use) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
-                rig.ledger.used(pressed.changes(), pos, null);
+                rig.ledger.used(pressed.changes());
                 if (PathLog.debugging()) {
                     PathLog.debug("{} 开关门 {}", rig.who, Work.changes(pressed));
                 }

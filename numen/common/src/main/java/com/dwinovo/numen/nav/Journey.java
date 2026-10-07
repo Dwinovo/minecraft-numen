@@ -42,7 +42,7 @@ public final class Journey {
 
     /** 活自己挖掉了 {@code pos}(原来是 {@code before}),比如为了拉出射线挖掉的遮挡物。 */
     public void dug(BlockPos pos, BlockState before) {
-        entries.add(new EditLedger.Dug(pos.immutable(), before, null));
+        entries.add(new EditLedger.Dug(pos.immutable(), before));
     }
 
     /** 这本账加上还在走的几趟路的账。 */

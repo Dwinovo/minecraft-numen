@@ -96,7 +96,7 @@ final class Work {
             case Mouse.Strike.Swinging s -> Beat.WORKED;
             case Mouse.Strike.Missed m -> blind(pos, Hitch.OCCLUDED);
             case Mouse.Strike.Broke broke -> {
-                rig.ledger.dug(broke.pos(), broke.before(), broke.pos().equals(pos) ? edit.permit() : null);
+                rig.ledger.dug(broke.pos(), broke.before());
                 if (PathLog.debugging()) {
                     PathLog.debug("{} 挖掉 {} {}{}", rig.who, PathLog.pos(broke.pos()), PathLog.block(broke.before()),
                             broke.pos().equals(pos) ? "" : "(要挖的是 " + PathLog.pos(pos) + ")");
@@ -133,7 +133,7 @@ final class Work {
         body.setShiftKeyDown(sneaking);
         return switch (use) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
-                rig.ledger.used(pressed.changes(), pos, edit.permit());
+                rig.ledger.used(pressed.changes());
                 if (PathLog.debugging()) {
                     PathLog.debug("{} 放下 {} {}", rig.who, PathLog.pos(pos), changes(pressed));
                 }
@@ -170,7 +170,7 @@ final class Work {
         }
         return switch (rig.use()) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
-                rig.ledger.used(pressed.changes(), caught.pos(), caught.permit());
+                rig.ledger.used(pressed.changes());
                 poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
                 PathLog.info("{} 倒水接坠落 {} 脚离落点还有 {} 格{}", rig.who, changes(pressed),
                         PathLog.num(body.getY() - caught.pos().getY()), poured ? "" : ",水没落在落点 " + PathLog.pos(caught.pos()));
@@ -202,7 +202,7 @@ final class Work {
         }
         return switch (rig.use()) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
-                rig.ledger.used(pressed.changes(), pos, caught.permit());
+                rig.ledger.used(pressed.changes());
                 scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
                 PathLog.info("{} 收回水 {}{}", rig.who, changes(pressed), scooped ? "" : "," + PathLog.pos(pos) + " 还是水");
                 yield Beat.WORKED;

@@ -59,11 +59,10 @@ class NavTextTest {
     @Test
     void theActualLedgerNamesEveryBlockAndCellAndWhatTheBodyDid() {
         List<EditLedger.Entry> entries = List.of(
-                new EditLedger.Dug(A, planks(), Permit.ALLOW),
-                new EditLedger.Dug(B, planks(), Permit.ALLOW),
-                new EditLedger.Placed(C, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(), null),
-                new EditLedger.Toggled(C.above(), Blocks.OAK_DOOR.defaultBlockState(), Blocks.OAK_DOOR.defaultBlockState(),
-                        null));
+                new EditLedger.Dug(A, planks()),
+                new EditLedger.Dug(B, planks()),
+                new EditLedger.Placed(C, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()),
+                new EditLedger.Toggled(C.above(), Blocks.OAK_DOOR.defaultBlockState(), Blocks.OAK_DOOR.defaultBlockState()));
         List<BodyAction> actions = List.of(new BodyAction.Dismounted(EntityType.BOAT),
                 new BodyAction.Held(Items.COBBLESTONE, 3, 3), new BodyAction.Held(Items.COBBLESTONE, 3, 3));
         assertEquals("En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone"
@@ -78,8 +77,8 @@ class NavTextTest {
     void waterPouredToBreakAFallAndScoopedBackIsToldAsSuch() {
         BlockState water = Blocks.WATER.defaultBlockState();
         BlockState air = Blocks.AIR.defaultBlockState();
-        String said = NavText.journey(List.of(new EditLedger.Placed(C, air, water, null),
-                new EditLedger.Placed(C, water, air, null)), List.of(), List.of());
+        String said = NavText.journey(List.of(new EditLedger.Placed(C, air, water),
+                new EditLedger.Placed(C, water, air)), List.of(), List.of());
         assertTrue(said.contains("pour 1 water (121,64,-33) to break a fall")
                 && said.contains("scoop 1 water (121,64,-33) back"), said);
     }
@@ -146,7 +145,7 @@ class NavTextTest {
         List<DiveLog.Dive> dives = List.of(new DiveLog.Dive(A, B, 30, 270, 300), new DiveLog.Dive(B, C, 245, 55, 300));
         assertEquals("I went under water 2 times; the longest: 12 s without a breath from 120,65,-33 to 121,64,-33,"
                 + " air down to 55/300.", NavText.journey(List.of(), List.of(), dives));
-        String both = NavText.journey(List.of(new EditLedger.Dug(A, planks(), Permit.ALLOW)), List.of(),
+        String both = NavText.journey(List.of(new EditLedger.Dug(A, planks())), List.of(),
                 List.of(new DiveLog.Dive(A, C, 10, 290, 300)));
         assertEquals("En route I had to break 1 oak_planks (120,64,-33). I went under water once: under 1 s without a"
                 + " breath from 120,64,-33 to 121,64,-33, air down to 290/300.", both);
