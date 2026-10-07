@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mixin;
+package com.dwinovo.numen.mixin;
 
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.DataSlot;

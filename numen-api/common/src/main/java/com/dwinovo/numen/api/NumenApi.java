@@ -3,6 +3,9 @@ package com.dwinovo.numen.api;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.Codec;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+
+import net.minecraft.commands.CommandSourceStack;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -99,6 +102,16 @@ public interface NumenApi {
      * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通
      */
     void bundleModules(Path modulesRoot);
+
+    /**
+     * 服务端:往 {@code /numen} 下挂一格给<b>玩家</b>用的指令(如 {@code /numen mynav debug})。
+     *
+     * <p>{@code /numen} 这个根只给不是她的来源(她不能经指令召唤、改权限、改设置),挂在它下面的每一格都随之:
+     * 不必也不该自己再 {@code register} 一个 {@code numen} 根——Brigadier 合并同名根时留下先来的那个的限制,谁先谁后
+     * 取决于加载顺序。字面量与别人已挂的撞了,服务器建指令树时就抛出。
+     * 她自己的功能不走这里,是 {@link #api} 登记的 Lua 函数。
+     */
+    void command(LiteralArgumentBuilder<CommandSourceStack> verb);
 
     /**
      * 跑一段<b>只在客户端才有意义</b>的代码。专用服务器上整块不执行。

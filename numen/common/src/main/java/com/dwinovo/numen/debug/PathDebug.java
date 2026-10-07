@@ -5,8 +5,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 调试模式开关簿:按"主人玩家 UUID"记录谁开了调试。开着的玩家会
- * 收到寻路路径粒子渲染,且其客户端聊天 UI 切到不过滤直出。
+ * 寻路调试开关簿:按"主人玩家 UUID"记录谁开了调试。开着的玩家会收到同伴正在走的路的快照,客户端把它画在世界里。
  */
 public final class PathDebug {
 

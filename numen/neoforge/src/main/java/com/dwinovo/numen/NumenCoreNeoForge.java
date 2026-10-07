@@ -1,6 +1,6 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.debug.DebugCommands;
+import com.dwinovo.numen.debug.PathDebugPayload;
 import com.dwinovo.numen.debug.PathDebugRenderer;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import com.dwinovo.numen.scan.BlockSearch;
@@ -29,9 +29,10 @@ public class NumenCoreNeoForge {
         com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
 
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
-        // Debug verbs merged into the /numen root registered by the Numen API mod.
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
-                DebugCommands.register(e.getDispatcher()));
+        // 寻路调试的下行包:类型在这里登记,处理体在客户端入口挂上(见 NumenCoreNeoForgeClient)。
+        eventBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent e) ->
+                e.registrar("1").playToClient(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC,
+                        (payload, ctx) -> PathDebugPayload.handle(payload)));
 
         // Numen 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
         // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
@@ -67,7 +68,7 @@ public class NumenCoreNeoForge {
         BlockSearch.tick(event.getServer());
         // Route plans (route plan): poll finished searches and reply.
         com.dwinovo.numen.nav.RouteQueries.serverTick(event.getServer());
-        // Debug particles for pathing state, sent only to players with debug on.
+        // 寻路调试:把在走的同伴的路发给开了调试的玩家。
         PathDebugRenderer.serverTick(event.getServer());
     }
 }

@@ -5,18 +5,17 @@ import java.util.List;
 
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.network.payload.PathDebugPayload;
-import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.Route;
 
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 寻路调试状态发布:每 {@link #INTERVAL} tick 把每个在走的同伴的状态(还没走完的那几步、路上要挖与要放的格、朝着的那一格)
- * 打包成 {@link PathDebugPayload} 发给同维度开了调试的主人;客户端逐帧画成世界空间的线与方框。不产生任何粒子。
+ * 打包成 {@link PathDebugPayload} 发给同维度开了调试的主人(载荷类型由各加载器入口登记);客户端逐帧画成世界空间的线与方框。不产生任何粒子。
  */
 public final class PathDebugRenderer {
 
@@ -53,7 +52,7 @@ public final class PathDebugRenderer {
             }
             PathDebugPayload payload = snapshot(companion, trip);
             for (ServerPlayer viewer : viewers) {
-                NumenNetwork.sendToPlayer(viewer, payload);
+                viewer.connection.send(new ClientboundCustomPayloadPacket(payload));
             }
         }
     }

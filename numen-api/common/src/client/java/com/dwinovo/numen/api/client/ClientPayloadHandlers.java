@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.client.chat.RawMessageMode;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
 import com.dwinovo.numen.api.client.data.ClientNumenLocations;
-import com.dwinovo.numen.api.client.debug.PathDebugState;
 import com.dwinovo.numen.api.client.hud.SpeechBubbles;
 import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.network.ClientPayloadSink;
@@ -18,7 +17,6 @@ import com.dwinovo.numen.api.network.payload.NumenEventPayload;
 import com.dwinovo.numen.api.network.payload.NumenStatePayload;
 import com.dwinovo.numen.api.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.api.network.payload.NumenRespawnPayload;
-import com.dwinovo.numen.api.network.payload.PathDebugPayload;
 
 import java.util.UUID;
 
@@ -57,7 +55,6 @@ public final class ClientPayloadHandlers {
                         System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
-        ClientPayloadSink.pathDebug = PathDebugState::accept;
         ClientPayloadSink.uiAction = ClientPayloadHandlers::handleUiAction;
     }
 

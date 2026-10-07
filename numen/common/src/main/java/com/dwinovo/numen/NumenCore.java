@@ -50,6 +50,18 @@ public final class NumenCore {
 
     private static boolean initialised = false;
 
+    /** Numen 在插件那扇门里的手柄(名字空间 {@code numen}),登记时拿到,运行中发事件用。 */
+    private static volatile com.dwinovo.numen.api.NumenApi api;
+
+    /** Numen 的 {@link com.dwinovo.numen.api.NumenApi}。{@link #init()} 之后才有。 */
+    public static com.dwinovo.numen.api.NumenApi api() {
+        com.dwinovo.numen.api.NumenApi handle = api;
+        if (handle == null) {
+            throw new IllegalStateException("NumenCore.init() has not run");
+        }
+        return handle;
+    }
+
     private NumenCore() {}
 
     public static void init() {
@@ -62,6 +74,9 @@ public final class NumenCore {
                 numen.registerGear(new com.dwinovo.numen.gear.VanillaArmor()));
         registerReflexes();
         enlistReflexRoster();
+        // 寻路调试开关挂在 /numen 下
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen ->
+                numen.command(com.dwinovo.numen.debug.PathCommands.verb()));
         Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), TaskFactory.size());
     }
@@ -101,6 +116,7 @@ public final class NumenCore {
      */
     private static void registerTools() {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> {
+            api = numen;
             com.dwinovo.numen.tools.perception.StatusApi.install(numen);
             com.dwinovo.numen.tools.perception.ScanApi.install(numen);
             com.dwinovo.numen.tools.locate.LocateApi.install(numen);

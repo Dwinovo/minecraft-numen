@@ -46,6 +46,8 @@ import java.util.function.Predicate;
  *   /numen player despawn &lt;name&gt;   permanently dismiss the named companion (gone for good)
  *   /numen settings                  open the settings GUI on the caller's client
  *   /numen reset                     clear the caller's conversation loops
+ *   /numen debug                     toggle debug mode (the caller's chat UI shows text unfiltered)
+ *   /numen pad                       toggle the companion chunk-loading pad (diagnosis A/B)
  *   /numen drive &lt;companion&gt; &lt;program&gt; (op) run a Lua program as her, through the same entry as her own;
  *                                    a name with spaces or non-ASCII letters goes in quotes
  *
@@ -78,7 +80,19 @@ public final class NumenCommands {
     private static final Predicate<CommandSourceStack> FOR_PLAYERS =
             source -> !(source.getEntity() instanceof NumenPlayer);
 
+    /** 谁开了"UI 文本不过滤直出"的调试模式。 */
+    private static final java.util.Set<java.util.UUID> DEBUG_TEXT = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** 插件经 {@link com.dwinovo.numen.api.NumenApi#command} 挂的指令;每次建指令树时一并挂上。 */
+    private static final List<LiteralArgumentBuilder<CommandSourceStack>> PLUGGED =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
     private NumenCommands() {}
+
+    /** 登记一格插件的指令,下一次建指令树时挂上。 */
+    public static void plug(LiteralArgumentBuilder<CommandSourceStack> verb) {
+        PLUGGED.add(verb);
+    }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         graft(dispatcher, Commands.literal("player")
@@ -92,6 +106,8 @@ public final class NumenCommands {
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
         graft(dispatcher, Commands.literal("reset")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.RESET_LOOPS)));
+        graft(dispatcher, Commands.literal("debug").executes(NumenCommands::toggleDebugText));
+        graft(dispatcher, Commands.literal("pad").executes(NumenCommands::togglePad));
         graft(dispatcher, Commands.literal("permission")
                 .then(modeCommand())
                 .then(Commands.literal("rules")
@@ -110,6 +126,9 @@ public final class NumenCommands {
                                 .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))
                         .then(Commands.argument("program", StringArgumentType.greedyString())
                                 .executes(NumenCommands::drive))));
+        for (LiteralArgumentBuilder<CommandSourceStack> verb : PLUGGED) {
+            graft(dispatcher, verb);
+        }
     }
 
     /**
@@ -203,6 +222,31 @@ public final class NumenCommands {
                 ? Component.translatable(Keys.COMMAND_DISMISSED_DUPLICATES, name, dismissed)
                 : Component.translatable(Keys.COMMAND_DISMISSED, name), false);
         return dismissed;
+    }
+
+    /** {@code /numen debug}:翻转调试模式,主人的客户端聊天 UI 切到不过滤直出。 */
+    private static int toggleDebugText(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        boolean on = DEBUG_TEXT.add(caller.getUUID());
+        if (!on) {
+            DEBUG_TEXT.remove(caller.getUUID());
+        }
+        NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(on
+                ? ClientUiActionPayload.Action.DEBUG_TEXT_ON
+                : ClientUiActionPayload.Action.DEBUG_TEXT_OFF));
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_ON : Keys.DEBUG_OFF), false);
+        return 1;
+    }
+
+    /**
+     * {@code /numen pad}:翻转同伴区块加载 pad(诊断 A/B 用):关掉后同伴不再自持加载票据,只能在别人(玩家)
+     * 保持加载的区块里活动;已有票据 40 tick 内自然过期。
+     */
+    private static int togglePad(CommandContext<CommandSourceStack> ctx) {
+        boolean on = !CompanionChunkLoader.enabled;
+        CompanionChunkLoader.enabled = on;
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_PAD_ON : Keys.DEBUG_PAD_OFF), false);
+        return 1;
     }
 
     private static int clientAction(CommandContext<CommandSourceStack> ctx,

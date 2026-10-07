@@ -12,13 +12,19 @@ neoForge {
     }
 }
 
+// 要读 Numen API 的 apiJar 任务,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
 dependencies {
-    // Numen API (project dependency on the in-repo numen-api/ tree). compileOnly:
-    // the api classes are provided at runtime by the Numen API mod, not bundled.
-    compileOnly project(':numen-api:common')
+    // Numen 是 Numen API 的第一个插件,和别的插件走同一扇门:编译期只看得见瘦 api jar 里公开的那部分,
+    // 由编译器把关;完整的类运行时由 Numen API 这个模组提供,不随 Numen 发。ai / agent / ui 是插件经 POM 传递依赖拿到的模块。
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly project(':ai')
+    compileOnly project(':agent')
+    compileOnly project(':ui')
     // 寻路模块(只依赖原版):Numen 的内容,发行 jar 里平铺进 Numen 的加载器 jar,见 numen-loader.gradle
     compileOnly project(':pathing')
-    // 单元测试要真的跑到 Numen API 类(排程机器随 Numen API),运行时类路径补上同一模块。
+    // 单元测试可以看完整的 Numen API(夹具要登记处、排程机器),编译与运行类路径补上同一模块。
     testImplementation project(':numen-api:common')
     testImplementation project(':pathing')
 
@@ -32,8 +38,22 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// 客户端专属源码集(寻路调试的覆盖层):src/client/java 只被客户端消费,主源码集的 classpath 上物理上没有这些类,
+// 服务端代码引用客户端类在编译期就过不去。照 numen-api/common 的做法。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.client)
+
 configurations {
     commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonClientJava {
         canBeResolved = false
         canBeConsumed = true
     }
@@ -45,6 +65,7 @@ configurations {
 
 artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
 
@@ -78,11 +99,10 @@ test {
     useJUnitPlatform()
 }
 
-// 服务端安全门:Numen 的 common 全部是服务端代码(工具/任务/寻路/
-// 建造),客户端半边住在 Numen API。common 编译用的是合并的客户端 MC jar,
+// 服务端安全门:Numen 的 common 主源码集全部是服务端代码(工具/任务/寻路/
+// 建造),客户端半边在 src/client/java。common 编译用的是合并的客户端 MC jar,
 // 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上
-// ClassNotFound——这道检查让它在构建期就 fail。将来真要在本仓写客户端
-// 代码,参照 Numen API 的做法建 src/client/java 源码集,而不是放进 main。
+// ClassNotFound——这道检查让它在构建期就 fail。
 tasks.register('checkServerSafe') {
     group = 'verification'
     description = 'Fail if src/main references Minecraft client-only classes.'

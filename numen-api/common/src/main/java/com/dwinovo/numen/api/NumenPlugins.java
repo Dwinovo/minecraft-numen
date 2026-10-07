@@ -252,6 +252,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void command(com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> verb) {
+            if (verb != null) com.dwinovo.numen.api.entity.NumenCommands.plug(verb);
+        }
+
+        @Override
         public void onClient(Runnable clientOnly) {
             if (clientOnly == null) return;
             if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);

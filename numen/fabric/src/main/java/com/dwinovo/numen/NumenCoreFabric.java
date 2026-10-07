@@ -1,10 +1,10 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.debug.DebugCommands;
+import com.dwinovo.numen.debug.PathDebugPayload;
 import com.dwinovo.numen.debug.PathDebugRenderer;
 import com.dwinovo.numen.scan.BlockSearch;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 /**
@@ -46,11 +46,9 @@ public class NumenCoreFabric implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);
         // Route plans (route plan): poll finished searches and reply.
         ServerTickEvents.END_SERVER_TICK.register(com.dwinovo.numen.nav.RouteQueries::serverTick);
-        // Debug particles for pathing state, sent only to players with debug on.
+        // 寻路调试:把在走的同伴的路发给开了调试的玩家;下行包的类型在这里登记,处理体在客户端入口挂上
         ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
-        // Debug verbs merged into the /numen root registered by the Numen API mod.
-        CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) -> DebugCommands.register(dispatcher));
+        PayloadTypeRegistry.playS2C().register(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC);
 
         Constants.LOG.info("numen-core initialised on Fabric.");
     }

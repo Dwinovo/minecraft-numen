@@ -9,15 +9,9 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
-    // Numen API, now a sibling loom project in this build. namedElements
-    // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
-    //
-    // api 而非 implementation:Numen API 的类型出现在 Numen 的公开签名里
-    // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
-    // implementation 在 POM 里落成 runtime,想扩展 Numen 的人拿得到 jar 却编译不了。
-    // 本模块的 datagen 需要 Numen API 在运行时类路径上,所以是 api 而不是 compileOnlyApi
-    // ——Forge 那边相反,见 numen/forge/build.gradle。
-    api project(path: ':numen-api:fabric', configuration: 'namedElements')
+    // Numen API 同在本构建里(Loom 项目)。编译期看不见它的内部类(见 numen-loader.gradle),开发运行与数据生成要它在
+    // 类路径上,所以是 runtimeOnly:POM 里落成运行期依赖。namedElements 直接给开发期(Mojang 名)的 jar,不经 maven 往返。
+    runtimeOnly project(path: ':numen-api:fabric', configuration: 'namedElements')
     // Bundle it into Numen's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
     include project(':numen-api:fabric')

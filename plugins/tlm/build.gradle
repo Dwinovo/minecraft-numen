@@ -26,7 +26,8 @@ dependencies {
  * 就不再是"只有本体"的样子。这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里)、联动的用例同在 numen 这一个
  * 模组里,车万女仆由运行时类路径带进来,和玩家装它一样被当成模组加载。
  *
- * 用例和 Numen 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 Numen 的输出。
+ * 用例和 Numen 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 Numen 的
+ * GameTest 源码集的输出。
  * 它们挂自己的命名空间 numen_tlm,这一次只跑这个命名空间:Numen 的用例类照样被加载(同一个模组),但一条都不跑。
  * 结构模板用 Numen 同步好的那一份目录。
  */
@@ -42,6 +43,9 @@ neoForge {
     mods {
         numen {
             sourceSet coreNeoForge.sourceSets.main
+            sourceSet coreNeoForge.sourceSets.gametest
+            // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
+            sourceSet project(':pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
         }
@@ -61,6 +65,7 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ coreNeoForge.sourceSets.main.output })
+    gametestCompileOnly files({ coreNeoForge.sourceSets.gametest.output })
     // 用例直接读她身上的外观附件(Outfit),不绕客户端
     gametestCompileOnly sourceSets.main.output
     // 整个 Numen API(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
@@ -68,8 +73,12 @@ dependencies {
     gametestImplementation "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
 
+tasks.named('compileGametestJava') {
+    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses'
+}
+
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen:neoforge:syncGameTestStructures'
+    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses', ':numen:neoforge:syncGameTestStructures'
 }
 
 /*

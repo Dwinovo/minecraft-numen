@@ -24,6 +24,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 状态旁边,加一处新状态 = 加一行,loader 一个字都不用改,也就没有"忘了登记"这回事。
  * 类没被加载过就不会报到 —— 那正确,它也就没有状态要清。
  *
+ * <p>插件的世界作用域状态(缓存、在飞的搜索)同样在这里报到,和 Numen API 自己的走同一扇门。
+ *
  * <p>两个 loader 各在服务器停止事件上调一次 {@link #fireStopped()};单人退存档、
  * 专用服关服、切存档,走的都是它。
  */

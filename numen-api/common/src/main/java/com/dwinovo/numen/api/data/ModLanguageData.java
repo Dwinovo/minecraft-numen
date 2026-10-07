@@ -844,7 +844,7 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "Answered consent request #%s for %s: %s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "Consent request #%s belongs to a companion that is not yours");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "No pending consent request #%s (already answered, expired or replaced)");
-        adder.add(Keys.DEBUG_ON,          "Debug mode on: path particles, and UI text shown unfiltered");
+        adder.add(Keys.DEBUG_ON,          "Debug mode on: UI text shown unfiltered");
         adder.add(Keys.DEBUG_OFF,         "Debug mode off");
         adder.add(Keys.DEBUG_PAD_ON,      "Companion loading pad on (the default)");
         adder.add(Keys.DEBUG_PAD_OFF,     "Companion loading pad off: companions only act in chunks that players keep loaded (for diagnosis)");
@@ -1364,7 +1364,7 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "已答复征询 #%s(%s):%s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "征询 #%s 属于别人的同伴");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "没有待答复的征询 #%s(已答复、过期或被顶掉)");
-        adder.add(Keys.DEBUG_ON,          "调试模式已开:路径粒子渲染 + UI 文本不过滤直出");
+        adder.add(Keys.DEBUG_ON,          "调试模式已开:UI 文本不过滤直出");
         adder.add(Keys.DEBUG_OFF,         "调试模式已关");
         adder.add(Keys.DEBUG_PAD_ON,      "同伴加载 pad 已开(默认状态)");
         adder.add(Keys.DEBUG_PAD_OFF,     "同伴加载 pad 已关:同伴仅在玩家加载的区块内活动(诊断用)");

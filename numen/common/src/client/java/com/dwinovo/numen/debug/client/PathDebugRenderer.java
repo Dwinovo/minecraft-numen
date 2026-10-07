@@ -1,6 +1,6 @@
-package com.dwinovo.numen.api.client.debug;
+package com.dwinovo.numen.debug.client;
 
-import com.dwinovo.numen.api.network.payload.PathDebugPayload;
+import com.dwinovo.numen.debug.PathDebugPayload;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 

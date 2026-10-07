@@ -149,6 +149,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
     include 'com/dwinovo/numen/api/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/api/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
+    include 'com/dwinovo/numen/api/area/**'            // 一块地方(格、团、区域)——API 函数的值类型,Lua 值转换也认它
     include 'com/dwinovo/numen/api/task/**'            // task contract + the registration points a pack drives
     include 'com/dwinovo/numen/api/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
     include 'com/dwinovo/numen/api/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
@@ -164,6 +165,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
     include 'com/dwinovo/numen/api/agent/skill/SkillInfo*.class'
     include 'com/dwinovo/numen/api/platform/Services*.class'          // cross-loader SPI locator
+    include 'com/dwinovo/numen/api/platform/ServerLifecycle*.class'   // 世界作用域的状态在关服时作废:持有者自己在静态块里报到
     include 'com/dwinovo/numen/api/platform/services/**'              // (block caps for storage inspection)
     // Loom 只给"认得出是 mod"的 jar 做重映射,判据就是 fabric.mod.json。瘦 jar 不带
     // 它,消费者的 modCompileOnly 会原样透传:jar 里是 intermediary、消费者环境里是
@@ -175,9 +177,6 @@ tasks.register('apiJar', Jar) {
     // 协议文本随成品 jar 进来(见上面 jar 块),瘦 jar 发给第三方开发者,一样要带
     include 'LICENSE*'
     include 'COPYING*'
-    // 已知债:调试通道的两个 payload 被 Numen 的 debug 侧直用;它们本该迁去 Numen 自己的网络层,迁移前先如实纳入契约
-    include 'com/dwinovo/numen/api/network/payload/PathDebugPayload*.class'
-    include 'com/dwinovo/numen/api/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages
     exclude 'com/dwinovo/numen/api/agent/tool/ToolInvocation*.class'
     exclude 'com/dwinovo/numen/api/agent/tool/ClientToolContext*.class'

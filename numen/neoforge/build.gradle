@@ -4,15 +4,9 @@ plugins {
 }
 
 dependencies {
-    // Numen API, now a sibling moddev project in this build.
-    // NeoForge is Mojang-mapped natively, so no remap step is needed.
-    //
-    // api 而非 implementation:Numen API 的类型出现在 Numen 的公开签名里
-    // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
-    // implementation 在 POM 里落成 runtime,想扩展 Numen 的人拿得到 jar 却编译不了。
-    // 本模块的 datagen 需要 Numen API 在运行时类路径上,所以是 api 而不是 compileOnlyApi
-    // ——Forge 那边相反,见 numen/forge/build.gradle。
-    api project(':numen-api:neoforge')
+    // Numen API 同在本构建里。编译期看不见它的内部类(见 numen-loader.gradle),运行与数据生成要它在类路径上,
+    // 所以是 runtimeOnly:POM 里落成运行期依赖,玩家装 Numen 就带上它。
+    runtimeOnly project(':numen-api:neoforge')
 
     // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
@@ -26,6 +20,21 @@ dependencies {
     jarJar(project(':numen-api:neoforge'))
 }
 
+/*
+ * GameTest 的用例在 src/gametest:它们拉起同伴、直接摸引擎内部(CompanionFactory、程序的回环客户端),所以要看见完整的
+ * Numen API——而 main 只看得见瘦 api jar(见 numen-loader.gradle)。用例不进发行 jar:jar 只收 main 的输出。
+ * 同一个模组 numen 里的另一份源码集,运行时和 main 一样加载。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+dependencies {
+    gametestImplementation project(':numen-api:neoforge')
+}
+
 // GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
 // 模板目录,运行前把两处同步进构建目录里的一处,运行配置指向它。
 def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
@@ -37,6 +46,7 @@ def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
 
 neoForge {
     version = neoforge_version
+    addModdingDependenciesTo(sourceSets.gametest)
     // Automatically enable neoforge AccessTransformers if the file exists
     def at = project(':numen:common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {
@@ -52,6 +62,7 @@ neoForge {
         }
         client {
             client()
+            sourceSet = sourceSets.gametest
             gameDirectory = this.mkdir(this.file("runs/client"))
         }
         data {
@@ -68,12 +79,14 @@ neoForge {
         }
         gameTestServer {
             type = "gameTestServer"
+            sourceSet = sourceSets.gametest
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
         }
     }
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
+            sourceSet sourceSets.gametest
             // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明;
             // 另外挂它自己的 GameTest 用例
             sourceSet project(':pathing').sourceSets.main
@@ -84,7 +97,7 @@ neoForge {
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
     dependsOn syncGameTestStructures
-    dependsOn ':pathing:gametestClasses'
+    dependsOn 'gametestClasses', ':pathing:gametestClasses'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

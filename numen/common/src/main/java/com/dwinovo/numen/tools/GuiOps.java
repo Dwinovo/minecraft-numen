@@ -77,7 +77,7 @@ public final class GuiOps {
             }
         }
         // 数据槽是界面另一条同步通道:真屏幕画进度、燃料、能量条读的那几个数。一般地读(不按界面特判),意思随界面
-        List<DataSlot> data = ((com.dwinovo.numen.api.mixin.MenuDataSlotsAccessor) (Object) menu).numen$dataSlots();
+        List<DataSlot> data = ((com.dwinovo.numen.mixin.MenuDataSlotsAccessor) (Object) menu).numen$dataSlots();
         List<Integer> numbers = data.stream().map(DataSlot::get).toList();
         return new Window(ownInventory ? "InventoryMenu" : menu.getClass().getSimpleName(), slots,
                 menu.getCarried().isEmpty() ? Optional.empty() : Optional.of(describe(menu.getCarried())), numbers,

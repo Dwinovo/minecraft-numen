@@ -1,10 +1,11 @@
-package com.dwinovo.numen.api.network.payload;
+package com.dwinovo.numen.debug;
 
-import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.Constants;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -74,8 +75,14 @@ public record PathDebugPayload(UUID companionId,
         return TYPE;
     }
 
-    /** Client-side handler (client main thread): stash for the frame renderer. */
+    /**
+     * 客户端收到后交给谁:主源码集看不见客户端类,所以由客户端源码集在启动时把它挂上(服务端上永远是空操作)。
+     * 在客户端主线程上调。
+     */
+    public static volatile Consumer<PathDebugPayload> onClient = p -> {};
+
+    /** 各加载器的下行包接收器调它。 */
     public static void handle(PathDebugPayload p) {
-        com.dwinovo.numen.api.network.ClientPayloadSink.pathDebug.accept(p);
+        onClient.accept(p);
     }
 }

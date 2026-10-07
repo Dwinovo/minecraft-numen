@@ -2,8 +2,14 @@ plugins {
     id 'numen-common'
 }
 
+// 要读 Numen API 的 apiJar 任务,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
 configurations {
     commonJava{
+        canBeResolved = true
+    }
+    commonClientJava{
         canBeResolved = true
     }
     commonResources{
@@ -12,6 +18,12 @@ configurations {
 }
 
 dependencies {
+    // Numen 是 Numen API 的插件:编译期只看得见瘦 api jar 里公开的那部分(见 numen/common/build.gradle)。瘦 jar 取 common 那份
+    // (Mojang 名),Fabric 的 intermediary 成品另有重映射,编译期用不着。
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly project(':ai')
+    compileOnly project(':agent')
+    compileOnly project(':ui')
     compileOnly(project(':numen:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
@@ -22,12 +34,17 @@ dependencies {
     // (它不发布)。Loom 的开发运行类路径上另外补一份(localRuntime 不进 POM);NeoForge 的开发运行靠模组的 sourceSet。
     compileOnly project(':pathing')
     commonJava project(path: ':numen:common', configuration: 'commonJava')
+    commonClientJava project(path: ':numen:common', configuration: 'commonClientJava')
     commonResources project(path: ':numen:common', configuration: 'commonResources')
 }
 
+// 加载器把 common 的主源码与客户端源码一起编进自己的 jar:分源码集的保护发生在 common 的编译期(主源码集看不见客户端类),
+// 发行 jar 照旧全量——服务端不会去加载客户端类,因为主源码集里已经没有任何引用。
 tasks.named('compileJava', JavaCompile) {
     dependsOn(configurations.commonJava)
     source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
 }
 
 processResources {
@@ -38,11 +55,15 @@ processResources {
 tasks.named('javadoc', Javadoc).configure {
     dependsOn(configurations.commonJava)
     source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
 }
 
 tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonJava)
     from(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
     from({ project(':pathing').sourceSets.main.allSource })

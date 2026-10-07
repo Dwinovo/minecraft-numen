@@ -106,7 +106,7 @@ public final class FleeChain implements Task, Reflex {
     public TaskState tick(NumenPlayer companion) {
         if (!fleeing) {
             fleeing = true;
-            com.dwinovo.numen.api.Constants.LOG.info("[numen-flee] 扛不住了,跑 —— 身边 {} 只在追",
+            com.dwinovo.numen.Constants.LOG.info("[numen-flee] 扛不住了,跑 —— 身边 {} 只在追",
                     chasers(companion).size());
         }
         if (haven == null || companion.blockPosition().closerThan(haven, HAVEN_ARRIVED)) {
@@ -153,8 +153,8 @@ public final class FleeChain implements Task, Reflex {
         stopNav();
         fleeing = false;
         companion.controls().releaseAll();
-        com.dwinovo.numen.api.Constants.LOG.info("[numen-flee] 退不掉,就地还手");
-        com.dwinovo.numen.api.event.NumenEvents.reflex(companion, this,
+        com.dwinovo.numen.Constants.LOG.info("[numen-flee] 退不掉,就地还手");
+        com.dwinovo.numen.task.reflex.CoreReflexes.report(companion, this,
                 "tried to run from what was chasing me but found no way out — fighting back where I stand");
         return TaskState.RUNNING;
     }
@@ -165,7 +165,7 @@ public final class FleeChain implements Task, Reflex {
         haven = null;
         stopNav();
         companion.controls().releaseAll();
-        com.dwinovo.numen.api.event.NumenEvents.reflex(companion, this, stillBeaten
+        com.dwinovo.numen.task.reflex.CoreReflexes.report(companion, this, stillBeaten
                 ? "broke off and ran — nothing hostile is within " + (int) Menace.FLEE_DISTANCE + " blocks now"
                 : "ran from a fight I could not take; I can hold my own again");
     }

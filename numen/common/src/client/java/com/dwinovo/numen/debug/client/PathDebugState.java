@@ -1,6 +1,6 @@
-package com.dwinovo.numen.api.client.debug;
+package com.dwinovo.numen.debug.client;
 
-import com.dwinovo.numen.api.network.payload.PathDebugPayload;
+import com.dwinovo.numen.debug.PathDebugPayload;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,5 +40,10 @@ public final class PathDebugState {
 
     public static void clear() {
         LATEST.clear();
+    }
+
+    /** 客户端启动时调一次:把下行的调试快照接到本仓。 */
+    public static void install() {
+        PathDebugPayload.onClient = PathDebugState::accept;
     }
 }
