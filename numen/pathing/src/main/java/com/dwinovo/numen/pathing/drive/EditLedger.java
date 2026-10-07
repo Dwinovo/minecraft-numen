@@ -4,14 +4,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import com.dwinovo.numen.pathing.body.Effector;
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.pathing.plan.Permit;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 实际账:这次导航真的改了世界的哪几格。只收 {@link Effector} 真实交回的结果——挖碎的是哪一格、原来是什么;右键之后哪几格
+ * 实际账:这次导航真的改了世界的哪几格。只收 {@link Mouse} 真实交回的结果——挖碎的是哪一格、原来是什么;右键之后哪几格
  * 变成了什么——不记意图:放方块落进了高草那一格,记的就是那一格。调用方从这里取,不另记一本。
  *
  * <p>一格换了一种方块是放下(或倒下的水),同一种方块换了状态是开关(门、栅栏门、活板门)。每一笔带着规划给那一格的许可
@@ -44,8 +44,8 @@ public final class EditLedger {
     }
 
     /** 右键之后变了的几格;{@code planned} 是规划里这一下要动的那一格与它的许可。 */
-    void used(List<Effector.Change> changes, BlockPos planned, Permit permit) {
-        for (Effector.Change c : changes) {
+    void used(List<Mouse.Change> changes, BlockPos planned, Permit permit) {
+        for (Mouse.Change c : changes) {
             Permit p = c.pos().equals(planned) ? permit : null;
             if (c.before().getBlock() == c.after().getBlock()) {
                 entries.add(new Toggled(c.pos().immutable(), c.before(), c.after(), p));

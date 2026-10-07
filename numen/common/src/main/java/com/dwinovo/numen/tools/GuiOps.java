@@ -44,7 +44,7 @@ public final class GuiOps {
                          @Doc("The menu's numbers: progress, fuel, energy (meaning is GUI-specific; a furnace's are lit "
                                  + "time, lit duration, cook progress, cook total).") List<Integer> data,
                          @Doc("The block whose window it is, when a click on it opened it.") Optional<BlockAt> block)
-            implements Clicks.Pressed, Clicks.Hit {
+            implements Clicks.Pressed {
 
         /** 同一个界面,点开它的是那一格。 */
         public Window openedAt(BlockAt at) {

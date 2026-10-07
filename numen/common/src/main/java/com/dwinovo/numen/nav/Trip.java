@@ -1,5 +1,6 @@
 package com.dwinovo.numen.nav;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +28,7 @@ import net.minecraft.world.item.Item;
  * ({@link Survey})。交进来一条规划好的路就先照它走({@link #following}),走不下去按同样的目标与规格重搜。
  *
  * <h2>越过边界才问</h2>
- * 规格把要问主人的格算能走时({@link RouteSpec#consent}),那几格在路上照常规划;权限的拍板在动手那一刻:她的手({@link CompanionHands})
+ * 规格把要问主人的格算能走时({@link RouteSpec#consent}),那几格在路上照常规划;权限的拍板在动手那一刻:她的鼠标({@link com.dwinovo.numen.api.entity.Mouse})
  * 走到那一格要挖、要放时问权限层,还没得到主人点头就停下、交回要问的那一条。这一趟就扣在那里({@link #consentNeeded}),由任务发起征询;
  * 主人答应了,授权进了权限快照,照没走完的那截路接着走;不答应,任务以被拒收场。开走之前不整条问一遍:要问的格可能根本走不到,
  * 走到之前世界也可能变了。
@@ -186,7 +187,7 @@ public final class Trip {
      * 一次导航没走到:手走到一格要问主人的地方停下了,就扣住没走完的那截路、交出要问的那一条,等主人答复;其余照实收场。
      */
     private void conclude(Outcome outcome) {
-        if (outcome instanceof Outcome.Denied denied && denied.reason() instanceof CompanionHands.Unasked unasked) {
+        if (outcome instanceof Outcome.Denied denied && denied.reason() instanceof Mouse.Refusal.Asks unasked) {
             List<Route.Leg> rest = navigation.remaining();
             retire();
             seed = rest.isEmpty() ? null

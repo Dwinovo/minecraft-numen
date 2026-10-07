@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.ArrayList;
@@ -8,7 +9,6 @@ import java.util.Set;
 
 import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
@@ -29,7 +29,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
-import net.minecraft.world.phys.BlockHitResult;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -338,27 +337,17 @@ public class AlterGameTests {
         t.fill(3, 1, 5, 3, 2, 5, Blocks.AIR);
         TestBody body = t.body(3, 1, 5);
         List<String> violations = new ArrayList<>();
-        t.hands = hands -> new Effector() {
+        body.mouse(new Mouse(body) {
             @Override
-            public Strike dig(BlockHitResult hit) {
+            public Strike dig() {
                 Set<BlockPos> supports = Supports.of(body);
-                Strike strike = hands.dig(hit);
+                Strike strike = super.dig();
                 if (strike instanceof Strike.Broke broke && supports.equals(Set.of(broke.pos()))) {
                     violations.add(t.rel(broke.pos()));
                 }
                 return strike;
             }
-
-            @Override
-            public void release() {
-                hands.release();
-            }
-
-            @Override
-            public Use use(BlockHitResult hit) {
-                return hands.use(hit);
-            }
-        };
+        });
         t.go(body, Goals.at(t.at(11, 1, 5)), NATURAL).within(1100).arrives().then(r -> {
             if (dug(r).size() < 16) {
                 throw new GameTestAssertException("应当挖一条隧道过去:" + dug(r));
@@ -405,7 +394,7 @@ public class AlterGameTests {
         wall(t, 8, 3, Blocks.STONE, -1);
         t.set(8, 1, 5, Blocks.CRAFTING_TABLE);
         TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.use(t.level, com.dwinovo.numen.pathing.body.Snapshots.of(body).stats(), t.at(8, 1, 5)), NATURAL)
+        t.go(body, Goals.use(t.level, com.dwinovo.numen.pathing.api.Snapshots.of(body).stats(), t.at(8, 1, 5)), NATURAL)
                 .within(400).arrives().then(r -> {
                     if (!t.state(8, 1, 5).is(Blocks.CRAFTING_TABLE) || !dug(r).isEmpty()) {
                         throw new GameTestAssertException("动了要去用的工作台:" + r.report.ledger().entries());

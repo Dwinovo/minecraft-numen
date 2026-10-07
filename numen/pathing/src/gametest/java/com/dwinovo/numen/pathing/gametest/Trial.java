@@ -17,8 +17,6 @@ import com.dwinovo.numen.pathing.api.PlanResult;
 import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
-import com.dwinovo.numen.pathing.body.Effector;
-import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
@@ -73,8 +71,6 @@ final class Trial {
     Materials materials = Materials.NONE;
     TerrainPolicy terrain = TerrainPolicy.ALLOW_ALL;
     Threats threats = Threats.NONE;
-    /** 包在身体的原版两只手外面的一层;默认不包。 */
-    java.util.function.UnaryOperator<Effector> hands = h -> h;
 
     Trial(GameTestHelper helper) {
         this.helper = helper;
@@ -225,7 +221,7 @@ final class Trial {
 
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(body, new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
+        return Navigator.of(body, new Ports(terrain, materials, threats));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */

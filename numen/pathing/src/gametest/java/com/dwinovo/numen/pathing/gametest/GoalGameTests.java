@@ -7,14 +7,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
@@ -144,7 +142,7 @@ public class GoalGameTests {
             }
             Sight.Trace seen = sees(r, furnace);
             r.body.look().at(seen.point());
-            BlockHitResult hit = Crosshair.on(r.body, furnace);
+            BlockHitResult hit = r.body.mouse().on(furnace);
             if (hit == null || !r.body.gameMode.useItemOn(r.body, t.level, ItemStack.EMPTY, InteractionHand.MAIN_HAND,
                     hit).consumesAction() || !(r.body.containerMenu instanceof FurnaceMenu)) {
                 throw new GameTestAssertException("打不开熔炉:" + hit + " " + r.body.containerMenu);

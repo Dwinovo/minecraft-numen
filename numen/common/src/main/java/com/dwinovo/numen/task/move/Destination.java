@@ -11,7 +11,7 @@ import com.dwinovo.numen.route.Stop;
 import com.dwinovo.numen.route.Target;
 import com.dwinovo.numen.task.dig.DigTaskRecord;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;

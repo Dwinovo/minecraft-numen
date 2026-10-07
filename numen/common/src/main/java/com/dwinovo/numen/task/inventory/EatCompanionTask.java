@@ -10,7 +10,6 @@ import com.dwinovo.numen.act.Interaction;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -62,8 +61,8 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
         // Take the food in hand (the precondition guarantees she carries it), then start a native held use with
         // that hand. The use() call decides whether eating begins (e.g. full hunger on non-always-eat food won't
         // start) — we read the outcome on completion.
-        InteractionHand hand = player.hotbar().grip(r.item).hand();
-        eat = Interaction.useInAir(player, hand, Interaction.Timing.hold());
+        player.hotbar().grip(r.item);
+        eat = Interaction.useInAir(player, Interaction.Timing.hold());
     }
 
     @Override

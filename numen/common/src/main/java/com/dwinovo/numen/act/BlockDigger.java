@@ -3,11 +3,11 @@ package com.dwinovo.numen.act;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-import com.dwinovo.numen.nav.CompanionHands;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.BodyAction;
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Effector.Strike;
+import com.dwinovo.numen.api.entity.Mouse.Strike;
+import com.dwinovo.numen.pathing.plan.ToolChoice;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.api.permission.Verdict;
 
@@ -19,7 +19,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 挖掘执行({@code work dig},建造清场也交给它)挖一格时怎么挖:转过去看着它、把挖它最快的那件拿到手上、按住左键直到它碎。
- * 破坏方块只有一条路,就是她身上那双手({@link CompanionHands}:原版的挖掘循环外面套着权限层)——导航路上挖、挖掘执行、
+ * 破坏方块只有一条路,就是她的鼠标({@link NumenPlayer#mouse}:原版的挖掘循环外面套着权限层)——导航路上挖、挖掘执行、
  * {@code use block} 左键用的是同一双手,所以每一格动手之前都过权限层,被拒的格一下都不挥,报 {@link DigResult#REFUSED};
  * 服务端退回的(别的模组取消了破坏、出生点保护、冒险模式)同样报被拒,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把
  * 没挖掉的方块报成挖掉了。创造模式一下就碎、生存模式按工具算时间,是原版的手自己分的。
@@ -43,7 +43,7 @@ public final class BlockDigger {
 
     /** 正在挖的那一格;没在挖为 null。 */
     public BlockPos current() {
-        return CompanionHands.of(player).pressing();
+        return player.mouse().pressing();
     }
 
     /**
@@ -106,31 +106,30 @@ public final class BlockDigger {
                 return DigResult.NO_SHOT;
             }
             player.look().at(line.point());
-            BlockPos blocker = Crosshair.pick(player) instanceof BlockHitResult hit
+            BlockPos blocker = player.mouse().pick() instanceof BlockHitResult hit
                     && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
             if (blocker == null || blocker.equals(target) || !mayClear.test(blocker)) {
                 return DigResult.NO_SHOT;
             }
             effective = blocker;
         }
-        BlockHitResult hit = Crosshair.on(player, effective);
-        if (hit == null) {
+        if (player.mouse().on(effective) == null) {
             return DigResult.NO_SHOT;
         }
-        CompanionHands hands = CompanionHands.of(player);
-        if (!effective.equals(hands.pressing())) {
+        if (!effective.equals(player.mouse().pressing())) {
             // 换了一格挖:先把挖它最快的那件拿到手上(与寻路给挖掘定价用的是同一份挑法)
-            hands.takeToolFor(player.level().getBlockState(effective)).ifPresent(told);
+            new ToolChoice(Snapshots.of(player)).take(player.level().getBlockState(effective), player.hotbar()).ifPresent(told);
         }
-        Strike strike = hands.dig(hit);
+        Strike strike = player.mouse().dig();
         return switch (strike) {
             case Strike.Swinging swinging -> DigResult.PROGRESSING;
+            case Strike.Missed missed -> DigResult.NO_SHOT;
             case Strike.Broke broke -> {
                 lastBroken = new Broken(broke.pos(), broke.before());
                 yield broke.pos().equals(target) ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
             }
             case Strike.Refused refused -> {
-                Verdict verdict = com.dwinovo.numen.nav.CompanionHands.verdict(refused.reason());
+                Verdict verdict = refused.reason().verdict();
                 refusal = verdict != null ? verdict : Verdict.deny(SERVER_REFUSED);
                 yield DigResult.REFUSED;
             }
@@ -139,6 +138,6 @@ public final class BlockDigger {
 
     /** 松开左键:正在挖的那一格放下,进度清零。 */
     public void cancel() {
-        CompanionHands.of(player).release();
+        player.mouse().release();
     }
 }

@@ -1,12 +1,11 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.dwinovo.numen.pathing.body.Effector;
-import com.dwinovo.numen.pathing.body.PlayerHands;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -14,11 +13,12 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 /**
- * 看着身体的手挖:每一格从哪一刻开挖(左键按下去、原版开始累加进度)、哪一刻碎、开挖时手上是什么、眼睛在不在水里、脚着不着地、
- * 原版这一下每刻的进度是多少,以及这一格一共开挖了几次(中途换靶、被当成换了工具,都会重开)。包在身体原版的两只手外面,
- * 不改它们做的任何事。
+ * 看着身体的鼠标挖:每一格从哪一刻开挖(左键按下去、原版开始累加进度)、哪一刻碎、开挖时手上是什么、眼睛在不在水里、脚着不着地、
+ * 原版这一下每刻的进度是多少,以及这一格一共开挖了几次(中途换靶、被当成换了工具,都会重开)。派生一个鼠标换在身体上,
+ * 不改原版的鼠标做的任何事。
  */
 final class DigWatch {
 
@@ -112,12 +112,14 @@ final class DigWatch {
         }
     }
 
-    /** 包在 {@code hands} 外面。 */
-    Effector wrap(Effector hands) {
-        PlayerHands inner = (PlayerHands) hands;
-        return new Effector() {
+    /** 把看着的鼠标换在身体上。 */
+    void install() {
+        body.mouse(new Mouse(body) {
             @Override
-            public Strike dig(BlockHitResult hit) {
+            public Strike dig() {
+                if (!(pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+                    return super.dig();
+                }
                 BlockPos pos = hit.getBlockPos().immutable();
                 BlockState state = body.level().getBlockState(pos);
                 float progress = state.getDestroyProgress(body, body.level(), pos);
@@ -125,7 +127,7 @@ final class DigWatch {
                 ItemStack tool = hand.copy();
                 boolean eyeInWater = body.isEyeInFluid(FluidTags.WATER);
                 boolean grounded = body.onGround();
-                Strike strike = inner.dig(hit);
+                Strike strike = super.dig();
                 long now = body.level().getGameTime();
                 Dig ongoing = pos.equals(current) ? digs.get(pos) : null;
                 if (ongoing != null) {
@@ -135,7 +137,7 @@ final class DigWatch {
                     ongoing.soaked += eyeInWater ? 1 : 0;
                 }
                 // 手换到了这一格上开始累加进度,或秒破的当场碎了
-                BlockPos pressing = inner.pressing();
+                BlockPos pressing = pressing();
                 boolean instant = strike instanceof Strike.Broke broke && broke.pos().equals(pos) && !pos.equals(current);
                 boolean restarted = ongoing != null && pos.equals(pressing)
                         && !ItemStack.isSameItemSameComponents(hand, ongoing.hand);
@@ -169,14 +171,9 @@ final class DigWatch {
 
             @Override
             public void release() {
-                inner.release();
-                current = inner.pressing();
+                super.release();
+                current = pressing();
             }
-
-            @Override
-            public Use use(BlockHitResult hit) {
-                return inner.use(hit);
-            }
-        };
+        });
     }
 }

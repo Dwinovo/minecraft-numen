@@ -164,6 +164,29 @@ public class InteractGameTests {
         });
     }
 
+    /** 右键一个有交易的村民:打开了交易界面,numen.use.entity 和 use.block 一样交回那个界面(#118 同一类:点实体的声明也要有"打开界面")。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void use_entity_on_a_villager_hands_back_the_trade_window(GameTestHelper helper) {
+        net.minecraft.world.entity.npc.Villager villager = net.minecraft.world.entity.EntityType.VILLAGER.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.setNoAi(true);
+        villager.setVillagerData(villager.getVillagerData()
+                .setProfession(net.minecraft.world.entity.npc.VillagerProfession.FARMER));
+        helper.getLevel().addFreshEntity(villager);
+        NumenPlayer companion = spawnAt(helper, "gametest_trader", new BlockPos(6, 2, 8), false);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+        ToolRun press = lua(companion, "numen.use.entity(" + villager.getId() + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(press.done(), "use entity has not finished");
+            helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu
+                            && press.reply().contains("\"menu\""),
+                    "use entity did not hand back the trade window: " + press.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.to(…, {arrive = "use"}),那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {

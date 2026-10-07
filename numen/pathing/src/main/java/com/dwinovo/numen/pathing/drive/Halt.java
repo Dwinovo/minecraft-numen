@@ -18,7 +18,7 @@ public sealed interface Halt {
     /** 一步走不下去,重搜也绕不过去,或同一步几次都走不下去。 */
     record Blocked(Blockage blockage) implements Halt {}
 
-    /** 动手被拒:{@code reason} 是拒绝方({@link com.dwinovo.numen.pathing.body.Effector})自己的理由。 */
+    /** 动手被拒:{@code reason} 是拒绝方({@link com.dwinovo.numen.api.entity.Mouse.Refusal})自己的理由,模块不解读。 */
     record Denied(BlockPos cell, Object reason) implements Halt {}
 
     /** 到了,但目标要求看得见的那一格看不见。 */

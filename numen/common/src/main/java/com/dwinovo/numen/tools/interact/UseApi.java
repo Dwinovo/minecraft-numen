@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.tools.BlockActionOps;
 import com.dwinovo.numen.tools.Clicks;
-import com.dwinovo.numen.tools.GuiOps;
 import com.dwinovo.numen.tools.SleepOps;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
@@ -104,7 +103,8 @@ public final class UseApi {
                            Optional<Item> item,
                            @Doc("Hold sneak while pressing.") @Omitted("press standing") Optional<Boolean> sneak) {}
 
-    @Fn("Right-click an entity within reach and in sight of where you stand.")
+    @Fn("Right-click an entity within reach and in sight of where you stand. When it opens a window (a villager's trade) "
+            + "it returns that Window.")
     @Example("numen.use.entity(812, {item = \"minecraft:shears\"})")
     @Example("numen.use.entity(812, {sneak = true})")
     @Note("It does NOT travel: an entity farther than your reach, or behind a wall, fails with where it is and the "
@@ -112,7 +112,7 @@ public final class UseApi {
     @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; a plan with mode = \"boat\" "
             + "steers it, numen.move.dismount() steps off. Never click your own vehicle again.")
     @SeeAlso({"numen.use.block", "numen.use.hit"})
-    public static Pending<Clicks.EntityClicked> entity(ServerCall call, OnEntity args) {
+    public static Pending<Clicks.Pressed> entity(ServerCall call, OnEntity args) {
         return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, idOf(call, args.entity()),
                 holdTicks(args.hold()), args.item().orElse(null), args.sneak().orElse(false)));
     }
@@ -131,18 +131,12 @@ public final class UseApi {
     @Note("Hitting your owner's blocks, pets, named mobs or villagers asks your owner first; the call waits for the "
             + "answer.")
     @SeeAlso({"numen.use.block", "numen.use.entity"})
-    public static Pending<Clicks.Hit> hit(ServerCall call, Hit args) {
+    public static Pending<Clicks.Pressed> hit(ServerCall call, Hit args) {
         CellOrEntity target = args.target();
-        if (target.cell() == null) {
-            return call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, idOf(call, target.entity()), 0, null,
-                    false));
-        }
-        // 点一格和右键共用一件活,它交回的类型是 Pressed(Window | Clicked);这里按类型逐种接成 Hit
-        return call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
-                .then(pressed -> switch (pressed) {
-                    case GuiOps.Window window -> window;
-                    case Clicks.Clicked clicked -> clicked;
-                });
+        return target.cell() != null
+                ? call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
+                : call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, idOf(call, target.entity()), 0, null,
+                        false));
     }
 
     /** 点名的那只按运行期编号认;按 UUID 写的(重启后再跑)换成它此刻的编号,不在了照编号交给活,由活如实说它不在。 */

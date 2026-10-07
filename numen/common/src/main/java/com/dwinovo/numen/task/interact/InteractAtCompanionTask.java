@@ -12,7 +12,6 @@ import com.dwinovo.numen.nav.NavText;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.move.GotoReminders;
 import com.dwinovo.numen.task.base.InReachTask;
-import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
@@ -24,7 +23,7 @@ import java.util.List;
  * {@code numen.use.block} / {@code use item} on the player body — the point-aimed native interaction (BLOCK + AIR).
  * It does not travel: the body must already be within reach of the aim (if one is given).
  *
- * <p>左键是一次纯按键:朝那一格的中心看过去,准星落在谁就按谁({@link Crosshair#pick}),手上是什么就用什么,点一下就松手
+ * <p>左键是一次纯按键:朝那一格的中心看过去,准星落在谁就按谁({@link NumenPlayer#mouse}),手上是什么就用什么,点一下就松手
  * (一下就碎的方块碎了,别的只是开了个头)——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
  * 挖东西(挑工具、清开视线、捡掉落)是 {@code numen.work.dig} 的事。
  *
@@ -87,7 +86,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
                         button() == Interaction.Button.USE && clickable ? player.look().use(r.aim) : null;
                 player.look().at(seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
             }
-            HitResult hit = Crosshair.pick(player);
+            HitResult hit = player.mouse().pick();
             if (r.aim != null && (button() == Interaction.Button.ATTACK || clickable)) {
                 landedElsewhere = elsewhere(hit);
             }
@@ -162,7 +161,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
 
     /**
      * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
-     * 手里的东西,两只手里会往世界里放东西的({@link Interaction#placementOf})也一并算上。
+     * 手里的东西,两只手里会往世界里放东西的({@link com.dwinovo.numen.api.entity.Mouse#placing})也一并算上。
      */
     private List<com.dwinovo.numen.api.permission.Action> proposedActions(HitResult hit) {
         boolean left = button() == Interaction.Button.ATTACK;
@@ -174,7 +173,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             List<com.dwinovo.numen.api.permission.Action> out = new java.util.ArrayList<>();
             out.add(com.dwinovo.numen.api.permission.Action.useBlock(bh.getBlockPos(), state));
             for (var hand : net.minecraft.world.InteractionHand.values()) {
-                var placing = Interaction.placementOf(player.level(), bh, player.getItemInHand(hand));
+                var placing = com.dwinovo.numen.api.entity.Mouse.placing(player.level(), bh, player.getItemInHand(hand));
                 if (placing != null) {
                     out.add(placing);
                 }
@@ -265,14 +264,10 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         // 点开的那个工位(与它确切的位置,比瞄的那一格准):她只记得住我们告诉过她的地方
         java.util.Optional<com.dwinovo.numen.api.sdk.BlockAt> station = activatedBlock == null ? java.util.Optional.empty()
                 : java.util.Optional.of(new com.dwinovo.numen.api.sdk.BlockAt(activatedBlockId, activatedBlock));
-        boolean opened = r.button == MouseButton.RIGHT && player.containerMenu != player.inventoryMenu;
-        if (opened) {
-            com.dwinovo.numen.tools.GuiOps.Window window = com.dwinovo.numen.tools.GuiOps.window(player);
-            return station.map(window::openedAt).orElse(window);
-        }
-        return new com.dwinovo.numen.tools.Clicks.Clicked(r.button == MouseButton.LEFT
-                ? com.dwinovo.numen.tools.Clicks.Button.LEFT : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
-                java.util.Optional.ofNullable(r.aim), station, java.util.List.copyOf(changes));
+        return com.dwinovo.numen.tools.Clicks.result(player, interaction != null && interaction.opened(),
+                r.button == MouseButton.LEFT ? com.dwinovo.numen.tools.Clicks.Button.LEFT
+                        : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
+                r.aim, null, station, changes);
     }
 
     @Override

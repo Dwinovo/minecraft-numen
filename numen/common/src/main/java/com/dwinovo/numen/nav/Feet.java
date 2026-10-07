@@ -1,6 +1,6 @@
 package com.dwinovo.numen.nav;
 
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Goal;

@@ -9,7 +9,6 @@ import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Interaction;
 import com.dwinovo.numen.task.base.InReachTask;
 import com.dwinovo.numen.task.base.Precondition;
-import com.dwinovo.numen.pathing.body.Crosshair;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -26,7 +25,7 @@ import java.util.List;
  * {@code numen.move.to} to copy. LEFT+hold repeats the native attack until the hold ends, the target dies, or the task
  * times out.
  */
-public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.tools.Clicks.EntityClicked> {
+public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.tools.Clicks.Pressed> {
 
     private Entity entity;
     private Interaction interaction;
@@ -112,7 +111,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
         // (e.g. not another entity wandered into the exact line) before pressing.
         player.look().at(entity.getEyePosition());
-        HitResult hit = Crosshair.pick(player);
+        HitResult hit = player.mouse().pick();
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
                 && ((EntityHitResult) hit).getEntity() == entity;
         if (!onTarget) {
@@ -206,11 +205,15 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         super.cleanup();
     }
 
+    /**
+     * 右键打开了一个界面(交易、模组机器),交回的就是那个 Window,和点一格同一种结果;别的点击交回按了哪个键、点了哪只实体、变了什么。
+     */
     @Override
-    protected com.dwinovo.numen.tools.Clicks.EntityClicked value() {
-        return new com.dwinovo.numen.tools.Clicks.EntityClicked(r.button == MouseButton.LEFT
-                ? com.dwinovo.numen.tools.Clicks.Button.LEFT : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
-                r.entityId, java.util.List.copyOf(changes));
+    protected com.dwinovo.numen.tools.Clicks.Pressed value() {
+        return com.dwinovo.numen.tools.Clicks.result(player, interaction != null && interaction.opened(),
+                r.button == MouseButton.LEFT ? com.dwinovo.numen.tools.Clicks.Button.LEFT
+                        : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
+                null, r.entityId, java.util.Optional.empty(), changes);
     }
 
     @Override

@@ -1,67 +1,49 @@
 package com.dwinovo.numen.act;
 
-
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
-import com.dwinovo.numen.nav.CompanionHands;
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Effector;
-import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Verdict;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.BucketItem;
-import net.minecraft.world.item.FireChargeItem;
-import net.minecraft.world.item.FlintAndSteelItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * The most-native interaction primitive for a fake-player body:
- * aim the eyes at a target, then "press"
+ * The most-native interaction primitive for a fake-player body: look at a target, then press
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
  * higher-level action is a thin layer on top: mining = ATTACK a block (hold),
  * {@code attack} = ATTACK an entity, eat/bow = hold USE in the air.
  *
- * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
+ * <p>按键本身是她的鼠标({@link NumenPlayer#mouse})的事,这里只管"什么时候按、按几次、按多久"和被拒、目标没了怎么说:
  * <ul>
- *   <li>ATTACK + block  → the body's own hands ({@link CompanionHands}: the vanilla dig loop behind the permission
- *       layer; creative insta / survival timed) on the block the crosshair lands on, with whatever is held</li>
+ *   <li>ATTACK + block  → {@link Mouse#dig} on the block the crosshair lands on (the vanilla dig loop behind the permission
+ *       layer; creative insta / survival timed), with whatever is held</li>
  *   <li>ATTACK + entity → {@code player.attack} (cooldown-scaled damage / sweep / knockback)</li>
- *   <li>USE + block     → {@code gameMode.useItemOn} (vanilla place / activate), both hands tried</li>
- *   <li>USE + entity    → {@code entity.interact} then {@code player.interactOn} (trade / breed / mount), both hands</li>
- *   <li>USE + air       → {@code gameMode.useItem} (+ a hold for food / bow)</li>
+ *   <li>USE + block / entity → {@link Mouse#use}: the one right click, on whatever the crosshair lands on</li>
+ *   <li>USE + air       → {@link Mouse#useItem} (+ a hold for food / bow)</li>
  * </ul>
  *
- * <p>右键方块总是按一个已经解析好的命中按:准星落点({@link #forHit},准星由寻路模块的
- * {@code Crosshair} 拾取),或调用方指定的那一面({@link #useBlock}),这里不另打射线。
- * 准星语义的 USE 另有一步收尾:方块/实体没吃掉点击时落到物品自用——真客户端的完整右键
- * 顺序,见 {@link #fallthroughUse}。指定命中面的外科原语没有这一步。
+ * <p>右键按下去总是对准星落着的东西:调用方给的命中({@link #forHit})只是转过去看哪儿,这里不另打射线、不替准星选目标。
+ * 准星语义的 USE 另有一步收尾:方块/实体没吃掉点击时落到物品自用(真客户端的完整右键顺序),身体约束物品时由任务层把它关掉。
  *
  * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
- * interval (auto-click a button, grind a mob); {@link Timing#hold()} holds the
+ * interval (grind a mob); {@link Timing#hold()} holds the
  * button until the action self-completes (a block breaks, food finishes);
  * {@link Timing#hold(int)} holds up to N ticks then releases (draw + loose a bow).
+ * 右键按住是每刻都按,两次按下的间隔(原版的 4 刻)由鼠标管。
  *
  * <p>Stateful + ticked (like {@link BlockDigger} / {@code PlayerNav}). The caller
- * walks the body within reach first; this only aims and presses.
+ * walks the body within reach first; this only looks and presses.
  */
 public final class Interaction {
 
     public enum Status { RUNNING, DONE, FAILED }
     public enum Button { ATTACK, USE }
-
-    /** The two hands USE tries, main first (vanilla interaction tries both). */
-    private static final InteractionHand[] HANDS = {InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND};
 
     /**
      * When and how often the button fires
@@ -107,16 +89,13 @@ public final class Interaction {
     private final Button button;
     private final BlockPos block;     // non-null → block target
     private final Entity entity;      // non-null → entity target
-    private final InteractionHand hand;
     private final Timing timing;
 
-    private BlockHitResult presetHit; // the block hit already resolved (crosshair, or the face the caller chose)
+    /** 按之前朝哪一点看:方块目标是命中的那一点,实体目标是它的眼睛;朝空气按没有。 */
+    private final Vec3 lookAt;
     /**
-     * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用
-     * ({@code gameMode.useItem})——真客户端就是这个顺序(useItemOn 不消费就发
-     * ServerboundUseItemPacket),桶找水、船找水面、掷物出手都住在那条路上。
-     * 外科原语(指定命中面的放置、开台)不设兜底:那里落空就该落空,兜底会把
-     * 手里的东西扔出去。false = 兜底关闭或被任务层否决(身体约束物品)。
+     * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用({@code gameMode.useItem})——桶找水、船找
+     * 水面、掷物出手都住在那条路上。false = 兜底关闭或被任务层否决(身体约束物品)。
      */
     private boolean itemFallthrough;
     /** 按住潜行再点({@code --sneak}),见 {@link #crouched}。 */
@@ -128,17 +107,16 @@ public final class Interaction {
     private boolean started;          // USE+air: the hold has begun
     private int held;                 // USE+air: ticks held so far
     private boolean hardFail;         // a fire hit an unrecoverable error
+    private boolean opened;           // a press opened a window (a chest, a trade, a machine)
     private String failReason = "interaction failed";
     private FailureType failType = FailureType.UNKNOWN;
-    private String lastUseOutcome = "not fired";
 
-    private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
-                        InteractionHand hand, Timing timing) {
+    private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity, Vec3 lookAt, Timing timing) {
         this.player = player;
         this.button = button;
         this.block = block == null ? null : block.immutable();
         this.entity = entity;
-        this.hand = hand;
+        this.lookAt = lookAt;
         this.timing = timing;
     }
 
@@ -149,10 +127,8 @@ public final class Interaction {
      * 创造一下就碎,生存按手上的东西算时间,都是原版的手自己分。
      */
     public static Interaction attackBlock(NumenPlayer p, BlockHitResult hit, boolean hold) {
-        Interaction i = new Interaction(p, Button.ATTACK, hit.getBlockPos(), null, InteractionHand.MAIN_HAND,
+        return new Interaction(p, Button.ATTACK, hit.getBlockPos(), null, hit.getLocation(),
                 hold ? Timing.hold() : Timing.once());
-        i.presetHit = hit;
-        return i;
     }
 
     /** Left-click an entity once (cooldown-gated native attack). */
@@ -161,41 +137,20 @@ public final class Interaction {
     }
 
     public static Interaction attackEntity(NumenPlayer p, Entity target, Timing timing) {
-        return new Interaction(p, Button.ATTACK, null, target, InteractionHand.MAIN_HAND, timing);
+        return new Interaction(p, Button.ATTACK, null, target, target.getEyePosition(), timing);
     }
 
-    /** Right-click a pre-resolved block hit — placement / precise activation supplies
-     *  the exact support face, and this presses against {@code hit}. */
-    public static Interaction useBlock(NumenPlayer p, BlockHitResult hit, InteractionHand hand) {
-        Interaction i = new Interaction(p, Button.USE, hit.getBlockPos(), null, hand, Timing.once());
-        i.presetHit = hit;
-        return i;
-    }
-
-    /**
-     * 右键落在 {@code hit} 这一面、手里是 {@code stack} 时,会不会往世界里放东西、放在哪:方块物品贴着
-     * 命中面放进可替换的格,桶倒出或舀起液体,打火石与火焰弹点起火——都是一次放置,交权限层裁决。
-     * 不往世界里放东西时为 null。按下右键的各处(导航执行、use block)都按这一份判。
-     */
-    public static Action placementOf(Level level, BlockHitResult hit, ItemStack stack) {
-        BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());
-        BlockState before = level.getBlockState(placeAt);
-        Item item = stack.getItem();
-        boolean places = (before.canBeReplaced() && item instanceof BlockItem)
-                || item instanceof BucketItem
-                || item instanceof FlintAndSteelItem
-                || item instanceof FireChargeItem;
-        return places ? Action.place(placeAt, before, item) : null;
+    /** 右键准星落着的那一格:转过去看 {@code hit} 那一点再按一下。 */
+    public static Interaction useBlock(NumenPlayer p, BlockHitResult hit) {
+        return new Interaction(p, Button.USE, hit.getBlockPos(), null, hit.getLocation(), Timing.once());
     }
 
     /** Right-click in the air with the held item, on the given {@link Timing}
      *  ({@code hold()} eats food / {@code hold(n)} draws and looses a bow). */
-    public static Interaction useInAir(NumenPlayer p, InteractionHand hand, Timing timing) {
-        return new Interaction(p, Button.USE, null, null, hand, timing);
+    public static Interaction useInAir(NumenPlayer p, Timing timing) {
+        return new Interaction(p, Button.USE, null, null, null, timing);
     }
 
-    /** vanilla {@code Minecraft.rightClickDelay} — held right-click re-fires this often. */
-    private static final int RIGHT_CLICK_DELAY = 4;
     /** A "hold forever" fire count; the owning task stops us after hold_ticks / on completion. */
     private static final int CONTINUOUS = 1_000_000;
 
@@ -206,14 +161,14 @@ public final class Interaction {
      *   <li>ATTACK·BLOCK → hit it (tap = one press, which breaks only what breaks at once; hold = till the block is
      *       gone);</li>
      *   <li>ATTACK·ENTITY → hit (tap = one cooldown-gated hit; hold = keep hitting);</li>
-     *   <li>USE·BLOCK → activate (tap once; hold re-clicks every rightClickDelay — modded crank);</li>
+     *   <li>USE·BLOCK → activate (tap once; hold re-clicks as the mouse allows — modded crank);</li>
      *   <li>USE·ENTITY → interact (tap once; hold re-clicks);</li>
      *   <li>USE·AIR → useItem (tap = throw; hold = charge/eat up to ticks, or self-complete);</li>
      *   <li>ATTACK·AIR → {@code null} (left-click air does nothing).</li>
      * </ul>
-     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used as-is (the
-     * native raytrace already resolved the exact face/point — no re-raycast). The caller drives
-     * the returned object to completion and enforces the hold duration.
+     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. {@code hit} says where to look; what gets pressed is whatever the
+     * crosshair lands on once she looks there. The caller drives the returned object to completion and enforces the
+     * hold duration.
      *
      * @param itemFallthrough USE 的准星兜底开关(见 {@link #itemFallthrough}):方块/实体
      *                        没吃掉点击就落到物品自用。任务层拿它挡身体约束物品——
@@ -238,10 +193,8 @@ public final class Interaction {
                 if (button == Button.ATTACK) {
                     return attackBlock(p, bh, hold);
                 }
-                Interaction i = new Interaction(p, Button.USE, bh.getBlockPos(), null,
-                        InteractionHand.MAIN_HAND,
-                        hold ? Timing.repeat(CONTINUOUS, RIGHT_CLICK_DELAY) : Timing.once());
-                i.presetHit = bh;   // use the robust native hit, no re-raycast
+                Interaction i = new Interaction(p, Button.USE, bh.getBlockPos(), null, bh.getLocation(),
+                        hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 i.itemFallthrough = itemFallthrough;
                 return i;
             }
@@ -250,8 +203,8 @@ public final class Interaction {
                 if (button == Button.ATTACK) {
                     return attackEntity(p, e, hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 }
-                Interaction i = new Interaction(p, Button.USE, null, e, InteractionHand.MAIN_HAND,
-                        hold ? Timing.repeat(CONTINUOUS, RIGHT_CLICK_DELAY) : Timing.once());
+                Interaction i = new Interaction(p, Button.USE, null, e, e.getEyePosition(),
+                        hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 i.itemFallthrough = itemFallthrough;
                 return i;
             }
@@ -260,13 +213,18 @@ public final class Interaction {
                     return null;
                 }
                 Timing t = hold ? (holdTicks > 0 ? Timing.hold(holdTicks) : Timing.hold()) : Timing.once();
-                return useInAir(p, InteractionHand.MAIN_HAND, t);
+                return useInAir(p, t);
             }
         }
     }
 
     public String failReason() {
         return failReason;
+    }
+
+    /** 按下去的哪一下打开了一个界面(箱子、交易、模组机器)。 */
+    public boolean opened() {
+        return opened;
     }
 
     /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
@@ -316,23 +274,23 @@ public final class Interaction {
 
     /**
      * 左键一格:每刻朝按下时的那一点看着,准星还落在那一格上就按;准星被挡开了(有东西走进来)就等着,不去按挡着的。点一下
-     * ({@link Timing#once})等手缓过来、真按下去一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问),被拒只转述、
-     * 不换法子。
+     * ({@link Timing#once})等手缓过来、真按下去一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问,
+     * 门在鼠标里),被拒只转述、不换法子。
      */
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
         player.controls().stop();
-        player.look().at(presetHit.getLocation());
-        BlockHitResult hit = Crosshair.on(player, block);
-        if (hit == null) {
+        player.look().at(lookAt);
+        if (player.mouse().on(block) == null) {
             return Status.RUNNING;
         }
-        return switch (CompanionHands.of(player).dig(hit)) {
-            case Effector.Strike.Swinging swinging -> timing.hold || !swinging.pressed() ? Status.RUNNING
+        return switch (player.mouse().dig()) {
+            case Mouse.Strike.Swinging swinging -> timing.hold || !swinging.pressed() ? Status.RUNNING
                     : Status.DONE;
-            case Effector.Strike.Broke broke -> Status.DONE;
-            case Effector.Strike.Refused refused -> {
-                Verdict verdict = CompanionHands.verdict(refused.reason());
+            case Mouse.Strike.Broke broke -> Status.DONE;
+            case Mouse.Strike.Missed missed -> Status.RUNNING;
+            case Mouse.Strike.Refused refused -> {
+                Verdict verdict = refused.reason().verdict();
                 failReason = "cannot break that block: " + (verdict != null ? verdict.reason()
                         : BlockDigger.SERVER_REFUSED);
                 failType = FailureType.REFUSED;
@@ -347,13 +305,15 @@ public final class Interaction {
     private Status useAir() {
         player.controls().stop();
         if (!started) {
+            if (player.mouse().useItem() instanceof Mouse.Use.Waiting) {
+                return Status.RUNNING;                 // 上一下右键的缓手还没过,下一刻再按
+            }
             started = true;
-            player.gameMode.useItem(player, player.level(), player.getItemInHand(hand), hand);
             if (!timing.hold) return Status.DONE;      // single tap (throw / instant use)
         }
         if (!player.isUsingItem()) return Status.DONE; // e.g. food finished eating
         if (timing.maxHold > 0 && ++held >= timing.maxHold) {
-            player.releaseUsingItem();                 // e.g. loose the bow
+            player.mouse().stopUse();                  // e.g. loose the bow
             return Status.DONE;
         }
         return Status.RUNNING;
@@ -368,10 +328,10 @@ public final class Interaction {
         }
         boolean fired = switch (button) {
             case ATTACK -> fireAttackEntity();
-            case USE -> entity != null ? fireUseEntity() : fireUseBlock();
+            case USE -> fireUse();
         };
         if (hardFail) return Status.FAILED;
-        if (!fired) return Status.RUNNING;             // soft wait (attack cooldown not ready)
+        if (!fired) return Status.RUNNING;             // soft wait (attack cooldown / right-click delay not ready)
         if (++fires >= timing.limit) return Status.DONE;
         cooldown = timing.interval;
         return Status.RUNNING;
@@ -403,96 +363,40 @@ public final class Interaction {
         return true;
     }
 
-    private boolean fireUseBlock() {
-        player.controls().stop();
-        net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
-        BlockHitResult hit = presetHit;
-        player.look().at(hit.getLocation());
-        StringBuilder outcome = new StringBuilder();
-        for (InteractionHand h : HANDS) {
-            InteractionResult res = player.gameMode.useItemOn(
-                    player, player.level(), player.getItemInHand(h), h, hit);
-            String handName = h == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand";
-            if (res.consumesAction()) {
-                player.swing(h);
-                lastUseOutcome = "consumed (" + handName + "=" + res + ")";
-                MenuOrigin.pressed(player, menuBefore, hit.getBlockPos());
-                return true;
-            }
-            if (outcome.length() > 0) outcome.append(", ");
-            outcome.append(handName).append('=').append(res);
-        }
-        if (fallthroughUse()) {
-            return true;
-        }
-        // Nothing consumed (e.g. empty hand on a non-interactive block) — still a press.
-        lastUseOutcome = outcome.toString();
-        return true;
-    }
-
-    /**
-     * 准星 USE 的收尾一步:方块/实体都没吃掉点击时,把同一次按键落到物品自用——
-     * 与真客户端一致(useItemOn 不消费就发 ServerboundUseItemPacket → Item.use)。
-     * 桶、船、钓竿这类物品的行为全写在 Item.use 里,自带各自的流体射线,
-     * 所以准星根本不需要点中水。开关见 {@link #itemFallthrough}。
-     *
-     * @return true = 有一只手的物品吃掉了这次按键
-     */
-    private boolean fallthroughUse() {
-        if (!itemFallthrough) {
-            return false;
-        }
-        for (InteractionHand h : HANDS) {
-            if (player.gameMode.useItem(player, player.level(),
-                    player.getItemInHand(h), h).consumesAction()) {
-                player.swing(h);
-                lastUseOutcome = "consumed (item self-use, "
-                        + (h == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand") + ")";
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * The vanilla verdict of the most recent USE-on-block press: {@code "consumed (...)"}
-     * or the per-hand results (e.g. {@code "main_hand=FAIL, off_hand=PASS"}). A press that
-     * consumes can STILL have placed nothing (the item's own rules refused) — placement
-     * callers must verify the world afterwards, and this string is what they log when a
-     * press quietly did nothing.
-     */
-    public String lastUseOutcome() {
-        return lastUseOutcome;
-    }
-
-    private boolean fireUseEntity() {
-        if (entity == null || !entity.isAlive()) {
+    /** 右键方块或实体:转过去看着,按一下准星落着的东西。 */
+    private boolean fireUse() {
+        if (entity != null && !entity.isAlive()) {
             failReason = "the entity is gone";
             failType = FailureType.TARGET_LOST;
             hardFail = true;
             return false;
         }
         player.controls().stop();
-        player.look().at(entity.getEyePosition());
-        net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
-        for (InteractionHand h : HANDS) {
-            if (entity.interact(player, h).consumesAction()) {       // animals / villagers
-                MenuOrigin.pressed(player, menuBefore, null);
-                return true;
+        player.look().at(lookAt);
+        return switch (player.mouse().use(itemFallthrough)) {
+            case Mouse.Use.Waiting waiting -> false;
+            case Mouse.Use.Refused refused -> {
+                Verdict verdict = refused.reason().verdict();
+                failReason = "cannot use that: " + (verdict != null ? verdict.reason() : "the server would not let it happen");
+                failType = FailureType.REFUSED;
+                hardFail = true;
+                yield false;
             }
-            if (player.interactOn(entity, h).consumesAction()) {     // item frames / leads
-                MenuOrigin.pressed(player, menuBefore, null);
-                return true;
+            case Mouse.Use.Pressed pressed -> {
+                if (pressed.opened()) {
+                    opened = true;
+                    MenuOrigin.opened(player, pressed.hit() instanceof BlockHitResult hit
+                            && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null);
+                }
+                yield true;                            // a press with no effect is still a press
             }
-        }
-        fallthroughUse();          // 实体没吃掉点击:真客户端同样落到物品自用
-        return true;               // a press with no effect is still a press
+        };
     }
 
     /** Abandon any in-progress interaction (clears a dig overlay / releases a held use / lets go of sneak). */
     public void stop() {
-        if (button == Button.ATTACK && block != null) CompanionHands.of(player).release();
-        if (player.isUsingItem()) player.releaseUsingItem();
+        if (button == Button.ATTACK && block != null) player.mouse().release();
+        player.mouse().stopUse();
         player.controls().stop();
         if (sneak) player.controls().release(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
     }

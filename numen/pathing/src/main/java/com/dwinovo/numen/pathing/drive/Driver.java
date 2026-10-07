@@ -8,7 +8,6 @@ import java.util.Map;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls.Key;
-import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Materials;
@@ -135,9 +134,9 @@ public final class Driver {
      * @param seed    先照这条路走(调用方从候选里挑的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
      * @param passing 路过这个目标:走进去就算到了,不停稳
      */
-    public Driver(Body body, Effector hands, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
+    public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed, boolean passing) {
-        this.rig = new Rig(body, hands, terrain, materials, threats);
+        this.rig = new Rig(body, terrain, materials, threats);
         this.goal = goal;
         this.spec = spec;
         this.budget = budget;
@@ -237,7 +236,7 @@ public final class Driver {
         PathLog.debug("{} 暂停 {}", rig.who, PathLog.body(rig.entity));
         paused = true;
         rig.keys.releaseAll();
-        rig.hands.release();
+        rig.mouse.release();
     }
 
     /** 接着走:照留着的路线走下去,不重新搜。 */
@@ -254,7 +253,7 @@ public final class Driver {
             pending = null;
         }
         rig.keys.releaseAll();
-        rig.hands.release();
+        rig.mouse.release();
         if (state == State.RUNNING) {
             state = State.HALTED;
         }
@@ -370,7 +369,7 @@ public final class Driver {
             case Beat.Going going -> lookahead();
             case Beat.Blocked blocked -> fail(blocked.blockage());
             case Beat.Denied denied -> {
-                rig.hands.release();
+                rig.mouse.release();
                 halt(new Halt.Denied(denied.cell(), denied.reason()));
             }
         }
@@ -693,7 +692,7 @@ public final class Driver {
             pending.cancel();
             pending = null;
         }
-        rig.hands.release();
+        rig.mouse.release();
         legs.clear();
         cur = 0;
         complete = false;
@@ -710,7 +709,7 @@ public final class Driver {
         PathLog.info("{} 走不下去 {} 这一步 {} 第 {}/{} 次 -> {} {}", rig.who, PathLog.blockage(blockage), PathLog.step(m),
                 count, STRIKES, count >= STRIKES ? "收场" : "重搜", PathLog.body(rig.entity));
         if (count >= STRIKES) {
-            rig.hands.release();
+            rig.mouse.release();
             halt(new Halt.Blocked(blockage));
             return;
         }

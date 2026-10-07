@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Look;
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.entity.Physics;
 
 import com.mojang.authlib.GameProfile;
@@ -25,7 +26,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.level.GameType;
 
 /**
- * 夹具自己的假玩家,不是同伴:一具普通的服务端玩家,带一副键盘({@link Controls}),每刻在自己的实体刻里跑模块的物理步进
+ * 夹具自己的假玩家,不是同伴:一具普通的服务端玩家,带一副键盘({@link Controls})、视角、鼠标与快捷栏(同伴用的那几件,不过权限层),每刻在自己的实体刻里跑模块的物理步进
  * ({@link Physics#step}),别的什么也不做。它能走通就说明寻路模块不依赖宿主。
  *
  * <p>它只进世界、不进玩家列表(不"登录"):没有客户端,也就没有与服务器协商过任何模组的网络通道,登录时别的模组发来的
@@ -35,6 +36,7 @@ final class TestBody extends ServerPlayer implements Body {
 
     private final Controls controls = new Controls();
     private final Look look = new Look(this);
+    private Mouse mouse = new Mouse(this);
     private final Hotbar hotbar = new Hotbar(this);
 
     private TestBody(MinecraftServer server, ServerLevel level, GameProfile profile) {
@@ -72,6 +74,16 @@ final class TestBody extends ServerPlayer implements Body {
     @Override
     public Look look() {
         return look;
+    }
+
+    @Override
+    public Mouse mouse() {
+        return mouse;
+    }
+
+    /** 换一个鼠标:用例派生一个 {@link Mouse},包在原版的鼠标外面看它做了什么、或在它动手那一刻动世界。 */
+    void mouse(Mouse watching) {
+        this.mouse = watching;
     }
 
     @Override

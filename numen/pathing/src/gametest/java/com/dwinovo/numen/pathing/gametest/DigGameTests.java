@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
@@ -11,9 +12,7 @@ import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.api.entity.BodyAction;
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.PlayerHands;
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.Edit;
@@ -101,7 +100,8 @@ public class DigGameTests {
             throw new GameTestAssertException("一格也没挖碎");
         }
         for (DigWatch.Dig d : watch.broken()) {
-            int priced = DigTime.ticks(Snapshots.of(body).mining(), Snapshots.of(body).creative(), d.tool, d.state, d.eyeInWater, d.grounded);
+            var snapshot = Snapshots.of(body);
+            int priced = DigTime.ticks(snapshot.mining(), snapshot.creative(), d.tool, d.state, d.eyeInWater, d.grounded);
             if (Math.abs(d.ticks() - d.vanillaTicks()) > 1 || Math.abs(priced - d.vanillaTicks()) > 1) {
                 throw new GameTestAssertException("耗时对不上:" + d + " 定价 " + priced + " 全部 " + watch.broken());
             }
@@ -119,7 +119,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(0, new ItemStack(Items.WOODEN_SHOVEL));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
             List<DigWatch.Dig> broken = new ArrayList<>(watch.broken());
             broken.sort(java.util.Comparator.comparingLong(d -> d.startedAt));
@@ -151,7 +151,7 @@ public class DigGameTests {
         t.fill(8, 3, 11, 8, 3, 20, Blocks.GRAVEL);
         TestBody body = t.body(4, 1, 8);
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 8)), NATURAL).within(800).arrives().then(r -> {
             for (DigWatch.Dig d : watch.broken()) {
                 if (d.above.getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
@@ -173,7 +173,7 @@ public class DigGameTests {
         t.fill(8, 1, 14, 8, 2, 26, Blocks.LAVA);
         TestBody body = t.body(4, 1, 13);
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 13)), NATURAL).within(1100).arrives().then(r -> {
             if (watch.broken().isEmpty()) {
                 throw new GameTestAssertException("一格也没挖");
@@ -207,7 +207,7 @@ public class DigGameTests {
         body.getInventory().setItem(1, new ItemStack(Items.WOODEN_PICKAXE));
         body.getInventory().setItem(2, new ItemStack(Items.WOODEN_SHOVEL));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
             for (DigWatch.Dig d : watch.broken()) {
                 boolean right = d.state.is(Blocks.STONE) ? d.toolAtBreak.is(Items.WOODEN_PICKAXE)
@@ -229,7 +229,7 @@ public class DigGameTests {
         wall(t, 8, 3, Blocks.OAK_LOG);
         TestBody body = t.body(4, 1, 5);
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(600).arrives().then(r -> {
             vanillaTimed(watch, body);
             watch.eachStartedOnce();
@@ -251,7 +251,7 @@ public class DigGameTests {
         TestBody body = t.body(5, 1, 5);
         body.getInventory().setItem(0, new ItemStack(Items.IRON_SHOVEL));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         NavRequest request = NavRequest.to(Goals.at(t.at(11, 3, 5)), NATURAL);
         t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
             if (plan.candidates().isEmpty()) {
@@ -330,7 +330,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
             vanillaTimed(watch, body);
             watch.eachStartedOnce();
@@ -350,7 +350,7 @@ public class DigGameTests {
         pickaxe.set(DataComponents.DAMAGE, 1000);
         body.getInventory().setItem(0, pickaxe);
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(800)
                 .during(r -> {
                     if (watch.digging() && r.ticks % 5 == 0) {
@@ -374,7 +374,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
             if (watch.broken().size() != 8) {
                 throw new GameTestAssertException("应当挖开八格:" + watch.broken());
@@ -394,7 +394,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(0, new ItemStack(Items.WOODEN_PICKAXE));
         DigWatch watch = new DigWatch(body);
-        t.hands = watch::wrap;
+        watch.install();
         Chicken[] mob = {null};
         int[] shownAt = {-1};
         t.go(body, Goals.at(t.at(14, 1, 5)), NATURAL).within(1000)
@@ -438,7 +438,7 @@ public class DigGameTests {
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(300)
                 .fails(Outcome.Denied.class, o -> {
                     NeoForge.EVENT_BUS.unregister(cancel);
-                    if (o.reason() != PlayerHands.Refusal.SERVER || o.cell().getX() - t.origin.getX() != 8) {
+                    if (!(o.reason() instanceof Mouse.Refusal.Server) || o.cell().getX() - t.origin.getX() != 8) {
                         throw new GameTestAssertException("应当以服务端不让挖收场、点出墙上那一格:" + o);
                     }
                 })
@@ -519,8 +519,8 @@ public class DigGameTests {
                     throw new GameTestAssertException("朝着 " + before + " 度时找不到瞄点");
                 }
                 body.look().at(point);
-                if (Crosshair.on(body, ore) == null) {
-                    throw new GameTestAssertException("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + Crosshair.pick(body));
+                if (body.mouse().on(ore) == null) {
+                    throw new GameTestAssertException("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + body.mouse().pick());
                 }
             }
         }

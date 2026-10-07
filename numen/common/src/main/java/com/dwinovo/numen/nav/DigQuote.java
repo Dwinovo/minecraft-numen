@@ -1,7 +1,7 @@
 package com.dwinovo.numen.nav;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.DigRules;

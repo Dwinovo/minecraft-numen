@@ -7,9 +7,7 @@ import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Crosshair;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -127,23 +125,24 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         }
         companion.look().at(Vec3.atCenterOf(ground));
 
-        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.NONE);
+        BlockHitResult aim = companion.mouse().itemRay(ClipContext.Fluid.NONE);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(ground)) {
             return TaskState.RUNNING;   // 还够不着,或者这一刻没瞄准 —— 下一刻更近
         }
 
         // 下界的水一倒就蒸发,倒下去只是白扔一个桶。
         if (!companion.level().dimensionType().ultraWarm() && carries(companion, Items.WATER_BUCKET)) {
-            InteractionHand hand = companion.hotbar().grip(Items.WATER_BUCKET).hand();
+            companion.hotbar().grip(Items.WATER_BUCKET);
             placed = waterLandsAt(companion, aim);
             reclaimTicks = RECLAIM_TICKS;
-            Interaction.useInAir(companion, hand, Interaction.Timing.once()).tick();
+            Interaction.useInAir(companion, Interaction.Timing.once()).tick();
             noteSave(companion, "a water bucket");
             return TaskState.RUNNING;
         }
         net.minecraft.world.item.Item block = softBlock(companion);
         if (block != null) {
-            Interaction.useBlock(companion, aim, companion.hotbar().grip(block).hand()).tick();
+            companion.hotbar().grip(block);
+            Interaction.useBlock(companion, aim).tick();
             noteSave(companion, "a soft block");
         }
         return TaskState.RUNNING;
@@ -156,13 +155,13 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         }
         companion.look().at(Vec3.atCenterOf(placed));
         // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种。
-        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.SOURCE_ONLY);
+        BlockHitResult aim = companion.mouse().itemRay(ClipContext.Fluid.SOURCE_ONLY);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {
             return TaskState.RUNNING;
         }
         if (carries(companion, Items.BUCKET)) {
-            Interaction.useInAir(companion, companion.hotbar().grip(Items.BUCKET).hand(),
-                    Interaction.Timing.once()).tick();
+            companion.hotbar().grip(Items.BUCKET);
+            Interaction.useInAir(companion, Interaction.Timing.once()).tick();
         }
         return TaskState.RUNNING;
     }

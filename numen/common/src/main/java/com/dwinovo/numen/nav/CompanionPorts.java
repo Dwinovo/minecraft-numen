@@ -6,7 +6,7 @@ import com.dwinovo.numen.combat.Menace;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Ports;
-import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
@@ -17,7 +17,7 @@ import com.dwinovo.numen.api.permission.Permission;
 import net.minecraft.world.item.Item;
 
 /**
- * 同伴接入寻路的端口,只在这里组:她的身体、她的手({@link CompanionHands})、此刻的权限快照({@link GateTerrain})、这一趟愿意
+ * 同伴接入寻路的端口,只在这里组:她的身体(键盘、视角、鼠标、快捷栏都在它上面)、此刻的权限快照({@link GateTerrain})、这一趟愿意
  * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
  * 用的都是这一套。在世界所在的线程上调:权限快照与垫路料在这一刻取。
  */
@@ -35,7 +35,7 @@ public final class CompanionPorts {
 
     /** 她的寻路门面,避开 {@code threats},垫路从 {@code materials} 里挑。 */
     public static Navigator navigator(NumenPlayer player, Threats threats, List<Item> materials) {
-        return Navigator.of(new CompanionBody(player), new Ports(CompanionHands.of(player), terrain(player), materials(player, materials),
+        return Navigator.of(new CompanionBody(player), new Ports(terrain(player), materials(player, materials),
                 threats));
     }
 

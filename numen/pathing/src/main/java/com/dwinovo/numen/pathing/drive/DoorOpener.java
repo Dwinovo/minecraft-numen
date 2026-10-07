@@ -2,15 +2,13 @@ package com.dwinovo.numen.pathing.drive;
 
 import java.util.function.Function;
 
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Effector;
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -35,25 +33,24 @@ final class DoorOpener {
             return unseen.apply(Hitch.OCCLUDED);
         }
         rig.look.at(point);
-        BlockHitResult hit = Crosshair.on(rig.entity, pos);
-        if (hit == null) {
+        if (rig.mouse.on(pos) == null) {
             return unseen.apply(Hitch.OCCLUDED);
         }
         boolean sneaking = rig.entity.isShiftKeyDown();
         rig.entity.setShiftKeyDown(false);
-        Effector.Use use = rig.use(hit);
+        Mouse.Use use = rig.use();
         rig.entity.setShiftKeyDown(sneaking);
         return switch (use) {
-            case Effector.Use.Waiting w -> Beat.IDLE;
-            case Effector.Use.Nothing n -> Beat.IDLE;
-            case Effector.Use.Changed changed -> {
-                rig.ledger.used(changed.changes(), pos, null);
+            case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
+                rig.ledger.used(pressed.changes(), pos, null);
                 if (PathLog.debugging()) {
-                    PathLog.debug("{} 开关门 {}", rig.who, Work.changes(changed));
+                    PathLog.debug("{} 开关门 {}", rig.who, Work.changes(pressed));
                 }
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> Work.refused(rig, "开关门", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> Work.refused(rig, "开关门", refused.pos(), refused.reason());
+            case Mouse.Use.Pressed pressed -> Beat.IDLE;
+            case Mouse.Use.Waiting waiting -> Beat.IDLE;
         };
     }
 }

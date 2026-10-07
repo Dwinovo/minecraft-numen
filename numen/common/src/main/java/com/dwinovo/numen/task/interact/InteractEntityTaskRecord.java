@@ -22,7 +22,7 @@ import net.minecraft.world.item.Item;
  * hold N ticks, -1 = hold until done (dead / self-complete) or timeout. {@code sneak}: hold sneak while pressing
  * ({@code --sneak}).
  */
-public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.EntityClicked> {
+public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Pressed> {
 
     /** Covers chasing a moving target. */
     private static final long TIMEOUT_TICKS = 60 * 20;

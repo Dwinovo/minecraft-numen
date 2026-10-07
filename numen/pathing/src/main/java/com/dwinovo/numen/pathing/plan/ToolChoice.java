@@ -1,5 +1,8 @@
 package com.dwinovo.numen.pathing.plan;
 
+import com.dwinovo.numen.api.entity.Hotbar;
+import com.dwinovo.numen.api.entity.BodyAction;
+import java.util.Optional;
 import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +51,14 @@ public final class ToolChoice {
     /** 挖 {@code state} 用哪件。 */
     public Pick best(BlockState state) {
         return picks.computeIfAbsent(state, this::choose);
+    }
+
+    /**
+     * 把挖 {@code state} 最快的那件拿到手上:与规划给挖掘定价是同一份挑法(看全背包,一样快时空手优先、其次不耗耐久的),
+     * 经 {@code hotbar} 换手。换了就交回做了什么。
+     */
+    public Optional<BodyAction> take(BlockState state, Hotbar hotbar) {
+        return hotbar.hold(best(state).slot());
     }
 
     /** 用挑中的那件挖 {@code state} 要几刻,见 {@link DigTime#ticks}。 */

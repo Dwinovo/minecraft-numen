@@ -9,14 +9,13 @@ import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Look;
-import com.dwinovo.numen.pathing.body.Effector;
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * 执行的一套家伙:身体与它的键盘、动手的端口、活世界、宿主的另外几个端口,以及这次导航的实际账、身体动作与潜过的水。一次导航
@@ -32,7 +31,8 @@ final class Rig {
     final Look look;
     /** 身体的快捷栏。 */
     final Hotbar hotbar;
-    final Effector hands;
+    /** 身体的鼠标:准星、左键挖、右键用,动手之前过不过权限层它自己管。 */
+    final Mouse mouse;
     final Materials materials;
     final TerrainPolicy terrain;
     final Threats threats;
@@ -46,34 +46,34 @@ final class Rig {
     private final List<BodyAction> actions = new ArrayList<>();
     private LiveWorld world;
 
-    Rig(Body body, Effector hands, TerrainPolicy terrain, Materials materials, Threats threats) {
+    Rig(Body body, TerrainPolicy terrain, Materials materials, Threats threats) {
         this.body = body;
         this.entity = body.entity();
         this.keys = body.controls();
         this.look = body.look();
         this.hotbar = body.hotbar();
-        this.hands = hands;
+        this.mouse = body.mouse();
         this.terrain = terrain;
         this.materials = materials;
         this.threats = threats;
         this.who = PathLog.who(entity);
     }
 
-    /** 经宿主的手左键这一下;用了多久(宿主问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
-    Effector.Strike dig(BlockHitResult hit) {
+    /** 左键这一下;用了多久(问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
+    Mouse.Strike dig() {
         long t0 = System.nanoTime();
         try {
-            return hands.dig(hit);
+            return mouse.dig();
         } finally {
             tally.acted(System.nanoTime() - t0);
         }
     }
 
-    /** 经宿主的手右键这一下;用了多久记进这一刻的账。 */
-    Effector.Use use(BlockHitResult hit) {
+    /** 右键这一下;用了多久记进这一刻的账。 */
+    Mouse.Use use() {
         long t0 = System.nanoTime();
         try {
-            return hands.use(hit);
+            return mouse.use();
         } finally {
             tally.acted(System.nanoTime() - t0);
         }

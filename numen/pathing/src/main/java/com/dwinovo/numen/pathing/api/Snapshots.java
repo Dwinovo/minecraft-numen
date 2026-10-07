@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.body;
+package com.dwinovo.numen.pathing.api;
 
 import java.util.List;
 

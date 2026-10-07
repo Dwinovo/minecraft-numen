@@ -1,5 +1,6 @@
 package com.dwinovo.numen.nav;
 
+import com.dwinovo.numen.api.entity.Mouse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -150,7 +151,11 @@ public final class NavText {
 
     /** 许可或动手时被拒的理由:权限层的裁决说它自己的话,别的(服务端退回)照实说。 */
     private static String reason(Object refusal) {
-        Verdict verdict = CompanionHands.verdict(refusal);
+        Verdict verdict = switch (refusal) {
+            case Verdict v -> v;
+            case Mouse.Refusal r -> r.verdict();
+            case null, default -> null;
+        };
         return verdict != null ? verdict.reason() : "the server would not let it happen";
     }
 

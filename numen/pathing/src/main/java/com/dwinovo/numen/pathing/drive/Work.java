@@ -1,8 +1,7 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.api.entity.Hotbar;
+import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -20,7 +19,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 做一件改动:挖掉一格、放下一块。身体站在哪由控制器管,这里只管手和眼:把该用的东西拿到手上,转过去看瞄点,准星落上了才
- * 按键,经 {@link Effector} 动手,把它交回的结果记进实际账。开关门是 {@link DoorOpener}。
+ * 按键,经 {@link Mouse} 动手,把它交回的结果记进实际账。开关门是 {@link DoorOpener}。
  *
  * <p>每刻调一次,直到 {@link #done} 答是。
  */
@@ -67,7 +66,7 @@ final class Work {
             if (edit instanceof Edit.Dig dig) {
                 // 先把挑中的工具拿到手上:按此刻的身体挑,与规划定价是同一个选择
                 BlockState state = rig.world().getBlockState(dig.pos());
-                rig.act(rig.hotbar.hold(new ToolChoice(rig.snapshot()).best(state).slot()).orElse(null));
+                rig.act(new ToolChoice(rig.snapshot()).take(state, rig.hotbar).orElse(null));
             }
         }
         return switch (edit) {
@@ -85,18 +84,18 @@ final class Work {
         BlockPos pos = edit.pos();
         Vec3 point = rig.look.point(pos);
         if (point == null) {
-            rig.hands.release();
+            rig.mouse.release();
             return blind(pos, Hitch.OCCLUDED);
         }
         rig.look.at(point);
-        BlockHitResult hit = Crosshair.on(body, pos);
-        if (hit == null) {
-            rig.hands.release();
+        if (rig.mouse.on(pos) == null) {
+            rig.mouse.release();
             return blind(pos, Hitch.OCCLUDED);
         }
-        return switch (rig.dig(hit)) {
-            case Effector.Strike.Swinging s -> Beat.WORKED;
-            case Effector.Strike.Broke broke -> {
+        return switch (rig.dig()) {
+            case Mouse.Strike.Swinging s -> Beat.WORKED;
+            case Mouse.Strike.Missed m -> blind(pos, Hitch.OCCLUDED);
+            case Mouse.Strike.Broke broke -> {
                 rig.ledger.dug(broke.pos(), broke.before(), broke.pos().equals(pos) ? edit.permit() : null);
                 if (PathLog.debugging()) {
                     PathLog.debug("{} 挖掉 {} {}{}", rig.who, PathLog.pos(broke.pos()), PathLog.block(broke.before()),
@@ -104,7 +103,7 @@ final class Work {
                 }
                 yield Beat.WORKED;
             }
-            case Effector.Strike.Refused refused -> refused(rig, "挖", refused.pos(), refused.reason());
+            case Mouse.Strike.Refused refused -> refused(rig, "挖", refused.pos(), refused.reason());
         };
     }
 
@@ -123,26 +122,26 @@ final class Work {
             return blind(pos, Hitch.NO_FACE);
         }
         rig.look.at(face.point());
-        if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
+        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !hit.getBlockPos().equals(face.clicked()) || hit.getDirection() != face.side()) {
             return blind(pos, Hitch.NO_FACE);
         }
         // 点中的方块若自己会响应右键(箱子、门),按着潜行才是往上贴方块:按下的那一刻按着潜行,与搭桥的玩家一样
         boolean sneaking = body.isShiftKeyDown();
         body.setShiftKeyDown(true);
-        Effector.Use use = rig.use(hit);
+        Mouse.Use use = rig.use();
         body.setShiftKeyDown(sneaking);
         return switch (use) {
-            case Effector.Use.Waiting w -> Beat.IDLE;
-            case Effector.Use.Nothing n -> Beat.IDLE;
-            case Effector.Use.Changed changed -> {
-                rig.ledger.used(changed.changes(), pos, edit.permit());
+            case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
+                rig.ledger.used(pressed.changes(), pos, edit.permit());
                 if (PathLog.debugging()) {
-                    PathLog.debug("{} 放下 {} {}", rig.who, PathLog.pos(pos), changes(changed));
+                    PathLog.debug("{} 放下 {} {}", rig.who, PathLog.pos(pos), changes(pressed));
                 }
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> refused(rig, "放", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "放", refused.pos(), refused.reason());
+            case Mouse.Use.Pressed pressed -> Beat.IDLE;
+            case Mouse.Use.Waiting waiting -> Beat.IDLE;
         };
     }
 
@@ -165,19 +164,19 @@ final class Work {
             return Beat.IDLE;
         }
         rig.look.at(face.point());
-        if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
+        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !hit.getBlockPos().equals(face.clicked())) {
             return Beat.IDLE;
         }
-        return switch (rig.use(hit)) {
-            case Effector.Use.Changed changed -> {
-                rig.ledger.used(changed.changes(), caught.pos(), caught.permit());
+        return switch (rig.use()) {
+            case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
+                rig.ledger.used(pressed.changes(), caught.pos(), caught.permit());
                 poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
-                PathLog.info("{} 倒水接坠落 {} 脚离落点还有 {} 格{}", rig.who, changes(changed),
+                PathLog.info("{} 倒水接坠落 {} 脚离落点还有 {} 格{}", rig.who, changes(pressed),
                         PathLog.num(body.getY() - caught.pos().getY()), poured ? "" : ",水没落在落点 " + PathLog.pos(caught.pos()));
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> refused(rig, "倒水", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "倒水", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
     }
@@ -198,32 +197,32 @@ final class Work {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
         rig.look.at(new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
-        if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
             return Beat.IDLE;
         }
-        return switch (rig.use(hit)) {
-            case Effector.Use.Changed changed -> {
-                rig.ledger.used(changed.changes(), pos, caught.permit());
+        return switch (rig.use()) {
+            case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
+                rig.ledger.used(pressed.changes(), pos, caught.permit());
                 scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
-                PathLog.info("{} 收回水 {}{}", rig.who, changes(changed), scooped ? "" : "," + PathLog.pos(pos) + " 还是水");
+                PathLog.info("{} 收回水 {}{}", rig.who, changes(pressed), scooped ? "" : "," + PathLog.pos(pos) + " 还是水");
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> refused(rig, "收水", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "收水", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
     }
 
     /** 动手被拒:记一行,交出拒绝方自己的理由。 */
-    static Beat refused(Rig rig, String what, BlockPos pos, Object reason) {
+    static Beat refused(Rig rig, String what, BlockPos pos, Mouse.Refusal reason) {
         PathLog.info("{} 动手被拒 {} {} {}:{}", rig.who, what, PathLog.pos(pos), PathLog.block(rig.world().getBlockState(pos)),
                 reason);
         return new Beat.Denied(pos, reason);
     }
 
     /** 右键之后变了的几格:{@code 格 原来 -> 现在}。 */
-    static String changes(Effector.Use.Changed changed) {
+    static String changes(Mouse.Use.Pressed pressed) {
         StringBuilder out = new StringBuilder();
-        for (Effector.Change c : changed.changes()) {
+        for (Mouse.Change c : pressed.changes()) {
             out.append(out.isEmpty() ? "" : "; ").append(PathLog.pos(c.pos())).append(' ').append(PathLog.block(c.before()))
                     .append(" -> ").append(PathLog.block(c.after()));
         }
