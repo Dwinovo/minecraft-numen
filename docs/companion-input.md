@@ -46,7 +46,7 @@
 NumenPlayer her;
 her.controls()  // 键盘:Controls
 her.look()      // 视角:at(点)、turn(朝向)、faceToward(x, z);point/digPoints/use/face:看向一格方块上她看得见的那一点或那一面
-her.mouse()     // 鼠标:pick/on/itemRay 准星;dig/release 左键;use/useItem/stopUse 右键
+her.mouse()     // 鼠标:pick/on/itemRay 准星;dig/attack/release 左键(挖方块、打实体);use/useItem/stopUse 右键;intents() 此刻要问许可的意图
 her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 BodyAction
 ```
 
@@ -83,11 +83,11 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 
 ### 4. 换人驱动时由大脑统一松手
 
-`CompanionBrain` 换驱动者的那一刻,在调旧驱动者的 `stop(PREEMPTED)` 之后,**统一把键盘和鼠标松开**(键全松、挖掘进度清零、右键松开)。新驱动者从一具
+`CompanionBrain` 换驱动者的那一刻(被顶掉或被换掉),在调旧驱动者的 `stop` 之后,**统一把键盘和鼠标松开**(键全松、挖掘进度清零、右键松开)。新驱动者从一具
 干净的身体开始。
 
 不另做"这一刻输入归谁"的仲裁:`CompanionBrain` 已经每刻只选一个驱动者(反射 > 同步 > 当前任务 > 空闲姿态,层内固定先后),仲裁本来就在那里,输入层不重复一份。
-被顶掉的任务与反射的 `stop` 不再各自松键;被换掉(`REPLACED`)的任务不经这里,仍由自己的 `stop` 或收尾的 `cleanup` 松。
+任务与反射的 `stop` 不再各自松键;被换掉(`REPLACED`)的任务经 `TaskSlot` 的 `letGo` 回调走同一处。
 
 ### 5. pathing 怎么接
 
