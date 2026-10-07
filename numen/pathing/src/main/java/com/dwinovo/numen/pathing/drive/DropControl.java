@@ -76,17 +76,17 @@ final class DropControl extends Control {
         keys().release(Key.SPRINT);
         Vec3 target = landingSpot();
         if (flows()) {
-            Steering.pass(rig.entity, keys(), target.x, target.z);
+            Steering.pass(rig, target.x, target.z);
             return water;
         }
         if (rig.entity.onGround() && rig.entity.getY() > m.landing().feetY() + DROPPED) {
             // 脚还在上面:压着速度往前走,直到脚下空了——冲出去太快就落过了头。托着脚的不一定只有起步那一块,
             // 梯子顶也托得住,所以看的是离没离地,不是走没走过格边
-            Steering.approach(rig.entity, keys(), target.x, target.z, EDGE_SPEED);
+            Steering.approach(rig, target.x, target.z, EDGE_SPEED);
             return water;
         }
         // 离地了(或已经落下去了):照原版空中那一点加速度修正,停在落点上
-        Steering.stop(rig.entity, keys(), target.x, target.z, m.landing().feetY());
+        Steering.stop(rig, target.x, target.z, m.landing().feetY());
         return water;
     }
 

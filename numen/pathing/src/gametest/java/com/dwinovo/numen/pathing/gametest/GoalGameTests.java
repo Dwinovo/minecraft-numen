@@ -7,7 +7,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
@@ -144,7 +143,7 @@ public class GoalGameTests {
                 throw new GameTestAssertException("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
             }
             Sight.Trace seen = sees(r, furnace);
-            Aim.look(r.body, seen.point());
+            r.body.look().at(seen.point());
             BlockHitResult hit = Crosshair.on(r.body, furnace);
             if (hit == null || !r.body.gameMode.useItemOn(r.body, t.level, ItemStack.EMPTY, InteractionHand.MAIN_HAND,
                     hit).consumesAction() || !(r.body.containerMenu instanceof FurnaceMenu)) {

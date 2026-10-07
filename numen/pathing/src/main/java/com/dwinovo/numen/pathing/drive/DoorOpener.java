@@ -2,7 +2,6 @@ package com.dwinovo.numen.pathing.drive;
 
 import java.util.function.Function;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
@@ -31,11 +30,11 @@ final class DoorOpener {
     /** @param unseen 门看不见、准星还没落上时交给调用方计数 */
     static Beat tick(Rig rig, Edit.Door door, Function<Hitch, Beat> unseen) {
         BlockPos pos = door.pos();
-        Vec3 point = Aim.point(rig.entity, pos);
+        Vec3 point = rig.look.point(pos);
         if (point == null) {
             return unseen.apply(Hitch.OCCLUDED);
         }
-        Aim.look(rig.entity, point);
+        rig.look.at(point);
         BlockHitResult hit = Crosshair.on(rig.entity, pos);
         if (hit == null) {
             return unseen.apply(Hitch.OCCLUDED);

@@ -8,7 +8,6 @@ import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -300,7 +299,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     }
 
     private void aimAtTarget() {
-        InputDriver.lookAt(player, castAimPoint(player.getEyePosition(), target));
+        player.look().at(castAimPoint(player.getEyePosition(), target));
     }
 
     private static Vec3 castAimPoint(Vec3 eye, BlockPos target) {

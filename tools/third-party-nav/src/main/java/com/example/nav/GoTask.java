@@ -2,7 +2,6 @@ package com.example.nav;
 
 import com.dwinovo.numen.api.agent.script.ErrorKind;
 import com.dwinovo.numen.api.entity.Controls;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -57,7 +56,7 @@ final class GoTask implements Task {
                     + " blocks short, standing at " + her.blockPosition().toShortString();
             return TaskState.FAILED;
         }
-        InputDriver.lookAt(her, new Vec3(goal.x, her.getEyeY(), goal.z));
+        her.look().at(new Vec3(goal.x, her.getEyeY(), goal.z));
         Controls keys = her.controls();
         keys.press(Controls.Key.FORWARD);
         keys.set(Controls.Key.JUMP, her.horizontalCollision);

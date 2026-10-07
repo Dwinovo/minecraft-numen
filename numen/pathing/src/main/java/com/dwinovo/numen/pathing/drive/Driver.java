@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls.Key;
@@ -415,7 +414,7 @@ public final class Driver {
             }
         }
         if (best != null) {
-            Steering.stop(body, rig.keys, best.x, best.z, body.getY());
+            Steering.stop(rig, best.x, best.z, body.getY());
         }
     }
 
@@ -502,7 +501,7 @@ public final class Driver {
             rig.keys.press(Key.JUMP);
         }
         Vec3 c = Control.center(end);
-        boolean still = Steering.stop(body, rig.keys, c.x, c.z, endStance.feetY())
+        boolean still = Steering.stop(rig, c.x, c.z, endStance.feetY())
                 || Math.sqrt(horizontalSpeedSqr()) < Control.STILL && distanceSqr(c) < 0.3 * 0.3;
         watchdog.observe(body.position(), false);
         if (!still || node == null || !settled(endStance.kind())) {
@@ -531,7 +530,7 @@ public final class Driver {
                 halt(new Halt.NoSight(sighting.target()));
                 return;
             }
-            Aim.look(body, seen.point());
+            rig.look.at(seen.point());
         }
         state = State.ARRIVED;
     }

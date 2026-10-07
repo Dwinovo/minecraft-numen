@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -41,9 +40,9 @@ final class StrideControl extends Control {
         keys().press(Key.SNEAK);
         keys().release(Key.JUMP);
         keys().release(Key.SPRINT);
-        if (Aim.face(rig.entity, place.pos(), place.block()) == null) {
+        if (rig.look.face(place.pos(), place.block()) == null) {
             Vec3 target = center(m.to());
-            Aim.faceToward(rig.entity, target.x, target.z);
+            rig.look.faceToward(target.x, target.z);
             keys().press(Key.FORWARD);
             keys().release(Key.BACK);
             return Beat.IDLE;
@@ -67,9 +66,9 @@ final class StrideControl extends Control {
         keys().set(Key.JUMP, jump);
         boolean flows = flows();
         if (flows) {
-            Steering.pass(rig.entity, keys(), target.x, target.z);
+            Steering.pass(rig, target.x, target.z);
         } else {
-            Steering.stop(rig.entity, keys(), target.x, target.z, m.landing().feetY());
+            Steering.stop(rig, target.x, target.z, m.landing().feetY());
         }
         keys().set(Key.SPRINT, SprintPolicy.sprint(m, next, flows));
     }

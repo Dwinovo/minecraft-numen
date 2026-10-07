@@ -4,7 +4,6 @@ import com.dwinovo.numen.PlayerInv;
 
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
-import com.dwinovo.numen.api.entity.InputDriver;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
@@ -113,7 +112,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
 
         // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
         // (e.g. not another entity wandered into the exact line) before pressing.
-        InputDriver.lookAt(player, entity.getEyePosition());
+        player.look().at(entity.getEyePosition());
         HitResult hit = Crosshair.pick(player);
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
                 && ((EntityHitResult) hit).getEntity() == entity;

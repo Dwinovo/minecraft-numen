@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.api.agent.script.ErrorKind;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -151,7 +150,7 @@ final class PotActTask implements Task {
             }
         }
         // 动锅之前先看着它:这些动作直接走方块实体,没有准星射线替身体转头,不看的话她会背对着锅做
-        InputDriver.lookAt(cook, Vec3.atCenterOf(r.pos));
+        cook.look().at(Vec3.atCenterOf(r.pos));
         Cooker cooker = Cooker.at(level, r.pos);
         Cooker.Step step = r.act.on(cooker, cook, dish, portions);
         lastStep = step.note();

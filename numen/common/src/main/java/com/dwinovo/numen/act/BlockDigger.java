@@ -8,7 +8,6 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.api.permission.Verdict;
 
@@ -97,16 +96,16 @@ public final class BlockDigger {
     public DigResult digStep(BlockPos target, Predicate<BlockPos> mayClear, Consumer<BodyAction> told) {
         player.controls().stop();
         BlockPos effective = target;
-        Vec3 point = Aim.point(player, target);
+        Vec3 point = player.look().point(target);
         if (point != null) {
-            Aim.look(player, point);
+            player.look().at(point);
         } else {
             Sight.Trace line = Sight.dig(player.level(), player.getEyePosition(), target,
-                    Aim.digPoints(player, target), mayClear);
+                    player.look().digPoints(target), mayClear);
             if (line == null) {
                 return DigResult.NO_SHOT;
             }
-            Aim.look(player, line.point());
+            player.look().at(line.point());
             BlockPos blocker = Crosshair.pick(player) instanceof BlockHitResult hit
                     && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
             if (blocker == null || blocker.equals(target) || !mayClear.test(blocker)) {

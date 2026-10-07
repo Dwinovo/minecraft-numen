@@ -26,7 +26,7 @@ final class ClimbControl extends Control {
         boolean up = m.to().getY() > m.from().getY();
         keys().set(Key.JUMP, up);
         Vec3 c = center(m.to());
-        Steering.stop(rig.entity, keys(), c.x, c.z, m.landing().feetY());
+        Steering.stop(rig, c.x, c.z, m.landing().feetY());
         return Beat.IDLE;
     }
 

@@ -13,7 +13,6 @@ import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.chain.MobDefenseChain;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
@@ -563,7 +562,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 player.getAttackStrengthScale(0.0f))) {
             return;
         }
-        InputDriver.lookAt(player, victim.getEyePosition());
+        player.look().at(victim.getEyePosition());
         // 疾跑会让原版取消暴击判定(Player.attack 里 flag1 带 !isSprinting)。
         player.setSprinting(false);
         player.attack(victim);
@@ -813,7 +812,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 里瞄不瞄没有区别 —— 而每刻转向会把脚带偏(移动按朝向投影),她就一路走进目标脸上。
         // 挥刀早就是这么做的,弓这一支一直没跟上。
         if (shot != null && shot.aboutToRelease()) {
-            InputDriver.lookAt(player, aim.lookPoint());
+            player.look().at(aim.lookPoint());
         }
 
         ItemStack before = player.getMainHandItem();

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.task.chain;
 
 import com.dwinovo.numen.api.entity.CompanionSpeech;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskState;
@@ -31,7 +30,7 @@ public final class SpeakingLookChain implements Task, Reflex {
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner == null) return TaskState.RUNNING;
         companion.controls().stop();
-        InputDriver.lookAt(companion, owner.getEyePosition());
+        companion.look().at(owner.getEyePosition());
         return TaskState.RUNNING;
     }
 

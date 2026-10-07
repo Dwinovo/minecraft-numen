@@ -1,7 +1,7 @@
 /**
  * <strong>Public API:</strong> {@link NumenPlayer} — the server-side companion
  * body a tool acts on (query its state, drive it, read its inventory; its keys are
- * {@link NumenPlayer#controls}) — and {@link InputDriver}, her own facing, looking and
+ * {@link NumenPlayer#controls}, its view {@link NumenPlayer#look}) — and {@link InputDriver}, her
  * boat steering: together they are how a tool pack moves the body without touching
  * Numen API internals.
  *

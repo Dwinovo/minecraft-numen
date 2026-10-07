@@ -10,7 +10,6 @@ import java.util.function.Consumer;
 import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.PlayerHands;
@@ -492,7 +491,7 @@ public class DigGameTests {
         TestBody body = t.body(3, 1, 6);
         t.go(body, Goals.dig(ore, Snapshots.of(body).stats()), RouteSpec.defaults()).within(300).arrives()
                 .then(r -> {
-                    if (Aim.point(r.body, ore) == null) {
+                    if (r.body.look().point(ore) == null) {
                         throw new GameTestAssertException("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
                     }
                 });
@@ -515,11 +514,11 @@ public class DigGameTests {
                 float before = yaw * 0.0125F;
                 body.setYRot(before);
                 body.setXRot(pitch * 0.0125F);
-                Vec3 point = Aim.point(body, ore);
+                Vec3 point = body.look().point(ore);
                 if (point == null) {
                     throw new GameTestAssertException("朝着 " + before + " 度时找不到瞄点");
                 }
-                Aim.look(body, point);
+                body.look().at(point);
                 if (Crosshair.on(body, ore) == null) {
                     throw new GameTestAssertException("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + Crosshair.pick(body));
                 }

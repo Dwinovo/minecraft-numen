@@ -28,9 +28,9 @@ final class SwimControl extends Control {
         keys().set(Key.SNEAK, dy < 0);
         Vec3 c = center(m.to());
         if (flows()) {
-            Steering.pass(rig.entity, keys(), c.x, c.z);
+            Steering.pass(rig, c.x, c.z);
         } else {
-            Steering.stop(rig.entity, keys(), c.x, c.z, m.landing().feetY());
+            Steering.stop(rig, c.x, c.z, m.landing().feetY());
         }
         return Beat.IDLE;
     }

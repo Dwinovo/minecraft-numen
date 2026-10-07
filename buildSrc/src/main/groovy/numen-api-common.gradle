@@ -158,6 +158,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/BodyDelta*.class'     // what an action changed on the body: carried items, health, riding, broken gear
     include 'com/dwinovo/numen/api/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
     include 'com/dwinovo/numen/api/entity/Controls*.class'      // 她缺的那半个客户端:键盘、
+    include 'com/dwinovo/numen/api/entity/Look*.class'          // 视角、
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),
     include 'com/dwinovo/numen/api/entity/BodyAction*.class'    // 以及换手留下的记录——自己写寻路的插件按它们让她走

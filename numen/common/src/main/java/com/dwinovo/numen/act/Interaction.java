@@ -1,6 +1,5 @@
 package com.dwinovo.numen.act;
 
-import com.dwinovo.numen.api.entity.InputDriver;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
@@ -323,7 +322,7 @@ public final class Interaction {
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
         player.controls().stop();
-        InputDriver.lookAt(player, presetHit.getLocation());
+        player.look().at(presetHit.getLocation());
         BlockHitResult hit = Crosshair.on(player, block);
         if (hit == null) {
             return Status.RUNNING;
@@ -390,7 +389,7 @@ public final class Interaction {
             return false;
         }
         player.controls().stop();
-        InputDriver.lookAt(player, entity.getEyePosition());
+        player.look().at(entity.getEyePosition());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
                 && living.hurtTime > 0;
         // 无敌帧与冷却的判据在 Swing 里,战斗任务用的是同一处。
@@ -408,7 +407,7 @@ public final class Interaction {
         player.controls().stop();
         net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         BlockHitResult hit = presetHit;
-        InputDriver.lookAt(player, hit.getLocation());
+        player.look().at(hit.getLocation());
         StringBuilder outcome = new StringBuilder();
         for (InteractionHand h : HANDS) {
             InteractionResult res = player.gameMode.useItemOn(
@@ -474,7 +473,7 @@ public final class Interaction {
             return false;
         }
         player.controls().stop();
-        InputDriver.lookAt(player, entity.getEyePosition());
+        player.look().at(entity.getEyePosition());
         net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         for (InteractionHand h : HANDS) {
             if (entity.interact(player, h).consumesAction()) {       // animals / villagers

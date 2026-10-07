@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.chain;
 
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.task.reflex.Reflex;
-import com.dwinovo.numen.api.entity.InputDriver;
 
 import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.nav.Trip;
@@ -119,7 +118,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.api.task.refle
                 }
             }
             if (airColumn != null) {
-                InputDriver.face(companion, Vec3.atCenterOf(airColumn));
+                companion.look().faceToward(airColumn.getX() + 0.5, airColumn.getZ() + 0.5);
                 companion.controls().press(Controls.Key.FORWARD);
             }
         }

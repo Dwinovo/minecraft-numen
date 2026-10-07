@@ -6,7 +6,6 @@ import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.task.survival.SurvivalDecisions;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.api.entity.Hotbar;
@@ -127,7 +126,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
             companion.setXRot(90.0f);   // 底下四十格没东西:先朝下候着
             return TaskState.RUNNING;
         }
-        InputDriver.lookAt(companion, Vec3.atCenterOf(ground));
+        companion.look().at(Vec3.atCenterOf(ground));
 
         BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.NONE);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(ground)) {
@@ -156,7 +155,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         if (companion.getDeltaMovement().y < SurvivalDecisions.MLG_SETTLED_SPEED) {
             return TaskState.RUNNING;   // 还在往水里沉,等停稳再收
         }
-        InputDriver.lookAt(companion, Vec3.atCenterOf(placed));
+        companion.look().at(Vec3.atCenterOf(placed));
         // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种。
         BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.SOURCE_ONLY);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {

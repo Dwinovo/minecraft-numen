@@ -3,7 +3,6 @@
  * 换手({@code Hotbar})是假玩家缺的那半个客户端,属于 Numen API(包 {@code com.dwinovo.numen.api.entity}),这里按它们用。
  *
  * <ul>
- *   <li>{@link com.dwinovo.numen.pathing.body.Aim} —— 把视角转向一个点;</li>
  *   <li>{@link com.dwinovo.numen.pathing.body.Crosshair} —— 准星落在哪;</li>
  *   <li>{@link com.dwinovo.numen.pathing.body.PlayerHands} —— 左键挖、右键用,端口 {@link com.dwinovo.numen.pathing.body.Effector}
  *       的原版实现;</li>

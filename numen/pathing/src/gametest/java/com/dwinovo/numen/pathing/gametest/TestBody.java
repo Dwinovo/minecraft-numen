@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Look;
 import com.dwinovo.numen.api.entity.Physics;
 
 import com.mojang.authlib.GameProfile;
@@ -32,6 +33,7 @@ import net.minecraft.world.level.GameType;
 final class TestBody extends ServerPlayer implements Body {
 
     private final Controls controls = new Controls();
+    private final Look look = new Look(this);
 
     private TestBody(MinecraftServer server, ServerLevel level, GameProfile profile) {
         super(server, level, profile, ClientInformation.createDefault());
@@ -63,6 +65,11 @@ final class TestBody extends ServerPlayer implements Body {
     @Override
     public Controls controls() {
         return controls;
+    }
+
+    @Override
+    public Look look() {
+        return look;
     }
 
     @Override

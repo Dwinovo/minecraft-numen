@@ -4,7 +4,6 @@ import com.dwinovo.numen.PlayerInv;
 
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
-import com.dwinovo.numen.api.entity.InputDriver;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
@@ -15,7 +14,6 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.move.GotoReminders;
 import com.dwinovo.numen.task.base.InReachTask;
 import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
@@ -31,7 +29,7 @@ import java.util.List;
  * (一下就碎的方块碎了,别的只是开了个头)——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
  * 挖东西(挑工具、清开视线、捡掉落)是 {@code numen.work.dig} 的事。
  *
- * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code numen.move.to(…, {arrive = "use"})} 同一个视线函数),
+ * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link com.dwinovo.numen.api.entity.Look#use},与 {@code numen.move.to(…, {arrive = "use"})} 同一个视线函数),
  * 准星落在谁就点谁({@link Interaction#forHit}):激活方块,或——对着空气——用手里的东西(扔、吃、拉弓)。视线上挡着的(箱子前的
  * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code numen.work.dig} 挖掉它或从另一面点。The mouse model is the two record fields
  * {@code button} (left/right) × {@code holdTicks} (tap/hold).
@@ -87,8 +85,8 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             boolean clickable = r.aim != null && Terrain.of(player).clickable(r.aim);
             if (r.aim != null) {
                 com.dwinovo.numen.api.entity.Sight.Trace seen =
-                        button() == Interaction.Button.USE && clickable ? Aim.use(player, r.aim) : null;
-                InputDriver.lookAt(player, seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
+                        button() == Interaction.Button.USE && clickable ? player.look().use(r.aim) : null;
+                player.look().at(seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
             }
             HitResult hit = Crosshair.pick(player);
             if (r.aim != null && (button() == Interaction.Button.ATTACK || clickable)) {

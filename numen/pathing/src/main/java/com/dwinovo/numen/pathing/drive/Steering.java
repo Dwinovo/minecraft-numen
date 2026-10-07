@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Controls.Key;
 
@@ -33,20 +32,22 @@ final class Steering {
     private Steering() {}
 
     /** 不减速地朝 {@code (x, z)} 走。 */
-    static void pass(ServerPlayer body, Controls keys, double x, double z) {
-        if (body.onGround()) {
-            Aim.faceToward(body, x, z);
+    static void pass(Rig rig, double x, double z) {
+        if (rig.entity.onGround()) {
+            rig.look.faceToward(x, z);
         }
-        keys.press(Key.FORWARD);
-        keys.release(Key.BACK);
+        rig.keys.press(Key.FORWARD);
+        rig.keys.release(Key.BACK);
     }
 
     /**
      * 朝 {@code (x, z)} 走,沿那个方向的速度不超过 {@code speed}(格每刻):低于它就按前进,否则松开。走出边沿时用它压住
      * 冲出去的速度,离地之后再由 {@link #stop} 在空中修正落点。
      */
-    static void approach(ServerPlayer body, Controls keys, double x, double z, double speed) {
-        Aim.faceToward(body, x, z);
+    static void approach(Rig rig, double x, double z, double speed) {
+        ServerPlayer body = rig.entity;
+        Controls keys = rig.keys;
+        rig.look.faceToward(x, z);
         double yaw = Math.toRadians(body.getYRot());
         Vec3 motion = body.getDeltaMovement();
         double along = motion.x * -Math.sin(yaw) + motion.z * Math.cos(yaw);
@@ -67,7 +68,9 @@ final class Steering {
      *
      * @return 已经停在那一点上
      */
-    static boolean stop(ServerPlayer body, Controls keys, double x, double z, double landingY) {
+    static boolean stop(Rig rig, double x, double z, double landingY) {
+        ServerPlayer body = rig.entity;
+        Controls keys = rig.keys;
         double dx = x - body.getX();
         double dz = z - body.getZ();
         double distance = Math.sqrt(dx * dx + dz * dz);
@@ -80,7 +83,7 @@ final class Steering {
         }
         // 只在地上转身;腾空时不回身,沿身体此刻朝着的方向按前进后退修正
         if (distance >= AT && body.onGround()) {
-            Aim.faceToward(body, x, z);
+            rig.look.faceToward(x, z);
         }
         double yaw = Math.toRadians(body.getYRot());
         double fx = -Math.sin(yaw);

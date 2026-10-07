@@ -2,26 +2,18 @@ package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.mixin.BoatAccessor;
 
-import net.minecraft.commands.arguments.EntityAnchorArgument;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 同伴自己的朝向、看向与驾船。走、跳、潜行、停是按她的键盘({@link NumenPlayer#controls},{@link Controls}),
- * 不在这里;看向一格方块上的哪一点、怎么转过去由寻路模块的瞄准({@code Aim})管,这里管的是她自己的事:看着说话的人、
- * 看着要打要用的实体、转身朝一个方向,以及坐在船里压舵。
+ * 同伴坐在载具里的驾驶:船压舵、马转身再按前进。走、跳、潜行、停是她的键盘({@link NumenPlayer#controls},{@link Controls}),
+ * 看向哪儿、转身朝一个方向是她的视角({@link NumenPlayer#look},{@link Look}),这里只在它们上面管载具。
  */
 public final class InputDriver {
 
     private InputDriver() {}
-
-    /** Aim the eyes at a point (yaw + pitch) — e.g. the eyes of whoever she talks to or hits. */
-    public static void lookAt(ServerPlayer p, Vec3 point) {
-        p.lookAt(EntityAnchorArgument.Anchor.EYES, point);
-    }
 
     /** 船的转向死区(度):差角小于它就不压舵。太小会和转向动量打架来回摆头。 */
     private static final float BOAT_TURN_DEADBAND = 5.0f;
@@ -45,10 +37,10 @@ public final class InputDriver {
             float diff = Mth.wrapDegrees(want - boat.getYRot());
             boat.setInput(diff < -BOAT_TURN_DEADBAND, diff > BOAT_TURN_DEADBAND, true, false);
             ((BoatAccessor) boat).numen$controlBoat();
-            face(p, target);   // 乘员朝向不驱动船,看向去处只是像个人
+            p.look().faceToward(target.x, target.z);   // 乘员朝向不驱动船,看向去处只是像个人
             return;
         }
-        face(p, target);
+        p.look().faceToward(target.x, target.z);
         p.controls().press(Controls.Key.FORWARD);
     }
 
@@ -58,14 +50,5 @@ public final class InputDriver {
             boat.setInput(false, false, false, false);
         }
         p.controls().stop();
-    }
-
-    /** Turn the body (and head) to face {@code target} horizontally — walking goes where yaw points. */
-    public static void face(ServerPlayer p, Vec3 target) {
-        double dx = target.x - p.getX();
-        double dz = target.z - p.getZ();
-        float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
-        p.setYRot(yaw);
-        p.setYHeadRot(yaw);
     }
 }

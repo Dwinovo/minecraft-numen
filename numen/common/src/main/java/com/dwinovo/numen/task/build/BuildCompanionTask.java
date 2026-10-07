@@ -11,7 +11,6 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.InputDriver;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.task.TaskState;
@@ -655,7 +654,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
                     new ItemStack(target.item()));
         }
-        InputDriver.lookAt(player, Vec3.atCenterOf(pos));
+        player.look().at(Vec3.atCenterOf(pos));
         try {
             var result = player.gameMode.useItemOn(player, player.level(),
                     player.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND,

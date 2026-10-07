@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 
@@ -23,7 +22,7 @@ final class ParkourControl extends Control {
         keys().set(Key.SPRINT, SprintPolicy.sprint(m, next, flows()));
         double edge = 0.5 + rig.entity.getBbWidth() / 2;
         if (rig.entity.onGround() && ahead() < edge) {
-            Aim.faceToward(rig.entity, target.x, target.z);
+            rig.look.faceToward(target.x, target.z);
             keys().press(Key.FORWARD);
             keys().release(Key.BACK);
             // 下一刻身子就离开边沿了:这一刻按下跳,原版在下一刻移动之前起跳
@@ -32,9 +31,9 @@ final class ParkourControl extends Control {
         }
         keys().release(Key.JUMP);
         if (flows()) {
-            Steering.pass(rig.entity, keys(), target.x, target.z);
+            Steering.pass(rig, target.x, target.z);
         } else {
-            Steering.stop(rig.entity, keys(), target.x, target.z, m.landing().feetY());
+            Steering.stop(rig, target.x, target.z, m.landing().feetY());
         }
         return Beat.IDLE;
     }

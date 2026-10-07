@@ -3,7 +3,6 @@ package com.dwinovo.numen.task.build;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Hotbar;
-import com.dwinovo.numen.pathing.body.Aim;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -63,7 +62,7 @@ final class BuildShowmanship {
             centre = centre.add(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
         }
         centre = centre.scale(1.0 / touched.size());
-        applySteppedAim(centre);
+        player.look().at(centre);   // 视角按鼠标像素取整转向目标点,和寻路同一套转头
         // 低处蹲下、高处站直:所有人都知道贴边放方块要蹲,这是玩家最熟的建造姿势。
         crouching = centre.y < player.getY() + 0.6;
         // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位每 2 刻一批
@@ -124,10 +123,5 @@ final class BuildShowmanship {
             Vec3 p = from.add(step.scale(i));
             level.sendParticles(ParticleTypes.END_ROD, p.x, p.y, p.z, 1, 0.0, 0.0, 0.0, 0.0);
         }
-    }
-
-    /** 视角按鼠标像素取整转向目标点(和寻路同一套转头,{@link Aim#look})。 */
-    private void applySteppedAim(Vec3 point) {
-        Aim.look(player, point);
     }
 }

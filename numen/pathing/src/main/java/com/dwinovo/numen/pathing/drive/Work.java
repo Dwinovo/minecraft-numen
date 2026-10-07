@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.api.entity.Hotbar;
@@ -84,12 +83,12 @@ final class Work {
     private Beat dig(Edit.Dig edit) {
         ServerPlayer body = rig.entity;
         BlockPos pos = edit.pos();
-        Vec3 point = Aim.point(body, pos);
+        Vec3 point = rig.look.point(pos);
         if (point == null) {
             rig.hands.release();
             return blind(pos, Hitch.OCCLUDED);
         }
-        Aim.look(body, point);
+        rig.look.at(point);
         BlockHitResult hit = Crosshair.on(body, pos);
         if (hit == null) {
             rig.hands.release();
@@ -119,11 +118,11 @@ final class Work {
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
-        Faces.Face face = Aim.face(body, pos, edit.block());
+        Faces.Face face = rig.look.face(pos, edit.block());
         if (face == null) {
             return blind(pos, Hitch.NO_FACE);
         }
-        Aim.look(body, face.point());
+        rig.look.at(face.point());
         if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !hit.getBlockPos().equals(face.clicked()) || hit.getDirection() != face.side()) {
             return blind(pos, Hitch.NO_FACE);
@@ -161,11 +160,11 @@ final class Work {
             return new Beat.Blocked(new Blockage(caught.pos(), rig.world().getBlockState(caught.pos()), move, null,
                     Hitch.NO_MATERIALS));
         }
-        Faces.Face face = Aim.face(body, caught.pos(), Blocks.WATER);
+        Faces.Face face = rig.look.face(caught.pos(), Blocks.WATER);
         if (face == null) {
             return Beat.IDLE;
         }
-        Aim.look(body, face.point());
+        rig.look.at(face.point());
         if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !hit.getBlockPos().equals(face.clicked())) {
             return Beat.IDLE;
@@ -198,7 +197,7 @@ final class Work {
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
-        Aim.look(body, new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+        rig.look.at(new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
         if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
             return Beat.IDLE;
         }
