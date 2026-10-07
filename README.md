@@ -8,10 +8,10 @@
 ![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
-[![QQ](https://img.shields.io/badge/QQ%E7%BE%A4-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)](#交流)
+![QQ](https://img.shields.io/badge/QQ%E7%BE%A4-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)
 [![Discord](https://img.shields.io/badge/Discord-%E5%8A%A0%E5%85%A5-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/MDsCKtemJ)
 
-[**网站**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题) · [**交流**](#交流)
+[**网站**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题)
 
 <img src="assets/branding/numen-hero-2560.webp" alt="Numen 言出法随" width="100%">
 
@@ -19,7 +19,7 @@
 
 言出法随是一个**运行在 Minecraft 内部的具身智能体**，*作为模组直接存在于游戏之中*，它能够不断探索 Minecraft 世界，**自主决策并采取行动完成任务**。
 
-详情请见[网站](https://numen.dwinovo.cn)。
+详情请见[网站](https://numen.dwinovo.cn)。使用中遇到问题，欢迎加入 QQ 交流群 **1121662678** 或 [Discord](https://discord.gg/MDsCKtemJ)；发现 bug 或想要新功能，请提 [issue](https://github.com/Dwinovo/minecraft-numen/issues)。
 
 ## 安装
 
@@ -86,15 +86,6 @@
 
 **外接大脑的模式下，人设还生效吗？**
 **不生效。** 外接大脑模式下由外部智能体接管言出法随，言出法随不会把人设交给它，对话上下文也不会在言出法随内部保存。*如需保持人设，可以把人设写进外部智能体自己的提示词中。*
-
-## 交流
-
-使用中遇到问题、想分享她做成的事，或者想参与开发，欢迎来聊：
-
-- **QQ 交流群**：1121662678
-- **Discord**：<https://discord.gg/MDsCKtemJ>
-
-发现 bug 或想要新功能，请提 [issue](https://github.com/Dwinovo/minecraft-numen/issues)。
 
 ## 许可
 

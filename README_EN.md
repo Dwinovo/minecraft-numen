@@ -9,9 +9,9 @@
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/MDsCKtemJ)
-[![QQ](https://img.shields.io/badge/QQ%20Group-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)](#community)
+![QQ](https://img.shields.io/badge/QQ%20Group-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)
 
-[**Website**](https://numen.dwinovo.cn) · [**Installation**](#installation) · [**Getting Started**](#getting-started) · [**Architecture**](#architecture) · [**Plugins**](#plugins) · [**FAQ**](#faq) · [**Community**](#community)
+[**Website**](https://numen.dwinovo.cn) · [**Installation**](#installation) · [**Getting Started**](#getting-started) · [**Architecture**](#architecture) · [**Plugins**](#plugins) · [**FAQ**](#faq)
 
 <img src="assets/branding/numen-hero-2560.webp" alt="Numen" width="100%">
 
@@ -19,7 +19,7 @@
 
 Numen is an **embodied agent that runs inside Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
 
-Learn more on the [website](https://numen.dwinovo.cn).
+Learn more on the [website](https://numen.dwinovo.cn). Questions? Join us on [Discord](https://discord.gg/MDsCKtemJ) or in QQ group **1121662678**; for bugs and feature requests, open an [issue](https://github.com/Dwinovo/minecraft-numen/issues).
 
 ## Installation
 
@@ -86,15 +86,6 @@ Numen itself is **open source and free**. Calls to the large language model use 
 
 **Does the persona still apply in External Brain mode?**
 **No.** In External Brain mode, an external agent takes over Numen. Numen does not hand the persona to it, and the conversation context is not saved inside Numen. *To keep a persona, write it into the external agent's own prompt.*
-
-## Community
-
-Questions, things she pulled off, or want to help build it? Come say hi:
-
-- **Discord**: <https://discord.gg/MDsCKtemJ>
-- **QQ group**: 1121662678
-
-Found a bug or want a feature? Open an [issue](https://github.com/Dwinovo/minecraft-numen/issues).
 
 ## License
 
