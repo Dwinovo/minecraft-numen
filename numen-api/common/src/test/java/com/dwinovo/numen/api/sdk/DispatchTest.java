@@ -72,9 +72,23 @@ class DispatchTest {
         }
     }
 
+    /** 一组服务端上的函数。 */
+    public static final class Wait {
+
+        private Wait() {}
+
+        @Fn("Wait for a Said, and hand back something else.")
+        @Example("gt.gt_wait.mislabel(\"cake\")")
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public static Pending<Echo.Said> mislabel(ServerCall call, Echo.Ask args) {
+            return (Pending) Pending.of(args.thing());
+        }
+    }
+
     @BeforeAll
     static void register() {
         SdkFixture.register("gt_echo", Echo.class);
+        SdkFixture.register("gt_wait", Wait.class);
     }
 
     private static ApiTester.Run run(String code) {
@@ -149,5 +163,17 @@ class DispatchTest {
         assertFalse(run.ok());
         assertTrue(run.message().contains("there is no API function gt.gt_echo.counts; did you mean "
                 + "gt.gt_echo.count?"), run.message());
+    }
+
+    @Test
+    void aValueTheFunctionsSignatureCannotWriteIsOneFailedReplyNotAnExceptionOutOfTheCall() {
+        JsonObject args = new JsonObject();
+        args.addProperty("thing", "cake");
+        List<String> replies = new java.util.ArrayList<>();
+        Dispatcher.serve("gt.gt_wait.mislabel", args, null, "c1", replies::add);
+        assertEquals(1, replies.size(), replies.toString());
+        JsonObject error = com.google.gson.JsonParser.parseString(replies.get(0)).getAsJsonObject().getAsJsonObject("error");
+        assertEquals("failed", error.get("kind").getAsString());
+        assertTrue(error.get("message").getAsString().startsWith("gt.gt_wait.mislabel broke: "), error.toString());
     }
 }

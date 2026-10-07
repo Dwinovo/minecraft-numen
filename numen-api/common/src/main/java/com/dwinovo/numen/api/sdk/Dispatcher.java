@@ -183,8 +183,7 @@ public final class Dispatcher {
                     Call.help(fn.fullName()), null).toString());
             return;
         } catch (RuntimeException broke) {
-            Constants.LOG.error("[numen-api] {} broke", fn.fullName(), broke);
-            reply.accept(ApiReply.error(ErrorKind.FAILED, fn.fullName() + " broke: " + broke, null, null).toString());
+            reply.accept(broke(fn, broke).toString());
             return;
         }
         switch (fn.kind()) {
@@ -219,16 +218,22 @@ public final class Dispatcher {
         return stderr.isEmpty() ? reply : ApiReply.withStderr(reply, stderr);
     }
 
-    /** 成功,值按函数的返回类型写成脚本的值。 */
+    /**
+     * 成功,值按函数的返回类型写成脚本的值。写不成(函数交回的和它的签名对不上)和函数本体抛了错是同一种失败({@link #broke}):
+     * 当场的值、等到的值、活收尾的值都经这里,所以不论哪条路,编码都不会把异常抛到调用它的服务器刻里。
+     */
     private static JsonObject value(ApiFunction fn, Object value) {
-        Object lua;
         try {
-            lua = fn.returns().encode(value);
-        } catch (ClassCastException wrongType) {
-            throw new IllegalStateException(fn.fullName() + " returned a " + value.getClass().getName()
-                    + ", not what its signature says", wrongType);
+            return ApiReply.value(JsonValues.toJson(fn.returns().encode(value)));
+        } catch (RuntimeException unwritable) {
+            return broke(fn, unwritable);
         }
-        return ApiReply.value(JsonValues.toJson(lua));
+    }
+
+    /** 函数自己的错:记日志,这次调用以 {@code failed} 结束。 */
+    private static JsonObject broke(ApiFunction fn, RuntimeException broke) {
+        Constants.LOG.error("[numen-api] {} broke", fn.fullName(), broke);
+        return ApiReply.error(ErrorKind.FAILED, fn.fullName() + " broke: " + broke, null, null);
     }
 
     /** 函数说的失败。 */
