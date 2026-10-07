@@ -91,6 +91,8 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 
 少数碰撞箱随世界或实体变化的方块(脚手架、细雪等)在语义表里明确列出、单独处理，不混进缓存。
 
+够得着(`Reach`)、看得见(`Sight`)、放方块时点哪一面(`Faces`)、放下去落在哪一格(`Replaceable`)是身体自己的事实，规划与身体共用一份，在 Numen API 的 `com.dwinovo.numen.api.entity`(`Reach` 只认眼睛的位置与交互距离，站在某一列时眼睛在哪由 `BodyStats.eye` 算)。
+
 ### 第 1 层　规划(`plan/`)
 
 - 每种动作(平走、斜走、上一级、下一级、下落、跑酷、垫柱、向下挖……)只有**前提与代价**两个纯函数，读的是只读世界
@@ -99,6 +101,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
   垫路料(端口 `Materials`)、身体快照(迈步、起跳、交互距离、游戏模式、按落差与落点方块算的摔伤与按血量推出的摔落上限、装备推出的能力、
   背包里的工具与挖掘属性、氧气与水下呼吸推出的能憋多久)、生物危险(端口 `Threats`,折成按位置的代价)。
   任务要改价，只能通过路线规格或按位置的代价表，不能继承成本上下文。
+- 挖多久是原版的公式(`DigTime`)，在 Numen API；身体上的事实是 `DigTime.Mining`，规划从身体快照里取。
 - 放一块的价钱只在放置定价这一处算。路上垫下的块留在原处,记在实际账里,宿主照账报给模型(见第十三节"删掉撤垫块")。
 - "许不许改地形"和"有没有料"是两个独立事实，分别来自规格与 `Materials`,不折成一个布尔。
 
@@ -113,7 +116,8 @@ A*、目标族、按节点数计的预算、异步派发与区块快照、候选
 
 ### 第 3 层　执行(`drive/`)
 
-- 每种动作有一个**控制器**,把规划好的一步变成按键与视角，经 `Body` 端口落到身体上。
+- 每种动作有一个**控制器**,把规划好的一步变成按键与视角，经 `Body` 端口落到身体上:键盘、视角、鼠标、快捷栏是 Numen API 的
+  (`Controls`、`Look`、`Mouse`、`Hotbar`)，模块不另写一套手。
 - 动作开始前和执行中，用**同一个**第 0 层和同一份前提函数在活世界上复核;对不上就停下，交出结构化原因
   (哪一格、什么方块、哪种动作、哪一条前提不成立，比如"头顶净空不足"),不再报笼统的"找不到路"。
 - 段状态机(首段、提前规划接续段、拼接)、疾跑、视角步进沿用现有实现。每段搜索展开一万个节点就先交出半程
@@ -139,11 +143,10 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 | 端口 | 模块向宿主要什么 | Numen 的实现 |
 |---|---|---|
-| `Body` | 身体实体(服务端玩家)、它的那一副键盘(`Controls`,Numen API 的)、此刻的身体快照 | `CompanionBody`(无状态的适配器):键盘是 `NumenPlayer.controls()`,每刻在她自己的实体刻里经 `Physics.step`(Numen API 的)落一次 |
+| `Body` | 身体实体(服务端玩家)、它的键盘 `Controls`、视角 `Look`、鼠标 `Mouse`、快捷栏 `Hotbar`(都是 Numen API 的)、此刻的身体快照 | `CompanionBody`(无状态的适配器):就是 `NumenPlayer` 的 `controls()`、`look()`、`mouse()`、`hotbar()`,键盘每刻在她自己的实体刻里经 `Physics.step`(Numen API 的)落一次;同伴的鼠标动手前自己过权限层 |
 | `TerrainPolicy` | 这一格能不能挖或放:放行 / 要问(带一个模块不解读的凭据)/ 拒绝 | `GateTerrain`:权限层 `Gate` 快照;凭据就是 `ConsentItem` |
 | `Materials` | 下一块垫路料用哪个(没有就是没料;规划建成本模型时问一次) | `ThrowawayBlocks.next` |
 | `Threats` | 此刻要避开的生物与各自的危险半径(规划建成本模型时问一次) | `Menace.dangers` |
-| `Effector` | 真的挖掉或放下一格,并如实返回成没成、为什么没成 | `CompanionHands`:模块的 `PlayerHands` 外面每一下先问权限层 |
 
 设计时列过的 `PlacementAdvice`(这一格放下去应该是什么状态,给建造)、`Limits`(服主总开关与上限)没有做,见第十三节切换记录。
 `NavLog`(日志出口)也不做成端口:模块直接经 slf4j 记进 `NumenPathing` 记录器(`drive/PathLog`),级别由宿主的日志配置管,
@@ -153,7 +156,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 ### Numen 适配层(`numen/.../nav/`)
 
-- 端口的实现:`CompanionPorts`(组端口、组成本模型)、`CompanionHands`(`Effector`,连同挑工具拿到手上)、`GateTerrain`
+- 端口的实现:`CompanionPorts`(组端口、组成本模型)、`GateTerrain`
   (`TerrainPolicy`)、`ThrowawayBlocks`(`Materials`);`Threats` 由 `Menace.dangers` 答。
 - 规划 `Survey`:只搜不走,一串路段从她脚下逐段规划,下一段接在上一段后面(`PlanQuery.after`),没走到的那一段交出看清的那一截
   (`PlanResult.partial`)。执行 `Trip`:照一段规划好的路走(`Trip.following`),或反射层直接 `Trip.to`;门面外面补上许动要主人
@@ -175,10 +178,10 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 - Gradle 模块 `pathing` 对着原版编译(neoForm),不含加载器代码,随 Numen 的两个加载器 jar 平铺发出(`numen-loader.gradle`)。
   包名 `com.dwinovo.numen.pathing`。
 - 依赖只有 Minecraft、fastutil、slf4j,加上 Numen API 的瘦 api jar(和插件同一扇门,编译期只看得见 Numen API 公开的那部分:
-  `Controls`、`Physics`、`Hotbar`、`BodyAction`);不依赖 `ai`、`agent`、Numen。往外的依赖在编译期就过不去。
+  `Controls`、`Look`、`Mouse`、`Hotbar`、`Physics`、`BodyAction`、`DigTime`、`Reach`、`Sight`、`Faces`、`Replaceable`);不依赖 `ai`、`agent`、Numen。往外的依赖在编译期就过不去。
 - Numen API 不依赖也不平铺 `pathing`;Numen 编译期依赖它(`compileOnly`),发行 jar 里平铺进去,不进 POM。联动插件不用它。
   模块本身没有单独的 maven 坐标。
-- Numen 在适配层之外只经门面(`api`)、规格(`spec`)、`search` 包里的目标族与身体机制(`body`)使用寻路(见第四节 Numen 适配层)。
+- Numen 在适配层之外只经门面(`api`)、规格(`spec`)、`search` 包里的目标族与身体端口(`body` 里只有 `Body`)使用寻路(见第四节 Numen 适配层)。
 - 以后单独发布时，门面与端口就是对外接口。
 
 ## 六、事实归属
@@ -195,22 +198,22 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 3 | 能不能站 | `CellClass.canWalkOn` 的白名单;床、附魔台、炼药锅、灯笼、雪层 4–7 站不上，活板门恒为障碍;霜行者另有 `mustBeSolidToWalkOn`;跑酷单独排除耕地;寻路外还有 6 处 | 第 0 层 `Footing`;"不踩耕地"这类意愿归规格 |
 | 4 | 脚在哪一格(节点归格) | `Movement.feet`(+0.1251,半砖楼梯上抬)、`BlockHelper.playerFeet`(只认半砖)、挖矿直接用 `blockPosition()`;`MoveToCompanionTask.reached` 同时用两把尺 | 第 0 层 `Footing.cellOf`;假起点归第 2 层 |
 | 5 | 落脚高度 | 没有表，散在 0.1251、0.07、0.094、"低于 0.5" 等小数里;背贴放块定价与执行对半砖的判断不一致 | 第 0 层 `Footing.height` |
-| 6 | 够不够得着 | `BlockReach`(格心加眼高)、放置射线、执行器视线、坠落放水各一份;寻路外 `BlockDigger`、交互任务、合成、感知、MLG 又各一份;`GoalCompiler.interact` 用曼哈顿贴邻，靠 `STANCE_DUD` 宽限兜底 | 第 0 层 `Reach`,读身体快照的交互距离 |
-| 7 | 能不能贴着放 | `canPlaceAgainst` 只收整块和玻璃;定价与执行各枚举一遍贴面，贴面中心的 y 公式不同，定价排除来向、执行不排除 | 第 0 层 `Faces` |
-| 8 | 这一格能不能放进去、真实落点 | `isReplaceable`、`Interaction.placementOf`、`ExecHarness`、建造各一份;瞄准高草、单层雪时按"命中面前一格"算，权限问错格、实际账漏记(推断) | 第 0 层 `Replaceable`;落点以 `Effector` 返回为准 |
+| 6 | 够不够得着 | `BlockReach`(格心加眼高)、放置射线、执行器视线、坠落放水各一份;寻路外 `BlockDigger`、交互任务、合成、感知、MLG 又各一份;`GoalCompiler.interact` 用曼哈顿贴邻，靠 `STANCE_DUD` 宽限兜底 | Numen API 的 `Reach`(身体与规划共用),眼睛的位置与交互距离由调用方按身体快照给 |
+| 7 | 能不能贴着放 | `canPlaceAgainst` 只收整块和玻璃;定价与执行各枚举一遍贴面，贴面中心的 y 公式不同，定价排除来向、执行不排除 | Numen API 的 `Faces`(身体与规划共用) |
+| 8 | 这一格能不能放进去、真实落点 | `isReplaceable`、`Interaction.placementOf`、`ExecHarness`、建造各一份;瞄准高草、单层雪时按"命中面前一格"算，权限问错格、实际账漏记(推断) | Numen API 的 `Replaceable`;落点以鼠标 `Mouse.Use` 返回为准 |
 | 9 | 物理上能不能挖 | `MovementHelper.avoidBreaking`;挖矿任务重复调一遍并自带基岩规则;建造自判 `destroySpeed==-1`;`canHarvest` 注释说成本模型会否决，实际不查 | 第 1 层 `DigRules` |
-| 10 | 挖多久 | `ToolSet` 自己重写原版公式(只看快捷栏，没有水下、离地减速);执行用原版 `getDestroyProgress`;感知另算一份 | 第 1 层 `DigTime`,读身体快照 |
+| 10 | 挖多久 | `ToolSet` 自己重写原版公式(只看快捷栏，没有水下、离地减速);执行用原版 `getDestroyProgress`;感知另算一份 | Numen API 的 `DigTime`(身体与规划共用),身体上的事实是 `DigTime.Mining` |
 | 11 | 用哪把工具 | 定价 `ToolSet`(快捷栏)、执行 `ToolSelect`(全背包)、挖矿 `bestToolFor`;规划不计价的镐子执行照拿 | `ToolChoice`(由身体快照建，看全背包),规划执行共用 |
 | 12 | 有没有料 ★ | `ThrowawayBlocks.available`、`CalculationContext.hasThrowaway`(和"许不许改地形"折成一个布尔)、`shortageAdvice`(自己扫背包);取料又有两套 | `Materials` 端口 |
 | 13 | 下一块用什么料 | 拆回定价按垫路料算，执行先问建造登记 | `Materials.next` 与 `PlacementAdvice` 端口 |
-| 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)与 `Effector`(执行)端口 |
+| 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)端口与她的鼠标(执行,同伴的鼠标自己问) |
 | 15 | 代价与罚分 | `ActionCosts`、`RouteSpec` 出厂值、`NavSettings`、建造上下文各有常量;每类格子代价除"禁止"外从没计价;`noise` 没人读;斜向上不收跳罚;涉水罚只在两种动作里收 | 第 1 层 `CostModel` |
 | 16 | 到没到 ★ | `NavGoal` 与 `goals/Goal` 两族目标经 `GoalAdapter` 映射，`adjacent` 成员集不同;任务层另有 `reached`、`closeEnoughToSucceed`(按高度放宽到 `|dy|≤1`)、跟随按三维距离 | 第 2 层只留一族目标;模块里没有"差不多到了" |
 | 17 | 估价权重 | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 1 层 `ActionCosts`;绕不开的挖掘(埋深)第 2 层 `Burial`,每格的最低价 `CostModel.digFloor`,见第十三节"挖掘时搜索铺开" |
 | 18 | 卡没卡住 | 12 处:执行器 6 种、状态机 2 种、导航 2 种、各任务、脱困反射、建造表演、`GoToThenDoTask` | 第 3 层 `Watchdog`,对外交出"在推进"信号 |
 | 19 | 进度量尺 | 导航用估价，goto 用欧氏距离，挖矿用挪没挪 2 格 | 第 3 层 `Watchdog` |
 | 20 | 搜索预算 | 改动预算只在规划时核，A* 不知道，重算不再核 | 第 2 层 |
-| 21 | 实际改了什么 | 执行器的账;任务旅程账;挖矿自己一份;`PlacedBlocks` 另记真实落点;坠落放水桶不记账(推断) | 第 3 层 `EditLedger`,只收 `Effector` 结果 |
+| 21 | 实际改了什么 | 执行器的账;任务旅程账;挖矿自己一份;`PlacedBlocks` 另记真实落点;坠落放水桶不记账(推断) | 第 3 层 `EditLedger`,只收鼠标 `Mouse` 的结果 |
 | 22 | 液体与危险 | `CellClass` 名单;各动作自查岩浆;生物危险两套(固定半径的 `Avoidance` 与 `Menace.dangerRadius`);压力板默认会踩、绊线当墙 | 第 0 层 `Semantics`,代价归第 1 层;生物危险半径经 `Threats` 端口 |
 | 23 | 落沙与漏液 | 每个动作各开一个窗口判"头顶会不会塌",范围不同 | 第 1 层 `DigRules` |
 | 24 | 门能不能开 | 规划里门格对所有动作可穿，只有平移会开门;门板朝向不看;有红石的铁门当墙 | 第 0 层语义 + 第 1 层前提 + 第 3 层开门控制器 |
@@ -371,7 +374,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 
 - `architecture-mind-model.md`:加了一条"寻路是独立模块,Numen 经端口接入;规划与执行共用一份地形几何"(切换时已改)。
 - `spatial-perception.md`:`scan_around` 读她身边的地形 `Terrain`(第 0 层),旧类的引用已换掉(切换时已改)。
-- `permission-layer.md`:开头对旧稿的引用已改指本文;规划与每次动作两个时机改成端口 `TerrainPolicy`、`Effector` 的说法(切换时已改)。
+- `permission-layer.md`:开头对旧稿的引用已改指本文;规划与每次动作两个时机改成端口 `TerrainPolicy` 与鼠标的说法(输入层落地时已改)。
 
 ## 十二、已定的设计选择
 
@@ -1034,6 +1037,20 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   那一格跟前、问主人,答应了接着走剩下的路,拒绝了在那里收场(`kind = "denied"`,下一步是把那一格写进描述的 `avoid` 再规划)。
   开走前整条规划一次、把要问的格一次问完的那一步删了——它唯一的理由就是权限的时机。
 - **模块没加的**:模块不认识"一趟路的描述""计划""途经点";多段、乘船、垫路料清单都在 Numen 侧(`numen/route`、`numen/nav`)。
+
+### 她的输入层(10-07,1.21.1 之上,设计稿 `docs/companion-input.md`)
+
+- **公式与几何进 Numen API**:`DigTime`(挖掘时间与挖完的缓手;身体上的事实是 `DigTime.Mining`)、`Reach`、`Sight`、`Faces`、`Replaceable`
+  搬进 `com.dwinovo.numen.api.entity`,pathing 与 Numen 都按它们用;`Reach` 只认眼睛的位置与交互距离,站在某一列时眼睛在哪由 `BodyStats.eye` 算。
+  纯规划的 `Footing`、`Stepping`、`Clearance` 等留在 `world/`。
+- **视角**:`Aim` 删去,转头、瞄点(挖看哪一点、用点哪一面、放点哪个面)并进 Numen API 的 `Look`(`NumenPlayer.look()`);`InputDriver` 只剩驾船。
+  `Hotbar` 由静态工具类改成挂在身体上的 `NumenPlayer.hotbar()`。
+- **鼠标**:`Crosshair`、`PlayerHands`、端口 `Effector`、Numen 的 `CompanionHands` 并成 Numen API 的 `Mouse`(`NumenPlayer.mouse()`):
+  准星拾取、左键挖、右键用(点格子、点空气、点实体是同一个右键,结果是同一种 `Use.Pressed`,带"打开了一个界面"),同伴的每一下动手之前先过权限层
+  (被拒交回 `Mouse.Refusal`,要问交回 `Refusal.Asks`)。`Ports` 只剩 `TerrainPolicy`、`Materials`、`Threats`;`Body` 交出 `controls()`、`look()`、
+  `mouse()`、`hotbar()`;`Snapshots` 挪到 `pathing.api`;挑工具拿到手上是 `ToolChoice.take`。`numen.use.block`、`item`、`entity`、`hit` 从同一个结果写回执。
+- **统一松手**:`CompanionBrain` 换驱动者时,旧驱动者 `stop(PREEMPTED)` 之后统一松开键盘与鼠标;被顶掉的任务与反射不再各自松键。
+- **测试**:`TestBody` 自带一份 `Mouse`、`Look`、`Hotbar`;`DigWatch` 与 `AlterGameTests` 不再包端口,派生一个 `Mouse` 换在身体上。
 
 ## 参考
 

@@ -296,7 +296,7 @@ route reverse mine --as back                 反着的一条
   一次,挖不掉的收工时归为 `BuildOutstanding.Cause.NOT_CLEARED`,连同挖掘执行的那句话。要放方块的格身上有料才清。创造模式照原版
   一下就碎:写成空气(通知邻居)再落位,不走挖掘。`BlockDigger.destroyNow` 删掉,破坏方块只有她的手这一条路。
 - **`use block left`**:纯按键——朝那一格中心看,准星落在谁就按谁,手上是什么就用什么,按住直到碎或 `--hold_ticks` 到,不挪步;
-  落在别的格或实体上回执照实说。`Interaction` 的左键挖方块直接按 `CompanionHands`,不再经 `BlockDigger`(那里的换工具、清视线
+  落在别的格或实体上回执照实说。`Interaction` 的左键挖方块直接按她的鼠标(`Mouse.dig`),不再经 `BlockDigger`(那里的换工具、清视线
   归挖掘执行)。
 - **`use block right`**(09-30 跟进):同样退回纯按键——看向目标看得见的那一面,准星落在谁就点谁,手上是什么就用什么,不挪步、
   不换工具、不再先清视线上的软遮挡;点到别的格或实体照实说,右键落在别的格上时写出 `work dig` 挖掉它或 `arrive:use` 从另一面点。

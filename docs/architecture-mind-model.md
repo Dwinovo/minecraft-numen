@@ -11,10 +11,13 @@ ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen
 
 **寻路是 Numen(Numen API 的第一个插件)的内容,独立成模块,经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖
 原版与 Numen API 公开的那部分(瘦 api jar),随 Numen 的加载器 jar 发出,Numen API 不依赖它。设计稿见 `docs/pathing.md`。
-她缺的那半个客户端——一副键盘 `Controls`、每刻一次的物理步进 `Physics`、换手 `Hotbar` 与它留下的记录 `BodyAction`——是
-Numen API 的公开部分(`com.dwinovo.numen.api.entity`),`NumenPlayer.controls()` 给出键盘,第三方想自己写一套寻路,按它们让她走;
+她缺的那半个客户端——一副键盘 `Controls`、一个视角 `Look`、一个鼠标 `Mouse`(准星、左键挖、右键用,动手之前身体是同伴就过权限层)、
+一个快捷栏 `Hotbar` 与它留下的记录 `BodyAction`、每刻一次的物理步进 `Physics`,以及身体与寻路规划共用的原版公式与几何(`DigTime`、`Reach`、
+`Sight`、`Faces`、`Replaceable`)——是 Numen API 的公开部分(`com.dwinovo.numen.api.entity`),`NumenPlayer.controls()`、`look()`、`mouse()`、
+`hotbar()` 各给出一件,谁驱动她都用同一份;第三方想自己写一套寻路(还能挖、能放),按它们让她动。设计与取舍见 `docs/companion-input.md`。
 寻路模块的身体端口 `Body` 在寻路这一侧,Numen 的适配层 `numen/nav` 的 `CompanionBody` 把同伴接进去(无状态:寻路只经
-`entity()`、`controls()`、`snapshot()` 用身体,不按身体对象存状态);手、许可、垫路料、要避开的生物四个端口也由适配层实现。
+`entity()`、`controls()`、`look()`、`mouse()`、`hotbar()`、`snapshot()` 用身体,不按身体对象存状态);许可、垫路料、要避开的生物三个端口也由适配层实现。
+`CompanionBrain` 换驱动者时统一松开键盘与鼠标。
 Numen 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
 只在适配层里接;结局与实际账说给模型听只在 `NavText` 一处。
 
@@ -292,7 +295,7 @@ deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:b
 |---|---|
 | 规划 | 成本模型只读裁决:拒绝无穷大;要问的格在 `alter=any` 下按有限代价算进路线、其余规格下无穷大;路线上那一格的改动(`Edit.Dig`)带着许可给的凭据,就是那一条征询(`ConsentItem`) |
 | 执行开始 | 整条路线或整个动作过一次裁决,需要同意就发起一次征询;不是走到墙边才问 |
-| 每次动作 | 她的两只手(`CompanionHands`,导航、挖矿、`use block` 共用的唯一挖掘与放置落点)、攻击落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
+| 每次动作 | 她的鼠标(`NumenPlayer.mouse()`,导航、挖矿、`use block` 共用的唯一挖掘与放置落点,身体是同伴就在动手那一刻过权限层)、攻击落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
 
 **各内容的接入点。** 内容只提出动作(`AbstractCompanionTask.permit`),判与问归权限层。mine 选目标
 不看权限,规格 `alter=any`,按"走过去 + 挖它"的同一套定价挑,动手前把挖掘交给权限层;goto、follow
