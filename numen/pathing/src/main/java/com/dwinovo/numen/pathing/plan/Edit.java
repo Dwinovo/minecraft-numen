@@ -13,6 +13,9 @@ public sealed interface Edit {
     /** 动的是哪一格。 */
     BlockPos pos();
 
+    /** 许可对这件事的答复:放行或要问;开关门不问许可,恒为放行。读"这件事要不要问主人"只问这里。 */
+    Permit permit();
+
     /** 算不算改地形:挖与放算,开关门不算(不改路线规格的改动预算,也不问许可)。 */
     default boolean alters() {
         return true;
@@ -44,6 +47,11 @@ public sealed interface Edit {
 
     /** 开关 {@code pos} 这扇门(或栅栏门、活板门);门的另一半随原版一起翻转。{@code state} 是开关之前的样子。 */
     record Door(BlockPos pos, BlockState state) implements Edit {
+
+        @Override
+        public Permit permit() {
+            return Permit.ALLOW;
+        }
 
         @Override
         public boolean alters() {

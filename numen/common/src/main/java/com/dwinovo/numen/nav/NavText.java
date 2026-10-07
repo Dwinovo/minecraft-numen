@@ -369,22 +369,13 @@ public final class NavText {
             Map<BlockPos, Block> places = new LinkedHashMap<>();
             Map<BlockPos, String> asks = new LinkedHashMap<>();
             for (Edit edit : edits) {
-                Permit permit = switch (edit) {
-                    case Edit.Dig dig -> {
-                        digs.put(dig.pos(), dig.state().getBlock());
-                        yield dig.permit();
-                    }
-                    case Edit.Place place -> {
-                        places.put(place.pos(), place.block());
-                        yield place.permit();
-                    }
-                    case Edit.Catch caught -> {
-                        places.put(caught.pos(), net.minecraft.world.level.block.Blocks.WATER);
-                        yield caught.permit();
-                    }
-                    case Edit.Door door -> null;
-                };
-                if (permit instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item) {
+                switch (edit) {
+                    case Edit.Dig dig -> digs.put(dig.pos(), dig.state().getBlock());
+                    case Edit.Place place -> places.put(place.pos(), place.block());
+                    case Edit.Catch caught -> places.put(caught.pos(), net.minecraft.world.level.block.Blocks.WATER);
+                    case Edit.Door door -> { }
+                }
+                if (edit.permit() instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item) {
                     asks.put(edit.pos(), item.cause());
                 }
             }

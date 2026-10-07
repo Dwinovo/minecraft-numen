@@ -273,13 +273,7 @@ public final class Trip {
         List<ConsentItem> items = new ArrayList<>(List.of(at));
         for (Route.Leg leg : rest) {
             for (Edit edit : leg.maneuver().edits()) {
-                Permit permit = switch (edit) {
-                    case Edit.Dig dig -> dig.permit();
-                    case Edit.Place place -> place.permit();
-                    case Edit.Catch caught -> caught.permit();
-                    case Edit.Door door -> null;
-                };
-                if (permit instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item
+                if (edit.permit() instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item
                         && at.covers(item) && items.stream().noneMatch(i -> java.util.Objects.equals(i.pos(), item.pos()))) {
                     items.add(item);
                 }

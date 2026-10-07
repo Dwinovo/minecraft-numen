@@ -46,12 +46,7 @@ public sealed interface Outcome {
 
         /** 那条路上有许可答"要问"的格。 */
         public boolean asks() {
-            return changes.stream().anyMatch(e -> switch (e) {
-                case Edit.Dig d -> d.permit() instanceof Permit.Ask;
-                case Edit.Place p -> p.permit() instanceof Permit.Ask;
-                case Edit.Catch c -> c.permit() instanceof Permit.Ask;
-                case Edit.Door door -> false;
-            });
+            return changes.stream().anyMatch(e -> e.permit() instanceof Permit.Ask);
         }
     }
 
