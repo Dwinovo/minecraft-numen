@@ -7,7 +7,6 @@ import java.util.Optional;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -87,7 +86,7 @@ public class MaterialGameTests {
         t.materials = Trial.carried(carrying, Blocks.COBBLESTONE);
         t.go(carrying, Goals.at(t.at(17, 5, 5)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
         TestBody empty = t.body(6, 5, 20);
-        t.materials = Materials.NONE;
+        t.materials = Trial.NO_MATERIALS;
         t.go(empty, Goals.at(t.at(17, 5, 20)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
     }
 

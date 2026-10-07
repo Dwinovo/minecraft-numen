@@ -10,7 +10,6 @@ import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -70,10 +69,10 @@ final class Draft extends EditedView {
         if (!admission.ok()) {
             return fail(pos, admission.refused(), admission.detail());
         }
-        if (!Reach.reaches(body.eye(Pose.STANDING, bx, feetY, bz), pos, body.blockReach())) {
+        if (!Reach.reaches(body.eye(bx, feetY, bz), pos, body.blockReach())) {
             return fail(pos, Reason.OUT_OF_REACH);
         }
-        boolean eyeInWater = Semantics.eyeInWater(this, bx + 0.5, feetY + body.eyeHeight(Pose.STANDING), bz + 0.5);
+        boolean eyeInWater = Semantics.eyeInWater(this, bx + 0.5, feetY + body.eyeHeight(), bz + 0.5);
         edits.add(new Edit.Dig(pos.immutable(), state, admission.permit(), eyeInWater, grounded));
         dig(pos);
         return true;
@@ -85,7 +84,7 @@ final class Draft extends EditedView {
      */
     boolean placeInSight(BlockPos pos, int bx, double feetY, int bz) {
         Block block = model.placing().orElse(null);
-        if (block != null && Faces.inSight(this, body.eye(Pose.STANDING, bx, feetY, bz), body.blockReach(), pos,
+        if (block != null && Faces.inSight(this, body.eye(bx, feetY, bz), body.blockReach(), pos,
                 block) == null) {
             return fail(pos, Reason.NO_FACE);
         }
@@ -96,7 +95,7 @@ final class Draft extends EditedView {
      * 往 {@code pos} 放一块垫路料:放的那一刻身体脚在 {@code (bx, feetY, bz)}。不往身体那一刻占着的格里放。
      */
     boolean place(BlockPos pos, int bx, double feetY, int bz) {
-        if (Clearance.occupies(body, Pose.STANDING, bx, feetY, bz, pos)) {
+        if (Clearance.occupies(body, bx, feetY, bz, pos)) {
             return fail(pos, Reason.OCCUPIED);
         }
         BlockState current = getBlockState(pos);
@@ -104,7 +103,7 @@ final class Draft extends EditedView {
         if (!admission.ok()) {
             return fail(pos, admission.refused(), admission.detail());
         }
-        if (!Reach.reaches(body.eye(Pose.STANDING, bx, feetY, bz), pos, body.blockReach())) {
+        if (!Reach.reaches(body.eye(bx, feetY, bz), pos, body.blockReach())) {
             return fail(pos, Reason.OUT_OF_REACH);
         }
         Block block = model.placing().orElseThrow();

@@ -76,7 +76,7 @@ class CostModelTest {
         TestWorld world = stones().set(FREE.above().above(), STONE);
         BlockPos air = FREE.above();
         CostModel digOnly = CostModel.of(RouteSpec.defaults().edit().dig(true).build(), Fixtures.body(),
-                TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+                Fixtures.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         assertNull(digOnly.admitDig(world, FREE, STONE).refused());
         assertEquals(Reason.NO_PLACING, digOnly.admitPlace(world, air, Blocks.AIR.defaultBlockState()).refused());
         CostModel placeOnly = digOnly.withSpec(RouteSpec.defaults().edit().place(true).build());
@@ -99,7 +99,7 @@ class CostModelTest {
         RouteSpec spec = RouteSpec.defaults().edit().changes(true).consent(false)
                 .positions(PositionCosts.builder().forbid(Use.DIG, FREE.asLong()).build())
                 .bans(new BlockBans(Set.of(), Set.of(Blocks.WATER), Set.of())).build();
-        CostModel model = CostModel.of(spec, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        CostModel model = CostModel.of(spec, Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         assertEquals(Reason.FORBIDDEN, model.admitDig(world, FREE, STONE).refused());
         BlockPos pond = new BlockPos(0, 60, 0);
         world.set(pond, Blocks.WATER.defaultBlockState()).set(pond.below(), STONE);
@@ -111,7 +111,7 @@ class CostModelTest {
     void placingIntoACellThePositionsForbidIsRefused() {
         TestWorld world = new TestWorld().set(FREE.below(), STONE);
         RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        CostModel open = CostModel.of(natural, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        CostModel open = CostModel.of(natural, Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         assertNull(open.admitPlace(world, FREE, Blocks.AIR.defaultBlockState()).refused());
         CostModel forbidden = open.withSpec(natural.edit()
                 .positions(PositionCosts.builder().forbid(Use.PLACE, FREE.asLong()).build()).build());
@@ -126,7 +126,7 @@ class CostModelTest {
     void diggingCostsTheDigTimeWithTheChosenToolPlusTheBreakPenalty() {
         RouteSpec spec = RouteSpec.defaults().edit().changes(true).consent(false).breakPenalty(7.5).build();
         BodySnapshot body = Fixtures.carrying(3, new ItemStack(Items.WOODEN_PICKAXE));
-        CostModel model = CostModel.of(spec, body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel model = CostModel.of(spec, body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         for (boolean eyeInWater : new boolean[] {false, true}) {
             for (boolean grounded : new boolean[] {true, false}) {
                 double ticks = DigTime.ticks(body.mining(), body.creative(), new ItemStack(Items.WOODEN_PICKAXE), STONE, eyeInWater, grounded);
@@ -141,7 +141,7 @@ class CostModelTest {
     void eachCreatureRaisesThePriceOnlyWithinItsOwnRadius() {
         Threat small = new Threat(0.5, 64, 0.5, 2);
         Threat wide = new Threat(20.5, 64, 0.5, 5);
-        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 () -> List.of(small, wide));
         double inside = model.extra(Use.PASS, new BlockPos(1, 64, 0).asLong());
         assertTrue(inside > 0, "小的那只半径里");
@@ -153,7 +153,7 @@ class CostModelTest {
     @Test
     void creaturesMakeTheCellsAroundThemDearer() {
         List<Threat> zombie = List.of(new Threat(10.5, 64, 10.5, 2));
-        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 () -> zombie);
         assertEquals(ActionCosts.DANGER_PER_CELL, model.extra(Use.PASS, new BlockPos(11, 64, 10).asLong()), 1e-9);
         assertEquals(0, model.extra(Use.PASS, new BlockPos(20, 64, 10).asLong()));
@@ -162,13 +162,13 @@ class CostModelTest {
     @Test
     void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
         RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(100).build();
-        CostModel healthy = CostModel.of(loose, Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertTrue(bears(healthy, 17), "20 点血摔完留 6 点:能摔 17 格");
         assertFalse(bears(healthy, 18));
-        CostModel weak = CostModel.of(loose, Fixtures.body(6), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel weak = CostModel.of(loose, Fixtures.body(6), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertTrue(bears(weak, 3), "只剩 6 点血时只落摔不疼的高度");
         assertFalse(bears(weak, 4));
-        CostModel factory = CostModel.of(RouteSpec.defaults(), Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+        CostModel factory = CostModel.of(RouteSpec.defaults(), Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 Threats.NONE);
         assertTrue(bears(factory, 3), "出厂规格收紧到 3");
         assertFalse(bears(factory, 4));

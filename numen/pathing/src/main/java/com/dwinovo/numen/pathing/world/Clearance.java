@@ -6,7 +6,6 @@ import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -25,27 +24,27 @@ public final class Clearance {
 
     private Clearance() {}
 
-    /** 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时放不放得下。 */
-    public static boolean fits(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z) {
-        return free(level, body, box(body, pose, x + 0.5, feetY, z + 0.5), feetY);
+    /** 身体站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时放不放得下。 */
+    public static boolean fits(BlockGetter level, BodyStats body, int x, double feetY, int z) {
+        return free(level, body, box(body, x + 0.5, feetY, z + 0.5), feetY);
     }
 
     /**
-     * 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时,碰撞箱与它交叠的那些格,自下而上;放得下时为空。
+     * 身体站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时,碰撞箱与它交叠的那些格,自下而上;放得下时为空。
      * 规划要挖开或打开哪几格才站得进去,问的就是这里。
      */
-    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z) {
-        return blockers(level, body, pose, x, feetY, z, 0, 0);
+    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, int x, double feetY, int z) {
+        return blockers(level, body, x, feetY, z, 0, 0);
     }
 
     /**
-     * 身体以 {@code pose}、脚一直在 {@code feetY},从 {@code (x, z)} 这一列的中心直走到 {@code (x + dx, z + dz)} 那一列的中心,
+     * 身体脚一直在 {@code feetY},从 {@code (x, z)} 这一列的中心直走到 {@code (x + dx, z + dz)} 那一列的中心,
      * 途中碰撞箱与它交叠的那些格,自下而上。关着的门只占格边,身体站在门格中心碰不到它,走过格边时才撞上——找挡路的门、
      * 要挖开的格问的是这里。走的是斜线时取两端身体盒的包络,比身体真实扫过的范围略大。
      */
-    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z,
+    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, int x, double feetY, int z,
                                           int dx, int dz) {
-        AABB swept = box(body, pose, x + 0.5, feetY, z + 0.5).minmax(box(body, pose, x + dx + 0.5, feetY, z + dz + 0.5));
+        AABB swept = box(body, x + 0.5, feetY, z + 0.5).minmax(box(body, x + dx + 0.5, feetY, z + dz + 0.5));
         List<BlockPos> out = new ArrayList<>();
         visit(level, body, swept, feetY, pos -> {
             out.add(pos.immutable());
@@ -56,17 +55,17 @@ public final class Clearance {
     }
 
     /**
-     * 身体以 {@code pose}、脚在 {@code feetY} 时占到的最高一格(碰撞盒的顶在这一格里)。最低一格就是脚所在的格
+     * 身体脚在 {@code feetY} 时占到的最高一格(碰撞盒的顶在这一格里)。最低一格就是脚所在的格
      * {@link Footing#cellOf}。身体经过哪几格、碰到哪几格,都按这两头数。
      */
-    public static int topCell(BodyStats body, Pose pose, double feetY) {
-        return Mth.floor(feetY + body.height(pose) - DEFLATE);
+    public static int topCell(BodyStats body, double feetY) {
+        return Mth.floor(feetY + body.height() - DEFLATE);
     }
 
-    /** 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时占着 {@code cell} 这一格。 */
-    public static boolean occupies(BodyStats body, Pose pose, int x, double feetY, int z, BlockPos cell) {
+    /** 身体站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时占着 {@code cell} 这一格。 */
+    public static boolean occupies(BodyStats body, int x, double feetY, int z, BlockPos cell) {
         return cell.getX() == x && cell.getZ() == z && cell.getY() >= Footing.cellOf(feetY)
-                && cell.getY() <= topCell(body, pose, feetY);
+                && cell.getY() <= topCell(body, feetY);
     }
 
     /**
@@ -76,10 +75,10 @@ public final class Clearance {
         return Boxes.whole(state);
     }
 
-    /** 身体以 {@code pose}、脚底中心在 {@code (cx, feetY, cz)} 时的碰撞盒。 */
-    static AABB box(BodyStats body, Pose pose, double cx, double feetY, double cz) {
+    /** 身体脚底中心在 {@code (cx, feetY, cz)} 时的碰撞盒。 */
+    static AABB box(BodyStats body, double cx, double feetY, double cz) {
         double half = body.width() / 2;
-        return new AABB(cx - half, feetY, cz - half, cx + half, feetY + body.height(pose), cz + half);
+        return new AABB(cx - half, feetY, cz - half, cx + half, feetY + body.height(), cz + half);
     }
 
     /**

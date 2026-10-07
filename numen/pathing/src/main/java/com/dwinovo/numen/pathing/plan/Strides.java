@@ -10,7 +10,6 @@ import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 
 /** 几种走法共用的小事:身体要腾出的格、泡没泡在水里、脚下的步速、每格走多久。 */
@@ -20,12 +19,12 @@ final class Strides {
 
     /** 身体脚在 {@code feetY} 站在 {@code to} 那一列时挡着它的格,自下而上。 */
     static List<BlockPos> at(BlockGetter level, BodyStats body, BlockPos to, double feetY) {
-        return Clearance.blockers(level, body, Pose.STANDING, to.getX(), feetY, to.getZ());
+        return Clearance.blockers(level, body, to.getX(), feetY, to.getZ());
     }
 
     /** 身体脚在 {@code feetY},从 {@code from} 那一列朝 {@code heading} 走进相邻一列,途中挡着它的格,自下而上。 */
     static List<BlockPos> across(BlockGetter level, BodyStats body, BlockPos from, Heading heading, double feetY) {
-        return Clearance.blockers(level, body, Pose.STANDING, from.getX(), feetY, from.getZ(), heading.dx(), heading.dz());
+        return Clearance.blockers(level, body, from.getX(), feetY, from.getZ(), heading.dx(), heading.dz());
     }
 
     /** 几份挡路的格合起来,去重后自下而上。 */
@@ -107,7 +106,7 @@ final class Strides {
      * 宁可多算。
      */
     static boolean submerged(BlockGetter level, BodyStats body, BlockPos from, Stance start, BlockPos to, Stance landing) {
-        double eye = body.eyeHeight(Pose.STANDING);
+        double eye = body.eyeHeight();
         return Semantics.breathless(level, from.getX() + 0.5, start.feetY() + eye, from.getZ() + 0.5)
                 || Semantics.breathless(level, to.getX() + 0.5, landing.feetY() + eye, to.getZ() + 0.5);
     }

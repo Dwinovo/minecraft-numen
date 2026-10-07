@@ -12,7 +12,6 @@ import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -51,13 +50,13 @@ final class Contact {
         this.fromX = from.getX();
         this.fromZ = from.getZ();
         this.fromLow = Footing.cellOf(fromFeet);
-        this.fromHigh = Clearance.topCell(body, Pose.STANDING, fromFeet);
+        this.fromHigh = Clearance.topCell(body, fromFeet);
     }
 
     /** 身体在 {@code (x, z)} 这一列经过,脚在 {@code lowFeet} 到 {@code highFeet} 之间。 */
     Contact column(int x, int z, double lowFeet, double highFeet) {
         int low = Footing.cellOf(Math.min(lowFeet, highFeet));
-        int high = Clearance.topCell(body, Pose.STANDING, Math.max(lowFeet, highFeet));
+        int high = Clearance.topCell(body, Math.max(lowFeet, highFeet));
         for (int y = low; y <= high; y++) {
             if (x == fromX && z == fromZ && y >= fromLow && y <= fromHigh) {
                 continue;

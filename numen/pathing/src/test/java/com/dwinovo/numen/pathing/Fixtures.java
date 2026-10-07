@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing;
 
+import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.api.entity.DigTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +30,15 @@ public final class Fixtures {
 
     /** 单测默认的展开预算。 */
     public static final int BUDGET = 20_000;
+
+    /** 原版玩家不带任何效果的挖掘取值。 */
+    public static final DigTime.Mining MINING = new DigTime.Mining(0, 1, 0.2, -1, -1);
+    /** 原版玩家不带任何效果、满氧气时的样子。 */
+    public static final Breath BREATH = new Breath(300, 300, 0, 0, false);
+    /** 身上什么料都没有。 */
+    public static final Materials NO_MATERIALS = Optional::empty;
+    /** 什么都放行。 */
+    public static final TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
 
     /** 等一次派发出去的搜索跑完,交出结论。 */
     public static <T> T await(com.dwinovo.numen.pathing.search.Pending<T> pending) {
@@ -63,18 +73,18 @@ public final class Fixtures {
     }
 
     public static BodySnapshot body(BodyStats stats, GameType mode, float health, List<ItemStack> inventory) {
-        return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, DigTime.Mining.VANILLA,
-                Breath.VANILLA);
+        return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, Fixtures.MINING,
+                Fixtures.BREATH);
     }
 
     /** 这份规格,原版身体,什么都放行,身上没料,没有生物。 */
     public static CostModel model(RouteSpec spec) {
-        return CostModel.of(spec, body(), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        return CostModel.of(spec, body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 
     /** 这份规格,原版身体,什么都放行,身上带着圆石。 */
     public static CostModel withCobble(RouteSpec spec) {
-        return CostModel.of(spec, body(), TerrainPolicy.ALLOW_ALL, COBBLE, Threats.NONE);
+        return CostModel.of(spec, body(), Fixtures.ALLOW_ALL, COBBLE, Threats.NONE);
     }
 
     /** 许挖许放、要问主人的格当墙的规格。 */

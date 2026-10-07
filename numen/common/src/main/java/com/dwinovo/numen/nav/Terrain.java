@@ -15,7 +15,6 @@ import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
@@ -103,7 +102,7 @@ public final class Terrain {
 
     /** 她站直的身体放得进脚在 {@code (x, feetY, z)} 这一格的那个位置。 */
     public boolean fits(int x, int feetY, int z) {
-        return Clearance.fits(world, body, Pose.STANDING, x, feetY, z);
+        return Clearance.fits(world, body, x, feetY, z);
     }
 
     /** 身体盒子是 {@code box} 时,此刻托着她的方块。 */

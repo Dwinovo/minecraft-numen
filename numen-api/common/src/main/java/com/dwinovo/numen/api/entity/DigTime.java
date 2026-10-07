@@ -41,9 +41,6 @@ public final class DigTime {
      */
     public record Mining(double efficiency, double breakSpeed, double submergedSpeed, int haste, int fatigue) {
 
-        /** 原版玩家不带任何效果时的取值。 */
-        public static final Mining VANILLA = new Mining(0, 1, 0.2, -1, -1);
-
         /**
          * 从一具真实的身体上读此刻的取值。挖掘效率属性里手上那件自己带的修饰符(效率附魔)要扣掉:挑工具时每件按它自己的修饰符
          * 加回去,不扣就会把手上那件的附魔算到每一件头上。

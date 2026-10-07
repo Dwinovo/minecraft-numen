@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.plan;
 
-import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.Fixtures;
@@ -105,7 +104,7 @@ class FallDamageTest {
         BodySnapshot creative = Fixtures.body(Vanilla.CREATIVE, GameType.CREATIVE, 20, List.of());
         assertEquals(0, creative.fallDamage(30, stalagmite()));
         BodySnapshot light = new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 5, 0.5, 20, 0, List.of(),
-                DigTime.Mining.VANILLA, Breath.VANILLA);
+                Fixtures.MINING, Fixtures.BREATH);
         assertEquals(3, light.fallDamage(10, Blocks.STONE.defaultBlockState()), "ceil((10 - 5) * 0.5)");
         assertEquals(2, light.fallDamage(5, stalagmite()), "ceil((5 + 2 - 5) * 2 * 0.5)");
     }

@@ -28,7 +28,6 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -208,7 +207,7 @@ public class GoalGameTests {
         t.go(body, Goals.use(t.level, stats, chest), RouteSpec.defaults()).within(400).arrives().then(r -> {
             // 搜索按节点中心的眼睛挑站位:从停下的那个节点看过去,中间隔着的是高草;高草还在(只走不改)
             BlockPos node = r.body.blockPosition();
-            Vec3 eye = stats.eye(Pose.STANDING, node.getX(), r.body.getY(), node.getZ());
+            Vec3 eye = stats.eye(node.getX(), r.body.getY(), node.getZ());
             Sight.Trace seen = Sight.use(t.level, eye, stats.blockReach(), chest, Direction.WEST);
             if (seen == null || seen.soft().isEmpty() || !t.state(11, 2, 5).is(Blocks.TALL_GRASS)) {
                 throw new GameTestAssertException("应当停在隔着高草看得见它的地方:" + t.rel(node) + " " + seen);
@@ -296,16 +295,6 @@ public class GoalGameTests {
         TestBody body = t.body(10, 1, 10);
         Goal goal = Goals.anyOf(List.of(Goals.at(t.at(30, 1, 10)), Goals.at(t.at(10, 1, 16))));
         t.go(body, goal, RouteSpec.defaults()).within(300).arrives().then(r -> at(t, r, 10, 1, 16));
-    }
-
-    /** 起点就在一个成员里,但停在那儿要付很大的到达价;十格外另一个成员不收:走过去,不在原地算到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void leaves_an_expensive_member_for_a_cheap_one(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        TestBody body = t.body(10, 1, 10);
-        Goal goal = Goals.anyOf(List.of(Goals.priced(Goals.within(Goals.at(t.at(10, 1, 10)), 0, 2), 500),
-                Goals.at(t.at(20, 1, 10))));
-        t.go(body, goal, RouteSpec.defaults()).within(300).arrives().then(r -> at(t, r, 20, 1, 10));
     }
 
     /**

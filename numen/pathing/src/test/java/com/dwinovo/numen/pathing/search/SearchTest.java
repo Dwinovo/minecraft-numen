@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.search;
 
-import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,7 +12,6 @@ import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
@@ -27,7 +25,6 @@ import com.dwinovo.numen.api.entity.Reach;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -147,8 +144,8 @@ class SearchTest {
     void aBlockBuriedDeepBelowIsReachedWithinTheDefaultBudget() {
         TestWorld ground = new TestWorld().ground(Y - 1, STONE).loadedWithin(6);
         CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
-                TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
-        SearchResult result = search(ground, model, START, Goals.dig(new BlockPos(0, Y - 27, 0), SURVIVAL),
+                Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        SearchResult result = search(ground, model, START, Goals.dig(new BlockPos(0, Y - 27, 0), SURVIVAL, Goals.Clearing.ANY),
                 NavRequest.DEFAULT_BUDGET);
         assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
         for (BlockPos node : result.route().nodes()) {
@@ -326,7 +323,7 @@ class SearchTest {
         world.fill(-1, Y + 2, -1, 11, Y + 2, 5, STONE);
         BlockPos denied = new BlockPos(5, Y, 0);
         TerrainPolicy policy = (change, pos, state, view) -> pos.getX() == 5 && pos.getZ() == 0 ? Permit.deny("玩家放的") : Permit.ALLOW;
-        CostModel model = CostModel.of(natural(), Fixtures.body(), policy, Materials.NONE, Threats.NONE);
+        CostModel model = CostModel.of(natural(), Fixtures.body(), policy, Fixtures.NO_MATERIALS, Threats.NONE);
         SearchResult result = search(world, model, START, Goals.at(new BlockPos(10, Y, 0)));
         assertTrue(result.arrived());
         assertFalse(digs(result.route(), denied) || digs(result.route(), denied.above()), "许可拒绝的格不进路线");
@@ -338,7 +335,7 @@ class SearchTest {
         TestWorld world = corridor().fill(5, Y, 0, 5, Y + 1, 0, Blocks.DIRT.defaultBlockState());
         TerrainPolicy policy = (change, pos, state, view) -> pos.getX() == 5 ? Permit.ask("要主人点头") : Permit.ALLOW;
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
-        CostModel naturalModel = CostModel.of(natural(), Fixtures.body(), policy, Materials.NONE, Threats.NONE);
+        CostModel naturalModel = CostModel.of(natural(), Fixtures.body(), policy, Fixtures.NO_MATERIALS, Threats.NONE);
         assertEquals(SearchResult.Stop.EXHAUSTED, search(world, naturalModel, START, goal).stop());
         CostModel anyModel = naturalModel.withSpec(RouteSpec.defaults().edit().changes(true).build());
         SearchResult result = search(world, anyModel, START, goal);
@@ -389,11 +386,11 @@ class SearchTest {
     void diggingABlockEndsWithinReachAndOutsideIt() {
         BlockPos chest = new BlockPos(10, Y, 0);
         TestWorld world = field().set(chest, Blocks.CHEST.defaultBlockState());
-        SearchResult result = search(world, defaults(), START, Goals.dig(chest, SURVIVAL));
+        SearchResult result = search(world, defaults(), START, Goals.dig(chest, SURVIVAL, Goals.Clearing.ANY));
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
         Stance stance = result.route().endStance();
-        assertTrue(Reach.reaches(SURVIVAL.eye(Pose.STANDING, end.getX(), stance.feetY(), end.getZ()), chest, SURVIVAL.blockReach()));
+        assertTrue(Reach.reaches(SURVIVAL.eye(end.getX(), stance.feetY(), end.getZ()), chest, SURVIVAL.blockReach()));
         assertNotEquals(chest, end);
         assertTrue(end.getX() < chest.getX(), "够得着就停,不走到跟前");
     }
@@ -420,7 +417,7 @@ class SearchTest {
             assertTrue(result.arrived(), result.stop().toString());
             BlockPos end = result.route().end();
             Stance stance = result.route().endStance();
-            long reached = pair.stream().filter(t -> Goals.dig(t, SURVIVAL).contains(end.getX(), end.getY(),
+            long reached = pair.stream().filter(t -> Goals.dig(t, SURVIVAL, Goals.Clearing.ANY).contains(end.getX(), end.getY(),
                     end.getZ(), stance)).count();
             assertTrue(Integer.signum(end.getZ()) == side && reached == 2,
                     "停在嵌着两格的那一头:" + end + " 够得着 " + reached);
@@ -445,7 +442,7 @@ class SearchTest {
         assertEquals(0, around.arrival(world, end.getX(), end.getY(), end.getZ(), result.route().endStance()), 1e-9,
                 "停在看得见它、不隔着羊毛的地方:" + end);
 
-        Goal anyone = Goals.dig(ore, SURVIVAL);
+        Goal anyone = Goals.dig(ore, SURVIVAL, Goals.Clearing.ANY);
         SearchResult near = search(world, defaults(), START, anyone);
         assertTrue(near.arrived());
         assertTrue(near.route().end().getX() < 4, "谁挖都行时停在墙前:" + near.route().end());
@@ -460,7 +457,7 @@ class SearchTest {
         BlockPos ore = new BlockPos(5, Y + 1, 0);
         TestWorld world = field().fill(4, Y, -6, 6, Y + 2, 6, STONE).set(ore, Blocks.IRON_ORE.defaultBlockState())
                 .set(4, Y + 1, 1, Blocks.AIR.defaultBlockState()).set(5, Y + 1, 1, Blocks.AIR.defaultBlockState());
-        Goal dig = Goals.dig(ore, SURVIVAL);
+        Goal dig = Goals.dig(ore, SURVIVAL, Goals.Clearing.ANY);
         Stance standing = new Stance(Stance.Kind.GROUND, Y, Y - 1);
         assertTrue(dig.contains(1, Y, 0, standing), "墙前正对着它的那一格够得着");
         assertEquals(ActionCosts.SIGHT_BLOCKER, dig.arrival(world, 1, Y, 0, standing), 1e-9, "隔着一格石头");
@@ -479,14 +476,14 @@ class SearchTest {
         BlockPos table = new BlockPos(3, Y, 0);
         TestWorld world = field().fill(2, Y, -3, 2, Y + 2, 3, STONE).set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
         Stance standing = new Stance(Stance.Kind.GROUND, Y, Y - 1);
-        assertTrue(Goals.dig(table, SURVIVAL).contains(0, Y, 0, standing), "起点几何上够得着");
+        assertTrue(Goals.dig(table, SURVIVAL, Goals.Clearing.ANY).contains(0, Y, 0, standing), "起点几何上够得着");
         Goals.Use use = Goals.use(world, SURVIVAL, table);
         assertFalse(use.contains(0, Y, 0, standing), "隔着墙,不是站位");
         SearchResult result = search(world, defaults(), START, use);
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
         assertTrue(end.getX() > 2, "绕到墙那边:" + end);
-        Vec3 eye = SURVIVAL.eye(Pose.STANDING, end.getX(), result.route().endStance().feetY(), end.getZ());
+        Vec3 eye = SURVIVAL.eye(end.getX(), result.route().endStance().feetY(), end.getZ());
         assertNotNull(use.sight(end.getX(), end.getY(), end.getZ(), result.route().endStance())
                 .seen(world, eye, SURVIVAL.blockReach()), "从停下的地方看得见它");
     }
@@ -546,13 +543,11 @@ class SearchTest {
     }
 
     @Test
-    void oneOfSeveralGoalsIsPickedByWalkingPlusArrivalPrice() {
+    void oneOfSeveralGoalsIsPickedByWalking() {
         BlockPos near = new BlockPos(3, Y, 0);
         BlockPos far = new BlockPos(9, Y, 0);
         Goal cheapNear = Goals.anyOf(List.of(Goals.at(near), Goals.at(far)));
         assertEquals(near, search(field(), defaults(), START, cheapNear).route().end());
-        Goal pricyNear = Goals.anyOf(List.of(Goals.priced(Goals.at(near), 500), Goals.at(far)));
-        assertEquals(far, search(field(), defaults(), START, pricyNear).route().end(), "近处那个到了还要付 500 刻");
     }
 
     @Test
@@ -598,7 +593,7 @@ class SearchTest {
     @Test
     void diggingABlockNeverFillsItOnTheWay() {
         TestWorld pit = field().fill(-1, Y, -1, 1, Y + 1, 1, STONE).fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
-        Goal reach = Goals.dig(START, SURVIVAL);
+        Goal reach = Goals.dig(START, SURVIVAL, Goals.Clearing.ANY);
         CostModel model = Fixtures.withCobble(natural());
         SearchResult loose = search(pit, model, START, unguarded(reach));
         assertTrue(loose.arrived() && fills(loose.route(), START), "不保护时最便宜的是把要够的那一格垫上");
@@ -617,7 +612,7 @@ class SearchTest {
         TestWorld cliff = new TestWorld().floor(-4, -4, 0, 4, Y - 1).floor(1, -4, 6, 4, Y - 13);
         BlockPos foot = new BlockPos(1, Y - 12, 0);
         BodySnapshot bucket = Fixtures.carrying(0, new ItemStack(Items.WATER_BUCKET));
-        CostModel model = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        CostModel model = CostModel.of(natural(), bucket, Fixtures.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         SearchResult loose = search(cliff, model, START, unguarded(Goals.at(foot)));
         assertTrue(loose.arrived() && catches(loose.route(), foot), "最便宜的是把水倒在要站的那一格里");
         SearchResult guarded = search(cliff, model, START, Goals.at(foot));
@@ -645,8 +640,12 @@ class SearchTest {
                 "挪了一格,还在里面");
         assertFalse(Goal.keepsStop(world, before, Goals.within(Goals.at(new BlockPos(12, Y, 0)), 0, 2), stop, standing),
                 "挪远了");
-        assertFalse(Goal.keepsStop(world, Goals.priced(before, 0), Goals.priced(before, 50), stop, standing),
-                "停在这儿变贵了");
+        // 停在这儿看那一格,换成一格要先挖开两格硬遮挡才看得见的:到达价涨了,不再算数;反过来变便宜了照样算
+        TestWorld blocked = field().fill(4, Y, 2, 6, Y + 1, 2, STONE).set(5, Y, -3, STONE).set(5, Y, 4, STONE);
+        Goal open = Goals.dig(new BlockPos(5, Y, -3), SURVIVAL, Goals.Clearing.ANY);
+        Goal behind = Goals.dig(new BlockPos(5, Y, 4), SURVIVAL, Goals.Clearing.ANY);
+        assertFalse(Goal.keepsStop(blocked, open, behind, stop, standing), "停在这儿变贵了");
+        assertTrue(Goal.keepsStop(blocked, behind, open, stop, standing), "停在这儿变便宜了");
     }
 
     // ==================== 旧路打折、生物危险 ====================
@@ -711,7 +710,7 @@ class SearchTest {
     @Test
     void routesDetourAroundCreatures() {
         Threat zombie = new Threat(10.5, Y, 0.5, 3);
-        CostModel wary = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+        CostModel wary = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 () -> List.of(zombie));
         Goal goal = Goals.at(new BlockPos(20, Y, 0));
         assertTrue(search(field(), defaults(), START, goal).route().nodes().stream()
@@ -738,8 +737,8 @@ class SearchTest {
     /** 原版身体,憋气的本钱是 {@code breath}。 */
     private static CostModel breathing(Breath breath) {
         BodySnapshot body = new BodySnapshot(SURVIVAL, net.minecraft.world.level.GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(), DigTime.Mining.VANILLA, breath);
-        return CostModel.of(RouteSpec.defaults(), body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+                List.of(), Fixtures.MINING, breath);
+        return CostModel.of(RouteSpec.defaults(), body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 
     /** 三十格长的封顶水道,一口气游完要约 285 刻,原版满氧气只憋得住 240 刻(留 3 秒):不走,搜完无路,说得出是憋气丢下了步子。 */

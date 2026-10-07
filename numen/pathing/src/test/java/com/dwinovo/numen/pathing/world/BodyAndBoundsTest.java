@@ -4,7 +4,6 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.level.border.WorldBorder;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -28,12 +27,6 @@ class BodyAndBoundsTest {
         double jump = SURVIVAL.jumpHeight(1.0);
         assertTrue(jump > 1.25 && jump < 1.26, "原版玩家起跳约 1.252,实为 " + jump);
         assertTrue(SURVIVAL.jumpHeight(0.5) < 0.5, "蜂蜜块上跳不过半格");
-    }
-
-    @Test
-    void standingAndCrouchingMustShareOneWidth() {
-        assertThrows(IllegalArgumentException.class, () -> new BodyStats(EntityDimensions.scalable(0.6F, 1.8F),
-                EntityDimensions.scalable(0.5F, 1.5F), 0.6, 0.42, 0.08, 4.5, false, false));
     }
 
     @Test

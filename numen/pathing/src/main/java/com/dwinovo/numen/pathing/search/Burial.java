@@ -8,7 +8,6 @@ import com.dwinovo.numen.pathing.world.Clearance;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -83,7 +82,7 @@ final class Burial {
             this.model = model;
             this.start = start;
             this.startKey = start.asLong();
-            this.tall = Clearance.topCell(model.body().stats(), Pose.STANDING, 0) + 1;
+            this.tall = Clearance.topCell(model.body().stats(), 0) + 1;
             this.minY = view.getMinBuildHeight();
             this.maxY = view.getMaxBuildHeight();
             best.defaultReturnValue(Double.POSITIVE_INFINITY);

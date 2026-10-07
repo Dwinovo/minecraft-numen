@@ -8,7 +8,6 @@ import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 
 /**
  * 跑酷:朝东南西北起跳,越过一到三格的空隙,落在同一个节点高度,或(规格开着时)高一级。
@@ -56,7 +55,7 @@ final class Parkour implements Move {
         if (!Double.isNaN(Footing.height(view, body, x + dx, y, z + dz))) {
             return Premise.fail(from.offset(dx, 0, dz), Reason.NO_GAP);
         }
-        if (!Clearance.fits(view, body, Pose.STANDING, x, peak, z)) {
+        if (!Clearance.fits(view, body, x, peak, z)) {
             return Premise.fail(from.above(2), Reason.NO_CLEARANCE);
         }
         boolean sprintable = model.maySprint();
@@ -91,8 +90,8 @@ final class Parkour implements Move {
                 }
             }
             // 空中经过这一列:起跳的脚高与最高点都放得下
-            if (!Clearance.fits(view, body, Pose.STANDING, cx, f0, cz)
-                    || !Clearance.fits(view, body, Pose.STANDING, cx, peak, cz)) {
+            if (!Clearance.fits(view, body, cx, f0, cz)
+                    || !Clearance.fits(view, body, cx, peak, cz)) {
                 return Premise.fail(new BlockPos(cx, y + 1, cz), Reason.NO_CLEARANCE);
             }
         }

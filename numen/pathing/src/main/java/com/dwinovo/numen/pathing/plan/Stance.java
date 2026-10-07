@@ -7,7 +7,6 @@ import com.dwinovo.numen.pathing.world.Recall;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 
 /**
@@ -40,11 +39,11 @@ public record Stance(Kind kind, double feetY, int supportY) {
 
     private static Stance measure(BlockGetter level, BodyStats body, int x, int y, int z) {
         double feet = Footing.height(level, body, x, y, z);
-        if (!Double.isNaN(feet) && Clearance.fits(level, body, Pose.STANDING, x, feet, z)) {
+        if (!Double.isNaN(feet) && Clearance.fits(level, body, x, feet, z)) {
             return new Stance(Kind.GROUND, feet, Footing.supportY(level, body, x, y, z));
         }
         BlockPos feetCell = new BlockPos(x, y, z);
-        if (hangs(level, feetCell) && Clearance.fits(level, body, Pose.STANDING, x, y, z)) {
+        if (hangs(level, feetCell) && Clearance.fits(level, body, x, y, z)) {
             boolean climbable = Semantics.is(level, feetCell, Semantics.Kind.CLIMBABLE);
             return new Stance(climbable ? Kind.CLIMBING : Kind.SWIMMING, y, Integer.MIN_VALUE);
         }
@@ -68,7 +67,7 @@ public record Stance(Kind kind, double feetY, int supportY) {
         if (at(level, body, pos) != null) {
             return pos;
         }
-        int step = Clearance.fits(level, body, Pose.STANDING, pos.getX(), pos.getY(), pos.getZ()) ? -1 : 1;
+        int step = Clearance.fits(level, body, pos.getX(), pos.getY(), pos.getZ()) ? -1 : 1;
         for (int y = pos.getY() + step; y >= level.getMinBuildHeight() && y < level.getMaxBuildHeight(); y += step) {
             BlockPos node = new BlockPos(pos.getX(), y, pos.getZ());
             if (at(level, body, node) != null) {

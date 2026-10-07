@@ -4,7 +4,6 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LanternBlock;
 import net.minecraft.world.level.block.SlabBlock;
@@ -102,7 +101,7 @@ class FootingTest {
                     .setValue(StairBlock.FACING, facing).setValue(StairBlock.HALF, Half.BOTTOM);
             TestWorld world = on(stair);
             assertEquals(Y + 0.5, height(world, Y), 1e-9);
-            assertFalse(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y + 0.5, 0), "楼梯格里站不进 " + facing);
+            assertFalse(Clearance.fits(world, SURVIVAL, 0, Y + 0.5, 0), "楼梯格里站不进 " + facing);
         }
     }
 
@@ -143,7 +142,7 @@ class FootingTest {
     void theBodyStandsInsideACauldronOnItsFloor() {
         TestWorld world = on(Blocks.CAULDRON.defaultBlockState());
         assertEquals(Y + 4 / 16.0, height(world, Y), 1e-9);
-        assertTrue(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y + 4 / 16.0, 0), "身体比炼药锅的内膛窄,站得进去");
+        assertTrue(Clearance.fits(world, SURVIVAL, 0, Y + 4 / 16.0, 0), "身体比炼药锅的内膛窄,站得进去");
     }
 
     @Test
@@ -154,7 +153,7 @@ class FootingTest {
         // 开着的活板门贴在格边,脚底碰不到:脚落在下面的石头上
         TestWorld open = on(bottom.setValue(TrapDoorBlock.OPEN, true));
         assertEquals(Y, height(open, Y), 1e-9);
-        assertTrue(Clearance.fits(open, SURVIVAL, Pose.STANDING, 0, Y, 0));
+        assertTrue(Clearance.fits(open, SURVIVAL, 0, Y, 0));
     }
 
     @Test
@@ -163,7 +162,7 @@ class FootingTest {
                 Blocks.VINE.defaultBlockState()}) {
             TestWorld world = on(thin);
             assertEquals(Y, height(world, Y), 1e-9, thin + ":脚落在下面的石头上");
-            assertTrue(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y, 0), thin + " 那一格身体放得下");
+            assertTrue(Clearance.fits(world, SURVIVAL, 0, Y, 0), thin + " 那一格身体放得下");
         }
     }
 
@@ -172,7 +171,7 @@ class FootingTest {
         TestWorld world = on(Blocks.SCAFFOLDING.defaultBlockState());
         assertEquals(Y + 1.0, height(world, Y + 1), 1e-9, "站在脚手架顶上");
         assertEquals(Y, height(world, Y), 1e-9, "在脚手架里,脚踩在下面的石头上");
-        assertTrue(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y, 0), "脚手架里身体放得下");
+        assertTrue(Clearance.fits(world, SURVIVAL, 0, Y, 0), "脚手架里身体放得下");
     }
 
     @Test

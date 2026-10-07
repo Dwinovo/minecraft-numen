@@ -21,7 +21,6 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -39,7 +38,7 @@ import net.minecraft.world.phys.Vec3;
  *   <li><b>够着</b>({@link #touch}):手够得着一个碰撞箱(要打的那只);</li>
  *   <li><b>远离</b>({@link #awayFrom}):离一组生物都在各自的危险半径之外。</li>
  * </ol>
- * 组合方式:多个取其一({@link #anyOf})、到了再付一笔({@link #priced});几个同时成立({@link #allOf})只给战斗走位
+ * 组合方式:多个取其一({@link #anyOf});几个同时成立({@link #allOf})只给战斗走位
  * ——站在围着目标的环上,同时离别的怪够远。
  *
  * <p>估价按 {@link ActionCosts} 的估价权重:水平走八方向距离、往上按跳、往下按落,每种目标只估到它自己的边界。
@@ -118,21 +117,21 @@ public final class Goals {
         Map<Long, Set<Direction>> stands = new HashMap<>();
         double reach = body.blockReach();
         int span = (int) Math.ceil(reach) + 1;
-        int eye = (int) Math.ceil(body.eyeHeight(Pose.STANDING));
+        int eye = (int) Math.ceil(body.eyeHeight());
         AABB box = new AABB(at);
         for (int x = at.getX() - span; x <= at.getX() + span && !open.isEmpty(); x++) {
             for (int z = at.getZ() - span; z <= at.getZ() + span; z++) {
                 for (int y = at.getY() - span - eye; y <= at.getY() + span; y++) {
                     // 脚在这一格里哪个高度都够不着的,不必再看站不站得住
-                    if (box.distanceToSqr(new Vec3(x + 0.5, y + 0.5 + body.eyeHeight(Pose.STANDING), z + 0.5))
+                    if (box.distanceToSqr(new Vec3(x + 0.5, y + 0.5 + body.eyeHeight(), z + 0.5))
                             >= (reach + 1) * (reach + 1)) {
                         continue;
                     }
                     Stance stance = Stance.at(level, body, x, y, z);
-                    if (stance == null || Clearance.occupies(body, Pose.STANDING, x, stance.feetY(), z, at)) {
+                    if (stance == null || Clearance.occupies(body, x, stance.feetY(), z, at)) {
                         continue;
                     }
-                    Vec3 from = body.eye(Pose.STANDING, x, stance.feetY(), z);
+                    Vec3 from = body.eye(x, stance.feetY(), z);
                     EnumSet<Direction> seen = EnumSet.noneOf(Direction.class);
                     for (Direction side : open) {
                         if (Sight.use(level, from, reach, at, side) != null) {
@@ -153,14 +152,7 @@ public final class Goals {
     /**
      * 挖 {@code target}:站在这里手够得着它(第 0 层 {@link Reach},与挖、放读同一个"够得着"),而且身体不占着它。挡着视线的
      * 由挖的一方挖开,不要求到了就看得见;停在一处要先挖开几格硬遮挡才看得见它,就加几份 {@link ActionCosts#SIGHT_BLOCKER}
-     * ——同样够得着时,搜索挑挡得少的站位。谁来挖、清得掉哪些格此刻还不知道:挡着的格一律算清得掉({@link Clearing#ANY})。
-     */
-    public static Goal dig(BlockPos target, BodyStats body) {
-        return dig(target, body, Clearing.ANY);
-    }
-
-    /**
-     * 挖 {@code target},挡着视线的格由 {@code clearing} 这一方清:看得见它的面只算隔着的格都清得掉的那些({@link Sight#dig}),
+     * ——同样够得着时,搜索挑挡得少的站位。挡着视线的格由 {@code clearing} 这一方清:看得见它的面只算隔着的格都清得掉的那些({@link Sight#dig}),
      * 一面都没有的站位停下也办不成,到达价无穷——搜索挑别的站位,挖的时候先清哪一格也按同一个判据。
      */
     public static Goal dig(BlockPos target, BodyStats body, Clearing clearing) {
@@ -249,14 +241,6 @@ public final class Goals {
         return new AnyOf(List.copyOf(goals));
     }
 
-    /** 到了 {@code goal} 之后还要付 {@code cost} 刻:成员各带各的价时,搜索按总价挑。 */
-    public static Goal priced(Goal goal, double cost) {
-        if (!(cost >= 0) || Double.isInfinite(cost)) {
-            throw new IllegalArgumentException("到达价要是非负的有限数:" + cost);
-        }
-        return new Priced(goal, cost);
-    }
-
     /**
      * 几个目标同时成立,每一个都到了才算到。只给战斗走位:站在围着要打的那只的环上,同时离别的怪都够远。估价取各自估价里
      * 最大的那个;到达价相加;要看的取第一个要求视线的;为了到得了都别动的格合在一起。
@@ -292,7 +276,7 @@ public final class Goals {
 
     /** 眼睛(按脚在这一格的底算)挪进 {@code box} 的 {@code reach} 以内最少要付多少,同 {@link #beyondReach(BlockPos, BodyStats, int, int, int)}。 */
     private static double beyondReach(AABB box, double reach, BodyStats body, int x, int y, int z) {
-        Vec3 eye = body.eye(Pose.STANDING, x, y, z);
+        Vec3 eye = body.eye(x, y, z);
         double dx = gap(eye.x, box.minX, box.maxX);
         double dz = gap(eye.z, box.minZ, box.maxZ);
         double rise = eye.y < box.minY ? box.minY - eye.y : 0;
@@ -518,8 +502,8 @@ public final class Goals {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             double feet = stance.feetY();
-            return !Clearance.occupies(body, Pose.STANDING, x, feet, z, target)
-                    && Reach.reaches(body.eye(Pose.STANDING, x, feet, z), target, body.blockReach());
+            return !Clearance.occupies(body, x, feet, z, target)
+                    && Reach.reaches(body.eye(x, feet, z), target, body.blockReach());
         }
 
         @Override
@@ -534,7 +518,7 @@ public final class Goals {
         @Override
         public LongSet endCells() {
             double reach = body.blockReach();
-            double eye = body.eyeHeight(Pose.STANDING);
+            double eye = body.eyeHeight();
             int span = (int) Math.ceil(reach + eye) + 1;
             LongOpenHashSet out = new LongOpenHashSet();
             for (int x = target.getX() - span; x <= target.getX() + span; x++) {
@@ -562,7 +546,7 @@ public final class Goals {
             if (!Sight.clickable(level, target)) {
                 return 0;
             }
-            Vec3 eye = body.eye(Pose.STANDING, x, stance.feetY(), z);
+            Vec3 eye = body.eye(x, stance.feetY(), z);
             Sight.Trace line = Sight.dig(level, eye, target, Sight.faces(level, eye, target),
                     pos -> clearing.clears(level, pos));
             return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER;
@@ -679,7 +663,7 @@ public final class Goals {
     private record Touch(AABB box, BodyStats body, double range) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
-            return Reach.reaches(body.eye(Pose.STANDING, x, stance.feetY(), z), box, range);
+            return Reach.reaches(body.eye(x, stance.feetY(), z), box, range);
         }
 
         @Override
@@ -877,44 +861,6 @@ public final class Goals {
         @Override
         public String toString() {
             return "allOf" + listed(members);
-        }
-    }
-
-    private record Priced(Goal inner, double cost) implements Goal {
-        @Override
-        public boolean contains(int x, int y, int z, Stance stance) {
-            return inner.contains(x, y, z, stance);
-        }
-
-        @Override
-        public double estimate(int x, int y, int z) {
-            return inner.estimate(x, y, z) + cost;
-        }
-
-        /** 这一笔,加上里面那个目标自己停在这儿要付的。 */
-        @Override
-        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
-            return cost + inner.arrival(level, x, y, z, stance);
-        }
-
-        @Override
-        public Sighting sight(int x, int y, int z, Stance stance) {
-            return inner.sight(x, y, z, stance);
-        }
-
-        @Override
-        public LongSet endCells() {
-            return inner.endCells();
-        }
-
-        @Override
-        public PositionCosts protection() {
-            return inner.protection();
-        }
-
-        @Override
-        public String toString() {
-            return inner + "+" + cost;
         }
     }
 }

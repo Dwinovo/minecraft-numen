@@ -31,7 +31,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
  */
 public final class Vanilla {
 
-    /** 原版玩家的身体:宽 0.6、站立高 1.8 眼高 1.62、潜行高 1.5 眼高 1.27;迈步 0.6、起跳 0.42、重力 0.08;生存交互距离 4.5。 */
+    /** 原版玩家的身体:宽 0.6、站立高 1.8 眼高 1.62;迈步 0.6、起跳 0.42、重力 0.08;生存交互距离 4.5。 */
     public static final BodyStats SURVIVAL;
     /** 同一具身体在创造模式下:交互距离 5。 */
     public static final BodyStats CREATIVE;
@@ -49,11 +49,10 @@ public final class Vanilla {
             bindTags(BuiltInRegistries.FLUID, data);
         }
         EntityDimensions standing = EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F);
-        EntityDimensions crouching = EntityDimensions.scalable(0.6F, 1.5F).withEyeHeight(1.27F);
-        SURVIVAL = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false, false);
-        CREATIVE = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 5.0, false, false);
-        LEATHER_BOOTS = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, true, false);
-        FROST_WALKER = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false, true);
+        SURVIVAL = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, false, false);
+        CREATIVE = new BodyStats(standing, 0.6, 0.42F, 0.08, 5.0, false, false);
+        LEATHER_BOOTS = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, true, false);
+        FROST_WALKER = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, false, true);
     }
 
     private Vanilla() {}

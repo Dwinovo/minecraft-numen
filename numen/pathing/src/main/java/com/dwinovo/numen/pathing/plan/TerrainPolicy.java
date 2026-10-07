@@ -15,9 +15,6 @@ import net.minecraft.world.level.block.state.BlockState;
 @FunctionalInterface
 public interface TerrainPolicy {
 
-    /** 什么都放行:不设限的宿主用。 */
-    TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
-
     /** 要做的改动。 */
     sealed interface Change {
 

@@ -91,10 +91,6 @@ public final class CostModel {
         return body;
     }
 
-    public ToolChoice tools() {
-        return tools;
-    }
-
     /** 下一块垫路料;身上没料为空。 */
     public Optional<Block> placing() {
         return Optional.ofNullable(placing);

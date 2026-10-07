@@ -258,7 +258,7 @@ class SteppingTest {
     void wholeBlockColumnsAnswerExactlyLikeTheirBoxes() {
         BodyStats body = SURVIVAL;
         double jump = body.jumpHeight(1.0);
-        double height = body.height(net.minecraft.world.entity.Pose.STANDING);
+        double height = body.height();
         for (int[] d : DIRECTIONS) {
             int dx = d[0];
             int dz = d[1];
@@ -293,7 +293,7 @@ class SteppingTest {
     void wholeBlockColumnsAnswerExactlyLikeTheirBoxesFromAnyFeetHeight() {
         BodyStats body = SURVIVAL;
         double jump = body.jumpHeight(1.0);
-        double height = body.height(net.minecraft.world.entity.Pose.STANDING);
+        double height = body.height();
         for (int[] d : Arrays.copyOf(DIRECTIONS, 4)) {
             int dx = d[0];
             int dz = d[1];

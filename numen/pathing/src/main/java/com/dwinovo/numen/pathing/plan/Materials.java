@@ -13,9 +13,6 @@ import net.minecraft.world.level.block.Block;
 @FunctionalInterface
 public interface Materials {
 
-    /** 身上什么料都没有。 */
-    Materials NONE = Optional::empty;
-
     /** 下一块垫路会放下哪种方块;身上没有可垫的料时为空。 */
     Optional<Block> next();
 }

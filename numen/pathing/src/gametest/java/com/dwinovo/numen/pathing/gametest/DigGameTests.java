@@ -460,7 +460,7 @@ public class DigGameTests {
         TestBody body = t.body(2, 1, 5);
         body.setGameMode(GameType.CREATIVE);
         BlockPos target = t.at(10, 1, 5);
-        t.later(2, () -> t.go(body, Goals.dig(target, Snapshots.of(body).stats()), RouteSpec.defaults())
+        t.later(2, () -> t.go(body, Goals.dig(target, Snapshots.of(body).stats(), Goals.Clearing.ANY), RouteSpec.defaults())
                 .within(300).arrives().then(r -> {
                     double distance = Math.sqrt(new AABB(target).distanceToSqr(r.body.getEyePosition()));
                     if (distance <= 4.5 || distance >= 5) {
@@ -480,7 +480,7 @@ public class DigGameTests {
         t.set(8, 2, 7, Blocks.AIR).set(9, 2, 7, Blocks.AIR);
         BlockPos ore = t.at(9, 2, 6);
         TestBody body = t.body(3, 1, 6);
-        t.go(body, Goals.dig(ore, Snapshots.of(body).stats()), RouteSpec.defaults()).within(300).arrives()
+        t.go(body, Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), RouteSpec.defaults()).within(300).arrives()
                 .then(r -> {
                     if (r.body.look().point(ore) == null) {
                         throw new GameTestAssertException("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
@@ -530,7 +530,7 @@ public class DigGameTests {
         TestBody body = t.body(8, 41, 8);
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         BlockPos ore = t.at(8, 14, 8);
-        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
+        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), NATURAL);
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
             if (plan.route() == null) {
                 throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
@@ -557,7 +557,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 20);
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         BlockPos ore = t.at(16, 2, 20);
-        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
+        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), NATURAL);
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
             if (plan.route() == null) {
                 throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());

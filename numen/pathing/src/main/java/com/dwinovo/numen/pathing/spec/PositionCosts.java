@@ -20,8 +20,9 @@ import it.unimi.dsi.fastutil.longs.LongSets;
  * <p>禁止的格有两种给法:逐格({@link Builder#forbid(Use, long)},一格一个键)与整片({@link Builder#forbid(Use, Region)}):
  * 宿主的一片地方可能有几百万格,逐格展开进集合既慢又占地方,所以整片只交一个"这一格在不在"的判定,模块逐格问它,不认识它怎么存。
  *
- * <p>不可变;建表走 {@link #builder()} 或 {@link #protect},合并走 {@link #plus}(禁令取并集,同格加价相加,"只许"取交集)。
- * 导航自己的目标格用 {@link #protect}:别挖自己要站、要够的那格,也别拿方块把它埋了——这是规划的正确性约束,不是权限。
+ * <p>不可变;建表走 {@link #builder()},合并走 {@link #plus}(禁令取并集,同格加价相加,"只许"取交集)。
+ * 导航自己的目标格用逐格的 {@link Builder#forbid(Use, long)} 禁挖禁放:别挖自己要站、要够的那格,也别拿方块把它埋了——这是规划的
+ * 正确性约束,不是权限。
  * "只许"给宿主写一趟路的承诺:只许挖、只许放计划里的那几格,重搜时自然只在承诺里找({@link Builder#confine})。
  */
 public final class PositionCosts {
@@ -63,13 +64,6 @@ public final class PositionCosts {
         this.forbiddenRegions = forbiddenRegions;
         this.extra = extra;
         this.confined = confined;
-    }
-
-    /** 禁挖禁放这些格。 */
-    public static PositionCosts protect(LongSet cells) {
-        Builder b = builder();
-        cells.forEach((long cell) -> b.forbid(Use.DIG, cell).forbid(Use.PLACE, cell));
-        return b.build();
     }
 
     public static Builder builder() {

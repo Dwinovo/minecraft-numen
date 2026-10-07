@@ -11,18 +11,14 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.CostModel;
-import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
@@ -163,7 +159,7 @@ class GoalsTest {
     @Test
     void diggingABlockEstimatesZeroWithinReachAndLessTheCloserFromOutside() {
         BlockPos target = new BlockPos(10, 64, 0);
-        Goal reach = Goals.dig(target, SURVIVAL);
+        Goal reach = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         for (int x = 6; x <= 8; x++) {
             assertTrue(reach.contains(x, 64, 0, standing), "x=" + x + " 够得着");
@@ -196,7 +192,7 @@ class GoalsTest {
         assertFalse(dig.contains(0, 64, 0, standing), "一格都够不着的不在目标里");
         double both = dig.arrival(world, 8, 64, 0, standing);
         double one = dig.arrival(world, 6, 64, -3, standing);
-        assertTrue(Goals.dig(a, SURVIVAL).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL)
+        assertTrue(Goals.dig(a, SURVIVAL, Goals.Clearing.ANY).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL, Goals.Clearing.ANY)
                 .contains(6, 64, -3, standing), "这一处只够得着 a");
         assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
         assertTrue(one - both < ActionCosts.WALK_ONE_BLOCK, "差的不到多走一格:" + (one - both));
@@ -233,8 +229,8 @@ class GoalsTest {
     @Test
     void diggingABlockFarBelowPricesEachAxisOnItsOwn() {
         BlockPos target = new BlockPos(0, 44, 0);
-        Goal dig = Goals.dig(target, SURVIVAL);
-        double eye = SURVIVAL.eyeHeight(Pose.STANDING);
+        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
+        double eye = SURVIVAL.eyeHeight();
         double above = 64 + eye - (target.getY() + 1);
         assertEquals((above - SURVIVAL.blockReach()) * ActionCosts.ESTIMATE_DOWN, dig.estimate(0, 64, 0), 1e-9);
         for (int x = 6; x < 12; x++) {
@@ -247,7 +243,7 @@ class GoalsTest {
     @Test
     void diggingEndCellsHoldEveryNodeThatReachesIt() {
         BlockPos target = new BlockPos(3, 70, -2);
-        Goal dig = Goals.dig(target, SURVIVAL);
+        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
         var ends = dig.endCells();
         int span = 10;
         for (int x = -span; x <= span; x++) {
@@ -276,7 +272,7 @@ class GoalsTest {
     @Test
     void diggingChargesForEveryHardBlockerInTheWay() {
         BlockPos target = new BlockPos(4, 64, 0);
-        Goal dig = Goals.dig(target, SURVIVAL);
+        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         com.dwinovo.numen.pathing.TestWorld open = new TestWorld().floor(-4, -4, 8, 4, 63)
                 .set(target, Blocks.IRON_ORE.defaultBlockState());
@@ -303,7 +299,7 @@ class GoalsTest {
                 .set(target, Blocks.IRON_ORE.defaultBlockState())
                 .fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
         assertTrue(Double.isInfinite(dig.arrival(world, 1, 64, 0, standing)), "看得见的每一面都隔着清不掉的石头");
-        assertEquals(ActionCosts.SIGHT_BLOCKER, Goals.dig(target, SURVIVAL).arrival(world, 1, 64, 0, standing), 1e-9,
+        assertEquals(ActionCosts.SIGHT_BLOCKER, Goals.dig(target, SURVIVAL, Goals.Clearing.ANY).arrival(world, 1, 64, 0, standing), 1e-9,
                 "没说谁来挖:照旧按一格硬遮挡定价");
         world.fill(3, 63, -4, 3, 70, 4, Blocks.DIRT.defaultBlockState());
         assertEquals(ActionCosts.SIGHT_BLOCKER, dig.arrival(world, 1, 64, 0, standing), 1e-9, "隔着清得掉的泥土");
@@ -336,7 +332,7 @@ class GoalsTest {
     @Test
     void everyCreatureWeighsTheSameAtTheEdgeOfItsOwnRadius() {
         Threat probe = new Threat(0.5, 64, 0.5, 2);
-        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 () -> List.of(probe));
         double oneCellInside = model.extra(Use.PASS, new BlockPos(1, 64, 0).asLong());
         assertTrue(oneCellInside > 0);
@@ -403,7 +399,7 @@ class GoalsTest {
         for (long cell : use.stands().keySet()) {
             BlockPos at = BlockPos.of(cell);
             Stance there = Stance.at(world, SURVIVAL, at);
-            Vec3 eye = SURVIVAL.eye(Pose.STANDING, at.getX(), there.feetY(), at.getZ());
+            Vec3 eye = SURVIVAL.eye(at.getX(), there.feetY(), at.getZ());
             for (Direction face : use.stands().get(cell)) {
                 assertNotNull(Sight.use(world, eye, SURVIVAL.blockReach(), furnace, face), at + " 看 " + face);
             }
@@ -420,7 +416,7 @@ class GoalsTest {
                 .fill(2, 64, -3, 2, 67, 3, Blocks.STONE.defaultBlockState());
         Goals.Use use = Goals.use(world, SURVIVAL, chest);
         assertEquals(List.of(Direction.WEST), use.open());
-        assertTrue(Goals.dig(chest, SURVIVAL).contains(3, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)),
+        assertTrue(Goals.dig(chest, SURVIVAL, Goals.Clearing.ANY).contains(3, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)),
                 "墙外那一格几何上够得着");
         assertFalse(use.contains(3, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)), "却看不见,不是站位");
         for (long cell : use.stands().keySet()) {

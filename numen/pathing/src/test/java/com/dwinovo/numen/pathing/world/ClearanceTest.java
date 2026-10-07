@@ -7,7 +7,6 @@ import com.dwinovo.numen.pathing.Vanilla;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -27,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 净空:站立(1.8)或潜行(1.5)的身体放不放得下,头顶的方块按真实碰撞箱判。 */
+/** 净空:站立(1.8)的身体放不放得下,头顶的方块按真实碰撞箱判。 */
 class ClearanceTest {
 
     private static final int Y = 64;
@@ -43,11 +42,7 @@ class ClearanceTest {
     }
 
     private static boolean stands(TestWorld world) {
-        return Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y, 0);
-    }
-
-    private static boolean crouches(TestWorld world) {
-        return Clearance.fits(world, SURVIVAL, Pose.CROUCHING, 0, Y, 0);
+        return Clearance.fits(world, SURVIVAL, 0, Y, 0);
     }
 
     @Test
@@ -57,10 +52,9 @@ class ClearanceTest {
     }
 
     @Test
-    void aOneAndAHalfHighGapFitsOnlyACrouchingBody() {
+    void aOneAndAHalfHighGapDoesNotFitAStandingBody() {
         TestWorld world = under(Blocks.OAK_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP));
         assertFalse(stands(world), "站着头顶撞上半砖");
-        assertTrue(crouches(world), "潜行 1.5 正好贴着上半砖的底");
     }
 
     @Test
@@ -96,8 +90,8 @@ class ClearanceTest {
     void aFenceBelowReachesHalfABlockIntoTheBody() {
         // 脚所在格下面是栅栏(高 1.5):脚在格底时身体插进栅栏上伸的那半格
         TestWorld world = new TestWorld().set(0, Y - 1, 0, Blocks.OAK_FENCE.defaultBlockState());
-        assertFalse(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y, 0));
-        assertTrue(Clearance.fits(world, SURVIVAL, Pose.STANDING, 0, Y + 0.5, 0));
+        assertFalse(Clearance.fits(world, SURVIVAL, 0, Y, 0));
+        assertTrue(Clearance.fits(world, SURVIVAL, 0, Y + 0.5, 0));
     }
 
     @Test
@@ -122,8 +116,8 @@ class ClearanceTest {
     void aBodyStandsOnACarpetButNotSunkIntoIt() {
         TestWorld carpet = new TestWorld().set(0, Y - 1, 0, Blocks.STONE.defaultBlockState())
                 .set(0, Y, 0, Blocks.WHITE_CARPET.defaultBlockState());
-        assertTrue(Clearance.fits(carpet, SURVIVAL, Pose.STANDING, 0, Y + 1 / 16.0, 0));
-        assertFalse(Clearance.fits(carpet, SURVIVAL, Pose.STANDING, 0, Y, 0), "脚不能陷进地毯里");
+        assertTrue(Clearance.fits(carpet, SURVIVAL, 0, Y + 1 / 16.0, 0));
+        assertFalse(Clearance.fits(carpet, SURVIVAL, 0, Y, 0), "脚不能陷进地毯里");
     }
 
     @Test
@@ -133,16 +127,16 @@ class ClearanceTest {
         TestWorld world = new TestWorld().set(0, Y - 1, 0, Blocks.STONE.defaultBlockState())
                 .set(-1, Y - 1, 0, Blocks.STONE.defaultBlockState())
                 .set(0, Y, 0, door).set(0, Y + 1, 0, door.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
-        assertTrue(Clearance.blockers(world, SURVIVAL, Pose.STANDING, 0, Y, 0).isEmpty());
+        assertTrue(Clearance.blockers(world, SURVIVAL, 0, Y, 0).isEmpty());
         assertEquals(List.of(new BlockPos(0, Y, 0), new BlockPos(0, Y + 1, 0)),
-                Clearance.blockers(world, SURVIVAL, Pose.STANDING, -1, Y, 0, 1, 0));
+                Clearance.blockers(world, SURVIVAL, -1, Y, 0, 1, 0));
     }
 
     @Test
     void theBodyOccupiesFromItsFeetCellUpToItsHeadCell() {
-        assertTrue(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y + 0.5, 0, new BlockPos(0, Y + 2, 0)), "脚在半格高,头伸进第三格");
-        assertFalse(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y, 0, new BlockPos(0, Y + 2, 0)));
-        assertFalse(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y, 0, new BlockPos(1, Y, 0)));
+        assertTrue(Clearance.occupies(SURVIVAL, 0, Y + 0.5, 0, new BlockPos(0, Y + 2, 0)), "脚在半格高,头伸进第三格");
+        assertFalse(Clearance.occupies(SURVIVAL, 0, Y, 0, new BlockPos(0, Y + 2, 0)));
+        assertFalse(Clearance.occupies(SURVIVAL, 0, Y, 0, new BlockPos(1, Y, 0)));
     }
 
     @Test

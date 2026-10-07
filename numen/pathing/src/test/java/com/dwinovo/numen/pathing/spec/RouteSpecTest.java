@@ -112,18 +112,6 @@ class RouteSpecTest {
     }
 
     @Test
-    void protectedCellsMayBeStoodOnButNotDugOrFilled() {
-        long cell = AT.asLong();
-        PositionCosts p = PositionCosts.protect(LongSet.of(cell));
-        assertTrue(p.forbids(Use.DIG, cell));
-        assertTrue(p.forbids(Use.PLACE, cell));
-        assertFalse(p.forbids(Use.STAND, cell));
-        assertFalse(p.forbids(Use.PASS, cell));
-        assertFalse(p.forbids(Use.DIG, AT.above().asLong()));
-        assertSame(PositionCosts.EMPTY, PositionCosts.protect(LongSet.of()));
-    }
-
-    @Test
     void positionTablesAddUp() {
         long cell = AT.asLong();
         PositionCosts a = PositionCosts.builder().add(Use.STAND, cell, 5).forbid(Use.DIG, cell).build();
@@ -154,7 +142,7 @@ class RouteSpecTest {
         assertTrue(both.forbids(Use.DIG, c));
         PositionCosts none = PositionCosts.builder().confine(Use.PLACE, LongSet.of()).build();
         assertTrue(none.forbids(Use.PLACE, a));
-        assertTrue(only.plus(PositionCosts.protect(LongSet.of(a))).forbids(Use.DIG, a), "禁令照旧取并集");
+        assertTrue(only.plus(PositionCosts.builder().forbid(Use.DIG, a).build()).forbids(Use.DIG, a), "禁令照旧取并集");
     }
 
     /** 整片禁止:只问"在不在",几百万格也不逐格展开;只管给了的那一栏,合并时与逐格的禁令一样取并集。 */

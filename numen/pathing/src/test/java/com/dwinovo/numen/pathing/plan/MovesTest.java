@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.plan;
 
-import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.Set;
 
@@ -268,7 +267,7 @@ class MovesTest {
     void aFallTooDeepIsCaughtWithWaterOnlyWhenABucketIsCarriedAndTheSpecMayPlace() {
         TestWorld cliff = ledge(12);
         BodySnapshot bucket = Fixtures.carrying(0, new ItemStack(net.minecraft.world.item.Items.WATER_BUCKET));
-        CostModel natural = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel natural = CostModel.of(natural(), bucket, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         Maneuver m = holds(MoveKind.FALL, natural, cliff, AT, EAST);
         assertTrue(m.wading(), "落进自己倒下的水里");
         Edit.Catch caught = assertInstanceOf(Edit.Catch.class, m.edits().get(m.edits().size() - 1));
@@ -276,15 +275,15 @@ class MovesTest {
         // 没带水桶,还是摔不起
         assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, Fixtures.model(natural()), cliff, AT, EAST).reason());
         // 带着水桶,但规格不许改地形
-        CostModel none = CostModel.of(RouteSpec.defaults(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel none = CostModel.of(RouteSpec.defaults(), bucket, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertEquals(Reason.NO_PLACING, fails(MoveKind.FALL, none, cliff, AT, EAST).reason());
     }
 
     @Test
     void theFallLimitTightensWithHealthAndTheSpecCanOnlyTightenIt() {
         RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(10).build();
-        CostModel healthy = CostModel.of(loose, Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
-        CostModel hurt = CostModel.of(loose, Fixtures.body(8), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        CostModel hurt = CostModel.of(loose, Fixtures.body(8), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         holds(MoveKind.FALL, healthy, ledge(8), AT, EAST);
         assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, hurt, ledge(8), AT, EAST).reason(), "血少了摔不起");
         assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, healthy, ledge(12), AT, EAST).reason(), "规格只到 10 格");
@@ -336,8 +335,8 @@ class MovesTest {
         RouteSpec spec = RouteSpec.defaults().edit().parkour(true).build();
         assertTrue(holds(MoveKind.PARKOUR, Fixtures.model(spec), gap(3), AT, EAST).sprint());
         BodySnapshot hungry = new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 3, 1, 6, 0, List.of(),
-                DigTime.Mining.VANILLA, Breath.VANILLA);
-        CostModel model = CostModel.of(spec, hungry, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+                Fixtures.MINING, Fixtures.BREATH);
+        CostModel model = CostModel.of(spec, hungry, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertEquals(Reason.NO_SPRINT, fails(MoveKind.PARKOUR, model, gap(3), AT, EAST).reason());
     }
 
@@ -515,8 +514,8 @@ class MovesTest {
         // 一池两格深的静水,水面与岸齐平:穿冰霜行者的身体踩着水面走过去,脚在水面那一层之上
         TestWorld world = pool(2);
         BodySnapshot frost = new BodySnapshot(Vanilla.FROST_WALKER, GameType.SURVIVAL, 20, 3, 1, 20, 0, List.of(),
-                DigTime.Mining.VANILLA, Breath.VANILLA);
-        CostModel model = CostModel.of(RouteSpec.defaults(), frost, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+                Fixtures.MINING, Fixtures.BREATH);
+        CostModel model = CostModel.of(RouteSpec.defaults(), frost, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         BlockPos shore = new BlockPos(-5, Y, 0);
         Maneuver m = holds(MoveKind.WALK, model, world, shore, EAST);
         assertTrue(m.landing().grounded(), "站在冻住的水面上");
@@ -533,9 +532,9 @@ class MovesTest {
         // 没穿皮靴,细雪托不住脚,这一步走不成
         fails(MoveKind.WALK, defaults(), world, AT, EAST);
         BodySnapshot boots = new BodySnapshot(Vanilla.LEATHER_BOOTS, GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(new ItemStack(net.minecraft.world.item.Items.LEATHER_BOOTS)), DigTime.Mining.VANILLA,
-                Breath.VANILLA);
-        CostModel model = CostModel.of(RouteSpec.defaults(), boots, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+                List.of(new ItemStack(net.minecraft.world.item.Items.LEATHER_BOOTS)), Fixtures.MINING,
+                Fixtures.BREATH);
+        CostModel model = CostModel.of(RouteSpec.defaults(), boots, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         Maneuver m = holds(MoveKind.WALK, model, world, AT, EAST);
         assertEquals(Y, m.landing().feetY(), 1e-9, "站在细雪顶上");
     }

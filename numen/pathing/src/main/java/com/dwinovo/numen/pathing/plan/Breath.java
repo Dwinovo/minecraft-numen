@@ -27,8 +27,6 @@ package com.dwinovo.numen.pathing.plan;
  */
 public record Breath(int supply, int maxSupply, double oxygenBonus, double shield, boolean turtleShell) {
 
-    /** 原版玩家不带任何效果、满氧气时的样子。 */
-    public static final Breath VANILLA = new Breath(300, 300, 0, 0, false);
     /** 海龟壳在眼睛出水时把水下呼吸续到的刻数({@code Player.turtleHelmetTick})。 */
     public static final int TURTLE_SHELL_TICKS = 200;
     /** 眼睛出水时每刻回的氧气({@code LivingEntity.increaseAirSupply})。 */

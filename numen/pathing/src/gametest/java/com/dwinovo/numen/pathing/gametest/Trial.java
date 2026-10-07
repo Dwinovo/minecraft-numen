@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.pathing.plan.Permit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +56,11 @@ final class Trial {
     static final String ARENA = "pathing_arena";
     /** 长条空场地模板(长途)。 */
     static final String LONG = "pathing_long";
+    /** 身上什么料都没有。 */
+    static final Materials NO_MATERIALS = Optional::empty;
+    /** 什么都放行。 */
+    static final TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
+
     /** 高场地模板(按高度爬高)。 */
     static final String TALL = "pathing_tall";
 
@@ -68,8 +74,8 @@ final class Trial {
     private final List<Runnable> tickers = new ArrayList<>();
     private boolean recorded;
 
-    Materials materials = Materials.NONE;
-    TerrainPolicy terrain = TerrainPolicy.ALLOW_ALL;
+    Materials materials = NO_MATERIALS;
+    TerrainPolicy terrain = ALLOW_ALL;
     Threats threats = Threats.NONE;
 
     Trial(GameTestHelper helper) {

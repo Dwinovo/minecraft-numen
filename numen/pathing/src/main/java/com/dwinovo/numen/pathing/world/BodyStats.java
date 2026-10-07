@@ -1,18 +1,16 @@
 package com.dwinovo.numen.pathing.world;
 
 import net.minecraft.world.entity.EntityDimensions;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 身体的几项物理量:站立与潜行时的碰撞盒和眼高、迈步高度、起跳力度、重力、方块交互距离,以及脚上的装备让它能不能
+ * 身体的几项物理量:站立时的碰撞盒和眼高、迈步高度、起跳力度、重力、方块交互距离,以及脚上的装备让它能不能
  * 站在细雪上、能不能踩着冻住的水面走。第 0 层只从这里读身体,不接触实体——宿主从真实的身体上取值交进来(尺寸取 {@code getDimensions(pose)},
  * 其余取同名属性),规划与执行拿到的是同一份。
  *
  * <p>交互距离由调用方给:原版生存模式 4.5、创造模式 5,各随属性与修饰符变。
  *
  * @param standing     站立的尺寸(原版玩家宽 0.6、高 1.8、眼高 1.62)
- * @param crouching    潜行的尺寸(原版玩家宽 0.6、高 1.5、眼高 1.27)
  * @param stepHeight   不跳就能走上去的高度(属性 {@code step_height},原版 0.6)
  * @param jumpStrength 起跳的初速度(属性 {@code jump_strength},原版 0.42)
  * @param gravity      每刻的重力加速度(属性 {@code gravity},原版 0.08)
@@ -20,46 +18,31 @@ import net.minecraft.world.phys.Vec3;
  * @param walksOnPowderSnow 细雪托得住它:原版 {@code PowderSnowBlock.canEntityWalkOnPowderSnow},玩家看脚上是不是皮靴
  * @param frostWalker       脚上的靴子带冰霜行者:走到静水边上,水面冻成冰,踩着走过去
  */
-public record BodyStats(EntityDimensions standing, EntityDimensions crouching, double stepHeight,
+public record BodyStats(EntityDimensions standing, double stepHeight,
                         double jumpStrength, double gravity, double blockReach, boolean walksOnPowderSnow,
                         boolean frostWalker) {
 
     /** 原版每刻对竖直速度乘的空气阻力({@code LivingEntity.travel} 里的 {@code 0.98F})。 */
     private static final double AIR_DRAG = 0.98F;
 
-    public BodyStats {
-        if (standing.width() != crouching.width()) {
-            // 第 0 层按一个宽度算脚下和两侧:站立与潜行的宽度不同,落脚与净空会各算各的,这里先拦下
-            throw new IllegalArgumentException("站立与潜行的宽度不同:" + standing.width() + " / " + crouching.width());
-        }
-    }
-
     /** 碰撞盒的宽。 */
     public double width() {
         return standing.width();
     }
 
-    /** 这个姿势下碰撞盒的高。只认站立与潜行,寻路不用别的姿势。 */
-    public double height(Pose pose) {
-        return dimensions(pose).height();
+    /** 站着时碰撞盒的高。 */
+    public double height() {
+        return standing.height();
     }
 
-    /** 这个姿势下眼睛离脚底的高度。 */
-    public double eyeHeight(Pose pose) {
-        return dimensions(pose).eyeHeight();
+    /** 站着时眼睛离脚底的高度。 */
+    public double eyeHeight() {
+        return standing.eyeHeight();
     }
 
-    /** 以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时眼睛的位置(列中心)。 */
-    public Vec3 eye(Pose pose, int x, double feetY, int z) {
-        return new Vec3(x + 0.5, feetY + eyeHeight(pose), z + 0.5);
-    }
-
-    private EntityDimensions dimensions(Pose pose) {
-        return switch (pose) {
-            case STANDING -> standing;
-            case CROUCHING -> crouching;
-            default -> throw new IllegalArgumentException("寻路只用站立与潜行两种姿势,不认 " + pose);
-        };
+    /** 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时眼睛的位置(列中心)。 */
+    public Vec3 eye(int x, double feetY, int z) {
+        return new Vec3(x + 0.5, feetY + eyeHeight(), z + 0.5);
     }
 
     /**

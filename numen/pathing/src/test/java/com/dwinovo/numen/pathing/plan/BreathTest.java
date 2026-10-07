@@ -43,7 +43,7 @@ class BreathTest {
     /** 原版满氧气 300 点,眼睛泡在水里每刻扣 1:憋 240 刻还留着 60 刻的余量,再多一刻就不算憋得住;规划说得出还能安全憋多久。 */
     @Test
     void aVanillaBodyHoldsThreeHundredTicksAndKeepsThreeSecondsSpare() {
-        Breath breath = Breath.VANILLA;
+        Breath breath = Fixtures.BREATH;
         Breath.Air now = breath.now();
         assertEquals(300, now.left());
         assertEquals(240, breath.spare(now));
@@ -104,13 +104,13 @@ class BreathTest {
         Breath.Air air = never.after(never.now(), true, 1_000_000);
         assertTrue(never.lasts(air));
         assertEquals(0, never.band(air));
-        assertTrue(Breath.VANILLA.lasts(Breath.VANILLA.after(Breath.UNLIMITED, true, 1_000_000)));
+        assertTrue(Fixtures.BREATH.lasts(Fixtures.BREATH.after(Breath.UNLIMITED, true, 1_000_000)));
     }
 
     /** 搜索分节点的档:肺里满、没在憋的是 0 档;憋着气的按还能撑多久分档,撑得久的与撑得短的不在一档。 */
     @Test
     void holdingBreathSplitsTheSearchIntoBands() {
-        Breath breath = Breath.VANILLA;
+        Breath breath = Fixtures.BREATH;
         assertEquals(0, breath.band(breath.now()));
         assertTrue(breath.rested(breath.now()));
         Breath.Air shortly = breath.after(breath.now(), true, 20);

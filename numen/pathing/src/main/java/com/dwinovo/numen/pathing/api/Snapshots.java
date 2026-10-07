@@ -67,7 +67,7 @@ public final class Snapshots {
 
     /** 第 0 层要的那几项物理量:尺寸、迈步、起跳、重力、交互距离、细雪与冰霜行者。 */
     public static BodyStats stats(ServerPlayer body) {
-        return new BodyStats(body.getDimensions(Pose.STANDING), body.getDimensions(Pose.CROUCHING),
+        return new BodyStats(body.getDimensions(Pose.STANDING),
                 body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(),
                 body.blockInteractionRange(), PowderSnowBlock.canEntityWalkOnPowderSnow(body), frostWalker(body));
     }

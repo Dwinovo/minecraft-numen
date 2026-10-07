@@ -7,8 +7,6 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.EditedView;
-import com.dwinovo.numen.pathing.plan.Materials;
-import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -48,7 +46,7 @@ class BurialTest {
     /** 许挖许放,背包里一把铁镐。 */
     private static CostModel natural() {
         return CostModel.of(Fixtures.natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
-                TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+                Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 
     private static Burial burial(TestWorld world, CostModel model, Goal goal) {
@@ -95,8 +93,8 @@ class BurialTest {
     void theEstimateWithBurialNeverExceedsWhatTheRouteStillCosts() {
         TestWorld world = slab().fill(4, Y, -4, 12, Y + 5, 4, STONE);
         CostModel model = natural();
-        for (Goal goal : List.of(Goals.dig(new BlockPos(0, Y - 11, 0), Vanilla.SURVIVAL),
-                Goals.dig(new BlockPos(9, Y + 1, 0), Vanilla.SURVIVAL))) {
+        for (Goal goal : List.of(Goals.dig(new BlockPos(0, Y - 11, 0), Vanilla.SURVIVAL, Goals.Clearing.ANY),
+                Goals.dig(new BlockPos(9, Y + 1, 0), Vanilla.SURVIVAL, Goals.Clearing.ANY))) {
             SearchResult result = Fixtures.search(world, model, START, goal);
             assertTrue(result.arrived(), goal + " " + result.stop());
             Route route = result.route();

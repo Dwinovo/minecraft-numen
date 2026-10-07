@@ -6,7 +6,6 @@ import java.util.List;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.AABB;
 
@@ -65,7 +64,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = body.jumpHeight(Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, toFeetY),
-                Math.max(fromFeetY, toFeetY) + jump + body.height(Pose.STANDING), fromFeetY);
+                Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY);
         return between(obstacles, body, jump, x, fromFeetY, z, dx, dz, toFeetY);
     }
 
@@ -79,7 +78,7 @@ public final class Stepping {
         if (walk.biggestStep <= body.stepHeight() + Footing.EPSILON) {
             return Step.WALK;
         }
-        double height = body.height(Pose.STANDING);
+        double height = body.height();
         double half = body.width() / 2 - Clearance.DEFLATE;
         double sx = x + 0.5;
         double sz = z + 0.5;
@@ -109,8 +108,8 @@ public final class Stepping {
     public static Step fromHold(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
                                 int dx, int dz, double toFeetY) {
         double top = Math.max(fromFeetY, toFeetY);
-        if (!Clearance.fits(level, body, Pose.STANDING, x, top, z)
-                || !Clearance.blockers(level, body, Pose.STANDING, x, top, z, dx, dz).isEmpty()) {
+        if (!Clearance.fits(level, body, x, top, z)
+                || !Clearance.blockers(level, body, x, top, z, dx, dz).isEmpty()) {
             return Step.BLOCKED;
         }
         return Step.WALK;
@@ -127,7 +126,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = body.jumpHeight(Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, lowestFeetY),
-                fromFeetY + jump + body.height(Pose.STANDING), fromFeetY);
+                fromFeetY + jump + body.height(), fromFeetY);
         return walkOff(obstacles, body, jump, x, fromFeetY, z, dx, dz);
     }
 
@@ -154,7 +153,7 @@ public final class Stepping {
 
     /** 按类注释里的推导走一遍;途中要抬到起跳也够不着的高度时返回 null。{@code jump} 是这具身体从起点能跳多高。 */
     static Walk walk(Obstacles obstacles, BodyStats body, double jump, int x, double fromFeetY, int z, int dx, int dz) {
-        double height = body.height(Pose.STANDING);
+        double height = body.height();
         double half = body.width() / 2 - Clearance.DEFLATE;
         double sx = x + 0.5;
         double sz = z + 0.5;
