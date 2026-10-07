@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.world;
+package com.dwinovo.numen.api.entity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +20,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * <p>口径照原版准星拾取({@code BlockGetter.clip},{@code ClipContext.Block.OUTLINE},不看流体):沿射线逐格,按方块轮廓
  * (连同交互轮廓的覆写)算碰没碰上。与原版的 clip 只差一处:碰上别的格之后不停,一直数到目标,把挡着的格分成两种——
  * <ul>
- *   <li><b>软遮挡</b>({@link #soft}):往里放一块别种方块时原版会直接顶掉的格(第 0 层 {@link Replaceable#displaced}:草、高草、
+ *   <li><b>软遮挡</b>({@link #soft}):往里放一块别种方块时原版会直接顶掉的格({@link Replaceable#displaced}:草、高草、
  *       蕨、枯灌木、单层雪、没长满的藤蔓……)。一下就掉、清掉它不算改建;清不清归用那一格的一方(挖掘执行清掉它,纯按键点到的就是它);</li>
  *   <li><b>硬遮挡</b>:其余有轮廓的格,要挖开才看得见。</li>
  * </ul>

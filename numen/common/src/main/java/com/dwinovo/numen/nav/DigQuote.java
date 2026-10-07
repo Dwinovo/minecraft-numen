@@ -9,7 +9,7 @@ import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.api.permission.Listing;
 
 import net.minecraft.core.BlockPos;

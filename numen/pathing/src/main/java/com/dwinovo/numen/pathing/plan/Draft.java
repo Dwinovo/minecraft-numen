@@ -5,8 +5,8 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
-import com.dwinovo.numen.pathing.world.Faces;
-import com.dwinovo.numen.pathing.world.Reach;
+import com.dwinovo.numen.api.entity.Faces;
+import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
@@ -70,7 +70,7 @@ final class Draft extends EditedView {
         if (!admission.ok()) {
             return fail(pos, admission.refused(), admission.detail());
         }
-        if (!Reach.reaches(body, Pose.STANDING, bx, feetY, bz, pos)) {
+        if (!Reach.reaches(body.eye(Pose.STANDING, bx, feetY, bz), pos, body.blockReach())) {
             return fail(pos, Reason.OUT_OF_REACH);
         }
         boolean eyeInWater = Semantics.eyeInWater(this, bx + 0.5, feetY + body.eyeHeight(Pose.STANDING), bz + 0.5);
@@ -85,7 +85,7 @@ final class Draft extends EditedView {
      */
     boolean placeInSight(BlockPos pos, int bx, double feetY, int bz) {
         Block block = model.placing().orElse(null);
-        if (block != null && Faces.inSight(this, Reach.eye(body, Pose.STANDING, bx, feetY, bz), body.blockReach(), pos,
+        if (block != null && Faces.inSight(this, body.eye(Pose.STANDING, bx, feetY, bz), body.blockReach(), pos,
                 block) == null) {
             return fail(pos, Reason.NO_FACE);
         }
@@ -104,7 +104,7 @@ final class Draft extends EditedView {
         if (!admission.ok()) {
             return fail(pos, admission.refused(), admission.detail());
         }
-        if (!Reach.reaches(body, Pose.STANDING, bx, feetY, bz, pos)) {
+        if (!Reach.reaches(body.eye(Pose.STANDING, bx, feetY, bz), pos, body.blockReach())) {
             return fail(pos, Reason.OUT_OF_REACH);
         }
         Block block = model.placing().orElseThrow();

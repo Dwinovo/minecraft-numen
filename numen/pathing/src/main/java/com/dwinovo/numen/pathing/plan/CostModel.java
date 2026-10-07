@@ -8,9 +8,9 @@ import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
-import com.dwinovo.numen.pathing.world.Faces;
+import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.world.Footing;
-import com.dwinovo.numen.pathing.world.Replaceable;
+import com.dwinovo.numen.api.entity.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;

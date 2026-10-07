@@ -1,5 +1,7 @@
 package com.dwinovo.numen.pathing.world;
 
+import com.dwinovo.numen.api.entity.Faces;
+import com.dwinovo.numen.api.entity.Replaceable;
 import java.util.Set;
 
 import com.dwinovo.numen.pathing.TestWorld;

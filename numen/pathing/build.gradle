@@ -33,6 +33,8 @@ sourceSets {
 dependencies {
     // 瘦 api jar:同插件一样的一扇门
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    // 单测跑起来也要这扇门里的类(挖掘公式、视线几何):运行期同一个瘦 jar
+    testRuntimeOnly files(project(':numen-api:common').tasks.named('apiJar'))
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

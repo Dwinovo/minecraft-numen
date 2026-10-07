@@ -321,7 +321,7 @@ public final class ScanApi {
                                 + "like.") Optional<BlockAt> blockedBy) {}
 
     /**
-     * 她看不看得见:一格是从她的眼睛朝那一格冲着她的各面打视线({@link com.dwinovo.numen.pathing.world.Sight},看不看得见一格只在那里判),
+     * 她看不看得见:一格是从她的眼睛朝那一格冲着她的各面打视线({@link com.dwinovo.numen.api.entity.Sight},看不看得见一格只在那里判),
      * 有一面碰上它、路上没隔着东西就看得见;空着的一格(没有轮廓)是视线到它中心不隔东西;一只实体照原版的视线判(看它的眼睛)。看不见时说
      * 挡着的第一格:先说要挖开的硬遮挡,只隔着草这类软遮挡时是那一格。
      */
@@ -337,7 +337,7 @@ public final class ScanApi {
         Vec3 eye = her.getEyePosition();
         CellOrEntity target = args.target();
         boolean visible;
-        com.dwinovo.numen.pathing.world.Sight.Trace seen;
+        com.dwinovo.numen.api.entity.Sight.Trace seen;
         Vec3 to;
         if (target.entity() != null) {
             Entity entity = target.entity().in(level);
@@ -347,16 +347,16 @@ public final class ScanApi {
             }
             to = entity.getEyePosition();
             visible = her.hasLineOfSight(entity);
-            seen = com.dwinovo.numen.pathing.world.Sight.trace(level, eye, to, null);
+            seen = com.dwinovo.numen.api.entity.Sight.trace(level, eye, to, null);
         } else {
             BlockPos cell = target.cell();
-            boolean solid = com.dwinovo.numen.pathing.world.Sight.clickable(level, cell);
+            boolean solid = com.dwinovo.numen.api.entity.Sight.clickable(level, cell);
             to = Vec3.atCenterOf(cell);
             seen = null;
             visible = false;
-            for (Vec3 point : solid ? com.dwinovo.numen.pathing.world.Sight.faces(level, eye, cell) : List.of(to)) {
-                com.dwinovo.numen.pathing.world.Sight.Trace trace =
-                        com.dwinovo.numen.pathing.world.Sight.trace(level, eye, point, cell);
+            for (Vec3 point : solid ? com.dwinovo.numen.api.entity.Sight.faces(level, eye, cell) : List.of(to)) {
+                com.dwinovo.numen.api.entity.Sight.Trace trace =
+                        com.dwinovo.numen.api.entity.Sight.trace(level, eye, point, cell);
                 boolean clear = solid ? trace.clear(null) : trace.hard().isEmpty() && trace.soft().isEmpty();
                 if (clear || seen == null || trace.hard().size() < seen.hard().size()) {
                     seen = trace;

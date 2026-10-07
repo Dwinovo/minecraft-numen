@@ -3,10 +3,10 @@ package com.dwinovo.numen.pathing.body;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.dwinovo.numen.pathing.world.Faces;
-import com.dwinovo.numen.pathing.world.Reach;
-import com.dwinovo.numen.pathing.world.Replaceable;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Faces;
+import com.dwinovo.numen.api.entity.Reach;
+import com.dwinovo.numen.api.entity.Replaceable;
+import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

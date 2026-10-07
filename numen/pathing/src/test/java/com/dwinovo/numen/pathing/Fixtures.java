@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -53,7 +54,7 @@ public final class Fixtures {
     }
 
     public static BodySnapshot body(BodyStats stats, GameType mode, float health, List<ItemStack> inventory) {
-        return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, BodySnapshot.Mining.VANILLA,
+        return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, DigTime.Mining.VANILLA,
                 Breath.VANILLA);
     }
 

@@ -16,7 +16,7 @@ import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.plan.DigTime;
+import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Route;
@@ -102,7 +102,7 @@ public class DigGameTests {
             throw new GameTestAssertException("一格也没挖碎");
         }
         for (DigWatch.Dig d : watch.broken()) {
-            int priced = DigTime.ticks(Snapshots.of(body), d.tool, d.state, d.eyeInWater, d.grounded);
+            int priced = DigTime.ticks(Snapshots.of(body).mining(), Snapshots.of(body).creative(), d.tool, d.state, d.eyeInWater, d.grounded);
             if (Math.abs(d.ticks() - d.vanillaTicks()) > 1 || Math.abs(priced - d.vanillaTicks()) > 1) {
                 throw new GameTestAssertException("耗时对不上:" + d + " 定价 " + priced + " 全部 " + watch.broken());
             }

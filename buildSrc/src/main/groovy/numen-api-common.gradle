@@ -161,6 +161,11 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),
     include 'com/dwinovo/numen/api/entity/BodyAction*.class'    // 以及换手留下的记录——自己写寻路的插件按它们让她走
+    include 'com/dwinovo/numen/api/entity/DigTime*.class'       // 原版的挖掘时间与缓手,
+    include 'com/dwinovo/numen/api/entity/Reach*.class'         // 够得着、
+    include 'com/dwinovo/numen/api/entity/Sight*.class'         // 看得见、
+    include 'com/dwinovo/numen/api/entity/Faces*.class'         // 点得中哪一面、
+    include 'com/dwinovo/numen/api/entity/Replaceable*.class'   // 放下去落在哪一格——身体与寻路规划共用的那一组原版事实
     include 'com/dwinovo/numen/api/entity/package-info.class'
     include 'com/dwinovo/numen/api/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
     include 'com/dwinovo/numen/api/agent/skill/SkillInfo*.class'

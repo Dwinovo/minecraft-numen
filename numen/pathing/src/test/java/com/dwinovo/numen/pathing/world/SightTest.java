@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.world;
 
+import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 

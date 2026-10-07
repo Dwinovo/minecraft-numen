@@ -7,7 +7,7 @@ import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Sight;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;

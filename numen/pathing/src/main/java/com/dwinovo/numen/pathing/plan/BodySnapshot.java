@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.plan;
 import java.util.List;
 import java.util.Objects;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.world.BodyStats;
 
 import net.minecraft.core.Direction;
@@ -38,26 +39,10 @@ import net.minecraft.world.level.block.state.properties.DripstoneThickness;
  */
 public record BodySnapshot(BodyStats stats, GameType gameMode, float health, double safeFallDistance,
                            double fallDamageMultiplier, int foodLevel, double waterMovementEfficiency,
-                           List<ItemStack> inventory, Mining mining, Breath breath) {
+                           List<ItemStack> inventory, DigTime.Mining mining, Breath breath) {
 
     /** 摔完至少要留下的血量(三颗心):按血量推摔落上限时不把她摔到只剩一口气。 */
     static final float HEALTH_RESERVE = 6.0F;
-
-    /**
-     * 挖掘速度用到的身体属性与效果,照原版 {@code Player.getDestroySpeed} 取值。
-     *
-     * @param efficiency     属性 {@code mining_efficiency} 里不来自手上那件的部分(原版 0);手上那件的效率附魔由挑工具时按
-     *                       那件自己的修饰符加上
-     * @param breakSpeed     属性 {@code block_break_speed}(原版 1)
-     * @param submergedSpeed 属性 {@code submerged_mining_speed}(原版 0.2,水下速掘把它提到 1)
-     * @param haste          急迫与潮涌能量里较高的等级(amplifier),没有是 -1
-     * @param fatigue        挖掘疲劳的等级(amplifier),没有是 -1
-     */
-    public record Mining(double efficiency, double breakSpeed, double submergedSpeed, int haste, int fatigue) {
-
-        /** 原版玩家不带任何效果时的取值。 */
-        public static final Mining VANILLA = new Mining(0, 1, 0.2, -1, -1);
-    }
 
     public BodySnapshot {
         Objects.requireNonNull(stats, "stats");

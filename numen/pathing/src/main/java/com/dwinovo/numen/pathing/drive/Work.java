@@ -8,7 +8,7 @@ import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
-import com.dwinovo.numen.pathing.world.Faces;
+import com.dwinovo.numen.api.entity.Faces;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;

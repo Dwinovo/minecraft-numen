@@ -9,8 +9,8 @@
  *   <li>{@link com.dwinovo.numen.pathing.plan.Stance} —— 身体在节点上站着、攀着还是浮着;</li>
  *   <li>{@link com.dwinovo.numen.pathing.plan.CostModel} —— 物理代价({@link com.dwinovo.numen.pathing.plan.ActionCosts})、
  *       路线规格、许可、垫路料、身体快照、生物危险组合成的成本模型;挖与放的准入与定价只在这里;</li>
- *   <li>{@link com.dwinovo.numen.pathing.plan.DigRules}、{@link com.dwinovo.numen.pathing.plan.DigTime}、
- *       {@link com.dwinovo.numen.pathing.plan.ToolChoice} —— 挖不挖得了、挖多久、用哪件工具;</li>
+ *   <li>{@link com.dwinovo.numen.pathing.plan.DigRules}、{@link com.dwinovo.numen.pathing.plan.ToolChoice} —— 挖不挖得了、用哪件工具;
+ *       挖多久是原版的公式,在 Numen API 的 {@link com.dwinovo.numen.api.entity.DigTime};</li>
  *   <li>端口 {@link com.dwinovo.numen.pathing.plan.TerrainPolicy}、{@link com.dwinovo.numen.pathing.plan.Materials}、
  *       {@link com.dwinovo.numen.pathing.plan.Threats},与值对象 {@link com.dwinovo.numen.pathing.plan.BodySnapshot}:宿主交进来的事实。</li>
  * </ul>

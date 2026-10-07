@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.Set;
 
@@ -128,7 +129,7 @@ class CostModelTest {
         CostModel model = CostModel.of(spec, body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
         for (boolean eyeInWater : new boolean[] {false, true}) {
             for (boolean grounded : new boolean[] {true, false}) {
-                double ticks = DigTime.ticks(body, new ItemStack(Items.WOODEN_PICKAXE), STONE, eyeInWater, grounded);
+                double ticks = DigTime.ticks(body.mining(), body.creative(), new ItemStack(Items.WOODEN_PICKAXE), STONE, eyeInWater, grounded);
                 assertEquals(ticks + 5 + 7.5, model.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, eyeInWater, grounded)), 1e-9,
                         "水里 " + eyeInWater + ",着地 " + grounded);
             }

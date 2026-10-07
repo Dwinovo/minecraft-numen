@@ -15,8 +15,8 @@ import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Reach;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Reach;
+import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -211,7 +211,7 @@ public class GoalGameTests {
         t.go(body, Goals.use(t.level, stats, chest), RouteSpec.defaults()).within(400).arrives().then(r -> {
             // 搜索按节点中心的眼睛挑站位:从停下的那个节点看过去,中间隔着的是高草;高草还在(只走不改)
             BlockPos node = r.body.blockPosition();
-            Vec3 eye = Reach.eye(stats, Pose.STANDING, node.getX(), r.body.getY(), node.getZ());
+            Vec3 eye = stats.eye(Pose.STANDING, node.getX(), r.body.getY(), node.getZ());
             Sight.Trace seen = Sight.use(t.level, eye, stats.blockReach(), chest, Direction.WEST);
             if (seen == null || seen.soft().isEmpty() || !t.state(11, 2, 5).is(Blocks.TALL_GRASS)) {
                 throw new GameTestAssertException("应当停在隔着高草看得见它的地方:" + t.rel(node) + " " + seen);

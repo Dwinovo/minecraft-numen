@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,7 +23,7 @@ import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Reach;
+import com.dwinovo.numen.api.entity.Reach;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -386,7 +387,7 @@ class SearchTest {
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
         Stance stance = result.route().endStance();
-        assertTrue(Reach.reaches(SURVIVAL, Pose.STANDING, end.getX(), stance.feetY(), end.getZ(), chest));
+        assertTrue(Reach.reaches(SURVIVAL.eye(Pose.STANDING, end.getX(), stance.feetY(), end.getZ()), chest, SURVIVAL.blockReach()));
         assertNotEquals(chest, end);
         assertTrue(end.getX() < chest.getX(), "够得着就停,不走到跟前");
     }
@@ -479,7 +480,7 @@ class SearchTest {
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
         assertTrue(end.getX() > 2, "绕到墙那边:" + end);
-        Vec3 eye = Reach.eye(SURVIVAL, Pose.STANDING, end.getX(), result.route().endStance().feetY(), end.getZ());
+        Vec3 eye = SURVIVAL.eye(Pose.STANDING, end.getX(), result.route().endStance().feetY(), end.getZ());
         assertNotNull(use.sight(end.getX(), end.getY(), end.getZ(), result.route().endStance())
                 .seen(world, eye, SURVIVAL.blockReach()), "从停下的地方看得见它");
     }
@@ -786,7 +787,7 @@ class SearchTest {
     /** 原版身体,憋气的本钱是 {@code breath}。 */
     private static CostModel breathing(Breath breath) {
         BodySnapshot body = new BodySnapshot(SURVIVAL, net.minecraft.world.level.GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(), BodySnapshot.Mining.VANILLA, breath);
+                List.of(), DigTime.Mining.VANILLA, breath);
         return CostModel.of(RouteSpec.defaults(), body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
     }
 

@@ -11,7 +11,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;

@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.api.permission.Verdict;
 
 import net.minecraft.core.BlockPos;

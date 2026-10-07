@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,9 +40,9 @@ public final class ToolChoice {
         this.inventory = body.inventory();
         this.efficiency = new double[inventory.size()];
         for (int slot = 0; slot < inventory.size(); slot++) {
-            efficiency[slot] = DigTime.efficiency(body, inventory.get(slot));
+            efficiency[slot] = DigTime.efficiency(body.mining(), inventory.get(slot));
         }
-        this.handEfficiency = DigTime.efficiency(body, ItemStack.EMPTY);
+        this.handEfficiency = DigTime.efficiency(body.mining(), ItemStack.EMPTY);
     }
 
     /** 挖 {@code state} 用哪件。 */
@@ -53,7 +54,7 @@ public final class ToolChoice {
     public int ticks(BlockState state, boolean eyeInWater, boolean grounded) {
         Pick pick = best(state);
         double eff = pick.slot() == Pick.BARE_HAND ? handEfficiency : efficiency[pick.slot()];
-        return DigTime.ticks(body, pick.tool(), eff, state, eyeInWater, grounded);
+        return DigTime.ticks(body.mining(), body.creative(), pick.tool(), eff, state, eyeInWater, grounded);
     }
 
     /**
@@ -67,13 +68,13 @@ public final class ToolChoice {
 
     private Pick choose(BlockState state) {
         Pick best = HAND;
-        int bestTicks = DigTime.ticks(body, ItemStack.EMPTY, handEfficiency, state, false, true);
+        int bestTicks = DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, handEfficiency, state, false, true);
         for (int slot = 0; slot < inventory.size(); slot++) {
             ItemStack tool = inventory.get(slot);
             if (tool.isEmpty()) {
                 continue;
             }
-            int ticks = DigTime.ticks(body, tool, efficiency[slot], state, false, true);
+            int ticks = DigTime.ticks(body.mining(), body.creative(), tool, efficiency[slot], state, false, true);
             // 严格更快才换;一样快时保留先到的,而先到的是空手,再是不耗耐久的物品
             if (ticks < bestTicks || (ticks == bestTicks && best.tool().isDamageableItem() && !tool.isDamageableItem())) {
                 best = new Pick(slot, tool);

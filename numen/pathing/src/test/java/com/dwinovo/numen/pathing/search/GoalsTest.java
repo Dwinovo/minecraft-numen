@@ -17,8 +17,8 @@ import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Reach;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Reach;
+import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -403,7 +403,7 @@ class GoalsTest {
         for (long cell : use.stands().keySet()) {
             BlockPos at = BlockPos.of(cell);
             Stance there = Stance.at(world, SURVIVAL, at);
-            Vec3 eye = Reach.eye(SURVIVAL, Pose.STANDING, at.getX(), there.feetY(), at.getZ());
+            Vec3 eye = SURVIVAL.eye(Pose.STANDING, at.getX(), there.feetY(), at.getZ());
             for (Direction face : use.stands().get(cell)) {
                 assertNotNull(Sight.use(world, eye, SURVIVAL.blockReach(), furnace, face), at + " 看 " + face);
             }

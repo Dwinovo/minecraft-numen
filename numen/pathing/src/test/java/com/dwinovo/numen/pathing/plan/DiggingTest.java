@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
+import com.dwinovo.numen.api.entity.DigTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,15 +42,15 @@ class DiggingTest {
     void anOakLogTakesThreeSecondsByHandLikeVanilla() {
         // 硬度 2,空手速度 1,原木不要求对的工具:每刻进度 1 / 2 / 30,60 刻碎
         BodySnapshot body = Fixtures.body();
-        assertEquals(60, DigTime.ticks(body, ItemStack.EMPTY, log(), false, true));
+        assertEquals(60, DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, log(), false, true));
     }
 
     @Test
     void diggingUnderWaterOrOffTheGroundIsFiveTimesSlowerAndBothStack() {
         BodySnapshot body = Fixtures.body();
-        assertEquals(300, DigTime.ticks(body, ItemStack.EMPTY, log(), true, true), "眼睛泡在水里乘 0.2");
-        assertEquals(300, DigTime.ticks(body, ItemStack.EMPTY, log(), false, false), "脚不着地除以 5");
-        assertEquals(1500, DigTime.ticks(body, ItemStack.EMPTY, log(), true, false));
+        assertEquals(300, DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, log(), true, true), "眼睛泡在水里乘 0.2");
+        assertEquals(300, DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, log(), false, false), "脚不着地除以 5");
+        assertEquals(1500, DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, log(), true, false));
     }
 
     @Test
@@ -57,15 +58,15 @@ class DiggingTest {
         BodySnapshot body = Fixtures.body();
         BlockState stone = Blocks.STONE.defaultBlockState();
         // 空手挖石头:硬度 1.5,不是对的工具,1 / 1.5 / 100
-        assertEquals(150, DigTime.ticks(body, ItemStack.EMPTY, stone, false, true));
+        assertEquals(150, DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, stone, false, true));
         // 木镐:速度 2,对的工具,2 / 1.5 / 30,22.5 刻向上取整
-        assertEquals(23, DigTime.ticks(body, new ItemStack(Items.WOODEN_PICKAXE), stone, false, true));
+        assertEquals(23, DigTime.ticks(body.mining(), body.creative(), new ItemStack(Items.WOODEN_PICKAXE), stone, false, true));
     }
 
     @Test
     void creativeModeBreaksEverythingAtOnce() {
         BodySnapshot creative = Fixtures.body(Vanilla.CREATIVE, GameType.CREATIVE, 20, List.of());
-        assertEquals(1, DigTime.ticks(creative, ItemStack.EMPTY, Blocks.OBSIDIAN.defaultBlockState(), false, true));
+        assertEquals(1, DigTime.ticks(creative.mining(), creative.creative(), ItemStack.EMPTY, Blocks.OBSIDIAN.defaultBlockState(), false, true));
     }
 
     /**
@@ -98,7 +99,7 @@ class DiggingTest {
         ToolChoice tools = new ToolChoice(body);
         BlockState stone = Blocks.STONE.defaultBlockState();
         assertEquals(31, tools.best(stone).slot(), "背包深处的钻石镐");
-        assertEquals(DigTime.ticks(body, new ItemStack(Items.DIAMOND_PICKAXE), stone, false, true),
+        assertEquals(DigTime.ticks(body.mining(), body.creative(), new ItemStack(Items.DIAMOND_PICKAXE), stone, false, true),
                 tools.ticks(stone, false, true));
         assertEquals(ToolChoice.Pick.BARE_HAND, tools.best(Blocks.DIRT.defaultBlockState()).slot(),
                 "挖泥土镐子不比空手快,不为它磨损镐子");

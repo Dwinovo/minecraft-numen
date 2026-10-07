@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.world;
+package com.dwinovo.numen.api.entity;
 
 import java.util.ArrayList;
 import java.util.EnumSet;

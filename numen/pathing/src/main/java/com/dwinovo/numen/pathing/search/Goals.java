@@ -14,8 +14,8 @@ import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
-import com.dwinovo.numen.pathing.world.Reach;
-import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.api.entity.Reach;
+import com.dwinovo.numen.api.entity.Sight;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -132,7 +132,7 @@ public final class Goals {
                     if (stance == null || Clearance.occupies(body, Pose.STANDING, x, stance.feetY(), z, at)) {
                         continue;
                     }
-                    Vec3 from = Reach.eye(body, Pose.STANDING, x, stance.feetY(), z);
+                    Vec3 from = body.eye(Pose.STANDING, x, stance.feetY(), z);
                     EnumSet<Direction> seen = EnumSet.noneOf(Direction.class);
                     for (Direction side : open) {
                         if (Sight.use(level, from, reach, at, side) != null) {
@@ -297,7 +297,7 @@ public final class Goals {
 
     /** 眼睛(按脚在这一格的底算)挪进 {@code box} 的 {@code reach} 以内最少要付多少,同 {@link #beyondReach(BlockPos, BodyStats, int, int, int)}。 */
     private static double beyondReach(AABB box, double reach, BodyStats body, int x, int y, int z) {
-        Vec3 eye = Reach.eye(body, Pose.STANDING, x, y, z);
+        Vec3 eye = body.eye(Pose.STANDING, x, y, z);
         double dx = gap(eye.x, box.minX, box.maxX);
         double dz = gap(eye.z, box.minZ, box.maxZ);
         double rise = eye.y < box.minY ? box.minY - eye.y : 0;
@@ -524,7 +524,7 @@ public final class Goals {
         public boolean contains(int x, int y, int z, Stance stance) {
             double feet = stance.feetY();
             return !Clearance.occupies(body, Pose.STANDING, x, feet, z, target)
-                    && Reach.reaches(body, Pose.STANDING, x, feet, z, target);
+                    && Reach.reaches(body.eye(Pose.STANDING, x, feet, z), target, body.blockReach());
         }
 
         @Override
@@ -567,7 +567,7 @@ public final class Goals {
             if (!Sight.clickable(level, target)) {
                 return 0;
             }
-            Vec3 eye = Reach.eye(body, Pose.STANDING, x, stance.feetY(), z);
+            Vec3 eye = body.eye(Pose.STANDING, x, stance.feetY(), z);
             Sight.Trace line = Sight.dig(level, eye, target, Sight.faces(level, eye, target),
                     pos -> clearing.clears(level, pos));
             return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER;
@@ -684,7 +684,7 @@ public final class Goals {
     private record Touch(AABB box, BodyStats body, double range) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
-            return Reach.reaches(body, Pose.STANDING, x, stance.feetY(), z, box, range);
+            return Reach.reaches(body.eye(Pose.STANDING, x, stance.feetY(), z), box, range);
         }
 
         @Override

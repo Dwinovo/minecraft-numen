@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.world;
+package com.dwinovo.numen.api.entity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.world;
 
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 身体的几项物理量:站立与潜行时的碰撞盒和眼高、迈步高度、起跳力度、重力、方块交互距离,以及脚上的装备让它能不能
@@ -46,6 +47,11 @@ public record BodyStats(EntityDimensions standing, EntityDimensions crouching, d
     /** 这个姿势下眼睛离脚底的高度。 */
     public double eyeHeight(Pose pose) {
         return dimensions(pose).eyeHeight();
+    }
+
+    /** 以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时眼睛的位置(列中心)。 */
+    public Vec3 eye(Pose pose, int x, double feetY, int z) {
+        return new Vec3(x + 0.5, feetY + eyeHeight(pose), z + 0.5);
     }
 
     private EntityDimensions dimensions(Pose pose) {

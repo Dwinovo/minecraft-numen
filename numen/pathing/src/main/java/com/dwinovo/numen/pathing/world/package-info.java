@@ -1,13 +1,14 @@
 /**
  * 第 0 层 地形模型:身体在一格世界里能怎样,全部从方块碰撞箱推导,规划、执行与感知读同一份。
  *
+ * <p>够得着、看得见、点得中哪一面、放下去落在哪一格是身体自己的事实,规划与身体共用一份,在 Numen API(包 {@code com.dwinovo.numen.api.entity}):
+ * {@link com.dwinovo.numen.api.entity.Reach}、{@link com.dwinovo.numen.api.entity.Sight}、{@link com.dwinovo.numen.api.entity.Faces}、
+ * {@link com.dwinovo.numen.api.entity.Replaceable};这里在它们上面算站在哪一格的眼睛({@link com.dwinovo.numen.pathing.world.BodyStats#eye})。
+ *
  * <ul>
  *   <li>{@link com.dwinovo.numen.pathing.world.Footing} —— 脚落在多高、踩的是哪一格、脚的高度归到哪一格(唯一规则);</li>
  *   <li>{@link com.dwinovo.numen.pathing.world.Clearance} —— 站立或潜行的身体放不放得下、占着哪几格、挡着它的是哪几格;</li>
  *   <li>{@link com.dwinovo.numen.pathing.world.Stepping} —— 走进相邻一列是走过去、要跳还是过不去,走出边沿落到多高;</li>
- *   <li>{@link com.dwinovo.numen.pathing.world.Reach} —— 够不够得着一格;</li>
- *   <li>{@link com.dwinovo.numen.pathing.world.Faces} —— 放方块时能点哪些面、点在哪;</li>
- *   <li>{@link com.dwinovo.numen.pathing.world.Replaceable} —— 放下的方块真正落在哪一格;</li>
  *   <li>{@link com.dwinovo.numen.pathing.world.Semantics} —— 碰撞箱表达不了的语义(流体、攀爬、门、危险、落沙、机关、易碎),
  *       碰撞箱随世界或身体变化的方块,以及脚下方块的起跳与步速系数、眼睛泡没泡在水里;</li>
  *   <li>{@link com.dwinovo.numen.pathing.world.Bounds} —— 世界边界;</li>

@@ -86,7 +86,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             // 两个键都是纯按键:准星落在谁就按谁,挡在前面的不清,回执照实说
             boolean clickable = r.aim != null && Terrain.of(player).clickable(r.aim);
             if (r.aim != null) {
-                com.dwinovo.numen.pathing.world.Sight.Trace seen =
+                com.dwinovo.numen.api.entity.Sight.Trace seen =
                         button() == Interaction.Button.USE && clickable ? Aim.use(player, r.aim) : null;
                 InputDriver.lookAt(player, seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
             }

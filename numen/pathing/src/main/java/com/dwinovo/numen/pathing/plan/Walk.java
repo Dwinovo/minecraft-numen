@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.pathing.world.Faces;
+import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Stepping;
 
