@@ -388,6 +388,15 @@ class MovesTest {
         assertEquals(Reason.NO_FOOTING, fails(MoveKind.DOWNWARD, Fixtures.model(natural()), hollow, AT, Heading.DOWN).reason());
     }
 
+    /** 规格不许落(无水落差 0)时,向下挖落一格同落下一级一样要问规格的无水落差:不落。 */
+    @Test
+    void aSpecThatAllowsNoFallDoesNotDigDownEither() {
+        TestWorld world = ground().set(0, Y - 3, 0, Blocks.STONE.defaultBlockState());
+        world.set(0, Y - 2, 0, Blocks.STONE.defaultBlockState());
+        RouteSpec noFall = natural().edit().maxFallHeightNoWater(0).build();
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.DOWNWARD, Fixtures.model(noFall), world, AT, Heading.DOWN).reason());
+    }
+
     // ==================== 攀爬 ====================
 
     /** 原点这一列靠东墙挂着 {@code height} 格梯子。 */

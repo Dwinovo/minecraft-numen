@@ -90,6 +90,14 @@ final class Strides {
         return model.body().fallDamage(drop, level.getBlockState(support));
     }
 
+    /**
+     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、落差也在规格的无水落差以内
+     * ({@link CostModel#bearsFall});攀着、浮着、落进水里的不摔。所有会落下去的走法(落下一级、斜走、向下挖)问的都是这一处。
+     */
+    static boolean bearsLanding(CostModel model, Stance landing, boolean wading, double drop, int damage) {
+        return !landing.grounded() || wading || model.bearsFall(drop, damage);
+    }
+
     /** 从 {@code drop} 高处落到这个落点的耗时:下落,至少要走回列中心那一截。 */
     static double landing(Maneuver m) {
         return Math.max(ActionCosts.fall(m.drop()), ActionCosts.CENTER_AFTER_FALL);

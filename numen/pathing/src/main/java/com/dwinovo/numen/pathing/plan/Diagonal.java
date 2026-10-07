@@ -68,7 +68,7 @@ final class Diagonal implements Move {
         boolean wading = Strides.inWater(draft, to);
         double drop = Math.max(0, f0 - f1);
         int damage = Strides.fallDamage(model, draft, landing, support, drop, wading);
-        if (!model.body().bears(damage)) {
+        if (!Strides.bearsLanding(model, landing, wading, drop, damage)) {
             return Premise.fail(support, Reason.TOO_FAR_TO_FALL);
         }
         if (!contact.admit(draft, model, support, f0 - f1 > 0.5)) {

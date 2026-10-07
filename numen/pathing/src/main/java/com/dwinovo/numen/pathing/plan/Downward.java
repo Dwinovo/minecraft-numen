@@ -48,7 +48,7 @@ final class Downward implements Move {
         double drop = f0 - landing.feetY();
         boolean wading = Strides.inWater(draft, below);
         int damage = Strides.fallDamage(model, draft, landing, support, drop, wading);
-        if (!model.body().bears(damage)) {
+        if (!Strides.bearsLanding(model, landing, wading, drop, damage)) {
             return Premise.fail(support, Reason.TOO_FAR_TO_FALL);
         }
         if (!contact.admit(draft, model, support, drop > 0.5)) {
