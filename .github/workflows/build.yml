@@ -65,6 +65,16 @@ jobs:
       - name: Run JVM tests
         run: ./gradlew test --no-daemon -x javadoc
 
+      # 第三方的视角:只用发布出去的坐标。把制品发到临时目录,再让一个独立的最小插件(tools/third-party-nav)只从那里拉
+      # Numen API 的瘦 jar 来编译。发布出去的 POM 引用了没发布的模块(0.1.4 就是这样),它在这里当场解析失败。
+      - name: Compile a third-party plugin against the published artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="file://$RUNNER_TEMP/numen-maven"
+          ./gradlew publishAll --no-daemon -x javadoc -Plocal_maven_url="$repo"
+          ./gradlew -p tools/third-party-nav compileJava --no-daemon -Pnumen_maven="$repo"
+
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4

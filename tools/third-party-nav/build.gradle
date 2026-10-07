@@ -1,0 +1,43 @@
+// 一个最小的第三方寻路插件:只依赖已发布的 Numen API。
+//
+// 用法(仓库根目录下):
+//   ./gradlew publishAll -Plocal_maven_url=file:///<临时目录>
+//   ./gradlew -p tools/third-party-nav compileJava -Pnumen_maven=file:///<临时目录>
+//
+// 编译期只给瘦 api jar(classifier api),和任何第三方插件一样。没有 GameTest:第三方现在没有公开的办法在测试里拉起一个同伴
+// (召唤要一个能收下行包的主人连接,CompanionFactory 是内部类),这一缺口记在 Numen API 的待办里,不绕。
+// 版本、MC 版本、NeoForge 版本与主构建同一份:读仓库根的 gradle.properties,不另写一遍。
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+def rootProps = new Properties()
+file('../../gradle.properties').withInputStream { rootProps.load(it) }
+def numenMaven = providers.gradleProperty('numen_maven')
+        .orElse(providers.provider { throw new GradleException('要用 -Pnumen_maven=<已发布坐标所在的 maven 目录的 URI>') })
+def numenApi = "com.dwinovo.numen:numen-api-neoforge-${rootProps.minecraft_version}:${rootProps.version}"
+
+group = 'com.example.nav'
+version = '1.0'
+java.toolchain.languageVersion = JavaLanguageVersion.of(rootProps.java_version as int)
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Numen API 的 @Fn 从方法签名读参数名
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    // 只有这一个:Numen API 与它依赖的 ai / agent / ui / lua 都从发布出来的坐标取
+    maven { url = uri(numenMaven.get()) }
+    mavenCentral()
+}
+
+neoForge {
+    version = rootProps.neoforge_version
+}
+
+dependencies {
+    // 编译期:瘦 api jar;POM 里的 numen-ai / agent / ui / lua 随它传递进来(POM 引用了没发布的模块,这里就解析不出来)
+    compileOnly "${numenApi}:api"
+}
