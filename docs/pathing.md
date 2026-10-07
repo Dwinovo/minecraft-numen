@@ -172,7 +172,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 ## 五、模块与构建
 
-- 新增 Gradle 模块 `pathing`,和 `api/common` 一样对着原版编译(neoForm),不含加载器代码，按 `api/common`
+- 新增 Gradle 模块 `pathing`,和 `numen-api/common` 一样对着原版编译(neoForm),不含加载器代码，按 `numen-api/common`
   的方式打进两个加载器的发行包。包名 `com.dwinovo.numen.pathing`。
 - 依赖只有 Minecraft、fastutil、slf4j;不依赖 `ai`、`agent`、`api`、`core`。模块的 classpath 上没有 Numen,
   往外的依赖在编译期就过不去。
@@ -402,7 +402,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 ### 第一批(09-27,`pathing-rewrite` 上 505deb86..42067cdf)
 
-- **构建**:`pathing` 模块用 `multiloader-common` 加 neoForm 对着原版编译;类在 `multiloader-loader.gradle` 的 `jar` 里平铺进两个
+- **构建**:`pathing` 模块用 `numen-common` 加 neoForm 对着原版编译;类在 `numen-loader.gradle` 的 `jar` 里平铺进两个
   加载器的发行包(Fabric 由 remapJar 一并改名)。开发期运行的类路径和 `core` 对它的依赖，等切换那批有了使用方再接。
 - **碰撞箱入口 `Boxes`**:按 `BlockState` 缓存;原版标了 dynamic shape 的六种(脚手架、细雪、竹子、滴水石锥、潜影盒、移动中的活塞)
   不缓存，每次按坐标和"脚在这个高度的身体"现问。

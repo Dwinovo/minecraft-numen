@@ -7,13 +7,13 @@ licenses/GPL-3.0.txt for the GNU GPL it builds on).
 This file covers the project's original art instead, collectively the "Assets":
 
   - the in-game textures under
-    `api/common/src/main/resources/assets/numen_api/textures/`;
-  - the mod icons `api/common/src/main/resources/numen_api.png` and
-    `core/common/src/main/resources/numen.png`;
+    `numen-api/common/src/main/resources/assets/numen_api/textures/`;
+  - the mod icons `numen-api/common/src/main/resources/numen_api.png` and
+    `numen/common/src/main/resources/numen.png`;
   - the logos and branding images under `assets/branding/` and
-    `api/docs/branding/`;
+    `numen-api/docs/branding/`;
   - the source artwork the textures are made from, i.e. the image files
-    under `tools/ui-textures/` and `api/tools/ui-textures/`.
+    under `tools/ui-textures/` and `numen-api/tools/ui-textures/`.
 
 Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
 -------------------------------------------------------------------------------
@@ -35,9 +35,9 @@ Third-party art (NOT covered by the reservation below)
 
 These icon sprites are not the project's art. They are converted from
 pixelarticons (https://github.com/halfmage/pixelarticons) with
-`api/tools/ui-textures/pixelarticons.py`, and stay under their own licence:
+`numen-api/tools/ui-textures/pixelarticons.py`, and stay under their own licence:
 
-  - `api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
+  - `numen-api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
     icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
     `icon_flag.png`, `icon_menu.png`, `icon_back.png`,
     `icon_more.png`, `icon_user.png`, `icon_users.png`, `icon_user_plus.png`,

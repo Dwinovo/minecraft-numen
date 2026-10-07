@@ -1,5 +1,5 @@
 plugins {
-    id 'api-loader'
+    id 'numen-api-loader'
     id 'net.fabricmc.fabric-loom-remap'
 }
 
@@ -12,7 +12,7 @@ dependencies {
 }
 
 loom {
-    def aw = project(':api:common').file("src/main/resources/${mod_id}.accesswidener")
+    def aw = project(':numen-api:common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
     }

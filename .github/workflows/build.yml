@@ -60,7 +60,7 @@ jobs:
       - name: Run data generation
         run: ./gradlew datagenAll --no-daemon -x javadoc
 
-      # 全模块测试。只跑 :api:common:test 的话,ai(provider/用量核算)、ui(控件)、
+      # 全模块测试。只跑 :numen-api:common:test 的话,ai(provider/用量核算)、ui(控件)、
       # core(寻路/战斗/任务)三家的用例一个都不会跑——那是一多半的测试。
       - name: Run JVM tests
         run: ./gradlew test --no-daemon -x javadoc

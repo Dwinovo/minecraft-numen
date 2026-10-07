@@ -17,9 +17,9 @@ Each Minecraft version has its own branch named after the version; the default b
 On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 
 ```bash
-./gradlew :core:fabric:build :core:neoforge:build
-./gradlew :ai:test :agent:test :api:common:test :core:common:test
-./gradlew :core:neoforge:runGameTestServer
+./gradlew :numen:fabric:build :numen:neoforge:build
+./gradlew :ai:test :agent:test :numen-api:common:test :numen:common:test
+./gradlew :numen:neoforge:runGameTestServer
 ```
 
 ## 授权 / License

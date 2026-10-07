@@ -18,7 +18,7 @@ repositories {
 
 dependencies {
     // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    compileOnly files(project(':numen-api:neoforge').tasks.named('apiJar'))
     // FTB 全家是 All Rights Reserved:只在编译期引用,运行时由玩家自己装的那份提供,
     // 本模块不携带、不复制它们一个字节。Architectury 是 FTB 的事件总线所在。
     def ftb = ["dev.ftb.mods:ftb-quests-neoforge:${ftb_quests_version}",

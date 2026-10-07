@@ -1,12 +1,12 @@
 /**
- * 真模型评测的场景源码集与运行配置(设计与用法见 docs/bench.md),原版(core/neoforge)与各联动共用这一份。
+ * 真模型评测的场景源码集与运行配置(设计与用法见 docs/bench.md),原版(numen/neoforge)与各联动共用这一份。
  *
  * <p>场景写在本项目的 {@code src/bench},和评测的机器({@code :bench}、{@code :bench:game})一起组成模组
  * {@code numen_bench},只在 {@code runBench} 这一次运行里加载:发行 jar 只收 main,本项目别的运行只加载 {@code numen}。
  *
  * <pre>
- * ./gradlew :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
- * ./gradlew :core:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+ * ./gradlew :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+ * ./gradlew :numen:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
  * </pre>
  *
  * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen}。
@@ -30,10 +30,10 @@ dependencies {
     // 场景只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
     benchCompileOnly project(':bench:game')
     // 整个引擎:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
-    benchImplementation project(':api:neoforge')
+    benchImplementation project(':numen-api:neoforge')
 }
 
-def coreNeoForge = project(':core:neoforge')
+def coreNeoForge = project(':numen:neoforge')
 
 neoForge {
     addModdingDependenciesTo(sourceSets.bench)
@@ -71,7 +71,7 @@ neoForge {
 }
 
 tasks.matching { it.name == 'runBench' }.configureEach {
-    dependsOn ':bench:classes', ':bench:game:classes', ':core:neoforge:classes', ':core:neoforge:syncGameTestStructures'
+    dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:neoforge:syncGameTestStructures'
 }
 
 /**

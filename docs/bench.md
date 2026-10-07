@@ -11,19 +11,19 @@ pass^k、轮数、token、每次成功的成本与失败类型。每次改命令
 
 ```bash
 # 只跑两种基线(标准解、空操作),不花 API:验证场景与断言
-./gradlew --no-daemon :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=0
+./gradlew --no-daemon :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=0
 
 # 真实模型,每个场景 3 次(key 只从环境变量读)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
 
 # 并行跑:几个服务器进程各跑一份场景,跑完并成一份结果(几份由 bench.parallel 给,不给按处理器数取,见 §九)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :core:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
 
 # 车万女仆的场景:挂着车万女仆单开一次(原版那次不挂)
 NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.scenarios=tlm -Dbench.repeats=3
 
 # 对比两份结果(路径相对仓库根,报告打到标准输出)
-./gradlew --no-daemon -q :bench:compare -Pbefore=core/neoforge/runs/bench/results/<时间戳> -Pafter=core/neoforge/runs/bench/results/<时间戳>
+./gradlew --no-daemon -q :bench:compare -Pbefore=numen/neoforge/runs/bench/results/<时间戳> -Pafter=numen/neoforge/runs/bench/results/<时间戳>
 ```
 
 | 参数 | 默认 | 说明 |
@@ -52,7 +52,7 @@ GameTest 服务器(runs/bench)
 └─ 模组 numen_bench      评测:只在 runBench 里加载
      ├─ :bench           纯 JVM:记录、统计、报告、对比
      ├─ :bench:game      场景接口、运行器、评测大脑、模拟主人
-     └─ 场景源码集        core/neoforge/src/bench(原版)、plugins/<联动>/src/bench
+     └─ 场景源码集        numen/neoforge/src/bench(原版)、plugins/<联动>/src/bench
 ```
 
 - **大脑**:循环内核 `AgentLoop` 原样,四个端口在服务端进程里接上(`Brain`)。请求由产品的
@@ -158,7 +158,7 @@ public final class TlmBench {
 
 ## 六、报告
 
-写到 `<游戏目录>/results/<时间戳>/`(原版是 `core/neoforge/runs/bench/results/`,车万女仆那次是
+写到 `<游戏目录>/results/<时间戳>/`(原版是 `numen/neoforge/runs/bench/results/`,车万女仆那次是
 `plugins/tlm/runs/bench/results/`):
 
 - `runs.jsonl`:一次一行。字段:`suite`、`scenario`、`variant`(solution / noop / live)、`attempt`、`commit`、

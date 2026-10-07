@@ -1,5 +1,5 @@
 plugins {
-    id 'multiloader-common'
+    id 'numen-api-common'
     id 'net.neoforged.moddev'
 }
 
@@ -12,17 +12,37 @@ neoForge {
     }
 }
 
+// 客户端专属源码集(issue #9):src/client/java 只被客户端消费,主源码集
+// 的 classpath 上物理上没有这些类——服务端代码引用客户端类从"运行时才炸"
+// 变成"import 就编译不过"。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.client)
+
 dependencies {
-    // The numen-api engine (project dependency on the in-repo api/ tree). compileOnly:
-    // the api classes are provided at runtime by the numen-api mod, not bundled.
-    compileOnly project(':api:common')
-    // 单元测试要真的跑到引擎类(排程机器随 api),运行时类路径补上同一模块。
-    testImplementation project(':api:common')
+    // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
+    // 消费方以及下游 loader 都能透视到 ai 的类型。
+    api project(':ai')
+    // 大脑本身(纯 JVM):输入队列、长期目标。api 配置同理,下游 loader 透视得到。
+    api project(':agent')
+    // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
+    // api 配置让下游 loader 也透视得到 widget/令牌类型。
+    api project(':ui')
+    // 寻路(只依赖原版):假玩家的身体机制(按键、物理步进、两只手、快捷栏)只此一份,同伴的身体
+    // NumenPlayer 用它;core 的适配层经它接入寻路。api 配置让 core 与下游 loader 透视得到。
+    api project(':pathing')
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
+    clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -34,6 +54,10 @@ configurations {
         canBeResolved = false
         canBeConsumed = true
     }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
     commonResources {
         canBeResolved = false
         canBeConsumed = true
@@ -42,6 +66,7 @@ configurations {
 
 artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
 
@@ -68,6 +93,9 @@ sourceSets {
     test {
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.runtimeClasspath
+        // 声线库/分句器等客户端类的 headless 测试要看得见 client 源码集
+        compileClasspath += sourceSets.client.output
+        runtimeClasspath += sourceSets.client.output
     }
 }
 
@@ -75,11 +103,11 @@ test {
     useJUnitPlatform()
 }
 
-// 服务端安全门:numen-core 的 common 全部是服务端代码(工具/任务/寻路/
-// 建造),客户端半边住在 numen-api。common 编译用的是合并的客户端 MC jar,
-// 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上
-// ClassNotFound——这道检查让它在构建期就 fail。将来真要在本仓写客户端
-// 代码,参照 numen-api 的做法建 src/client/java 源码集,而不是放进 main。
+// 服务端安全门:主源码集不得引用 Minecraft 客户端类。源码集隔离挡得住
+// "引用我们自己的客户端类"(classpath 上没有,import 即编译错),但挡不住
+// 直接 import 原版客户端类——common 编译用的是合并的客户端 MC jar,
+// net.minecraft.client 永远在场。这道检查把缺口补上:出现即 fail,
+// 该代码应移入 src/client/java。
 tasks.register('checkServerSafe') {
     group = 'verification'
     description = 'Fail if src/main references Minecraft client-only classes.'
@@ -101,8 +129,7 @@ tasks.register('checkServerSafe') {
         if (!offenders.isEmpty()) {
             throw new GradleException(
                     "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
-                    + "numen-core 的 common 应保持纯服务端;客户端功能归 numen-api:\n  "
-                    + offenders.join('\n  '))
+                    + "把这些代码移进 src/client/java:\n  " + offenders.join('\n  '))
         }
     }
 }

@@ -1,5 +1,5 @@
 plugins {
-    id 'multiloader-common'
+    id 'numen-common'
 }
 
 configurations {
@@ -12,14 +12,14 @@ configurations {
 }
 
 dependencies {
-    compileOnly(project(':core:common')) {
+    compileOnly(project(':numen:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
             attribute(loaderAttribute, 'common')
         }
     }
-    commonJava project(path: ':core:common', configuration: 'commonJava')
-    commonResources project(path: ':core:common', configuration: 'commonResources')
+    commonJava project(path: ':numen:common', configuration: 'commonJava')
+    commonResources project(path: ':numen:common', configuration: 'commonResources')
 }
 
 tasks.named('compileJava', JavaCompile) {

@@ -8,8 +8,8 @@ Numen is a Minecraft mod: an AI companion that is a server-side fake player (`Se
 
 - `ai/` — LLM transport, pure JVM.
 - `ui/` — widget library, pure JVM, no Minecraft classes.
-- `api/` — the engine: agent loop, inbox, task slot, tool transport, the companion body, the permission layer (`com.dwinovo.numen.permission`).
-- `core/` — content: tools, tasks, pathing, instincts, bundled skills. Loader entry points in `core/fabric`, `core/neoforge` or `core/forge`.
+- `numen-api/` — the engine: agent loop, inbox, task slot, tool transport, the companion body, the permission layer (`com.dwinovo.numen.permission`).
+- `numen/` — content: tools, tasks, pathing, instincts, bundled skills. Loader entry points in `numen/fabric`, `numen/neoforge` or `numen/forge`.
 - `plugins/` — integrations with other mods, loaded only when the target mod is present.
 - `docs/architecture-mind-model.md` — the architecture rules. Read it before changing engine behavior.
 
@@ -20,7 +20,7 @@ Numen is a Minecraft mod: an AI companion that is a server-side fake player (`Se
 - Fix the root cause. Do not add fallbacks, try/catch blocks that swallow an error and take a second path, or workarounds around a symptom.
 - Before writing a check, a parser, a message or a helper, search for an existing one and reuse it. Never leave an old implementation beside a new one.
 - Do not add abstractions or options for requirements nobody stated.
-- Machinery belongs in `api/`, content in `core/`. `api/` must not reference `core/` types. Common code must not branch on the mod loader.
+- Machinery belongs in `numen-api/`, content in `numen/`. `numen-api/` must not reference `numen/` types. Common code must not branch on the mod loader.
 - Actions that change the world or hurt an entity are decided only by the permission layer. Do not add "may I do this" checks inside tools or tasks.
 - Whatever the companion's body does must be reported to the model. No silent teleports or inventory edits.
 - Comments say what the code does now and why, never how it used to be. Match the comment language of the surrounding file.

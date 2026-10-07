@@ -635,7 +635,7 @@ sealed interface LoopEvent {
 
 ## 十七、分步落地
 
-每一步单独提交、单独跑通 `:ai:test :agent:test :api:common:test :core:common:test :ui:test`(第 0 步之前
+每一步单独提交、单独跑通 `:ai:test :agent:test :numen-api:common:test :numen:common:test :ui:test`(第 0 步之前
 没有 `:agent:test`)、两个加载器构建、GameTest;客户端行为变化的步骤部署后真机过一遍。
 `CONTRIBUTING.md` 的测试命令同步补上 `:ai:test :agent:test`。
 

@@ -128,7 +128,7 @@
 
 - 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
   (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎
-  (`api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
+  (`numen-api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
 - **程序整段在服务端跑**(§十四):客户端只送程序文本、她的模块清单与服务端还没有的模块正文,服务端在身体与数据旁边跑完,回一张
   回执。客户端的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
 
@@ -711,7 +711,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 服务端函数就进程内执行,遇到客户端函数就向主人客户端发**反向请求**,Lua 线程挂着等客户端用 `Dispatcher.client` 执行完答回来
 (同 MCP 的 sampling、LSP 的 workspace/configuration);对 API 作者完全透明。
 
-### 部件(`api/common/.../program` 与 `agent.script`)
+### 部件(`numen-api/common/.../program` 与 `agent.script`)
 
 | 部件 | 做什么 |
 |---|---|

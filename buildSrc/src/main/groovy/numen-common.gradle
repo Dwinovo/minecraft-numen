@@ -34,7 +34,7 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // numen-api 已并入本仓 api/ 子树,以 project 依赖直连——本地 maven 中转与
+    // numen-api 已并入本仓 numen-api/ 子树,以 project 依赖直连——本地 maven 中转与
     // SNAPSHOT 缓存补丁均已随之退役。
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
     exclusiveContent {

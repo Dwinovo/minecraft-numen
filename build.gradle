@@ -14,12 +14,12 @@ plugins {
 // 各模块继承它。api 曾经走自己的版本线,代价是没人答得上"哪个 api 配哪个模组"——
 // 得有张兼容表,而那张表不存在。锁步之后这个问题不成立:模组 0.1.3 就配 api 0.1.3。
 allprojects { ext.mod_id = 'numen' }
-['api:common', 'api:fabric', 'api:neoforge'].each { path ->
+['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'
         // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/neoforge),
-        // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
-        // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——api-common.gradle
+        // 若 group 也相同,Gradle 会把 project(':numen-api:common') 依赖按"同一模块"做版本
+        // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——numen-api-common.gradle
         // 的 publication 显式写 groupId。
         group = 'com.dwinovo.numen.api'
     }
@@ -28,13 +28,13 @@ allprojects { ext.mod_id = 'numen' }
 // 本分支的第二个 loader。Fabric 每条分支都有,另一个是 NeoForge 还是 Forge 由分支决定,
 // 下面三个入口都按它挑。<b>CI 只认这几个任务名</b>,不做探测:同一个判断写两遍,
 // 迟早只改对一遍。
-def secondLoader = findProject(':core:neoforge') != null ? 'neoforge' : 'forge'
+def secondLoader = findProject(':numen:neoforge') != null ? 'neoforge' : 'forge'
 
 /** 数据生成的统一入口。 */
 tasks.register('datagenAll') {
     group = 'build'
     description = '跑齐 api 与 core 两家、本分支两个 loader 的数据生成'
-    ['api', 'core'].each { family ->
+    ['numen-api', 'numen'].each { family ->
         dependsOn ":${family}:fabric:runDatagen"
         // NeoForge 是 moddev 的 runData,Forge 是 ForgeGradle 的 Data
         dependsOn ":${family}:${secondLoader}:${secondLoader == 'neoforge' ? 'runData' : 'Data'}"
@@ -51,7 +51,7 @@ tasks.register('publishAll') {
     dependsOn ':agent:publish'
     dependsOn ':lua:publish'
     dependsOn ':ui:publish'
-    ['api', 'core'].each { family ->
+    ['numen-api', 'numen'].each { family ->
         ['common', 'fabric', secondLoader].each { dependsOn ":${family}:${it}:publish" }
     }
 }
@@ -71,7 +71,7 @@ tasks.register('releaseJars', Sync) {
     description = '把本分支每个 loader 发给玩家的那个 jar 收进 build/release/<loader>/'
     into layout.buildDirectory.dir('release')
     doFirst {
-        ['api', 'core'].each { family ->
+        ['numen-api', 'numen'].each { family ->
             ['fabric', secondLoader].each { loader ->
                 def dir = project(":${family}:${loader}").file('src/generated/resources')
                 def generated = dir.isDirectory() ? fileTree(dir) { exclude '.cache/**' }.files : []
@@ -90,10 +90,10 @@ tasks.register('releaseJars', Sync) {
         forge   : { p -> p.tasks.getByName('jarJar') },
     ]
     ['fabric', secondLoader].each { loader ->
-        from({ shipped[loader](project(":core:${loader}")) }) { into loader }
+        from({ shipped[loader](project(":numen:${loader}")) }) { into loader }
     }
     // Forge 的成品还要过一道 reobf(official 名换成 SRG 名),它原地改写 jarJar 的产物,
     // 由 build 挂上、不是 jarJar 自己的一步。这里明确等它:只依赖 jarJar 的话,拷走的是
     // 改写前的开发 jar,线上一调 MC 的方法就 NoSuchMethodError。
-    if (secondLoader == 'forge') dependsOn ':core:forge:reobfJarJar'
+    if (secondLoader == 'forge') dependsOn ':numen:forge:reobfJarJar'
 }

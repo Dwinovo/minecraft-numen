@@ -6,7 +6,7 @@ neoForge { neoFormVersion = neo_form_version }
 
 dependencies {
     // 瘦 api jar 取跨加载器那份:与本模块一样只有原版 MC 的类型
-    compileOnly files(project(':api:common').tasks.named('apiJar'))
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
 }
 
 // YSM 是闭源且混淆的,本联动<b>不引用它任何一个类</b>——只用命令(ysm model set / play / auth)

@@ -1,5 +1,5 @@
 plugins {
-    id 'multiloader-loader'
+    id 'numen-loader'
     id 'net.neoforged.moddev'
 }
 
@@ -11,8 +11,8 @@ dependencies {
     // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
     // implementation 在 POM 里落成 runtime,想扩展 core 的人拿得到 jar 却编译不了。
     // 本模块的 datagen 需要引擎在运行时类路径上,所以是 api 而不是 compileOnlyApi
-    // ——Forge 那边相反,见 core/forge/build.gradle。
-    api project(':api:neoforge')
+    // ——Forge 那边相反,见 numen/forge/build.gradle。
+    api project(':numen-api:neoforge')
 
     // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
@@ -23,7 +23,7 @@ dependencies {
     compileOnly project(':plugins:curios')
     compileOnly project(':plugins:ftbquests')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
-    jarJar(project(':api:neoforge'))
+    jarJar(project(':numen-api:neoforge'))
 }
 
 // GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
@@ -38,7 +38,7 @@ def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
 neoForge {
     version = neoforge_version
     // Automatically enable neoforge AccessTransformers if the file exists
-    def at = project(':core:common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    def at = project(':numen:common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {
         accessTransformers.from(at.absolutePath)
     }
@@ -121,6 +121,6 @@ tasks.named('check') {
     dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test')
 }
 
-// 真模型评测:原版的场景在 src/bench,:core:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 真模型评测:原版的场景在 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
 // 放在末尾:它要用到上面定义好的模组 numen。
 apply plugin: 'numen-bench'

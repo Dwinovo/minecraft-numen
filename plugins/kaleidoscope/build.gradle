@@ -15,7 +15,7 @@ repositories {
 
 dependencies {
     // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    compileOnly files(project(':numen-api:neoforge').tasks.named('apiJar'))
     // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "curse.maven:kaleidoscope-cookery-1309203:${kaleidoscope_version}"
 }

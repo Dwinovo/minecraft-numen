@@ -25,7 +25,7 @@
 
 原版的实现也作为提供者之一,走同一扇门,不写"原版先决定、模组兜底"。
 
-## 三、接口(api/common,`com.dwinovo.numen.api.gear`,在瘦 api jar 的 `api/**` 内)
+## 三、接口(numen-api/common,`com.dwinovo.numen.api.gear`,在瘦 api jar 的 `api/**` 内)
 
 ```java
 /** 一处能把东西穿戴在身上的来源:原版四件甲是一处,Curios 饰品栏是一处。
@@ -117,9 +117,9 @@ public interface GearSlot {
 - **只用 `top.theillusivec4.curios.api` 包。** `CuriosApi` 的静态方法是空桩,实现由 Mixin 注入,模组不在场时不能调,靠 Gate 的延迟加载保证。
 - **构建**:
   - 仓库 `maven.theillusivec4.top`,用 `exclusiveContent` 只放 `top.theillusivec4.curios`;
-  - `compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"`,加上 `:api:neoforge` 的 `apiJar`;
+  - `compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"`,加上 `:numen-api:neoforge` 的 `apiJar`;
   - `curios_version=9.5.1+1.21.1`;
-  - `settings.gradle` 里 include,`core/neoforge` 里 `compileOnly` 并加进 jar;
+  - `settings.gradle` 里 include,`numen/neoforge` 里 `compileOnly` 并加进 jar;
   - `Builtin.java` 里 `gate.open("curios", "curios", …)`。
 - **第一版不带技能文档。**
 

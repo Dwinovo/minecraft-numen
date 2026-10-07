@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * 界面里那些小图标:一张 12×12 的纯白像素图,按用处着色再贴。
  *
  * <p><b>为什么是贴图不是代码里的形状</b>:图标形状该由画图标的人来画。这里的几枚取自
- * pixelarticons(MIT),用 {@code api/tools/ui-textures/pixelarticons.py} 转成本项目的
+ * pixelarticons(MIT),用 {@code numen-api/tools/ui-textures/pixelarticons.py} 转成本项目的
  * png——它本来就是按 12×12 的像素格画的,转换不做重采样,拿到的就是作者那张稿子。
  * 授权与出处见仓库的 {@code licenses/ASSETS.txt}。
  *

@@ -201,7 +201,7 @@ gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 
 ## 生态
 
-**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体。引擎(`api/`)、MCP 服务器与模组本体同住这一个仓,引擎另经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布,对外开放一套小巧的公共 API。
+**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体。引擎(`numen-api/`)、MCP 服务器与模组本体同住这一个仓,引擎另经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布,对外开放一套小巧的公共 API。
 
 两类东西建在它之上：
 

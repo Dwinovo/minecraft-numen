@@ -200,7 +200,7 @@ One run covers both audiences: it builds once; pushes the artifacts to numen-mav
 
 ## Ecosystem
 
-**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. The engine (`api/`), the MCP server and the mod itself all live in this one repository; the engine is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
+**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. The engine (`numen-api/`), the MCP server and the mod itself all live in this one repository; the engine is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
 
 Two things build on it:
 
