@@ -3,7 +3,6 @@ import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.FailureType;
 
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -63,7 +62,7 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
         // Take the food in hand (the precondition guarantees she carries it), then start a native held use with
         // that hand. The use() call decides whether eating begins (e.g. full hunger on non-always-eat food won't
         // start) — we read the outcome on completion.
-        InteractionHand hand = Hotbar.grip(player, r.item).hand();
+        InteractionHand hand = player.hotbar().grip(r.item).hand();
         eat = Interaction.useInAir(player, hand, Interaction.Timing.hold());
     }
 

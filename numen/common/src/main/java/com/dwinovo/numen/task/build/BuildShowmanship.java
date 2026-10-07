@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Controls;
-import com.dwinovo.numen.api.entity.Hotbar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -75,7 +74,7 @@ final class BuildShowmanship {
         if (sample != null) {
             int slot = inv.findSlot(sample.getBlock().asItem(), true);
             if (slot >= 0) {
-                Hotbar.hold(player, slot);
+                player.hotbar().hold(slot);
             }
         }
         if (!(player.level() instanceof ServerLevel level) || sample == null) {

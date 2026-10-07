@@ -11,7 +11,6 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.task.TaskState;
 
@@ -647,7 +646,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (slot < 0) {
                 return;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
             }
-            Hotbar.hold(player, slot);
+            player.hotbar().hold(slot);
         } else {
             // 免耗材:凭空一叠拿在手里,放完把原来的东西还回去,不动她的真背包
             restore = player.getMainHandItem();

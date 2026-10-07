@@ -8,7 +8,6 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.api.entity.Hotbar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
@@ -135,7 +134,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
 
         // 下界的水一倒就蒸发,倒下去只是白扔一个桶。
         if (!companion.level().dimensionType().ultraWarm() && carries(companion, Items.WATER_BUCKET)) {
-            InteractionHand hand = Hotbar.grip(companion, Items.WATER_BUCKET).hand();
+            InteractionHand hand = companion.hotbar().grip(Items.WATER_BUCKET).hand();
             placed = waterLandsAt(companion, aim);
             reclaimTicks = RECLAIM_TICKS;
             Interaction.useInAir(companion, hand, Interaction.Timing.once()).tick();
@@ -144,7 +143,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
         }
         net.minecraft.world.item.Item block = softBlock(companion);
         if (block != null) {
-            Interaction.useBlock(companion, aim, Hotbar.grip(companion, block).hand()).tick();
+            Interaction.useBlock(companion, aim, companion.hotbar().grip(block).hand()).tick();
             noteSave(companion, "a soft block");
         }
         return TaskState.RUNNING;
@@ -162,7 +161,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
             return TaskState.RUNNING;
         }
         if (carries(companion, Items.BUCKET)) {
-            Interaction.useInAir(companion, Hotbar.grip(companion, Items.BUCKET).hand(),
+            Interaction.useInAir(companion, companion.hotbar().grip(Items.BUCKET).hand(),
                     Interaction.Timing.once()).tick();
         }
         return TaskState.RUNNING;

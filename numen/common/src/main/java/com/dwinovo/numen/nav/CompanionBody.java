@@ -1,6 +1,7 @@
 package com.dwinovo.numen.nav;
 
 import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Look;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Body;
@@ -26,5 +27,10 @@ record CompanionBody(NumenPlayer player) implements Body {
     @Override
     public Look look() {
         return player.look();
+    }
+
+    @Override
+    public Hotbar hotbar() {
+        return player.hotbar();
     }
 }

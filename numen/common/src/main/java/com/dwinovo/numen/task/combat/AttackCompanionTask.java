@@ -14,7 +14,6 @@ import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.chain.MobDefenseChain;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -555,7 +554,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         ItemStack before = player.getMainHandItem();
         if (loadout.hasMelee()) {
-            Hotbar.hold(player, loadout.melee().slot());
+            player.hotbar().hold(loadout.melee().slot());
         }
         boolean weaponChanged = player.getMainHandItem() != before;
         if (!Swing.mayStrike(weaponChanged, victim instanceof LivingEntity hurt && hurt.hurtTime > 0,
@@ -816,7 +815,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
 
         ItemStack before = player.getMainHandItem();
-        Hotbar.hold(player, weapon.slot());
+        player.hotbar().hold(weapon.slot());
         if (player.getMainHandItem() != before && shot == null) {
             return TaskState.RUNNING;   // 这一刻只换手,下一刻才起手
         }

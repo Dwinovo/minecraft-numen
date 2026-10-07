@@ -37,7 +37,7 @@ import java.util.UUID;
  * dimensions).
  *
  * <h2>身体</h2>
- * 她有一副键盘({@link Controls})和一个视角({@link Look}),导航、本能与各件活用的都是它们;每刻在自己的实体刻里跑一次物理步进
+ * 她有一副键盘({@link Controls})、一个视角({@link Look})和一个快捷栏({@link Hotbar}),导航、本能与各件活用的都是它们;每刻在自己的实体刻里跑一次物理步进
  * ({@link Physics#step}),按着的键在那里落成输入。
  */
 public final class NumenPlayer extends ServerPlayer {
@@ -57,6 +57,8 @@ public final class NumenPlayer extends ServerPlayer {
     private final Controls controls = new Controls();
     /** 她的视角:往哪儿看、怎么转过去。 */
     private final Look look = new Look(this);
+    /** 她的快捷栏:把东西拿到手上。 */
+    private final Hotbar hotbar = new Hotbar(this);
 
     /**
      * 死因,在 {@link #die} 里趁早抄下来。
@@ -420,7 +422,7 @@ public final class NumenPlayer extends ServerPlayer {
         return fakeClient;
     }
 
-    // ---- 键盘与视角 ----
+    // ---- 键盘、视角与快捷栏 ----
 
     /** 她的键盘。 */
     public Controls controls() {
@@ -430,6 +432,11 @@ public final class NumenPlayer extends ServerPlayer {
     /** 她的视角:看向一点、转到一个朝向、看一格方块上看得见的那一点。 */
     public Look look() {
         return look;
+    }
+
+    /** 她的快捷栏:切格、换手、把要用的东西拿到手上。 */
+    public Hotbar hotbar() {
+        return hotbar;
     }
 
     @Override

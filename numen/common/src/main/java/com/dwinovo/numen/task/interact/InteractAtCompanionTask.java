@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.PlayerInv;
 
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -77,7 +76,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         // Resolve the crosshair once we're in position, then drive the action.
         if (interaction == null) {
             if (r.item != null) {
-                Hotbar.grip(player, r.item);
+                player.hotbar().grip(r.item);
             }
             // 右键点可点的目标:看向它看得见的那一面(与 numen.move.to 的 arrive = "use" 同一个视线函数),哪一面都看不见就看格心。
             // 左键、空气与流体都看格心;对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船),落点不另说。

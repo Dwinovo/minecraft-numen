@@ -7,6 +7,7 @@ import java.util.List;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls;
+import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Look;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
@@ -29,6 +30,8 @@ final class Rig {
     final Controls keys;
     /** 身体的视角。 */
     final Look look;
+    /** 身体的快捷栏。 */
+    final Hotbar hotbar;
     final Effector hands;
     final Materials materials;
     final TerrainPolicy terrain;
@@ -48,6 +51,7 @@ final class Rig {
         this.entity = body.entity();
         this.keys = body.controls();
         this.look = body.look();
+        this.hotbar = body.hotbar();
         this.hands = hands;
         this.terrain = terrain;
         this.materials = materials;

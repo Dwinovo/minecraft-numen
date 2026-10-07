@@ -17,21 +17,26 @@ import net.minecraft.world.item.Items;
 /**
  * 把东西拿到手上,照原版玩家的几个按键:数字键切换快捷栏选中的格({@code handleSetCarriedItem}),中键把背包深处的
  * 东西换进快捷栏({@code handlePickItem},换进的是原版挑的那一格——先空格,再不是附魔过的,原来那件换回背包,不丢),
- * F 键交换主副手,创造模式中键凭空取一叠。每一次真的换了都交回一个 {@link BodyAction},由调用方记进结局。
+ * F 键交换主副手,创造模式中键凭空取一叠。每一次真的换了都交回一个 {@link BodyAction},由调用方记进结局。同伴的是
+ * {@link NumenPlayer#hotbar}。
  */
 public final class Hotbar {
 
     /** 副手在 {@link BodyAction.Held#from} 里的编号(原版物品栏里副手那一格)。 */
     public static final int OFFHAND = Inventory.SLOT_OFFHAND;
 
-    private Hotbar() {}
+    private final ServerPlayer body;
+
+    public Hotbar(ServerPlayer body) {
+        this.body = body;
+    }
 
     /**
      * 把主背包第 {@code slot} 格的东西拿到主手;{@code slot} 是 {@link #OFFHAND} 就交换主副手;{@code slot} 为负是空手——切到
      * 快捷栏里一个空格({@link #emptyHand}),没有空格就拿着手上的东西。已经在主手上就什么也不做。手上本来就空着、只是换到
      * 另一个空格时,手上拿的没变,不算一个身体动作。
      */
-    public static Optional<BodyAction> hold(ServerPlayer body, int slot) {
+    public Optional<BodyAction> hold(int slot) {
         Inventory inventory = body.getInventory();
         if (slot == OFFHAND) {
             Item item = body.getOffhandItem().getItem();
@@ -45,7 +50,7 @@ public final class Hotbar {
                 return Optional.empty();
             }
             boolean wasEmpty = inventory.getSelected().isEmpty();
-            BodyAction action = select(body, empty, Items.AIR);
+            BodyAction action = select(empty, Items.AIR);
             return wasEmpty ? Optional.empty() : Optional.of(action);
         }
         if (slot == inventory.selected) {
@@ -53,7 +58,7 @@ public final class Hotbar {
         }
         Item item = inventory.getItem(slot).getItem();
         if (Inventory.isHotbarSlot(slot)) {
-            return Optional.of(select(body, slot, item));
+            return Optional.of(select(slot, item));
         }
         body.connection.handlePickItem(new ServerboundPickItemPacket(slot));
         return Optional.of(new BodyAction.Held(item, slot, inventory.selected));
@@ -65,7 +70,7 @@ public final class Hotbar {
      *
      * @return 拿到了没有、拿在哪只手上,连同做了什么(没做为 null)
      */
-    public static Grip grip(ServerPlayer body, Item item) {
+    public Grip grip(Item item) {
         Inventory inventory = body.getInventory();
         ItemStack main = inventory.getSelected();
         if (main.is(item)) {
@@ -76,10 +81,10 @@ public final class Hotbar {
         }
         int slot = slotOf(inventory, item);
         if (slot >= 0) {
-            return new Grip(InteractionHand.MAIN_HAND, hold(body, slot).orElse(null));
+            return new Grip(InteractionHand.MAIN_HAND, hold(slot).orElse(null));
         }
         if (body.getOffhandItem().is(item)) {
-            return new Grip(InteractionHand.MAIN_HAND, hold(body, OFFHAND).orElse(null));
+            return new Grip(InteractionHand.MAIN_HAND, hold(OFFHAND).orElse(null));
         }
         if (body.gameMode.isCreative()) {
             inventory.setPickedItem(new ItemStack(item));
@@ -129,7 +134,7 @@ public final class Hotbar {
         return -1;
     }
 
-    private static BodyAction select(ServerPlayer body, int slot, Item item) {
+    private BodyAction select(int slot, Item item) {
         body.connection.handleSetCarriedItem(new ServerboundSetCarriedItemPacket(slot));
         return new BodyAction.Held(item, slot, slot);
     }

@@ -4,7 +4,6 @@ import com.dwinovo.numen.act.Interaction;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.body.Effector;
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
@@ -67,7 +66,7 @@ public final class CompanionHands implements Effector {
      * 一样快时空手优先、其次不耗耐久的)。换了就交回做了什么。
      */
     public Optional<BodyAction> takeToolFor(BlockState state) {
-        return Hotbar.hold(player, new ToolChoice(Snapshots.of(player)).best(state).slot());
+        return player.hotbar().hold(new ToolChoice(Snapshots.of(player)).best(state).slot());
     }
 
     /** 左键正按在哪一格上;没按为 null。 */

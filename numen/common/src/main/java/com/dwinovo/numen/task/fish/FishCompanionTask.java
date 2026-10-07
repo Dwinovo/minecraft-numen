@@ -9,7 +9,6 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskState;
@@ -84,7 +83,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             fail("fishing stopped because there is no fishing rod left", FailureType.WRONG_TOOL);
             return TaskState.FAILED;
         }
-        Hotbar.hold(player, rodSlot);
+        player.hotbar().hold(rodSlot);
         if (!player.getMainHandItem().is(Items.FISHING_ROD)) return TaskState.RUNNING;
 
         return switch (phase) {

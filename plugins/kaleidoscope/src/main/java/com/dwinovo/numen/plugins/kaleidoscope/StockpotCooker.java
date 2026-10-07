@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IStockpot;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.recipe.soupbase.ISoupBase;
 import com.github.ysbbbbbb.kaleidoscopecookery.blockentity.kitchen.StockpotBlockEntity;
@@ -201,7 +200,7 @@ final class StockpotCooker implements Cooker {
         if (stockpot.hasLid()) {
             Inventory inv = cook.getInventory();
             if (!inv.getItem(inv.selected).isEmpty()) {
-                Hotbar.hold(cook, -1);
+                cook.hotbar().hold(-1);
                 if (!inv.getItem(inv.selected).isEmpty()) {
                     return Step.blocked("the hotbar is full, so there is no free hand to take the lid off");
                 }

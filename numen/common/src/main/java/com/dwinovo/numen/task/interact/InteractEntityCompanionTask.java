@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.PlayerInv;
 
-import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.task.TaskState;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -138,7 +137,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         }
         if (interaction == null) {
             if (r.item != null) {
-                Hotbar.grip(player, r.item);
+                player.hotbar().grip(r.item);
             }
             // 兜底开关与 use block 同一条身体约束(政策的唯一出处在那份记录上):
             // 实体没吃掉点击才轮到物品自用,手里是食物/珍珠时宁可不兜。
