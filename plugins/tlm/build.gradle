@@ -36,14 +36,14 @@ sourceSets {
 }
 
 // 在 runs 块外取:块里的 project(…) 是运行配置自己的"依赖某个项目",不是那个项目
-def coreNeoForge = project(':numen:neoforge')
+def numenNeoForge = project(':numen:neoforge')
 
 neoForge {
     addModdingDependenciesTo(sourceSets.gametest)
     mods {
         numen {
-            sourceSet coreNeoForge.sourceSets.main
-            sourceSet coreNeoForge.sourceSets.gametest
+            sourceSet numenNeoForge.sourceSets.main
+            sourceSet numenNeoForge.sourceSets.gametest
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
             sourceSet project(':pathing').sourceSets.main
             sourceSet sourceSets.main
@@ -58,14 +58,14 @@ neoForge {
             gameDirectory = project.mkdir(project.file('runs/gametestserver'))
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_tlm')
             systemProperty('numen.gametest.structures',
-                    coreNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
+                    numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
         }
     }
 }
 
 dependencies {
-    gametestCompileOnly files({ coreNeoForge.sourceSets.main.output })
-    gametestCompileOnly files({ coreNeoForge.sourceSets.gametest.output })
+    gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
+    gametestCompileOnly files({ numenNeoForge.sourceSets.gametest.output })
     // 用例直接读她身上的外观附件(Outfit),不绕客户端
     gametestCompileOnly sourceSets.main.output
     // 整个 Numen API(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组

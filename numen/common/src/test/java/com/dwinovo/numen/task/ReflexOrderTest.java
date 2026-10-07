@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ReflexOrderTest {
 
-    /** {@code NumenCore.registerReflexes} 注册的顺序,先注册的先被问到。 */
+    /** {@code NumenContent.registerReflexes} 注册的顺序,先注册的先被问到。 */
     private static final List<Reflex> ORDER = List.of(
             new MLGChain(),          // 10 — 正在坠落是最迫近的死法
             new BreathChain(),       // 20 — 淹水是硬计时:先浮上去,打架等会儿

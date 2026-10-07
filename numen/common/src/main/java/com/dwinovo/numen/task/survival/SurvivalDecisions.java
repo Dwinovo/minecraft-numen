@@ -11,7 +11,7 @@ package com.dwinovo.numen.task.survival;
  * 返回一个浮点"我多想要身体"再挑最大的,就是用连续量表达一个固定序——那些数值
  * 会变成必须小心维护却没人看得懂的魔法数。
  *
- * <p>先后现在写在注册号上({@code NumenCore.registerReflexes},小的先,与原版
+ * <p>先后现在写在注册号上({@code NumenContent.registerReflexes},小的先,与原版
  * {@code addGoal(int priority, goal)} 同一惯例),这里只回答"触发没触发"。
  * 顺序是:摔落 &gt; 换气 &gt; 自卫 &gt; 进食 &gt; 脱困——正在坠落是最迫近的死法,
  * 而卡住只是烦人,绝不该压过打架或吃饭。

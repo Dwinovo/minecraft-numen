@@ -154,7 +154,7 @@ public final class FleeChain implements Task, Reflex {
         fleeing = false;
         companion.controls().releaseAll();
         com.dwinovo.numen.Constants.LOG.info("[numen-flee] 退不掉,就地还手");
-        com.dwinovo.numen.task.reflex.CoreReflexes.report(companion, this,
+        com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this,
                 "tried to run from what was chasing me but found no way out — fighting back where I stand");
         return TaskState.RUNNING;
     }
@@ -165,7 +165,7 @@ public final class FleeChain implements Task, Reflex {
         haven = null;
         stopNav();
         companion.controls().releaseAll();
-        com.dwinovo.numen.task.reflex.CoreReflexes.report(companion, this, stillBeaten
+        com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this, stillBeaten
                 ? "broke off and ran — nothing hostile is within " + (int) Menace.FLEE_DISTANCE + " blocks now"
                 : "ran from a fight I could not take; I can hold my own again");
     }

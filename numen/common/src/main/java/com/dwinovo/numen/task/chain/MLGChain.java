@@ -173,7 +173,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
     private void noteSave(NumenPlayer companion, String means) {
         if (notedThisFall) return;
         notedThisFall = true;
-        com.dwinovo.numen.task.reflex.CoreReflexes.report(companion, this, "broke a fall with " + means);
+        com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this, "broke a fall with " + means);
     }
 
     @Override

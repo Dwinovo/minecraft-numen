@@ -1,6 +1,6 @@
 package com.dwinovo.numen.route;
 
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.pathing.spec.BlockBans;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -54,7 +54,7 @@ class DescriptionTest {
 
     @BeforeAll
     static void boot() {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
         ApiRegistry.register("numen", "gt_route", "Test fixture: a route description read.", Reader.class);
     }
 

@@ -28,7 +28,7 @@ public class ApiLintReport {
 
     @Test
     void writeTheReport() throws IOException, URISyntaxException {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint());
         List<ApiTester.Text> texts = new ArrayList<>(documents("skills"));
         texts.add(new ApiTester.Text("NumenPrompts.ENTITY_PROMPT", NumenPrompts.ENTITY_PROMPT));

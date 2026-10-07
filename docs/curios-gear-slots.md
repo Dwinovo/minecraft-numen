@@ -59,7 +59,7 @@ public interface GearSlot {
 - `VanillaArmor` 用 `body.inventoryMenu` 里真实的四个 `ArmorSlot`,顺序是 `ARMOR_SLOT_START + i` 对应 HEAD、CHEST、LEGS、FEET。
   - 放入用 `mayPlace`(NeoForge 改写成 `stack.canEquip`,Fabric 用原版判据),取出用 `mayPickup`(绑定诅咒),写入用 `setByPlayer`(触发 `onEquipItem`,有音效)。
   - 各加载器用各自的原版规则,通用代码不按加载器分支。
-- `NumenCore.init` 先于 `Builtin.registerAll`,所以原版总是排在最前。
+- `NumenContent.init` 先于 `Builtin.registerAll`,所以原版总是排在最前。
 - **主手、副手不是装备位。** 主手是在 36 格里选中一格,不是把东西搬出背包;手里拿的已经在 `<inventory>` 的 holding 行里报了,再算进 `<worn>` 就成了同一事实的两个来源。
 
 ## 五、工具与任务

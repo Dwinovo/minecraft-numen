@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.ApiLintReport;
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ class KaleidoscopeApiLintReport {
 
     @Test
     void writeTheReport() throws IOException, URISyntaxException {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
         java.nio.file.Path modules = java.nio.file.Path.of(KaleidoscopeApiLintReport.class.getClassLoader()
                 .getResource("plugins/kaleidoscope/modules").toURI());
         NumenPlugins.register(KaleidoscopeApi.NAMESPACE, numen -> {

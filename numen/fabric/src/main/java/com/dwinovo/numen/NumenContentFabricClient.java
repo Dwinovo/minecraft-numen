@@ -10,7 +10,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 
 /** Fabric 的客户端入口:只接寻路调试的覆盖层——下行快照、世界里画线、断线清空。 */
-public class NumenCoreFabricClient implements ClientModInitializer {
+public class NumenContentFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {

@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.tlm;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.ApiLintReport;
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ class TlmApiLintReport {
 
     @Test
     void writeTheReport() throws IOException, URISyntaxException {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
         NumenPlugins.register(NumenTlm.NAMESPACE, SkinApi::install);
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("tlm.")).toList());

@@ -1,14 +1,14 @@
 package com.dwinovo.numen;
 
 /**
- * Numen 的单测要用登记处时共用的一步:引导 MC(方块注册表,原语要认方块),再照 {@link NumenCore#init()} 同一份登记装上 Numen 的全部 API
+ * Numen 的单测要用登记处时共用的一步:引导 MC(方块注册表,原语要认方块),再照 {@link NumenContent#init()} 同一份登记装上 Numen 的全部 API
  * 组,和 Numen API 自己的工具与几组。登记处与工具表是进程级的静态表,一个进程只装一次;各测试类都经这里装,不各装各的一份——装两次会撞名。
  */
-public final class CoreApiFixture {
+public final class NumenApiFixture {
 
     private static boolean installed;
 
-    private CoreApiFixture() {}
+    private NumenApiFixture() {}
 
     public static synchronized void install() {
         if (installed) {
@@ -16,7 +16,7 @@ public final class CoreApiFixture {
         }
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
-        NumenCore.init();
+        NumenContent.init();
         // 内置的 Lua 模块产品里由加载器从 jar 里的 modules/ 交出去,单测从类路径上同一个目录交
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN,
                 numen -> numen.bundleModules(resource("modules")));
@@ -37,7 +37,7 @@ public final class CoreApiFixture {
 
     private static java.nio.file.Path resource(String dir) {
         try {
-            return java.nio.file.Path.of(CoreApiFixture.class.getClassLoader().getResource(dir).toURI());
+            return java.nio.file.Path.of(NumenApiFixture.class.getClassLoader().getResource(dir).toURI());
         } catch (java.net.URISyntaxException e) {
             throw new IllegalStateException(e);
         }

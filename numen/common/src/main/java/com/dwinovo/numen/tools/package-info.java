@@ -2,7 +2,7 @@
  * 身体工具总目录:按<b>领域</b>分包(perception 看/inventory 物品/interact 碰/
  * locate 找/work 长活/agent 管自己),包名回答"这是干嘛的";执行机制不进包名,
  * 由每个工具在执行体里选通道。根部只住注册器与共享助手(*Ops 实现类/
- * ToolParse/MenuOps)。注册集中在 NumenCore 且顺序即提示词缓存键,新工具
+ * ToolParse/MenuOps)。注册集中在 NumenContent 且顺序即提示词缓存键,新工具
  * 一律追加在注册表末尾。
  *
  * <h2>新增工具的四连问(按顺序问,答案即执行通道)</h2>

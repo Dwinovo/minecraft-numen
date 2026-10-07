@@ -50,10 +50,10 @@ dependencies {
  * 也不需要在场——测试不经 Builtin 的闸门、不假装模组已装,只执行联动登记函数的那一段(同一个 install,经同一扇
  * NumenPlugins 的门),那一段只碰 Numen API。联动的组只进它自己这个测试进程,不混进 Numen 的单测。
  */
-def coreTests = { project(':numen:common').sourceSets.test }
+def numenTests = { project(':numen:common').sourceSets.test }
 sourceSets.test {
-    compileClasspath += files({ coreTests().output }) + files({ coreTests().compileClasspath })
-    runtimeClasspath += files({ coreTests().output }) + files({ coreTests().runtimeClasspath })
+    compileClasspath += files({ numenTests().output }) + files({ numenTests().compileClasspath })
+    runtimeClasspath += files({ numenTests().output }) + files({ numenTests().runtimeClasspath })
 }
 
 dependencies {

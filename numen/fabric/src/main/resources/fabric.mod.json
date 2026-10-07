@@ -16,10 +16,10 @@
     "environment": "*",
     "entrypoints": {
         "main": [
-            "com.dwinovo.numen.NumenCoreFabric"
+            "com.dwinovo.numen.NumenContentFabric"
         ],
         "client": [
-            "com.dwinovo.numen.NumenCoreFabricClient"
+            "com.dwinovo.numen.NumenContentFabricClient"
         ],
         "fabric-datagen": [
             "com.dwinovo.numen.data.FabricDataGenerators"

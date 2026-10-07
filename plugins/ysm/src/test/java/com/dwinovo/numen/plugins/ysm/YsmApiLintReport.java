@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.ApiLintReport;
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ class YsmApiLintReport {
 
     @Test
     void writeTheReport() throws IOException, URISyntaxException {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
         Ysm ysm = new Ysm(Ysm.Storage.NEOFORGE);
         NumenPlugins.register(YsmApi.NAMESPACE, numen -> YsmApi.install(numen, ysm));
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()

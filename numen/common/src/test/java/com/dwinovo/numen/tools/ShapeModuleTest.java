@@ -1,6 +1,6 @@
 package com.dwinovo.numen.tools;
 
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -19,7 +19,7 @@ class ShapeModuleTest {
 
     @BeforeAll
     static void install() {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
     }
 
     /** 跑一段程序,它打印的那几行。 */

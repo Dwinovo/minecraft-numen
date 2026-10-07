@@ -13,7 +13,7 @@ public final class Constants {
 
     public static final String MOD_ID = "numen";
     public static final String MOD_NAME = "Numen";
-    public static final Logger LOG = LoggerFactory.getLogger("NumenCore");
+    public static final Logger LOG = LoggerFactory.getLogger("NumenContent");
 
     private Constants() {}
 }

@@ -11,9 +11,9 @@ import net.neoforged.neoforge.common.NeoForge;
 
 /** NeoForge 的客户端入口:只接寻路调试的覆盖层——下行快照、世界里画线、断线清空。 */
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
-public class NumenCoreNeoForgeClient {
+public class NumenContentNeoForgeClient {
 
-    public NumenCoreNeoForgeClient() {
+    public NumenContentNeoForgeClient() {
         PathDebugState.install();
         NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent event) -> {
             if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {

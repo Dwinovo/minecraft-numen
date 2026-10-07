@@ -33,7 +33,7 @@ dependencies {
     benchImplementation project(':numen-api:neoforge')
 }
 
-def coreNeoForge = project(':numen:neoforge')
+def numenNeoForge = project(':numen:neoforge')
 
 neoForge {
     addModdingDependenciesTo(sourceSets.bench)
@@ -59,7 +59,7 @@ neoForge {
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
             // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 Numen 同步好的那一份模板目录
             systemProperty('numen.gametest.structures',
-                    coreNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
+                    numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
             systemProperty('bench.pricing', rootProject.file('bench/pricing.json').absolutePath)
             systemProperties.put('bench.commit', benchCommit)
             benchParameters.each { name ->

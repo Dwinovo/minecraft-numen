@@ -46,7 +46,7 @@ import com.dwinovo.numen.task.move.MoveToTaskRecord;
  *   <li>vanilla armour as the first gear source.</li>
  * </ul>
  */
-public final class NumenCore {
+public final class NumenContent {
 
     private static boolean initialised = false;
 
@@ -57,12 +57,12 @@ public final class NumenCore {
     public static com.dwinovo.numen.api.NumenApi api() {
         com.dwinovo.numen.api.NumenApi handle = api;
         if (handle == null) {
-            throw new IllegalStateException("NumenCore.init() has not run");
+            throw new IllegalStateException("NumenContent.init() has not run");
         }
         return handle;
     }
 
-    private NumenCore() {}
+    private NumenContent() {}
 
     public static void init() {
         if (initialised) return;
@@ -77,7 +77,7 @@ public final class NumenCore {
         // 寻路调试开关挂在 /numen 下
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen ->
                 numen.command(com.dwinovo.numen.debug.PathCommands.verb()));
-        Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",
+        Constants.LOG.info("[numen-content] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), TaskFactory.size());
     }
 
@@ -107,7 +107,7 @@ public final class NumenCore {
      * like the rest of init.
      */
     private static void enlistReflexRoster() {
-        com.dwinovo.numen.task.reflex.CoreReflexes.registerAll();
+        com.dwinovo.numen.task.reflex.NumenReflexes.registerAll();
     }
 
     /**

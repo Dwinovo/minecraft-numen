@@ -3,7 +3,7 @@ package com.dwinovo.numen.tools.work;
 import com.dwinovo.numen.api.agent.script.ApiError;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
-import com.dwinovo.numen.CoreApiFixture;
+import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.ApiTester;
@@ -21,14 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Numen 的各组登记得上(照 NumenCore 同一份登记一起装):她的工具只有跑程序、装技能、记计划、札记这几个,别的都是脚本里的函数;每组的
+ * Numen 的各组登记得上(照 NumenContent 同一份登记一起装):她的工具只有跑程序、装技能、记计划、札记这几个,别的都是脚本里的函数;每组的
  * 帮助从 {@code numen.api.help} 答得出;她常写的几种调用读得通,旧写法读不成。函数的执行要身体,在 GameTest 里验。
  */
-class CoreGroupsTest {
+class NumenGroupsTest {
 
     @BeforeAll
     static void install() {
-        CoreApiFixture.install();
+        NumenApiFixture.install();
     }
 
     private static final UUID HER = UUID.randomUUID();

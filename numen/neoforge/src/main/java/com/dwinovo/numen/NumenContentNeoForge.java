@@ -20,16 +20,16 @@ import java.nio.file.Path;
  * which Numen depends on.
  */
 @Mod(Constants.MOD_ID)
-public class NumenCoreNeoForge {
+public class NumenContentNeoForge {
 
-    public NumenCoreNeoForge(IEventBus eventBus, ModContainer container) {
-        NumenCore.init();
+    public NumenContentNeoForge(IEventBus eventBus, ModContainer container) {
+        NumenContent.init();
 
         // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
         com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
 
-        NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
-        // 寻路调试的下行包:类型在这里登记,处理体在客户端入口挂上(见 NumenCoreNeoForgeClient)。
+        NeoForge.EVENT_BUS.addListener(NumenContentNeoForge::onServerTickPost);
+        // 寻路调试的下行包:类型在这里登记,处理体在客户端入口挂上(见 NumenContentNeoForgeClient)。
         eventBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent e) ->
                 e.registrar("1").playToClient(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC,
                         (payload, ctx) -> PathDebugPayload.handle(payload)));
@@ -39,7 +39,7 @@ public class NumenCoreNeoForge {
         declareBundledSkills();
         declareBundledModules();
 
-        Constants.LOG.info("numen-core initialised on NeoForge.");
+        Constants.LOG.info("Numen content initialised on NeoForge.");
     }
 
     private static void declareBundledSkills() {
@@ -47,7 +47,7 @@ public class NumenCoreNeoForge {
         if (root != null) {
             com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(root));
         } else {
-            Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
+            Constants.LOG.warn("[numen-content] no bundled skills/ dir found in jar");
         }
     }
 
@@ -58,7 +58,7 @@ public class NumenCoreNeoForge {
     private static void declareBundledModules() {
         Path root = ModJar.find("modules");
         if (root == null) {
-            throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
+            throw new IllegalStateException("[numen-content] no bundled modules/ dir found in jar");
         }
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(root));
     }
