@@ -179,9 +179,8 @@ public final class FleeChain implements Task, Reflex {
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        // 被更急的链抢走(摔落、换气):只松开身体,落点留着,回来接着跑
+        // 被更急的链抢走(摔落、换气):落点留着,回来接着跑
         stopNav();
-        companion.controls().releaseAll();
     }
 
     @Override

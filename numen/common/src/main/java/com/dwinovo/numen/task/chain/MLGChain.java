@@ -175,9 +175,6 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        if (companion.isUsingItem()) {
-            companion.releaseUsingItem();
-        }
         companion.setXRot(0.0f);   // stop staring straight down; the resumed task re-aims as needed
         notedThisFall = false;     // the fall episode is over — the next fall diaries anew
         placed = null;

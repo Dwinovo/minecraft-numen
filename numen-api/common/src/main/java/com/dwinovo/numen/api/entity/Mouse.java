@@ -400,6 +400,12 @@ public class Mouse {
         }
     }
 
+    /** 两个键都松开:挖掘进度清零、右键放开。 */
+    public void releaseAll() {
+        release();
+        stopUse();
+    }
+
     private Use press(HitResult hit, boolean itemFallthrough) {
         useReadyAt = now() + RIGHT_CLICK_DELAY;
         ServerLevel level = body.serverLevel();

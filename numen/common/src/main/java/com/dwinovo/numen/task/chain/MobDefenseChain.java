@@ -150,10 +150,9 @@ public final class MobDefenseChain implements Task, Reflex {
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
         if (fight != null) {
-            // 被更急的链抢走(摔落、换气):只松开身体,这场仗的状态一个不动,回来接着打。
+            // 被更急的链抢走(摔落、换气):这场仗的状态一个不动,回来接着打。
             fight.stop(companion, why);
         }
-        companion.controls().releaseAll();
     }
 
     @Override

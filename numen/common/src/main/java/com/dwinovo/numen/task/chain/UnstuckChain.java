@@ -60,7 +60,6 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.api.task.refl
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        companion.controls().releaseAll();
         wanderTicksLeft = 0;
     }
 

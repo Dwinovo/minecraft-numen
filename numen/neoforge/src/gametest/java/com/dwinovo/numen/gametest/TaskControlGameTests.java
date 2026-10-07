@@ -314,6 +314,37 @@ public class TaskControlGameTests {
     }
 
     /**
+     * 换驱动者:站着的长活被一件短活顶掉(任务自己的 stop 什么也不松),大脑统一把旧驱动者按着的键全松、鼠标的挖掘进度清零,
+     * 新驱动者拿到的是一具干净的身体。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    public static void a_new_driver_starts_from_a_clean_body(GameTestHelper helper) {
+        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
+        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_clean_hands", new BlockPos(3, 2, 5), false);
+        ToolRun linger = lua(companion, "gt.gt_long.linger(100)");
+        AtomicReference<ToolRun> hold = new AtomicReference<>();
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(linger.task() != null, "the long work was not accepted: " + linger.reply()))
+                .thenExecute(() -> {
+                    companion.look().at(Vec3.atCenterOf(stone));
+                    companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.FORWARD);
+                    companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
+                    companion.mouse().dig();
+                    helper.assertTrue(companion.mouse().digging(), "the left button did not go down on the stone");
+                    hold.set(lua(companion, "gt.gt_sync.hold(3)"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(hold.get().done() && hold.get().succeeded()
+                                && !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.FORWARD)
+                                && !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK)
+                                && !companion.mouse().digging(),
+                        "the short work took the body but the old driver's keys are still down: " + hold.get().outcome()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /**
      * 重启后接回函数派下的长活:再跑记下的那一行 Lua,接回来的活照样叫那个函数名,收尾的 task_finished 也是这个名字。
      * 重启用"休眠 + 把重启前落盘的那条记录放回去 + 复活"来演。
      */

@@ -143,6 +143,10 @@ final class CompanionBrain {
 
         if (holder != null && holder != winner) {
             holder.stop(companion, Task.StopReason.PREEMPTED);
+            // 换了驱动者:旧的被顶掉时按着的键一律松开(键盘全松,鼠标挖掘进度清零、右键放开),新的从一具干净的身体开始。
+            // 松手只在这一处——任务被顶掉时不必各自记得松,它们只管留着逻辑状态等拿回身体
+            companion.controls().releaseAll();
+            companion.mouse().releaseAll();
         }
         holder = winner;
 

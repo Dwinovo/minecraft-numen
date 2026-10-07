@@ -618,17 +618,15 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
     // ---------------------------------------------------------------------
 
     /**
-     * Preempted by a higher-priority survival chain: release the BODY (zero the
-     * locomotion inputs, drop sneak) but keep every logical field — including the
+     * Preempted by a higher-priority survival chain: keep every logical field — including the
      * nav PLAN — intact. Deliberately does NOT call {@code nav.stop()}: the plan
-     * is what lets {@link #resume()} pick straight back up on the next tick.
+     * is what lets the task pick straight back up on the next tick.
      */
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        // 被抢占:只松开身体(归零移动输入、放开潜行),<b>逻辑字段一个不动</b>——
-        // 尤其是寻路计划,它正是下次拿回身体时能接着走的原因。不调 nav.stop()。
-        // 被换掉/身体没了不需要额外收尾:buildResult 里的 cleanup() 会跑。
-        player.controls().releaseAll();
+        // 被抢占:<b>逻辑字段一个不动</b>——尤其是寻路计划,它正是下次拿回身体时能接着走的原因。不调 nav.stop()。
+        // 身体的键由大脑(CompanionBrain)换驱动者时统一松开;被换掉/身体没了不需要额外收尾:
+        // buildResult 里的 cleanup() 会跑。
     }
 
     @Override

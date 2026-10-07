@@ -35,9 +35,7 @@ public final class SpeakingLookChain implements Task, Reflex {
     }
 
     @Override
-    public void stop(NumenPlayer companion, StopReason why) {
-        companion.controls().stop();
-    }
+    public void stop(NumenPlayer companion, StopReason why) {}
 
     @Override
     public String name() {
