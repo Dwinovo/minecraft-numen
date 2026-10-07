@@ -23,10 +23,10 @@ dependencies {
     compileOnly project(':agent')
     compileOnly project(':ui')
     // 寻路模块(只依赖原版):Numen 的内容,发行 jar 里平铺进 Numen 的加载器 jar,见 numen-loader.gradle
-    compileOnly project(':pathing')
+    compileOnly project(':numen:pathing')
     // 单元测试可以看完整的 Numen API(夹具要登记处、排程机器),编译与运行类路径补上同一模块。
     testImplementation project(':numen-api:common')
-    testImplementation project(':pathing')
+    testImplementation project(':numen:pathing')
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common

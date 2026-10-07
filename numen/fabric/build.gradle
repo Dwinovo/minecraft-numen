@@ -20,7 +20,7 @@ dependencies {
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里。
     // 只有 YSM:车万女仆没有 Fabric 版。
     compileOnly project(':plugins:ysm')
-    localRuntime project(':pathing')
+    localRuntime project(':numen:pathing')
 }
 
 loom {

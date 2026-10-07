@@ -45,7 +45,7 @@ neoForge {
             sourceSet numenNeoForge.sourceSets.main
             sourceSet numenNeoForge.sourceSets.gametest
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
-            sourceSet project(':pathing').sourceSets.main
+            sourceSet project(':numen:pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
         }

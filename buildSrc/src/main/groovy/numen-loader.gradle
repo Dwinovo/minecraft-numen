@@ -2,8 +2,9 @@ plugins {
     id 'numen-common'
 }
 
-// 要读 Numen API 的 apiJar 任务,它得先配置好
+// 要读 Numen API 的 apiJar 任务与寻路模块的源码集,它们得先配置好(寻路是 numen/ 的子项目,排在加载器之后)
 evaluationDependsOn(':numen-api:common')
+evaluationDependsOn(':numen:pathing')
 
 configurations {
     commonJava{
@@ -32,7 +33,7 @@ dependencies {
     }
     // 寻路(只依赖原版)是 Numen 的内容,不是 Numen API 的:编译期看得见,发行 jar 里由下方 jar 块平铺进来、不作为依赖进 POM
     // (它不发布)。Loom 的开发运行类路径上另外补一份(localRuntime 不进 POM);NeoForge 的开发运行靠模组的 sourceSet。
-    compileOnly project(':pathing')
+    compileOnly project(':numen:pathing')
     commonJava project(path: ':numen:common', configuration: 'commonJava')
     commonClientJava project(path: ':numen:common', configuration: 'commonClientJava')
     commonResources project(path: ':numen:common', configuration: 'commonResources')
@@ -66,11 +67,11 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
-    from({ project(':pathing').sourceSets.main.allSource })
+    from({ project(':numen:pathing').sourceSets.main.allSource })
 }
 
 // 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
 // intermediary 名,NeoForge 上原样发出。
 tasks.named('jar', Jar) {
-    from({ project(':pathing').sourceSets.main.output })
+    from({ project(':numen:pathing').sourceSets.main.output })
 }

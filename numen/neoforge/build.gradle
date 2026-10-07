@@ -40,7 +40,7 @@ dependencies {
 def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
 def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
     from 'gameteststructures'
-    from project(':pathing').file('src/gametest/structures')
+    from project(':numen:pathing').file('src/gametest/structures')
     into gameTestStructures
 }
 
@@ -89,15 +89,15 @@ neoForge {
             sourceSet sourceSets.gametest
             // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明;
             // 另外挂它自己的 GameTest 用例
-            sourceSet project(':pathing').sourceSets.main
-            sourceSet project(':pathing').sourceSets.gametest
+            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':numen:pathing').sourceSets.gametest
         }
     }
 }
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
     dependsOn syncGameTestStructures
-    dependsOn 'gametestClasses', ':pathing:gametestClasses'
+    dependsOn 'gametestClasses', ':numen:pathing:gametestClasses'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
