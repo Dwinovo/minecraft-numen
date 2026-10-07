@@ -107,9 +107,7 @@ final class GoTask implements Task {
 
     @Override
     public void stop(NumenPlayer her, StopReason why) {
-        // 被换掉时(被顶掉的由大脑统一松手)不把键和挖掘进度留在身上
-        her.controls().stop();
-        her.mouse().release();
+        // 被顶掉、被换掉,身体上的键与挖掘进度都由大脑统一松开,这里不必松
     }
 
     @Override

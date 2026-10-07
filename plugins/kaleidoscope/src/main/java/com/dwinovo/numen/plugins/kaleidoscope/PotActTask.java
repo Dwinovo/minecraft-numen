@@ -226,11 +226,7 @@ final class PotActTask implements Task {
     }
 
     @Override
-    public void stop(NumenPlayer cook, StopReason why) {
-        cook.controls().stop();
-        // 装盘时为铲菜按下的潜行,还没铲就被停下也松开
-        cook.controls().set(com.dwinovo.numen.api.entity.Controls.Key.SNEAK, false);
-    }
+    public void stop(NumenPlayer cook, StopReason why) {}
 
     @Override
     public TaskResult result(TaskState terminal) {

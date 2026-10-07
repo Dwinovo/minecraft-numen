@@ -19,12 +19,15 @@ import java.util.function.Consumer;
 final class TaskSlot {
 
     private final Consumer<TaskRecord<?>> outbox;
+    /** 槽里的活被换掉也是换了驱动者:大脑把身体上按着的键与鼠标松开。 */
+    private final Consumer<NumenPlayer> letGo;
 
     private Task task;
     private TaskRecord<?> record;
 
-    TaskSlot(Consumer<TaskRecord<?>> outbox) {
+    TaskSlot(Consumer<TaskRecord<?>> outbox, Consumer<NumenPlayer> letGo) {
         this.outbox = outbox;
+        this.letGo = letGo;
     }
 
     boolean isEmpty() {
@@ -47,6 +50,7 @@ final class TaskSlot {
     void put(NumenPlayer companion, TaskRecord<?> rec, Task runner) {
         if (record != null) {
             task.stop(companion, Task.StopReason.REPLACED);
+            letGo.accept(companion);
             record.stop(TaskRecord.StopCause.REPLACED);
             settle(companion);
         }

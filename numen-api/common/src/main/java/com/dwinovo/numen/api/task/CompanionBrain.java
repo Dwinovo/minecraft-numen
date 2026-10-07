@@ -41,9 +41,9 @@ final class CompanionBrain {
     private final Deque<TaskRecord<?>> outbox = new ArrayDeque<>();
 
     /** 回合挂着等的同步动作。 */
-    final TaskSlot sync = new TaskSlot(outbox::addLast);
+    final TaskSlot sync = new TaskSlot(outbox::addLast, this::letGo);
     /** 她现在在做的事:钓鱼、跟随、挖 64 块——常驻还是一次性只看 tick 返不返终态。 */
-    final TaskSlot current = new TaskSlot(outbox::addLast);
+    final TaskSlot current = new TaskSlot(outbox::addLast, this::letGo);
     /** 受理之前在准备的那一次调用:结论出来才受理进 {@link #current},见 {@link Preparation}。 */
     final Preparing preparing = new Preparing();
 
@@ -99,6 +99,15 @@ final class CompanionBrain {
         return body == null || body == companion;
     }
 
+    /**
+     * 这具身体换了驱动者(被反射或同步动作顶掉、槽里的活被新活换掉):旧驱动者按着的键一律松开——键盘全松,鼠标挖掘进度清零、
+     * 右键放开——新的从一具干净的身体开始。松手只在这一处:任务被顶掉或换掉时不必各自记得松,它们只管留着或收掉自己的逻辑状态。
+     */
+    private void letGo(NumenPlayer companion) {
+        companion.controls().releaseAll();
+        companion.mouse().releaseAll();
+    }
+
     /** 绑着的那具身体已经离开世界了 —— 这才是"该换大脑"。 */
     boolean boundBodyGone() {
         return body == null || body.isRemoved();
@@ -143,10 +152,7 @@ final class CompanionBrain {
 
         if (holder != null && holder != winner) {
             holder.stop(companion, Task.StopReason.PREEMPTED);
-            // 换了驱动者:旧的被顶掉时按着的键一律松开(键盘全松,鼠标挖掘进度清零、右键放开),新的从一具干净的身体开始。
-            // 松手只在这一处——任务被顶掉时不必各自记得松,它们只管留着逻辑状态等拿回身体
-            companion.controls().releaseAll();
-            companion.mouse().releaseAll();
+            letGo(companion);
         }
         holder = winner;
 

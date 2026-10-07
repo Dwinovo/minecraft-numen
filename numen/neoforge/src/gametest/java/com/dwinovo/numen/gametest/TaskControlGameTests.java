@@ -344,6 +344,32 @@ public class TaskControlGameTests {
                 .thenSucceed();
     }
 
+    /** 换驱动者不只是被顶掉:槽里的长活被新活换掉,旧驱动者按着的键与鼠标同样由大脑松开。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    public static void a_replaced_driver_leaves_a_clean_body(GameTestHelper helper) {
+        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
+        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_replaced_hands", new BlockPos(3, 2, 5), false);
+        ToolRun first = lua(companion, "gt.gt_long.linger(100)");
+        AtomicReference<ToolRun> second = new AtomicReference<>();
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(first.task() != null, "the first work was not accepted: " + first.reply()))
+                .thenExecute(() -> {
+                    companion.look().at(Vec3.atCenterOf(stone));
+                    companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
+                    companion.mouse().dig();
+                    helper.assertTrue(companion.mouse().digging(), "the left button did not go down on the stone");
+                    second.set(lua(companion, "gt.gt_long.linger(5)"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(second.get().task() != null
+                                && !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK)
+                                && !companion.mouse().digging(),
+                        "the new work replaced the old one but its keys are still down: " + second.get().reply()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
     /**
      * 重启后接回函数派下的长活:再跑记下的那一行 Lua,接回来的活照样叫那个函数名,收尾的 task_finished 也是这个名字。
      * 重启用"休眠 + 把重启前落盘的那条记录放回去 + 复活"来演。
