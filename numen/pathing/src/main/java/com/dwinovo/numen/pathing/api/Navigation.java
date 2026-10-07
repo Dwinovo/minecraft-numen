@@ -175,14 +175,4 @@ public final class Navigation {
             driver.retarget(goal);
         }
     }
-
-    /** 暂停:松开所有键,手上正在挖的放下,路线留着。 */
-    public void pause() {
-        driver.pause();
-    }
-
-    /** 接着走:照留着的路线走下去,不重新搜。 */
-    public void resume() {
-        driver.resume();
-    }
 }

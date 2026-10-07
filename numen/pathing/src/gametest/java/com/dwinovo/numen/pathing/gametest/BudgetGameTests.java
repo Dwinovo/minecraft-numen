@@ -24,7 +24,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 预算与长途:预算用完不说成无路;长途分段接上、段与段之间不停;挖隧道的长路一段一段挖过去;要一路搭桥时先走交出的一段、
- * 边走边搜;按高度的目标垫五十格不被当成停滞;暂停之后照留着的路接着走;路伸进没加载的区块时说"未加载"。
+ * 边走边搜;按高度的目标垫五十格不被当成停滞;路伸进没加载的区块时说"未加载"。
  */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
@@ -164,58 +164,6 @@ public class BudgetGameTests {
                         throw new GameTestAssertException("没到那一层:" + t.rel(r.body.blockPosition()));
                     }
                 });
-    }
-
-    /**
-     * 走在一条绕远的走廊里,半路暂停四十刻:这期间身体站住;暂停时走廊墙上开了一个直通去处的口,接着走时照留着的路走下去
-     * (不重搜,也就不拐进新口),而且接着走的第一刻就动起来,不等搜索。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
-    public static void resumes_the_kept_route_without_searching(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        // 一条 U 形走廊:从 (4,5) 往东到 x=30,拐到 z=11,再往西回到 (4,11);去处在 (4,11)
-        t.fill(2, 1, 3, 32, 3, 13, Blocks.BEDROCK);
-        t.fill(3, 1, 4, 30, 2, 6, Blocks.AIR);
-        t.fill(28, 1, 4, 30, 2, 12, Blocks.AIR);
-        t.fill(3, 1, 10, 30, 2, 12, Blocks.AIR);
-        TestBody body = t.body(4, 1, 5);
-        int[] pausedAt = {-1};
-        boolean[] resumed = {false};
-        int[] resumedAt = {-1};
-        t.go(body, Goals.at(t.at(4, 1, 11)), RouteSpec.defaults()).within(700).realTime()
-                .during(r -> {
-                    double x = r.body.getX() - t.origin.getX();
-                    double z = r.body.getZ() - t.origin.getZ();
-                    var v = r.body.getDeltaMovement();
-                    double speed = Math.sqrt(v.x * v.x + v.z * v.z);
-                    if (pausedAt[0] < 0 && x >= 12 && z < 7) {
-                        pausedAt[0] = r.ticks;
-                        r.navigation.pause();
-                        // 开一个直通的口:从走廊的这一段横穿到回来的那一段
-                        for (int y = 1; y <= 2; y++) {
-                            for (int cz = 7; cz <= 9; cz++) {
-                                t.change((int) Math.floor(x), y, cz, Blocks.AIR.defaultBlockState());
-                            }
-                        }
-                    } else if (pausedAt[0] >= 0 && !resumed[0]) {
-                        if (r.ticks - pausedAt[0] > 10 && speed > 0.01) {
-                            throw new GameTestAssertException("暂停时身体还在走:" + speed);
-                        }
-                        if (r.ticks - pausedAt[0] >= 40) {
-                            resumed[0] = true;
-                            resumedAt[0] = r.ticks;
-                            r.navigation.resume();
-                        }
-                    } else if (resumed[0]) {
-                        if (r.ticks - resumedAt[0] == 3 && speed < 0.01) {
-                            throw new GameTestAssertException("接着走三刻了还没动起来");
-                        }
-                        if (z > 7 && z < 10 && x < 27) {
-                            throw new GameTestAssertException("接着走时拐进了暂停时开的口:" + t.rel(r.body.blockPosition()));
-                        }
-                    }
-                })
-                .arrives();
     }
 
     /**

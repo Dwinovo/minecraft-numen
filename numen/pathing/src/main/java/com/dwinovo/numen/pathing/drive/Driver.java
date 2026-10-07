@@ -122,7 +122,6 @@ public final class Driver {
     private int stalePartials;
     private int offRoute;
     private int stranded;
-    private boolean paused;
 
     private State state = State.RUNNING;
     private Halt halt;
@@ -186,7 +185,7 @@ public final class Driver {
      * 宿主的换气本能只接管计划外的。
      */
     public boolean plannedDive() {
-        return state == State.RUNNING && !paused && cur < legs.size() && legs.get(cur).maneuver().submerged()
+        return state == State.RUNNING && cur < legs.size() && legs.get(cur).maneuver().submerged()
                 && (step == null || step.holdsBreath());
     }
 
@@ -231,21 +230,6 @@ public final class Driver {
         reset();
     }
 
-    /** 暂停:松开所有键,手上正在挖的放下,路线留着。 */
-    public void pause() {
-        PathLog.debug("{} 暂停 {}", rig.who, PathLog.body(rig.entity));
-        paused = true;
-        rig.keys.releaseAll();
-        rig.mouse.release();
-    }
-
-    /** 接着走:照留着的路线走下去,不重新搜。 */
-    public void resume() {
-        PathLog.debug("{} 接着走", rig.who);
-        paused = false;
-        step = null;
-    }
-
     /** 叫停:在飞的搜索作废,松开所有键(包括潜行),手上正在挖的放下。 */
     public void stop() {
         if (pending != null) {
@@ -277,10 +261,6 @@ public final class Driver {
 
     /** 推一刻。 */
     private State advance() {
-        if (paused) {
-            watchdog.waiting(rig.entity.position());
-            return state;
-        }
         DiveLog.Dive surfaced = rig.dives.observe(rig.entity);
         if (surfaced != null) {
             PathLog.info("{} 出水 从 {} 到 {} 憋了 {} 刻 氧气最低 {}/{}", rig.who, PathLog.pos(surfaced.from()),
