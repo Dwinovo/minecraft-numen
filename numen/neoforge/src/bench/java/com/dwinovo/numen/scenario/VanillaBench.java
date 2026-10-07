@@ -1,5 +1,6 @@
-package com.dwinovo.numen.bench;
+package com.dwinovo.numen.scenario;
 
+import com.dwinovo.numen.bench.Bench;
 import net.minecraft.gametest.framework.GameTestGenerator;
 import net.minecraft.gametest.framework.TestFunction;
 import net.neoforged.neoforge.gametest.GameTestHolder;

@@ -1,5 +1,9 @@
-package com.dwinovo.numen.bench;
+package com.dwinovo.numen.scenario;
 
+import com.dwinovo.numen.bench.Budget;
+import com.dwinovo.numen.bench.Check;
+import com.dwinovo.numen.bench.Scenario;
+import com.dwinovo.numen.bench.Scene;
 import com.dwinovo.numen.api.sdk.Positions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;

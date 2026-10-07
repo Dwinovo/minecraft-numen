@@ -1,5 +1,7 @@
-package com.dwinovo.numen.bench;
+package com.dwinovo.numen.scenario;
 
+import com.dwinovo.numen.bench.Arena;
+import com.dwinovo.numen.bench.Scene;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
