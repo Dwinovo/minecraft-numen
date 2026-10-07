@@ -47,9 +47,8 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
   以及要问的格价钱乘几倍 `consentMultiplier`)、按位置的代价(`PositionCosts`)
   与按方块种类的禁令、动作代价(挖、放、跳、涉水)。服主总开关是上限，规格只能在其内收紧。
 - **路径不是可交接的东西**,能交接的是目标加规格;路径由引擎随时推导、拼接、重算。
-- **规划是查询，执行是任务。** 查询当场返回，不占身体;候选路线用惩罚法出(把已有候选踩过的格加价重搜，
-  重叠过高的丢弃),不引入随机，路线可复现。
-- **账单**:预算账和实际账同一格式(长度、要挖的格、要放的格、需要同意的格)。
+- **规划是查询，执行是任务。** 查询当场返回，不占身体;一次规划交出一条路线，不引入随机，路线可复现。
+- **改动清单**:路线里每一步带着要做的改动(挖、放、接水、开关门),每个改动带许可的答复;实际做了的记在 `EditLedger`。
 - **权限不是寻路的子功能。** 寻路只问"这一格能不能动、要不要问",规划器自己不判;`sacred`(别挖自己要站的
   那一格)是规划正确性约束，不是权限。
 - **目标是意图编出来的**(位置、距离范围、站上去、用、挖、远离,见第十三节"到达整理成六种"),到达判据只写在目标里。
@@ -64,9 +63,9 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
             └───────────────┬───────────────────────────────┬────────────────┘
                             │ 只经门面                        │ 实现端口
 ┌──────────────────────── pathing 模块(只依赖原版 MC)─────────────────────────┐
-│ 4 门面 api/      Navigator:plan / drive;请求、结局、账单都是数据             │
+│ 4 门面 api/      Navigator:plan / drive;请求、结局都是数据                 │
 │ 3 执行 drive/    段状态机、每种动作的控制器、疾跑、视角;驱动 Body 端口          │
-│ 2 搜索 search/   A*、目标、预算、派发与快照、候选路线                           │
+│ 2 搜索 search/   A*、目标、预算、派发与快照                                     │
 │ 1 规划 plan/     每种动作的前提与代价(纯函数)、成本模型组合                    │
 │ 0 地形 world/    身体尺寸、从碰撞箱推导的落脚与净空、少量语义分类              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -107,7 +106,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 
 ### 第 2 层　搜索(`search/`)
 
-A*、目标族、按节点数计的预算、异步派发与区块快照、候选路线规划(`RoutePlanner`)。
+A*、目标族、按节点数计的预算、异步派发与区块快照。
 没到目标的结论带着停下的原因：搜完了没有路，还是预算用完(不能证明没路)。现有代码基本就是这个样子，主要是搬家。
 一次搜索带一本记事本(第 0 层 `Recall`):没叠改动的快照上,同一格的落脚高度、站姿、旁边有没有伤身的格只算一次。
 估价是目标的估价(`Goal.estimate`,按身体怎么挪)加埋深(`Burial`,路上绕不开要挖掉的格至少多少钱),两样都是下界。
@@ -129,13 +128,13 @@ A*、目标族、按节点数计的预算、异步派发与区块快照、候选
 
 ```java
 Navigator nav = Navigator.of(body, ports);
-PlanResult plan = nav.plan(query);          // 只搜不走:候选路线与预算账
+PlanResult plan = nav.plan(query);          // 只搜不走:一条路线,或没有路的结局
 Navigation run = nav.drive(request);        // 目标 + 规格;返回句柄
 NavStatus s = run.tick();                   // RUNNING / ARRIVED / FAILED(Outcome)
 EditLedger edits = run.stop();              // 叫停也交出实际账
 ```
 
-请求、结局、账单都是数据。结局是枚举加事实，例如 `NO_ROUTE`(搜完无路)、`OUT_OF_BUDGET`、
+请求、结局都是数据。结局是枚举加事实，例如 `NO_ROUTE`(搜完无路)、`OUT_OF_BUDGET`、
 `BLOCKED(位置, 方块, 动作, 原因)`、`NEEDS_CHANGES`(规格不许挖或不许放,带上要改的那几格)、`NO_MATERIALS`、`DENIED(位置, 许可给的理由)`。
 模块里没有一句给模型或玩家看的话。
 
@@ -328,7 +327,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 预算与长途 | 挖隧道的长路给出部分路线;按高度的目标爬 50 格不被判停滞;暂停后续走不冷启动搜索;未加载区块时停在边界、原因是"未加载";要一路搭桥过一百五十格宽的空隙时两秒内起步、边走边搜到对岸 |
 | 执行复核 | 规划与执行对不上时在有限次内收场，结局点出是哪一格、哪一条前提 |
 | tick 速率 | 破块冷却、放置视角步进在调高 tick 速率后结果不变 |
-| 门面 | 叫停时松开潜行、交出实际账;先 `plan` 再按选中的候选 `drive`,走的就是那条;只搜不走时身体不动、世界不变 |
+| 门面 | 叫停时松开潜行、交出实际账;先 `plan` 再按得到的路线 `drive`,走的就是那条;只搜不走时身体不动、世界不变 |
 
 第七节的每一条经验都要能在这两张表里找到对应的场景;找不到就补进来。
 
@@ -462,8 +461,6 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
   假起点是 `Origin`。
 - **快照与派发**:`WorldSnapshot.capture` 在世界所在线程拷贝以一个区块为中心的正方形里已加载区块的非空区段
   (`PalettedContainer.copy`)与世界边界;`Searches` 是唯一派发口，固定大小的守护线程池;`Pending` 逐刻轮询、可叫停。
-- **候选路线**:`RoutePlanner` 惩罚法：已有候选经过的节点每格加两倍平走一格的价重搜，重叠超过 0.7 的丢弃;候选按调用方的
-  成本模型重新定价。
 - **第 0 层补了几处**(规划第一次要用，仍只在第 0 层):`Clearance.blockers`(站着与走过去时挡着哪些格)、`topCell`/`occupies`
   (身体占哪几格)、`Stepping.walkOff`(不指定终点地走出边沿会落到多高)、`Semantics.speedFactor`/`eyeInWater`;
   `Footing.EPSILON` 公开为全模块的高度容差。
@@ -501,16 +498,16 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
   `Hotbar` 把工具或料拿到手上(数字键、中键、F 键、创造模式取料),每次都交回 `BodyAction`;`Crosshair` 准星拾取;
   `Snapshots` 从身体上抄 `BodySnapshot`(挖掘效率扣掉手上那件自己的修饰符)。
 - **第 3 层**(`drive/`):`Driver` 段状态机(首段、提前 100 刻搜下一段接上、按身体落在哪个节点认步、离开路线重搜、
-  同一步三次走不下去收场、半程路线连续三段不更近收场、换目标只问 `Goal.keepsStop`、暂停与接着走不重搜、下载具记进动作);
+  同一步三次走不下去收场、半程路线连续三段不更近收场、换目标只问 `Goal.keepsStop`、下载具记进动作);
   `Step` 一步开始前在活世界(`LiveWorld`)上用同一个 `Moves.of(kind).premise`、同一个方向复核,不成立交出 `Fails`;
   每种走法一个 `Control`(`StrideControl` 管平走斜走上一级与背贴搭桥、`DropControl`、`ParkourControl`、`PillarControl`、
   `DownwardControl`、`ClimbControl`、`SwimControl`),改动由 `Work` 做(挖、放、倒水接坠落再收回),开关门是可复用的
   `DoorOpener`;`Steering` 照原版移动与摩擦推算怎么停在一点、空中不回身;`SprintPolicy`、`Aim`(瞄点与按鼠标像素转头,
   与准星同一套射线)、`Watchdog`(按估价给一步期限、对外的"在推进"信号)各只一处;`EditLedger` 只收 `Effector` 真实
   交回的结果。
-- **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:候选路线各带
-  预算账,没有候选时带结局),`drive(NavRequest)` 交出 `Navigation`(`tick`/`stop`/`report`/`progressing`/`plannedFall`/
-  `retarget`/`pause`/`resume`),`takeBack` 交出 `Teardown`;请求可带先照走的候选路线与展开预算。结局 `Outcome` 是数据:
+- **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:一条路线,
+  没有路线时带结局),`drive(NavRequest)` 交出 `Navigation`(`tick`/`stop`/`report`/`progressing`/`plannedFall`/
+  `retarget`),`takeBack` 交出 `Teardown`;请求可带先照走的路线与展开预算。结局 `Outcome` 是数据:
   `Arrived`、`NoRoute`、`OutOfBudget`、`Unloaded`、`Stranded`、`NeedsChanges(要做的改动)`、`NoMaterials`、
   `OverAlterBudget(要改几格)`、`Denied(格, 理由)`、`Blocked(格, 方块, 走法, 前提或执行里出的事)`、`NoLineOfSight`。
   搜索没交出路时,为什么没路由 `Diagnosis` 在同一份快照上换条件再搜得出(先问许挖许放够不够、再加上许征询,不许征询时问许征询够不够,
@@ -837,13 +834,12 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   执行时的复核与重搜读的都是同一个 `forbids`,承诺不另写检查。
 - **接着规划**:`PlanQuery.after(route)`:起点是那条路线的终点,身体到那里时怎么待着、最后一步的改动照它算(与执行分段接续的
   `Search.after` 同一个)。快照按新起点拷;更早几步的改动不叠,与已知近似"展开节点只叠走到这里那一步的改动"同一回事。
-- **看清的那一截**:一条候选都没有时,`PlanResult.partial` 交出第一次搜索朝目标推进的半程路线(连同预算账),诊断照旧给结局。
+- **看清的那一截**:没有路线时,`PlanResult.partial` 交出第一次搜索朝目标推进的半程路线,诊断照旧给结局。
   宿主拿它说"这一段看清到哪儿、之后未知",执行时拿它当这一段的开头,后面照这一段的目标边走边算(承诺照样绑着)。
 - 单测:`RouteSpecTest.aConfinedUseForbidsEveryOtherCellAndTwoConfinementsIntersect`、`SearchTest.aSpecConfinedToThePlannedDigsDigsOnlyThose`、
   `aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw`、`aPlanContinuingARouteStartsWhereItEndsAndCarriesItsLastStep`。
 - **要改地形才有路的那条路**:结局 `Outcome.NeedsChanges` 带上诊断搜出的那条路要做的改动(`changes`,挖哪几格、放哪几格连同许可的
-  答复;`alterations()` 是它的格数),宿主点名那几格,代替原来失败后另起一次规划列候选。诊断设想身上有料,点名的放块可能是身上没有的料。
-- 候选路线的惩罚法(`RoutePlanner` 多条候选)模块里留着(门面 GameTest 在测),Numen 侧只要一条。
+  答复),宿主点名那几格。诊断设想身上有料,点名的放块可能是身上没有的料。
 
 ### 整片禁止(09-30,`look-plan-act` 第 3 步)
 
