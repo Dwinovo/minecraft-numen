@@ -145,6 +145,25 @@ public class InteractGameTests {
         });
     }
 
+    /** 准星落在箱子上时 numen.use.item 点开了它:回执是那个界面(#118:这条路的声明漏了"打开界面",编不成回执掀翻了服务器)。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void use_ahead_at_a_chest_hands_back_its_window(GameTestHelper helper) {
+        chestWithDiamonds(helper, new BlockPos(5, 2, 4), 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_facing_chest", new BlockPos(3, 2, 4), false);
+        companion.setYRot(-90f);
+        companion.setYHeadRot(-90f);
+        companion.setXRot(29f);
+        ToolRun press = lua(companion, "numen.use.item()");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(press.done(), "use item has not finished");
+            helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
+                            && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
+                    "use item did not hand back the chest window: " + press.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.to(…, {arrive = "use"}),那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {

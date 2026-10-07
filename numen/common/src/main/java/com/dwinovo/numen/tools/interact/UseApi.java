@@ -90,7 +90,7 @@ public final class UseApi {
     @Note("To aim somewhere, `numen.use.block` at that cell instead; air cells work too.")
     @Note("Food and drink go through `numen.inv.eat`, not here.")
     @SeeAlso("numen.use.block")
-    public static Pending<Clicks.Clicked> item(ServerCall call, Press args) {
+    public static Pending<Clicks.Pressed> item(ServerCall call, Press args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, null, holdTicks(args.hold()),
                 args.item().orElse(null), args.sneak().orElse(false)));
     }
