@@ -16,6 +16,7 @@ import com.dwinovo.numen.bench.report.Variant;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.network.Fragments;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
@@ -33,6 +34,7 @@ import com.dwinovo.numen.api.network.payload.RunProgramPayload;
 import com.dwinovo.numen.api.network.payload.StopProgramPayload;
 import com.dwinovo.numen.api.program.ProgramUplink;
 import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -41,7 +43,9 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -80,7 +84,7 @@ import java.util.stream.Stream;
  * <h2>上行与下行</h2>
  * 整段程序经 {@link ProgramUplink#wire} 直接交给服务端真实入口 {@link RunProgramPayload#handle}(停止、客户端函数的答复同样),发送者是
  * 模拟主人,上行的包按网络上的样子过一遍({@link Fragments#crossed}:超过单包上限的切成片再拼回、编解码);发给主人的模组载荷由
- * {@link OwnerConnection} 截下,分片的消息进主人的收件箱拼回({@link NumenNetwork#assembled}),也编解码一遍,再照主人客户端的
+ * {@link OwnerLine} 截下,分片的消息进主人的收件箱拼回({@link NumenNetwork#assembled}),也编解码一遍,再照主人客户端的
  * 处理方式交给大脑:程序的回执与每次调用的结局给上行部件、服务端要客户端执行的函数交给客户端执行体、当前任务与身体状态给运行期状态、
  * 世界事件进收件箱、征询由剧本答复、死亡切断循环。
  */
@@ -123,6 +127,8 @@ final class Attempt {
     private Mind mind;
     private Scene scene;
     private ServerPlayer owner;
+    /** 主人的连接:服务端发给主人的模组载荷停在它的队列里,每刻开头取走交给大脑。 */
+    private OwnerLine ownerLine;
     private NumenPlayer her;
     private Brain brain;
     private String promptHash = "";
@@ -158,8 +164,12 @@ final class Attempt {
             deleteTree(library);
         }
         scenario.arena().build(level, origin);
-        owner = OwnerConnection.join(server, level, OWNER_NAME, standOn(scenario.ownerAt()),
-                payload -> mail.add(() -> downlink(payload)));
+        GameProfile ownerProfile = new GameProfile(UUID.randomUUID(), OWNER_NAME);
+        owner = new ServerPlayer(server, level, ownerProfile, ClientInformation.createDefault());
+        ownerLine = new OwnerLine();
+        server.getPlayerList().placeNewPlayer(ownerLine, owner, CommonListenerCookie.createInitial(ownerProfile, false));
+        Vec3 ownerAt = standOn(scenario.ownerAt());
+        owner.teleportTo(level, ownerAt.x, ownerAt.y, ownerAt.z, 0, 0);
         her = CompanionFactory.spawn(server, UUID.randomUUID(), HER_NAME, owner.getUUID(), level,
                 standOn(scenario.start()));
         scene = new Scene(level, origin, her, owner);
@@ -188,6 +198,10 @@ final class Attempt {
     /** 每个服务端 tick 一次。 */
     void tick() {
         ticks++;
+        for (CustomPacketPayload payload; (payload = ownerLine.sent.poll()) != null; ) {
+            CustomPacketPayload sent = payload;
+            mail.add(() -> downlink(sent));
+        }
         for (Runnable job; (job = mail.poll()) != null; ) {
             job.run();
         }

@@ -1,6 +1,6 @@
 // 评测在游戏里的那一半:场景接口、运行器、评测大脑、模拟主人。它是一个独立的模组 numen_bench,只在评测的运行配置里
 // 与场景的源码集一起加载(numen/neoforge 与各联动的 runBench),平时的游戏、GameTest、发行 jar 里都没有它。
-// 模拟主人的连接要 NeoForge 的频道协商(见 OwnerConnection),所以对着 NeoForge 编译;评测也只在 NeoForge 上跑。
+// 模组入口(NumenBench)是 NeoForge 的,所以对着 NeoForge 编译;评测也只在 NeoForge 上跑。考场只依赖 Numen API,不认识任何插件。
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev'
@@ -30,6 +30,9 @@ repositories {
     mavenCentral()
 }
 
+// 要读 Numen API 的测试夹具源码集(模拟主人的连接),它得先配置好
+evaluationDependsOn(':numen-api:common')
+
 neoForge {
     version = neoforge_version
 }
@@ -39,4 +42,6 @@ dependencies {
     api project(':bench')
     // 整个 Numen API,不是瘦 api jar:评测大脑接的是 Numen API 内部的零件(循环内核、传输层、召唤),和 Numen 的 GameTest 一样
     api project(':numen-api:neoforge')
+    // 模拟主人的连接(OwnerLine)与它的频道配法接口(MockConnection):Numen API 的测试夹具,运行时与登记 GameTest 套件的那份同在模组 numen 里
+    compileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
