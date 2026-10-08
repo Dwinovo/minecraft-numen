@@ -39,8 +39,13 @@ dependencies {
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
 
-// 这一次 GameTest 跑批带的有用例的模块:Numen 与寻路。联动的 GameTest 另开一次(它们的构建脚本里),不带这两个的用例。
-def gameTestModules = [project(':numen:common'), project(':numen:pathing')]
+// 这一次 GameTest 跑批带的有用例的模块,和各自的套件名(套件名与模块的对应只在这里定义)。联动的 GameTest 另开一次(它们的构建脚本里),
+// 不带这两个模块的用例。
+def gameTestSuites = [':numen:common': 'numen', ':numen:pathing': 'numen_pathing']
+def gameTestModules = gameTestSuites.keySet().collect { project(it) }
+// 跑哪些套件:默认是这一次带的全部;-Pgametest=numen_pathing(逗号分隔)只跑指定的。没给 numen.gametest.suites 就一个套件都不登记
+// (评测的运行配置就不给,见 numen-bench.gradle)
+def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.values().join(','))
 
 // GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把它们同步进构建目录里的一处,
 // 运行配置指向它(模板文件名各模块之间不重名)。
@@ -49,23 +54,6 @@ def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
     gameTestModules.each { from it.file('src/gametest/structures') }
     into gameTestStructures
 }
-
-// 各模块的套件在自己的 src/gametest/resources 里用同名的 META-INF/services 文件报到;一次跑批里这几个模块的输出在模组里
-// 是同一个模块,同名文件只有一份看得见。所以把这一次带的各模块的报到文件合成一份,放进本模块的 gametest 源码集(声明在模组的最后)。
-def suiteRegistry = 'META-INF/services/com.dwinovo.numen.api.gametest.GameTestSuite'
-def mergedSuites = layout.buildDirectory.dir('gametest-suites')
-def mergeGameTestSuites = tasks.register('mergeGameTestSuites') {
-    def registries = gameTestModules.collect { it.file("src/gametest/resources/${suiteRegistry}") }
-    inputs.files(registries)
-    outputs.dir(mergedSuites)
-    doLast {
-        def merged = mergedSuites.get().file(suiteRegistry).asFile
-        merged.parentFile.mkdirs()
-        merged.text = registries.collect { it.text.trim() }.join('\n') + '\n'
-    }
-}
-sourceSets.gametest.resources.srcDir(mergedSuites)
-tasks.named('processGametestResources') { dependsOn mergeGameTestSuites }
 
 neoForge {
     version = neoforge_version
@@ -80,13 +68,12 @@ neoForge {
             // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
             // /test run <用例> 现场围观也用(见 GameTestSuites)。
             systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
-            // 跑哪些套件:-Pgametest=numen_pathing(逗号分隔);不给就是这一次带的全部
-            systemProperties.put('numen.gametest.suites', providers.gradleProperty('gametest').orElse(''))
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
         }
         client {
             client()
             sourceSet = sourceSets.gametest
+            systemProperties.put('numen.gametest.suites', gameTestSelection)
             gameDirectory = this.mkdir(this.file("runs/client"))
         }
         data {
@@ -104,6 +91,7 @@ neoForge {
         gameTestServer {
             type = "gameTestServer"
             sourceSet = sourceSets.gametest
+            systemProperties.put('numen.gametest.suites', gameTestSelection)
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
         }
     }
@@ -115,9 +103,8 @@ neoForge {
             // 套件机制(GameTestSuites 与套件接口)与 Numen 的夹具:只含原版类;夹具是联动的 GameTest 也用的那一份
             sourceSet project(':numen-api:common').sourceSets.testFixtures
             sourceSet project(':numen:common').sourceSets.testFixtures
-            // 各模块的用例
+            // 各模块的用例,和本模块的 gametest(登记入口、模拟连接的加载器实现)
             gameTestModules.each { sourceSet it.sourceSets.gametest }
-            // 本模块的 gametest 放最后:合并后的套件报到文件要盖过各模块自己的那份
             sourceSet sourceSets.gametest
         }
     }

@@ -7,11 +7,6 @@ import java.util.List;
 public final class TlmGameTestSuite implements GameTestSuite {
 
     @Override
-    public String name() {
-        return "numen_tlm";
-    }
-
-    @Override
     public List<Class<?>> classes() {
         return List.of(TlmGameTests.class);
     }

@@ -7,11 +7,6 @@ import java.util.List;
 public final class PathingGameTestSuite implements GameTestSuite {
 
     @Override
-    public String name() {
-        return "numen_pathing";
-    }
-
-    @Override
     public List<Class<?>> classes() {
         return List.of(
                 AlterGameTests.class,

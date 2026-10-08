@@ -1,16 +1,10 @@
 package com.dwinovo.numen.gametest;
 
-import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.gametest.GameTestSuite;
 import java.util.List;
 
 /** Numen 的 GameTest 套件:命名空间就是模组 id {@code numen}。 */
 public final class NumenGameTestSuite implements GameTestSuite {
-
-    @Override
-    public String name() {
-        return Constants.MOD_ID;
-    }
 
     @Override
     public List<Class<?>> classes() {
