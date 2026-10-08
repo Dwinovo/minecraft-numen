@@ -62,14 +62,15 @@ neoForge {
     runs {
         configureEach {
             if (it.name != 'bench') {
-                loadedMods = [mods.numen]
+                loadedMods = [mods.numen, mods.numen_api_gametest]
             }
         }
         bench {
             type = 'gameTestServer'
             ideName = "NeoForge Bench (${project.path})"
             sourceSet = sourceSets.bench
-            loadedMods = [mods.numen, mods.numen_bench]
+            // 考场(numen_bench)与 Numen API 的 GameTest 支持不认识 Numen;被测的模块(numen,联动在里面)与目标模组另外在场
+            loadedMods = [mods.numen, mods.numen_api_gametest, mods.numen_bench]
             gameDirectory = project.mkdir(project.file('runs/bench'))
             // 车万女仆这类目标模组自带它们的 GameTest,不归我们跑:NeoForge 的命名空间过滤只放行评测的
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
@@ -90,8 +91,8 @@ neoForge {
 
 tasks.matching { it.name == 'runBench' }.configureEach {
     dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:common:syncGameTestStructures'
-    // 登记套件的入口与模拟主人连接的配法,在 Numen 的 GameTest 源码集与夹具里
-    dependsOn ':numen:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses'
+    // 登记套件的入口与模拟主人连接的配法,在 Numen API 的 GameTest 源码集与夹具里
+    dependsOn ':numen-api:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses'
     benchModules.each { dependsOn "${it.path}:benchClasses" }
 }
 

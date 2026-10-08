@@ -3,8 +3,34 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
+/*
+ * GameTest 与评测在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):把套件入口 GameTestSuites
+ * 登记给原版的 GameTest 框架,和给模拟主人的连接配频道表。用 Numen API 的都用得上(Numen、联动、评测、第三方插件),所以归 Numen API;
+ * 各运行配置把它和 Numen API 的测试夹具声明成模组 numen_api_gametest。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+dependencies {
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+processGametestResources {
+    var expandProps = ['neoforge_loader_version_range': neoforge_loader_version_range]
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand expandProps
+    }
+    inputs.properties(expandProps)
+}
+
 neoForge {
     version = neoforge_version
+    addModdingDependenciesTo(sourceSets.gametest)
     // Automatically enable neoforge AccessTransformers if the file exists
     def at = project(':numen-api:common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {

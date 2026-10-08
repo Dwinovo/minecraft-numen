@@ -1,0 +1,18 @@
+# 开发期的小模组:把 GameTest 的套件入口登记给原版的 GameTest 框架(见 NeoForgeGameTestMod),并给模拟主人的连接配频道表。
+# 只在 GameTest 与评测的运行配置里加载,不进发行 jar,不发布。
+modLoader = "javafml"
+loaderVersion = "${neoforge_loader_version_range}"
+license = "LGPL-3.0"
+
+[[mods]]
+modId = "numen_api_gametest"
+version = "0"
+displayName = "Numen API GameTest"
+description = '''Development-only: GameTest support for Numen API and everything built on it.'''
+
+[[dependencies.numen_api_gametest]]
+modId = "numen_api"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"

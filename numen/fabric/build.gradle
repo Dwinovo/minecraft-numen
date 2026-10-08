@@ -3,6 +3,9 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap'
 }
 
+// 要读 Numen API 的开发期 gametest 源码集,它得先配置好
+evaluationDependsOn(':numen-api:fabric')
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
@@ -27,18 +30,16 @@ dependencies {
  * GameTest:同一批用例(套件 numen、numen_pathing)在 Fabric 上跑,`./gradlew :numen:fabric:runGameTestServer`,
  * `-Pgametest=numen_pathing` 选跑谁(默认是根 build.gradle 的 numenGameTestModules 带的全部套件)。
  *
- * 用例只用原版注解,在 numen/common 与 numen/pathing 的 gametest 里;Fabric 这一层只做两件事,都在本模块的 src/gametest(开发期的
- * 小模组 numen_gametest,不进发行 jar):用它的 fabric.mod.json 把套件入口 GameTestSuites 登记成 `fabric-gametest` 入口,
- * 和给模拟主人连接用的 MockConnection 实现。用例、夹具与这个小模组的输出以普通类路径进开发运行(localRuntime),
- * 编译时对着 Numen 本体的类,运行时解析到本模块 main 的那一份。
+ * 用例只用原版注解,在 numen/common 与 numen/pathing 的 gametest 里。加载器这一层的支持(把套件入口 GameTestSuites 登记成
+ * `fabric-gametest` 入口、模拟主人连接的 MockConnection 实现)属于 Numen API,在 numen-api/fabric 的开发期小模组
+ * numen_api_gametest 里。用例、夹具与小模组的输出以普通类路径进开发运行(localRuntime),编译时对着 Numen 本体的类,运行时解析到
+ * 本模块 main 的那一份。
  */
-sourceSets {
-    gametest {
-        compileClasspath += sourceSets.main.compileClasspath
-    }
-}
 // 结构模板:原版只在 IDE 里才从磁盘目录加载,Fabric 的 GameTest API 改从数据包的 data/<命名空间>/gametest/structure/ 加载。
-// 把各模块的模板按它的套件名(也是它的结构命名空间)放到那里,作为小模组 numen_gametest 的资源
+// 把各模块的模板按它的套件名(也是它的结构命名空间)放到那里,当作小模组 numen_api_gametest 的资源(下面的 loom.mods 把它们并进同一个模组)
+sourceSets {
+    gametestData {}
+}
 def fabricStructures = layout.buildDirectory.dir('gametest-structures')
 def syncFabricStructures = tasks.register('syncFabricGameTestStructures', Sync) {
     into fabricStructures
@@ -49,15 +50,14 @@ def syncFabricStructures = tasks.register('syncFabricGameTestStructures', Sync) 
         }
     }
 }
-sourceSets.gametest.resources.srcDir(fabricStructures)
-tasks.named('processGametestResources') { dependsOn syncFabricStructures }
+sourceSets.gametestData.resources.srcDir(fabricStructures)
+tasks.named('processGametestDataResources') { dependsOn syncFabricStructures }
 
 dependencies {
-    // 登记入口与模拟连接的接口:Numen API 的测试夹具
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
     // Fabric 的 GameTest API(fabric-api 的合集 jar 里没有它)
     modLocalRuntime fabricApi.module('fabric-gametest-api-v1', fabric_version)
-    localRuntime sourceSets.gametest.output
+    localRuntime project(':numen-api:fabric').sourceSets.gametest.output
+    localRuntime sourceSets.gametestData.output
     localRuntime project(':numen-api:common').sourceSets.testFixtures.output
     localRuntime project(':numen:common').sourceSets.testFixtures.output
     rootProject.ext.numenGameTestModules.each { localRuntime project(it).sourceSets.gametest.output }
@@ -68,6 +68,15 @@ def gameTestSelection = providers.gradleProperty('gametest')
         .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
 
 loom {
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+        numen_api_gametest {
+            sourceSet project(':numen-api:fabric').sourceSets.gametest
+            sourceSet sourceSets.gametestData
+        }
+    }
     def aw = project(':numen:common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
@@ -110,7 +119,7 @@ loom {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:common:syncGameTestStructures', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses', 'gametestClasses'
+    dependsOn ':numen:common:syncGameTestStructures', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses', ':numen-api:fabric:gametestClasses', 'gametestDataClasses'
     rootProject.ext.numenGameTestModules.each { dependsOn "${it}:gametestClasses" }
 }
 

@@ -11,6 +11,23 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 }
 
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
+/*
+ * GameTest 在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):用它的 fabric.mod.json 把套件入口
+ * GameTestSuites 登记成 `fabric-gametest` 入口,和给模拟主人连接用的 MockConnection 实现。用 Numen API 的都用得上(Numen、
+ * 第三方插件),所以归 Numen API;各运行配置把它的输出放进开发运行的类路径(见 numen/fabric/build.gradle)。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+}
+dependencies {
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
 loom {
     def aw = project(':numen-api:common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {

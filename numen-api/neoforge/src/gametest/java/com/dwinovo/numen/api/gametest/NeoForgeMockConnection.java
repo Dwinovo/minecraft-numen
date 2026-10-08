@@ -1,6 +1,5 @@
-package com.dwinovo.numen.gametest;
+package com.dwinovo.numen.api.gametest;
 
-import com.dwinovo.numen.api.gametest.MockConnection;
 import net.minecraft.network.Connection;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 

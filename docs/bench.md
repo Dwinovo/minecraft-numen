@@ -52,7 +52,8 @@ NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.r
 
 ```
 GameTest 服务器(runs/bench)
-├─ 模组 numen            产品本体,原样(含 Numen 的 GameTest 登记入口与测试夹具:模拟主人的连接就在夹具里)
+├─ 模组 numen            被测的模块:产品本体(联动的代码在它里面),原样
+├─ 模组 numen_api_gametest  Numen API 的 GameTest 支持(开发期小模组,不进发行 jar):登记套件入口、模拟主人的连接(夹具里的 OwnerLine)
 └─ 模组 numen_bench      评测:只在 runBench 里加载
      ├─ :bench           纯 JVM:记录、统计、报告、对比
      ├─ :bench:game      考场:场景接口、运行器、评测大脑;只依赖 Numen API,不认识任何插件

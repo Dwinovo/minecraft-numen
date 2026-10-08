@@ -45,14 +45,16 @@ neoForge {
     mods {
         numen {
             sourceSet numenNeoForge.sourceSets.main
-            // 登记套件入口与模拟连接配法的那一个源码集(加载器这一层只做这个)
-            sourceSet numenNeoForge.sourceSets.gametest
             sourceSet project(':numen:common').sourceSets.testFixtures
-            sourceSet project(':numen-api:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
             sourceSet project(':numen:pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
+        }
+        // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
+        numen_api_gametest {
+            sourceSet project(':numen-api:neoforge').sourceSets.gametest
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
     }
     runs {
@@ -88,7 +90,7 @@ tasks.named('compileGametestJava') {
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
+    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
             ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
 }
 

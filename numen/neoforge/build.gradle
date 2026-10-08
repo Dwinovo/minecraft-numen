@@ -3,8 +3,9 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
-// 要读 Numen 的 gametest 与 testFixtures 源码集,它们得先配置好
+// 要读 Numen 的 gametest 与 testFixtures 源码集、Numen API 的开发期 gametest 源码集,它们得先配置好
 evaluationDependsOn(':numen:common')
+evaluationDependsOn(':numen-api:neoforge')
 
 dependencies {
     // Numen API 同在本构建里。编译期看不见它的内部类(见 numen-loader.gradle),运行与数据生成要它在类路径上,
@@ -24,20 +25,10 @@ dependencies {
 }
 
 /*
- * GameTest 在加载器这一层只做登记:src/gametest 里是把套件入口登记给原版 GameTest 框架的一个类(SuiteRegistration),和给模拟主人
- * 连接配频道表的 NeoForge 实现(NeoForgeMockConnection)。用例本身在 numen/common 与 numen/pathing 的 gametest 里,只用原版,
- * 经套件报到;这里只把它们的输出声明进模组 numen(见下面的 mods)。不进发行 jar:jar 只收 main 的输出。
+ * GameTest:用例在 numen/common 与 numen/pathing 的 gametest 里,只用原版,经套件报到;这里只把它们的输出声明进模组 numen(见下面的
+ * mods)。加载器这一层的支持(登记套件入口、模拟主人连接的频道配法)属于 Numen API,在 numen-api/neoforge 的开发期小模组
+ * numen_api_gametest 里,这里把它声明进运行配置。用例与夹具不进发行 jar:jar 只收 main 的输出。
  */
-sourceSets {
-    gametest {
-        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
-        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
-    }
-}
-dependencies {
-    // 套件机制与模拟连接的接口:各模块的用例都经它交给原版的 GameTest 框架,见 numen-api 的测试夹具
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
-}
 
 // 这一次 GameTest 跑批带的有用例的模块,和它们的套件名(模块与套件名的对应在根 build.gradle 的 numenSuites 表里)。联动的 GameTest
 // 另开一次(它们的构建脚本里),不带这两个模块的用例。
@@ -52,7 +43,6 @@ def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gam
 
 neoForge {
     version = neoforge_version
-    addModdingDependenciesTo(sourceSets.gametest)
     // Automatically enable neoforge AccessTransformers if the file exists
     def at = project(':numen:common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {
@@ -67,7 +57,6 @@ neoForge {
         }
         client {
             client()
-            sourceSet = sourceSets.gametest
             systemProperties.put('numen.gametest.suites', gameTestSelection)
             gameDirectory = this.mkdir(this.file("runs/client"))
         }
@@ -85,7 +74,6 @@ neoForge {
         }
         gameTestServer {
             type = "gameTestServer"
-            sourceSet = sourceSets.gametest
             systemProperties.put('numen.gametest.suites', gameTestSelection)
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
         }
@@ -95,19 +83,22 @@ neoForge {
             sourceSet sourceSets.main
             // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明
             sourceSet project(':numen:pathing').sourceSets.main
-            // 套件机制(GameTestSuites 与套件接口)与 Numen 的夹具:只含原版类;夹具是联动的 GameTest 也用的那一份
-            sourceSet project(':numen-api:common').sourceSets.testFixtures
+            // Numen 的夹具:只含原版类;是联动的 GameTest 也用的那一份
             sourceSet project(':numen:common').sourceSets.testFixtures
-            // 各模块的用例,和本模块的 gametest(登记入口、模拟连接的加载器实现)
+            // 各模块的用例
             gameTestModules.each { sourceSet it.sourceSets.gametest }
-            sourceSet sourceSets.gametest
+        }
+        // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现(都不属于 Numen,别的运行配置也这样声明)
+        numen_api_gametest {
+            sourceSet project(':numen-api:neoforge').sourceSets.gametest
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
     }
 }
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
     dependsOn ':numen:common:syncGameTestStructures'
-    dependsOn 'gametestClasses', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses'
+    dependsOn ':numen-api:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses'
     gameTestModules.each { dependsOn "${it.path}:gametestClasses" }
 }
 
