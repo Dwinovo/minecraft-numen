@@ -31,9 +31,6 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-import net.neoforged.neoforge.items.SlotItemHandler;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,18 +41,15 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * 车万女仆在场时她养女仆:驯服、名下清单、切工作模式、改日程、开背包页放东西、够不着、别人的女仆、女仆死了、女仆喂她。
  * 都从入口调(`use entity`、`tlm …` 这几行命令),女仆用代码生成。
  *
- * <p>只在挂着车万女仆的那一次跑批里跑({@code :plugins:tlm:runGameTestServer},见插件的 build.gradle),命名空间
- * {@value #NAMESPACE};Numen 那一次跑批里没有这些用例,也没有车万女仆。
+ * <p>只在挂着车万女仆的那一次跑批里跑({@code :plugins:tlm:runGameTestServer},见插件的 build.gradle),套件 {@code numen_tlm}
+ * (见 {@link TlmGameTestSuite});Numen 那一次跑批里没有这些用例,也没有车万女仆。
  *
  * <p>权限层照出厂规则:对她自己的女仆动手由 {@code use_entity(self_owned)} 放行,野生女仆由 {@code use_entity(!owned)}
  * 放行,都不问。只有别人的女仆那一条开 {@link Mode#BYPASS}:别人的女仆出厂规则一行都没说到,照旧要问主人,用例里的主人
  * 不在线,一问就按拒绝收场;那一条测的是车万女仆自己的主人判据,得先让权限层放过去。
  */
-@GameTestHolder(TlmGameTests.NAMESPACE)
-@PrefixGameTestTemplate(false)
 public class TlmGameTests {
 
-    static final String NAMESPACE = "numen_tlm";
     private static final String BATCH = "numen_tlm";
     private static final ResourceLocation FARM = ResourceLocation.fromNamespaceAndPath("touhou_little_maid", "farm");
 
@@ -348,6 +342,9 @@ public class TlmGameTests {
                                 && her.containerMenu instanceof AbstractMaidContainer menu && menu.getMaid() == maid,
                         "her backpack page is not open — tlm open said: " + open.reply()))
                 .thenExecute(() -> {
+                    // 女仆自己背包的第 0 格:先在那一格放一个记号,菜单里显示着这个记号的格子就是它
+                    ItemStack marker = new ItemStack(Items.STICK);
+                    maid.getMaidInv().setStackInSlot(0, marker);
                     int from = -1;
                     int to = -1;
                     for (int i = 0; i < her.containerMenu.slots.size(); i++) {
@@ -355,11 +352,11 @@ public class TlmGameTests {
                         if (from < 0 && slot.container == her.getInventory() && slot.getItem().is(Items.WHEAT_SEEDS)) {
                             from = i;
                         }
-                        if (to < 0 && slot instanceof SlotItemHandler own && own.getItemHandler() == maid.getMaidInv()
-                                && own.getSlotIndex() == 0) {
+                        if (to < 0 && slot.getItem() == marker) {
                             to = i;
                         }
                     }
+                    maid.getMaidInv().setStackInSlot(0, ItemStack.EMPTY);
                     helper.assertTrue(from >= 0 && to >= 0, "no seed slot or no maid slot 0 in the open GUI");
                     moved.set(lua(her, "numen.gui.move(" + from + ", " + to + ")"));
                 })
