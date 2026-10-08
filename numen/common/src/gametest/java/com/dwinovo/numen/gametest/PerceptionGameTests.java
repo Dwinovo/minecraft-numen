@@ -74,6 +74,23 @@ public class PerceptionGameTests {
         });
     }
 
+    /** 一只箱子从每一面都露出同一份存储:只列一份,面写全,不按面重复。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void inspect_block_storage_lists_a_chest_once_with_all_its_sides(GameTestHelper helper) {
+        BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
+        NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
+        ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(storage.succeeded(), "reading the chest failed: " + storage.reply());
+            String reply = storage.reply();
+            helper.assertTrue(reply.contains("(sides: all,down,up,north,south,west,east)"),
+                    "the chest is not one storage exposed on every side: " + reply);
+            helper.assertTrue(!reply.contains("items #"), "the chest is listed more than once: " + reply);
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /** 俯视图:以她为中心,东边两格的墙是 #,北边两格的台阶是 ^,西边两格的水是 ~。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void look_around_draws_walls_steps_and_water(GameTestHelper helper) {
