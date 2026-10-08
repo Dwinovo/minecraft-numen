@@ -391,8 +391,8 @@ public class RouteGameTests {
                 .thenSucceed();
     }
 
-    /** 寻路模块的长场地:224 × 24,两百格跨十几个区块,远过一次规划看得清的范围(快照从起点往外 96 格)。 */
-    private static final String LONG = "pathing_long";
+    /** 寻路模块的长场地(它的套件 numen_pathing 的模板):224 × 24,两百格跨十几个区块,远过一次规划看得清的范围(快照从起点往外 96 格)。 */
+    private static final String LONG = "numen_pathing:pathing_long";
 
     /** 长场地铺一层石头地面(y=0),她站在 y=1。 */
     private static void longFloor(GameTestHelper helper) {

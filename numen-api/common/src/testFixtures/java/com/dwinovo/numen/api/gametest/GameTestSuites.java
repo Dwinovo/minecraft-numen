@@ -49,7 +49,8 @@ public final class GameTestSuites {
 
     private static final Logger LOG = LogUtils.getLogger();
 
-    private GameTestSuites() {}
+    /** 公开的无参构造:原版调生成器方法前先实例化声明它的类,各加载器登记入口也要实例化它。 */
+    public GameTestSuites() {}
 
     /** 套件 {@code suite} 这一次被明确选中了;夹具在类加载时用它判断要不要登记只给这个套件用的东西。 */
     public static boolean selected(String suite) {

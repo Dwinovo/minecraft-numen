@@ -23,6 +23,50 @@ dependencies {
     localRuntime project(':numen:pathing')
 }
 
+/*
+ * GameTest:同一批用例(套件 numen、numen_pathing)在 Fabric 上跑,`./gradlew :numen:fabric:runGameTestServer`,
+ * `-Pgametest=numen_pathing` 选跑谁(默认是根 build.gradle 的 numenGameTestModules 带的全部套件)。
+ *
+ * 用例只用原版注解,在 numen/common 与 numen/pathing 的 gametest 里;Fabric 这一层只做两件事,都在本模块的 src/gametest(开发期的
+ * 小模组 numen_gametest,不进发行 jar):用它的 fabric.mod.json 把套件入口 GameTestSuites 登记成 `fabric-gametest` 入口,
+ * 和给模拟主人连接用的 MockConnection 实现。用例、夹具与这个小模组的输出以普通类路径进开发运行(localRuntime),
+ * 编译时对着 Numen 本体的类,运行时解析到本模块 main 的那一份。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+}
+// 结构模板:原版只在 IDE 里才从磁盘目录加载,Fabric 的 GameTest API 改从数据包的 data/<命名空间>/gametest/structure/ 加载。
+// 把各模块的模板按它的套件名(也是它的结构命名空间)放到那里,作为小模组 numen_gametest 的资源
+def fabricStructures = layout.buildDirectory.dir('gametest-structures')
+def syncFabricStructures = tasks.register('syncFabricGameTestStructures', Sync) {
+    into fabricStructures
+    rootProject.ext.numenGameTestModules.each { path ->
+        from(project(path).file('src/gametest/structures')) {
+            include '*.snbt'
+            into "data/${rootProject.ext.numenSuites[path].gametest}/gametest/structure"
+        }
+    }
+}
+sourceSets.gametest.resources.srcDir(fabricStructures)
+tasks.named('processGametestResources') { dependsOn syncFabricStructures }
+
+dependencies {
+    // 登记入口与模拟连接的接口:Numen API 的测试夹具
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    // Fabric 的 GameTest API(fabric-api 的合集 jar 里没有它)
+    modLocalRuntime fabricApi.module('fabric-gametest-api-v1', fabric_version)
+    localRuntime sourceSets.gametest.output
+    localRuntime project(':numen-api:common').sourceSets.testFixtures.output
+    localRuntime project(':numen:common').sourceSets.testFixtures.output
+    rootProject.ext.numenGameTestModules.each { localRuntime project(it).sourceSets.gametest.output }
+}
+
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+def gameTestSelection = providers.gradleProperty('gametest')
+        .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
+
 loom {
     def aw = project(':numen:common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
@@ -41,6 +85,16 @@ loom {
             ideConfigGenerated(true)
             runDir('runs/server')
         }
+        gameTestServer {
+            inherit server
+            setConfigName('Fabric GameTest Server')
+            ideConfigGenerated(false)
+            runDir('runs/gametestserver')
+            vmArg('-Dfabric-api.gametest')
+            // 结构模板目录(只有 GameTestKit 要读磁盘上的图纸夹具)与跑哪些套件:同 NeoForge 的运行配置(模板见 numen/common 的 syncGameTestStructures)
+            vmArg("-Dnumen.gametest.structures=${gameTestStructures.get().asFile}")
+            vmArg("-Dnumen.gametest.suites=${gameTestSelection.get()}")
+        }
         datagen {
             inherit client
             setConfigName('Fabric Data Generation')
@@ -54,6 +108,11 @@ loom {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    dependsOn ':numen:common:syncGameTestStructures', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses', 'gametestClasses'
+    rootProject.ext.numenGameTestModules.each { dependsOn "${it}:gametestClasses" }
+}
 
 // 联动模组的类与资源平铺进发行 jar——它本质是独立模组,只是跟车一起发。
 // 平铺在 jar 这一步,随后 remapJar 把它连同本模块的类一起换成 intermediary 名:

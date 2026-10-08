@@ -1,0 +1,17 @@
+{
+    "schemaVersion": 1,
+    "id": "numen_gametest",
+    "version": "0",
+    "name": "Numen GameTest",
+    "description": "Development-only: registers the GameTest suites with Fabric's GameTest API. Never part of the release jar.",
+    "environment": "*",
+    "entrypoints": {
+        "fabric-gametest": [
+            "com.dwinovo.numen.api.gametest.GameTestSuites"
+        ]
+    },
+    "depends": {
+        "numen": "*",
+        "fabric-gametest-api-v1": "*"
+    }
+}
