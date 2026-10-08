@@ -166,6 +166,17 @@ public class AnthropicProvider implements LlmProvider {
 
     private static final com.google.gson.Gson GSON_TREE = new com.google.gson.Gson();
 
+    /**
+     * 本协议的 prompt 缓存要显式打断点({@code cache_control}),不打就一个 token 都不缓存。
+     * 缓存前缀的顺序是 工具 → system → 消息,每个请求至多 4 个断点,这里正好用满:
+     * <ul>
+     *   <li>最后一个工具:工具清单单独成段,改了人设也照样命中;</li>
+     *   <li>system:字节级稳定的系统提示;</li>
+     *   <li>消息里最后两个可打断点的块:最后一块常是每轮现算、不进历史的
+     *       {@code <runtime_state>},下一轮就变;倒数第二块是历史的末尾,下一轮还在原处,
+     *       服务端回看时从它命中整段历史。</li>
+     * </ul>
+     */
     @Override
     public JsonObject buildRequestBody(String model, String systemPrompt,
                                         List<JsonObject> messages, JsonArray tools) {
@@ -173,13 +184,49 @@ public class AnthropicProvider implements LlmProvider {
         body.addProperty("model", model);
         body.addProperty("max_tokens", BASE_MAX_TOKENS);
         if (systemPrompt != null && !systemPrompt.isBlank()) {
-            body.addProperty("system", systemPrompt);
+            JsonObject text = new JsonObject();
+            text.addProperty("type", "text");
+            text.addProperty("text", systemPrompt);
+            text.add("cache_control", ephemeral());
+            JsonArray system = new JsonArray();
+            system.add(text);
+            body.add("system", system);
         }
-        body.add("messages", mergeConsecutiveRoles(messages));
+        JsonArray merged = mergeConsecutiveRoles(messages);
+        markLastBlocks(merged, 2);
+        body.add("messages", merged);
         if (tools != null && !tools.isEmpty()) {
-            body.add("tools", tools);
+            JsonArray marked = tools.deepCopy();
+            marked.get(marked.size() - 1).getAsJsonObject().add("cache_control", ephemeral());
+            body.add("tools", marked);
         }
         return body;
+    }
+
+    private static JsonObject ephemeral() {
+        JsonObject c = new JsonObject();
+        c.addProperty("type", "ephemeral");
+        return c;
+    }
+
+    /**
+     * 从末尾往前给 {@code count} 个块打缓存断点。思考块不能打断点,跳过;
+     * 块对象可能与调用方的消息共用,先换成副本再改。
+     */
+    private static void markLastBlocks(JsonArray messages, int count) {
+        int left = count;
+        for (int m = messages.size() - 1; m >= 0 && left > 0; m--) {
+            JsonArray blocks = messages.get(m).getAsJsonObject().getAsJsonArray("content");
+            for (int b = blocks.size() - 1; b >= 0 && left > 0; b--) {
+                JsonObject block = blocks.get(b).getAsJsonObject();
+                String type = block.get("type").getAsString();
+                if (type.equals("thinking") || type.equals("redacted_thinking")) continue;
+                JsonObject marked = block.deepCopy();
+                marked.add("cache_control", ephemeral());
+                blocks.set(b, marked);
+                left--;
+            }
+        }
     }
 
     /**
