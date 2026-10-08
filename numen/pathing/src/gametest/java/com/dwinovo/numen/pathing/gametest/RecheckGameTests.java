@@ -20,15 +20,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 执行复核:规划之后、执行之前世界变了,那一步开始前在活世界上用同一个前提复核,不成立就停下,结局点出哪一格、什么方块、
  * 哪一条前提;规划看不见的东西让身体做不到那一步时,同一步几次走不下去就收场,不无休止地重搜同一条路。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class RecheckGameTests {
 
     private static final String BATCH = "pathing_recheck";

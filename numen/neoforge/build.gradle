@@ -33,6 +33,8 @@ sourceSets {
 }
 dependencies {
     gametestImplementation project(':numen-api:neoforge')
+    // 套件机制(登记入口 GameTestSuites):各模块的用例都经它交给原版的 GameTest 框架,见 numen-api 的测试夹具
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 // GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
@@ -54,7 +56,7 @@ neoForge {
     }
     runs {
         configureEach {
-            systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
+            systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},numen_pathing")
             // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
             // /test run <用例> 现场围观也用(见 GameTestKit 静态块)。
             systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
@@ -91,13 +93,15 @@ neoForge {
             // 另外挂它自己的 GameTest 用例
             sourceSet project(':numen:pathing').sourceSets.main
             sourceSet project(':numen:pathing').sourceSets.gametest
+            // 套件机制(GameTestSuites 与套件接口):只含原版类
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
     }
 }
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
     dependsOn syncGameTestStructures
-    dependsOn 'gametestClasses', ':numen:pathing:gametestClasses'
+    dependsOn 'gametestClasses', ':numen:pathing:gametestClasses', ':numen-api:common:testFixturesClasses'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

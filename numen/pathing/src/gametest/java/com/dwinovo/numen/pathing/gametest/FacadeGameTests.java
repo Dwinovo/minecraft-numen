@@ -25,14 +25,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 门面:叫停时松开潜行、交出实际账;先规划再按挑中的候选走,走的就是那条;只搜不走时身体不动、世界不变。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class FacadeGameTests {
 
     private static final String BATCH = "pathing_facade";

@@ -20,12 +20,8 @@ import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 楼梯、半砖与矮方块:走上走下、背面侧面、转角、上半楼梯当地面、螺旋楼梯、半砖台阶、各种矮方块上走与站。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class StairGameTests {
 
     private static final String BATCH = "pathing_stairs";

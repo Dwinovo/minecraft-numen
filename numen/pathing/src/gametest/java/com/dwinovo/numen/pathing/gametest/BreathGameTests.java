@@ -19,15 +19,11 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 憋气:封顶的水道一口气游不完就不下水、结局说出那一段水下;短到憋得住的照游;上面敞开能换气的长水道照游;戴海龟壳、带着
  * 水下呼吸效果能游更长的。都断言没掉血、潜过的水照实记在账上。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class BreathGameTests {
 
     private static final String BATCH = "pathing_breath";

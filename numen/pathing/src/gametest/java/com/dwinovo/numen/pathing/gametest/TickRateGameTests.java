@@ -23,8 +23,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * tick 速率:{@code /tick rate} 调到 100 之后,挖墙(破块冷却)、搭桥(放置时转头瞄面)、绕墙走,结果与规划的一样——挖掉、放下的
@@ -34,8 +32,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
  * 结论晚到的刻数越多。测试服务器本来就不等墙钟(一刻做完接着下一刻),这一批再让搜索的线程池一直排着一队睡着的活,
  * 每次搜索的结论都要晚到很多刻,看结果变不变。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class TickRateGameTests {
 
     private static final String BATCH = "pathing_tickrate";

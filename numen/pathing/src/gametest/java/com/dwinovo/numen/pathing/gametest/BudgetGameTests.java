@@ -19,15 +19,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 预算与长途:预算用完不说成无路;长途分段接上、段与段之间不停;挖隧道的长路一段一段挖过去;要一路搭桥时先走交出的一段、
  * 边走边搜;按高度的目标垫五十格不被当成停滞;路伸进没加载的区块时说"未加载"。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class BudgetGameTests {
 
     private static final String BATCH = "pathing_budget";

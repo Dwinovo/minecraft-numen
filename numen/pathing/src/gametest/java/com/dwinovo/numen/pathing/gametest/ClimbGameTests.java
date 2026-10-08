@@ -22,12 +22,8 @@ import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.VineBlock;
 import net.minecraft.world.level.block.state.properties.Half;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 攀爬:梯子上下、藤蔓、阁楼、梯子顶端出口、脚手架、长梯子一直在推进、挂在梯子上挖。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class ClimbGameTests {
 
     private static final String BATCH = "pathing_climb";

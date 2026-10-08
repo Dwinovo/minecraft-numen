@@ -17,8 +17,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.state.properties.SlabType;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 跑酷:越过一格、两格、三格的沟(三格要疾跑助跑);跳上高一级的落点;从下半砖、楼梯上起跳,落到下半砖上;落点是耕地时不跳;
@@ -26,8 +24,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
  *
  * <p>场景都是两块基岩台子中间一道沟:沟四格深,跳下去摔不起,只能跳过去(或绕远处的桥)。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class ParkourGameTests {
 
     private static final String BATCH = "pathing_parkour";

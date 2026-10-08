@@ -19,12 +19,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.Half;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 门:木门自己开、铁门当墙、双开门、地上开着与关着的活板门、上一级与下一级与斜走途中的门、门板在侧面、通了红石的铁门。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class DoorGameTests {
 
     private static final String BATCH = "pathing_doors";

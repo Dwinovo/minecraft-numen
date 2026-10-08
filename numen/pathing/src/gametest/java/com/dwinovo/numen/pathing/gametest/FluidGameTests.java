@@ -22,12 +22,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.PressurePlateBlock;
 import net.minecraft.world.level.block.SweetBerryBushBlock;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 流体与危险:涉水、游泳、流水、岩浆、细雪与蜘蛛网、仙人掌火浆果岩浆块、压力板与绊线、两只怪之间。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class FluidGameTests {
 
     private static final String BATCH = "pathing_fluids";

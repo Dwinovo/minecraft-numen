@@ -32,16 +32,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 目标:用一格方块(狭窄矿道里的熔炉、只有一面敞开的箱子、悬崖上的工作台、隔着高草)、站上、靠近、环形站位、到某一高度、
  * 梯子上与水里的一格、远离一组生物、多个目标取其一;起点在贵成员里;最后一步进目标的同一刻搜索失败;垫柱或搭桥到目标格站稳
  * 才报到;规划之后视线被挡住;不垫柱站到目标旁上方;可站却到不了。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class GoalGameTests {
 
     private static final String BATCH = "pathing_goals";

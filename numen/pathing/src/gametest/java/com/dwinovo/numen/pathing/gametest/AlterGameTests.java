@@ -30,15 +30,11 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 许不许改地形:不许改时绕行或报"要改地形";许改时挖穿、垫柱、搭桥、向下挖;许可拒绝的格不碰、要问的格带着凭据列进路线;
  * 能绕就不挖;桥位上有单层雪时块放进那一格;不挖托着自己的那一格;改动预算不够;世界边界;按种类禁挖;不挖要去用的工作台。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class AlterGameTests {
 
     private static final String BATCH = "pathing_alter";

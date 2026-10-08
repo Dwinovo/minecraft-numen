@@ -22,8 +22,9 @@ sourceSets {
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.runtimeClasspath
     }
-    // 模块自己的 GameTest:用一个不是同伴的普通假玩家真走,只看模块与原版。由 numen:neoforge 的 GameTest 服务器
-    // 一起跑(见 numen/neoforge/build.gradle),所以不进发行 jar;模板在 src/gametest/structures。
+    // 模块自己的 GameTest:用一个不是同伴的普通假玩家真走,只看模块与原版,用例只写原版的注解。套件 numen_pathing 经
+    // META-INF/services 报到,由 numen:neoforge 的 GameTest 服务器一起跑(见 numen/neoforge/build.gradle),所以不进发行 jar;
+    // 模板在 src/gametest/structures。
     gametest {
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
@@ -38,10 +39,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    // GameTest 服务器只登记挂着 NeoForge 的 @GameTestHolder 的类:用例要看见这一个注解;另外只借它的事件总线,在用例里
-    // 扮演"别的模组取消了破坏事件"。模块自己的代码一个 NeoForge 类不用
-    gametestCompileOnly "net.neoforged:neoforge:${neoforge_version}:universal"
-    gametestCompileOnly 'net.neoforged:bus:8.0.5'
+    // GameTest 的套件机制(原版注解之外的唯一依赖):套件接口与登记的入口,见 numen-api 的测试夹具
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 test {

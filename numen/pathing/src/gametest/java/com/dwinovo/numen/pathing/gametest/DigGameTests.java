@@ -42,19 +42,13 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.level.BlockEvent;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆、冰,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
- * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;破坏事件被取消时以
+ * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;服务端退回挖掘时以
  * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离;要挖的那一格同样够得着的几个站位里,停在挡得少的那一处;
  * 埋在石头深处、藏在石山里的矿,出厂预算的一次规划就搜到头,照着挖过去。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class DigGameTests {
 
     private static final String BATCH = "pathing_dig";
@@ -413,22 +407,21 @@ public class DigGameTests {
                 });
     }
 
-    /** 石墙,手上铁镐,别的模组把这具身体的破坏事件都取消了:以"拒绝"收场,点出那一格与拒绝的理由,不空挥到超时。 */
+    /**
+     * 创造模式,石墙,快捷栏塞满调试棒(空不出手来):原版服务端不让调试棒破坏方块({@code Item.canAttackBlock}),规划不知道这条,
+     * 走到墙前才被退回。挖掘的包被退回、方块不变,以"拒绝"收场,点出那一格与拒绝的理由,不空挥到超时。
+     */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
-    public static void refuses_when_the_break_event_is_cancelled(GameTestHelper helper) {
+    public static void refuses_when_the_server_bounces_the_dig(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.STONE);
         TestBody body = t.body(4, 1, 5);
-        body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
-        Consumer<BlockEvent.BreakEvent> cancel = event -> {
-            if (event.getPlayer() == body) {
-                event.setCanceled(true);
-            }
-        };
-        NeoForge.EVENT_BUS.addListener(cancel);
+        body.setGameMode(GameType.CREATIVE);
+        for (int slot = 0; slot < 9; slot++) {
+            body.getInventory().setItem(slot, new ItemStack(Items.DEBUG_STICK));
+        }
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(300)
                 .fails(Outcome.Denied.class, o -> {
-                    NeoForge.EVENT_BUS.unregister(cancel);
                     if (!(o.reason() instanceof Mouse.Refusal.Server) || o.cell().getX() - t.origin.getX() != 8) {
                         throw new GameTestAssertException("应当以服务端不让挖收场、点出墙上那一格:" + o);
                     }

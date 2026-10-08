@@ -20,12 +20,8 @@ import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.core.Direction;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 平地:直走、斜走、绕开障碍、窄道、不切角、目标就在脚下、长距离、四面封死,以及普查补充的起步情形。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class FlatGameTests {
 
     private static final String BATCH = "pathing_flat";

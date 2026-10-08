@@ -22,8 +22,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 垫路料:没料报"没有料"、不许改地形时不提料;创造模式凭空取料、按清单变料;按清单优先级取料、副手回退、料只在背包深处
@@ -31,8 +29,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
  *
  * <p>场景都是两块基岩台子中间一道四格宽的沟(沟挖不动、跳下去摔不起),过沟只能搭桥。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class MaterialGameTests {
 
     private static final String BATCH = "pathing_materials";

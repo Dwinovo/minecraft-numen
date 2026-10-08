@@ -20,12 +20,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** 挡路的方块与净空:栅栏、墙、栅栏门、玻璃板与铁栏杆;两格高的通道、一格半的缝、头顶按真实形状、起跳不撞头。 */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class BlockGameTests {
 
     private static final String BATCH = "pathing_blocks";

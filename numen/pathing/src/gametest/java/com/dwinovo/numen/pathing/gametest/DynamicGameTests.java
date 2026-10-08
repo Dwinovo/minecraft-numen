@@ -19,15 +19,11 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 动态世界:走到一半前方被放了方块、门被关上;被推离路线、被打飞之后回到路上;重搜不无谓换道;目标在挪(跟随)。
  * 用例中途改世界走 {@link Trial#change},不算进导航的账。
  */
-@GameTestHolder("numen")
-@PrefixGameTestTemplate(false)
 public class DynamicGameTests {
 
     private static final String BATCH = "pathing_dynamic";
