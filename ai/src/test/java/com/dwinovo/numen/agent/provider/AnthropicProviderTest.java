@@ -31,10 +31,76 @@ class AnthropicProviderTest {
     void systemIsTopLevelNotAMessage() {
         JsonObject body = P.buildRequestBody("claude-sonnet-4-5", "你是同伴",
                 List.of(P.buildUserMessage("你好")), new JsonArray());
-        assertEquals("你是同伴", body.get("system").getAsString());
+        JsonObject system = body.getAsJsonArray("system").get(0).getAsJsonObject();
+        assertEquals("你是同伴", system.get("text").getAsString());
         JsonArray msgs = body.getAsJsonArray("messages");
         assertEquals(1, msgs.size());
         assertEquals("user", msgs.get(0).getAsJsonObject().get("role").getAsString());
+    }
+
+    @Test
+    void cacheBreakpointsOnLastToolSystemAndLastTwoBlocks() {
+        // 不打断点就一个 token 都不缓存:工具、system、历史末尾与最后一块各一个,共 4 个(协议上限)。
+        IToolSpec look = tool("look");
+        IToolSpec dig = tool("dig");
+        JsonObject extras = new JsonObject();
+        extras.addProperty(AnthropicProvider.SIGNATURE_KEY, "sig");
+        List<JsonObject> messages = List.of(
+                P.buildUserMessage("去挖矿"),
+                P.assistantToRequestItems(new AssistantTurn("",
+                        List.of(new LlmToolCall("tu1", "dig", "{}")), extras, "想一想")).get(0),
+                P.buildToolResultMessage("tu1", "挖到了"),
+                P.buildUserMessage("<runtime_state/>"));
+        JsonObject body = P.buildRequestBody("m", "你是同伴", messages, P.buildToolList(List.of(look, dig)));
+
+        assertTrue(body.getAsJsonArray("system").get(0).getAsJsonObject().has("cache_control"));
+        JsonArray tools = body.getAsJsonArray("tools");
+        assertFalse(tools.get(0).getAsJsonObject().has("cache_control"));
+        assertEquals("ephemeral", tools.get(1).getAsJsonObject()
+                .getAsJsonObject("cache_control").get("type").getAsString());
+
+        JsonArray msgs = body.getAsJsonArray("messages");
+        JsonArray last = msgs.get(2).getAsJsonObject().getAsJsonArray("content");
+        assertTrue(last.get(0).getAsJsonObject().has("cache_control"));   // tool_result:历史末尾
+        assertTrue(last.get(1).getAsJsonObject().has("cache_control"));   // runtime_state
+        JsonArray assistant = msgs.get(1).getAsJsonObject().getAsJsonArray("content");
+        assertFalse(assistant.get(0).getAsJsonObject().has("cache_control"));
+        assertFalse(msgs.get(0).getAsJsonObject().getAsJsonArray("content")
+                .get(0).getAsJsonObject().has("cache_control"));
+    }
+
+    @Test
+    void thinkingBlocksAreNeverMarked() {
+        // 思考块不能打断点:最后两块落在思考块上时跳过它往前找。
+        JsonObject extras = new JsonObject();
+        extras.addProperty(AnthropicProvider.SIGNATURE_KEY, "sig");
+        JsonObject assistant = P.assistantToRequestItems(
+                new AssistantTurn("好", List.of(), extras, "想一想")).get(0);
+        JsonObject body = P.buildRequestBody("m", null,
+                List.of(P.buildUserMessage("你好"), assistant), new JsonArray());
+        JsonArray msgs = body.getAsJsonArray("messages");
+        JsonArray blocks = msgs.get(1).getAsJsonObject().getAsJsonArray("content");
+        assertFalse(blocks.get(0).getAsJsonObject().has("cache_control"));
+        assertTrue(blocks.get(1).getAsJsonObject().has("cache_control"));
+        assertTrue(msgs.get(0).getAsJsonObject().getAsJsonArray("content")
+                .get(0).getAsJsonObject().has("cache_control"));
+    }
+
+    @Test
+    void markingDoesNotTouchCallerObjects() {
+        JsonArray tools = P.buildToolList(List.of(tool("look")));
+        JsonObject user = P.buildToolResultMessage("t1", "结果");
+        P.buildRequestBody("m", null, List.of(user), tools);
+        assertFalse(tools.get(0).getAsJsonObject().has("cache_control"));
+        assertFalse(user.getAsJsonArray("content").get(0).getAsJsonObject().has("cache_control"));
+    }
+
+    private static IToolSpec tool(String name) {
+        return new IToolSpec() {
+            @Override public String name() { return name; }
+            @Override public String description() { return name; }
+            @Override public Map<String, Object> parameterSchema() { return Map.of("type", "object"); }
+        };
     }
 
     @Test
