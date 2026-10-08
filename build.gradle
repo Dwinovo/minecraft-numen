@@ -22,6 +22,8 @@ ext.numenSuites = [
         ':numen:pathing' : [gametest: 'numen_pathing'],
         ':plugins:tlm'   : [gametest: 'numen_tlm', bench: 'tlm'],
 ]
+// Numen 本体的 GameTest 跑批(两个加载器上都是这一份)带哪些模块的用例;联动的 GameTest 另开一次,不在里面。
+ext.numenGameTestModules = [':numen:common', ':numen:pathing']
 ['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'

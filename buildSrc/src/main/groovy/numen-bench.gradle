@@ -27,6 +27,9 @@ def benchCommit = providers.exec { commandLine 'git', 'rev-parse', '--short=9', 
         .zip(providers.exec { commandLine 'git', 'status', '--porcelain', '--untracked-files=no' }.standardOutput.asText,
                 { head, status -> head.trim() + (status.trim().isEmpty() ? '' : '+dirty') })
 
+// 同步好的 GameTest 结构模板目录(见 numen/common 的 syncGameTestStructures):评测的场地由代码现搭,只借其中一块地板作落脚点
+def gameTestStructures = rootProject.project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+
 // 考题所在的模块,各自的 src/bench 是一个 bench 源码集;本项目自己的 bench 源码集另外是这次运行的类路径
 def benchModules = project.hasProperty('benchModules') ? project.benchModules : [project]
 def benchSuites = benchModules.collect { rootProject.ext.numenSuites[it.path].bench }
@@ -43,8 +46,6 @@ dependencies {
     // 整个 Numen API:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
     benchImplementation project(':numen-api:neoforge')
 }
-
-def numenNeoForge = project(':numen:neoforge')
 
 neoForge {
     addModdingDependenciesTo(sourceSets.bench)
@@ -76,7 +77,7 @@ neoForge {
             systemProperties.put('numen.gametest.suites', providers.gradleProperty('bench').orElse(benchSuites.join(',')))
             // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 Numen 同步好的那一份模板目录
             systemProperty('numen.gametest.structures',
-                    numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
+                    gameTestStructures.get().asFile.absolutePath)
             systemProperty('bench.pricing', rootProject.file('bench/pricing.json').absolutePath)
             systemProperties.put('bench.commit', benchCommit)
             benchParameters.each { name ->
@@ -88,7 +89,7 @@ neoForge {
 }
 
 tasks.matching { it.name == 'runBench' }.configureEach {
-    dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:neoforge:syncGameTestStructures'
+    dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:common:syncGameTestStructures'
     // 登记套件的入口与模拟主人连接的配法,在 Numen 的 GameTest 源码集与夹具里
     dependsOn ':numen:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses'
     benchModules.each { dependsOn "${it.path}:benchClasses" }

@@ -66,6 +66,13 @@ sourceSets {
 }
 neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
 
+// GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把 Numen 本体跑批带的各模块的同步进
+// 构建目录里的一处,各加载器的 GameTest 运行配置与联动、评测的运行配置都指向它(模板文件名各模块之间不重名)。
+tasks.register('syncGameTestStructures', Sync) {
+    rootProject.ext.numenGameTestModules.each { from project(it).file('src/gametest/structures') }
+    into layout.buildDirectory.dir('gameteststructures')
+}
+
 /*
  * Numen 的评测考题(套件 vanilla):src/bench,考题跟着被测的模块走。只对着评测的考场(:bench:game,模组 numen_bench)与 Numen API 写;
  * 考场不认识 Numen,考题依赖考场。:numen:neoforge:runBench 把它的输出声明进模组 numen_bench(见 buildSrc 的 numen-bench.gradle)。

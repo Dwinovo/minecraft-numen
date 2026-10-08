@@ -41,19 +41,14 @@ dependencies {
 
 // 这一次 GameTest 跑批带的有用例的模块,和它们的套件名(模块与套件名的对应在根 build.gradle 的 numenSuites 表里)。联动的 GameTest
 // 另开一次(它们的构建脚本里),不带这两个模块的用例。
-def gameTestModules = [project(':numen:common'), project(':numen:pathing')]
+def gameTestModules = rootProject.ext.numenGameTestModules.collect { project(it) }
 def gameTestSuites = gameTestModules.collect { rootProject.ext.numenSuites[it.path].gametest }
 // 跑哪些套件:默认是这一次带的全部;-Pgametest=numen_pathing(逗号分隔)只跑指定的。没给 numen.gametest.suites 就一个套件都不登记
 // (评测的运行配置就不给,见 numen-bench.gradle)
 def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.join(','))
 
-// GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把它们同步进构建目录里的一处,
-// 运行配置指向它(模板文件名各模块之间不重名)。
-def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
-def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
-    gameTestModules.each { from it.file('src/gametest/structures') }
-    into gameTestStructures
-}
+// GameTest 的结构模板:同步进 numen/common 的构建目录里的一处(见那边的 syncGameTestStructures),运行配置指向它。
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
 
 neoForge {
     version = neoforge_version
@@ -65,7 +60,7 @@ neoForge {
     }
     runs {
         configureEach {
-            // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
+            // 所有运行配置都指向同步好的 SNBT 模板目录(见 numen/common 的 syncGameTestStructures):无头跑批用,开发客户端里
             // /test run <用例> 现场围观也用(见 GameTestSuites)。
             systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
@@ -111,7 +106,7 @@ neoForge {
 }
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
-    dependsOn syncGameTestStructures
+    dependsOn ':numen:common:syncGameTestStructures'
     dependsOn 'gametestClasses', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses'
     gameTestModules.each { dependsOn "${it.path}:gametestClasses" }
 }
