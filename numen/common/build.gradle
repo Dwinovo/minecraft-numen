@@ -48,6 +48,32 @@ sourceSets {
 }
 neoForge.addModdingDependenciesTo(sourceSets.client)
 
+/*
+ * Numen 的 GameTest:用例在 src/gametest(套件 numen,见 NumenGameTestSuite),共用件(GameTestKit、Steps)在 src/testFixtures,
+ * Numen 自己的用例与联动的用例都用它。它们拉起同伴、直接摸 Numen API 的内部类(CompanionFactory、程序的回环客户端),所以看得见完整的
+ * Numen API,不是瘦 api jar。用例与夹具不进发行 jar,只是源码集(理由同 numen-api/common 的夹具);加载器的开发期运行把它们的输出声明进
+ * 模组 numen(见 numen/neoforge/build.gradle),联动的 GameTest 只带夹具、不带用例。模板在 src/gametest/structures。
+ */
+sourceSets {
+    testFixtures {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath + sourceSets.testFixtures.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath + sourceSets.testFixtures.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
+dependencies {
+    testFixturesImplementation project(':numen-api:common')
+    testFixturesImplementation project(':numen:pathing')
+    testFixturesCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestImplementation project(':numen-api:common')
+    gametestImplementation project(':numen:pathing')
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
 configurations {
     commonJava {
         canBeResolved = false

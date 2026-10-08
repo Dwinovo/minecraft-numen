@@ -1,0 +1,62 @@
+package com.dwinovo.numen.gametest;
+
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+
+import static com.dwinovo.numen.gametest.GameTestKit.*;
+
+/** 插件接口:插件登记的身体状态片段与事件送到她那里。 */
+public class PluginGameTests {
+
+    /** 插件批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_plugin")
+    public static void preparePluginBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /**
+     * 插件经那扇门挂上的东西,和 Numen API 自带的走同一条路:测试里登记一个假插件,它从身体上读一段状态
+     * (只对这只同伴说话),再登记一种事件并发一条。{@code status_self} 里有那段状态;主人不在线,
+     * 那条事件以插件登记的类型进出箱,kind 就是那个类型。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
+    public static void a_plugins_body_state_and_event_reach_her(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_charmed", new BlockPos(4, 2, 4), false);
+        UUID self = companion.getUUID();
+        com.dwinovo.numen.api.NumenPlugins.register("gt", numen -> {
+            numen.contributeBodyState(body -> body.getUUID().equals(self)
+                    ? "<gametest_charm>wearing a gametest charm</gametest_charm>" : "");
+            numen.registerEventType("gametest_charm_changed", false);
+            numen.emit(companion, "gametest_charm_changed", java.util.Map.of("slot", "neck"),
+                    "put on a gametest charm", false);
+        });
+        ToolRun reply = lua(companion, "numen.status.self()");
+        var outbox = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(reply.reply() != null, "status_self has not replied");
+            var status = dataIn(reply.reply());
+            // 身体状态片段以 Numen API 渲染的 <worn> 打头,之后接插件登记的片段:这个插件的那段紧跟在 <worn> 后面
+            helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString().startsWith("<worn>")
+                            && status.get("body_state").getAsString()
+                            .endsWith("</worn><gametest_charm>wearing a gametest charm</gametest_charm>"),
+                    "status_self leaves out what the plugin reads off her body: " + reply.reply());
+            var kept = outbox.peek(self).entries().stream()
+                    .filter(e -> e.type().equals("gametest_charm_changed")).toList();
+            helper.assertTrue(kept.size() == 1
+                            && kept.get(0).text().startsWith("<event kind=\"gametest_charm_changed\"")
+                            && kept.get(0).text().contains("slot=\"neck\""),
+                    "the plugin's event did not go out as its own kind: " + outbox.peek(self).entries());
+            outbox.forget(self);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+}

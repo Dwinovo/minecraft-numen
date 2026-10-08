@@ -3,6 +3,9 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+// 要读 Numen 的 gametest 与 testFixtures 源码集,它们得先配置好
+evaluationDependsOn(':numen:common')
+
 dependencies {
     // Numen API 同在本构建里。编译期看不见它的内部类(见 numen-loader.gradle),运行与数据生成要它在类路径上,
     // 所以是 runtimeOnly:POM 里落成运行期依赖,玩家装 Numen 就带上它。
@@ -21,9 +24,9 @@ dependencies {
 }
 
 /*
- * GameTest 的用例在 src/gametest:它们拉起同伴、直接摸引擎内部(CompanionFactory、程序的回环客户端),所以要看见完整的
- * Numen API——而 main 只看得见瘦 api jar(见 numen-loader.gradle)。用例不进发行 jar:jar 只收 main 的输出。
- * 同一个模组 numen 里的另一份源码集,运行时和 main 一样加载。
+ * GameTest 在加载器这一层只做登记:src/gametest 里是把套件入口登记给原版 GameTest 框架的一个类(SuiteRegistration),和给模拟主人
+ * 连接配频道表的 NeoForge 实现(NeoForgeMockConnection)。用例本身在 numen/common 与 numen/pathing 的 gametest 里,只用原版,
+ * 经套件报到;这里只把它们的输出声明进模组 numen(见下面的 mods)。不进发行 jar:jar 只收 main 的输出。
  */
 sourceSets {
     gametest {
@@ -32,19 +35,37 @@ sourceSets {
     }
 }
 dependencies {
-    gametestImplementation project(':numen-api:neoforge')
-    // 套件机制(登记入口 GameTestSuites):各模块的用例都经它交给原版的 GameTest 框架,见 numen-api 的测试夹具
+    // 套件机制与模拟连接的接口:各模块的用例都经它交给原版的 GameTest 框架,见 numen-api 的测试夹具
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
 
-// GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
-// 模板目录,运行前把两处同步进构建目录里的一处,运行配置指向它。
+// 这一次 GameTest 跑批带的有用例的模块:Numen 与寻路。联动的 GameTest 另开一次(它们的构建脚本里),不带这两个的用例。
+def gameTestModules = [project(':numen:common'), project(':numen:pathing')]
+
+// GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把它们同步进构建目录里的一处,
+// 运行配置指向它(模板文件名各模块之间不重名)。
 def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
 def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
-    from 'gameteststructures'
-    from project(':numen:pathing').file('src/gametest/structures')
+    gameTestModules.each { from it.file('src/gametest/structures') }
     into gameTestStructures
 }
+
+// 各模块的套件在自己的 src/gametest/resources 里用同名的 META-INF/services 文件报到;一次跑批里这几个模块的输出在模组里
+// 是同一个模块,同名文件只有一份看得见。所以把这一次带的各模块的报到文件合成一份,放进本模块的 gametest 源码集(声明在模组的最后)。
+def suiteRegistry = 'META-INF/services/com.dwinovo.numen.api.gametest.GameTestSuite'
+def mergedSuites = layout.buildDirectory.dir('gametest-suites')
+def mergeGameTestSuites = tasks.register('mergeGameTestSuites') {
+    def registries = gameTestModules.collect { it.file("src/gametest/resources/${suiteRegistry}") }
+    inputs.files(registries)
+    outputs.dir(mergedSuites)
+    doLast {
+        def merged = mergedSuites.get().file(suiteRegistry).asFile
+        merged.parentFile.mkdirs()
+        merged.text = registries.collect { it.text.trim() }.join('\n') + '\n'
+    }
+}
+sourceSets.gametest.resources.srcDir(mergedSuites)
+tasks.named('processGametestResources') { dependsOn mergeGameTestSuites }
 
 neoForge {
     version = neoforge_version
@@ -88,20 +109,23 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
-            sourceSet sourceSets.gametest
-            // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明;
-            // 另外挂它自己的 GameTest 用例
+            // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明
             sourceSet project(':numen:pathing').sourceSets.main
-            sourceSet project(':numen:pathing').sourceSets.gametest
-            // 套件机制(GameTestSuites 与套件接口):只含原版类
+            // 套件机制(GameTestSuites 与套件接口)与 Numen 的夹具:只含原版类;夹具是联动的 GameTest 也用的那一份
             sourceSet project(':numen-api:common').sourceSets.testFixtures
+            sourceSet project(':numen:common').sourceSets.testFixtures
+            // 各模块的用例
+            gameTestModules.each { sourceSet it.sourceSets.gametest }
+            // 本模块的 gametest 放最后:合并后的套件报到文件要盖过各模块自己的那份
+            sourceSet sourceSets.gametest
         }
     }
 }
 
 tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
     dependsOn syncGameTestStructures
-    dependsOn 'gametestClasses', ':numen:pathing:gametestClasses', ':numen-api:common:testFixturesClasses'
+    dependsOn 'gametestClasses', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses'
+    gameTestModules.each { dependsOn "${it.path}:gametestClasses" }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

@@ -57,6 +57,8 @@ neoForge {
             loadedMods = [mods.numen, mods.numen_bench]
             gameDirectory = project.mkdir(project.file('runs/bench'))
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
+            // numen 的用例类也在这一次的类路径上,评测不选其中任何套件(夹具不该登记进评测的她)
+            systemProperty('numen.gametest.suites', 'numen_bench')
             // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 Numen 同步好的那一份模板目录
             systemProperty('numen.gametest.structures',
                     numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)

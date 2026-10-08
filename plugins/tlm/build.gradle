@@ -27,7 +27,7 @@ dependencies {
  * 模组里,车万女仆由运行时类路径带进来,和玩家装它一样被当成模组加载。
  *
  * 用例和 Numen 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 Numen 的
- * GameTest 源码集的输出。
+ * 测试夹具(numen/common 的 src/testFixtures)的输出;Numen 自己的用例与寻路的用例不加载。
  * 它们挂自己的命名空间 numen_tlm,这一次只跑这个命名空间:Numen 的用例类照样被加载(同一个模组),但一条都不跑。
  * 结构模板用 Numen 同步好的那一份目录。
  */
@@ -43,7 +43,10 @@ neoForge {
     mods {
         numen {
             sourceSet numenNeoForge.sourceSets.main
+            // 登记套件入口与模拟连接配法的那一个源码集(加载器这一层只做这个)
             sourceSet numenNeoForge.sourceSets.gametest
+            sourceSet project(':numen:common').sourceSets.testFixtures
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
             sourceSet project(':numen:pathing').sourceSets.main
             sourceSet sourceSets.main
@@ -65,7 +68,9 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
-    gametestCompileOnly files({ numenNeoForge.sourceSets.gametest.output })
+    gametestCompileOnly project(':numen:common').sourceSets.testFixtures.output
+    // 套件接口:本联动的用例经它报到(numen_tlm)
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
     // 用例直接读她身上的外观附件(Outfit),不绕客户端
     gametestCompileOnly sourceSets.main.output
     // 整个 Numen API(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
@@ -74,11 +79,12 @@ dependencies {
 }
 
 tasks.named('compileGametestJava') {
-    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses'
+    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses'
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses', ':numen:neoforge:syncGameTestStructures'
+    dependsOn ':numen:neoforge:classes', ':numen:neoforge:gametestClasses', ':numen:neoforge:syncGameTestStructures',
+            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
 }
 
 /*

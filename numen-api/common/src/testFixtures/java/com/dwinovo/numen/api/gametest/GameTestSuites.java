@@ -39,6 +39,8 @@ public final class GameTestSuites {
 
     /** 选套件的系统属性。 */
     public static final String SELECTION = "numen.gametest.suites";
+    /** 结构模板目录的系统属性:各模块的 SNBT 模板拷进同一个目录,运行配置经它指给原版。 */
+    public static final String STRUCTURES = "numen.gametest.structures";
 
     private static final Logger LOG = LogUtils.getLogger();
 
@@ -58,6 +60,11 @@ public final class GameTestSuites {
 
     @GameTestGenerator
     public static Collection<TestFunction> all() {
+        // 模板在登记之后才加载,目录赶在这之前指好
+        String structures = System.getProperty(STRUCTURES);
+        if (structures != null) {
+            StructureUtils.testStructuresDir = structures;
+        }
         Map<String, GameTestSuite> found = new LinkedHashMap<>();
         for (GameTestSuite suite : ServiceLoader.load(GameTestSuite.class, GameTestSuite.class.getClassLoader())) {
             found.put(suite.name(), suite);
@@ -79,6 +86,12 @@ public final class GameTestSuites {
     }
 
     private static void collect(String suite, Class<?> type, List<TestFunction> out) {
+        // 用例类的静态块登记夹具(只给用例用的命令组、任务),要赶在服务器起来之前,所以此刻就初始化
+        try {
+            Class.forName(type.getName(), true, type.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
         Method[] methods = type.getDeclaredMethods();
         Arrays.sort(methods, Comparator.comparing(Method::getName));
         for (Method method : methods) {
