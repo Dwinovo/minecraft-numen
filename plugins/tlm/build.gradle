@@ -28,7 +28,7 @@ dependencies {
  *
  * 用例和 Numen 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 Numen 的
  * 测试夹具(numen/common 的 src/testFixtures)的输出;Numen 自己的用例与寻路的用例不加载。
- * 它们挂自己的命名空间 numen_tlm,这一次只跑这个命名空间:Numen 的用例类照样被加载(同一个模组),但一条都不跑。
+ * 它们是套件 numen_tlm(见 TlmGameTestSuite);Numen 与寻路的用例不在这一次的类路径上,所以只跑这一个套件。
  * 结构模板用 Numen 同步好的那一份目录。
  */
 sourceSets {
@@ -59,6 +59,9 @@ neoForge {
             ideName = "NeoForge GameTestServer (${project.path})"
             sourceSet = sourceSets.gametest
             gameDirectory = project.mkdir(project.file('runs/gametestserver'))
+            // 跑哪些套件:-Pgametest=…(逗号分隔);不给就是这一次带的全部,也就是 numen_tlm
+            systemProperties.put('numen.gametest.suites', providers.gradleProperty('gametest').orElse(''))
+            // 车万女仆自带一条它自己的 GameTest(它的 @GameTestHolder),第三方模组的用例不归我们跑:NeoForge 的命名空间过滤只放行 numen_tlm
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_tlm')
             systemProperty('numen.gametest.structures',
                     numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)

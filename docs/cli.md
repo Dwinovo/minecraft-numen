@@ -1357,7 +1357,7 @@ This call came to N bytes, more than the 8388608 bytes one message to your clien
 - 防漂移:`tlm` 组的说明与技能 `maid_keeping` 里写的每一行命令按命令树读一遍(`:plugins:tlm:test`)。
 - GameTest 单开一次跑批:`./gradlew --no-daemon :plugins:tlm:runGameTestServer`。运行配置在插件的 build.gradle,照成品拼
   一个 numen 模组(本体 + 这个联动 + 用例),车万女仆 `maven.modrinth:touhou-little-maid` 在运行时类路径上当模组加载;
-  用例挂自己的命名空间 `numen_tlm`,只跑这个命名空间。不挂进 `:numen:neoforge:runGameTestServer`:车万女仆的 mixin 会改掉
+  用例是套件 `numen_tlm`,这一次的类路径上没有 Numen 与寻路的用例,所以只跑它。不挂进 `:numen:neoforge:runGameTestServer`:车万女仆的 mixin 会改掉
   全部用例的环境。
 - 用例(从入口调):野生女仆拿蛋糕驯服并出现在 `tlm maids`、有 `maid_tamed`;切到种地、改成夜班并读回;开背包页后
   `use transfer` 放进女仆的格子;离太远失败并给 `move goto`;别人的女仆被车万女仆的主人判据拒绝;女仆死亡的急件带墓碑;

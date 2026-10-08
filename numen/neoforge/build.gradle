@@ -77,10 +77,11 @@ neoForge {
     }
     runs {
         configureEach {
-            systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},numen_pathing")
             // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
-            // /test run <用例> 现场围观也用(见 GameTestKit 静态块)。
+            // /test run <用例> 现场围观也用(见 GameTestSuites)。
             systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
+            // 跑哪些套件:-Pgametest=numen_pathing(逗号分隔);不给就是这一次带的全部
+            systemProperties.put('numen.gametest.suites', providers.gradleProperty('gametest').orElse(''))
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
         }
         client {

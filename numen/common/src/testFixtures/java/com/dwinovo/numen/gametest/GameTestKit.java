@@ -40,7 +40,7 @@ import net.minecraft.world.phys.Vec3;
  * 在结构模板圈出的场地里,用真实的生成路径拉起同伴、经真实任务队列下发指令,按 tick 轮询断言
  * 世界状态——退出码 = 失败用例数,可直接进 CI。
  *
- * <p>结构模板以 SNBT 文本存于仓库 {@code neoforge/gameteststructures/}(运行配置经系统属性
+ * <p>结构模板以 SNBT 文本存于仓库 {@code numen/common/src/gametest/structures/}(运行配置经系统属性
  * {@code numen.gametest.structures} 指路),不提交二进制 .nbt。注意两件事:模板必须是
  * gametest 的"打包" SNBT 形态(palette 为字符串、方块表叫 {@code data}——裸结构 NBT 形态
  * 会被 {@code NbtUtils.unpackStructureTemplate} 静默丢弃,一块不放);且模板方块落位在
