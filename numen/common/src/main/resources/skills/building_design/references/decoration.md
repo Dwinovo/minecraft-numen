@@ -82,13 +82,13 @@ that the rooms still have shadows.
 - **windows** — trapdoor shutters flanking the opening; a `flower_pot` or lantern
   on the sill; panes set back one cell into the wall so the opening has depth
 - **doorstep** — one stone step, two lanterns flanking, and a path of
-  `dirt_path` / `gravel` / `coarse_dirt` leading away: one `layer` grid, drawn
-  wandering rather than ruler-straight
-- **garden** — a `layer` grid of `short_grass` with two or three flower types
+  `dirt_path` / `gravel` / `coarse_dirt` leading away, wandering rather than
+  ruler-straight
+- **garden** — `short_grass` with two or three flower types
   mixed in, roughly one cell in four; a single tree off-axis beats a
   symmetrical pair
 - **chimney** — a 1x1 column past the ridge with a `campfire` on top for smoke
-- **fence yard** — a `layer` ring of `oak_fence` with a gap, or an `oak_fence_gate` in it
+- **fence yard** — a ring of `oak_fence` with a gap, or an `oak_fence_gate` in it
 - **roof interest** — a `bell` or `lightning_rod` near the ridge; lanterns hung
   under the eave corners
 - **rafter ends** — a full block poking out under the eave every 2 cells, which

@@ -1,124 +1,37 @@
 ---
 name: building_design
-description: Building design doctrine for the build API - buildings drawn as Cells with numen.shape and built with numen.build.raise, blueprint files, planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
+description: Building design knowledge for Minecraft - building sizes, floors and doorways, which way stairs, doors, trapdoors, ladders, beds, lanterns and logs face, roof geometry and the details that make a roof read as a style, interiors and what furniture is made of, mixing materials, and a library of 40 architectural style references with their materials, proportions and signature moves.
 ---
 
-# Skill: building_design
+# Building design
 
-Load this before designing anything bigger than a few blocks, and again when a
-finished build looks wrong.
-
-## Workflow
-
-1. PLAN first: purpose, footprint, height, one main material + one accent material.
-2. Inspect the site (numen.move.to / numen.scan.map): flat enough? big enough? Note the GROUND
-   level — every vertical decision below is anchored to it.
-   **Uneven ground is YOUR problem to solve, not the builder's**: the builder puts
-   blocks exactly where told, so on a slope one side of the footprint will hang in
-   the air (or bury into the hill). Scan the footprint first; if the surface varies,
-   either move the site, or give the building a foundation — a `layer` of the
-   wall material repeated from the lowest ground up to your chosen floor level
-   (costs materials in survival like any build). Stilt houses are a valid choice
-   too — just make it a choice, not an accident.
-3. Draw the building as Cells, one level at a time from the ground up, in one
-   program: each level is a `numen.shape.layer` grid (or a box, a line, a
-   cylinder), and `union` stacks them — later Cells win where two overlap, so go
-   big to small within a level and put single details last. Draw around one
-   corner `o` (`numen.shape.pos(x, y, z)`) and offset from it (`o:offset(dx, dy, dz)`),
-   so you think in the building's own terms.
-4. Check before you build: `numen.build.diff` on the Cells says how many cells
-   are left, which must be dug out first and how many are out of reach; print a
-   few cells of a level if you are unsure what you drew. Nothing is built yet.
-5. `numen.build.raise` the Cells: each round it asks `numen.build.diff` what is
-   still to do from where you stand, places what your hand reaches
-   (`numen.build.place`, which in survival prices all of it first), digs out what is
-   in the way and walks on to the lowest cell left, until all of it stands.
-6. When it ends, LOOK at the result and run the checklist below. To fix
-   something, change the program that draws the Cells and `numen.build.raise` them
-   again — it only adds what is missing and changes what differs. Nothing is
-   kept between programs: the world is what you built, so draw the same Cells
-   again (keep the program in a module of your own if you will build it twice).
+What separates a build that reads as designed from a box of blocks. The style files under `references/` describe one architectural style each; `references/decoration.md` collects finishing touches.
 
 ## Size reference (width x depth x height)
 
 - hut / shed: 7 x 7 x 6      - house / shop: 12 x 10 x 8
 - mansion / temple: 18 x 15 x 12      - castle / cathedral: 30 x 25 x 20
 
-Interior walls at least 3 tall so rooms don't feel cramped.
+Interior walls at least 3 tall so rooms don't feel cramped. Ground is rarely flat: a building on a slope either gets a
+foundation built up from the lowest ground to the floor level, or stands on stilts on purpose; otherwise one side hangs
+in the air or sinks into the hill.
 
-## THE SINGLE-FLOOR RULE (most common mistake)
+## Floors and doorways
 
-A building has EXACTLY ONE floor slab: one solid `layer` at the floor level, and
-the wall ring stacked on top of it.
+A building has **exactly one floor slab**, with the walls standing on it. A second solid course under the walls or over
+the floor half-buries the doorway, and the door jams against the raised interior.
 
-```
-floor   x1,y1,z1 rows all '#'          <- this IS the interior floor
-walls   x1,y1+1,z1  y2=y1+3  rows '#' on the perimeter, '.' inside
-```
+- A doorway is two air cells tall, cut through the wall.
+- The lower door cell sits at the level of a body standing on the interior floor — directly above the floor slab.
+- The interior walking level should equal the outside ground; if the floor slab raises it by one, a step block goes
+  outside the door.
+- Walk the doorway in your head: outside ground → (step?) → lower door cell → interior floor. Any solid block on that
+  line jams the door.
+- Windows sit 1-2 blocks above the floor, filled with glass or panes.
 
-NEVER put a second solid grid under the walls or over the floor — the doorway
-ends up half-buried and the door jams against the raised interior. The wall grid
-has '.' everywhere inside: `.` means "leave this cell alone", which is what you
-want for a room.
+## Which way a block faces
 
-## Door & floor alignment
-
-- door opening = TWO air cells, cut AFTER the walls;
-- the LOWER door cell sits at the level a body occupies when standing on the
-  interior floor — i.e. directly above the floor slab;
-- interior walking level should equal outside ground; if the floor slab raises
-  it by one, put a step block outside the door;
-- walk the doorway in your head: outside ground -> (step?) -> door lower cell
-  -> interior floor. Any solid block in that line means the door is jammed.
-
-## Drawing: numen.shape
-
-Everything is drawn as Cells — a list of Blocks, each the block for one cell —
-with the shapes of the built-in module `numen.shape`. All geometry, no style.
-What you build with them is yours. With a block each cell is that Block; without
-one, only the cells (for `numen.work.dig` or route flags).
-
-- `layer(at, rows, legend)` — a character grid stamped at one level: `at` is
-  where the first character goes. The first row sits at that z and runs +x, so
-  the grid reads like a map: north at the top, east to the right. `legend` says
-  which block each character is (`{["#"] = "cobblestone", ["<"] = "oak_stairs[facing=south]"}`);
-  `' '` and `'.'` leave a cell out. One grid is a floor, a wall ring, an
-  L-shaped footprint, a course of roof tiles, a window pattern, scattered
-  flowers. **This is the shape you will use for almost everything.** Repeat a
-  grid up a wall with `shift`: `ring:union(ring:shift(0, 1, 0))`.
-- `box(from, to, block, hollow)` — every cell between two corners, or only its
-  faces.
-- `line(from, to, block)` — two points, diagonals included: beams, posts,
-  ridges, hip lines.
-- `cylinder(base, radius, height, block, hollow)` / `sphere(center, radius,
-  block, hollow)` — round geometry; a dome is the top half of a hollow sphere.
-- Cells combine: `a:union(b)` (b wins where both have a cell), `a:minus(b)`
-  (takes b's cells out), `a:shift(dx, dy, dz)`, and `a:rotate(quarters, origin)`
-  turns them clockwise seen from above, the blocks' facing with them. Build one
-  wing, turn it for the other; draw one window bay and shift it down the wall.
-
-A small house, drawn and built in one program:
-```lua
-local S = numen.shape
-local o = S.pos(120, 64, -35)
-local floor = S.layer(o, {"#######", "#######", "#######", "#######", "#######"}, {["#"] = "cobblestone"})
-local ring = S.layer(o:offset(0, 1, 0), {"#######", "#.....#", "#.....#", "#.....#", "#######"}, {["#"] = "oak_planks"})
-local house = floor:union(ring):union(ring:shift(0, 1, 0)):union(ring:shift(0, 2, 0))
-house = house:union(S.box(o:offset(3, 1, 4), o:offset(3, 2, 4), "air"))
-house = house:union({{name = "oak_door[facing=north]", pos = o:offset(3, 1, 4)}})
-print(numen.build.diff(house).left)
-numen.build.raise(house)
-```
-
-The doorway and the door are in the same cell of the south wall (z=4); the door
-comes after the doorway, so it wins that cell.
-
-Block states ride along with the block name, exactly as in `numen.mc.run("setblock")`:
-`oak_stairs[facing=north,half=top]`, `oak_slab[type=double]`, `oak_log[axis=x]`,
-`oak_trapdoor[open=true,facing=north]`. A door or tall flower is written as its
-lower half alone and a bed as its foot — the other half appears with it.
-
-Which way a block faces (these are the game's own rules):
+These are the game's own rules (north is -z, south +z, east +x).
 
 - **stairs** — `facing` is the side the tall back is on, the way you walk UP
   them. A roof slope rises toward the ridge, so its stairs face the ridge: on a
@@ -140,44 +53,24 @@ Which way a block faces (these are the game's own rules):
 - **log / pillar** — `axis` is the way it runs: `y` upright, `x` east–west,
   `z` north–south.
 
-Where something already stands in a cell, the cell's block replaces it (in
-survival, dig it out first: `numen.build.raise` does), and an `air` cell digs that
-cell out. A cell you leave out of the Cells is left alone — adding to a building
-someone else made, draw only your additions.
 
-## Composition order (matches the bottom-up layered builder)
+## The parts of a building
 
-1. foundation: one solid `layer`, 1 thick — this IS the interior floor
-2. wall ring: one `layer` repeated from floor+1 to floor+3
-3. roof — see the roof section below. For a dome use the top half of a hollow
-   `sphere` instead.
-4. openings: a `layer` of `air` for the doorway (two cells tall) and windows
-   1-2 above the floor; the door itself is one cell, its lower half
-5. **interior fittings** — see the Interiors section. This is not a garnish: on
-   an inhabited floor it is 35-50% of the cells, so plan the room purposes and
-   the wall lines before you start drawing, not after.
-6. exterior details: stairs facing the right way, glass panes, lanterns, and a
-   sparse `layer` of flowers and grass around the yard
+1. **Foundation / floor** — one solid course, one block thick; it is the interior floor.
+2. **Walls** — from floor + 1 up to at least floor + 3.
+3. **Roof** — see below; a dome is the top half of a hollow sphere.
+4. **Openings** — doorways two cells tall, windows 1-2 above the floor.
+5. **Interior fittings** — on an inhabited floor 35-50% of the cells (see Interiors).
+6. **Exterior details** — stairs and slabs as trim, glass panes, lanterns, paths, and flowers and grass around the yard.
 
-**Two passes.** She lays everything that stands on its own first, one layer at a
-time from the ground up, and then walks the building again to fit the things that
-need something to hold onto: torches, signs, ladders, carpets, flowers, rails,
-redstone, pressure plates, buttons and hanging lanterns. You do not have to order
-those specially — draw them wherever they belong and they get deferred for
-you. It also means an upper-floor lantern is never placed into thin
-air and dropped.
-
-**Liquids are not handled.** Leave `water` and `lava` out of the Cells entirely. Dig
-and line the basin, the moat, the canal or the fountain so it is ready to hold
-water, and let the player pour it — one bucket does the whole pond. Existing water
-on the site is never drained either, so pick a dry spot or plan the build around
-it.
+Torches, signs, ladders, carpets, flowers, rails, buttons, pressure plates and hanging lanterns need a block to hold
+onto, so they go up after the blocks around them. Ponds, moats, canals and fountains are dug and lined first; one water
+source poured in spreads through a whole shallow basin.
 
 ## Roofs (the part most builds get wrong)
 
-There is no roof shape. You draw a roof course by course with `layer`, one grid per
-level, and that is the point: any shape you can draw, you can build — including
-the L-shaped and cross-shaped roofs no generator would have given you.
+There is no roof block: a roof is built course by course, one level at a time, which is why any footprint — L-shaped,
+cross-shaped — can carry a fitting roof.
 
 ### The one rule that keeps a roof watertight
 
@@ -234,8 +127,8 @@ k=1   ............
 - **Gable (two slopes)** — as above: two rows per course marching inward,
   the gable ends filled in as a triangle with the wall material.
 - **Hip (four slopes)** — each course is a RING inset by k on all four sides.
-  The four diagonals fall out of the ring corners; run a `line` of the ridge
-  material along each of them.
+  The four diagonals fall out of the ring corners; a line of the ridge
+  material runs along each of them.
 - **Pyramid** — a hip roof on a square footprint; the rings shrink to a point.
 - **Half-hip** — rings for the lower third, then switch to two rows and finish
   as a gable, with a decorated panel filling the small end wall.
@@ -325,6 +218,7 @@ A pagoda is not one roof — it is a pyramid roof repeated once per storey, each
 little smaller. Multi-winged buildings likewise get one roof per wing at
 different heights, not a single roof stretched over everything.
 
+
 ## Interiors (this is where builds are actually lost)
 
 **On an inhabited level, 35-50% of the blocks you place are furnishing.** That is
@@ -334,8 +228,8 @@ furnishing is 16% of 5859 cells. If your interior is a bed, a crafting table and
 two torches, you are not slightly under-furnished — you are two orders of
 magnitude short, and the room will read as a storage shed with a bed in it.
 
-Budget for it. A house whose shell is 3000 cells wants roughly 800-1200 more for
-the inside, and the 16384-cell limit has room for that.
+Budget for it: a house whose shell is 3000 cells wants roughly 800-1200 more for
+the inside.
 
 ### What furniture is actually made of
 
@@ -417,68 +311,35 @@ and let three or four props carry it:
 Two rooms with the same props are one room built twice. Vary the purpose before
 you vary the blocks.
 
-### Drawing it
+The state is the whole point of most interior detail blocks:
 
-Interior detail is the **last** pass — Cells unioned on top win their cells, so the
-shell goes first and the fittings go on top. Almost all of it is one cell with a
-state, because the state is the whole point:
-
-- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]` (stands on
-  the cell's south edge)
+- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]` (stands on the cell's south edge)
 - hanging shelf: `oak_trapdoor[half=top,open=false]`
 - lit hearth: `campfire[signal_fire=false,lit=true]`
 - hanging lantern: `lantern[hanging=true]` under a beam
 
-A row of barrels along a wall is a `line`; a floor of carpet and the odd pot is
-one `layer` grid — draw where each piece goes instead of sprinkling at random.
+A row of barrels along a wall, a floor of carpet with the odd pot: placed where each piece belongs, not sprinkled at
+random.
 
 ## Mix your materials
 
-A large surface in one flat colour is the single most reliable way to make a
-build look fake, so **mix every wall, floor and roof that covers real area**:
-10-20% of a weathered or contrasting variant is usually enough; the eye reads it
-as texture rather than as a pattern. Choose the variant by the cell's position,
-never by `math.random` — each round of `numen.build.raise` draws the Cells again,
-and a random pick would change the wall it already built:
+A large surface in one flat colour is the single most reliable way to make a build look fake, so **mix every wall,
+floor and roof that covers real area**: 10-20% of a weathered or contrasting variant is usually enough; the eye reads it
+as texture rather than as a pattern. Spread the variant unevenly across the surface rather than in visible stripes or
+patches.
 
-```lua
-local function mixed(cells, variant, every)
-  for _, c in ipairs(cells) do
-    if (c.pos.x * 7 + c.pos.y * 13 + c.pos.z * 31) % every == 0 then
-      c.name = variant
-    end
-  end
-  return cells
-end
-```
+## What a finished build has
 
-## Quality checklist
-
-- exactly one floor layer; doorway passable per the alignment rule above
-- large surfaces are mixes, not one flat colour
-- roofs overhang the walls, have a ridge that stands proud of the tiles, closed
-  gable ends, and no gap between neighbouring courses
-- windows 1-2 above the floor; panes or glass in the openings
-- **every inhabited level furnished, not just the ground floor** — if an upper
-  room is a bare box, the build is not finished
+- exactly one floor course; every doorway passable
+- large surfaces mixed, not one flat colour
+- roofs that overhang the walls, a ridge standing proud of the tiles, closed gable ends, and no gap between neighbouring
+  courses
+- windows 1-2 above the floor, with panes or glass
+- **every inhabited level furnished**, not just the ground floor
 - furniture along the walls, room centres clear
-- each room has one legible purpose, carried by three or four props
+- each room with one legible purpose, carried by three or four props
 - lit well enough that nothing spawns, dim enough to still have shadows
-- one main material family + one accent beats a single-material box
-
-## Command mapping
-
-- draw: `numen.shape.layer`, `numen.shape.box`, `numen.shape.line`,
-  `numen.shape.cylinder`, `numen.shape.sphere`; combine with `union`, `minus`,
-  `shift`, `rotate`; block states ride in the block name; `air` clears
-- `numen.build.diff` of the Cells says what is still to do and where, without building
-- `numen.build.place` of the Cells places what your hand reaches from where you stand,
-  each cell once; `numen.build.raise` of them walks the site until all of it stands
-- a single block: `numen.build.place({{name = "crafting_table", pos = {x = 120, y = 64, z = -35}}})`
-- whole structure files: `numen.build.blueprint("cottage", {x = 120, y = 64, z = -35})`
-  reads one placed at a spot (size, cells, materials, what you are short of) and
-  `numen.build.raise` of it builds it; placing the same file at the same spot again
-  changes that building to match the file; liquids are always skipped
+- one main material family plus one accent, rather than a single-material box
 
 ## Style references — how to read them
 
@@ -501,14 +362,14 @@ a style and the reasoning behind it; composing the actual building stays yours.
 
 **Two buildings in the same style SHOULD differ** in footprint, height, massing
 and exact blocks. If yours come out as twins, you are reading the reference as a
-template — go back and re-roll the proportions and the material picks.
+template rather than as a vocabulary.
 
 A style file deliberately never names tool parameters. It says the roof is "low
 and wide with lifted corners"; translating that into courses, materials, an
 overhang and a corner lift is yours to do, and doing it differently on two
 buildings of the same style is the point, not a mistake.
 
-Load one with the skill tool: skill `building_design`, file `references/baroque.md` (any style file name below).
+Each style is the file `references/<name>.md` of this skill, e.g. `references/baroque.md`.
 
 ### East Asia
 `japanese_minka` 和风民居 · `japanese_shrine` 神社 · `japanese_castle` 天守 ·
@@ -543,9 +404,8 @@ Load one with the skill tool: skill `building_design`, file `references/baroque.
 `underwater` 水下
 
 `ruins_overgrown` 废墟 is not a style of its own — it is a **treatment you apply
-on top of any other one**. Load it together with the base style whenever the
-player asks for something ruined, abandoned, ancient or reclaimed.
+on top of any other one**: a ruined, abandoned, ancient or reclaimed version of a base style.
 
-Also `references/decoration.md` — finishing-touch recipes (windows, paths,
-gardens, chimneys, interiors); load it before the detail pass of any build.
+`references/decoration.md` collects finishing touches (windows, paths, gardens,
+chimneys, interiors) that work in any style.
 

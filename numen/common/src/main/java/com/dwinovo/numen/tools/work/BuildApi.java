@@ -77,6 +77,9 @@ public final class BuildApi {
     @Note("Survival: Cells are priced as a whole before the first block and refused, placing nothing, when anything is "
             + "short; a blueprint builds as far as your stock goes. Where another block stands it places nothing: dig "
             + "it out first with numen.work.dig (numen.build.diff lists those cells). Creative replaces it at once.")
+    @Note("Blocks that hang on others (torches, ladders, signs, carpets, flowers, rails, buttons, hanging lanterns) go "
+            + "in after the blocks around them. A door or a tall plant is written as its lower half and a bed as its "
+            + "foot; the other half comes with it. Liquids (water, lava) are never placed.")
     @Note("Asks your owner first when their rules say so, for the cells it would change; a refusal stops it with their "
             + "words.")
     @SeeAlso({"numen.build.diff", "numen.build.raise", "numen.task.stop"})
