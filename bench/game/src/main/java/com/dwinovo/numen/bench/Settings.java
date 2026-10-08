@@ -11,7 +11,7 @@ import java.util.List;
  * 这一次评测的设置,全部来自运行配置传进来的系统属性(见 {@code docs/bench.md}),API key 例外:只从环境变量
  * {@value #KEY_ENV} 读,不经任何属性、文件或日志。
  *
- * @param scenarios 要跑的场景({@code bench.scenarios},逗号隔开:{@code all}、组名、场景名);空 = 什么都不跑
+ * @param scenarios 要跑的场景({@code bench.scenarios},逗号隔开:场景名,或 {@code 组名/场景名});空 = 选中的套件里的全部
  * @param repeats   真实模型每个场景跑几次({@code bench.repeats});0 = 只跑两种基线
  * @param commit    跑的是哪个提交({@code bench.commit},由构建脚本算好)
  * @param shard     并行跑时这个服务器是第几份({@code bench.shard} 写成 {@code 第几份/共几份},从 0 数);一个服务器跑全部是 0

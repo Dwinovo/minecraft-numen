@@ -1,16 +1,21 @@
 /**
- * 真模型评测的场景源码集与运行配置(设计与用法见 docs/bench.md),原版(numen/neoforge)与各联动共用这一份。
+ * 真模型评测的运行配置(设计与用法见 docs/bench.md),原版(numen/neoforge)与各联动共用这一份。
  *
- * <p>场景写在本项目的 {@code src/bench},和评测的机器({@code :bench}、{@code :bench:game})一起组成模组
- * {@code numen_bench},只在 {@code runBench} 这一次运行里加载:发行 jar 只收 main,本项目别的运行只加载 {@code numen}。
+ * <p>评测的机器({@code :bench}、{@code :bench:game},考场)只依赖 Numen API、不认识任何插件;考题是 GameTest 套件,跟着被测的模块走:
+ * 写在那个模块的 {@code src/bench}(Numen 的在 numen/common,联动的在联动自己)。一次评测运行 = 考场 + Numen API + 选中的考题 +
+ * 它们要测的模块与目标模组,考场和考题一起组成模组 {@code numen_bench},只在 {@code runBench} 这一次运行里加载。
+ *
+ * <p>考哪几套由 {@code -Pbench=套件名,…} 选,默认是本项目带的全部(套件名出自根 build.gradle 的 {@code numenSuites} 表,只此一处);
+ * 套件里考哪几个场景由 {@code -Dbench.scenarios} 再收窄。
  *
  * <pre>
- * ./gradlew :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
- * ./gradlew :numen:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+ * ./gradlew :numen:neoforge:runBench -Dbench.repeats=3
+ * ./gradlew :numen:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
  * </pre>
  *
  * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen}。
- * 本项目在 {@code benchImplementation} 里补上场景要的目标模组(车万女仆这类)。
+ * 考题所在的模块默认是本项目自己;考题在别处的(numen/neoforge,考题在 numen/common)在应用之前设 {@code ext.benchModules}。
+ * 本项目的 {@code bench} 源码集是运行的类路径:联动在 {@code benchImplementation} 里补上考题要的目标模组(车万女仆这类)。
  */
 
 /** 评测的参数:{@code -P} 或 {@code -D} 给 Gradle 都认,原样转成游戏进程的系统属性;没给的传空串,由评测按默认值处理。 */
@@ -22,13 +27,19 @@ def benchCommit = providers.exec { commandLine 'git', 'rev-parse', '--short=9', 
         .zip(providers.exec { commandLine 'git', 'status', '--porcelain', '--untracked-files=no' }.standardOutput.asText,
                 { head, status -> head.trim() + (status.trim().isEmpty() ? '' : '+dirty') })
 
+// 考题所在的模块,各自的 src/bench 是一个 bench 源码集;本项目自己的 bench 源码集另外是这次运行的类路径
+def benchModules = project.hasProperty('benchModules') ? project.benchModules : [project]
+def benchSuites = benchModules.collect { rootProject.ext.numenSuites[it.path].bench }
+
 sourceSets {
     bench {}
 }
 
 dependencies {
-    // 场景只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
+    // 考题只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
     benchCompileOnly project(':bench:game')
+    // 考题实现 GameTestSuite
+    benchCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
     // 整个 Numen API:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
     benchImplementation project(':numen-api:neoforge')
 }
@@ -41,7 +52,10 @@ neoForge {
         numen_bench {
             sourceSet project(':bench').sourceSets.main
             sourceSet project(':bench:game').sourceSets.main
-            sourceSet sourceSets.bench
+            benchModules.each { sourceSet it.sourceSets.bench }
+            if (!benchModules.contains(project)) {
+                sourceSet sourceSets.bench
+            }
         }
     }
     runs {
@@ -56,7 +70,10 @@ neoForge {
             sourceSet = sourceSets.bench
             loadedMods = [mods.numen, mods.numen_bench]
             gameDirectory = project.mkdir(project.file('runs/bench'))
+            // 车万女仆这类目标模组自带它们的 GameTest,不归我们跑:NeoForge 的命名空间过滤只放行评测的
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
+            // 考哪几套:默认是本项目带的全部,-Pbench 覆盖
+            systemProperties.put('numen.gametest.suites', providers.gradleProperty('bench').orElse(benchSuites.join(',')))
             // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 Numen 同步好的那一份模板目录
             systemProperty('numen.gametest.structures',
                     numenNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
@@ -72,6 +89,9 @@ neoForge {
 
 tasks.matching { it.name == 'runBench' }.configureEach {
     dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:neoforge:syncGameTestStructures'
+    // 登记套件的入口与模拟主人连接的配法,在 Numen 的 GameTest 源码集与夹具里
+    dependsOn ':numen:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses'
+    benchModules.each { dependsOn "${it.path}:benchClasses" }
 }
 
 /**
@@ -141,4 +161,5 @@ tasks.register('runBenchParallel') {
 // 场景跟着构建一起编译:产品的接口改了,评测当场编不过,而不是等下次跑评测才发现
 tasks.named('check') {
     dependsOn 'benchClasses'
+    benchModules.each { dependsOn "${it.path}:benchClasses" }
 }

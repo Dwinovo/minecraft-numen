@@ -58,12 +58,11 @@ public final class Suite {
         return Collections.unmodifiableMap(scenarios);
     }
 
-    /** {@code wanted} 里点到的场景:写 {@code all}、组名,或场景名({@code 组名/场景名} 也认)。 */
+    /** {@code wanted} 里点到的场景:写场景名({@code 组名/场景名} 也认);{@code wanted} 空就是全部。 */
     List<String> pick(List<String> wanted) {
         List<String> out = new ArrayList<>();
         for (String id : scenarios.keySet()) {
-            if (wanted.contains("all") || wanted.contains(name) || wanted.contains(id)
-                    || wanted.contains(name + "/" + id)) {
+            if (wanted.isEmpty() || wanted.contains(id) || wanted.contains(name + "/" + id)) {
                 out.add(id);
             }
         }

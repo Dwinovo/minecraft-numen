@@ -11,8 +11,11 @@ import net.neoforged.fml.common.Mod;
  * 服务端,没有客户端来接,所以在这里接同一扇门——只接技能,插件的客户端块照旧不跑——再扫一遍技能表。
  * 玩家自己的技能目录不扫:评测比的是自带的那一份。
  */
-@Mod(Bench.NAMESPACE)
+@Mod(NumenBench.MOD_ID)
 public final class NumenBench {
+
+    /** 模组 id,也是评测用例的命名空间。 */
+    public static final String MOD_ID = "numen_bench";
 
     public NumenBench() {
         NumenPlugins.bindSkills(root -> SkillRegistry.instance().declareBundled(root));

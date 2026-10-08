@@ -1,17 +1,20 @@
 package com.dwinovo.numen.scenario;
 
+import com.dwinovo.numen.api.gametest.GameTestSuite;
 import com.dwinovo.numen.bench.Bench;
 import net.minecraft.gametest.framework.GameTestGenerator;
 import net.minecraft.gametest.framework.TestFunction;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 
 import java.util.Collection;
+import java.util.List;
 
-/** 原版的评测场景:只用原版方块与物品,不挂任何联动。 */
-@GameTestHolder(Bench.NAMESPACE)
-public final class VanillaBench {
+/** 原版的评测场景(套件 vanilla):只用原版方块与物品,不挂任何联动。 */
+public final class VanillaBench implements GameTestSuite {
 
-    private VanillaBench() {}
+    @Override
+    public List<Class<?>> classes() {
+        return List.of(VanillaBench.class);
+    }
 
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {

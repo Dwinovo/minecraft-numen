@@ -39,13 +39,13 @@ dependencies {
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }
 
-// 这一次 GameTest 跑批带的有用例的模块,和各自的套件名(套件名与模块的对应只在这里定义)。联动的 GameTest 另开一次(它们的构建脚本里),
-// 不带这两个模块的用例。
-def gameTestSuites = [':numen:common': 'numen', ':numen:pathing': 'numen_pathing']
-def gameTestModules = gameTestSuites.keySet().collect { project(it) }
+// 这一次 GameTest 跑批带的有用例的模块,和它们的套件名(模块与套件名的对应在根 build.gradle 的 numenSuites 表里)。联动的 GameTest
+// 另开一次(它们的构建脚本里),不带这两个模块的用例。
+def gameTestModules = [project(':numen:common'), project(':numen:pathing')]
+def gameTestSuites = gameTestModules.collect { rootProject.ext.numenSuites[it.path].gametest }
 // 跑哪些套件:默认是这一次带的全部;-Pgametest=numen_pathing(逗号分隔)只跑指定的。没给 numen.gametest.suites 就一个套件都不登记
 // (评测的运行配置就不给,见 numen-bench.gradle)
-def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.values().join(','))
+def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.join(','))
 
 // GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把它们同步进构建目录里的一处,
 // 运行配置指向它(模板文件名各模块之间不重名)。
@@ -152,6 +152,7 @@ tasks.named('check') {
     dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test')
 }
 
-// 真模型评测:原版的场景在 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 真模型评测:Numen 的考题在 numen/common 的 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
 // 放在末尾:它要用到上面定义好的模组 numen。
+ext.benchModules = [project(':numen:common')]
 apply plugin: 'numen-bench'

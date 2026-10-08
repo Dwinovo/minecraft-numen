@@ -11,16 +11,19 @@ pass^k、轮数、token、每次成功的成本与失败类型。每次改命令
 
 ```bash
 # 只跑两种基线(标准解、空操作),不花 API:验证场景与断言
-./gradlew --no-daemon :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=0
+./gradlew --no-daemon :numen:neoforge:runBench -Dbench.repeats=0
 
 # 真实模型,每个场景 3 次(key 只从环境变量读)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBench -Dbench.repeats=3
 
 # 并行跑:几个服务器进程各跑一份场景,跑完并成一份结果(几份由 bench.parallel 给,不给按处理器数取,见 §九)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
 
-# 车万女仆的场景:挂着车万女仆单开一次(原版那次不挂)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.scenarios=tlm -Dbench.repeats=3
+# 车万女仆的考题:挂着车万女仆单开一次(原版那次不挂)
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.repeats=3
+
+# 只考某一套、某几个场景
+./gradlew --no-daemon :numen:neoforge:runBench -Pbench=vanilla -Dbench.scenarios=mine_iron,guard_owner -Dbench.repeats=0
 
 # 对比两份结果(路径相对仓库根,报告打到标准输出)
 ./gradlew --no-daemon -q :bench:compare -Pbefore=numen/neoforge/runs/bench/results/<时间戳> -Pafter=numen/neoforge/runs/bench/results/<时间戳>
@@ -28,7 +31,8 @@ NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.s
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `bench.scenarios` | 空 = 什么都不跑 | 逗号隔开:`all`、组名(`vanilla`、`tlm`)、场景名(`mine_iron`)或 `组名/场景名` |
+| `bench`(只能用 `-P`) | 本次运行带的全部套件:`:numen:neoforge:runBench` 是 `vanilla`,`:plugins:tlm:runBench` 是 `tlm`(套件名出自根 `build.gradle` 的 `numenSuites` 表) | 考哪几套,逗号隔开;其余的套件一个都不登记 |
+| `bench.scenarios` | 空 = 选中的套件里的全部 | 再收窄到哪几个场景,逗号隔开:场景名(`mine_iron`)或 `组名/场景名` |
 | `bench.repeats` | 3 | 真实模型每个场景跑几次;0 = 只跑基线 |
 | `bench.provider` | `deepseek` | 服务商,同产品的服务商表 |
 | `bench.model` | `deepseek-v4-flash` | 模型 |
@@ -48,11 +52,11 @@ NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.s
 
 ```
 GameTest 服务器(runs/bench)
-├─ 模组 numen            产品本体,原样
+├─ 模组 numen            产品本体,原样(含 Numen 的 GameTest 登记入口与测试夹具:模拟主人的连接就在夹具里)
 └─ 模组 numen_bench      评测:只在 runBench 里加载
      ├─ :bench           纯 JVM:记录、统计、报告、对比
-     ├─ :bench:game      场景接口、运行器、评测大脑、模拟主人
-     └─ 场景源码集        numen/neoforge/src/bench(原版)、plugins/<联动>/src/bench
+     ├─ :bench:game      考场:场景接口、运行器、评测大脑;只依赖 Numen API,不认识任何插件
+     └─ 考题源码集        numen/common/src/bench(Numen 的,套件 vanilla)、plugins/<联动>/src/bench(联动的)
 ```
 
 - **大脑**:循环内核 `AgentLoop` 原样,四个端口在服务端进程里接上(`Brain`)。请求由产品的
@@ -61,12 +65,12 @@ GameTest 服务器(runs/bench)
   和主人客户端不同的只有:人设用内置默认人设,主动性用默认档位,插件在客户端现算的状态片段没有(没有客户端)。
 - **上行**:整段程序照产品的路走到 `ProgramUplink`,它的上行出口 `ProgramUplink.wire` 在评测里直接交给服务端真实入口
   (`RunProgramPayload.handle`,停止与客户端函数的答复同样),发送者是模拟主人,上行的包按网络的样子编解码一遍。
-- **模拟主人**:一个在线的 `ServerPlayer`,连接是 `OwnerConnection`。发给主人的模组载荷截下来,按网络的样子
-  编解码一遍,照主人客户端的做法交给大脑:程序的回执(与每次调用的结局)给上行部件,服务端要客户端执行的函数交给 `ClientEndpoint`,
+- **模拟主人**:一个在线的 `ServerPlayer`,连接是 Numen API 测试夹具里的 `OwnerLine`(GameTest 的模拟主人也是它)。发给主人的
+  模组载荷停在它的队列里,每刻开头取走,按网络的样子编解码一遍,照主人客户端的做法交给大脑:程序的回执(与每次调用的结局)给上行部件,服务端要客户端执行的函数交给 `ClientEndpoint`,
   当前任务与身体状态给运行期状态,世界事件进收件箱,
   征询按剧本经 `ConsentDesk.reply` 答复,死亡切断循环。
-  下行包过得了 NeoForge 的频道检查,是因为连接用 NeoForge 给 GameTest 的 `NetworkRegistry.configureMockConnection`
-  写上了协商好的频道表(同伴的 `FakeConnection` 不需要:numen 的 mixin 在检查之前就把发给它的包丢了)。
+  下行包过得了 NeoForge 的频道检查,是因为 `OwnerLine` 经 `MockConnection`(加载器的开发期实现,NeoForge 的是
+  `NetworkRegistry.configureMockConnection`)写上了协商好的频道表(同伴的 `FakeConnection` 不需要:numen 的 mixin 在检查之前就把发给它的包丢了)。
 - **技能**:主人客户端起来时把自带技能接进技能表;评测没有客户端,`numen_bench` 构造时经同一扇门
   (`NumenPlugins.bindSkills`)接上,玩家自己的技能目录不扫。
 - **每次运行从白纸开始**:新的场地(彼此隔 512 格,任何扫描都看不见上一块)、新的她(新 UUID)、新的主人、
@@ -100,11 +104,14 @@ API 返回 402(余额不足)时不再调模型,余下的真实模型运行全部
 
 ## 四、加一个场景
 
-场景实现 `Scenario`,组用 `Bench.suite` 登记,写法同登记命令组:
+场景实现 `Scenario`。考题跟着被测的模块走(Numen 的在 `numen/common/src/bench`,联动的在联动自己的 `src/bench`),一组是一个 GameTest
+套件,用 `Bench.suite` 登记:套件类实现 `GameTestSuite`(和别的 GameTest 同一个机制:按名字报到、由运行配置选),资源
+`META-INF/numen/gametest/套件名`(如 `tlm`)写套件类的全名:
 
 ```java
-@GameTestHolder(Bench.NAMESPACE)
-public final class TlmBench {
+public final class TlmBench implements GameTestSuite {
+    public List<Class<?>> classes() { return List.of(TlmBench.class); }
+
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {
         return Bench.suite("tlm", "Touhou Little Maid: taming and keeping maids.",
@@ -128,8 +135,9 @@ public final class TlmBench {
 每次运行造一个新实例(`suite.add` 收构造器),这一次生成的东西(一只女仆)放在场景自己的字段里。坐标相对场地:
 地板在 y=0,站在地板上是 y=1。
 
-**插件的场景**放在插件自己的 `src/bench` 源码集里,由插件自己的 `runBench` 挂上目标模组跑(照 `plugins/tlm/build.gradle`):
-场景源码集编译对着 `:bench:game`,运行时和 `:bench`、`:bench:game` 一起组成模组 `numen_bench`。
+**插件的考题**放在插件自己的 `src/bench` 源码集里,由插件自己的 `runBench` 挂上目标模组跑(照 `plugins/tlm/build.gradle`):
+考题源码集编译对着 `:bench:game`(考场不依赖考题,方向只能是考题依赖考场),运行时和 `:bench`、`:bench:game` 一起组成模组
+`numen_bench`。套件名在根 `build.gradle` 的 `numenSuites` 表里登一行。
 
 ---
 

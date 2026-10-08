@@ -65,6 +65,25 @@ sourceSets {
     }
 }
 neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
+
+/*
+ * Numen 的评测考题(套件 vanilla):src/bench,考题跟着被测的模块走。只对着评测的考场(:bench:game,模组 numen_bench)与 Numen API 写;
+ * 考场不认识 Numen,考题依赖考场。:numen:neoforge:runBench 把它的输出声明进模组 numen_bench(见 buildSrc 的 numen-bench.gradle)。
+ */
+sourceSets {
+    bench {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.bench)
+dependencies {
+    benchCompileOnly project(':bench')
+    // 考场是对着 NeoForge 编的(它的模组入口),这里只要它的评测接口,不要它传递进来的加载器
+    benchCompileOnly(project(':bench:game')) { transitive = false }
+    benchCompileOnly project(':numen-api:common')
+    benchCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
 dependencies {
     testFixturesImplementation project(':numen-api:common')
     testFixturesImplementation project(':numen:pathing')
