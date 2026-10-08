@@ -69,12 +69,12 @@ import java.util.stream.Stream;
  * <h2>Wire format injected into the system prompt</h2>
  * {@link #formatXml()} produces, every turn, a block of the form
  * <pre>
- * Skills provide specialized instructions and workflows for specific tasks.
- * Use the skill tool to load a skill when a task matches its description.
+ * Skills are reference knowledge: how the game and the mods in this world work, their numbers and ids.
+ * Use the skill tool to read a skill when what you are about to do touches its topic.
  * &lt;available_skills&gt;
  *   &lt;skill&gt;
- *     &lt;name&gt;build_hut&lt;/name&gt;
- *     &lt;description&gt;Build a small 2x2 hut at the player's location.&lt;/description&gt;
+ *     &lt;name&gt;mining_and_ores&lt;/name&gt;
+ *     &lt;description&gt;Which pickaxe harvests which block and the height every ore generates at.&lt;/description&gt;
  *   &lt;/skill&gt;
  * &lt;/available_skills&gt;
  * </pre>
@@ -320,9 +320,9 @@ public final class SkillRegistry {
         if (described.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder(256);
-        sb.append("Skills provide specialized instructions and workflows for specific tasks.\n");
+        sb.append("Skills are reference knowledge: how the game and the mods in this world work, their numbers and ids.\n");
         sb.append("Use the ").append(com.dwinovo.numen.api.agent.tool.SkillTool.NAME)
-                .append(" tool to load a skill when a task matches its description.\n");
+                .append(" tool to read a skill when what you are about to do touches its topic.\n");
         sb.append("<available_skills>\n");
         for (SkillInfo s : described) {
             sb.append("  <skill>\n");

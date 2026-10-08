@@ -33,12 +33,12 @@ public final class SkillTool implements NumenTool {
     @Override
     public String description() {
         // 照 Claude Code 的 Skill 工具写:动词起头,说清什么时候用、结果是什么
-        return "Loads a skill — the detailed workflow for one kind of task — and returns its instructions as this "
-                + "call's result.\n"
-                + "- <available_skills> in the system prompt lists each skill and what it is for. When a task you "
-                + "are asked to do matches one, load it before you start on the task, then follow it.\n"
-                + "- A loaded skill is a <skill_content name=\"…\"> block in the conversation, whether this tool or "
-                + "your owner's slash command put it there; while it is in the conversation, follow it from there.\n"
+        return "Reads a skill — reference knowledge on one topic: how the game or a mod works, its numbers and ids — "
+                + "and returns its text as this call's result.\n"
+                + "- <available_skills> in the system prompt lists each skill and what it covers. When something you "
+                + "are about to do touches one of those topics, read it first.\n"
+                + "- A read skill is a <skill_content name=\"…\"> block in the conversation, whether this tool or "
+                + "your owner's slash command put it there; while it is in the conversation, it is there to look up.\n"
                 + "- A skill's text may name a supporting file by relative path; load that with file when the text "
                 + "sends you there.\n"
                 + "- A long text comes a page at a time; its last line says which page to ask for next.";
