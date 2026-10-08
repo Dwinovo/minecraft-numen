@@ -1,5 +1,12 @@
 package com.dwinovo.numen.api.platform;
 
+import com.dwinovo.numen.api.platform.services.BlockStorageReading;
+import com.dwinovo.numen.api.platform.services.BlockStorageReading.Energy;
+import com.dwinovo.numen.api.platform.services.BlockStorageReading.FluidTank;
+import com.dwinovo.numen.api.platform.services.BlockStorageReading.FluidTanks;
+import com.dwinovo.numen.api.platform.services.BlockStorageReading.ItemInventory;
+import com.dwinovo.numen.api.platform.services.BlockStorageReading.ItemSlot;
+import com.dwinovo.numen.api.platform.services.Exposures;
 import com.dwinovo.numen.api.platform.services.IBlockCapabilityReader;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,9 +20,7 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * NeoForge implementation of {@link IBlockCapabilityReader} — reads a block's
@@ -26,95 +31,53 @@ import java.util.Map;
  * combined handler there, but several (Industrial Foregoing, Mekanism disabled
  * faces, Thermal side-config) return {@code null} for {@code null} and ONLY
  * expose per-face handlers. There is no documented contract that null-side is a
- * combined view, so we probe {@code null} + all six {@link Direction}s and
- * de-duplicate the returned handlers by identity, recording which sides exposed
- * each one.
+ * combined view, so we probe {@code null} + all six {@link Direction}s
+ * ({@link Exposures}, which also decides what counts as the same storage).
  */
 public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityReader {
 
     @Override
-    public List<String> describe(Level level, BlockPos pos) {
-        List<String> out = new ArrayList<>();
-        appendItems(level, pos, out);
-        appendFluids(level, pos, out);
-        appendEnergy(level, pos, out);
-        return out;
+    public BlockStorageReading read(Level level, BlockPos pos) {
+        return new BlockStorageReading(
+                new Exposures<ItemInventory>()
+                        .probe(d -> items(level.getCapability(Capabilities.ItemHandler.BLOCK, pos, d))).found(),
+                new Exposures<FluidTanks>()
+                        .probe(d -> fluids(level.getCapability(Capabilities.FluidHandler.BLOCK, pos, d))).found(),
+                energy(level, pos));
     }
 
-    private void appendItems(Level level, BlockPos pos, List<String> out) {
-        Map<IItemHandler, List<String>> byHandler = new IdentityHashMap<>();
-        collect(byHandler, level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null), "all");
-        for (Direction d : Direction.values()) {
-            collect(byHandler, level.getCapability(Capabilities.ItemHandler.BLOCK, pos, d), d.getName());
+    private static ItemInventory items(IItemHandler handler) {
+        if (handler == null) return null;
+        List<ItemSlot> slots = new ArrayList<>();
+        for (int s = 0; s < handler.getSlots(); s++) {
+            ItemStack stack = handler.getStackInSlot(s);
+            slots.add(stack.isEmpty() ? ItemSlot.EMPTY
+                    : new ItemSlot(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
         }
-        if (byHandler.isEmpty()) return;
-        int idx = 0;
-        for (Map.Entry<IItemHandler, List<String>> e : byHandler.entrySet()) {
-            IItemHandler h = e.getKey();
-            out.add("items" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
-                    + String.join(",", e.getValue()) + "), " + h.getSlots() + " slots:");
-            boolean any = false;
-            for (int s = 0; s < h.getSlots(); s++) {
-                ItemStack st = h.getStackInSlot(s);
-                if (st.isEmpty()) continue;
-                any = true;
-                out.add("  slot " + s + ": " + itemId(st) + " x" + st.getCount());
-            }
-            if (!any) {
-                out.add("  (all " + h.getSlots() + " slots empty)");
-            }
-            idx++;
-        }
+        return new ItemInventory(slots);
     }
 
-    private void appendFluids(Level level, BlockPos pos, List<String> out) {
-        Map<IFluidHandler, List<String>> byHandler = new IdentityHashMap<>();
-        collect(byHandler, level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null), "all");
-        for (Direction d : Direction.values()) {
-            collect(byHandler, level.getCapability(Capabilities.FluidHandler.BLOCK, pos, d), d.getName());
+    private static FluidTanks fluids(IFluidHandler handler) {
+        if (handler == null) return null;
+        List<FluidTank> tanks = new ArrayList<>();
+        for (int t = 0; t < handler.getTanks(); t++) {
+            FluidStack stack = handler.getFluidInTank(t);
+            tanks.add(stack.isEmpty()
+                    ? new FluidTank(null, 0, handler.getTankCapacity(t))
+                    : new FluidTank(BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString(), stack.getAmount(),
+                            handler.getTankCapacity(t)));
         }
-        if (byHandler.isEmpty()) return;
-        int idx = 0;
-        for (Map.Entry<IFluidHandler, List<String>> e : byHandler.entrySet()) {
-            IFluidHandler h = e.getKey();
-            out.add("fluids" + (byHandler.size() > 1 ? " #" + idx : "") + " (sides: "
-                    + String.join(",", e.getValue()) + "):");
-            for (int t = 0; t < h.getTanks(); t++) {
-                FluidStack fs = h.getFluidInTank(t);
-                out.add("  tank " + t + ": " + (fs.isEmpty() ? "empty" : fluidId(fs) + " " + fs.getAmount())
-                        + "/" + h.getTankCapacity(t) + " mB");
-            }
-            idx++;
-        }
+        return new FluidTanks(tanks);
     }
 
-    private void appendEnergy(Level level, BlockPos pos, List<String> out) {
+    /** 能量取第一个露出的:先不指定面,再逐面。 */
+    private static Energy energy(Level level, BlockPos pos) {
         IEnergyStorage en = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, null);
-        if (en == null) {
-            for (Direction d : Direction.values()) {
-                en = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, d);
-                if (en != null) break;
-            }
+        for (Direction d : Direction.values()) {
+            if (en != null) break;
+            en = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, d);
         }
-        if (en == null) return;
-        List<String> io = new ArrayList<>();
-        if (en.canReceive()) io.add("accepts");
-        if (en.canExtract()) io.add("provides");
-        out.add("energy: " + en.getEnergyStored() + "/" + en.getMaxEnergyStored() + " FE"
-                + (io.isEmpty() ? "" : " (" + String.join("/", io) + ")"));
-    }
-
-    /** Record a non-null handler under the side that exposed it, de-duplicating by identity. */
-    private static <T> void collect(Map<T, List<String>> byHandler, T handler, String side) {
-        if (handler == null) return;
-        byHandler.computeIfAbsent(handler, h -> new ArrayList<>()).add(side);
-    }
-
-    private static String itemId(ItemStack stack) {
-        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-    }
-
-    private static String fluidId(FluidStack stack) {
-        return BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString();
+        return en == null ? null
+                : new Energy(en.getEnergyStored(), en.getMaxEnergyStored(), en.canReceive(), en.canExtract());
     }
 }
