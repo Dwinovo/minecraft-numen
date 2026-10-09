@@ -58,7 +58,8 @@ jobs:
           version="$(prop version)"
           mc="$(prop minecraft_version)"
           # 分支就是 MC 版本。在别的分支或 tag 上点了 Run workflow,到这里为止。
-          if [ "$GITHUB_REF" != "refs/heads/$mc" ]; then
+          # hotfix/<MC> 是从上一个 tag 拉出的补丁分支:版本分支已经往下一版走了,补丁版从这里发。
+          if [ "$GITHUB_REF" != "refs/heads/$mc" ] && [ "$GITHUB_REF" != "refs/heads/hotfix/$mc" ]; then
             echo "::error::发版要在 MC 版本分支上跑:这里是 $GITHUB_REF,本分支的 minecraft_version 是 $mc"
             exit 1
           fi
