@@ -15,7 +15,7 @@ import net.minecraft.core.BlockPos;
  * @param start    起点节点:从身体脚下搜时由 {@link Origin} 从身体的真实位置定出,接着一条路线往下搜时是那条路线的终点
  * @param budget   最多展开几个节点;结论不随机器快慢和 tick 速率变
  * @param handOver 展开到这么多个节点还没到目标、又已经有一段离起点足够远的半程路线,就先交出它({@link AStar});
- *                 不小于 {@code budget} 时搜到底才交。也按节点数计,结论同样不随机器快慢变
+ *                 不小于 {@code budget} 时搜到底才交。交出策略的阈值与交哪一截见 {@link HandOver}
  * @param arrival  走到起点的那一步:接着一条路线的终点往下搜时,身体到那里时怎么待着、那一步做过哪些改动,都照它算——
  *                 快照里还没有那一步垫下的块;从身体脚下搜为 null
  * @param air      身体在起点时憋气的样子:从脚下搜是身体此刻的({@link Breath#now}),接着一条路线往下搜是走完那一步时的

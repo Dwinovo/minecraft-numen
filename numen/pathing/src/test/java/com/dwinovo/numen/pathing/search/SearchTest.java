@@ -132,7 +132,7 @@ class SearchTest {
         SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 2000);
         assertEquals(SearchResult.Stop.BUDGET, result.stop());
         assertNotNull(result.route(), "挖隧道的长路搜不到头,也要交出朝目标挖过去的半程路线");
-        assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "半程路线朝目标推进:" + result.route().end());
+        assertTrue(result.route().end().getX() > HandOver.MIN_PARTIAL, "半程路线朝目标推进:" + result.route().end());
     }
 
     /**
@@ -182,7 +182,7 @@ class SearchTest {
         assertNotNull(result.route());
         assertTrue(expanded[0] <= 2001, "展开到先交半程的节点数就交:展开了 " + expanded[0]);
         BlockPos end = result.route().end();
-        assertTrue(end.distSqr(START) > AStar.MIN_PARTIAL * AStar.MIN_PARTIAL, "交出的一段离起点够远:" + end);
+        assertTrue(end.distSqr(START) > HandOver.MIN_PARTIAL * HandOver.MIN_PARTIAL, "交出的一段离起点够远:" + end);
         assertTrue(end.distSqr(ACROSS) < START.distSqr(ACROSS), "交出的一段朝目标推进:" + end);
     }
 
@@ -659,7 +659,7 @@ class SearchTest {
         assertEquals(SearchResult.Stop.BUDGET, result.stop());
         assertNotNull(result.route(), "朝目标挖过去的那一截要交出来");
         assertEquals(START, result.route().start());
-        assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "那一截朝目标推进:" + result.route().end());
+        assertTrue(result.route().end().getX() > HandOver.MIN_PARTIAL, "那一截朝目标推进:" + result.route().end());
     }
 
     /**

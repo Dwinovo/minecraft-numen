@@ -16,6 +16,7 @@ import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.HandOver;
 import com.dwinovo.numen.pathing.search.Origin;
 import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Route;
@@ -52,16 +53,6 @@ public final class Driver {
 
     /** 起点身体待不住(卡在方块里、悬在半空)最多等多少刻。 */
     private static final int STRANDED_TICKS = 60;
-    /**
-     * 每一段搜索展开到这么多个节点还没到目标、又已经有够远的半程路线,就先交出它({@link Search#handOver}):身体先走这一段,
-     * 快走完时从它的终点接着搜。依据是等多久,不是地形:许改地形的搜索每个节点 15 到 76 微秒(实测见 docs/pathing.md 第十三节),
-     * 一万个节点在 0.15 到 0.76 秒之间,与 Baritone 先交路线的 primaryTimeoutMS(500 毫秒)同一量级;它是默认预算
-     * {@link com.dwinovo.numen.pathing.api.NavRequest#DEFAULT_BUDGET} 的四分之一,Baritone 的 primary 与 failure 两个时限也是一比四。
-     * 靶场十八条固定路线共搜了 36 次(估价是运动学下界,搜到头的就是最优路线):一半自己搜到头,
-     * 中位约两千个节点、最多 9965 个,另一半在这里交出半程;下到盆地、绕山、爬坡这类要绕的路一次搜不完。
-     * 按节点数计,结论不随机器快慢变。
-     */
-    static final int HAND_OVER = 10_000;
 
     /** 导航的状态。 */
     public enum State {
@@ -509,7 +500,7 @@ public final class Driver {
 
     /**
      * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组;展开到
-     * {@link #HAND_OVER} 个节点就先交出半程。接着路线往下搜时起点接在 {@code arrival} 那一步后面(憋气从走完那一步时的样子起),
+     * {@link HandOver#NODES} 个节点就先交出半程。接着路线往下搜时起点接在 {@code arrival} 那一步后面(憋气从走完那一步时的样子起),
      * 从身体脚下搜为 null(憋气从身体此刻的样子起)。
      */
     private void dispatch(Purpose why, BlockPos from, Route.Leg arrival) {
@@ -521,7 +512,7 @@ public final class Driver {
         rig.tally.dispatched(t1 - t0, t2 - t1);
         PathLog.debug("{} 派搜索 {} 从 {} 去 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
                 PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
-        Search search = new Search(view, model, from, goal, budget, favoring).handingOverAt(HAND_OVER).after(arrival);
+        Search search = new Search(view, model, from, goal, budget, favoring).handingOverAt(HandOver.NODES).after(arrival);
         pendingSearch = search;
         purpose = why;
         pending = Searches.submit(search);

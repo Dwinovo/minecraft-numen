@@ -39,13 +39,13 @@ import net.minecraft.world.level.material.FluidState;
  *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、搜完无路、预算用完、有路伸进快照外没加载的区块。
  *       一步的前提读到了没加载的列,它成不成立就不知道,这一步不走、结论记成"未加载";前提没读到那些列就定了的(规格没开这种
  *       走法、紧挨着的一列就挡住了),与那边是什么无关,不算;</li>
- *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,取第一个离起点超过 {@value #MIN_PARTIAL}
- *       格的交出;都不够远就不交——原地打转的半截路不是路。最后一档只看估价(离目标多近):估价按疾跑算,挖隧道、搭桥时
+ *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,交哪一截由 {@link HandOver#pick} 定
+ *       (截到最后一个回得了头的节点,离起点不够远就不交)。最后一档只看估价(离目标多近):估价按疾跑算,挖隧道、搭桥时
  *       每一步的真实代价比它贵几十倍,前几档的折算都压不住已走的代价,最好的节点总在起点跟前。憋着气的节点不当终点:
  *       身体停在水下等下一段,下一段接不上就困在那里;</li>
- *   <li><b>先交半程</b>:展开到 {@link Search#handOver} 个节点还没到目标,只要已经有够远的半程路线就先交出它(停因同预算用完),
- *       执行层先走这一段、同时从它的终点接着搜——许放块时搜索在空中四面铺开,一次搜到底要几秒,身体一直站着等。
- *       在封顶之前到了目标的,路线与搜到底一样;封顶时还没有够远的半程,就接着搜,直到有了或预算用完;</li>
+ *   <li><b>先交半程</b>:展开到 {@link Search#handOver} 个节点({@link HandOver#NODES})还没到目标,只要已经有可交的半程路线就先交出它
+ *       (停因同预算用完),执行层先走这一段、同时从它的终点接着搜——许放块时搜索在空中四面铺开,一次搜到底要几秒,身体一直站着等。
+ *       在封顶之前到了目标的,路线与搜到底一样;封顶时还没有可交的半程,就接着搜,直到有了或预算用完;</li>
  *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
  *       展开起点时叠上那一步的改动——快照里还没有它垫下的块;</li>
  *   <li><b>估价</b>:目标的估价({@link Goal#estimate})加上埋深({@link Burial}):路上绕不开要挖掉的格至少多少钱。两样都是
@@ -66,8 +66,6 @@ public final class AStar {
 
     /** 半程路线的几档折算系数:越小越接近真正的最优,越大越激进地朝目标扑;最后一档不计已走的代价。 */
     private static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10, Double.POSITIVE_INFINITY};
-    /** 半程路线的终点至少要离起点这么多格才交出。 */
-    static final int MIN_PARTIAL = 5;
     /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */
     private static final double MIN_IMPROVEMENT = 0.01;
 
@@ -146,7 +144,7 @@ public final class AStar {
                     return new SearchResult(SearchResult.Stop.ARRIVED, route(start, current), expanded, breathless);
                 }
             }
-            if (expanded >= search.handOver()) {
+            if (HandOver.due(expanded, search.handOver())) {
                 Route early = partial(start, best);
                 if (early != null) {
                     return new SearchResult(SearchResult.Stop.BUDGET, early, expanded, breathless);
@@ -300,17 +298,13 @@ public final class AStar {
         return n;
     }
 
-    /** 按系数从紧到松,取第一个离起点足够远的最好节点;都不够远就没有半程路线。 */
+    /** 按系数从紧到松各档最好节点的路线里,交出的那一截({@link HandOver#pick});没有可交的为 null。 */
     private Route partial(Node start, Node[] best) {
+        List<Route> candidates = new ArrayList<>(best.length);
         for (Node n : best) {
-            double dx = n.x - start.x;
-            double dy = n.y - start.y;
-            double dz = n.z - start.z;
-            if (dx * dx + dy * dy + dz * dz > MIN_PARTIAL * MIN_PARTIAL) {
-                return route(start, n);
-            }
+            candidates.add(route(start, n));
         }
-        return null;
+        return HandOver.pick(candidates);
     }
 
     private static Route route(Node start, Node end) {
