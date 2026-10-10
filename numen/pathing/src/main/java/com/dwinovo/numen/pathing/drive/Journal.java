@@ -1,7 +1,9 @@
 package com.dwinovo.numen.pathing.drive;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -14,6 +16,7 @@ import com.dwinovo.numen.pathing.plan.MoveKind;
 public final class Journal {
 
     private int searches;
+    private final List<Integer> expansions = new ArrayList<>();
     private int budgetStops;
     private int replans;
     private int blockages;
@@ -30,9 +33,10 @@ public final class Journal {
      */
     public record Timing(int steps, int ticks, double estimated) {}
 
-    /** 一次搜索有了结论;{@code budgetStop} 是它因节点预算停下(交出半程路线,接着再搜)。 */
-    void searched(boolean budgetStop) {
+    /** 一次搜索有了结论;{@code budgetStop} 是它因节点预算停下(交出半程路线,接着再搜),{@code expanded} 是它展开了几个节点。 */
+    void searched(boolean budgetStop, int expanded) {
         searches++;
+        expansions.add(expanded);
         if (budgetStop) {
             budgetStops++;
         }
@@ -67,6 +71,11 @@ public final class Journal {
     /** 搜索有了结论的次数(不含为"没有路"而做的诊断)。 */
     public int searches() {
         return searches;
+    }
+
+    /** 每次搜索展开的节点数,按先后。 */
+    public List<Integer> expansions() {
+        return Collections.unmodifiableList(expansions);
     }
 
     /** 其中因节点预算停下的次数。 */

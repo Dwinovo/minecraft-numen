@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
 import java.util.ArrayList;
@@ -168,6 +169,10 @@ final class TerrainRun {
         o.addProperty("limit", route.limit());
         o.addProperty("searches", journal.searches());
         o.addProperty("budgetStops", journal.budgetStops());
+        JsonArray expansions = new JsonArray();
+        journal.expansions().forEach(expansions::add);
+        o.add("expansions", expansions);
+        o.addProperty("expanded", journal.expansions().stream().mapToInt(Integer::intValue).sum());
         o.addProperty("replans", journal.replans());
         o.addProperty("blocked", journal.blockages());
         o.addProperty("stuck", journal.stuck());
@@ -198,13 +203,13 @@ final class TerrainRun {
             if (DONE.size() < TerrainRoutes.ALL.size()) {
                 return;
             }
-            LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6s %5s %5s %6s %6s %6s %7s %7s %6s %5s %5s", "route", "arrived",
-                    "dist", "rise", "limit", "ticks", "search", "budget", "replan", "blocked", "stuck", "steps", "hp"));
+            LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6s %5s %5s %6s %6s %6s %7s %7s %7s %6s %5s %5s", "route", "arrived",
+                    "dist", "rise", "limit", "ticks", "search", "budget", "expand", "replan", "blocked", "stuck", "steps", "hp"));
             for (JsonObject o : DONE) {
-                LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6.1f %5d %5d %6d %6d %6d %7d %7d %6d %5d %5.1f",
+                LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6.1f %5d %5d %6d %6d %6d %7d %7d %7d %6d %5d %5.1f",
                         o.get("route").getAsString(), o.get("state").getAsString(), o.get("distance").getAsDouble(),
                         o.get("rise").getAsInt(), o.get("limit").getAsInt(), o.get("ticks").getAsInt(),
-                        o.get("searches").getAsInt(), o.get("budgetStops").getAsInt(), o.get("replans").getAsInt(), o.get("blocked").getAsInt(),
+                        o.get("searches").getAsInt(), o.get("budgetStops").getAsInt(), o.get("expanded").getAsInt(), o.get("replans").getAsInt(), o.get("blocked").getAsInt(),
                         o.get("stuck").getAsInt(), o.get("steps").getAsInt(), o.get("lowestHealth").getAsFloat()));
             }
             DONE.clear();

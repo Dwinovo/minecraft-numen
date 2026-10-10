@@ -571,7 +571,7 @@ public final class Driver {
      */
     private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
         Route route = result.route();
-        rig.journal.searched(result.stop() == SearchResult.Stop.BUDGET);
+        rig.journal.searched(result.stop() == SearchResult.Stop.BUDGET, result.expanded());
         PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 用时 {} 排队 {} 停因 {} {}", rig.who, purpose.label,
                 PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
                 PathLog.ms(done.ranNanos()), PathLog.ms(done.queuedNanos()), result.stop(),
