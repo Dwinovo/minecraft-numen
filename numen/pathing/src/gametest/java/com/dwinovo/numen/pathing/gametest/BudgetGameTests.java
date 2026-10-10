@@ -83,13 +83,15 @@ public class BudgetGameTests {
     }
 
     /**
-     * 身前是九十五格厚的整片石头(顶到场地的屋顶,翻不过去),去处在石头里八十九格深,手上一把钻石镐,许挖许放:每次搜索
-     * 只许展开八千个节点,一次搜不到头(规划说预算用完),照样一段一段挖过去,挖到去处。
+     * 身前是九十五格厚的整片石头(顶上盖着一层基岩,翻不过去;没有这层屋顶,爬上顶面走过去比挖八十九格便宜),去处在石头里
+     * 八十九格深,手上一把钻石镐,许挖许放:每次搜索只许展开八千个节点,一次搜不到头(规划说预算用完),照样一段一段挖过去,
+     * 挖到去处。
      */
     @GameTest(template = LONG, batch = BATCH, timeoutTicks = 7000)
     public static void tunnels_a_long_way_by_partial_routes(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 1, 0, 100, 14, 23, Blocks.STONE);
+        t.fill(6, 15, 0, 100, 15, 23, Blocks.BEDROCK);
         TestBody body = t.body(2, 1, 12);
         body.getInventory().setItem(0, new ItemStack(Items.DIAMOND_PICKAXE));
         NavRequest request = Trial.budgeted(NavRequest.to(Goals.at(t.at(94, 1, 12)), NATURAL), 8000);
