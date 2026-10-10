@@ -174,6 +174,15 @@ final class TerrainRun {
         o.addProperty("rechecks", journal.rechecks());
         o.addProperty("steps", report.ledger().steps());
         o.addProperty("walked", report.ledger().walked().toString());
+        JsonObject timings = new JsonObject();
+        journal.timings().forEach((kind, t) -> {
+            JsonObject one = new JsonObject();
+            one.addProperty("steps", t.steps());
+            one.addProperty("ticks", t.ticks());
+            one.addProperty("estimated", Math.round(t.estimated() * 10) / 10.0);
+            timings.add(kind.name(), one);
+        });
+        o.add("timings", timings);
         o.addProperty("dug", dug);
         o.addProperty("placed", placed);
         o.addProperty("toggled", toggled);
