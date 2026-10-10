@@ -222,7 +222,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 22 | 液体与危险 | `CellClass` 名单;各动作自查岩浆;生物危险两套(固定半径的 `Avoidance` 与 `Menace.dangerRadius`);压力板默认会踩、绊线当墙 | 第 0 层 `Semantics`,代价归第 1 层;生物危险半径经 `Threats` 端口 |
 | 23 | 落沙与漏液 | 每个动作各开一个窗口判"头顶会不会塌",范围不同 | 第 1 层 `DigRules` |
 | 24 | 门能不能开 | 规划里门格对所有动作可穿，只有平移会开门;门板朝向不看;有红石的铁门当墙 | 第 0 层语义 + 第 1 层前提 + 第 3 层开门控制器 |
-| 25 | 疾跑与跳 | 水里定价不给疾跑折扣，执行照样疾跑;脱困反射、建造表演各自按跳 | 第 3 层 `SprintPolicy`,读第 1 层 |
+| 25 | 疾跑与跳(疾不疾跑、在哪一步收脚) | 水里定价不给疾跑折扣，执行照样疾跑;脱困反射、建造表演各自按跳;规划里 `Walk`、`Diagonal` 各定一份 `sprint`、`Ascend`、`Drop` 写死 `false`,执行里 `SprintPolicy` 再加一道、`Control.flows` 另定停不停 | 第 3 层 `Gait`(第六节第 39 行)。`SprintPolicy`、`Control.flows`、`Maneuver.sprint` 与各走法里的疾跑判断已并入后删除 |
 | 26 | 视角瞄点 | 执行器和放置各有一个步进器实例、各有一份"是否对准";一个管实体遮挡一个不管 | 身体机制 `Aim`(执行层与宿主共用) |
 | 27 | 摔落上限与水桶 | 规划按血量、备货按规格原值、`willPlaceBucket` 当刻重算、`MLGChain` 按下落速度;"有没有水桶"四份 | 摔伤 `BodySnapshot.fallDamage`(按落差与落点方块,照原版 `fallOn`),受不受得起 `BodySnapshot.bears`(按血量),规格只能收紧(`CostModel.bearsFall`);水桶只给要接的坠落备(`Edit.Catch`) |
 | 28 | 世界边界 | A* 整格在内，挖放内缩一格 | 第 0 层 |
@@ -233,9 +233,10 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 33 | 能憋多久、一步憋不憋气 ★ | 09-30 真机:规划不知道要憋气,把她带进封顶的水下洞穴;Numen 的换气本能按"氧气不到 240"另判,计划内的水下三秒就被它接管 | 规则第 1 层 `Breath`(身体快照),眼睛换不换得了气第 0 层 `Semantics.breathless`,一步憋不憋气 `Maneuver.submerged`;搜索、执行复核、诊断同一份,见第十三节"憋气" |
 | 34 | 身体怎么动(速度、起跳、下落、攀爬、每种走法几何上的最短耗时) ★ | 靶场量到:`ActionCosts` 写死原版玩家的速度常数,`JUMP_ONE_BLOCK` 是"升到一格高"的 3.2 刻、不是"落在高一格上"的 9 刻;`BodyStats.jumpHeight` 只判跳不跳得上;`Steering` 自己一份地面加速、摩擦、空中加速和几刻落地。上一格的估价实际/估价 1.74 | 第 0 层 `Kinematics`(读 `BodyStats` 的移动速度、起跳力度、重力与调用方给的脚下方块量,照原版逐刻推);已并入:`ActionCosts` 的物理耗时、`BodyStats.jumpHeight`、`Steering` 自算的那份。代价、估价、`Steering` 预判、`Watchdog` 期限基数都读它 |
 | 35 | 身体此刻在路线的哪一步(往前认、往后退、离开路线) | 段状态机里一段 `track`,与到达判定各数一份"落在路线之外多久" | 第 3 层 `Tracker`(窗口、离开路线的刻数随它走);路线与进度只在 `Course` |
-| 36 | 何时提前搜下一段、怎么拼、末尾几步何时能开始走 ★ | 提前搜按路线的**代价**(含罚分)估剩余时间;接续段在一步开始之后才到时,这一步当成"后面没有路"收脚——同一条路线跑出的刻数取决于搜索线程快慢 | 第 3 层 `Continuation`:剩余时间按运动学的最短耗时(`Course.remainingTicks`);末尾 `TAIL` 步要等"后面接什么"定下来才开始,接续段先到后到只改变等不等,不改变每一步怎么走 |
+| 36 | 何时提前搜下一段、怎么拼、末尾几步何时能开始走 ★ | 提前搜按路线的**代价**(含罚分)估剩余时间;接续段在一步开始之后才到时,这一步当成"后面没有路"收脚——同一条路线跑出的刻数取决于搜索线程快慢 | 第 3 层 `Continuation`:剩余时间按运动学的最短耗时(`Course.remainingTicks`);末尾 `TAIL` 步要等"后面接什么"定下来才开始,接续段先到后到只改变等不等,不改变每一步怎么走;等的位置一定是待得住的节点:末尾那几步的头一步起点是攀着的就往前退(攀着不按键会顺梯滑下去,脚手架上蹲着也往下穿,没有保持的办法) |
 | 37 | 走不下去几次重搜、半程路线不再变近就收场 | 段状态机里的计数与常数 | 第 3 层 `Recovery`(`STRIKES`、`STALE_PARTIALS` 随它走) |
 | 38 | 停稳之后到没到(目标自己的判定、世界变了没有、视线复核) | 段状态机里一段 `arrive`,按键与下结论搅在一起 | 第 3 层 `Arrival`(只下结论、不碰身体);怎么停稳(按键、转向)归 `Steering` 与段状态机 |
+| 39 | 步态:疾不疾跑、带不带着冲劲进下一步、在哪一步收脚 ★ | 见第 25 行:五处各定一部分,坡上走、上交替整段跑不起来;`Maneuver.sprint` 是规划替执行做的决定 | 第 3 层 `Gait`:只看路线相邻两步的事实。疾跑 = 身体跑得动(`CostModel.maySprint`)且这一步物理上跑得起来(`Maneuver.runnable`:站着起步、不潜行、不泡水、不原地改地形)且路径两侧站得稳(`Maneuver.flanked`),跑酷要助跑(`Maneuver.runUp`)就跑,下一级、下落压着速度走出去不跑;带冲劲进下一步 = 两步都在地上、下一步不原地改地形、下一步不贴着落坑、不是自由下落,离地的下一级与跑酷要下一步同向,转弯时用不上的那份速度(转角不到直角是侧向分量,过了直角是全部)的 `Kinematics.stopDistance` 不超过落点格里的余量(格宽减身宽的一半),不然收脚。价钱按物理上能达到的最快步态定(`Strides.pace`,读同一个 `runnable`),两者只在起步、收脚处有偏差 |
 
 另外，普查发现几处文档或注释与代码不符:`spatial-perception.md` 说 `scan_around` 与寻路同口径(实际不是)、
 `BlockHelper.canHarvest` 的注释、`ContextFactory` 关于冻结快照的注释。重写后这些随旧代码一起删除。
@@ -514,7 +515,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
   `Step` 一步开始前在活世界(`LiveWorld`)上用同一个 `Moves.of(kind).premise`、同一个方向复核,不成立交出 `Fails`;
   每种走法一个 `Control`(`StrideControl` 管平走斜走上一级与背贴搭桥、`DropControl`、`ParkourControl`、`PillarControl`、
   `DownwardControl`、`ClimbControl`、`SwimControl`),改动由 `Work` 做(挖、放、倒水接坠落再收回),开关门是可复用的
-  `DoorOpener`;`Steering` 照原版移动与摩擦推算怎么停在一点、空中不回身;`SprintPolicy`、`Aim`(瞄点与按鼠标像素转头,
+  `DoorOpener`;`Steering` 照原版移动与摩擦推算怎么停在一点、空中不回身;`Gait`(原 `SprintPolicy`)、`Aim`(瞄点与按鼠标像素转头,
   与准星同一套射线)、`Watchdog`(按估价给一步期限、对外的"在推进"信号)各只一处;`EditLedger` 只收 `Effector` 真实
   交回的结果。
 - **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:一条路线,
@@ -528,7 +529,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
   如实交回碎了哪格、变了哪几格、被拒及理由)、`TerrainPolicy.judge(改动, 格, 方块) → Permit`(放行/要问带凭据/拒绝带理由)、
   `Materials.next()`、`Threats.current()`。第四节表里的 `PlacementAdvice`、`Limits`、`NavLog` 没有用到的地方,没做。
 - **对照第六节落定的**:#18、#19 卡没卡住与进度量尺只在 `Watchdog`;#21 实际改动只在 `EditLedger`,坠落倒的水也记账;
-  #24 门只经 `DoorOpener`,任何走法穿门都用它;#25 疾跑只在 `SprintPolicy`;#26 瞄点只在 `Aim`;#27 水桶只给要接的
+  #24 门只经 `DoorOpener`,任何走法穿门都用它;#25 疾跑与收脚只在 `Gait`;#26 瞄点只在 `Aim`;#27 水桶只给要接的
   坠落备(`Edit.Catch`),执行中的计划坠落经 `plannedFall` 对外声明;#31 下载具记进 `BodyAction`;#16 到达只看目标的
   `contains`,视线由执行层到了之后复核(`NoLineOfSight`);#11 挖的时候照 `ToolChoice` 同一个选择拿工具;
   执行复核与规划用同一个前提函数。
