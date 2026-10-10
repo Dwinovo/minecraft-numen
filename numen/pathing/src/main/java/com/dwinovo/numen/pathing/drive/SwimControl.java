@@ -27,6 +27,10 @@ final class SwimControl extends Control {
         keys().set(Key.JUMP, dy > 0 || dy == 0 && feet < m.to().getY() + FLOAT);
         keys().set(Key.SNEAK, dy < 0);
         Vec3 c = center(m.to());
+        // 水里没有地面可借力,Steering 只在地上转身;横着游的时候身子自由转,每刻先朝向落点那一列(竖着游不转)
+        if (m.heading().horizontal()) {
+            rig.look.faceToward(c.x, c.z);
+        }
         if (flows()) {
             Steering.pass(rig, c.x, c.z);
         } else {
