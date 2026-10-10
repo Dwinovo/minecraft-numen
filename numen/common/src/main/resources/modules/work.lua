@@ -27,6 +27,8 @@ function M.collect(opts)
   walk.radius = nil
   walk.items = nil
   local walked = {}
+  -- the pickup happens on the tick after the delay reaches 0: seen at 0 once is still on its way, seen at 0 twice stays
+  local due = {}
   local unreachable = {}
   while true do
     local items = {}
@@ -55,8 +57,11 @@ function M.collect(opts)
     end
     local item = items[1]
     if walked[item.id] and item.pickup_delay == 0 then
-      raise("failed", item.item .. " x" .. item.count .. " is still there after walking onto it: a full pack, or a "
-          .. "spot you cannot stand in", nil, {item = item})
+      if due[item.id] then
+        raise("failed", item.item .. " x" .. item.count .. " is still there after walking onto it: a full pack, or a "
+            .. "spot you cannot stand in", nil, {item = item})
+      end
+      due[item.id] = true
     end
     if item.pickup_delay > 100 then
       raise("failed", item.item .. " x" .. item.count .. " cannot be picked up for another " .. item.pickup_delay
