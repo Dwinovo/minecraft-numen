@@ -48,6 +48,8 @@ final class Step {
     private float healthBefore = Float.NaN;
     /** 计划内的坠落预计掉几点血。 */
     private int expectedDamage;
+    /** 这一步开始时的估价(刻)。 */
+    private double estimate;
 
     Step(Rig rig, Maneuver planned, Maneuver next, List<Maneuver> diving, Goal goal, RouteSpec spec, Watchdog watchdog) {
         this.rig = rig;
@@ -121,6 +123,7 @@ final class Step {
      * 预计掉几点血、接不接水,落地时({@link #finish})再对一次账。
      */
     private void begun(Maneuver m, double expected) {
+        estimate = expected;
         if (PathLog.debugging()) {
             PathLog.debug("{} 步 {} 估 {} 刻 期限 {} 刻 改动 {}", rig.who, PathLog.step(m), PathLog.num(expected),
                     PathLog.num(watchdog.allowance()), m.edits().size());
@@ -136,8 +139,9 @@ final class Step {
                 catches ? " 上倒的水里" : "", m.fallDamage(), PathLog.num(healthBefore));
     }
 
-    /** 这一步走完,身体落在 {@code node}:计划内的坠落记一行落地——实际掉了几点血。 */
+    /** 这一步走完,身体落在 {@code node}:记下这一步的用时;计划内的坠落再记一行落地——实际掉了几点血。 */
     void finish(BlockPos node) {
+        rig.journal.timed(planned.kind(), watchdog.stepTicks(), estimate);
         if (Float.isNaN(healthBefore)) {
             return;
         }
