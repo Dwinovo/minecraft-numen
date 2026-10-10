@@ -585,6 +585,19 @@ class MovesTest {
         assertTrue(m.landing().grounded());
     }
 
+    /** 深水里浮着,往东一格是浅水:水底顶面就在这一格的脚高上,规划里落点是踩在水底上(站着)。游的控制器要照这个去沉到水底。 */
+    @Test
+    void swimmingFromDeepWaterOntoAShallowBedLandsStandingOnTheBed() {
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        BlockState water = Blocks.WATER.defaultBlockState();
+        TestWorld world = new TestWorld().fill(-6, Y - 4, -4, 0, Y - 4, 4, stone).fill(1, Y - 4, -4, 6, Y - 1, 4, stone)
+                .fill(-6, Y - 3, -4, 0, Y, 4, water).fill(1, Y, -4, 6, Y, 4, water);
+        assertEquals(Stance.Kind.SWIMMING, Stance.at(world, Vanilla.SURVIVAL, AT).kind(), "深水里浮着");
+        Maneuver m = holds(MoveKind.SWIM, defaults(), world, AT, EAST);
+        assertTrue(m.landing().grounded(), "浅水里踩在水底上:" + m.landing());
+        assertEquals(Y, m.landing().feetY(), 1e-9);
+    }
+
     @Test
     void aBodyThatCannotJumpInWaterStillWadesOutOnTheBottom() {
         TestWorld world = ground().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), Blocks.WATER.defaultBlockState());

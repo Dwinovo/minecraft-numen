@@ -71,6 +71,25 @@ public class FluidGameTests {
         t.go(body, Goals.at(t.at(16, 1, 5)), RouteSpec.defaults()).within(700).arrives();
     }
 
+    /**
+     * 三格深的水接着一溜一格深的浅水:游过深水,到了浅水里脚下是水底。规划认为浅水格是踩在水底上(站着),原版水里不按键每刻只沉
+     * 0.005 格,身子浮在水底之上老远,落不到水底上——游的控制器要到了列中心就按住潜行沉下去,段状态机才认得站在了落点上。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    public static void swims_from_deep_water_onto_a_shallow_bed(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(5, -4, 0, 23, -1, 39, Blocks.STONE);
+        t.fill(6, -2, 0, 13, 0, 39, Blocks.WATER);
+        t.fill(14, 0, 0, 22, 0, 39, Blocks.WATER);
+        TestBody body = t.body(3, 1, 5);
+        t.go(body, Goals.at(t.at(25, 1, 5)), RouteSpec.defaults()).within(800).arrives().then(r -> {
+            if (r.report.journal().stuck() > 0 || r.report.journal().blockages() > 0) {
+                throw new GameTestAssertException("游过去的路上卡住过:卡住 " + r.report.journal().stuck() + " 次,走不下去 "
+                        + r.report.journal().blockages() + " 次");
+            }
+        });
+    }
+
     /** 一道流水横在路上(一头是源头,顺着两格高的水渠流开),水渠尽头之外能绕:绕过去,脚从不踩进流水。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
     public static void keeps_out_of_flowing_water(GameTestHelper helper) {
