@@ -187,7 +187,7 @@ public class ModeGameTests {
         companion.teleportTo(floor.getX() + 0.5, floor.getY(), floor.getZ() + 0.5);
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ", {costs = {dig = true, place = true, consent = false}, materials = {\"minecraft:cobblestone\"}})");
+        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ", {costs = {dig = false, place = true, consent = false}, materials = {\"minecraft:cobblestone\"}})");
         helper.onEachTick(() -> {
             if (walk.done() && !walk.succeeded()) {
                 helper.fail("she did not pillar out of the well with the walk's materials: " + walk.outcome());

@@ -81,7 +81,7 @@ public class SwimGameTests {
     }
 
     /**
-     * 20 格长的封顶水道(一口气约 220 刻,满氧气憋得住),离出口两格的顶上有一个封死的小气室(一格水、上面一格空气,四周是玻璃),
+     * 17 格长的封顶水道(一口气约 200 刻,满氧气憋得住),离出口两格的顶上有一个封死的小气室(一格水、上面一格空气,四周是玻璃),
      * 不通地面。她游到气室底下、往东的那一步刚开始,前面那一格被一堵基岩挡住:这一步卡住,拖得比这一段剩下的憋气长。
      * <ul>
      *   <li>导航说这一段是计划内的每一刻,她的氧气都还够游完剩下的水下再留出余量({@link Breath#RESERVE})——撑不到的那一刻导航
@@ -93,16 +93,16 @@ public class SwimGameTests {
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = BATCH)
     public static void a_planned_dive_held_up_under_water_lets_go_before_the_air_runs_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        sealedChannel(helper, 10, 30);
-        // 气室:水道顶上 x = 28 那一格是水,再上面一格空气,四周与顶上是玻璃
-        fill(helper, 27, 2, Z - 1, 29, 3, Z + 1, Blocks.GLASS.defaultBlockState());
-        fill(helper, 28, 1, Z, 28, 1, Z, Blocks.WATER.defaultBlockState());
-        fill(helper, 28, 2, Z, 28, 2, Z, Blocks.AIR.defaultBlockState());
+        sealedChannel(helper, 10, 27);
+        // 气室:水道顶上 x = 25 那一格是水,再上面一格空气,四周与顶上是玻璃
+        fill(helper, 24, 2, Z - 1, 26, 3, Z + 1, Blocks.GLASS.defaultBlockState());
+        fill(helper, 25, 1, Z, 25, 1, Z, Blocks.WATER.defaultBlockState());
+        fill(helper, 25, 2, Z, 25, 2, Z, Blocks.AIR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
-        BlockPos there = helper.absolutePos(new BlockPos(33, 2, Z));
+        BlockPos there = helper.absolutePos(new BlockPos(30, 2, Z));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(there) + ")");
         var outbox = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer());
-        double wallX = helper.absolutePos(new BlockPos(28, 0, Z)).getX() + 0.5;
+        double wallX = helper.absolutePos(new BlockPos(25, 0, Z)).getX() + 0.5;
         boolean[] walled = {false};
         int[] plannedAir = {Integer.MAX_VALUE};
         float[] lowest = {Float.MAX_VALUE};
@@ -115,7 +115,7 @@ public class SwimGameTests {
             // 她在气室底下、往东的那一步已经开始:挡住它要去的那一格
             if (!walled[0] && companion.getX() >= wallX && companion.isEyeInFluid(FluidTags.WATER)) {
                 walled[0] = true;
-                fill(helper, 29, -1, Z, 29, 0, Z, Blocks.BEDROCK.defaultBlockState());
+                fill(helper, 26, -1, Z, 26, 0, Z, Blocks.BEDROCK.defaultBlockState());
             }
         });
 
