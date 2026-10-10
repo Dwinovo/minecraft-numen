@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:overworld",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:overworld",
+    "biome_source": {
+      "type": "minecraft:multi_noise",
+      "preset": "minecraft:overworld"
+    }
+  }
+}

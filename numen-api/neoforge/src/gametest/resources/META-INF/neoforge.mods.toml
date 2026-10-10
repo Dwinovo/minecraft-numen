@@ -4,6 +4,9 @@ modLoader = "javafml"
 loaderVersion = "${neoforge_loader_version_range}"
 license = "LGPL-3.0"
 
+[[mixins]]
+config = "numen_api_gametest.mixins.json"
+
 [[mods]]
 modId = "numen_api_gametest"
 version = "0"

@@ -38,6 +38,8 @@ def gameTestSuites = gameTestModules.collect { rootProject.ext.numenSuites[it.pa
 // (评测的运行配置就不给,见 numen-bench.gradle)
 def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.join(','))
 
+def gameTestSeed = providers.gradleProperty('gametestSeed')
+
 // GameTest 的结构模板:同步进 numen/common 的构建目录里的一处(见那边的 syncGameTestStructures),运行配置指向它。
 def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
 
@@ -75,6 +77,10 @@ neoForge {
         gameTestServer {
             type = "gameTestServer"
             systemProperties.put('numen.gametest.suites', gameTestSelection)
+            // 真实地形维度的种子(-PgametestSeed=…):没给就是原版 GameTest 服务器写死的 0
+            if (gameTestSeed.present) {
+                systemProperties.put('numen.gametest.seed', gameTestSeed.get())
+            }
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
         }
     }

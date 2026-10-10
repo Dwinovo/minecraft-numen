@@ -64,6 +64,7 @@ dependencies {
 }
 
 def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+def gameTestSeed = providers.gradleProperty('gametestSeed')
 def gameTestSelection = providers.gradleProperty('gametest')
         .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
 
@@ -75,6 +76,8 @@ loom {
         numen_api_gametest {
             sourceSet project(':numen-api:fabric').sourceSets.gametest
             sourceSet sourceSets.gametestData
+            // 夹具里的 mixin 配置与数据包维度(numen_test:terrain)要在这个模组的根上才被加载器认到
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
     }
     def aw = project(':numen:common').file("src/main/resources/${mod_id}.accesswidener")
@@ -103,6 +106,10 @@ loom {
             // 结构模板目录(只有 GameTestKit 要读磁盘上的图纸夹具)与跑哪些套件:同 NeoForge 的运行配置(模板见 numen/common 的 syncGameTestStructures)
             vmArg("-Dnumen.gametest.structures=${gameTestStructures.get().asFile}")
             vmArg("-Dnumen.gametest.suites=${gameTestSelection.get()}")
+            // 真实地形维度的种子(-PgametestSeed=…):没给就是原版 GameTest 服务器写死的 0
+            if (gameTestSeed.present) {
+                vmArg("-Dnumen.gametest.seed=${gameTestSeed.get()}")
+            }
         }
         datagen {
             inherit client

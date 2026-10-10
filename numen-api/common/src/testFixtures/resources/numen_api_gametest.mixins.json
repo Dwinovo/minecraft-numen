@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.api.gametest.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "GameTestServerWorldMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

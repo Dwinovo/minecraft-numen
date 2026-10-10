@@ -52,6 +52,10 @@ dependencies {
     clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
 
+    // 夹具里的 mixin(GameTest 世界并入数据包维度、可指定种子)编译时,注解要在场
+    testFixturesCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    testFixturesCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
