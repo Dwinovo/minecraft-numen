@@ -21,7 +21,7 @@ class KinematicsTest {
 
     /** 同一具身体换一个移动速度、起跳力度、重力。 */
     private static BodyStats body(double speed, double jump, double gravity) {
-        return new BodyStats(SURVIVAL.standing(), 0.6, jump, gravity, speed, 4.5, false, false);
+        return new BodyStats(SURVIVAL.standing(), 0.6, jump, gravity, speed, 0.3, 4.5, false, false);
     }
 
     /** 参照:地上一直按前进,逐刻推到稳定,返回最后一刻走的距离(格)。 */

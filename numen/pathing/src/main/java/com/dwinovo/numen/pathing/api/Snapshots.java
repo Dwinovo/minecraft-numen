@@ -70,6 +70,7 @@ public final class Snapshots {
     public static BodyStats stats(ServerPlayer body) {
         return new BodyStats(body.getDimensions(Pose.STANDING),
                 body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(), walkingSpeed(body),
+                body.getAttributeValue(Attributes.SNEAKING_SPEED),
                 body.blockInteractionRange(), PowderSnowBlock.canEntityWalkOnPowderSnow(body), frostWalker(body));
     }
 

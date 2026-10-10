@@ -32,10 +32,8 @@ public final class Kinematics {
     /** 空中每刻的加速度:走与疾跑({@code Player.getFlyingSpeed})。 */
     private static final double AIR_ACCELERATION = 0.02;
     private static final double AIR_ACCELERATION_SPRINTING = 0.026;
-    /** 疾跑让移动速度乘的倍数:原版加的是 +0.3 的"乘总量"修饰符。 */
+    /** 疾跑让移动速度乘的倍数:原版加的是 +0.3 的"乘总量"修饰符。1.21.1 里这个修饰符是 {@code LivingEntity} 的私有常量,没有公开的属性或常量能读。 */
     public static final double SPRINT_MULTIPLIER = 1.3;
-    /** 潜行让移动输入乘的倍数(属性 {@code sneaking_speed} 的默认值)。 */
-    private static final double SNEAK_MULTIPLIER = 0.3;
     /** 水里的摩擦,与水下移动效率 1 时的摩擦(正好是陆上的 0.6 × 0.91)。 */
     private static final double WATER_FRICTION = 0.8;
     private static final double WATER_FRICTION_EFFICIENT = 0.54600006;
@@ -55,7 +53,7 @@ public final class Kinematics {
      * 估价要取身体的下界,见 {@code docs/pathing-015.md} 第二步。
      */
     public static final BodyStats REFERENCE = new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6,
-            0.42F, 0.08, 0.1, 4.5, false, false);
+            0.42F, 0.08, 0.1, 0.3, 4.5, false, false);
 
     private Kinematics() {}
 
@@ -91,9 +89,9 @@ public final class Kinematics {
         return 1 / steadyStride(body.movementSpeed() * SPRINT_MULTIPLIER, DEFAULT_FRICTION);
     }
 
-    /** 平地潜行一格要几刻:移动输入乘潜行倍数。 */
+    /** 平地潜行一格要几刻:移动输入乘身体的潜行倍数({@link BodyStats#sneakingSpeed})。 */
     public static double sneakTicksPerBlock(BodyStats body) {
-        return 1 / (steadyStride(body.movementSpeed(), DEFAULT_FRICTION) * SNEAK_MULTIPLIER);
+        return 1 / (steadyStride(body.movementSpeed(), DEFAULT_FRICTION) * body.sneakingSpeed());
     }
 
     /**

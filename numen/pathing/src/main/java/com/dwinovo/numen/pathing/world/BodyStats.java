@@ -15,12 +15,13 @@ import net.minecraft.world.phys.Vec3;
  * @param jumpStrength 起跳的初速度(属性 {@code jump_strength},原版 0.42)
  * @param gravity      每刻的重力加速度(属性 {@code gravity},原版 0.08)
  * @param movementSpeed 平走的移动速度(属性 {@code movement_speed},不含疾跑的加成,原版 0.1)
+ * @param sneakingSpeed 潜行时移动输入乘的倍数(属性 {@code sneaking_speed},原版 0.3)
  * @param blockReach   方块交互距离(属性 {@code block_interaction_range})
  * @param walksOnPowderSnow 细雪托得住它:原版 {@code PowderSnowBlock.canEntityWalkOnPowderSnow},玩家看脚上是不是皮靴
  * @param frostWalker       脚上的靴子带冰霜行者:走到静水边上,水面冻成冰,踩着走过去
  */
 public record BodyStats(EntityDimensions standing, double stepHeight,
-                        double jumpStrength, double gravity, double movementSpeed, double blockReach, boolean walksOnPowderSnow,
+                        double jumpStrength, double gravity, double movementSpeed, double sneakingSpeed, double blockReach, boolean walksOnPowderSnow,
                         boolean frostWalker) {
 
     /** 碰撞盒的宽。 */
