@@ -32,9 +32,11 @@ function M.raise(building, opts)
   local function at(p)
     return p and string.format("%d %d %d", p.x, p.y, p.z) or "-"
   end
-  -- every round that gets anywhere changes what is left or where the next cell is; seeing a round again means it
-  -- goes round in circles
+  -- every round that gets anywhere changes what is left, where the next cell is or how much was put down so far (a
+  -- cell going in can knock a neighbour out again, leaving the counts alone); seeing a round again means it goes round
+  -- in circles
   local seen = {}
+  local put_down = 0
   local rounds = 0
   while true do
     local left = numen.build.diff(building)
@@ -42,7 +44,7 @@ function M.raise(building, opts)
       return rounds
     end
     rounds = rounds + 1
-    local now = left.left .. "/" .. left.reach .. "/" .. #left.dig .. "/" .. at(left.next)
+    local now = left.left .. "/" .. left.reach .. "/" .. #left.dig .. "/" .. at(left.next) .. "/" .. put_down
     if seen[now] then
       raise("failed", "building " .. name .. " is stuck: " .. left.left .. " cell(s) left, " .. left.reach
           .. " within reach, " .. #left.dig .. " to dig out, " .. left.far .. " out of reach"
@@ -53,9 +55,11 @@ function M.raise(building, opts)
     if left.reach > 0 then
       -- the last cell going in lets the world settle once; what it changes after that is vanilla's say, and placing it
       -- again comes out the same (numen.build.place's settled_away counts them)
-      if numen.build.place(building).left == 0 then
+      local did = numen.build.place(building)
+      if did.left == 0 then
         return rounds
       end
+      put_down = put_down + did.placed + did.cleared
     elseif #left.dig > 0 then
       to(left.dig[1], "dig")
       numen.work.dig(left.dig)
