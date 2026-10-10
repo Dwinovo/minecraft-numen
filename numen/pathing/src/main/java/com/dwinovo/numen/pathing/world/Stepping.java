@@ -22,7 +22,7 @@ import net.minecraft.world.phys.AABB;
  *   <li>没撞上,就落到脚底下最高的顶面上(走下台阶、走出边沿)。</li>
  * </ul>
  * 每个坎都不高于迈步高度,就是走过去,与原版每刻碰撞时先试着抬一个迈步高度是同一回事。有坎高过迈步高度,就看起跳:
- * 一路上最高的脚高不超过起跳能到的高度({@link BodyStats#jumpHeight},按脚下方块的起跳系数),且从起点到最高处这一段,
+ * 一路上最高的脚高不超过起跳能到的高度({@link Kinematics#jumpHeight},按脚下方块的起跳系数),且从起点到最高处这一段,
  * 身体在起跳越过的高度上处处放得下(头顶不撞)。起跳停不在恰好够高的那一点上:身体沿抛物线升到顶再落下,只有高出要越过的
  * 高度一截的那几刻能往前挪,所以越过的高度取最高的脚高加 {@link #JUMP_CLEARANCE}(起跳到不了那么高时取到得了的顶)。
  * 走完落到的脚高必须就是终点节点的脚高,否则这一步去的不是那个节点。
@@ -62,7 +62,7 @@ public final class Stepping {
     public static Step between(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
                                int dx, int dz, double toFeetY) {
         checkDirection(dx, dz);
-        double jump = body.jumpHeight(Semantics.jumpFactor(level, x, fromFeetY, z));
+        double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, toFeetY),
                 Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY);
         return between(obstacles, body, jump, x, fromFeetY, z, dx, dz, toFeetY);
@@ -124,7 +124,7 @@ public final class Stepping {
     public static double walkOff(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
                                  int dx, int dz, double lowestFeetY) {
         checkDirection(dx, dz);
-        double jump = body.jumpHeight(Semantics.jumpFactor(level, x, fromFeetY, z));
+        double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, lowestFeetY),
                 fromFeetY + jump + body.height(), fromFeetY);
         return walkOff(obstacles, body, jump, x, fromFeetY, z, dx, dz);

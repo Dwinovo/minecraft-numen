@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Stepping;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -142,16 +143,16 @@ final class Drop implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return movement(m) + Strides.bruise(m) + model.overhead(m);
+        return movement(model, m) + Strides.bruise(m) + model.overhead(m);
     }
 
     @Override
     public double ticks(CostModel model, Maneuver m) {
-        return movement(m) + model.workTicks(m);
+        return movement(model, m) + model.workTicks(m);
     }
 
     /** 身体下去的刻数:走出边沿,落下去,走回列中心。 */
-    private static double movement(Maneuver m) {
-        return ActionCosts.WALK_OFF_EDGE / m.speedFactor() + Strides.landing(m);
+    private static double movement(CostModel model, Maneuver m) {
+        return Kinematics.walkOffEdgeTicks(model.body().stats()) / m.speedFactor() + Strides.landing(model, m);
     }
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 
@@ -37,7 +38,7 @@ final class Pillar implements Move {
         Draft draft = new Draft(model, view);
         BlockPos to = from.above();
         double f0 = stance.feetY();
-        double peak = f0 + body.jumpHeight(Semantics.jumpFactor(view, from.getX(), f0, from.getZ()));
+        double peak = f0 + Kinematics.jumpHeight(body, Semantics.jumpFactor(view, from.getX(), f0, from.getZ()));
         // 头顶先腾出来:身体要在垫好的那一块上放得下
         if (!draft.clear(Strides.at(draft, body, to, to.getY()), true, from.getX(), f0, from.getZ(), true)) {
             return draft.failure();
@@ -68,11 +69,11 @@ final class Pillar implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return Strides.jump(model) + model.overhead(m);
+        return Strides.jump(model, 1) + model.spec().jumpPenalty() + model.overhead(m);
     }
 
     @Override
     public double ticks(CostModel model, Maneuver m) {
-        return ActionCosts.JUMP_ONE_BLOCK + model.workTicks(m);
+        return Strides.jump(model, 1) + model.workTicks(m);
     }
 }

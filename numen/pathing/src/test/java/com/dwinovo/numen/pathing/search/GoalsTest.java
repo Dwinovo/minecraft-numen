@@ -195,7 +195,7 @@ class GoalsTest {
         assertTrue(Goals.dig(a, SURVIVAL, Goals.Clearing.ANY).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL, Goals.Clearing.ANY)
                 .contains(6, 64, -3, standing), "这一处只够得着 a");
         assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
-        assertTrue(one - both < ActionCosts.WALK_ONE_BLOCK, "差的不到多走一格:" + (one - both));
+        assertTrue(one - both < ActionCosts.UNIT, "差的不到多走一格:" + (one - both));
         assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL, Goals.Clearing.ANY));
     }
 

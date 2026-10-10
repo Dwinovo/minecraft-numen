@@ -15,19 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 身体的起跳高度、眼睛的位置与世界边界。 */
+/** 眼睛的位置与世界边界。 */
 class BodyAndBoundsTest {
 
     @BeforeAll
     static void boot() {
         Vanilla.boot();
-    }
-
-    @Test
-    void aVanillaJumpClearsOneBlockButNotAFence() {
-        double jump = SURVIVAL.jumpHeight(1.0);
-        assertTrue(jump > 1.25 && jump < 1.26, "原版玩家起跳约 1.252,实为 " + jump);
-        assertTrue(SURVIVAL.jumpHeight(0.5) < 0.5, "蜂蜜块上跳不过半格");
     }
 
     @Test

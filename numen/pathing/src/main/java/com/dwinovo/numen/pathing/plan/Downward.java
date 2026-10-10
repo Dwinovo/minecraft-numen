@@ -60,11 +60,11 @@ final class Downward implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return Strides.landing(m) + Strides.bruise(m) + model.overhead(m);
+        return Strides.landing(model, m) + Strides.bruise(m) + model.overhead(m);
     }
 
     @Override
     public double ticks(CostModel model, Maneuver m) {
-        return Strides.landing(m) + model.workTicks(m);
+        return Strides.landing(model, m) + model.workTicks(m);
     }
 }

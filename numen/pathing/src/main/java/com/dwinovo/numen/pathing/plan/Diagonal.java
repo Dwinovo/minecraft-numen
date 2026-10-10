@@ -95,8 +95,8 @@ final class Diagonal implements Move {
     private static double movement(CostModel model, Maneuver m) {
         double move = Strides.pace(model, m) * Math.sqrt(2);
         if (m.jump()) {
-            move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK);
+            move = Math.max(move, Strides.jump(model, Strides.rise(m)));
         }
-        return m.drop() > 0.5 ? move + Strides.landing(m) : move;
+        return m.drop() > 0.5 ? move + Strides.landing(model, m) : move;
     }
 }

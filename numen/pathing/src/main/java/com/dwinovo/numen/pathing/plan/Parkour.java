@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 
@@ -13,7 +14,7 @@ import net.minecraft.core.BlockPos;
  * 跑酷:朝东南西北起跳,越过一到三格的空隙,落在同一个节点高度,或(规格开着时)高一级。
  *
  * <p>前提:规格开着跑酷;起步时站在地上、脚下不泡在液体里;紧挨着的那一列是空隙(托不住脚——托得住就直接走过去);
- * 起跳能升的高度按脚下方块的起跳系数算({@link BodyStats#jumpHeight}),起步那一列头顶与空中经过的每一列在起跳的脚高与
+ * 起跳能升的高度按脚下方块的起跳系数算({@link Kinematics#jumpHeight}),起步那一列头顶与空中经过的每一列在起跳的脚高与
  * 最高点都放得下身体;落点是第一列托得住脚、放得下身体的节点。跳多远看助跑:脚下步速慢(灵魂沙、蜂蜜块)最远落到第 2 列,
  * 不疾跑最远第 3 列,疾跑第 4 列;落到第 4 列、落点比起跳的脚高(跳上高一级,或落在比起跳处高半格的半砖上)都要疾跑——
  * 落点越高,身体越早落回那个高度,留给水平飞的刻数越少。落点再往前一列不能是这条路线排除的格——
@@ -51,7 +52,7 @@ final class Parkour implements Move {
         int dx = heading.dx();
         int dz = heading.dz();
         double f0 = stance.feetY();
-        double peak = f0 + body.jumpHeight(Semantics.jumpFactor(view, x, f0, z));
+        double peak = f0 + Kinematics.jumpHeight(body, Semantics.jumpFactor(view, x, f0, z));
         if (!Double.isNaN(Footing.height(view, body, x + dx, y, z + dz))) {
             return Premise.fail(from.offset(dx, 0, dz), Reason.NO_GAP);
         }
@@ -126,16 +127,16 @@ final class Parkour implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return movement(m) + model.spec().jumpPenalty() + model.overhead(m);
+        return movement(model, m) + model.spec().jumpPenalty() + model.overhead(m);
     }
 
     @Override
     public double ticks(CostModel model, Maneuver m) {
-        return movement(m) + model.workTicks(m);
+        return movement(model, m) + model.workTicks(m);
     }
 
-    /** 身体跳过去的刻数:按助跑的步速跨过这几列。 */
-    private static double movement(Maneuver m) {
-        return m.span() * (m.sprint() ? ActionCosts.SPRINT_ONE_BLOCK : ActionCosts.WALK_ONE_BLOCK);
+    /** 身体跳过去的刻数:按助跑的步速跨过这几列,空中的时间不短于落在那一高度上的工夫。 */
+    private static double movement(CostModel model, Maneuver m) {
+        return Kinematics.leapTicks(model.body().stats(), m.span(), m.sprint(), Strides.rise(m));
     }
 }

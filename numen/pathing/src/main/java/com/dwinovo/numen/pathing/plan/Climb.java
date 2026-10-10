@@ -5,6 +5,7 @@ import java.util.List;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 
@@ -65,16 +66,17 @@ final class Climb implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return movement(m) + model.overhead(m);
+        return movement(model, m) + model.overhead(m);
     }
 
     @Override
     public double ticks(CostModel model, Maneuver m) {
-        return movement(m) + model.workTicks(m);
+        return movement(model, m) + model.workTicks(m);
     }
 
     /** 身体顺着爬一格的刻数:往上比往下慢。 */
-    private static double movement(Maneuver m) {
-        return m.to().getY() > m.from().getY() ? ActionCosts.CLIMB_UP_ONE : ActionCosts.CLIMB_DOWN_ONE;
+    private static double movement(CostModel model, Maneuver m) {
+        return m.to().getY() > m.from().getY() ? Kinematics.climbUpTicksPerBlock(model.body().stats())
+                : Kinematics.climbDownTicksPerBlock();
     }
 }

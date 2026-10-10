@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
@@ -66,14 +67,20 @@ final class Strides {
         if (m.wading()) {
             return model.waterStep();
         }
-        double pace = m.sneak() ? ActionCosts.SNEAK_ONE_BLOCK
-                : m.sprint() ? ActionCosts.SPRINT_ONE_BLOCK : ActionCosts.WALK_ONE_BLOCK;
+        BodyStats body = model.body().stats();
+        double pace = m.sneak() ? Kinematics.sneakTicksPerBlock(body)
+                : m.sprint() ? Kinematics.sprintTicksPerBlock(body) : Kinematics.walkTicksPerBlock(body);
         return pace / m.speedFactor();
     }
 
-    /** 起跳的价钱:起跳升一格的耗时,加规格的起跳罚分。 */
-    static double jump(CostModel model) {
-        return ActionCosts.JUMP_ONE_BLOCK + model.spec().jumpPenalty();
+    /** 起跳落在比起跳时高 {@code rise} 格的平面上、能接着再跳要几刻({@link Kinematics#jumpCycleTicks})。 */
+    static double jump(CostModel model, double rise) {
+        return Kinematics.jumpCycleTicks(model.body().stats(), 1.0, rise);
+    }
+
+    /** 这一步起跳,落点比起步高几格。 */
+    static double rise(Maneuver m) {
+        return m.landing().feetY() - m.start().feetY();
     }
 
     /**
@@ -99,8 +106,9 @@ final class Strides {
     }
 
     /** 从 {@code drop} 高处落到这个落点的耗时:下落,至少要走回列中心那一截。 */
-    static double landing(Maneuver m) {
-        return Math.max(ActionCosts.fall(m.drop()), ActionCosts.CENTER_AFTER_FALL);
+    static double landing(CostModel model, Maneuver m) {
+        BodyStats body = model.body().stats();
+        return Math.max(Kinematics.fallTicks(body.gravity(), m.drop()), Kinematics.centerAfterFallTicks(body));
     }
 
     /** 落地摔疼的折价:掉的血按 {@link ActionCosts#FALL_DAMAGE_PER_POINT} 折成刻。 */

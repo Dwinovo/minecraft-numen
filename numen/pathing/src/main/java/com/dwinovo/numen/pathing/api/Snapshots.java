@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
@@ -68,8 +69,14 @@ public final class Snapshots {
     /** 第 0 层要的那几项物理量:尺寸、迈步、起跳、重力、交互距离、细雪与冰霜行者。 */
     public static BodyStats stats(ServerPlayer body) {
         return new BodyStats(body.getDimensions(Pose.STANDING),
-                body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(),
+                body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(), walkingSpeed(body),
                 body.blockInteractionRange(), PowderSnowBlock.canEntityWalkOnPowderSnow(body), frostWalker(body));
+    }
+
+    /** 平走的移动速度:属性值去掉此刻疾跑加上的那一份(疾跑的倍数在 {@code Kinematics} 里按疾跑算)。 */
+    private static double walkingSpeed(ServerPlayer body) {
+        double value = body.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        return body.isSprinting() ? value / Kinematics.SPRINT_MULTIPLIER : value;
     }
 
     /** 脚上的靴子带冰霜行者。 */

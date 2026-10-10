@@ -49,10 +49,10 @@ public final class Vanilla {
             bindTags(BuiltInRegistries.FLUID, data);
         }
         EntityDimensions standing = EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F);
-        SURVIVAL = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, false, false);
-        CREATIVE = new BodyStats(standing, 0.6, 0.42F, 0.08, 5.0, false, false);
-        LEATHER_BOOTS = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, true, false);
-        FROST_WALKER = new BodyStats(standing, 0.6, 0.42F, 0.08, 4.5, false, true);
+        SURVIVAL = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 4.5, false, false);
+        CREATIVE = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 5.0, false, false);
+        LEATHER_BOOTS = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 4.5, true, false);
+        FROST_WALKER = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 4.5, false, true);
     }
 
     private Vanilla() {}

@@ -257,7 +257,7 @@ class SteppingTest {
     @Test
     void wholeBlockColumnsAnswerExactlyLikeTheirBoxes() {
         BodyStats body = SURVIVAL;
-        double jump = body.jumpHeight(1.0);
+        double jump = Kinematics.jumpHeight(body, 1.0);
         double height = body.height();
         for (int[] d : DIRECTIONS) {
             int dx = d[0];
@@ -292,7 +292,7 @@ class SteppingTest {
     @Test
     void wholeBlockColumnsAnswerExactlyLikeTheirBoxesFromAnyFeetHeight() {
         BodyStats body = SURVIVAL;
-        double jump = body.jumpHeight(1.0);
+        double jump = Kinematics.jumpHeight(body, 1.0);
         double height = body.height();
         for (int[] d : Arrays.copyOf(DIRECTIONS, 4)) {
             int dx = d[0];

@@ -33,7 +33,7 @@ class DiagnosisTest {
 
     /**
      * 两间干屋之间只有一条三十格长的封顶水道(地、四壁与顶都是基岩):搜完无路,诊断说憋得住就有路,点出那一段水下从踏进水里
-     * 的那一格到走出水的那一格、要憋约 286 刻(31 步水里的工夫加走出来那一步),满氧气能安全憋 240 刻。
+     * 的那一格到走出水的那一格、要憋约 320 刻(31 步水里的工夫,水里走一格 10.2 刻,加走出来那一步),满氧气能安全憋 240 刻。
      */
     @Test
     void aWayOnlyUnderWaterTooLongToHoldIsToldAsSuch() {
@@ -49,7 +49,7 @@ class DiagnosisTest {
         Outcome.Breathless breathless = assertInstanceOf(Outcome.Breathless.class, outcome);
         assertEquals(new BlockPos(-1, Y, 0), breathless.from());
         assertEquals(new BlockPos(31, Y, 0), breathless.to());
-        assertTrue(breathless.held() > 280 && breathless.held() < 295, "要憋的刻数:" + breathless.held());
+        assertTrue(breathless.held() > 310 && breathless.held() < 330, "要憋的刻数:" + breathless.held());
         assertEquals(300 - (int) Breath.RESERVE, breathless.spare());
     }
 }

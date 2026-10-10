@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.api.entity.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
@@ -111,10 +112,9 @@ public final class CostModel {
         return body.canSprint();
     }
 
-    /** 水里走或游一格:按水下移动效率在水里的步速与陆上步速之间插值。 */
+    /** 水里走或游一格要几刻({@link Kinematics#wadeTicksPerBlock},按水下移动效率)。 */
     public double waterStep() {
-        double efficiency = Mth.clamp(body.waterMovementEfficiency(), 0, 1);
-        return ActionCosts.WALK_ONE_IN_WATER * (1 - efficiency) + ActionCosts.WALK_ONE_BLOCK * efficiency;
+        return Kinematics.wadeTicksPerBlock(body.stats(), Mth.clamp(body.waterMovementEfficiency(), 0, 1));
     }
 
     // ==================== 按种类与按位置 ====================

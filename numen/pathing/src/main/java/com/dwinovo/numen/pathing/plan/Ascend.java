@@ -5,6 +5,7 @@ import java.util.List;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Stepping;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 
@@ -101,12 +102,12 @@ final class Ascend implements Move {
         return movement(model, m) + model.workTicks(m);
     }
 
-    /** 身体上去的刻数:一格的步速;跳上去的至少是起跳上一格的工夫,从水里、梯子上够上去的另加爬一格。 */
+    /** 身体上去的刻数:一格的步速;跳上去的至少是起跳落到那一高度的工夫,从水里、梯子上够上去的另加爬一格。 */
     private static double movement(CostModel model, Maneuver m) {
         double move = Strides.pace(model, m);
         if (m.jump()) {
-            return Math.max(move, ActionCosts.JUMP_ONE_BLOCK);
+            return Math.max(move, Strides.jump(model, Strides.rise(m)));
         }
-        return m.start().grounded() ? move : move + ActionCosts.CLIMB_UP_ONE;
+        return m.start().grounded() ? move : move + Kinematics.climbUpTicksPerBlock(model.body().stats());
     }
 }
