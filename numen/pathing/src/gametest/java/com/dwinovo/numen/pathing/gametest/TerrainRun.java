@@ -30,8 +30,6 @@ import org.slf4j.Logger;
 final class TerrainRun {
 
     private static final Logger LOG = LogUtils.getLogger();
-    /** 路线加载范围的半径(区块):沿路线每隔几个区块压一张票据,各罩住这么宽。 */
-    private static final int TICKET_DISTANCE = 6;
     /** 汇总表要等所有路线都跑完;每条跑完时登记一行。 */
     private static final List<JsonObject> DONE = new ArrayList<>();
 
@@ -39,6 +37,7 @@ final class TerrainRun {
 
     private final GameTestHelper helper;
     private final TerrainRoutes.Route route;
+    private final TerrainBlock block;
     private final ServerLevel level;
     private Phase phase = Phase.LOADING;
     private TestBody body;
@@ -46,40 +45,33 @@ final class TerrainRun {
     private int waited;
     private float lowestHealth = Float.MAX_VALUE;
 
-    private TerrainRun(GameTestHelper helper, TerrainRoutes.Route route) {
+    private TerrainRun(GameTestHelper helper, TerrainBlock block, TerrainRoutes.Route route) {
+        this.block = block;
         this.helper = helper;
         this.route = route;
         this.level = helper.getLevel().getServer().getLevel(TerrainWorld.DIMENSION);
     }
 
-    /** 开跑:核对路线与存档,压票据加载路线沿途的区块,之后每刻推一步。 */
+    /** 开跑:核对路线与存档,压一张票据把存档里路线可能走到的整片区块加载好(路线绕路也不会走进没加载的区块),之后每刻推一步。 */
     static void start(GameTestHelper helper, TerrainRoutes.Route route) {
         TerrainBlock block = TerrainBlock.load();
         block.requireInside(route);
-        TerrainRun run = new TerrainRun(helper, route);
+        TerrainRun run = new TerrainRun(helper, block, route);
         block.requireFromSave(run.level);
         Worlds.settle(run.level);
-        run.loadAlongRoute();
+        ChunkPos center = block.center();
+        run.level.getChunkSource().addRegionTicket(TicketType.FORCED, center, TerrainBlock.LOAD_DISTANCE, center);
         helper.onEachTick(run::tick);
     }
 
-    private void loadAlongRoute() {
-        int steps = Math.max(1, (int) Math.ceil(route.distance() / (4 * 16)));
-        for (int i = 0; i <= steps; i++) {
-            int x = route.from().getX() + (route.to().getX() - route.from().getX()) * i / steps;
-            int z = route.from().getZ() + (route.to().getZ() - route.from().getZ()) * i / steps;
-            ChunkPos pos = new ChunkPos(new BlockPos(x, 0, z));
-            level.getChunkSource().addRegionTicket(TicketType.FORCED, pos, TICKET_DISTANCE, pos);
-        }
-    }
-
     private boolean loaded() {
-        int steps = Math.max(1, (int) Math.ceil(route.distance() / (4 * 16)));
-        for (int i = 0; i <= steps; i++) {
-            int x = route.from().getX() + (route.to().getX() - route.from().getX()) * i / steps;
-            int z = route.from().getZ() + (route.to().getZ() - route.from().getZ()) * i / steps;
-            if (level.getChunkSource().getChunkNow(x >> 4, z >> 4) == null) {
-                return false;
+        int r = TerrainBlock.LOAD_RADIUS;
+        ChunkPos center = block.center();
+        for (int cx = center.x - r; cx <= center.x + r; cx++) {
+            for (int cz = center.z - r; cz <= center.z + r; cz++) {
+                if (level.getChunkSource().getChunkNow(cx, cz) == null) {
+                    return false;
+                }
             }
         }
         return true;

@@ -14,6 +14,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 
 /**
@@ -22,8 +23,21 @@ import net.minecraft.world.level.block.Block;
  */
 final class TerrainBlock {
 
+    /** 区域正中的区块,票据压在这里。 */
+    ChunkPos center() {
+        return new ChunkPos(regionX * 32 + 15, regionZ * 32 + 15);
+    }
+
     /** 路线两端离区域边缘至少这么多区块:路线的加载范围要整个落在存档里,边缘外的区块存档里没有。 */
     private static final int MARGIN_CHUNKS = 4;
+
+    /**
+     * 加载票据的距离:压在区域正中的区块上,往外 13 圈到 FULL、12 圈实体能刻(身体靠这个才会动)。12 圈是区块 3..27,
+     * 罩住 {@link #MARGIN_CHUNKS} 圈以内的整片内部(区块 4..27),路线绕再远的路也不出这片。
+     */
+    static final int LOAD_DISTANCE = 14;
+    /** 必须加载好的半径(实体能刻的那一圈)。 */
+    static final int LOAD_RADIUS = LOAD_DISTANCE - 2;
 
     private record Sentinel(BlockPos pos, Block block) {}
 
