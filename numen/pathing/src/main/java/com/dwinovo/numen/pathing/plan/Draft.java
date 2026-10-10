@@ -8,10 +8,12 @@ import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Stepping;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 一步的草稿:把这一步设想中的改动(挖掉、放下、开关门)叠在只读视图上({@link EditedView}),自己也是一个视图——几何
@@ -78,6 +80,12 @@ final class Draft extends EditedView {
         return true;
     }
 
+    /** 潜行探出边沿到头时眼睛的位置:列中心往 {@code heading} 方向挪执行有把握探出的那么远({@link Stepping#leanOut})。 */
+    private Vec3 leanedEye(int bx, double feetY, int bz, Heading heading) {
+        double out = Stepping.leanOut(this, body, bx, feetY, bz, heading.dx(), heading.dz());
+        return body.eye(bx, feetY, bz).add(heading.dx() * out, 0, heading.dz() * out);
+    }
+
     /** 搭桥的姿势:站定点得中,或要潜行探出边沿才点得中。 */
     enum Bridging {
         STANDING, LEANING
@@ -86,7 +94,7 @@ final class Draft extends EditedView {
     /**
      * 桥位 {@code pos} 上那一块垫路料({@link #place} 放的)是站在 {@code (bx, feetY, bz)} 那一列、往 {@code heading} 方向走过去时放的:
      * 在这一步别的改动都做完、桥块还没放(桥位暂时还原成放之前的样子)的世界里,先看站定、眼睛在列中心能不能点中一个面({@link Faces#inSight}),点不中再看
-     * 潜行探出边沿({@link BodyStats#leanedEye})能不能。两种都点不中就没法放,记 {@link Reason#NO_FACE}。判据只此一处:执行时站着瞄、
+     * 潜行探出边沿(探出多远见 {@link Stepping#leanOut}:执行有把握到达的位置,不是最远处)能不能。两种都点不中就没法放,记 {@link Reason#NO_FACE}。判据只此一处:执行时站着瞄、
      * 或潜行探出去瞄,瞄的就是这里判过的那个姿势下的面。桥块的改动挪到改动表的末尾——执行是先腾出要探进去的格、再放。
      *
      * @return 放得下用哪种姿势;放不下为 null(失败已记)
@@ -103,7 +111,7 @@ final class Draft extends EditedView {
         Bridging how = Bridging.STANDING;
         try {
             if (Faces.inSight(this, body.eye(bx, feetY, bz), body.blockReach(), pos, bridge.block()) == null) {
-                if (Faces.inSight(this, body.leanedEye(bx, feetY, bz, heading.dx(), heading.dz()), body.blockReach(), pos,
+                if (Faces.inSight(this, leanedEye(bx, feetY, bz, heading), body.blockReach(), pos,
                         bridge.block()) == null) {
                     fail(pos, Reason.NO_FACE);
                     return null;

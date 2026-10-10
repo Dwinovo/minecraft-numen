@@ -115,6 +115,33 @@ public final class Stepping {
         return Step.WALK;
     }
 
+    /** 潜行探出边沿一步一步往外挪,原版({@code Player.maybeBackOffFromEdge})每次减 0.05;留一步的余量,执行有把握到的位置。 */
+    private static final double LEAN_STEP = 0.05;
+    /** 探多远也不会超过这个:再往外身体早已没有地托着。 */
+    private static final int LEAN_STEPS = 20;
+
+    /**
+     * 站立的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向潜行探出边沿,身体中心从列中心起最远能挪出多远(格),执行有把握
+     * 到达的:原版潜行时只要身体的碰撞盒往外挪一点之后,脚下迈步高度以内还碰得到东西,就挪得动;碰撞盒底下托着它的那个碰撞形状
+     * 多宽,就能探多远(整块探到边沿外 0.3 格,栅栏只有中间一条)。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量。
+     * 脚下没有东西托着时是 0。
+     */
+    public static double leanOut(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {
+        checkDirection(dx, dz);
+        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY);
+        double half = body.width() / 2;
+        double out = 0;
+        for (int i = 1; i <= LEAN_STEPS; i++) {
+            double c = i * LEAN_STEP;
+            double top = obstacles.support(x + 0.5 + dx * c, z + 0.5 + dz * c, half, feetY);
+            if (top < feetY - body.stepHeight() - Footing.EPSILON) {
+                break;
+            }
+            out = c;
+        }
+        return Math.max(0, out - LEAN_STEP);
+    }
+
     /**
      * 站立的身体脚在 {@code (x, fromFeetY, z)},不起跳,朝 {@code (dx, dz)} 走进相邻一列,脚最后落在多高:与
      * {@link #between} 同一套推导,只是不指定终点。途中有坎高过迈步高度、要跳才过得去,答 {@link Double#NaN};脚下直到

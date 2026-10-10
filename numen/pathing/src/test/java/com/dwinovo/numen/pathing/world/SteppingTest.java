@@ -368,4 +368,30 @@ class SteppingTest {
         assertEquals(0, Double.compare(expected.peak(), actual.peak()), "最高的脚高");
         assertEquals(expected.peakAt(), actual.peakAt(), "最高点在第几个取样点");
     }
+
+    // ==================== 潜行探出边沿 ====================
+
+    /** 孤零零一块方块在 (0, Y - 1, 0),四周什么也没有。 */
+    private static TestWorld lone(BlockState state) {
+        return new TestWorld().set(0, Y - 1, 0, state);
+    }
+
+    @Test
+    void sneakingOutPastTheEdgeOfAFullBlockReachesAboutSevenTenths() {
+        // 整块的边沿离列中心 0.5,身体半宽 0.3:原版潜行最多挪到碰撞盒刚好还压着边沿,留一步余量
+        double out = Stepping.leanOut(lone(Blocks.STONE.defaultBlockState()), SURVIVAL, 0, Y, 0, 1, 0);
+        assertTrue(out > 0.6 && out <= 0.75, "整块上探出 " + out);
+    }
+
+    @Test
+    void sneakingOutOfAFenceReachesLessBecauseItsPostIsNarrow() {
+        double out = Stepping.leanOut(lone(Blocks.OAK_FENCE.defaultBlockState()), SURVIVAL, 0, Y + 0.5, 0, 1, 0);
+        assertTrue(out > 0.2 && out < 0.45, "栅栏上探出 " + out);
+        assertTrue(out < Stepping.leanOut(lone(Blocks.STONE.defaultBlockState()), SURVIVAL, 0, Y, 0, 1, 0), "比整块上探得近");
+    }
+
+    @Test
+    void thereIsNoLeaningWithNothingUnderfoot() {
+        assertEquals(0, Stepping.leanOut(new TestWorld(), SURVIVAL, 0, Y, 0, 1, 0), 1e-9);
+    }
 }
