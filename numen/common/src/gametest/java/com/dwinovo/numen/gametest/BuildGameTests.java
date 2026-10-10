@@ -2336,6 +2336,42 @@ public class BuildGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 放下一格会让原版按邻居重算,把旁边一格图纸点名要的、原版却托不住的(安山岩上的粉红花簇,照图直写时立得住)带掉:
+     * 这一遍放下了石头,净完成数一格没涨,也是做成了——{@code numen.build.place} 不能当"一格都没放成"收场,
+     * 否则 {@code numen.build.raise} 在这一格上就此放弃,而花簇再放一次又是一格进展。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void a_pass_that_places_a_cell_is_not_failed_for_the_neighbour_it_knocks_out(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(4, 2, 6), false);
+        companion.getInventory().add(new ItemStack(Items.PINK_PETALS, 4));
+        companion.getInventory().add(new ItemStack(Items.STONE, 4));
+        BlockPos petals = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos stone = petals.east();
+        level.setBlockAndUpdate(petals.below(), Blocks.ANDESITE.defaultBlockState());
+        String flower = "{name = \"pink_petals[flower_amount=1,facing=west]\", pos = " + xyz(petals) + "}";
+        String cells = "{" + flower + ", {name = \"stone\", pos = " + xyz(stone) + "}}";
+        AtomicReference<ToolRun> first = new AtomicReference<>();
+        AtomicReference<ToolRun> second = new AtomicReference<>();
+
+        steps(helper)
+                .thenExecute(() -> first.set(lua(companion, "numen.build.place({" + flower + "})")))
+                .thenWaitUntil(() -> helper.assertTrue(first.get().receipt() != null, "the first placement has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(first.get().succeeded() && level.getBlockState(petals).is(Blocks.PINK_PETALS),
+                            "the petals did not go in: " + first.get().reply());
+                    second.set(lua(companion, "numen.build.place(" + cells + ")"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(second.get().receipt() != null, "the second placement has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(second.get().succeeded() && level.getBlockState(stone).is(Blocks.STONE),
+                            "a pass that placed the stone was failed for the petals it knocked out: " + second.get().reply());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     // ---- 从脚本入口:numen.build.place、diff、raise、蓝图与建成的房子 ----
 
     /** 放一格工作台:没有朝向的方块像右键那样放下,生存按格扣料;派下的活叫那个函数的名字。 */

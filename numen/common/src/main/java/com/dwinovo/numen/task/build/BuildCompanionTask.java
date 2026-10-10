@@ -122,6 +122,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** {@code skippedPos.size()} 的缓存——判完工在热路径上,不必每次问集合。 */
     private int skippedCells;
     private int passStartCompleted;
+    /** 本遍开工时已经放下与拆掉的格数合计。 */
+    private int passStartActions;
     /**
      * 本遍已经证明<b>付不起剩下任何一格</b>——缺料这件事在这一刻就成立了,不必走完这遍。
      *
@@ -268,6 +270,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         rebuildOrder();
         computePace();
         passStartCompleted = r.completed();
+        passStartActions = r.placed() + r.broken();
         collectConsent();
         phase = consentItems.isEmpty() ? Phase.WORK : Phase.CONSENT;
         placeCredit = 0;
@@ -695,7 +698,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (r.completed() + skippedCells >= r.targets.size()) {
             return conclude(null);
         }
-        boolean progressed = r.completed() > passStartCompleted;
+        // 动了手就是有进展:放下一格会让原版按邻居重算,把旁边一格本就立不住的(图纸点名要的、原版托不住的)带掉,净完成数
+        // 可以一格不涨;这一遍的活仍然做了,下一遍接着放。净完成数涨了而一格没动(别人替她盖了)也算。
+        boolean progressed = r.placed() + r.broken() > passStartActions || r.completed() > passStartCompleted;
         com.dwinovo.numen.Constants.LOG.debug(
                 "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 断料{}",
                 r.completed(), r.targets.size(), r.completed() - passStartCompleted,
