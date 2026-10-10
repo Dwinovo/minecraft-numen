@@ -64,7 +64,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, toFeetY),
-                Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY);
+                Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY, false);
         return between(obstacles, body, jump, x, fromFeetY, z, dx, dz, toFeetY);
     }
 
@@ -124,11 +124,11 @@ public final class Stepping {
      * 站立的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向潜行探出边沿,身体中心从列中心起最远能挪出多远(格),执行有把握
      * 到达的:原版潜行时只要身体的碰撞盒往外挪一点之后,脚下迈步高度以内还碰得到东西,就挪得动;碰撞盒底下托着它的那个碰撞形状
      * 多宽,就能探多远(整块探到边沿外 0.3 格,栅栏只有中间一条)。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量。
-     * 脚下没有东西托着时是 0。
+     * 脚下没有东西托着时是 0。探出去是按着潜行的:脚手架的顶板这时让开({@link Boxes#shape}),站在脚手架上探不出去。
      */
     public static double leanOut(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {
         checkDirection(dx, dz);
-        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY);
+        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY, true);
         double half = body.width() / 2;
         double out = 0;
         for (int i = 1; i <= LEAN_STEPS; i++) {
@@ -153,7 +153,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, lowestFeetY),
-                fromFeetY + jump + body.height(), fromFeetY);
+                fromFeetY + jump + body.height(), fromFeetY, false);
         return walkOff(obstacles, body, jump, x, fromFeetY, z, dx, dz);
     }
 
@@ -220,7 +220,7 @@ public final class Stepping {
      * 整块位图;碰到别的形状就把已经看过的整块换成碰撞箱,接着逐个收。
      */
     static Obstacles gather(BlockGetter level, BodyStats body, int x, int z, int dx, int dz,
-                            double low, double high, double feetY) {
+                            double low, double high, double feetY, boolean sneaking) {
         int y0 = Footing.cellOf(low) - 1;
         int y1 = Mth.floor(high) + 1;
         int x0 = Math.min(x, x + dx);
@@ -233,7 +233,7 @@ public final class Stepping {
         for (int cx = x0; cx < x0 + nx; cx++) {
             for (int cz = z0; cz < z0 + nz; cz++) {
                 for (int cy = y0; cy <= y1; cy++) {
-                    Boxes.Shape shape = Boxes.shape(level, body, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY);
+                    Boxes.Shape shape = Boxes.shape(level, body, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY, sneaking);
                     if (shape.fill() == Boxes.Fill.EMPTY) {
                         continue;
                     }

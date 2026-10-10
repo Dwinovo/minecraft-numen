@@ -391,6 +391,11 @@ class SteppingTest {
     }
 
     @Test
+    void thereIsNoLeaningOutOfScaffoldingBecauseItsPlateGivesWayToASneakingBody() {
+        assertEquals(0, Stepping.leanOut(lone(Blocks.SCAFFOLDING.defaultBlockState()), SURVIVAL, 0, Y, 0, 1, 0), 1e-9);
+    }
+
+    @Test
     void thereIsNoLeaningWithNothingUnderfoot() {
         assertEquals(0, Stepping.leanOut(new TestWorld(), SURVIVAL, 0, Y, 0, 1, 0), 1e-9);
     }
