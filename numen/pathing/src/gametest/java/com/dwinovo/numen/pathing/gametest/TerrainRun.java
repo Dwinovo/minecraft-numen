@@ -62,6 +62,13 @@ final class TerrainRun {
         ChunkPos center = block.center();
         run.level.getChunkSource().addRegionTicket(TicketType.FORCED, center, TerrainBlock.LOAD_DISTANCE, center);
         run.level.getChunkSource().setViewDistance(TerrainBlock.BODY_VIEW);
+        // 整片区域一次加载完(阻塞到全部 FULL):加载花多少墙钟与刻数都不进路线的账,GameTest 的时限也不被它吃掉
+        int r = TerrainBlock.LOAD_RADIUS;
+        for (int cx = center.x - r; cx <= center.x + r; cx++) {
+            for (int cz = center.z - r; cz <= center.z + r; cz++) {
+                run.level.getChunk(cx, cz, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, true);
+            }
+        }
         helper.onEachTick(run::tick);
     }
 
