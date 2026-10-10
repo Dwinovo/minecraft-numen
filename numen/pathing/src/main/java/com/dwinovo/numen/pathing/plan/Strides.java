@@ -6,8 +6,10 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Stepping;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
 import net.minecraft.core.BlockPos;
@@ -74,6 +76,58 @@ final class Strides {
         double pace = m.sneak() ? Kinematics.sneakTicksPerBlock(body)
                 : model.maySprint() && m.runnable() ? Kinematics.sprintTicksPerBlock(body) : Kinematics.walkTicksPerBlock(body);
         return pace / m.speedFactor();
+    }
+
+    /**
+     * 不改地形,身体能不能从落点 {@code to} 回到起点 {@code from}(交出半程路线的一截只能停在回得了头的节点上)。判据全是运动学与第 0 层的几何:
+     * <ul>
+     *   <li>起点不是站着的(攀着、浮着):回去是爬上去、游上去,都回得去;</li>
+     *   <li>站着落在站着的地方,落差(起点的脚高减落点的)不超过迈步高度,回去只是走上去,回得去;更高就看回去那一步
+     *       ({@link Stepping#between},落差在起跳能到的高度以内才回得去);同一列(往下挖穿)没有那一步,落差要在起跳能到的高度以内;</li>
+     *   <li>落在攀着、浮着的地方:顺着梯子、藤蔓爬上去,爬到头了剩下的落差要在起跳能到的高度以内;在水里游到水面,岸沿高出水面不超过
+     *       迈步高度(原版出水靠撞着岸沿时顶上一点,{@code LivingEntity.travel} 里的 0.6 格);再从起点那一列挪回去
+     *       ({@link Stepping#fromHold})。</li>
+     * </ul>
+     */
+    static boolean reversible(BlockGetter level, BodyStats body, BlockPos from, Stance start, BlockPos to, Stance landing) {
+        if (!start.grounded()) {
+            return true;
+        }
+        double rise = start.feetY() - landing.feetY();
+        int dx = from.getX() - to.getX();
+        int dz = from.getZ() - to.getZ();
+        boolean sameColumn = dx == 0 && dz == 0;
+        double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, to.getX(), landing.feetY(), to.getZ()));
+        if (landing.grounded()) {
+            if (rise <= body.stepHeight() + Footing.EPSILON) {
+                return true;
+            }
+            return sameColumn ? rise <= jump + Footing.EPSILON
+                    : Stepping.between(level, body, to.getX(), landing.feetY(), to.getZ(), dx, dz, start.feetY()) != Stepping.Step.BLOCKED;
+        }
+        double reach = landing.feetY();
+        BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos();
+        boolean water = inWater(level, to);
+        double ledge;
+        if (water) {
+            int y = to.getY();
+            while (inWater(level, cell.set(to.getX(), y + 1, to.getZ()))) {
+                y++;
+            }
+            reach = y + 1;
+            ledge = body.stepHeight();
+        } else {
+            int y = to.getY();
+            while (Semantics.is(level, cell.set(to.getX(), y + 1, to.getZ()), Kind.CLIMBABLE)) {
+                y++;
+            }
+            reach = y + 1;
+            ledge = jump;
+        }
+        if (start.feetY() - reach > ledge + Footing.EPSILON) {
+            return false;
+        }
+        return sameColumn || Stepping.fromHold(level, body, to.getX(), landing.feetY(), to.getZ(), dx, dz, start.feetY()) != Stepping.Step.BLOCKED;
     }
 
     /** 起跳落在比起跳时高 {@code rise} 格的平面上、能接着再跳要几刻({@link Kinematics#jumpCycleTicks})。 */

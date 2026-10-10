@@ -124,7 +124,9 @@ final class Parkour implements Move {
         return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, runUp,
                 false, Strides.inWater(view, to), Strides.submerged(view, body, from, stance, to, landing),
                 Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
-                span, draft.edits(), contact.cells(), contact.exposure(), support));
+                span, draft.edits(), contact.cells(), contact.exposure(), support,
+                // 跳回去的跨距与落差不比去时难:落点不比起点低
+                true));
     }
 
     @Override

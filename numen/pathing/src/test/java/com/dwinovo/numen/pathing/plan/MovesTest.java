@@ -303,6 +303,70 @@ class MovesTest {
                 "摔疼的按掉血折价");
     }
 
+    // ==================== 回得了头 ====================
+
+    @Test
+    void aStepUpOrOneStepDownCanBeUndoneOnFoot() {
+        assertTrue(holds(MoveKind.WALK, defaults(), ground(), AT, EAST).reversible());
+        assertTrue(holds(MoveKind.DESCEND, defaults(), ledge(1), AT, EAST).reversible(), "下一级:回去是跳上一格");
+        TestWorld step = ground().set(AT.east(), Blocks.STONE.defaultBlockState());
+        assertTrue(holds(MoveKind.ASCEND, defaults(), step, AT, EAST).reversible(), "上一级:回去是走下来");
+    }
+
+    @Test
+    void aFallOfTwoBlocksOrMoreCannotBeUndoneOnFoot() {
+        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(10).build());
+        assertFalse(holds(MoveKind.FALL, loose, ledge(2), AT, EAST).reversible(), "两格:起跳最高 1.25,爬不回去");
+        assertFalse(holds(MoveKind.FALL, loose, ledge(3), AT, EAST).reversible());
+        assertFalse(holds(MoveKind.FALL, loose, ledge(5), AT, EAST).reversible(), "四格以上更不行");
+    }
+
+    @Test
+    void aFallIntoWaterCanBeUndoneOnlyWhenTheBankIsLowEnoughToClimbOut() {
+        // 下一级落进浅水:水面和岸平,游过去就上岸
+        TestWorld shallow = ledge(1).set(1, Y - 1, 0, Blocks.WATER.defaultBlockState());
+        Maneuver in = holds(MoveKind.DESCEND, defaults(), shallow, AT, EAST);
+        assertTrue(in.wading() && in.reversible());
+        // 三格高的岸:水面低过岸三格,出不了水
+        TestWorld pool = ledge(4).fill(1, Y - 4, -4, 6, Y - 3, 4, Blocks.WATER.defaultBlockState());
+        Maneuver high = holds(MoveKind.FALL, defaults(), pool, AT, EAST);
+        assertTrue(high.wading());
+        assertFalse(high.reversible(), "岸沿高出水面两格,游不上去");
+    }
+
+    /** 西边是岸,东边一列往下什么也没有,只有往下的梯子在那里。 */
+    private static TestWorld shaft() {
+        return new TestWorld().floor(-4, -4, 0, 4, Y - 1);
+    }
+
+    @Test
+    void aFallOntoALadderCanBeUndoneOnlyWhereTheLadderClimbsBackToTheEdge() {
+        // 梯子从落点一路爬到只比岸沿低一格,最后一格是起跳上去的
+        TestWorld reaching = shaft().set(1, Y - 2, 0, Blocks.LADDER.defaultBlockState()).set(1, Y - 3, 0, Blocks.LADDER.defaultBlockState())
+                .set(1, Y - 4, 0, Blocks.LADDER.defaultBlockState());
+        Maneuver up = holds(MoveKind.FALL, defaults(), reaching, AT, EAST);
+        assertEquals(Stance.Kind.CLIMBING, up.landing().kind());
+        assertTrue(up.reversible());
+        // 梯子只有最下面一格:爬到头了离岸沿还有两格
+        TestWorld stub = shaft().set(1, Y - 3, 0, Blocks.LADDER.defaultBlockState());
+        Maneuver low = holds(MoveKind.FALL, defaults(), stub, AT, EAST);
+        assertEquals(Stance.Kind.CLIMBING, low.landing().kind());
+        assertFalse(low.reversible());
+    }
+
+    @Test
+    void climbingJumpingBackAcrossAGapAndDiggingDownOneBlockCanAllBeUndone() {
+        CostModel parkour = Fixtures.model(RouteSpec.defaults().edit().parkour(true).build());
+        assertTrue(holds(MoveKind.PARKOUR, parkour, gap(2), AT, EAST).reversible(), "跳回去的跨距与落差不比去时难");
+        TestWorld ladder = ground().fill(1, Y, -1, 1, Y + 3, 1, Blocks.STONE.defaultBlockState());
+        for (int y = Y; y < Y + 3; y++) {
+            ladder.set(0, y, 0, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST));
+        }
+        assertTrue(holds(MoveKind.CLIMB, defaults(), ladder, AT, Heading.UP).reversible(), "梯子上下都走得了");
+        TestWorld dig = ground().set(0, Y - 3, 0, Blocks.STONE.defaultBlockState()).set(0, Y - 2, 0, Blocks.STONE.defaultBlockState());
+        assertTrue(holds(MoveKind.DOWNWARD, Fixtures.model(natural()), dig, AT, Heading.DOWN).reversible(), "向下挖一格,回去是起跳上一格");
+    }
+
     @Test
     void whatTheFallLandsOnDecidesWhetherItIsBearable() {
         CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(30).build());

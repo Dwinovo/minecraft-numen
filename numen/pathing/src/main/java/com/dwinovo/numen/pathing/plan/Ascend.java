@@ -81,7 +81,8 @@ final class Ascend implements Move {
         boolean jump = rises && grounded;
         return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false, false,
                 Strides.inWater(draft, to), Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), 0, 0, 1, draft.edits(),
-                contact.cells(), contact.exposure(), support));
+                contact.cells(), contact.exposure(), support,
+                Strides.reversible(draft, body, from, stance, to, landing)));
     }
 
     /** 站着是从脚下的方块迈上去或跳上去({@link Stepping#between});攀着、浮着是在梯子、水里升上去再挪过去({@link Stepping#fromHold})。 */

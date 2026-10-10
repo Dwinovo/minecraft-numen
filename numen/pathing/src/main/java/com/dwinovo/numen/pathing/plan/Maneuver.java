@@ -29,10 +29,12 @@ import net.minecraft.core.BlockPos;
  * @param exposure    这些格与脚下那一格水平方向上紧挨着几格碰了会伤身的(岩浆、火、仙人掌……):挨着走没碰上,歪一点、
  *                    滑一下就碰上了
  * @param support     落到之后脚踩的那一格;不是站着为 null
+ * @param reversible  不改地形,身体能不能从落点回到起点:落差在迈步、起跳或爬得上去的范围内,掉进水里的游得到岸边、岸沿不高过出水的高度({@link Strides#reversible})。
+ *                    交出半程路线的一截只能停在最后一个回得了头的节点上({@code HandOver})
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean runUp,
                        boolean sneak, boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
-                       long[] cells, int exposure, BlockPos support) {
+                       long[] cells, int exposure, BlockPos support, boolean reversible) {
 
     public Maneuver {
         edits = List.copyOf(edits);
