@@ -81,6 +81,7 @@ neoForge {
             if (gameTestSeed.present) {
                 systemProperties.put('numen.gametest.seed', gameTestSeed.get())
             }
+            rootProject.ext.numenTerrainProperties().each { key, value -> systemProperties.put(key, value) }
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
         }
     }

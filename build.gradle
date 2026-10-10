@@ -24,6 +24,18 @@ ext.numenSuites = [
 ]
 // Numen 本体的 GameTest 跑批(两个加载器上都是这一份)带哪些模块的用例;联动的 GameTest 另开一次,不在里面。
 ext.numenGameTestModules = [':numen:common', ':numen:pathing']
+// 真实地形固定存档(寻路 GameTest 的套件 numen_pathing_terrain 用,制作与使用见 numen/pathing/src/gametest/terrain/README.md):
+// 两个加载器的 GameTest 运行配置都从这里取系统属性。-PbakeTerrain=名字 是制作模式(存档写进该名字的目录,种子用 -PgametestSeed,
+// 区域用 -PbakeRegion=X,Z,默认 0,0),否则运行时加载 numenTerrain 这块存档。
+ext.numenTerrain = 'hills'
+ext.numenTerrainProperties = {
+    def terrains = project(':numen:pathing').file('src/gametest/terrain')
+    def bake = findProperty('bakeTerrain')
+    return bake
+            ? ['numen.terrain.bake.out': new File(terrains, bake).absolutePath,
+               'numen.terrain.bake.region': findProperty('bakeRegion') ?: '0,0']
+            : ['numen.gametest.terrain': new File(terrains, numenTerrain).absolutePath]
+}
 ['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'

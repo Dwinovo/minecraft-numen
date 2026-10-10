@@ -110,6 +110,7 @@ loom {
             if (gameTestSeed.present) {
                 vmArg("-Dnumen.gametest.seed=${gameTestSeed.get()}")
             }
+            rootProject.ext.numenTerrainProperties().each { key, value -> vmArg("-D${key}=${value}") }
         }
         datagen {
             inherit client
