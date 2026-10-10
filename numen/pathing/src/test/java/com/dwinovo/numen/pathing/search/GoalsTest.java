@@ -176,6 +176,19 @@ class GoalsTest {
         }
     }
 
+    /** 攀着的站位够得着也不算工位:导航收场松开键之后没人按着潜行,身子顺着梯子滑下去;站在地上同一处才算。 */
+    @Test
+    void aClimbingStanceIsNotAWorkingPosition() {
+        Goal dig = Goals.dig(new BlockPos(10, 64, 0), SURVIVAL, Goals.Clearing.ANY);
+        Goal place = Goals.place(new BlockPos(10, 64, 0), SURVIVAL);
+        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
+        Stance climbing = new Stance(Stance.Kind.CLIMBING, 64, Integer.MIN_VALUE);
+        for (Goal goal : List.of(dig, place)) {
+            assertTrue(goal.contains(7, 64, 0, standing), goal + " 站在地上够得着");
+            assertFalse(goal.contains(7, 64, 0, climbing), goal + " 攀着不算");
+        }
+    }
+
     /**
      * 挖几格里的任意一格:够得着其中一格就算到;停下的价钱里每少够着一格加一小份,全少了也不到多走一格——同样划算的站位里,
      * 一次够得着的越多越便宜。一格都够不着的站位不在目标里。

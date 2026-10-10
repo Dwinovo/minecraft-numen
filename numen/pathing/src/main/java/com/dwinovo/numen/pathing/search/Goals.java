@@ -508,7 +508,9 @@ public final class Goals {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             double feet = stance.feetY();
-            return !Clearance.occupies(body, x, feet, z, target)
+            // 攀着的站位不算工位:导航收场松开键之后没人按着潜行,身子顺着梯子滑下去,下一次调用时已经不在这一格了
+            return stance.kind() != Stance.Kind.CLIMBING
+                    && !Clearance.occupies(body, x, feet, z, target)
                     && Reach.reaches(body.eye(x, feet, z), target, body.blockReach());
         }
 
