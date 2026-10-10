@@ -460,7 +460,7 @@ class SearchTest {
         Goal dig = Goals.dig(ore, SURVIVAL, Goals.Clearing.ANY);
         Stance standing = new Stance(Stance.Kind.GROUND, Y, Y - 1);
         assertTrue(dig.contains(1, Y, 0, standing), "墙前正对着它的那一格够得着");
-        assertEquals(ActionCosts.SIGHT_BLOCKER, dig.arrival(world, 1, Y, 0, standing), 1e-9, "隔着一格石头");
+        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * com.dwinovo.numen.pathing.world.Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(world, 1, Y, 0, standing), 1e-9, "隔着一格石头");
         SearchResult result = search(world, defaults(), START, dig);
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
@@ -576,8 +576,8 @@ class SearchTest {
             }
 
             @Override
-            public double estimate(int x, int y, int z) {
-                return goal.estimate(x, y, z);
+            public double estimate(int x, int y, int z, com.dwinovo.numen.pathing.world.Kinematics.Pace pace) {
+                return goal.estimate(x, y, z, pace);
             }
         };
     }

@@ -155,7 +155,8 @@ class CostModelTest {
         List<Threat> zombie = List.of(new Threat(10.5, 64, 10.5, 2));
         CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 () -> zombie);
-        assertEquals(ActionCosts.DANGER_PER_CELL, model.extra(Use.PASS, new BlockPos(11, 64, 10).asLong()), 1e-9);
+        assertEquals(ActionCosts.DANGER_BLOCKS * com.dwinovo.numen.pathing.world.Kinematics.walkTicksPerBlock(Fixtures.body().stats()),
+                model.extra(Use.PASS, new BlockPos(11, 64, 10).asLong()), 1e-9);
         assertEquals(0, model.extra(Use.PASS, new BlockPos(20, 64, 10).asLong()));
     }
 

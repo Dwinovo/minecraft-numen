@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.entity.Sight;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.Vec3;
 
@@ -24,8 +25,11 @@ public interface Goal {
     /** 身体以 {@code stance} 待在节点 {@code (x, y, z)} 上,算不算到了。 */
     boolean contains(int x, int y, int z, Stance stance);
 
-    /** 从节点 {@code (x, y, z)} 到目标的估价(刻)。 */
-    double estimate(int x, int y, int z);
+    /**
+     * 从节点 {@code (x, y, z)} 到目标的估价(刻)。必须是下界:不高过任何一条路线从这个节点走到目标的真实代价。价钱由这具身体的
+     * 运动学给出({@link Kinematics#pace}),搜索每次搜索算一份传进来。
+     */
+    double estimate(int x, int y, int z, Kinematics.Pace pace);
 
     /**
      * 停在这个已到达的节点之后还要付的价钱(刻),默认 0。多个成员各带各的价时,搜索按"走过去加到了再付"挑终点。

@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.api.entity.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
@@ -62,7 +63,7 @@ public final class CostModel {
     public static CostModel of(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Materials materials,
                                Threats threats) {
         Block next = materials.next().orElse(null);
-        return new CostModel(spec, body, terrain, next, dangerCosts(threats.current()), new ToolChoice(body));
+        return new CostModel(spec, body, terrain, next, dangerCosts(threats.current(), body.stats()), new ToolChoice(body));
     }
 
     /** 同一具身体、同样的端口答复,换一份路线规格。 */
@@ -324,7 +325,7 @@ public final class CostModel {
         for (long cell : m.cells()) {
             cost += extra(Use.PASS, cell);
         }
-        cost += m.exposure() * ActionCosts.EXPOSED_SIDE;
+        cost += m.exposure() * ActionCosts.EXPOSED_SIDE_BLOCKS * Kinematics.walkTicksPerBlock(body.stats());
         if (m.support() != null) {
             cost += extra(Use.STAND, m.support().asLong());
         }
@@ -336,12 +337,13 @@ public final class CostModel {
 
     // ==================== 生物危险 ====================
 
-    /** 每只生物危险半径里的每一格,身体进去一格加 {@link ActionCosts#DANGER_PER_CELL}。几只重叠就叠加。 */
-    static PositionCosts dangerCosts(List<Threat> threats) {
+    /** 每只生物危险半径里的每一格,身体进去一格加 {@link ActionCosts#DANGER_BLOCKS} 格平走的耗时。几只重叠就叠加。 */
+    static PositionCosts dangerCosts(List<Threat> threats, BodyStats body) {
         if (threats.isEmpty()) {
             return PositionCosts.EMPTY;
         }
         PositionCosts.Builder b = PositionCosts.builder();
+        double danger = ActionCosts.DANGER_BLOCKS * Kinematics.walkTicksPerBlock(body);
         for (Threat t : threats) {
             int r = Mth.ceil(t.radius());
             int cx = Mth.floor(t.x());
@@ -351,7 +353,7 @@ public final class CostModel {
                 for (int y = cy - r; y <= cy + r; y++) {
                     for (int z = cz - r; z <= cz + r; z++) {
                         if (t.covers(x, y, z)) {
-                            b.add(Use.PASS, BlockPos.asLong(x, y, z), ActionCosts.DANGER_PER_CELL);
+                            b.add(Use.PASS, BlockPos.asLong(x, y, z), danger);
                         }
                     }
                 }

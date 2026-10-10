@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Stance;
@@ -22,6 +23,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
+import static com.dwinovo.numen.pathing.Fixtures.PACE;
 import static com.dwinovo.numen.pathing.Vanilla.SURVIVAL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -76,9 +78,9 @@ class GoalsTest {
     @Test
     void aRangeLeadsOutwardWhenTooCloseAndInwardWhenTooFar() {
         Goal ring = Goals.within(COLUMN, 3, 5);
-        assertTrue(ring.estimate(1, 64, 0) > ring.estimate(2, 64, 0), "太近:往外更便宜");
-        assertTrue(ring.estimate(9, 64, 0) > ring.estimate(8, 64, 0), "太远:往里更便宜");
-        assertEquals(0, ring.estimate(4, 64, 0));
+        assertTrue(ring.estimate(1, 64, 0, PACE) > ring.estimate(2, 64, 0, PACE), "太近:往外更便宜");
+        assertTrue(ring.estimate(9, 64, 0, PACE) > ring.estimate(8, 64, 0, PACE), "太远:往里更便宜");
+        assertEquals(0, ring.estimate(4, 64, 0, PACE));
     }
 
     /** 离一列的距离只量水平;离一格的距离三个方向都量。 */
@@ -86,7 +88,7 @@ class GoalsTest {
     void theDistanceIsMeasuredOverTheCoordinatesTheCenterGives() {
         Goal ring = Goals.within(COLUMN, 3, 5);
         assertTrue(ring.contains(4, 90, 0, null));
-        assertEquals(ring.estimate(4, 64, 0), ring.estimate(4, 90, 0));
+        assertEquals(ring.estimate(4, 64, 0, PACE), ring.estimate(4, 90, 0, PACE));
         Goal sphere = Goals.within(Goals.at(CENTER), 3, 5);
         assertTrue(sphere.contains(4, 64, 0, null));
         assertFalse(sphere.contains(4, 90, 0, null));
@@ -105,7 +107,7 @@ class GoalsTest {
         assertFalse(away.contains(0, 64, 0, null));
         assertTrue(away.contains(1, 64, 0, null));
         assertTrue(away.contains(300, 64, 0, null));
-        assertEquals(0, away.estimate(300, 64, 0));
+        assertEquals(0, away.estimate(300, 64, 0, PACE));
     }
 
     @Test
@@ -113,7 +115,7 @@ class GoalsTest {
         Goal away = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, 3)));
         double previous = Double.POSITIVE_INFINITY;
         for (int x = 1; x <= 10; x++) {
-            double here = away.estimate(x, 64, 0);
+            double here = away.estimate(x, 64, 0, PACE);
             assertTrue(here < previous, "x=" + x);
             previous = here;
         }
@@ -123,15 +125,15 @@ class GoalsTest {
     void theDangerOfSeveralCreaturesAddsUp() {
         Threat left = new Threat(-3.5, 64, 0.5, 3);
         Threat right = new Threat(4.5, 64, 0.5, 3);
-        double one = Goals.awayFrom(List.of(left)).estimate(0, 64, 0);
-        double both = Goals.awayFrom(List.of(left, right)).estimate(0, 64, 0);
+        double one = Goals.awayFrom(List.of(left)).estimate(0, 64, 0, PACE);
+        double both = Goals.awayFrom(List.of(left, right)).estimate(0, 64, 0, PACE);
         assertTrue(both > one, "两只一左一右,直穿哪一只都不便宜");
     }
 
     @Test
     void aWiderDangerRadiusIsDearerAtTheSameDistance() {
-        double small = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, 2))).estimate(5, 64, 0);
-        double wide = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, 6))).estimate(5, 64, 0);
+        double small = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, 2))).estimate(5, 64, 0, PACE);
+        double wide = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, 6))).estimate(5, 64, 0, PACE);
         assertTrue(wide > small);
     }
 
@@ -163,12 +165,12 @@ class GoalsTest {
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         for (int x = 6; x <= 8; x++) {
             assertTrue(reach.contains(x, 64, 0, standing), "x=" + x + " 够得着");
-            assertEquals(0, reach.estimate(x, 64, 0), "x=" + x + " 在够得着的带里");
+            assertEquals(0, reach.estimate(x, 64, 0, PACE), "x=" + x + " 在够得着的带里");
         }
         double previous = Double.POSITIVE_INFINITY;
         for (int x = 0; x <= 5; x++) {
             assertFalse(reach.contains(x, 64, 0, standing), "x=" + x + " 够不着");
-            double here = reach.estimate(x, 64, 0);
+            double here = reach.estimate(x, 64, 0, PACE);
             assertTrue(here > 0 && here < previous, "x=" + x + ":" + here);
             previous = here;
         }
@@ -195,7 +197,7 @@ class GoalsTest {
         assertTrue(Goals.dig(a, SURVIVAL, Goals.Clearing.ANY).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL, Goals.Clearing.ANY)
                 .contains(6, 64, -3, standing), "这一处只够得着 a");
         assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
-        assertTrue(one - both < ActionCosts.UNIT, "差的不到多走一格:" + (one - both));
+        assertTrue(one - both < Kinematics.walkTicksPerBlock(SURVIVAL), "差的不到多走一格:" + (one - both));
         assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL, Goals.Clearing.ANY));
     }
 
@@ -223,7 +225,7 @@ class GoalsTest {
     }
 
     /**
-     * 挖的估价按分轴的价钱:要挖的那一格在正下方二十格,正上方往下每一格按落的价;横着走开,每一格涨一格疾跑的价——
+     * 挖的估价按分轴的价钱:要挖的那一格在正下方二十格,正上方往下每一格按落的价;横着走开,每一格涨一格疾跑的价(竖直的落比横着走快得多,横着走开之后价钱全在横向)——
      * 不因为离得深,横着走就几乎不涨。
      */
     @Test
@@ -232,9 +234,10 @@ class GoalsTest {
         Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
         double eye = SURVIVAL.eyeHeight();
         double above = 64 + eye - (target.getY() + 1);
-        assertEquals((above - SURVIVAL.blockReach()) * ActionCosts.ESTIMATE_DOWN, dig.estimate(0, 64, 0), 1e-9);
-        for (int x = 6; x < 12; x++) {
-            assertEquals(ActionCosts.ESTIMATE_PER_BLOCK, dig.estimate(x + 1, 64, 0) - dig.estimate(x, 64, 0), 1e-9,
+        // 正下方横向不用挪,只付落的价
+        assertEquals((above - SURVIVAL.blockReach()) * PACE.drop(), dig.estimate(0, 64, 0, PACE), 1e-9);
+        for (int x = 10; x < 16; x++) {
+            assertEquals(PACE.sprint(), dig.estimate(x + 1, 64, 0, PACE) - dig.estimate(x, 64, 0, PACE), 1e-9,
                     "x=" + x);
         }
     }
@@ -278,10 +281,10 @@ class GoalsTest {
                 .set(target, Blocks.IRON_ORE.defaultBlockState());
         assertEquals(0, dig.arrival(open, 1, 64, 0, standing));
         open.fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
-        assertEquals(com.dwinovo.numen.pathing.plan.ActionCosts.SIGHT_BLOCKER, dig.arrival(open, 1, 64, 0, standing),
+        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(open, 1, 64, 0, standing),
                 1e-9, "隔着一堵一格厚的墙");
         open.fill(2, 63, -4, 2, 70, 4, Blocks.STONE.defaultBlockState());
-        assertEquals(2 * com.dwinovo.numen.pathing.plan.ActionCosts.SIGHT_BLOCKER, dig.arrival(open, 1, 64, 0, standing),
+        assertEquals(2 * ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(open, 1, 64, 0, standing),
                 1e-9, "两堵");
     }
 
@@ -299,10 +302,10 @@ class GoalsTest {
                 .set(target, Blocks.IRON_ORE.defaultBlockState())
                 .fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
         assertTrue(Double.isInfinite(dig.arrival(world, 1, 64, 0, standing)), "看得见的每一面都隔着清不掉的石头");
-        assertEquals(ActionCosts.SIGHT_BLOCKER, Goals.dig(target, SURVIVAL, Goals.Clearing.ANY).arrival(world, 1, 64, 0, standing), 1e-9,
+        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), Goals.dig(target, SURVIVAL, Goals.Clearing.ANY).arrival(world, 1, 64, 0, standing), 1e-9,
                 "没说谁来挖:照旧按一格硬遮挡定价");
         world.fill(3, 63, -4, 3, 70, 4, Blocks.DIRT.defaultBlockState());
-        assertEquals(ActionCosts.SIGHT_BLOCKER, dig.arrival(world, 1, 64, 0, standing), 1e-9, "隔着清得掉的泥土");
+        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(world, 1, 64, 0, standing), 1e-9, "隔着清得掉的泥土");
     }
 
     // ==================== 距离范围的半径 ====================
@@ -339,8 +342,8 @@ class GoalsTest {
         for (int radius : new int[] {2, 3, 6}) {
             Goal away = Goals.awayFrom(List.of(new Threat(0.5, 64, 0.5, radius)));
             assertTrue(away.contains(radius, 64, 0, null), "半径 " + radius + ":站在半径上就算离开了");
-            assertEquals(oneCellInside, away.estimate(radius, 64, 0), 1e-9, "半径 " + radius + " 的边上");
-            assertEquals(oneCellInside / 4, away.estimate(2 * radius, 64, 0), 1e-9, "半径 " + radius + " 的两倍处");
+            assertEquals(oneCellInside, away.estimate(radius, 64, 0, PACE), 1e-9, "半径 " + radius + " 的边上");
+            assertEquals(oneCellInside / 4, away.estimate(2 * radius, 64, 0, PACE), 1e-9, "半径 " + radius + " 的两倍处");
         }
     }
 
@@ -357,9 +360,9 @@ class GoalsTest {
         boolean ringLeads = false;
         boolean awayLeads = false;
         for (int x = -6; x <= 24; x++) {
-            double r = ring.estimate(x, 64, 0);
-            double a = away.estimate(x, 64, 0);
-            assertEquals(Math.max(r, a), both.estimate(x, 64, 0), 1e-9, "x=" + x);
+            double r = ring.estimate(x, 64, 0, PACE);
+            double a = away.estimate(x, 64, 0, PACE);
+            assertEquals(Math.max(r, a), both.estimate(x, 64, 0, PACE), 1e-9, "x=" + x);
             ringLeads |= r > a;
             awayLeads |= a > r;
         }

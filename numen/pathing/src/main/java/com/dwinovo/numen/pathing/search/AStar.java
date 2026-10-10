@@ -19,6 +19,7 @@ import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Recall;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -73,6 +74,8 @@ public final class AStar {
     private final Search search;
     private final CostModel model;
     private final BodyStats body;
+    /** 这一次搜索的估价价钱:这具身体运动学的下界。 */
+    private final Kinematics.Pace pace;
     private final boolean budgeted;
     private final int alterBudget;
     private final Breath breath;
@@ -87,6 +90,7 @@ public final class AStar {
         RouteSpec spec = search.model().spec();
         this.model = Goal.guarded(search.goal(), search.model());
         this.body = model.body().stats();
+        this.pace = Kinematics.pace(body);
         this.budgeted = spec.budgeted();
         this.alterBudget = spec.alterBudget();
         this.breath = model.body().breath();
@@ -290,7 +294,7 @@ public final class AStar {
                 return n;
             }
         }
-        Node n = new Node(x, y, z, used, band, search.goal().estimate(x, y, z) + burial.floor(x, y, z));
+        Node n = new Node(x, y, z, used, band, search.goal().estimate(x, y, z, pace) + burial.floor(x, y, z));
         n.sibling = head;
         nodes.put(key, n);
         return n;

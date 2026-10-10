@@ -13,6 +13,7 @@ import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.api.entity.Sight;
@@ -151,7 +152,7 @@ public final class Goals {
 
     /**
      * 挖 {@code target}:站在这里手够得着它(第 0 层 {@link Reach},与挖、放读同一个"够得着"),而且身体不占着它。挡着视线的
-     * 由挖的一方挖开,不要求到了就看得见;停在一处要先挖开几格硬遮挡才看得见它,就加几份 {@link ActionCosts#SIGHT_BLOCKER}
+     * 由挖的一方挖开,不要求到了就看得见;停在一处要先挖开几格硬遮挡才看得见它,就加几份 {@link ActionCosts#SIGHT_BLOCKER_BLOCKS} 格平走的耗时
      * ——同样够得着时,搜索挑挡得少的站位。挡着视线的格由 {@code clearing} 这一方清:看得见它的面只算隔着的格都清得掉的那些({@link Sight#dig}),
      * 一面都没有的站位停下也办不成,到达价无穷——搜索挑别的站位,挖的时候先清哪一格也按同一个判据。
      */
@@ -168,7 +169,7 @@ public final class Goals {
      * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats, Clearing)},挡着的由
      * {@code clearing} 这一方清)就算到。停下的价钱是够得着的那些格里"到达价 + 挖它的价钱"最低的一个,所以挖起来贵的格(要问
      * 主人的)只在便宜的远出它那份价钱时才去。同样划算的站位里优先一次够得着最多格的——站位每少够着一格,停下多付
-     * {@link ActionCosts#UNIT} 除以格数(全少了也不到多走一格),所以走路的价钱差得出一格时仍按近的挑,只在不相上下的
+     * 一格平走的耗时除以格数(全少了也不到多走一格),所以走路的价钱差得出一格时仍按近的挑,只在不相上下的
      * 站位之间按够得着几格分先后。
      */
     public static Goal dig(List<DigTarget> targets, BodyStats body, Clearing clearing) {
@@ -254,12 +255,9 @@ public final class Goals {
 
     // ==================== 估价 ====================
 
-    private static double horizontal(double dx, double dz) {
-        return (Math.min(dx, dz) * Math.sqrt(2) + Math.abs(dx - dz)) * ActionCosts.ESTIMATE_PER_BLOCK;
-    }
-
-    private static double vertical(double rise) {
-        return rise > 0 ? rise * ActionCosts.ESTIMATE_UP : -rise * ActionCosts.ESTIMATE_DOWN;
+    /** 八方向距离(格):斜着走一步前进 √2 格,先斜后直。 */
+    private static double octile(double dx, double dz) {
+        return Math.min(dx, dz) * Math.sqrt(2) + Math.abs(dx - dz);
     }
 
     /**
@@ -270,19 +268,21 @@ public final class Goals {
      * <p>不按直线距离一个价钱估:那样目标在正下方深处时,横着走开十几格估价几乎不涨,地表每一格连同它底下挖开的一列都
      * 像离目标一样近,搜索一圈圈铺开。
      */
-    private static double beyondReach(BlockPos target, BodyStats body, int x, int y, int z) {
-        return beyondReach(new AABB(target), body.blockReach(), body, x, y, z);
+    private static double beyondReach(BlockPos target, BodyStats body, int x, int y, int z, Kinematics.Pace pace) {
+        return beyondReach(new AABB(target), body.blockReach(), body, x, y, z, pace);
     }
 
-    /** 眼睛(按脚在这一格的底算)挪进 {@code box} 的 {@code reach} 以内最少要付多少,同 {@link #beyondReach(BlockPos, BodyStats, int, int, int)}。 */
-    private static double beyondReach(AABB box, double reach, BodyStats body, int x, int y, int z) {
+    /** 眼睛(按脚在这一格的底算)挪进 {@code box} 的 {@code reach} 以内最少要付多少,同 {@link #beyondReach(BlockPos, BodyStats, int, int, int, Kinematics.Pace)}。 */
+    private static double beyondReach(AABB box, double reach, BodyStats body, int x, int y, int z, Kinematics.Pace pace) {
         Vec3 eye = body.eye(x, y, z);
         double dx = gap(eye.x, box.minX, box.maxX);
         double dz = gap(eye.z, box.minZ, box.maxZ);
         double rise = eye.y < box.minY ? box.minY - eye.y : 0;
         double drop = eye.y > box.maxY ? eye.y - box.maxY : 0;
-        double perVertical = rise > 0 ? ActionCosts.ESTIMATE_UP : ActionCosts.ESTIMATE_DOWN;
-        return intoDisc(Math.sqrt(dx * dx + dz * dz), rise + drop, reach, ActionCosts.ESTIMATE_PER_BLOCK, perVertical);
+        // 眼睛按脚在格底算:目标在上方时,脚真实可以高到差一点满一格,要升的至多少了一格;目标在下方时格底就是离目标最近的脚高,
+        // 要落的米数一点不少
+        double vertical = rise > 0 ? Math.max(0, rise - 1) : drop;
+        return intoDisc(Math.sqrt(dx * dx + dz * dz), vertical, reach, pace.sprint(), rise > 0 ? pace.rise() : pace.drop());
     }
 
     /** 坐标 {@code v} 离 {@code [cell, cell + 1]} 这一段有多远:在段里为 0。 */
@@ -297,21 +297,27 @@ public final class Goals {
 
     /**
      * 平面上从 {@code (a, b)}({@code a, b ≥ 0})挪进以原点为心、半径 {@code r} 的圆,横向每格 {@code alpha}、纵向每格
-     * {@code beta},最少付多少。圆上 {@code alpha·u + beta·v} 最大的一点是 {@code r·(alpha, beta)/‖(alpha, beta)‖};它不越过
-     * {@code (a, b)} 时就停在那一点,越过了哪一轴就那一轴不挪、只挪另一轴到圆上。
+     * {@code beta},最少付多少。横纵同时挪,付的是两项中大的那个({@link Kinematics.Pace#estimate}):挪 {@code x} 格横向、
+     * {@code y} 格纵向付 {@code max(alpha·x, beta·y)}。付 {@code t} 刻能挪的是方块 {@code [0, t/alpha] × [0, t/beta]},要它碰上
+     * 以 {@code (a, b)} 为心、半径 {@code r} 的圆,即 {@code (a, b)} 到方块的距离不超过 {@code r};取最小的 {@code t}。
      */
     private static double intoDisc(double a, double b, double r, double alpha, double beta) {
         if (a * a + b * b <= r * r) {
             return 0;
         }
-        double norm = Math.sqrt(alpha * alpha + beta * beta);
-        if (r * alpha / norm > a) {
-            return beta * (b - Math.sqrt(r * r - a * a));
+        double u = 1 / alpha;
+        double w = 1 / beta;
+        // 横纵两项都还没挪够(离方块都还有距离):解 (a - u t)² + (b - w t)² = r²
+        double q = u * u + w * w;
+        double half = a * u + b * w;
+        double t = (half - Math.sqrt(Math.max(0, half * half - q * (a * a + b * b - r * r)))) / q;
+        double tA = alpha * a;
+        double tB = beta * b;
+        if (t <= Math.min(tA, tB)) {
+            return t;
         }
-        if (r * beta / norm > b) {
-            return alpha * (a - Math.sqrt(r * r - b * b));
-        }
-        return alpha * a + beta * b - r * norm;
+        // 先挪够的那一项已经不用再挪,只剩另一项靠到圆上
+        return tA <= tB ? beta * (b - r) : alpha * (a - r);
     }
 
     // ==================== 排障 ====================
@@ -384,8 +390,8 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int nx, int ny, int nz) {
-            return (x != null ? horizontal(Math.abs(x - nx), Math.abs(z - nz)) : 0) + (y != null ? vertical(y - ny) : 0);
+        public double estimate(int nx, int ny, int nz, Kinematics.Pace pace) {
+            return pace.estimate(x != null ? octile(Math.abs(x - nx), Math.abs(z - nz)) : 0, y != null ? y - ny : 0);
         }
 
         /** 某一格就是那一格;列与高度没有边。 */
@@ -427,13 +433,13 @@ public final class Goals {
          * 竖直方向照样按跳与落算。
          */
         @Override
-        public double estimate(int x, int y, int z) {
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double d = Math.sqrt(center.distanceSqr(x, y, z));
             if (d < min) {
-                return (min - d) * ActionCosts.ESTIMATE_PER_BLOCK;
+                return (min - d) * pace.sprint();
             }
             if (d > max) {
-                return center.estimate(x, y, z) * (d - max) / d;
+                return center.estimate(x, y, z, pace) * (d - max) / d;
             }
             return 0;
         }
@@ -471,8 +477,8 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
-            return beyondReach(target, body, x, y, z);
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
+            return beyondReach(target, body, x, y, z, pace);
         }
 
         /** 别挖要用的那一格,也别往里放东西;敞开的面前那一格不放方块——放了就把自己要看的那一面堵上了。 */
@@ -507,8 +513,8 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
-            return beyondReach(target, body, x, y, z);
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
+            return beyondReach(target, body, x, y, z, pace);
         }
 
         /**
@@ -539,7 +545,7 @@ public final class Goals {
 
         /**
          * 从这里的眼睛看它朝着眼睛的各面({@link Sight#faces}),隔着的格都清得掉的那些面里取硬遮挡最少的那一面({@link Sight#dig}),
-         * 每一格加一份 {@link ActionCosts#SIGHT_BLOCKER};一面都没有是无穷。它没有轮廓(已经挖掉了)不加。
+         * 每一格加一份 {@link ActionCosts#SIGHT_BLOCKER_BLOCKS} 格平走的耗时;一面都没有是无穷。它没有轮廓(已经挖掉了)不加。
          */
         @Override
         public double arrival(WorldView level, int x, int y, int z, Stance stance) {
@@ -549,7 +555,7 @@ public final class Goals {
             Vec3 eye = body.eye(x, stance.feetY(), z);
             Sight.Trace line = Sight.dig(level, eye, target, Sight.faces(level, eye, target),
                     pos -> clearing.clears(level, pos));
-            return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER;
+            return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(body);
         }
 
         /** 别挖要挖的那一格(那是挖的一方的事),也别往里放方块把它埋了。 */
@@ -578,16 +584,16 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double min = Double.POSITIVE_INFINITY;
             for (Dig g : members) {
-                min = Math.min(min, g.estimate(x, y, z));
+                min = Math.min(min, g.estimate(x, y, z, pace));
             }
             return min;
         }
 
         /**
-         * 够得着的那些格里"到达价 + 挖它的价钱"最低的一个,加上每一格够不着的那份:{@link ActionCosts#UNIT} 除以格数。
+         * 够得着的那些格里"到达价 + 挖它的价钱"最低的一个,加上每一格够不着的那份:一格平走的耗时除以格数。
          * 一格都够不着是 0(不在目标里,搜索不会在这里停)。
          */
         @Override
@@ -605,7 +611,7 @@ public final class Goals {
             if (missed == members.size()) {
                 return 0;
             }
-            return min + missed * ActionCosts.UNIT / members.size();
+            return min + missed * Kinematics.walkTicksPerBlock(members.get(0).body()) / members.size();
         }
 
         @Override
@@ -640,8 +646,8 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
-            return reach.estimate(x, y, z);
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
+            return reach.estimate(x, y, z, pace);
         }
 
         @Override
@@ -667,8 +673,8 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
-            return beyondReach(box, range, body, x, y, z);
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
+            return beyondReach(box, range, body, x, y, z, pace);
         }
 
         @Override
@@ -693,10 +699,10 @@ public final class Goals {
 
         /**
          * 势场:每一只按"离它的距离是危险半径的几倍"贡献,越近越贵,几只相加——两只一左一右时,直穿哪一只都不便宜。
-         * 贴在半径上时每只贡献 {@link ActionCosts#DANGER_PER_CELL},与走进它半径里一格的代价同一个量级。
+         * 贴在半径上时每只贡献 {@link ActionCosts#DANGER_BLOCKS} 格平走的耗时,与走进它半径里一格的代价同一个量级。
          */
         @Override
-        public double estimate(int x, int y, int z) {
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double sum = 0;
             for (Threat t : threats) {
                 double dx = x + 0.5 - t.x();
@@ -706,7 +712,7 @@ public final class Goals {
                 double ratio = (dx * dx + dy * dy + dz * dz) / (span * span);
                 sum += 1 / Math.max(ratio, 1.0E-3);
             }
-            return sum * ActionCosts.DANGER_PER_CELL;
+            return sum * ActionCosts.DANGER_BLOCKS * pace.walk();
         }
 
         @Override
@@ -727,10 +733,10 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double min = Double.POSITIVE_INFINITY;
             for (Goal g : members) {
-                min = Math.min(min, g.estimate(x, y, z));
+                min = Math.min(min, g.estimate(x, y, z, pace));
             }
             return min;
         }
@@ -809,10 +815,10 @@ public final class Goals {
         }
 
         @Override
-        public double estimate(int x, int y, int z) {
+        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double max = 0;
             for (Goal g : members) {
-                max = Math.max(max, g.estimate(x, y, z));
+                max = Math.max(max, g.estimate(x, y, z, pace));
             }
             return max;
         }

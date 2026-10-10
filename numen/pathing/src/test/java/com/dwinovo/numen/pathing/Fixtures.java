@@ -30,6 +30,9 @@ public final class Fixtures {
 
     /** 单测默认的展开预算。 */
     public static final int BUDGET = 20_000;
+    /** 原版玩家的估价价钱(运动学给的下界)。 */
+    public static final com.dwinovo.numen.pathing.world.Kinematics.Pace PACE =
+            com.dwinovo.numen.pathing.world.Kinematics.pace(Vanilla.SURVIVAL);
 
     /** 原版玩家不带任何效果的挖掘取值。 */
     public static final DigTime.Mining MINING = new DigTime.Mining(0, 1, 0.2, -1, -1);

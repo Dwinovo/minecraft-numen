@@ -25,6 +25,7 @@ import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
@@ -586,7 +587,7 @@ public final class Driver {
             return;
         }
         BlockPos end = result.route().end();
-        if (recovery.stalled(goal.estimate(end.getX(), end.getY(), end.getZ()))) {
+        if (recovery.stalled(goal.estimate(end.getX(), end.getY(), end.getZ(), Kinematics.pace(rig.snapshot().stats())))) {
             PathLog.info("{} 半程路线连续 {} 段没离目标更近,收场", rig.who, Recovery.STALE_PARTIALS);
             halt(new Halt.Searched(result.stop(), result.breathless(), pendingSearch));
         }

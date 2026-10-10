@@ -109,7 +109,7 @@ class BurialTest {
                     left += legs.get(i).cost();
                 }
                 BlockPos n = nodes.get(i);
-                double estimate = goal.estimate(n.getX(), n.getY(), n.getZ()) + burial.floor(n.getX(), n.getY(), n.getZ());
+                double estimate = goal.estimate(n.getX(), n.getY(), n.getZ(), com.dwinovo.numen.pathing.Fixtures.PACE) + burial.floor(n.getX(), n.getY(), n.getZ());
                 assertTrue(estimate <= left + 1e-9, goal + " 在 " + n + " 估 " + estimate + ",还要付 " + left);
             }
         }
