@@ -109,7 +109,13 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 A*、目标族、按节点数计的预算、异步派发与区块快照。
 没到目标的结论带着停下的原因：搜完了没有路，还是预算用完(不能证明没路)。现有代码基本就是这个样子，主要是搬家。
 一次搜索带一本记事本(第 0 层 `Recall`):没叠改动的快照上,同一格的落脚高度、站姿、旁边有没有伤身的格只算一次。
-估价是目标的估价(`Goal.estimate`,按身体怎么挪)加埋深(`Burial`,路上绕不开要挖掉的格至少多少钱),两样都是下界。
+估价是目标的估价(`Goal.estimate`,按身体怎么挪)加埋深(`Burial`,路上绕不开要挖掉的格至少多少钱),两样都是下界。目标的估价用的价钱是
+`Kinematics.pace(身体)` 给的一份(`Pace`):水平每格取疾跑一格(各种走法的水平耗时都不比它短);往上每个节点取
+`min(疾跑一格, 起跳间隔 10 刻, 爬梯子一格)`——每种走法定义上一步至多升一个节点,水平挪动的一步至少疾跑一格的耗时,半砖、楼梯台阶脚只抬半格
+也升一个节点,所以不能按"脚抬多高"算;往下按米取自由下落终速的倒数 `(1 - 0.98) / (重力 × 0.98)`,节点落 n 个脚至少落 n − 1 米。
+横纵同时挪时取两项中大的那个(`Pace.estimate` = `max(水平价 × 八方向距离, 竖直价 × 竖直量)`,不是相加):一步可以又前进又升降,
+代价至少是两者中大的那个,许多步合成之后总和也不小于水平总量与竖直总量各自的和中大的那个。上一级不能当"水平加往上"估,否则楼梯、半砖台阶就
+高估了。`EstimateAdmissibilityTest` 逐种走法与随机小地形断言估价不高过真实代价与 A* 最优代价。
 执行分段搜时,展开到一定节点数、已经有朝目标的一段就先交出它(`Search.handOver`),接着从这一段的终点往下搜
 (`Search.arrival`:起点照上一步的落点与改动算)。
 
@@ -208,7 +214,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)端口与她的鼠标(执行,同伴的鼠标自己问) |
 | 15 | 代价与罚分 | `ActionCosts`、`RouteSpec` 出厂值、`NavSettings`、建造上下文各有常量;每类格子代价除"禁止"外从没计价;`noise` 没人读;斜向上不收跳罚;涉水罚只在两种动作里收 | 第 1 层 `CostModel`;物理耗时一律来自 `Kinematics`,`ActionCosts` 只留摔伤折价、危险、视线遮挡这类权衡 |
 | 16 | 到没到 ★ | `NavGoal` 与 `goals/Goal` 两族目标经 `GoalAdapter` 映射，`adjacent` 成员集不同;任务层另有 `reached`、`closeEnoughToSucceed`(按高度放宽到 `|dy|≤1`)、跟随按三维距离 | 第 2 层只留一族目标;模块里没有"差不多到了" |
-| 17 | 估价权重 | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 1 层 `ActionCosts`,水平/往上/往下每格的价钱取自 `Kinematics`;绕不开的挖掘(埋深)第 2 层 `Burial`,每格的最低价 `CostModel.digFloor`,见第十三节"挖掘时搜索铺开" |
+| 17 | 估价权重 | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 0 层 `Kinematics.pace`(`Pace`):水平/往上/往下每格的价钱按这一次的身体推出,搜索每次搜索算一份传给 `Goal.estimate`;权衡(`ActionCosts` 的 `*_BLOCKS`)只写格数,乘这具身体平走一格的刻数才是刻;绕不开的挖掘(埋深)第 2 层 `Burial`,每格的最低价 `CostModel.digFloor`,见第十三节"挖掘时搜索铺开" |
 | 18 | 卡没卡住 | 12 处:执行器 6 种、状态机 2 种、导航 2 种、各任务、脱困反射、建造表演、`GoToThenDoTask` | 第 3 层 `Watchdog`,对外交出"在推进"信号 |
 | 19 | 进度量尺 | 导航用估价，goto 用欧氏距离，挖矿用挪没挪 2 格 | 第 3 层 `Watchdog` |
 | 20 | 搜索预算 | 改动预算只在规划时核，A* 不知道，重算不再核 | 第 2 层 |
@@ -658,7 +664,7 @@ JVM 里成对交替跑、取每对耗时之比的中位数。这台机器上别�
 
 - **先交半程**:见第 2、3 层。`Driver.HAND_OVER` 是一万个节点:许改地形的搜索每节点几十微秒,一万个节点在一秒以内,与
   Baritone 先交路线的 `primaryTimeoutMS`(500 毫秒)同一量级,是默认预算四万的四分之一(Baritone 的 primary 与 failure
-  两个时限也是一比四);按节点数计,结论不随机器快慢变。封顶之前到了目标的,路线与搜到底一样(`SearchTest`)。接着搜的
+  两个时限也是一比四);按节点数计,结论不随机器快慢变。靶场十八条固定路线(`Journal.expansions` 记每次搜索展开几个节点)共搜 36 次:一半自己搜到头(中位约两千、最多 9965),另一半在一万处交出半程。封顶之前到了目标的,路线与搜到底一样(`SearchTest`)。接着搜的
   起点接在上一步后面(`Search.arrival`):快照里还没有上一段搭下的桥,只给起点时身体在那里待不住。GameTest
   `starts_bridging_a_wide_chasm_before_the_whole_route_is_found`:一百五十格宽的空隙,起步那段按真实服务器每刻五十毫秒,
   两秒内起步,一段段接上,到对岸。
@@ -920,7 +926,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 09-30 真机:要挖掘的地形里一条 4 步的路展开 9305 个节点、950 毫秒;挖正下方 26 格、12 格外往下 8 格的矿,规划在四万节点的
 预算内搜不到(`OutOfBudget`)。`move goto --arrive dig` 开路到深处的矿、`work dig` 在工作区里挑矿,用的都是这一套搜索。
 
-**为什么铺开**:估价(`Goal.estimate`)只按身体怎么挪算——水平每格 3.56 刻(疾跑)、往下每格 3.89 刻(`fall(2)/2`)。挖一格的真实
+**为什么铺开**:估价(`Goal.estimate`)只按身体怎么挪算——水平每格 3.56 刻(疾跑)、往下每米 0.26 刻(终速)。挖一格的真实
 价钱是挖掘耗时加规格的挖掘罚分(`CostModel.digCost`):铁镐挖石头 8 刻、缓手 5 刻、罚分 30,共 43 刻;空手 185 刻。竖着往下挖一层
 比估价贵十一倍以上,横着挖隧道一格(两格高)贵二十五倍。A* 要把 f 小于最优代价 C* 的节点全展开一遍才敢认一条路,地面上每走开
 一格 f 涨约 7.1 刻(走过去加估价),"松弛" C* − h(起点) 有多大,地面就铺多大一圈,每一列底下还往下挖几格。挖正下方 26 格:C* =
@@ -932,7 +938,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - `costHeuristic = 3.563`(`src/api/java/baritone/api/Settings.java:414`)不是加权 A* 的权重,是估价里水平每格的价钱
   (`GoalXZ.java:115`,乘在八方向距离上),就是疾跑一格(`ActionCosts.java:31`,`SPRINT_ONE_BLOCK_COST = 20 / 5.612`);
   `Settings.java:405-413` 的注释说它要严格小于走一格的价钱,调高会更快但路线变差,默认求最优。竖直按 `GoalYLevel.java:49-59`:
-  往下 `FALL_N_BLOCKS_COST[2] / 2`、往上 `JUMP_ONE_BLOCK_COST`。模块的 `ActionCosts.ESTIMATE_*` 取自 `Kinematics`:水平每格是疾跑一格(与它一样),往上是起跳升一格的耗时 3.0 刻(不是它的 `JUMP_ONE_BLOCK_COST`),往下一样。
+  往下 `FALL_N_BLOCKS_COST[2] / 2`、往上 `JUMP_ONE_BLOCK_COST`。模块的估价取自 `Kinematics.pace`:水平每格是疾跑一格(与它一样);竖直不照它的 `JUMP_ONE_BLOCK_COST` 与 `FALL_N_BLOCKS_COST`(那是单个走法的价钱,台阶、楼梯会让往上一格比它便宜),往上按每个节点最少多少刻、往下按终速,横纵同时挪取大者。
 - 分段取当前最好的一段:`primaryTimeoutMS = 500`、`failureTimeoutMS = 2000`(`Settings.java:578,583`),每 64 个节点看一次表
   (`AStarPathFinder.java:83-88`:有了够远的路就在 500 毫秒收,没有就撑到 2000);没到目标时按
   `COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10}` 各取"估价加已走代价的折算"最好的节点,取第一个离起点超过 5 格的

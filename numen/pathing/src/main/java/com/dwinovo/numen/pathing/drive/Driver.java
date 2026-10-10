@@ -54,10 +54,11 @@ public final class Driver {
     private static final int STRANDED_TICKS = 60;
     /**
      * 每一段搜索展开到这么多个节点还没到目标、又已经有够远的半程路线,就先交出它({@link Search#handOver}):身体先走这一段,
-     * 快走完时从它的终点接着搜。依据:最费的是许放块时搜索在空中铺开(搭桥一格约 35、垫柱约 25,估价每格只减 3.56),测试服务器里
-     * 许改地形的搜索每个节点几十微秒(实测见 docs/pathing.md 第十三节),一万个节点在一秒以内,与 Baritone 先交路线的
-     * primaryTimeoutMS(500 毫秒)同一量级;它是默认预算 {@link com.dwinovo.numen.pathing.api.NavRequest#DEFAULT_BUDGET}
-     * 的四分之一,Baritone 的 primary 与 failure 两个时限也是一比四。起伏地形上一百格的路展开两三千到四千个节点,路线不变。
+     * 快走完时从它的终点接着搜。依据是等多久,不是地形:许改地形的搜索每个节点 15 到 76 微秒(实测见 docs/pathing.md 第十三节),
+     * 一万个节点在 0.15 到 0.76 秒之间,与 Baritone 先交路线的 primaryTimeoutMS(500 毫秒)同一量级;它是默认预算
+     * {@link com.dwinovo.numen.pathing.api.NavRequest#DEFAULT_BUDGET} 的四分之一,Baritone 的 primary 与 failure 两个时限也是一比四。
+     * 靶场十八条固定路线共搜了 36 次(估价是运动学下界,搜到头的就是最优路线):一半自己搜到头,
+     * 中位约两千个节点、最多 9965 个,另一半在这里交出半程;下到盆地、绕山、爬坡这类要绕的路一次搜不完。
      * 按节点数计,结论不随机器快慢变。
      */
     static final int HAND_OVER = 10_000;
