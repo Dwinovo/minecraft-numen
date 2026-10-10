@@ -6,7 +6,9 @@ import com.dwinovo.numen.pathing.api.NavStatus;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Ports;
+import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -14,34 +16,22 @@ import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.slf4j.Logger;
 
 /**
  * 在固定存档上走一条固定路线({@link TerrainRoutes.Route}),跑完记一行 JSON 到日志({@code [terrain-route] {...}}),
- * 这份记录是寻路优化的基线。成败只看到没到、超没超时;其余字段只记录、不断言。
- *
- * <p>搜索次数、重搜、走不下去、卡住这几项寻路不经 API 交出,只写进它的日志({@code NumenPathing}),这里挂一个日志附加器(接在根记录器上,只看 NumenPathing 的事件)按身体名数。
+ * 这份记录是寻路优化的基线,数据全取自寻路交出的行程报告({@link Report})。成败只看到没到、超没超时;其余字段只记录、不断言。
  */
 final class TerrainRun {
 
     private static final Logger LOG = LogUtils.getLogger();
     /** 路线加载范围的半径(区块):沿路线每隔几个区块压一张票据,各罩住这么宽。 */
     private static final int TICKET_DISTANCE = 6;
-    private static final Pattern KINDS = Pattern.compile("(?:到目标|半程) \\d+ 步 \\[([^\\]]*)\\]");
     /** 汇总表要等所有路线都跑完;每条跑完时登记一行。 */
     private static final List<JsonObject> DONE = new ArrayList<>();
 
@@ -50,19 +40,16 @@ final class TerrainRun {
     private final GameTestHelper helper;
     private final TerrainRoutes.Route route;
     private final ServerLevel level;
-    private final Counter counter;
     private Phase phase = Phase.LOADING;
     private TestBody body;
     private Navigation navigation;
     private int waited;
-    private int ticks;
     private float lowestHealth = Float.MAX_VALUE;
 
     private TerrainRun(GameTestHelper helper, TerrainRoutes.Route route) {
         this.helper = helper;
         this.route = route;
         this.level = helper.getLevel().getServer().getLevel(TerrainWorld.DIMENSION);
-        this.counter = new Counter("terrain_" + route.name());
     }
 
     /** 开跑:核对路线与存档,压票据加载路线沿途的区块,之后每刻推一步。 */
@@ -108,7 +95,7 @@ final class TerrainRun {
                         phase = Phase.FINISHED;
                         return;
                     }
-                    body = TestBody.spawn(level, counter.who, from.getX() + 0.5, from.getY(), from.getZ() + 0.5);
+                    body = TestBody.spawn(level, "terrain_" + route.name(), from.getX() + 0.5, from.getY(), from.getZ() + 0.5);
                     body.getFoodData().setFoodLevel(20);
                     phase = Phase.SPAWNED;
                 }
@@ -128,14 +115,13 @@ final class TerrainRun {
     }
 
     private void walk() {
-        ticks++;
         NavStatus status = navigation.tick();
         while (navigation.waiting()) {
             nap();
             status = navigation.tick();
         }
         lowestHealth = Math.min(lowestHealth, body.getHealth());
-        boolean overdue = status.running() && ticks >= route.limit();
+        boolean overdue = status.running() && navigation.report().ticks() >= route.limit();
         if (status.running() && !overdue) {
             return;
         }
@@ -146,7 +132,6 @@ final class TerrainRun {
         JsonObject record = record(status, overdue);
         LOG.info("[terrain-route] {}", record);
         body.leave();
-        counter.close();
         summarize(record);
         if (status.state() == NavStatus.State.ARRIVED) {
             helper.succeed();
@@ -157,10 +142,12 @@ final class TerrainRun {
     }
 
     private JsonObject record(NavStatus status, boolean overdue) {
+        Report report = navigation.report();
+        Journal journal = report.journal();
         int dug = 0;
         int placed = 0;
         int toggled = 0;
-        for (EditLedger.Entry e : navigation.report().ledger().entries()) {
+        for (EditLedger.Entry e : report.ledger().entries()) {
             switch (e) {
                 case EditLedger.Dug d -> dug++;
                 case EditLedger.Placed p -> placed++;
@@ -177,19 +164,21 @@ final class TerrainRun {
         o.addProperty("arrived", status.state() == NavStatus.State.ARRIVED);
         o.addProperty("state", overdue ? "TIMEOUT" : status.state().name());
         o.addProperty("outcome", status.outcome() == null ? "" : status.outcome().toString());
-        o.addProperty("ticks", ticks);
+        o.addProperty("ticks", report.ticks());
         o.addProperty("limit", route.limit());
-        o.addProperty("searches", counter.searches.get());
-        o.addProperty("budgetStops", counter.budget.get());
-        o.addProperty("replans", counter.replans.get());
-        o.addProperty("blocked", counter.blocked.get());
-        o.addProperty("stuck", counter.stuck.get());
-        o.addProperty("steps", navigation.report().ledger().steps());
-        o.addProperty("firstPlan", counter.firstPlan.get());
+        o.addProperty("searches", journal.searches());
+        o.addProperty("budgetStops", journal.budgetStops());
+        o.addProperty("replans", journal.replans());
+        o.addProperty("blocked", journal.blockages());
+        o.addProperty("stuck", journal.stuck());
+        o.addProperty("rechecks", journal.rechecks());
+        o.addProperty("steps", report.ledger().steps());
+        o.addProperty("walked", report.ledger().walked().toString());
         o.addProperty("dug", dug);
         o.addProperty("placed", placed);
         o.addProperty("toggled", toggled);
         o.addProperty("lowestHealth", lowestHealth);
+        o.addProperty("endedAt", body.blockPosition().toShortString());
         return o;
     }
 
@@ -218,60 +207,6 @@ final class TerrainRun {
             Thread.sleep(1);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }
-    }
-
-    /** 按身体名数寻路日志里的几类事件。 */
-    private static final class Counter extends AbstractAppender {
-
-        final String who;
-        final AtomicInteger searches = new AtomicInteger();
-        /** 搜索因节点预算用完而停(交出半程路线,接着再搜)的次数。 */
-        final AtomicInteger budget = new AtomicInteger();
-        final AtomicInteger replans = new AtomicInteger();
-        final AtomicInteger blocked = new AtomicInteger();
-        final AtomicInteger stuck = new AtomicInteger();
-        /** 第一次搜索交出的路线按动作种类的步数,如 {@code WALK×56 ASCEND×27}。 */
-        final AtomicReference<String> firstPlan = new AtomicReference<>("");
-        private final LoggerConfig root =
-                ((LoggerContext) LogManager.getContext(false)).getConfiguration().getRootLogger();
-
-        Counter(String who) {
-            super("terrain-counter-" + who, null, null, true, org.apache.logging.log4j.core.config.Property.EMPTY_ARRAY);
-            this.who = who;
-            start();
-            root.addAppender(this, null, null);
-        }
-
-        @Override
-        public void append(LogEvent event) {
-            if (!"NumenPathing".equals(event.getLoggerName())) {
-                return;
-            }
-            String message = event.getMessage().getFormattedMessage();
-            if (!message.contains(" " + who + "#")) {
-                return;
-            }
-            if (message.contains(" 搜索 ") && message.contains(" 展开 ")) {
-                if (message.contains(" 停因 BUDGET ")) {
-                    budget.incrementAndGet();
-                }
-                if (searches.getAndIncrement() == 0) {
-                    Matcher m = KINDS.matcher(message);
-                    firstPlan.set(m.find() ? m.group(1) : "");
-                }
-            } else if (message.contains(" 重搜:")) {
-                replans.incrementAndGet();
-            } else if (message.contains(" 走不下去 ")) {
-                blocked.incrementAndGet();
-            } else if (message.contains(" 卡住 ")) {
-                stuck.incrementAndGet();
-            }
-        }
-
-        void close() {
-            root.removeAppender(getName());
-            stop();
         }
     }
 }
