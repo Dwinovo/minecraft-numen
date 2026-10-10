@@ -96,7 +96,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 
 - 每种动作(平走、斜走、上一级、下一级、下落、跑酷、垫柱、向下挖……)只有**前提与代价**两个纯函数，读的是只读世界
   视图、第 0 层和成本模型，不接触 `ServerPlayer`。
-- **成本模型由几部分组合而成**:物理代价(`ActionCosts`)、路线规格、改地形许可(端口 `TerrainPolicy`)、
+- **成本模型由几部分组合而成**:身体运动学(`Kinematics`,走、跑、跳、落、爬要几刻)、权衡(`ActionCosts`)、路线规格、改地形许可(端口 `TerrainPolicy`)、
   垫路料(端口 `Materials`)、身体快照(迈步、起跳、交互距离、游戏模式、按落差与落点方块算的摔伤与按血量推出的摔落上限、装备推出的能力、
   背包里的工具与挖掘属性、氧气与水下呼吸推出的能憋多久)、生物危险(端口 `Threats`,折成按位置的代价)。
   任务要改价，只能通过路线规格或按位置的代价表，不能继承成本上下文。
@@ -206,9 +206,9 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 12 | 有没有料 ★ | `ThrowawayBlocks.available`、`CalculationContext.hasThrowaway`(和"许不许改地形"折成一个布尔)、`shortageAdvice`(自己扫背包);取料又有两套 | `Materials` 端口 |
 | 13 | 下一块用什么料 | 拆回定价按垫路料算，执行先问建造登记 | `Materials.next` 与 `PlacementAdvice` 端口 |
 | 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)端口与她的鼠标(执行,同伴的鼠标自己问) |
-| 15 | 代价与罚分 | `ActionCosts`、`RouteSpec` 出厂值、`NavSettings`、建造上下文各有常量;每类格子代价除"禁止"外从没计价;`noise` 没人读;斜向上不收跳罚;涉水罚只在两种动作里收 | 第 1 层 `CostModel` |
+| 15 | 代价与罚分 | `ActionCosts`、`RouteSpec` 出厂值、`NavSettings`、建造上下文各有常量;每类格子代价除"禁止"外从没计价;`noise` 没人读;斜向上不收跳罚;涉水罚只在两种动作里收 | 第 1 层 `CostModel`;物理耗时一律来自 `Kinematics`,`ActionCosts` 只留摔伤折价、危险、视线遮挡这类权衡 |
 | 16 | 到没到 ★ | `NavGoal` 与 `goals/Goal` 两族目标经 `GoalAdapter` 映射，`adjacent` 成员集不同;任务层另有 `reached`、`closeEnoughToSucceed`(按高度放宽到 `|dy|≤1`)、跟随按三维距离 | 第 2 层只留一族目标;模块里没有"差不多到了" |
-| 17 | 估价权重 | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 1 层 `ActionCosts`;绕不开的挖掘(埋深)第 2 层 `Burial`,每格的最低价 `CostModel.digFloor`,见第十三节"挖掘时搜索铺开" |
+| 17 | 估价权重 | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 1 层 `ActionCosts`,水平/往上/往下每格的价钱取自 `Kinematics`;绕不开的挖掘(埋深)第 2 层 `Burial`,每格的最低价 `CostModel.digFloor`,见第十三节"挖掘时搜索铺开" |
 | 18 | 卡没卡住 | 12 处:执行器 6 种、状态机 2 种、导航 2 种、各任务、脱困反射、建造表演、`GoToThenDoTask` | 第 3 层 `Watchdog`,对外交出"在推进"信号 |
 | 19 | 进度量尺 | 导航用估价，goto 用欧氏距离，挖矿用挪没挪 2 格 | 第 3 层 `Watchdog` |
 | 20 | 搜索预算 | 改动预算只在规划时核，A* 不知道，重算不再核 | 第 2 层 |
@@ -225,6 +225,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 31 | 载具 | 起步时静默下载具，没报给模型 | `Body` 端口，记进结局 |
 | 32 | 看不看得见一格(视线)★ | 09-29 补查:瞄点射线(`Aim.hits`)、到达复核(`Driver.sees`:瞄点加准星比对)、`use block` 的遮挡(瞄点加准星比对)各一份;"用一格方块"的到达只判几何,真机上一半结局是到了看不见 | 第 0 层 `Sight`:搜索在快照上、执行在活世界上调同一个函数 |
 | 33 | 能憋多久、一步憋不憋气 ★ | 09-30 真机:规划不知道要憋气,把她带进封顶的水下洞穴;Numen 的换气本能按"氧气不到 240"另判,计划内的水下三秒就被它接管 | 规则第 1 层 `Breath`(身体快照),眼睛换不换得了气第 0 层 `Semantics.breathless`,一步憋不憋气 `Maneuver.submerged`;搜索、执行复核、诊断同一份,见第十三节"憋气" |
+| 34 | 身体怎么动(速度、起跳、下落、攀爬、每种走法几何上的最短耗时) ★ | 靶场量到:`ActionCosts` 写死原版玩家的速度常数,`JUMP_ONE_BLOCK` 是"升到一格高"的 3.2 刻、不是"落在高一格上"的 9 刻;`BodyStats.jumpHeight` 只判跳不跳得上;`Steering` 自己一份地面加速、摩擦、空中加速和几刻落地。上一格的估价实际/估价 1.74 | 第 0 层 `Kinematics`(读 `BodyStats` 的移动速度、起跳力度、重力与调用方给的脚下方块量,照原版逐刻推);已并入:`ActionCosts` 的物理耗时、`BodyStats.jumpHeight`、`Steering` 自算的那份。代价、估价、`Steering` 预判、`Watchdog` 期限基数都读它 |
 
 另外，普查发现几处文档或注释与代码不符:`spatial-perception.md` 说 `scan_around` 与寻路同口径(实际不是)、
 `BlockHelper.canHarvest` 的注释、`ContextFactory` 关于冻结快照的注释。重写后这些随旧代码一起删除。
@@ -926,7 +927,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - `costHeuristic = 3.563`(`src/api/java/baritone/api/Settings.java:414`)不是加权 A* 的权重,是估价里水平每格的价钱
   (`GoalXZ.java:115`,乘在八方向距离上),就是疾跑一格(`ActionCosts.java:31`,`SPRINT_ONE_BLOCK_COST = 20 / 5.612`);
   `Settings.java:405-413` 的注释说它要严格小于走一格的价钱,调高会更快但路线变差,默认求最优。竖直按 `GoalYLevel.java:49-59`:
-  往下 `FALL_N_BLOCKS_COST[2] / 2`、往上 `JUMP_ONE_BLOCK_COST`。模块的 `ActionCosts.ESTIMATE_*` 与它一模一样。
+  往下 `FALL_N_BLOCKS_COST[2] / 2`、往上 `JUMP_ONE_BLOCK_COST`。模块的 `ActionCosts.ESTIMATE_*` 取自 `Kinematics`:水平每格是疾跑一格(与它一样),往上是起跳升一格的耗时 3.0 刻(不是它的 `JUMP_ONE_BLOCK_COST`),往下一样。
 - 分段取当前最好的一段:`primaryTimeoutMS = 500`、`failureTimeoutMS = 2000`(`Settings.java:578,583`),每 64 个节点看一次表
   (`AStarPathFinder.java:83-88`:有了够远的路就在 500 毫秒收,没有就撑到 2000);没到目标时按
   `COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10}` 各取"估价加已走代价的折算"最好的节点,取第一个离起点超过 5 格的
