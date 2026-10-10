@@ -8,7 +8,7 @@ import com.dwinovo.numen.pathing.plan.MoveKind;
 
 /**
  * 这次导航的行程:段状态机一路上搜了几次、几次因节点预算停下交出半程、几次扔掉路重搜、几步走不下去、几步卡住、复核了几次前提。
- * 每种走法走完的步数、实际共用的刻数与规划时估价共多少刻,看得出哪种走法实际比估的慢。
+ * 每种走法走完的步数、实际共用的刻数与最短耗时共多少刻,看得出哪种走法实际比几何最短慢。
  * 计数记在事件发生的那一处——与写日志的是同一处——不另行推算;随实际账({@link EditLedger},含实际走完的各种步)一起交出。
  */
 public final class Journal {
@@ -26,7 +26,7 @@ public final class Journal {
      *
      * @param steps     走完几步(有时一步没走完身体已落在后面某一步上,这样的不计)
      * @param ticks     这些步实际共用的刻数
-     * @param estimated 这些步在开始时的估价共多少刻(与期限所依的是同一个数)
+     * @param estimated 这些步开始时算的几何最短耗时(运动学加挖掘的刻数)共多少刻,也是看护定期限的基数
      */
     public record Timing(int steps, int ticks, double estimated) {}
 
@@ -58,7 +58,7 @@ public final class Journal {
         rechecks++;
     }
 
-    /** 一步 {@code kind} 走完:实际用了 {@code ticks} 刻,开始时估 {@code estimated} 刻。 */
+    /** 一步 {@code kind} 走完:实际用了 {@code ticks} 刻,开始时算的最短耗时是 {@code estimated} 刻。 */
     void timed(MoveKind kind, int ticks, double estimated) {
         timings.merge(kind, new Timing(1, ticks, estimated),
                 (a, b) -> new Timing(a.steps + b.steps, a.ticks + b.ticks, a.estimated + b.estimated));

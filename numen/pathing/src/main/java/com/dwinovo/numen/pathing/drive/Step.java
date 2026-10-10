@@ -48,7 +48,7 @@ final class Step {
     private float healthBefore = Float.NaN;
     /** 计划内的坠落预计掉几点血。 */
     private int expectedDamage;
-    /** 这一步开始时的估价(刻)。 */
+    /** 这一步开始时算的几何最短耗时(刻),看护定期限的基数。 */
     private double estimate;
 
     Step(Rig rig, Maneuver planned, Maneuver next, List<Maneuver> diving, Goal goal, RouteSpec spec, Watchdog watchdog) {
@@ -97,7 +97,7 @@ final class Step {
                 return outOfBreath(drowns, 0);
             }
             control = Control.of(rig, fresh, next);
-            double expected = Moves.of(fresh.kind()).cost(model, fresh);
+            double expected = Moves.of(fresh.kind()).ticks(model, fresh);
             watchdog.begin(expected, rig.entity.position());
             begun(fresh, expected);
         } else {

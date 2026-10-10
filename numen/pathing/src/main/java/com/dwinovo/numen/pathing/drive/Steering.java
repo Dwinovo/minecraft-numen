@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Controls.Key;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,18 +13,12 @@ import net.minecraft.world.phys.Vec3;
  * 三者里挑一个:照原版的移动与摩擦往后推算这一刻按下它、之后一直松着,身体最后停在哪,挑停得离那一点最近的;身体在空中
  * 时连同落地前的那几刻一起推算。
  *
- * <p>推算用原版的量:地上每刻的加速度是移动速度属性乘 {@code 0.216 / 方块摩擦³},速度每刻乘方块摩擦乘 0.91;空中加速度
- * 0.02(疾跑 0.026),速度每刻乘 0.91。
+ * <p>推算用的量全来自 {@link Kinematics}(规划定价用的是同一份物理):地上的加速度与摩擦、空中的加速度与阻力、落地要几刻。
  *
  * <p>只在脚踏实地时转身;腾空时不回身,按身体此刻朝着的方向前进或后退来修正——空中转过身去,落地就是背对着路。
  */
 final class Steering {
 
-    /** 原版方块默认摩擦。 */
-    private static final double DEFAULT_FRICTION = 0.6;
-    private static final double AIR_FRICTION = 0.91;
-    /** 原版速度小于它就归零。 */
-    private static final double REST = 0.003;
     /** 推算的最长刻数。 */
     private static final int HORIZON = 80;
     /** 离目标点这么近、速度这么小就算停住了。 */
@@ -60,7 +55,7 @@ final class Steering {
         double yaw = Math.toRadians(body.getYRot());
         Vec3 motion = body.getDeltaMovement();
         double along = motion.x * -Math.sin(yaw) + motion.z * Math.cos(yaw);
-        return along + (body.onGround() ? groundAccel(body) : (body.isSprinting() ? 0.026 : 0.02) * 0.98);
+        return along + (body.onGround() ? groundAccel(body) : Kinematics.airAcceleration(body.isSprinting()));
     }
 
     /**
@@ -78,7 +73,7 @@ final class Steering {
         double speed = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
         keys.release(Key.FORWARD);
         keys.release(Key.BACK);
-        if (distance < AT && speed < REST * 10) {
+        if (distance < AT && speed < Kinematics.REST * 10) {
             return true;
         }
         // 只在地上转身;腾空时不回身,沿身体此刻朝着的方向按前进后退修正
@@ -90,10 +85,10 @@ final class Steering {
         double fz = Math.cos(yaw);
         double ahead = dx * fx + dz * fz;
         double along = motion.x * fx + motion.z * fz;
-        int airLeft = body.onGround() ? 0 : ticksToLand(body.getY(), motion.y, landingY, body.getGravity());
+        int airLeft = body.onGround() ? 0 : Kinematics.ticksToLand(body.getY(), motion.y, landingY, body.getGravity(), HORIZON);
         double groundAccel = groundAccel(body);
-        double groundFriction = friction(body) * 0.91;
-        double airAccel = (body.isSprinting() ? 0.026 : 0.02) * 0.98;
+        double groundFriction = Kinematics.groundDrag(friction(body));
+        double airAccel = Kinematics.airAcceleration(body.isSprinting());
         double best = Double.POSITIVE_INFINITY;
         int choice = 0;
         for (int action : new int[] {1, 0, -1}) {
@@ -125,12 +120,12 @@ final class Steering {
             if (t < airLeft) {
                 m += airAccel * input;
                 pos += m;
-                m *= AIR_FRICTION;
+                m *= Kinematics.AIR_DRAG;
             } else {
                 m += groundAccel * input;
                 pos += m;
                 m *= groundFriction;
-                if (Math.abs(m) < REST) {
+                if (Math.abs(m) < Kinematics.REST) {
                     break;
                 }
             }
@@ -138,27 +133,15 @@ final class Steering {
         return pos;
     }
 
-    /** 从脚高 {@code y}、竖直速度 {@code vy} 落到 {@code landingY} 要几刻(原版先移动,再减重力乘 0.98)。 */
-    private static int ticksToLand(double y, double vy, double landingY, double gravity) {
-        int ticks = 0;
-        while (y > landingY && ticks < HORIZON) {
-            y += vy;
-            vy = (vy - gravity) * 0.98;
-            ticks++;
-        }
-        return Math.max(ticks, 1);
-    }
-
-    /** 地上按前进一刻加的速度:原版 {@code getFrictionInfluencedSpeed} 乘输入的 0.98。 */
+    /** 地上按前进一刻加的速度:身体此刻的移动速度(含疾跑)与脚下的摩擦。 */
     private static double groundAccel(ServerPlayer body) {
-        double f = friction(body);
-        return body.getSpeed() * (0.21600002 / (f * f * f)) * 0.98;
+        return Kinematics.groundAcceleration(body.getSpeed(), friction(body));
     }
 
     /** 脚下影响移动的那一格的摩擦(原版看脚下半格处)。 */
     private static double friction(ServerPlayer body) {
         BlockPos below = BlockPos.containing(body.getX(), body.getY() - 0.5000001, body.getZ());
         float friction = body.level().getBlockState(below).getBlock().getFriction();
-        return friction > 0 ? friction : DEFAULT_FRICTION;
+        return friction > 0 ? friction : Kinematics.DEFAULT_FRICTION;
     }
 }
