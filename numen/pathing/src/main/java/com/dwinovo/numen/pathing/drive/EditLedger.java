@@ -2,9 +2,12 @@ package com.dwinovo.numen.pathing.drive;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import com.dwinovo.numen.api.entity.Mouse;
+import com.dwinovo.numen.pathing.plan.MoveKind;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,7 +35,7 @@ public final class EditLedger {
     public record Toggled(BlockPos pos, BlockState before, BlockState after) implements Entry {}
 
     private final List<Entry> entries = new ArrayList<>();
-    private int steps;
+    private final Map<MoveKind, Integer> walked = new EnumMap<>(MoveKind.class);
 
     void dug(BlockPos pos, BlockState before) {
         entries.add(new Dug(pos.immutable(), before));
@@ -49,9 +52,9 @@ public final class EditLedger {
         }
     }
 
-    /** 走完了一步。 */
-    void stepped() {
-        steps++;
+    /** 走完了一步 {@code kind}。 */
+    void stepped(MoveKind kind) {
+        walked.merge(kind, 1, Integer::sum);
     }
 
     /** 全部笔,按先后。 */
@@ -61,6 +64,11 @@ public final class EditLedger {
 
     /** 走完的步数。 */
     public int steps() {
-        return steps;
+        return walked.values().stream().mapToInt(Integer::intValue).sum();
+    }
+
+    /** 实际走完的步,按走法分;没走过的走法不在里面。 */
+    public Map<MoveKind, Integer> walked() {
+        return Collections.unmodifiableMap(walked);
     }
 }

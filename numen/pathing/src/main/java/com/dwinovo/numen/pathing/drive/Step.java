@@ -80,6 +80,7 @@ final class Step {
                     CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, Threats.NONE));
             Premise premise = recheck(model);
             rig.tally.rechecked(System.nanoTime() - t0);
+            rig.journal.rechecked();
             if (premise instanceof Premise.Fails fails) {
                 return new Beat.Blocked(new Blockage(fails.cell(), rig.world().getBlockState(fails.cell()),
                         planned.kind(), fails.reason(), null));
@@ -106,6 +107,7 @@ final class Step {
         Beat beat = control.tick();
         watchdog.observe(rig.entity.position(), beat instanceof Beat.Going going && going.worked());
         if (beat instanceof Beat.Going && watchdog.overran()) {
+            rig.journal.gotStuck();
             PathLog.info("{} 卡住 {} 做了 {} 刻,超过期限 {} 刻;落点 {} 是 {} {}", rig.who, PathLog.step(planned),
                     watchdog.stepTicks(), PathLog.num(watchdog.allowance()), PathLog.pos(planned.to()),
                     PathLog.block(rig.world().getBlockState(planned.to())), PathLog.body(rig.entity));

@@ -37,6 +37,8 @@ final class Rig {
     final TerrainPolicy terrain;
     final Threats threats;
     final EditLedger ledger = new EditLedger();
+    /** 这次导航一路上的搜索、重搜、走不下去、卡住与复核的次数。 */
+    final Journal journal = new Journal();
     /** 这次导航里身体真在水下憋过的气。 */
     final DiveLog dives = new DiveLog();
     /** 日志里的"谁"({@link PathLog#who})。 */

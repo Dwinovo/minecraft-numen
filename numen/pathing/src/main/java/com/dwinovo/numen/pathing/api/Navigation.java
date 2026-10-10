@@ -27,6 +27,8 @@ public final class Navigation {
     private final long startNanos;
     private Pending<Outcome> diagnosis;
     private NavStatus status = NavStatus.RUNNING;
+    /** 收场那一刻的游戏刻;没收场为 -1。 */
+    private long endTick = -1;
 
     Navigation(Driver driver, ServerPlayer entity) {
         this.driver = driver;
@@ -40,6 +42,14 @@ public final class Navigation {
         if (!status.running()) {
             return status;
         }
+        advance();
+        if (!status.running()) {
+            endTick = entity.level().getGameTime();
+        }
+        return status;
+    }
+
+    private void advance() {
         if (diagnosis != null) {
             Outcome outcome = diagnosis.poll();
             if (outcome != null) {
@@ -48,7 +58,7 @@ public final class Navigation {
                 status = NavStatus.failed(outcome);
                 log("结局", " 诊断 " + PathLog.ms(spent));
             }
-            return status;
+            return;
         }
         switch (driver.tick()) {
             case RUNNING -> {
@@ -59,7 +69,6 @@ public final class Navigation {
             }
             case HALTED -> conclude(driver.halt());
         }
-        return status;
     }
 
     private void conclude(Halt halt) {
@@ -97,7 +106,7 @@ public final class Navigation {
         }
         PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
                 status.running() ? driver : describe(status.outcome()), ledger.steps(), dug, placed, toggled,
-                driver.actions().size(), entity.level().getGameTime() - startTick,
+                driver.actions().size(), ticks(),
                 PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
                 extra, PathLog.body(entity));
     }
@@ -122,14 +131,21 @@ public final class Navigation {
         if (status.running()) {
             log("被叫停", "");
             status = NavStatus.STOPPED;
+            endTick = entity.level().getGameTime();
         }
         driver.stop();
         return report();
     }
 
-    /** 到此刻为止的实际账。 */
+    /** 出发以来的游戏刻数;收场了就是到收场那一刻为止。 */
+    private int ticks() {
+        long now = endTick >= 0 ? endTick : entity.level().getGameTime();
+        return (int) (now - startTick);
+    }
+
+    /** 到此刻为止的行程报告。 */
     public Report report() {
-        return new Report(driver.ledger(), driver.actions(), driver.dives());
+        return new Report(status, ticks(), driver.journal(), driver.ledger(), driver.actions(), driver.dives());
     }
 
     /** 在推进:宿主的脱困反射读它。 */

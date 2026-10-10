@@ -164,6 +164,10 @@ public final class Driver {
         return rig.actions();
     }
 
+    public Journal journal() {
+        return rig.journal;
+    }
+
     /** 到此刻为止身体真在水下憋过的每一段。 */
     public List<DiveLog.Dive> dives() {
         return rig.dives.dives(rig.entity);
@@ -420,9 +424,9 @@ public final class Driver {
                     step.finish(node);
                 }
                 for (int k = cur; k < j; k++) {
-                    rig.ledger.stepped();
-                    // 走成了的这几步一笔勾销;别的步记着的不清——同一处一圈圈地绕回来、在同一步上没走成,次数要攒得起来
                     Maneuver walked = legs.get(k).maneuver();
+                    rig.ledger.stepped(walked.kind());
+                    // 走成了的这几步一笔勾销;别的步记着的不清——同一处一圈圈地绕回来、在同一步上没走成,次数要攒得起来
                     strikes.remove(List.of(walked.kind(), walked.from(), walked.to()));
                 }
                 lastBlockage = null;
@@ -605,6 +609,7 @@ public final class Driver {
      */
     private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
         Route route = result.route();
+        rig.journal.searched(result.stop() == SearchResult.Stop.BUDGET);
         PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 用时 {} 排队 {} 停因 {} {}", rig.who, purpose.label,
                 PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
                 PathLog.ms(done.ranNanos()), PathLog.ms(done.queuedNanos()), result.stop(),
@@ -659,6 +664,7 @@ public final class Driver {
 
     /** 扔掉当前路线,从身体脚下重新搜,旧路打折;{@code why} 记进日志。 */
     private void replan(String why) {
+        rig.journal.replanned();
         PathLog.info("{} 重搜:{} 身体 {}", rig.who, why, PathLog.at(rig.entity.position()));
         reset();
     }
@@ -686,6 +692,7 @@ public final class Driver {
         Maneuver m = legs.get(cur).maneuver();
         List<Object> key = List.of(m.kind(), m.from(), m.to());
         int count = strikes.merge(key, 1, Integer::sum);
+        rig.journal.blocked();
         PathLog.info("{} 走不下去 {} 这一步 {} 第 {}/{} 次 -> {} {}", rig.who, PathLog.blockage(blockage), PathLog.step(m),
                 count, STRIKES, count >= STRIKES ? "收场" : "重搜", PathLog.body(rig.entity));
         if (count >= STRIKES) {
