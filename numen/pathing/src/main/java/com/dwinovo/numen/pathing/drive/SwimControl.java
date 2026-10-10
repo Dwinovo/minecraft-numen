@@ -11,8 +11,8 @@ import net.minecraft.world.phys.Vec3;
  */
 final class SwimControl extends Control {
 
-    SwimControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    SwimControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override
@@ -31,7 +31,7 @@ final class SwimControl extends Control {
         if (m.heading().horizontal()) {
             rig.look.faceToward(c.x, c.z);
         }
-        if (flows()) {
+        if (stride.flows()) {
             Steering.pass(rig, c.x, c.z);
         } else {
             Steering.stop(rig, c.x, c.z, m.landing().feetY());

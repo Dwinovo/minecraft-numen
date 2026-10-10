@@ -11,15 +11,15 @@ import net.minecraft.world.phys.Vec3;
  */
 final class ParkourControl extends Control {
 
-    ParkourControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    ParkourControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override
     Beat tick() {
         keys().release(Key.SNEAK);
         Vec3 target = center(m.to());
-        keys().set(Key.SPRINT, SprintPolicy.sprint(m, next, flows()));
+        keys().set(Key.SPRINT, stride.sprint());
         double edge = 0.5 + rig.entity.getBbWidth() / 2;
         if (rig.entity.onGround() && ahead() < edge) {
             rig.look.faceToward(target.x, target.z);
@@ -30,7 +30,7 @@ final class ParkourControl extends Control {
             return Beat.IDLE;
         }
         keys().release(Key.JUMP);
-        if (flows()) {
+        if (stride.flows()) {
             Steering.pass(rig, target.x, target.z);
         } else {
             Steering.stop(rig, target.x, target.z, m.landing().feetY());

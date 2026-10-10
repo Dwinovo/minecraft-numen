@@ -100,7 +100,9 @@ final class Parkour implements Move {
             return Premise.fail(from.offset(dx * longest, 0, dz * longest), Reason.NO_FOOTING);
         }
         boolean ascend = landing.feetY() > f0 + Footing.EPSILON;
-        if ((span == 4 || ascend) && !sprintable) {
+        // 不助跑跳不过去:落到第 4 列,或落点比起跳时高
+        boolean runUp = span == 4 || ascend;
+        if (runUp && !sprintable) {
             return Premise.fail(to, Reason.NO_SPRINT);
         }
         Contact contact = new Contact(body, from, f0);
@@ -119,10 +121,10 @@ final class Parkour implements Move {
         if (!contact.admit(draft, model, support, true)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, span == 4 || ascend,
+        return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, runUp,
                 false, Strides.inWater(view, to), Strides.submerged(view, body, from, stance, to, landing),
                 Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
-                span, draft.edits(), contact.cells(), contact.exposure(), support));
+                span, draft.edits(), contact.cells(), contact.exposure(), support, true));
     }
 
     @Override
@@ -137,6 +139,6 @@ final class Parkour implements Move {
 
     /** 身体跳过去的刻数:按助跑的步速跨过这几列,空中的时间不短于落在那一高度上的工夫。 */
     private static double movement(CostModel model, Maneuver m) {
-        return Kinematics.leapTicks(model.body().stats(), m.span(), m.sprint(), Strides.rise(m));
+        return Kinematics.leapTicks(model.body().stats(), m.span(), model.maySprint(), Strides.rise(m));
     }
 }

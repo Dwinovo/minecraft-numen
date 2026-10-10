@@ -75,11 +75,11 @@ class MovesTest {
     // ==================== 平走 ====================
 
     @Test
-    void walkingAcrossFlatGroundChangesNothingAndMaySprint() {
+    void walkingAcrossFlatGroundChangesNothingAndCanRun() {
         Maneuver m = holds(MoveKind.WALK, defaults(), ground(), AT, EAST);
         assertEquals(AT.east(), m.to());
         assertTrue(m.edits().isEmpty());
-        assertTrue(m.sprint());
+        assertTrue(m.runnable());
         assertFalse(m.jump());
     }
 
@@ -120,7 +120,7 @@ class MovesTest {
         Maneuver m = holds(MoveKind.WALK, Fixtures.model(natural()), world, AT, EAST);
         assertEquals(2, m.alterations());
         assertTrue(m.edits().stream().allMatch(e -> e instanceof Edit.Dig));
-        assertFalse(m.sprint(), "边挖边走不疾跑");
+        assertFalse(m.runnable(), "边挖边走跑不起来");
     }
 
     @Test
@@ -146,6 +146,19 @@ class MovesTest {
         assertEquals(Reason.NO_FACE, fails(MoveKind.WALK, withCobble(natural()), scaffolding, AT, EAST).reason());
         TestWorld stone = new TestWorld().set(AT.below(), Blocks.STONE.defaultBlockState());
         assertTrue(holds(MoveKind.WALK, withCobble(natural()), stone, AT, EAST).sneak());
+    }
+
+    /** 路径两侧的列有东西托着(或被墙挡着)才算站得稳;一侧是空着的落坑就不是。 */
+    @Test
+    void aStepAlongALedgeIsNotFlankedButOnWideGroundItIs() {
+        assertTrue(holds(MoveKind.WALK, defaults(), ground(), AT, EAST).flanked());
+        TestWorld ledge = new TestWorld().floor(-4, 0, 6, 0, Y - 1);
+        assertFalse(holds(MoveKind.WALK, defaults(), ledge, AT, EAST).flanked(), "两侧都是落坑");
+        TestWorld walled = new TestWorld().floor(-4, 0, 6, 0, Y - 1).fill(-4, Y, -1, 6, Y + 1, -1, Blocks.STONE.defaultBlockState())
+                .fill(-4, Y, 1, 6, Y + 1, 1, Blocks.STONE.defaultBlockState());
+        assertTrue(holds(MoveKind.WALK, defaults(), walled, AT, EAST).flanked(), "两侧是墙,不会踩空");
+        TestWorld corner = new TestWorld().floor(0, 0, 1, 0, Y - 1).floor(1, -1, 1, 0, Y - 1);
+        assertFalse(holds(MoveKind.DIAGONAL, defaults(), corner, AT, NORTH_EAST).flanked(), "斜走的拐角列空着");
     }
 
     @Test
@@ -242,7 +255,7 @@ class MovesTest {
 
     @Test
     void aDiagonalCutsNoCorners() {
-        assertTrue(holds(MoveKind.DIAGONAL, defaults(), ground(), AT, NORTH_EAST).sprint());
+        assertTrue(holds(MoveKind.DIAGONAL, defaults(), ground(), AT, NORTH_EAST).runnable());
         TestWorld corner = ground().fill(1, Y, 0, 1, Y + 1, 0, Blocks.STONE.defaultBlockState());
         assertEquals(Reason.NO_CLEARANCE, fails(MoveKind.DIAGONAL, Fixtures.model(natural()), corner, AT, NORTH_EAST).reason(),
                 "斜穿切角不许,也不为斜走挖");
@@ -344,7 +357,7 @@ class MovesTest {
     @Test
     void theLongestJumpNeedsASprintAndAHungryBodyCannotSprint() {
         RouteSpec spec = RouteSpec.defaults().edit().parkour(true).build();
-        assertTrue(holds(MoveKind.PARKOUR, Fixtures.model(spec), gap(3), AT, EAST).sprint());
+        assertTrue(holds(MoveKind.PARKOUR, Fixtures.model(spec), gap(3), AT, EAST).runUp());
         BodySnapshot hungry = new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 3, 1, 6, 0, List.of(),
                 Fixtures.MINING, Fixtures.BREATH);
         CostModel model = CostModel.of(spec, hungry, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
@@ -526,7 +539,7 @@ class MovesTest {
         TestWorld world = ground().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), Blocks.WATER.defaultBlockState());
         Maneuver m = holds(MoveKind.WALK, defaults(), world, AT, EAST);
         assertTrue(m.wading());
-        assertFalse(m.sprint(), "水里不疾跑");
+        assertFalse(m.runnable(), "水里跑不起来");
     }
 
     @Test

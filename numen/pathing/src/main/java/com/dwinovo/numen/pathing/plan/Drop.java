@@ -125,7 +125,7 @@ final class Drop implements Move {
         }
         return new Premise.Holds(new Maneuver(kind, heading, from, stance, to, landing, false, false, false, wading,
                 Strides.submerged(draft, body, from, stance, to, landing), Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, damage, 1, draft.edits(), contact.cells(), contact.exposure(),
-                support));
+                support, true));
     }
 
     /**

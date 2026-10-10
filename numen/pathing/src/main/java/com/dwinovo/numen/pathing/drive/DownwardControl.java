@@ -8,8 +8,8 @@ import com.dwinovo.numen.pathing.plan.Maneuver;
  */
 final class DownwardControl extends Control {
 
-    DownwardControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    DownwardControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override

@@ -21,8 +21,8 @@ final class DropControl extends Control {
     /** 脚比落点高出这么多,就还没落下去。 */
     private static final double DROPPED = 0.3;
 
-    DropControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    DropControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
         Edit last = m.edits().isEmpty() ? null : m.edits().get(m.edits().size() - 1);
         this.caught = last instanceof Edit.Catch c ? c : null;
     }
@@ -73,9 +73,9 @@ final class DropControl extends Control {
         }
         keys().release(Key.SNEAK);
         keys().set(Key.JUMP, floatUp());
-        keys().release(Key.SPRINT);
+        keys().set(Key.SPRINT, stride.sprint());
         Vec3 target = landingSpot();
-        if (flows()) {
+        if (stride.flows()) {
             Steering.pass(rig, target.x, target.z);
             return water;
         }

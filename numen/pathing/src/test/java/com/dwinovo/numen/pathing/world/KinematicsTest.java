@@ -181,4 +181,14 @@ class KinematicsTest {
         assertEquals(12, Kinematics.leapTicks(SURVIVAL, 2, true, 0), 1e-9, "两列远的跳受空中时间限制");
         assertEquals(9, Kinematics.leapTicks(SURVIVAL, 1, true, 1.0), 1e-9, "跳上一格是 9 刻");
     }
+
+    @Test
+    void stopDistanceCoastsOneTickThenBrakesAndGrowsWithSpeed() {
+        assertEquals(0, Kinematics.stopDistance(SURVIVAL, 0), 1e-9);
+        double sprint = Kinematics.sprintSpeed(SURVIVAL);
+        assertEquals(1 / Kinematics.sprintTicksPerBlock(SURVIVAL), sprint, 1e-9);
+        // 疾跑稳态 0.2806 格每刻:先滑一刻(×0.546)0.153,再按反向键减去 0.098 滑 0.055,第三刻停住
+        assertEquals(0.153 + 0.055, Kinematics.stopDistance(SURVIVAL, sprint), 2e-3);
+        assertTrue(Kinematics.stopDistance(SURVIVAL, sprint * Math.sqrt(0.5)) < Kinematics.stopDistance(SURVIVAL, sprint));
+    }
 }

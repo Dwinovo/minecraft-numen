@@ -11,8 +11,8 @@ import net.minecraft.world.phys.Vec3;
  */
 final class ClimbControl extends Control {
 
-    ClimbControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    ClimbControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override

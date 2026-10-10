@@ -64,7 +64,7 @@ final class Pillar implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.PILLAR, heading, from, stance, to, landing, true, false, false, false,
-                Strides.submerged(draft, body, from, stance, to, landing), 1, 0, 0, 0, draft.edits(), contact.cells(), contact.exposure(), support));
+                Strides.submerged(draft, body, from, stance, to, landing), 1, 0, 0, 0, draft.edits(), contact.cells(), contact.exposure(), support, true));
     }
 
     @Override

@@ -96,10 +96,10 @@ final class Walk implements Move {
             return draft.failure();
         }
         boolean wading = Strides.inWater(draft, to);
-        boolean sprint = model.maySprint() && !wading && !jump && draft.edits().isEmpty();
-        return new Premise.Holds(new Maneuver(MoveKind.WALK, heading, from, stance, to, landing, jump, sprint, sneak, wading,
+        return new Premise.Holds(new Maneuver(MoveKind.WALK, heading, from, stance, to, landing, jump, false, sneak, wading,
                 Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 0, 1, draft.edits(),
-                contact.cells(), contact.exposure(), support));
+                contact.cells(), contact.exposure(), support,
+                Strides.flanked(draft, body, from, f0, to, f1, heading)));
     }
 
     /**

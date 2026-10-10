@@ -15,7 +15,7 @@ import net.minecraft.core.BlockPos;
  * @param to          落到的节点
  * @param landing     身体在 {@code to} 上怎么待着
  * @param jump        要起跳
- * @param sprint      可以疾跑过去
+ * @param runUp       要助跑:不跑起来跳不过去(跑酷落到第 4 列,或落点比起跳时高),只有跑酷有
  * @param sneak       要潜行(搭桥时站定点不中任何一个面,身子探出边沿才点得中)
  * @param wading      落到的节点泡在水里
  * @param submerged   这一步眼睛换不了气:起步或落定时眼睛泡在水里({@link Strides#submerged}),整步按憋着气算
@@ -29,13 +29,23 @@ import net.minecraft.core.BlockPos;
  * @param exposure    这些格与脚下那一格水平方向上紧挨着几格碰了会伤身的(岩浆、火、仙人掌……):挨着走没碰上,歪一点、
  *                    滑一下就碰上了
  * @param support     落到之后脚踩的那一格;不是站着为 null
+ * @param flanked     路径两侧的列都托得住脚或被墙挡着,没有一侧是空着的落坑({@link Strides#flanked}):歪一点踩偏也踩在实处。
+ *                    只有平走、斜走、上一级判这一项,别的走法恒为真。步态拿它定敢不敢跑、敢不敢带着冲劲进来
  */
-public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
+public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean runUp,
                        boolean sneak, boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
-                       long[] cells, int exposure, BlockPos support) {
+                       long[] cells, int exposure, BlockPos support, boolean flanked) {
 
     public Maneuver {
         edits = List.copyOf(edits);
+    }
+
+    /**
+     * 物理上跑得起来:站着起步、不潜行、不泡水、这一步不先在原地改地形(站着做完改动再起步,一步里加不到跑速)。能不能真跑还要看
+     * 身体饿不饿,跑不跑、跑到哪一步收脚由步态定({@code Gait}),价钱按能跑算({@code Strides#pace})——两处读的是这一个事实。
+     */
+    public boolean runnable() {
+        return start.grounded() && !sneak && !wading && edits.isEmpty();
     }
 
     /** 这一步改地形的格数(挖加放,开关门不算)。 */

@@ -96,7 +96,7 @@ final class Step {
             if (drowns != null) {
                 return outOfBreath(drowns, 0);
             }
-            control = Control.of(rig, fresh, next);
+            control = Control.of(rig, fresh, Gait.stride(model.body().stats(), model.maySprint(), fresh, next));
             double expected = Moves.of(fresh.kind()).ticks(model, fresh);
             watchdog.begin(expected, rig.entity.position());
             begun(fresh, expected);

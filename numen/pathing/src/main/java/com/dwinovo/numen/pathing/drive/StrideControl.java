@@ -15,8 +15,8 @@ import net.minecraft.world.phys.Vec3;
  */
 final class StrideControl extends Control {
 
-    StrideControl(Rig rig, com.dwinovo.numen.pathing.plan.Maneuver m, com.dwinovo.numen.pathing.plan.Maneuver next) {
-        super(rig, m, next);
+    StrideControl(Rig rig, com.dwinovo.numen.pathing.plan.Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override
@@ -64,13 +64,13 @@ final class StrideControl extends Control {
                 && (rig.entity.horizontalCollision
                         || rig.entity.getY() < m.landing().feetY() - 0.01 && ahead() >= jumpPoint());
         keys().set(Key.JUMP, jump);
-        boolean flows = flows();
+        boolean flows = stride.flows();
         if (flows) {
             Steering.pass(rig, target.x, target.z);
         } else {
             Steering.stop(rig, target.x, target.z, m.landing().feetY());
         }
-        keys().set(Key.SPRINT, SprintPolicy.sprint(m, next, flows));
+        keys().set(Key.SPRINT, stride.sprint());
     }
 
     /** 身体中心走出这么远就起跳:身子前沿快碰到那一列时。 */

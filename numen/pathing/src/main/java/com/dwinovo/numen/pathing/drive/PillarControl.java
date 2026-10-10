@@ -10,8 +10,8 @@ import com.dwinovo.numen.pathing.plan.Maneuver;
  */
 final class PillarControl extends Control {
 
-    PillarControl(Rig rig, Maneuver m, Maneuver next) {
-        super(rig, m, next);
+    PillarControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
     }
 
     @Override

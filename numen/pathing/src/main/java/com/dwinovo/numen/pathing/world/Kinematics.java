@@ -71,6 +71,29 @@ public final class Kinematics {
         return groundAcceleration(speed, friction) / (1 - groundDrag(friction));
     }
 
+    /**
+     * 地上以 {@code speed}(格每刻)冲着,要停下来最少滑出多远(格):决定得晚一刻,先按惯性滑一刻(速度乘地上的阻力),
+     * 之后每刻按住反向键减去一刻的加速度({@link #groundAcceleration},按走的速度,反向键没有疾跑加成),直到停住。
+     * 步态拿它判冲劲接不接得住:停下的距离要小于身体在落点格里能多滑出去而不碰到邻格的余量。
+     */
+    public static double stopDistance(BodyStats body, double speed) {
+        double drag = groundDrag(DEFAULT_FRICTION);
+        double brake = groundAcceleration(body.movementSpeed(), DEFAULT_FRICTION);
+        double v = speed * drag;
+        double distance = v;
+        while (v > REST) {
+            v = Math.max(0, v - brake);
+            distance += v;
+            v *= drag;
+        }
+        return distance;
+    }
+
+    /** 平地疾跑稳态的速度(格每刻)。 */
+    public static double sprintSpeed(BodyStats body) {
+        return steadyStride(body.movementSpeed() * SPRINT_MULTIPLIER, DEFAULT_FRICTION);
+    }
+
     /** 平地走一格要几刻。 */
     public static double walkTicksPerBlock(BodyStats body) {
         return 1 / steadyStride(body.movementSpeed(), DEFAULT_FRICTION);
@@ -78,7 +101,7 @@ public final class Kinematics {
 
     /** 平地疾跑一格要几刻。 */
     public static double sprintTicksPerBlock(BodyStats body) {
-        return 1 / steadyStride(body.movementSpeed() * SPRINT_MULTIPLIER, DEFAULT_FRICTION);
+        return 1 / sprintSpeed(body);
     }
 
     /** 平地潜行一格要几刻:移动输入乘身体的潜行倍数({@link BodyStats#sneakingSpeed})。 */

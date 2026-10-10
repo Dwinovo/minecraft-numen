@@ -29,28 +29,28 @@ abstract class Control {
 
     final Rig rig;
     final Maneuver m;
-    /** 路线上的下一步;这是最后一步为 null。 */
-    final Maneuver next;
+    /** 这一步的步态({@link Gait}):疾不疾跑、带不带着冲劲进下一步。 */
+    final Gait.Stride stride;
     final Work work;
     /** 下一件要做的改动的下标。 */
     private int edit;
 
-    Control(Rig rig, Maneuver m, Maneuver next) {
+    Control(Rig rig, Maneuver m, Gait.Stride stride) {
         this.rig = rig;
         this.m = m;
-        this.next = next;
+        this.stride = stride;
         this.work = new Work(rig, m.kind());
     }
 
-    static Control of(Rig rig, Maneuver m, Maneuver next) {
+    static Control of(Rig rig, Maneuver m, Gait.Stride stride) {
         return switch (m.kind()) {
-            case WALK, DIAGONAL, ASCEND -> new StrideControl(rig, m, next);
-            case DESCEND, FALL -> new DropControl(rig, m, next);
-            case PARKOUR -> new ParkourControl(rig, m, next);
-            case PILLAR -> new PillarControl(rig, m, next);
-            case DOWNWARD -> new DownwardControl(rig, m, next);
-            case CLIMB -> new ClimbControl(rig, m, next);
-            case SWIM -> new SwimControl(rig, m, next);
+            case WALK, DIAGONAL, ASCEND -> new StrideControl(rig, m, stride);
+            case DESCEND, FALL -> new DropControl(rig, m, stride);
+            case PARKOUR -> new ParkourControl(rig, m, stride);
+            case PILLAR -> new PillarControl(rig, m, stride);
+            case DOWNWARD -> new DownwardControl(rig, m, stride);
+            case CLIMB -> new ClimbControl(rig, m, stride);
+            case SWIM -> new SwimControl(rig, m, stride);
         };
     }
 
@@ -202,26 +202,5 @@ abstract class Control {
         }
         Vec3 c = center(m.from());
         return ((rig.entity.getX() - c.x) * dx + (rig.entity.getZ() - c.z) * dz) / length;
-    }
-
-    /**
-     * 走完这一步不用停下,可以接着走下一步:下一步不先在原地做改动,是平地上的走法,两步都落在地上、落点不泡在水里。
-     * 带着冲劲落地的(下一级、跑酷)只有下一步朝同一个方向才不停——冲过了头也还在路上;下落(两格以上)从不带着冲劲落,
-     * 飘得太远,落点(一池水、一块窄台)就接不住了。
-     */
-    final boolean flows() {
-        if (next == null || !next.edits().isEmpty() || !m.landing().grounded() || m.wading()
-                || !next.start().grounded() || m.kind() == MoveKind.FALL) {
-            return false;
-        }
-        boolean flat = switch (next.kind()) {
-            case WALK, DIAGONAL, ASCEND, DESCEND, FALL, PARKOUR -> true;
-            default -> false;
-        };
-        if (!flat) {
-            return false;
-        }
-        boolean momentum = m.kind() == MoveKind.DESCEND || m.kind() == MoveKind.PARKOUR;
-        return !momentum || next.heading().dx() == m.heading().dx() && next.heading().dz() == m.heading().dz();
     }
 }
