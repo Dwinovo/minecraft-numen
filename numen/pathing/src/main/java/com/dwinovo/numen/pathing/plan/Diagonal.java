@@ -76,8 +76,7 @@ final class Diagonal implements Move {
         }
         return new Premise.Holds(new Maneuver(MoveKind.DIAGONAL, heading, from, stance, to, landing, jump, false, false, wading,
                 Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), drop, damage, 1, draft.edits(),
-                contact.cells(), contact.exposure(), support,
-                Strides.flanked(draft, body, from, f0, to, f1, heading)));
+                contact.cells(), contact.exposure(), support));
     }
 
     @Override

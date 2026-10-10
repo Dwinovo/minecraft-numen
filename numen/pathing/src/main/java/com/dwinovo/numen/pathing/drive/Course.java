@@ -94,9 +94,13 @@ final class Course {
         return at(cur);
     }
 
-    /** 紧接着正在走的那一步的下一步;没有为 null。 */
-    Maneuver following() {
-        return cur + 1 < legs.size() ? at(cur + 1) : null;
+    /** 紧接着正在走的那一步往后的 {@code count} 步(不够就是剩下的),按先后。 */
+    List<Maneuver> ahead(int count) {
+        List<Maneuver> out = new ArrayList<>();
+        for (int i = cur + 1; i < legs.size() && out.size() < count; i++) {
+            out.add(at(i));
+        }
+        return out;
     }
 
     Route.Leg lastLeg() {

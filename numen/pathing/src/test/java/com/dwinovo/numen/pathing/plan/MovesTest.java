@@ -148,19 +148,6 @@ class MovesTest {
         assertTrue(holds(MoveKind.WALK, withCobble(natural()), stone, AT, EAST).sneak());
     }
 
-    /** 路径两侧的列有东西托着(或被墙挡着)才算站得稳;一侧是空着的落坑就不是。 */
-    @Test
-    void aStepAlongALedgeIsNotFlankedButOnWideGroundItIs() {
-        assertTrue(holds(MoveKind.WALK, defaults(), ground(), AT, EAST).flanked());
-        TestWorld ledge = new TestWorld().floor(-4, 0, 6, 0, Y - 1);
-        assertFalse(holds(MoveKind.WALK, defaults(), ledge, AT, EAST).flanked(), "两侧都是落坑");
-        TestWorld walled = new TestWorld().floor(-4, 0, 6, 0, Y - 1).fill(-4, Y, -1, 6, Y + 1, -1, Blocks.STONE.defaultBlockState())
-                .fill(-4, Y, 1, 6, Y + 1, 1, Blocks.STONE.defaultBlockState());
-        assertTrue(holds(MoveKind.WALK, defaults(), walled, AT, EAST).flanked(), "两侧是墙,不会踩空");
-        TestWorld corner = new TestWorld().floor(0, 0, 1, 0, Y - 1).floor(1, -1, 1, 0, Y - 1);
-        assertFalse(holds(MoveKind.DIAGONAL, defaults(), corner, AT, NORTH_EAST).flanked(), "斜走的拐角列空着");
-    }
-
     @Test
     void aWallThatWouldLetWaterInIsNotDug() {
         TestWorld world = ground().fill(1, Y, -4, 1, Y + 1, 4, Blocks.STONE.defaultBlockState())

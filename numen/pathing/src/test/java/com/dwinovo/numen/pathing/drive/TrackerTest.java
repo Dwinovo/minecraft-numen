@@ -106,7 +106,7 @@ class TrackerTest {
         assertEquals(84, course.remainingTicks(), 1e-9);
         course.advanceTo(5);
         assertEquals(49, course.remainingTicks(), 1e-9);
-        assertEquals(course.at(6), course.following(), "紧接着的下一步");
+        assertEquals(course.at(6), course.ahead(1).get(0), "紧接着的下一步");
         assertEquals(Stance.Kind.GROUND, course.startStance().kind());
     }
 }

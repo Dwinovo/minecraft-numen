@@ -143,6 +143,50 @@ public final class Stepping {
     }
 
     /**
+     * 站着的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向借着冲劲滑出去,身体中心从列中心起最远能滑出多远(格):每滑一小步,
+     * 脚底下还有东西托着(顶面不比脚低过迈步高度),身体也不撞上东西。冲得快就停不住、滑过了头——落点格里的余量比停下来要滑的距离
+     * ({@link Kinematics#stopDistance})小,冲劲就接不住。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量;整块的顶上约 0.75 格(身体碰撞盒还压着边沿就托得住),
+     * 炼药锅里只比身体宽一点点,是 0。
+     */
+    public static double slideRoom(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {
+        checkDirection(dx, dz);
+        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY, false);
+        double half = body.width() / 2;
+        double out = 0;
+        for (int i = 1; i <= LEAN_STEPS; i++) {
+            double c = i * LEAN_STEP;
+            double cx = x + 0.5 + dx * c;
+            double cz = z + 0.5 + dz * c;
+            if (!Double.isNaN(obstacles.highestHit(cx, cz, half, feetY, body.height()))
+                    || obstacles.support(cx, cz, half, feetY) < feetY - body.stepHeight() - Footing.EPSILON) {
+                break;
+            }
+            out = c;
+        }
+        return Math.max(0, out - LEAN_STEP);
+    }
+
+    /**
+     * 这一步走过的路径两侧站得稳:平走、上一级是起点和终点两端旁边的列,斜走是两个拐角列;每一列要么脚下有东西托着(落差在
+     * 一格以内),要么在这个高度被墙挡着、放不下身体。空着的一侧是落坑,疾跑时歪一点、冲出去一点就踩空。
+     * 检查的是节点所在高度往下一格,和执行时身体偏离中心线的那一点点距离相称,不是整条路线两边都要有路。
+     */
+    public static boolean flanked(BlockGetter level, BodyStats body, BlockPos from, double fromFeetY, BlockPos to, double toFeetY,
+                                  int dx, int dz) {
+        int y = Footing.cellOf(Math.max(fromFeetY, toFeetY));
+        if (dx != 0 && dz != 0) {
+            return footed(level, body, from.getX() + dx, y, from.getZ()) && footed(level, body, from.getX(), y, from.getZ() + dz);
+        }
+        return footed(level, body, from.getX() + dz, y, from.getZ() + dx) && footed(level, body, from.getX() - dz, y, from.getZ() - dx)
+                && footed(level, body, to.getX() + dz, y, to.getZ() + dx) && footed(level, body, to.getX() - dz, y, to.getZ() - dx);
+    }
+
+    private static boolean footed(BlockGetter level, BodyStats body, int x, int y, int z) {
+        return !Double.isNaN(Footing.height(level, body, x, y, z)) || !Double.isNaN(Footing.height(level, body, x, y - 1, z))
+                || !Clearance.fits(level, body, x, y, z);
+    }
+
+    /**
      * 站立的身体脚在 {@code (x, fromFeetY, z)},不起跳,朝 {@code (dx, dz)} 走进相邻一列,脚最后落在多高:与
      * {@link #between} 同一套推导,只是不指定终点。途中有坎高过迈步高度、要跳才过得去,答 {@link Double#NaN};脚下直到
      * {@code lowestFeetY} 都没有东西托住,答 {@link Double#NEGATIVE_INFINITY}(身体落出了看的范围)。落进水里、抓住梯子

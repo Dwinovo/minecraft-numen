@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/** 步态:每一步疾不疾跑、收不收脚,只看路线上相邻两步的事实;不经 {@link Driver}。 */
+/** 步态:每一步疾不疾跑、收不收脚,只看路线上相邻两步的事实与脚下的世界;不经 {@link Driver}。 */
 class GaitTest {
 
     private static final int Y = 64;
@@ -31,11 +31,16 @@ class GaitTest {
         Vanilla.boot();
     }
 
-    /** 这条路线每一步的步态,最后一步没有下一步。 */
-    private static List<Gait.Stride> strides(List<Maneuver> steps, boolean maySprint) {
+    /** 窗口只有 {@code m} 和 {@code next} 两步时 {@code m} 的步态。 */
+    private static Gait.Stride stride(TestWorld world, boolean maySprint, Maneuver m, Maneuver next) {
+        return Gait.stride(world, Vanilla.SURVIVAL, maySprint, next == null ? List.of(m) : List.of(m, next));
+    }
+
+    /** 这条路线每一步的步态(每一步看得到后面的四步),最后一步没有下一步。 */
+    private static List<Gait.Stride> strides(TestWorld world, List<Maneuver> steps, boolean maySprint) {
         List<Gait.Stride> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
-            out.add(Gait.stride(Vanilla.SURVIVAL, maySprint, steps.get(i), i + 1 < steps.size() ? steps.get(i + 1) : null));
+            out.add(Gait.stride(world, Vanilla.SURVIVAL, maySprint, steps.subList(i, Math.min(steps.size(), i + Continuation.TAIL))));
         }
         return out;
     }
@@ -59,7 +64,8 @@ class GaitTest {
 
     @Test
     void aStraightRunSprintsEveryStepAndCarriesItsMomentumUntilTheLastOne() {
-        List<Gait.Stride> strides = strides(route(flat(), new BlockPos(0, Y, 0), new BlockPos(12, Y, 0)), true);
+        TestWorld world = flat();
+        List<Gait.Stride> strides = strides(world, route(world, new BlockPos(0, Y, 0), new BlockPos(12, Y, 0)), true);
         assertEquals(12, strides.size());
         assertTrue(strides.stream().allMatch(Gait.Stride::sprint));
         assertTrue(strides.subList(0, 11).stream().allMatch(Gait.Stride::flows), "连贯直行,冲劲带着进下一步");
@@ -68,7 +74,8 @@ class GaitTest {
 
     @Test
     void aHungryBodyNeverSprints() {
-        List<Gait.Stride> strides = strides(route(flat(), new BlockPos(0, Y, 0), new BlockPos(6, Y, 0)), false);
+        TestWorld world = flat();
+        List<Gait.Stride> strides = strides(world, route(world, new BlockPos(0, Y, 0), new BlockPos(6, Y, 0)), false);
         assertTrue(strides.stream().noneMatch(Gait.Stride::sprint));
         assertTrue(strides.get(0).flows(), "不疾跑也一样连贯");
     }
@@ -76,11 +83,12 @@ class GaitTest {
     @Test
     void climbingStairsOfFullBlocksRunsUphillWithoutStoppingAtEachStep() {
         TestWorld world = flat();
-        for (int i = 1; i <= 5; i++) {
-            world.fill(i * 2, Y, -8, 40, Y + i - 1, 8, Blocks.STONE.defaultBlockState());
+        // 台阶之间隔着三格平地:落点前面没有墙贴着,余量够
+        for (int i = 1; i <= 4; i++) {
+            world.fill(i * 4, Y, -8, 40, Y + i - 1, 8, Blocks.STONE.defaultBlockState());
         }
-        List<Maneuver> steps = route(world, new BlockPos(0, Y, 0), new BlockPos(12, Y + 5, 0));
-        List<Gait.Stride> strides = strides(steps, true);
+        List<Maneuver> steps = route(world, new BlockPos(0, Y, 0), new BlockPos(16, Y + 4, 0));
+        List<Gait.Stride> strides = strides(world, steps, true);
         assertTrue(steps.stream().anyMatch(m -> m.kind() == MoveKind.ASCEND), "有上一级");
         for (int i = 0; i < steps.size(); i++) {
             if (steps.get(i).kind() == MoveKind.ASCEND || steps.get(i).kind() == MoveKind.WALK) {
@@ -99,7 +107,7 @@ class GaitTest {
             world.fill(2 * k, Y, -8, 2 * k + 1, Y + 3 - k, 8, Blocks.STONE.defaultBlockState());
         }
         List<Maneuver> steps = route(world, new BlockPos(0, Y + 4, 0), new BlockPos(12, Y, 0));
-        List<Gait.Stride> strides = strides(steps, true);
+        List<Gait.Stride> strides = strides(world, steps, true);
         boolean seen = false;
         for (int i = 0; i + 1 < steps.size(); i++) {
             if (steps.get(i).kind() == MoveKind.DESCEND) {
@@ -120,14 +128,14 @@ class GaitTest {
         Maneuver descend = steps.get(at);
         Maneuver after = steps.get(at + 1);
         assertTrue(descend.heading().dx() != after.heading().dx() || descend.heading().dz() != after.heading().dz(), "下一步转了向");
-        assertFalse(Gait.stride(Vanilla.SURVIVAL, true, descend, after).flows());
+        assertFalse(stride(world, true, descend, after).flows());
     }
 
     @Test
     void theStepBeforeAnInPlaceEditStopsAndTheEditStepDoesNotRun() {
         TestWorld world = flat().fill(5, Y, -8, 5, Y + 1, 8, Blocks.STONE.defaultBlockState());
         List<Maneuver> steps = route(world, Fixtures.model(Fixtures.natural()), new BlockPos(0, Y, 0), new BlockPos(8, Y, 0));
-        List<Gait.Stride> strides = strides(steps, true);
+        List<Gait.Stride> strides = strides(world, steps, true);
         int editing = -1;
         for (int i = 0; i < steps.size(); i++) {
             if (!steps.get(i).edits().isEmpty()) {
@@ -142,17 +150,16 @@ class GaitTest {
 
     @Test
     void aRightAngleTurnStopsButADiagonalTurnCarries() {
-        // 直角:全部速度都要在落点格里停下来,滑出去的距离超过格里的余量;斜着拐四十五度,只有侧向的那一份要停
-        Maneuver east = walk(1, 0);
-        assertFalse(Gait.stride(Vanilla.SURVIVAL, true, east, walk(0, -1)).flows(), "直角弯收脚");
-        assertTrue(Gait.stride(Vanilla.SURVIVAL, true, east, walk(1, -1)).flows(), "斜着拐四十五度,侧向的那一份停得住");
-        assertTrue(Gait.stride(Vanilla.SURVIVAL, true, east, walk(1, 0)).flows());
-        assertFalse(Gait.stride(Vanilla.SURVIVAL, true, east, walk(-1, 0)).flows(), "掉头比直角更停不住");
+        // 落点前一格是堵墙,格里往前只剩 0.15 格的余量:直角要停下全部速度(滑出去 0.21),停不住;斜着拐四十五度只有侧向那一份(0.12),停得住
+        TestWorld world = new TestWorld().floor(-4, -4, 4, 4, Y - 1).fill(2, Y, 0, 2, Y + 1, 0, Blocks.STONE.defaultBlockState());
+        Maneuver east = walk(world, 1, 0);
+        assertFalse(stride(world, true, east, walk(world, 0, -1)).flows(), "直角弯收脚");
+        assertTrue(stride(world, true, east, walk(world, 1, -1)).flows(), "斜着拐四十五度,侧向的那一份停得住");
+        assertFalse(stride(world, true, east, walk(world, -1, 0)).flows(), "掉头比直角更停不住");
     }
 
     /** 平地上朝 (dx, dz) 走一格的平走或斜走。 */
-    private static Maneuver walk(int dx, int dz) {
-        TestWorld world = new TestWorld().floor(-4, -4, 4, 4, Y - 1);
+    private static Maneuver walk(TestWorld world, int dx, int dz) {
         return route(world, new BlockPos(0, Y, 0), new BlockPos(dx, Y, dz)).get(0);
     }
 
@@ -160,20 +167,32 @@ class GaitTest {
     void aStepBesideADropDoesNotRunAndTheStepBeforeItStops() {
         TestWorld ledge = new TestWorld().floor(-4, 0, 20, 0, Y - 1);
         List<Maneuver> steps = route(ledge, new BlockPos(0, Y, 0), new BlockPos(8, Y, 0));
-        List<Gait.Stride> strides = strides(steps, true);
-        assertTrue(steps.stream().noneMatch(Maneuver::flanked), "一格宽的窄道,两侧都是落坑");
-        assertTrue(strides.stream().noneMatch(Gait.Stride::sprint), "贴着落坑不跑");
+        List<Gait.Stride> strides = strides(ledge, steps, true);
+        assertTrue(strides.stream().noneMatch(Gait.Stride::sprint), "一格宽的窄道,两侧都是落坑,贴着落坑不跑");
         assertTrue(strides.stream().noneMatch(Gait.Stride::flows), "也不带着冲劲进下一步");
         // 宽地上的一步后面接窄道的一步:宽地上的这一步在落点上收脚
-        Maneuver wide = walk(1, 0);
-        assertFalse(Gait.stride(Vanilla.SURVIVAL, true, wide, steps.get(0)).flows(), "窄道前收脚");
+        TestWorld wide = new TestWorld().floor(-4, -4, 4, 4, Y - 1);
+        assertFalse(stride(ledge, true, walk(wide, 1, 0), steps.get(0)).flows(), "窄道前收脚");
+    }
+
+    @Test
+    void aLandingTooNarrowToStopOnIsNotRunInto() {
+        // 炼药锅里只比身体宽一点点:冲进去就撞出来。落点是它的上一级不跑,前一步也不把冲劲带进来
+        TestWorld world = flat().set(6, Y, 0, Blocks.CAULDRON.defaultBlockState());
+        List<Maneuver> steps = route(world, new BlockPos(0, Y, 0), new BlockPos(6, Y, 0));
+        List<Gait.Stride> strides = strides(world, steps, true);
+        int last = steps.size() - 1;
+        assertEquals(new BlockPos(6, Y, 0), steps.get(last).to());
+        assertFalse(strides.get(last).sprint(), "落点里没有余量,跑不起来");
+        assertFalse(strides.get(last - 1).flows(), "前一步在落点上收脚,不带冲劲进来");
+        assertTrue(strides.get(0).sprint(), "前面宽敞的路照跑");
     }
 
     @Test
     void wadingThroughWaterNeitherSprintsNorCarries() {
         TestWorld world = flat().fill(3, Y, -8, 9, Y, 8, Blocks.WATER.defaultBlockState());
         List<Maneuver> steps = route(world, new BlockPos(0, Y, 0), new BlockPos(12, Y, 0));
-        List<Gait.Stride> strides = strides(steps, true);
+        List<Gait.Stride> strides = strides(world, steps, true);
         int wet = 0;
         for (int i = 0; i < steps.size(); i++) {
             if (steps.get(i).wading()) {
@@ -193,9 +212,9 @@ class GaitTest {
         Maneuver leap = firstOf(MoveKind.PARKOUR, steps);
         assertTrue(leap.runUp(), "四列远的跳要助跑");
         int at = steps.indexOf(leap);
-        List<Gait.Stride> strides = strides(steps, true);
+        List<Gait.Stride> strides = strides(world, steps, true);
         assertTrue(strides.get(at).sprint());
         assertTrue(at > 0 && strides.get(at - 1).sprint() && strides.get(at - 1).flows(), "起跳前的步子跑着,冲劲带进跳里");
-        assertFalse(strides(steps, false).get(at).sprint(), "饿着跑不起来");
+        assertFalse(strides(world, steps, false).get(at).sprint(), "饿着跑不起来");
     }
 }

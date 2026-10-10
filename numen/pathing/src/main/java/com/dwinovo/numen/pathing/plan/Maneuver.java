@@ -29,12 +29,10 @@ import net.minecraft.core.BlockPos;
  * @param exposure    这些格与脚下那一格水平方向上紧挨着几格碰了会伤身的(岩浆、火、仙人掌……):挨着走没碰上,歪一点、
  *                    滑一下就碰上了
  * @param support     落到之后脚踩的那一格;不是站着为 null
- * @param flanked     路径两侧的列都托得住脚或被墙挡着,没有一侧是空着的落坑({@link Strides#flanked}):歪一点踩偏也踩在实处。
- *                    只有平走、斜走、上一级判这一项,别的走法恒为真。步态拿它定敢不敢跑、敢不敢带着冲劲进来
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean runUp,
                        boolean sneak, boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
-                       long[] cells, int exposure, BlockPos support, boolean flanked) {
+                       long[] cells, int exposure, BlockPos support) {
 
     public Maneuver {
         edits = List.copyOf(edits);

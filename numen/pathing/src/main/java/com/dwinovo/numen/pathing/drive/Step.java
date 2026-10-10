@@ -33,7 +33,8 @@ final class Step {
 
     private final Rig rig;
     private final Maneuver planned;
-    private final Maneuver next;
+    /** 路线上这一步后面的几步:步态要看得到连着的冲劲接不接得住。 */
+    private final List<Maneuver> ahead;
     /** 这一步之后同一段水下接着的几步(都憋着气),按先后;这一步不在水下或后面换得了气为空。 */
     private final List<Maneuver> diving;
     private final Goal goal;
@@ -51,10 +52,10 @@ final class Step {
     /** 这一步开始时算的几何最短耗时(刻),看护定期限的基数。 */
     private double estimate;
 
-    Step(Rig rig, Maneuver planned, Maneuver next, List<Maneuver> diving, Goal goal, RouteSpec spec, Watchdog watchdog) {
+    Step(Rig rig, Maneuver planned, List<Maneuver> ahead, List<Maneuver> diving, Goal goal, RouteSpec spec, Watchdog watchdog) {
         this.rig = rig;
         this.planned = planned;
-        this.next = next;
+        this.ahead = List.copyOf(ahead);
         this.diving = List.copyOf(diving);
         this.goal = goal;
         this.spec = spec;
@@ -96,7 +97,10 @@ final class Step {
             if (drowns != null) {
                 return outOfBreath(drowns, 0);
             }
-            control = Control.of(rig, fresh, Gait.stride(model.body().stats(), model.maySprint(), fresh, next));
+            List<Maneuver> window = new ArrayList<>(ahead.size() + 1);
+            window.add(fresh);
+            window.addAll(ahead);
+            control = Control.of(rig, fresh, Gait.stride(rig.world(), model.body().stats(), model.maySprint(), window));
             double expected = Moves.of(fresh.kind()).ticks(model, fresh);
             watchdog.begin(expected, rig.entity.position());
             begun(fresh, expected);

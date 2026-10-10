@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import static com.dwinovo.numen.pathing.Vanilla.SURVIVAL;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -393,6 +394,35 @@ class SteppingTest {
     @Test
     void thereIsNoLeaningOutOfScaffoldingBecauseItsPlateGivesWayToASneakingBody() {
         assertEquals(0, Stepping.leanOut(lone(Blocks.SCAFFOLDING.defaultBlockState()), SURVIVAL, 0, Y, 0, 1, 0), 1e-9);
+    }
+
+    @Test
+    void slidingPastTheCenterOfAFullBlockGoesAboutThreeQuarters() {
+        double room = Stepping.slideRoom(lone(Blocks.STONE.defaultBlockState()), SURVIVAL, 0, Y, 0, 1, 0);
+        assertTrue(room > 0.7 && room <= 0.8, "整块上滑出 " + room);
+    }
+
+    @Test
+    void thereIsNoRoomToSlideInsideACauldronBecauseItsRimStopsTheBody() {
+        // 炼药锅里只比身体宽 0.15:滑一小步就撞上锅沿。身体站在锅底,脚比锅沿低
+        TestWorld cauldron = new TestWorld().floor(-3, -3, 3, 3, Y - 1).set(0, Y, 0, Blocks.CAULDRON.defaultBlockState());
+        assertEquals(0, Stepping.slideRoom(cauldron, SURVIVAL, 0, Y + 0.25, 0, 1, 0), 1e-9);
+    }
+
+    /** 路径两侧的列有东西托着(或被墙挡着)才算站得稳;一侧是空着的落坑就不是。 */
+    @Test
+    void aStepIsFlankedOnWideGroundAndBetweenWallsButNotAlongALedge() {
+        BlockPos from = new BlockPos(0, Y, 0);
+        BlockPos to = new BlockPos(1, Y, 0);
+        TestWorld wide = new TestWorld().floor(-4, -4, 6, 4, Y - 1);
+        assertTrue(Stepping.flanked(wide, SURVIVAL, from, Y, to, Y, 1, 0));
+        TestWorld ledge = new TestWorld().floor(-4, 0, 6, 0, Y - 1);
+        assertFalse(Stepping.flanked(ledge, SURVIVAL, from, Y, to, Y, 1, 0), "两侧都是落坑");
+        TestWorld walled = new TestWorld().floor(-4, 0, 6, 0, Y - 1).fill(-4, Y, -1, 6, Y + 1, -1, Blocks.STONE.defaultBlockState())
+                .fill(-4, Y, 1, 6, Y + 1, 1, Blocks.STONE.defaultBlockState());
+        assertTrue(Stepping.flanked(walled, SURVIVAL, from, Y, to, Y, 1, 0), "两侧是墙,不会踩空");
+        TestWorld corner = new TestWorld().floor(0, 0, 1, 0, Y - 1).floor(1, -1, 1, 0, Y - 1);
+        assertFalse(Stepping.flanked(corner, SURVIVAL, from, Y, new BlockPos(1, Y, -1), Y, 1, -1), "斜走的拐角列空着");
     }
 
     @Test

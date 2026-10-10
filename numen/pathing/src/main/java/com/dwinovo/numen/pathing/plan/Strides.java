@@ -6,7 +6,6 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
-import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
@@ -75,28 +74,6 @@ final class Strides {
         double pace = m.sneak() ? Kinematics.sneakTicksPerBlock(body)
                 : model.maySprint() && m.runnable() ? Kinematics.sprintTicksPerBlock(body) : Kinematics.walkTicksPerBlock(body);
         return pace / m.speedFactor();
-    }
-
-    /**
-     * 路径两侧站得稳:这一步走过的两端(平走、上一级)或两个拐角(斜走)旁边的列,脚下有东西托着(落差在迈步高度以内)或被墙挡着。
-     * 空着的一侧是落坑,疾跑时歪一点、冲出去一点就踩空——步态据此不敢在上面跑。
-     * 检查的是节点所在高度往下一格,和执行时身体偏离中心线的那一点点距离相称,不是整条路线两边都要有路。
-     */
-    static boolean flanked(BlockGetter level, BodyStats body, BlockPos from, double f0, BlockPos to, double f1, Heading heading) {
-        int dx = heading.dx();
-        int dz = heading.dz();
-        int y = Footing.cellOf(Math.max(f0, f1));
-        if (dx != 0 && dz != 0) {
-            return footed(level, body, from.getX() + dx, y, from.getZ()) && footed(level, body, from.getX(), y, from.getZ() + dz);
-        }
-        return footed(level, body, from.getX() + dz, y, from.getZ() + dx) && footed(level, body, from.getX() - dz, y, from.getZ() - dx)
-                && footed(level, body, to.getX() + dz, y, to.getZ() + dx) && footed(level, body, to.getX() - dz, y, to.getZ() - dx);
-    }
-
-    /** 这一列在 {@code y} 或低一格的节点上托得住脚,或这一高度上被挡着(墙)放不下身体。 */
-    private static boolean footed(BlockGetter level, BodyStats body, int x, int y, int z) {
-        return !Double.isNaN(Footing.height(level, body, x, y, z)) || !Double.isNaN(Footing.height(level, body, x, y - 1, z))
-                || !Clearance.fits(level, body, x, y, z);
     }
 
     /** 起跳落在比起跳时高 {@code rise} 格的平面上、能接着再跳要几刻({@link Kinematics#jumpCycleTicks})。 */

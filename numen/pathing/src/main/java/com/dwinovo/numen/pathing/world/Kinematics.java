@@ -94,9 +94,14 @@ public final class Kinematics {
         return steadyStride(body.movementSpeed() * SPRINT_MULTIPLIER, DEFAULT_FRICTION);
     }
 
+    /** 平地走的稳态速度(格每刻)。 */
+    public static double walkSpeed(BodyStats body) {
+        return steadyStride(body.movementSpeed(), DEFAULT_FRICTION);
+    }
+
     /** 平地走一格要几刻。 */
     public static double walkTicksPerBlock(BodyStats body) {
-        return 1 / steadyStride(body.movementSpeed(), DEFAULT_FRICTION);
+        return 1 / walkSpeed(body);
     }
 
     /** 平地疾跑一格要几刻。 */
