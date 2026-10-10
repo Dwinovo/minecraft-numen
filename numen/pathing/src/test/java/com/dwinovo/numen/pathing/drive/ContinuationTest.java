@@ -10,7 +10,11 @@ import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.plan.Stance;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LadderBlock;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -29,6 +33,42 @@ class ContinuationTest {
         TestWorld world = new TestWorld().floor(-4, -4, 40, 4, Y - 1);
         BlockPos from = course.end();
         return Fixtures.search(world, Fixtures.model(RouteSpec.defaults()), from, Goals.at(from.offset(8, 0, 0))).route();
+    }
+
+    /** 先平走三步再爬一架八格高的梯子到顶:没到目标的半程路线。 */
+    private static Course ladderCourse() {
+        TestWorld world = new TestWorld().floor(-4, -4, 12, 4, Y - 1).fill(4, Y, -1, 4, Y + 8, 1, Blocks.STONE.defaultBlockState());
+        for (int y = Y; y < Y + 8; y++) {
+            world.set(3, y, 0, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.EAST));
+        }
+        Route route = Fixtures.search(world, Fixtures.model(RouteSpec.defaults()), new BlockPos(0, Y, 0),
+                Goals.at(new BlockPos(3, Y + 7, 0))).route();
+        Course course = new Course();
+        course.install(route, false, m -> 10);
+        return course;
+    }
+
+    @Test
+    void theBodyNeverWaitsForTheNextSegmentOnALadder() {
+        Course course = ladderCourse();
+        assertTrue(course.size() > Continuation.TAIL + 3, "路线够长,末尾那几步落在梯子上");
+        long climbing = java.util.stream.IntStream.range(0, course.size()).filter(i -> course.at(i).start().kind() == Stance.Kind.CLIMBING).count();
+        assertTrue(climbing >= Continuation.TAIL, "末尾那几步的起点全是攀着的");
+        Continuation continuation = new Continuation();
+        int cur = 0;
+        while (continuation.settled(course)) {
+            cur++;
+            course.advanceTo(cur);
+        }
+        assertTrue(cur < course.size() - Continuation.TAIL, "比不退让早停下");
+        assertTrue(course.at(cur).start().kind() != Stance.Kind.CLIMBING, "停下来等的这一步,起点待得住:" + course.at(cur).start());
+    }
+
+    @Test
+    void aRouteThatStartsOnALadderCanOnlyWaitThere() {
+        Course course = ladderCourse();
+        course.advanceTo(course.size() - Continuation.TAIL);
+        assertFalse(new Continuation().settled(course), "没处可退,就在这一步的起点上等");
     }
 
     @Test
