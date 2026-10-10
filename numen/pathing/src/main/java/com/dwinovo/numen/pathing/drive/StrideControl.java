@@ -10,7 +10,7 @@ import net.minecraft.world.phys.Vec3;
  * 平走、斜走、上一级:走进相邻的一列。要起跳时(整块、楼梯背面)贴近那一列就按跳,离地就松开;楼梯正面、下半砖是
  * 走上去的,不跳。从梯子顶上、水面上跨上岸是攀上去、游上去的:按住跳朝那一列走。
  *
- * <p>脚下搭桥而能点的面只剩起步那一块的侧面时(规划的 {@link com.dwinovo.numen.pathing.plan.Maneuver#sneak()}),
+ * <p>脚下搭桥而站定点不中任何一个面、探出边沿才点得中时(规划的 {@link com.dwinovo.numen.pathing.plan.Maneuver#sneak()}),
  * 按住潜行朝落点走——原版潜行走不出边沿——探出去到看得见那个面,再回身点它。
  */
 final class StrideControl extends Control {

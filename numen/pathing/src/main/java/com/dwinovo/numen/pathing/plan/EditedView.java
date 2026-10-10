@@ -91,7 +91,7 @@ public class EditedView implements WorldView, Recall.Source {
         }
     }
 
-    private void set(BlockPos pos, BlockState state) {
+    final void set(BlockPos pos, BlockState state) {
         if (changed == null) {
             changed = new Long2ObjectOpenHashMap<>(4);
         }

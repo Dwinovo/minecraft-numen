@@ -1,21 +1,18 @@
 package com.dwinovo.numen.pathing.plan;
 
 import java.util.List;
-import java.util.Set;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Stepping;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 
 /**
  * 平走:进东南西北相邻一列,落在同一个节点高度(脚高可以在这一格里上下,比如走上下半砖、走下地毯)。
  *
  * <p>前提:起步时站着或攀着(浮着平挪是 {@link Swim});落点那一格托得住脚——托不住时,那一格是水或能攀爬就走进去浮着或
- * 攀着,否则在它脚下搭一块桥(要改地形、要有料;只剩起步那块的侧面可贴时潜行探出去放)。几何照第 0 层 {@link Stepping}
+ * 攀着,否则在它脚下搭一块桥(要改地形、要有料;站定点不中、探出边沿才点得中时潜行探出去放)。几何照第 0 层 {@link Stepping}
  * 判;过不去时,把身体走过去途中与落定后挡着它的格腾出来——门就开关、其余挖开——再判一次。
  */
 final class Walk implements Move {
@@ -43,6 +40,7 @@ final class Walk implements Move {
         boolean grounded = stance.grounded();
         boolean sneak = false;
         boolean hanging = false;
+        BlockPos bridge = null;
 
         double f1 = Footing.height(draft, body, to.getX(), to.getY(), to.getZ());
         if (Double.isNaN(f1)) {
@@ -55,7 +53,7 @@ final class Walk implements Move {
                 if (!grounded) {
                     return Premise.fail(to, Reason.NO_FOOTING);
                 }
-                BlockPos bridge = to.below();
+                bridge = to.below();
                 if (!draft.place(bridge, from.getX(), f0, from.getZ())) {
                     return draft.failure();
                 }
@@ -63,7 +61,6 @@ final class Walk implements Move {
                 if (Double.isNaN(f1)) {
                     return Premise.fail(to, Reason.NO_FOOTING);
                 }
-                sneak = onlyBackFace(draft, model, bridge, from);
             }
         }
         Stepping.Step step = geometry(draft, body, from, f0, grounded, heading, f1, hanging);
@@ -77,6 +74,13 @@ final class Walk implements Move {
             if (step == Stepping.Step.BLOCKED) {
                 return Premise.fail(to, f1 - f0 > body.stepHeight() ? Reason.TOO_HIGH : Reason.NO_CLEARANCE);
             }
+        }
+        if (bridge != null) {
+            Draft.Bridging how = draft.bridging(bridge, from.getX(), f0, from.getZ(), heading);
+            if (how == null) {
+                return draft.failure();
+            }
+            sneak = how == Draft.Bridging.LEANING;
         }
         Stance landing = Stance.at(draft, body, to);
         if (landing == null) {
@@ -113,15 +117,6 @@ final class Walk implements Move {
         }
         double after = Stepping.walkOff(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
         return after <= f1 + Footing.EPSILON ? Stepping.Step.WALK : Stepping.Step.BLOCKED;
-    }
-
-    /**
-     * 往桥位放的这一块,能点的面只剩起步那一列脚下那块朝前的侧面:要潜行探出边沿、回身去点它。
-     */
-    private static boolean onlyBackFace(Draft draft, CostModel model, BlockPos bridge, BlockPos from) {
-        Set<Direction> faces = Faces.against(draft, bridge, model.placing().orElseThrow());
-        Direction back = Direction.getNearest(from.getX() - bridge.getX(), 0, from.getZ() - bridge.getZ());
-        return faces.size() == 1 && faces.contains(back);
     }
 
     @Override

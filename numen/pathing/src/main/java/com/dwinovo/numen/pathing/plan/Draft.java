@@ -78,6 +78,46 @@ final class Draft extends EditedView {
         return true;
     }
 
+    /** 搭桥的姿势:站定点得中,或要潜行探出边沿才点得中。 */
+    enum Bridging {
+        STANDING, LEANING
+    }
+
+    /**
+     * 桥位 {@code pos} 上那一块垫路料({@link #place} 放的)是站在 {@code (bx, feetY, bz)} 那一列、往 {@code heading} 方向走过去时放的:
+     * 在这一步别的改动都做完、桥块还没放(桥位暂时还原成放之前的样子)的世界里,先看站定、眼睛在列中心能不能点中一个面({@link Faces#inSight}),点不中再看
+     * 潜行探出边沿({@link BodyStats#leanedEye})能不能。两种都点不中就没法放,记 {@link Reason#NO_FACE}。判据只此一处:执行时站着瞄、
+     * 或潜行探出去瞄,瞄的就是这里判过的那个姿势下的面。桥块的改动挪到改动表的末尾——执行是先腾出要探进去的格、再放。
+     *
+     * @return 放得下用哪种姿势;放不下为 null(失败已记)
+     */
+    Bridging bridging(BlockPos pos, int bx, double feetY, int bz, Heading heading) {
+        Edit.Place bridge = null;
+        for (Edit edit : edits) {
+            if (edit instanceof Edit.Place place && place.pos().equals(pos)) {
+                bridge = place;
+            }
+        }
+        BlockState placed = getBlockState(pos);
+        set(pos, bridge.replaced());
+        Bridging how = Bridging.STANDING;
+        try {
+            if (Faces.inSight(this, body.eye(bx, feetY, bz), body.blockReach(), pos, bridge.block()) == null) {
+                if (Faces.inSight(this, body.leanedEye(bx, feetY, bz, heading.dx(), heading.dz()), body.blockReach(), pos,
+                        bridge.block()) == null) {
+                    fail(pos, Reason.NO_FACE);
+                    return null;
+                }
+                how = Bridging.LEANING;
+            }
+        } finally {
+            set(pos, placed);
+        }
+        edits.remove(bridge);
+        edits.add(bridge);
+        return how;
+    }
+
     /**
      * 同 {@link #place},另要站在 {@code (bx, feetY, bz)} 那一列中心的眼睛点得中一个面({@link Faces#inSight}):先站定再放的走法
      * (上一级垫一块台阶)执行时就是站在那儿瞄这个面,点不中就放不下。

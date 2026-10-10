@@ -144,6 +144,30 @@ public class AlterGameTests {
         });
     }
 
+    /**
+     * 站在一根四格高的基岩柱顶,去处在柱子旁边一格、脚下是空的:桥位只有两个能点的邻面——脚下那块朝桥位的侧面(站着点不到,
+     * 要潜行探出边沿才看得见)和东边一块打开的活板门的板面(被起步那一列东边的石头挡住,看不见)。站定点不中,探出去点得中:
+     * 规划认出这一步要潜行,执行潜行探出去放,桥搭得成;规划若只看有没有能点的面,会认作站着就能放,执行点不中,反复走不下去。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    public static void bridges_leaning_out_when_only_the_back_face_is_in_sight(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(5, 1, 5, 5, 4, 5, Blocks.BEDROCK);
+        t.set(6, 4, 4, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.TrapDoorBlock.OPEN, true)
+                .setValue(net.minecraft.world.level.block.TrapDoorBlock.FACING, net.minecraft.core.Direction.WEST));
+        t.set(6, 5, 5, Blocks.STONE);
+        TestBody body = t.body(5, 5, 5);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        t.go(body, Goals.at(t.at(5, 5, 4)), NATURAL).within(700).arrives().then(r -> {
+            List<EditLedger.Placed> placed = placed(r);
+            if (placed.size() != 1 || !placed.get(0).pos().equals(t.at(5, 4, 4))) {
+                throw new GameTestAssertException("应当只在桥位放一块:" + placed);
+            }
+        });
+    }
+
     /** 站在四格厚的泥土上,去处在正下方的地面:向下挖下去。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
     public static void digs_down_to_a_lower_goal(GameTestHelper helper) {

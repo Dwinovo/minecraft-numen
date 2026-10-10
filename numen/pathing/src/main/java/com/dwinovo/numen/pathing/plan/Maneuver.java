@@ -16,7 +16,7 @@ import net.minecraft.core.BlockPos;
  * @param landing     身体在 {@code to} 上怎么待着
  * @param jump        要起跳
  * @param sprint      可以疾跑过去
- * @param sneak       要潜行(贴着脚下那块的侧面搭桥时,身子探出边沿)
+ * @param sneak       要潜行(搭桥时站定点不中任何一个面,身子探出边沿才点得中)
  * @param wading      落到的节点泡在水里
  * @param submerged   这一步眼睛换不了气:起步或落定时眼睛泡在水里({@link Strides#submerged}),整步按憋着气算
  * @param speedFactor 脚下方块的步速系数(起步与落点两处的平均,灵魂沙、蜂蜜块慢)

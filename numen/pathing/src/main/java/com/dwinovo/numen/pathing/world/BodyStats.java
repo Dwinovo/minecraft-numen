@@ -38,6 +38,20 @@ public record BodyStats(EntityDimensions standing, double stepHeight,
         return standing.eyeHeight();
     }
 
+    /** 潜行探出边沿时,身体中心最远能越过站的那一块的边沿多远:再往外身体就没有地托着了(原版潜行按这个挡住),留 0.05 的余量。 */
+    public double leanOut() {
+        return width() / 2 - 0.05;
+    }
+
+    /**
+     * 站在 {@code (x, z)} 这一列、脚在 {@code feetY},朝 {@code (dx, dz)} 方向潜行探出边沿到头时眼睛的位置:列中心再往前
+     * 半格(到边沿)加 {@link #leanOut}。
+     */
+    public Vec3 leanedEye(int x, double feetY, int z, int dx, int dz) {
+        double out = 0.5 + leanOut();
+        return new Vec3(x + 0.5 + dx * out, feetY + eyeHeight(), z + 0.5 + dz * out);
+    }
+
     /** 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时眼睛的位置(列中心)。 */
     public Vec3 eye(int x, double feetY, int z) {
         return new Vec3(x + 0.5, feetY + eyeHeight(), z + 0.5);
