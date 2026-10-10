@@ -103,4 +103,14 @@ public class TerrainGameTests {
     public static void dense_forest(GameTestHelper helper) {
         TerrainRun.start(helper, TerrainRoutes.DENSE_FOREST);
     }
+
+    @GameTest(template = TEMPLATE, batch = "terrain_lake_cross", timeoutTicks = TIMEOUT)
+    public static void lake_cross(GameTestHelper helper) {
+        TerrainRun.start(helper, TerrainRoutes.LAKE_CROSS);
+    }
+
+    @GameTest(template = TEMPLATE, batch = "terrain_lake_shallows", timeoutTicks = TIMEOUT)
+    public static void lake_shallows(GameTestHelper helper) {
+        TerrainRun.start(helper, TerrainRoutes.LAKE_SHALLOWS);
+    }
 }

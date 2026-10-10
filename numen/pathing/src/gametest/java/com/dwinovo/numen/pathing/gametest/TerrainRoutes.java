@@ -5,7 +5,7 @@ import net.minecraft.core.BlockPos;
 
 /**
  * 固定存档 {@code hills}(种子 0,区域 r.0.0,见 terrain/README.md)上的固定路线。起终点是站立的那一格(地面之上一格),
- * 常量是从制作存档时的勘测表上挑的,重做存档要重新挑。路线全程避开水(两侧各两格内都没有)。
+ * 常量是从制作存档时的勘测表上挑的,重做存档要重新挑。除了 long_300 和最后两条游泳路线,路线全程避开水(两侧各两格内都没有)。
  *
  * <p>类型:平地直行、上坡、下坡、陡坎(中途有一级 5 格以上的落差)、穿树林、树林里上坡、绕障碍(直线中间隔着 30 格以上的断崖)、
  * 起伏、长距离(160 格)。时限是够从容走完的刻数,超过就算没走到。
@@ -53,6 +53,11 @@ final class TerrainRoutes {
     static final Route BROKEN = new Route("broken", "破碎地形", new BlockPos(205, 88, 398), new BlockPos(300, 87, 440), 2500);
     static final Route DENSE_FOREST = new Route("dense_forest", "密林", new BlockPos(403, 70, 64), new BlockPos(444, 86, 104), 2000);
 
+    /** 游泳的两条,留给以后的"征服水"当起点基线:横渡一道六十格宽的深水(最深 27 格),和穿过深浅交错的一段湖(深水里夹着一格深的浅滩)。 */
+    static final Route LAKE_CROSS = new Route("lake_cross", "横渡深湖", new BlockPos(156, 63, 183), new BlockPos(217, 63, 183), 1200);
+    static final Route LAKE_SHALLOWS = new Route("lake_shallows", "深浅交错的湖", new BlockPos(217, 63, 138), new BlockPos(250, 63, 138), 1200);
+
     static final List<Route> ALL = List.of(FLAT, UPHILL, DOWNHILL, STEP, FOREST, FOREST_UPHILL, WALL, LONG_A, LONG_B, ROLLING,
-            RAVINE_FLOOR, RAVINE_CROSS, RIDGE_DETOUR, HILL_DETOUR, BASIN_DESCENT, LONG_300, BROKEN, DENSE_FOREST);
+            RAVINE_FLOOR, RAVINE_CROSS, RIDGE_DETOUR, HILL_DETOUR, BASIN_DESCENT, LONG_300, BROKEN, DENSE_FOREST,
+            LAKE_CROSS, LAKE_SHALLOWS);
 }
