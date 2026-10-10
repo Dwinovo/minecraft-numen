@@ -32,12 +32,16 @@ final class TerrainBlock {
     private static final int MARGIN_CHUNKS = 4;
 
     /**
-     * 加载票据的距离:压在区域正中的区块上,往外 13 圈到 FULL、12 圈实体能刻(身体靠这个才会动)。12 圈是区块 3..27,
-     * 罩住 {@link #MARGIN_CHUNKS} 圈以内的整片内部(区块 4..27),路线绕再远的路也不出这片。
+     * 加载票据的距离:压在区域正中的区块上,往外 16 圈到 FULL(整个区域 32×32 个区块,外加一圈),15 圈实体能刻(身体靠这个才会动)。
+     * 搜索的快照读的是"已加载的区块",所以路线开跑前整片区域都要加载好、跑的途中一直在:加载进度随墙钟走,快照里有几个区块就会
+     * 随墙钟变,同一条路线搜出的路就会不同。区域之外的区块存档里没有,身体的视距压到 {@link #BODY_VIEW}(见 {@link TerrainRun}),
+     * 它在 {@link #MARGIN_CHUNKS} 圈以内走动就不会引出区域外的区块。
      */
-    static final int LOAD_DISTANCE = 14;
-    /** 必须加载好的半径(实体能刻的那一圈)。 */
-    static final int LOAD_RADIUS = LOAD_DISTANCE - 2;
+    static final int LOAD_DISTANCE = 17;
+    /** 必须加载好的半径:FULL 的那一圈。 */
+    static final int LOAD_RADIUS = LOAD_DISTANCE - 1;
+    /** 身体的视距(区块)。 */
+    static final int BODY_VIEW = 2;
 
     private record Sentinel(BlockPos pos, Block block) {}
 

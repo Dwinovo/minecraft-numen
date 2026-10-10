@@ -61,6 +61,7 @@ final class TerrainRun {
         Worlds.settle(run.level);
         ChunkPos center = block.center();
         run.level.getChunkSource().addRegionTicket(TicketType.FORCED, center, TerrainBlock.LOAD_DISTANCE, center);
+        run.level.getChunkSource().setViewDistance(TerrainBlock.BODY_VIEW);
         helper.onEachTick(run::tick);
     }
 
