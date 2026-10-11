@@ -151,6 +151,12 @@ public final class CompanionTickDispatcher {
                     com.dwinovo.numen.api.event.NumenEvents.ownerHurt(ap, hurt.attacker(),
                             hurt.hp(), hurt.maxHp(), ap.distanceTo(ownerPlayer), hurt.urgent());
                 }
+                // 她自己挨打了说一声——远处的弓箭手她看不见,不叫醒她就一直挨着。
+                NumenPlayer.CompanionHurt selfHurt = ap.pollCompanionHurt(server.getTickCount());
+                if (selfHurt != null) {
+                    com.dwinovo.numen.api.event.NumenEvents.companionHurt(ap, selfHurt.attacker(),
+                            selfHurt.amount(), selfHurt.hp(), selfHurt.maxHp(), selfHurt.distance());
+                }
                 // 等主人点头的那条征询:主人下线或到点就按拒绝收尾,发起的任务下一刻读到结论。
                 com.dwinovo.numen.api.permission.ConsentDesk.of(ap).tick();
                 // 等主人点头的指令这一刻就读结论:允许的接着执行,拒绝的回执。

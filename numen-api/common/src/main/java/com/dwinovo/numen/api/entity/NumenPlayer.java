@@ -262,12 +262,45 @@ public final class NumenPlayer extends ServerPlayer {
         if (verdict == OwnerHurtWatch.Verdict.NONE) {
             return null;
         }
-        String label = attacker instanceof net.minecraft.world.entity.player.Player p
+        String label = attackerLabel(attacker);
+        return new OwnerHurt(label, owner.getHealth(), owner.getMaxHealth(),
+                verdict == OwnerHurtWatch.Verdict.DANGER);
+    }
+
+    /** 她自己挨打的看护(纯判定在 {@link CompanionHurtWatch})。 */
+    private final CompanionHurtWatch selfHurtWatch = new CompanionHurtWatch();
+
+    /** 待上报的一次实体伤害:攻击者标签、结算前的伤害量、与她当时的距离。 */
+    private String hurtAttacker;
+    private float hurtAmount;
+    private double hurtDistance;
+
+    /** 一次"她自己挨打"报告:攻击者、伤害量、她的血量与攻击者离她多远。 */
+    public record CompanionHurt(String attacker, float amount, float hp, float maxHp, double distance) {}
+
+    /**
+     * 她自己这一刻有没有挨打值得说。每服务端 tick 问一次(见 {@code CompanionTickDispatcher});
+     * 只报实体攻击,去抖在 {@link CompanionHurtWatch}。环境伤与没有新伤害都返回 null。
+     */
+    public CompanionHurt pollCompanionHurt(long now) {
+        String attacker = hurtAttacker;
+        float amount = hurtAmount;
+        double distance = hurtDistance;
+        hurtAttacker = null;
+        hurtAmount = 0.0f;
+        hurtDistance = 0.0;
+        CompanionHurtWatch.Report report =
+                selfHurtWatch.poll(attacker, amount, getHealth(), getMaxHealth(), now);
+        return report == null ? null
+                : new CompanionHurt(report.attacker(), report.amount(), report.hp(), report.maxHp(), distance);
+    }
+
+    /** 攻击者的显示名:玩家用游戏名,其余用实体类型 id。事件正文与属性都用它。 */
+    private static String attackerLabel(net.minecraft.world.entity.Entity attacker) {
+        return attacker instanceof net.minecraft.world.entity.player.Player p
                 ? p.getGameProfile().getName()
                 : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
                         .getKey(attacker.getType()).getPath();
-        return new OwnerHurt(label, owner.getHealth(), owner.getMaxHealth(),
-                verdict == OwnerHurtWatch.Verdict.DANGER);
     }
 
     public boolean pollWokeUp() {
@@ -397,6 +430,14 @@ public final class NumenPlayer extends ServerPlayer {
     public boolean hurt(net.minecraft.world.damagesource.DamageSource source, float amount) {
         boolean took = super.hurt(source, amount);
         if (took) {
+            // 只抄实体攻击:环境伤(摔落、岩浆)没有攻击者,不进给她的事件。真正的发送在
+            // CompanionTickDispatcher 每 tick 的轮询里办,这里只留一条待说的事实。
+            net.minecraft.world.entity.Entity attacker = source.getEntity();
+            if (attacker != null) {
+                hurtAttacker = attackerLabel(attacker);
+                hurtAmount = amount;
+                hurtDistance = distanceTo(attacker);
+            }
             CompanionEvents.fire(CompanionEvent.HURT,
                     new CompanionEvent.Hurt(this, source, amount));
         }

@@ -50,6 +50,7 @@ class EventTypesTest {
         assertRow(EventTypes.DEATH, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.HUNGRY, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.OWNER_HURT, EventTypes.Delivery.STEER, false, false, false, false);
+        assertRow(EventTypes.COMPANION_HURT, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.TIMER, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.WOKE, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);

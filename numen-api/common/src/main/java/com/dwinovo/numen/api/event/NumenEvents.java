@@ -121,6 +121,28 @@ public final class NumenEvents {
     }
 
     /**
+     * 她自己挨打了。<b>恒为急件</b>——远处的弓箭手她看不见,不叫醒她就会一直挨着;反击、退开、
+     * 找掩体都由她当场定。检测与去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。
+     */
+    public static void companionHurt(NumenPlayer companion, String attacker, float amount,
+                                     float hp, float maxHp, double distance) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("by", attacker);
+        attrs.put("damage", number(amount));
+        attrs.put("hp", Math.round(hp) + "/" + Math.round(maxHp));
+        attrs.put("distance", String.valueOf(Math.round(distance)));
+        String text = attacker + " hit you for " + number(amount) + " — you are at " + Math.round(hp)
+                + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                + " blocks away; decide now whether to fight back, fall back, or break line of sight";
+        emit(companion, EventTypes.COMPANION_HURT, attrs, text, true);
+    }
+
+    /** 伤害量的写法:整数不带小数点,小数原样。 */
+    private static String number(float amount) {
+        return amount == Math.floor(amount) ? String.valueOf((int) amount) : String.valueOf(amount);
+    }
+
+    /**
      * 服务端对她说了一句话(系统聊天或动作栏),原文照交。{@code repeats} 是这一句在上一次交出去之后又说了几遍——
      * 同一句刷屏只在每个折叠窗口里交一次,收拢与窗口在 {@code ServerMessages}。不急,也不叫醒她:捎带投递,见类型表。
      *

@@ -77,6 +77,11 @@ public final class EventTypes {
     public static final String ADVANCEMENT_REWARD = "advancement_reward";
     /** 主人挨打了(只报实体攻击)。急不急由发送方按主人血线分档。 */
     public static final String OWNER_HURT = "owner_hurt";
+    /**
+     * 她挨打了(只报实体攻击)。恒为急件:远处的弓箭手她看不见,不叫醒她就会一直挨着——
+     * 反击、退开、找掩体,都由她当场定。连击去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。
+     */
+    public static final String COMPANION_HURT = "companion_hurt";
     /** 她自己定的表到点了。恒为急件:提醒而已,不代表那件事完成了。 */
     public static final String TIMER = "timer";
     /** 她从床上醒了。恒为急件:{@code sleep} 到躺下就返回,醒来这一刻只有这条事件说得出。 */
@@ -268,6 +273,7 @@ public final class EventTypes {
         register(event(INVENTORY_FULL, true));
         register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(event(OWNER_HURT, false));
+        register(event(COMPANION_HURT, true));
         register(event(TIMER, true));
         register(event(WOKE, true));
         register(event(DIMENSION_CHANGE, false));
