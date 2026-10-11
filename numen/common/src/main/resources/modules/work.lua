@@ -79,9 +79,18 @@ end
 ---most of what is left), then pick up what that dug dropped and still lies around (numen.work.collect with its drops),
 ---and again until none of it is left. A round that digs nothing raises failed with what is left; any other failing step (a
 ---dig that can't get there or is refused, a pick-up with no way) raises its error as it is.
+---It takes no options: it digs the whole cluster. To dig a limited number of cells, use numen.work.dig(cells, {count = N}).
 ---@param cluster Cluster|Cells What to dig: a cluster numen.scan.blocks found, as it is (or Cells, or a list of Blocks).
 ---@return integer dug How many cells it dug.
-function M.mine(cluster)
+function M.mine(cluster, opts)
+  -- Lua drops arguments a function does not name, so an option like {count = 20} would vanish here and the caller would
+  -- think it had limited the dig. Refuse it instead of swallowing it, and name the call that does take a count.
+  if opts ~= nil and (type(opts) ~= "table" or next(opts) ~= nil) then
+    local bad = type(opts) == "table" and next(opts)
+    raise("bad_argument", (bad and ("there is no option " .. tostring(bad)) or "the second argument is not a table of options")
+        .. "; numen.work.mine takes only what to dig and digs all of it: to dig a limited number of cells use "
+        .. "numen.work.dig(cells, {count = N})", nil, {got = opts})
+  end
   local dug = 0
   while true do
     local r = numen.work.dig(cluster)

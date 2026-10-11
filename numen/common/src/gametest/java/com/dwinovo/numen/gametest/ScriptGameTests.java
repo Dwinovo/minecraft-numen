@@ -279,6 +279,40 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * numen.work.mine 只收"挖哪一团":多余的选项不再被 Lua 静默吞掉——{@code {count = N}} 当场 bad_argument,并指出限量挖要用
+     * numen.work.dig——于是调用方(LLM)看得见自己的上限没生效,而不是一直挖到工具损坏;一格都没挖。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void work_mine_refuses_options_instead_of_ignoring_them(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_mine_opts", new BlockPos(1, 2, 1), false);
+        BlockPos stone = helper.absolutePos(new BlockPos(3, 2, 1));
+        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        LlmToolCall run = programCall("""
+                local ok, err = pcall(numen.work.mine, {x = %d, y = %d, z = %d}, {count = 20})
+                if ok then return {kind = "no error"} end
+                return {kind = err.kind, message = err.message}
+                """.formatted(stone.getX(), stone.getY(), stone.getZ()));
+        Round[] round = new Round[1];
+
+        steps(helper)
+                .thenExecute(() -> round[0] = round(helper, her, run))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(round[0].hasSettled(), "the script has not finished");
+                    String msg = message(round[0], run);
+                    JsonObject returned = round[0].data().getAsJsonObject("returned");
+                    helper.assertTrue("bad_argument".equals(returned.get("kind").getAsString()),
+                            "numen.work.mine did not refuse the option: " + msg);
+                    helper.assertTrue(returned.get("message").getAsString().contains("numen.work.dig"),
+                            "the refusal does not point to numen.work.dig: " + msg);
+                    helper.assertTrue(level.getBlockState(stone).is(Blocks.STONE),
+                            "a refused call dug a block: " + msg);
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), her))
+                .thenSucceed();
+    }
+
     /** 出厂的一个夹具模块:改它、删它、还原它,不碰别的 GameTest 在用的出厂模块。 */
     private static final String COPIED = "gt.copied";
 
