@@ -32,6 +32,8 @@ public final class Builtin {
     public static void registerAll() {
         Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnFabric.install(skills));
+        gate.open("litematica", "litematica",
+                skills -> () -> com.dwinovo.numen.plugins.litematica.NumenLitematica.install(skills));
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,Fabric 的答案在这里。 */
