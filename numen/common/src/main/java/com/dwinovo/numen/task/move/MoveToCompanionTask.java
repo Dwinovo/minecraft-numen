@@ -10,6 +10,8 @@ import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.nav.BoatNav;
 import com.dwinovo.numen.nav.Feet;
+import com.dwinovo.numen.nav.NavText;
+import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.nav.Walked;
 import com.dwinovo.numen.nav.Walking;
@@ -49,6 +51,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Ceiling for lease renewals on the work clock (start + {@link #CHECK_IN_CAP_TICKS}); 0 = unset. */
     private long leaseCapWork;
 
+    /** 这一趟收尾时,寻路里最近一次"离目标最近处被拒"的那一步;没有为 null。 */
+    private Blockage refusal;
     /** 编好的去处:受理之前编过就用那一份,动手的活派下来的子活开工时现编。 */
     private Destination destination;
     /** 这一趟驾船:航线的船腿;走路的一趟为 null。 */
@@ -253,16 +257,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     @Override
     protected String timeoutMessage() {
-        int gy = player.blockPosition().getY();
-        // Two different stories for the model: a stall (progress dried up — something is wrong, reconsider) vs a
-        // check-in (journey healthy but longer than the cap — resuming is the right move).
-        boolean stalled = boat == null && (nav == null || !nav.progressing());
-        return "timed out " + String.format("%.1f", distance()) + " blocks from target (now at " + here(gy) + "); "
-                + (stalled
-                        ? "progress had stopped — likely blocked; `numen.move.to` again plans from here, or go to a "
-                                + "point on the way first."
-                        : "the journey was still progressing and simply exceeded its check-in budget; call "
-                                + "`numen.move.to` again to go on from here.");
+        // 到期是一趟最长的时间到了(一直在推进),还是租约到期前没有进展:看干活的刻数有没有用满,不看到期那一刻的瞬时信号
+        boolean checkIn = workTicks() >= leaseCapWork;
+        return NavText.timedOut((int) workTicks(), distance(), here(player.blockPosition().getY()), refusal, checkIn);
     }
 
     @Override
@@ -277,6 +274,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Release the nav (base), ship the oars. */
     @Override
     protected void cleanup() {
+        // 回执在收尾之后才拼,那时这一趟已经放手:离目标最近处被拒的原因趁它还在先记下
+        if (nav != null) {
+            refusal = nav.nearestRefusal();
+        }
         super.cleanup();
         if (boat != null) {
             boat.stop();   // 中途被取消/让位:收桨,别让船带着按下的前进键漂走

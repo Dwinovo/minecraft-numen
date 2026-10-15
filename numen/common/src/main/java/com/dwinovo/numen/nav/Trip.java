@@ -13,6 +13,7 @@ import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Threats;
@@ -403,6 +404,11 @@ public final class Trip {
     /** 身体此刻站着等搜索的结论(诊断为什么没路、等搜索回来),不在走。 */
     public boolean waiting() {
         return phase == Phase.DRIVING && navigation.waiting();
+    }
+
+    /** 在走的这一次导航里,最近一次"离目标最近处被拒"的那一步;没有为 null。 */
+    public Blockage nearestRefusal() {
+        return navigation == null ? null : navigation.nearestRefusal();
     }
 
     /** 在推进:在走的这一次导航说的;等主人答复时不算卡住。 */

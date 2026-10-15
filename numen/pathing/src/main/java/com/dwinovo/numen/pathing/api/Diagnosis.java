@@ -64,8 +64,7 @@ final class Diagnosis {
         if (blocking == null) {
             return null;
         }
-        BlockPos cell = blocking.fails().cell();
-        return new Blockage(cell, failed.view().getBlockState(cell), blocking.move(), blocking.fails().reason(), null);
+        return Blockage.refused(failed, blocking);
     }
 
     /**

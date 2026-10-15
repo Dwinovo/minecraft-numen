@@ -2,6 +2,8 @@ package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Reason;
+import com.dwinovo.numen.pathing.search.Search;
+import com.dwinovo.numen.pathing.search.SearchResult;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -14,6 +16,12 @@ import net.minecraft.world.level.block.state.BlockState;
  * @param hitch  执行里出的事;是复核的事为 null
  */
 public record Blockage(BlockPos cell, BlockState block, MoveKind move, Reason reason, Hitch hitch) {
+
+    /** 搜索里离目标最近的节点上朝目标的那一步被拒了,说成一条阻碍(那一格在这次搜索读到的世界里是什么方块);回执与诊断共用这一处。 */
+    public static Blockage refused(Search search, SearchResult.Blocking blocking) {
+        BlockPos cell = blocking.fails().cell();
+        return new Blockage(cell, search.view().getBlockState(cell), blocking.move(), blocking.fails().reason(), null);
+    }
 
     /** 前提成立、身体却做不到的几种情况。 */
     public enum Hitch {

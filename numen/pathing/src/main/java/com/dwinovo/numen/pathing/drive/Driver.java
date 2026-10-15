@@ -107,6 +107,8 @@ public final class Driver {
     /** 最近一次搜索的输入与结论:总预算用完收场时诊断它。 */
     private Search lastSearch;
     private SearchResult lastResult;
+    /** 最近一次没搜到这一段终点的搜索里,离目标最近处朝目标的那一步为什么被拒;还没有为 null。一趟走得久了要对人说"卡在哪",读它。 */
+    private Blockage nearestRefusal;
     /** 最近一次没走成的一步的原因;之后走成了一步就清掉。从那里重搜把能走的都搜过了还是没路,没路的原因就是它。 */
     private Blockage lastBlockage;
     /** 这一趟里哪一次搜索因为憋不住气丢下过前提成立的步子:收场诊断"憋得住的话有没有路"看的是整趟,不只最后一次。 */
@@ -164,6 +166,11 @@ public final class Driver {
     /** 到此刻为止身体真在水下憋过的每一段。 */
     public List<DiveLog.Dive> dives() {
         return rig.dives.dives(rig.entity);
+    }
+
+    /** 这一趟里最近一次"离目标最近处被拒"的那一步;没有为 null。 */
+    public Blockage nearestRefusal() {
+        return nearestRefusal;
     }
 
     /** 在推进:{@link Watchdog} 对外交出的信号。 */
@@ -598,6 +605,9 @@ public final class Driver {
         pending = null;
         lastSearch = search;
         lastResult = result;
+        if (result.blocking() != null && !result.reached()) {
+            nearestRefusal = Blockage.refused(search, result.blocking());
+        }
         allowance.spend(result.expanded());
         if (Double.isFinite(result.startEstimate())) {
             allowance.begun(result.startEstimate(), search.advance());

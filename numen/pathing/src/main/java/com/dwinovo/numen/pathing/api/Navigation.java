@@ -148,6 +148,11 @@ public final class Navigation {
         return new Report(status, ticks(), driver.journal(), driver.ledger(), driver.actions(), driver.dives());
     }
 
+    /** 这一趟里最近一次"离目标最近处被拒"的那一步;没有为 null。 */
+    public com.dwinovo.numen.pathing.drive.Blockage nearestRefusal() {
+        return driver.nearestRefusal();
+    }
+
     /** 在推进:宿主的脱困反射读它。 */
     public boolean progressing() {
         return driver.progressing();

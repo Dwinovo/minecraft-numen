@@ -149,6 +149,20 @@ public final class NavText {
         return reason == Reason.DENIED ? reason(detail) : reason(reason);
     }
 
+    /**
+     * 一趟路走到期限还没到:走了多久、离目标多远、停在哪,搜索里离目标最近处朝目标的一步被什么挡住了(有的话,与"没搜到路"
+     * 同一种说法),接下来能做什么。{@code checkIn} 是这一趟一直在推进、只是超过了一趟能走的最长时间;否则是租约到期前没有进展。
+     */
+    public static String timedOut(int workTicks, double distance, String here, Blockage nearest, boolean checkIn) {
+        return "timed out after " + seconds(workTicks) + " of walking, " + String.format("%.1f", distance)
+                + " blocks from target (now at " + here + ")" + heldUp(nearest) + "; "
+                + (checkIn
+                        ? "the walk was still going and reached the longest a single walk runs; call `numen.move.to` again to"
+                        + " go on from here, or pick a destination closer to the way it was taking."
+                        : "it made no progress for the last stretch; `numen.move.to` again plans from here, or go to a point"
+                        + " on the way first.");
+    }
+
     /** 搜索里离目标最近的地方,朝目标的一步被什么挡住了;没有是空串。 */
     private static String heldUp(Blockage cause) {
         return cause == null ? "" : "; nearest to the target, " + move(cause.move()) + " at " + Listing.coords(cause.cell())

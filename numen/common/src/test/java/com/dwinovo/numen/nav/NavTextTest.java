@@ -209,4 +209,15 @@ class NavTextTest {
         assertEquals("no route within a budget of 1 changed blocks (the cheapest found would change 3)",
                 NavText.overBudget(1, 3));
     }
+
+    @Test
+    void aWalkThatRanOutOfTimeSaysHowLongHowFarAndWhatBlockedTheNearestApproach() {
+        Blockage nearest = new Blockage(B, Blocks.STONE.defaultBlockState(), MoveKind.PILLAR, Reason.WOULD_COLLAPSE, null);
+        String checkIn = NavText.timedOut(6000, 20.7, "1,2,3", nearest, true);
+        assertTrue(checkIn.startsWith("timed out after 300 s of walking, 20.7 blocks from target (now at 1,2,3)")
+                && checkIn.contains("nearest to the target, pillaring up at 120,65,-33 (stone) was ruled out: ")
+                && checkIn.contains("call `numen.move.to` again") && !checkIn.contains("progress had stopped"), checkIn);
+        String stalled = NavText.timedOut(900, 5, "1,2,3", null, false);
+        assertTrue(stalled.contains("made no progress") && !stalled.contains("nearest to the target"), stalled);
+    }
 }
