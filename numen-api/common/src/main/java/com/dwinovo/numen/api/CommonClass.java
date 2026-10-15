@@ -44,6 +44,8 @@ public class CommonClass {
         // Numen API 自带姿态链的名册文书:提示词总览里的一行。
         com.dwinovo.numen.api.task.reflex.ReflexRegistry.register(
                 new com.dwinovo.numen.api.task.chain.SpeakingLookChain());
+        com.dwinovo.numen.api.task.reflex.ReflexRegistry.register(
+                new com.dwinovo.numen.api.task.chain.FloatChain());
     }
 
     /**

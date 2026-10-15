@@ -48,8 +48,8 @@ final class CompanionBrain {
     final Preparing preparing = new Preparing();
 
     private final List<Task> reflexes;
-    /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。 */
-    private final List<Task> idlePoses;
+    /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。视线一面、跳一面,同时成立时都做。 */
+    private final Task idlePoses;
 
     /**
      * 重启前留下、还没接回来的那件活:身体进世界那一刻从落盘记录接手,第一次 tick 时取走重放;那之前派下新活
@@ -80,7 +80,9 @@ final class CompanionBrain {
         this.reflexes = List.copyOf(BrainChains.build());
         // 说话时看着主人排在当前任务<b>之下</b>——她挖着矿跟你说话不回头,
         // 这是旧调度里就有的关系(它的出价本来就低于 LLM 基准价),不是新决定。
-        this.idlePoses = List.of(new com.dwinovo.numen.api.task.chain.SpeakingLookChain());
+        // 先看人再漂浮:看人那一下停步会松掉跳,漂浮排在后面才按得住(见 Poses)。
+        this.idlePoses = new Poses(List.of(new com.dwinovo.numen.api.task.chain.SpeakingLookChain(),
+                new com.dwinovo.numen.api.task.chain.FloatChain()));
     }
 
     /**
