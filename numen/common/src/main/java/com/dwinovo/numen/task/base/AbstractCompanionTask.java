@@ -58,9 +58,9 @@ import java.util.List;
  *   <li>{@link #tick} short-circuits to the terminal state a {@code fail(...)}
  *       (or a start-time precondition) parked in {@code pendingTerminal};
  *       otherwise it delegates to {@link #onTick()}.</li>
- *   <li>{@link #result(TaskState)} runs {@link #cleanup()} and then templates
- *       the {@link TaskResult} from the terminal state and the overridable
- *       message / data hooks.</li>
+ *   <li>{@link #result(TaskState)} templates the {@link TaskResult} from the
+ *       terminal state and the overridable message / data hooks, and only then runs
+ *       {@link #cleanup()}: no hook ever reads state cleanup has released.</li>
  * </ul>
  *
  * <h2>The onTick fail idiom</h2>
@@ -389,14 +389,18 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         if (child != null) {
             endChild(TaskState.CANCELLED);
         }
-        cleanup();
+        // 回执先于放手拼好:钩子(successMessage、timeoutMessage、value……)读到的都是这件活收场那一刻的样子,
+        // 不会读到 cleanup 放掉的导航、手势和跟踪。收场时要先结账的(回执要报它)放在 closeBooks 里
+        closeBooks();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
-        String travelled = journey.describe();
+        String travelled = soFar().describe();
         String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
                 + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".")
                 + (broken.isEmpty() ? "" : " " + broken);
-        return outcome(finalState, enRoute);
+        TaskResult result = outcome(finalState, enRoute);
+        cleanup();
+        return result;
     }
 
     /** 收场的回执:按终态取那一句,后面接上 {@code tail}。 */
@@ -448,7 +452,13 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
     /** Advance one tick; return {@link TaskState#RUNNING} or a terminal state. */
     protected abstract TaskState onTick();
 
-    /** Release physical resources on termination. Default: stop nav + clear the path overlay. */
+    /**
+     * 收场、拼回执之前结账:回执要报告的、需要在这一刻收口的记录(例如还在飘的掉落物记成"还在动")。默认什么都不做。只结账,不放手
+     * ——放手(导航、按键、手势)是 {@link #cleanup()} 的事,它在回执拼好之后才跑。
+     */
+    protected void closeBooks() {}
+
+    /** Release physical resources on termination, after the result is composed: stop nav + clear the path overlay. */
     protected void cleanup() {
         stopNav();
     }
@@ -630,11 +640,14 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         if (!(ended instanceof AbstractCompanionTask<?, ?> a)) {
             return ended.result(st);
         }
+        // 同 result:子活的回执先拼好,再让它放手(放手时它的导航账才并进它的旅程账)
+        a.closeBooks();
+        TaskResult result = a.outcome(st, "");
         a.cleanup();
         this.failType = a.lastFailure();
         journey.add(a.journey);
         allowances.addAll(a.allowances);
-        return a.outcome(st, "");
+        return result;
     }
 
     // ---------------------------------------------------------------------

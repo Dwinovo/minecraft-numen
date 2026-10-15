@@ -256,6 +256,13 @@ public class DetourGameTests {
             if (mustArrive) {
                 helper.assertTrue(walk.succeeded(), "she did not get there: " + walk.outcome());
             }
+            // 一趟走到时限还没到:回执说走了多久、停在哪、最近处被什么挡住(回执在放手之前拼,读得到这一趟的寻路)
+            String said = walk.outcome();
+            if (said.startsWith("timed out")) {
+                helper.assertTrue(said.startsWith("timed out after ") && !said.contains("progress had stopped")
+                                && said.contains("nearest to the target"),
+                        "the timeout receipt does not say what blocked the nearest approach: " + said);
+            }
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
     }
