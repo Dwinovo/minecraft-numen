@@ -23,11 +23,20 @@ public final class NumenReflexes {
     private NumenReflexes() {}
 
     /**
-     * 本能替身体做了一件事,告诉她:{@code reflex} 属性写本能在名册里的登记名。永远不急——身体已经自己应对过了,
-     * 这条是让她和翻聊天流的主人看得懂刚才发生了什么,攒着搭下一轮的车就够。
+     * 本能替身体做了一件事,告诉她:{@code reflex} 属性写本能在名册里的登记名。不急——身体已经自己应对过了,
+     * 这条是让她和翻聊天流的主人看得懂刚才发生了什么,随下一次调模型捎带(类型表里 reflex 是知会档,不为它叫醒她)。
      */
     public static void report(NumenPlayer companion, Reflex reflex, String text) {
-        NumenContent.api().emit(companion, EventTypes.REFLEX, Map.of("reflex", reflex.id()), text, false);
+        emit(companion, reflex, text, false);
+    }
+
+    /** 本能碰上要她当场决定的险情(例如被封死在水下找不到出口):同一种事件,标成急件,立刻叫醒她。 */
+    public static void alert(NumenPlayer companion, Reflex reflex, String text) {
+        emit(companion, reflex, text, true);
+    }
+
+    private static void emit(NumenPlayer companion, Reflex reflex, String text, boolean urgent) {
+        NumenContent.api().emit(companion, EventTypes.REFLEX, Map.of("reflex", reflex.id()), text, urgent);
     }
 
     public static void registerAll() {

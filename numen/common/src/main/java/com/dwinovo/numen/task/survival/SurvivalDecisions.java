@@ -58,24 +58,4 @@ public final class SurvivalDecisions {
      * 和"已经落进水里"分得开。
      */
     public static final double MLG_SETTLED_SPEED = -0.5;
-
-    // ---- breath thresholds (vanilla air is 0..300 ticks; damage starts at 0) ----
-    /**
-     * Air ticks at/below which surfacing takes the body. 240 leaves a ~3-second
-     * dip tolerance (normal head-bobs while swimming don't trigger), while the
-     * remaining 12 seconds of air are ample for any plausible swim-up. The band
-     * between wake (240) and full (300) also gives an idle body in deep water a
-     * natural bob cycle: sink → head under → air dips past 240 → surface → refill
-     * — a fake player has no client holding the jump key, so this chain IS its
-     * float instinct.
-     */
-    public static final int LOW_AIR_TICKS = 240;
-
-    /**
-     * 换气触发条件:头没在水里且氧气见底。头一出水面立刻不触发(氧气自己回),
-     * 氧气还够也不触发。
-     */
-    public static boolean breathTriggered(boolean headUnderWater, int airSupply) {
-        return headUnderWater && airSupply <= LOW_AIR_TICKS;
-    }
 }

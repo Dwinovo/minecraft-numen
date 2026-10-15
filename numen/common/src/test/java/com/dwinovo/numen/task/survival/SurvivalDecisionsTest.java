@@ -69,23 +69,4 @@ class SurvivalDecisionsTest {
         // 两条线必须分得开:还在自由落体时不能被当成"落进水里了,可以收桶"
         assertTrue(SurvivalDecisions.MLG_SETTLED_SPEED > SurvivalDecisions.MLG_FALL_SPEED);
     }
-
-    // ---- 换气 ----
-
-    @Test
-    void lowAirUnderwaterSurfaces() {
-        assertTrue(SurvivalDecisions.breathTriggered(true, SurvivalDecisions.LOW_AIR_TICKS));
-        assertTrue(SurvivalDecisions.breathTriggered(true, 0));
-    }
-
-    @Test
-    void plentyOfAirDoesNotSurface() {
-        assertFalse(SurvivalDecisions.breathTriggered(true, 300));
-    }
-
-    @Test
-    void headAboveWaterDoesNotSurface() {
-        // 头一出水面立刻不触发:氧气自己会回,再占着身体就成了在水面发呆
-        assertFalse(SurvivalDecisions.breathTriggered(false, 0));
-    }
 }

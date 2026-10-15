@@ -128,7 +128,7 @@ public class SwimGameTests {
             var told = outbox.peek(companion.getUUID()).entries().stream()
                     .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
                     .map(e -> e.text()).toList();
-            helper.assertTrue(told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("swam up for a breath")),
+            helper.assertTrue(told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("to swim up for a breath")),
                     "no breath reflex event: " + told);
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("I went under water"),
                     "the reply does not tell the failed walk and the dive: " + walk.outcome());
