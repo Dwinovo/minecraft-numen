@@ -288,7 +288,7 @@ record Type(String id,
             Function<String,String> chatPreview,
             boolean clearedByInterrupt,
             boolean fromOwner,
-            Delivery delivery,                    // STEER | FOLLOW_UP | CONTROL | AMBIENT
+            Delivery delivery,                    // STEER | FOLLOW_UP | CONTROL | AMBIENT | NOTICE
             boolean alwaysUrgent)                 // true = 这类恒为急件;false = 发送方定。只有叫醒她的档能恒急
 ```
 
@@ -300,6 +300,7 @@ record Type(String id,
 | `compact` 压缩 | CONTROL | false | true | true |
 | `clear` 清空 | CONTROL | false | true | true |
 | `talk`/`left` 旁听、离场 | AMBIENT | false | false | false |
+| `reflex` 本能做了事 | NOTICE | false(险情由发送方标急件) | false | false |
 
 ### 每一档自己声明怎么投递
 
@@ -311,10 +312,11 @@ record Type(String id,
 | FOLLOW_UP | 是 | `OWN_CALL`:只随自己引起的那次——别的已经要调模型时它等着,等本来要停的时候 |
 | CONTROL | 否 | `NONE`:不是给模型的文本,循环闲时自己执行;它是队列里的墙 |
 | AMBIENT | 否 | `ANY_CALL`:随下一次调模型捎带,自己不引起调用 |
+| NOTICE | 否(标了急件的那一条按 STEER 办) | `ANY_CALL`:平时同 AMBIENT |
 
 由这两件推出全部行为,没有第二处写:
 
-- **急件**:急件的意思是"立刻叫醒她",只有 `wakes` 的档可能急;入队与读盘都过 `EventQueue` 里同一条规则,
+- **急件**:急件的意思是"立刻叫醒她",只有 `wakes` 的档和可升格的 NOTICE 可能急(NOTICE 里标了急件的那一条按 STEER 投递);入队与读盘都过 `EventQueue` 里同一条规则,
   发送方怎么标都一样。不叫醒她的档登记成恒急,登记时就拒绝。
 - **闲时熟度**:只数墙之前 `wakes` 的条目——有急件即熟,否则按档位攒够条数或等够时长。
 - **回合里的边界**:工具结果等着回应时(这次调用无论如何都会发生),带上墙之前所有 `ANY_CALL` 的条目;
