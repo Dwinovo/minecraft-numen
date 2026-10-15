@@ -54,6 +54,22 @@ class InventoryBlockTest {
                 selected, offhand, List.of(), "", -1, "", 1L);
     }
 
+    // ==================== 碰着水的 ====================
+
+    /** 水况片段挂在 {@code <runtime_state>} 里:在水里有这一段,不在水里一个字都没有。 */
+    @Test
+    void theWaterSegmentIsThereOnlyWhileSheTouchesWater() {
+        assumeTrue(booted);
+        java.util.UUID her = java.util.UUID.randomUUID();
+        BodySnapshot wet = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "", -1,
+                com.dwinovo.numen.api.entity.WaterState.render(true, true, 240, 300, ""), 1L);
+        assertTrue(new RuntimeState(her, () -> wet).xml()
+                .contains("<water>In water, head under water; air left 12s.</water>"));
+        BodySnapshot dry = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "", -1,
+                com.dwinovo.numen.api.entity.WaterState.render(false, false, 300, 300, ""), 1L);
+        assertFalse(new RuntimeState(her, () -> dry).xml().contains("water"));
+    }
+
     // ==================== 身上在生效的 ====================
 
     private static BodySnapshot withEffects(long receivedAtMs,

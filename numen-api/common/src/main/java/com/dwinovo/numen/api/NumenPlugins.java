@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.api.entity.CompanionEvents;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.WaterState;
 import com.dwinovo.numen.api.event.NumenEvents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
@@ -120,11 +121,11 @@ public final class NumenPlugins {
     private static final List<GearSource> GEAR = new CopyOnWriteArrayList<>();
 
     /**
-     * 身体状态片段。第一段是 Numen API 自己从穿戴来源渲染的 {@code <worn>},其后是插件经
-     * {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
+     * 身体状态片段。打头的是 Numen API 自己读的:穿戴来源渲染的 {@code <worn>}、碰着水时的 {@code <water>}
+     * ({@link WaterState});其后是插件经 {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
      */
     private static final List<Function<NumenPlayer, String>> BODY_STATE =
-            new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn));
+            new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn, WaterState::describe));
 
     /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>Numen API 内部调用</b>(服务端主线程)。 */
     public static List<GearSlot> gearSlots(NumenPlayer body) {
