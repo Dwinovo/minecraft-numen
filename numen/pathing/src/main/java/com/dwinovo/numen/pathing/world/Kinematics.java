@@ -121,9 +121,10 @@ public final class Kinematics {
 
     /**
      * 水里走或游一格要几刻,照原版水里的移动({@code LivingEntity.travel}):摩擦 0.8 与加速度 0.02,
-     * 水下移动效率 {@code efficiency}(0 到 1)把两者向陆上的值插过去,1 时与陆上平走一样快。
+     * 水下移动效率 {@code efficiency}(属性值,夹在 0 到 1)把两者向陆上的值插过去,1 时与陆上平走一样快。
      */
     public static double wadeTicksPerBlock(BodyStats body, double efficiency) {
+        efficiency = Math.max(0, Math.min(1, efficiency));
         double friction = WATER_FRICTION + (WATER_FRICTION_EFFICIENT - WATER_FRICTION) * efficiency;
         double acceleration = (WATER_ACCELERATION + (body.movementSpeed() - WATER_ACCELERATION) * efficiency) * INPUT;
         return 1 / (acceleration / (1 - friction));

@@ -150,7 +150,7 @@ public final class CostModel {
 
     /** 水里走或游一格要几刻({@link Kinematics#wadeTicksPerBlock},按水下移动效率)。 */
     public double waterStep() {
-        return Kinematics.wadeTicksPerBlock(body.stats(), Mth.clamp(body.waterMovementEfficiency(), 0, 1));
+        return Kinematics.wadeTicksPerBlock(body.stats(), body.waterMovementEfficiency());
     }
 
     /**

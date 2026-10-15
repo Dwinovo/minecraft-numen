@@ -49,12 +49,18 @@ public final class Snapshots {
     /**
      * 憋气的本钱。水下呼吸类效果照原版 {@code MobEffectUtil.hasWaterBreathing} 认水下呼吸与潮涌能量两种,取剩得久的;
      * 能在水下呼吸的实体({@code canBreatheUnderwater})与无敌的玩家原版不扣氧({@code LivingEntity.baseTick}),记成无穷。
+     * 规划之外要问"此刻憋得住吗"的(Numen 的换气本能)也读这一份。
      */
-    private static Breath breath(ServerPlayer body) {
+    public static Breath breath(ServerPlayer body) {
         double shield = body.canBreatheUnderwater() || body.getAbilities().invulnerable ? Double.POSITIVE_INFINITY
                 : Math.max(remaining(body, MobEffects.WATER_BREATHING), remaining(body, MobEffects.CONDUIT_POWER));
         return new Breath(body.getAirSupply(), body.getMaxAirSupply(), body.getAttributeValue(Attributes.OXYGEN_BONUS),
                 shield, body.getItemBySlot(EquipmentSlot.HEAD).is(Items.TURTLE_HELMET));
+    }
+
+    /** 在水里游一格要几刻:规划给水里一步定价用的同一个数({@link Kinematics#wadeTicksPerBlock})。 */
+    public static double swimTicksPerBlock(ServerPlayer body) {
+        return Kinematics.wadeTicksPerBlock(stats(body), body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY));
     }
 
     /** 这个效果还剩几刻;没有为 0,不限时为无穷。 */
