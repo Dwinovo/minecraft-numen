@@ -41,6 +41,8 @@ class EventTypesTest {
         // 旁听的话与离场通知:捎带
         assertRow(EventTypes.TALK, EventTypes.Delivery.AMBIENT, false, false, false, false);
         assertRow(EventTypes.LEFT, EventTypes.Delivery.AMBIENT, false, false, false, false);
+        // 本能做了事:常态知会,险情由发送方标急件
+        assertRow(EventTypes.REFLEX, EventTypes.Delivery.NOTICE, false, false, false, false);
     }
 
     @Test
@@ -53,7 +55,6 @@ class EventTypesTest {
         assertRow(EventTypes.TIMER, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.WOKE, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);
-        assertRow(EventTypes.REFLEX, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.DROPPED, EventTypes.Delivery.STEER, false, false, false, false);
     }
 
@@ -188,6 +189,10 @@ class EventTypesTest {
         assertTrue(EventTypes.Delivery.CONTROL.control());
         assertFalse(EventTypes.Delivery.AMBIENT.wakes(), "旁听不唤醒");
         assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.AMBIENT.joins(), "但随下一次调用捎带");
+        assertFalse(EventTypes.Delivery.NOTICE.wakes(), "知会平时不唤醒");
+        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.NOTICE.joins());
+        assertEquals(EventTypes.Delivery.STEER, EventTypes.Delivery.NOTICE.whenUrgent(), "标了急件的那一条按插话办");
+        assertEquals(EventTypes.Delivery.AMBIENT, EventTypes.Delivery.AMBIENT.whenUrgent(), "别的档标了急件也不改投递");
         for (EventTypes.Delivery d : EventTypes.Delivery.values()) {
             assertEquals(d.joins() == EventTypes.Delivery.Joins.NONE, d.control(), d + ":控制命令就是不随任何调用走的那一档");
             assertFalse(d.wakes() && d.control(), d + ":叫醒她的条目必须交得出去");

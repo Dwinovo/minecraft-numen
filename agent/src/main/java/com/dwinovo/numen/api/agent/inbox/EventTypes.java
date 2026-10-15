@@ -83,7 +83,10 @@ public final class EventTypes {
     public static final String WOKE = "woke";
     /** 同伴自己跨了维度。急不急由发送方定。 */
     public static final String DIMENSION_CHANGE = "dimension_change";
-    /** 某个本能替身体做了一件事(溺水自救、下落放水、防御……),条目里带着是哪个本能。急不急由发送方定。 */
+    /**
+     * 某个本能替身体做了一件事(溺水自救、下落放水、防御……),条目里带着是哪个本能。走 {@link Delivery#NOTICE}:常态随下一次调模型捎带,
+     * 不为它叫醒她;本能碰上要她当场决定的险情(被封死在水下找不到出口)由发送方标成急件。
+     */
     public static final String REFLEX = "reflex";
     /**
      * 服务端对她说的一句话:原版与模组发给她的系统聊天与动作栏("只能在夜间睡觉"、模组的提示与警告)。
@@ -133,6 +136,7 @@ public final class EventTypes {
      * FOLLOW_UP  是     OWN_CALL  参与熟度                          只在本来要停时接上
      * CONTROL    否     NONE      循环自己执行(整理记忆、清空上下文) 不进回合;排在它后面的等它执行完
      * AMBIENT    否     ANY_CALL  不参与熟度,等别的事叫醒她          随下一次调模型捎带,自己不引起调用
+     * NOTICE     否*    ANY_CALL  同 AMBIENT;发送方标了急件的那一条按 STEER 办
      * </pre>
      */
     public enum Delivery {
@@ -146,7 +150,12 @@ public final class EventTypes {
          * 捎带:"她该听见,但不值得为它把她叫醒"——躺在队里等下次别的事叫醒她,跟着那次调用一起走。
          * 因此它是<b>免费</b>的:不额外唤醒就不额外花钱。群聊里旁听到的话走这一档(唤醒只能由人产生)。
          */
-        AMBIENT(false, Joins.ANY_CALL);
+        AMBIENT(false, Joins.ANY_CALL),
+        /**
+         * 知会:平时同捎带,不为它把她叫醒;发送方把某一条标成急件,那一条就按插话办,立刻叫醒她。同一种事的常态与险情走一个类型
+         * (本能替身体做了一件事:常态只是让她知情,被封死在水下找不到出口才是要她当场决定的),急不急由发送方按事情本身定。
+         */
+        NOTICE(false, Joins.ANY_CALL, true);
 
         /** 一条条目随哪一次模型调用交给模型。 */
         public enum Joins {
@@ -160,15 +169,34 @@ public final class EventTypes {
 
         private final boolean wakes;
         private final Joins joins;
+        private final boolean escalates;
 
         Delivery(boolean wakes, Joins joins) {
+            this(wakes, joins, false);
+        }
+
+        Delivery(boolean wakes, Joins joins, boolean escalates) {
             // 会叫醒她的条目必须随它引起的那次调用交出去;只随自己那次走的条目必须叫得醒她——两样违背一样,
             // 就会开出一次取不到东西的调用,或者有一类条目永远取不出来。
             if (wakes ? joins == Joins.NONE : joins == Joins.OWN_CALL) {
                 throw new IllegalStateException("投递档 " + name() + " 的声明自相矛盾");
             }
+            if (escalates && (wakes || joins != Joins.ANY_CALL)) {
+                throw new IllegalStateException("投递档 " + name() + " 升格后按插话办,本身得是随任何调用走、不叫醒她的档");
+            }
             this.wakes = wakes;
             this.joins = joins;
+            this.escalates = escalates;
+        }
+
+        /** 发送方标了急件的条目按插话办(本身不叫醒她、但可以升格的档,如 {@link #NOTICE});别的档标了急件也不改投递。 */
+        public boolean escalates() {
+            return escalates;
+        }
+
+        /** 一条急件实际按哪一档投递:可升格的档是 {@link #STEER},其余就是自己。 */
+        public Delivery whenUrgent() {
+            return escalates ? STEER : this;
         }
 
         /**
@@ -271,7 +299,8 @@ public final class EventTypes {
         register(event(TIMER, true));
         register(event(WOKE, true));
         register(event(DIMENSION_CHANGE, false));
-        register(event(REFLEX, false));
+        // 本能做了事:常态只让她知情(知会),险情由发送方标急件
+        register(new Type(REFLEX, s -> s, s -> null, false, false, Delivery.NOTICE, false));
         register(event(DROPPED, false));
         // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
         register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));

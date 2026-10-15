@@ -147,13 +147,13 @@ public final class EventQueue {
     }
 
     /**
-     * 条目生效后的急不急。急件的意思是"立刻叫醒她",所以只有投递档声明会叫醒她的条目
-     * ({@link EventTypes.Delivery#wakes})才可能急——旁听的话不唤醒是群聊的不变量,控制命令由循环闲时自己执行,
-     * 两者靠发送方自觉守不住,发送方怎么标都一样。其余:类型表说恒急就急,否则听发送方的。
+     * 条目生效后的急不急。急件的意思是"立刻叫醒她",所以只有投递档声明会叫醒她、或声明可升格
+     * ({@link EventTypes.Delivery#wakes}、{@link EventTypes.Delivery#escalates})的条目才可能急——旁听的话不唤醒是群聊的不变量,
+     * 控制命令由循环闲时自己执行,两者靠发送方自觉守不住,发送方怎么标都一样。其余:类型表说恒急就急,否则听发送方的。
      * 入队与读盘都只过这一处。
      */
     private static boolean urgent(EventTypes.Type kind, boolean asSent) {
-        return kind.delivery().wakes() && (kind.alwaysUrgent() || asSent);
+        return (kind.delivery().wakes() || kind.delivery().escalates()) && (kind.alwaysUrgent() || asSent);
     }
 
     /**
@@ -446,8 +446,10 @@ public final class EventQueue {
         return taken;
     }
 
+    /** 这一条实际按哪一档投递:急件按档的升格办({@link EventTypes.Delivery#whenUrgent}),生效后的急不急就记在条目上。 */
     private static EventTypes.Delivery delivery(Entry e) {
-        return EventTypes.get(e.type()).delivery();
+        EventTypes.Delivery d = EventTypes.get(e.type()).delivery();
+        return e.urgent() ? d.whenUrgent() : d;
     }
 
     /** 因为满了丢掉、还没报告过的条数变成一条普通事件——丢弃可以,无声消失不行。 */

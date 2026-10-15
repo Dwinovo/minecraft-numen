@@ -434,6 +434,33 @@ class EventQueueTest {
         assertTrue(q.isEmpty());
     }
 
+    // ---- 知会(NOTICE):平时捎带,发送方标了急件才叫醒 ----
+
+    /** 同一种事的常态:攒多少条、躺多久都不开轮,跟着别的事的那一轮走。 */
+    @Test
+    void aNoticeSentCalmlyNeverRipensButRidesAlong() {
+        EventQueue q = fresh();
+        int notices = EventQueue.thresholdOf(1) * 3;
+        for (int i = 0; i < notices; i++) {
+            assertFalse(q.push(EventTypes.REFLEX, "<event kind=\"reflex\">第" + i + "回</event>", T0, false));
+        }
+        assertFalse(q.ripeness(T0 + EventQueue.maxWaitMsOf(1) * 10, 1).ripe());
+        assertFalse(q.wantsAnswer());
+
+        q.push(EventTypes.QUERY, "<query>在吗</query>", T0 + 1, false);
+        assertEquals(notices + 1, q.takeForCall(false, T0 + 1).size(), "知会跟着主人那一轮全带走");
+        assertTrue(q.isEmpty());
+    }
+
+    /** 险情:发送方标了急件,这一条就叫醒她,按插话办。 */
+    @Test
+    void aNoticeSentUrgentWakesHer() {
+        EventQueue q = fresh();
+        assertTrue(q.push(EventTypes.REFLEX, "<event kind=\"reflex\">被封在水下了</event>", T0, true));
+        assertEquals(EventQueue.Ripeness.Why.URGENT, q.ripeness(T0, 1).why());
+        assertEquals(1, q.takeForCall(false, T0).size());
+    }
+
     // ---- 捎带(AMBIENT):听得见,但不为它开一轮 ----
 
     /** 群聊的不变量守在这一处:发送方怎么标,旁听到的话都不是急件。 */

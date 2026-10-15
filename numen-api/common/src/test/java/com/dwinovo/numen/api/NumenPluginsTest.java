@@ -35,7 +35,7 @@ class NumenPluginsTest {
         for (String id : List.of("gametest_accessory_changed", "gametest_accessory_broke")) {
             assertTrue(EventTypes.isRegistered(id), id);
             EventTypes.Type row = EventTypes.get(id);
-            EventTypes.Type builtIn = EventTypes.get(EventTypes.REFLEX);
+            EventTypes.Type builtIn = EventTypes.get(EventTypes.DIMENSION_CHANGE);
             assertEquals(builtIn.delivery(), row.delivery(), id + " 与内置事件同样插话投递");
             assertEquals(builtIn.clearedByInterrupt(), row.clearedByInterrupt(), id + " 按了停止也还在");
             assertEquals(builtIn.fromOwner(), row.fromOwner(), id + " 不是主人说的");
