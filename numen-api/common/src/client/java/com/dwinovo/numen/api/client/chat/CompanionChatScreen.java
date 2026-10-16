@@ -268,10 +268,11 @@ public class CompanionChatScreen extends Screen {
                 && ConsentMessage.click(this.font, card, keysX, keysY, keysW, mouseX, mouseY)) {
             return true;
         }
-        if (inputBar != null && inputBar.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
+        boolean handled = inputBar != null && inputBar.mouseClicked(mouseX, mouseY, button)
+                || super.mouseClicked(mouseX, mouseY, button);
+        // 这一屏只是一行输入:点到哪儿输入框都不失焦。失了焦字打不进、回车也没反应,只剩发送键还能点
+        if (inputBar != null) inputBar.setFocused(true);
+        return handled;
     }
 
     @Override
