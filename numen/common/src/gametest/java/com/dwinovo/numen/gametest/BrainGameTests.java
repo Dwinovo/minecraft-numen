@@ -135,11 +135,15 @@ public class BrainGameTests {
         private final net.minecraft.server.MinecraftServer server;
 
         Brain(GameTestHelper helper, String name) throws java.io.IOException {
+            this(helper, name, Files.createTempDirectory("numen-gametest-brain-"));
+        }
+
+        /** {@code dir} 里 {@code her/} 是她的家(可以已经有搬过来的东西)。 */
+        Brain(GameTestHelper helper, String name, Path dir) throws java.io.IOException {
             this.server = helper.getLevel().getServer();
             this.companion = spawnAt(helper, name, new BlockPos(3, 2, 3), false);
             CompanionRegistry.get(server).put(companion.getUUID(), new CompanionRegistry.Entry(name,
                     companion.getOwnerUuid(), Level.OVERWORLD, companion.blockPosition()));
-            Path dir = Files.createTempDirectory("numen-gametest-brain-");
             Io io = NumenIo.inline("numen-gametest");
             NoteBook.init(uuid -> new Home(dir.resolve("memory"), io), () -> 0);
             this.rooms = Conversations.of(server, companion.getOwnerUuid());
@@ -316,5 +320,35 @@ public class BrainGameTests {
             helper.assertTrue(her.mind.asked.size() == 1, "the owner's words did not wake her");
             her.close();
         });
+    }
+
+    /** 旧版本留在客户端的对话、收件箱、目标搬进世界之后,她醒来还记得。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void a_companion_with_migrated_data_wakes_up_remembering_it(GameTestHelper helper)
+            throws Exception {
+        Path dir = Files.createTempDirectory("numen-gametest-migrate-");
+        Path legacy = dir.resolve("config").resolve("companions").resolve("her");
+        var old = com.dwinovo.numen.api.agent.llm.ConvoLog.atFile(legacy.resolve("chat.jsonl"));
+        old.append(new ConvoState.Msg.User("<query>记得我吗</query>"), null);
+        old.append(new ConvoState.Msg.Assistant(new AssistantTurn("记得", List.of(), null)), null);
+        var waiting = com.dwinovo.numen.api.agent.inbox.JsonlJournal.atFile(legacy.resolve("inbox.jsonl"));
+        waiting.save(List.of(new com.dwinovo.numen.api.agent.inbox.EventQueue.Entry(EventTypes.TASK_FINISHED,
+                "<event>矿挖完了</event>", 1L, false)));
+        var goal = new com.dwinovo.numen.api.store.JsonDoc(legacy.resolve("goal.json"),
+                com.dwinovo.numen.api.store.JsonDoc.Format.of(1), NumenIo.inline("test"));
+        goal.write(com.dwinovo.numen.api.agent.goal.GoalState.of("挖 64 个铁", 0).toJson());
+
+        helper.assertTrue(com.dwinovo.numen.api.brain.LegacyMigration.companion(legacy, dir.resolve("her")),
+                "nothing was migrated");
+        Brain her = new Brain(helper, "gametest_rememberer", dir);
+
+        helper.assertTrue(her.transcript().size() == 2 && her.transcript().get(0) instanceof ConvoState.Msg.User,
+                "the migrated conversation is not there: " + her.transcript());
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TASK_FINISHED)),
+                "the migrated inbox is not there");
+        helper.assertTrue(her.loop.goal() != null && her.loop.goal().objective().equals("挖 64 个铁"),
+                "the migrated goal is not there");
+        her.close();
+        helper.succeed();
     }
 }
