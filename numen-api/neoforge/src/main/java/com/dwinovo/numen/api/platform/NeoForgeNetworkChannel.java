@@ -7,6 +7,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.HandlerThread;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.ArrayList;
@@ -22,15 +23,16 @@ import java.util.function.Consumer;
  * {@link #flushPending(RegisterPayloadHandlersEvent)} is invoked from the
  * event handler (see {@code NumenMod}).
  *
- * <p>{@code IPayloadContext} already dispatches handlers on the main thread
- * (server-main for C→S, client-main for S→C), so we don't re-schedule.
+ * <p>Handlers run on the main thread (server-main for C→S, client-main for S→C) unless the registration asks for
+ * {@link Execution#NETWORK}, which registers the handler on the connection's own thread.
  */
 public final class NeoForgeNetworkChannel implements INetworkChannel {
 
     private record C2SRegistration<T extends CustomPacketPayload>(
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
-            BiConsumer<T, ServerPlayer> handler) {}
+            BiConsumer<T, ServerPlayer> handler,
+            Execution execution) {}
 
     private record S2CRegistration<T extends CustomPacketPayload>(
             CustomPacketPayload.Type<T> type,
@@ -44,8 +46,9 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
     public <T extends CustomPacketPayload> void registerClientToServer(
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
-            BiConsumer<T, ServerPlayer> handler) {
-        pendingC2S.add(new C2SRegistration<>(type, codec, handler));
+            BiConsumer<T, ServerPlayer> handler,
+            Execution execution) {
+        pendingC2S.add(new C2SRegistration<>(type, codec, handler, execution));
     }
 
     @Override
@@ -83,7 +86,10 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
      */
     public void flushPending(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
-        for (C2SRegistration<?> r : pendingC2S) applyC2S(registrar, r);
+        PayloadRegistrar onNetwork = registrar.executesOn(HandlerThread.NETWORK);
+        for (C2SRegistration<?> r : pendingC2S) {
+            applyC2S(r.execution() == Execution.NETWORK ? onNetwork : registrar, r);
+        }
         for (S2CRegistration<?> r : pendingS2C) applyS2C(registrar, r);
         pendingC2S.clear();
         pendingS2C.clear();

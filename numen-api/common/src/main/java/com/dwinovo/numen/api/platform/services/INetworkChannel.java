@@ -22,8 +22,8 @@ import java.util.function.Consumer;
  *       public {@code Type<T>} and {@code StreamCodec}.</li>
  *   <li>Call {@link #registerClientToServer} once from {@code NumenNetwork.register}.</li>
  *   <li>Client sends via {@code NumenNetwork.sendToServer}, which measures the
- *       payload ({@code Wire}) and then calls {@link #sendToServer}; handler
- *       runs on the server main thread.</li>
+ *       payload ({@code Wire}) and then calls {@link #sendToServer}; the handler
+ *       runs on the thread its {@link Execution} names.</li>
  * </ol>
  *
  * <h2>Payload lifecycle (S→C)</h2>
@@ -35,9 +35,11 @@ import java.util.function.Consumer;
  *       runs on the client main thread.</li>
  * </ol>
  *
- * <h2>Threading guarantee</h2>
- * Handlers (both directions) are dispatched on the receiving side's main
- * thread. Common code doesn't need to schedule.
+ * <h2>Threading</h2>
+ * Downlink handlers are dispatched on the client main thread. Uplink handlers name their {@link Execution}:
+ * {@link Execution#MAIN} is the server main thread, so common code doesn't need to schedule;
+ * {@link Execution#NETWORK} is for handlers that are cheap and thread-safe (reassembling fragments, putting a
+ * message in a mailbox) and should not wait for the server tick.
  *
  * <h2>Why a single combined interface</h2>
  * Versus separate {@code IClientChannel} / {@code IServerChannel}: feature
@@ -48,17 +50,26 @@ import java.util.function.Consumer;
 public interface INetworkChannel {
 
     /**
+     * Which thread an uplink handler runs on. {@code NETWORK} asks for the connection's own thread; a loader whose
+     * networking API always hands the handler to the server thread (Fabric's does) honours it by calling the handler
+     * there, so a {@code NETWORK} handler must be correct on either thread.
+     */
+    enum Execution { NETWORK, MAIN }
+
+    /**
      * Register a payload the client can send to the server. Idempotent per
      * type id — duplicate registrations are loader-defined error behaviour.
      *
      * @param type    payload type with a stable identifier
      * @param codec   stream codec for {@code RegistryFriendlyByteBuf}
-     * @param handler invoked on the server main thread for each received payload
+     * @param handler   invoked for each received payload, on the thread {@code execution} names
+     * @param execution the thread the handler runs on
      */
     <T extends CustomPacketPayload> void registerClientToServer(
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
-            BiConsumer<T, ServerPlayer> handler);
+            BiConsumer<T, ServerPlayer> handler,
+            Execution execution);
 
     /**
      * Send a registered payload from the client to the server. Client-only —

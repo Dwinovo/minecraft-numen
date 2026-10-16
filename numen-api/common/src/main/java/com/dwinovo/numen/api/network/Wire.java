@@ -66,6 +66,12 @@ public enum Wire {
      */
     public static final int ASSEMBLING = 8;
 
+    /**
+     * 每位玩家上行分片的持续带宽:256 KiB/s,桶的容量是一条最大的消息({@link #MESSAGE_BYTES})。正当的大消息(几 MB 的上传)
+     * 几十秒内送完、不挤游戏;超出的分片丢弃,见 {@link UplinkBudget}。
+     */
+    public static final int UPLINK_BYTES_PER_SECOND = 256 * 1024;
+
     /** 三字节长度前缀能写的最大帧:2^21 - 1。 */
     public static final int FRAME_BYTES = (1 << 21) - 1;
 

@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.network.payload.LocateNumenPayload;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.api.platform.services.INetworkChannel.Execution;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
@@ -50,8 +51,12 @@ import java.util.function.Consumer;
  */
 public final class NumenNetwork {
 
-    /** 一种包的编解码器与处理器。编解码器按"能写在注册表缓冲上的"记:上行的编解码器写在 {@code ByteBuf} 上,同样接得住。 */
-    private record Route<H>(StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload> codec, H handler) {}
+    /**
+     * 一种包的编解码器、处理器,以及处理器在哪个线程上跑(下行恒为客户端主线程)。编解码器按"能写在注册表缓冲上的"记:
+     * 上行的编解码器写在 {@code ByteBuf} 上,同样接得住。
+     */
+    private record Route<H>(StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload> codec, H handler,
+                            Execution execution) {}
 
     /** 每种下行包按它的类型登记的路径;表里的编解码器只拿去编登记时那一种包。 */
     private static final Map<CustomPacketPayload.Type<?>, Route<Consumer<CustomPacketPayload>>> TO_CLIENT =
@@ -64,6 +69,9 @@ public final class NumenNetwork {
     private static final Fragments.Inbox FROM_SERVER = new Fragments.Inbox(Wire.TO_CLIENT);
     /** 服务端从各位玩家的客户端收到的、拼装中的分片消息,一个连接一份。 */
     private static final Map<UUID, Fragments.Inbox> FROM_CLIENTS = new ConcurrentHashMap<>();
+    /** 每位玩家上行分片的带宽预算。 */
+    private static final UplinkBudget UPLINK = new UplinkBudget(Wire.MESSAGE_BYTES, Wire.UPLINK_BYTES_PER_SECOND,
+            System::nanoTime);
 
     private NumenNetwork() {}
 
@@ -96,12 +104,28 @@ public final class NumenNetwork {
         return route;
     }
 
-    /** 服务端收到一片:这位玩家的收件箱收齐了,就把原包交给它登记的处理器。 */
+    /**
+     * 服务端收到一片:这位玩家的收件箱收齐了,就把原包交给它登记的处理器。本方法在网络线程上跑(见 {@link Execution#NETWORK}):
+     * 拼装和解码都在这里做;处理器登记的是主线程的,收齐之后才切回主线程。超出这位玩家上行预算({@link UplinkBudget})的片丢弃,
+     * 它所在的整条消息作废。
+     */
     public static void fragmentFromClient(FragmentPayload fragment, ServerPlayer from) {
-        CustomPacketPayload whole = assembled(FROM_CLIENTS.computeIfAbsent(from.getUUID(),
-                id -> new Fragments.Inbox(Wire.TO_SERVER)), fragment);
-        if (whole != null) {
-            route(TO_SERVER, whole).handler().accept(whole, from);
+        Fragments.Inbox inbox = FROM_CLIENTS.computeIfAbsent(from.getUUID(), id -> new Fragments.Inbox(Wire.TO_SERVER));
+        if (!UPLINK.admit(from.getUUID(), fragment.chunk().length)) {
+            Constants.LOG.warn("[numen-net] dropped a fragment of a message from {}: over the uplink budget",
+                    from.getUUID());
+            inbox.clear();
+            return;
+        }
+        CustomPacketPayload whole = assembled(inbox, fragment);
+        if (whole == null) {
+            return;
+        }
+        Route<BiConsumer<CustomPacketPayload, ServerPlayer>> route = route(TO_SERVER, whole);
+        if (route.execution() == Execution.MAIN && !from.server.isSameThread()) {
+            from.server.execute(() -> route.handler().accept(whole, from));
+        } else {
+            route.handler().accept(whole, from);
         }
     }
 
@@ -142,6 +166,7 @@ public final class NumenNetwork {
 
     /** 这位玩家断线了:他连接上没收完的残片丢掉。 */
     public static void disconnected(UUID player) {
+        UPLINK.forget(player);
         Fragments.Inbox inbox = FROM_CLIENTS.remove(player);
         if (inbox != null) {
             inbox.clear();
@@ -162,20 +187,28 @@ public final class NumenNetwork {
     private static <T extends CustomPacketPayload> void toClient(CustomPacketPayload.Type<T> type,
                                                                  StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
                                                                  Consumer<T> handler) {
-        TO_CLIENT.put(type, new Route<>(erased(codec), erased(handler)));
+        TO_CLIENT.put(type, new Route<>(erased(codec), erased(handler), Execution.MAIN));
         Services.NETWORK.registerServerToClient(type, codec, handler);
     }
 
     private static <T extends CustomPacketPayload> void toServer(CustomPacketPayload.Type<T> type,
                                                                  StreamCodec<ByteBuf, T> codec,
                                                                  BiConsumer<T, ServerPlayer> handler) {
-        TO_SERVER.put(type, new Route<>(erased(codec), erased(handler)));
-        Services.NETWORK.registerClientToServer(type, codec, handler);
+        toServer(type, codec, handler, Execution.MAIN);
+    }
+
+    private static <T extends CustomPacketPayload> void toServer(CustomPacketPayload.Type<T> type,
+                                                                 StreamCodec<ByteBuf, T> codec,
+                                                                 BiConsumer<T, ServerPlayer> handler,
+                                                                 Execution execution) {
+        TO_SERVER.put(type, new Route<>(erased(codec), erased(handler), execution));
+        Services.NETWORK.registerClientToServer(type, codec, handler, execution);
     }
 
     public static void register() {
         // 两个方向上一条超过单包上限的消息的片(见 Fragments):对端收齐拼回,交给原来的处理器。
-        toServer(FragmentPayload.TO_SERVER, FragmentPayload.TO_SERVER_CODEC, NumenNetwork::fragmentFromClient);
+        toServer(FragmentPayload.TO_SERVER, FragmentPayload.TO_SERVER_CODEC, NumenNetwork::fragmentFromClient,
+                Execution.NETWORK);
         toClient(FragmentPayload.TO_CLIENT, FragmentPayload.TO_CLIENT_CODEC, NumenNetwork::fragmentFromServer);
 
         // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).

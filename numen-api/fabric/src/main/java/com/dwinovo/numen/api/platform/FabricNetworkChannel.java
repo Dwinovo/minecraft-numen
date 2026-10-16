@@ -35,12 +35,19 @@ public final class FabricNetworkChannel implements INetworkChannel {
     public <T extends CustomPacketPayload> void registerClientToServer(
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
-            BiConsumer<T, ServerPlayer> handler) {
+            BiConsumer<T, ServerPlayer> handler,
+            Execution execution) {
         PayloadTypeRegistry.playC2S().register(type, codec);
+        // Fabric 的网络 API 在服务端主线程上调接收器(见其 ServerPlayNetworkAddon.receive),拿不到连接自己的线程:
+        // NETWORK 就是直接调;MAIN 在当前不是主线程时才切回去(别的版本的 API 若在网络线程上调)。
         ServerPlayNetworking.registerGlobalReceiver(type, (payload, context) -> {
             MinecraftServer server = context.server();
             ServerPlayer player = context.player();
-            server.execute(() -> handler.accept(payload, player));
+            if (execution == Execution.NETWORK || server.isSameThread()) {
+                handler.accept(payload, player);
+            } else {
+                server.execute(() -> handler.accept(payload, player));
+            }
         });
     }
 
