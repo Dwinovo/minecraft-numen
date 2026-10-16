@@ -626,6 +626,9 @@ public final class GameTestKit {
         try {
             java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-gametest-lua-");
             com.dwinovo.numen.api.script.Modules.init(uuid -> modules);
+            // 服务器起好时产品把模块落点指到了主人的目录(名册上有的同伴才有主人),这里的同伴没有登记:落点拿回来
+            com.dwinovo.numen.api.platform.ServerLifecycle.onStarted(
+                    server -> com.dwinovo.numen.api.script.Modules.init(uuid -> modules));
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }

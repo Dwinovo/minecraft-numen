@@ -67,8 +67,8 @@ public final class ThemePanel {
         initTitle.setBounds(x, sy + 1, Minecraft.getInstance().font.width(initiativeText), 9);
         Slider initiative = ui.add(new Slider(
                 EventQueue.MIN_LEVEL, EventQueue.MAX_LEVEL, 1,
-                com.dwinovo.numen.api.client.data.ClientPrefs.initiativeLevel(),
-                v -> com.dwinovo.numen.api.client.data.ClientPrefs.setInitiativeLevel((int) v),
+                com.dwinovo.numen.api.client.agent.ServerLibraries.initiative(),
+                v -> com.dwinovo.numen.api.client.agent.ServerLibraries.setInitiative((int) v),
                 v -> String.valueOf((int) v)));
         initiative.setBounds(x + 44, sy, Math.min(140, w - 44), NumenStyle.CONTROL_H);
         wrapped(I18n.get(ModLanguageData.Keys.THEME_INITIATIVE_HINT), x, sy + NumenStyle.CONTROL_H + 3, w, Label.Role.SECONDARY);

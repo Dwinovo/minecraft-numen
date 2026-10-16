@@ -1,7 +1,8 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
@@ -14,7 +15,7 @@ import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.Anim;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -92,9 +93,9 @@ final class ProfilePage {
     /** 背包那一行这一帧的顶边;点它是页内开合。 */
     private int itemsRowY = Integer.MIN_VALUE;
     /** 札记按"哪一本、写过几次"缓存:索引要读盘,不能每帧读。 */
-    private UUID notesOf;
-    private int notesRevision = -1;
-    private List<NoteBook.Note> notes = List.of();
+    /** 上次向服务端要她的札记索引的时刻:面板开着时隔几秒要一次最新的。 */
+    private long notesAskedMs;
+    private static final long NOTES_REFRESH_MS = 5_000L;
 
     ProfilePage(Font font) {
         this.font = font;
@@ -226,7 +227,7 @@ final class ProfilePage {
 
         // ---- 记忆 ----
         cy = gap(g, t, x, w, cy);
-        List<NoteBook.Note> all = notes(who);
+        List<ServerLibraries.Note> all = notes(who);
         cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
                 x + PAD, cy, iw);
         if (all.isEmpty()) {
@@ -234,7 +235,7 @@ final class ProfilePage {
             cy += 14;
         } else {
             for (int i = 0; i < Math.min(NOTES_SHOWN, all.size()); i++) {
-                NoteBook.Note n = all.get(i);
+                ServerLibraries.Note n = all.get(i);
                 infoRow(g, t, Sprites.BOOK, n.description(),
                         I18n.get("numen.profile.note_meta", n.day(), n.type()), x + PAD, cy, iw);
                 cy += ROW_H;
@@ -299,10 +300,10 @@ final class ProfilePage {
         cy = settingRow(g, t, I18n.get("numen.profile.persona"), persona, x, cy, w, mouseX, mouseY);
         String model = I18n.get("numen.profile.model_none");
         if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
-            var entry = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().get(loop.providerEntryId());
+            var entry = ServerLibraries.providers().stream()
+                    .filter(p -> p.id().equals(loop.providerEntryId())).findFirst().orElse(null);
             model = entry == null ? I18n.get("numen.profile.model_deleted")
-                    : entry.profile().model() == null || entry.profile().model().isBlank()
-                            ? entry.name() : entry.profile().model();
+                    : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
         }
         cy = settingRow(g, t, I18n.get("numen.profile.model"), model, x, cy, w, mouseX, mouseY);
         var voice = com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().resolve(who);
@@ -319,7 +320,7 @@ final class ProfilePage {
             int rowTop = cy;
             cy = settingRow(g, t, I18n.get("numen.profile.context"),
                     I18n.get("numen.profile.context_value", Math.clamp(loop.contextPercent(), 0, 100),
-                            loop.display().size()), x, cy, w, mouseX, mouseY);
+                            loop.messageCount()), x, cy, w, mouseX, mouseY);
             if (mouseX >= x && mouseX < x + w && mouseY >= rowTop && mouseY < cy) tip = usageDetail(loop);
         }
         cy += 4;
@@ -388,20 +389,19 @@ final class ProfilePage {
     }
 
     /** 她的札记,新的在前;同一本写过几次没变就不重读。 */
-    private List<NoteBook.Note> notes(UUID who) {
-        NoteBook book = NoteBook.of(who);
-        if (!who.equals(notesOf) || book.revision() != notesRevision) {
-            notesOf = who;
-            notesRevision = book.revision();
-            notes = book.index();
+    private List<ServerLibraries.Note> notes(UUID who) {
+        long now = System.currentTimeMillis();
+        if (now - notesAskedMs > NOTES_REFRESH_MS) {
+            notesAskedMs = now;
+            RemoteCompanions.library().ask(Libraries.NOTES);
         }
-        return notes;
+        return ServerLibraries.notes(who);
     }
 
     /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */
     private List<FormattedCharSequence> bio(CompanionView loop, int width) {
         if (loop == null || loop.personaId() == null) return List.of();
-        var persona = PersonaLibrary.instance().get(loop.personaId());
+        var persona = ServerLibraries.persona(loop.personaId());
         if (persona == null || persona.text() == null) return List.of();
         StringBuilder para = new StringBuilder();
         for (String line : persona.text().split("\n")) {

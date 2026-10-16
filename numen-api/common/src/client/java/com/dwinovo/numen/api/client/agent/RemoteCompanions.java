@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.brain.History;
+import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.network.ClientPayloadSink;
@@ -70,6 +71,11 @@ public final class RemoteCompanions {
         return new Entry(self[0], presenter);
     }
 
+    /** 她不在了(遣散):放掉这头的视图。她的东西都在服务端,那边收。 */
+    public static void forget(UUID companion) {
+        COMPANIONS.remove(companion);
+    }
+
     /** 每个客户端刻一次:各视图的表现层往前走一步(打字机、语音、说话状态)。 */
     public static void tick() {
         for (Entry entry : COMPANIONS.values()) {
@@ -108,7 +114,12 @@ public final class RemoteCompanions {
         ClientPayloadSink.feed = RemoteCompanions::onFeed;
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
         ClientPayloadSink.conversations = RemoteCompanions::onConversations;
-        ClientPayloadSink.library = LIBRARY::onPayload;
+        ClientPayloadSink.library = p -> {
+            LIBRARY.onPayload(p);
+            if (Libraries.MCP_CLIENT.equals(p.kind())) {
+                McpAuthPrompt.onServers();
+            }
+        };
     }
 
     /**
@@ -153,6 +164,12 @@ public final class RemoteCompanions {
         if (!served) {
             Constants.LOG.warn("[numen-net] the server speaks protocol {}, this client {}: its companions are not shown",
                     p.protocol(), Presence.PROTOCOL);
+            return;
+        }
+        // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
+        for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL, Libraries.NOTES,
+                Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
+            LIBRARY.ask(kind);
         }
     }
 
@@ -188,6 +205,7 @@ public final class RemoteCompanions {
         TRANSCRIPTS.clear();
         saved = List.of();
         LIBRARY.clear();
+        McpAuthPrompt.clear();
         served = false;
         admin = false;
         helloSent = false;

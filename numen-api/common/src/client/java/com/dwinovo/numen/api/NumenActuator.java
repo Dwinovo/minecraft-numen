@@ -113,7 +113,7 @@ public final class NumenActuator {
                 return;
             }
             String n = name == null ? "" : name.trim();
-            NumenNetwork.sendToServer(new SummonRequestPayload(n, "", "", false));
+            NumenNetwork.sendToServer(new SummonRequestPayload(n, "", "", false, "", ""));
             f.complete(true);
         });
         return f;

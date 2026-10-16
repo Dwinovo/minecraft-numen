@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.CompanionHome;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
@@ -11,7 +13,7 @@ import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 
@@ -92,7 +94,7 @@ public final class CompanionEditPanel extends ModalCard {
         var loop = CompanionViews.getOrCreate(uuid);
         var binding = CompanionHome.binding(uuid);
         origPersona = loop.personaId();
-        origProvider = binding.providerId();
+        origProvider = loop.providerEntryId();
         origVoice = binding.voiceId();
         origCreative = host.currentCreative();
         // 皮肤当前选择从绑定读;没记账或条目已删 = 按名字默认。
@@ -114,7 +116,8 @@ public final class CompanionEditPanel extends ModalCard {
 
     @Override
     protected void layout(int top) {
-        PersonaLibrary.instance().reload();   // 人设目录可能刚被增删,和召唤卡一样重扫
+        // 人设目录可能刚被增删,和召唤卡一样让服务端重扫
+        RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
         title(t(ModLanguageData.Keys.EDIT_COMPANION_TITLE));
         coverTop = top;
         int ry = top + COVER_H;
@@ -123,7 +126,7 @@ public final class CompanionEditPanel extends ModalCard {
         List<String> pIds = new ArrayList<>();
         pIds.add(PERSONA_NONE);
         personaNames.add(t(ModLanguageData.Keys.SUMMON_PERSONA_NONE));
-        for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
+        for (ServerLibraries.Persona p : ServerLibraries.personas()) {
             pIds.add(p.id());
             personaNames.add(p.name());
         }
@@ -155,7 +158,7 @@ public final class CompanionEditPanel extends ModalCard {
             ids.add("");
             provNames.add(t(ModLanguageData.Keys.EDIT_PROVIDER_UNBOUND));
         }
-        for (var e : ProviderLibrary.instance().list()) {
+        for (var e : ServerLibraries.providers()) {
             ids.add(e.id());
             provNames.add(e.name());
         }

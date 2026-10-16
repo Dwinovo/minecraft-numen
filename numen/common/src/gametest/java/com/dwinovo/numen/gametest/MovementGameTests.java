@@ -341,7 +341,7 @@ public class MovementGameTests {
         StringBuilder told = new StringBuilder();
         succeedWhen(helper, () -> {
             helper.assertTrue(registry.find(uuid).taskName().isBlank(), "the task that cannot be replayed is still on record");
-            for (var entry : com.dwinovo.numen.api.entity.EventOutbox.get(server).peek(uuid)
+            for (var entry : com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).orElseThrow().inbox()
                     .takeEntries(System.currentTimeMillis())) {
                 told.append(entry.text());
             }

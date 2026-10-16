@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,7 +46,7 @@ class LibrariesTest {
                 owner -> prefs.computeIfAbsent(owner, id -> new OwnerPrefs(new com.dwinovo.numen.api.store.JsonDoc(
                         dir.resolve("players").resolve(id.toString()).resolve("prefs.json"),
                         com.dwinovo.numen.api.store.JsonDoc.Format.of(1), Io.direct(e -> { })))),
-                providers, new Libraries.ServerConfig() {
+                owner -> List.of(), providers, new Libraries.ServerConfig() {
             @Override
             public String proxy() {
                 return config.get("proxy");

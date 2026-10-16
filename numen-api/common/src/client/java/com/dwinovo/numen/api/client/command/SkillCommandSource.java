@@ -2,9 +2,8 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.agent.skill.SkillInfo;
-import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,20 +11,19 @@ import java.util.List;
 /**
  * 每个技能一条命令:{@code /build 在河边盖个木屋}。
  *
- * <p>按当前技能库现算——主人往 {@code config/numen/skills} 里丢个目录、或者在面板里
+ * <p>按服务器上当前的技能表现算(技能目录是服务器全局的)——往 {@code config/numen/skills} 里丢个目录、或者管理员在面板里
  * 把某个技能关掉,命令表跟着变,不用重启也不用去哪儿登记。
  */
 final class SkillCommandSource implements CommandSource {
 
     @Override
     public List<ChatCommand> commands(CompanionView loop) {
-        SkillRegistry registry = SkillRegistry.instance();
         List<ChatCommand> out = new ArrayList<>();
-        for (SkillInfo info : registry.all()) {
+        for (ServerLibraries.Skill skill : ServerLibraries.skills()) {
             // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
             // 否则打得出来、按下去却说"已经不在了"。
-            if (!registry.isDisabled(info.name())) {
-                out.add(new SkillCommand(info.name()));
+            if (skill.enabled()) {
+                out.add(new SkillCommand(skill.name()));
             }
         }
         return out;
@@ -34,7 +32,7 @@ final class SkillCommandSource implements CommandSource {
     /**
      * 一条技能命令。
      *
-     * <p>只记名字不记 {@link SkillInfo}:正文要在<b>执行那一刻</b>去库里现取,否则
+     * <p>只记名字:正文由服务端在<b>执行那一刻</b>从技能目录里现取并展开,否则
      * 主人刚改过的 SKILL.md 不会生效,而补全列表是很早以前建的。
      */
     private record SkillCommand(String skill) implements ChatCommand {
@@ -46,8 +44,8 @@ final class SkillCommandSource implements CommandSource {
 
         @Override
         public String description() {
-            String desc = SkillRegistry.instance().get(skill)
-                    .map(SkillInfo::description).orElse(null);
+            String desc = ServerLibraries.skills().stream().filter(s -> s.name().equals(skill))
+                    .map(ServerLibraries.Skill::description).findFirst().orElse(null);
             return desc == null || desc.isBlank() ? I18n.get(Keys.CMD_SKILL) : desc;
         }
 
@@ -70,8 +68,8 @@ final class SkillCommandSource implements CommandSource {
          */
         @Override
         public String run(CompanionView loop, String args) {
-            SkillInfo info = SkillRegistry.instance().get(skill).orElse(null);
-            if (info == null) {
+            boolean there = ServerLibraries.skills().stream().anyMatch(s -> s.name().equals(skill) && s.enabled());
+            if (!there) {
                 return I18n.get(Keys.CMD_SKILL_GONE, skill);
             }
             loop.submitSkill(ChatCommands.PREFIX + skill + (args.isBlank() ? "" : " " + args), skill, args);

@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.skin.SkinLibrary;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
@@ -13,9 +15,10 @@ import com.dwinovo.numen.api.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.persona.PersonaLibrary;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
+
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -100,8 +103,8 @@ public final class SummonPanel extends ModalCard {
 
     @Override
     protected void layout(int top) {
-        // 人设下拉的数据源是 persona/ 目录:每次打开召唤面板重扫一遍。
-        PersonaLibrary.instance().reload();
+        // 人设下拉的数据源是服务器上他的 persona/ 目录:每次打开召唤面板让服务端重扫一遍
+        RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
         title(t("numen.summon.title"));
         coverTop = top;
         nameField = field(coverRight(), coverFieldY(top), coverRightW(), t(ModLanguageData.Keys.SUMMON_NAME),
@@ -114,7 +117,7 @@ public final class SummonPanel extends ModalCard {
         List<String> pIds = new ArrayList<>();
         pIds.add(PERSONA_NONE);
         personaNames.add(t(ModLanguageData.Keys.SUMMON_PERSONA_NONE));
-        for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
+        for (ServerLibraries.Persona p : ServerLibraries.personas()) {
             pIds.add(p.id());
             personaNames.add(p.name());
         }
@@ -130,7 +133,7 @@ public final class SummonPanel extends ModalCard {
         // 模型配置必选(无默认项无兜底):库空则这一行写"没有——去设置里新建"(警告色),点它跳去新建。
         List<String> provNames = new ArrayList<>();
         List<String> ids = new ArrayList<>();
-        for (var e : ProviderLibrary.instance().list()) {
+        for (var e : ServerLibraries.providers()) {
             ids.add(e.id());
             provNames.add(e.name());
         }

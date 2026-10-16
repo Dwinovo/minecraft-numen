@@ -183,6 +183,11 @@ public final class RemoteCompanion implements CompanionView {
     }
 
     @Override
+    public int messageCount() {
+        return state.messages();
+    }
+
+    @Override
     public List<ConvoLog.Line> display() {
         return java.util.Collections.unmodifiableList(lines);
     }

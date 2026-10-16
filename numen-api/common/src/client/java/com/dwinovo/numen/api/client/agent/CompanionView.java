@@ -73,6 +73,9 @@ public interface CompanionView {
     /** 她此刻在哪个会话里(最后一次是被哪个会话叫醒的);{@code null} = 就他俩。 */
     String conversation();
 
+    /** 她此刻的上下文里有几条消息。 */
+    int messageCount();
+
     /** 她自己那本日志里已经读到手的面板行,从老到新。 */
     List<ConvoLog.Line> display();
 

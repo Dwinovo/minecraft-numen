@@ -1,15 +1,18 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
 
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.mcp.server.McpMode;
-import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.google.gson.JsonObject;
 import com.dwinovo.numen.api.client.platform.ClientServices;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
@@ -108,31 +111,31 @@ public final class SettingsView {
     }
 
     // ---- 模型配置列表:通用 LibraryListPanel(ListView 行 + ConfirmDialog 删除闸) ----
-    private LibraryListPanel<com.dwinovo.numen.api.agent.llm.ProviderLibrary.Entry> profileList;
+    private LibraryListPanel<ServerLibraries.Provider> profileList;
 
-    private LibraryListPanel<com.dwinovo.numen.api.agent.llm.ProviderLibrary.Entry> profileList() {
+    /** 服务器上的模型档案。key 花服主的钱:只有管理员能新建、改、删,别人只能给自己的同伴选一个。 */
+    private LibraryListPanel<ServerLibraries.Provider> profileList() {
         if (profileList == null) {
-            profileList = new LibraryListPanel<>(
-                    ModLanguageData.Keys.PROVIDER_ADD,
+            boolean admin = RemoteCompanions.admin();
+            profileList = new LibraryListPanel<ServerLibraries.Provider>(
+                    admin ? ModLanguageData.Keys.PROVIDER_ADD : null,
                     ModLanguageData.Keys.PROVIDER_EMPTY,
-                    () -> com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().list(),
+                    ServerLibraries::providers,
                     e -> {
-                        var p = e.profile();
-                        boolean hasKey = nb(p.apiKey());
-                        String meta = (nb(p.provider()) ? p.provider() : "?") + " · "
-                                + (nb(p.model()) ? p.model() : "?")
-                                + (hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
+                        boolean hasKey = e.hasKey();
+                        String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
+                                + (nb(e.model()) ? e.model() : "?")
+                                + (!admin || hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
                         // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                com.dwinovo.numen.api.client.agent.CompanionHome
-                                        .binding(host.uuid()).providerId());
-                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, !hasKey, marked);
+                                CompanionViews.getOrCreate(host.uuid()).providerEntryId());
+                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, admin && !hasKey, marked);
                     },
-                    e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
-                            e.name() == null ? "" : e.name()).getString(),
-                    e -> com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().remove(e.id()),
-                    this::beginNewProvider,
-                    this::beginEditProvider)
+                    admin ? e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
+                            e.name() == null ? "" : e.name()).getString() : null,
+                    admin ? e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id()) : null,
+                    admin ? this::beginNewProvider : null,
+                    admin ? this::beginEditProvider : null)
                     // 换绑走 setProviderEntry(下一次请求即生效);不许解绑——同伴必须有端点
                     .withBind(e -> {
                         if (host.uuid() != null) {
@@ -198,13 +201,8 @@ public final class SettingsView {
     }
 
     private void onProfileSave(ProfileFormPanel.Draft d) {
-        var lib = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance();
-        if (providerEditId != null) {
-            lib.update(new com.dwinovo.numen.api.agent.llm.ProviderLibrary.Entry(
-                    providerEditId, d.name.trim(), d.toProfile()));
-        } else {
-            lib.create(d.name.trim(), d.toProfile());
-        }
+        RemoteCompanions.library().put(Libraries.PROVIDER, ProviderLibrary.entryToJson(
+                new ProviderLibrary.Entry(providerEditId, d.name.trim(), d.toProfile())));
         addingProvider = false;
         providerEditId = null;
         host.rebuild();
@@ -239,6 +237,9 @@ public final class SettingsView {
     // ---- MCP 分区:NumenUI McpFormPanel + LibraryListPanel(行内启停/状态点/tooltip) ----
     private boolean addingMcp;
     private McpFormPanel mcpForm;
+    /** 把授权完成后的回调网址贴回来的那张小卡。 */
+    private boolean pastingAuth;
+    private McpAuthFormPanel mcpAuthForm;
     private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
     /** 分区名:与 Section 声明顺序严格对应。 */
@@ -331,7 +332,7 @@ public final class SettingsView {
 
     /** 任一新建/编辑表单在场(表单模态)——屏幕据此屏蔽背景交互。 */
     public boolean formActive() {
-        return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp;
+        return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp || pastingAuth;
     }
 
     /** 在场的那张表单里有下拉或选择框开着。人设、MCP 表单没有弹层。 */
@@ -353,6 +354,7 @@ public final class SettingsView {
         if (skinForm != null) skinForm.cancelPending();
         addingPersona = false; personaEditId = null;
         addingMcp = false;
+        pastingAuth = false;
         host.rebuild();
         return true;
     }
@@ -457,9 +459,19 @@ public final class SettingsView {
         leaving = false;
         pushPx = 0f;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
-        if (s == Section.PERSONA) {
-            // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
-            PersonaLibrary.instance().reload();
+        // 列表面板按进页时的身份(管理员还是普通玩家)搭,每次进页重搭;服务器上的表要最新的
+        profileList = null;
+        personaListPanel = null;
+        mcpListPanel = null;
+        skillsListPanel = null;
+        switch (s) {
+            case PROVIDER -> RemoteCompanions.library().ask(Libraries.PROVIDER);
+            // 人设是服务器上他目录里的 .md 文件:进页先让服务端重扫,外部编辑器的修改即时可见。
+            case PERSONA -> RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
+            case MCP -> RemoteCompanions.library().ask(Libraries.MCP_CLIENT);
+            case SKILLS -> RemoteCompanions.library().ask(Libraries.SKILL);
+            case BRAIN -> RemoteCompanions.library().ask(Libraries.MCP_SERVER);
+            default -> { }
         }
         resetSectionState();
         host.rebuild();
@@ -493,6 +505,7 @@ public final class SettingsView {
     private void resetSectionState() {
         cardBody = null;   // 表单卡随分区一起离开,不在别的分区上淡出
         addingMcp = false;
+        pastingAuth = false;
         addingPersona = false;
         personaEditId = null;
         addingProvider = false;
@@ -518,6 +531,7 @@ public final class SettingsView {
                 mcpListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingMcp) buildMcpForm();
+                if (pastingAuth) buildMcpAuthForm();
             }
             case PERSONA -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
@@ -664,25 +678,23 @@ public final class SettingsView {
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
     // ---- 人格列表:通用 LibraryListPanel + 克隆(预设行点了就是克隆)+ 标题行 ↻ 重扫 ----
-    private LibraryListPanel<PersonaLibrary.Persona> personaListPanel;
+    private LibraryListPanel<ServerLibraries.Persona> personaListPanel;
 
-    private LibraryListPanel<PersonaLibrary.Persona> personaListPanel() {
+    private LibraryListPanel<ServerLibraries.Persona> personaListPanel() {
         if (personaListPanel == null) {
             personaListPanel = new LibraryListPanel<>(
                     "numen.persona.add", "numen.persona.empty",
-                    () -> PersonaLibrary.instance().list(),
+                    ServerLibraries::personas,
                     p -> {
-                        String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
-                        String meta = (badge + p.text()).replace('\n', ' ');
-                        // 行尾勾 = 本同伴的人设;预设行同样可绑
+                        String meta = p.text().replace('\n', ' ');
+                        // 行尾勾 = 本同伴的人设
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
-                                com.dwinovo.numen.api.client.agent.CompanionHome
-                                        .binding(host.uuid()).personaId());
-                        return new LibraryListPanel.Row(p.name(), meta, false, marked, p.preset());
+                                CompanionViews.getOrCreate(host.uuid()).personaId());
+                        return new LibraryListPanel.Row(p.name(), meta, false, marked, false);
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
-                    p -> PersonaLibrary.instance().remove(p.id()),
+                    p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id()),
                     () -> {
                         addingPersona = true;
                         personaEditId = null;
@@ -702,12 +714,23 @@ public final class SettingsView {
                                     CompanionViews.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
-                    .withClone(p -> PersonaLibrary.instance().create(
-                            I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.PERSONA_COPY, p.name()), p.text()))
+                    .withClone(p -> savePersona(null, I18n.get(ModLanguageData.Keys.PERSONA_COPY, p.name()), p.text()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
-                    .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
+                    .withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.PERSONA,
+                            Libraries.RELOAD, new JsonObject()));
         }
         return personaListPanel;
+    }
+
+    /** 存一条人设:{@code id} 为 null 是新建。服务端存,改名时它把在用的同伴一起改指。 */
+    private static void savePersona(String id, String name, String text) {
+        JsonObject body = new JsonObject();
+        if (id != null) {
+            body.addProperty("id", id);
+        }
+        body.addProperty("name", name);
+        body.addProperty("text", text);
+        RemoteCompanions.library().put(Libraries.PERSONA, body);
     }
 
     /** 表单卡里的 NumenUI 人格表单(名称 + 多行正文编辑器);卡壳照旧 formModal。 */
@@ -729,25 +752,7 @@ public final class SettingsView {
     }
 
     private void onPersonaSave(PersonaFormPanel.Draft d) {
-        String name = d.name.trim();
-        String text = d.text.trim();
-        var lib = PersonaLibrary.instance();
-        if (personaEditId != null) {
-            PersonaLibrary.Persona saved = lib.update(personaEditId, name, text);
-            // 改正文不需要做任何事:同伴只记 id,正文用时去库里现取,编辑即刻
-            // 对所有同伴生效(不管它加载没加载)。这里只处理改名——人设的 id
-            // 就是文件名,改名等于换了身份,得把在用的同伴重新指过去。
-            if (saved != null && !saved.id().equals(personaEditId)) {
-                for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
-                    CompanionView l = CompanionViews.get(cu).orElse(null);
-                    if (l != null && personaEditId.equals(l.personaId())) {
-                        l.setPersona(saved.id());
-                    }
-                }
-            }
-        } else {
-            lib.create(name, text);
-        }
+        savePersona(personaEditId, d.name.trim(), d.text.trim());
         addingPersona = false;
         personaEditId = null;
         personaDraft = new PersonaFormPanel.Draft();
@@ -770,46 +775,84 @@ public final class SettingsView {
         return themePanel;
     }
 
-    private LibraryListPanel<com.dwinovo.numen.api.mcp.client.McpClientManager.ServerHandle> mcpListPanel;
+    private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel;
 
-    private LibraryListPanel<com.dwinovo.numen.api.mcp.client.McpClientManager.ServerHandle> mcpListPanel() {
+    /** 接进来的 MCP 服务器。配置(地址、令牌、命令行)是管理员的事;别人只看得到名字、连没连上、工具数。 */
+    private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel() {
         if (mcpListPanel == null) {
-            mcpListPanel = new LibraryListPanel<>(
-                    "numen.mcp.add", "numen.mcp.empty",
-                    com.dwinovo.numen.api.mcp.client.McpClientManager::servers,
+            boolean admin = RemoteCompanions.admin();
+            mcpListPanel = new LibraryListPanel<ServerLibraries.McpClientRow>(
+                    admin ? "numen.mcp.add" : null, "numen.mcp.empty",
+                    ServerLibraries::mcpClients,
                     h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
                             h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED, null),
-                    h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
-                    h -> com.dwinovo.numen.api.mcp.client.McpClientManager.deleteServer(h.name()),
-                    () -> {
+                    admin ? h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString() : null,
+                    admin ? h -> mcpRequest(Libraries.DELETE, h.name()) : null,
+                    admin ? () -> {
                         addingMcp = true;
                         mcpDraft = new McpFormPanel.Draft();
                         host.rebuild();
-                    },
-                    h -> beginEditMcp(h.name()))
-                    .withRowIcon(8, (s, h, ix, iy, size) ->
-                            s.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h.status())))
-                    .withRowToggle(
-                            h -> h.toggledOn(),
-                            h -> {
-                                var st = h.status();
-                                // 连接中/已连接 → 关;禁用/失败 → (重)连(失败的点一下即重试)
-                                if (st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTED
-                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTING
-                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.AUTHORIZING) {
-                                    com.dwinovo.numen.api.mcp.client.McpClientManager.disableServer(h.name());
-                                } else {
-                                    com.dwinovo.numen.api.mcp.client.McpClientManager.enableServer(h.name());
-                                }
-                            });
+                    } : null,
+                    admin ? h -> beginEditMcp(h) : null);
+            if (admin) {
+                mcpListPanel.withTitleAction(I18n.get("numen.mcp.paste_auth"), () -> {
+                            pastingAuth = true;
+                            host.rebuild();
+                        })
+                        .withRowIcon(8, (s, h, ix, iy, size) ->
+                                s.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h)))
+                        .withRowToggle(
+                                h -> h.status() != com.dwinovo.numen.api.mcp.client.McpClientManager.Status.DISABLED,
+                                h -> {
+                                    var st = h.status();
+                                    // 连接中/等授权/已连接 → 关;禁用/失败 → (重)连(失败的点一下即重试)
+                                    boolean on = st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTED
+                                            || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTING
+                                            || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.AUTHORIZING;
+                                    mcpRequest(on ? Libraries.DISABLE : Libraries.ENABLE, h.name());
+                                    if (!on) {
+                                        McpAuthPrompt.expect(h.name());
+                                    }
+                                });
+            }
         }
         return mcpListPanel;
+    }
+
+    /** 管理员对一台 MCP 服务器的操作(删、接上、断开)。 */
+    private static void mcpRequest(String op, String name) {
+        JsonObject body = new JsonObject();
+        body.addProperty("name", name);
+        RemoteCompanions.library().request(Libraries.MCP_CLIENT, op, body);
     }
 
     /** 表单卡里的 NumenUI MCP 表单(类型切行/内联校验);卡壳照旧 formModal。 */
     private void buildMcpForm() {
         mcpForm().open(mcpDraft);
         mcpForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private void buildMcpAuthForm() {
+        mcpAuthForm().open();
+        mcpAuthForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private McpAuthFormPanel mcpAuthForm() {
+        if (mcpAuthForm == null) {
+            mcpAuthForm = new McpAuthFormPanel(
+                    url -> {
+                        JsonObject body = new JsonObject();
+                        body.addProperty("url", url);
+                        RemoteCompanions.library().request(Libraries.MCP_CLIENT, Libraries.AUTH, body);
+                        pastingAuth = false;
+                        host.rebuild();
+                    },
+                    () -> {
+                        pastingAuth = false;
+                        host.rebuild();
+                    });
+        }
+        return mcpAuthForm;
     }
 
     private McpFormPanel mcpForm() {
@@ -829,8 +872,9 @@ public final class SettingsView {
         // When editing, preserve the server's on/off state (a plain edit shouldn't flip its toggle).
         boolean enabled = true;
         if (d.editOriginal != null) {
-            var orig = com.dwinovo.numen.api.mcp.client.McpClientManager.spec(d.editOriginal);
-            if (orig != null) enabled = orig.enabled();
+            enabled = ServerLibraries.mcpClients().stream()
+                    .filter(h -> h.name().equals(d.editOriginal) && h.spec() != null)
+                    .map(h -> h.spec().enabled()).findFirst().orElse(true);
         }
         com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec spec;
         if (d.stdio) {
@@ -844,11 +888,13 @@ public final class SettingsView {
             spec = new com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(d.extra),
                     "", List.of(), java.util.Map.of(), enabled, 20, 120);
         }
-        com.dwinovo.numen.api.mcp.client.McpClientManager.upsertServer(spec);
-        // Renamed while editing → upsert wrote the new-named entry; drop the old one.
+        JsonObject body = com.dwinovo.numen.api.mcp.client.McpClientConfig.serverToJson(spec);
+        // 改了名:服务端存新名字的同时把旧的摘掉
         if (d.editOriginal != null && !d.editOriginal.equals(name)) {
-            com.dwinovo.numen.api.mcp.client.McpClientManager.deleteServer(d.editOriginal);
+            body.addProperty("replaces", d.editOriginal);
         }
+        RemoteCompanions.library().put(Libraries.MCP_CLIENT, body);
+        McpAuthPrompt.expect(name);
         addingMcp = false;
         mcpDraft = new McpFormPanel.Draft();
         host.rebuild();
@@ -880,26 +926,30 @@ public final class SettingsView {
     }
 
     // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除,一行一个技能,整行点了就翻开关) ----
-    private LibraryListPanel<com.dwinovo.numen.api.agent.skill.SkillInfo> skillsListPanel;
+    private LibraryListPanel<ServerLibraries.Skill> skillsListPanel;
 
-    private LibraryListPanel<com.dwinovo.numen.api.agent.skill.SkillInfo> skillsListPanel() {
+    /** 服务器上的技能:谁都看得到有哪些,开关只有管理员能拨。 */
+    private LibraryListPanel<ServerLibraries.Skill> skillsListPanel() {
         if (skillsListPanel == null) {
-            skillsListPanel = new LibraryListPanel<com.dwinovo.numen.api.agent.skill.SkillInfo>(
+            skillsListPanel = new LibraryListPanel<ServerLibraries.Skill>(
                     null, "numen.skill.empty",
-                    () -> new ArrayList<>(com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().all()),
+                    ServerLibraries::skills,
                     sk -> {
                         String desc = sk.description() == null
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, null, null, null)
-                    .withRowToggle(
-                            sk -> !com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
-                            sk -> {
-                                var reg = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance();
-                                reg.setEnabled(sk.name(), reg.isDisabled(sk.name()));   // flip
-                            })
-                    .withTitleAction(I18n.get("numen.skill.open_dir"), SettingsView::openSkillsFolder);
+                    null, null, null, null);
+            if (RemoteCompanions.admin()) {
+                skillsListPanel.withRowToggle(
+                        sk -> sk.enabled(),
+                        sk -> {
+                            JsonObject body = new JsonObject();
+                            body.addProperty("name", sk.name());
+                            RemoteCompanions.library().request(Libraries.SKILL,
+                                    sk.enabled() ? Libraries.DISABLE : Libraries.ENABLE, body);
+                        });
+            }
         }
         return skillsListPanel;
     }
@@ -908,7 +958,7 @@ public final class SettingsView {
         skillsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
         // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
-        var sk = skillsListPanel().entryAtBody(mouseX, mouseY);
+        ServerLibraries.Skill sk = skillsListPanel().entryAtBody(mouseX, mouseY);
         if (sk != null && sk.description() != null) {
             host.tip(List.of(Component.literal(sk.name()), Nb.colored(sk.description(), TXT_MUTED)),
                     mouseX, mouseY);
@@ -1194,10 +1244,10 @@ public final class SettingsView {
         selectSection(Section.PROVIDER);
     }
 
-    private void beginEditProvider(com.dwinovo.numen.api.agent.llm.ProviderLibrary.Entry e) {
+    private void beginEditProvider(ServerLibraries.Provider e) {
         addingProvider = true;
         providerEditId = e.id();
-        providerDraft = ProfileFormPanel.Draft.of(e.name(), e.profile());
+        providerDraft = ProfileFormPanel.Draft.of(e.name(), e.full().profile());
         host.rebuild();
     }
 
@@ -1210,6 +1260,10 @@ public final class SettingsView {
             formCard(Component.translatable("numen.mcp.title"), mcpForm()::render);
             return;
         }
+        if (pastingAuth) {
+            formCard(Component.translatable("numen.mcp.auth_title"), mcpAuthForm()::render);
+            return;
+        }
         // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾开关上不弹)。
         var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
         if (hovered != null) {
@@ -1217,8 +1271,8 @@ public final class SettingsView {
         }
     }
 
-    private int mcpDotColor(com.dwinovo.numen.api.mcp.client.McpClientManager.Status s) {
-        return switch (s) {
+    private int mcpDotColor(ServerLibraries.McpClientRow h) {
+        return switch (h.status()) {
             case CONNECTED -> OK;
             case CONNECTING, AUTHORIZING -> RUN;
             case FAILED -> FAIL;
@@ -1226,27 +1280,31 @@ public final class SettingsView {
         };
     }
 
-    private String mcpMeta(com.dwinovo.numen.api.mcp.client.McpClientManager.ServerHandle h) {
+    private String mcpMeta(ServerLibraries.McpClientRow h) {
+        if (!h.admin()) {
+            return I18n.get(h.connected() ? "numen.mcp.connected" : "numen.mcp.disabled", "mcp", h.toolCount());
+        }
+        String type = h.spec().isStdio() ? "stdio" : "http";
         return switch (h.status()) {
-            case CONNECTED -> I18n.get("numen.mcp.connected", h.type(), h.toolCount());
-            case CONNECTING -> I18n.get("numen.mcp.connecting", h.type());
+            case CONNECTED -> I18n.get("numen.mcp.connected", type, h.toolCount());
+            case CONNECTING -> I18n.get("numen.mcp.connecting", type);
             case AUTHORIZING -> I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.MCP_WAITING_BROWSER);
-            case FAILED -> I18n.get("numen.mcp.failed", h.type());
-            case DISABLED -> I18n.get("numen.mcp.disabled", h.type());
+            case FAILED -> I18n.get("numen.mcp.failed", type);
+            case DISABLED -> I18n.get("numen.mcp.disabled", type);
         };
     }
 
-    private List<Component> mcpTooltip(com.dwinovo.numen.api.mcp.client.McpClientManager.ServerHandle h) {
+    private List<Component> mcpTooltip(ServerLibraries.McpClientRow h) {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal(h.name()));
-        var spec = com.dwinovo.numen.api.mcp.client.McpClientManager.spec(h.name());
-        if (spec != null) {
+        if (h.admin()) {
+            var spec = h.spec();
             lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_MUTED));
-        }
-        if (h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED && !h.error().isBlank()) {
-            lines.add(Nb.colored(h.error(), FAIL));
-        } else if (!h.toolNames().isEmpty()) {
-            lines.add(Nb.colored(String.join(", ", h.toolNames()), TXT_MUTED));
+            if (h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED && !h.error().isBlank()) {
+                lines.add(Nb.colored(h.error(), FAIL));
+            } else if (!h.tools().isEmpty()) {
+                lines.add(Nb.colored(String.join(", ", h.tools()), TXT_MUTED));
+            }
         }
         return lines;
     }
@@ -1263,7 +1321,7 @@ public final class SettingsView {
         if (addingPersona) formCard(Component.translatable("numen.persona.title"), personaForm()::render);
     }
 
-    private void beginEditPersona(PersonaLibrary.Persona p) {
+    private void beginEditPersona(ServerLibraries.Persona p) {
         addingPersona = true;
         personaEditId = p.id();
         var d = new PersonaFormPanel.Draft();
@@ -1337,7 +1395,11 @@ public final class SettingsView {
                 && mcpForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        if (section == Section.MCP && !addingMcp
+        if (section == Section.MCP && pastingAuth
+                && mcpAuthForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.MCP && !addingMcp && !pastingAuth
                 && mcpListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
@@ -1369,9 +1431,9 @@ public final class SettingsView {
     }
 
     /** Open the add-form PRE-FILLED with {@code name}'s current spec — saving REPLACES the entry. */
-    private void beginEditMcp(String name) {
-        var spec = com.dwinovo.numen.api.mcp.client.McpClientManager.spec(name);
-        if (spec == null) return;
+    private void beginEditMcp(ServerLibraries.McpClientRow row) {
+        var spec = row.spec();
+        String name = row.name();
         addingMcp = true;
         var d = new McpFormPanel.Draft();
         d.editOriginal = name;
@@ -1442,7 +1504,7 @@ public final class SettingsView {
         if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
-        if (section == Section.MCP && !addingMcp
+        if (section == Section.MCP && !addingMcp && !pastingAuth
                 && mcpListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
@@ -1497,6 +1559,7 @@ public final class SettingsView {
         if (section == Section.BRAIN) return brainPanel().keyPressed(keyCode, modifiers);
         if (section == Section.MCP) {
             if (addingMcp) return mcpForm().keyPressed(keyCode, modifiers);
+            if (pastingAuth) return mcpAuthForm().keyPressed(keyCode, modifiers);
             return mcpListPanel().keyPressed(keyCode, modifiers);
         }
         return false;
@@ -1510,6 +1573,7 @@ public final class SettingsView {
         if (section == Section.STT) return sttPanel().charTyped(ch);
         if (section == Section.BRAIN) return brainPanel().charTyped(ch);
         if (section == Section.MCP && addingMcp) return mcpForm().charTyped(ch);
+        if (section == Section.MCP && pastingAuth) return mcpAuthForm().charTyped(ch);
         return false;
     }
 

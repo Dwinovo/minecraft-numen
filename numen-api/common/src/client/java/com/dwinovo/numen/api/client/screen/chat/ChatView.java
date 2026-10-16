@@ -25,8 +25,6 @@ import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.markdown.Markdown;
 import com.dwinovo.numen.api.client.ui.richtext.Doc;
 import com.dwinovo.numen.api.client.ui.richtext.RichLayout;
-import com.dwinovo.numen.api.mcp.server.McpMode;
-import com.dwinovo.numen.api.mcp.server.McpTranscript;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
@@ -299,6 +297,7 @@ public final class ChatView {
         scrollTarget = 0;
         pinBottom = true;
         snapNext = true;
+        topKey = null;
         lastFrameMs = 0;
         live.clear();
         expandedGroups.clear();
@@ -383,12 +382,35 @@ public final class ChatView {
             long seen = Conversations.instance().lastSeen(opened);
             unreadSince = ConversationPreview.unread(opened, seen) > 0 ? seen : Long.MAX_VALUE;
         }
-        renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
+        List<Block> blocks = build(bubbleMaxW(w));
+        keepViewOnPrepend(blocks);
+        renderBlocks(g, x, y, w, h, blocks, dt);
         // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
         Conversation c = conv.get();
         var latest = ConversationPreview.last(c);
         if (pinBottom && latest != null) Conversations.instance().markSeen(c, latest.ts());
         renderJump(g, x, y, h, dt, ConversationPreview.unread(c, Conversations.instance().lastSeen(c)));
+    }
+
+    /** 上一帧记录最老那条的编号和内容总高:往上翻出更早的一页接在最前面时,据此把视图挪开新长出来的高度。 */
+    private String topKey;
+    private int topContent;
+
+    /**
+     * 更早的一页接到了记录最前面:内容从上面长高了,视图按长出的高度往下挪,主人正读的那条留在原处。
+     * 停在最底的(新话从下面来)不挪,那边本来就跟着底走。
+     */
+    private void keepViewOnPrepend(List<Block> blocks) {
+        List<Transcript.Entry> source = transcript();
+        String key = source.isEmpty() ? null : String.valueOf(source.get(0).ids());
+        int content = totalHeight(blocks);
+        if (!pinBottom && topKey != null && key != null && !key.equals(topKey) && content > topContent) {
+            int grew = content - topContent;
+            scrollTarget += grew;
+            scrollPos += grew;
+        }
+        topKey = key;
+        topContent = content;
     }
 
     /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来,顶上压一枚未读数。 */
@@ -499,105 +521,6 @@ public final class ChatView {
         }
     }
 
-    // ---- 外脑驱动中:聊天区画现场缓冲 ----
-
-    /** 外脑现场的头部知情区高度(标题行 + 状态行 + 分隔线)。 */
-    private static final int EXT_HEADER_H = 30;
-
-    /**
-     * 外脑驱动时的聊天区:顶上一条"谁接进来了"的知情行(主人得一眼知道这屏对面
-     * 是外接大脑),下面用<b>同一套气泡语法</b>画 {@link McpTranscript} 的现场——
-     * 主人的话右侧气泡、外脑的 say 左侧气泡、动作淡色一行。还没动静时显示接入向导。
-     */
-    public void renderExternal(GuiGraphics g, int x, int y, int w, int h) {
-        loadPalette();
-        group = false;   // 外脑现场只有她一个
-        long now = System.currentTimeMillis();
-        frameNow = now;
-        float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
-        lastFrameMs = now;
-        McpMode mcp = McpMode.instance();
-        int cx = x + EDGE;
-        int cw = w - EDGE - SB_W - 3;
-
-        line(g, I18n.get("numen.brain.console_title"), cx, y + 2, TXT);
-        String who = mcp.clientName();
-        line(g, who == null
-                        ? I18n.get("numen.brain.status_waiting")
-                        : I18n.get("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs())),
-                cx, y + 14, who == null ? FAINT : OK);
-        g.fill(cx, y + 26, cx + cw, y + 27, CHIP_FILL);
-
-        UUID id = solo();
-        if (McpTranscript.isEmpty(id)) {
-            renderConsoleGuide(g, mcp, cx, y + EXT_HEADER_H + 2, cw, who != null);
-            return;
-        }
-        renderBlocks(g, x, y + EXT_HEADER_H, w, h - EXT_HEADER_H, buildExternal(id, bubbleMaxW(w)), dt);
-        renderJump(g, x, y + EXT_HEADER_H, h - EXT_HEADER_H, dt, 0);   // 现场缓冲没有未读一说
-    }
-
-    /** 现场缓冲 → 可画的块。与 {@link #build} 同一套 Block 词汇,只是来源不同。 */
-    private List<Block> buildExternal(UUID id, int bubbleMaxW) {
-        List<Block> out = new ArrayList<>();
-        int innerW = bubbleMaxW - PAD_H * 2;
-        int chipTextW = bubbleMaxW - PAD_H * 2 - ICON_W;
-        UUID last = null;
-        for (McpTranscript.Line ln : McpTranscript.view(id)) {
-            switch (ln.kind()) {
-                case OWNER -> {
-                    out.add(bubble(true, null, rich(ln.text(), false), TXT, OWN_FILL,
-                            innerW, null, null, -1, ln.text(), null));
-                    last = OWNER;
-                }
-                case SAY -> {
-                    boolean first = !id.equals(last);
-                    out.add(bubble(false, first ? label(id) : null, rich(ln.text(), false), TXT,
-                            AI_FILL, innerW, id, null, -1, ln.text(), null));
-                    last = id;
-                }
-                case TOOL -> {
-                    boolean first = !id.equals(last);
-                    out.add(new Chip(List.of(new ChipRow(
-                            ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
-                            Nb.colored(Nb.clip(font, ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
-                                    .getVisualOrderText())), null, first ? label(id) : null, id, -1, false));
-                    last = id;
-                }
-            }
-        }
-        settleRuns(out);
-        return out;
-    }
-
-    /** 还没有调用记录时的引导:连上了就等它动手,没连过就讲怎么接。 */
-    private void renderConsoleGuide(GuiGraphics g, McpMode mcp, int cx, int cy, int cw, boolean connected) {
-        if (connected) {
-            line(g, I18n.get("numen.brain.console_empty"), cx, cy, FAINT);
-            return;
-        }
-        line(g, I18n.get("numen.brain.guide_title"), cx, cy, TXT);
-        line(g, I18n.get("numen.brain.endpoint") + ": " + mcp.endpoint(), cx, cy + 14, MUTED);
-        line(g, I18n.get("numen.brain.token") + ": "
-                        + (mcp.token().isBlank() ? I18n.get("numen.brain.token_none") : mcp.maskedToken()),
-                cx, cy + 26, MUTED);
-        int ty = cy + 44;
-        for (FormattedCharSequence l : font.split(Nb.colored(I18n.get("numen.brain.guide_step"), MUTED), cw)) {
-            draw(g, l, cx, ty);
-            ty += LINE_H + 2;
-        }
-    }
-
-    private void line(GuiGraphics g, String text, int x, int y, int color) {
-        draw(g, Nb.colored(text, color).getVisualOrderText(), x, y);
-    }
-
-    /** "12 秒前" / "3 分钟前"。 */
-    private static String sinceLabel(long stampMs) {
-        long sec = Math.max(0, (System.currentTimeMillis() - stampMs) / 1000);
-        return sec < 60 ? I18n.get("numen.brain.since_sec", sec) : I18n.get("numen.brain.since_min", sec / 60);
-    }
-
     /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
     public boolean mouseScrolled(double sy) {
         lastScrollMs = System.currentTimeMillis();
@@ -638,7 +561,6 @@ public final class ChatView {
                             net.minecraft.network.chat.ClickEvent.Action.OPEN_URL, link)));
             return true;
         }
-        if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
         for (Hit h : hits) {
             // 点在气泡顶上的引用条上:跳回被引的那句

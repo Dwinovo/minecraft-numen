@@ -58,7 +58,7 @@ public final class ServerActuator implements ExternalHands {
     @Override
     public CompletableFuture<Boolean> create(String name) {
         return asOwner(player -> SummonRequestPayload.handle(
-                new SummonRequestPayload(name == null ? "" : name.trim(), "", "", false), player));
+                new SummonRequestPayload(name == null ? "" : name.trim(), "", "", false, "", ""), player));
     }
 
     @Override

@@ -16,7 +16,13 @@ import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.mcp.server.McpConfig;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.mcp.server.McpAccessPrompt;
 import com.dwinovo.numen.api.mcp.server.McpMode;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import net.minecraft.client.gui.Font;
@@ -82,6 +88,13 @@ public final class BrainPanel {
     private int x, y, w, h;
     private int dimX, dimY, dimW, dimH;
 
+    /** 搭这一页时的宿主状态;{@code null} = 不是管理员(或服务端还没说)。配置变了才重搭,谁连着这类随时在变的不重搭。 */
+    private ServerLibraries.McpServerState builtFor;
+    /** 发出去等回执的保存:发的时候这张表被推来几次,变了就是服务端答了。 */
+    private boolean awaitingSave;
+    private long savedAtRevision;
+    private long lastAskMs;
+
     /** 手绘几条的基线(滚动层坐标,画的时候减 {@link ScrollBox#offset()})。 */
     private int endpointRow, tokenRow, lanRow;
     /** 话筒那一行的顶边(固定层):起服失败与回执胶囊落在这儿,平时空着。 */
@@ -110,9 +123,13 @@ public final class BrainPanel {
         portField = null;
         saveButton = null;
         iconButtons.clear();
-        McpMode mcp = McpMode.instance();
-        McpConfig cfg = mcp.config();
+        ServerLibraries.McpServerState st = ServerLibraries.mcpServer();
+        builtFor = st;
         Font font = Minecraft.getInstance().font;
+        if (st == null) {
+            SettingsRows.label(fixedUi, t("numen.brain.admin_only"), x, y, w);
+            return;
+        }
 
         // ---- 固定层 ----
         // 这一页叫什么在面板抬头上;第一行是一条设置:左边说开关管什么,右边是开关
@@ -120,7 +137,7 @@ public final class BrainPanel {
         // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
         // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。
         // 开关本身就是"开着还是关着",这一行不另写一句;开着时开关左边报接上没接上(见 render)。
-        Toggle tog = fixedUi.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
+        Toggle tog = fixedUi.add(new Toggle(st.enabled(), on -> put("enabled", on)));
         tog.setBounds(x + w - 24, SettingsRows.controlY(y, 11), 22, 11);
         // 总开关自成一组,和下面接入要用的东西之间一道宽缝
         SettingsRows.gap(fixedUi, x, y + SettingsRows.ROW_H, w);
@@ -131,7 +148,7 @@ public final class BrainPanel {
         footerRow = footer;
         promptW = font.width(promptLabel) + 14;
         Button prompt = fixedUi.add(new Button(promptLabel, Button.Style.ACCENT,
-                () -> copy(McpMode.instance().accessPrompt())));
+                () -> copy(accessPrompt())));
         prompt.setBounds(x, footer, promptW, NumenStyle.CONTROL_H);
         fixedUi.add(notice).setBounds(x, msgRow - 3, w, 15);
 
@@ -143,14 +160,14 @@ public final class BrainPanel {
         endpointRow = ry;
         SettingsRows.label(ui, t("numen.brain.endpoint"), x, ry, labelW());
         iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN, ry,
-                () -> copy(McpMode.instance().endpoint()));
+                () -> copy(state().endpoint()));
         ry += SettingsRows.ROW_H;
 
         tokenRow = ry;
         SettingsRows.label(ui, t("numen.brain.token"), x, ry, labelW());
         // 没令牌时复制没得复制:留在原地置灰,这一行的排布不跟着跳。
         iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN - ICON_PITCH, ry,
-                () -> copy(McpMode.instance().token())).setEnabled(!mcp.token().isBlank());
+                () -> copy(state().token())).setEnabled(!st.token().isBlank());
         iconButton(Sprites.REFRESH, t("numen.brain.regenerate"), x + w - ICON_BTN, ry,
                 this::askRegenerate);
         ry += SettingsRows.ROW_H;
@@ -167,7 +184,7 @@ public final class BrainPanel {
         // 开=0.0.0.0。玩家不必知道那五个字符,想绑具体网卡的高级用户改
         // config/numen/mcp_server.json —— 配置文件就是逃生舱。
         SettingsRows.label(ui, t("numen.brain.port"), x, ry, w - NUM_FIELD_W - 8);
-        portText = portText != null ? portText : String.valueOf(cfg.port());
+        portText = portText != null ? portText : String.valueOf(st.port());
         portField = ui.add(new TextField(portText, v -> {
             portText = v;
             refreshSaveState();
@@ -187,7 +204,7 @@ public final class BrainPanel {
 
         SettingsRows.label(ui, t("numen.brain.timeout"), x, ry, w - NUM_FIELD_W - 8);
         timeoutText = timeoutText != null ? timeoutText
-                : String.valueOf(cfg.callTimeoutSeconds());
+                : String.valueOf(st.callTimeoutSeconds());
         TextField timeoutField = ui.add(new TextField(timeoutText, v -> timeoutText = v)
                 .numeric());
         timeoutField.setBounds(x + w - RIGHT_INSET - NUM_FIELD_W, SettingsRows.controlY(ry, NumenStyle.CONTROL_H),
@@ -195,7 +212,7 @@ public final class BrainPanel {
         ry += SettingsRows.ROW_H;
 
         SettingsRows.label(ui, t("numen.brain.hidden_tools"), x, ry, HIDDEN_LABEL_W);
-        hiddenText = hiddenText != null ? hiddenText : String.join(", ", cfg.hiddenTools());
+        hiddenText = hiddenText != null ? hiddenText : String.join(", ", st.hiddenTools());
         int hiddenW = w - RIGHT_INSET - HIDDEN_LABEL_W - 8;
         TextField hiddenField = ui.add(new TextField(hiddenText, v -> hiddenText = v)
                 .placeholder(t("numen.brain.hidden_hint")));
@@ -215,8 +232,7 @@ public final class BrainPanel {
 
         SettingsRows.label(ui, I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L),
                 x, ry, w - 28);
-        Toggle quiet = ui.add(new Toggle(cfg.quietFallback(),
-                McpMode.instance()::setQuietFallback));
+        Toggle quiet = ui.add(new Toggle(st.quietFallback(), on -> put("quietFallback", on)));
         quiet.setBounds(x + w - 24, SettingsRows.controlY(ry, 11), 22, 11);
         fullH = ry + SettingsRows.ROW_H - top;
 
@@ -240,7 +256,7 @@ public final class BrainPanel {
     private static int noteBelow(int row) { return SettingsRows.controlY(row, NumenStyle.CONTROL_H) + NumenStyle.CONTROL_H + 1; }
 
     private boolean lanNow() {
-        return lanOn != null ? lanOn : McpMode.instance().config().lanExposed();
+        return lanOn != null ? lanOn : state().lanExposed();
     }
 
     /** 遮罩范围由宿主给——确认卡要盖住整个设置面板,不是只盖这个分区。 */
@@ -253,16 +269,16 @@ public final class BrainPanel {
 
     /** 端点改了且服务在跑 → 这次保存要重开服务,按钮如实说。 */
     private String saveLabel() {
-        McpConfig cfg = McpMode.instance().config();
+        ServerLibraries.McpServerState cfg = state();
         boolean endpointChanged = portValue() != cfg.port() || lanNow() != cfg.lanExposed();
-        return t(McpMode.instance().enabled() && endpointChanged
+        return t(cfg.enabled() && endpointChanged
                 ? "numen.brain.save_restart" : "numen.brain.save");
     }
 
     /** 草稿里的端口;空的或不成数 = -1(校验会拦下)。 */
     private int portValue() {
         if (portText == null) {
-            return McpMode.instance().config().port();
+            return state().port();
         }
         try {
             return Integer.parseInt(portText.strip());
@@ -284,14 +300,14 @@ public final class BrainPanel {
         int port = portValue();
         boolean portOk = port >= 1 && port <= 65535;
         portField.setError(portOk ? null : t("numen.brain.port_range"));
-        boolean tokenOk = !lanNow() || !McpMode.instance().token().isBlank();
+        boolean tokenOk = !lanNow() || !state().token().isBlank();
         saveButton.setEnabled(portOk && tokenOk);
         saveButton.setLabel(saveLabel());
     }
 
     private void save() {
-        McpConfig cfg = McpMode.instance().config();
-        List<String> hidden = new ArrayList<>();
+        ServerLibraries.McpServerState cfg = state();
+        JsonArray hidden = new JsonArray();
         for (String piece : (hiddenText == null ? "" : hiddenText).split(",")) {
             String name = piece.strip();
             if (!name.isEmpty()) hidden.add(name);
@@ -304,21 +320,50 @@ public final class BrainPanel {
                 timeout = cfg.callTimeoutSeconds();
             }
         }
-        boolean ok = McpMode.instance().applySettings(
-                lanNow() ? McpConfig.ANY_HOST : McpConfig.LOOPBACK,
-                portValue(),
-                Math.max(1, timeout),
-                hidden,
-                McpMode.instance().token());
-        if (ok) {
-            // 落地了,配置重新成为真源——草稿清空,下次 build 照配置填。
+        JsonObject body = new JsonObject();
+        body.addProperty("host", lanNow() ? McpConfig.ANY_HOST : McpConfig.LOOPBACK);
+        body.addProperty("port", portValue());
+        body.addProperty("callTimeoutSeconds", Math.max(1, timeout));
+        body.add("hiddenTools", hidden);
+        send(body);
+        awaitingSave = true;
+    }
+
+    /** 拨一个开关,只改这一项。 */
+    private void put(String key, boolean value) {
+        JsonObject body = new JsonObject();
+        body.addProperty(key, value);
+        send(body);
+    }
+
+    private void send(JsonObject body) {
+        savedAtRevision = RemoteCompanions.library().revision(Libraries.MCP_SERVER);
+        RemoteCompanions.library().put(Libraries.MCP_SERVER, body);
+    }
+
+    /** 服务端答了保存:办成,草稿作废、配置重新成为真源;没办成(最常见是端口被占),话挂回出错的那个框。 */
+    private void settleSave() {
+        if (!awaitingSave || RemoteCompanions.library().revision(Libraries.MCP_SERVER) == savedAtRevision) {
+            return;
+        }
+        awaitingSave = false;
+        String problem = RemoteCompanions.library().problem(Libraries.MCP_SERVER);
+        if (problem == null) {
             portText = timeoutText = hiddenText = null;
             lanOn = null;
             notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
-        } else {
-            // 起服失败最常见的就是端口被占用——把话挂回出错的那个框,别飘在别处
+        } else if (portField != null) {
             portField.setError(I18n.get("numen.brain.port_taken", portValue()));
         }
+    }
+
+    private static ServerLibraries.McpServerState state() {
+        return ServerLibraries.mcpServer();
+    }
+
+    private static String accessPrompt() {
+        ServerLibraries.McpServerState st = state();
+        return McpAccessPrompt.build(st.endpoint(), st.token());
     }
 
     // ---- 令牌 ----
@@ -334,23 +379,34 @@ public final class BrainPanel {
                 t("numen.brain.regen_confirm_title") + "\n" + t("numen.brain.regen_confirm_body"),
                 t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), t("numen.brain.regenerate"),
                 () -> {
-                    McpConfig cfg = McpMode.instance().config();
-                    McpMode.instance().applySettings(cfg.host(), cfg.port(),
-                            cfg.callTimeoutSeconds(), cfg.hiddenTools(), McpConfig.mintToken());
+                    put("regenerateToken", true);
                     notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
-                    build(x, y, w, h);   // 令牌从无到有时,复制钮得跟着亮起来
                 });
     }
 
     private String tokenText() {
-        McpMode mcp = McpMode.instance();
+        ServerLibraries.McpServerState mcp = state();
         return mcp.token().isBlank() ? t("numen.brain.token_none") : mcp.maskedToken();
     }
 
     // ---- 渲染 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        McpMode mcp = McpMode.instance();
+        ServerLibraries.McpServerState mcp = state();
+        // 状态页开着时每两秒向服务端要一次最新的(谁接进来了、多久前动过);配置变了才重搭
+        if (nowMs - lastAskMs > 2_000) {
+            lastAskMs = nowMs;
+            RemoteCompanions.library().ask(Libraries.MCP_SERVER);
+        }
+        settleSave();
+        if (mcp == null || !mcp.sameConfig(builtFor)) {
+            if (mcp != null || builtFor != null) build(x, y, w, h);
+            mcp = state();
+        }
+        if (mcp == null) {
+            fixedUi.render(s, c, mouseX, mouseY, nowMs);
+            return;
+        }
         if (advanced.step(nowMs)) scroll.resize(revealedH());
 
         scroll.beginClip(s);
@@ -388,7 +444,7 @@ public final class BrainPanel {
                 c.textSecondary(), false);
         // 话筒那一行平时空着,只有起服失败时说话(回执胶囊也落在这儿)。
         String err = mcp.lastError();
-        if (err != null) {
+        if (err != null && !mcp.enabled()) {
             s.drawText(TextClip.fit(s, I18n.get("numen.brain.start_failed", err), w),
                     x, msgRow, c.danger(), false);
         }
@@ -456,7 +512,7 @@ public final class BrainPanel {
     }
 
     /** 开着时的一句:等谁来接,或者谁在用、多久前活跃过。关着不说——开关自己就说明了。 */
-    private static String statusLine(McpMode mcp) {
+    private static String statusLine(ServerLibraries.McpServerState mcp) {
         String who = mcp.clientName();
         if (who == null) return t("numen.brain.status_waiting");
         return I18n.get("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs()));

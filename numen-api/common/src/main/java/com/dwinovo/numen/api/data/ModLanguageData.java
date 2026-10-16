@@ -480,16 +480,13 @@ public final class ModLanguageData {
         adder.add("numen.brain.status_connected", "%s · %s");
         adder.add("numen.brain.since_sec", "%ds ago");
         adder.add("numen.brain.since_min", "%dmin ago");
-        adder.add("numen.brain.console_title", "External brain console");
-        adder.add("numen.brain.console_empty", "Say something below, or wait for the AI to act — the conversation shows up here.");
+        adder.add("numen.brain.driving", "An external brain is driving her");
+        adder.add("numen.brain.admin_only", "Only server admins can set up the external brain.");
         adder.add("numen.brain.quiet_standby", "The external brain has gone quiet — your companion is standing by.");
         adder.add("numen.brain.quiet_fallback", "The external brain has gone quiet — the built-in brain is taking over until it returns.");
         adder.add("numen.brain.advanced", "Advanced");
         adder.add("numen.brain.back_active", "The external brain is back.");
         adder.add("numen.brain.quiet_toggle", "Disconnect after %s min of silence");
-        adder.add("numen.brain.guide_title", "Connect an external AI");
-        adder.add("numen.brain.guide_step",
-                "Copy the setup prompt in Settings → MCP Brain, paste it to your AI, and it configures the rest.");
         adder.add("numen.brain.regenerate", "New token");
         adder.add("numen.brain.regen_confirm_title", "Issue a new token?");
         adder.add("numen.brain.regen_confirm_body",
@@ -588,6 +585,9 @@ public final class ModLanguageData {
         adder.add("numen.mcp.form_command", "Command");
         adder.add("numen.mcp.form_header", "Header (optional)");
         adder.add("numen.mcp.form_env", "Env vars (optional)");
+        adder.add("numen.mcp.paste_auth", "Paste authorization address");
+        adder.add("numen.mcp.auth_title", "Finish authorization");
+        adder.add("numen.mcp.auth_hint", "Paste the address from the browser's address bar after you approved (it carries the code).");
         adder.add("numen.mcp.delete_confirm", "Delete %s?");
         adder.add("numen.mcp.connected", "%1$s · %2$s tools");
         adder.add("numen.mcp.connecting", "%s · connecting…");
@@ -1077,16 +1077,13 @@ public final class ModLanguageData {
         adder.add("numen.brain.status_connected", "%s · %s");
         adder.add("numen.brain.since_sec", "%d 秒前");
         adder.add("numen.brain.since_min", "%d 分钟前");
-        adder.add("numen.brain.console_title", "外接大脑控制台");
-        adder.add("numen.brain.console_empty", "在下面开口说话,或等外部 AI 动手——对话现场会出现在这里。");
+        adder.add("numen.brain.driving", "外接大脑正在驾驶她");
+        adder.add("numen.brain.admin_only", "只有服务器管理员能设置外接大脑。");
         adder.add("numen.brain.quiet_standby", "外接大脑没动静了——她先安静待命。");
         adder.add("numen.brain.quiet_fallback", "外接大脑没动静了——内置大脑先接管,它回来就交还。");
         adder.add("numen.brain.advanced", "高级设置");
         adder.add("numen.brain.back_active", "外接大脑回来了。");
         adder.add("numen.brain.quiet_toggle", "%s 分钟无响应自动断开");
-        adder.add("numen.brain.guide_title", "接入外部 AI");
-        adder.add("numen.brain.guide_step",
-                "到「设置 → 外接大脑」复制接入提示词,粘贴给你的 AI,剩下的它会自己配好。");
         adder.add("numen.brain.regenerate", "重新生成");
         adder.add("numen.brain.regen_confirm_title", "换一个新令牌?");
         adder.add("numen.brain.regen_confirm_body",
@@ -1183,6 +1180,9 @@ public final class ModLanguageData {
         adder.add("numen.mcp.form_command", "命令");
         adder.add("numen.mcp.form_header", "请求头(可选)");
         adder.add("numen.mcp.form_env", "环境变量(可选)");
+        adder.add("numen.mcp.paste_auth", "粘贴授权地址");
+        adder.add("numen.mcp.auth_title", "完成授权");
+        adder.add("numen.mcp.auth_hint", "批准授权后,把浏览器地址栏里的网址贴在这里(它带着授权码)。");
         adder.add("numen.mcp.delete_confirm", "删除 %s？");
         adder.add("numen.mcp.connected", "%1$s · %2$s 工具");
         adder.add("numen.mcp.connecting", "%s · 连接中…");

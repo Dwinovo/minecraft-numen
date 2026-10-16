@@ -103,8 +103,7 @@ public final class NumenCommands {
                                 .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name"))))));
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
-        graft(dispatcher, Commands.literal("reset")
-                .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.RESET_LOOPS)));
+        graft(dispatcher, Commands.literal("reset").executes(NumenCommands::resetBrains));
         graft(dispatcher, Commands.literal("debug").executes(NumenCommands::toggleDebugText));
         graft(dispatcher, Commands.literal("permission")
                 .then(modeCommand())
@@ -233,6 +232,13 @@ public final class NumenCommands {
                 ? ClientUiActionPayload.Action.DEBUG_TEXT_ON
                 : ClientUiActionPayload.Action.DEBUG_TEXT_OFF));
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_ON : Keys.DEBUG_OFF), false);
+        return 1;
+    }
+
+    /** 调试:把调用者名下各同伴的大脑放掉重建,从她们的家里重新读起;在飞的回合作废。 */
+    private static int resetBrains(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        com.dwinovo.numen.api.brain.CompanionBrains.reset(caller.server, caller.getUUID());
         return 1;
     }
 

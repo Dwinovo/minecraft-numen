@@ -34,11 +34,17 @@ public sealed interface OwnerInput {
     /** 给她换人设;{@code null} = 默认人格。 */
     record SetPersona(UUID companion, String persona) implements OwnerInput {}
 
+    /**
+     * 渠道(桥接、弹幕、别的客户端模组)往她那里送一条输入:{@code type} 是主人的话({@code query})或一个登记过的世界事件。
+     * {@code NumenGateway.emit} 在服务端大脑下就是发这个。
+     */
+    record Emit(UUID companion, String type, String text) implements OwnerInput {}
+
     /** 客户端的朗读此刻在不在放:身体据此在说话期间注视主人。 */
     record Speaking(UUID companion, boolean playing) implements OwnerInput {}
 
-    /** 往会话里拉一个人。 */
-    record Pull(String conversation, UUID companion) implements OwnerInput {}
+    /** 往会话里拉一个人;从"就他俩"拉则新群用 {@code newId}。 */
+    record Pull(String conversation, UUID companion, String newId) implements OwnerInput {}
 
     /** 把一个人移出会话。 */
     record Drop(String conversation, UUID companion) implements OwnerInput {}
@@ -62,11 +68,13 @@ public sealed interface OwnerInput {
             case ClearGoal g -> put(o, "clear_goal", "companion", g.companion().toString());
             case SetProvider p -> put(o, "set_provider", "companion", p.companion().toString(), "provider", p.provider());
             case SetPersona p -> put(o, "set_persona", "companion", p.companion().toString(), "persona", p.persona());
+            case Emit e -> put(o, "emit", "companion", e.companion().toString(), "type", e.type(), "text", e.text());
             case Speaking s -> {
                 put(o, "speaking", "companion", s.companion().toString());
                 o.addProperty("playing", s.playing());
             }
-            case Pull p -> put(o, "pull", "conversation", p.conversation(), "companion", p.companion().toString());
+            case Pull p -> put(o, "pull", "conversation", p.conversation(), "companion", p.companion().toString(),
+                    "newId", p.newId());
             case Drop d -> put(o, "drop", "conversation", d.conversation(), "companion", d.companion().toString());
             case Rename r -> put(o, "rename", "conversation", r.conversation(), "name", r.name());
             case Dissolve d -> put(o, "dissolve", "conversation", d.conversation());
@@ -93,8 +101,9 @@ public sealed interface OwnerInput {
                 case "clear_goal" -> new ClearGoal(uuid(o, "companion"));
                 case "set_provider" -> new SetProvider(uuid(o, "companion"), text(o, "provider"));
                 case "set_persona" -> new SetPersona(uuid(o, "companion"), text(o, "persona"));
+                case "emit" -> new Emit(uuid(o, "companion"), text(o, "type"), text(o, "text"));
                 case "speaking" -> new Speaking(uuid(o, "companion"), o.get("playing").getAsBoolean());
-                case "pull" -> new Pull(text(o, "conversation"), uuid(o, "companion"));
+                case "pull" -> new Pull(text(o, "conversation"), uuid(o, "companion"), text(o, "newId"));
                 case "drop" -> new Drop(text(o, "conversation"), uuid(o, "companion"));
                 case "rename" -> new Rename(text(o, "conversation"), text(o, "name"));
                 case "dissolve" -> new Dissolve(text(o, "conversation"));

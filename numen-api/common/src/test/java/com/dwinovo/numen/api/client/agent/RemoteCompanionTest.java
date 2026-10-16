@@ -33,7 +33,7 @@ class RemoteCompanionTest {
         return new CompanionState(phase, null, null, false, null, 0.0,
                 List.of(new EventQueue.Preview("p1", "query", "<query>去挖矿</query>")), compactProblem, null, null,
                 1500, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 900, 2, 33, 64000, "小焰", "prov1", "G",
-                outstanding);
+                outstanding, 12);
     }
 
     @Test

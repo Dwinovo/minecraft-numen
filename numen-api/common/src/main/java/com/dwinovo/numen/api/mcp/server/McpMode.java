@@ -133,6 +133,23 @@ public final class McpMode {
         return config;
     }
 
+    /**
+     * 大脑所在的那一端关停时放手:服务器停掉,不碰配置文件里的开关(下次起来照旧)。
+     */
+    public void shutdown() {
+        if (server != null) {
+            server.stop();
+            server = null;
+        }
+        enabled = false;
+        clientName = null;
+        hands = null;
+        notices = null;
+        configFile = null;
+        config = McpConfig.disabledDefault();
+        Constants.LOG.info("[numen-mcp] 外接大脑宿主随这一端关停");
+    }
+
     private boolean startServer() {
         lastError = null;
         McpServer s = new McpServer(config, hands);

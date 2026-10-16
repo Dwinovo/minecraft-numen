@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.client.agent;
+package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import org.junit.jupiter.api.Test;

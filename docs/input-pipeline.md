@@ -304,7 +304,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 - 待定:外部大脑的端口,先走"服主自开端口 + 反向代理",文档给隧道的办法;共用 MC 端口另行调研(§五)。
 - 已定(10-16):多模态的画面交给客户端画,服务端只出清单;暂缓,排在输入管线之后(§九)。
 
-## 十四、第 2 步落地计划(进行中:提交 1 到 9b 已落地,翻转起等协调者的通知)
+## 十四、第 2 步落地计划(进行中:提交 1 到 10 已落地,清理等协调者的通知)
 
 基底:第 1 步 dcc02130d,加包名归入 `com.dwinovo.numen.api.store`(7b4d33538)。下面九节对应任务的九个问题。读代码得出的事实都写了出处;"我的判断"与"待定"分开标。
 
@@ -521,4 +521,19 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 - **提交 10a(服务端接线,翻转的准备)**:`CompanionBrains.create` 是一只同伴的大脑怎么从服务器各处接起来的唯一一处(世界里的家、服主的档案、主人库里现取的人设、主人的偏好、本进程的程序、直读身体的状态),产品与 GameTest 的 `Brain` 走同一个;
   `ensure` 在其上加"名册上有她就有大脑":先搬旧版客户端的家(`LegacyMigration`),再把离线出箱里攒的事件倒进收件箱。主动性档位住在 `OwnerPrefs`(`players/<主人>/prefs.json`)。
   库协议再加三种:`prefs`(主人自己的)、`skill`(人人能看,开关仅管理员)、`mcp-server`(外接大脑宿主,仅管理员,令牌由服务端铸)。`ServerLifecycle` 加"服务器起好"一档。这一提交没有任何地方调 `ensure`,翻转提交接上。
+- **提交 10(翻转)**:`BrainSite.CURRENT = SERVER`。服务器起好(`ServerLifecycle.fireStarted`)时 `ServerBrains` 备好札记与模块的落点、技能(插件随包的加 `config/numen/skills`)、型号目录、接进来的 MCP 工具、外接大脑宿主(单人游戏才起,专用服等第 4 步),
+  房主在旧版留下的人设库、模块、会话成员表复制进来(`LegacyMigration`),然后名册上每只同伴一个大脑;召唤、登录恢复也经 `CompanionBrains.ensure`。同一进程里客户端不再起 MCP 宿主与 MCP 工具(`ClientMcp` 看 `BrainSite`),只有服务端起,不会两边抢端口。
+  - **服务端不再给客户端推**死亡、复活、当前任务、离线补发(`NumenDeathPayload`/`NumenRespawnPayload`/`CurrentTaskPayload`/出箱补发):大脑直接读身体,这些包的类和客户端挂点留到清理提交。**没有大脑的身体**(GameTest 里直接 `spawnAt` 的那些)的事件仍进 `EventOutbox`,
+    用例靠它收事件——清理提交删出箱时要先给这些用例换一个收事件的办法。
+  - **召唤请求**多带人设与档案的 id(`SummonRequestPayload`),服务端校验、绑定;声线与皮肤还是这台机器的,名册到达时按名字记进绑定。
+  - **`OwnerInput`** 加 `Emit`(渠道输入,`NumenGateway.emit` 就是发它,只回 `HANDED_OFF`/`REJECTED`,`Delivery` 的其余三个值没人报得出来,删了)、`Pull` 带客户端起的新群 id(界面马上要指着刚建的群);会话改动办不成也把真表推回去。
+  - **库协议**再加 `notes`(她的札记索引,资料页读)、persona 的 `reload`;人设改名由服务端把在用的同伴改指新名字;`/numen reset` 改成服务端把名下大脑放掉重建。
+  - **客户端**:`Conversations` 只剩展示偏好(`conversation_prefs.json`,首次从旧会话文件接过选中、置顶、文件夹、草稿、已读)加服务端成员表的视图,改动先按办成画、真表来了对齐;人设页、模型配置页、MCP 工具页、外接大脑页、技能页、召唤卡、编辑卡、资料页、主动性滑块全读服务器的库
+    (`ServerLibraries`),写经库协议;普通玩家的页面只有读(列表与选择),写按钮不画。接进来的 MCP 服务器要 OAuth 时授权网址推到让它接上的那个管理员客户端去开浏览器,专用服务器上管理员把回调网址贴回(`McpAuthFormPanel`)。
+  - **外接大脑驾驶期间**对话流不再换成现场缓冲(她的话和外脑的动作都在日志里),输入框上方多一行"外接大脑正在驾驶她";"谁接进来了"留在设置页的外接大脑页。
+  - **左栏的最后一句与未读**读 `CompanionViews.transcript`(与正文同一个出口,服务端大脑下按会话要最近一页);资料页的"上下文里 N 条消息"来自状态(`CompanionState.messages`);往上翻出更早一页时 `ChatView` 把视图挪开新长出的高度。
+  - **测试的增删改**:删 `OutboxReplayTest`(出箱补发的函数没了,覆盖由 `a_brain_made_on_demand_takes_in_what_waited_in_the_outbox` 接手);`ConversationsDissolveTest` 从客户端 `Conversations` 搬到服务端 `Conversations`(判据在服务端了,断言不变);
+    `FeedTest`/`RemoteCompanionTest`/`OwnerInputTest`/`LibrariesTest` 的改动只是构造函数多了参数。
+  - 留给清理提交的:`EntityAgentLoop`、`AgentLoopRegistry`、`ToolDispatcher`、`TokenLedger` 的客户端用法、`CompanionHome` 里循环用的部分、`ClientPrefs.initiative`、`ClientHands`/`ClientMcp.init*`/`NumenActuator`、`McpTranscript`、`McpClientManager` 的客户端装载、模块那条线、
+    下行包 `NumenDeathPayload`/`NumenRespawnPayload`/`CurrentTaskPayload`/`NumenEventPayload` 与 `EventOutbox`(连同上一条的用例)、`BrainSite`、评测 `Brain` 收口到 `CompanionLoop`。
 

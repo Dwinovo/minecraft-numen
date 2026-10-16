@@ -165,6 +165,11 @@ public final class CompanionRegistry extends SavedData {
         if (entries.remove(companionUuid) != null) setDirty();
     }
 
+    /** Every companion that exists, whoever owns it. */
+    public List<UUID> all() {
+        return new ArrayList<>(entries.keySet());
+    }
+
     /** Every companion owned by {@code ownerUuid} (UUID + entry). */
     public List<Map.Entry<UUID, Entry>> ownedBy(UUID ownerUuid) {
         List<Map.Entry<UUID, Entry>> out = new ArrayList<>();

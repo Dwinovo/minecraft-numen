@@ -17,7 +17,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record ClientUiActionPayload(Action action) implements CustomPacketPayload {
 
-    public enum Action { OPEN_SETTINGS, RESET_LOOPS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
+    public enum Action { OPEN_SETTINGS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
 
     public static final Type<ClientUiActionPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_ui_action"));

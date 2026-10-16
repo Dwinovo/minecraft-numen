@@ -1,9 +1,6 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
-import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
 
@@ -33,11 +30,9 @@ import java.util.UUID;
  * injecting one from outside would be operating the hands without the brain.
  *
  * <h2>Client-side API</h2>
- * Companions are driven by their owner's game client (the owner's API key
- * pays for the tokens), so this must be called in the owner's client process.
- * Safe from any thread — the emit itself is marshalled onto the client
- * main thread. Companion UUIDs come from the entity
- * ({@code entity.getUUID()}).
+ * Companions' brains run on the server, so the input is handed to the server as one of the owner's actions
+ * ({@code OwnerInput.Emit}); the server checks that the companion is the owner's and that {@code type} is an input
+ * type, and queues it. Safe from any thread. Companion UUIDs come from the entity ({@code entity.getUUID()}).
  */
 public final class NumenGateway {
 
@@ -55,15 +50,10 @@ public final class NumenGateway {
      * seen by the model at the next tool-batch boundary (queued messages merge
      * into one user message).
      *
-     * <p>The agent loop is created on first contact: any companion on the
-     * client's roster is addressable immediately after login — no need to have
-     * opened its chat panel first. (Loops used to be panel-created only, which
-     * made every quick-key/bridge message before the first panel visit vanish
-     * with "not online".)
+     * <p>Any companion on the client's roster is addressable immediately after login.
      *
-     * <p>返回的是<b>实际发生了什么</b>,不是对"她忙不忙"的推断——桥接方判"送没送到"
-     * 就照这个判,自己另算一遍必然会跟真正的闸门跑偏。游戏内的聊天回显只记事不记状态,
-     * 所以这几个值今天没有任何界面在读;它们是给外部集成的汇报,该说实话。
+     * <p>返回的是<b>实际发生了什么</b>:输入交给了服务端({@link Delivery#HANDED_OFF}),或者这只同伴不在名册上
+     * ({@link Delivery#REJECTED})。服务端那头是排上了、被压着还是给了外接大脑,不再回给这里。
      *
      * @param companion the companion entity's UUID
      * @param type      {@link EventTypes#QUERY}, or a type registered as a world event
@@ -72,26 +62,11 @@ public final class NumenGateway {
      */
     public static Delivery emit(UUID companion, String type, String text) {
         com.dwinovo.numen.api.event.NumenEvents.requireClientInput(type);
-        boolean ownerWords = EventTypes.QUERY.equals(type);
         if (companion == null || text == null || text.isBlank()) return Delivery.REJECTED;
-        boolean known = AgentLoopRegistry.get(companion).isPresent()
-                || com.dwinovo.numen.api.client.agent.NumenRoster.instance().name(companion) != null;
-        if (!known) return Delivery.REJECTED;
-        Minecraft mc = Minecraft.getInstance();
-        if (!mc.isSameThread()) {
-            mc.execute(() -> submit(AgentLoopRegistry.getOrCreate(companion), ownerWords, type, text));
-            return Delivery.HANDED_OFF;
-        }
-        EntityAgentLoop loop = AgentLoopRegistry.getOrCreate(companion);
-        boolean pressed = submit(loop, ownerWords, type, text);
-        // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
-        // 判据取自驾驶席本身这一处真源,不另猜。
-        if (com.dwinovo.numen.api.mcp.server.McpMode.instance().driving()) return Delivery.TO_EXTERNAL_BRAIN;
-        return pressed ? Delivery.QUEUED : Delivery.SEEN;
-    }
-
-    private static boolean submit(EntityAgentLoop loop, boolean ownerWords, String type, String text) {
-        return ownerWords ? loop.submitPrompt(text) : loop.submitEvent(type, text);
+        if (com.dwinovo.numen.api.client.agent.NumenRoster.instance().name(companion) == null) return Delivery.REJECTED;
+        com.dwinovo.numen.api.client.agent.RemoteCompanions.send(
+                new com.dwinovo.numen.api.brain.OwnerInput.Emit(companion, type, text));
+        return Delivery.HANDED_OFF;
     }
 
     /**

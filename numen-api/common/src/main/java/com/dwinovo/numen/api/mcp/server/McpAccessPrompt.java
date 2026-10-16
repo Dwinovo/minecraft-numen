@@ -10,12 +10,12 @@ package com.dwinovo.numen.api.mcp.server;
  * <p>端点与令牌直接内嵌进文本,用户零填空——这也是为什么按钮旁必须提示
  * "提示词含你的本机令牌,只发给你信任的 AI"。
  */
-final class McpAccessPrompt {
+public final class McpAccessPrompt {
 
     private McpAccessPrompt() {}
 
     /** 为当前端点/令牌生成整段提示词。 */
-    static String build(String endpoint, String token) {
+    public static String build(String endpoint, String token) {
         String auth = token == null || token.isBlank() ? "" : token;
         return """
                 I'm playing Minecraft with a mod called Numen, and I want you to connect to it.

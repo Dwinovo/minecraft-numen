@@ -2,18 +2,15 @@ package com.dwinovo.numen.api.client.screen.chat;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.resources.language.I18n;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,22 +49,15 @@ public final class ConversationPreview {
 
     private static Cached cached(Conversation c) {
         Conversations convos = Conversations.instance();
-        Map<UUID, List<ConvoLog.Line>> logs = new LinkedHashMap<>();
-        int total = 0;
-        for (UUID m : convos.membersAlive(c)) {
-            CompanionView lp = CompanionViews.get(m).orElse(null);
-            if (lp == null) continue;
-            List<ConvoLog.Line> lines = lp.display();
-            logs.put(m, lines);
-            total += lines.size();
-        }
+        // 和面板正文同一个出口:服务端大脑下它按会话要最近一页并接上实时推来的行
+        List<Transcript.Entry> merged = CompanionViews.transcript(c, convos.tagOf(c), convos.membersAlive(c));
+        int total = merged.size();
         Cached hit = CACHE.get(c.id());
         if (hit != null && hit.lines() == total) {
             return hit;
         }
         boolean group = convos.soloOf(c) == null;
         Line out = null;
-        List<Transcript.Entry> merged = Transcript.merge(convos.tagOf(c), logs);
         List<Long> saidAt = new java.util.ArrayList<>();
         for (Transcript.Entry e : merged) {
             if (e.ts() > 0 && e.msg() instanceof ConvoState.Msg.Assistant a

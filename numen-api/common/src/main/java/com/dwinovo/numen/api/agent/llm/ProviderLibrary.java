@@ -129,18 +129,18 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
         return e.id();
     }
 
-    /** 一条档案的 JSON(落盘的同一个样子,含 key):管理员经库协议读写它。 */
-    public JsonObject toJson(Entry entry) {
-        return writeEntry(entry);
-    }
-
-    /** {@link #toJson} 的逆。 */
-    public Entry fromJson(JsonObject o) {
-        return readEntry(o);
+    @Override
+    protected Entry readEntry(JsonObject o) {
+        return entryFromJson(o);
     }
 
     @Override
-    protected Entry readEntry(JsonObject o) {
+    protected JsonObject writeEntry(Entry e) {
+        return entryToJson(e);
+    }
+
+    /** 一条档案的 JSON(落盘的同一个样子,含 key):管理员经库协议读写它,两头都用这一个编解码。 */
+    public static Entry entryFromJson(JsonObject o) {
         return new Entry(strOrNull(o, "id"), strOrNull(o, "name"), new ConnectionProfile(
                 strOrNull(o, "provider"), strOrNull(o, "protocol"), strOrNull(o, "model"),
                 strOrNull(o, "api_key"), strOrNull(o, "base_url"), strOrNull(o, "proxy"),
@@ -152,8 +152,8 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
                 o.has("compat") && o.get("compat").isJsonObject() ? o.getAsJsonObject("compat") : null));
     }
 
-    @Override
-    protected JsonObject writeEntry(Entry e) {
+    /** {@link #entryFromJson} 的逆。 */
+    public static JsonObject entryToJson(Entry e) {
         ConnectionProfile p = e.profile();
         JsonObject o = new JsonObject();
         o.addProperty("id", e.id());

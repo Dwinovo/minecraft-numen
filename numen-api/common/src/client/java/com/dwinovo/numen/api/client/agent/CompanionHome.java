@@ -91,8 +91,6 @@ public final class CompanionHome {
     private static final String CONVERSATIONS = "conversations.json";
     private static final String GOAL = "goal.json";
     private static final String WORLD = "world";
-    /** 主人那一份 Lua 模块的根:{@code lua/<主人 UUID>/}。 */
-    private static final String LUA = "lua";
 
     /** 同伴数据的根;由各 loader 的客户端入口注入,见 {@link #init}。 */
     private static Path root;
@@ -109,21 +107,6 @@ public final class CompanionHome {
      */
     public static void init(Path numenConfigRoot) {
         root = numenConfigRoot;
-        // 札记的落点由这里给:目录布局的知识只住在本类,NoteBook 自己不拼路径。
-        // 天数是懒取的——要到她真的记一条时才问 Minecraft,所以这里没有时序问题。
-        com.dwinovo.numen.api.agent.memory.NoteBook.init(
-                uuid -> new com.dwinovo.numen.api.home.Home(memory(uuid), NumenIo.inline("numen-memory")),
-                CompanionHome::gameDay);
-        // 她的 Lua 模块按主人放,不按同伴:同一主人的同伴共用一个目录 lua/<主人>/。主人就是这台客户端登录的那个账号,
-        // 用到时才问,和天数同样没有时序问题。
-        com.dwinovo.numen.api.script.Modules.init(companion -> numenRoot().resolve(LUA)
-                .resolve(net.minecraft.client.Minecraft.getInstance().getUser().getProfileId().toString()));
-    }
-
-    /** 现在是游戏第几天;没进世界(主菜单、datagen)算第 0 天。 */
-    private static int gameDay() {
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        return mc == null || mc.level == null ? 0 : (int) (mc.level.getDayTime() / 24000L);
     }
 
     // ---- 路径 ----

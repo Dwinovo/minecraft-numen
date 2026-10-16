@@ -3,10 +3,12 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.goal.GoalState;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
 import com.dwinovo.numen.api.agent.skill.SkillInjection;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import net.minecraft.server.MinecraftServer;
 
@@ -55,6 +57,11 @@ public final class OwnerInputs {
 
         static Applied refused(String problem) {
             return new Applied(problem, false);
+        }
+
+        /** 改会话的请求没办成:客户端已经先按办成画了,真表照样推回去让它对齐。 */
+        static Applied refusedResync(String problem) {
+            return new Applied(problem, true);
         }
     }
 
@@ -113,6 +120,21 @@ public final class OwnerInputs {
             case OwnerInput.ClearGoal goal -> loop(server, owner, goal.companion(), brain -> brain.clearGoal(null));
             case OwnerInput.SetProvider p -> loop(server, owner, p.companion(), brain -> brain.setProvider(p.provider()));
             case OwnerInput.SetPersona p -> loop(server, owner, p.companion(), brain -> brain.setPersona(p.persona()));
+            case OwnerInput.Emit emit -> {
+                // 上行的类型不可信:主人的话,或登记过的世界事件,别的不收
+                try {
+                    NumenEvents.requireClientInput(emit.type());
+                } catch (IllegalArgumentException notAnInput) {
+                    yield Applied.refused(notAnInput.getMessage());
+                }
+                yield loop(server, owner, emit.companion(), brain -> {
+                    if (EventTypes.QUERY.equals(emit.type())) {
+                        brain.submitPrompt(emit.text());
+                    } else {
+                        brain.submitEvent(emit.type(), emit.text());
+                    }
+                });
+            }
             case OwnerInput.Speaking s -> {
                 if (!owns(server, owner, s.companion())) {
                     yield Applied.refused("not your companion");
@@ -123,15 +145,20 @@ public final class OwnerInputs {
             case OwnerInput.Pull pull -> {
                 Conversation conv = conversation(rooms, owner, pull.conversation(), server);
                 if (conv == null || !owns(server, owner, pull.companion())) {
-                    yield Applied.refused("no such conversation or companion");
+                    yield Applied.refusedResync("no such conversation or companion");
                 }
-                rooms.pullIn(conv, pull.companion());
+                // 从"就他俩"拉人要起一个新群,号由客户端起,核过没撞号才用
+                String newId = pull.newId() == null ? UUID.randomUUID().toString() : pull.newId();
+                if (rooms.get(conv.id()) == null && !rooms.isFreeId(newId)) {
+                    yield Applied.refusedResync("that conversation id is taken");
+                }
+                rooms.pullIn(conv, pull.companion(), newId);
                 yield Applied.changed();
             }
             case OwnerInput.Drop drop -> {
                 Conversation conv = rooms.get(drop.conversation());
                 if (conv == null) {
-                    yield Applied.refused("no such conversation");
+                    yield Applied.refusedResync("no such conversation");
                 }
                 rooms.drop(conv, drop.companion());
                 yield Applied.changed();
@@ -139,7 +166,7 @@ public final class OwnerInputs {
             case OwnerInput.Rename rename -> {
                 Conversation conv = rooms.get(rename.conversation());
                 if (conv == null) {
-                    yield Applied.refused("no such conversation");
+                    yield Applied.refusedResync("no such conversation");
                 }
                 rooms.rename(conv, rename.name());
                 yield Applied.changed();
@@ -147,7 +174,7 @@ public final class OwnerInputs {
             case OwnerInput.Dissolve dissolve -> {
                 Conversation conv = rooms.get(dissolve.conversation());
                 if (conv == null) {
-                    yield Applied.refused("no such conversation");
+                    yield Applied.refusedResync("no such conversation");
                 }
                 rooms.dissolve(conv);
                 yield Applied.changed();

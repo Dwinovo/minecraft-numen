@@ -9,5 +9,5 @@ public enum BrainSite {
     SERVER;
 
     /** 现在用哪一处。 */
-    public static final BrainSite CURRENT = CLIENT;
+    public static final BrainSite CURRENT = SERVER;
 }

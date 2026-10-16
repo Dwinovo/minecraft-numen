@@ -26,7 +26,8 @@ class OwnerInputTest {
                 new OwnerInput.SetGoal(HER, "挖 64 个铁", "/goal 挖 64 个铁"), new OwnerInput.ClearGoal(HER),
                 new OwnerInput.SetProvider(HER, "prov1"), new OwnerInput.SetProvider(HER, null),
                 new OwnerInput.SetPersona(HER, "小焰"), new OwnerInput.Speaking(HER, true),
-                new OwnerInput.Pull("G", HER), new OwnerInput.Drop("G", HER), new OwnerInput.Rename("G", "挖矿队"),
+                new OwnerInput.Pull("G", HER, "N"), new OwnerInput.Pull("G", HER, null),
+                new OwnerInput.Emit(HER, "query", "来一下"), new OwnerInput.Drop("G", HER), new OwnerInput.Rename("G", "挖矿队"),
                 new OwnerInput.Dissolve("G"));
 
         for (OwnerInput input : all) {

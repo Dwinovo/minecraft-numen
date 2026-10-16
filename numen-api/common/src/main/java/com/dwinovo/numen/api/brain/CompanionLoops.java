@@ -101,6 +101,15 @@ public final class CompanionLoops {
         }
     }
 
+    /** 这位主人的人设改了名(文件名就是 id):名下用它的大脑改指新的 id。 */
+    public static void repersona(UUID owner, String from, String to) {
+        for (Entry entry : LOOPS.values()) {
+            if (entry.owner.equals(owner) && from.equals(entry.loop.personaId())) {
+                entry.loop.setPersona(to);
+            }
+        }
+    }
+
     /** 主人客户端的朗读开始、停止放音。 */
     public static void voicePlaying(UUID companion, boolean playing) {
         Entry entry = LOOPS.get(companion);
@@ -135,6 +144,14 @@ public final class CompanionLoops {
         Home home = homes.companion(companion);
         home.delete();
         homes.forgetCompanion(companion);
+    }
+
+    /** 这只同伴的大脑放手:在飞的回合作废,不再写她的日志;她的家原样留着,下一次 {@code ensure} 从那里重新读起。 */
+    static void release(UUID companion) {
+        Entry entry = LOOPS.remove(companion);
+        if (entry != null) {
+            entry.loop.dispose();
+        }
     }
 
     private static void dropAll() {

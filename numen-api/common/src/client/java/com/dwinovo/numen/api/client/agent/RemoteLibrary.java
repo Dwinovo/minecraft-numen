@@ -20,6 +20,7 @@ public final class RemoteLibrary {
     private final Consumer<LibraryRequestPayload> send;
     private final Map<String, JsonArray> entries = new HashMap<>();
     private final Map<String, String> problems = new HashMap<>();
+    private final Map<String, Long> revisions = new HashMap<>();
 
     public RemoteLibrary(Consumer<LibraryRequestPayload> send) {
         this.send = send;
@@ -28,6 +29,11 @@ public final class RemoteLibrary {
     /** 这种库最近一次读到的整表;还没读过是空表。 */
     public JsonArray entries(String kind) {
         return entries.getOrDefault(kind, new JsonArray());
+    }
+
+    /** 这种库的表被服务端推来过几次——界面发了请求等回执时,看它变没变。 */
+    public long revision(String kind) {
+        return revisions.getOrDefault(kind, 0L);
     }
 
     /** 最近一次请求没办成的原因;办成了(或没请求过)是 {@code null}。 */
@@ -45,6 +51,11 @@ public final class RemoteLibrary {
         send.accept(new LibraryRequestPayload(kind, "put", entry.toString()));
     }
 
+    /** 这种库的一个专有操作(接上、断开、重扫、交回授权网址……),能不能办由服务端判。 */
+    public void request(String kind, String op, JsonObject body) {
+        send.accept(new LibraryRequestPayload(kind, op, body.toString()));
+    }
+
     /** 删一条。 */
     public void delete(String kind, String id) {
         JsonObject body = new JsonObject();
@@ -55,6 +66,7 @@ public final class RemoteLibrary {
     /** 服务端推来一张表。 */
     public void onPayload(LibraryPayload p) {
         entries.put(p.kind(), JsonParser.parseString(p.entries()).getAsJsonArray());
+        revisions.merge(p.kind(), 1L, Long::sum);
         if (p.problem().isEmpty()) {
             problems.remove(p.kind());
         } else {
@@ -66,5 +78,6 @@ public final class RemoteLibrary {
     public void clear() {
         entries.clear();
         problems.clear();
+        revisions.clear();
     }
 }

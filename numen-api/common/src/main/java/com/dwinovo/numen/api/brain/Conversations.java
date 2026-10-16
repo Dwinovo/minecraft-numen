@@ -42,6 +42,9 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
         String name(UUID companion);
     }
 
+    /** 会话 id 的长度上限。 */
+    private static final int MAX_ID = 64;
+
     private final Roster roster;
     private final java.util.function.Function<UUID, java.util.Optional<CompanionLoop>> loops;
     private final java.util.function.Supplier<String> ownerName;
@@ -203,11 +206,28 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
      * 从落过盘的会话拉人是扩这个会话。
      */
     public Conversation pullIn(Conversation conv, UUID companion) {
+        return pullIn(conv, companion, UUID.randomUUID().toString());
+    }
+
+    /** 同上;从"就他俩"拉人时新群用 {@code newId}(主人的客户端起的,服务端核过没撞号)。 */
+    public Conversation pullIn(Conversation conv, UUID companion, String newId) {
         List<UUID> members = new ArrayList<>(conv.members());
         if (!members.contains(companion)) {
             members.add(companion);
         }
-        return save(tagOf(conv) != null ? conv.withMembers(members) : Conversation.of(members));
+        return save(tagOf(conv) != null ? conv.withMembers(members) : Conversation.of(newId, members));
+    }
+
+    /** 这个 id 能不能给一个新群:没有人用过,也不是名册上哪只同伴的号("就他俩"用同伴的 UUID 当 id)。 */
+    public boolean isFreeId(String id) {
+        if (id == null || id.isBlank() || id.length() > MAX_ID || get(id) != null) {
+            return false;
+        }
+        try {
+            return roster.name(UUID.fromString(id)) == null;
+        } catch (IllegalArgumentException notUuid) {
+            return true;
+        }
     }
 
     /** 把一个人移出会话。 */

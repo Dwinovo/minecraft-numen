@@ -2,7 +2,9 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.mcp.client.McpOAuth;
@@ -27,6 +29,7 @@ import java.util.function.Function;
  *       "有哪几个、叫什么、哪个型号"——key、接口地址、代理在服务端编码的这一处就没有,客户端拿不到,也就不存在泄露;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
+ *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
  *   <li><b>技能</b>({@link #SKILL}):服务器上有哪些,人人看得到;开关只有管理员能拨(技能目录是服务器全局的);</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
  *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
@@ -45,10 +48,13 @@ public final class Libraries {
     public static final String MCP_SERVER = "mcp-server";
     public static final String PREFS = "prefs";
     public static final String SKILL = "skill";
+    public static final String NOTES = "notes";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
     public static final String DELETE = "delete";
+    /** 人设库专有:重扫目录。 */
+    public static final String RELOAD = "reload";
     /** MCP 服务器专有:接上、断开、交回授权回调网址。 */
     public static final String ENABLE = "enable";
     public static final String DISABLE = "disable";
@@ -75,6 +81,7 @@ public final class Libraries {
     /** 这台服务器上的那一份:人设按主人、模型档案是服主的、配置是加载器自己的。 */
     public static Libraries of(net.minecraft.server.MinecraftServer server) {
         return new Libraries(owner -> PersonaLibraries.of(server, owner), owner -> OwnerPrefs.of(server, owner),
+                owner -> CompanionRegistry.get(server).ownedBy(owner).stream().map(java.util.Map.Entry::getKey).toList(),
                 ProviderLibrary.instance(), new ServerConfig() {
             private final com.dwinovo.numen.api.platform.services.INumenConfig config =
                     com.dwinovo.numen.api.platform.Services.CONFIG;
@@ -100,13 +107,15 @@ public final class Libraries {
 
     private final Function<UUID, PersonaLibrary> personas;
     private final Function<UUID, OwnerPrefs> prefs;
+    private final Function<UUID, List<UUID>> companions;
     private final ProviderLibrary providers;
     private final ServerConfig config;
 
     public Libraries(Function<UUID, PersonaLibrary> personas, Function<UUID, OwnerPrefs> prefs,
-                     ProviderLibrary providers, ServerConfig config) {
+                     Function<UUID, List<UUID>> companions, ProviderLibrary providers, ServerConfig config) {
         this.personas = personas;
         this.prefs = prefs;
+        this.companions = companions;
         this.providers = providers;
         this.config = config;
     }
@@ -124,6 +133,7 @@ public final class Libraries {
             case MCP_CLIENT -> mcpClient(admin, op, body);
             case MCP_SERVER -> mcpServer(admin, op, body);
             case PREFS -> prefs(owner, op, body);
+            case NOTES -> LIST.equals(op) ? null : "unknown operation";
             case SKILL -> skill(admin, op, body);
             default -> "unknown library";
         };
@@ -141,7 +151,7 @@ public final class Libraries {
                 o.addProperty("text", p.text());
                 out.add(o);
             });
-            case PROVIDER -> providers.list().forEach(e -> out.add(admin ? providers.toJson(e) : masked(e)));
+            case PROVIDER -> providers.list().forEach(e -> out.add(admin ? ProviderLibrary.entryToJson(e) : masked(e)));
             case SERVER_CONFIG -> {
                 if (admin) {
                     JsonObject o = new JsonObject();
@@ -157,6 +167,15 @@ public final class Libraries {
                 }
             }
             case PREFS -> out.add(prefs.apply(owner).toJson());
+            case NOTES -> companions.apply(owner).forEach(companion -> NoteBook.of(companion).index().forEach(note -> {
+                JsonObject o = new JsonObject();
+                o.addProperty("companion", companion.toString());
+                o.addProperty("name", note.name());
+                o.addProperty("description", note.description());
+                o.addProperty("type", note.type());
+                o.addProperty("day", note.day());
+                out.add(o);
+            }));
             case SKILL -> SkillRegistry.instance().all().forEach(info -> {
                 JsonObject o = new JsonObject();
                 o.addProperty("name", info.name());
@@ -239,6 +258,9 @@ public final class Libraries {
         switch (op) {
             case LIST:
                 return null;
+            case RELOAD:
+                library.reload();   // 目录里的 .md 是真源,外部编辑器改过就重扫
+                return null;
             case PUT: {
                 String name = string(body, "name");
                 String text = string(body, "text");
@@ -247,7 +269,11 @@ public final class Libraries {
                 }
                 String id = string(body, "id");
                 if (id != null && library.get(id) != null) {
-                    library.update(id, name, text);
+                    PersonaLibrary.Persona saved = library.update(id, name, text);
+                    // 人设的 id 就是文件名:改名等于换了身份,在用它的同伴得重新指过去
+                    if (saved != null && !saved.id().equals(id)) {
+                        CompanionLoops.repersona(owner, id, saved.id());
+                    }
                 } else {
                     library.create(name, text);
                 }
@@ -277,7 +303,7 @@ public final class Libraries {
             case PUT: {
                 ProviderLibrary.Entry entry;
                 try {
-                    entry = providers.fromJson(body);
+                    entry = ProviderLibrary.entryFromJson(body);
                 } catch (RuntimeException unreadable) {
                     return "unreadable profile";
                 }

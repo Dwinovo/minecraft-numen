@@ -8,6 +8,8 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.EventOutbox;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
@@ -385,7 +387,7 @@ public class TaskControlGameTests {
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
-        EventOutbox outbox = EventOutbox.get(server);
+        EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
         AtomicReference<TaskRecord<?>> restored = new AtomicReference<>();
 
         steps(helper)
@@ -398,13 +400,12 @@ public class TaskControlGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(restored.get().getToolName().equals("gt.gt_long.linger"),
                         "the replayed task is named " + restored.get().getToolName()))
                 .thenExecute(() -> CompanionTickDispatcher.stopActive(second, TaskRecord.StopCause.TASK_STOP))
-                .thenWaitUntil(() -> helper.assertTrue(outbox.peek(uuid).entries().stream()
+                .thenWaitUntil(() -> helper.assertTrue(inbox.entries().stream()
                                 .anyMatch(e -> e.type().equals("task_finished")
                                         && e.text().contains("task=\"gt.gt_long.linger\"")
                                         && e.text().contains(restored.get().publicId())),
-                        "the replayed task did not finish under its name: " + outbox.peek(uuid).entries()))
+                        "the replayed task did not finish under its name: " + inbox.entries()))
                 .thenExecute(() -> {
-                    outbox.forget(uuid);
                     Companions.dismiss(server, second);
                 })
                 .thenSucceed();
@@ -429,20 +430,19 @@ public class TaskControlGameTests {
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), "gt.gt_long.linger(\"soon\")"));
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
-        EventOutbox outbox = EventOutbox.get(server);
+        EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
 
         succeedWhen(helper, () -> {
             helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
             helper.assertTrue(registry.find(uuid).taskName().isBlank(),
                     "the task that cannot be replayed is still on record");
-            helper.assertTrue(outbox.peek(uuid).entries().stream()
+            helper.assertTrue(inbox.entries().stream()
                             .anyMatch(e -> e.type().equals("task_finished")
                                     && e.text().contains("task=\"gt.gt_long.linger\"")
                                     && e.text().contains("status=\"failed\"")
                                     && e.text().contains("could not be resumed after the restart")
                                     && e.text().contains("bad_argument")),
-                    "she was not told under the task's name: " + outbox.peek(uuid).entries());
-            outbox.forget(uuid);
+                    "she was not told under the task's name: " + inbox.entries());
             Companions.dismiss(server, second);
         });
     }
@@ -465,8 +465,8 @@ public class TaskControlGameTests {
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
-        EventOutbox outbox = EventOutbox.get(server);
-        outbox.forget(uuid);
+        EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
+        inbox.takeEntries(System.currentTimeMillis());   // 先清掉第一次派活留下的
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         ToolRun woken = lua(second, "gt.gt_long.linger(900)");
@@ -478,7 +478,7 @@ public class TaskControlGameTests {
                     "the new task is not the one running: " + CompanionTickDispatcher.currentTaskFor(uuid));
             helper.assertTrue(registry.find(uuid).taskLua().equals("gt.gt_long.linger(900)"),
                     "the new task is not on record: " + registry.find(uuid).taskLua());
-            var entries = outbox.peek(uuid).entries();
+            var entries = inbox.entries();
             helper.assertTrue(entries.stream().noneMatch(e -> e.text().contains("could not be resumed")),
                     "a task was reported as not taken back: " + entries);
             helper.assertTrue(entries.stream().anyMatch(e -> e.type().equals("task_finished")
@@ -486,7 +486,6 @@ public class TaskControlGameTests {
                             && e.text().contains("status=\"stopped\"")
                             && e.text().contains("a newer one replaced it")),
                     "she was not told the left-over task was superseded: " + entries);
-            outbox.forget(uuid);
             Companions.dismiss(server, second);
         });
     }

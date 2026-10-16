@@ -22,6 +22,7 @@ public class CommonClass {
         registerTools();
         registerApi();
         wireTaskMachine();
+        com.dwinovo.numen.api.brain.ServerBrains.register();
     }
 
     /**

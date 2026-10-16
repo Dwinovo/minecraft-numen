@@ -25,13 +25,14 @@ import java.util.List;
  * @param outstanding    结果还会来的工具调用的 id(在飞的与排着的):历史里没结果又不在这里的调用是被切断的
  * @param compactProblem  现在不能整理的理由(语言键);{@code null} = 能
  * @param clearProblem    现在不能清空的理由;{@code null} = 能
+ * @param messages        她此刻的上下文里有几条消息
  */
 public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean bodyTaskRunning,
                              LoopStatus.Doing activity, double compactProgress, List<EventQueue.Preview> queued,
                              String compactProblem, String clearProblem, JsonObject goal,
                              long totalTokens, Usage usageSum, Usage usageLast, long wastedTokens, int wasteCount,
                              int contextPercent, int window, String personaId, String providerId,
-                             String conversation, List<String> outstanding) {
+                             String conversation, List<String> outstanding, int messages) {
 
     public CompanionState {
         queued = List.copyOf(queued);
@@ -41,7 +42,7 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
     /** 还没听说过她的任何事时的样子:闲着,什么都没排,没有目标。 */
     public static CompanionState idle() {
         return new CompanionState(null, null, null, false, null, 0.0, List.of(), null, null, null, 0, Usage.ZERO,
-                Usage.ZERO, 0, 0, 0, 0, null, null, null, List.of());
+                Usage.ZERO, 0, 0, 0, 0, null, null, null, List.of(), 0);
     }
 
     /** 停止键此刻有东西可停:在干活,或者排着主人的指令。 */
@@ -92,6 +93,7 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         put(o, "providerId", providerId);
         put(o, "conversation", conversation);
         o.add("outstanding", strings(outstanding));
+        o.addProperty("messages", messages);
         return o;
     }
 
@@ -118,7 +120,7 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
                 longOf(o, "totalTokens"), usage(o.getAsJsonObject("usageSum")), usage(o.getAsJsonObject("usageLast")),
                 longOf(o, "wastedTokens"), (int) longOf(o, "wasteCount"), (int) longOf(o, "contextPercent"),
                 (int) longOf(o, "window"), string(o, "personaId"), string(o, "providerId"), string(o, "conversation"),
-                list(o.get("outstanding")));
+                list(o.get("outstanding")), (int) longOf(o, "messages"));
     }
 
     // ---- 小件:原因、预览、用量的 JSON ----

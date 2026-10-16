@@ -101,6 +101,18 @@ public final class CompanionBrains {
         return loop;
     }
 
+    /** 把这位主人名下各只的大脑放掉重建,并把此刻的样子补给他的客户端。 */
+    public static void reset(MinecraftServer server, UUID owner) {
+        for (var entry : CompanionRegistry.get(server).ownedBy(owner)) {
+            CompanionLoops.release(entry.getKey());
+            ensure(server, entry.getKey());
+        }
+        var player = server.getPlayerList().getPlayer(owner);
+        if (player != null && Presence.hasClient(owner)) {
+            CompanionLoops.sendSnapshots(owner, Replies.link(server, owner));
+        }
+    }
+
     /** 旧版客户端留在 {@code config/numen/companions/<uuid>/} 里的她的家:单人游戏的房主,搬进世界里她的家。 */
     private static void migrateLegacy(MinecraftServer server, UUID companion, UUID owner, Homes homes) {
         if (!isHost(server, owner)) {

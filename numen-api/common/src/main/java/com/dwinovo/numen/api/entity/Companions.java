@@ -3,8 +3,6 @@ package com.dwinovo.numen.api.entity;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.gear.GearSlot;
-import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
-import com.dwinovo.numen.api.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import net.minecraft.server.MinecraftServer;
@@ -64,7 +62,10 @@ public final class Companions {
                 }
             }
             NumenPlayer body = respawn(server, existing);
-            if (body != null) return body;
+            if (body != null) {
+                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
+                return body;
+            }
             reg.remove(existing);   // stale entry (no .dat) — replace it
         }
         UUID companionUuid = UUID.randomUUID();
@@ -77,6 +78,7 @@ public final class Companions {
         reg.put(companionUuid, fresh);
         NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
         reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
+        com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
         return body;
     }
 
@@ -179,6 +181,7 @@ public final class Companions {
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
             try {
+                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
                 if (e.getValue().diedAt() > 0L) {
                     if (owner != null) respawnDead(server, e.getKey(), e.getValue(), owner);
                 } else {
@@ -188,55 +191,12 @@ public final class Companions {
                 com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
             }
         }
-        if (owner != null) {
-            replayOutbox(server, ownerUuid, owner);
-        }
-    }
-
-    /**
-     * 主人登录:把他离线期间攒下的世界事件补发给客户端。
-     *
-     * <p>他不在的时候她照样在干活——任务跑完了、被怪打了、跨了维度。这些都留着
-     * 等他回来:"我帮你把矿挖完了"是最值得说的一件事,不能因为他当时不在就没了。
-     * 攒满被丢掉的条数也如实说一句:丢弃可以,无声消失不行。
-     */
-    private static void replayOutbox(MinecraftServer server, UUID ownerUuid, ServerPlayer owner) {
-        List<UUID> companions = new ArrayList<>();
-        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            companions.add(e.getKey());
-        }
-        for (com.dwinovo.numen.api.network.payload.NumenEventPayload p
-                : outboxPayloads(EventOutbox.get(server), companions, System.currentTimeMillis())) {
-            NumenNetwork.sendToPlayer(owner, p);
-            com.dwinovo.numen.api.Constants.LOG.info("[numen-outbox] {} 补发 {} 条离线输入",
-                    p.entityUuid(), p.entries().size());
-        }
-    }
-
-    /**
-     * 把出箱里攒的东西取出来,<b>一只同伴一个包</b>,装着她攒下的全部条目;什么都没攒的同伴不发。
-     *
-     * <p>整批一个包是为了一次送达:客户端收到一个包就一次入队、再问一次熟没熟。逐条发包的话,
-     * 第一条急件一到就开轮,只带走已经到的那几条,剩下的要等下一轮。
-     *
-     * <p>纯逻辑,不碰网络——留这个缝是为了"一只一个包、一条不少"能被单测钉住。
-     */
-    static List<com.dwinovo.numen.api.network.payload.NumenEventPayload> outboxPayloads(
-            EventOutbox outbox, Collection<UUID> companions, long now) {
-        List<com.dwinovo.numen.api.network.payload.NumenEventPayload> out = new ArrayList<>();
-        for (UUID companion : companions) {
-            List<com.dwinovo.numen.api.agent.inbox.EventQueue.Entry> pending = outbox.take(companion, now);
-            if (!pending.isEmpty()) {
-                out.add(new com.dwinovo.numen.api.network.payload.NumenEventPayload(companion, pending));
-            }
-        }
-        return out;
     }
 
     /**
      * A companion just DIED (detected in {@link NumenPlayer#tick}). The death itself is left fully
      * vanilla — drops / a grave mod / keepInventory all run because it's a real ServerPlayer death.
-     * We only: stop the brain (the owner's loop suspends on {@link NumenDeathPayload}, recording the
+     * We only: stop the brain (its loop suspends, recording the
      * cut-off turn with the death cause), heal the body so its saved {@code .dat} is whole, and
      * queue a timed respawn at the owner. The corpse is removed AFTER this tick (a fake player isn't
      * auto-removed on death — it would sit at 0 HP forever waiting for a respawn packet that never comes).
@@ -252,16 +212,13 @@ public final class Companions {
             cause = body.getCombatTracker().getDeathMessage().getString();
         }
         if (cause == null || cause.isBlank()) cause = "未知原因";
-        // 先把死亡消息发出去,再触发生命周期钩子——<b>顺序要紧</b>:死亡消息一到,
-        // 客户端的循环就停牌 DEAD;此后钩子里产生的收尾事件(异步任务的
-        // task_finished status="interrupted")照样进队列,但不开 run,安静躺到复活。
+        // 先让大脑停牌,再触发生命周期钩子——<b>顺序要紧</b>:大脑一停牌 DEAD,
+        // 此后钩子里产生的收尾事件(异步任务的 task_finished status="interrupted")
+        // 照样进队列,但不开 run,安静躺到复活。
         //
         // 反过来的话,那条 urgent 收尾事件会在停牌之前到达、当场开一轮,而紧接着的
-        // 死亡消息又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
+        // 停牌又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
         ServerPlayer owner = body.resolveOwnerPlayer();
-        if (owner != null) {   // immediate, same-session
-            NumenNetwork.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
-        }
         String diedOf = cause;
         com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf));
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
@@ -315,7 +272,6 @@ public final class Companions {
         body.clearFire();
         CompanionRegistry.get(server).markAlive(uuid);
         syncRosterToOwner(server, owner);
-        NumenNetwork.sendToPlayer(owner, new NumenRespawnPayload(uuid, entry.deathCause()));
         com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onRespawned(entry.deathCause()));
         return true;
     }

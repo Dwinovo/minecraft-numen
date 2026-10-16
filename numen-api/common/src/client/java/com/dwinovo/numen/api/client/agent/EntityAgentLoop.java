@@ -162,7 +162,7 @@ public final class EntityAgentLoop implements CompanionView {
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity, this::receiptAfterCut);
         this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName,
-                said -> Conversations.instance().heard(entityUuid, said), false,
+                said -> { }, false,
                 speaking -> com.dwinovo.numen.api.network.NumenNetwork.sendToServer(
                         new com.dwinovo.numen.api.network.payload.SpeakingStatePayload(entityUuid, speaking)));
         this.tokens = new com.dwinovo.numen.api.brain.TokenLedger(entityUuid,
@@ -281,6 +281,11 @@ public final class EntityAgentLoop implements CompanionView {
     }
 
     /** Read-only physical transcript for the GUI (see {@link #display}). */
+    public int messageCount() {
+        return display().size();
+    }
+
+    @Override
     public List<ConvoLog.Line> display() {
         return java.util.Collections.unmodifiableList(display);
     }

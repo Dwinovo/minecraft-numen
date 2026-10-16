@@ -547,4 +547,193 @@ public class BrainGameTests {
             her.close();
         });
     }
+
+    /** 群里 @ 谁谁醒,别人旁听:旁听是捎带的事件,不叫醒她。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void in_a_group_the_one_called_wakes_and_the_other_only_overhears(GameTestHelper helper)
+            throws Exception {
+        Brain a = new Brain(helper, "gametest_ga");
+        Brain b = new Brain(helper, "gametest_gb", Files.createTempDirectory("numen-gametest-brain-"),
+                a.companion.getOwnerUuid());
+        a.mind.say("来了");
+        var server = helper.getLevel().getServer();
+        UUID owner = a.companion.getOwnerUuid();
+
+        var pulled = OwnerInputs.apply(server, owner, new OwnerInput.Pull(a.companion.getUUID().toString(),
+                b.companion.getUUID(), "gametest-group"));
+        helper.assertTrue(pulled.problem() == null && pulled.conversationsChanged(), "the group was not made: " + pulled);
+        var said = OwnerInputs.apply(server, owner, new OwnerInput.Say("gametest-group", "@gametest_ga 过来一下"));
+        helper.assertTrue(said.problem() == null, "the words were refused: " + said.problem());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(a.mind.asked.size() == 1, "the one called did not wake");
+            helper.assertTrue(b.mind.asked.isEmpty(), "the one who only overheard woke up");
+            helper.assertTrue(b.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
+                    && e.text().contains("过来一下")), "the other did not overhear: " + b.loop.inbox().entries());
+            a.close();
+            b.close();
+        });
+    }
+
+    /** 渠道(桥接、弹幕)送来的输入和主人的话走同一个门:认归属、认类型。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void a_bridge_input_reaches_her_like_the_owners_words(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_bridged");
+        her.mind.say("收到弹幕");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+
+        helper.assertTrue(OwnerInputs.apply(server, owner, new OwnerInput.Emit(her.companion.getUUID(), "no_such_type",
+                "x")).problem() != null, "an unregistered type was accepted");
+        helper.assertTrue(OwnerInputs.apply(server, UUID.randomUUID(), new OwnerInput.Emit(her.companion.getUUID(),
+                EventTypes.QUERY, "x")).problem() != null, "a stranger's input was accepted");
+        var applied = OwnerInputs.apply(server, owner, new OwnerInput.Emit(her.companion.getUUID(), EventTypes.QUERY,
+                "弹幕:加油"));
+        helper.assertTrue(applied.problem() == null, "the owner's bridge was refused: " + applied.problem());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(her.mind.asked.size() == 1, "the bridged words did not wake her");
+            helper.assertTrue(her.transcript().get(0) instanceof ConvoState.Msg.User u && u.content().contains("弹幕:加油"),
+                    "the bridged words are not in her log: " + her.transcript());
+            her.close();
+        });
+    }
+
+    /** 外接大脑把驾驶席交还:驾驶期间攒下的话,内脑回来就接着答。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void handing_the_wheel_back_lets_her_answer_what_waited(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_handback");
+        her.mind.say("我在");
+        her.driving = true;
+        her.loop.submitPrompt("在吗");
+
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(her.mind.asked.isEmpty(), "she thought while an external brain drove");
+            helper.assertTrue(her.loop.status().hold() == Hold.EXTERNAL, "not held: " + her.loop.status().hold());
+            her.driving = false;
+        });
+        succeedWhen(helper, () -> {
+            helper.assertTrue(her.mind.asked.size() == 1, "she did not take the wheel back");
+            helper.assertTrue(her.loop.status().hold() == null, "still held: " + her.loop.status().hold());
+            her.close();
+        });
+    }
+
+    /** 召唤时选的人设和档案交给服务端绑,而且她从此有服务端大脑。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void summoning_gives_her_a_brain_with_the_chosen_persona_and_profile(GameTestHelper helper)
+            throws Exception {
+        var server = helper.getLevel().getServer();
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_summoner");
+        var persona = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID())
+                .create("gametest_persona", "你是测试员");
+        var profile = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().create("gametest_profile",
+                new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", "sk-test",
+                        "https://relay.example", null, null, 0, null, 0, null));
+
+        com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
+                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", "", "", false,
+                        persona.id(), profile.id()), owner);
+
+        var born = server.getPlayerList().getPlayerByName("gametest_born");
+        helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
+        var brain = CompanionLoops.get(born.getUUID());
+        helper.assertTrue(brain.isPresent(), "she has no server brain");
+        helper.assertTrue(persona.id().equals(brain.get().personaId()), "persona not bound: " + brain.get().personaId());
+        helper.assertTrue(profile.id().equals(brain.get().providerId()), "profile not bound: " + brain.get().providerId());
+
+        com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
+        com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().remove(profile.id());
+        com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /** 人设改名(文件名即身份):在用它的同伴改指新名字。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void renaming_a_persona_repoints_the_companions_using_it(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_renamed");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+        var library = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner);
+        var old = library.create("gametest_old_name", "文本");
+        her.loop.setPersona(old.id());
+
+        JsonObject body = new JsonObject();
+        body.addProperty("id", old.id());
+        body.addProperty("name", "gametest_new_name");
+        body.addProperty("text", "文本");
+        var result = com.dwinovo.numen.api.brain.Libraries.of(server).handle(owner, false,
+                com.dwinovo.numen.api.brain.Libraries.PERSONA, com.dwinovo.numen.api.brain.Libraries.PUT, body);
+
+        helper.assertTrue(result.problem() == null, "the rename was refused: " + result.problem());
+        helper.assertTrue("gametest_new_name".equals(her.loop.personaId()), "she still points at " + her.loop.personaId());
+        library.remove("gametest_new_name");
+        her.close();
+        helper.succeed();
+    }
+
+    /** 她存在就有大脑:按需建起来,离线出箱里攒着的事件倒进她的收件箱,再要一次是同一个。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void a_brain_made_on_demand_takes_in_what_waited_in_the_outbox(GameTestHelper helper)
+            throws Exception {
+        var server = helper.getLevel().getServer();
+        NumenPlayer body = spawnAt(helper, "gametest_ondemand", new BlockPos(3, 2, 3), false);
+        CompanionRegistry.get(server).put(body.getUUID(), new CompanionRegistry.Entry("gametest_ondemand",
+                body.getOwnerUuid(), Level.OVERWORLD, body.blockPosition()));
+        Io io = NumenIo.inline("numen-gametest");
+        Path notes = Files.createTempDirectory("numen-gametest-notes-");
+        NoteBook.init(uuid -> new Home(notes, io), () -> 0);
+        com.dwinovo.numen.api.entity.EventOutbox.get(server).put(body.getUUID(), new com.dwinovo.numen.api.agent.inbox
+                .EventQueue.Entry(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\">矿挖完了</event>", 1234L, true));
+
+        CompanionLoop loop = com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID());
+
+        helper.assertTrue(loop != null, "no brain was made");
+        helper.assertTrue(loop.inbox().entries().stream().anyMatch(e -> e.text().contains("矿挖完了") && e.ts() == 1234L),
+                "the outbox did not reach her inbox with its time: " + loop.inbox().entries());
+        helper.assertTrue(com.dwinovo.numen.api.entity.EventOutbox.get(server).peek(body.getUUID()).isEmpty(),
+                "the outbox still holds what was handed over");
+        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID()) == loop,
+                "asking again made another brain");
+        CompanionLoops.dismissed(server, body.getUUID());
+        CompanionRegistry.get(server).remove(body.getUUID());
+        CompanionFactory.despawn(server, body);
+        helper.succeed();
+    }
+
+    /** 管理员经协议存了模型档案:他收到带 key 的整表,在线的别人收到去了 key 的新表。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void an_admin_adds_a_model_profile_and_everyone_online_hears_of_it_without_the_key(
+            GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var admin = GameTestKit.presentPlayer(helper, null, "gametest_boss");
+        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
+                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+        var other = GameTestKit.presentPlayer(helper, null, "gametest_hand");
+        helper.assertTrue(com.dwinovo.numen.api.config.Authority.isAdmin(admin), "the test admin is not an admin");
+        com.dwinovo.numen.api.brain.Replies.hello(other, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        GameTestKit.received(admin);
+        GameTestKit.received(other);
+
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
+                "{\"name\":\"gametest_admin_profile\",\"provider\":\"openai\",\"api_key\":\"sk-admin\"}");
+
+        var told = GameTestKit.received(admin);
+        var heard = GameTestKit.received(other);
+        helper.assertTrue(told.size() == 1 && told.get(0) instanceof com.dwinovo.numen.api.network.payload.LibraryPayload a
+                        && a.problem().isEmpty() && a.entries().contains("sk-admin"),
+                "the admin was not given the whole table: " + told);
+        helper.assertTrue(heard.size() == 1 && heard.get(0) instanceof com.dwinovo.numen.api.network.payload.LibraryPayload h
+                        && h.entries().contains("gametest_admin_profile") && !h.entries().contains("sk-admin"),
+                "the other player was not told of the new profile without its key: " + heard);
+
+        var library = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance();
+        library.list().stream().filter(e -> "gametest_admin_profile".equals(e.name())).map(e -> e.id()).toList()
+                .forEach(library::remove);
+        server.getPlayerList().deop(admin.getGameProfile());
+        GameTestKit.leave(other);
+        GameTestKit.leave(admin);
+        helper.succeed();
+    }
 }

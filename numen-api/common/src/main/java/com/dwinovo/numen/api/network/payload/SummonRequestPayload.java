@@ -20,11 +20,16 @@ import net.minecraft.server.level.ServerPlayer;
  * {@code skinValue} 非空 = 客户端皮肤库里 MineSkin 代签好的 Mojang 签名数据,直接
  * 采用(签名自验证,客户端伪造不了);为空 = <b>名字就是皮肤来源</b>,服务端异步查
  * 同名正版玩家,查到穿其皮肤,查不到静默回落默认皮肤(日志可查,不打扰玩家)。
+ *
+ * <p>{@code persona} 与 {@code provider} 是召唤时给她选的人设和模型档案(空串 = 不选):大脑在服务端,选择在这里一并交给服务端校验、绑定。
  */
-public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative)
+public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative,
+                                   String persona, String provider)
         implements CustomPacketPayload {
 
     public static final int MAX_NAME = 16;
+    /** 人设、档案的 id 上限。 */
+    private static final int MAX_ID = 128;
 
     public static final Type<SummonRequestPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
@@ -37,6 +42,8 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
                     Wire.TO_SERVER.text(), SummonRequestPayload::skinValue,
                     Wire.TO_SERVER.text(), SummonRequestPayload::skinSig,
                     ByteBufCodecs.BOOL, SummonRequestPayload::creative,
+                    ByteBufCodecs.stringUtf8(MAX_ID), SummonRequestPayload::persona,
+                    ByteBufCodecs.stringUtf8(MAX_ID), SummonRequestPayload::provider,
                     SummonRequestPayload::new);
 
     @Override
@@ -77,9 +84,31 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
             ServerLevel level = (ServerLevel) owner.level();
             var body = Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
             Companions.applyGameMode(owner, body, p.creative());
+            bind(server, owner, body, p);
             Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
         } finally {
             SPAWNING.remove(spawnKey);
+        }
+    }
+
+    /** 召唤时选的人设和档案:库里有才绑,选了却没有的(途中被删)如实告诉主人,她照常以默认人格、未绑档案起来。 */
+    private static void bind(net.minecraft.server.MinecraftServer server, ServerPlayer owner,
+                             com.dwinovo.numen.api.entity.NumenPlayer body, SummonRequestPayload p) {
+        var brain = com.dwinovo.numen.api.brain.CompanionLoops.get(body.getUUID());
+        if (brain.isEmpty()) {
+            return;
+        }
+        if (!p.persona().isEmpty()) {
+            if (com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).get(p.persona()) != null) {
+                brain.get().setInitialPersona(p.persona());
+            } else {
+                owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                        "numen.summon.persona_missing"));
+            }
+        }
+        if (!p.provider().isEmpty()
+                && com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().get(p.provider()) != null) {
+            brain.get().setProvider(p.provider());
         }
     }
 }

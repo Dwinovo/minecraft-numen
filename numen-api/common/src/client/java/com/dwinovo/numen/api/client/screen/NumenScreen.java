@@ -750,9 +750,7 @@ public final class NumenScreen extends Screen {
     /** 召唤卡的宿主面:落库(把选择挂到名字上)与发包留在屏幕这边。 */
     private final class SummonHost implements SummonPanel.Host {
         @Override public void onCreate(SummonPanel.Draft d) {
-            // 选择按名字记账;CompanionListPayload 在新同伴到达时套用。
-            if (d.personaId != null) com.dwinovo.numen.api.persona.PersonaLibrary.pendSummon(d.name, d.personaId);
-            com.dwinovo.numen.api.agent.llm.ProviderLibrary.pendSummon(d.name, d.providerId);
+            // 人设和档案随召唤请求交给服务端绑;声线和皮肤是这台机器的,按名字记账,名册在新同伴到达时套用。
             if (d.voiceId != null) com.dwinovo.numen.api.client.voice.VoiceLibrary.pendSummon(d.name, d.voiceId);
             // 自定义皮肤:库里存好的签名数据现成,直接发。选了库条目的同时记账
             // (UUID 到货时落进绑定),编辑卡才能标出她当前穿的是哪张。
@@ -788,7 +786,8 @@ public final class NumenScreen extends Screen {
         private void sendSummon(SummonPanel.Draft d, String skinValue, String skinSig) {
             NumenNetwork.sendToServer(
                     new com.dwinovo.numen.api.network.payload.SummonRequestPayload(
-                            d.name, skinValue, skinSig, d.creative));
+                            d.name, skinValue, skinSig, d.creative,
+                            d.personaId == null ? "" : d.personaId, d.providerId == null ? "" : d.providerId));
             // 查皮肤那一两秒里卡可能已被收掉、换成了别的卡:只收召唤卡自己。
             // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
             if (cardLive() && modalCard == summonPanel) closeCard();
@@ -2837,6 +2836,7 @@ public final class NumenScreen extends Screen {
         boolean compacting = lp != null && lp.status().phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;
         boolean blocked = lp != null && lp.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.BLOCKED
                 && lp.status().holdReason() != null;
+        boolean external = lp != null && lp.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.EXTERNAL;
         boolean cmdLive = cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty();
         boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
         if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位(占位文案由输入行现取)
@@ -2844,18 +2844,13 @@ public final class NumenScreen extends Screen {
             micNotice = null;
         }
         boolean noticeLine = noticeLive && inputBar != null && !inputBar.text().isEmpty();
-        boolean dock = compacting || blocked || cmdLive || noticeLine;
+        boolean dock = compacting || blocked || external || cmdLive || noticeLine;
         dockShown = com.dwinovo.numen.api.client.ui.Anim.approach(dockShown, dock ? STATUS_H : 0f, 18f, dt);
         int bodyBottom = inputTop - 4 - Math.round(dockShown);
 
-        // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
-        // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
-        if (lp != null && com.dwinovo.numen.api.mcp.server.McpMode.instance().driving()) {
-            chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
-        } else {
-            chatView.scrollbarRight(left + panelW - 4);   // 滑块贴正文区右缘,不是气泡区的
-            chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
-        }
+        // 外脑驱动时她的话、外脑的动作都和内脑一样写进她的日志,对话流不用换样子
+        chatView.scrollbarRight(left + panelW - 4);   // 滑块贴正文区右缘,不是气泡区的
+        chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
 
         // 置顶条点开:目标详情从它下面往下长,盖在对话流上;展开/收起都有过渡,收完才不画
         if (pinGoal != null && (goalOpen || goalShownH > 0f)) {
@@ -2871,6 +2866,10 @@ public final class NumenScreen extends Screen {
         if (blocked && !compacting) {
             txt(g, Component.literal(com.dwinovo.numen.api.client.agent.CauseWords.text(lp.status().holdReason())),
                     left + PAD, dockY, FAIL);
+        }
+        // 外接大脑握着驾驶席:她自己不开轮,主人得知道话是谁在回
+        if (external && !blocked && !compacting && !cmdLive && !noticeLine) {
+            txt(g, Component.literal(I18n.get("numen.brain.driving")), left + PAD, dockY, TXT_MUTED);
         }
         // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
         // 报的是"还在动",不是"完成了百分之几"——永远差一点,收尾时整条消失。

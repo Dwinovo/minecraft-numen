@@ -39,6 +39,11 @@ public record Conversation(String id, String name, List<UUID> members, int turn)
         return new Conversation(UUID.randomUUID().toString(), null, dedup(members), 0);
     }
 
+    /** 新建一个群,id 由调用方定:主人的客户端先起好 id,界面马上就能指着这个新群,服务端照这个 id 落。 */
+    public static Conversation of(String id, List<UUID> members) {
+        return new Conversation(id, null, dedup(members), 0);
+    }
+
     /**
      * 界面上叫什么:主人改过名就用他起的,没改过就拼成员名。
      *

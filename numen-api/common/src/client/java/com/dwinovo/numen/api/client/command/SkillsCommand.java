@@ -2,10 +2,13 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.agent.skill.SkillInfo;
-import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.widget.SelectPanel;
+
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +16,8 @@ import java.util.List;
 /**
  * {@code /skills} —— 技能面板:一行一个,回车开关可见性。
  *
- * <p>与设置页的技能管理<b>同源</b>:两边写的都是 {@link SkillRegistry} 这一个单例,
- * 落盘也是它自己的 {@code skills_state.json}。没有第二份状态,也就没有要对齐的东西。
+ * <p>与设置页的技能管理<b>同源</b>:两边读的都是服务器上的技能表(库协议 {@code skill}),开关由服务端判——
+ * 只有管理员拨得动。没有第二份状态,也就没有要对齐的东西。
  */
 final class SkillsCommand implements PopupCommand {
 
@@ -43,12 +46,11 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public List<SelectPanel.Row> rows() {
-            SkillRegistry reg = SkillRegistry.instance();
             List<SelectPanel.Row> out = new ArrayList<>();
-            for (SkillInfo info : reg.all()) {
-                String desc = info.description() == null || info.description().isBlank()
-                        ? "" : info.description();
-                out.add(new SelectPanel.Row(info.name(), desc, !reg.isDisabled(info.name())));
+            for (ServerLibraries.Skill skill : ServerLibraries.skills()) {
+                String desc = skill.description() == null || skill.description().isBlank()
+                        ? "" : skill.description();
+                out.add(new SelectPanel.Row(skill.name(), desc, skill.enabled()));
             }
             if (out.isEmpty()) {
                 out.add(new SelectPanel.Row(I18n.get(Keys.CMD_SKILLS_EMPTY), I18n.get(Keys.CMD_SKILLS_EMPTY_HINT), null));
@@ -58,13 +60,14 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public boolean activate(int index) {
-            SkillRegistry reg = SkillRegistry.instance();
-            List<SkillInfo> all = new ArrayList<>(reg.all());
+            List<ServerLibraries.Skill> all = ServerLibraries.skills();
             if (index < 0 || index >= all.size()) {
                 return false;   // 空库时那条占位行:按了也没有东西可开关
             }
-            String name = all.get(index).name();
-            reg.setEnabled(name, reg.isDisabled(name));   // 翻面
+            ServerLibraries.Skill skill = all.get(index);
+            JsonObject body = new JsonObject();
+            body.addProperty("name", skill.name());
+            RemoteCompanions.library().request(Libraries.SKILL, skill.enabled() ? Libraries.DISABLE : Libraries.ENABLE, body);
             return true;
         }
     }
