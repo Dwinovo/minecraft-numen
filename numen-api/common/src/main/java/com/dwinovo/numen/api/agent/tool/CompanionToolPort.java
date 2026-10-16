@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.agent.loop.ToolPort;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.entity.CompanionEvents;
+import com.dwinovo.numen.api.program.ProgramHost;
 import com.dwinovo.numen.api.program.ProgramUplink;
 import com.dwinovo.numen.api.program.RunResult;
 
@@ -29,7 +30,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     private final UUID companion;
     /** 每个调用派出那一刻取一次:客户端上它带着此刻看得见的那具身体(出了视距是 null)。 */
     private final Supplier<? extends ToolAnchor> anchor;
-    private final ProgramUplink uplink;
+    private final ProgramHost uplink;
     private final AfterCut afterCut;
     private final SerialCalls calls;
 
@@ -49,8 +50,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         this(companion, anchor, ProgramUplink.CONNECTION, afterCut);
     }
 
-    /** @param uplink 程序送去哪里:主人客户端上是这个连接的那一份,评测给它自己的 */
-    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramUplink uplink,
+    /** @param uplink 程序交给谁跑:主人客户端上是这个连接的那一份,服务端大脑是本进程里的 {@code LocalPrograms} */
+    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramHost uplink,
                              AfterCut afterCut) {
         this.companion = companion;
         this.anchor = anchor;

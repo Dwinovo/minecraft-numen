@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.agent.goal.GoalPrompts;
 import com.dwinovo.numen.api.agent.goal.GoalState;
 import com.dwinovo.numen.api.agent.goal.GoalSteward;
@@ -137,7 +138,7 @@ public final class EntityAgentLoop {
 
     /** 表现层(打字机/气泡/说话位/语音)与 token 台账,循环之外的两件事。 */
     private final TurnPresenter presenter;
-    private final TokenLedger tokens;
+    private final com.dwinovo.numen.api.brain.TokenLedger tokens;
 
     /** 模型那一侧的端口:正常一轮、压缩、目标评估都从它发出。 */
     private final Model model;
@@ -161,7 +162,9 @@ public final class EntityAgentLoop {
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity, this::receiptAfterCut);
         this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
-        this.tokens = new TokenLedger(entityUuid);
+        this.tokens = new com.dwinovo.numen.api.brain.TokenLedger(entityUuid,
+                new com.dwinovo.numen.api.store.JsonDoc(CompanionHome.stats(entityUuid),
+                        com.dwinovo.numen.api.store.JsonDoc.Format.of(1), NumenIo.inline("numen-entity#" + entityUuid)));
         this.model = new Model();
         this.compactor = new Compactor(entityUuid.toString(), convo, log, this::modelWindow);
         this.loop = new AgentLoop(entityUuid.toString(), model, dispatcher, convo, queue, compactor, new Host());

@@ -86,15 +86,19 @@ public final class ConvoLog {
     /** 现在模型上下文由哪些记录组成(按序的 id)、最近一次记下的模型与思考档位;第一次要写之前才从文件建。 */
     private State state;
 
-    private ConvoLog(Path file) {
+    private ConvoLog(Path file, Io io) {
         this.file = file;
-        this.log = new AppendLog(file, format(file),
-                Io.direct(e -> AiLog.LOG.warn("[numen-convo] {}", e.getMessage())));
+        this.log = new AppendLog(file, format(file), io);
     }
 
-    /** 会话日志的落点由宿主给全路径(客户端按同伴归拢在 companions/&lt;uuid&gt;/)。第一次写之前不建文件。 */
+    /** 会话日志的落点由宿主给全路径(按同伴归拢在 companions/&lt;uuid&gt;/)。第一次写之前不建文件。写在调用线程上直接做。 */
     public static ConvoLog atFile(Path file) {
-        return new ConvoLog(file);
+        return atFile(file, Io.direct(e -> AiLog.LOG.warn("[numen-convo] {}", e.getMessage())));
+    }
+
+    /** 同上,写的线程由宿主给({@code io} 的执行器):服务端给每只同伴一条串行车道。 */
+    public static ConvoLog atFile(Path file, Io io) {
+        return new ConvoLog(file, io);
     }
 
     public Path file() {

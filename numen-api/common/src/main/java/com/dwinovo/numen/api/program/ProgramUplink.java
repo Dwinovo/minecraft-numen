@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.Program;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.CancelTasksPayload;
@@ -22,7 +21,7 @@ import java.util.function.Function;
  *
  * <p>线程:都在主人客户端的主线程上。
  */
-public final class ProgramUplink {
+public final class ProgramUplink implements ProgramHost {
 
     /**
      * 上行的出口:主人客户端上是网络({@link NumenNetwork#sendToServer})。没有主人客户端的进程(评测)换成把包交给服务端真实入口的
@@ -59,6 +58,7 @@ public final class ProgramUplink {
      *
      * @param programId 这段程序的编号,调用方保证不重
      */
+    @Override
     public void run(UUID companion, String programId, String code, Consumer<RunResult> done) {
         send(companion, programId, new Waiting(companion, code, done, false));
     }
@@ -83,11 +83,7 @@ public final class ProgramUplink {
         waiting.remove(programId);
         if (result instanceof RunResult.Ended ended) {
             // 用到的每个模块记一次战绩:战绩记在客户端的账本里,和模块的真源在一处
-            Modules mine = modules.apply(w.companion());
-            for (Program.Used used : ended.outcome().used()) {
-                mine.tally(used.module(), used.tally().ok(), used.tally().line(), used.tally().error(),
-                        System.currentTimeMillis());
-            }
+            LocalPrograms.tally(modules.apply(w.companion()), ended);
         }
         w.done().accept(result);
     }
@@ -96,11 +92,13 @@ public final class ProgramUplink {
      * 这段程序所在的那一批作废了(切断),但程序在服务端照常停下、交出回执:晚到的结果交给 {@code late},而不是原来等的那一方。
      * 已经回来或根本没送出的,不做什么。
      */
+    @Override
     public void afterwards(String programId, Consumer<RunResult> late) {
         waiting.computeIfPresent(programId, (id, w) -> new Waiting(w.companion(), w.code(), late, w.retried()));
     }
 
     /** 不再等这段程序的答复(客户端放弃了):晚到的答复不理。 */
+    @Override
     public void forget(String programId) {
         waiting.remove(programId);
     }
@@ -108,6 +106,7 @@ public final class ProgramUplink {
     /**
      * 叫服务端上的这段程序停在调用之间:{@code why} 是给模型的原因(主人开口、客户端那边来了急件)。
      */
+    @Override
     public void interrupt(UUID companion, String programId, String why) {
         uplink.accept(new StopProgramPayload(companion, programId, false, false, why));
     }
@@ -117,11 +116,13 @@ public final class ProgramUplink {
      *
      * @param stopBody 身体活是不是一起叫停(叫停本身另发 {@code CancelTasksPayload}),回执照实说
      */
+    @Override
     public void cutOff(UUID companion, String programId, boolean stopBody) {
         uplink.accept(new StopProgramPayload(companion, programId, true, stopBody, ""));
     }
 
     /** 主人按停止:叫停她身体上在跑的活(程序另用 {@link #cutOff})。 */
+    @Override
     public void stopBody(UUID companion) {
         uplink.accept(new CancelTasksPayload(companion));
     }

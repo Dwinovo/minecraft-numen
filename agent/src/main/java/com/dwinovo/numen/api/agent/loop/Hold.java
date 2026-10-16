@@ -7,17 +7,19 @@ package com.dwinovo.numen.api.agent.loop;
  * Hold        什么时候进入                          什么解开
  * DEAD        身体死亡                              复活
  * EXTERNAL    外接模型驾驶(现算,不存)              驾驶席交还内脑——现算的值自己变回来,不经 Release
+ * AWAY        主人不在线(现算,不存)                主人回来——现算的值自己变回来,不经 Release
  * OWNER_STOP  主人按停止                            主人再说话
  * BLOCKED     模型端点不可用(未绑定、没 key)       主人再说话;或绑定变更
  * FAILED      调用失败且不再重试                    主人说话;或来了急件
  * </pre>
  *
- * <p>DEAD 与 EXTERNAL 优先于其余三种:身体不在、驾驶席不在内脑手里时,别的停牌无意义。存储上是
- * "死没死"一个布尔(身体事实)、后三种一个值、外接驾驶每次现问,由 {@link AgentLoop#hold()} 合成。
+ * <p>DEAD、EXTERNAL、AWAY 优先于其余三种:身体不在、驾驶席不在内脑手里、主人不在时,别的停牌无意义。存储上是
+ * "死没死"一个布尔(身体事实)、后三种一个值、外接驾驶与主人在不在每次现问,由 {@link AgentLoop#hold()} 合成。
  */
 public enum Hold {
     DEAD,
     EXTERNAL,
+    AWAY,
     OWNER_STOP,
     BLOCKED,
     FAILED;
@@ -38,7 +40,7 @@ public enum Hold {
     public boolean releasedBy(Release release) {
         return switch (this) {
             case DEAD -> release == Release.RESPAWN;
-            case EXTERNAL -> false;
+            case EXTERNAL, AWAY -> false;
             case OWNER_STOP -> release == Release.OWNER_SPOKE;
             case BLOCKED -> release == Release.OWNER_SPOKE || release == Release.BINDING_CHANGED;
             case FAILED -> release == Release.OWNER_SPOKE || release == Release.URGENT;

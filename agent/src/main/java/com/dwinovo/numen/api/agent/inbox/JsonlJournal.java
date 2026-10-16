@@ -28,13 +28,18 @@ public final class JsonlJournal implements EventQueue.Journal {
 
     private final AppendLog log;
 
-    private JsonlJournal(Path file) {
-        this.log = new AppendLog(file, AppendLog.Format.of(2).upgrade(1, records -> records),
-                Io.direct(e -> AiLog.LOG.warn("[numen-queue] {}", e.getMessage())));
+    private JsonlJournal(Path file, Io io) {
+        this.log = new AppendLog(file, AppendLog.Format.of(2).upgrade(1, records -> records), io);
     }
 
+    /** 写在调用线程上直接做。 */
     public static JsonlJournal atFile(Path file) {
-        return new JsonlJournal(file);
+        return atFile(file, Io.direct(e -> AiLog.LOG.warn("[numen-queue] {}", e.getMessage())));
+    }
+
+    /** 同上,写的线程由宿主给({@code io} 的执行器)。 */
+    public static JsonlJournal atFile(Path file, Io io) {
+        return new JsonlJournal(file, io);
     }
 
     @Override

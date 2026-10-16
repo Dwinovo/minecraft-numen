@@ -27,7 +27,11 @@ public final class OwnedBody {
      * @return 这具身体;认不出是 null
      */
     public static NumenPlayer of(ServerPlayer sender, UUID entityUuid, Consumer<String> refuse) {
-        MinecraftServer server = sender.level().getServer();
+        return of(sender.level().getServer(), sender.getUUID(), entityUuid, refuse);
+    }
+
+    /** 同上,不是玩家发的包而是服务端大脑替这位主人办事:{@code ownerUuid} 是该是她主人的那一位。 */
+    public static NumenPlayer of(MinecraftServer server, UUID ownerUuid, UUID entityUuid, Consumer<String> refuse) {
         NumenPlayer companion = NumenPlayer.findByUuid(server, entityUuid);
         if (companion == null) {
             // 她死着的时候不许从这儿把她拉起来:复活的唯一出口是定时复活
@@ -45,7 +49,7 @@ public final class OwnedBody {
             refuse.accept("companion not found (never summoned, or its data is gone)");
             return null;
         }
-        if (!companion.isOwnedByPlayer(sender.getUUID())) {
+        if (!companion.isOwnedByPlayer(ownerUuid)) {
             refuse.accept("not the owner");
             return null;
         }

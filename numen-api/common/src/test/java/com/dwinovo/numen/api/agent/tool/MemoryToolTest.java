@@ -27,7 +27,8 @@ class MemoryToolTest {
 
     @BeforeAll
     static void books() {
-        NoteBook.init(uuid -> homes.resolve(uuid.toString()), () -> 7);
+        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(homes.resolve(uuid.toString()),
+                com.dwinovo.numen.api.NumenIo.inline("test")), () -> 7);
     }
 
     /** 调一次:参数是那段 JSON 文本,交回这次调用的结果。 */

@@ -15,6 +15,14 @@ public interface HostPort {
     /** 驾驶席此刻在外接模型手里。现算,不存。 */
     boolean externallyDriven();
 
+    /**
+     * 主人在线。不在线时内脑待命({@link Hold#AWAY}):输入照收进收件箱,等他回来再处理。现算,不存。缺省恒在线——
+     * 主人本来就在身边的宿主(评测)不用管。
+     */
+    default boolean ownerPresent() {
+        return true;
+    }
+
     /** 注入输入时垫在最前面、随这条 user 消息一起进历史的现场块;没有返回空串。 */
     String injectionPreamble();
 

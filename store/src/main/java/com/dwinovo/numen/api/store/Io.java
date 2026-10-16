@@ -30,8 +30,8 @@ public record Io(Executor executor, Consumer<StoreException> onError) {
         return new Io(Runnable::run, onError);
     }
 
-    /** 把一次写交给执行器;{@link StoreException} 去 {@code onError}。 */
-    void write(Runnable job) {
+    /** 把一次写交给执行器;{@link StoreException} 去 {@code onError}。给存储自己的写和"一条一个文件"的内容文件用。 */
+    public void write(Runnable job) {
         executor.execute(() -> {
             try {
                 job.run();

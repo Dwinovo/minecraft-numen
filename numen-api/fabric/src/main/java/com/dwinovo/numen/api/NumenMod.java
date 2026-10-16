@@ -31,6 +31,7 @@ public class NumenMod implements ModInitializer {
                 (handler, server) -> {
                     if (!(handler.getPlayer() instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
                         com.dwinovo.numen.api.program.ServerPrograms.ownerLeft(handler.getPlayer().getUUID());
+                        com.dwinovo.numen.api.brain.CompanionLoops.ownerLeft(handler.getPlayer().getUUID());
                     }
                 });
 

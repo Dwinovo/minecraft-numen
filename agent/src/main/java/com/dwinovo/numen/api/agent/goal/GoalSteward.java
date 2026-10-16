@@ -86,7 +86,7 @@ public final class GoalSteward {
         goal = next;
         persist.accept(next);
         Hold hold = loop.hold();
-        if (next == null || hold == Hold.DEAD || hold == Hold.EXTERNAL) {
+        if (next == null || hold == Hold.DEAD || hold == Hold.EXTERNAL || hold == Hold.AWAY) {
             return false;
         }
         next.countTurn();

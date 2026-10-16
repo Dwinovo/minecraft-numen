@@ -214,6 +214,7 @@ public abstract class LoopHarness {
         public long now = T0;
         public int level = 3;
         public boolean external;
+        public boolean away;
         public String preamble = "";
         public boolean bodyTask;
 
@@ -230,6 +231,11 @@ public abstract class LoopHarness {
         @Override
         public boolean externallyDriven() {
             return external;
+        }
+
+        @Override
+        public boolean ownerPresent() {
+            return !away;
         }
 
         @Override

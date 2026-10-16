@@ -175,7 +175,8 @@ final class Attempt {
         // 札记、会话日志与她的 Lua 模块落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,模块只用内置原版、不读主人目录
         // 里的,评测也从不读它们
         home = Files.createTempDirectory("numen-bench-");
-        NoteBook.init(uuid -> home.resolve("memory"), () -> (int) (level.getDayTime() / 24000L));
+        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(home.resolve("memory"),
+                com.dwinovo.numen.api.NumenIo.inline("numen-bench")), () -> (int) (level.getDayTime() / 24000L));
         com.dwinovo.numen.api.script.Modules.init(uuid -> home.resolve("lua"));
         scenario.setup(scene);
         mind = switch (variant) {

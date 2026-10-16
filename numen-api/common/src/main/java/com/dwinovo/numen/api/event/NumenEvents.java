@@ -247,6 +247,13 @@ public final class NumenEvents {
         UUID uuid = companion.getUUID();
         String type = entry.type();
         boolean urgent = entry.urgent();
+        // 她有服务端大脑:事件直接进她的收件箱,主人在不在线都一样(离线只是攒着)
+        var brain = com.dwinovo.numen.api.brain.CompanionLoops.get(uuid);
+        if (brain.isPresent()) {
+            brain.get().push(List.of(entry));
+            Constants.LOG.info("[numen-event] {} kind={}{} → 服务端大脑", uuid, type, urgent ? " URGENT" : "");
+            return;
+        }
         ServerPlayer owner = companion.resolveOwnerPlayer();
         route(uuid, entry,
                 owner == null ? null : payload -> {

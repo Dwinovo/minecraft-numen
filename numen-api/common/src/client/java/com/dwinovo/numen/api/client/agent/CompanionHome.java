@@ -111,7 +111,9 @@ public final class CompanionHome {
         root = numenConfigRoot;
         // 札记的落点由这里给:目录布局的知识只住在本类,NoteBook 自己不拼路径。
         // 天数是懒取的——要到她真的记一条时才问 Minecraft,所以这里没有时序问题。
-        com.dwinovo.numen.api.agent.memory.NoteBook.init(CompanionHome::memory, CompanionHome::gameDay);
+        com.dwinovo.numen.api.agent.memory.NoteBook.init(
+                uuid -> new com.dwinovo.numen.api.home.Home(memory(uuid), NumenIo.inline("numen-memory")),
+                CompanionHome::gameDay);
         // 她的 Lua 模块按主人放,不按同伴:同一主人的同伴共用一个目录 lua/<主人>/。主人就是这台客户端登录的那个账号,
         // 用到时才问,和天数同样没有时序问题。
         com.dwinovo.numen.api.script.Modules.init(companion -> numenRoot().resolve(LUA)

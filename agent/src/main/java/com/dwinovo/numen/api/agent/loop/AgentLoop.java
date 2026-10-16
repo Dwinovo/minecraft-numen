@@ -239,7 +239,7 @@ public final class AgentLoop {
      *       清空/整理是主人对内脑的直接要求,按了停止之后照样立即执行;</li>
      *   <li>否则什么也不做,也不说话。</li>
      * </ol>
-     * 死着、外接驾驶时什么都不做:身体不在、驾驶席不在内脑手里。
+     * 死着、外接驾驶、主人不在时什么都不做:身体不在、驾驶席不在内脑手里、主人不在线。
      *
      * @return 这一步动了队列或停牌(开了 run、执行了控制条目),值得再看一眼;什么也没做、或者被端点挡下是 {@code false}
      */
@@ -248,7 +248,7 @@ public final class AgentLoop {
             return false;   // run 里的边界自己取队列;外接大脑的调用借着工具口时不开 run
         }
         Hold hold = hold();
-        if (hold == Hold.DEAD || hold == Hold.EXTERNAL) {
+        if (hold == Hold.DEAD || hold == Hold.EXTERNAL || hold == Hold.AWAY) {
             return false;
         }
         int level = host.initiativeLevel();
@@ -612,6 +612,9 @@ public final class AgentLoop {
         }
         if (host.externallyDriven()) {
             return Hold.EXTERNAL;
+        }
+        if (!host.ownerPresent()) {
+            return Hold.AWAY;
         }
         return stopped;
     }

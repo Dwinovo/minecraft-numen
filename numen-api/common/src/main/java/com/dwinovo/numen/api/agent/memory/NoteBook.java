@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.agent.memory;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.api.agent.skill.SkillMarkdown;
@@ -54,7 +56,7 @@ public final class NoteBook {
     public record Note(String name, String description, String type, int day, String content) {}
 
     /** 每只同伴的记忆目录;由客户端注入,见 {@link #init}。 */
-    private static Function<UUID, Path> homes;
+    private static Function<UUID, Home> homes;
 
     /** 现在是游戏第几天;由客户端注入,见 {@link #init}。 */
     private static IntSupplier today;
@@ -66,20 +68,27 @@ public final class NoteBook {
     private static final java.util.Map<UUID, NoteBook> OPEN = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final Path dir;
+    private final Io io;
+    /**
+     * 全部札记(按名字)。第一次要用时从目录读进来,之后读写都在这里——写落盘是异步的(车道),读不能指望文件已经更新;
+     * 所以进程运行期间目录里被人手改的文件要到下次启动才读到。
+     */
+    private java.util.Map<String, Note> notes;
 
     /** 写一次加一;注入那侧靠它判断"变过没有",不必比对正文。 */
     private int revision;
 
-    private NoteBook(Path dir) {
-        this.dir = dir;
+    private NoteBook(Home home) {
+        this.dir = home.dir();
+        this.io = home.io();
     }
 
     /**
      * 安家的位置与当前天数——{@code CompanionHome} 独占目录布局的知识,这里只接受它给的落点,
      * 不自己拼 {@code companions/<uuid>/}:布局写在两处,改一处就开始对不上。
      */
-    public static void init(Function<UUID, Path> companionMemoryDirs, IntSupplier gameDay) {
-        homes = companionMemoryDirs;
+    public static void init(Function<UUID, Home> companionMemoryHomes, IntSupplier gameDay) {
+        homes = companionMemoryHomes;
         today = gameDay;
         OPEN.clear();   // 换了落点,开着的那些本子指向的是上一处
     }
@@ -96,43 +105,45 @@ public final class NoteBook {
     // ---- 读 ----
 
     /** 全部记忆,按天数倒序(新的在前),同天按名字——顺序稳定,注入的字节才稳定。 */
-    public List<Note> index() {
-        List<Note> out = new ArrayList<>();
-        if (!Files.isDirectory(dir)) {
-            return out;
-        }
-        try (Stream<Path> list = Files.list(dir)) {
-            for (Path p : list.toList()) {
-                if (!p.getFileName().toString().endsWith(".md")) {
-                    continue;   // 别人放进来的东西,不碰
-                }
-                Note n = parse(p);
-                if (n != null) {
-                    out.add(n);
-                }
-            }
-        } catch (IOException e) {
-            Constants.LOG.warn("[numen-memory] 札记目录读不了 {}: {}", dir, e.toString());
-        }
+    public synchronized List<Note> index() {
+        List<Note> out = new ArrayList<>(notes().values());
         out.sort(Comparator.comparingInt(Note::day).reversed().thenComparing(Note::name));
         return out;
     }
 
-    /** 读一条的正文;没有这条则 null。 */
-    public Note read(String name) {
-        String slug = slug(name);
-        if (slug.isEmpty()) {
-            return null;
+    private java.util.Map<String, Note> notes() {
+        if (notes == null) {
+            notes = new java.util.HashMap<>();
+            if (Files.isDirectory(dir)) {
+                try (Stream<Path> list = Files.list(dir)) {
+                    for (Path p : list.toList()) {
+                        if (!p.getFileName().toString().endsWith(".md")) {
+                            continue;   // 别人放进来的东西,不碰
+                        }
+                        Note n = parse(p);
+                        if (n != null) {
+                            notes.put(n.name(), n);
+                        }
+                    }
+                } catch (IOException e) {
+                    Constants.LOG.warn("[numen-memory] 札记目录读不了 {}: {}", dir, e.toString());
+                }
+            }
         }
-        Path p = dir.resolve(slug + ".md");
-        return Files.isRegularFile(p) ? parse(p) : null;
+        return notes;
+    }
+
+    /** 读一条的正文;没有这条则 null。 */
+    public synchronized Note read(String name) {
+        String slug = slug(name);
+        return slug.isEmpty() ? null : notes().get(slug);
     }
 
     /**
      * 索引块:进模型的就这些,不含正文。空着就不发——她有没有记忆这件事由系统提示词讲,
      * 不靠一个空块去说。
      */
-    public String formatXml() {
+    public synchronized String formatXml() {
         List<Note> notes = index();
         if (notes.isEmpty()) {
             return "";
@@ -148,7 +159,7 @@ public final class NoteBook {
     }
 
     /** 写过几次:注入那侧用它判断要不要重贴。 */
-    public int revision() {
+    public synchronized int revision() {
         return revision;
     }
 
@@ -160,7 +171,7 @@ public final class NoteBook {
      *
      * @return 落盘后的这一条
      */
-    public Note write(String name, String description, String type, String content) {
+    public synchronized Note write(String name, String description, String type, String content) {
         String slug = slug(name);
         if (slug.isEmpty()) {
             throw new IllegalArgumentException("name must contain letters or digits");
@@ -172,30 +183,30 @@ public final class NoteBook {
         String line = description.strip().replaceAll("\\s*\\R\\s*", " ");
         Note note = new Note(slug, line, type, today.getAsInt(),
                 content == null ? "" : content.strip());
-        try {
-            Atomic.write(dir.resolve(slug + ".md"), render(note));
-            revision++;
-        } catch (StoreException e) {
-            throw new IllegalStateException("记不下来: " + e, e);
-        }
+        notes().put(slug, note);
+        revision++;
+        Path file = dir.resolve(slug + ".md");
+        String text = render(note);
+        io.write(() -> Atomic.write(file, text));
         return note;
     }
 
     /** 忘掉一条;没有这条返回 false。 */
-    public boolean forget(String name) {
+    public synchronized boolean forget(String name) {
         String slug = slug(name);
-        if (slug.isEmpty()) {
+        if (slug.isEmpty() || notes().remove(slug) == null) {
             return false;
         }
-        try {
-            if (Files.deleteIfExists(dir.resolve(slug + ".md"))) {
-                revision++;
-                return true;
+        revision++;
+        Path file = dir.resolve(slug + ".md");
+        io.write(() -> {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                throw new StoreException("删不掉 " + file + ": " + e, e);
             }
-        } catch (IOException e) {
-            Constants.LOG.warn("[numen-memory] 删不掉 {}: {}", slug, e.toString());
-        }
-        return false;
+        });
+        return true;
     }
 
     // ---- 文件 ----

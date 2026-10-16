@@ -11,6 +11,7 @@ public final class NumenGameTestSuite implements GameTestSuite {
         return List.of(
                 ArriveGameTests.class,
                 BodyReportGameTests.class,
+                BrainGameTests.class,
                 BuildGameTests.class,
                 CellRouteGameTests.class,
                 CollectGameTests.class,

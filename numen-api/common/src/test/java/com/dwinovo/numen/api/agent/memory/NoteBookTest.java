@@ -33,7 +33,8 @@ class NoteBookTest {
 
     @BeforeEach
     void wire() {
-        NoteBook.init(uuid -> tmp.resolve(uuid.toString()), () -> day);
+        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(tmp.resolve(uuid.toString()),
+                com.dwinovo.numen.api.NumenIo.inline("test")), () -> day);
     }
 
     @Test
@@ -171,12 +172,31 @@ class NoteBookTest {
     /** 主人手改坏的文件不能把整本札记拖垮——读不出索引行的那条跳过,其余照常。 */
     @Test
     void aHandEditedFileMissingItsDescriptionIsSkipped() throws Exception {
-        NoteBook book = NoteBook.of(SHE);
-        book.write("good", "读得出来", "world", "");
         Path dir = tmp.resolve(SHE.toString());
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("good.md"), "---\nname: good\ndescription: 读得出来\ntype: world\nday: 3\n---\n\n正文\n",
+                StandardCharsets.UTF_8);
         Files.writeString(dir.resolve("broken.md"), "---\nname: broken\n---\n\n正文\n",
                 StandardCharsets.UTF_8);
 
+        NoteBook book = NoteBook.of(SHE);   // 第一次要用时才读目录
+
         assertEquals(List.of("good"), book.index().stream().map(NoteBook.Note::name).toList());
+    }
+
+    /** 写落盘是异步的:执行器还没动手,刚写的也要读得到,而且东西最后落在文件里。 */
+    @Test
+    void whatWasJustWrittenIsReadBackBeforeTheDiskWriteHappens() throws Exception {
+        java.util.List<Runnable> queued = new java.util.ArrayList<>();
+        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(tmp.resolve(uuid.toString()),
+                new com.dwinovo.numen.api.store.Io(queued::add, e -> { })), () -> day);
+        NoteBook book = NoteBook.of(SHE);
+
+        book.write("base", "主基地", "world", "门朝东");
+
+        assertEquals("门朝东", book.read("base").content());
+        assertFalse(Files.exists(tmp.resolve(SHE.toString()).resolve("base.md")), "写还排在车道里");
+        queued.forEach(Runnable::run);
+        assertTrue(Files.exists(tmp.resolve(SHE.toString()).resolve("base.md")));
     }
 }

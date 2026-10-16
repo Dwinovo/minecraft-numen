@@ -227,10 +227,6 @@ final class CompanionBrain {
         pushedTaskId = id;
         pushedDescribe = desc;
         ticksSinceTaskPush = 0;
-        net.minecraft.server.level.ServerPlayer owner = companion.resolveOwnerPlayer();
-        if (owner == null) {
-            return;   // 主人不在线:他重登时会看到那时的状态,不需要补发历史
-        }
         com.dwinovo.numen.api.network.payload.CurrentTaskPayload msg;
         if (rec == null) {
             msg = com.dwinovo.numen.api.network.payload.CurrentTaskPayload.idle(companion.getUUID());
@@ -241,7 +237,12 @@ final class CompanionBrain {
                     companion.getUUID(), id, rec.getToolName(), desc, rec.activity(),
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
-        com.dwinovo.numen.api.network.NumenNetwork.sendToPlayer(owner, msg);
+        // 服务端大脑直接读这一份(主人在不在线都要,她下一轮读 <current_task>);主人客户端上的循环等包
+        com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).ifPresent(brain -> brain.onCurrentTask(msg));
+        net.minecraft.server.level.ServerPlayer owner = companion.resolveOwnerPlayer();
+        if (owner != null) {   // 主人不在线:他重登时会看到那时的状态,不需要补发历史
+            com.dwinovo.numen.api.network.NumenNetwork.sendToPlayer(owner, msg);
+        }
     }
 
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */

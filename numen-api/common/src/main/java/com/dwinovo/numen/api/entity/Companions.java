@@ -262,6 +262,8 @@ public final class Companions {
         if (owner != null) {   // immediate, same-session
             NumenNetwork.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
         }
+        String diedOf = cause;
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf));
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
         // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
         // the respawn window — without this, a relog lost the pending state and the body silently respawned
@@ -314,6 +316,7 @@ public final class Companions {
         CompanionRegistry.get(server).markAlive(uuid);
         syncRosterToOwner(server, owner);
         NumenNetwork.sendToPlayer(owner, new NumenRespawnPayload(uuid, entry.deathCause()));
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onRespawned(entry.deathCause()));
         return true;
     }
 
@@ -462,6 +465,7 @@ public final class Companions {
             reg.remove(uuid);
             outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
+            com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉
         }
         ServerPlayer owner = ownerUuid == null ? null : server.getPlayerList().getPlayer(ownerUuid);
         if (owner != null) {

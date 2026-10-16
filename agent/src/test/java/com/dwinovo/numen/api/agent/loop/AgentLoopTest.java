@@ -748,6 +748,34 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void whileTheOwnerIsAwayTheInputIsKeptAndNoRunStartsUntilHeIsBack() {
+            host.away = true;
+            ownerSays("去挖矿");
+            worldEvent("矿挖完了", true);
+
+            assertEquals(Hold.AWAY, loop.hold());
+            assertEquals(0, model.calls.size(), "主人不在,内脑待命");
+            assertEquals(2, inbox.size(), "话与事件照收");
+
+            host.away = false;
+            loop.tick();
+
+            assertNull(loop.hold());
+            assertEquals(1, model.calls.size(), "他回来,攒着的一起处理");
+        }
+
+        @Test
+        void awayNeverReleasesByItselfSoOnlyThePresenceOfTheOwnerEndsIt() {
+            host.away = true;
+            ownerSays("在吗");
+            loop.respawned();
+            loop.bindingChanged();
+
+            assertEquals(Hold.AWAY, loop.hold(), "停牌是现算的,解除只看主人回没回来");
+            assertEquals(0, model.calls.size());
+        }
+
+        @Test
         void externalTakeoverVoidsAnInFlightCompaction() {
             memory.due = true;
             ownerSays("去挖矿");

@@ -75,6 +75,7 @@ public class NumenMod {
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player && !(player instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
             com.dwinovo.numen.api.program.ServerPrograms.ownerLeft(player.getUUID());
+            com.dwinovo.numen.api.brain.CompanionLoops.ownerLeft(player.getUUID());
         }
     }
 

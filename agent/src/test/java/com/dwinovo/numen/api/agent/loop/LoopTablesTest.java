@@ -26,6 +26,7 @@ class LoopTablesTest {
     @Test
     void holdReleaseTable() {
         assertEquals(EnumSet.of(Hold.Release.RESPAWN), releasers(Hold.DEAD));
+        assertEquals(EnumSet.noneOf(Hold.Release.class), releasers(Hold.AWAY), "主人不在线是现算的值,回来自己变回去");
         assertEquals(EnumSet.noneOf(Hold.Release.class), releasers(Hold.EXTERNAL), "外接驾驶是现算的,不经解开");
         assertEquals(EnumSet.of(Hold.Release.OWNER_SPOKE), releasers(Hold.OWNER_STOP), "停止只有主人再开口能解开");
         assertEquals(EnumSet.of(Hold.Release.OWNER_SPOKE, Hold.Release.BINDING_CHANGED), releasers(Hold.BLOCKED));
