@@ -244,6 +244,7 @@ public class CompanionChatScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(keyCode);   // 小键盘回车并成回车
         // 输入行先拿:弹层的上下/Tab/回车、面板的整个键盘、回车发送。它不要的(比如
         // 没开面板时的 Esc)才落到屏幕——Esc 关屏
         if (inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {

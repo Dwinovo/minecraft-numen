@@ -1545,6 +1545,7 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(keyCode);   // 小键盘回车并成回车
         int k = keyCode;
         if (overlayOpen()) {   // 确认卡在场:Esc = 取消(UiRoot 浮层通道保证),其余键不下传
             if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
