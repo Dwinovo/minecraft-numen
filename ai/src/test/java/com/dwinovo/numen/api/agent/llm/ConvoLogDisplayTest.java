@@ -36,7 +36,7 @@ class ConvoLogDisplayTest {
         log.append(CALL, null);
         log.append(RESULT, null);
         log.append(HALT, null);
-        log.appendCompactSummary("[摘要] 挖过铁", List.of(), null);
+        log.appendCompactSummary("[摘要] 挖过铁", 0, null);
         log.append(REPLY, null);
         log.appendPersonaDivider();
         log.appendClearBoundary();

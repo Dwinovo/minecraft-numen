@@ -22,12 +22,17 @@ class CompactorTest {
 
     private static final int WINDOW = 64_000;
 
-    private static Compactor compactor(ConvoState convo, Path dir) {
-        return new Compactor("test", convo, ConvoLog.atFile(dir.resolve("chat.jsonl")), () -> WINDOW);
+    private static Compactor compactor(ConvoState convo, ConvoLog log) {
+        return new Compactor("test", convo, log, () -> WINDOW);
     }
 
-    private static ConvoState historyOf(int messages) {
-        ConvoState convo = new ConvoState();
+    private static ConvoLog logIn(Path dir) {
+        return ConvoLog.atFile(dir.resolve("chat.jsonl"));
+    }
+
+    /** 和游戏里一样接线:历史里的每条消息同时写进日志(整理的"保留"指向的就是日志里这些记录)。 */
+    private static ConvoState historyOf(int messages, ConvoLog log) {
+        ConvoState convo = new ConvoState(m -> log.append(m, null));
         for (int i = 0; i < messages; i++) {
             if (i % 2 == 0) {
                 convo.addUser("第" + i + "句");
@@ -44,7 +49,7 @@ class CompactorTest {
 
     @Test
     void theGateFallsWhenTheLastRequestNearsTheWindow(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10), dir);
+        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
         c.on(turnUsed(40_000));
         assertFalse(c.compactionDue(), "离窗口还远");
 
@@ -54,14 +59,14 @@ class CompactorTest {
 
     @Test
     void aShortHistoryIsNotWorthCompactingOnItsOwn(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(4), dir);
+        Compactor c = compactor(historyOf(4, logIn(dir)), logIn(dir));
         c.on(turnUsed(WINDOW));
         assertFalse(c.compactionDue(), "短于下限不自己动手——手动整理不看这个");
     }
 
     @Test
     void onlyConversationCallsCountTowardTheGate(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10), dir);
+        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
         c.on(new LoopEvent.ModelUsed(new Usage(WINDOW, 10, 0, 0), LoopEvent.Purpose.GOAL));
         c.on(new LoopEvent.ModelUsed(new Usage(WINDOW, 10, 0, 0), LoopEvent.Purpose.COMPACT));
         assertEquals(0, c.contextPercent(), "目标评估与整理本身的体量不是对话上下文的体量");
@@ -69,9 +74,10 @@ class CompactorTest {
 
     @Test
     void aSummaryReplacesTheHistoryAndLeavesADividerInTheRecord(@TempDir Path dir) {
-        ConvoState convo = historyOf(10);
-        Compactor c = compactor(convo, dir);
-        ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
+        ConvoLog written = logIn(dir);
+        ConvoState convo = historyOf(10, written);
+        Compactor c = compactor(convo, written);
+        ConvoLog log = logIn(dir);
 
         MemoryPort.Compaction cut = c.compaction(false);
         assertTrue(cut.request().tools().isEmpty(), "整理不带工具");
@@ -96,8 +102,9 @@ class CompactorTest {
      */
     @Test
     void theSecondPassUpdatesTheLastSummaryInsteadOfChewingItAgain(@TempDir Path dir) {
-        ConvoState convo = historyOf(10);
-        Compactor c = compactor(convo, dir);
+        ConvoLog log = logIn(dir);
+        ConvoState convo = historyOf(10, log);
+        Compactor c = compactor(convo, log);
         c.compaction(false).apply(new AssistantTurn(
                 "<summary>主人要铁;基地在 0,64,0</summary>", List.of(), null),
                 new Usage(9_000, 300, 0, 0));
@@ -119,9 +126,10 @@ class CompactorTest {
 
     @Test
     void anEmptySummaryLeavesTheHistoryAlone(@TempDir Path dir) {
-        ConvoState convo = historyOf(10);
+        ConvoLog log = logIn(dir);
+        ConvoState convo = historyOf(10, log);
         List<ConvoState.Msg> before = convo.snapshot();
-        MemoryPort.Compaction cut = compactor(convo, dir).compaction(true);
+        MemoryPort.Compaction cut = compactor(convo, log).compaction(true);
 
         assertFalse(cut.apply(new AssistantTurn("<summary>  </summary>", List.of(), null), Usage.ZERO));
         assertEquals(before, convo.snapshot());
@@ -129,7 +137,7 @@ class CompactorTest {
 
     @Test
     void threeFailuresInARowStopTheAutoPathUntilTheHistoryChanges(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10), dir);
+        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
         c.on(turnUsed(WINDOW));
         for (int i = 0; i < 3; i++) {
             c.compaction(true).failed("超时");
@@ -146,7 +154,7 @@ class CompactorTest {
         ConvoLog sink = ConvoLog.atFile(dir.resolve("chat.jsonl"));
         ConvoState convo = new ConvoState(m -> sink.append(m, null));
         convo.addUser("你好");
-        Compactor c = compactor(convo, dir);
+        Compactor c = compactor(convo, sink);
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
 
         c.clear();

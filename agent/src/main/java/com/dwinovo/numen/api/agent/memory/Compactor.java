@@ -244,10 +244,12 @@ public final class Compactor implements MemoryPort {
                     }
                 }
                 // Boundary into the JSONL first (relaunches replay the compacted view;
-                // the raw pre-compaction history stays in the file as an archive), then
+                // the raw pre-compaction history stays in the file as an archive; the kept
+                // tail is the last kept.size() messages of the history, which the boundary
+                // points at instead of copying), then
                 // swap the in-memory history without re-notifying the sink. The visible
                 // transcript only gains a divider — the owner's chat never vanishes.
-                log.appendCompactSummary(wrapped, kept, meta);
+                log.appendCompactSummary(wrapped, kept.size(), meta);
                 List<ConvoState.Msg> next = new ArrayList<>();
                 next.add(new ConvoState.Msg.User(wrapped));
                 next.addAll(kept);

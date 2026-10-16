@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.agent.llm;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,16 +60,20 @@ class ConvoLogHaltTest {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
         log.append(HALT, null);
 
-        String last = Files.readAllLines(log.file(), StandardCharsets.UTF_8).get(1);
-        assertTrue(last.startsWith("{\"type\":\"halt\",\"reason\":\"你死了(被僵尸杀死)\""),
-                "按事件记(有 type、没有 role),旧版读到也只会当成不认识的事件跳过:" + last);
+        JsonObject last = JsonParser.parseString(Files.readAllLines(log.file(), StandardCharsets.UTF_8).get(1))
+                .getAsJsonObject();
+        assertEquals("halt", last.get("type").getAsString());
+        assertEquals("你死了(被僵尸杀死)", last.get("reason").getAsString());
+        assertFalse(last.has("role"), "按事件记(有 type、没有 role),旧版读到也只会当成不认识的事件跳过");
     }
 
     @Test
     void aHaltPreservedAcrossCompactionComesBack(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
         log.append(USER, null);
-        log.appendCompactSummary("[摘要] 她去挖铁", List.of(USER, CALL, HALT), new JsonObject());
+        log.append(CALL, null);
+        log.append(HALT, null);
+        log.appendCompactSummary("[摘要] 她去挖铁", 3, new JsonObject());
 
         assertEquals(List.of(new ConvoState.Msg.User("[摘要] 她去挖铁"), USER, CALL, HALT), log.load(100));
     }

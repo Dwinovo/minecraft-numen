@@ -742,6 +742,8 @@ public final class EntityAgentLoop {
         /** 这一轮的请求:组装只在 {@link AgentRequestContext#turn} 一处,评测调的也是它。 */
         @Override
         public ModelRequest turnRequest() {
+            // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
+            log.noteEndpoint(com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().resolve(providerEntryId));
             return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), personaText(),
                     com.dwinovo.numen.api.script.Modules.of(entityUuid));
         }
