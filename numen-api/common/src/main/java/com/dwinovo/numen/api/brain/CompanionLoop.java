@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.agent.goal.GoalSteward;
 import com.dwinovo.numen.api.agent.http.CancelToken;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
 import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
@@ -23,6 +24,8 @@ import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.memory.Compactor;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.agent.provider.AssistantTurn;
+import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.agent.request.AgentRequestContext;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
@@ -44,6 +47,7 @@ import com.google.gson.JsonObject;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
@@ -130,6 +134,8 @@ public final class CompanionLoop {
     private String personaId;
     /** 死亡原因,复活时放进复活事件(活着是 {@code null})。 */
     private String deathCause;
+    /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
+    private boolean wasDriving;
 
     public CompanionLoop(Parts parts) {
         this.parts = parts;
@@ -154,6 +160,7 @@ public final class CompanionLoop {
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
         loop.subscribe(runtime::on);
+        this.wasDriving = parts.driving().getAsBoolean();
         restore();
     }
 
@@ -361,9 +368,66 @@ public final class CompanionLoop {
         loop.halt(HaltReason.DISPOSE);
     }
 
-    /** 每个服务器刻一次:停牌变化的播报,和"攒够时长"的熟度。 */
+    /** 每个服务器刻一次:驾驶席翻转、停牌变化的播报,和"攒够时长"的熟度。 */
     public void tick() {
+        // 驾驶席翻成外接的那一下作废在飞的回合:接管之后内脑的回复不该再派工具、整理不该再换历史。
+        // 交还不用做什么——停牌是现算的,内核下一次推进自己看得见。
+        boolean driving = parts.driving().getAsBoolean();
+        if (driving && !wasDriving) {
+            loop.halt(HaltReason.EXTERNAL);
+        }
+        wasDriving = driving;
         loop.tick();
+    }
+
+    // ---- 外接大脑 ----
+    // 外脑驾驶的那段和内脑自己的一样进她的会话历史与日志(取走的事件是 user、替她说的话是 assistant、跑的程序是
+    // assistant 的调用加 tool 的结果),面板读日志,交还之后内脑也知道这期间做了什么。
+
+    /**
+     * 外接大脑收件:取走此刻队里所有给模型看的文本(捎带的也交)。长轮询的到点清扫与程序回执的捎带都走这一个口,
+     * 渲染与内脑注入同一份 {@link EventQueue#render}——外脑看到的事件文本和内脑一字不差。
+     *
+     * <p>控制条目(整理/清空)是对内脑说的:跳过它们、留在队里等交还。
+     *
+     * @return 取走的事件拼段;没有返回 null
+     */
+    public String takeEventsForExternal() {
+        return took(queue.takeRenderedText(System.currentTimeMillis()));
+    }
+
+    /** 长等待停靠:有会叫醒她的条目就整批交出,规则见 {@link ExternalWait}。 */
+    public ExternalWait.Parked parkForExternal() {
+        ExternalWait.Parked parked = ExternalWait.park(queue, System::currentTimeMillis);
+        return new ExternalWait.Parked(parked.batch().thenApply(this::took), parked.cancel());
+    }
+
+    private String took(String batch) {
+        if (batch != null) {
+            convo.addUser(batch);
+        }
+        return batch;
+    }
+
+    /**
+     * 外接大脑跑一个工具调用:交给她自己的工具口,与内脑同一个派发器({@link AgentLoop#runAside})。
+     *
+     * @return 收下了;内脑正在干活、或已有一个外接调用在跑时为 false,什么都没记
+     */
+    public boolean runExternal(LlmToolCall call, Consumer<String> done) {
+        if (!loop.asideFree()) {
+            return false;
+        }
+        convo.addAssistant(new AssistantTurn("", List.of(call), null));
+        return loop.runAside(call, result -> {
+            convo.addToolResult(call.id(), result);
+            done.accept(result);
+        });
+    }
+
+    /** 外接大脑替她说话:和内脑的一条回复同一个出口,见 {@link AgentLoop#said}。 */
+    public void externalSay(String text) {
+        loop.said(new AssistantTurn(text, List.of(), null));
     }
 
     /** 身体死了:内核冻结,收件箱照收。 */

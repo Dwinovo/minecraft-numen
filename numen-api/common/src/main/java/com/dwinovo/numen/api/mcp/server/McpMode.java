@@ -25,7 +25,7 @@ import java.nio.file.Path;
  *
  * <h2>线程</h2>
  * {@link #enabled()} 被渲染线程和游戏主线程高频读,故用 volatile 裸字段;
- * 握手信息由 HTTP 线程写入、渲染线程读。现场缓冲见 {@link McpTranscript}。
+ * 握手信息由 HTTP 线程写入、渲染线程读。
  */
 public final class McpMode {
 
@@ -44,9 +44,21 @@ public final class McpMode {
     private volatile String lastError;       // 起服失败的原因,给 UI 显示
     private boolean announcedQuiet;          // 失联已播报过(边沿检测,只在主线程碰)
 
+    /** 失联与回归的播报:谁在场、用什么语言说,是宿主的事(客户端画聊天行,服务端发给主人的系统消息)。 */
+    public interface Notices {
+
+        /** 外脑安静太久了;{@code fallback} 为真时内置大脑已经接管。 */
+        void quiet(boolean fallback);
+
+        /** 外脑回来了。 */
+        void back();
+    }
+
     private Path configFile;
     private McpConfig config = McpConfig.disabledDefault();
     private McpServer server;
+    private ExternalHands hands;
+    private Notices notices;
 
     private McpMode() {}
 
@@ -57,12 +69,13 @@ public final class McpMode {
     // ---- 生命周期 ----
 
     /**
-     * 客户端启动时装载配置:记住配置文件位置,enabled 则立刻起服。
-     * 只调一次(两个 loader 的 client 入口各自调本平台的)。
+     * 装载配置:记住配置文件位置、同伴的手和播报口,enabled 则立刻起服。大脑所在的那一端启动时调一次。
      */
-    void bootstrap(Path file, McpConfig loaded) {
+    void bootstrap(Path file, McpConfig loaded, ExternalHands hands, Notices notices) {
         this.configFile = file;
         this.config = loaded;
+        this.hands = hands;
+        this.notices = notices;
         if (loaded.enabled()) {
             startServer();
         } else {
@@ -122,7 +135,7 @@ public final class McpMode {
 
     private boolean startServer() {
         lastError = null;
-        McpServer s = new McpServer(config);
+        McpServer s = new McpServer(config, hands);
         try {
             s.start();
         } catch (Exception ex) {
@@ -169,10 +182,10 @@ public final class McpMode {
     }
 
     /**
-     * 每 client tick 一次(两个 loader 的 client 入口驱动):失联/回归的边沿检测。
+     * 每刻一次(大脑所在的那一端驱动):失联/回归的边沿检测。
      * 主人有知情权——外脑没动静了得说一声,不能让她无声变成"已读不回"。
      */
-    public void clientTick() {
+    public void tick() {
         if (!enabled || clientName == null) {
             announcedQuiet = false;
             return;
@@ -180,15 +193,10 @@ public final class McpMode {
         boolean quiet = System.currentTimeMillis() - lastActivityMs > QUIET_AFTER_MS;
         if (quiet && !announcedQuiet) {
             announcedQuiet = true;
-            com.dwinovo.numen.api.client.chat.ChatLines.notice(
-                    net.minecraft.client.resources.language.I18n.get("numen.brain.title"),
-                    net.minecraft.client.resources.language.I18n.get(config.quietFallback()
-                            ? "numen.brain.quiet_fallback" : "numen.brain.quiet_standby"));
+            notices.quiet(config.quietFallback());
         } else if (!quiet && announcedQuiet) {
             announcedQuiet = false;
-            com.dwinovo.numen.api.client.chat.ChatLines.notice(
-                    net.minecraft.client.resources.language.I18n.get("numen.brain.title"),
-                    net.minecraft.client.resources.language.I18n.get("numen.brain.back_active"));
+            notices.back();
         }
     }
 

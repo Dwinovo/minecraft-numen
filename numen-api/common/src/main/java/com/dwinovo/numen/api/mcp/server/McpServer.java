@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
-import com.dwinovo.numen.api.NumenActuator;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -41,9 +40,9 @@ import java.util.concurrent.TimeoutException;
  * Every Numen API tool (from {@link ToolRegistry}, minus the config's hidden set) —
  * the script tool, the skill tool, the todo tool, plus the tools of remote MCP servers the owner connected — is
  * advertised with an extra {@code companion} argument, and calls route to
- * {@link NumenActuator#invoke}: a program runs through the companion's own
+ * {@link ExternalHands#invoke}: a program runs through the companion's own
  * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
- * {@code create_companion}, {@code delete_companion} — wrap the actuator's roster
+ * {@code create_companion}, {@code delete_companion} — wrap the hands' roster
  * methods. There is no take-control handshake: 模式开启期间内置大脑一轮都不开
  * (见 {@link McpMode}), 所以外部驱动者直接派活即可。Since every call is addressed
  * to a companion and each body runs its tasks independently, an agent can drive
@@ -117,11 +116,13 @@ public final class McpServer {
             MAX_WAIT_SECONDS);
 
     private final McpConfig config;
+    private final ExternalHands hands;
     private final Gson gson = new Gson();
     private HttpServer http;
 
-    public McpServer(McpConfig config) {
+    public McpServer(McpConfig config, ExternalHands hands) {
         this.config = config;
+        this.hands = hands;
     }
 
     public void start() throws IOException {
@@ -425,7 +426,7 @@ public final class McpServer {
         }
         String argsLine = argsSummary(args);
         String head = name + (argsLine.isBlank() ? "" : "  " + argsLine);
-        McpTranscript.tool(who, head + " → " + textOf(out), isError(out));
+        hands.activity(who, head + " → " + textOf(out), isError(out));
     }
 
     private JsonObject dispatchToolCall(String name, JsonObject args) {
@@ -475,13 +476,13 @@ public final class McpServer {
     }
 
     private String listCompanions() throws Exception {
-        List<NumenActuator.Companion> list = NumenActuator.companions()
+        List<ExternalHands.Companion> list = hands.companions()
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         if (list.isEmpty()) {
             return "No companions are live in the world right now. Summon one in-game first.";
         }
         StringBuilder sb = new StringBuilder("Live companions:\n");
-        for (NumenActuator.Companion c : list) {
+        for (ExternalHands.Companion c : list) {
             sb.append("- ").append(c.name()).append("  (id: ").append(c.uuid()).append(")\n");
         }
         return sb.toString().stripTrailing();
@@ -493,7 +494,7 @@ public final class McpServer {
         if (name.isEmpty()) {
             return content("create_companion needs a 'name' (3–16 letters, digits, or underscore)", true);
         }
-        boolean ok = NumenActuator.create(name).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        boolean ok = hands.create(name).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         if (!ok) {
             return content("could not summon — is the game in a world?", true);
         }
@@ -506,7 +507,7 @@ public final class McpServer {
         if (target == null) {
             return content("no such companion — call list_companions to see valid names/ids", true);
         }
-        boolean ok = NumenActuator.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        boolean ok = hands.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(ok ? "dismissed " + target + " — it drops its inventory, armor and accessories and is gone for good"
                 : "could not dismiss " + target, !ok);
     }
@@ -523,7 +524,7 @@ public final class McpServer {
             wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
         }
         if (wait > 0) {
-            NumenActuator.EventWait parked = NumenActuator.awaitEvents(target);
+            ExternalHands.EventWait parked = hands.awaitEvents(target);
             try {
                 String batch = parked.batch().get(wait, TimeUnit.SECONDS);
                 if (batch != null) return content(batch, false);
@@ -533,7 +534,7 @@ public final class McpServer {
                 parked.cancel().run();
             }
         }
-        String rest = NumenActuator.takeEvents(target)
+        String rest = hands.takeEvents(target)
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(rest != null ? rest
                 : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
@@ -549,7 +550,7 @@ public final class McpServer {
         if (text.isEmpty()) {
             return content("say needs a non-empty 'text'", true);
         }
-        boolean ok = NumenActuator.say(target, text).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        boolean ok = hands.say(target, text).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(ok ? "said" : "could not say — is the companion live?", !ok);
     }
 
@@ -560,15 +561,15 @@ public final class McpServer {
         }
         JsonObject toolArgs = args.deepCopy();
         toolArgs.remove("companion");
-        String result = NumenActuator.invoke(target, toolName, toolArgs.toString())
+        String result = hands.invoke(target, toolName, toolArgs.toString())
                 .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
         // the external agent reads what the built-in brain reads: the result's message, never its structured data
-        String events = NumenActuator.takeEvents(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        String events = hands.takeEvents(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return receipt(ToolOutcome.modelText(result), ToolOutcome.failed(result), events);
     }
 
     /**
-     * 一次工具调用的回执：结果文本在前；这段时间到达的事件（{@link NumenActuator#takeEvents} 取走的那批，
+     * 一次工具调用的回执：结果文本在前；这段时间到达的事件（{@link ExternalHands#takeEvents} 取走的那批，
      * 取走即不再由 get_events 交）作为另一段文本跟在后面，外脑干活时不必另外轮询。
      */
     static JsonObject receipt(String text, boolean isError, String events) {
@@ -584,17 +585,17 @@ public final class McpServer {
         if (!args.has("companion") || args.get("companion").isJsonNull()) return null;
         String raw = args.get("companion").getAsString().trim();
         if (raw.isEmpty()) return null;
-        List<NumenActuator.Companion> list = NumenActuator.companions()
+        List<ExternalHands.Companion> list = hands.companions()
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         // exact id match first
-        for (NumenActuator.Companion c : list) {
+        for (ExternalHands.Companion c : list) {
             if (c.uuid().toString().equalsIgnoreCase(raw)) return c.uuid();
         }
         // then exact name, then case-insensitive name
-        for (NumenActuator.Companion c : list) {
+        for (ExternalHands.Companion c : list) {
             if (c.name().equals(raw)) return c.uuid();
         }
-        for (NumenActuator.Companion c : list) {
+        for (ExternalHands.Companion c : list) {
             if (c.name().equalsIgnoreCase(raw)) return c.uuid();
         }
         return null;

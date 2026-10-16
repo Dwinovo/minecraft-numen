@@ -184,6 +184,20 @@ public final class AgentLoop {
         return true;
     }
 
+    /** {@link #runAside} 此刻收不收:内核手上没有 run、也没有外接调用在跑。 */
+    public boolean asideFree() {
+        return run == null && aside == null;
+    }
+
+    /**
+     * 外接大脑替她说了一句话:作为她的一条回复进会话历史、发 {@link LoopEvent.AssistantMessage},于是界面、语音、
+     * 同会话旁听者见到的和内脑的回复同一个样子。不开 run,也不动停牌。
+     */
+    public void said(AssistantTurn turn) {
+        transcript.addAssistant(turn);
+        emit(new LoopEvent.AssistantMessage(lastRunId, turn));
+    }
+
     /** 身体复活了。复活的叙事事件由调用方在这之前推进队列,解开后一起走。 */
     public void respawned() {
         release(Hold.Release.RESPAWN);

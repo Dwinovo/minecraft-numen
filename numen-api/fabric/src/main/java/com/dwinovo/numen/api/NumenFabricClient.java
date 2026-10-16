@@ -55,7 +55,7 @@ public class NumenFabricClient implements ClientModInitializer {
         // MCP server: the other direction — stand up a loopback MCP server so an
         // external agent can drive companions directly, bypassing the built-in brain.
         // Off unless enabled in config/numen/mcp_server.json.
-        com.dwinovo.numen.api.mcp.server.NumenMcp.initClient(FabricLoader.getInstance().getConfigDir());
+        com.dwinovo.numen.api.mcp.server.ClientMcp.init(FabricLoader.getInstance().getConfigDir());
 
         // Skills live under config/numen/skills. Hook the resource reload
         // pipeline so /reload picks up newly added SKILL.md files without a
@@ -104,7 +104,7 @@ public class NumenFabricClient implements ClientModInitializer {
                 .register(client -> {
                     com.dwinovo.numen.api.client.NumenKeys.tick();
                     com.dwinovo.numen.api.client.agent.AgentLoopRegistry.tickAll();
-                    com.dwinovo.numen.api.mcp.server.McpMode.instance().clientTick();
+                    com.dwinovo.numen.api.mcp.server.ClientMcp.tick();
                 });
 
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT

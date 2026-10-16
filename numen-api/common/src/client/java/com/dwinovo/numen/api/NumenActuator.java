@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.mcp.server.ExternalHands.Companion;
+import com.dwinovo.numen.api.mcp.server.ExternalHands.EventWait;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.ClientToolContext;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
@@ -77,9 +79,6 @@ public final class NumenActuator {
     private static final String TOOL_PREFIX = "mcp-";
 
     private NumenActuator() {}
-
-    /** One of the owner's live companions: stable id + display name. */
-    public record Companion(UUID uuid, String name) {}
 
     /**
      * The owner's companions currently live in the world — what an external brain
@@ -165,9 +164,6 @@ public final class NumenActuator {
                 f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal()));
         return f;
     }
-
-    /** A parked long-poll, see {@link #awaitEvents}. */
-    public record EventWait(CompletableFuture<String> batch, Runnable cancel) {}
 
     /**
      * Park until {@code companion} has something that wakes it (the inbox's own rule, see

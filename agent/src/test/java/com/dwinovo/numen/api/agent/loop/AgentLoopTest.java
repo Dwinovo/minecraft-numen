@@ -28,6 +28,30 @@ class AgentLoopTest extends LoopHarness {
     private static final Cause NETWORK = Cause.of(Cause.NETWORK);
     private static final Cause UNBOUND = Cause.of(Cause.UNBOUND);
 
+    // ---- 外接大脑 ----
+
+    @Nested
+    class ExternalBrain {
+
+        @Test
+        void saidIsAReplyInTheHistoryWithoutARun() {
+            loop.said(new AssistantTurn("收到", List.of(), null));
+
+            assertEquals("收到", ((ConvoState.Msg.Assistant) transcript.lastMessage()).turn().content());
+            assertEquals(1, eventsOf(LoopEvent.AssistantMessage.class).size());
+            assertTrue(eventsOf(LoopEvent.RunStarted.class).isEmpty());
+            assertTrue(model.calls.isEmpty());
+        }
+
+        @Test
+        void asideIsOnlyFreeWhenNeitherARunNorAnotherAsideIsInFlight() {
+            assertTrue(loop.asideFree());
+            assertTrue(loop.runAside(new LlmToolCall("ext-a", "lua", "{}"), result -> { }));
+            assertFalse(loop.asideFree());
+            assertFalse(loop.runAside(new LlmToolCall("ext-b", "lua", "{}"), result -> { }));
+        }
+    }
+
     // ---- 开 run 的时机 ----
 
     @Nested

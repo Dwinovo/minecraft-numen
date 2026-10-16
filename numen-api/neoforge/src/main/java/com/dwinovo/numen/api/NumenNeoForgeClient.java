@@ -39,7 +39,7 @@ public class NumenNeoForgeClient {
         // MCP server: the other direction — a loopback MCP server letting an external
         // agent drive companions directly, bypassing the built-in brain. Off unless
         // enabled in config/numen/mcp_server.json.
-        com.dwinovo.numen.api.mcp.server.NumenMcp.initClient(
+        com.dwinovo.numen.api.mcp.server.ClientMcp.init(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
 
         // 同伴数据的根,以及旧布局的一次性迁移。根从 FML 拿,不问 Minecraft
@@ -125,7 +125,7 @@ public class NumenNeoForgeClient {
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
         com.dwinovo.numen.api.client.NumenKeys.tick();
         com.dwinovo.numen.api.client.agent.AgentLoopRegistry.tickAll();
-        com.dwinovo.numen.api.mcp.server.McpMode.instance().clientTick();
+        com.dwinovo.numen.api.mcp.server.ClientMcp.tick();
     }
 
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
