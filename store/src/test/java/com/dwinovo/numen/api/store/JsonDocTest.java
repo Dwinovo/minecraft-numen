@@ -1,4 +1,4 @@
-package com.dwinovo.numen.store;
+package com.dwinovo.numen.api.store;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

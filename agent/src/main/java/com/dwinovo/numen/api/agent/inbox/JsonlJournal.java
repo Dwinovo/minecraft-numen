@@ -1,9 +1,9 @@
 package com.dwinovo.numen.api.agent.inbox;
 
 import com.dwinovo.numen.api.ai.AiLog;
-import com.dwinovo.numen.store.AppendLog;
-import com.dwinovo.numen.store.Io;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.AppendLog;
+import com.dwinovo.numen.api.store.Io;
+import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonObject;
 
 import java.nio.file.Path;

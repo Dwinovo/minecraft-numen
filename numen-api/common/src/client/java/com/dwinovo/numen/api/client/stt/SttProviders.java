@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.stt;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.google.gson.JsonObject;

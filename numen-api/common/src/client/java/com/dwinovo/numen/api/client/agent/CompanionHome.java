@@ -3,9 +3,9 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.entity.CompanionRoster;
-import com.dwinovo.numen.store.Atomic;
-import com.dwinovo.numen.store.JsonDoc;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.JsonDoc;
+import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 

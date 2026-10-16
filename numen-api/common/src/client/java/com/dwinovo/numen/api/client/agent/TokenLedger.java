@@ -3,8 +3,8 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.provider.CacheWaste;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.store.Io;
-import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.api.store.Io;
+import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 

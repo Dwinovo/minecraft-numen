@@ -1,4 +1,4 @@
-package com.dwinovo.numen.store;
+package com.dwinovo.numen.api.store;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;

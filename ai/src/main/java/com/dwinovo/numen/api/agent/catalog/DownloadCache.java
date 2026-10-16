@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.agent.catalog;
 
 import com.dwinovo.numen.api.ai.AiLog;
-import com.dwinovo.numen.store.Io;
-import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.api.store.Io;
+import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 

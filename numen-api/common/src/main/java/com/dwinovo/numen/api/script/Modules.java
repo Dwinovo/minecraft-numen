@@ -3,10 +3,10 @@ package com.dwinovo.numen.api.script;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.script.ScriptCatalog;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.store.Atomic;
-import com.dwinovo.numen.store.Io;
-import com.dwinovo.numen.store.JsonDoc;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.Io;
+import com.dwinovo.numen.api.store.JsonDoc;
+import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;

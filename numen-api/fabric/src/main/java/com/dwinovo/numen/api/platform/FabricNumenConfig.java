@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.platform;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.store.Atomic;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

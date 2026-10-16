@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
-import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

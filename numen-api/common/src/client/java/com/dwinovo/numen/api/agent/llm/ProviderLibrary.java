@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.agent.catalog.BundledSnapshot;
 import com.dwinovo.numen.api.agent.catalog.Catalog;
 import com.dwinovo.numen.api.agent.catalog.DownloadCache;
-import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 
 import java.util.LinkedHashMap;

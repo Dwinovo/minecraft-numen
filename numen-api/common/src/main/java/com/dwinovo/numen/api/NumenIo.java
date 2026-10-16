@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.store.Io;
+import com.dwinovo.numen.api.store.Io;
 
 /**
  * Numen API 里各存储落盘用的 {@link Io}:现在都在调用线程上读写(数据还在客户端、小而少),

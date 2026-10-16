@@ -2,8 +2,8 @@ package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.client.data.JsonLibrary;
-import com.dwinovo.numen.store.Atomic;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;

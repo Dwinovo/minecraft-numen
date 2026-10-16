@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.agent.memory;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.store.Atomic;
-import com.dwinovo.numen.store.StoreException;
+import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.api.agent.skill.SkillMarkdown;
 
 import java.io.IOException;
