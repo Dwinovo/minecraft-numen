@@ -242,7 +242,7 @@ class EventQueueTest {
         q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertEquals(List.of("<query>回来</query>"), q.chatPreview(),
+        assertEquals(List.of("<query>回来</query>"), q.chatPreview().stream().map(EventQueue.Preview::text).toList(),
                 "事件不进聊天流——那是表里写的,不是这儿判断的;"
                         + "进得来的原样交出去,画成什么样是渲染那一层的事");
     }
@@ -264,7 +264,7 @@ class EventQueueTest {
         q.push("raid_alert", "村庄被围了", T0, true);
 
         assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "这类不恒急,发送方标了急就是急件");
-        assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview());
+        assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview().stream().map(EventQueue.Preview::text).toList());
         assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
     }
 

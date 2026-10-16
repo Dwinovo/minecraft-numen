@@ -211,6 +211,30 @@ public final class NumenNetwork {
                 Execution.NETWORK);
         toClient(FragmentPayload.TO_CLIENT, FragmentPayload.TO_CLIENT_CODEC, NumenNetwork::fragmentFromServer);
 
+        // 服务端大脑与主人的客户端之间:报到、主人做的事、一刻的事件、历史分页、会话列表(见 brain 包)。
+        toServer(com.dwinovo.numen.api.network.payload.HelloPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.HelloPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.HelloPayload::handle);
+        toClient(com.dwinovo.numen.api.network.payload.HelloAckPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.HelloAckPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.HelloAckPayload::handle);
+        // 主人做的事在网络线程上读懂、投进信箱,不等服务器刻
+        toServer(com.dwinovo.numen.api.network.payload.OwnerInputPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.OwnerInputPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.OwnerInputPayload::handle, Execution.NETWORK);
+        toClient(com.dwinovo.numen.api.network.payload.FeedPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.FeedPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.FeedPayload::handle);
+        toServer(com.dwinovo.numen.api.network.payload.HistoryRequestPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.HistoryRequestPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.HistoryRequestPayload::handle);
+        toClient(com.dwinovo.numen.api.network.payload.HistoryPagePayload.TYPE,
+                com.dwinovo.numen.api.network.payload.HistoryPagePayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.HistoryPagePayload::handle);
+        toClient(com.dwinovo.numen.api.network.payload.ConversationsPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);
+
         // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).
         toServer(
                 com.dwinovo.numen.api.network.payload.RunProgramPayload.TYPE,

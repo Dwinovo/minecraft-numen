@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.api.client.agent.Conversations;
@@ -179,7 +180,8 @@ final class ProfilePage {
         Nb.text(g, font, name, cx - font.width(name) / 2, cy, t.text());
         cy += 12;
         // 手上有活就说她在干什么(强调色,这是她此刻最要紧的一句),没有才是在线/忙碌
-        String doing = loop != null ? loop.status().activity() : null;
+        var activity = loop != null ? loop.status().activity() : null;
+        String doing = activity == null ? null : ActivityWords.text(activity);
         String st = Nb.clip(font, doing != null ? I18n.get("numen.profile.doing", doing) : status.apply(who), iw);
         Nb.text(g, font, st, cx - font.width(st) / 2, cy, doing != null ? t.accent() : t.textDim());
         cy += 13;

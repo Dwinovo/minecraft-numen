@@ -462,7 +462,12 @@ public final class Companions {
         CompanionRegistry reg = CompanionRegistry.get(server);
         EventOutbox outbox = EventOutbox.get(server);
         for (UUID uuid : uuids) {
+            CompanionRegistry.Entry gone = reg.find(uuid);
             reg.remove(uuid);
+            if (gone != null) {
+                // 和她同过会话的告诉一声她走了;名册上已经没有她,成员表按名册过滤
+                com.dwinovo.numen.api.brain.Conversations.of(server, gone.owner()).left(uuid, gone.name());
+            }
             outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
             com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉

@@ -87,6 +87,19 @@ public final class RuntimeState {
     }
 
     /**
+     * 她此刻在干什么,{@code LoopStatus} 要的那一句:后台活优先(几十秒的长活,得看见她在挖矿而不是卡死了),
+     * 没有才是手上这一个工具调用({@code tool}),都没有返回 {@code null}。"在干什么"只在这一处合成。
+     */
+    public com.dwinovo.numen.api.agent.loop.LoopStatus.Doing doing(String tool) {
+        Activity task = activity();
+        if (task != null) {
+            return new com.dwinovo.numen.api.agent.loop.LoopStatus.Doing(task.key(), task.args());
+        }
+        return tool == null ? null
+                : new com.dwinovo.numen.api.agent.loop.LoopStatus.Doing("numen.tool." + tool, java.util.List.of(tool));
+    }
+
+    /**
      * 这一轮临时挂载的运行期状态。全部现算,一个字都不入会话历史——包进同一个
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */

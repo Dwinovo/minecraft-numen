@@ -484,8 +484,8 @@ public final class EntityAgentLoop {
             return problem;
         }
         // 清空是控制命令:不叫醒她、不走熟度,循环闲下来自己执行。
-        // 条目的字进聊天流给主人看(不进模型),按主人此刻的语言写下
-        loop.push(List.of(new EventQueue.Entry(EventTypes.CLEAR, I18n.get(Keys.LOOP_CLEAR), System.currentTimeMillis(),
+        // 条目的字是语言键,聊天流画的时候按主人此刻的语言翻(不进模型)
+        loop.push(List.of(new EventQueue.Entry(EventTypes.CLEAR, Keys.LOOP_CLEAR, System.currentTimeMillis(),
                 false)));
         return null;
     }
@@ -706,8 +706,8 @@ public final class EntityAgentLoop {
             return problem;
         }
         // 整理是控制命令:不叫醒她、不走熟度,循环闲下来自己执行。
-        // 条目的字进聊天流给主人看(不进模型),按主人此刻的语言写下
-        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, I18n.get(Keys.LOOP_COMPACT),
+        // 条目的字是语言键,聊天流画的时候按主人此刻的语言翻(不进模型)
+        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, Keys.LOOP_COMPACT,
                 System.currentTimeMillis(), false)));
         return null;
     }
@@ -826,15 +826,9 @@ public final class EntityAgentLoop {
             return runtime.bodyTaskRunning();
         }
 
-        /** 后台活优先(几十秒的长活,主人得看见她在挖矿而不是卡死了),没有才是手上这一个工具调用。 */
         @Override
-        public String activity() {
-            var task = runtime.activity();
-            if (task != null) {
-                return task.text().getString();
-            }
-            String tool = dispatcher.currentToolName();
-            return tool == null ? null : ToolWords.label(tool);
+        public com.dwinovo.numen.api.agent.loop.LoopStatus.Doing activity() {
+            return runtime.doing(dispatcher.currentToolName());
         }
     }
 

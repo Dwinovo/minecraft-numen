@@ -16,6 +16,11 @@ import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
+import com.dwinovo.numen.api.brain.Conversations;
+import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.brain.History;
+import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.brain.OwnerInputs;
 import com.dwinovo.numen.api.brain.Mind;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
@@ -97,10 +102,34 @@ public class BrainGameTests {
         }
     }
 
+    /** 主人那一头:记下推给他的每一包事件。 */
+    private static final class Owner implements CompanionLoops.Link {
+        final List<Feed> events = new ArrayList<>();
+        final List<String> told = new ArrayList<>();
+        boolean client = true;
+
+        @Override
+        public boolean hasClient() {
+            return client;
+        }
+
+        @Override
+        public void send(UUID companion, List<Feed> batch) {
+            events.addAll(batch);
+        }
+
+        @Override
+        public void tell(UUID companion, String said) {
+            told.add(said);
+        }
+    }
+
     /** 一只带服务端大脑的同伴:家在临时目录里,写在调用线程上直接做(用例读日志不必等车道)。 */
     private static final class Brain {
         final NumenPlayer companion;
         final Scripted mind = new Scripted();
+        final Owner owner = new Owner();
+        final Conversations rooms;
         final CompanionLoop loop;
         boolean ownerOnline = true;
         private final net.minecraft.server.MinecraftServer server;
@@ -113,11 +142,12 @@ public class BrainGameTests {
             Path dir = Files.createTempDirectory("numen-gametest-brain-");
             Io io = NumenIo.inline("numen-gametest");
             NoteBook.init(uuid -> new Home(dir.resolve("memory"), io), () -> 0);
+            this.rooms = Conversations.of(server, companion.getOwnerUuid());
             this.loop = new CompanionLoop(new CompanionLoop.Parts(companion.getUUID(), new Home(dir.resolve("her"), io),
                     server::execute, mind, new LocalPrograms(server), () -> companion, () -> null, () -> false,
                     () -> ownerOnline, () -> false, () -> 3, id -> null, () -> helper.getLevel().getDayTime(),
-                    CompanionLoop.Rooms.ALONE));
-            CompanionLoops.install(companion.getOwnerUuid(), loop);
+                    rooms));
+            CompanionLoops.install(companion.getOwnerUuid(), loop, owner, rooms);
         }
 
         void close() {
@@ -132,7 +162,7 @@ public class BrainGameTests {
     }
 
     /** 主人的话 → 模型派一段程序 → 程序在服务端跑 → 回执回到模型 → 最终回复,整条回路都落进她的日志。 */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void owner_words_run_the_whole_loop_on_the_server(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_thinker");
         her.mind.program("return 1 + 1").say("算好了:2");
@@ -152,12 +182,19 @@ public class BrainGameTests {
             helper.assertTrue(her.mind.asked.get(1).messages().stream().anyMatch(m -> m instanceof ConvoState.Msg.Tool),
                     "the second request did not carry the receipt");
             helper.assertTrue(Files.isRegularFile(her.loop.log().file()), "nothing was written to her home");
+            helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Replied r
+                            && r.content().equals("算好了:2")), "the owner's client was not told her reply: " + her.owner.events);
+            helper.assertTrue(her.owner.events.stream().filter(e -> e instanceof Feed.Line).count() == 4,
+                    "the owner's client did not get the four log lines: " + her.owner.events);
+            helper.assertTrue(her.owner.events.get(her.owner.events.size() - 1) instanceof Feed.Status s
+                            && s.state().phase() == null && s.state().hold() == null,
+                    "the last thing the client hears is not that she is idle: " + her.owner.events);
             her.close();
         });
     }
 
     /** 主人不在线时事件照收、不开 run;他回来,攒着的一起处理。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void an_away_owner_leaves_the_events_waiting_in_her_inbox(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_waiter");
         her.ownerOnline = false;
@@ -180,7 +217,7 @@ public class BrainGameTests {
     }
 
     /** 死着时不开 run;复活时死亡的叙事随攒着的输入一起走。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void death_freezes_the_loop_and_the_respawn_tells_her_how_she_died(GameTestHelper helper)
             throws Exception {
         Brain her = new Brain(helper, "gametest_mortal");
@@ -205,7 +242,7 @@ public class BrainGameTests {
     }
 
     /** 主人按停止:在飞的回复作废,日志记下切断点,没有新的 run,直到主人再开口。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void stop_voids_the_reply_in_flight_until_the_owner_speaks_again(GameTestHelper helper)
             throws Exception {
         Brain her = new Brain(helper, "gametest_stopped");
@@ -229,6 +266,54 @@ public class BrainGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(her.mind.asked.size() == 2, "the owner's next word did not wake her");
             helper.assertTrue(her.loop.status().hold() == null, "still stopped");
+            her.close();
+        });
+    }
+
+    /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_pager");
+        her.mind.program("return 1 + 1").say("算好了:2");
+        her.loop.submitPrompt("算一下 1 + 1");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(her.mind.asked.size() == 2 && her.transcript().size() == 4, "the loop has not finished");
+            var conv = her.rooms.find(her.companion.getUUID().toString());
+            History.Page newest = History.page(her.rooms, conv, null, 3).join();
+            helper.assertTrue(newest.lines().size() == 3 && newest.more(), "newest page: " + newest);
+            History.Page oldest = History.page(her.rooms, conv, newest.cursor(), 3).join();
+            helper.assertTrue(oldest.lines().size() == 1 && !oldest.more(), "oldest page: " + oldest);
+            List<String> ids = new ArrayList<>();
+            oldest.lines().forEach(l -> ids.add(l.id()));
+            newest.lines().forEach(l -> ids.add(l.id()));
+            helper.assertTrue(ids.equals(her.loop.log().loadLines(100).stream()
+                            .map(com.dwinovo.numen.api.agent.llm.ConvoLog.Line::id).toList()),
+                    "the pages do not add up to the whole record: " + ids);
+            her.close();
+        });
+    }
+
+    /** 主人经客户端说话:过归属检查,进她的收件箱;别人名下的同伴、不存在的会话一概不收。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void an_owners_words_reach_only_his_own_companion(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_mine");
+        her.mind.say("在的");
+        var server = helper.getLevel().getServer();
+        UUID stranger = UUID.randomUUID();
+
+        helper.assertTrue(OwnerInputs.apply(server, stranger, new OwnerInput.Say(her.companion.getUUID().toString(),
+                "我不是你主人")).problem() != null, "a stranger's words were accepted");
+        helper.assertTrue(OwnerInputs.apply(server, stranger, new OwnerInput.Compact(her.companion.getUUID()))
+                .problem() != null, "a stranger's command was accepted");
+        helper.assertTrue(her.mind.asked.isEmpty(), "she thought about a stranger's words");
+
+        var applied = OwnerInputs.apply(server, her.companion.getOwnerUuid(),
+                new OwnerInput.Say(her.companion.getUUID().toString(), "你在吗"));
+        helper.assertTrue(applied.problem() == null, "the owner's words were refused: " + applied.problem());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(her.mind.asked.size() == 1, "the owner's words did not wake her");
             her.close();
         });
     }

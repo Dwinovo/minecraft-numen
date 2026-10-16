@@ -249,8 +249,8 @@ public abstract class LoopHarness {
         }
 
         @Override
-        public String activity() {
-            return bodyTask ? "挖 64 块泥土" : null;
+        public LoopStatus.Doing activity() {
+            return bodyTask ? new LoopStatus.Doing("numen.activity.dig", List.of("64")) : null;
         }
     }
 

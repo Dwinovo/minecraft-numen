@@ -585,6 +585,35 @@ public final class ConvoLog {
         return el == null || el.isJsonNull() ? "" : el.getAsString();
     }
 
+    // ---- 面板行上线的样子 ----
+
+    /**
+     * 一行面板记录送给面板的 JSON:编号、时刻、会话印,加上消息本身(和落盘同一个记录体,切断点另标 {@code halt})。
+     * 面板行在线上就是这个样子,不另写一套编码。
+     */
+    public static JsonObject toJson(Line line) {
+        JsonObject o = encode(line.msg());
+        o.addProperty("id", line.id());
+        o.addProperty("ts", line.ts());
+        if (line.conv() != null) {
+            o.addProperty("conv", line.conv());
+        }
+        if (line.msg() instanceof ConvoState.Msg.Halt) {
+            o.addProperty("halt", true);
+        }
+        return o;
+    }
+
+    /** {@link #toJson(Line)} 的逆;读不懂(未知角色)返回 {@code null}。 */
+    public static Line lineFromJson(JsonObject o) {
+        ConvoState.Msg msg = o.has("halt") ? decodeHalt(o) : decodeMessage(o);
+        if (msg == null) {
+            return null;
+        }
+        return new Line(o.has("id") ? str(o.get("id")) : null, o.has("ts") ? o.get("ts").getAsLong() : 0L,
+                o.has("conv") ? str(o.get("conv")) : null, msg);
+    }
+
     // ---- 旧版本升上来 ----
 
     /** 升级时补回上下文的消息副本的记号:模型上下文里有,面板不再显示第二遍。 */

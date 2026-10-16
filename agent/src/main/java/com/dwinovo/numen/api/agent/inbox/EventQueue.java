@@ -533,12 +533,18 @@ public final class EventQueue {
         return dropped;
     }
 
+    /**
+     * 待发列表里的一条:条目的编号(面板据此认出"这条还排着",落进日志后换成落盘的那一行)、类型、进聊天流的样子。
+     * 整理、清空两种控制条目的 {@code text} 是语言键,由界面按主人的语言翻。
+     */
+    public record Preview(String id, String type, String text) {}
+
     /** 待发列表(给聊天流看):按类型表渲染,返回 null 的类型不出现。 */
-    public List<String> chatPreview() {
-        List<String> out = new ArrayList<>();
+    public List<Preview> chatPreview() {
+        List<Preview> out = new ArrayList<>();
         for (Entry e : entries) {
             String s = EventTypes.get(e.type()).chatPreview().apply(e.text());
-            if (s != null) out.add(s);
+            if (s != null) out.add(new Preview(e.id(), e.type(), s));
         }
         return List.copyOf(out);
     }

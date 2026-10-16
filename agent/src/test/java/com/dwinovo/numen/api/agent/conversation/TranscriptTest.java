@@ -92,6 +92,19 @@ class TranscriptTest {
         assertEquals(2, t.size());
     }
 
+    /** 翻页的游标要按各本日志各自翻过哪一行记:合并掉的副本,每一份的行编号都留在那一行上。 */
+    @Test
+    void aMergedCopyRemembersEveryLogsLineId() {
+        ConvoLog.Line mine = owner(1000, "G", 1, "我回来了", "小柚");
+        ConvoLog.Line hers = owner(1008, "G", 1, "我回来了", "阿岚");
+        List<Transcript.Entry> t = Transcript.merge("G", logs(
+                List.of(new ConvoLog.Line("a1", mine.ts(), mine.conv(), mine.msg())),
+                List.of(new ConvoLog.Line("b1", hers.ts(), hers.conv(), hers.msg()))));
+
+        assertEquals(1, t.size());
+        assertEquals(java.util.Map.of(YOU, "a1", LAN, "b1"), t.get(0).ids());
+    }
+
     @Test
     void repliesInterleaveByTimeAndKeepTheirSpeaker() {
         List<Transcript.Entry> t = Transcript.merge("G", logs(

@@ -1100,8 +1100,11 @@ public final class ChatView {
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
             var status = lp.status();
-            for (String q : status.queuedPreview()) {
-                String shown = ownerText(q);
+            for (var preview : status.queuedPreview()) {
+                // 整理、清空排着时,条目的字是语言键:按主人的语言翻;主人的话取 <query> 里的原话
+                String shown = com.dwinovo.numen.api.agent.inbox.EventTypes.COMPACT.equals(preview.type())
+                        || com.dwinovo.numen.api.agent.inbox.EventTypes.CLEAR.equals(preview.type())
+                        ? net.minecraft.client.resources.language.I18n.get(preview.text()) : ownerText(preview.text());
                 if (!shown.isEmpty()) queued.add(shown);
             }
             compacting |= status.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;

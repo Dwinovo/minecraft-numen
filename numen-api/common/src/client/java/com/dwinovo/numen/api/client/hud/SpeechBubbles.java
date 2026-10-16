@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.hud;
 
+import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
 
 import java.util.HashMap;
@@ -125,7 +126,7 @@ public final class SpeechBubbles {
         var loop = AgentLoopRegistry.get(entityUuid).orElse(null);
         if (loop != null) {
             var status = loop.status();
-            activity = status.activity();
+            activity = status.activity() == null ? null : ActivityWords.text(status.activity());
             waiting = activity == null && status.busy();
         }
 

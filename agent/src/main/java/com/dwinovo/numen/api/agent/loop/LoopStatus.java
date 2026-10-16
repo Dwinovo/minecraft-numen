@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.agent.loop;
 
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+
 import java.util.List;
 
 /**
@@ -12,10 +14,21 @@ import java.util.List;
  * @param queuedPreview   排着、进聊天流的条目(主人的话、排上的整理/清空)
  * @param compactProgress 整理记忆的进度 0~1。摘要多长事先不知道,没有分母:这是一条随流回来的字数逼近 1 的
  *                        曲线,给的是"还在动"这个事实;不在整理时为 0
- * @param activity        此刻在干的那件事,给人看的一句;没有具体动作时 {@code null}
+ * @param activity        此刻在干的那件事(语言键加现场的词,界面按主人的语言翻);没有具体动作时 {@code null}
  */
 public record LoopStatus(Phase phase, Hold hold, Cause holdReason, boolean bodyTaskRunning,
-                         List<String> queuedPreview, double compactProgress, String activity) {
+                         List<EventQueue.Preview> queuedPreview, double compactProgress, Doing activity) {
+
+    /**
+     * 她此刻在干什么:语言键加现场的词。任务有自己的说法(键由所属模组的语言文件给);没有任务、只有手上这个工具调用时,
+     * 键是 {@code numen.tool.<工具名>},没有译文的(接进来的外部工具)界面退回 {@code args[0]} 的工具名。
+     */
+    public record Doing(String key, List<String> args) {
+
+        public Doing {
+            args = List.copyOf(args);
+        }
+    }
 
     /** 大脑或身体在干活:等模型、跑工具、整理记忆,或身体有后台任务。 */
     public boolean busy() {

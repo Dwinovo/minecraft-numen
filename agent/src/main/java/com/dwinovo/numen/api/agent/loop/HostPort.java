@@ -29,6 +29,6 @@ public interface HostPort {
     /** 身体手上有没有后台任务。 */
     boolean bodyTaskRunning();
 
-    /** 此刻在干的那件事,给人看的一句;没有具体动作返回 {@code null}。 */
-    String activity();
+    /** 此刻在干的那件事;没有具体动作返回 {@code null}。 */
+    LoopStatus.Doing activity();
 }

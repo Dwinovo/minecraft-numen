@@ -18,6 +18,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1046,12 +1047,13 @@ class AgentLoopTest extends LoopHarness {
         ownerSays("你好");
         LoopStatus queued = loop.status();
         assertEquals(Hold.EXTERNAL, queued.hold());
-        assertEquals(List.of("<query>你好</query>"), queued.queuedPreview());
+        assertEquals(List.of("<query>你好</query>"), queued.queuedPreview().stream().map(EventQueue.Preview::text).toList());
+        assertNotNull(queued.queuedPreview().get(0).id(), "排着的条目有编号");
         assertTrue(queued.canInterrupt(), "排着主人的话:停止键可按");
         assertFalse(queued.busy());
 
         host.bodyTask = true;
         assertTrue(loop.status().busy());
-        assertEquals("挖 64 块泥土", loop.status().activity());
+        assertEquals(new LoopStatus.Doing("numen.activity.dig", List.of("64")), loop.status().activity());
     }
 }

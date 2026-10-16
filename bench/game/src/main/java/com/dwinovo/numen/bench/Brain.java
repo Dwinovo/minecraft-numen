@@ -118,9 +118,8 @@ final class Brain {
             }
 
             @Override
-            public String activity() {
-                var task = runtime.activity();
-                return task != null ? task.text().getString() : tools.currentToolName();
+            public com.dwinovo.numen.api.agent.loop.LoopStatus.Doing activity() {
+                return runtime.doing(tools.currentToolName());
             }
         };
         this.loop = new AgentLoop(her.toString(), model, tools, convo, queue, compactor, host);

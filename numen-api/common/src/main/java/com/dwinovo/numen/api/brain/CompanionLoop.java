@@ -71,11 +71,8 @@ public final class CompanionLoop {
     @FunctionalInterface
     public interface Rooms {
 
-        /** 就他俩时没人听得见,说了反而是噪音:空串。 */
-        Rooms ALONE = (companion, conversation) -> "";
-
         /**
-         * 挂在 {@code <query>} 标记外面的"谁在场"那一行:模型看得到,聊天流不画。
+         * 挂在 {@code <query>} 标记外面的"谁在场"那一行:模型看得到,聊天流不画。就他俩时没人听得见,说了反而是噪音:空串。
          *
          * @param conversation 她此刻在哪个会话里;{@code null} = 就他俩
          */
@@ -235,6 +232,24 @@ public final class CompanionLoop {
     /** 内核此刻的只读快照:忙不忙、为什么不动、排着什么。 */
     public LoopStatus status() {
         return loop.status();
+    }
+
+    /**
+     * 在她的写车道上读点东西:排在前面已交的写都落下去之后才读,所以刚写下的一定读得到。结果在车道的线程上算好。
+     */
+    public <T> java.util.concurrent.CompletableFuture<T> read(Supplier<T> job) {
+        return java.util.concurrent.CompletableFuture.supplyAsync(job, parts.home().io().executor());
+    }
+
+    /** 她此刻的样子,界面读的全部状态;变了才推给主人的客户端。 */
+    public CompanionState state() {
+        LoopStatus status = loop.status();
+        GoalState goal = goals.goal();
+        return new CompanionState(status.phase(), status.hold(), status.holdReason(), status.bodyTaskRunning(),
+                status.activity(), status.compactProgress(), status.queuedPreview(), compactProblem(), clearProblem(),
+                goal == null ? null : goal.toJson(), tokens.total(), tokens.sum(), tokens.latest(),
+                tokens.waste().missedTokens(), tokens.waste().missCount(), contextPercent(), modelWindow(),
+                personaId, providerId, conversation);
     }
 
     /** 她的对话日志:面板按 id 往前翻它。 */
@@ -557,14 +572,9 @@ public final class CompanionLoop {
             return runtime.bodyTaskRunning();
         }
 
-        /** 后台活优先(几十秒的长活,得看见她在挖矿而不是卡死了),没有才是手上这一个工具调用。 */
         @Override
-        public String activity() {
-            var task = runtime.activity();
-            if (task != null) {
-                return task.text().getString();
-            }
-            return tools.currentToolName();
+        public LoopStatus.Doing activity() {
+            return runtime.doing(tools.currentToolName());
         }
     }
 

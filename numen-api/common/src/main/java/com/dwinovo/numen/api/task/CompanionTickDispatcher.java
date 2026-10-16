@@ -105,7 +105,8 @@ public final class CompanionTickDispatcher {
         Companions.restorePending(server);
         // 她们的程序排着的服务端调用:在预算里执行,主线程不等任何程序
         com.dwinovo.numen.api.program.ServerPrograms.tick();
-        com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度
+        com.dwinovo.numen.api.brain.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理
+        com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件
         Companions.tickRespawns(server);   // timed death recoveries
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
