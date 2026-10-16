@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.script.Program;
 import com.dwinovo.numen.api.agent.script.ScriptCall;
-import com.dwinovo.numen.api.agent.script.SerialExecutor;
+import com.dwinovo.numen.api.store.SerialExecutor;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;

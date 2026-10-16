@@ -17,7 +17,7 @@ import java.util.function.Consumer;
  *
  * <h2>谁在哪个线程</h2>
  * 状态只在 {@code serial} 上读写。{@link #arrived}、{@link #taskFinished}、{@link #interrupt}、{@link #cancel} 与调用的结果回调
- * 从任何线程调都行,各自把活交给 {@code serial}。同一个 {@link SerialExecutor} 先交先跑,所以一件活的收尾一定排在受理它的那次调用
+ * 从任何线程调都行,各自把活交给 {@code serial}。同一个 {@link com.dwinovo.numen.api.store.SerialExecutor} 先交先跑,所以一件活的收尾一定排在受理它的那次调用
  * 的结果之后。
  *
  * <h2>等的时候来了急件</h2>
@@ -106,7 +106,7 @@ public final class Program {
 
     /**
      * @param id     这段程序的编号;它里面第 n 次调用的编号是 {@code <id>#<n>}
-     * @param serial 这段程序的执行体,调用方保证同一时刻至多一个任务在上面跑({@link SerialExecutor});测试用当场执行的
+     * @param serial 这段程序的执行体,调用方保证同一时刻至多一个任务在上面跑({@link com.dwinovo.numen.api.store.SerialExecutor});测试用当场执行的
      * @param ended  跑完时交出结局,恰好一次,在 {@code serial} 上
      */
     public Program(String id, String code, Port port, Executor serial, Consumer<Outcome> ended) {
