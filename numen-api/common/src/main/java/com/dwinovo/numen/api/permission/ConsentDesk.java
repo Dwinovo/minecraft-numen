@@ -209,7 +209,7 @@ public final class ConsentDesk {
         settle(ticket, answer);
         line.clear(null);
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
-                said.isEmpty() ? "" : ": " + said);
+                said.isEmpty() ? "" : " (带一句 " + said.length() + " 字的话)");
         return true;
     }
 

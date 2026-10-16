@@ -97,13 +97,13 @@ public final class TaskPersistence {
     static void replay(NumenPlayer companion, LeftOver left) {
         String taskName = left.taskName();
         if (left.lua().isBlank()) {
-            Constants.LOG.warn("[numen-task] {} 重启前的活是旧版本按一行命令记下的,这一版不再跑它,丢掉:{}",
-                    companion.getUUID(), left.old());
+            Constants.LOG.warn("[numen-task] {} 重启前的活是旧版本按一行命令记下的,这一版不再跑它,丢掉",
+                    companion.getUUID());
             abandon(companion, taskName, "it was saved by an older version of Numen as a command line ("
                     + left.old() + "), which this version no longer runs. Start it again if it is still wanted.");
             return;
         }
-        Constants.LOG.info("[numen-task] {} 接回重启前的活:{}", companion.getUUID(), left.lua());
+        Constants.LOG.info("[numen-task] {} 接回重启前的活 {}({} 字符的程序)", companion.getUUID(), taskName, left.lua().length());
         // 再跑,和她写的程序走同一个入口。受理了,它干完时的 task_finished 照常送到她手里;没受理(读不通、调用被拒、准备没过)就是
         // 这件活没接回来,程序的回执说为什么
         boolean[] accepted = {false};

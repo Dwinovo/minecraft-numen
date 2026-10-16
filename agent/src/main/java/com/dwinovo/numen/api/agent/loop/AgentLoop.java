@@ -124,8 +124,8 @@ public final class AgentLoop {
                 continue;
             }
             boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
-            AiLog.LOG.info("[numen-entity#{}] queued {}{}: {}", name, e.type(), asUrgent ? " URGENT" : "",
-                    brief(e.text(), 120));
+            AiLog.LOG.info("[numen-entity#{}] queued {}{} ({} chars)", name, e.type(), asUrgent ? " URGENT" : "",
+                    e.text().length());
             queued.add(new Queued(e, asUrgent));
             urgent |= asUrgent;
             ownerSpoke |= EventTypes.get(e.type()).ownerWords();
@@ -668,8 +668,4 @@ public final class AgentLoop {
 
     /** 入了队的一条,和队列的急件规则给它算出的急不急。 */
     private record Queued(EventQueue.Entry entry, boolean urgent) {}
-
-    private static String brief(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max) + "...";
-    }
 }

@@ -58,12 +58,8 @@ public record LlmToolCall(String id, String name, String arguments) {
         } catch (RuntimeException notJson) {
             // 落到下面统一处理
         }
-        AiLog.LOG.warn("[numen-llm] 工具参数不是合法 JSON 对象,按无参处理: {}", brief(trimmed));
+        AiLog.LOG.warn("[numen-llm] 工具参数不是合法 JSON 对象({} 字符),按无参处理", trimmed.length());
         return NO_ARGS;
-    }
-
-    private static String brief(String s) {
-        return s.length() <= 200 ? s : s.substring(0, 200) + "…(" + s.length() + " chars)";
     }
 
     /** Build the OpenAI-shape JSON for this tool call (used inside the assistant message). */

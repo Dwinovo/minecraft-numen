@@ -505,8 +505,8 @@ public final class HttpLlmTransport {
                 chunkCount.incrementAndGet();
                 handler.accept(obj);
             } catch (RuntimeException ex) {
-                AiLog.LOG.warn("[numen-http][{}] ignoring malformed SSE chunk: {} (data: {})",
-                        requestId, ex.getMessage(), truncate(data, 200));
+                AiLog.LOG.warn("[numen-http][{}] ignoring malformed SSE chunk ({} chars): {}",
+                        requestId, data.length(), ex.getMessage());
             }
         }
     }

@@ -191,7 +191,7 @@ final class TurnPresenter {
         endTurn();   // committed 消息接管显示,半截打字与在飞行摘掉
         String shown = ChatDisplayModes.current().assistantText(turn.content());
         if (!turn.hasToolCalls()) {
-            Constants.LOG.info("[numen-entity#{}] assistant (final): {}", entityUuid, turn.content());
+            Constants.LOG.info("[numen-entity#{}] assistant (final): {} chars", entityUuid, turn.content().length());
         }
         // 最终回复和开工前的顺嘴一句(tool_calls 旁附的 content)同一个画法:是话就上气泡 + 字幕行,
         // 超长折叠,悬停看全文,完整记录在 G 面板。开工前没话说就不动气泡——上一句正文泡留着走完

@@ -105,8 +105,8 @@ public final class GoalSteward {
         if (goal == null) {
             return;
         }
-        AiLog.LOG.info("[numen-entity#{}] 目标收工({} 轮,{}):{}",
-                name, goal.turnsExecuted(), why == null ? "主人清掉" : why, goal.objective());
+        AiLog.LOG.info("[numen-entity#{}] 目标收工({} 轮,{})",
+                name, goal.turnsExecuted(), why == null ? "主人清掉" : "评估后收工");
         cancelJudging();
         goal = null;
         persist.accept(null);
@@ -212,9 +212,8 @@ public final class GoalSteward {
         var verdict = GoalPrompts.readVerdict(answered.turn().content());
         goal.setLastReason(verdict.reason());
         boolean giveUp = goal.noteStuck(verdict.stuck());
-        AiLog.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}:{}", name, goal.turnsExecuted(),
-                verdict.met() ? "达成" : verdict.stuck() ? "打转 x" + goal.stuckStreak() : "还差",
-                verdict.reason());
+        AiLog.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}", name, goal.turnsExecuted(),
+                verdict.met() ? "达成" : verdict.stuck() ? "打转 x" + goal.stuckStreak() : "还差");
         if (verdict.met()) {
             clear("目标达成:" + verdict.reason());
             return;

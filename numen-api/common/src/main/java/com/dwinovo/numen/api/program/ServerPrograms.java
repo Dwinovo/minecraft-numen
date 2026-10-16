@@ -133,8 +133,8 @@ public final class ServerPrograms {
         ProgramCalls calls = new ObservedCalls(new RoutedCalls(
                 new ServerCalls(her, running.lane, job -> running.claimed = request.reportsToModel() ? job : null),
                 client), observer);
-        Constants.LOG.info("[numen-program] {} runs {} on the server: {}", companion, request.programId(),
-                request.code());
+        Constants.LOG.info("[numen-program] {} runs {} on the server ({} chars)", companion, request.programId(),
+                request.code().length());
         running.program = new Program(request.programId(), request.code(),
                 new ProgramPort(her, opened.modules(), calls), new SerialExecutor(THREADS), outcome -> {
                     // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉

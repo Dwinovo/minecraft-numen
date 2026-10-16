@@ -221,18 +221,11 @@ public final class NumenLlmClient {
             if (toolSummary.length() > 0) toolSummary.append(", ");
             toolSummary.append(tc.name());
         }
-        String contentSnippet = turn.content().isEmpty() ? "<no text>"
-                : truncate(turn.content().replace('\n', ' '), 120);
         AiLog.LOG.info(
-                "[numen-llm] chat done in {}ms, chunks={}, tokens={}, finish={}, tool_calls=[{}], content=\"{}\"",
+                "[numen-llm] chat done in {}ms, chunks={}, tokens={}, finish={}, tool_calls=[{}], content={} chars",
                 elapsedMs, acc.chunkCount, tokens,
                 acc.finishReason == null ? "?" : acc.finishReason,
-                toolSummary, contentSnippet);
-    }
-
-    private static String truncate(String s, int max) {
-        if (s == null) return "";
-        return s.length() <= max ? s : s.substring(0, max) + "...";
+                toolSummary, turn.content().length());
     }
 
     public LlmProvider provider() { return provider; }

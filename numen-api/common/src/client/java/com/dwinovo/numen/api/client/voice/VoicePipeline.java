@@ -179,15 +179,15 @@ public final class VoicePipeline {
                     if (gen != generation) return;   // 本轮已被打断,结果作废
                     if (fail != null) {
                         target.failed = true;
-                        Constants.LOG.warn("[numen-voice#{}] 合成失败({}), 跳过该句: {} — {}",
-                                entityUuid, backend.describe(), truncate(target.text), unwrap(fail));
+                        Constants.LOG.warn("[numen-voice#{}] 合成失败({}), 跳过该句({} 字): {}",
+                                entityUuid, backend.describe(), target.text.length(), unwrap(fail));
                     } else {
                         target.audio = audio;
                         // INFO 而非 debug:每句一行,是"流式分句确实在 LLM 说完前就开始
                         // 合成"的唯一运行时证据,也是合成延迟的常驻观测点。
-                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, {}ms 音频: {}",
+                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, {}ms 音频, {} 字",
                                 entityUuid, (System.nanoTime() - t0) / 1_000_000,
-                                audio.durationMs(), truncate(target.text));
+                                audio.durationMs(), target.text.length());
                     }
                     pumpSynthesis();
                     pumpPlayback();
@@ -225,8 +225,8 @@ public final class VoicePipeline {
         playing = com.dwinovo.numen.api.client.platform.ClientServices.VOICE
                 .entityVoice(entityUuid, body, head.audio, 1.0f);
         mc.getSoundManager().play(playing);
-        Constants.LOG.info("[numen-voice#{}] 开播 {}ms: {}",
-                entityUuid, head.audio.durationMs(), truncate(head.text));
+        Constants.LOG.info("[numen-voice#{}] 开播 {}ms, {} 字",
+                entityUuid, head.audio.durationMs(), head.text.length());
         pumpSynthesis();
     }
 
@@ -237,10 +237,6 @@ public final class VoicePipeline {
         }
         queue.clear();
         divider.reset();
-    }
-
-    private static String truncate(String s) {
-        return s.length() <= 40 ? s : s.substring(0, 40) + "...";
     }
 
     private static String unwrap(Throwable t) {

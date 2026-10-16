@@ -156,8 +156,9 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
             return;
         }
         java.util.function.Consumer<SerialCalls.Settled> landed = landing(call, done);
-        Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
-                companion, call.name(), call.id(), truncate(call.arguments()));
+        // 日志是公开的(服主、mclo.gs):工具参数(程序源码)只记多大,不记原文
+        Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={} chars",
+                companion, call.name(), call.id(), call.arguments().length());
         try {
             if (tool instanceof ScriptTool) {
                 uplink.run(companion, call.id(), ScriptTool.code(call.arguments()), result -> landed.accept(settled(result)));
@@ -189,16 +190,12 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
             if (inFlightDone != null && call == calls.inFlight()) {
                 inFlightDone = null;
             }
-            Constants.LOG.info("[numen-dispatch#{}] result id={} {} → {}",
-                    companion, call.id(), call.name(), truncate(settled.result()));
+            Constants.LOG.info("[numen-dispatch#{}] result id={} {} → {}, {} chars",
+                    companion, call.id(), call.name(), ToolOutcome.failed(settled.result()) ? "failed" : "ok",
+                    settled.result().length());
             done.accept(settled);
         };
         inFlightDone = landed;
         return landed;
-    }
-
-    private static String truncate(String s) {
-        if (s == null) return "";
-        return s.length() <= 200 ? s : s.substring(0, 200) + "...";
     }
 }
