@@ -3,10 +3,10 @@ package com.dwinovo.numen.api.client.screen;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
@@ -164,7 +164,7 @@ final class ProfilePage {
         }
         var snap = ClientNumenState.get(who).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(who);
-        EntityAgentLoop loop = AgentLoopRegistry.get(who).orElse(null);
+        CompanionView loop = CompanionViews.get(who).orElse(null);
         ItemStack[] hover = {ItemStack.EMPTY};
         String tip = null;
         int cx = x + w / 2;
@@ -399,7 +399,7 @@ final class ProfilePage {
     }
 
     /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */
-    private List<FormattedCharSequence> bio(EntityAgentLoop loop, int width) {
+    private List<FormattedCharSequence> bio(CompanionView loop, int width) {
         if (loop == null || loop.personaId() == null) return List.of();
         var persona = PersonaLibrary.instance().get(loop.personaId());
         if (persona == null || persona.text() == null) return List.of();
@@ -515,7 +515,7 @@ final class ProfilePage {
      * 的话那三段自然消失。它是给想知道的人看的,住在上下文那一行的悬停提示里,不常驻。
      * 命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
      */
-    private static String usageDetail(EntityAgentLoop lp) {
+    private static String usageDetail(CompanionView lp) {
         var sum = lp.usageTotals();
         List<String> parts = new ArrayList<>();
         if (sum.input() > 0) parts.add("↑" + com.dwinovo.numen.api.client.ui.TokenFormat.tokens(sum.input()));

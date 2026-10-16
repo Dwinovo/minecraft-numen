@@ -249,7 +249,7 @@ public final class CompanionLoop {
                 status.activity(), status.compactProgress(), status.queuedPreview(), compactProblem(), clearProblem(),
                 goal == null ? null : goal.toJson(), tokens.total(), tokens.sum(), tokens.latest(),
                 tokens.waste().missedTokens(), tokens.waste().missCount(), contextPercent(), modelWindow(),
-                personaId, providerId, conversation);
+                personaId, providerId, conversation, tools.outstanding());
     }
 
     /** 她的对话日志:面板按 id 往前翻它。 */

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.command;
 
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 
 import java.util.List;
 
@@ -18,5 +18,5 @@ import java.util.List;
 public interface CommandSource {
 
     /** 此刻这个来源能提供的命令。允许每次调用返回不同的内容。 */
-    List<ChatCommand> commands(EntityAgentLoop loop);
+    List<ChatCommand> commands(CompanionView loop);
 }

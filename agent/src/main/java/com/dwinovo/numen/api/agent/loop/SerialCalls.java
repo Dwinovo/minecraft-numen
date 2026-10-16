@@ -128,6 +128,16 @@ public final class SerialCalls {
         return queue.stream().anyMatch(call -> call.id().equals(callId));
     }
 
+    /** 结果还会来的调用的 id:在飞的和还排着的。 */
+    public List<String> outstanding() {
+        List<String> ids = new ArrayList<>();
+        if (inFlight != null) {
+            ids.add(inFlight.id());
+        }
+        queue.forEach(call -> ids.add(call.id()));
+        return ids;
+    }
+
     /** 在飞的那一个;没有是 null。 */
     public LlmToolCall inFlight() {
         return inFlight;

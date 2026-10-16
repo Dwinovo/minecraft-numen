@@ -4,7 +4,7 @@ import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.ui.widget.SelectPanel;
 
 import java.util.ArrayList;
@@ -29,7 +29,7 @@ final class SkillsCommand implements PopupCommand {
     }
 
     @Override
-    public com.dwinovo.numen.api.client.ui.widget.Popup popup(EntityAgentLoop loop) {
+    public com.dwinovo.numen.api.client.ui.widget.Popup popup(CompanionView loop) {
         return new SelectPanel(new SkillsPage());
     }
 

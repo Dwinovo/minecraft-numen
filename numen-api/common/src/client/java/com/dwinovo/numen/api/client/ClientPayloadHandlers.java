@@ -56,9 +56,11 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
         ClientPayloadSink.uiAction = ClientPayloadHandlers::handleUiAction;
+        com.dwinovo.numen.api.client.agent.RemoteCompanions.install();
     }
 
     private static void handleCompanionList(CompanionListPayload p) {
+        com.dwinovo.numen.api.client.agent.RemoteCompanions.hello();
         java.util.Map<UUID, String> before = new java.util.HashMap<>();
         for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.put(e.uuid(), e.name());
 

@@ -281,12 +281,12 @@ public class BrainGameTests {
             helper.assertTrue(her.mind.asked.size() == 2 && her.transcript().size() == 4, "the loop has not finished");
             var conv = her.rooms.find(her.companion.getUUID().toString());
             History.Page newest = History.page(her.rooms, conv, null, 3).join();
-            helper.assertTrue(newest.lines().size() == 3 && newest.more(), "newest page: " + newest);
+            helper.assertTrue(newest.entries().size() == 3 && newest.more(), "newest page: " + newest);
             History.Page oldest = History.page(her.rooms, conv, newest.cursor(), 3).join();
-            helper.assertTrue(oldest.lines().size() == 1 && !oldest.more(), "oldest page: " + oldest);
+            helper.assertTrue(oldest.entries().size() == 1 && !oldest.more(), "oldest page: " + oldest);
             List<String> ids = new ArrayList<>();
-            oldest.lines().forEach(l -> ids.add(l.id()));
-            newest.lines().forEach(l -> ids.add(l.id()));
+            oldest.entries().forEach(e -> ids.add(e.ids().get(e.companion())));
+            newest.entries().forEach(e -> ids.add(e.ids().get(e.companion())));
             helper.assertTrue(ids.equals(her.loop.log().loadLines(100).stream()
                             .map(com.dwinovo.numen.api.agent.llm.ConvoLog.Line::id).toList()),
                     "the pages do not add up to the whole record: " + ids);

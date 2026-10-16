@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 
 /**
  * {@code /clear} —— 清空上下文,她白纸一张地开始下一轮。
@@ -28,15 +28,15 @@ final class ClearCommand implements ChatCommand {
     }
 
     @Override
-    public String unavailable(EntityAgentLoop loop) {
-        return loop == null ? null : loop.clearProblem();
+    public String unavailable(CompanionView loop) {
+        return loop == null || loop.clearProblem() == null ? null : I18n.get(loop.clearProblem());
     }
 
     @Override
-    public String run(EntityAgentLoop loop, String args) {
+    public String run(CompanionView loop, String args) {
         String refused = loop.requestClearContext();
         if (refused != null) {
-            return refused;
+            return I18n.get(refused);
         }
         // 成功不吭声:清完分隔线当场出现,排着时队列条目自己在聊天流里挂着——
         // 画面已经说明了一切,再回一行字是重复。

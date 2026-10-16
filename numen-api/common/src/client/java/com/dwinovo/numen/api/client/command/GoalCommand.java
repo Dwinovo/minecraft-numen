@@ -4,7 +4,7 @@ import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.goal.GoalPrompts;
 import com.dwinovo.numen.api.agent.goal.GoalState;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 
 import java.util.Locale;
 
@@ -42,7 +42,7 @@ final class GoalCommand implements ChatCommand {
             java.util.Set.of("clear", "stop", "off", "reset", "none", "cancel");
 
     @Override
-    public String run(EntityAgentLoop loop, String args) {
+    public String run(CompanionView loop, String args) {
         GoalState goal = loop.goal();
         if (args.isBlank()) {
             return status(goal);

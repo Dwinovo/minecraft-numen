@@ -103,6 +103,11 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         return calls.holds(callId);
     }
 
+    /** 结果还会来的调用的 id(在飞的与排着的):历史里没结果、又不在这里的调用是被切断的。 */
+    public List<String> outstanding() {
+        return calls.outstanding();
+    }
+
     /** 派出去、结果还没回来的那一个;没有是 null。 */
     public LlmToolCall inFlight() {
         return calls.inFlight();

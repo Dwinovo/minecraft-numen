@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.config.Authority;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.network.NumenNetwork;
@@ -63,10 +62,7 @@ public final class Replies {
             return;
         }
         History.page(rooms, conv, cursor, Math.max(1, Math.min(History.PAGE, limit))).thenAccept(page -> {
-            JsonArray lines = new JsonArray();
-            page.lines().forEach(line -> lines.add(ConvoLog.toJson(line)));
-            NumenNetwork.sendToPlayer(player, new HistoryPagePayload(requestId, conversation, lines.toString(),
-                    page.cursor(), page.more()));
+            NumenNetwork.sendToPlayer(player, HistoryPagePayload.of(requestId, conversation, page));
         });
     }
 

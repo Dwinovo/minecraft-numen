@@ -33,17 +33,17 @@ public final class History {
     /**
      * 一页。
      *
-     * @param lines  按时间从老到新
+     * @param entries 按时间从老到新
      * @param cursor 再往前翻带回来的游标
      * @param more   再往前还有没有这个会话的行
      */
-    public record Page(List<ConvoLog.Line> lines, String cursor, boolean more) {}
+    public record Page(List<Transcript.Entry> entries, String cursor, boolean more) {}
 
     private History() {}
 
     /**
      * 取一页:{@code conversation} 的成员(此刻还在名册上、有大脑的)各读一段,归并,留最新的 {@code limit} 行。
-     * 行的编号用所在成员的那份(主人的话是第一份副本的)。
+     * 每一行说清是谁那本日志里的、各本日志里的行编号。
      */
     public static CompletableFuture<Page> page(Conversations rooms, Conversation conversation, String cursor,
                                                int limit) {
@@ -70,8 +70,7 @@ public final class History {
             Map<UUID, String> next = new HashMap<>(from);
             next.putAll(oldest);
             return probe(rooms, members, next, tag).thenApply(more -> new Page(
-                    chosen.stream().map(e -> new ConvoLog.Line(e.ids().get(e.companion()), e.ts(), tag, e.msg())).toList(),
-                    writeCursor(next), more));
+                    List.copyOf(chosen), writeCursor(next), more));
         });
     }
 

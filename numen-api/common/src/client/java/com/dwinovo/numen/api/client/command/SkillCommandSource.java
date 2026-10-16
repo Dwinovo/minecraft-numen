@@ -3,9 +3,8 @@ package com.dwinovo.numen.api.client.command;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
-import com.dwinovo.numen.api.agent.skill.SkillInjection;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +18,7 @@ import java.util.List;
 final class SkillCommandSource implements CommandSource {
 
     @Override
-    public List<ChatCommand> commands(EntityAgentLoop loop) {
+    public List<ChatCommand> commands(CompanionView loop) {
         SkillRegistry registry = SkillRegistry.instance();
         List<ChatCommand> out = new ArrayList<>();
         for (SkillInfo info : registry.all()) {
@@ -70,13 +69,12 @@ final class SkillCommandSource implements CommandSource {
          * 所以这里不用再回一句话,主人的气泡本身就是回执。
          */
         @Override
-        public String run(EntityAgentLoop loop, String args) {
+        public String run(CompanionView loop, String args) {
             SkillInfo info = SkillRegistry.instance().get(skill).orElse(null);
             if (info == null) {
                 return I18n.get(Keys.CMD_SKILL_GONE, skill);
             }
-            loop.submitCommand(ChatCommands.PREFIX + skill + (args.isBlank() ? "" : " " + args),
-                    SkillInjection.body(info, args));
+            loop.submitSkill(ChatCommands.PREFIX + skill + (args.isBlank() ? "" : " " + args), skill, args);
             return null;
         }
     }

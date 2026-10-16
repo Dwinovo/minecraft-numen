@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.CompanionHome;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
@@ -89,7 +89,7 @@ public final class CompanionEditPanel extends ModalCard {
     @Override
     void reset() {
         var uuid = host.uuid();
-        var loop = AgentLoopRegistry.getOrCreate(uuid);
+        var loop = CompanionViews.getOrCreate(uuid);
         var binding = CompanionHome.binding(uuid);
         origPersona = loop.personaId();
         origProvider = binding.providerId();
@@ -210,10 +210,10 @@ public final class CompanionEditPanel extends ModalCard {
     private void save() {
         var uuid = host.uuid();
         if (!Objects.equals(draft.personaId, origPersona)) {
-            AgentLoopRegistry.getOrCreate(uuid).setPersona(draft.personaId);
+            CompanionViews.getOrCreate(uuid).setPersona(draft.personaId);
         }
         if (draft.providerId != null && !draft.providerId.equals(origProvider)) {
-            AgentLoopRegistry.getOrCreate(uuid).setProviderEntry(draft.providerId);
+            CompanionViews.getOrCreate(uuid).setProviderEntry(draft.providerId);
         }
         if (!Objects.equals(draft.voiceId, origVoice)) {
             CompanionHome.bind(uuid, CompanionHome.binding(uuid).withVoice(draft.voiceId));

@@ -6,13 +6,13 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Mentions;
 import com.dwinovo.numen.api.agent.conversation.Quote;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.CauseWords;
 import com.dwinovo.numen.api.client.agent.ToolWords;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
@@ -603,6 +603,9 @@ public final class ChatView {
         lastScrollMs = System.currentTimeMillis();
         scrollTarget = Math.clamp((long) (scrollTarget - sy * LINE_H * 3), 0, lastMaxScroll);
         pinBottom = scrollTarget >= lastMaxScroll;
+        if (scrollTarget == 0) {
+            CompanionViews.loadOlder(conv.get());   // 翻到头了:要更早的一页
+        }
         return true;
     }
 
@@ -1081,13 +1084,13 @@ public final class ChatView {
         java.util.Set<String> queued = new java.util.LinkedHashSet<>();
         boolean compacting = false;
         for (UUID her : Conversations.instance().membersAlive(conv.get())) {
-            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            CompanionView lp = CompanionViews.get(her).orElse(null);
             if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
             if (!her.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
             // 在飞的思考流接在她这段过程末尾;回合落库后由落库的那段接管,永不双份。
             String liveReasoning = lp.liveReasoning();
             if (!liveReasoning.isBlank()) addPiece(f, her, -1, new Piece(liveReasoning, true, null));
-            // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
+            // The in-flight reply, typed out live (chunk stream → CompanionView.livePartial).
             Live l = live.get(her);
             if (l != null && (!l.shown.isEmpty() || l.caret)) {
                 flushProcess(f, done, failed, bubbleMaxW);
@@ -1314,7 +1317,7 @@ public final class ChatView {
         List<UUID> members = Conversations.instance().membersAlive(conv.get());
         live.keySet().retainAll(members);
         for (UUID her : members) {
-            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            CompanionView lp = CompanionViews.get(her).orElse(null);
             String full = lp == null ? "" : ChatDisplayModes.current().assistantText(lp.livePartial());
             if (full.isEmpty()) {
                 live.remove(her);
@@ -1714,16 +1717,12 @@ public final class ChatView {
     private List<Transcript.Entry> transcript() {
         Conversations convos = Conversations.instance();
         Conversation c = conv.get();
-        java.util.Map<UUID, List<ConvoLog.Line>> logs = new java.util.LinkedHashMap<>();
-        for (UUID member : convos.membersAlive(c)) {
-            AgentLoopRegistry.get(member).ifPresent(l -> logs.put(member, l.display()));
-        }
-        return Transcript.merge(convos.tagOf(c), logs);
+        return CompanionViews.transcript(c, convos.tagOf(c), convos.membersAlive(c));
     }
 
     /** 这次调用还在她那条循环的派发器手里没有——"还在跑"只问派发器,不从历史长什么样去猜。 */
     private static boolean outstanding(UUID companion, String callId) {
-        return AgentLoopRegistry.get(companion).map(l -> l.isToolCallOutstanding(callId)).orElse(false);
+        return CompanionViews.get(companion).map(l -> l.isToolCallOutstanding(callId)).orElse(false);
     }
 
     /** 气泡上的名字:名册名。多人会话里每条回复各标各的说话人。 */

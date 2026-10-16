@@ -4,9 +4,9 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
 import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.data.ModLanguageData;
@@ -55,7 +55,7 @@ public final class ConversationPreview {
         Map<UUID, List<ConvoLog.Line>> logs = new LinkedHashMap<>();
         int total = 0;
         for (UUID m : convos.membersAlive(c)) {
-            EntityAgentLoop lp = AgentLoopRegistry.get(m).orElse(null);
+            CompanionView lp = CompanionViews.get(m).orElse(null);
             if (lp == null) continue;
             List<ConvoLog.Line> lines = lp.display();
             logs.put(m, lines);

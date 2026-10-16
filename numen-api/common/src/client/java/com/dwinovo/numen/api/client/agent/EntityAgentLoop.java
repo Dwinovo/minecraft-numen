@@ -33,7 +33,6 @@ import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.resources.language.I18n;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -70,7 +69,7 @@ import java.util.function.Consumer;
  * ({@link ToolDispatcher}), and model callbacks, which {@link Model#call} hops back via
  * {@code Minecraft.execute} before they reach the kernel.
  */
-public final class EntityAgentLoop {
+public final class EntityAgentLoop implements CompanionView {
 
 
 
@@ -161,7 +160,10 @@ public final class EntityAgentLoop {
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity, this::receiptAfterCut);
-        this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
+        this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName,
+                said -> Conversations.instance().heard(entityUuid, said), false,
+                speaking -> com.dwinovo.numen.api.network.NumenNetwork.sendToServer(
+                        new com.dwinovo.numen.api.network.payload.SpeakingStatePayload(entityUuid, speaking)));
         this.tokens = new com.dwinovo.numen.api.brain.TokenLedger(entityUuid,
                 new com.dwinovo.numen.api.store.JsonDoc(CompanionHome.stats(entityUuid),
                         com.dwinovo.numen.api.store.JsonDoc.Format.of(1), NumenIo.inline("numen-entity#" + entityUuid)));
@@ -259,9 +261,14 @@ public final class EntityAgentLoop {
         return tokens.latest();
     }
 
-    /** 缓存重计费的诊断数。 */
-    public com.dwinovo.numen.api.agent.provider.CacheWaste cacheWaste() {
-        return tokens.waste();
+    @Override
+    public long wastedTokens() {
+        return tokens.waste().missedTokens();
+    }
+
+    @Override
+    public int wasteCount() {
+        return tokens.waste().missCount();
     }
 
     /**
@@ -280,6 +287,12 @@ public final class EntityAgentLoop {
     /** 内核此刻的只读快照——忙不忙、为什么不动、排着什么。 */
     public LoopStatus status() {
         return loop.status();
+    }
+
+    @Override
+    public void submitSkill(String echo, String skill, String args) {
+        var info = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().get(skill).orElse(null);
+        submitCommand(echo, info == null ? "" : com.dwinovo.numen.api.agent.skill.SkillInjection.body(info, args));
     }
 
     /**
@@ -449,11 +462,11 @@ public final class EntityAgentLoop {
      */
     public String compactProblem() {
         Hold hold = loop.hold();
-        if (hold == Hold.DEAD) return I18n.get(Keys.LOOP_GONE);
+        if (hold == Hold.DEAD) return Keys.LOOP_GONE;
         // 整理是对内脑说的:驾驶席在外接模型手里时内脑不开工,排上了也只会一直躺着。
-        if (hold == Hold.EXTERNAL) return I18n.get(Keys.LOOP_EXTERNAL_COMPACT);
-        if (loop.status().phase() == Phase.COMPACT) return I18n.get(Keys.LOOP_COMPACTING);
-        if (queue.count(EventTypes.COMPACT) > 0) return I18n.get(Keys.LOOP_COMPACT_QUEUED);
+        if (hold == Hold.EXTERNAL) return Keys.LOOP_EXTERNAL_COMPACT;
+        if (loop.status().phase() == Phase.COMPACT) return Keys.LOOP_COMPACTING;
+        if (queue.count(EventTypes.COMPACT) > 0) return Keys.LOOP_COMPACT_QUEUED;
         // 不看忙不忙:整理进队列排着,闲下来自己执行。按了就一定会发生,主人不必盯着什么时候能按。
         // 也不看记录长短:整理多少、什么时候整理是主人的事。条数门槛只属于自动整理
         // ——那是替他省一次没意义的请求,不是替他做决定。
@@ -464,10 +477,10 @@ public final class EntityAgentLoop {
     /** {@code /clear} 现在按不按得下。同 {@link #compactProblem} 的形状,但不查端点:清空不发请求。 */
     public String clearProblem() {
         Hold hold = loop.hold();
-        if (hold == Hold.DEAD) return I18n.get(Keys.LOOP_GONE);
+        if (hold == Hold.DEAD) return Keys.LOOP_GONE;
         // 同整理:清空的是内脑的上下文,外接模型驾驶时内脑不开工,排上了也执行不了。
-        if (hold == Hold.EXTERNAL) return I18n.get(Keys.LOOP_EXTERNAL_CLEAR);
-        if (queue.count(EventTypes.CLEAR) > 0) return I18n.get(Keys.LOOP_CLEAR_QUEUED);
+        if (hold == Hold.EXTERNAL) return Keys.LOOP_EXTERNAL_CLEAR;
+        if (queue.count(EventTypes.CLEAR) > 0) return Keys.LOOP_CLEAR_QUEUED;
         return null;
     }
 

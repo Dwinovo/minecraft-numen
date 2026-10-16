@@ -74,6 +74,7 @@ public final class AgentLoopRegistry {
         for (EntityAgentLoop loop : ENTITY_LOOPS.values()) {
             loop.clientTick();
         }
+        RemoteCompanions.tick();
     }
 
     /**
@@ -88,6 +89,7 @@ public final class AgentLoopRegistry {
             loop.quiesce();
         }
         // 服务端按主人断线清掉了他的模块缓存:这个连接上送过哪些正文的记录作废;服务端那头没发完的分片消息也不会再来了
+        RemoteCompanions.disconnected();
         com.dwinovo.numen.api.program.ProgramUplink.CONNECTION.disconnected();
         com.dwinovo.numen.api.network.NumenNetwork.disconnectedFromServer();
     }

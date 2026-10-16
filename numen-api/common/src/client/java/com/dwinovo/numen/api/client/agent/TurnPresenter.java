@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
-import com.dwinovo.numen.api.agent.provider.AssistantTurn;
+import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.client.chat.ChatLines;
 import com.dwinovo.numen.api.client.hud.NumenHudToasts;
@@ -17,7 +17,6 @@ import com.dwinovo.numen.api.client.ui.NumenToasts;
 import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.client.voice.VoicePipeline;
 import com.dwinovo.numen.api.mcp.server.McpTranscript;
-import com.dwinovo.numen.api.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
@@ -66,10 +65,21 @@ final class TurnPresenter {
     /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
     private boolean lastSpeakingSent;
 
-    TurnPresenter(UUID entityUuid, Supplier<LoopStatus> status, Supplier<String> personaName) {
+    /** 她说出口的话旁听给同会话的其他成员(服务端大脑那一侧由服务端做,这里不传)。 */
+    private final Consumer<String> overheard;
+    /** "大脑在想"是服务端自己知道的(服务端大脑):只报朗读在不在放。 */
+    private final boolean serverKnowsThinking;
+    /** 说话状态翻转了往哪报。 */
+    private final Consumer<Boolean> speakingSink;
+
+    TurnPresenter(UUID entityUuid, Supplier<LoopStatus> status, Supplier<String> personaName,
+                  Consumer<String> overheard, boolean serverKnowsThinking, Consumer<Boolean> speakingSink) {
         this.entityUuid = entityUuid;
         this.status = status;
         this.personaName = personaName;
+        this.overheard = overheard;
+        this.serverKnowsThinking = serverKnowsThinking;
+        this.speakingSink = speakingSink;
     }
 
     /** 内核的事件在这里变成主人看得见、听得见的东西。 */
@@ -77,7 +87,8 @@ final class TurnPresenter {
         switch (event) {
             case LoopEvent.TurnStarted turn -> beginTurn(turn.ownerSpoke());
             case LoopEvent.ModelDelta delta -> delta(delta.content(), delta.reasoning());
-            case LoopEvent.AssistantMessage message -> showReply(message.turn());
+            case LoopEvent.AssistantMessage message ->
+                    showReply(message.turn().content(), message.turn().hasToolCalls());
             case LoopEvent.RunEnded ended -> {
                 if (!(ended.end() instanceof RunEnd.Done)) {
                     endTurn();   // 失败或被切断:半截文字作废、语音收尾(说完了的回复在落库时已经收过)
@@ -101,6 +112,25 @@ final class TurnPresenter {
             case LoopEvent.ProgramEnded ignored -> { }
             case LoopEvent.ModelUsed ignored -> { }
             case LoopEvent.TranscriptBoundary ignored -> { }
+        }
+    }
+
+    /** 服务端大脑推来的事件:画的和听的是同一套。 */
+    void on(Feed event) {
+        switch (event) {
+            case Feed.TurnStart turn -> beginTurn(turn.ownerSpoke());
+            case Feed.Delta delta -> delta(delta.content(), delta.reasoning());
+            case Feed.Replied replied -> showReply(replied.content(), replied.hasToolCalls());
+            case Feed.TurnCut cut -> endTurn();
+            case Feed.Failed failed -> showFailure(CauseWords.text(failed.cause()));
+            case Feed.Blocked blocked -> showBlocked(CauseWords.text(blocked.cause()));
+            case Feed.Halted halted -> {
+                interruptVoice();
+                SpeechBubbles.clear(entityUuid);
+            }
+            case Feed.Line line -> { }
+            case Feed.Pending pending -> { }
+            case Feed.Status status -> { }
         }
     }
 
@@ -187,18 +217,18 @@ final class TurnPresenter {
     }
 
     /** 模型的一条回复落地:头顶气泡是回复的主显示(附近玩家都看得见),聊天框回显一份当日志。 */
-    private void showReply(AssistantTurn turn) {
+    private void showReply(String content, boolean hasToolCalls) {
         endTurn();   // committed 消息接管显示,半截打字与在飞行摘掉
-        String shown = ChatDisplayModes.current().assistantText(turn.content());
-        if (!turn.hasToolCalls()) {
-            Constants.LOG.info("[numen-entity#{}] assistant (final): {} chars", entityUuid, turn.content().length());
+        String shown = ChatDisplayModes.current().assistantText(content);
+        if (!hasToolCalls) {
+            Constants.LOG.info("[numen-entity#{}] assistant (final): {} chars", entityUuid, content.length());
         }
         // 最终回复和开工前的顺嘴一句(tool_calls 旁附的 content)同一个画法:是话就上气泡 + 字幕行,
         // 超长折叠,悬停看全文,完整记录在 G 面板。开工前没话说就不动气泡——上一句正文泡留着走完
         // 生命周期,身体动起来本身就是反馈;最终回复滤完为空(全是动作记号)时收起思考泡。
         if (!shown.isBlank()) {
             spoke(shown);
-        } else if (!turn.hasToolCalls()) {
+        } else if (!hasToolCalls) {
             SpeechBubbles.clear(entityUuid);
         }
     }
@@ -214,7 +244,7 @@ final class TurnPresenter {
         String shown = compact(said);
         SpeechBubbles.say(entityUuid, shown);
         ChatLines.companion(speakerName(), shown);
-        com.dwinovo.numen.api.client.agent.Conversations.instance().heard(entityUuid, shown);
+        overheard.accept(shown);
         com.dwinovo.numen.api.client.notify.MessageNotices.spoke(entityUuid, shown);
     }
 
@@ -281,11 +311,11 @@ final class TurnPresenter {
             return;
         }
         Phase phase = status.get().phase();
-        boolean speaking = phase == Phase.MODEL || phase == Phase.TOOLS || (voice != null && voice.isSpeaking());
+        boolean voicePlaying = voice != null && voice.isSpeaking();
+        boolean speaking = voicePlaying || !serverKnowsThinking && (phase == Phase.MODEL || phase == Phase.TOOLS);
         if (speaking != lastSpeakingSent) {
             lastSpeakingSent = speaking;
-            NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.SpeakingStatePayload(
-                    entityUuid, speaking));
+            speakingSink.accept(speaking);
         }
     }
 

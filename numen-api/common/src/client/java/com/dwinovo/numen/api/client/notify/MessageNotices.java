@@ -1,9 +1,9 @@
 package com.dwinovo.numen.api.client.notify;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.CompanionChatScreen;
 import com.dwinovo.numen.api.client.chat.SelectedCompanion;
@@ -59,7 +59,7 @@ public final class MessageNotices {
      */
     public static void spoke(UUID speaker, String said) {
         Conversations convos = Conversations.instance();
-        String tag = AgentLoopRegistry.get(speaker).map(EntityAgentLoop::conversation).orElse(null);
+        String tag = CompanionViews.get(speaker).map(CompanionView::conversation).orElse(null);
         Conversation c = tag == null ? convos.of(speaker) : convos.get(tag);
         if (c == null || !wanted(c)) return;
         String who = convos.soloOf(c) == null ? NumenRoster.instance().name(speaker) : null;

@@ -2,7 +2,8 @@ package com.dwinovo.numen.api.client.screen.settings;
 
 
 import com.dwinovo.numen.api.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.api.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.api.client.agent.CompanionViews;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
@@ -135,7 +136,7 @@ public final class SettingsView {
                     // 换绑走 setProviderEntry(下一次请求即生效);不许解绑——同伴必须有端点
                     .withBind(e -> {
                         if (host.uuid() != null) {
-                            AgentLoopRegistry.getOrCreate(host.uuid()).setProviderEntry(e.id());
+                            CompanionViews.getOrCreate(host.uuid()).setProviderEntry(e.id());
                         }
                     }, null);
         }
@@ -693,12 +694,12 @@ public final class SettingsView {
                     .withBind(
                             p -> {
                                 if (host.uuid() != null) {
-                                    AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(p.id());
+                                    CompanionViews.getOrCreate(host.uuid()).setPersona(p.id());
                                 }
                             },
                             p -> {
                                 if (host.uuid() != null) {
-                                    AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(null);
+                                    CompanionViews.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
                     .withClone(p -> PersonaLibrary.instance().create(
@@ -738,7 +739,7 @@ public final class SettingsView {
             // 就是文件名,改名等于换了身份,得把在用的同伴重新指过去。
             if (saved != null && !saved.id().equals(personaEditId)) {
                 for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
-                    EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
+                    CompanionView l = CompanionViews.get(cu).orElse(null);
                     if (l != null && personaEditId.equals(l.personaId())) {
                         l.setPersona(saved.id());
                     }
