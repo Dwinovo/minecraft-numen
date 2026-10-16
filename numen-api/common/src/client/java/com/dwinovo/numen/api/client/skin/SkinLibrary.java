@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.client.data.JsonLibrary;
+import com.dwinovo.numen.api.library.JsonLibrary;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonObject;
@@ -39,7 +39,7 @@ public final class SkinLibrary extends JsonLibrary<SkinLibrary.Entry> {
     private final Path skinDir;
 
     private SkinLibrary(Path file, Path skinDir) {
-        super(file);
+        super(file, com.dwinovo.numen.api.NumenIo.inline("numen-skin"));
         this.skinDir = skinDir;
         load();
     }

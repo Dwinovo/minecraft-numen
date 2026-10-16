@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.voice;
 
-import com.dwinovo.numen.api.client.data.JsonLibrary;
+import com.dwinovo.numen.api.library.JsonLibrary;
 import com.google.gson.JsonObject;
 
 import java.nio.file.Path;
@@ -121,7 +121,7 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
 
     /** 测试可直接用临时路径构造;游戏内走 {@link #instance()}。 */
     VoiceLibrary(Path file) {
-        super(file);
+        super(file, com.dwinovo.numen.api.NumenIo.inline("numen-voice"));
         load();
     }
 

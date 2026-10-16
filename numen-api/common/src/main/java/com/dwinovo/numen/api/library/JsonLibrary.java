@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.client.data;
+package com.dwinovo.numen.api.library;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.store.Io;
@@ -32,13 +32,13 @@ public abstract class JsonLibrary<E> {
     protected final Map<String, E> entries = new LinkedHashMap<>();
 
     /** 第 1 版的库(格式没变过)。 */
-    protected JsonLibrary(Path file) {
-        this(file, JsonDoc.Format.of(1));
+    protected JsonLibrary(Path file, Io io) {
+        this(file, JsonDoc.Format.of(1), io);
     }
 
-    protected JsonLibrary(Path file, JsonDoc.Format format) {
-        // 标签等出错时才问子类:构造期间子类还没就位
-        this.doc = new JsonDoc(file, format, Io.direct(e -> Constants.LOG.warn("[{}] {}", logTag(), e.getMessage())));
+    /** @param io 这份库落盘用的读写通道:服务端给车道,客户端给调用线程直接做 */
+    protected JsonLibrary(Path file, JsonDoc.Format format, Io io) {
+        this.doc = new JsonDoc(file, format, io);
     }
 
     /** 配置目录 {@code config/numen};见 {@link com.dwinovo.numen.api.NumenPaths}。 */

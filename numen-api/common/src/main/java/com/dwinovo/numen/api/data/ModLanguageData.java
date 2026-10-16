@@ -426,7 +426,6 @@ public final class ModLanguageData {
         public static final String SCREEN_RENDER_FAILED = "numen.screen.render_failed";
         public static final String PERSONA_NAME_PLACEHOLDER = "numen.persona.name_placeholder";
         public static final String PERSONA_COPY = "numen.persona.copy";
-        public static final String PERSONA_INIT_MARKER = "numen.persona.init_marker";
         public static final String STT_DOUBAO_KEY_PLACEHOLDER = "numen.stt.doubao_key_placeholder";
         public static final String THEME_TALK_HINT = "numen.theme.talk_hint";
         public static final String THEME_INITIATIVE = "numen.theme.initiative";
@@ -1026,7 +1025,6 @@ public final class ModLanguageData {
         adder.add(Keys.SCREEN_RENDER_FAILED, "The Numen panel failed to render and fell back — see latest.log for details");
         adder.add(Keys.PERSONA_NAME_PLACEHOLDER, "Name (also the file name), e.g. Ember");
         adder.add(Keys.PERSONA_COPY, "%s copy");
-        adder.add(Keys.PERSONA_INIT_MARKER, "Delete this file and the built-in example personas come back from the mod on the next launch (files with the same name are not overwritten).");
         adder.add(Keys.STT_DOUBAO_KEY_PLACEHOLDER, "API Key (old console: appid:access_token)");
         adder.add(Keys.THEME_TALK_HINT, "Quick-talk hint (shows the key when your crosshair is on a companion)");
         adder.add(Keys.THEME_INITIATIVE, "Initiative");
@@ -1625,7 +1623,6 @@ public final class ModLanguageData {
         adder.add(Keys.SCREEN_RENDER_FAILED, "Numen 面板渲染出错,已兜底——详情见 latest.log");
         adder.add(Keys.PERSONA_NAME_PLACEHOLDER, "名称(即文件名),如 小焰");
         adder.add(Keys.PERSONA_COPY, "%s 副本");
-        adder.add(Keys.PERSONA_INIT_MARKER, "删除此文件后,下次启动会从模组内恢复内置示例人设(不覆盖已存在的同名文件)。");
         adder.add(Keys.STT_DOUBAO_KEY_PLACEHOLDER, "API Key(旧版控制台填 appid:access_token)");
         adder.add(Keys.THEME_TALK_HINT, "快捷对话提醒(准星指着同伴时提示按键)");
         adder.add(Keys.THEME_INITIATIVE, "主动性");

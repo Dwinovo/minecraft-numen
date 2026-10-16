@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.agent.conversation.Mentions;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
-import com.dwinovo.numen.api.client.data.JsonLibrary;
+import com.dwinovo.numen.api.library.JsonLibrary;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 
@@ -41,7 +41,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
     private String selectedId;
 
     private Conversations(java.nio.file.Path file) {
-        super(file);
+        super(file, com.dwinovo.numen.api.NumenIo.inline("numen-convo"));
     }
 
     public static Conversations instance() {

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.agent.llm;
 
-import com.dwinovo.numen.api.client.data.JsonLibrary;
+import com.dwinovo.numen.api.library.JsonLibrary;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.agent.catalog.BundledSnapshot;
 import com.dwinovo.numen.api.agent.catalog.Catalog;
@@ -56,7 +56,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      * @param catalogCache models.dev 缓存文件({@code config/numen/cache/models-dev.json})
      */
     ProviderLibrary(java.nio.file.Path file, java.nio.file.Path catalogCache) {
-        super(file, FORMAT);
+        super(file, FORMAT, com.dwinovo.numen.api.NumenIo.inline("numen-providers"));
         this.cache = new DownloadCache(catalogCache);
         this.catalog = new Catalog(cache, BundledSnapshot.INSTANCE);
         load();

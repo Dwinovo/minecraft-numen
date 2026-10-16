@@ -1,14 +1,11 @@
 package com.dwinovo.numen.api.persona;
 
-import net.minecraft.client.resources.language.I18n;
-import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +39,10 @@ public final class PersonaLibrary {
 
     /** 哨兵文件:删掉它,下次启动重新从 jar 复制缺失的内置示例。 */
     private static final String INIT_MARKER = ".init";
+    /** 哨兵文件里写给人看的话:服务端也会播种,没有玩家的语言可取,两种都写。 */
+    private static final String INIT_MARKER_TEXT = "删除此文件后,下次启动会从模组内恢复内置示例人设(不覆盖已存在的同名文件)。\n"
+            + "Delete this file and the built-in example personas come back from the mod on the next launch "
+            + "(files with the same name are not overwritten).\n";
     /** jar 里的内置示例(资源路径 assets/numen_api/persona/ 下的文件名)。
      *  原型覆盖:傲娇(小焰)/猫娘(团子)/温柔守护者(暖暖)/元气伙伴(阿光)/
      *  沉稳老哥(老墨)——低龄玩家也有零门槛的选择。 */
@@ -60,8 +61,7 @@ public final class PersonaLibrary {
 
     public static PersonaLibrary instance() {
         if (instance == null) {
-            Path cfg = Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("config").resolve(com.dwinovo.numen.api.Constants.CONFIG_ROOT);
+            Path cfg = com.dwinovo.numen.api.NumenPaths.config();
             instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"));
             instance.load();
         }
@@ -119,13 +119,6 @@ public final class PersonaLibrary {
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] 人设文件删除失败 {}: {}", id, ex.toString());
         }
-    }
-
-    /** 复制一份可编辑副本。 */
-    public Persona clonePersona(String id) {
-        Persona src = personas.get(id);
-        if (src == null) return null;
-        return create(I18n.get(ModLanguageData.Keys.PERSONA_COPY, src.name()), src.text());
     }
 
     // ---- pending summon assignment ----
@@ -261,7 +254,7 @@ public final class PersonaLibrary {
             }
         }
         try {
-            Atomic.write(dir.resolve(INIT_MARKER), I18n.get(ModLanguageData.Keys.PERSONA_INIT_MARKER) + "\n");
+            Atomic.write(dir.resolve(INIT_MARKER), INIT_MARKER_TEXT);
         } catch (StoreException ex) {
             Constants.LOG.warn("[numen-persona] .init 哨兵写入失败: {}", ex.toString());
         }

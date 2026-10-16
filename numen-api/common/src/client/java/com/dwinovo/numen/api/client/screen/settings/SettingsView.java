@@ -701,7 +701,8 @@ public final class SettingsView {
                                     AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
-                    .withClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
+                    .withClone(p -> PersonaLibrary.instance().create(
+                            I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.PERSONA_COPY, p.name()), p.text()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
                     .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
         }
