@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 她在水里的三件事分开管:闲着时浮在水面上(空闲姿态,不发消息)、真缺氧才上来换气(换气本能,每次只报一条)、
+ * 她在水里的三件事分开管:在水面上浮着(身体的基本面,不发消息)、真缺氧才上来换气(换气本能,每次只报一条)、
  * 自己的状态进 {@code <runtime_state>}。场地是一只五乘五的水箱:基岩围壁,底是模板的地板,水从地板上一层起;
  * 事件条数从身体真发出去的出箱({@link EventOutbox},主人不在线时事件就存在那里)里数。
  */
@@ -72,15 +72,16 @@ public class FloatGameTests {
     }
 
     /**
-     * 深水水面上闲置 30 秒:漂浮姿态让她一直浮着,头没进过水,没往下沉;身体没有做什么值得说的事,一条事件都没有。
-     * 创造模式同样(不扣氧气,浮着是姿态的事,不靠换气)。
+     * 深水水面上 30 秒不按键(闲着,或手上的活是站着等):漂浮让她一直浮着,头没进过水,没往下沉;身体没有做什么值得说的事,
+     * 一条事件都没有。创造模式同样(不扣氧气,浮着不靠换气)。{@code waiting} 时她手上是 {@code numen.time.wait},占着任务槽。
      */
-    private static void floatsAtTheSurface(GameTestHelper helper, boolean creative) {
+    private static void floatsAtTheSurface(GameTestHelper helper, boolean creative, boolean waiting) {
         ServerLevel level = helper.getLevel();
         tank(helper, 8, null);
         BlockPos top = new BlockPos(18, BED + 7, 18);
         NumenPlayer companion = spawnAt(helper, creative ? "gametest_floater_creative" : "gametest_floater", top, creative);
         double topY = helper.absolutePos(top).getY();
+        ToolRun wait = waiting ? lua(companion, "numen.time.wait(30)") : null;
         int[] ticks = {0};
         double[] lowest = {Double.MAX_VALUE};
         boolean[] headUnder = {false};
@@ -91,7 +92,8 @@ public class FloatGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(ticks[0] >= 600, "still idling");
+            helper.assertTrue(ticks[0] >= 580, "still idling");
+            helper.assertTrue(wait == null || !wait.done(), "the wait ended before the 30 seconds were up");
             helper.assertTrue(!headUnder[0], "her head went under water while idle at the surface");
             helper.assertTrue(lowest[0] > topY - 1.5, "she sank: lowest y " + lowest[0] + " vs the top water cell at " + topY);
             helper.assertTrue(reflexes(level, companion).isEmpty(),
@@ -102,17 +104,22 @@ public class FloatGameTests {
 
     @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
     public static void idle_at_the_surface_of_deep_water_floats_and_says_nothing(GameTestHelper helper) {
-        floatsAtTheSurface(helper, false);
+        floatsAtTheSurface(helper, false, false);
+    }
+
+    @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
+    public static void waiting_on_deep_water_floats_and_says_nothing(GameTestHelper helper) {
+        floatsAtTheSurface(helper, false, true);
     }
 
     @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
     public static void creative_idle_in_deep_water_floats(GameTestHelper helper) {
-        floatsAtTheSurface(helper, true);
+        floatsAtTheSurface(helper, true, false);
     }
 
     /**
      * 潜到水箱半腰某一格后闲置:她整个人在水下,不被往上拽(沉向箱底,一格都没升过);氧气不够游回水面了,换气本能接管一次、
-     * 只报一条(不急,随下一次调模型捎带),换满气才松手,之后漂浮姿态接着让她浮在水面上,不再触发第二次。
+     * 只报一条(不急,随下一次调模型捎带),换满气才松手,之后漂浮接着让她浮在水面上,不再触发第二次。
      */
     @GameTest(template = "floor20", timeoutTicks = 1500, batch = BATCH)
     public static void idle_under_water_stays_down_until_the_air_runs_low_then_surfaces_once(GameTestHelper helper) {
