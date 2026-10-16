@@ -1,0 +1,79 @@
+// numen-store:落盘的两种基础件,纯 JVM——零 Minecraft 依赖、零业务依赖,只用 Gson。
+// 只管"怎么可靠地存",不管存的是什么:
+//   · AppendLog:只追加的日志(首行带版本的头、每条记录有 id 与 parentId、按类型分、整份迁移);
+//   · JsonDoc:小文档(带版本号、读时迁移);
+//   · Atomic:两者共用的"先写临时文件再原子替换",也给一条一个文件的内容文件(札记、人设、模块)用;
+//   · Io:磁盘读写放哪个线程由使用方给的执行器定。
+// 对话日志、收件箱、各种库在上层各自只保留"记录格式",彼此不认识(见 docs/input-pipeline.md §六)。
+// 代码本身与 Minecraft 版本无关,但各版本分支上的这份源码目前并不相同(功能先落 1.21.1),
+// 所以发布坐标带分支后缀,见下方 artifactId。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
+group = 'com.dwinovo.numen'
+
+// 可复现构建:同一份源码重复构建应得到同样的字节。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+base {
+    archivesName = 'numen-store'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 与 MC 1.21.1 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    api 'com.google.code.gson:gson:2.10.1'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 带 MC 版本后缀,理由同 ai/build.gradle:本模块零 MC 依赖,但各版本分支上的
+            // 这份源码并不相同,不带后缀就是十三条分支抢同一个坐标、谁最后发谁赢。
+            artifactId = "numen-store-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;
+            // CI 用 -Plocal_maven_url= 指到 checkout 出来的 numen-maven。
+            // 这里不写兜底默认值:属性缺了就当场报错,好过静默发到别处。
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

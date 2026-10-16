@@ -48,6 +48,8 @@ dependencies {
     // 与 MC 1.21.1 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
     api 'com.google.code.gson:gson:2.10.1'
     api 'org.slf4j:slf4j-api:2.0.9'
+    // 落盘的基础件(日志、小文档):会话日志与目录缓存只保留各自的记录格式。api 配置让 agent 与 Numen API 透视得到。
+    api project(':store')
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

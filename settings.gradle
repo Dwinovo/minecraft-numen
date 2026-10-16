@@ -30,6 +30,8 @@ include('numen:neoforge')
 include('numen-api:common')
 include('numen-api:fabric')
 include('numen-api:neoforge')
+// numen-store:落盘的两种基础件(只追加日志、小文档),纯 JVM、只依赖 Gson,被 ai 依赖(详见 store/build.gradle 头注)。
+include('store')
 // numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
 include('ai')
 // numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 Numen API 依赖(详见 agent/build.gradle 头注)。

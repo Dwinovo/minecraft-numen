@@ -18,6 +18,7 @@ dependencies {
     // 消费面契约:NumenTool 继承 ai 的 IToolSpec,编译期消费者(如 Numen 的
     // loader 模块)需要看见 ai 的类型。发行 jar 已把 ai 的类平铺进来(见下方
     // jar 块),运行时自含,这条声明只服务编译期与 pom 的如实陈述。
+    api project(':store')
     api project(':ai')
     // 大脑本身(纯 JVM,输入队列与长期目标)同理:发行 jar 里的类由下方 jar 块平铺进来。
     api project(':agent')
@@ -67,6 +68,7 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+    from({ project(':store').sourceSets.main.allSource })
     from({ project(':ai').sourceSets.main.allSource })
     from({ project(':agent').sourceSets.main.allSource })
     from({ project(':lua').sourceSets.main.allSource })
@@ -77,6 +79,7 @@ tasks.named('sourcesJar', Jar) {
 // 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
 // numen-agent 同理:队列与目标从 common 迁去 agent 模块,类在这里平铺回来。
 tasks.named('jar', Jar) {
+    from({ project(':store').sourceSets.main.output })
     from({ project(':ai').sourceSets.main.output })
     from({ project(':agent').sourceSets.main.output })
     from({ project(':lua').sourceSets.main.output })
