@@ -2,11 +2,13 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.store.Io;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,6 +57,11 @@ class LibrariesTest {
                 config.put("prompt", systemPrompt);
             }
         });
+    }
+
+    @AfterEach
+    void forgetMcpServers() {
+        McpClientManager.shutdown();
     }
 
     private static JsonObject body(String... keyValues) {
@@ -170,5 +177,60 @@ class LibrariesTest {
     @Test
     void anUnknownLibraryIsRefused(@TempDir Path dir) {
         assertNotNull(libraries(dir).handle(ADMIN, true, "elsewhere", Libraries.LIST, new JsonObject()).problem());
+    }
+
+    private Libraries withMcpServers(Path dir) throws java.io.IOException {
+        java.nio.file.Files.writeString(dir.resolve("mcp_clients.json"), """
+                {"enabled":true,"servers":[
+                  {"name":"shell","type":"stdio","command":"secret-cmd","args":["--token","hunter2"],"env":{},"enabled":false},
+                  {"name":"files","type":"http","url":"http://internal.example/mcp","headers":{"Authorization":"Bearer hunter2"},"enabled":false}
+                ]}""");
+        McpClientManager.init(dir, Runnable::run, null);
+        return libraries(dir);
+    }
+
+    @Test
+    void anOrdinaryPlayerSeesOnlyTheNameAndWhetherAnMcpServerIsUp(@TempDir Path dir) throws Exception {
+        Libraries libraries = withMcpServers(dir);
+
+        String seen = libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, Libraries.LIST, new JsonObject()).entries();
+
+        JsonObject shell = array(seen).get(0).getAsJsonObject();
+        assertEquals("shell", shell.get("name").getAsString());
+        assertFalse(shell.get("connected").getAsBoolean());
+        assertEquals(0, shell.get("toolCount").getAsInt());
+        assertFalse(seen.contains("secret-cmd") || seen.contains("hunter2") || seen.contains("internal.example"), seen);
+    }
+
+    @Test
+    void anAdminSeesTheWholeMcpServerAndAnOrdinaryPlayerCannotChangeAnything(@TempDir Path dir) throws Exception {
+        Libraries libraries = withMcpServers(dir);
+
+        String seen = libraries.view(ADMIN, true, Libraries.MCP_CLIENT);
+        assertTrue(seen.contains("secret-cmd") && seen.contains("internal.example") && seen.contains("DISABLED"), seen);
+
+        for (String op : new String[]{Libraries.PUT, Libraries.DELETE, Libraries.ENABLE, Libraries.DISABLE, Libraries.AUTH}) {
+            assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, op,
+                    body("name", "shell", "type", "stdio", "command", "evil", "url", "x")).problem(), op);
+        }
+        assertEquals(2, array(libraries.view(ADMIN, true, Libraries.MCP_CLIENT)).size(), "什么也没变");
+        assertFalse(libraries.view(ADMIN, true, Libraries.MCP_CLIENT).contains("evil"));
+    }
+
+    @Test
+    void anAdminAddsRenamesAndDeletesAnMcpServer(@TempDir Path dir) throws Exception {
+        Libraries libraries = withMcpServers(dir);
+
+        assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.PUT,
+                body("name", "docs", "type", "http", "url", "http://127.0.0.1:1/mcp")).problem());
+        JsonObject renamed = body("name", "manual", "type", "http", "url", "http://127.0.0.1:1/mcp", "replaces", "docs");
+        renamed.addProperty("enabled", false);
+        assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.PUT, renamed).problem());
+        String seen = libraries.view(ADMIN, true, Libraries.MCP_CLIENT);
+        assertTrue(seen.contains("manual") && !seen.contains("\"docs\""), seen);
+
+        assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.DELETE, body("name", "manual")).problem());
+        assertNotNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.DELETE, body("name", "manual")).problem());
+        assertEquals(2, array(libraries.view(ADMIN, true, Libraries.MCP_CLIENT)).size());
     }
 }

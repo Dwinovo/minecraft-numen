@@ -1,7 +1,5 @@
 package com.dwinovo.numen.api.mcp.client;
 
-import net.minecraft.client.resources.language.I18n;
-import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.store.JsonDoc;
@@ -39,19 +37,25 @@ import java.util.concurrent.TimeUnit;
  *   <li>Authorization Server Metadata discovery (RFC 8414 / OpenID Connect discovery).</li>
  *   <li>Dynamic Client Registration (RFC 7591) to obtain a {@code client_id}.</li>
  *   <li>PKCE (S256) + the {@code resource} indicator (RFC 8707).</li>
- *   <li>Browser authorization ({@code Util.openUri}) with a loopback redirect caught by a
- *       throwaway {@link HttpServer} on {@code 127.0.0.1}.</li>
+ *   <li>Authorization: the authorization URL goes to whoever can open a browser ({@code urlSink}); the
+ *       redirect carries {@code code} and {@code state} back as a "callback URL".</li>
  *   <li>Authorization-code → token exchange, and refresh-token renewal.</li>
  * </ol>
  *
- * <p>Tokens are persisted per server in {@code config/numen/mcp_oauth.json}. {@link #tokenFor}
- * returns a valid bearer token (refreshing near expiry); {@link #authorize} runs the interactive
- * flow when there is none. Blocking — always called from a background connect thread.
+ * <p>There is one way for the code to arrive: {@link #complete} takes a callback URL. The redirect target is a
+ * throwaway {@link HttpServer} on {@code 127.0.0.1} that hands every request it gets to {@link #complete} — when the
+ * browser runs on the machine hosting the game, that is all it takes. On a dedicated server the admin's browser
+ * lands on <i>its own</i> loopback, the redirect fails to load, and the admin pastes the address-bar URL back
+ * ({@link #complete} again). Same mechanism, two ways of delivering the URL; the process never needs a browser.
+ *
+ * <p>Tokens are persisted per server in {@code mcp_oauth.json} next to the config, on the machine running the
+ * brain only. {@link #tokenFor} returns a valid bearer token (refreshing near expiry); {@link #authorize} runs the
+ * interactive flow when there is none. Blocking — always called from a background connect thread.
  *
  * <p>Limitation: if the authorization server offers no dynamic registration and no client id is
  * pre-configured, the flow fails with a clear message (a pre-registered client id would be needed).
  */
-final class McpOAuth {
+public final class McpOAuth {
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
@@ -64,9 +68,17 @@ final class McpOAuth {
 
     // ---- public API ----
 
-    /** Run the full flow for a server (opens the browser) and persist the token. Blocking. */
-    static void authorize(McpClientConfig.ServerSpec spec, String resourceMetadataUrl, Path configDir)
-            throws Exception {
+    /** Authorizations waiting for their callback URL, by {@code state}. */
+    private static final Map<String, CompletableFuture<String[]>> WAITING = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Run the full flow for a server and persist the token. Blocking until the callback URL arrives
+     * ({@link #complete}) or {@value #AUTH_TIMEOUT_MS} ms pass.
+     *
+     * @param urlSink gets the authorization URL a browser must open
+     */
+    static void authorize(McpClientConfig.ServerSpec spec, String resourceMetadataUrl, Path configDir,
+                          java.util.function.Consumer<String> urlSink) throws Exception {
         String serverUrl = spec.url();
         String canonicalResource = canonicalResource(serverUrl);
 
@@ -114,12 +126,18 @@ final class McpOAuth {
                     .append("&resource=").append(enc(canonicalResource));
             String scope = joinStrings(prm, "scopes_supported");
             if (scope != null) url.append("&scope=").append(enc(scope));
-            Constants.LOG.info("[numen-mcp-oauth] opening browser to authorize '{}'", spec.name());
-            net.minecraft.Util.getPlatform().openUri(URI.create(url.toString()));
+            CompletableFuture<String[]> arrival = new CompletableFuture<>();
+            WAITING.put(state, arrival);
+            Constants.LOG.info("[numen-mcp-oauth] '{}' waits for authorization", spec.name());
+            urlSink.accept(url.toString());
 
-            // 6. Wait for the loopback redirect.
-            String[] result = cb.future.get(AUTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);   // [code, state]
-            if (!state.equals(result[1])) throw new IllegalStateException("OAuth state mismatch");
+            // 6. Wait for the callback URL (the loopback redirect or one pasted back).
+            String[] result;
+            try {
+                result = arrival.get(AUTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);   // [code, state]
+            } finally {
+                WAITING.remove(state);
+            }
 
             // 7. Token exchange, then persist.
             JsonObject token = exchangeCode(tokenEndpoint, clientId, redirectUri, result[0], verifier, canonicalResource);
@@ -128,6 +146,36 @@ final class McpOAuth {
         } finally {
             cb.server.stop(0);
         }
+    }
+
+    /**
+     * The callback URL of an authorization has arrived — the redirect itself, or the address-bar text an admin pasted
+     * (a full URL, or just its query). The {@code state} picks the authorization it belongs to.
+     *
+     * @return why the URL is not an answer to a pending authorization; {@code null} when it was
+     */
+    public static String complete(String callbackUrl) {
+        Map<String, String> q = parseQuery(queryOf(callbackUrl));
+        CompletableFuture<String[]> waiting = WAITING.get(q.get("state"));
+        if (waiting == null) {
+            return "no pending authorization matches this address";
+        }
+        if (q.containsKey("code")) {
+            waiting.complete(new String[]{q.get("code"), q.get("state")});
+        } else {
+            waiting.completeExceptionally(new IllegalStateException("authorization denied: "
+                    + q.getOrDefault("error", "no code")));
+        }
+        return null;
+    }
+
+    private static String queryOf(String url) {
+        if (url == null) return "";
+        String s = url.strip();
+        int hash = s.indexOf('#');
+        if (hash >= 0) s = s.substring(0, hash);
+        int q = s.indexOf('?');
+        return q >= 0 ? s.substring(q + 1) : s;
     }
 
     /** A valid bearer access token for a server (refreshing near expiry), or null if none stored. */
@@ -233,28 +281,22 @@ final class McpOAuth {
 
     // ---- loopback callback server ----
 
-    private record Callback(HttpServer server, int port, CompletableFuture<String[]> future) {}
+    private record Callback(HttpServer server, int port) {}
 
-    /** 回调页:浏览器里给主人看的一句话,按他的语言;转义了才放进 HTML(失败原因来自授权服务器)。 */
+    /** 回调页:浏览器里给人看的一句话(服务端没有语言环境,两种语言并列);转义了才放进 HTML。 */
     private static String page(String words) {
         String escaped = words.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         return "<html><body style='font-family:sans-serif'>" + escaped + "</body></html>";
     }
 
+    /** 回调地址:每个请求原样交给 {@link #complete},和管理员贴回来的网址是同一条路。 */
     private static Callback startCallbackServer() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        CompletableFuture<String[]> future = new CompletableFuture<>();
         server.createContext("/callback", (HttpExchange ex) -> {
-            Map<String, String> q = parseQuery(ex.getRequestURI().getRawQuery());
-            String html;
-            if (q.containsKey("code")) {
-                future.complete(new String[]{q.get("code"), q.getOrDefault("state", "")});
-                html = page(I18n.get(ModLanguageData.Keys.MCP_OAUTH_OK));
-            } else {
-                future.completeExceptionally(new IllegalStateException("authorization denied: "
-                        + q.getOrDefault("error", "no code")));
-                html = page(I18n.get(ModLanguageData.Keys.MCP_OAUTH_FAILED, q.getOrDefault("error", "")));
-            }
+            String problem = complete(ex.getRequestURI().toString());
+            String html = page(problem == null
+                    ? "Numen is authorized; you can close this page. / Numen 授权成功,可以关闭此页面。"
+                    : "Authorization failed: " + problem + " / 授权失败:" + problem);
             byte[] out = html.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
             ex.sendResponseHeaders(200, out.length);
@@ -262,8 +304,7 @@ final class McpOAuth {
             ex.close();
         });
         server.start();
-        int port = server.getAddress().getPort();
-        return new Callback(server, port, future);
+        return new Callback(server, server.getAddress().getPort());
     }
 
     // ---- token store ----

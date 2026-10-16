@@ -1,12 +1,9 @@
 package com.dwinovo.numen.api.mcp.client;
 
-import net.minecraft.client.resources.language.I18n;
-import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec;
 import com.google.gson.JsonObject;
-import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -16,24 +13,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 /**
  * Wires the MCP client into Numen API and owns the live enable/disable of each
- * external server. On init it reads {@code config/numen/mcp_clients.json},
+ * external server. It runs where the companions' brains run: on init it reads {@code mcp_clients.json}
+ * from the config directory it is given,
  * connects to every enabled server on a background thread, and registers the
  * tools it exposes into the global {@link ToolRegistry} — after which the
- * built-in brain sees those tools automatically ({@code EntityAgentLoop} feeds
- * the whole registry to every LLM turn, so late registration/removal is fine).
+ * built-in brain sees those tools automatically (every LLM turn is built from
+ * the whole registry, so late registration/removal is fine).
  *
  * <h2>Live toggles</h2>
- * The companion panel calls {@link #enableServer}/{@link #disableServer} at
+ * The admin's panel calls {@link #enableServer}/{@link #disableServer} at
  * runtime. Enabling connects (on a background thread) and registers; disabling
  * removes that server's tools from the {@link ToolRegistry} and closes its
  * transport (killing any stdio subprocess). Both persist the flip back to
  * {@code mcp_clients.json} so it survives a restart. Every {@link ToolRegistry}
- * mutation is marshalled onto the client main thread (the registry's backing map
- * is not synchronized and {@code all()} is read on main), mirroring
- * {@code NumenActuator}.
+ * mutation is marshalled onto the brain's main thread (the registry's backing map
+ * is not synchronized and {@code all()} is read on main).
+ *
+ * <p>A server that needs OAuth shows up as {@link Status#AUTHORIZING} with the {@link ServerHandle#authUrl()} a
+ * browser must open; the callback URL comes back through {@link McpOAuth#complete}. Whoever watches the state (the
+ * admin's panel) is told of every change through the {@code onChange} callback given to {@link #init}.
  *
  * <p>A server that fails to connect is logged and its handle marked
  * {@link Status#FAILED}; it never crashes init or the toggle. A JVM shutdown hook
@@ -42,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class McpClientManager {
 
     /** Connection state of one configured server, surfaced to the panel. */
-    public enum Status { DISABLED, CONNECTING, CONNECTED, FAILED }
+    public enum Status { DISABLED, CONNECTING, AUTHORIZING, CONNECTED, FAILED }
 
     /** Live runtime state for one configured server (status + what it registered). */
     public static final class ServerHandle {
@@ -52,6 +54,7 @@ public final class McpClientManager {
         private volatile McpTransport transport;   // set once connected; closed on disable
         private volatile List<String> toolNames = List.of();
         private volatile String error = "";
+        private volatile String authUrl;   // set while AUTHORIZING
 
         ServerHandle(String name, String type, Status status) {
             this.name = name;
@@ -65,6 +68,8 @@ public final class McpClientManager {
         public int toolCount() { return toolNames.size(); }
         public List<String> toolNames() { return toolNames; }
         public String error() { return error; }
+        /** The authorization URL a browser must open; {@code null} unless {@link Status#AUTHORIZING}. */
+        public String authUrl() { return authUrl; }
         /** The panel's toggle is ON whenever the server isn't disabled (FAILED still reads ON). */
         public boolean toggledOn() { return status != Status.DISABLED; }
     }
@@ -74,22 +79,31 @@ public final class McpClientManager {
     private static volatile Path configFile;
     private static volatile Path configDir;
     private static volatile boolean initialized;
+    private static boolean hooked;
+    private static volatile Executor main;
+    private static volatile Runnable onChange;
 
     private McpClientManager() {}
 
     /**
-     * @param numenConfigDir the {@code config/numen} directory; the config file is
-     *                       {@code mcp_clients.json} inside it.
+     * @param numenConfigDir the directory holding {@code mcp_clients.json} and {@code mcp_oauth.json}
+     * @param brainThread    the thread the brains run on: the tool registry is touched and tool results arrive there
+     * @param changed        told (on {@code brainThread}) whenever a server's state changes; may be {@code null}
      */
-    public static synchronized void initClient(Path numenConfigDir) {
+    public static synchronized void init(Path numenConfigDir, Executor brainThread, Runnable changed) {
         if (initialized) return;
         initialized = true;
 
+        main = brainThread;
+        onChange = changed;
         configDir = numenConfigDir;
         configFile = numenConfigDir.resolve("mcp_clients.json");
         config = McpClientConfig.load(configFile);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(McpClientManager::shutdown, "numen-mcp-client-shutdown"));
+        if (!hooked) {
+            hooked = true;
+            Runtime.getRuntime().addShutdownHook(new Thread(McpClientManager::shutdown, "numen-mcp-client-shutdown"));
+        }
 
         int connecting = 0;
         for (ServerSpec spec : config.servers()) {
@@ -137,6 +151,7 @@ public final class McpClientManager {
         handle.error = "";
         setEnabledPersist(name, true);
         spawnConnect(spec);
+        changed();
     }
 
     /** Remove a server's tools, close its transport (killing any subprocess), and mark it off. */
@@ -148,8 +163,10 @@ public final class McpClientManager {
             for (String tool : handle.toolNames) ToolRegistry.remove(tool);
             handle.toolNames = List.of();
             handle.status = Status.DISABLED;
+            handle.authUrl = null;
             closeTransport(handle);
             Constants.LOG.info("[numen-mcp-client] '{}' disabled", name);
+            changed();
         });
     }
 
@@ -171,6 +188,7 @@ public final class McpClientManager {
         HANDLES.put(spec.name(),
                 new ServerHandle(spec.name(), badge(spec), spec.enabled() ? Status.CONNECTING : Status.DISABLED));
         if (spec.enabled()) spawnConnect(spec);
+        changed();
     }
 
     /** Remove a server entirely: tear it down, drop it from config + handles, persist. */
@@ -187,6 +205,7 @@ public final class McpClientManager {
             McpClientConfig.save(file, config);
         }
         HANDLES.remove(name);
+        changed();
     }
 
     // ---- connect / teardown ----
@@ -212,13 +231,19 @@ public final class McpClientManager {
             } catch (McpAuthRequired auth) {
                 if (authTried || configDir == null) { last = auth; break; }   // token still rejected — stop
                 authTried = true;
-                if (handle != null) {
-                    handle.status = Status.CONNECTING;
-                    handle.error = I18n.get(ModLanguageData.Keys.MCP_WAITING_BROWSER);
-                }
-                Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — launching browser flow", spec.name());
+                Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — waiting for an authorization", spec.name());
                 try {
-                    McpOAuth.authorize(spec, auth.resourceMetadataUrl(), configDir);
+                    McpOAuth.authorize(spec, auth.resourceMetadataUrl(), configDir, url -> {
+                        if (handle != null) {
+                            handle.authUrl = url;
+                            handle.status = Status.AUTHORIZING;
+                            changed();
+                        }
+                    });
+                    if (handle != null) {
+                        handle.authUrl = null;
+                        handle.status = Status.CONNECTING;
+                    }
                     // token stored — the next connectOnce merges it in (see withOAuth); no extra delay
                 } catch (Exception oe) {
                     last = oe;
@@ -234,8 +259,10 @@ public final class McpClientManager {
         }
         if (handle != null && handle.status != Status.DISABLED) {
             handle.transport = null;
+            handle.authUrl = null;
             handle.status = Status.FAILED;
             handle.error = rootMessage(last);
+            changed();
         }
     }
 
@@ -296,6 +323,7 @@ public final class McpClientManager {
                     handle.toolNames = List.copyOf(registerEach(spec.name(), wrapped));
                     Constants.LOG.info("[numen-mcp-client] '{}' now {} tool(s)",
                             spec.name(), handle.toolNames.size());
+                    changed();
                 });
             } catch (Exception ex) {
                 Constants.LOG.warn("[numen-mcp-client] '{}' tools refresh failed: {}", spec.name(), ex.toString());
@@ -325,7 +353,7 @@ public final class McpClientManager {
         Set<String> taken = new HashSet<>();
         for (JsonObject def : tools) {
             if (def.has("name") && !def.get("name").isJsonNull()) {
-                wrapped.add(new RemoteMcpTool(server, client, def, callMs, taken));
+                wrapped.add(new RemoteMcpTool(server, client, def, callMs, main, taken));
             }
         }
         return wrapped;
@@ -364,12 +392,30 @@ public final class McpClientManager {
                 handle.toolNames = List.copyOf(registered);
                 handle.status = Status.CONNECTED;
             }
+            changed();
         });
     }
 
-    /** Close every transport (kills stdio subprocesses). Safe to call more than once. */
-    public static void shutdown() {
-        for (ServerHandle h : HANDLES.values()) closeTransport(h);
+    /**
+     * Close every transport (kills stdio subprocesses), take the tools back out of the registry and forget every
+     * server, so the next {@link #init} starts clean (the next world, or the next test). Safe to call more than once.
+     */
+    public static synchronized void shutdown() {
+        for (ServerHandle h : HANDLES.values()) {
+            closeTransport(h);
+            for (String tool : h.toolNames) ToolRegistry.remove(tool);
+            h.toolNames = List.of();
+            h.status = Status.DISABLED;
+        }
+        HANDLES.clear();
+        config = null;
+        initialized = false;
+    }
+
+    /** Tell the watcher something changed; the callback runs on the brain's thread. */
+    private static void changed() {
+        Runnable listener = onChange;
+        if (listener != null) main.execute(listener);
     }
 
     // ---- helpers ----
@@ -410,11 +456,9 @@ public final class McpClientManager {
         }
     }
 
-    /** Run now if already on the client main thread, otherwise marshal onto it. */
+    /** Marshal onto the brain's main thread (the executor runs it at once when already there). */
     private static void runOnMain(Runnable r) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.isSameThread()) r.run();
-        else mc.execute(r);
+        main.execute(r);
     }
 
     private static String badge(ServerSpec spec) {

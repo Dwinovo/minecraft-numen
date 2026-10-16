@@ -89,7 +89,8 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
         }
     }
 
-    private static ServerSpec parseServer(JsonObject o) {
+    /** One server as the config file (and the library protocol) writes it. */
+    public static ServerSpec parseServer(JsonObject o) {
         return new ServerSpec(
                 strOr(o, "name", "unnamed"),
                 strOr(o, "type", "http"),
@@ -140,7 +141,7 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
                 s.args(), s.env(), enabled, s.connectTimeoutSeconds(), s.callTimeoutSeconds());
     }
 
-    private static JsonObject serverToJson(ServerSpec s) {
+    public static JsonObject serverToJson(ServerSpec s) {
         JsonObject o = new JsonObject();
         o.addProperty("name", s.name());
         o.addProperty("type", s.type());

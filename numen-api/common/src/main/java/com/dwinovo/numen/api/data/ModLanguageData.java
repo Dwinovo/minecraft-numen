@@ -433,8 +433,6 @@ public final class ModLanguageData {
         public static final String VOICE_TEST_SENTENCE = "numen.voice.test_sentence";
         public static final String VOICE_FISH_REF_PLACEHOLDER = "numen.voice.fish_ref_placeholder";
         public static final String MCP_WAITING_BROWSER = "numen.mcp.waiting_browser";
-        public static final String MCP_OAUTH_OK = "numen.mcp.oauth_ok";
-        public static final String MCP_OAUTH_FAILED = "numen.mcp.oauth_failed";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -1032,8 +1030,6 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_TEST_SENTENCE, "Hi, I'm your companion, and this is my voice.");
         adder.add(Keys.VOICE_FISH_REF_PLACEHOLDER, "fish.audio/m/… or a bare ID");
         adder.add(Keys.MCP_WAITING_BROWSER, "Waiting for browser authorization…");
-        adder.add(Keys.MCP_OAUTH_OK, "Numen is authorized; you can close this page.");
-        adder.add(Keys.MCP_OAUTH_FAILED, "Authorization failed: %s");
         // 皮肤失败(SkinError)按码翻:numen.skin.error.<码>,原话接在 detail 后面
         adder.add("numen.skin.error.http", "%s answered HTTP %s");
         adder.add("numen.skin.error.rate_limited", "%s is rate-limiting requests (free tier: 20 skins a minute), wait a moment and retry");
@@ -1630,8 +1626,6 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_TEST_SENTENCE, "你好,我是你的同伴,这是我的声音。");
         adder.add(Keys.VOICE_FISH_REF_PLACEHOLDER, "fish.audio/m/… 或纯 ID");
         adder.add(Keys.MCP_WAITING_BROWSER, "等待浏览器授权…");
-        adder.add(Keys.MCP_OAUTH_OK, "Numen 授权成功,可以关闭此页面。");
-        adder.add(Keys.MCP_OAUTH_FAILED, "授权失败:%s");
         // 皮肤失败(SkinError)按码翻:numen.skin.error.<码>,原话接在 detail 后面
         adder.add("numen.skin.error.http", "%s 回了 HTTP %s");
         adder.add("numen.skin.error.rate_limited", "%s 限流了(免费档 20 张/分),稍等再试");

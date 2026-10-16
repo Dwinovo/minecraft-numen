@@ -2,6 +2,9 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.mcp.client.McpClientConfig;
+import com.dwinovo.numen.api.mcp.client.McpClientManager;
+import com.dwinovo.numen.api.mcp.client.McpOAuth;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -18,6 +21,8 @@ import java.util.function.Function;
  *   <li><b>模型档案</b>:key 花服主的钱,只有管理员({@code Authority})能存、能删、能看全貌;别人只看得到
  *       "有哪几个、叫什么、哪个型号"——key、接口地址、代理在服务端编码的这一处就没有,客户端拿不到,也就不存在泄露;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
+ *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
+ *       别人只看得到名字、连没连上、有几个工具。授权网址只给管理员,授权回来的网址也由管理员贴回({@link #AUTH})。</li>
  * </ul>
  * 答复永远是这位玩家此刻看得到的那一份整表,存和删之后也是;办不成附上原因。
  *
@@ -28,10 +33,15 @@ public final class Libraries {
     public static final String PERSONA = "persona";
     public static final String PROVIDER = "provider";
     public static final String SERVER_CONFIG = "server-config";
+    public static final String MCP_CLIENT = "mcp-client";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
     public static final String DELETE = "delete";
+    /** MCP 服务器专有:接上、断开、交回授权回调网址。 */
+    public static final String ENABLE = "enable";
+    public static final String DISABLE = "disable";
+    public static final String AUTH = "auth";
 
     /** 服务器配置里这两项的读写(加载器自己的配置文件)。 */
     public interface ServerConfig {
@@ -96,6 +106,7 @@ public final class Libraries {
             case PERSONA -> persona(owner, op, body);
             case PROVIDER -> provider(admin, op, body);
             case SERVER_CONFIG -> serverConfig(admin, op, body);
+            case MCP_CLIENT -> mcpClient(admin, op, body);
             default -> "unknown library";
         };
         return new Result(view(owner, admin, kind), problem);
@@ -121,9 +132,32 @@ public final class Libraries {
                     out.add(o);
                 }
             }
+            case MCP_CLIENT -> McpClientManager.servers().forEach(h -> out.add(mcpView(h, admin)));
             default -> { }
         }
         return out.toString();
+    }
+
+    /** 管理员看到整份配置加连接状态;别人只有名字、连没连上、工具数。 */
+    private static JsonObject mcpView(McpClientManager.ServerHandle handle, boolean admin) {
+        JsonObject o = new JsonObject();
+        McpClientConfig.ServerSpec spec = McpClientManager.spec(handle.name());
+        if (admin && spec != null) {
+            o = McpClientConfig.serverToJson(spec);
+            o.addProperty("status", handle.status().name());
+            o.addProperty("error", handle.error());
+            if (handle.authUrl() != null) {
+                o.addProperty("authUrl", handle.authUrl());
+            }
+            JsonArray tools = new JsonArray();
+            handle.toolNames().forEach(tools::add);
+            o.add("tools", tools);
+        } else {
+            o.addProperty("name", handle.name());
+            o.addProperty("connected", handle.status() == McpClientManager.Status.CONNECTED);
+        }
+        o.addProperty("toolCount", handle.toolCount());
+        return o;
     }
 
     /** 别人只看得到有哪几个、叫什么、哪个型号:选档案给同伴用,不需要知道 key。 */
@@ -224,6 +258,52 @@ public final class Libraries {
             return null;
         }
         return LIST.equals(op) ? null : "unknown operation";
+    }
+
+    private String mcpClient(boolean admin, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return null;
+        }
+        if (!admin) {
+            return "only a server admin may change connected MCP servers";
+        }
+        String name = string(body, "name");
+        switch (op) {
+            case PUT: {
+                McpClientConfig.ServerSpec spec;
+                try {
+                    spec = McpClientConfig.parseServer(body);
+                } catch (RuntimeException unreadable) {
+                    return "unreadable MCP server";
+                }
+                if (name == null || name.isBlank()) {
+                    return "an MCP server needs a name";
+                }
+                McpClientManager.upsertServer(spec);
+                String renamedFrom = string(body, "replaces");
+                if (renamedFrom != null && !renamedFrom.equals(name)) {
+                    McpClientManager.deleteServer(renamedFrom);
+                }
+                return null;
+            }
+            case DELETE:
+            case ENABLE:
+            case DISABLE: {
+                if (name == null || McpClientManager.spec(name) == null) {
+                    return "no such MCP server";
+                }
+                switch (op) {
+                    case DELETE -> McpClientManager.deleteServer(name);
+                    case ENABLE -> McpClientManager.enableServer(name);
+                    default -> McpClientManager.disableServer(name);
+                }
+                return null;
+            }
+            case AUTH:
+                return McpOAuth.complete(string(body, "url"));
+            default:
+                return "unknown operation";
+        }
     }
 
     private static String string(JsonObject o, String key) {

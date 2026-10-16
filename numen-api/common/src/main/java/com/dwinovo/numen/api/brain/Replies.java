@@ -88,11 +88,20 @@ public final class Replies {
         NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
                 result.problem() == null ? "" : result.problem()));
         if (result.problem() == null && !Libraries.LIST.equals(op) && !Libraries.PERSONA.equals(kind)) {
-            for (ServerPlayer other : server.getPlayerList().getPlayers()) {
-                if (other != player && Presence.hasClient(other.getUUID())) {
-                    NumenNetwork.sendToPlayer(other, new LibraryPayload(kind,
-                            libraries.view(other.getUUID(), Authority.isAdmin(other), kind), ""));
-                }
+            share(server, player, kind);
+        }
+    }
+
+    /**
+     * 一种库变了:在线、装着客户端的玩家各收到他们此刻看得到的新表({@code except} 已经收到了答复)。
+     * 接进来的 MCP 服务器连上、断开、等授权都是自己变的,也经这里推。
+     */
+    public static void share(MinecraftServer server, ServerPlayer except, String kind) {
+        Libraries libraries = Libraries.of(server);
+        for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+            if (other != except && Presence.hasClient(other.getUUID())) {
+                NumenNetwork.sendToPlayer(other, new LibraryPayload(kind,
+                        libraries.view(other.getUUID(), Authority.isAdmin(other), kind), ""));
             }
         }
     }

@@ -795,7 +795,8 @@ public final class SettingsView {
                                 var st = h.status();
                                 // 连接中/已连接 → 关;禁用/失败 → (重)连(失败的点一下即重试)
                                 if (st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTED
-                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTING) {
+                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTING
+                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.AUTHORIZING) {
                                     com.dwinovo.numen.api.mcp.client.McpClientManager.disableServer(h.name());
                                 } else {
                                     com.dwinovo.numen.api.mcp.client.McpClientManager.enableServer(h.name());
@@ -1219,7 +1220,7 @@ public final class SettingsView {
     private int mcpDotColor(com.dwinovo.numen.api.mcp.client.McpClientManager.Status s) {
         return switch (s) {
             case CONNECTED -> OK;
-            case CONNECTING -> RUN;
+            case CONNECTING, AUTHORIZING -> RUN;
             case FAILED -> FAIL;
             case DISABLED -> TXT_FAINT;
         };
@@ -1229,6 +1230,7 @@ public final class SettingsView {
         return switch (h.status()) {
             case CONNECTED -> I18n.get("numen.mcp.connected", h.type(), h.toolCount());
             case CONNECTING -> I18n.get("numen.mcp.connecting", h.type());
+            case AUTHORIZING -> I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.MCP_WAITING_BROWSER);
             case FAILED -> I18n.get("numen.mcp.failed", h.type());
             case DISABLED -> I18n.get("numen.mcp.disabled", h.type());
         };

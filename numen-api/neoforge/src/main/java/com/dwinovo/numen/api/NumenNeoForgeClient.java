@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -33,7 +32,7 @@ public class NumenNeoForgeClient {
         // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
         com.dwinovo.numen.api.client.ConfigRootMigration.run(net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
 
-        McpClientManager.initClient(
+        com.dwinovo.numen.api.mcp.server.ClientMcp.initClients(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.CONFIG_ROOT));
 
         // MCP server: the other direction — a loopback MCP server letting an external

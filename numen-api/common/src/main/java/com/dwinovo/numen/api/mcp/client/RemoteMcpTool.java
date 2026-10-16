@@ -4,13 +4,13 @@ import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolCall;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 /**
  * One external MCP tool, wrapped as a {@link NumenTool} so the built-in brain
@@ -21,7 +21,7 @@ import java.util.Set;
  *
  * <p>{@link #invoke} forwards a {@code tools/call} on the client's transport and
  * completes the {@link ToolCall} when the reply lands — marshalled back onto the
- * game main thread, because completion drives conversation state and the next
+ * brain's main thread, because completion drives conversation state and the next
  * LLM turn (the dispatcher's completion path is not thread-safe off-main). Any
  * error/timeout comes back as a {@code ToolOutcome.failure} JSON so the agent loop
  * never wedges.
@@ -34,12 +34,15 @@ public final class RemoteMcpTool implements NumenTool {
     private final String description;
     private final Map<String, Object> schema;
     private final long callTimeoutMs;
+    private final Executor main;
 
     /**
+     * @param main       大脑所在的主线程:调用的结果经它回来
      * @param takenNames 本批已用掉的模型侧工具名;构造时会把自己这个加进去(见 {@link McpToolName}）
      */
     public RemoteMcpTool(String serverName, McpClient client, JsonObject toolDef,
-                         long callTimeoutMs, Set<String> takenNames) {
+                         long callTimeoutMs, Executor main, Set<String> takenNames) {
+        this.main = main;
         this.client = client;
         this.remoteName = toolDef.get("name").getAsString();
         this.qualifiedName = McpToolName.qualify(serverName, remoteName, takenNames);
@@ -78,8 +81,8 @@ public final class RemoteMcpTool implements NumenTool {
                     ? com.dwinovo.numen.api.agent.llm.ToolOutcome.failure("mcp tool '" + qualifiedName + "' failed: " + rootMessage(err))
                     : result;
             // Hop to the main thread: completing the call records the result and may
-            // start the next LLM turn, which is not safe off the client thread.
-            Minecraft.getInstance().execute(() -> call.complete(out));
+            // start the next LLM turn, which is not safe off the brain's thread.
+            main.execute(() -> call.complete(out));
         });
     }
 

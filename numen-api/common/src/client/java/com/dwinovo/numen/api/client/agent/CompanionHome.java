@@ -103,7 +103,7 @@ public final class CompanionHome {
      * 安家的位置——{@code <config>/numen/}。<b>由 loader 给,不问 {@code Minecraft}</b>:
      * 模组构造在 datagen 里同样会跑,那时 {@code Minecraft.getInstance()} 还是 null,而
      * 加载器的配置目录任何时候都在。同一制式见 {@code UiTheme.init} 与
-     * {@code McpClientManager.initClient}。
+     * {@code ClientMcp.initClients}。
      *
      * <p>测试传临时目录进来,走的是同一条路,不是另开的后门。
      */

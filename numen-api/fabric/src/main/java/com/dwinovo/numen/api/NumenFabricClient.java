@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -50,7 +49,8 @@ public class NumenFabricClient implements ClientModInitializer {
         // MCP client: connect to any external MCP servers listed in
         // config/numen/mcp_clients.json and register their tools so the built-in
         // brain can call them. Config dir from the loader (avoids Minecraft timing).
-        McpClientManager.initClient(FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
+        com.dwinovo.numen.api.mcp.server.ClientMcp.initClients(
+                FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
 
         // MCP server: the other direction — stand up a loopback MCP server so an
         // external agent can drive companions directly, bypassing the built-in brain.
