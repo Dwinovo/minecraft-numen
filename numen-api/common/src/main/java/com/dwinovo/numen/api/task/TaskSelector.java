@@ -11,7 +11,7 @@ import java.util.List;
  * 1. 反射     多个,按注册序   等模型就晚了(摔落/换气/自卫/进食/脱困)
  * 2. 同步     0 或 1 个       回合挂着等它,有界短(放个方块)
  * 3. 当前任务 一个槽          主人说什么就是什么
- * 4. 空闲姿态 一层({@link Poses})  没别的事可做时(说话时看着主人、在水面上浮着)
+ * 4. 空闲姿态 多个,按注册序   没别的事可做时(说话时看着主人)
  * </pre>
  *
  * <p>第 4 层不是"常驻行为"——那是第 3 层的槽。它是<b>连身体都不算真正占用</b>的
@@ -39,10 +39,10 @@ public final class TaskSelector {
      * @param reflexes 反射,按注册序(先注册的先问)
      * @param sync     回合挂着等的同步动作,没有则 null
      * @param current  当前任务槽,空则 null
-     * @param idle     空闲姿态层({@link Poses}:姿态各管一面、互不排斥),没有则 null
+     * @param idle     空闲姿态,按注册序
      */
     public static Task select(List<Task> reflexes, Task sync, Task current,
-                              Task idle, NumenPlayer companion) {
+                              List<Task> idle, NumenPlayer companion) {
         if (reflexes != null) {
             for (Task reflex : reflexes) {
                 if (reflex != null && reflex.canRun(companion)) {
@@ -56,8 +56,12 @@ public final class TaskSelector {
         if (current != null && current.canRun(companion)) {
             return current;
         }
-        if (idle != null && idle.canRun(companion)) {
-            return idle;
+        if (idle != null) {
+            for (Task pose : idle) {
+                if (pose != null && pose.canRun(companion)) {
+                    return pose;
+                }
+            }
         }
         return null;
     }

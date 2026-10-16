@@ -44,7 +44,7 @@ class TaskSelectorTest {
         }
     }
 
-    private static Task pick(List<Task> reflexes, Task sync, Task current, Task idle) {
+    private static Task pick(List<Task> reflexes, Task sync, Task current, List<Task> idle) {
         return TaskSelector.select(reflexes, sync, current, idle, null);
     }
 
@@ -55,7 +55,7 @@ class TaskSelectorTest {
         // 等模型就晚了 —— 快淹死的时候在挖矿也得撒手
         Stub reflex = new Stub("反射", true);
         assertSame(reflex, pick(List.of(reflex), new Stub("同步", true),
-                new Stub("当前", true), new Stub("姿态", true)));
+                new Stub("当前", true), List.of(new Stub("姿态", true))));
     }
 
     @Test
@@ -64,7 +64,7 @@ class TaskSelectorTest {
         // 让它排在后面等于把整个对话卡到 deadline
         Stub sync = new Stub("同步", true);
         assertSame(sync, pick(List.of(new Stub("反射", false)), sync,
-                new Stub("当前", true), new Stub("姿态", true)));
+                new Stub("当前", true), List.of(new Stub("姿态", true))));
     }
 
     @Test
@@ -72,19 +72,19 @@ class TaskSelectorTest {
         // 她挖着矿跟你说话不该停下回头 —— 这条关系旧调度里就有
         // (SpeakingLookChain 的出价本来就低于任务基准价),不是新决定
         Stub current = new Stub("当前", true);
-        assertSame(current, pick(List.of(), null, current, new Stub("姿态", true)));
+        assertSame(current, pick(List.of(), null, current, List.of(new Stub("姿态", true))));
     }
 
     @Test
     void idlePoseOnlyWhenNothingElseWants() {
         Stub pose = new Stub("姿态", true);
-        assertSame(pose, pick(List.of(new Stub("反射", false)), null, null, pose));
+        assertSame(pose, pick(List.of(new Stub("反射", false)), null, null, List.of(pose)));
     }
 
     @Test
     void nobodyWantsTheBodyMeansSheJustStands() {
         // 空闲是雕塑 —— 这不是缺陷,是没有事情要做
-        assertNull(pick(List.of(new Stub("反射", false)), null, null, new Stub("姿态", false)));
+        assertNull(pick(List.of(new Stub("反射", false)), null, null, List.of(new Stub("姿态", false))));
         assertNull(pick(null, null, null, null));
     }
 
@@ -109,6 +109,13 @@ class TaskSelectorTest {
         assertSame(awake, pick(List.of(sleeping, awake), null, null, null));
     }
 
+    @Test
+    void idlePosesAlsoGoByOrder() {
+        Stub first = new Stub("一", true);
+        Stub second = new Stub("二", true);
+        assertSame(first, pick(List.of(), null, null, List.of(first, second)));
+    }
+
     // ---- 休眠 ----
 
     @Test
@@ -117,10 +124,10 @@ class TaskSelectorTest {
         // 那不是失败也不是让位,是休眠——身体让给别人,条件回来了自己接着干
         Stub fishing = new Stub("钓鱼", false);
         Stub pose = new Stub("姿态", true);
-        assertSame(pose, pick(List.of(), null, fishing, pose));
+        assertSame(pose, pick(List.of(), null, fishing, List.of(pose)));
 
         fishing.ready = true;
-        assertSame(fishing, pick(List.of(), null, fishing, pose), "条件回来它就该拿回身体");
+        assertSame(fishing, pick(List.of(), null, fishing, List.of(pose)), "条件回来它就该拿回身体");
     }
 
     @Test
