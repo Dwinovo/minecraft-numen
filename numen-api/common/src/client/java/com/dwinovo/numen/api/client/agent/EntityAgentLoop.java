@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.loop.AgentLoop;
@@ -517,32 +518,21 @@ public final class EntityAgentLoop implements CompanionView {
     // ---- external control (an MCP client / Claude drives the body directly) ----
 
     /**
-     * 外接大脑收件(get_events 的取货口):{@code urgentOnly} 时只在队里有给它的急件才取,
-     * 长轮询靠它省着等;到点了不管急不急有什么给什么。渲染与内脑注入同一份 {@link EventQueue#render}
-     * ——外脑看到的事件文本和内脑一字不差。
+     * 外接大脑收件:取走此刻队里所有给模型看的文本(捎带的也交)。get_events 到点清扫与程序回执捎带都走这一个口,
+     * 渲染与内脑注入同一份 {@link EventQueue#render}——外脑看到的事件文本和内脑一字不差。
      *
      * <p>控制条目(整理/清空)是对内脑说的:跳过它们、留在队里等交还,文本照取。外接模型不会去执行
      * 控制条目,停在队首的话后面的话就永远取不到。
      *
-     * @return 取走的事件拼段;这次没取到返回 null(继续等或如实说没有)
+     * @return 取走的事件拼段;没有返回 null
      */
-    public String takeEventsForExternal(boolean urgentOnly) {
-        // 急件只可能是文本:控制命令在队列的急件规则里就不急
-        if (urgentOnly && !queue.hasUrgent()) return null;
-        long now = System.currentTimeMillis();
-        List<EventQueue.Entry> taken = queue.takeText(now);
-        if (taken.isEmpty()) return null;
-        List<String> parts = EventQueue.render(taken, now);
-        return parts.isEmpty() ? null : String.join("\n\n", parts);
+    public String takeEventsForExternal() {
+        return queue.takeRenderedText(System.currentTimeMillis());
     }
 
-    /** 急件叫醒挂点直通(get_events 长轮询停靠用)。主线程调用。 */
-    public void addUrgentListener(Runnable listener) {
-        queue.addUrgentListener(listener);
-    }
-
-    public void removeUrgentListener(Runnable listener) {
-        queue.removeUrgentListener(listener);
+    /** get_events 长等待停靠:有会叫醒她的条目就整批交出。主线程调用。 */
+    public ExternalWait.Parked parkForExternal() {
+        return ExternalWait.park(queue, System::currentTimeMillis);
     }
 
     /**

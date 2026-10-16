@@ -155,7 +155,7 @@ class EventTypesTest {
                 EventTypes.DEATH, EventTypes.HUNGRY, EventTypes.TIMER, EventTypes.WOKE}) {
             EventQueue q = new EventQueue(EventQueue.Journal.NONE);
             java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
-            q.addUrgentListener(woken::incrementAndGet);
+            q.addWakeListener(woken::incrementAndGet);
 
             assertTrue(q.push(id, "x", T0, false), id + ":发送方没标急,类型表说它恒急");
 

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api;
 
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.ClientToolContext;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
@@ -147,8 +148,10 @@ public final class NumenActuator {
     /**
      * Take whatever events are pending right now (the owner speaking arrives as a
      * {@code <query>}, world happenings as {@code <event>}s — same wire text the
-     * built-in brain would see). This is the deadline sweep of a long poll; for
-     * the parked wait use {@link #awaitUrgent}.
+     * built-in brain would see), including the ones that only ride along. This is
+     * the one place events are consumed for an external driver: the deadline sweep
+     * of a long poll and the events a program receipt carries both take from here,
+     * so nothing is delivered twice. For the parked wait use {@link #awaitEvents}.
      *
      * @return the rendered event batch, or null when there was nothing
      */
@@ -159,57 +162,37 @@ public final class NumenActuator {
             return f;
         }
         Minecraft.getInstance().execute(() ->
-                f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal(false)));
+                f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal()));
         return f;
     }
 
-    /**
-     * A parked long-poll: {@code batch} completes with the whole event batch the
-     * moment something urgent lands (immediately when one already has); {@code cancel}
-     * withdraws the waiter — idempotent, safe after completion. Correctness never
-     * rests on the wake: whatever a lost poke would have delivered, the caller's
-     * deadline sweep ({@link #takeEvents}) picks up.
-     */
+    /** A parked long-poll, see {@link #awaitEvents}. */
     public record EventWait(CompletableFuture<String> batch, Runnable cancel) {}
 
     /**
-     * Park until {@code companion} has something urgent. Check-then-register runs in
-     * ONE client-thread hop, so no urgent can slip between "queue was empty" and
-     * "waiter parked".
+     * Park until {@code companion} has something that wakes it (the inbox's own rule, see
+     * {@link ExternalWait}): {@code batch} then completes with the whole event batch;
+     * {@code cancel} withdraws the waiter — idempotent, safe after completion. Correctness never
+     * rests on the wake: whatever a lost poke would have delivered, the caller's deadline sweep
+     * ({@link #takeEvents}) picks up.
      */
-    public static EventWait awaitUrgent(UUID companion) {
+    public static EventWait awaitEvents(UUID companion) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null) {
             f.complete(null);
             return new EventWait(f, () -> { });
         }
-        java.util.concurrent.atomic.AtomicReference<Runnable> hook =
+        java.util.concurrent.atomic.AtomicReference<ExternalWait.Parked> parked =
                 new java.util.concurrent.atomic.AtomicReference<>();
         Runnable cancel = () -> Minecraft.getInstance().execute(() -> {
-            Runnable h = hook.getAndSet(null);
-            if (h != null) {
-                AgentLoopRegistry.get(companion).ifPresent(lp -> lp.removeUrgentListener(h));
-            }
+            ExternalWait.Parked p = parked.getAndSet(null);
+            if (p != null) p.cancel().run();
         });
+        // 先查后登记在一次客户端线程的跳转里完成,不让一条事件从"队是空的"与"已停靠"之间溜过去。
         Minecraft.getInstance().execute(() -> {
-            var loop = AgentLoopRegistry.getOrCreate(companion);
-            String now = loop.takeEventsForExternal(true);
-            if (now != null) {
-                f.complete(now);
-                return;
-            }
-            Runnable h = () -> {
-                String batch = loop.takeEventsForExternal(true);
-                if (batch != null) {   // 别的取件人抢先了就继续挂着,等下一声
-                    Runnable self = hook.getAndSet(null);
-                    if (self != null) {
-                        loop.removeUrgentListener(self);
-                    }
-                    f.complete(batch);
-                }
-            };
-            hook.set(h);
-            loop.addUrgentListener(h);
+            ExternalWait.Parked p = AgentLoopRegistry.getOrCreate(companion).parkForExternal();
+            parked.set(p);
+            p.batch().thenAccept(f::complete);
         });
         return new EventWait(f, cancel);
     }

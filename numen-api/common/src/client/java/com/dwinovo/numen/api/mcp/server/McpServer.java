@@ -55,10 +55,9 @@ public final class McpServer {
     private static final String SERVER_VERSION = "0.1.0";
     /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
-    /** get_events 长轮询：默认只停 2 秒——停靠期间外脑困在这一次调用里，别的什么都做不了，
-     *  它得频繁拿回方向盘才能主动行动，而不是只会应答。急件走叫醒挂点即刻送达，与这个值无关；
-     *  上限 50 秒留给"就想挂着等主人"的用法，也给桥接层（mcp-remote 等）的请求超时留余量。 */
-    private static final int DEFAULT_WAIT_SECONDS = 2;
+    /** get_events 长等待：外脑每调一次工具就是一次完整的模型请求，所以没事就一直等，有事（会叫醒她的条目，
+     *  判据见 {@code ExternalWait}）立刻返回。最长 50 秒，给桥接层（mcp-remote 等）和客户端的请求超时留余量
+     *  （Codex 的工具超时默认 60 秒）；到点返回空，外脑再调一次接着等。 */
     private static final int MAX_WAIT_SECONDS = 50;
     /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
     private static final int SUMMARY_LIMIT = 90;
@@ -104,19 +103,18 @@ public final class McpServer {
             drive several companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) \
             work natively.
 
-            You also carry the companion's conversation: call get_events(companion) about every 2 \
-            seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
-            something urgent lands, so you get the wheel back every couple of seconds and can act on \
-            your own initiative instead of only reacting. The owner speaking to the companion (in-game \
-            chat or voice) arrives as a <query> and stops a running program between two calls; the task \
-            it was waiting for keeps running, and its end arrives as a task_finished <event> among the \
-            world happenings. Reply with \
-            say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
-            and voice. Keep your own conversation history — the game stores none for you; between \
-            get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
-            you deliberately want to park and wait for the owner to speak.""".formatted(
+            You also carry the companion's conversation. To wait for the owner to speak or for something to happen, \
+            call get_events(companion): it returns as soon as there is news and otherwise waits up to %d seconds, \
+            then answers that nothing came, so call it again to keep waiting. While you run programs, events that \
+            arrive come back with the program's receipt, after the receipt text. The owner speaking to the companion \
+            (in-game chat or voice) arrives as a <query> and stops a running program between two calls; the task it \
+            was waiting for keeps running, and its end arrives as a task_finished <event> among the world \
+            happenings. Reply with say(companion, text): the words appear in-game as the companion's chat line, \
+            speech bubble, and voice. Keep your own conversation history — the game stores none for you; events \
+            queue up until you take them.""".formatted(
             com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.api.agent.tool.SkillTool.NAME,
-            com.dwinovo.numen.api.agent.tool.TodoTool.NAME, com.dwinovo.numen.api.agent.tool.MemoryTool.NAME, ONE_BODY);
+            com.dwinovo.numen.api.agent.tool.TodoTool.NAME, com.dwinovo.numen.api.agent.tool.MemoryTool.NAME, ONE_BODY,
+            MAX_WAIT_SECONDS);
 
     private final McpConfig config;
     private final Gson gson = new Gson();
@@ -288,10 +286,11 @@ public final class McpServer {
                 requiredStringSchema("companion",
                         "Which companion to dismiss — its name or id (see list_companions).")));
         tools.add(toolDef("get_events",
-                "Long-poll the companion's inbox: returns the moment something urgent arrives (the owner "
-                        + "speaking to it shows up as a <query>; world happenings as <event>s), or whatever "
-                        + "accumulated once wait_seconds runs out. Events are consumed on read and nothing is "
-                        + "lost between calls — call this about every 2 seconds while you drive the companion.",
+                "Wait on the companion's inbox: returns as soon as there is news (the owner speaking to it shows "
+                        + "up as a <query>; world happenings as <event>s), or after up to " + MAX_WAIT_SECONDS
+                        + " seconds with whatever accumulated. Events are consumed on read and nothing is "
+                        + "lost between calls. Call it when you want to wait for the owner or for something to happen; "
+                        + "events that arrive while you run programs come with the program's receipt.",
                 getEventsSchema()));
         tools.add(toolDef("say",
                 "Speak as the companion: the text appears in-game as its chat line, speech bubble, and voice "
@@ -380,9 +379,8 @@ public final class McpServer {
         JsonObject schema = objectSchema("companion", true);
         JsonObject wait = new JsonObject();
         wait.addProperty("type", "integer");
-        wait.addProperty("description", "How long to wait for something urgent before returning, in seconds "
-                + "(0–" + MAX_WAIT_SECONDS + ", default " + DEFAULT_WAIT_SECONDS + "). 0 = return at once. "
-                + "Leave it unset for the normal drive loop; raise it only to park and wait for the owner.");
+        wait.addProperty("description", "The longest to wait for news, in seconds (0–" + MAX_WAIT_SECONDS
+                + ", default " + MAX_WAIT_SECONDS + "). 0 = return at once with whatever is queued.");
         schema.getAsJsonObject("properties").add("wait_seconds", wait);
         return schema;
     }
@@ -513,19 +511,19 @@ public final class McpServer {
                 : "could not dismiss " + target, !ok);
     }
 
-    /** 长轮询取件：停靠在队列的急件叫醒挂点上，急件一到立即整批返回；到点清扫，
-     *  有什么给什么，没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
+    /** 长等待取件：停靠在收件箱上，会叫醒她的条目一到立即整批返回；到点清扫，
+     *  有什么给什么（捎带的也交），没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
     private JsonObject handleGetEvents(JsonObject args) throws Exception {
         UUID target = resolveCompanion(args);
         if (target == null) {
             return content("get_events needs a 'companion' argument (a name or id from list_companions)", true);
         }
-        int wait = DEFAULT_WAIT_SECONDS;
+        int wait = MAX_WAIT_SECONDS;
         if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
             wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
         }
         if (wait > 0) {
-            NumenActuator.EventWait parked = NumenActuator.awaitUrgent(target);
+            NumenActuator.EventWait parked = NumenActuator.awaitEvents(target);
             try {
                 String batch = parked.batch().get(wait, TimeUnit.SECONDS);
                 if (batch != null) return content(batch, false);
@@ -538,7 +536,7 @@ public final class McpServer {
         String rest = NumenActuator.takeEvents(target)
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(rest != null ? rest
-                : "(no new events — keep polling; the owner's words and world happenings land here)", false);
+                : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
     }
 
     private JsonObject handleSay(JsonObject args) throws Exception {
@@ -565,7 +563,20 @@ public final class McpServer {
         String result = NumenActuator.invoke(target, toolName, toolArgs.toString())
                 .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
         // the external agent reads what the built-in brain reads: the result's message, never its structured data
-        return content(ToolOutcome.modelText(result), ToolOutcome.failed(result));
+        String events = NumenActuator.takeEvents(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        return receipt(ToolOutcome.modelText(result), ToolOutcome.failed(result), events);
+    }
+
+    /**
+     * 一次工具调用的回执：结果文本在前；这段时间到达的事件（{@link NumenActuator#takeEvents} 取走的那批，
+     * 取走即不再由 get_events 交）作为另一段文本跟在后面，外脑干活时不必另外轮询。
+     */
+    static JsonObject receipt(String text, boolean isError, String events) {
+        JsonObject out = content(text, isError);
+        if (events != null) {
+            out.getAsJsonArray("content").add(textItem(events));
+        }
+        return out;
     }
 
     /** Resolve the {@code companion} argument (name or UUID) to a live companion's UUID, or null. */
@@ -591,12 +602,16 @@ public final class McpServer {
 
     // ---- result envelopes ----
 
-    private JsonObject content(String text, boolean isError) {
+    private static JsonObject textItem(String text) {
         JsonObject item = new JsonObject();
         item.addProperty("type", "text");
         item.addProperty("text", text);
+        return item;
+    }
+
+    private static JsonObject content(String text, boolean isError) {
         JsonArray arr = new JsonArray();
-        arr.add(item);
+        arr.add(textItem(text));
         JsonObject result = new JsonObject();
         result.add("content", arr);
         result.addProperty("isError", isError);

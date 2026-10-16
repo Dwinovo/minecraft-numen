@@ -87,16 +87,20 @@ class EventQueueTest {
     // ---- 急件叫醒 ----
 
     @Test
-    void urgentPushWakesListeners() {
+    void wakingPushWakesListenersAndAmbientDoesNot() {
         EventQueue q = fresh();
         java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
-        q.addUrgentListener(woken::incrementAndGet);
+        q.addWakeListener(woken::incrementAndGet);
+
+        q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
+        q.push(EventTypes.REFLEX, "<event>本能</event>", T0, false);
+        assertEquals(0, woken.get(), "捎带的(AMBIENT、非急件的 NOTICE)不单独叫");
 
         q.push(EventTypes.TASK_FINISHED, "<event>下雨了</event>", T0, false);
-        assertEquals(0, woken.get(), "普通件不叫");
+        assertEquals(1, woken.get(), "会叫醒她的条目一落地就叫,不必是急件");
 
-        q.push(EventTypes.QUERY, "<query>救命</query>", T0, true);
-        assertEquals(1, woken.get(), "急件即叫");
+        q.push(EventTypes.REFLEX, "<event>被封死了</event>", T0, true);
+        assertEquals(2, woken.get(), "急件的 NOTICE 升格后叫");
         assertTrue(q.hasUrgent(), "叫醒不递件,货还在台账上");
     }
 
@@ -108,9 +112,9 @@ class EventQueueTest {
         Runnable[] once = new Runnable[1];
         once[0] = () -> {
             woken.incrementAndGet();
-            q.removeUrgentListener(once[0]);
+            q.removeWakeListener(once[0]);
         };
-        q.addUrgentListener(once[0]);
+        q.addWakeListener(once[0]);
 
         q.push(EventTypes.QUERY, "<query>a</query>", T0, true);
         q.push(EventTypes.QUERY, "<query>b</query>", T0, true);
@@ -534,7 +538,7 @@ class EventQueueTest {
     void controlEntriesAreNeverUrgentNoMatterWhatTheSenderSays() {
         EventQueue q = fresh();
         java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
-        q.addUrgentListener(woken::incrementAndGet);
+        q.addWakeListener(woken::incrementAndGet);
 
         assertFalse(q.push(EventTypes.CLEAR, "清空上下文", T0, true));
         assertFalse(q.push(EventTypes.COMPACT, "整理记忆", T0, true));

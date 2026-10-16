@@ -72,11 +72,11 @@ final class McpAccessPrompt {
 
                 - Every tool takes a `companion` argument (name or id), so each call targets one body. \
                 There is no take-control handshake — just call tools.
-                - You are the companion's brain, so call `get_events(companion)` about every 2 seconds \
-                while you drive it: it waits 2 seconds by default and returns at once when something \
-                urgent lands. The player speaking to the companion in-game arrives as a `<query>`; \
-                world happenings arrive as `<event>`s. Events are consumed on read and nothing is lost \
-                between calls. Raise `wait_seconds` (up to 50) only to park and wait for the player.
+                - You are the companion's brain. To wait for the player to speak or for something to happen, call \
+                `get_events(companion)`: it returns as soon as there is news and otherwise waits up to 50 seconds, \
+                so call it again to keep waiting. While you run programs, events that arrive come back with the \
+                program's receipt. The player speaking to the companion in-game arrives as a `<query>`; world \
+                happenings arrive as `<event>`s. Events are consumed on read and nothing is lost between calls. \
                 - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.

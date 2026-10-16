@@ -29,11 +29,11 @@ import java.util.Set;
  * 哪些条目算叫醒她、随哪一次模型调用交出去、哪些是循环自己执行的控制命令,都读
  * {@link EventTypes.Delivery} 的声明;这里没有一处按档名判断。
  *
- * <h2>急件叫醒:脉冲可以丢,电平不会骗</h2>
- * 急件落地时同步通知{@link #addUrgentListener 登记过的等待者}——叫的内容只是
- * "来问吧",不递事件。正确性从不依赖叫醒:{@link #hasUrgent}/{@link #ripeness}
+ * <h2>叫醒:脉冲可以丢,电平不会骗</h2>
+ * 会叫醒她的条目落地时同步通知{@link #addWakeListener 登记过的等待者}——叫的内容只是
+ * "来问吧",不递事件。正确性从不依赖叫醒:{@link #hasWaking}/{@link #ripeness}
  * 是随时可问、答案一致的状态;丢一次叫醒,消费者按自己的节律(内脑的 tick 心跳、
- * 外脑的下一次长轮询)一问就发现。
+ * 外脑的长等待到点清扫)一问就发现。
  *
  * <h2>"排空"是"到点就走",不是"立刻发出"</h2>
  * {@link #ripeness} 只读状态,可以反复问、答案一致。上层因为协议原因(不能往
@@ -90,8 +90,8 @@ public final class EventQueue {
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    /** 急件叫醒名单。回调在 push 的调用线程上同步执行,只该做"完成一个等待"这类轻动作。 */
-    private final List<Runnable> urgentListeners = new ArrayList<>();
+    /** 叫醒名单。回调在 push 的调用线程上同步执行,只该做"完成一个等待"这类轻动作。 */
+    private final List<Runnable> wakeListeners = new ArrayList<>();
     private final Journal journal;
     private final int cap;
     private int dropped;
@@ -143,10 +143,10 @@ public final class EventQueue {
             dropped++;
         }
         journal.save(entries);
-        if (effective) {
+        if (delivery(entries.get(entries.size() - 1)).wakes()) {
             // 叫醒在入队落盘之后:等待者被叫起来一问,货一定已经在。
             // 拷贝一份再遍历,回调里摘自己是安全的。
-            for (Runnable listener : List.copyOf(urgentListeners)) {
+            for (Runnable listener : List.copyOf(wakeListeners)) {
                 listener.run();
             }
         }
@@ -185,18 +185,21 @@ public final class EventQueue {
         return urgent(EventTypes.get(type), asSent);
     }
 
-    // ---- 急件叫醒 ----
+    // ---- 叫醒 ----
 
-    /** 登记急件叫醒(叫"来问吧",不递事件)。 */
-    public void addUrgentListener(Runnable listener) {
+    /**
+     * 登记叫醒(叫"来问吧",不递事件)。叫醒的判据与内脑开 run 的是同一条——落地的条目按它实际的投递档
+     * {@link EventTypes.Delivery#wakes} 叫醒她(急件按升格后的档):不叫醒她的捎带条目落地时不叫,等别的事叫醒时一起交。
+     */
+    public void addWakeListener(Runnable listener) {
         if (listener != null) {
-            urgentListeners.add(listener);
+            wakeListeners.add(listener);
         }
     }
 
     /** 摘掉叫醒。没登记过的静默忽略。 */
-    public void removeUrgentListener(Runnable listener) {
-        urgentListeners.remove(listener);
+    public void removeWakeListener(Runnable listener) {
+        wakeListeners.remove(listener);
     }
 
     // ---- 出 ----
@@ -446,7 +449,7 @@ public final class EventQueue {
 
     /**
      * 取走所有给模型看的文本,不管排在哪;控制条目原样留着,先后不变。外接大脑取件用:控制条目是对内脑说的,
-     * 留着等内脑,但不能挡住排在它后面的话。
+     * 留着等内脑,但不能挡住排在它后面的话。外脑的长等待返回、程序回执捎带都从这一个口取,取走即不再交。
      *
      * @return 取走的条目,按入队顺序;一条都没有则空列表
      */
@@ -465,6 +468,20 @@ public final class EventQueue {
         flushDropped(taken, now);
         journal.save(entries);
         return taken;
+    }
+
+    /**
+     * 外接大脑一次取走的文本,渲染成给模型的样子({@link #render},与内脑看到的一字不差)。
+     *
+     * @return 拼好的事件段;没有可交的文本是 {@code null}
+     */
+    public String takeRenderedText(long now) {
+        List<Entry> taken = takeText(now);
+        if (taken.isEmpty()) {
+            return null;
+        }
+        List<String> parts = render(taken, now);
+        return parts.isEmpty() ? null : String.join("\n\n", parts);
     }
 
     /** 这一条实际按哪一档投递:急件按档的升格办({@link EventTypes.Delivery#whenUrgent}),生效后的急不急就记在条目上。 */
