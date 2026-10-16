@@ -109,6 +109,22 @@ class ProviderLibraryTest {
     }
 
     @Test
+    void liftingTwiceChangesNothingTheSecondTime() throws IOException {
+        Files.writeString(dir.resolve("providers.json"),
+                "{\"entries\":[{\"id\":\"a\",\"provider\":\"ollama\"},{\"id\":\"b\",\"provider\":\"kimi\"}]}");
+        ProviderLibrary once = fresh();
+        once.update(once.get("a"));   // 存一次:换成第 2 版落盘
+        String saved = Files.readString(dir.resolve("providers.json"));
+
+        ProviderLibrary again = fresh();
+        again.update(again.get("a"));
+
+        assertEquals(saved, Files.readString(dir.resolve("providers.json")), "第二次读写,文件一个字节不变");
+        assertEquals("custom", again.get("a").profile().provider());
+        assertEquals("moonshotai", again.get("b").profile().provider());
+    }
+
+    @Test
     void aSavedLibraryIsVersionTwoAndIsNeverLiftedAgain() throws IOException {
         ProviderLibrary.Entry made = fresh().create("x",
                 new ConnectionProfile("lmstudio", null, "m", "", null, null, null, 0, null, 0, null));
