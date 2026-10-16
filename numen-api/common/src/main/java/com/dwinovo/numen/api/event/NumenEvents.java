@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.script.ScriptCall;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.payload.NumenEventPayload;
-import com.dwinovo.numen.api.task.reflex.Reflex;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.task.TaskResult;
 import net.minecraft.server.MinecraftServer;
@@ -88,15 +87,6 @@ public final class NumenEvents {
     public static void advancementReward(NumenPlayer companion, String id, String title, String change) {
         emit(companion, EventTypes.ADVANCEMENT_REWARD, Map.of("id", id),
                 "you completed the advancement \"" + title + "\" and its reward reached you: " + change, false);
-    }
-
-    /**
-     * 某个本能替身体做了一件事。{@code reflex} 属性写的是它在本能名册里的登记名({@link Reflex#id}),
-     * 不另起一套名字。永远不急:身体已经自己应对过了,这条是让她和翻聊天流的主人看得懂刚才发生了什么,
-     * 攒着搭下一轮的车就够。
-     */
-    public static void reflex(NumenPlayer companion, Reflex reflex, String text) {
-        emit(companion, EventTypes.REFLEX, Map.of("reflex", reflex.id()), text, false);
     }
 
     /**
