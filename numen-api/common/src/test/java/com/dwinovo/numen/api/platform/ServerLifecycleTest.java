@@ -56,4 +56,17 @@ class ServerLifecycleTest {
 
         assertEquals(2, ran.stream().filter("x"::equals).count());
     }
+
+    @Test
+    void everyRegisteredStartRunsAndOneFailingDoesNotStopTheRest() {
+        List<String> ran = new ArrayList<>();
+        ServerLifecycle.onStarted(server -> {
+            throw new IllegalStateException("起来时炸了");
+        });
+        ServerLifecycle.onStarted(server -> ran.add("after"));
+
+        ServerLifecycle.fireStarted(null);
+
+        assertTrue(ran.contains("after"), "前一项抛异常后,后面的开工没跑");
+    }
 }

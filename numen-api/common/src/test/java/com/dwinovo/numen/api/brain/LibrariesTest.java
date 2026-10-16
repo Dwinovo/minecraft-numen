@@ -32,6 +32,7 @@ class LibrariesTest {
 
     private final Map<String, String> config = new HashMap<>(Map.of("proxy", "", "prompt", ""));
     private final Map<UUID, PersonaLibrary> personas = new HashMap<>();
+    private final Map<UUID, OwnerPrefs> prefs = new HashMap<>();
 
     private Libraries libraries(Path dir) {
         ProviderLibrary providers = new ProviderLibrary(dir.resolve("providers.json"),
@@ -40,7 +41,11 @@ class LibrariesTest {
                 "https://relay.example", "127.0.0.1:7890", null, 0, null, 0, null));
         return new Libraries(owner -> personas.computeIfAbsent(owner,
                 id -> PersonaLibrary.at(dir.resolve("players").resolve(id.toString()).resolve("persona"),
-                        Io.direct(e -> { }))), providers, new Libraries.ServerConfig() {
+                        Io.direct(e -> { }))),
+                owner -> prefs.computeIfAbsent(owner, id -> new OwnerPrefs(new com.dwinovo.numen.api.store.JsonDoc(
+                        dir.resolve("players").resolve(id.toString()).resolve("prefs.json"),
+                        com.dwinovo.numen.api.store.JsonDoc.Format.of(1), Io.direct(e -> { })))),
+                providers, new Libraries.ServerConfig() {
             @Override
             public String proxy() {
                 return config.get("proxy");
@@ -232,5 +237,33 @@ class LibrariesTest {
         assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.DELETE, body("name", "manual")).problem());
         assertNotNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.DELETE, body("name", "manual")).problem());
         assertEquals(2, array(libraries.view(ADMIN, true, Libraries.MCP_CLIENT)).size());
+    }
+
+    @Test
+    void everyonesPrefsAreTheirOwn(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+
+        assertNull(libraries.handle(PLAYER, false, Libraries.PREFS, Libraries.PUT, bodyInt("initiative", 8)).problem());
+
+        assertEquals(8, array(libraries.view(PLAYER, false, Libraries.PREFS)).get(0).getAsJsonObject()
+                .get("initiative").getAsInt());
+        assertEquals(com.dwinovo.numen.api.agent.inbox.EventQueue.DEFAULT_LEVEL,
+                array(libraries.view(OTHER, false, Libraries.PREFS)).get(0).getAsJsonObject().get("initiative").getAsInt(),
+                "别人的偏好不受影响");
+    }
+
+    @Test
+    void theExternalBrainIsAnAdminsAloneToSeeAndChange(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+
+        assertEquals("[]", libraries.view(PLAYER, false, Libraries.MCP_SERVER));
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_SERVER, Libraries.PUT, body("token", "mine")).problem());
+        assertEquals(1, array(libraries.view(ADMIN, true, Libraries.MCP_SERVER)).size());
+    }
+
+    private static JsonObject bodyInt(String key, int value) {
+        JsonObject o = new JsonObject();
+        o.addProperty(key, value);
+        return o;
     }
 }

@@ -1,7 +1,10 @@
 package com.dwinovo.numen.api.platform;
 
+import net.minecraft.server.MinecraftServer;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * 服务器停了 —— 属于那个世界的进程内状态在这里一起作废。
@@ -27,11 +30,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>插件的世界作用域状态(缓存、在飞的搜索)同样在这里报到,和 Numen API 自己的走同一扇门。
  *
  * <p>两个 loader 各在服务器停止事件上调一次 {@link #fireStopped()};单人退存档、
- * 专用服关服、切存档,走的都是它。
+ * 专用服关服、切存档,走的都是它。起来的那一刻同理:{@link #fireStarted} 让需要世界的东西(同伴的大脑、外接大脑宿主)
+ * 在服务器起好后各自开工。
  */
 public final class ServerLifecycle {
 
     private static final List<Runnable> ON_STOPPED = new CopyOnWriteArrayList<>();
+    private static final List<Consumer<MinecraftServer>> ON_STARTED = new CopyOnWriteArrayList<>();
 
     private ServerLifecycle() {}
 
@@ -42,6 +47,22 @@ public final class ServerLifecycle {
      */
     public static void onStopped(Runnable drop) {
         ON_STOPPED.add(drop);
+    }
+
+    /** 报到:服务器起好之后(世界已加载)调 {@code start}。 */
+    public static void onStarted(Consumer<MinecraftServer> start) {
+        ON_STARTED.add(start);
+    }
+
+    /** 由各 loader 在服务器起好的事件上调用。一个失败不连累其余。 */
+    public static void fireStarted(MinecraftServer server) {
+        for (Consumer<MinecraftServer> start : ON_STARTED) {
+            try {
+                start.accept(server);
+            } catch (RuntimeException e) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 服务器起来时有一项失败,其余继续", e);
+            }
+        }
     }
 
     /** 由各 loader 在服务器停止事件上调用。一个清理失败不连累其余。 */

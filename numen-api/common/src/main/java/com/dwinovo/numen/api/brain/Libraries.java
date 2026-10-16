@@ -2,14 +2,19 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.mcp.client.McpOAuth;
+import com.dwinovo.numen.api.mcp.server.McpConfig;
+import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -21,6 +26,9 @@ import java.util.function.Function;
  *   <li><b>模型档案</b>:key 花服主的钱,只有管理员({@code Authority})能存、能删、能看全貌;别人只看得到
  *       "有哪几个、叫什么、哪个型号"——key、接口地址、代理在服务端编码的这一处就没有,客户端拿不到,也就不存在泄露;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
+ *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
+ *   <li><b>技能</b>({@link #SKILL}):服务器上有哪些,人人看得到;开关只有管理员能拨(技能目录是服务器全局的);</li>
+ *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
  *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
  *       别人只看得到名字、连没连上、有几个工具。授权网址只给管理员,授权回来的网址也由管理员贴回({@link #AUTH})。</li>
  * </ul>
@@ -34,6 +42,9 @@ public final class Libraries {
     public static final String PROVIDER = "provider";
     public static final String SERVER_CONFIG = "server-config";
     public static final String MCP_CLIENT = "mcp-client";
+    public static final String MCP_SERVER = "mcp-server";
+    public static final String PREFS = "prefs";
+    public static final String SKILL = "skill";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
@@ -63,7 +74,8 @@ public final class Libraries {
 
     /** 这台服务器上的那一份:人设按主人、模型档案是服主的、配置是加载器自己的。 */
     public static Libraries of(net.minecraft.server.MinecraftServer server) {
-        return new Libraries(owner -> PersonaLibraries.of(server, owner), ProviderLibrary.instance(), new ServerConfig() {
+        return new Libraries(owner -> PersonaLibraries.of(server, owner), owner -> OwnerPrefs.of(server, owner),
+                ProviderLibrary.instance(), new ServerConfig() {
             private final com.dwinovo.numen.api.platform.services.INumenConfig config =
                     com.dwinovo.numen.api.platform.Services.CONFIG;
 
@@ -87,11 +99,14 @@ public final class Libraries {
     }
 
     private final Function<UUID, PersonaLibrary> personas;
+    private final Function<UUID, OwnerPrefs> prefs;
     private final ProviderLibrary providers;
     private final ServerConfig config;
 
-    public Libraries(Function<UUID, PersonaLibrary> personas, ProviderLibrary providers, ServerConfig config) {
+    public Libraries(Function<UUID, PersonaLibrary> personas, Function<UUID, OwnerPrefs> prefs,
+                     ProviderLibrary providers, ServerConfig config) {
         this.personas = personas;
+        this.prefs = prefs;
         this.providers = providers;
         this.config = config;
     }
@@ -107,6 +122,9 @@ public final class Libraries {
             case PROVIDER -> provider(admin, op, body);
             case SERVER_CONFIG -> serverConfig(admin, op, body);
             case MCP_CLIENT -> mcpClient(admin, op, body);
+            case MCP_SERVER -> mcpServer(admin, op, body);
+            case PREFS -> prefs(owner, op, body);
+            case SKILL -> skill(admin, op, body);
             default -> "unknown library";
         };
         return new Result(view(owner, admin, kind), problem);
@@ -133,9 +151,48 @@ public final class Libraries {
                 }
             }
             case MCP_CLIENT -> McpClientManager.servers().forEach(h -> out.add(mcpView(h, admin)));
+            case MCP_SERVER -> {
+                if (admin) {
+                    out.add(mcpServerView());
+                }
+            }
+            case PREFS -> out.add(prefs.apply(owner).toJson());
+            case SKILL -> SkillRegistry.instance().all().forEach(info -> {
+                JsonObject o = new JsonObject();
+                o.addProperty("name", info.name());
+                o.addProperty("description", info.description());
+                o.addProperty("enabled", !SkillRegistry.instance().isDisabled(info.name()));
+                out.add(o);
+            });
             default -> { }
         }
         return out.toString();
+    }
+
+    /** 外接大脑宿主的整份状态:配置、令牌、谁连着、起服失败的原因。 */
+    private static JsonObject mcpServerView() {
+        McpMode mode = McpMode.instance();
+        McpConfig cfg = mode.config();
+        JsonObject o = new JsonObject();
+        o.addProperty("enabled", mode.enabled());
+        o.addProperty("host", cfg.host());
+        o.addProperty("port", cfg.port());
+        o.addProperty("lanExposed", cfg.lanExposed());
+        o.addProperty("token", cfg.token());
+        o.addProperty("callTimeoutSeconds", cfg.callTimeoutSeconds());
+        JsonArray hidden = new JsonArray();
+        cfg.hiddenTools().forEach(hidden::add);
+        o.add("hiddenTools", hidden);
+        o.addProperty("quietFallback", cfg.quietFallback());
+        o.addProperty("endpoint", mode.endpoint());
+        if (mode.clientName() != null) {
+            o.addProperty("clientName", mode.clientName());
+        }
+        o.addProperty("lastActivityMs", mode.lastActivityMs());
+        if (mode.lastError() != null) {
+            o.addProperty("lastError", mode.lastError());
+        }
+        return o;
     }
 
     /** 管理员看到整份配置加连接状态;别人只有名字、连没连上、工具数。 */
@@ -258,6 +315,86 @@ public final class Libraries {
             return null;
         }
         return LIST.equals(op) ? null : "unknown operation";
+    }
+
+    /**
+     * 外接大脑宿主:开关、端点与超时、不暴露的工具、令牌、失联回退,哪些字段在 {@code put} 里就改哪些。起服失败的原因当作办不成的原因交回。
+     */
+    private String mcpServer(boolean admin, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return null;
+        }
+        if (!admin) {
+            return "only a server admin may change the external brain";
+        }
+        if (!PUT.equals(op)) {
+            return "unknown operation";
+        }
+        McpMode mode = McpMode.instance();
+        McpConfig cfg = mode.config();
+        if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")
+                || body.has("token") || body.has("regenerateToken")) {
+            List<String> hidden = new ArrayList<>(cfg.hiddenTools());
+            if (body.get("hiddenTools") instanceof JsonArray names) {
+                hidden.clear();
+                names.forEach(n -> hidden.add(n.getAsString()));
+            }
+            String token = body.has("regenerateToken") ? McpConfig.mintToken()
+                    : body.has("token") ? string(body, "token") : cfg.token();
+            String host = string(body, "host") == null ? cfg.host() : string(body, "host");
+            int port = body.has("port") ? body.get("port").getAsInt() : cfg.port();
+            int timeout = body.has("callTimeoutSeconds") ? body.get("callTimeoutSeconds").getAsInt()
+                    : cfg.callTimeoutSeconds();
+            if (!mode.applySettings(host, port, Math.max(1, timeout), hidden, token == null ? "" : token)) {
+                return mode.lastError();
+            }
+        }
+        if (body.has("enabled") && !mode.setEnabled(body.get("enabled").getAsBoolean())) {
+            return mode.lastError();
+        }
+        if (body.has("quietFallback")) {
+            mode.setQuietFallback(body.get("quietFallback").getAsBoolean());
+        }
+        return null;
+    }
+
+    /** 每位主人自己的偏好;只认认得的字段。 */
+    private String prefs(UUID owner, String op, JsonObject body) {
+        switch (op) {
+            case LIST:
+                return null;
+            case PUT:
+                if (body.has("initiative")) {
+                    prefs.apply(owner).setInitiative(body.get("initiative").getAsInt());
+                }
+                return null;
+            default:
+                return "unknown operation";
+        }
+    }
+
+    /** 技能目录是服务器全局的:谁都能看有哪些,开关只有管理员能拨。 */
+    private String skill(boolean admin, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return null;
+        }
+        if (!admin) {
+            return "only a server admin may switch skills";
+        }
+        String name = string(body, "name");
+        if (name == null || SkillRegistry.instance().get(name).isEmpty()) {
+            return "no such skill";
+        }
+        switch (op) {
+            case ENABLE:
+                SkillRegistry.instance().setEnabled(name, true);
+                return null;
+            case DISABLE:
+                SkillRegistry.instance().setEnabled(name, false);
+                return null;
+            default:
+                return "unknown operation";
+        }
     }
 
     private String mcpClient(boolean admin, String op, JsonObject body) {

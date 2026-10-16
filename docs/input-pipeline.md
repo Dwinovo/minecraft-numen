@@ -518,4 +518,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
   **OAuth**:服务端没有浏览器,授权网址作为服务器状态的一项(`authUrl`)经库协议推给管理员的客户端去开;code 只靠"回调网址"一个机制回来——回调地址是本机回环上的一个临时 HTTP 端点,
   把每个请求交给 `McpOAuth.complete`;专用服务器上管理员的浏览器跳回的是他自己的回环,页面打不开,他把地址栏里的网址贴回设置页(库协议 `auth`),同样进 `complete`。授权码 + PKCE(S256)、动态客户端注册、`resource` 指示符照 MCP 授权规范。
   回调页的两句话不再走语言键(服务端没有语言环境,浏览器页中英并列),`MCP_OAUTH_OK`/`MCP_OAUTH_FAILED` 两个键随之删掉。旧的客户端设置页在翻转提交改读库协议,`ClientMcp.initClients` 和客户端设置页对 `McpClientManager` 的直接调用留到清理提交。
+- **提交 10a(服务端接线,翻转的准备)**:`CompanionBrains.create` 是一只同伴的大脑怎么从服务器各处接起来的唯一一处(世界里的家、服主的档案、主人库里现取的人设、主人的偏好、本进程的程序、直读身体的状态),产品与 GameTest 的 `Brain` 走同一个;
+  `ensure` 在其上加"名册上有她就有大脑":先搬旧版客户端的家(`LegacyMigration`),再把离线出箱里攒的事件倒进收件箱。主动性档位住在 `OwnerPrefs`(`players/<主人>/prefs.json`)。
+  库协议再加三种:`prefs`(主人自己的)、`skill`(人人能看,开关仅管理员)、`mcp-server`(外接大脑宿主,仅管理员,令牌由服务端铸)。`ServerLifecycle` 加"服务器起好"一档。这一提交没有任何地方调 `ensure`,翻转提交接上。
 

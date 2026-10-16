@@ -16,6 +16,7 @@ import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
+import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Conversations;
@@ -32,7 +33,7 @@ import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpServer;
 import com.dwinovo.numen.api.mcp.server.ServerActuator;
-import com.dwinovo.numen.api.program.LocalPrograms;
+
 import com.dwinovo.numen.api.store.Io;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
@@ -163,11 +164,8 @@ public class BrainGameTests {
             Io io = NumenIo.inline("numen-gametest");
             NoteBook.init(uuid -> new Home(dir.resolve("memory"), io), () -> 0);
             this.rooms = Conversations.of(server, companion.getOwnerUuid());
-            this.loop = new CompanionLoop(new CompanionLoop.Parts(companion.getUUID(), new Home(dir.resolve("her"), io),
-                    server::execute, mind, new LocalPrograms(server), () -> companion, () -> null, () -> false,
-                    () -> ownerOnline, () -> driving, () -> 3, id -> null, () -> helper.getLevel().getDayTime(),
-                    rooms));
-            CompanionLoops.install(companion.getOwnerUuid(), loop, owner, rooms);
+            this.loop = CompanionBrains.create(server, companion.getUUID(), companion.getOwnerUuid(),
+                    new Home(dir.resolve("her"), io), mind, owner, () -> ownerOnline, () -> driving);
         }
 
         void close() {

@@ -52,6 +52,8 @@ public class NumenMod implements ModInitializer {
 
         // 服务器停了：属于那个世界的进程内状态一起作废。单人「退出存档」不结束进程，
         // 静态表会原封不动活到下一个存档——谁持有谁在自己那边报到，见 ServerLifecycle。
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(
+                com.dwinovo.numen.api.platform.ServerLifecycle::fireStarted);
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(
                 server -> com.dwinovo.numen.api.platform.ServerLifecycle.fireStopped());
 
