@@ -42,6 +42,7 @@ public final class RemoteCompanions {
     /** 服务端发来的落过盘的会话(成员表与名字),整份。 */
     private static List<Conversation> saved = List.of();
     private static long nextRequest;
+    private static final RemoteLibrary LIBRARY = new RemoteLibrary(NumenNetwork::sendToServer);
     /** 这个连接上报过到了。 */
     private static boolean helloSent;
 
@@ -85,6 +86,11 @@ public final class RemoteCompanions {
         return admin;
     }
 
+    /** 服务器上的库(人设、模型档案、服务器配置)在这里读写。 */
+    public static RemoteLibrary library() {
+        return LIBRARY;
+    }
+
     public static List<Conversation> savedConversations() {
         return saved;
     }
@@ -102,6 +108,7 @@ public final class RemoteCompanions {
         ClientPayloadSink.feed = RemoteCompanions::onFeed;
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
         ClientPayloadSink.conversations = RemoteCompanions::onConversations;
+        ClientPayloadSink.library = LIBRARY::onPayload;
     }
 
     /**
@@ -180,6 +187,7 @@ public final class RemoteCompanions {
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
         saved = List.of();
+        LIBRARY.clear();
         served = false;
         admin = false;
         helloSent = false;

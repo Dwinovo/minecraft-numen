@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.persona;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.store.Atomic;
+import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -52,20 +53,32 @@ public final class PersonaLibrary {
 
     private final Path dir;
     private final Path legacyJson;
+    /** 运行中的写与删走它(服务端是主人那条写车道);装入时的播种与旧格式迁移在它开始被用之前,直接做。 */
+    private final Io io;
     private final Map<String, Persona> personas = new LinkedHashMap<>();
 
-    private PersonaLibrary(Path dir, Path legacyJson) {
+    private PersonaLibrary(Path dir, Path legacyJson, Io io) {
         this.dir = dir;
         this.legacyJson = legacyJson;
+        this.io = io;
     }
 
+    /** 主人客户端上的那一份(旧布局,服务端大脑接手后不再用)。 */
     public static PersonaLibrary instance() {
         if (instance == null) {
             Path cfg = com.dwinovo.numen.api.NumenPaths.config();
-            instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"));
+            instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"),
+                    com.dwinovo.numen.api.NumenIo.inline("numen-persona"));
             instance.load();
         }
         return instance;
+    }
+
+    /** 一位主人在服务器上的人设库:目录和写它用的车道由宿主给。 */
+    public static PersonaLibrary at(Path dir, Io io) {
+        PersonaLibrary library = new PersonaLibrary(dir, null, io);
+        library.load();
+        return library;
     }
 
     /** 重扫目录——打开人设页/召唤面板时调用,外部编辑器的修改即时可见。 */
@@ -98,11 +111,7 @@ public final class PersonaLibrary {
         String newId = sanitizeName(name);
         if (!newId.equals(id)) {
             newId = uniqueName(newId);
-            try {
-                Files.deleteIfExists(dir.resolve(id + ".md"));
-            } catch (IOException ex) {
-                Constants.LOG.warn("[numen-persona] 旧人设文件删除失败 {}: {}", id, ex.toString());
-            }
+            delete(id);
             personas.remove(id);
         }
         if (!write(newId, text)) return null;
@@ -114,11 +123,18 @@ public final class PersonaLibrary {
     /** 删除人设文件。绑定跟着同伴走,这里不管;在用的同伴回落兜底快照,不会失忆。 */
     public void remove(String id) {
         if (personas.remove(id) == null) return;
-        try {
-            Files.deleteIfExists(dir.resolve(id + ".md"));
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-persona] 人设文件删除失败 {}: {}", id, ex.toString());
-        }
+        delete(id);
+    }
+
+    private void delete(String id) {
+        Path file = dir.resolve(id + ".md");
+        io.write(() -> {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ex) {
+                throw new StoreException("人设文件删除失败 " + file + ": " + ex, ex);
+            }
+        });
     }
 
     // ---- pending summon assignment ----
@@ -180,7 +196,7 @@ public final class PersonaLibrary {
 
     /** 旧版 personas.json 的用户条目一次性迁移为 .md,原文件改名 .bak。 */
     private void migrateLegacyJson() {
-        if (!Files.isRegularFile(legacyJson)) return;
+        if (legacyJson == null || !Files.isRegularFile(legacyJson)) return;
         int migrated = 0;
         try {
             JsonObject o = JsonParser.parseString(
@@ -194,7 +210,7 @@ public final class PersonaLibrary {
                     String text = str(po, "text");
                     if (text.isBlank()) continue;
                     String id = uniqueName(sanitizeName(name.isBlank() ? str(po, "id") : name));
-                    if (write(id, text)) migrated++;
+                    if (writeNow(id, text)) migrated++;
                 }
             }
             Files.move(legacyJson, legacyJson.resolveSibling("personas.json.bak"),
@@ -205,7 +221,16 @@ public final class PersonaLibrary {
         }
     }
 
+    /** 运行中写一份人设:内存先到位,落盘排进写车道。 */
     private boolean write(String id, String text) {
+        Path file = dir.resolve(id + ".md");
+        String body = (text == null ? "" : text.strip()) + "\n";
+        io.write(() -> Atomic.write(file, body));
+        return true;
+    }
+
+    /** 装入时写一份:此刻写车道还没人用,读盘紧跟在后,所以当场落下。 */
+    private boolean writeNow(String id, String text) {
         try {
             Atomic.write(dir.resolve(id + ".md"), (text == null ? "" : text.strip()) + "\n");
             return true;
@@ -225,7 +250,7 @@ public final class PersonaLibrary {
     private String uniqueName(String base) {
         String cand = base;
         int i = 2;
-        while (Files.exists(dir.resolve(cand + ".md"))) {
+        while (personas.containsKey(cand) || Files.exists(dir.resolve(cand + ".md"))) {
             cand = base + "_" + i++;
         }
         return cand;

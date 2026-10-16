@@ -54,9 +54,11 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      * 测试可直接用临时路径构造;游戏内走 {@link #instance()}。
      *
      * @param catalogCache models.dev 缓存文件({@code config/numen/cache/models-dev.json})
+     * @param io           存档用的读写通道:游戏里是服务器那条写车道
      */
-    ProviderLibrary(java.nio.file.Path file, java.nio.file.Path catalogCache) {
-        super(file, FORMAT, com.dwinovo.numen.api.NumenIo.inline("numen-providers"));
+    public ProviderLibrary(java.nio.file.Path file, java.nio.file.Path catalogCache,
+                           com.dwinovo.numen.api.store.Io io) {
+        super(file, FORMAT, io);
         this.cache = new DownloadCache(catalogCache);
         this.catalog = new Catalog(cache, BundledSnapshot.INSTANCE);
         load();
@@ -65,7 +67,8 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     public static ProviderLibrary instance() {
         if (instance == null) {
             instance = new ProviderLibrary(configDir().resolve("providers.json"),
-                    configDir().resolve("cache").resolve("models-dev.json"));
+                    configDir().resolve("cache").resolve("models-dev.json"),
+                    com.dwinovo.numen.api.NumenIo.lanes().io("server"));
         }
         return instance;
     }
@@ -124,6 +127,16 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     @Override
     protected String idOf(Entry e) {
         return e.id();
+    }
+
+    /** 一条档案的 JSON(落盘的同一个样子,含 key):管理员经库协议读写它。 */
+    public JsonObject toJson(Entry entry) {
+        return writeEntry(entry);
+    }
+
+    /** {@link #toJson} 的逆。 */
+    public Entry fromJson(JsonObject o) {
+        return readEntry(o);
     }
 
     @Override

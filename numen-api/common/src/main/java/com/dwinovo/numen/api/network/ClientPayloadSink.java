@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
+import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.api.network.payload.NumenEventPayload;
@@ -39,4 +40,5 @@ public final class ClientPayloadSink {
     public static volatile Consumer<FeedPayload> feed = p -> {};
     public static volatile Consumer<HistoryPagePayload> historyPage = p -> {};
     public static volatile Consumer<ConversationsPayload> conversations = p -> {};
+    public static volatile Consumer<LibraryPayload> library = p -> {};
 }

@@ -9,7 +9,10 @@ import com.dwinovo.numen.api.network.payload.ConversationsPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
+import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -64,6 +67,34 @@ public final class Replies {
         History.page(rooms, conv, cursor, Math.max(1, Math.min(History.PAGE, limit))).thenAccept(page -> {
             NumenNetwork.sendToPlayer(player, HistoryPagePayload.of(requestId, conversation, page));
         });
+    }
+
+    /**
+     * 读写一种库:谁能做什么由 {@link Libraries} 判,答复是这位玩家此刻看得到的整表(办不成附原因)。模型档案、服务器配置
+     * 改成了,在线的其他玩家也各收到他们看得到的新表——档案选择器里的名单不能是旧的。
+     */
+    public static void library(ServerPlayer player, String kind, String op, String json) {
+        JsonObject body = new JsonObject();
+        try {
+            if (JsonParser.parseString(json) instanceof JsonObject parsed) {
+                body = parsed;
+            }
+        } catch (RuntimeException unreadable) {
+            // 读不懂的请求体当空:各库按"缺字段"拒绝
+        }
+        MinecraftServer server = player.server;
+        Libraries libraries = Libraries.of(server);
+        Libraries.Result result = libraries.handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
+        NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
+                result.problem() == null ? "" : result.problem()));
+        if (result.problem() == null && !Libraries.LIST.equals(op) && !Libraries.PERSONA.equals(kind)) {
+            for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+                if (other != player && Presence.hasClient(other.getUUID())) {
+                    NumenNetwork.sendToPlayer(other, new LibraryPayload(kind,
+                            libraries.view(other.getUUID(), Authority.isAdmin(other), kind), ""));
+                }
+            }
+        }
     }
 
     /** 这位主人那一头:他的客户端在不在、事件怎么推给他、没有客户端时她的话怎么告诉他。 */

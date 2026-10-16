@@ -19,7 +19,8 @@ class ProviderLibraryTest {
     Path dir;
 
     private ProviderLibrary fresh() {
-        return new ProviderLibrary(dir.resolve("providers.json"), dir.resolve("cache").resolve("models-dev.json"));
+        return new ProviderLibrary(dir.resolve("providers.json"), dir.resolve("cache").resolve("models-dev.json"),
+                com.dwinovo.numen.api.store.Io.direct(e -> { }));
     }
 
     @Test

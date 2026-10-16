@@ -135,13 +135,21 @@ public class BrainGameTests {
         private final net.minecraft.server.MinecraftServer server;
 
         Brain(GameTestHelper helper, String name) throws java.io.IOException {
-            this(helper, name, Files.createTempDirectory("numen-gametest-brain-"));
+            this(helper, name, Files.createTempDirectory("numen-gametest-brain-"), null);
         }
 
         /** {@code dir} 里 {@code her/} 是她的家(可以已经有搬过来的东西)。 */
         Brain(GameTestHelper helper, String name, Path dir) throws java.io.IOException {
+            this(helper, name, dir, null);
+        }
+
+        /** {@code ownerId} 非空时认他作主人(扮主人的真玩家在场时用)。 */
+        Brain(GameTestHelper helper, String name, Path dir, UUID ownerId) throws java.io.IOException {
             this.server = helper.getLevel().getServer();
             this.companion = spawnAt(helper, name, new BlockPos(3, 2, 3), false);
+            if (ownerId != null) {
+                companion.setOwnerUuid(ownerId);
+            }
             CompanionRegistry.get(server).put(companion.getUUID(), new CompanionRegistry.Entry(name,
                     companion.getOwnerUuid(), Level.OVERWORLD, companion.blockPosition()));
             Io io = NumenIo.inline("numen-gametest");
@@ -349,6 +357,75 @@ public class BrainGameTests {
         helper.assertTrue(her.loop.goal() != null && her.loop.goal().objective().equals("挖 64 个铁"),
                 "the migrated goal is not there");
         her.close();
+        helper.succeed();
+    }
+
+    /** 装了客户端的主人报到:得到回答(协议版本、是不是管理员),并补上名下大脑此刻的样子与会话列表,整条路经真的发包。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void a_client_that_says_hello_is_answered_and_caught_up(GameTestHelper helper) throws Exception {
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_greeter");
+        Brain her = new Brain(helper, "gametest_greeted", Files.createTempDirectory("numen-gametest-brain-"),
+                owner.getUUID());
+        GameTestKit.received(owner);
+
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+
+        var sent = GameTestKit.received(owner);
+        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload a
+                        && a.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL && !a.admin()),
+                "no hello answer for an ordinary player: " + sent);
+        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.FeedPayload f
+                        && f.companion().equals(her.companion.getUUID())
+                        && f.events().stream().anyMatch(e -> e instanceof Feed.Status)),
+                "her state was not caught up: " + sent);
+        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.ConversationsPayload),
+                "the conversation list was not sent");
+        her.close();
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /** 协议版本对不上的客户端不被服务:回答照给,但不推任何她的东西。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void a_client_of_another_protocol_is_answered_but_not_served(GameTestHelper helper) throws Exception {
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_mismatch");
+        Brain her = new Brain(helper, "gametest_unserved", Files.createTempDirectory("numen-gametest-brain-"),
+                owner.getUUID());
+        GameTestKit.received(owner);
+
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL + 1);
+
+        var sent = GameTestKit.received(owner);
+        helper.assertTrue(sent.size() == 1 && sent.get(0) instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload,
+                "an unserved client got more than the answer: " + sent);
+        her.close();
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /** 普通玩家经协议改不了服务器上的模型档案和配置,回话说明原因;看到的档案表里没有 key。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void an_ordinary_player_cannot_change_the_servers_model_profiles(GameTestHelper helper)
+            throws Exception {
+        var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
+        helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
+        int before = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().list().size();
+        GameTestKit.received(player);
+
+        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
+                "{\"name\":\"偷偷加的\",\"provider\":\"openai\",\"api_key\":\"sk-stolen\"}");
+        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
+                "{\"proxy\":\"evil:1\"}");
+
+        var sent = GameTestKit.received(player);
+        helper.assertTrue(sent.size() == 2 && sent.stream().allMatch(p ->
+                        p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
+                "the refusals were not told: " + sent);
+        helper.assertTrue(com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().list().size() == before,
+                "a profile was added by an ordinary player");
+        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.CONFIG.getProxy().equals("evil:1"),
+                "the proxy was changed by an ordinary player");
+        GameTestKit.leave(player);
         helper.succeed();
     }
 }
