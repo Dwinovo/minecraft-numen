@@ -1,34 +1,36 @@
 package com.dwinovo.numen.api.agent.inbox;
 
 import com.dwinovo.numen.api.ai.AiLog;
+import com.dwinovo.numen.store.AppendLog;
+import com.dwinovo.numen.store.Io;
+import com.dwinovo.numen.store.StoreException;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@link EventQueue} 的落盘实现:一行一条 JSON,整本快照重写。
+ * {@link EventQueue} 的落盘实现:一个 {@link AppendLog},一条输入一条记录({@code type} 就是输入的类型),
+ * 每次存盘把整本现状换进去。本类只管输入条目的记录格式(类型、正文、时刻、急不急);头、版本、id、
+ * 坏行与原子替换都是 {@link AppendLog} 的事。
  *
  * <p>作用只有一个——关游戏时没来得及消费的输入,下次登录还在,同伴不失忆
- * ("主人你不在的时候我把矿挖完了")。文件很小(几条输入),整本重写比增量日志
- * 省一套 append/compact 簿记。
+ * ("主人你不在的时候我把矿挖完了")。文件很小(几条输入),队列的变化又以"取走若干条"为主,
+ * 所以每次整本重写,不记"取走了哪条"的簿记。第 1 版是没有头的一行一条,第 2 版起带头与 id。
  *
- * <p>容错取向:坏行跳过、读不了当空箱、写失败只记日志不打断对话——**输入队列
- * 出问题不该让对话停摆**。
+ * <p>容错取向:坏行跳过、读不了当空箱、写失败只记日志不打断对话——<b>输入队列
+ * 出问题不该让对话停摆</b>。
  *
- * <p>纯 JVM(Gson + nio),不碰 Minecraft:路径由调用方解析后注入。
+ * <p>纯 JVM,不碰 Minecraft:路径由调用方解析后注入。
  */
 public final class JsonlJournal implements EventQueue.Journal {
 
-    private final Path file;
+    private final AppendLog log;
 
     private JsonlJournal(Path file) {
-        this.file = file;
+        this.log = new AppendLog(file, AppendLog.Format.of(2).upgrade(1, records -> records),
+                Io.direct(e -> AiLog.LOG.warn("[numen-queue] {}", e.getMessage())));
     }
 
     public static JsonlJournal atFile(Path file) {
@@ -37,54 +39,43 @@ public final class JsonlJournal implements EventQueue.Journal {
 
     @Override
     public List<EventQueue.Entry> load() {
-        if (!Files.exists(file)) {
+        AppendLog.Loaded loaded;
+        try {
+            loaded = log.read();
+        } catch (StoreException ex) {
+            AiLog.LOG.warn("[numen-queue] {}", ex.getMessage());
             return List.of();
         }
         List<EventQueue.Entry> out = new ArrayList<>();
-        try {
-            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                if (line.isBlank()) {
-                    continue;
-                }
-                try {
-                    JsonObject o = JsonParser.parseString(line).getAsJsonObject();
-                    out.add(new EventQueue.Entry(
-                            o.get("type").getAsString(),
-                            o.get("text").getAsString(),
-                            o.has("ts") ? o.get("ts").getAsLong() : 0L,
-                            o.has("urgent") && o.get("urgent").getAsBoolean()));
-                } catch (RuntimeException bad) {
-                    AiLog.LOG.warn("[numen-queue] 跳过坏行 {}", file.getFileName());
-                }
+        int skipped = loaded.skipped();
+        for (AppendLog.Record r : loaded.records()) {
+            String text = r.string("text");
+            if (text == null) {
+                skipped++;
+                continue;
             }
-        } catch (IOException ex) {
-            AiLog.LOG.warn("[numen-queue] 读不了 {}: {}", file.getFileName(), ex.getMessage());
+            out.add(new EventQueue.Entry(r.type(), text, r.ts(), r.json().has("urgent")
+                    && r.json().get("urgent").getAsBoolean()));
+        }
+        if (skipped > 0) {
+            AiLog.LOG.warn("[numen-queue] 跳过 {} 条坏记录 {}", skipped, log.file().getFileName());
         }
         return out;
     }
 
     @Override
     public void save(List<EventQueue.Entry> entries) {
-        try {
-            if (entries.isEmpty()) {
-                Files.deleteIfExists(file);   // 空箱不留空文件
-                return;
+        List<JsonObject> records = new ArrayList<>(entries.size());
+        for (EventQueue.Entry e : entries) {
+            JsonObject o = new JsonObject();
+            o.addProperty("type", e.type());
+            o.addProperty("ts", e.ts());
+            o.addProperty("text", e.text());
+            if (e.urgent()) {
+                o.addProperty("urgent", true);
             }
-            Files.createDirectories(file.getParent());
-            StringBuilder sb = new StringBuilder();
-            for (EventQueue.Entry e : entries) {
-                JsonObject o = new JsonObject();
-                o.addProperty("type", e.type());
-                o.addProperty("text", e.text());
-                o.addProperty("ts", e.ts());
-                if (e.urgent()) {
-                    o.addProperty("urgent", true);
-                }
-                sb.append(o).append('\n');
-            }
-            Files.writeString(file, sb.toString(), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            AiLog.LOG.warn("[numen-queue] 写不了 {}: {}", file.getFileName(), ex.getMessage());
+            records.add(o);
         }
+        log.rewrite(records);   // 空箱就是删文件:不留空壳
     }
 }
