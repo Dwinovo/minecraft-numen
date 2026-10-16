@@ -50,6 +50,24 @@ class JsonlJournalTest {
         assertEquals(EventTypes.QUERY, back.get(1).type());
     }
 
+    /** 条目的编号是队列盖的,落盘后重启读回来还是它——面板认"这条还排着"靠的就是这个。 */
+    @Test
+    void idsSurviveReloadingAndLaterSaves() {
+        Path file = file();
+        EventQueue first = new EventQueue(JsonlJournal.atFile(file));
+        first.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);
+        first.push(EventTypes.TASK_FINISHED, "<event>二</event>", T0 + 1, false);
+        List<String> before = first.entries().stream().map(EventQueue.Entry::id).toList();
+
+        EventQueue reopened = new EventQueue(JsonlJournal.atFile(file));
+        reopened.push(EventTypes.TASK_FINISHED, "<event>三</event>", T0 + 2, false);
+
+        List<String> after = reopened.entries().stream().map(EventQueue.Entry::id).toList();
+        assertEquals(before, after.subList(0, 2), "重启之后旧条目的编号不变");
+        assertEquals(3, after.stream().distinct().count(), "新条目有自己的编号");
+        assertTrue(after.stream().allMatch(java.util.Objects::nonNull));
+    }
+
     @Test
     void orderIsPreserved() {
         JsonlJournal journal = JsonlJournal.atFile(file());

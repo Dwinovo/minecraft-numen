@@ -47,6 +47,59 @@ class AppendLogTest {
     }
 
     @Test
+    void readBeforePagesBackwardsFromTheEndAcrossChunks(@TempDir Path dir) {
+        AppendLog log = log(dir.resolve("a.jsonl"));
+        List<String> ids = new ArrayList<>();
+        // 每条约 4 KB 的中文,总共远超一次往前读的块,还跨着多字节字符的边界
+        String filler = "挖矿的记录".repeat(300);
+        for (int i = 0; i < 40; i++) {
+            ids.add(log.append("note", body("text", i + filler)).id());
+        }
+
+        List<String> newest = idsOf(log.readBefore(null, 5));
+        assertEquals(ids.subList(35, 40), newest);
+
+        List<String> older = idsOf(log.readBefore(newest.get(0), 5));
+        assertEquals(ids.subList(30, 35), older);
+
+        List<String> everything = new ArrayList<>();
+        String cursor = null;
+        while (true) {
+            List<String> page = idsOf(log.readBefore(cursor, 7));
+            if (page.isEmpty()) {
+                break;
+            }
+            everything.addAll(0, page);
+            cursor = page.get(0);
+        }
+        assertEquals(ids, everything);
+        assertTrue(log.readBefore(ids.get(0), 5).records().isEmpty());
+    }
+
+    @Test
+    void readBeforeSkipsBadLinesAndCountsThem(@TempDir Path dir) throws IOException {
+        AppendLog log = log(dir.resolve("a.jsonl"));
+        String a = log.append("note", body("text", "甲")).id();
+        Files.writeString(log.file(), "not json\n", StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
+        String b = log.append("note", body("text", "乙")).id();
+
+        AppendLog.Loaded page = log.readBefore(null, 10);
+        assertEquals(List.of(a, b), idsOf(page));
+        assertEquals(1, page.skipped());
+    }
+
+    @Test
+    void readBeforeAnUnknownIdIsEmptyNotTheLastPage(@TempDir Path dir) {
+        AppendLog log = log(dir.resolve("a.jsonl"));
+        log.append("note", body("text", "一"));
+        assertTrue(log.readBefore("ffffffff", 5).records().isEmpty());
+    }
+
+    private static List<String> idsOf(AppendLog.Loaded loaded) {
+        return loaded.records().stream().map(AppendLog.Record::id).toList();
+    }
+
+    @Test
     void aFreshFileStartsWithAHeaderAndEveryRecordPointsAtTheOneBefore(@TempDir Path dir) throws IOException {
         AppendLog log = log(dir.resolve("a.jsonl"));
         AppendLog.Record first = log.append("note", body("text", "一"));

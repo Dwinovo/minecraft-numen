@@ -385,7 +385,43 @@ public final class ConvoLog {
      * 归并成一个会话的视图,靠的就是这两样(按时间交错、按会话过滤),消息自己不带。
      * {@code conv} 为 null = 就他俩(她的单成员会话)。
      */
-    public record Line(long ts, String conv, ConvoState.Msg msg) {}
+    public record Line(String id, long ts, String conv, ConvoState.Msg msg) {}
+
+    /**
+     * 往前翻的一页:最多 {@code limit} 行面板记录(文件顺序),以及再往前还有没有记录。翻页的游标就是最老那一行的 {@link Line#id}。
+     */
+    public record Page(List<Line> lines, boolean more) {}
+
+    /**
+     * 面板记录里 {@code beforeId} 那一行之前的一页;{@code beforeId} 为 null 是最新一页。按 id 往前读,不读整份:
+     * 面板打开时取最新一页,往上翻再取更早的,历史再长也只付这一页的钱。
+     */
+    public Page linesBefore(String beforeId, int limit) {
+        List<Line> got = new ArrayList<>();
+        String cursor = beforeId;
+        String oldestRecord = beforeId;
+        try {
+            while (got.size() < limit) {
+                List<AppendLog.Record> chunk = log.readBefore(cursor, Math.max(limit, 64)).records();
+                if (chunk.isEmpty()) {
+                    break;
+                }
+                for (int i = chunk.size() - 1; i >= 0 && got.size() < limit; i--) {
+                    oldestRecord = chunk.get(i).id();
+                    Line shown = lineOf(chunk.get(i));
+                    if (shown != null) {
+                        got.add(0, shown);
+                    }
+                }
+                cursor = oldestRecord;
+            }
+            boolean more = oldestRecord != null && !log.readBefore(oldestRecord, 1).records().isEmpty();
+            return new Page(got, more);
+        } catch (StoreException e) {
+            AiLog.LOG.warn("[numen-convo] {}", e.getMessage());
+            return new Page(List.of(), false);
+        }
+    }
 
     /** 同 {@link #loadDisplay},每行连着时间戳与会话印。 */
     public List<Line> loadLines(int limit) {
@@ -402,7 +438,7 @@ public final class ConvoLog {
     private static Line lineOf(AppendLog.Record record) {
         ConvoState.Msg shown = displayOf(record);
         if (shown == null) return null;
-        return new Line(record.ts(), record.string("conv"), shown);
+        return new Line(record.id(), record.ts(), record.string("conv"), shown);
     }
 
     private static final Pattern QUERY = Pattern.compile("(?s)<query>(.*?)</query>");

@@ -7,6 +7,8 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -122,6 +124,9 @@ public final class AppendLog {
 
     /** 读出来的记录(文件顺序),以及跳过的坏行数。 */
     public record Loaded(List<Record> records, int skipped) {}
+
+    /** 往前读时每次读多少字节。 */
+    private static final int BACKWARD_CHUNK = 64 * 1024;
 
     private final Path file;
     private final Format format;
@@ -268,6 +273,85 @@ public final class AppendLog {
     /** 交给执行器去读。 */
     public CompletableFuture<Loaded> readAsync() {
         return io.read(this::read);
+    }
+
+    /**
+     * 从文件尾往前读:{@code beforeId} 那条之前的最多 {@code limit} 条记录(文件顺序,不含头),{@code beforeId} 为 null 就是
+     * 最后 {@code limit} 条。给"分页往前翻"用,只读到够数为止,不读整份。{@code beforeId} 不在文件里得空表(不退化成最后一页:
+     * 翻页的游标指到一条已经不存在的记录,是调用方的状态错了,不该悄悄给它另一页)。读不了抛 {@link StoreException}。
+     */
+    public Loaded readBefore(String beforeId, int limit) {
+        open();
+        if (limit <= 0 || !Files.isRegularFile(file)) {
+            return new Loaded(List.of(), 0);
+        }
+        List<Record> newestFirst = new ArrayList<>();
+        int skipped = 0;
+        boolean[] passed = {beforeId == null};
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            long position = channel.size();
+            byte[] carry = new byte[0];
+            while (position > 0 && newestFirst.size() < limit) {
+                int size = (int) Math.min(BACKWARD_CHUNK, position);
+                position -= size;
+                ByteBuffer chunk = ByteBuffer.allocate(size + carry.length);
+                chunk.limit(size);
+                while (chunk.hasRemaining()) {
+                    if (channel.read(chunk, position + chunk.position()) < 0) {
+                        throw new IOException("文件在读的时候变短了");
+                    }
+                }
+                chunk.limit(chunk.capacity());
+                chunk.put(carry);
+                byte[] data = chunk.array();
+                int end = data.length;
+                for (int i = data.length - 1; i >= 0 && newestFirst.size() < limit; i--) {
+                    if (data[i] == '\n') {
+                        skipped += takeBackward(data, i + 1, end, beforeId, passed, newestFirst);
+                        end = i;
+                    }
+                }
+                carry = java.util.Arrays.copyOfRange(data, 0, end);
+            }
+            if (position == 0 && newestFirst.size() < limit) {
+                skipped += takeBackward(carry, 0, carry.length, beforeId, passed, newestFirst);
+            }
+        } catch (IOException e) {
+            throw new StoreException("读不了 " + file + ": " + e, e);
+        }
+        java.util.Collections.reverse(newestFirst);
+        return new Loaded(newestFirst, skipped);
+    }
+
+    /** 交给执行器去读。 */
+    public CompletableFuture<Loaded> readBeforeAsync(String beforeId, int limit) {
+        return io.read(() -> readBefore(beforeId, limit));
+    }
+
+    /** 往前读时处理一行:还没走过 {@code beforeId} 的丢掉,走过了的收进来;返回这行是不是坏行。 */
+    private static int takeBackward(byte[] data, int from, int to, String beforeId, boolean[] passed,
+                                    List<Record> out) {
+        if (to <= from) {
+            return 0;
+        }
+        String line = new String(data, from, to - from, StandardCharsets.UTF_8);
+        if (line.isBlank()) {
+            return 0;
+        }
+        JsonObject o = parse(line);
+        String type = o == null ? null : typeOf(o);
+        if (type == null) {
+            return passed[0] ? 1 : 0;
+        }
+        if (HEADER.equals(type)) {
+            return 0;
+        }
+        if (!passed[0]) {
+            passed[0] = beforeId.equals(idOf(o));
+            return 0;
+        }
+        out.add(new Record(o));
+        return 0;
     }
 
     // ---- 写 ----

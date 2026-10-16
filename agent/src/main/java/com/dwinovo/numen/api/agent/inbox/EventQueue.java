@@ -1,7 +1,11 @@
 package com.dwinovo.numen.api.agent.inbox;
 
+import com.dwinovo.numen.api.store.AppendLog;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 同伴的输入队列——主人的话与世界事件<b>共用</b>的这一个。
@@ -53,11 +57,18 @@ public final class EventQueue {
      *
      * @param result 一件身体活收尾(task_finished)时它的结果({@code success}、{@code message}、{@code kind}、{@code hint}、
      *               {@code data}),随条目一起到,给等这件活的程序;不进她读的文字、不落盘。别的条目是 null
+     * @param id     稳定的编号:入队时由队列盖上(发送方不用给),落盘、重启后不变,面板据此认出"这条还排着"。
+     *               还没入队的条目是 null
      */
-    public record Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
+    public record Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result,
+                        String id) {
 
         public Entry(String type, String text, long ts, boolean urgent) {
-            this(type, text, ts, urgent, null);
+            this(type, text, ts, urgent, null, null);
+        }
+
+        public Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
+            this(type, text, ts, urgent, result, null);
         }
     }
 
@@ -94,8 +105,18 @@ public final class EventQueue {
         this.cap = Math.max(1, cap);
         // 读回来的条目同样过急件规则:盘上的标记是写下它的那一版定的,生效与否以现在的类型表为准
         for (Entry e : this.journal.load()) {
-            entries.add(new Entry(e.type(), e.text(), e.ts(), urgent(EventTypes.get(e.type()), e.urgent())));
+            entries.add(new Entry(e.type(), e.text(), e.ts(), urgent(EventTypes.get(e.type()), e.urgent()), null,
+                    e.id() != null ? e.id() : freshId()));
         }
+    }
+
+    /** 队里没有的新编号。 */
+    private String freshId() {
+        Set<String> used = new HashSet<>();
+        for (Entry e : entries) {
+            used.add(e.id());
+        }
+        return AppendLog.freshId(used);
     }
 
     // ---- 进 ----
@@ -116,7 +137,7 @@ public final class EventQueue {
             return false;
         }
         boolean effective = urgent(EventTypes.get(type), urgent);
-        entries.add(new Entry(type, text, now, effective, result));
+        entries.add(new Entry(type, text, now, effective, result, freshId()));
         while (entries.size() > cap) {
             entries.remove(evictee());
             dropped++;

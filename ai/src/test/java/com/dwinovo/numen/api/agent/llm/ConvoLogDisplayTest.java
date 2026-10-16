@@ -26,6 +26,31 @@ class ConvoLogDisplayTest {
     private static final ConvoState.Msg HALT = new ConvoState.Msg.Halt("主人按了停止");
     private static final ConvoState.Msg REPLY = new ConvoState.Msg.Assistant(new AssistantTurn("挖完了", List.of(), null));
 
+    /** 面板翻页的游标就是最老一行的 id:一页一页往前翻,拼起来正好是整份显示记录。 */
+    @Test
+    void pagesWalkBackwardsByLineIdAndAddUpToTheWholeRecord(@TempDir Path dir) {
+        ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
+        for (int i = 0; i < 25; i++) {
+            log.append(new ConvoState.Msg.User("第" + i + "句"), null);
+            log.appendCustom("test:note", new com.google.gson.JsonObject());   // 面板不显示的记录夹在中间
+        }
+
+        List<ConvoLog.Line> whole = new ArrayList<>();
+        String cursor = null;
+        ConvoLog.Page page;
+        int pages = 0;
+        do {
+            page = log.linesBefore(cursor, 10);
+            whole.addAll(0, page.lines());
+            cursor = page.lines().isEmpty() ? cursor : page.lines().get(0).id();
+            pages++;
+        } while (page.more());
+
+        assertEquals(3, pages, "25 行,一页 10 行");
+        assertEquals(log.loadLines(100), whole);
+        assertEquals(25, whole.stream().map(ConvoLog.Line::id).distinct().count(), "每行有自己的 id");
+    }
+
     @Test
     void whatIsShownLiveIsWhatIsReadBackFromDisk(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));

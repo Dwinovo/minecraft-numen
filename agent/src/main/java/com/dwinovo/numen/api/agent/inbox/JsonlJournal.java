@@ -55,7 +55,7 @@ public final class JsonlJournal implements EventQueue.Journal {
                 continue;
             }
             out.add(new EventQueue.Entry(r.type(), text, r.ts(), r.json().has("urgent")
-                    && r.json().get("urgent").getAsBoolean()));
+                    && r.json().get("urgent").getAsBoolean(), null, r.id()));
         }
         if (skipped > 0) {
             AiLog.LOG.warn("[numen-queue] 跳过 {} 条坏记录 {}", skipped, log.file().getFileName());
@@ -69,6 +69,9 @@ public final class JsonlJournal implements EventQueue.Journal {
         for (EventQueue.Entry e : entries) {
             JsonObject o = new JsonObject();
             o.addProperty("type", e.type());
+            if (e.id() != null) {
+                o.addProperty("id", e.id());   // 编号是条目的,不是这次重写数出来的:重启前后同一条还是它
+            }
             o.addProperty("ts", e.ts());
             o.addProperty("text", e.text());
             if (e.urgent()) {

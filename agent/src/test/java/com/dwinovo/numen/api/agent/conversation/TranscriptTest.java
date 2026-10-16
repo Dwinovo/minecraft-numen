@@ -24,12 +24,12 @@ class TranscriptTest {
     private static final UUID LAN = UUID.randomUUID();
 
     private static ConvoLog.Line owner(long ts, String conv, int turn, String said, String audience) {
-        return new ConvoLog.Line(ts, conv, new ConvoState.Msg.User(
+        return new ConvoLog.Line(null, ts, conv, new ConvoState.Msg.User(
                 EventQueue.query(said) + "\n" + Audience.line(turn, audience)));
     }
 
     private static ConvoLog.Line reply(long ts, String conv, String said) {
-        return new ConvoLog.Line(ts, conv, new ConvoState.Msg.Assistant(new AssistantTurn(said, List.of(), null)));
+        return new ConvoLog.Line(null, ts, conv, new ConvoState.Msg.Assistant(new AssistantTurn(said, List.of(), null)));
     }
 
     private static Map<UUID, List<ConvoLog.Line>> logs(List<ConvoLog.Line> you, List<ConvoLog.Line> lan) {
@@ -85,8 +85,8 @@ class TranscriptTest {
     @Test
     void linesWithoutATurnNumberNeverMerge() {
         List<Transcript.Entry> t = Transcript.merge(null, logs(
-                List.of(new ConvoLog.Line(1000, null, new ConvoState.Msg.User("<query>好</query>")),
-                        new ConvoLog.Line(1100, null, new ConvoState.Msg.User("<query>好</query>"))),
+                List.of(new ConvoLog.Line(null, 1000, null, new ConvoState.Msg.User("<query>好</query>")),
+                        new ConvoLog.Line(null, 1100, null, new ConvoState.Msg.User("<query>好</query>"))),
                 List.of()));
 
         assertEquals(2, t.size());
