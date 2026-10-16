@@ -79,12 +79,13 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
     ProtocolView)     串行、兜底超时)   (ai)
 ```
 
-照 pi-mono 的 `ai → agent → coding-agent` 分三层,模块依赖单向:
+照 pi-mono 的 `ai → agent → coding-agent` 分三层,模块依赖单向(最底下还有 `store`:落盘的两种基础件,只依赖 Gson,见 `input-pipeline.md` §六):
 
 | 模块 | 内容 |
 |---|---|
-| `ai`(现有,纯 Java) | 传输、服务商、`NumenLlmClient`、`ConvoState`/`ConvoLog`/`CompactSplit`;新增 `ProtocolView` |
-| `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 Numen API 的 `event` 包搬来,包名 `com.dwinovo.numen.api.agent.inbox`);长期目标 `GoalState`/`GoalPrompts`(从 Numen API 搬来)与 `GoalSteward`;`Compactor` |
+| `store`(纯 Java,只依赖 Gson) | 只追加日志 `AppendLog`、小文档 `JsonDoc`、原子写 `Atomic`、读写放哪个线程的 `Io`;不认识任何业务 |
+| `ai`(现有,纯 Java,依赖 store) | 传输、服务商、`NumenLlmClient`、`ConvoState`/`ConvoLog`/`CompactSplit`;新增 `ProtocolView` |
+| `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 Numen API 的 `event` 包搬来,包名 `com.dwinovo.numen.api.agent.inbox`;落盘是 store 的日志,每次存盘整本换进去);长期目标 `GoalState`/`GoalPrompts`(从 Numen API 搬来)与 `GoalSteward`;`Compactor` |
 | `numen-api`(依赖 agent) | 同伴门面 `EntityAgentLoop`、`ToolDispatcher`、`TurnPresenter`、`SystemPromptComposer`、`RuntimeState`;`NumenEvents` 与服务端 `EventOutbox`(用到 Minecraft,留下) |
 
 - **内核单独成模块**:不放 Numen API——Numen API 依赖 Minecraft,"不引用 Minecraft"只能靠自觉,编译器拦不住;
@@ -450,8 +451,27 @@ record Halt(String reason) implements Msg {}   // 这一轮在这里被切断:�
 - `AgentRequestContext.withoutLegacyCurrentTask` 请求期剥旧块的兼容代码,改为 `ConvoLog.migrateIfNeeded`
   一次性迁移。
 
-`ConvoLog` 编码 `Halt` 为事件记录;`load` 回放它,`loadDisplay` 把它显示成一条中断分隔。
+`ConvoLog` 把 `Halt` 记成 `halt` 记录;`load` 回放它,`loadDisplay` 把它显示成一条中断分隔。
 面板里不再出现"(已中断)"这类补丁消息。
+
+### 对话日志的格式(第 4 版)
+
+日志是 store 的 `AppendLog`(头、版本、id、坏行、整份迁移都是它的事),`ConvoLog` 只管记录的样子:
+
+| 类型 | 内容 |
+|---|---|
+| `message` | 一条消息(`role` 是 user/assistant/tool),assistant 带出处 `origin`(协议/厂家/型号)、思考、私货;`conv` 是会话印 |
+| `halt` | 一轮在这里被切断:给模型的 `reason`,和给面板翻译的 `code`+`args` |
+| `compact` | 整理:只写摘要 `content` 和 `firstKeptId`("从哪条 id 起原文保留"),保留的几条仍是它们原来的记录,不抄第二份 |
+| `clear`、`persona-change` | 清空、换人设的分界,只记何时 |
+| `model-change`、`thinking-change` | 这一轮起换了模型 / 换了思考档位,各自单独一条;`EntityAgentLoop` 每轮发请求前比一下,没变不写 |
+| `<命名空间>:<名字>` | 插件自己的记录(`appendCustom`/`custom`),不进模型上下文也不进面板 |
+
+每条记录有 `type`、`id`(文件内唯一)、`parentId`(上一条的 id)、`ts`。认不得的类型两个视图都跳过但留在文件里。
+`load` 的推法:整理从摘要起重放、接上 `firstKeptId` 起上下文里的那几项;清空从零起。
+第 1~3 版的文件第一次打开时整份升到第 4 版(临时文件换进去,留 `.v<N>.bak`);第 3 版整理记录里抄的几条换成指针,
+对不上整理那一刻上下文里任何一项的(旧版本改写过的)补成只给模型的 `restored` 副本,面板不多显示一遍。
+换模型、换档位的记录这一步只写不读:还没进模型上下文,也没进面板。
 
 ---
 

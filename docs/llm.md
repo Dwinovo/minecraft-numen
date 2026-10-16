@@ -171,7 +171,7 @@ models.dev 里 OpenAI 的 `npm` 是 `@ai-sdk/openai`,按 pi 的规则走 Respons
 - Chat 的 `thinkingFormat`:Z.ai、智谱、Kimi、火山方舟同形(只写 `thinking.type`),都归 `zai`;不再为 xAI 特判,有没有档位由型号的档位表决定。
 - 回合出处戳改成 `协议/厂家/型号`(以前是适配器类名/型号,同一协议的不同厂家分不开)。老存档里的戳对不上,升级后老回合的私货会被脱掉一次。
 - OpenAI 官方按 `npm` 走 Responses(第 4 步),`VendorDefaults` 里不再有协议覆盖。Responses 请求不附带 `stream_options`。
-- 老档案迁移在 `ConfigMigrations`:档案库根上的 `models_dev_ids` 标记是“已迁过”的判据(`lmstudio` 既是老 id 又是 models.dev 的 id,只看 id 分不出)。
+- 老档案迁移在 `ProviderLibrary` 的读时升级:档案库是 store 的小文档,第 2 版起厂家 id 是 models.dev 的 id,版本号就是“已迁过”的判据(`lmstudio` 既是老 id 又是 models.dev 的 id,只看 id 分不出);更早的 `models_dev_ids` 标记当第 2 版认。
 - 密钥去首尾空白在 `LlmEndpoint` 的构造里,是全仓唯一一处;报错带主机与厂家原话在 `LlmHttpException`;失败原因是 agent 的原因码(`Cause`),界面按语言由 `CauseWords` 说。
 
 **思考档位与界面**(第 3 步)
