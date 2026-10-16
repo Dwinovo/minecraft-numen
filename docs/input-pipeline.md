@@ -296,7 +296,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 - 待定:外部大脑的端口,先走"服主自开端口 + 反向代理",文档给隧道的办法;共用 MC 端口另行调研(§五)。
 - 已定(10-16):多模态的画面交给客户端画,服务端只出清单;暂缓,排在输入管线之后(§九)。
 
-## 十四、第 2 步落地计划(待核对,未动手)
+## 十四、第 2 步落地计划(进行中:提交 1 到 8 已落地,9 起等 MCP 的并入)
 
 基底:第 1 步 dcc02130d,加包名归入 `com.dwinovo.numen.api.store`(7b4d33538)。下面九节对应任务的九个问题。读代码得出的事实都写了出处;"我的判断"与"待定"分开标。
 
@@ -479,6 +479,19 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 
 落地时与本节的出入(逐条):
 - **提交 2**:Fabric 的网络 API 总在服务端主线程上调接收器,网络线程拼装只在 NeoForge 上生效(见 §二);每玩家的**信箱**挪到提交 6(它的使用者 `OwnerInput` 等在那时才出现,先写就是没人调的代码),带宽预算先落在分片这条路上。
-- **提交 1**:没有加日志记录的 `from` 字段:面板把"待发"换成落盘行靠 `Feed` 里 `PendingChanged` 与 `LineAppended` 在同一刻包里按序到达,不需要在日志里再记一份对应关系。
+- **提交 1**:没有加日志记录的 `from` 字段:面板把"待发"换成落盘行靠同一包里 `Feed.Line` 与 `Feed.Pending` 按序到达,不需要在日志里再记一份对应关系。
 - **提交 4**:模块那条线(`ProgramUplink`、`ModuleSync`、`ModuleCache`、`RunModules`、`RunResult.Missing`)**推迟到清理提交删除**:翻转之前客户端循环还靠它送程序,
   服务端循环(提交 5)直接调 `ServerPrograms`,不经过它;提交 4 只做库的搬家(`ProviderLibrary`、`PersonaLibrary`、`JsonLibrary` 进主源码集,按路径注入、不再取客户端单例)。
+- **提交 5**:内核新增停牌 `Hold.AWAY`(主人不在线,现算不存,`HostPort.ownerPresent`),输入照收、他回来再处理;程序交给谁跑抽成 `ProgramHost`(旧的 `ProgramUplink` 走网络,新的 `LocalPrograms` 直调 `ServerPrograms`);工具口的兜底超时去掉了——它救的是网络丢掉的回执,程序在本进程里不会丢结果。
+  `NoteBook` 改成内存模型:写走车道是异步的,读不能指望文件已更新,所以札记第一次用时读进内存、之后读写都走内存;代价是**进程运行期间手改札记文件要到下次启动才读到**。
+- **提交 6a(协议)**:实际的包是 `Hello`/`HelloAck`(报到、协议版本、是否管理员)、`OwnerInput`(主人做的事,JSON,网络线程读懂后投进每位玩家一个 256 条的信箱,主线程每刻取 8 条)、
+  `Feed`(一刻的事件,JSON 一包,可分片;进服补课也是 `Feed`:`CompanionState` 加在飞的半截)、`HistoryRequest`/`HistoryPage`(按游标翻,游标是各成员各翻到哪一行,服务端给、原样带回)、
+  `Conversations`(落过盘的成员表)。服务端不产出任何翻译过的字:原因、理由、在做的事都是语言键加现场的词(`CompanionState`、`LoopStatus.Doing`、`EventQueue.Preview`),控制条目(整理、清空)的字是语言键。
+  群聊的成员表与送话路由在服务端 `Conversations`(落在世界存档),就是循环读的"谁在场";`Rooms` 的默认空实现已删。她说出口的话只经 `Voice` 一处:旁听给同会话的成员,主人没装客户端就只发他一条系统消息。
+- **提交 6b(客户端视图)**:界面经 `CompanionView` 读和做,旧的 `EntityAgentLoop` 与新的 `RemoteCompanion` 都实现它,谁是哪一个只在 `CompanionViews`/`BrainSite` 判;会话记录经 `CompanionViews.transcript`。
+  留到翻转提交的:客户端 `Conversations` 的成员半边(现在仍是旧的本地文件)与展示偏好分家;技能补全的 `SkillList`;`ChatView` 往上翻页后保持滚动位置(现在新翻出的行会把画面推下去);
+  `ConversationPreview`/`ProfilePage` 里用 `display()` 的两处在服务端模式下只有实时到的行(翻转时让状态带上最后一行与条数)。
+- **提交 7(迁移)**:`LegacyMigration` 是纯路径的函数(她的家、主人的库、会话成员表),复制不移动、目标在了就不动、半成品先清;`blocks.json` 没人读,不搬;绑定只搬档案与人设两项,声线与皮肤还在客户端读旧文件。
+  **调用点在翻转提交**(她的大脑在服务端创建那一刻):翻转之前就搬会冻结一份过时的快照,翻转时客户端循环里新写的对话就搬不过去了。
+- **提交 8(库协议)**:`Libraries` 三种库——人设(每位主人自己的,`PersonaLibrary.at`,写走他的车道)、模型档案(仅管理员写,别人只看到 id、名字、型号)、服务器配置(仅管理员);脱敏发生在编码的那一处。
+  客户端是 `RemoteLibrary`(视图加请求),人设页与模型配置页接它在翻转提交;`providers.json` 的写已改走服务器那条车道。
