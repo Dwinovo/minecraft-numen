@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 同伴的大脑在服务端时外脑的手:直接操作进程内的 {@link CompanionLoop}。外脑驱动的是服主名下的同伴
@@ -94,22 +93,10 @@ public final class ServerActuator implements ExternalHands {
     }
 
     @Override
-    public EventWait awaitEvents(UUID companion) {
-        CompletableFuture<String> f = new CompletableFuture<>();
-        AtomicReference<ExternalWait.Parked> parked = new AtomicReference<>();
-        Runnable cancel = () -> server.execute(() -> {
-            ExternalWait.Parked p = parked.getAndSet(null);
-            if (p != null) {
-                p.cancel().run();
-            }
-        });
+    public ExternalWait.Parked awaitEvents(UUID companion) {
         // 先查后登记在一次主线程的跳转里完成,不让一条事件从"队是空的"与"已停靠"之间溜过去
-        server.execute(() -> CompanionLoops.get(companion).ifPresentOrElse(loop -> {
-            ExternalWait.Parked p = loop.parkForExternal();
-            parked.set(p);
-            p.batch().thenAccept(f::complete);
-        }, () -> f.complete(null)));
-        return new EventWait(f, cancel);
+        return ExternalWait.parkOn(server, () -> CompanionLoops.get(companion)
+                .map(CompanionLoop::parkForExternal).orElse(null));
     }
 
     @Override

@@ -69,7 +69,7 @@ class ExternalWaitTest {
         EventQueue q = fresh();
         ExternalWait.Parked parked = park(q);
         q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
-        parked.cancel().run();
+        parked.cancel().get();
 
         String swept = q.takeRenderedText(T0);
         assertTrue(swept.contains("在吗"), "到点清扫有什么给什么");
@@ -92,12 +92,64 @@ class ExternalWaitTest {
     void cancelWithdrawsTheWaiter() {
         EventQueue q = fresh();
         ExternalWait.Parked parked = park(q);
-        parked.cancel().run();
+        parked.cancel().get();
 
         q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
 
         assertFalse(parked.batch().isDone());
         assertEquals("<query>a</query>", q.takeRenderedText(T0), "货留在队里给下一个取件人");
+    }
+
+    @Test
+    void aDeadlineThatLandsOnTheWakeStillGetsTheBatch() {
+        EventQueue q = fresh();
+        ExternalWait.Parked parked = park(q);
+
+        // 调用方的期限到了、还没来得及撤销的当口,叫醒先把批次取走了
+        q.push(EventTypes.QUERY, "<query>来一下</query>", T0, false);
+        String late = parked.cancel().get();
+
+        assertEquals("<query>来一下</query>", late, "取走的批次由撤销交回,不会取件了却没人收");
+        assertTrue(q.isEmpty());
+    }
+
+    @Test
+    void cancelBeforeAnyWakeLeavesTheEventInTheQueue() {
+        EventQueue q = fresh();
+        ExternalWait.Parked parked = park(q);
+
+        assertNull(parked.cancel().get());
+        q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
+
+        assertNull(parked.cancel().get(), "撤销之后叫醒不再取件");
+        assertEquals("<query>a</query>", q.takeRenderedText(T0));
+    }
+
+    @Test
+    void parkingOnAnotherThreadCanBeWithdrawnBeforeTheRegistrationRuns() {
+        EventQueue q = fresh();
+        java.util.List<Runnable> pending = new java.util.ArrayList<>();
+        ExternalWait.Parked parked = ExternalWait.parkOn(pending::add, () -> park(q));
+
+        assertNull(parked.cancel().get());
+        pending.forEach(Runnable::run);
+        q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
+
+        assertFalse(parked.batch().isDone(), "撤销在先,登记就不再做");
+        assertEquals("<query>a</query>", q.takeRenderedText(T0), "货没被一个没人读的等待者拿走");
+    }
+
+    @Test
+    void parkingOnAnotherThreadDeliversAfterTheRegistration() throws Exception {
+        EventQueue q = fresh();
+        java.util.List<Runnable> pending = new java.util.ArrayList<>();
+        ExternalWait.Parked parked = ExternalWait.parkOn(pending::add, () -> park(q));
+        pending.forEach(Runnable::run);
+
+        q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
+
+        assertEquals("<query>a</query>", parked.batch().get());
+        assertEquals("<query>a</query>", parked.cancel().get());
     }
 
     @Test

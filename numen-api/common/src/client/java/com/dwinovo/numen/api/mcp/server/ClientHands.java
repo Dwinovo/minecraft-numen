@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.mcp.server;
 import com.dwinovo.numen.api.NumenActuator;
 
 import java.util.List;
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -33,7 +35,7 @@ final class ClientHands implements ExternalHands {
     }
 
     @Override
-    public EventWait awaitEvents(UUID companion) {
+    public ExternalWait.Parked awaitEvents(UUID companion) {
         return NumenActuator.awaitEvents(companion);
     }
 

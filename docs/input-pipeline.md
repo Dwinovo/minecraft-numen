@@ -508,3 +508,6 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
   交还后内脑从历史里就知道这期间做了什么;驾驶席翻成外接的那一下和旧循环一样 `halt(EXTERNAL)`。ADR(control 0012)与落地没有出入。
   **没有搬的**:接进来的 MCP 工具(`McpClientManager`、`McpOAuth`、`RemoteMcpTool`,约 2000 行,绑着客户端的 `Minecraft`/`I18n`/浏览器弹窗)——服务端循环的工具表读不到它们,**翻转之前必须搬**;设置页"外部大脑"改走库协议 `mcp-server` 也在翻转提交(现在仍读客户端的 `McpMode.instance()`)。
   清理提交的清单另加:`ExternalHands.activity` 钩子、`ClientHands`/`ClientMcp`、评测 `Brain` 与 `CompanionLoop` 的收口。
+- **提交 9a(长轮询丢事件)**:`get_events` 的期限与叫醒撞在同一刻时,叫醒已把批次取走、期限那边却在撤销,批次没人读。根因是"取件"与"交付"分在两步:现在 `ExternalWait` 的等待者要么在叫醒时取走批次、要么已撤销,由它自己的锁裁决,
+  撤销返回"叫醒抢先取走的批次",宿主以它为准;跨线程的登记与撤销(`parkOn`)同理,撤销在登记之前到达时登记不再做,不会留下一个没人读的等待者。
+

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -16,14 +18,6 @@ public interface ExternalHands {
 
     /** 主人的一只同伴:稳定 id + 显示名。 */
     record Companion(UUID uuid, String name) {}
-
-    /**
-     * 一次停靠中的长等待。
-     *
-     * @param batch  叫醒后取到的整批事件;到点没有人叫就一直不完成,由调用方的期限清扫兜底
-     * @param cancel 撤掉停靠;完成后调也安全
-     */
-    record EventWait(CompletableFuture<String> batch, Runnable cancel) {}
 
     /** 主人名下此刻在世界里的同伴。 */
     CompletableFuture<List<Companion>> companions();
@@ -45,8 +39,8 @@ public interface ExternalHands {
      */
     CompletableFuture<String> takeEvents(UUID companion);
 
-    /** 停靠到她有会叫醒她的条目为止,见 {@link EventWait}。 */
-    EventWait awaitEvents(UUID companion);
+    /** 停靠到她有会叫醒她的条目为止,撤销与取走的批次怎么交代见 {@link ExternalWait.Parked}。 */
+    ExternalWait.Parked awaitEvents(UUID companion);
 
     /** 替她说话:气泡、聊天行、她绑定的声线,与内置大脑的回复同一套表现。 */
     CompletableFuture<Boolean> say(UUID companion, String text);

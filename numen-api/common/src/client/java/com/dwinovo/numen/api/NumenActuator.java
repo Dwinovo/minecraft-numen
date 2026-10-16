@@ -2,7 +2,6 @@ package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.mcp.server.ExternalHands.Companion;
-import com.dwinovo.numen.api.mcp.server.ExternalHands.EventWait;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.ClientToolContext;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
@@ -168,29 +167,16 @@ public final class NumenActuator {
     /**
      * Park until {@code companion} has something that wakes it (the inbox's own rule, see
      * {@link ExternalWait}): {@code batch} then completes with the whole event batch;
-     * {@code cancel} withdraws the waiter — idempotent, safe after completion. Correctness never
-     * rests on the wake: whatever a lost poke would have delivered, the caller's deadline sweep
-     * ({@link #takeEvents}) picks up.
+     * {@code cancel} withdraws the waiter and hands back a batch the wake took first, so a deadline
+     * that lands on the wake loses nothing. The caller's deadline sweep ({@link #takeEvents}) picks up
+     * whatever a lost poke would have delivered.
      */
-    public static EventWait awaitEvents(UUID companion) {
-        CompletableFuture<String> f = new CompletableFuture<>();
+    public static ExternalWait.Parked awaitEvents(UUID companion) {
         if (companion == null) {
-            f.complete(null);
-            return new EventWait(f, () -> { });
+            return new ExternalWait.Parked(CompletableFuture.completedFuture(null), () -> null);
         }
-        java.util.concurrent.atomic.AtomicReference<ExternalWait.Parked> parked =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        Runnable cancel = () -> Minecraft.getInstance().execute(() -> {
-            ExternalWait.Parked p = parked.getAndSet(null);
-            if (p != null) p.cancel().run();
-        });
-        // 先查后登记在一次客户端线程的跳转里完成,不让一条事件从"队是空的"与"已停靠"之间溜过去。
-        Minecraft.getInstance().execute(() -> {
-            ExternalWait.Parked p = AgentLoopRegistry.getOrCreate(companion).parkForExternal();
-            parked.set(p);
-            p.batch().thenAccept(f::complete);
-        });
-        return new EventWait(f, cancel);
+        return ExternalWait.parkOn(Minecraft.getInstance(),
+                () -> AgentLoopRegistry.getOrCreate(companion).parkForExternal());
     }
 
     /**

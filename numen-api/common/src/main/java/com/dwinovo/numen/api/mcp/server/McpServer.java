@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
@@ -524,15 +525,18 @@ public final class McpServer {
             wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
         }
         if (wait > 0) {
-            ExternalHands.EventWait parked = hands.awaitEvents(target);
+            ExternalWait.Parked parked = hands.awaitEvents(target);
+            String batch = null;
             try {
-                String batch = parked.batch().get(wait, TimeUnit.SECONDS);
-                if (batch != null) return content(batch, false);
+                batch = parked.batch().get(wait, TimeUnit.SECONDS);
             } catch (TimeoutException deadline) {
                 // 到点，转清扫——叫醒只是提前，正确性由清扫兜底
             } finally {
-                parked.cancel().run();
+                // 撤销与叫醒谁先谁得：到点那一刻叫醒恰好取走的批次由撤销交回，取走的一定交到外脑手里
+                String late = parked.cancel().get();
+                if (batch == null) batch = late;
             }
+            if (batch != null) return content(batch, false);
         }
         String rest = hands.takeEvents(target)
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
