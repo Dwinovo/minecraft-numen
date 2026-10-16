@@ -1,16 +1,12 @@
 package com.dwinovo.numen.api.mcp.client;
 
 import com.dwinovo.numen.api.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -44,7 +40,9 @@ import java.util.Map;
  */
 public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
 
-    private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
+    private static JsonDoc doc(Path file) {
+        return new JsonDoc(file, JsonDoc.Format.of(1), NumenIo.inline("numen-mcp-client"));
+    }
 
     /** One external MCP server the client may connect to. */
     public record ServerSpec(
@@ -70,14 +68,13 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
     }
 
     public static McpClientConfig load(Path file) {
-        if (!Files.isRegularFile(file)) {
-            McpClientConfig def = defaultConfig();
-            writeDefault(file, def);
-            return def;
-        }
         try {
-            JsonObject o = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8))
-                    .getAsJsonObject();
+            JsonObject o = doc(file).read().orElse(null);
+            if (o == null) {
+                McpClientConfig def = defaultConfig();
+                writeDefault(file, def);
+                return def;
+            }
             boolean enabled = !o.has("enabled") || o.get("enabled").getAsBoolean();
             List<ServerSpec> servers = new ArrayList<>();
             if (o.has("servers") && o.get("servers").isJsonArray()) {
@@ -86,7 +83,7 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
                 }
             }
             return new McpClientConfig(enabled, List.copyOf(servers));
-        } catch (IOException | RuntimeException ex) {
+        } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-mcp-client] unreadable config {} — client disabled: {}", file, ex.toString());
             return new McpClientConfig(false, List.of());
         }
@@ -129,12 +126,7 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
         JsonArray servers = new JsonArray();
         for (ServerSpec s : cfg.servers()) servers.add(serverToJson(s));
         root.add("servers", servers);
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, PRETTY.toJson(root), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-mcp-client] failed to write config {}: {}", file, ex.toString());
-        }
+        doc(file).write(root);
     }
 
     private static void writeDefault(Path file, McpClientConfig def) {

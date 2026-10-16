@@ -1,11 +1,11 @@
 package com.dwinovo.numen.api.agent.llm;
 
 import com.dwinovo.numen.api.client.data.JsonLibrary;
-import com.dwinovo.numen.api.config.ConfigMigrations;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.agent.catalog.BundledSnapshot;
 import com.dwinovo.numen.api.agent.catalog.Catalog;
 import com.dwinovo.numen.api.agent.catalog.DownloadCache;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonObject;
 
 import java.util.LinkedHashMap;
@@ -56,7 +56,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      * @param catalogCache models.dev 缓存文件({@code config/numen/cache/models-dev.json})
      */
     ProviderLibrary(java.nio.file.Path file, java.nio.file.Path catalogCache) {
-        super(file);
+        super(file, FORMAT);
         this.cache = new DownloadCache(catalogCache);
         this.catalog = new Catalog(cache, BundledSnapshot.INSTANCE);
         load();
@@ -159,13 +159,59 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
         return o;
     }
 
-    @Override
-    protected void readExtra(JsonObject root) {
-    }
+    // ---- 版本 ----
 
-    /** 厂家 id 是 models.dev 的 id 了:迁移({@link ConfigMigrations})靠这个标记认出已迁过的库。 */
-    @Override
-    protected void writeExtra(JsonObject root) {
-        root.addProperty(ConfigMigrations.PROVIDER_IDS_MARKER, true);
+    /**
+     * 第 1 版:厂家 id 是各家自己的叫法(含玩家顺手填的别名)。第 2 版起是 models.dev 的 id——
+     * 版本号就是"迁过没有"的判据:{@code lmstudio} 既是老 id(要变成自定义厂家)也是 models.dev 的 id
+     * (新档案可能选了它),只看 id 分不出来。
+     */
+    private static final JsonDoc.Format FORMAT = JsonDoc.Format.of(2).upgrade(1, ProviderLibrary::toModelsDevIds);
+
+    /** 第 2 版之前的库在根上记过的"已迁过"标记;有它的库厂家 id 早已是 models.dev 的 id,只差一个版本号。 */
+    private static final String LEGACY_MARKER = "models_dev_ids";
+
+    /** 老厂家 id(含玩家顺手会填的别名)→ models.dev 的厂家 id。只在升级里用。 */
+    private static final Map<String, String> LEGACY_PROVIDER_IDS = Map.ofEntries(
+            Map.entry("kimi", "moonshotai"), Map.entry("moonshot", "moonshotai"),
+            Map.entry("doubao", "volcengine"), Map.entry("ark", "volcengine"),
+            Map.entry("qwen", "alibaba-cn"), Map.entry("tongyi", "alibaba-cn"),
+            Map.entry("aliyun", "alibaba-cn"), Map.entry("dashscope", "alibaba-cn"),
+            Map.entry("glm", "zhipuai"), Map.entry("zhipu", "zhipuai"),
+            Map.entry("silicon", "siliconflow-cn"), Map.entry("siliconflow", "siliconflow-cn"),
+            Map.entry("gemini", "google"), Map.entry("grok", "xai"),
+            Map.entry("openai-compatible", "openai"));
+
+    /** 本地部署的老厂家 id → 它们当年的缺省地址;升级成自定义厂家(OpenAI 兼容协议),地址写进档案。 */
+    private static final Map<String, String> LEGACY_LOCAL_PROVIDERS = Map.of(
+            "ollama", "http://localhost:11434/v1",
+            "lmstudio", "http://localhost:1234/v1",
+            "vllm", "http://localhost:8000/v1");
+
+    /**
+     * 档案里的老厂家 id 换成 models.dev 的 id;{@code ollama}、{@code lmstudio}、{@code vllm} 变成自定义厂家,
+     * 玩家填过的地址不动,别的字段原样保留。
+     */
+    private static JsonObject toModelsDevIds(JsonObject root) {
+        if (root.remove(LEGACY_MARKER) != null || !(root.get("entries") instanceof com.google.gson.JsonArray entries)) {
+            return root;
+        }
+        for (var el : entries) {
+            if (!el.isJsonObject() || !(el.getAsJsonObject().get("provider") instanceof com.google.gson.JsonPrimitive)) {
+                continue;
+            }
+            JsonObject entry = el.getAsJsonObject();
+            String old = entry.get("provider").getAsString().strip().toLowerCase(java.util.Locale.ROOT);
+            if (LEGACY_LOCAL_PROVIDERS.containsKey(old)) {
+                entry.addProperty("provider", "custom");
+                entry.addProperty("protocol", "chat");
+                if (!entry.has("base_url") || entry.get("base_url").getAsString().isBlank()) {
+                    entry.addProperty("base_url", LEGACY_LOCAL_PROVIDERS.get(old));
+                }
+            } else if (LEGACY_PROVIDER_IDS.containsKey(old)) {
+                entry.addProperty("provider", LEGACY_PROVIDER_IDS.get(old));
+            }
+        }
+        return root;
     }
 }

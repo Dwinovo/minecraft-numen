@@ -3,8 +3,8 @@ package com.dwinovo.numen.api.mcp.client;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -19,7 +19,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -54,7 +53,6 @@ import java.util.concurrent.TimeUnit;
  */
 final class McpOAuth {
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
             .version(HttpClient.Version.HTTP_1_1)
@@ -286,22 +284,30 @@ final class McpOAuth {
         e.addProperty("client_id", clientId);
         if (resource != null) e.addProperty("resource", resource);
         all.add(serverName, e);
-        Path file = configDir.resolve(STORE_FILE);
-        try {
-            Files.createDirectories(configDir);
-            Files.writeString(file, GSON.toJson(all), StandardCharsets.UTF_8);
-        } catch (Exception ex) {
-            Constants.LOG.warn("[numen-mcp-oauth] failed to write {}: {}", file, ex.toString());
-        }
+        JsonObject content = new JsonObject();
+        content.add("servers", all);
+        storeDoc(configDir).write(content);
+    }
+
+    /**
+     * 令牌库:第 2 版是 {@code {"servers":{服务器名:令牌}}};第 1 版顶层直接就是服务器名到令牌的表——
+     * 服务器名是玩家起的,不能和文档自己的版本号字段共用一层。
+     */
+    private static JsonDoc storeDoc(Path configDir) {
+        return new JsonDoc(configDir.resolve(STORE_FILE),
+                JsonDoc.Format.of(2).upgrade(1, flat -> {
+                    JsonObject nested = new JsonObject();
+                    nested.add("servers", flat);
+                    return nested;
+                }),
+                NumenIo.inline("numen-mcp-oauth"));
     }
 
     private static JsonObject loadStore(Path configDir) {
-        Path file = configDir.resolve(STORE_FILE);
-        if (!Files.isRegularFile(file)) return new JsonObject();
         try {
-            return JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
-        } catch (Exception ex) {
-            Constants.LOG.warn("[numen-mcp-oauth] unreadable {}: {}", file, ex.toString());
+            return storeDoc(configDir).read().map(o -> o.getAsJsonObject("servers")).orElseGet(JsonObject::new);
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("[numen-mcp-oauth] unreadable {}: {}", configDir.resolve(STORE_FILE), ex.toString());
             return new JsonObject();
         }
     }

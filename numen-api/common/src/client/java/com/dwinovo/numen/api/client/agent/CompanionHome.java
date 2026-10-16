@@ -1,7 +1,11 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.entity.CompanionRoster;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.store.StoreException;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -181,35 +185,33 @@ public final class CompanionHome {
         return numenRoot().resolve(DIR).resolve(CONVERSATIONS);
     }
 
+    // ---- 小文档(目标、绑定) ----
+
+    /** 这只同伴家里的一个小文档;只算路径、不建目录,写的时候才建。 */
+    private static JsonDoc doc(UUID entityUuid, String name) {
+        return new JsonDoc(at(entityUuid).resolve(name), JsonDoc.Format.of(1), NumenIo.inline("numen-home"));
+    }
+
     // ---- 长期目标 ----
 
     /** 读这只同伴的长期目标;没有(或正文为空)则 null。 */
     public static com.dwinovo.numen.api.agent.goal.GoalState goal(UUID entityUuid) {
-        Path p = at(entityUuid).resolve(GOAL);
-        if (!Files.isRegularFile(p)) {
-            return null;
-        }
         try {
-            return com.dwinovo.numen.api.agent.goal.GoalState.fromJson(
-                    JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8))
-                            .getAsJsonObject());
-        } catch (IOException | RuntimeException e) {
-            Constants.LOG.warn("[numen-home] 目标读不了 {}: {}", p, e.toString());
+            return doc(entityUuid, GOAL).read()
+                    .map(com.dwinovo.numen.api.agent.goal.GoalState::fromJson).orElse(null);
+        } catch (RuntimeException e) {
+            Constants.LOG.warn("[numen-home] 目标读不了 {}: {}", entityUuid, e.toString());
             return null;
         }
     }
 
     /** 写这只同伴的长期目标(null = 清掉,删文件不留空壳)。 */
     public static void setGoal(UUID entityUuid, com.dwinovo.numen.api.agent.goal.GoalState goal) {
-        Path p = (goal == null ? at(entityUuid) : dir(entityUuid)).resolve(GOAL);
-        try {
-            if (goal == null) {
-                Files.deleteIfExists(p);
-                return;
-            }
-            Files.writeString(p, goal.toJson().toString(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            Constants.LOG.warn("[numen-home] 目标写入失败 {}: {}", p, e.toString());
+        JsonDoc doc = doc(entityUuid, GOAL);
+        if (goal == null) {
+            doc.delete();
+        } else {
+            doc.write(goal.toJson());
         }
     }
 
@@ -217,40 +219,30 @@ public final class CompanionHome {
 
     /** 读这只同伴的绑定;没有则 {@link Binding#EMPTY}。 */
     public static Binding binding(UUID entityUuid) {
-        Path p = at(entityUuid).resolve(BINDING);
-        if (!Files.isRegularFile(p)) {
-            return Binding.EMPTY;
-        }
         try {
-            JsonObject o = JsonParser.parseString(
-                    Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
-            return new Binding(str(o, "provider"), str(o, "persona"), str(o, "voice"),
-                    str(o, "skin"));
-        } catch (IOException | RuntimeException e) {
-            Constants.LOG.warn("[numen-home] 绑定读取失败 {}: {}", p, e.toString());
+            return doc(entityUuid, BINDING).read()
+                    .map(o -> new Binding(str(o, "provider"), str(o, "persona"), str(o, "voice"), str(o, "skin")))
+                    .orElse(Binding.EMPTY);
+        } catch (RuntimeException e) {
+            Constants.LOG.warn("[numen-home] 绑定读取失败 {}: {}", entityUuid, e.toString());
             return Binding.EMPTY;
         }
     }
 
     /** 写这只同伴的绑定(全空则删文件——不留空壳)。 */
     public static void bind(UUID entityUuid, Binding b) {
-        // 解绑走 at():删一个文件不该顺手把家建出来
-        boolean unbind = b == null || b.isEmpty();
-        Path p = (unbind ? at(entityUuid) : dir(entityUuid)).resolve(BINDING);
-        try {
-            if (unbind) {
-                Files.deleteIfExists(p);
-                return;
-            }
-            JsonObject o = new JsonObject();
-            if (b.providerId() != null) o.addProperty("provider", b.providerId());
-            if (b.personaId() != null) o.addProperty("persona", b.personaId());
-            if (b.voiceId() != null) o.addProperty("voice", b.voiceId());
-            if (b.skinId() != null) o.addProperty("skin", b.skinId());
-            Files.writeString(p, o.toString(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            Constants.LOG.warn("[numen-home] 绑定写入失败 {}: {}", p, e.toString());
+        // 解绑只删文件,不顺手把家建出来;写的时候才建
+        JsonDoc doc = doc(entityUuid, BINDING);
+        if (b == null || b.isEmpty()) {
+            doc.delete();
+            return;
         }
+        JsonObject o = new JsonObject();
+        if (b.providerId() != null) o.addProperty("provider", b.providerId());
+        if (b.personaId() != null) o.addProperty("persona", b.personaId());
+        if (b.voiceId() != null) o.addProperty("voice", b.voiceId());
+        if (b.skinId() != null) o.addProperty("skin", b.skinId());
+        doc.write(o);
     }
 
     // ---- 世界归属 ----
@@ -282,9 +274,9 @@ public final class CompanionHome {
             return;
         }
         try {
-            Files.writeString(dir(entityUuid).resolve(WORLD), worldId, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            Constants.LOG.warn("[numen-home] 世界标记写入失败 {}: {}", entityUuid, e.toString());
+            Atomic.write(dir(entityUuid).resolve(WORLD), worldId);
+        } catch (StoreException e) {
+            Constants.LOG.warn("[numen-home] 世界标记写入失败 {}: {}", entityUuid, e.getMessage());
         }
     }
 
@@ -529,7 +521,7 @@ public final class CompanionHome {
             }
             // 段已收拢:抹掉,库文件从此只装配置(可以直接分享给别人)
             root.remove("assignments");
-            Files.writeString(libFile, root.toString(), StandardCharsets.UTF_8);
+            Atomic.write(libFile, root.toString());   // 库文件仍是没有版本号的第 1 版,由各库读时升级
         } catch (IOException | RuntimeException e) {
             Constants.LOG.warn("[numen-home] 绑定迁移失败 {}: {}", libFile, e.toString());
         }

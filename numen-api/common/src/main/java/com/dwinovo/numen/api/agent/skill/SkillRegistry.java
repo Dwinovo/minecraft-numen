@@ -1,12 +1,11 @@
 package com.dwinovo.numen.api.agent.skill;
 
 import com.dwinovo.numen.api.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -97,7 +96,6 @@ public final class SkillRegistry {
     public static final String STATE_FILENAME = "skills_state.json";
 
     private static final SkillRegistry INSTANCE = new SkillRegistry();
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     /** The live merged set, keyed by skill name. Insertion-ordered for stable XML output. */
     private final Map<String, SkillInfo> skills = new LinkedHashMap<>();
@@ -113,7 +111,7 @@ public final class SkillRegistry {
     private final Set<String> disabled = new LinkedHashSet<>();
 
     /** {@code config/numen/skills_state.json}; derived from {@code userRoot} in {@link #scan}. */
-    private Path stateFile;
+    private JsonDoc state;
 
     /**
      * Bundled skill roots a mod has declared, in declaration order. Each is a
@@ -180,7 +178,8 @@ public final class SkillRegistry {
         this.userRoot = userRoot;
         this.scanned = true;
         // Sidecar disabled-state lives next to the skills dir (config/numen/skills_state.json).
-        this.stateFile = userRoot == null ? null : userRoot.resolveSibling(STATE_FILENAME);
+        this.state = userRoot == null ? null
+                : new JsonDoc(userRoot.resolveSibling(STATE_FILENAME), JsonDoc.Format.of(1), NumenIo.inline("numen-skill"));
         loadDisabled();
 
         Map<String, SkillInfo> next = new LinkedHashMap<>();
@@ -278,32 +277,27 @@ public final class SkillRegistry {
 
     private void loadDisabled() {
         disabled.clear();
-        if (stateFile == null || !Files.isRegularFile(stateFile)) return;
+        if (state == null) return;
         try {
-            JsonObject o = JsonParser.parseString(Files.readString(stateFile, StandardCharsets.UTF_8))
-                    .getAsJsonObject();
+            JsonObject o = state.read().orElse(null);
+            if (o == null) return;
             if (o.has("disabled") && o.get("disabled").isJsonArray()) {
                 for (JsonElement el : o.getAsJsonArray("disabled")) {
                     if (!el.isJsonNull()) disabled.add(el.getAsString());
                 }
             }
-        } catch (IOException | RuntimeException ex) {
-            Constants.LOG.warn("[numen-skill] unreadable {}: {}", stateFile, ex.toString());
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("[numen-skill] unreadable {}: {}", state.file(), ex.toString());
         }
     }
 
     private void saveDisabled() {
-        if (stateFile == null) return;
+        if (state == null) return;
         JsonObject o = new JsonObject();
         JsonArray arr = new JsonArray();
         disabled.forEach(arr::add);
         o.add("disabled", arr);
-        try {
-            Files.createDirectories(stateFile.getParent());
-            Files.writeString(stateFile, GSON.toJson(o), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-skill] failed to write {}: {}", stateFile, ex.toString());
-        }
+        state.write(o);
     }
 
     /**

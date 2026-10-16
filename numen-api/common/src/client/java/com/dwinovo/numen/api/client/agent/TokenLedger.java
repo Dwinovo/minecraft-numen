@@ -3,19 +3,16 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.provider.CacheWaste;
 import com.dwinovo.numen.api.agent.provider.Usage;
+import com.dwinovo.numen.store.Io;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.UUID;
 
 /**
  * 一个同伴的 token 消费台账,持久化于
- * {@code config/numen/conversations/<uuid>.stats.json}。四元累计(输入/输出/缓存读/
+ * 同伴家里的 {@code stats.json}(一个小文档)。四元累计(输入/输出/缓存读/
  * 缓存写)加一个新处理量的总数;压缩调用同样计入——它一样烧 token。
  *
  * <p>命中率不存:它只看<b>最近一轮</b>,累计命中率会被历史稀释,看不出"刚才那轮把
@@ -52,20 +49,19 @@ final class TokenLedger {
         return waste;
     }
 
-    private Path file() {
-        return CompanionHome.stats(entityUuid);
+    private JsonDoc doc() {
+        return new JsonDoc(CompanionHome.stats(entityUuid), JsonDoc.Format.of(1),
+                Io.direct(e -> Constants.LOG.warn("[numen-entity#{}] token 统计写盘失败: {}", entityUuid, e.getMessage())));
     }
 
     void load() {
         try {
-            Path f = file();
-            if (!Files.isRegularFile(f)) return;
-            JsonObject o = JsonParser.parseString(
-                    Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
-            if (o.has("totalTokens")) total = Math.max(0, o.get("totalTokens").getAsLong());
-            sum = new Usage(readLong(o, "input"), readLong(o, "output"),
-                    readLong(o, "cacheRead"), readLong(o, "cacheWrite"));
-        } catch (IOException | RuntimeException ex) {
+            doc().read().ifPresent(o -> {
+                if (o.has("totalTokens")) total = Math.max(0, o.get("totalTokens").getAsLong());
+                sum = new Usage(readLong(o, "input"), readLong(o, "output"),
+                        readLong(o, "cacheRead"), readLong(o, "cacheWrite"));
+            });
+        } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-entity#{}] token 统计读取失败: {}", entityUuid, ex.toString());
         }
     }
@@ -97,18 +93,12 @@ final class TokenLedger {
         waste.observe(u);
         sum = sum.plus(u);
         total += u.fresh();
-        try {
-            Path f = file();
-            Files.createDirectories(f.getParent());
-            JsonObject o = new JsonObject();
-            o.addProperty("totalTokens", total);
-            o.addProperty("input", sum.input());
-            o.addProperty("output", sum.output());
-            o.addProperty("cacheRead", sum.cacheRead());
-            o.addProperty("cacheWrite", sum.cacheWrite());
-            Files.writeString(f, o.toString(), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-entity#{}] token 统计写盘失败: {}", entityUuid, ex.toString());
-        }
+        JsonObject o = new JsonObject();
+        o.addProperty("totalTokens", total);
+        o.addProperty("input", sum.input());
+        o.addProperty("output", sum.output());
+        o.addProperty("cacheRead", sum.cacheRead());
+        o.addProperty("cacheWrite", sum.cacheWrite());
+        doc().write(o);
     }
 }

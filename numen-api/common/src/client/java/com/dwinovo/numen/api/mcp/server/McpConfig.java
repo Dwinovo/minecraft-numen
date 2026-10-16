@@ -1,14 +1,12 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,14 +53,13 @@ public record McpConfig(
      * 与其指望他改地址时记得再设一个,不如一开始就有。
      */
     public static McpConfig load(Path file) {
-        if (!Files.isRegularFile(file)) {
-            McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN, false);
-            writeDefault(file, def);
-            return def;
-        }
         try {
-            JsonObject o = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8))
-                    .getAsJsonObject();
+            JsonObject o = doc(file).read().orElse(null);
+            if (o == null) {
+                McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN, false);
+                writeDefault(file, def);
+                return def;
+            }
             return new McpConfig(
                     o.has("enabled") ? o.get("enabled").getAsBoolean() : false,
                     strOr(o, "host", "127.0.0.1"),
@@ -71,7 +68,7 @@ public record McpConfig(
                     o.has("call_timeout_seconds") ? o.get("call_timeout_seconds").getAsInt() : 300,
                     o.has("hidden_tools") ? strings(o, "hidden_tools") : DEFAULT_HIDDEN,
                     o.has("quiet_fallback") && o.get("quiet_fallback").getAsBoolean());
-        } catch (IOException | RuntimeException ex) {
+        } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
             return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN, false);
         }
@@ -161,13 +158,12 @@ public record McpConfig(
         cfg.hiddenTools().forEach(hidden::add);
         o.add("hidden_tools", hidden);
         o.addProperty("quiet_fallback", cfg.quietFallback());
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, o.toString(), StandardCharsets.UTF_8);
-            Constants.LOG.info("[numen-mcp] {} {}", what, file);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-mcp] failed to write config {}: {}", file, ex.toString());
-        }
+        doc(file).write(o);
+        Constants.LOG.info("[numen-mcp] {} {}", what, file);
+    }
+
+    private static JsonDoc doc(Path file) {
+        return new JsonDoc(file, JsonDoc.Format.of(1), NumenIo.inline("numen-mcp"));
     }
 
     private static List<String> strings(JsonObject o, String key) {

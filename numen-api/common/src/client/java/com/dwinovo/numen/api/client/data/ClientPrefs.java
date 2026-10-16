@@ -1,11 +1,11 @@
 package com.dwinovo.numen.api.client.data;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -23,7 +23,7 @@ import java.nio.file.Path;
  */
 public final class ClientPrefs {
 
-    private static Path file;
+    private static JsonDoc doc;
 
     private static String theme = "light";
     private static boolean talkHint = true;
@@ -36,12 +36,12 @@ public final class ClientPrefs {
 
     /** 客户端启动读一次;文件缺失或损坏都退回默认值,不阻断启动。 */
     public static void init(Path numenConfigDir) {
-        file = numenConfigDir.resolve("ui.json");
+        doc = new JsonDoc(numenConfigDir.resolve("ui.json"), JsonDoc.Format.of(1), NumenIo.inline("numen-prefs"));
         try {
-            if (!Files.exists(file)) {
+            JsonObject o = doc.read().orElse(null);
+            if (o == null) {
                 return;
             }
-            JsonObject o = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             if (o.has("theme")) theme = o.get("theme").getAsString();
             if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
             if (o.has("messageNotices")) messageNotices = o.get("messageNotices").getAsBoolean();
@@ -108,22 +108,17 @@ public final class ClientPrefs {
     }
 
     private static void persist() {
-        if (file == null) {
+        if (doc == null) {
             return;
         }
-        try {
-            Files.createDirectories(file.getParent());
-            JsonObject o = new JsonObject();
-            o.addProperty("theme", theme);
-            o.addProperty("talkHint", talkHint);
-            o.addProperty("messageNotices", messageNotices);
-            o.addProperty("initiative", initiative);
-            com.google.gson.JsonArray recent = new com.google.gson.JsonArray();
-            for (String name : recentCommands) recent.add(name);
-            o.add("recentCommands", recent);
-            Files.writeString(file, o.toString());
-        } catch (Exception e) {
-            Constants.LOG.warn("[numen-prefs] ui.json 写不了,偏好没保存", e);
-        }
+        JsonObject o = new JsonObject();
+        o.addProperty("theme", theme);
+        o.addProperty("talkHint", talkHint);
+        o.addProperty("messageNotices", messageNotices);
+        o.addProperty("initiative", initiative);
+        com.google.gson.JsonArray recent = new com.google.gson.JsonArray();
+        for (String name : recentCommands) recent.add(name);
+        o.add("recentCommands", recent);
+        doc.write(o);
     }
 }

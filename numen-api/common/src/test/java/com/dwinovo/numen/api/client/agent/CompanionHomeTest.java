@@ -198,11 +198,20 @@ class CompanionHomeTest {
 
     // ---- 迁移 ----
 
+    /**
+     * 当前版本的会话日志(只有头)。迁移会翻同伴的日志找旧版记的人设,日志是当前版本就原样不动,
+     * 所以"搬运不改内容"这类断言用它;{@code tag} 写进头里好分辨是哪一份。
+     */
+    private static String chatLog(String tag) {
+        return "{\"type\":\"header\",\"v\":" + com.dwinovo.numen.api.agent.llm.ConvoLog.FORMAT_VERSION
+                + ",\"created\":1,\"tag\":\"" + tag + "\"}\n";
+    }
+
     @Test
     void migrationMovesLegacyFilesIntoHomes() throws IOException {
         Path conv = Files.createDirectories(root.resolve("conversations"));
         Path mem = Files.createDirectories(root.resolve("memory"));
-        Files.writeString(conv.resolve(A + ".jsonl"), "chat-a\n", StandardCharsets.UTF_8);
+        Files.writeString(conv.resolve(A + ".jsonl"), chatLog("chat-a"), StandardCharsets.UTF_8);
         Files.writeString(conv.resolve(A + ".stats.json"), "{\"t\":1}", StandardCharsets.UTF_8);
         Files.writeString(conv.resolve(A + ".inbox.jsonl"), "inbox-a\n", StandardCharsets.UTF_8);
         Files.writeString(conv.resolve(A + ".jsonl.v1.bak"), "old-format\n", StandardCharsets.UTF_8);
@@ -210,7 +219,7 @@ class CompanionHomeTest {
 
         CompanionHome.migrateLegacy();
 
-        assertEquals("chat-a\n", Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8));
+        assertEquals(chatLog("chat-a"), Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8));
         assertEquals("{\"t\":1}", Files.readString(CompanionHome.stats(A), StandardCharsets.UTF_8));
         assertEquals("inbox-a\n", Files.readString(CompanionHome.inbox(A), StandardCharsets.UTF_8));
         assertEquals("{\"b\":1}", Files.readString(
@@ -294,16 +303,16 @@ class CompanionHomeTest {
     @Test
     void migrationIsIdempotentAndKeepsNewerData() throws IOException {
         Path conv = Files.createDirectories(root.resolve("conversations"));
-        Files.writeString(conv.resolve(A + ".jsonl"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(conv.resolve(A + ".jsonl"), chatLog("old"), StandardCharsets.UTF_8);
         CompanionHome.migrateLegacy();
 
         // 第二轮:旧文件又出现(手动还原/多存档),但家里已有更新的内容
-        Files.writeString(CompanionHome.chat(A), "new\n", StandardCharsets.UTF_8);
+        Files.writeString(CompanionHome.chat(A), chatLog("new"), StandardCharsets.UTF_8);
         Files.createDirectories(conv);
-        Files.writeString(conv.resolve(A + ".jsonl"), "old-again\n", StandardCharsets.UTF_8);
+        Files.writeString(conv.resolve(A + ".jsonl"), chatLog("old-again"), StandardCharsets.UTF_8);
         CompanionHome.migrateLegacy();
 
-        assertEquals("new\n", Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8),
+        assertEquals(chatLog("new"), Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8),
                 "已迁过的不许被旧文件盖回去");
     }
 

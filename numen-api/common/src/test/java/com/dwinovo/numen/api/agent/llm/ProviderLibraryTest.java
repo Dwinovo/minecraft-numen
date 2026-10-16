@@ -11,9 +11,8 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 档案库的存取:档案的每个字段落盘再读回来,落盘时带上“厂家 id 已是 models.dev id”的标记。 */
+/** 档案库的存取:档案的每个字段落盘再读回来;第 1 版的库(厂家 id 还是各家的叫法)读时升到第 2 版。 */
 class ProviderLibraryTest {
 
     @TempDir
@@ -60,10 +59,62 @@ class ProviderLibraryTest {
         assertNull(p.compat());
     }
 
+    // ---- 厂家 id 迁到 models.dev:第 1 版的库读时升到第 2 版 ----
+
+    private ProviderLibrary.Entry read(String id) {
+        return fresh().get(id);
+    }
+
     @Test
-    void savingMarksTheIdsAsModelsDevIds() throws IOException {
-        fresh().create("x", new ConnectionProfile("lmstudio", null, "m", "", null, null, null, 0, null, 0, null));
-        assertTrue(Files.readString(dir.resolve("providers.json"))
-                .contains("\"" + com.dwinovo.numen.api.config.ConfigMigrations.PROVIDER_IDS_MARKER + "\": true"));
+    void legacyProviderIdsBecomeModelsDevIds() throws IOException {
+        Files.writeString(dir.resolve("providers.json"), """
+                {"entries":[
+                  {"id":"a","provider":"moonshot","api_key":"k1","model":"kimi-k2"},
+                  {"id":"b","provider":"Zhipu"},{"id":"c","provider":"dashscope"},{"id":"d","provider":"siliconflow"},
+                  {"id":"e","provider":"gemini"},{"id":"f","provider":"grok"},{"id":"g","provider":"qwen"},
+                  {"id":"h","provider":"deepseek"}]}""");
+        String[] expected = {"moonshotai", "zhipuai", "alibaba-cn", "siliconflow-cn", "google", "xai",
+                "alibaba-cn", "deepseek"};
+        String[] ids = {"a", "b", "c", "d", "e", "f", "g", "h"};
+        for (int i = 0; i < ids.length; i++) {
+            assertEquals(expected[i], read(ids[i]).profile().provider(), "entry " + ids[i]);
+        }
+        assertEquals("k1", read("a").profile().apiKey(), "别的字段原样保留");
+        assertEquals("kimi-k2", read("a").profile().model());
+    }
+
+    @Test
+    void localDeploymentsBecomeCustomProvidersKeepingTheirAddress() throws IOException {
+        Files.writeString(dir.resolve("providers.json"), """
+                {"entries":[
+                  {"id":"a","provider":"ollama","model":"qwen3"},
+                  {"id":"b","provider":"lmstudio","base_url":"http://192.168.1.5:1234/v1"},
+                  {"id":"c","provider":"vllm"}]}""");
+        for (String id : new String[] {"a", "b", "c"}) {
+            assertEquals("custom", read(id).profile().provider());
+            assertEquals("chat", read(id).profile().protocol());
+        }
+        assertEquals("http://localhost:11434/v1", read("a").profile().baseUrl());
+        assertEquals("http://192.168.1.5:1234/v1", read("b").profile().baseUrl(), "玩家填过的地址不动");
+        assertEquals("http://localhost:8000/v1", read("c").profile().baseUrl());
+        assertEquals("qwen3", read("a").profile().model());
+    }
+
+    @Test
+    void aLibraryMarkedByTheOldMigrationIsNotMigratedAgain() throws IOException {
+        // models.dev 自己也有 lmstudio:迁过之后玩家选了它,不能再被当成老 id 改成自定义
+        Files.writeString(dir.resolve("providers.json"),
+                "{\"entries\":[{\"id\":\"a\",\"provider\":\"lmstudio\"}],\"models_dev_ids\":true}");
+        assertEquals("lmstudio", read("a").profile().provider());
+    }
+
+    @Test
+    void aSavedLibraryIsVersionTwoAndIsNeverLiftedAgain() throws IOException {
+        ProviderLibrary.Entry made = fresh().create("x",
+                new ConnectionProfile("lmstudio", null, "m", "", null, null, null, 0, null, 0, null));
+
+        JsonObject saved = JsonParser.parseString(Files.readString(dir.resolve("providers.json"))).getAsJsonObject();
+        assertEquals(2, saved.get("v").getAsInt());
+        assertEquals("lmstudio", fresh().get(made.id()).profile().provider(), "新档案选的 lmstudio 不被当成老 id");
     }
 }

@@ -1,28 +1,25 @@
 package com.dwinovo.numen.api.client.data;
 
 import com.dwinovo.numen.api.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.dwinovo.numen.store.Io;
+import com.dwinovo.numen.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code config/numen} 下"命名条目库"的共享底盘:保序条目表、
- * {@code {"entries":[...]}} 的 JSON 落盘(损坏时告警并从空开始)、
- * list/get/remove 与 id 生成。模型配置库/声线库/皮肤库三库共用——
- * 此前三份各自手抄同一套单例+CRUD+落盘。人设库是"一个 .md 一个人设"
- * 的目录库,不在此列。
+ * {@code {"entries":[...]}} 这一种记录格式、list/get/remove 与 id 生成。
+ * 模型配置库/声线库/皮肤库/会话名册共用。落盘(版本号、读时迁移、原子写)是 store 的
+ * {@link JsonDoc}:损坏时告警并从空开始;库的格式要变,就把版本号加一并补上升级那一步。
+ * 人设库是"一个 .md 一个人设"的目录库,不在此列。
  *
  * <p>条目之外的段(全局开关等)由子类经 {@link #readExtra}/{@link #writeExtra}
  * 挂进同一个文件。<b>库只装配置,不装绑定</b>——"哪只同伴用哪个条目"住在
@@ -31,13 +28,17 @@ import java.util.Map;
  */
 public abstract class JsonLibrary<E> {
 
-    protected static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
-
-    protected final Path file;
+    protected final JsonDoc doc;
     protected final Map<String, E> entries = new LinkedHashMap<>();
 
+    /** 第 1 版的库(格式没变过)。 */
     protected JsonLibrary(Path file) {
-        this.file = file;
+        this(file, JsonDoc.Format.of(1));
+    }
+
+    protected JsonLibrary(Path file, JsonDoc.Format format) {
+        // 标签等出错时才问子类:构造期间子类还没就位
+        this.doc = new JsonDoc(file, format, Io.direct(e -> Constants.LOG.warn("[{}] {}", logTag(), e.getMessage())));
     }
 
     /** 配置目录 {@code config/numen};见 {@link com.dwinovo.numen.api.NumenPaths}。 */
@@ -106,12 +107,12 @@ public abstract class JsonLibrary<E> {
     protected final void load() {
         entries.clear();
         resetExtra();
-        if (!Files.exists(file)) {
-            return;   // 全新安装:库从空开始,玩家自己创建
-        }
         try {
-            JsonObject root = JsonParser.parseString(
-                    Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+            Optional<JsonObject> read = doc.read();
+            if (read.isEmpty()) {
+                return;   // 全新安装:库从空开始,玩家自己创建
+            }
+            JsonObject root = read.get();
             if (root.has("entries") && root.get("entries").isJsonArray()) {
                 for (JsonElement el : root.getAsJsonArray("entries")) {
                     if (!el.isJsonObject()) continue;
@@ -122,9 +123,9 @@ public abstract class JsonLibrary<E> {
                 }
             }
             readExtra(root);
-        } catch (RuntimeException | IOException ex) {
+        } catch (RuntimeException ex) {
             Constants.LOG.warn("[{}] unreadable {} — starting empty ({})",
-                    logTag(), file, ex.getMessage());
+                    logTag(), doc.file(), ex.getMessage());
             entries.clear();
             resetOnCorrupt();
         }
@@ -138,12 +139,7 @@ public abstract class JsonLibrary<E> {
         JsonObject root = new JsonObject();
         root.add("entries", arr);
         writeExtra(root);
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, PRETTY.toJson(root), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[{}] can't save {}: {}", logTag(), file, ex.getMessage());
-        }
+        doc.write(root);
     }
 
     /** 字符串字段;缺失/非原始值给 ""。 */

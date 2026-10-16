@@ -3,11 +3,11 @@ package com.dwinovo.numen.api.script;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.script.ScriptCatalog;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.Io;
+import com.dwinovo.numen.store.JsonDoc;
+import com.dwinovo.numen.store.StoreException;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -102,7 +102,6 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     private static final String LEDGER = "modules.json";
     /** 账本里一份上次装进去的出厂指纹;她新建的撞上出厂同名的,记成空串(没有哪一版是它的底)。 */
     private static final String FACTORY = "factory";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Object LOCK = new Object();
     /** 这个进程里已经装过的目录。 */
     private static final Set<Path> INSTALLED = ConcurrentHashMap.newKeySet();
@@ -173,7 +172,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                 String disk = read(file(name));
                 if (!entry.has(FACTORY)) {
                     if (disk == null) {
-                        write(file(name), builtin.code());
+                        Atomic.write(file(name), builtin.code());
                         entry.addProperty(FACTORY, now);
                     } else {
                         // 她新建的撞上新出厂的同名一份:当作改过的
@@ -185,7 +184,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                     if (mine.equals(now)) {
                         entry.addProperty(FACTORY, now);
                     } else if (mine.equals(base)) {
-                        write(file(name), builtin.code());
+                        Atomic.write(file(name), builtin.code());
                         entry.addProperty(FACTORY, now);
                     }
                 }
@@ -337,7 +336,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         requireDir();
         synchronized (LOCK) {
             boolean existed = Files.exists(file(name));
-            write(file(name), code);
+            Atomic.write(file(name), code);
             JsonObject ledger = ledger();
             JsonObject entry = entry(ledger, name);
             clearStats(entry);
@@ -390,7 +389,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         }
         requireDir();
         synchronized (LOCK) {
-            write(file(name), builtin.code());
+            Atomic.write(file(name), builtin.code());
             JsonObject ledger = ledger();
             JsonObject entry = new JsonObject();
             entry.addProperty(FACTORY, fingerprint(builtin.code()));
@@ -471,15 +470,6 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         }
     }
 
-    private static void write(Path file, String text) {
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, text, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("写不了 " + file, e);
-        }
-    }
-
     private static void deleteFile(Path file) {
         try {
             Files.deleteIfExists(file);
@@ -492,21 +482,23 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         if (dir == null) {
             return new JsonObject();
         }
-        String text = read(dir.resolve(LEDGER));
-        if (text == null) {
-            return new JsonObject();
-        }
         try {
-            JsonElement parsed = JsonParser.parseString(text);
-            return parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
-        } catch (RuntimeException unreadable) {
+            return ledgerDoc().read().orElseGet(JsonObject::new);
+        } catch (StoreException unreadable) {
             Constants.LOG.warn("[numen-script] 模块账本读不通,当作空的: {}", dir.resolve(LEDGER));
             return new JsonObject();
         }
     }
 
     private void writeLedger(JsonObject ledger) {
-        write(dir.resolve(LEDGER), GSON.toJson(ledger));
+        ledgerDoc().write(ledger);
+    }
+
+    /** 账本写不下去要让调用方知道(模块是她自己改的真源,账本对不上就是悄悄的不一致),所以写失败原样抛出。 */
+    private JsonDoc ledgerDoc() {
+        return new JsonDoc(dir.resolve(LEDGER), JsonDoc.Format.of(1), Io.direct(e -> {
+            throw e;
+        }));
     }
 
     /**

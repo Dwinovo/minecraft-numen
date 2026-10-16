@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 小文档:一个 JSON 对象一个文件,带版本号,读时迁移,写时先写临时文件再原子替换({@link Atomic})。
  *
- * <p>版本号存在顶层的 {@value #VERSION} 里;没有它的文件是第 1 版(版本号出现之前写的)。
+ * <p>版本号是顶层的数字 {@value #VERSION};没有它的文件是第 1 版(版本号出现之前写的)。
  * <b>文档内容里看不到这个字段</b>:读时被摘掉、写时再盖上,所以上层的记录格式不必为它留位置,
  * 也不会和自己的键撞名。读到旧版本就在内存里一步步升到当前版本,磁盘上的文件等下一次写才换成新版;
  * 读到更新的版本(回退了模组)不硬读,抛 {@link StoreException}。
@@ -110,7 +110,9 @@ public final class JsonDoc {
                 throw new StoreException(file + " 不是 JSON 对象");
             }
             doc = root.getAsJsonObject();
-            version = doc.has(VERSION) ? doc.remove(VERSION).getAsInt() : 1;
+            // 版本号是数字;不是数字的 v 是第 1 版文档自己的内容(比如一张"名字 → 内容"的表里叫 v 的那项)
+            version = doc.get(VERSION) instanceof com.google.gson.JsonPrimitive p && p.isNumber()
+                    ? doc.remove(VERSION).getAsInt() : 1;
         } catch (RuntimeException e) {
             if (e instanceof StoreException se) {
                 throw se;
