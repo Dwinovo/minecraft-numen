@@ -2,6 +2,8 @@ package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.client.data.JsonLibrary;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.StoreException;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
@@ -59,9 +61,8 @@ public final class SkinLibrary extends JsonLibrary<SkinLibrary.Entry> {
     public void put(Entry e, byte[] png) {
         if (png != null) {
             try {
-                Files.createDirectories(skinDir);
-                Files.write(pngPath(e.id()), png);
-            } catch (IOException ex) {
+                Atomic.write(pngPath(e.id()), png);
+            } catch (StoreException ex) {
                 Constants.LOG.warn("[numen-skin] 皮肤原图写盘失败 {}: {}", e.id(), ex.toString());
             }
         }

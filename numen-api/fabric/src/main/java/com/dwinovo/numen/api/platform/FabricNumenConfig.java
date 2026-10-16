@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.platform;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.StoreException;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -9,7 +11,6 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -89,12 +90,9 @@ public final class FabricNumenConfig implements INumenConfig {
     private ConfigData writeDefaultTemplate(Path configPath) {
         ConfigData defaults = ConfigData.defaults();
         try {
-            Files.createDirectories(configPath.getParent());
-            try (Writer w = Files.newBufferedWriter(configPath)) {
-                GSON.toJson(defaults, w);
-            }
+            Atomic.write(configPath, GSON.toJson(defaults));
             Constants.LOG.info("[numen-config] wrote default template to {}", configPath);
-        } catch (IOException ex) {
+        } catch (StoreException ex) {
             Constants.LOG.warn("[numen-config] could not write default config to {}: {}",
                     configPath, ex.getMessage());
         }
@@ -168,12 +166,9 @@ public final class FabricNumenConfig implements INumenConfig {
     public void save() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         try {
-            Files.createDirectories(configPath.getParent());
-            try (Writer w = Files.newBufferedWriter(configPath)) {
-                GSON.toJson(data, w);
-            }
+            Atomic.write(configPath, GSON.toJson(data));
             Constants.LOG.info("[numen-config] saved {}", configPath);
-        } catch (IOException ex) {
+        } catch (StoreException ex) {
             Constants.LOG.warn("[numen-config] save failed for {}: {}", configPath, ex.getMessage());
         }
     }

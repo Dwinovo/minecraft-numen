@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.persona;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.StoreException;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -212,11 +214,9 @@ public final class PersonaLibrary {
 
     private boolean write(String id, String text) {
         try {
-            Files.createDirectories(dir);
-            Files.writeString(dir.resolve(id + ".md"),
-                    (text == null ? "" : text.strip()) + "\n", StandardCharsets.UTF_8);
+            Atomic.write(dir.resolve(id + ".md"), (text == null ? "" : text.strip()) + "\n");
             return true;
-        } catch (IOException ex) {
+        } catch (StoreException ex) {
             Constants.LOG.warn("[numen-persona] 人设写盘失败 {}: {}", id, ex.toString());
             return false;
         }
@@ -255,16 +255,14 @@ public final class PersonaLibrary {
                     Constants.LOG.warn("[numen-persona] jar 内示例缺失: {}", res);
                     continue;
                 }
-                Files.copy(in, target);
-            } catch (IOException ex) {
+                Atomic.write(target, in.readAllBytes());
+            } catch (IOException | StoreException ex) {
                 Constants.LOG.warn("[numen-persona] 示例复制失败 {}: {}", res, ex.toString());
             }
         }
         try {
-            Files.writeString(dir.resolve(INIT_MARKER),
-                    I18n.get(ModLanguageData.Keys.PERSONA_INIT_MARKER) + "\n",
-                    StandardCharsets.UTF_8);
-        } catch (IOException ex) {
+            Atomic.write(dir.resolve(INIT_MARKER), I18n.get(ModLanguageData.Keys.PERSONA_INIT_MARKER) + "\n");
+        } catch (StoreException ex) {
             Constants.LOG.warn("[numen-persona] .init 哨兵写入失败: {}", ex.toString());
         }
     }

@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.agent.memory;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.store.Atomic;
+import com.dwinovo.numen.store.StoreException;
 import com.dwinovo.numen.api.agent.skill.SkillMarkdown;
 
 import java.io.IOException;
@@ -171,10 +173,9 @@ public final class NoteBook {
         Note note = new Note(slug, line, type, today.getAsInt(),
                 content == null ? "" : content.strip());
         try {
-            Files.createDirectories(dir);
-            Files.writeString(dir.resolve(slug + ".md"), render(note), StandardCharsets.UTF_8);
+            Atomic.write(dir.resolve(slug + ".md"), render(note));
             revision++;
-        } catch (IOException e) {
+        } catch (StoreException e) {
             throw new IllegalStateException("记不下来: " + e, e);
         }
         return note;

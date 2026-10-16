@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.client.stt;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.store.Atomic;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.google.gson.JsonObject;
@@ -164,8 +165,7 @@ public final class SttProviders {
                 return Files.readString(file, StandardCharsets.UTF_8);
             }
             if (bundled != null) {
-                Files.createDirectories(file.getParent());
-                Files.writeString(file, bundled, StandardCharsets.UTF_8);
+                Atomic.write(file, bundled);
             }
         } catch (Exception e) {
             Constants.LOG.warn("[numen] couldn't read/seed config/numen/stt.json", e);
