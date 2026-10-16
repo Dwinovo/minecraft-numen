@@ -670,4 +670,13 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
     public String name() {
         return getClass().getSimpleName();
     }
+
+    /**
+     * 身体稳没稳——动作前置里"站得住"那一半的唯一判据。不等于"站在地上":
+     * 游在水面(舀水、放船正是这个姿势)和坐在载具里都没有 onGround,原版对
+     * 交互也从不要求脚踏实地;这道门挡的只是坠落中途的按键。
+     */
+    protected final boolean bodySettled() {
+        return player.onGround() || player.isInWater() || player.isPassenger();
+    }
 }

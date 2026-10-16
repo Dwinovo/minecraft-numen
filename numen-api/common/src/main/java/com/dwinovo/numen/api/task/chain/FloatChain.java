@@ -13,7 +13,7 @@ import net.minecraft.tags.FluidTags;
  * 下一个工具调用还没来,不能自己浮上去(浮上来是换气本能的事,它只管真缺氧);寻路不插手。
  *
  * <p>它不是哪一层的出价,而是每刻在谁拿了身体之后补的一手({@code CompanionBrain}):判"有没有人在动身体"用键盘本身——这一刻没有
- * 任何人按着前后左右、跳、潜行(寻路走着时每刻都按着键;等待、站着干活的任务不按),才轮到它按跳。键盘是所有驱动者共用的那一处,
+ * 任何人按着前后左右、跳、潜行(寻路走着时每刻都按着键;等待、站着干活的任务不按),才轮到它按跳。手上正挖着一块(鼠标按着挖掘)同样算在动身体:跳一下准星就晃,挖掘进度清零。键盘是所有驱动者共用的那一处,
  * 所以不必在每个任务里各加一份,也不必区分是寻路、任务还是反射。它自己按的跳在下一刻开头先松掉,免得被当成别人按的。
  * 不发任何事件:浮着是身体的常态,不是值得说的事。
  */
@@ -40,6 +40,9 @@ public final class FloatChain implements Reflex {
             if (companion.controls().held(key)) {
                 return;
             }
+        }
+        if (companion.mouse().digging()) {
+            return;   // 手上正挖着:跳起落落会晃掉准星,挖掘进度跟着清零
         }
         if (companion.isInWater() && !companion.isUnderWater()
                 && companion.getFluidHeight(FluidTags.WATER) > companion.getFluidJumpThreshold()) {
