@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.agent.http.CancelToken;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.ai.AiLog;
@@ -580,6 +581,10 @@ public final class AgentLoop {
      */
     public void halt(HaltReason reason, String detail) {
         Run cut = run;
+        // 外接大脑借的那一个调用(见 runAside)随这一批一起作废;收批次的人不叫 sink,等它的人就得在这里被放开。
+        // 少了这一句,aside 永远留着,此后每一次 runAside 都以为还有一段程序在跑,她再也收不下外接的调用。
+        Consumer<String> cutAside = aside;
+        aside = null;
         // 先收工具口、再作废 run:在跑的脚本这时交出它停在哪一行的回执,还记在这次 run 名下进历史
         List<String> abandoned = tools.cancel(reason.stopsBody());
         if (cut != null) {
@@ -609,6 +614,12 @@ public final class AgentLoop {
                 cut == null ? "idle" : cut.phase, abandoned.size(), cleared, inbox.size());
         emit(new LoopEvent.Halted(reason));
         announceHold(null);
+        if (cutAside != null) {
+            // 回一条失败(不是回执:那一批已经作废),等它的人据此收场;再推一次,和工具口自己结算时同一套收尾
+            cutAside.accept(ToolOutcome.failure("this turn was cut off: " + reason.name()
+                    + (detail == null || detail.isBlank() ? "" : " (" + detail + ")") + "; nothing else ran"));
+            pump();
+        }
     }
 
     /** 切断点:{@code words} 是给模型看的那句,{@code cause} 是给界面的结构化原因,两句各自生成、互不拼接。 */
