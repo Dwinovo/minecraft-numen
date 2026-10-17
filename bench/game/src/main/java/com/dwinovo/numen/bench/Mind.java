@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 回话的那一方:真实模型,或者两种基线。就是产品大脑({@code CompanionLoop})的模型口({@link com.dwinovo.numen.api.brain.Mind}),
@@ -118,18 +119,19 @@ interface Mind extends com.dwinovo.numen.api.brain.Mind {
 
     /**
      * 基线:第一次调用把 {@code program} 作为一次 {@code lua} 调用交出去(没有就直接说话),之后每次都只说 {@code words}。
-     * 标准解是写好的程序,空操作没有程序。不花 API,用量记零。
+     * 标准解是写好的程序,空操作没有程序。程序到第一次被问才现取:场景搭好之后才写得出标准解,而大脑要在搭场景之前就建好。
+     * 不花 API,用量记零。
      */
     final class Scripted implements Mind {
 
         private final LlmEndpoint endpoint;
         private final BooleanSupplier mayCall;
-        private final String program;
+        private final Supplier<String> program;
         private final String words;
         private boolean acted;
 
         /** @param endpoint 上下文窗口取自它,与真实模型同一个口径 */
-        Scripted(LlmEndpoint endpoint, BooleanSupplier mayCall, String program, String words) {
+        Scripted(LlmEndpoint endpoint, BooleanSupplier mayCall, Supplier<String> program, String words) {
             this.endpoint = endpoint;
             this.mayCall = mayCall;
             this.program = program;
@@ -153,10 +155,11 @@ interface Mind extends com.dwinovo.numen.api.brain.Mind {
                 return;
             }
             AssistantTurn turn;
-            if (!acted && program != null) {
+            String code = acted ? null : program.get();
+            if (code != null) {
                 acted = true;
                 turn = new AssistantTurn("", List.of(new LlmToolCall("bench-" + UUID.randomUUID(), ScriptEngine.IN_USE.toolName(),
-                        ScriptTool.args(program).toString())), null);
+                        ScriptTool.args(code).toString())), null);
             } else {
                 turn = new AssistantTurn(words, List.of(), null);
             }

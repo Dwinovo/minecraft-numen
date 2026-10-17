@@ -187,8 +187,8 @@ final class Attempt {
         BooleanSupplier mayCall = () -> meter.turns <= scenario.budget().turns();
         LlmEndpoint endpoint = settings.endpoint();
         mind = switch (variant) {
-            case SOLUTION -> new Mind.Scripted(endpoint, mayCall, scenario.solution(scene), "做好了。");
-            case NOOP -> new Mind.Scripted(endpoint, mayCall, null, "好的。");
+            case SOLUTION -> new Mind.Scripted(endpoint, mayCall, () -> scenario.solution(scene), "做好了。");
+            case NOOP -> new Mind.Scripted(endpoint, mayCall, () -> null, "好的。");
             case LIVE -> new Mind.Live(endpoint, mayCall);
         };
         // 大脑先于场景:搭场景时发生的事(一只女仆死了)直接进她的收件箱,在主人开口前就叫醒她
