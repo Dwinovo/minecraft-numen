@@ -736,4 +736,54 @@ public class BrainGameTests {
         GameTestKit.leave(admin);
         helper.succeed();
     }
+
+    /**
+     * 管理员的档案表单问目录与检测:目录、草稿解析出的端点、"缺 key"的判断都在服务端,答案经他自己的连接送回;
+     * 检测先答"在试",结局到了再送一张;别的在线玩家什么也收不到。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void the_profile_form_asks_the_server_for_the_catalog_and_the_connection_test(
+            GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var admin = GameTestKit.presentPlayer(helper, null, "gametest_form_boss");
+        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
+                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+        var other = GameTestKit.presentPlayer(helper, null, "gametest_form_hand");
+        GameTestKit.received(admin);
+        GameTestKit.received(other);
+
+        String draft = "{\"draft\":{\"provider\":\"deepseek\"},\"models\":true}";
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.CATALOG, "list", draft);
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK, "run",
+                draft);
+
+        List<com.dwinovo.numen.api.network.payload.LibraryPayload> told = new ArrayList<>();
+        GameTestKit.steps(helper)
+                .thenWaitUntil(() -> {
+                    GameTestKit.received(admin).forEach(p -> {
+                        if (p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l) {
+                            told.add(l);
+                        }
+                    });
+                    helper.assertTrue(told.stream().anyMatch(l -> l.entries().contains("need_key")),
+                            "the connection test has not come back: " + told);
+                })
+                .thenExecute(() -> {
+                    var catalog = told.stream().filter(l -> l.kind().equals(com.dwinovo.numen.api.brain.Libraries.CATALOG))
+                            .findFirst();
+                    helper.assertTrue(catalog.isPresent() && catalog.get().problem().isEmpty()
+                                    && catalog.get().entries().contains("\"vendors\"")
+                                    && catalog.get().entries().contains("\"preview\"")
+                                    && catalog.get().entries().contains("\"models\""),
+                            "the catalog was not answered whole: " + catalog);
+                    helper.assertTrue(told.stream().anyMatch(l -> l.entries().contains("checking")),
+                            "the test did not first say it was trying: " + told);
+                    helper.assertTrue(GameTestKit.received(other).isEmpty(),
+                            "the answer reached a player who did not ask");
+                    server.getPlayerList().deop(admin.getGameProfile());
+                    GameTestKit.leave(other);
+                    GameTestKit.leave(admin);
+                })
+                .thenSucceed();
+    }
 }

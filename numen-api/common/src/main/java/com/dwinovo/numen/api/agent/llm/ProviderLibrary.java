@@ -38,6 +38,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     /** 型号目录:运行时缓存盖过随包快照。 */
     private final DownloadCache cache;
     private final Catalog catalog;
+    private final java.util.function.Supplier<String> proxy;
 
     public Catalog catalog() {
         return catalog;
@@ -45,7 +46,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
 
     /** 客户端启动时调一次:后台刷新 models.dev 缓存(一天最多拉一次,拉不到静默用缓存或快照)。 */
     public void refreshCatalog() {
-        cache.refresh(Services.CONFIG.getProxy());
+        cache.refresh(proxy.get());
     }
 
     private static ProviderLibrary instance;
@@ -55,10 +56,12 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      *
      * @param catalogCache models.dev 缓存文件({@code config/numen/cache/models-dev.json})
      * @param io           存档用的读写通道:游戏里是服务器那条写车道
+     * @param proxy        全局代理 {@code host:port},每次现问:游戏里是服务器配置里此刻的那一个
      */
     public ProviderLibrary(java.nio.file.Path file, java.nio.file.Path catalogCache,
-                           com.dwinovo.numen.api.store.Io io) {
+                           com.dwinovo.numen.api.store.Io io, java.util.function.Supplier<String> proxy) {
         super(file, FORMAT, io);
+        this.proxy = proxy;
         this.cache = new DownloadCache(catalogCache);
         this.catalog = new Catalog(cache, BundledSnapshot.INSTANCE);
         load();
@@ -68,7 +71,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
         if (instance == null) {
             instance = new ProviderLibrary(configDir().resolve("providers.json"),
                     configDir().resolve("cache").resolve("models-dev.json"),
-                    com.dwinovo.numen.api.NumenIo.lanes().io("server"));
+                    com.dwinovo.numen.api.NumenIo.lanes().io("server"), () -> Services.CONFIG.getProxy());
         }
         return instance;
     }
@@ -81,12 +84,12 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      */
     public LlmEndpoint resolve(String id) {
         Entry e = get(id);
-        return e == null ? LlmEndpoint.unresolved(Services.CONFIG.getProxy()) : resolve(e.profile());
+        return e == null ? LlmEndpoint.unresolved(proxy.get()) : resolve(e.profile());
     }
 
     /** 同一套解析用于还没保存的草稿(设置界面的预览与连通性检测)。 */
     public LlmEndpoint resolve(ConnectionProfile profile) {
-        return EndpointResolver.resolve(profile, catalog, Services.CONFIG.getProxy());
+        return EndpointResolver.resolve(profile, catalog, proxy.get());
     }
 
     /** Create an entry — only the name is required; everything else may be blank. */

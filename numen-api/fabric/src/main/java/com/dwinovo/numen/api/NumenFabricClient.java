@@ -28,9 +28,6 @@ public class NumenFabricClient implements ClientModInitializer {
         com.dwinovo.numen.api.client.screen.UiTheme.init(
                 FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
 
-        // 型号目录:后台刷新 models.dev 缓存(一天最多拉一次,拉不到静默用缓存或随包快照)。
-        com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().refreshCatalog();
-
         // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.api.client.NumenKeys.OPEN_ROSTER);
         // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.

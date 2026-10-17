@@ -38,9 +38,6 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.api.client.screen.UiTheme.init(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.CONFIG_ROOT));
 
-        // 型号目录:后台刷新 models.dev 缓存(一天最多拉一次,拉不到静默用缓存或随包快照)。
-        com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().refreshCatalog();
-
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);

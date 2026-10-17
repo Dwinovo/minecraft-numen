@@ -37,7 +37,7 @@ class LibrariesTest {
 
     private Libraries libraries(Path dir) {
         ProviderLibrary providers = new ProviderLibrary(dir.resolve("providers.json"),
-                dir.resolve("cache").resolve("models-dev.json"), Io.direct(e -> { }));
+                dir.resolve("cache").resolve("models-dev.json"), Io.direct(e -> { }), () -> "");
         providers.create("服主的 DeepSeek", new ConnectionProfile("deepseek", null, "deepseek-chat", "sk-secret",
                 "https://relay.example", "127.0.0.1:7890", null, 0, null, 0, null));
         return new Libraries(owner -> personas.computeIfAbsent(owner,
@@ -260,6 +260,90 @@ class LibrariesTest {
         assertEquals("[]", libraries.view(PLAYER, false, Libraries.MCP_SERVER));
         assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_SERVER, Libraries.PUT, body("token", "mine")).problem());
         assertEquals(1, array(libraries.view(ADMIN, true, Libraries.MCP_SERVER)).size());
+    }
+
+    @Test
+    void theSkillDirectoryIsTheServersAndOnlyAnAdminMakesItRescan(@TempDir Path dir) throws java.io.IOException {
+        Libraries libraries = libraries(dir);
+        Path skills = dir.resolve("skills");
+        java.nio.file.Files.createDirectories(skills);
+        com.dwinovo.numen.api.agent.skill.SkillRegistry registry = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance();
+        try {
+            registry.scan(skills);
+            Path lumber = java.nio.file.Files.createDirectories(skills.resolve("lumber"));
+            java.nio.file.Files.writeString(lumber.resolve(com.dwinovo.numen.api.agent.skill.SkillRegistry.SKILL_FILENAME),
+                    "---\nname: lumber\ndescription: Fell a tree.\n---\n\n# Felling\n");
+
+            assertNotNull(libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.RELOAD, new JsonObject()).problem());
+            assertFalse(libraries.view(PLAYER, false, Libraries.SKILL).contains("lumber"), "没重扫之前看不到");
+
+            assertNull(libraries.handle(ADMIN, true, Libraries.SKILL, Libraries.RELOAD, new JsonObject()).problem());
+            assertTrue(libraries.view(PLAYER, false, Libraries.SKILL).contains("lumber"), "重扫之后人人看得到");
+        } finally {
+            registry.scan(null);
+        }
+    }
+
+    /** 档案表单问目录的问题:{@code draft} 是草稿(一条档案的样子),{@code models} 要不要这个厂家的型号。 */
+    private static JsonObject ask(boolean models, String... draftKeyValues) {
+        JsonObject o = new JsonObject();
+        o.add("draft", body(draftKeyValues));
+        o.addProperty("models", models);
+        return o;
+    }
+
+    @Test
+    void theCatalogIsAnAdminsToAskAndTheServerAnswersWithItsVendorsModelsAndThePreview(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+
+        Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.CATALOG, Libraries.LIST, new JsonObject());
+        assertNotNull(refused.problem());
+        assertEquals("[]", refused.entries());
+
+        Libraries.Result answered = libraries.handle(ADMIN, true, Libraries.CATALOG, Libraries.LIST,
+                ask(true, "provider", "deepseek", "model", "deepseek-chat"));
+        assertNull(answered.problem());
+        JsonObject answer = array(answered.entries()).get(0).getAsJsonObject();
+        JsonObject first = answer.getAsJsonArray("vendors").get(0).getAsJsonObject();
+        assertTrue(first.get("popular").getAsBoolean(), "常用的厂家排在前面");
+        assertFalse(first.get("defaultModel").getAsString().isEmpty());
+        assertEquals("deepseek", answer.get("modelsFor").getAsString());
+        assertFalse(answer.getAsJsonArray("models").isEmpty(), "这个厂家的型号");
+        JsonObject preview = answer.getAsJsonObject("preview");
+        assertFalse(preview.get("baseUrl").getAsString().isEmpty(), "厂家的缺省地址");
+        assertEquals("auto", preview.getAsJsonArray("steps").get(0).getAsJsonObject().get("level").getAsString(),
+                "思考计划第一档永远是自动");
+
+        var read = com.dwinovo.numen.api.client.agent.ServerLibraries.catalogOf(answer);
+        assertTrue(read.vendors().get(0).popular());
+        assertEquals("deepseek", read.modelsFor());
+        assertEquals(answer.getAsJsonArray("models").size(), read.models().size());
+        assertEquals(com.dwinovo.numen.api.agent.catalog.ThinkingLevel.AUTO, read.preview().steps().get(0).level());
+        assertEquals(preview.get("baseUrl").getAsString(), read.preview().baseUrl());
+
+        JsonObject withoutModels = array(libraries.handle(ADMIN, true, Libraries.CATALOG, Libraries.LIST,
+                ask(false, "provider", "deepseek")).entries()).get(0).getAsJsonObject();
+        assertFalse(withoutModels.has("models"), "没要型号就不送");
+        assertFalse(array(libraries.view(ADMIN, true, Libraries.CATALOG)).get(0).getAsJsonObject().has("preview"),
+                "没带草稿就没有解析");
+    }
+
+    @Test
+    void aConnectionTestSaysWhatIsMissingBeforeItSpendsARequest(@TempDir Path dir) throws Exception {
+        Libraries libraries = libraries(dir);
+
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.PROVIDER_CHECK, Libraries.RUN,
+                ask(false, "provider", "deepseek", "api_key", "sk-x")).problem());
+
+        Libraries.Result noKey = libraries.handle(ADMIN, true, Libraries.PROVIDER_CHECK, Libraries.RUN,
+                ask(false, "provider", "deepseek"));
+        assertNull(noKey.problem());
+        assertEquals("checking", array(noKey.entries()).get(0).getAsJsonObject().get("state").getAsString());
+        assertEquals("need_key", array(noKey.later().get()).get(0).getAsJsonObject().get("state").getAsString());
+
+        Libraries.Result noUrl = libraries.handle(ADMIN, true, Libraries.PROVIDER_CHECK, Libraries.RUN,
+                ask(false, "provider", "custom", "api_key", "sk-x"));
+        assertEquals("need_url", array(noUrl.later().get()).get(0).getAsJsonObject().get("state").getAsString());
     }
 
     private static JsonObject bodyInt(String key, int value) {

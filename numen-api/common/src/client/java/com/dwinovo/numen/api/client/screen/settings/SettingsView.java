@@ -6,15 +6,11 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.google.gson.JsonObject;
-import com.dwinovo.numen.api.client.platform.ClientServices;
-import com.dwinovo.numen.api.platform.Services;
-import com.dwinovo.numen.api.platform.services.INumenConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -464,7 +460,13 @@ public final class SettingsView {
         mcpListPanel = null;
         skillsListPanel = null;
         switch (s) {
-            case PROVIDER -> RemoteCompanions.library().ask(Libraries.PROVIDER);
+            case PROVIDER -> {
+                RemoteCompanions.library().ask(Libraries.PROVIDER);
+                // 档案表单要的厂家名单:管理员才编辑档案,目录与端点解析在服务端
+                if (RemoteCompanions.admin()) {
+                    RemoteCompanions.library().ask(Libraries.CATALOG);
+                }
+            }
             // 人设是服务器上他目录里的 .md 文件:进页先让服务端重扫,外部编辑器的修改即时可见。
             case PERSONA -> RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
             case MCP -> RemoteCompanions.library().ask(Libraries.MCP_CLIENT);
@@ -940,6 +942,9 @@ public final class SettingsView {
                     },
                     null, null, null, null);
             if (RemoteCompanions.admin()) {
+                // 技能目录在服务器上:管理员往里放了新的,↻ 让服务器重扫
+                skillsListPanel.withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.SKILL,
+                        Libraries.RELOAD, new JsonObject()));
                 skillsListPanel.withRowToggle(
                         sk -> sk.enabled(),
                         sk -> {
@@ -961,17 +966,6 @@ public final class SettingsView {
         if (sk != null && sk.description() != null) {
             host.tip(List.of(Component.literal(sk.name()), Nb.colored(sk.description(), TXT_MUTED)),
                     mouseX, mouseY);
-        }
-    }
-
-    private static void openSkillsFolder() {
-        try {
-            java.nio.file.Path dir = Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("config").resolve(com.dwinovo.numen.api.Constants.CONFIG_ROOT).resolve("skills");
-            java.nio.file.Files.createDirectories(dir);
-            net.minecraft.Util.getPlatform().openUri(dir.toUri());
-        } catch (Exception ex) {
-            com.dwinovo.numen.api.Constants.LOG.warn("[numen] open skills folder failed: {}", ex.toString());
         }
     }
 

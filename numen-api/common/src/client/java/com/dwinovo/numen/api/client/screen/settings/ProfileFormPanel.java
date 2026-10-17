@@ -1,18 +1,14 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
 import com.dwinovo.numen.api.agent.catalog.Api;
-import com.dwinovo.numen.api.agent.catalog.Catalog;
-import com.dwinovo.numen.api.agent.catalog.ModelInfo;
-import com.dwinovo.numen.api.agent.catalog.ProviderInfo;
 import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
-import com.dwinovo.numen.api.agent.llm.ConvoState;
-import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
-import com.dwinovo.numen.api.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
-import com.dwinovo.numen.api.agent.loop.Cause;
+import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.CauseWords;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
@@ -31,13 +27,13 @@ import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
+import com.google.gson.JsonObject;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -47,9 +43,9 @@ import java.util.stream.Collectors;
  * 配置,创建同伴时自选。编辑的是 {@link Draft} 草稿,保存才落库(与旧表单
  * 同语义);检测直接测草稿当前值,存不存都能先试。
  *
- * <p>表单只组装:厂家、型号是长列表,点开是通用的 {@link PickerBox},列什么、怎么排由这里从目录取了交给它;
- * 能力(上下文、思考档位)一律取自目录或 {@link ProviderLibrary#resolve} 的解析结果,这里不另算。
- * 草稿一变就整张表单按草稿重排({@link #relayout}),输入框的值本来就在草稿里,不会丢。
+ * <p>表单只组装:厂家、型号是长列表,点开是通用的 {@link PickerBox},列什么、怎么排由这里取了服务端的答案交给它;
+ * 目录、草稿解析成的端点(能力:上下文、思考档位)、检测那次请求都在服务端算,这里一概不算也不连网——草稿变了就问一次
+ * ({@link #ask}),答案回来({@link #pollAnswer})整张表单按草稿重排({@link #relayout}),输入框的值本来就在草稿里,不会丢。
  */
 public final class ProfileFormPanel {
 
@@ -140,8 +136,20 @@ public final class ProfileFormPanel {
     private TextField nameField, keyField, baseUrlField;
     private Button checkButton;
     private InlineAlert resultAlert;
-    private volatile boolean checking;
+    private boolean checking;
+    /** 点检测那一刻检测库已经被推来过几次:比它新的、已经有结局的答复才是这一次的。 */
+    private long checkBase;
     private List<ThinkingLevel> thinkingLevels = List.of(ThinkingLevel.AUTO);
+
+    /** 服务端对目录问题的最近一次答案(厂家、草稿解析出的端点),和它是第几次被推来的。 */
+    private ServerLibraries.CatalogAnswer answer = ServerLibraries.CatalogAnswer.EMPTY;
+    private long answerRevision = -1;
+    /** 当前厂家的全部型号:问时要了才有;{@link #modelsFor} 是它们属于哪个厂家,{@link #modelsAsked} 是已经在要的那个厂家。 */
+    private List<ServerLibraries.CatalogModel> models = List.of();
+    private String modelsFor = "";
+    private String modelsAsked = "";
+    /** 上一次问的草稿里会改变答案的那几项:没变就不再问。 */
+    private String askedKey = "";
 
     public ProfileFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
         this.onSave = onSave;
@@ -158,6 +166,8 @@ public final class ProfileFormPanel {
     public void open(Draft d) {
         this.draft = d;
         this.advanced.snap(false);
+        this.askedKey = "";
+        this.checking = false;
     }
 
     /** 下拉与选择框不得越出的区域(通常是整个设置窗口)。在 build 之前给。 */
@@ -175,12 +185,14 @@ public final class ProfileFormPanel {
         ui.setViewport(window);
         picker = new PickerBox();
 
+        pollAnswer();
         if (draft.provider == null || draft.provider.isBlank()) {
-            List<ProviderInfo> popular = catalog().popular();
+            List<ServerLibraries.Vendor> popular = answer.vendors().stream().filter(ServerLibraries.Vendor::popular).toList();
             adaptToVendor(popular.isEmpty() ? ConnectionProfile.CUSTOM : popular.get(0).id());
         }
-        ProviderInfo vendor = vendor();
-        ModelInfo model = model();
+        ask();
+        ServerLibraries.Vendor vendor = vendor();
+        ServerLibraries.CatalogModel model = model();
 
         int ry = y;
         Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.PROVIDER_FORM_NAME);
@@ -206,7 +218,10 @@ public final class ProfileFormPanel {
             List<String> protocols = List.of(t(ModLanguageData.Keys.GUI_PROVIDERS_PROTO_CHAT),
                     t(ModLanguageData.Keys.GUI_PROVIDERS_PROTO_RESPONSES),
                     t(ModLanguageData.Keys.GUI_PROVIDERS_PROTO_ANTHROPIC));
-            Dropdown protocol = ui.add(new Dropdown(protocols, protocolIndex(), i -> draft.protocol = Api.values()[i].id()));
+            Dropdown protocol = ui.add(new Dropdown(protocols, protocolIndex(), i -> {
+                draft.protocol = Api.values()[i].id();
+                ask();
+            }));
             protocol.setBounds(x, ry, w, NumenStyle.CONTROL_H);
             ry += NumenStyle.ROW_PITCH;
         }
@@ -235,18 +250,18 @@ public final class ProfileFormPanel {
 
         // 单一自适应思考控件:列哪几档、每档右边的说明都来自解析出的端点的思考计划——请求体写的也是它,
         // 所以选得到的每一档都真会改变请求。计划里只剩自动(型号不支持、手填的型号、这个端点发不出)时整栏不出。
-        ThinkingPlan plan = preview().thinkingPlan();
-        thinkingLevels = plan.steps().stream().map(ThinkingPlan.Step::level).toList();
-        if (!plan.autoOnly()) {
+        ServerLibraries.Preview preview = answer.preview();
+        thinkingLevels = preview == null ? List.of(ThinkingLevel.AUTO)
+                : preview.steps().stream().map(ThinkingPlan.Step::level).toList();
+        if (preview != null && !preview.autoOnly()) {
             ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_THINKING);
             List<String> levelNames = new ArrayList<>();
             List<String> levelNotes = new ArrayList<>();
-            for (ThinkingPlan.Step step : plan.steps()) {
+            for (ThinkingPlan.Step step : preview.steps()) {
                 levelNames.add(levelLabel(step));
                 levelNotes.add(levelNote(step.wire()));
             }
-            Dropdown thinking = ui.add(new Dropdown(levelNames,
-                    thinkingLevels.indexOf(plan.effective(ThinkingLevel.byId(draft.reasoningEffort))),
+            Dropdown thinking = ui.add(new Dropdown(levelNames, thinkingLevels.indexOf(preview.effective()),
                     this::onThinkingPicked).details(levelNotes));
             thinking.setBounds(x, ry, Math.min(w, 260), NumenStyle.CONTROL_H);
             ry += NumenStyle.ROW_PITCH;
@@ -309,6 +324,44 @@ public final class ProfileFormPanel {
         build(x, y, w, h);
     }
 
+    /** 服务端新答了一次目录问题:换上它,型号随之更新。答案和原来不同才返回 {@code true}(要重排)。 */
+    private boolean pollAnswer() {
+        long revision = RemoteCompanions.library().revision(Libraries.CATALOG);
+        if (revision == answerRevision) {
+            return false;
+        }
+        answerRevision = revision;
+        ServerLibraries.CatalogAnswer before = answer;
+        answer = ServerLibraries.catalog();
+        if (answer.models() != null) {
+            models = answer.models();
+            modelsFor = answer.modelsFor();
+        }
+        return !answer.equals(before);
+    }
+
+    /**
+     * 问服务端这份草稿解析成什么(和当前厂家有哪些型号)。只有会改变答案的几项变了才问:厂家、型号、协议、兼容项。
+     * key 与地址覆盖不带——答案与它们无关;上下文长度和思考档位是玩家在这一页上输入的,不用答案回头改写它们。
+     */
+    private void ask() {
+        String provider = nz(draft.provider);
+        ConnectionProfile profile = draft.toProfile().withApiKey("").withBaseUrl("");
+        String key = profile.provider() + "|" + profile.protocol() + "|" + profile.model() + "|" + profile.compat();
+        boolean wantModels = !provider.equals(modelsFor) && !provider.equals(modelsAsked);
+        if (key.equals(askedKey) && !wantModels) {
+            return;
+        }
+        askedKey = key;
+        if (wantModels) {
+            modelsAsked = provider;
+        }
+        JsonObject body = new JsonObject();
+        body.add("draft", ProviderLibrary.entryToJson(new ProviderLibrary.Entry(null, "", profile)));
+        body.addProperty("models", wantModels);
+        RemoteCompanions.library().request(Libraries.CATALOG, Libraries.LIST, body);
+    }
+
     // ---- 宿主转发面 ----
 
     /** 此刻露出的内容高。 */
@@ -317,6 +370,8 @@ public final class ProfileFormPanel {
     }
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        pollCheck();
+        if (pollAnswer()) relayout();
         if (advanced.step(nowMs)) scroll.resize(revealedH());
         // 表单行进裁剪区(滚出视口的部分不画);下拉弹层、选择框与固定层在裁剪区外。
         scroll.beginClip(s);
@@ -372,28 +427,35 @@ public final class ProfileFormPanel {
     /** 地址输入:占位是目录给的缺省地址(不含档案里的覆盖)。 */
     private TextField addBaseUrlField(int fx, int fy) {
         TextField f = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
-        f.placeholder(preview().baseUrl());
+        f.placeholder(answer.preview() == null ? "" : answer.preview().baseUrl());
         f.setBounds(fx, fy, w, NumenStyle.CONTROL_H);
         return f;
     }
 
     // ---- 目录与草稿 ----
 
-    private static Catalog catalog() {
-        return ProviderLibrary.instance().catalog();
+    private ServerLibraries.Vendor vendor(String id) {
+        for (ServerLibraries.Vendor v : answer.vendors()) {
+            if (v.id().equals(id)) return v;
+        }
+        return null;
     }
 
     /** 草稿里的厂家;自定义厂家和目录里没有的厂家给 null。 */
-    private ProviderInfo vendor() {
-        return catalog().provider(nz(draft.provider));
+    private ServerLibraries.Vendor vendor() {
+        return vendor(nz(draft.provider));
     }
 
     /** 草稿里的型号;目录里没有的(手填的、已弃用的)给 null。 */
-    private ModelInfo model() {
-        return catalog().model(nz(draft.provider), nz(draft.model));
+    private ServerLibraries.CatalogModel model() {
+        if (!nz(draft.provider).equals(modelsFor)) return null;
+        for (ServerLibraries.CatalogModel m : models) {
+            if (m.id().equals(nz(draft.model))) return m;
+        }
+        return null;
     }
 
-    private String vendorName(ProviderInfo vendor) {
+    private String vendorName(ServerLibraries.Vendor vendor) {
         if (vendor != null) return vendor.name();
         return ConnectionProfile.CUSTOM.equals(draft.provider) ? t(ModLanguageData.Keys.GUI_PROVIDERS_CUSTOM)
                 : nz(draft.provider);
@@ -409,51 +471,33 @@ public final class ProfileFormPanel {
         draft.provider = vendorId;
         draft.protocol = ConnectionProfile.CUSTOM.equals(vendorId) ? Api.CHAT.id() : "";
         draft.compat = null;
-        draft.model = defaultModelId(vendorId);
+        ServerLibraries.Vendor vendor = vendor(vendorId);
+        draft.model = vendor == null ? "" : vendor.defaultModel();
         draft.reasoningEffort = "";
         draft.baseUrl = "";
     }
 
-    private static String defaultModelId(String vendorId) {
-        ProviderInfo vendor = catalog().provider(vendorId);
-        if (vendor == null || vendor.models().isEmpty()) return "";
-        for (ModelInfo m : vendor.models()) {
-            if (m.toolCall()) return m.id();
-        }
-        return vendor.models().get(0).id();
-    }
-
-    /** 草稿现在对应的端点,不含地址覆盖:取目录给的缺省地址与型号能力来展示。 */
-    private LlmEndpoint preview() {
-        return ProviderLibrary.instance().resolve(draft.toProfile().withBaseUrl(""));
-    }
-
-    /** 型号下面的能力小标签,数字和能力取自解析结果与目录;目录里没有的型号只标“手填的型号”。 */
-    private List<TagRow.Tag> modelTags(ModelInfo m) {
+    /** 型号下面的能力小标签,数字和能力取自服务端的解析结果与目录;目录里没有的型号只标“手填的型号”。 */
+    private List<TagRow.Tag> modelTags(ServerLibraries.CatalogModel m) {
         List<TagRow.Tag> tags = new ArrayList<>();
         if (m == null) {
             if (!nz(draft.model).isBlank()) tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_MANUAL), false));
             return tags;
         }
-        int ctx = preview().contextWindow();
+        int ctx = answer.preview() == null ? 0 : answer.preview().contextWindow();
         if (ctx > 0) {
             tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_CONTEXT, TokenFormat.capacity(ctx)), false));
         }
         if (m.maxOutput() > 0) {
             tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_OUTPUT, TokenFormat.capacity(m.maxOutput())), false));
         }
-        if (reasons(m)) tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_THINKING), false));
+        if (m.reasons()) tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_THINKING), false));
         if (!m.inputs().isEmpty()) {
             tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_MULTIMODAL,
                     m.inputs().stream().map(ProfileFormPanel::modality).collect(Collectors.joining(" · "))), false));
         }
         if (!m.toolCall()) tags.add(new TagRow.Tag(t(ModLanguageData.Keys.GUI_PROVIDERS_TAG_NO_TOOLS), true));
         return tags;
-    }
-
-    /** 能控制思考的型号:档位表里除了自动还有别的。 */
-    private static boolean reasons(ModelInfo m) {
-        return m.thinking().levels().size() > 1;
     }
 
     private static String modality(String id) {
@@ -470,20 +514,19 @@ public final class ProfileFormPanel {
     // ---- 选择框 ----
 
     private void openVendorPicker() {
-        Catalog catalog = catalog();
-        Set<String> popularIds = catalog.popular().stream().map(ProviderInfo::id).collect(Collectors.toSet());
+        List<ServerLibraries.Vendor> vendors = answer.vendors();
         PickerBox.Labels labels = new PickerBox.Labels(t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_VENDOR),
-                t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_VENDOR_HINT, catalog.providers().size()),
+                t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_VENDOR_HINT, vendors.size()),
                 t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_SEARCH), pickerKeys(),
                 q -> t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_NO_MATCH, q));
         picker.open(ui, window.left(), window.top(), window.right() - window.left(),
                 window.bottom() - window.top(), labels, null, q -> {
             String lq = q.toLowerCase(Locale.ROOT);
-            List<PickerBox.Item> popular = catalog.popular().stream()
+            List<PickerBox.Item> popular = vendors.stream().filter(ServerLibraries.Vendor::popular)
                     .filter(p -> matches(lq, p.name(), p.id(), p.host())).map(this::vendorRow).toList();
-            List<PickerBox.Item> rest = catalog.providers().stream().filter(p -> !popularIds.contains(p.id()))
+            List<PickerBox.Item> rest = vendors.stream().filter(p -> !p.popular())
                     .filter(p -> matches(lq, p.name(), p.id(), p.host()))
-                    .sorted(Comparator.comparing(ProviderInfo::name, String.CASE_INSENSITIVE_ORDER))
+                    .sorted(Comparator.comparing(ServerLibraries.Vendor::name, String.CASE_INSENSITIVE_ORDER))
                     .map(this::vendorRow).toList();
             PickerBox.Item custom = new PickerBox.Item(ConnectionProfile.CUSTOM,
                     t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_CUSTOM),
@@ -506,16 +549,16 @@ public final class ProfileFormPanel {
         });
     }
 
-    private PickerBox.Item vendorRow(ProviderInfo p) {
+    private PickerBox.Item vendorRow(ServerLibraries.Vendor p) {
         return new PickerBox.Item(p.id(), p.name(), p.host(), List.of(), p.id().equals(draft.provider));
     }
 
     private void openModelPicker() {
-        ProviderInfo vendor = vendor();
-        List<ModelInfo> models = vendor == null ? List.of() : vendor.models();
+        ServerLibraries.Vendor vendor = vendor();
+        List<ServerLibraries.CatalogModel> offered = vendor == null || !vendor.id().equals(modelsFor) ? List.of() : models;
         PickerBox.Labels labels = new PickerBox.Labels(t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_MODEL),
                 vendor == null ? t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_MODEL_HAND)
-                        : t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_MODEL_HINT, vendor.name(), models.size()),
+                        : t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_MODEL_HINT, vendor.name(), offered.size()),
                 t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_SEARCH), pickerKeys(),
                 // 没搜时列表就是空的(自定义厂家没有目录):提示该手填,而不是“没有找到「」”
                 q -> q.isEmpty() ? t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_MODEL_HAND)
@@ -529,13 +572,15 @@ public final class ProfileFormPanel {
                 q -> t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_FREE_TITLE, q),
                 t(ModLanguageData.Keys.GUI_PROVIDERS_PICK_FREE_DETAIL));
         // 发布日期新的在前;没写日期的排在后面(同日期保持目录里的顺序)
-        Comparator<ModelInfo> newestFirst = Comparator.comparing(ModelInfo::releaseDate).reversed();
+        Comparator<ServerLibraries.CatalogModel> newestFirst =
+                Comparator.comparing(ServerLibraries.CatalogModel::releaseDate).reversed();
         picker.open(ui, window.left(), window.top(), window.right() - window.left(),
                 window.bottom() - window.top(), labels, table, q -> {
             String lq = q.toLowerCase(Locale.ROOT);
-            List<ModelInfo> hit = models.stream().filter(m -> matches(lq, m.name(), m.id()))
+            List<ServerLibraries.CatalogModel> hit = offered.stream().filter(m -> matches(lq, m.name(), m.id()))
                     .sorted(newestFirst).toList();
-            List<PickerBox.Item> withTools = hit.stream().filter(ModelInfo::toolCall).map(this::modelRow).toList();
+            List<PickerBox.Item> withTools = hit.stream().filter(ServerLibraries.CatalogModel::toolCall)
+                    .map(this::modelRow).toList();
             List<PickerBox.Item> without = hit.stream().filter(m -> !m.toolCall()).map(this::modelRow).toList();
             boolean sectioned = q.isEmpty();   // 搜索时不分节
             return List.of(
@@ -549,14 +594,14 @@ public final class ProfileFormPanel {
         });
     }
 
-    private PickerBox.Item modelRow(ModelInfo m) {
+    private PickerBox.Item modelRow(ServerLibraries.CatalogModel m) {
         String none = "—";
         String inputs = (m.inputs().isEmpty() ? "" : " ")
                 + m.inputs().stream().map(ProfileFormPanel::modality).collect(Collectors.joining(" "));
         return new PickerBox.Item(m.id(), m.name(), m.id(), List.of(
                 m.contextWindow() > 0 ? TokenFormat.capacity(m.contextWindow()) : none,
                 m.maxOutput() > 0 ? TokenFormat.capacity(m.maxOutput()) : none,
-                reasons(m) ? "✓" : none,
+                m.reasons() ? "✓" : none,
                 modality("text") + inputs), m.id().equals(draft.model));
     }
 
@@ -615,39 +660,41 @@ public final class ProfileFormPanel {
         onSave.accept(draft);
     }
 
-    /** 检测草稿当前值——存不存都能先试连。 */
+    /** 检测草稿当前值——存不存都能先试连。试连是服务端发的请求,这里只发草稿、等结局({@link #pollCheck})。 */
     private void runConnectivityCheck() {
         if (checking) return;
-        if (draft.apiKey == null || draft.apiKey.isBlank()) {
-            keyField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_KEY));
-            return;
-        }
-        // 检测用档案当前的设置,只是思考不发(检测只关心连得通、密钥对不对)
-        LlmEndpoint ep = ProviderLibrary.instance().resolve(draft.toProfile().withReasoningEffort("auto"));
-        if (!ep.hasUrl()) {
-            advanced.setOpen(true);   // 目录厂家没有固定地址:地址覆盖在高级里,展开它再标错
-            baseUrlField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_URL));
-            return;
-        }
         checking = true;
+        checkBase = RemoteCompanions.library().revision(Libraries.PROVIDER_CHECK);
         checkButton.setEnabled(false);
         checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
-        NumenLlmClient.forEndpoint(ep)
-                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null,
-                        new com.dwinovo.numen.api.agent.http.CancelToken(), null)
-                .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
-                    checking = false;
-                    checkButton.setEnabled(true);
-                    checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK));
-                    if (error == null) {
-                        // 成功=知道了就行,2.5s 自动淡出;失败驻留到被下次操作替换。
-                        resultAlert.show(InlineAlert.Severity.SUCCESS,
-                                t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_OK), 2_500);
-                    } else {
-                        resultAlert.show(InlineAlert.Severity.ERROR, CauseWords.text(Cause.fromError(error)));
-                    }
-                }));
+        JsonObject body = new JsonObject();
+        body.add("draft", ProviderLibrary.entryToJson(new ProviderLibrary.Entry(null, draft.name, draft.toProfile())));
+        RemoteCompanions.library().request(Libraries.PROVIDER_CHECK, Libraries.RUN, body);
+    }
+
+    /** 服务端交回了这一次检测的结局:缺 key、缺地址标在字段上,连得通连不通进结果胶囊。 */
+    private void pollCheck() {
+        if (!checking || RemoteCompanions.library().revision(Libraries.PROVIDER_CHECK) == checkBase) return;
+        ServerLibraries.Check check = ServerLibraries.check();
+        if (check == null || !check.done()) return;
+        checking = false;
+        checkButton.setEnabled(true);
+        checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK));
+        switch (check.state()) {
+            case "need_key" -> {
+                resultAlert.clear();
+                keyField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_KEY));
+            }
+            case "need_url" -> {
+                resultAlert.clear();
+                advanced.setOpen(true);   // 目录厂家没有固定地址:地址覆盖在高级里,展开它再标错
+                baseUrlField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_URL));
+            }
+            // 成功=知道了就行,2.5s 自动淡出;失败驻留到被下次操作替换。
+            case "ok" -> resultAlert.show(InlineAlert.Severity.SUCCESS, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_OK), 2_500);
+            default -> resultAlert.show(InlineAlert.Severity.ERROR, CauseWords.text(check.cause()));
+        }
     }
 
     private static String t(String key, Object... args) {

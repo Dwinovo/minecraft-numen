@@ -27,10 +27,12 @@ import java.util.function.Function;
  *   <li><b>人设</b>:每位主人自己的库,自己读写;</li>
  *   <li><b>模型档案</b>:key 花服主的钱,只有管理员({@code Authority})能存、能删、能看全貌;别人只看得到
  *       "有哪几个、叫什么、哪个型号"——key、接口地址、代理在服务端编码的这一处就没有,客户端拿不到,也就不存在泄露;</li>
+ *   <li><b>型号目录</b>({@link #CATALOG})与<b>连通性检测</b>({@link #PROVIDER_CHECK}):管理员编辑档案的表单问的,
+ *       目录、草稿解析成的端点、检测的那次请求都在服务端算({@link ProviderForm}),界面只画答案;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
  *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
- *   <li><b>技能</b>({@link #SKILL}):服务器上有哪些,人人看得到;开关只有管理员能拨(技能目录是服务器全局的);</li>
+ *   <li><b>技能</b>({@link #SKILL}):服务器上有哪些,人人看得到;开关与重扫只有管理员能做(技能目录是服务器全局的);</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
  *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
  *       别人只看得到名字、连没连上、有几个工具。授权网址只给管理员,授权回来的网址也由管理员贴回({@link #AUTH})。</li>
@@ -49,16 +51,20 @@ public final class Libraries {
     public static final String PREFS = "prefs";
     public static final String SKILL = "skill";
     public static final String NOTES = "notes";
+    public static final String CATALOG = "catalog";
+    public static final String PROVIDER_CHECK = "provider-check";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
     public static final String DELETE = "delete";
-    /** 人设库专有:重扫目录。 */
+    /** 人设库、技能库专有:重扫目录。 */
     public static final String RELOAD = "reload";
     /** MCP 服务器专有:接上、断开、交回授权回调网址。 */
     public static final String ENABLE = "enable";
     public static final String DISABLE = "disable";
     public static final String AUTH = "auth";
+    /** 连通性检测专有:试连一份草稿。 */
+    public static final String RUN = "run";
 
     /** 服务器配置里这两项的读写(加载器自己的配置文件)。 */
     public interface ServerConfig {
@@ -75,8 +81,19 @@ public final class Libraries {
      *
      * @param entries 这位玩家此刻看得到的整表(JSON 数组)
      * @param problem 办不成的原因(给界面和日志);办成是 {@code null}
+     * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去;没有是 {@code null}
      */
-    public record Result(String entries, String problem) {}
+    public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later) {
+
+        public Result(String entries, String problem) {
+            this(entries, problem, null);
+        }
+    }
+
+    /** 这种库变了要不要告诉别的在线玩家:人设、目录和检测是每个人各自问各自的,不共用一张表。 */
+    public static boolean shared(String kind) {
+        return !PERSONA.equals(kind) && !CATALOG.equals(kind) && !PROVIDER_CHECK.equals(kind);
+    }
 
     /** 这台服务器上的那一份:人设按主人、模型档案是服主的、配置是加载器自己的。 */
     public static Libraries of(net.minecraft.server.MinecraftServer server) {
@@ -126,6 +143,9 @@ public final class Libraries {
      * @param body  存和删带的 JSON;列不用
      */
     public Result handle(UUID owner, boolean admin, String kind, String op, JsonObject body) {
+        if (PROVIDER_CHECK.equals(kind)) {
+            return check(admin, op, body);
+        }
         String problem = switch (kind) {
             case PERSONA -> persona(owner, op, body);
             case PROVIDER -> provider(admin, op, body);
@@ -135,13 +155,46 @@ public final class Libraries {
             case PREFS -> prefs(owner, op, body);
             case NOTES -> LIST.equals(op) ? null : "unknown operation";
             case SKILL -> skill(admin, op, body);
+            case CATALOG -> catalog(admin, op);
             default -> "unknown library";
         };
-        return new Result(view(owner, admin, kind), problem);
+        return new Result(view(owner, admin, kind, body), problem);
+    }
+
+    /** 连通性检测:管理员试连一份草稿,先答"在试",结局到了再送一张表。 */
+    private Result check(boolean admin, String op, JsonObject body) {
+        if (!admin) {
+            return new Result("[]", "only a server admin may test a connection");
+        }
+        if (!RUN.equals(op)) {
+            return new Result("[]", "unknown operation");
+        }
+        if (!body.has("draft") || !body.get("draft").isJsonObject()) {
+            return new Result("[]", "a connection test needs the draft to test");
+        }
+        JsonArray checking = new JsonArray();
+        checking.add(ProviderForm.state(ProviderForm.STATE_CHECKING));
+        return new Result(checking.toString(), null, ProviderForm.check(providers, body).thenApply(state -> {
+            JsonArray done = new JsonArray();
+            done.add(state);
+            return done.toString();
+        }));
+    }
+
+    private static String catalog(boolean admin, String op) {
+        if (!admin) {
+            return "only a server admin may edit model profiles";
+        }
+        return LIST.equals(op) ? null : "unknown operation";
     }
 
     /** 这位玩家此刻看得到的整表。看不到的库是空表。 */
     public String view(UUID owner, boolean admin, String kind) {
+        return view(owner, admin, kind, new JsonObject());
+    }
+
+    /** 同上;目录这种按问题答的库,{@code ask} 是问题(见 {@link ProviderForm#answer})。 */
+    private String view(UUID owner, boolean admin, String kind, JsonObject ask) {
         JsonArray out = new JsonArray();
         switch (kind) {
             case PERSONA -> personas.apply(owner).list().forEach(p -> {
@@ -164,6 +217,11 @@ public final class Libraries {
             case MCP_SERVER -> {
                 if (admin) {
                     out.add(mcpServerView());
+                }
+            }
+            case CATALOG -> {
+                if (admin) {
+                    out.add(ProviderForm.answer(providers, ask));
                 }
             }
             case PREFS -> out.add(prefs.apply(owner).toJson());
@@ -406,6 +464,10 @@ public final class Libraries {
         }
         if (!admin) {
             return "only a server admin may switch skills";
+        }
+        if (RELOAD.equals(op)) {
+            SkillRegistry.instance().rescan();   // 技能目录是服务器全局的,管理员往里放了新的,重扫才看得到
+            return null;
         }
         String name = string(body, "name");
         if (name == null || SkillRegistry.instance().get(name).isEmpty()) {

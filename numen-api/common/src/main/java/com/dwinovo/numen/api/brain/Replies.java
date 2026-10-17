@@ -87,7 +87,11 @@ public final class Replies {
         Libraries.Result result = libraries.handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
         NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
                 result.problem() == null ? "" : result.problem()));
-        if (result.problem() == null && !Libraries.LIST.equals(op) && !Libraries.PERSONA.equals(kind)) {
+        if (result.later() != null) {
+            result.later().thenAccept(entries -> server.execute(
+                    () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, ""))));
+        }
+        if (result.problem() == null && !Libraries.LIST.equals(op) && Libraries.shared(kind)) {
             share(server, player, kind);
         }
     }

@@ -125,14 +125,14 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
 
     // ---- 小件:原因、预览、用量的 JSON ----
 
-    static JsonObject cause(Cause cause) {
+    public static JsonObject cause(Cause cause) {
         JsonObject o = new JsonObject();
         o.addProperty("code", cause.code());
         o.add("args", strings(cause.args()));
         return o;
     }
 
-    static Cause cause(JsonObject o) {
+    public static Cause cause(JsonObject o) {
         return new Cause(string(o, "code"), list(o.get("args")));
     }
 

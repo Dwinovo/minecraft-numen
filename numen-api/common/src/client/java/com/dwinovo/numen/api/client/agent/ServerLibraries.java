@@ -1,6 +1,10 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.agent.loop.Cause;
+import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
+import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
@@ -69,6 +73,101 @@ public final class ServerLibraries {
                     admin ? ProviderLibrary.entryFromJson(o) : null));
         }
         return out;
+    }
+
+    // ---- 型号目录与连通性检测(管理员的档案表单问的;目录、端点解析、检测都在服务端算) ----
+
+    /** 一个厂家。{@code defaultModel}:换到它时先选的型号。 */
+    public record Vendor(String id, String name, String host, boolean popular, String defaultModel) {}
+
+    /** 一个型号。 */
+    public record CatalogModel(String id, String name, int contextWindow, int maxOutput, List<String> inputs,
+                               boolean toolCall, boolean reasons, String releaseDate) {}
+
+    /**
+     * 一份草稿在服务端解析出的端点(不含地址覆盖)。
+     *
+     * @param steps     可选的思考档位与每档实际会发什么,第一个永远是自动
+     * @param effective 草稿选的档位在这个计划里生效的那一档
+     */
+    public record Preview(String baseUrl, int contextWindow, List<ThinkingPlan.Step> steps, ThinkingLevel effective) {
+
+        /** 只有自动:这个型号在这个端点上没有可控的思考。 */
+        public boolean autoOnly() {
+            return steps.size() == 1;
+        }
+    }
+
+    /**
+     * 目录问答的最近一次答案。{@code models} 只在问时要了型号才有({@code modelsFor} 是它们属于哪个厂家)、{@code preview}
+     * 只在问时带了草稿才有,否则是 {@code null}。
+     */
+    public record CatalogAnswer(List<Vendor> vendors, List<CatalogModel> models, String modelsFor, Preview preview) {
+
+        public static final CatalogAnswer EMPTY = new CatalogAnswer(List.of(), null, "", null);
+    }
+
+    /** 服务端对目录问题的最近一次答案;还没答过是 {@link CatalogAnswer#EMPTY}。 */
+    public static CatalogAnswer catalog() {
+        JsonArray answers = entries(Libraries.CATALOG);
+        return answers.isEmpty() ? CatalogAnswer.EMPTY : catalogOf(answers.get(0).getAsJsonObject());
+    }
+
+    /** 服务端写的一份目录答案读成记录(编解码只这一对:{@code ProviderForm#answer} 与这里)。 */
+    public static CatalogAnswer catalogOf(JsonObject o) {
+        List<Vendor> vendors = new ArrayList<>();
+        for (JsonElement e : o.getAsJsonArray("vendors")) {
+            JsonObject v = e.getAsJsonObject();
+            vendors.add(new Vendor(text(v, "id"), text(v, "name"), text(v, "host"), v.get("popular").getAsBoolean(),
+                    text(v, "defaultModel")));
+        }
+        List<CatalogModel> models = null;
+        if (o.has("models")) {
+            models = new ArrayList<>();
+            for (JsonElement e : o.getAsJsonArray("models")) {
+                JsonObject m = e.getAsJsonObject();
+                List<String> inputs = new ArrayList<>();
+                m.getAsJsonArray("inputs").forEach(i -> inputs.add(i.getAsString()));
+                models.add(new CatalogModel(text(m, "id"), text(m, "name"), m.get("contextWindow").getAsInt(),
+                        m.get("maxOutput").getAsInt(), inputs, m.get("toolCall").getAsBoolean(),
+                        m.get("reasons").getAsBoolean(), text(m, "releaseDate")));
+            }
+        }
+        Preview preview = null;
+        if (o.has("preview")) {
+            JsonObject p = o.getAsJsonObject("preview");
+            List<ThinkingPlan.Step> steps = new ArrayList<>();
+            for (JsonElement e : p.getAsJsonArray("steps")) {
+                JsonObject s = e.getAsJsonObject();
+                steps.add(new ThinkingPlan.Step(ThinkingLevel.byId(text(s, "level")), new ThinkingPlan.Wire(
+                        ThinkingPlan.Wire.Kind.valueOf(text(s, "wire")), text(s, "effort"), s.get("tokens").getAsInt())));
+            }
+            preview = new Preview(text(p, "baseUrl"), p.get("contextWindow").getAsInt(), List.copyOf(steps),
+                    ThinkingLevel.byId(text(p, "effective")));
+        }
+        return new CatalogAnswer(List.copyOf(vendors), models == null ? null : List.copyOf(models),
+                text(o, "modelsFor") == null ? "" : text(o, "modelsFor"), preview);
+    }
+
+    /**
+     * 连通性检测的结局。{@code state}:{@code checking} 在试、{@code ok}、{@code need_key}、{@code need_url}、{@code failed}
+     * (这时 {@code cause} 说为什么)。
+     */
+    public record Check(String state, Cause cause) {
+
+        public boolean done() {
+            return !"checking".equals(state);
+        }
+    }
+
+    /** 最近一次检测的结局;没试过是 {@code null}。 */
+    public static Check check() {
+        JsonArray results = entries(Libraries.PROVIDER_CHECK);
+        if (results.isEmpty()) {
+            return null;
+        }
+        JsonObject o = results.get(0).getAsJsonObject();
+        return new Check(text(o, "state"), o.has("cause") ? CompanionState.cause(o.getAsJsonObject("cause")) : null);
     }
 
     // ---- 她的札记 ----

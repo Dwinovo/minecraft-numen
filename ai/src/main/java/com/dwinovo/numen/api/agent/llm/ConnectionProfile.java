@@ -32,6 +32,12 @@ public record ConnectionProfile(String provider, String protocol, String model, 
                 temperature, maxTokens, compat);
     }
 
+    /** 换掉密钥的副本。 */
+    public ConnectionProfile withApiKey(String apiKey) {
+        return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort, ctx,
+                temperature, maxTokens, compat);
+    }
+
     /** 换掉思考档位的副本。 */
     public ConnectionProfile withReasoningEffort(String reasoningEffort) {
         return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort, ctx,
