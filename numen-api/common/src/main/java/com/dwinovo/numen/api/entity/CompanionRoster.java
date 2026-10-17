@@ -4,8 +4,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -16,15 +14,10 @@ import java.util.UUID;
  * 判断散在各处的话,每一处都要 MinecraftServer 才跑得起来,也就一条都测不到——而
  * "谁还存在"判错一次的代价是删掉主人的会话数据。
  *
- * <h2>两条规则</h2>
- * <ol>
- *   <li>{@link #build} —— 名册来自<b>注册表</b>(持久、权威:谁存在),不是玩家列表
- *       (瞬时:谁此刻站在世界里)。死了、休眠、正等复活的同伴<b>都在名册上</b>,
- *       因为她们确实还存在。</li>
- *   <li>{@link #orphans} —— "不在名册上"只在<b>同一个世界内</b>才等于"被遣散了"。
- *       跨世界的家一律不碰:换个存档进去,别的世界的同伴当然不在这份名册上,
- *       那不叫被遣散。</li>
- * </ol>
+ * <h2>规则</h2>
+ * {@link #build} —— 名册来自<b>注册表</b>(持久、权威:谁存在),不是玩家列表
+ * (瞬时:谁此刻站在世界里)。死了、休眠、正等复活的同伴<b>都在名册上</b>,
+ * 因为她们确实还存在。
  */
 public final class CompanionRoster {
 
@@ -90,34 +83,5 @@ public final class CompanionRoster {
         }
         long leftTicks = respawnDelayTicks - (nowTick - diedAtTick);
         return leftTicks <= 0L ? 0L : leftTicks * MS_PER_TICK;
-    }
-
-    /**
-     * 该删的家:<b>属于这个世界</b>、却已不在名册上的。
-     *
-     * <p>世界对不上的、没标世界的,一律不删——"不在名册上"的原因太多了
-     * (换了存档、还没收到名册、旧版本迁移过来的数据),只有"确定属于这个世界
-     * 而这个世界说她不在了"才是真的被遣散。宁可留孤儿也不删错:孤儿扫一遍就没了,
-     * 删错的会话找不回来。
-     *
-     * @param homeWorlds 客户端每个家目录 → 它标着的世界 id(没标的给 null)
-     * @param currentWorldId 当前世界的 id;null/空 = 还不知道在哪儿,一个都不删
-     * @param onRoster 这份名册上的同伴
-     */
-    public static List<UUID> orphans(Map<UUID, String> homeWorlds, String currentWorldId,
-                                     Set<UUID> onRoster) {
-        List<UUID> out = new ArrayList<>();
-        if (currentWorldId == null || currentWorldId.isBlank()) {
-            return out;
-        }
-        for (Map.Entry<UUID, String> e : homeWorlds.entrySet()) {
-            if (!currentWorldId.equals(e.getValue())) {
-                continue;   // 别的世界的家,或者没标过世界的旧数据:不归这次对账管
-            }
-            if (!onRoster.contains(e.getKey())) {
-                out.add(e.getKey());
-            }
-        }
-        return out;
     }
 }

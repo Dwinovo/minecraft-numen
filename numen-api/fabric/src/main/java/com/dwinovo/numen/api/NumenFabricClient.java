@@ -1,17 +1,10 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.resources.ResourceManager;
 
-import java.nio.file.Path;
 
 public class NumenFabricClient implements ClientModInitializer {
 
@@ -22,22 +15,14 @@ public class NumenFabricClient implements ClientModInitializer {
         // 早先用 MOD_ID 当配置根,技能与 mcp_clients 落在了 config/numen_api/。
         // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
         com.dwinovo.numen.api.client.ConfigRootMigration.run(FabricLoader.getInstance().getConfigDir());
-        Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve(Constants.CONFIG_ROOT);
-        Path skillsDir = numenConfigRoot.resolve("skills");
-
-        // 同伴数据的根,以及旧布局的一次性迁移。根从 loader 拿,不问 Minecraft
+        // 每只同伴用哪条声线、穿哪张皮肤是这台机器的偏好。根从 loader 拿,不问 Minecraft
         // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
-        com.dwinovo.numen.api.client.agent.CompanionHome.init(
+        com.dwinovo.numen.api.client.agent.CompanionLooks.init(
                 FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
-        com.dwinovo.numen.api.client.agent.CompanionHome.migrateLegacy();
 
         // 把只在客户端存在的能力接给插件那扇门。接上了本身就是"这是客户端"的判据——
-        // 专用服务器上没人接,插件的 bundleSkills 与 onClient 自然成空操作,
-        // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
-        com.dwinovo.numen.api.NumenPlugins.bindClient(
-                root -> com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::emit);
+        // 专用服务器上没人接,插件的 onClient 自然成空操作,不必让每个插件自己去问一遍加载器"我在哪一侧"。
+        com.dwinovo.numen.api.NumenPlugins.bindClient(com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.api.client.screen.UiTheme.init(
@@ -45,36 +30,6 @@ public class NumenFabricClient implements ClientModInitializer {
 
         // 型号目录:后台刷新 models.dev 缓存(一天最多拉一次,拉不到静默用缓存或随包快照)。
         com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().refreshCatalog();
-
-        // MCP client: connect to any external MCP servers listed in
-        // config/numen/mcp_clients.json and register their tools so the built-in
-        // brain can call them. Config dir from the loader (avoids Minecraft timing).
-        com.dwinovo.numen.api.mcp.server.ClientMcp.initClients(
-                FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
-
-        // MCP server: the other direction — stand up a loopback MCP server so an
-        // external agent can drive companions directly, bypassing the built-in brain.
-        // Off unless enabled in config/numen/mcp_server.json.
-        com.dwinovo.numen.api.mcp.server.ClientMcp.init(FabricLoader.getInstance().getConfigDir());
-
-        // Skills live under config/numen/skills. Hook the resource reload
-        // pipeline so /reload picks up newly added SKILL.md files without a
-        // client restart.
-        ResourceLocation skillLoaderId = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skill_loader");
-        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES)
-                .registerReloadListener(new SimpleSynchronousResourceReloadListener() {
-                    @Override
-                    public ResourceLocation getFabricId() {
-                        return skillLoaderId;
-                    }
-
-                    @Override
-                    public void onResourceManagerReload(ResourceManager rm) {
-                        // Numen API ships no built-in skills; pick up any SKILL.md the
-                        // player (or a tool pack) has placed under config/numen/skills.
-                        SkillRegistry.instance().scan(skillsDir);
-                    }
-                });
 
         // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.api.client.NumenKeys.OPEN_ROSTER);
@@ -103,21 +58,20 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.api.client.NumenKeys.tick();
-                    com.dwinovo.numen.api.client.agent.AgentLoopRegistry.tickAll();
-                    com.dwinovo.numen.api.mcp.server.ClientMcp.tick();
+                    com.dwinovo.numen.api.client.agent.RemoteCompanions.tick();
                 });
 
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
-                    // 先掐大脑:作废在飞回合与工具链,别让上一个存档的回合漂进下一个存档
-                    com.dwinovo.numen.api.client.agent.AgentLoopRegistry.quiesceAll();
+                    // 服务端推来的一切都不算了:别让上一个存档的东西漂进下一个存档
+                    com.dwinovo.numen.api.client.agent.RemoteCompanions.disconnected();
+                    com.dwinovo.numen.api.network.NumenNetwork.disconnectedFromServer();
                     com.dwinovo.numen.api.client.data.ClientNumenState.clear();
                     com.dwinovo.numen.api.client.agent.KnownSkins.clear();
                     com.dwinovo.numen.api.client.hud.SpeechBubbles.clear();
                     com.dwinovo.numen.api.client.chat.QuickVoice.clear();
                     com.dwinovo.numen.api.client.chat.ChatLines.clearLive();
                     com.dwinovo.numen.api.client.agent.NumenRoster.instance().clear();
-                    com.dwinovo.numen.api.client.agent.CompanionHome.onDisconnect();
                     com.dwinovo.numen.api.client.consent.ConsentCards.clear();
                 });
 

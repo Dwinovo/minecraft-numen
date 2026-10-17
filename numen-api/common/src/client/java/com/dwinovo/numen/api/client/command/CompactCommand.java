@@ -2,12 +2,12 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 
 /**
  * {@code /compact} —— 整理记忆。
  *
- * <p>可用性问 {@link CompanionView#compactProblem()},那是唯一的判据。补全行会把
+ * <p>可用性问 {@link RemoteCompanion#compactProblem()},那是唯一的判据。补全行会把
  * 理由原样显示出来——从前那颗按钮只会灰着,不说为什么。
  */
 final class CompactCommand implements ChatCommand {
@@ -28,12 +28,12 @@ final class CompactCommand implements ChatCommand {
     }
 
     @Override
-    public String unavailable(CompanionView loop) {
+    public String unavailable(RemoteCompanion loop) {
         return loop == null || loop.compactProblem() == null ? null : I18n.get(loop.compactProblem());
     }
 
     @Override
-    public String run(CompanionView loop, String args) {
+    public String run(RemoteCompanion loop, String args) {
         String refused = loop.requestCompact();
         if (refused != null) {
             return I18n.get(refused);

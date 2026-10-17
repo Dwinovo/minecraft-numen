@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.command;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.widget.SelectPanel;
@@ -32,7 +32,7 @@ final class SkillsCommand implements PopupCommand {
     }
 
     @Override
-    public com.dwinovo.numen.api.client.ui.widget.Popup popup(CompanionView loop) {
+    public com.dwinovo.numen.api.client.ui.widget.Popup popup(RemoteCompanion loop) {
         return new SelectPanel(new SkillsPage());
     }
 

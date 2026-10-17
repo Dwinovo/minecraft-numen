@@ -70,7 +70,7 @@ public final class ChatInputBar {
          * null 时补全只给一行灰着的 {@link com.dwinovo.numen.api.client.command.ChatCommands#soloOnly()},
          * 回车回的也是这一句,斜杠输入不会当话发出去。
          */
-        com.dwinovo.numen.api.client.agent.CompanionView loop();
+        com.dwinovo.numen.api.client.agent.RemoteCompanion loop();
 
         /** 这条输入行对着的会话;`@` 补的是它里面的人。null = 没选。 */
         com.dwinovo.numen.api.agent.conversation.Conversation conversation();

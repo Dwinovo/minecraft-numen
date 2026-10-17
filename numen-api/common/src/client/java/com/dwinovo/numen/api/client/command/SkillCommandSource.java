@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 
 import java.util.ArrayList;
@@ -17,7 +17,7 @@ import java.util.List;
 final class SkillCommandSource implements CommandSource {
 
     @Override
-    public List<ChatCommand> commands(CompanionView loop) {
+    public List<ChatCommand> commands(RemoteCompanion loop) {
         List<ChatCommand> out = new ArrayList<>();
         for (ServerLibraries.Skill skill : ServerLibraries.skills()) {
             // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
@@ -67,7 +67,7 @@ final class SkillCommandSource implements CommandSource {
          * 所以这里不用再回一句话,主人的气泡本身就是回执。
          */
         @Override
-        public String run(CompanionView loop, String args) {
+        public String run(RemoteCompanion loop, String args) {
             boolean there = ServerLibraries.skills().stream().anyMatch(s -> s.name().equals(skill) && s.enabled());
             if (!there) {
                 return I18n.get(Keys.CMD_SKILL_GONE, skill);

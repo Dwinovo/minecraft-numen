@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 
 /**
  * {@code /clear} —— 清空上下文,她白纸一张地开始下一轮。
@@ -28,12 +28,12 @@ final class ClearCommand implements ChatCommand {
     }
 
     @Override
-    public String unavailable(CompanionView loop) {
+    public String unavailable(RemoteCompanion loop) {
         return loop == null || loop.clearProblem() == null ? null : I18n.get(loop.clearProblem());
     }
 
     @Override
-    public String run(CompanionView loop, String args) {
+    public String run(RemoteCompanion loop, String args) {
         String refused = loop.requestClearContext();
         if (refused != null) {
             return I18n.get(refused);

@@ -16,13 +16,11 @@ import java.util.UUID;
  * <h2>Why UUID, not network id</h2>
  * The vanilla network {@code entity.getId()} (int) is a per-session handle that
  * changes whenever the entity is recreated (most notably on cross-dimension
- * travel). The client agent loop is therefore keyed by UUID and resolves the
- * current body through here, surviving the int-id churn of a Nether/End trip.
- * See {@link AgentLoopRegistry}.
+ * travel). Client-side views of a companion are therefore keyed by UUID and
+ * resolve the current body through here, surviving the int-id churn of a Nether/End trip.
  *
  * <p>{@code ClientLevel} exposes no public by-UUID lookup, so we scan the
- * loaded entities. Callers (chat GUI, agent loop) hit this infrequently — per
- * prompt / per tool round-trip, never per tick — so the linear scan is fine.
+ * loaded entities. Callers (chat GUI, skin and voice lookups) hit this infrequently, never per tick — so the linear scan is fine.
  *
  * <h2>Threading</h2>
  * Client main thread only.

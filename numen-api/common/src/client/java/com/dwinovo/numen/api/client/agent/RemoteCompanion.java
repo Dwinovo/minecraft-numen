@@ -22,7 +22,7 @@ import java.util.function.Consumer;
  *
  * <p>线程:客户端主线程。
  */
-public final class RemoteCompanion implements CompanionView {
+public final class RemoteCompanion {
 
     private final UUID uuid;
     private final Consumer<OwnerInput> send;
@@ -85,109 +85,107 @@ public final class RemoteCompanion implements CompanionView {
 
     // ---- 读 ----
 
-    @Override
     public UUID entityUuid() {
         return uuid;
     }
 
-    @Override
+    /** 内核此刻的只读快照:忙不忙、为什么不动、排着什么、在干什么。 */
     public LoopStatus status() {
         return new LoopStatus(state.phase(), state.hold(), state.holdReason(), state.bodyTaskRunning(), state.queued(),
                 state.compactProgress(), state.activity());
     }
 
-    @Override
+    /** 在飞的回复已长出的正文(空串 = 没有):对话面板打字机的数据源。 */
     public String livePartial() {
         return partial.toString();
     }
 
-    @Override
+    /** 在飞回合的思考流(空串 = 没有或已落库)。 */
     public String liveReasoning() {
         return reasoning.toString();
     }
 
-    @Override
+    /** 累计用了多少 token。 */
     public long totalTokensUsed() {
         return state.totalTokens();
     }
 
-    @Override
+    /** 四元累计用量(跨会话)。 */
     public Usage usageTotals() {
         return state.usageSum();
     }
 
-    @Override
+    /** 最近一轮的用量:命中率取自它,累计命中率会被历史稀释。 */
     public Usage lastUsage() {
         return state.usageLast();
     }
 
-    @Override
+    /** 缓存重计费的诊断数:本该命中却重新处理的 token。 */
     public long wastedTokens() {
         return state.wastedTokens();
     }
 
-    @Override
+    /** 缓存重计费发生的次数。 */
     public int wasteCount() {
         return state.wasteCount();
     }
 
-    @Override
+    /** 这次工具调用的结果还会不会来;历史里没结果、这里又答 false 的调用是被切断的。 */
     public boolean isToolCallOutstanding(String callId) {
         return state.outstanding().contains(callId);
     }
 
-    @Override
+    /** 当前的长期目标;没有是 {@code null}。 */
     public GoalState goal() {
         return state.goal() == null ? null : GoalState.fromJson(state.goal());
     }
 
-    @Override
+    /** 此刻不能整理记忆的理由(语言键);{@code null} = 能。 */
     public String compactProblem() {
         return state.compactProblem();
     }
 
-    @Override
+    /** 此刻不能清空上下文的理由(语言键);{@code null} = 能。 */
     public String clearProblem() {
         return state.clearProblem();
     }
 
-    @Override
+    /** 上下文水位百分比。 */
     public int contextPercent() {
         return state.contextPercent();
     }
 
-    @Override
+    /** 她绑定的模型的上下文窗口;没绑是 0。 */
     public int modelWindow() {
         return state.window();
     }
 
-    @Override
+    /** 她绑定的人设 id;没绑是 {@code null}。 */
     public String personaId() {
         return state.personaId();
     }
 
     /** 人设的 id 就是它的名字(文件名),所以名字不用另问。 */
-    @Override
     public String personaName() {
         return state.personaId();
     }
 
-    @Override
+    /** 她绑定的模型档案 id;没绑是 {@code null}。 */
     public String providerEntryId() {
         return state.providerId();
     }
 
-    @Override
+    /** 她此刻在哪个会话里(最后一次是被哪个会话叫醒的);{@code null} = 就他俩。 */
     public String conversation() {
         return state.conversation();
     }
 
-    @Override
+    /** 她此刻的上下文里有几条消息。 */
     public int messageCount() {
         return state.messages();
     }
 
-    @Override
+    /** 她自己那本日志里已经实时推来的面板行,从老到新。 */
     public List<ConvoLog.Line> display() {
         return java.util.Collections.unmodifiableList(lines);
     }
@@ -195,19 +193,17 @@ public final class RemoteCompanion implements CompanionView {
     // ---- 做 ----
 
     /** 话发出去了;服务端那头压没压着,从推来的状态里看,这里只报"没压着"。 */
-    @Override
     public boolean submitPrompt(String text) {
         send.accept(new OwnerInput.Say(uuid.toString(), text));
         return true;
     }
 
-    @Override
+    /** 一条技能命令:{@code echo} 是主人打的原文;技能正文由服务端展开。 */
     public void submitSkill(String echo, String skill, String args) {
         send.accept(new OwnerInput.Command(uuid, echo));
     }
 
     /** 能不能整理的判据在服务端、随状态推来;不能就当场回理由,能就发出去。 */
-    @Override
     public String requestCompact() {
         if (state.compactProblem() != null) {
             return state.compactProblem();
@@ -216,7 +212,7 @@ public final class RemoteCompanion implements CompanionView {
         return null;
     }
 
-    @Override
+    /** 主人要求清空上下文,形状同 {@link #requestCompact}。 */
     public String requestClearContext() {
         if (state.clearProblem() != null) {
             return state.clearProblem();
@@ -225,27 +221,27 @@ public final class RemoteCompanion implements CompanionView {
         return null;
     }
 
-    @Override
+    /** 主人按停止。 */
     public void abort() {
         send.accept(new OwnerInput.Stop(uuid.toString()));
     }
 
-    @Override
+    /** 定一个长期目标;{@code echo} 是主人打的原文,聊天里要有这行字。 */
     public void setGoal(GoalState next, String echo) {
         send.accept(new OwnerInput.SetGoal(uuid, next.objective(), echo));
     }
 
-    @Override
+    /** 收工。 */
     public void clearGoal(String why) {
         send.accept(new OwnerInput.ClearGoal(uuid));
     }
 
-    @Override
+    /** 换人设;{@code null} = 默认人格。 */
     public void setPersona(String id) {
         send.accept(new OwnerInput.SetPersona(uuid, id));
     }
 
-    @Override
+    /** 换模型档案;{@code null} = 不绑。 */
     public void setProviderEntry(String entryId) {
         send.accept(new OwnerInput.SetProvider(uuid, entryId));
     }

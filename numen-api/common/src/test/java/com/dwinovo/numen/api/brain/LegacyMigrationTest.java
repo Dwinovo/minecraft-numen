@@ -186,4 +186,26 @@ class LegacyMigrationTest {
         assertFalse(written.has("selected"), "选中是客户端的展示偏好");
         assertFalse(LegacyMigration.conversations(legacyFile, c -> c.has(A), worldFile), "已经有就不再写");
     }
+
+    @Test
+    void theOldInitiativeMovesToTheOwnersPrefsOnTheServerOnce(@TempDir Path dir) throws IOException {
+        Path config = dir.resolve("config");
+        text(config.resolve("ui.json"), "{\"v\":1,\"theme\":\"light\",\"initiative\":7}");
+        Path prefs = dir.resolve("server").resolve("players").resolve("owner").resolve("prefs.json");
+
+        assertTrue(LegacyMigration.initiative(config, prefs));
+
+        assertEquals(7, doc(prefs).read().orElseThrow().get("initiative").getAsInt());
+        assertFalse(LegacyMigration.initiative(config, prefs), "已经有就不再写");
+    }
+
+    @Test
+    void anOldUiFileWithoutInitiativeCarriesNothing(@TempDir Path dir) throws IOException {
+        Path config = dir.resolve("config");
+        text(config.resolve("ui.json"), "{\"v\":1,\"theme\":\"light\"}");
+        Path prefs = dir.resolve("server").resolve("prefs.json");
+
+        assertFalse(LegacyMigration.initiative(config, prefs));
+        assertFalse(Files.exists(prefs));
+    }
 }

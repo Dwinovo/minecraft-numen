@@ -171,7 +171,7 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
      */
     public Entry resolve(UUID companion) {
         if (!enabled || companion == null) return null;
-        return get(com.dwinovo.numen.api.client.agent.CompanionHome.binding(companion).voiceId());
+        return get(com.dwinovo.numen.api.client.agent.CompanionLooks.of(companion).voiceId());
     }
 
     // ---- pending summon assignment (same mechanism as PersonaLibrary.pendSummon:

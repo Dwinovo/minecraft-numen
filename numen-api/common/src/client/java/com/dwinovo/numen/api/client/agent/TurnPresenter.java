@@ -3,11 +3,8 @@ package com.dwinovo.numen.api.client.agent;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.loop.Hold;
-import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
-import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.client.chat.ChatLines;
@@ -16,7 +13,6 @@ import com.dwinovo.numen.api.client.hud.SpeechBubbles;
 import com.dwinovo.numen.api.client.ui.NumenToasts;
 import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.client.voice.VoicePipeline;
-import com.dwinovo.numen.api.mcp.server.McpTranscript;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
@@ -27,8 +23,8 @@ import java.util.function.Supplier;
  * 一只同伴的<b>表现层</b>:聊天框打字机、头顶气泡、聊天栏的话与提示、错误 toast、说话状态上报、
  * 流式语音(TTS)的接线与在飞文本缓冲。
  *
- * <p>它直接订阅循环内核的 {@link LoopEvent}({@link #on}),内核只管什么时候调模型、派工具、停下来,
- * 不碰界面;这里只管"她看/听起来在干什么",不碰会话与队列。删掉这一层,对话照常进行,只是又聋又哑。
+ * <p>吃服务端大脑推来的 {@link Feed}({@link #on}):大脑只管什么时候调模型、派工具、停下来,不碰界面;这里只管
+ * "她看/听起来在干什么",不碰会话与队列。删掉这一层,对话照常进行,只是又聋又哑。
  */
 final class TurnPresenter {
 
@@ -65,57 +61,18 @@ final class TurnPresenter {
     /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
     private boolean lastSpeakingSent;
 
-    /** 她说出口的话旁听给同会话的其他成员(服务端大脑那一侧由服务端做,这里不传)。 */
-    private final Consumer<String> overheard;
-    /** "大脑在想"是服务端自己知道的(服务端大脑):只报朗读在不在放。 */
-    private final boolean serverKnowsThinking;
-    /** 说话状态翻转了往哪报。 */
+    /** 说话状态翻转了往哪报:"大脑在想"服务端自己知道,这里只报朗读在不在放。 */
     private final Consumer<Boolean> speakingSink;
 
     TurnPresenter(UUID entityUuid, Supplier<LoopStatus> status, Supplier<String> personaName,
-                  Consumer<String> overheard, boolean serverKnowsThinking, Consumer<Boolean> speakingSink) {
+                  Consumer<Boolean> speakingSink) {
         this.entityUuid = entityUuid;
         this.status = status;
         this.personaName = personaName;
-        this.overheard = overheard;
-        this.serverKnowsThinking = serverKnowsThinking;
         this.speakingSink = speakingSink;
     }
 
-    /** 内核的事件在这里变成主人看得见、听得见的东西。 */
-    void on(LoopEvent event) {
-        switch (event) {
-            case LoopEvent.TurnStarted turn -> beginTurn(turn.ownerSpoke());
-            case LoopEvent.ModelDelta delta -> delta(delta.content(), delta.reasoning());
-            case LoopEvent.AssistantMessage message ->
-                    showReply(message.turn().content(), message.turn().hasToolCalls());
-            case LoopEvent.RunEnded ended -> {
-                if (!(ended.end() instanceof RunEnd.Done)) {
-                    endTurn();   // 失败或被切断:半截文字作废、语音收尾(说完了的回复在落库时已经收过)
-                }
-            }
-            case LoopEvent.TurnFailed failed -> showFailure(CauseWords.text(failed.cause()));
-            case LoopEvent.HoldChanged changed -> {
-                if (changed.hold() == Hold.BLOCKED) {
-                    showBlocked(CauseWords.text(changed.cause()));
-                }
-            }
-            case LoopEvent.Halted halted -> {
-                // 切断不管当时有没有 run 都会来:闲时按停止同样要让语音闭嘴、收起头顶的思考/残句
-                interruptVoice();
-                SpeechBubbles.clear(entityUuid);
-            }
-            case LoopEvent.RunStarted ignored -> { }
-            case LoopEvent.ToolStarted ignored -> { }
-            case LoopEvent.ToolFinished ignored -> { }
-            case LoopEvent.ApiCalled ignored -> { }
-            case LoopEvent.ProgramEnded ignored -> { }
-            case LoopEvent.ModelUsed ignored -> { }
-            case LoopEvent.TranscriptBoundary ignored -> { }
-        }
-    }
-
-    /** 服务端大脑推来的事件:画的和听的是同一套。 */
+    /** 服务端大脑推来的事件在这里变成主人看得见、听得见的东西。 */
     void on(Feed event) {
         switch (event) {
             case Feed.TurnStart turn -> beginTurn(turn.ownerSpoke());
@@ -149,22 +106,6 @@ final class TurnPresenter {
         if (voice != null) voice.tick();
         syncSpeakingState();
         streamToChat();
-    }
-
-    /**
-     * 外接大脑替她说话(say 工具):头顶气泡 + 聊天栏定格行 + 外接现场记录 + 语音,走的全是内脑说话的
-     * 同一套画法。语音按当前绑定现取声线,整段排到播放队尾——不开新轮、不清存量,连续的 say 自然连播;
-     * 主人的停止键照样一刀切停。未绑声线 = 静默(气泡与聊天行照旧)。
-     */
-    void sayExternal(String text) {
-        String shown = ChatDisplayModes.current().assistantText(text);
-        if (shown.isBlank()) shown = text;   // 全是动作记号也别无声吞掉——原样示人
-        McpTranscript.say(entityUuid, shown);
-        spoke(shown);
-        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
-        if (cfg == null) return;
-        if (voice == null) voice = new VoicePipeline(entityUuid);
-        voice.sayAppend(cfg, text);
     }
 
     /** 说话人显示名:人设名优先,否则花名册名。 */
@@ -218,7 +159,12 @@ final class TurnPresenter {
 
     /** 模型的一条回复落地:头顶气泡是回复的主显示(附近玩家都看得见),聊天框回显一份当日志。 */
     private void showReply(String content, boolean hasToolCalls) {
+        // 没开过一轮就来的回复是外接大脑替她说的:没有增量可以边出边读,整段读出来(排到播放队尾,连续的话自然连播)
+        boolean unprompted = voiceTurn == SILENT_VOICE;
         endTurn();   // committed 消息接管显示,半截打字与在飞行摘掉
+        if (unprompted) {
+            readAloud(content);
+        }
         String shown = ChatDisplayModes.current().assistantText(content);
         if (!hasToolCalls) {
             Constants.LOG.info("[numen-entity#{}] assistant (final): {} chars", entityUuid, content.length());
@@ -234,17 +180,12 @@ final class TurnPresenter {
     }
 
     /**
-     * 她说出口了——<b>唯一的一处</b>。头顶气泡是主显示,聊天框回显一份当日志,
-     * 同一个会话里的其他同伴旁听到一份。
-     *
-     * <p>内脑回复与外脑 say 走同一条——"她说了什么"只能有一个出处,
-     * 否则旁听到的和主人听见的会开始对不上。
+     * 她说出口了——<b>唯一的一处</b>。头顶气泡是主显示,聊天框回显一份当日志;同一个会话里的其他同伴旁听是服务端做的。
      */
     private void spoke(String said) {
         String shown = compact(said);
         SpeechBubbles.say(entityUuid, shown);
         ChatLines.companion(speakerName(), shown);
-        overheard.accept(shown);
         com.dwinovo.numen.api.client.notify.MessageNotices.spoke(entityUuid, shown);
     }
 
@@ -254,6 +195,18 @@ final class TurnPresenter {
      */
     private static String compact(String text) {
         return text.replaceAll("\\n\\s*\\n+", "\n");
+    }
+
+    /** 整段读出来:按当前绑定现取声线;未绑声线 = 静默(气泡与聊天行照旧)。 */
+    private void readAloud(String text) {
+        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
+        if (cfg == null) {
+            return;
+        }
+        if (voice == null) {
+            voice = new VoicePipeline(entityUuid);
+        }
+        voice.sayAppend(cfg, text);
     }
 
     /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */
@@ -310,9 +263,8 @@ final class TurnPresenter {
         if (Minecraft.getInstance().getConnection() == null) {
             return;
         }
-        Phase phase = status.get().phase();
         boolean voicePlaying = voice != null && voice.isSpeaking();
-        boolean speaking = voicePlaying || !serverKnowsThinking && (phase == Phase.MODEL || phase == Phase.TOOLS);
+        boolean speaking = voicePlaying;
         if (speaking != lastSpeakingSent) {
             lastSpeakingSent = speaking;
             speakingSink.accept(speaking);

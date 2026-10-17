@@ -25,12 +25,12 @@ class VoiceLibraryTest {
 
     @org.junit.jupiter.api.BeforeEach
     void homeInTemp() {
-        com.dwinovo.numen.api.client.agent.CompanionHome.init(dir);
+        com.dwinovo.numen.api.client.agent.CompanionLooks.init(dir);
     }
 
     @org.junit.jupiter.api.AfterEach
     void homeRestore() {
-        com.dwinovo.numen.api.client.agent.CompanionHome.init(null);
+        com.dwinovo.numen.api.client.agent.CompanionLooks.init(null);
     }
 
     private VoiceLibrary fresh() {
@@ -145,7 +145,7 @@ class VoiceLibraryTest {
         assertFalse(fresh().enabled());
     }
 
-    // 绑定不再住在库里(它跟着同伴走,见 CompanionHome),所以这几条验的是
+    // 绑定不再住在库里(它跟着同伴走,见 CompanionLooks),所以这几条验的是
     // "库按外部给的绑定解析"——总开关闸门、悬空绑定回落。
 
     @Test
@@ -153,8 +153,8 @@ class VoiceLibraryTest {
         VoiceLibrary lib = fresh();
         UUID u = UUID.randomUUID();
         VoiceLibrary.Entry e = openai(lib, "A");
-        com.dwinovo.numen.api.client.agent.CompanionHome.bind(u,
-                com.dwinovo.numen.api.client.agent.CompanionHome.Binding.EMPTY.withVoice(e.id()));
+        com.dwinovo.numen.api.client.agent.CompanionLooks.set(u,
+                com.dwinovo.numen.api.client.agent.CompanionLooks.Looks.EMPTY.withVoice(e.id()));
 
         assertEquals(e.id(), lib.resolve(u).id());   // 缺省开 → 绑定即出声
         lib.setEnabled(false);
@@ -178,8 +178,8 @@ class VoiceLibraryTest {
         lib.setEnabled(true);
         UUID u = UUID.randomUUID();
         VoiceLibrary.Entry e = openai(lib, "A");
-        com.dwinovo.numen.api.client.agent.CompanionHome.bind(u,
-                com.dwinovo.numen.api.client.agent.CompanionHome.Binding.EMPTY.withVoice(e.id()));
+        com.dwinovo.numen.api.client.agent.CompanionLooks.set(u,
+                com.dwinovo.numen.api.client.agent.CompanionLooks.Looks.EMPTY.withVoice(e.id()));
         lib.remove(e.id());                   // 条目删了,绑定悬空 → 回落静音
         assertNull(lib.resolve(u));
     }

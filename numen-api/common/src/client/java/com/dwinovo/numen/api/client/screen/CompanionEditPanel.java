@@ -3,8 +3,7 @@ package com.dwinovo.numen.api.client.screen;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
-import com.dwinovo.numen.api.client.agent.CompanionViews;
-import com.dwinovo.numen.api.client.agent.CompanionHome;
+import com.dwinovo.numen.api.client.agent.CompanionLooks;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.skin.SkinLibrary;
@@ -91,8 +90,8 @@ public final class CompanionEditPanel extends ModalCard {
     @Override
     void reset() {
         var uuid = host.uuid();
-        var loop = CompanionViews.getOrCreate(uuid);
-        var binding = CompanionHome.binding(uuid);
+        var loop = RemoteCompanions.getOrCreate(uuid);
+        var binding = CompanionLooks.of(uuid);
         origPersona = loop.personaId();
         origProvider = loop.providerEntryId();
         origVoice = binding.voiceId();
@@ -213,20 +212,20 @@ public final class CompanionEditPanel extends ModalCard {
     private void save() {
         var uuid = host.uuid();
         if (!Objects.equals(draft.personaId, origPersona)) {
-            CompanionViews.getOrCreate(uuid).setPersona(draft.personaId);
+            RemoteCompanions.getOrCreate(uuid).setPersona(draft.personaId);
         }
         if (draft.providerId != null && !draft.providerId.equals(origProvider)) {
-            CompanionViews.getOrCreate(uuid).setProviderEntry(draft.providerId);
+            RemoteCompanions.getOrCreate(uuid).setProviderEntry(draft.providerId);
         }
         if (!Objects.equals(draft.voiceId, origVoice)) {
-            CompanionHome.bind(uuid, CompanionHome.binding(uuid).withVoice(draft.voiceId));
+            CompanionLooks.set(uuid, CompanionLooks.of(uuid).withVoice(draft.voiceId));
         }
         if (!modeLocked && draft.creative != origCreative) {
             host.setCreative(draft.creative);
         }
         if (!draft.skinId.equals(origSkin)) {
             host.applySkin(draft.skinId);
-            CompanionHome.bind(uuid, CompanionHome.binding(uuid)
+            CompanionLooks.set(uuid, CompanionLooks.of(uuid)
                     .withSkin(SKIN_BY_NAME.equals(draft.skinId) ? null : draft.skinId));
         }
         host.onClose();

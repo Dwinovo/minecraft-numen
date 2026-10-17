@@ -63,8 +63,7 @@ public final class RemoteCompanions {
 
     private static Entry open(UUID companion) {
         RemoteCompanion[] self = new RemoteCompanion[1];
-        TurnPresenter presenter = new TurnPresenter(companion, () -> self[0].status(),
-                () -> self[0].personaName(), said -> { }, true,
+        TurnPresenter presenter = new TurnPresenter(companion, () -> self[0].status(), () -> self[0].personaName(),
                 playing -> send(new OwnerInput.Speaking(companion, playing)));
         self[0] = new RemoteCompanion(companion, RemoteCompanions::send, presenter::on,
                 line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
@@ -78,6 +77,10 @@ public final class RemoteCompanions {
 
     /** 每个客户端刻一次:各视图的表现层往前走一步(打字机、语音、说话状态)。 */
     public static void tick() {
+        // 循环属于一次连接:标题画面上没有连接,身体够不着、包发不出去
+        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
+            return;
+        }
         for (Entry entry : COMPANIONS.values()) {
             entry.presenter().tick();
         }

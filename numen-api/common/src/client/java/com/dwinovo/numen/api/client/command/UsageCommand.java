@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.command;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.ui.TokenFormat;
 import com.dwinovo.numen.api.client.ui.widget.Popup;
 import com.dwinovo.numen.api.client.ui.widget.Readout;
@@ -19,7 +19,7 @@ import java.util.Locale;
  *
  * <p>输入按<b>缓存命中 / 新处理</b>拆,这是唯一与服务商无关的拆法;缓存写归到新处理
  * 那一侧,它是实打实处理过的量,只是顺便存了起来。页脚那一行读的是同一份数据
- * ({@link CompanionView#usageTotals()} 等),不各算各的。
+ * ({@link RemoteCompanion#usageTotals()} 等),不各算各的。
  */
 final class UsageCommand implements PopupCommand {
 
@@ -34,12 +34,12 @@ final class UsageCommand implements PopupCommand {
     }
 
     @Override
-    public Popup popup(CompanionView loop) {
+    public Popup popup(RemoteCompanion loop) {
         return new Readout(new UsageContent(loop));
     }
 
     /** 每次取值都现问:账在她说话时随时在变。 */
-    private record UsageContent(CompanionView loop) implements Readout.Content {
+    private record UsageContent(RemoteCompanion loop) implements Readout.Content {
 
         @Override
         public String title() {

@@ -82,7 +82,8 @@ public final class ServerBrains {
         UUID host = profile.getId();
         Path legacy = NumenPaths.config();
         LegacyMigration.ownerLibraries(legacy, host, homes.owner(host).dir());
-        LegacyMigration.conversations(legacy.resolve("companions").resolve("conversations.json"),
+        LegacyMigration.initiative(legacy, homes.owner(host).file("prefs.json"));
+        LegacyMigration.conversations(LegacyMigration.conversationsFile(legacy),
                 conv -> conv.members().stream().anyMatch(member -> registry.find(member) != null),
                 homes.worldOwner(host).file("conversations.json"));
     }

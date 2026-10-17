@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.ui.widget.Popup;
 
 /**
@@ -22,7 +22,7 @@ import com.dwinovo.numen.api.client.ui.widget.Popup;
 public interface PopupCommand extends ChatCommand {
 
     /** 这条命令要弹出来的那一层。 */
-    Popup popup(CompanionView loop);
+    Popup popup(RemoteCompanion loop);
 
     /**
      * 没有界面的调用方走到这儿——弹层是界面的东西,给不了。
@@ -30,7 +30,7 @@ public interface PopupCommand extends ChatCommand {
      * <p>不静默:说清楚它得在聊天面板里用,比什么都不发生好查。
      */
     @Override
-    default String run(CompanionView loop, String args) {
+    default String run(RemoteCompanion loop, String args) {
         return I18n.get(Keys.CMD_POPUP_ONLY, ChatCommands.PREFIX + name());
     }
 }

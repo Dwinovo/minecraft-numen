@@ -28,8 +28,7 @@ public final class ClientPayloadHandlers {
     /**
      * 客户端入口调用一次,把全部处理体挂进主源码集的挂点。
      *
-     * <p><b>这里只挂处理体</b>——需要客户端真的起来的活(比如
-     * {@code CompanionHome.migrateLegacy()} 要读游戏目录)不属于这儿:模组构造在 datagen
+     * <p><b>这里只挂处理体</b>——需要客户端真的起来的活不属于这儿:模组构造在 datagen
      * 里同样会跑,那时 {@code Minecraft.getInstance()} 还是 null。那类事挂到各 loader 的
      * 客户端启动钩子上。
      */
@@ -58,17 +57,11 @@ public final class ClientPayloadHandlers {
         }
         NumenRoster.instance().replaceAll(p.worldId(), snapshot);
 
-        // 对账:本世界不在名册上的 = 已被永久遣散,家目录整个删掉。
-        // 名册来自服务端的持久注册表(死亡/休眠的同伴都在册),所以"不在册"只有这一个意思。
-        // 这是状态同步不是事件通知——掉线时遣散的、信号丢了的,下次收到名册照样对得平。
-        int swept = com.dwinovo.numen.api.client.agent.CompanionHome.reconcile(p.worldId(), onRoster);
-        if (swept > 0) {
-            Constants.LOG.info("[numen-net] 对账清理了 {} 只已遣散同伴的数据", swept);
-        }
-        // 遣散的那只在服务端的家、会话里的位置都由服务端收;这里只放掉我们这头她的视图
+        // 遣散的那只在服务端的家、会话里的位置都由服务端收;这里只放掉我们这头她的视图和这台机器上记的外观选择
         for (UUID gone : before.keySet()) {
             if (!onRoster.contains(gone)) {
                 com.dwinovo.numen.api.client.agent.RemoteCompanions.forget(gone);
+                com.dwinovo.numen.api.client.agent.CompanionLooks.forget(gone);
             }
         }
 
@@ -79,8 +72,8 @@ public final class ClientPayloadHandlers {
             String voiceEntry = VoiceLibrary.takePendingSummon(e.name());
             if (voiceEntry != null) {
                 if (VoiceLibrary.instance().get(voiceEntry) != null) {
-                    com.dwinovo.numen.api.client.agent.CompanionHome.bind(e.uuid(),
-                            com.dwinovo.numen.api.client.agent.CompanionHome.binding(e.uuid()).withVoice(voiceEntry));
+                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(e.uuid(),
+                            com.dwinovo.numen.api.client.agent.CompanionLooks.of(e.uuid()).withVoice(voiceEntry));
                 } else {
                     // 声线条目在召唤途中被删了:她会变哑巴,不说一声主人要找很久
                     com.dwinovo.numen.api.client.chat.ChatLines.notice(e.name(),
@@ -91,8 +84,8 @@ public final class ClientPayloadHandlers {
             // 不用出声——皮肤按签名值已生效,只是记不上账,编辑卡会按默认显示。
             String skinEntry = com.dwinovo.numen.api.client.skin.SkinLibrary.takePendingSummon(e.name());
             if (skinEntry != null && com.dwinovo.numen.api.client.skin.SkinLibrary.instance().get(skinEntry) != null) {
-                com.dwinovo.numen.api.client.agent.CompanionHome.bind(e.uuid(),
-                        com.dwinovo.numen.api.client.agent.CompanionHome.binding(e.uuid()).withSkin(skinEntry));
+                com.dwinovo.numen.api.client.agent.CompanionLooks.set(e.uuid(),
+                        com.dwinovo.numen.api.client.agent.CompanionLooks.of(e.uuid()).withSkin(skinEntry));
             }
         }
     }

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.command;
 
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ import java.util.List;
  * 在本地跑完,要不要让模型知道、让它知道什么,由命令自己决定,不经过模型的判断。
  *
  * <h2>为什么 {@link #run} 只回一个字符串</h2>
- * 命令想干的一切(展开技能、开一轮、压缩、翻开关)本来就是 {@link CompanionView}
+ * 命令想干的一切(展开技能、开一轮、压缩、翻开关)本来就是 {@link RemoteCompanion}
  * 上的方法,它自己去调。框架真正需要拿回来的只有一样:<b>给主人看什么</b>。
  *
  * <p>如果这里返回的是"结果的种类",那么每多一种命令就得往那个种类上加一格,而
@@ -52,12 +52,12 @@ public interface ChatCommand {
      * <p>补全行据此灰掉并把理由显示出来。这是斜杠命令比按钮强的地方:按钮灰着不说话,
      * 这里灰着还告诉你为什么。
      */
-    default String unavailable(CompanionView loop) {
+    default String unavailable(RemoteCompanion loop) {
         return null;
     }
 
     /** 参数的补全候选;{@code partial} 是已经打出来的那截参数(可能是空串)。 */
-    default List<Completion> completeArgs(CompanionView loop, String partial) {
+    default List<Completion> completeArgs(RemoteCompanion loop, String partial) {
         return List.of();
     }
 
@@ -67,5 +67,5 @@ public interface ChatCommand {
      * @param args 命令名之后的原文,已 trim;没有参数时是空串,不会是 {@code null}
      * @return 给主人看的话(可多行);{@code null} = 不吭声
      */
-    String run(CompanionView loop, String args);
+    String run(RemoteCompanion loop, String args);
 }

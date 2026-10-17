@@ -7,11 +7,11 @@ import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.client.agent.CompanionViews;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ChatFolders;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.SelectedCompanion;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
@@ -190,7 +190,7 @@ public final class NumenScreen extends Screen {
             return new HeaderStatus("respawn", rem <= 0 ? I18n.get(ModLanguageData.Keys.RESPAWN_BLOCKED)
                     : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0)));
         }
-        var st = CompanionViews.get(her).map(CompanionView::status).orElse(null);
+        var st = RemoteCompanions.get(her).map(RemoteCompanion::status).orElse(null);
         if (st == null) return new HeaderStatus("online", I18n.get(ModLanguageData.Keys.HEADER_ONLINE));
         if (st.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT) {
             return new HeaderStatus("compacting", I18n.get(ModLanguageData.Keys.HEADER_COMPACTING) + dots(now));
@@ -481,9 +481,9 @@ public final class NumenScreen extends Screen {
     }
 
     /** 就他俩那只的大脑;会话没有单一的主时 null。 */
-    private CompanionView loop() {
+    private RemoteCompanion loop() {
         UUID her = solo();
-        return her == null ? null : CompanionViews.getOrCreate(her);
+        return her == null ? null : RemoteCompanions.getOrCreate(her);
     }
 
     /**
@@ -1141,7 +1141,7 @@ public final class NumenScreen extends Screen {
             return I18n.get("numen.chat.hint", n == null ? "" : n);
         }
 
-        @Override public CompanionView loop() {
+        @Override public RemoteCompanion loop() {
             return NumenScreen.this.loop();
         }
 
@@ -1505,7 +1505,7 @@ public final class NumenScreen extends Screen {
     private String activePersonaName() {
         UUID her = solo();
         if (her == null) return null;
-        return CompanionViews.get(her).map(CompanionView::personaName).orElse(null);
+        return RemoteCompanions.get(her).map(RemoteCompanion::personaName).orElse(null);
     }
 
     @Override
@@ -2649,7 +2649,7 @@ public final class NumenScreen extends Screen {
         String tag = Conversations.instance().tagOf(c);
         boolean group = Conversations.instance().soloOf(c) == null;
         for (UUID m : Conversations.instance().membersAlive(c)) {
-            CompanionView lp = CompanionViews.get(m).orElse(null);
+            RemoteCompanion lp = RemoteCompanions.get(m).orElse(null);
             if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
             HeaderStatus s = headerStatus(m, now);
             if (s == null || !(s.key().equals("typing") || s.key().equals("busy") || s.key().equals("compacting"))) {
@@ -2705,7 +2705,7 @@ public final class NumenScreen extends Screen {
 
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */
     private int statusColor(UUID u) {
-        return CompanionViews.get(u).map(loop -> {
+        return RemoteCompanions.get(u).map(loop -> {
             var status = loop.status();
             if (status.busy()) return RUN;   // 等模型、跑工具、整理记忆、身体有后台任务
             if (!status.queuedPreview().isEmpty()) return CTA;
@@ -2813,7 +2813,7 @@ public final class NumenScreen extends Screen {
 
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         renderFind(g, mouseX, mouseY);
-        CompanionView lp = loop();
+        RemoteCompanion lp = loop();
         long now = System.currentTimeMillis();
         float dt = lastPinFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPinFrameMs) / 1000f);
         lastPinFrameMs = now;

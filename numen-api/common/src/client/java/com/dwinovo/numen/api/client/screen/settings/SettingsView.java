@@ -6,8 +6,7 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
-import com.dwinovo.numen.api.client.agent.CompanionViews;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
@@ -128,7 +127,7 @@ public final class SettingsView {
                                 + (!admin || hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
                         // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                CompanionViews.getOrCreate(host.uuid()).providerEntryId());
+                                RemoteCompanions.getOrCreate(host.uuid()).providerEntryId());
                         return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, admin && !hasKey, marked);
                     },
                     admin ? e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
@@ -139,7 +138,7 @@ public final class SettingsView {
                     // 换绑走 setProviderEntry(下一次请求即生效);不许解绑——同伴必须有端点
                     .withBind(e -> {
                         if (host.uuid() != null) {
-                            CompanionViews.getOrCreate(host.uuid()).setProviderEntry(e.id());
+                            RemoteCompanions.getOrCreate(host.uuid()).setProviderEntry(e.id());
                         }
                     }, null);
         }
@@ -164,7 +163,7 @@ public final class SettingsView {
                                 nb(e.backend()) ? e.backend() : "openai", detail, Math.round(e.volume() * 5.0f));
                         // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                com.dwinovo.numen.api.client.agent.CompanionHome.binding(host.uuid()).voiceId());
+                                com.dwinovo.numen.api.client.agent.CompanionLooks.of(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta, false, marked);
                     },
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
@@ -177,20 +176,20 @@ public final class SettingsView {
                         host.rebuild();
                     },
                     this::beginEditVoice)
-                    // 换绑/解绑写进 CompanionHome 绑定,下一句话就用新声线(VoiceLibrary 现查)
+                    // 换绑/解绑写进 CompanionLooks,下一句话就用新声线(VoiceLibrary 现查)
                     .withBind(
                             e -> {
                                 if (host.uuid() != null) {
-                                    com.dwinovo.numen.api.client.agent.CompanionHome.bind(host.uuid(),
-                                            com.dwinovo.numen.api.client.agent.CompanionHome
-                                                    .binding(host.uuid()).withVoice(e.id()));
+                                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
+                                            com.dwinovo.numen.api.client.agent.CompanionLooks
+                                                    .of(host.uuid()).withVoice(e.id()));
                                 }
                             },
                             e -> {
                                 if (host.uuid() != null) {
-                                    com.dwinovo.numen.api.client.agent.CompanionHome.bind(host.uuid(),
-                                            com.dwinovo.numen.api.client.agent.CompanionHome
-                                                    .binding(host.uuid()).withVoice(null));
+                                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
+                                            com.dwinovo.numen.api.client.agent.CompanionLooks
+                                                    .of(host.uuid()).withVoice(null));
                                 }
                             })
                     .withToggle(ModLanguageData.Keys.VOICE_ENABLED,
@@ -624,8 +623,8 @@ public final class SettingsView {
             // 从某个同伴的设置页新建 → 直接绑给它:用户的心智模型是"建声线就是给
             // 这只配音",绑定下拉只用于换绑/多同伴共用一条声线。
             if (host.uuid() != null) {
-                com.dwinovo.numen.api.client.agent.CompanionHome.bind(host.uuid(),
-                        com.dwinovo.numen.api.client.agent.CompanionHome.binding(host.uuid())
+                com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
+                        com.dwinovo.numen.api.client.agent.CompanionLooks.of(host.uuid())
                                 .withVoice(created.id()));
             }
         }
@@ -690,7 +689,7 @@ public final class SettingsView {
                         String meta = p.text().replace('\n', ' ');
                         // 行尾勾 = 本同伴的人设
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
-                                CompanionViews.getOrCreate(host.uuid()).personaId());
+                                RemoteCompanions.getOrCreate(host.uuid()).personaId());
                         return new LibraryListPanel.Row(p.name(), meta, false, marked, false);
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
@@ -706,12 +705,12 @@ public final class SettingsView {
                     .withBind(
                             p -> {
                                 if (host.uuid() != null) {
-                                    CompanionViews.getOrCreate(host.uuid()).setPersona(p.id());
+                                    RemoteCompanions.getOrCreate(host.uuid()).setPersona(p.id());
                                 }
                             },
                             p -> {
                                 if (host.uuid() != null) {
-                                    CompanionViews.getOrCreate(host.uuid()).setPersona(null);
+                                    RemoteCompanions.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
                     .withClone(p -> savePersona(null, I18n.get(ModLanguageData.Keys.PERSONA_COPY, p.name()), p.text()))

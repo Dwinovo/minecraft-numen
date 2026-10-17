@@ -42,6 +42,11 @@ public final class LegacyMigration {
 
     private LegacyMigration() {}
 
+    /** 旧版放会话名册(连同展示偏好)的文件:{@code <config/numen>/companions/conversations.json}。 */
+    public static Path conversationsFile(Path legacyRoot) {
+        return legacyRoot.resolve("companions").resolve("conversations.json");
+    }
+
     /**
      * 她的家:旧的 {@code companions/<uuid>/}(对话日志及其备份、收件箱、台账、目标、札记、绑定)搬到世界里她的家。
      *
@@ -74,6 +79,30 @@ public final class LegacyMigration {
         moved |= tree(legacyRoot.resolve("persona"), ownerHome.resolve("persona"));
         moved |= tree(legacyRoot.resolve("lua").resolve(profileId.toString()), ownerHome.resolve("lua"));
         return moved;
+    }
+
+    /**
+     * 主人的主动性档位:旧版存在客户端的 {@code ui.json} 里(全局一个),搬到服务器上他的偏好文件。目标已经在就不动。
+     *
+     * @param legacyRoot 旧的 {@code config/numen/}
+     * @param prefsFile  服务器上他的偏好文件
+     * @return 这一次搬了
+     */
+    public static boolean initiative(Path legacyRoot, Path prefsFile) {
+        Path ui = legacyRoot.resolve("ui.json");
+        if (Files.exists(prefsFile) || !Files.isRegularFile(ui)) {
+            return false;
+        }
+        JsonObject legacy = new JsonDoc(ui, JsonDoc.Format.of(1), Io.direct(e -> { })).read().orElse(null);
+        if (legacy == null || !legacy.has("initiative")) {
+            return false;
+        }
+        JsonObject prefs = new JsonObject();
+        prefs.addProperty("initiative", legacy.get("initiative").getAsInt());
+        new JsonDoc(prefsFile, JsonDoc.Format.of(1), Io.direct(e -> {
+            throw new StoreException(e.getMessage(), e);
+        })).write(prefs);
+        return true;
     }
 
     /**

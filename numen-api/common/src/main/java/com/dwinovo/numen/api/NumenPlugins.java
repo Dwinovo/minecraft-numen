@@ -36,15 +36,16 @@ import java.util.function.Function;
  * 跑不了的等它就绪。
  *
  * <h2>专用服务器上会安静地少几样</h2>
- * 技能和头像只活在玩家的客户端上。它们由客户端启动时{@linkplain #bindClient 接上来};
- * 专用服务器上没人接,于是 {@code bundleSkills} / {@code registerPortrait} 就是空操作。
- * <b>"有没有接上"本身就是判据</b>,不必再去问一遍"我现在是不是客户端"——那种问法
- * 每个加载器一个写法,写在插件里就是每个插件一个写法。
+ * 头像只活在玩家的客户端上,它由客户端启动时{@linkplain #bindClient 接上来};专用服务器上没人接,
+ * 于是 {@code registerPortrait} 与 {@code onClient} 就是空操作。技能归服务端的大脑,
+ * 服务端起来时{@linkplain #bindSkills 接上}。<b>"有没有接上"本身就是判据</b>,不必再去问一遍
+ * "我现在是不是客户端"——那种问法每个加载器一个写法,写在插件里就是每个插件一个写法。
  */
 public final class NumenPlugins {
 
-    /** 客户端接上来的那几样;专用服务器上一直是 null,于是相关调用自然成空操作。 */
+    /** 服务端大脑接上来的技能表入口;没接上之前登记的技能先攒在 {@link #PENDING_SKILLS}。 */
     private static volatile Consumer<Path> skills;
+    /** 客户端接上来的输入口;专用服务器上一直是 null。 */
     private static volatile ClientInput clientInput;
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
@@ -77,18 +78,16 @@ public final class NumenPlugins {
     /**
      * 客户端起来时把只在客户端存在的能力接上来。<b>Numen API 内部调用</b>,插件不该碰。
      */
-    public static void bindClient(Consumer<Path> skillSink, ClientInput input) {
-        skills = skillSink;
+    public static void bindClient(ClientInput input) {
         clientInput = input;
         clientReady = true;
         for (Runnable r : PENDING) runClientBlock(r);
         PENDING.clear();
-        flushSkills(skillSink);
     }
 
     /**
-     * 只接技能这一样,不算客户端起来了:没有客户端、却要照主人客户端的样子组装提示词的进程(评测)用它。
-     * 插件的 {@code onClient} 块照旧攒着不跑。<b>Numen API 内部调用</b>,插件不该碰。
+     * 服务端起来时把技能表接上来(评测的进程也是一个"服务端")。已经登记的技能这时一并交出去。
+     * <b>Numen API 内部调用</b>,插件不该碰。
      */
     public static void bindSkills(Consumer<Path> skillSink) {
         skills = skillSink;

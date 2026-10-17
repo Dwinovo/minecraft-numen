@@ -3,8 +3,6 @@ package com.dwinovo.numen.api.entity;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,53 +112,5 @@ class CompanionRosterTest {
         assertEquals(0L, CompanionRoster.respawnInMs(1000L, 1000L + DELAY, DELAY));
         assertEquals(0L, CompanionRoster.respawnInMs(1000L, 999999L, DELAY), "等了很久也还是 0");
         assertTrue(new CompanionRoster.Line(A, "x", 0L).dead(), "0 = 还在等复活,不是活着");
-    }
-
-    // ---- 删:哪些家该清 ----
-
-    @Test
-    void dismissedCompanionIsSweptButLivingOnesAreNot() {
-        List<UUID> gone = CompanionRoster.orphans(
-                Map.of(A, "world-1", B, "world-1"), "world-1", Set.of(A));
-        assertEquals(List.of(B), gone);
-    }
-
-    @Test
-    void deadCompanionOnTheRosterIsNeverSwept() {
-        // 判错就是毁数据的那条路:她死了、暂时不在世界里,但她还在名册上
-        List<UUID> gone = CompanionRoster.orphans(
-                Map.of(A, "world-1"), "world-1", Set.of(A));
-        assertTrue(gone.isEmpty(), "死亡不是遣散");
-    }
-
-    @Test
-    void otherWorldsAreNeverTouched() {
-        // 换个存档进去,上一个存档的同伴当然不在这份名册上——照着删就是灭顶之灾
-        List<UUID> gone = CompanionRoster.orphans(
-                Map.of(A, "world-1", B, "world-2"), "world-2", Set.of(B));
-        assertTrue(gone.isEmpty(), "world-1 的同伴不归 world-2 的名册管");
-    }
-
-    @Test
-    void untaggedHomesAreNeverSwept() {
-        // 旧版本迁移过来的数据没标世界,归属不明 → 一个都不删(宁可留孤儿)
-        java.util.Map<UUID, String> homes = new java.util.HashMap<>();
-        homes.put(A, null);
-        assertTrue(CompanionRoster.orphans(homes, "world-1", Set.of()).isEmpty());
-    }
-
-    @Test
-    void unknownWorldSweepsNothing() {
-        // 还没收到过名册就不知道自己在哪个世界,这时候一个都不能删
-        assertTrue(CompanionRoster.orphans(Map.of(A, "world-1"), null, Set.of()).isEmpty());
-        assertTrue(CompanionRoster.orphans(Map.of(A, "world-1"), "  ", Set.of()).isEmpty());
-    }
-
-    @Test
-    void emptyRosterInAKnownWorldSweepsThatWorldOnly() {
-        // 主人把最后一只同伴也遣散了:本世界该清空,别的世界纹丝不动
-        List<UUID> gone = CompanionRoster.orphans(
-                Map.of(A, "world-1", B, "world-2"), "world-1", Set.of());
-        assertEquals(List.of(A), gone);
     }
 }

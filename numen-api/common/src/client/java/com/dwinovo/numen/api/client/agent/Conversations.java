@@ -2,6 +2,8 @@ package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.api.NumenPaths;
+import com.dwinovo.numen.api.brain.LegacyMigration;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.store.JsonDoc;
@@ -64,8 +66,8 @@ public final class Conversations {
 
     public static Conversations instance() {
         if (instance == null) {
-            instance = new Conversations(CompanionHome.numenRoot().resolve("conversation_prefs.json"),
-                    CompanionHome.conversations());
+            Path root = NumenPaths.config();
+            instance = new Conversations(root.resolve("conversation_prefs.json"), LegacyMigration.conversationsFile(root));
             instance.load();
         }
         return instance;
@@ -451,7 +453,7 @@ public final class Conversations {
     /** 有谁能停。 */
     public boolean canAbort(Conversation conv) {
         for (UUID m : membersAlive(conv)) {
-            if (CompanionViews.get(m).map(view -> view.status().canInterrupt()).orElse(false)) {
+            if (RemoteCompanions.get(m).map(view -> view.status().canInterrupt()).orElse(false)) {
                 return true;
             }
         }

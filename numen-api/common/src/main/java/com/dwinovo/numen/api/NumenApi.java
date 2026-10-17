@@ -30,8 +30,7 @@ import java.util.function.Function;
  * 这里只是它们对外的那一面。
  *
  * <h2>专用服务器上会安静地少几样</h2>
- * 技能和头像喂的是 LLM 与界面,而两者都只活在玩家自己的客户端上。在专用服务器上
- * {@link #bundleSkills} 与 {@link #registerPortrait} 是<b>空操作</b>,不报错。
+ * 头像喂的是界面,只活在玩家自己的客户端上。在专用服务器上 {@link #registerPortrait} 是<b>空操作</b>,不报错。
  * 这样插件不必自己写 {@code if (dist == CLIENT)} ——那种判断写在每个插件里,
  * 就是四个插件四种写法。
  */
@@ -85,7 +84,7 @@ public interface NumenApi {
      * 把一个目录里的技能交给 Numen API。就地读,不复制:你的 jar 一卸载技能跟着消失。
      * 玩家在 {@code config/numen/skills/} 放同名目录可以覆盖你这份。
      *
-     * <p>通常传你自己 jar 里的 {@code skills/}。专用服务器上是空操作。
+     * <p>通常传你自己 jar 里的 {@code skills/}。技能由服务端的大脑读,客户端与服务端都会走到这里。
      */
     void bundleSkills(Path skillsRoot);
 

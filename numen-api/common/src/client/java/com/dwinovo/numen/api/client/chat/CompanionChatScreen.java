@@ -5,9 +5,9 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
-import com.dwinovo.numen.api.client.agent.CompanionViews;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.consent.ConsentCards;
 import com.dwinovo.numen.api.client.consent.ConsentMessage;
@@ -90,9 +90,9 @@ public class CompanionChatScreen extends Screen {
     }
 
     /** 就他俩那只的大脑(补全、征询);会话没有单一的主时 null。 */
-    private CompanionView loop() {
+    private RemoteCompanion loop() {
         UUID her = Conversations.instance().soloOf(conv);
-        return her == null ? null : CompanionViews.getOrCreate(her);
+        return her == null ? null : RemoteCompanions.getOrCreate(her);
     }
 
     /** 名字牌(说给谁:头像 + 名字)的宽度:它和输入行同排,占掉输入卡最左边这一截。 */
@@ -133,7 +133,7 @@ public class CompanionChatScreen extends Screen {
             return I18n.get(Keys.CHAT_INPUT_HINT);
         }
 
-        @Override public CompanionView loop() { return CompanionChatScreen.this.loop(); }
+        @Override public RemoteCompanion loop() { return CompanionChatScreen.this.loop(); }
 
         @Override public Conversation conversation() { return conv; }
 
