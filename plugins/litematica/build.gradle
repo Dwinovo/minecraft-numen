@@ -1,0 +1,11 @@
+plugins { id 'numen-plugin' }
+
+// 只写原版 MC 与 Numen API:它读的是主人客户端上的文件,游戏目录经原版 Minecraft 实例拿,
+// 不碰任何加载器类。Litematica 本身一个类都不引用——只读它的配置文件与图纸目录,
+// 所以没有它的 compileOnly 依赖。
+neoForge { neoFormVersion = neo_form_version }
+
+dependencies {
+    // 瘦 api jar 取跨加载器那份:与本模块一样只有原版 MC 的类型
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+}
