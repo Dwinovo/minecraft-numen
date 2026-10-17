@@ -108,12 +108,6 @@ public final class NumenPlugins {
      * 而且没有任何报错。专用服务器上没人来接,这两个表原样留着不跑,正是要的行为。
      */
     /**
-     * 插件挂在 {@code <runtime_state>} 上的现算片段。见 {@link NumenApi#contributeState}。
-     * 用 CopyOnWriteArrayList:登记发生在加载期,读发生在每次请求,读远多于写。
-     */
-    private static final List<Function<UUID, String>> STATE = new CopyOnWriteArrayList<>();
-
-    /**
      * 登记过的穿戴来源,按登记顺序——那也是自动选位的优先级。见 {@link NumenApi#registerGear}。
      * 原版四件甲由 Numen 在加载期最先登记,所以总在最前。
      */
@@ -166,11 +160,6 @@ public final class NumenPlugins {
         return sb.append("</worn>").toString();
     }
 
-    /** 汇总所有插件对这只同伴的客户端现算片段。<b>Numen API 内部调用</b>。 */
-    public static String stateFragments(UUID companion) {
-        return joinFragments(STATE, companion);
-    }
-
     /** 汇总所有插件从这具身体上读的状态片段。<b>Numen API 内部调用</b>(服务端)。 */
     public static String bodyStateFragments(NumenPlayer body) {
         return joinFragments(BODY_STATE, body);
@@ -185,7 +174,7 @@ public final class NumenPlugins {
      * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。同一个片段连着出错
      * 只在第一次记日志,算出来一次就重新计。
      */
-    private static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
+    static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
         if (fragments.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (Function<T, String> f : fragments) {
@@ -260,11 +249,6 @@ public final class NumenPlugins {
         public void onClient(Runnable clientOnly) {
             if (clientOnly == null) return;
             if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);
-        }
-
-        @Override
-        public void contributeState(Function<UUID, String> fragment) {
-            if (fragment != null) STATE.add(fragment);
         }
 
         @Override

@@ -96,22 +96,22 @@ class NumenPluginsTest {
 
     @Test
     void aFailingFragmentIsSkippedUntilItComputesAgain() {
-        NumenApi numen = door();
         UUID self = UUID.randomUUID();
         boolean[] broken = {true};
-        numen.contributeState(id -> {
+        java.util.function.Function<UUID, String> flaky = id -> {
             if (!id.equals(self)) return "";
             if (broken[0]) throw new IllegalStateException("gametest: 读不到");
             return "<gametest_broken>ok</gametest_broken>";
-        });
-        numen.contributeState(id -> id.equals(self) ? "<gametest_fine>ok</gametest_fine>" : "");
+        };
+        java.util.function.Function<UUID, String> fine = id -> id.equals(self) ? "<gametest_fine>ok</gametest_fine>" : "";
+        List<java.util.function.Function<UUID, String>> fragments = List.of(flaky, fine);
 
         for (int tick = 0; tick < 3; tick++) {
-            assertEquals("<gametest_fine>ok</gametest_fine>", NumenPlugins.stateFragments(self),
+            assertEquals("<gametest_fine>ok</gametest_fine>", NumenPlugins.joinFragments(fragments, self),
                     "算炸的那段丢掉,后面的照常挂上");
         }
         broken[0] = false;
         assertEquals("<gametest_broken>ok</gametest_broken><gametest_fine>ok</gametest_fine>",
-                NumenPlugins.stateFragments(self), "恢复以后那段回来");
+                NumenPlugins.joinFragments(fragments, self), "恢复以后那段回来");
     }
 }

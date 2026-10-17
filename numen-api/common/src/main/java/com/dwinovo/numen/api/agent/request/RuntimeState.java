@@ -104,11 +104,8 @@ public final class RuntimeState {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     public String xml() {
-        // 插件的片段也挂这一层:它们和背包、状态效果一样是"此刻的她",
-        // 会变,所以不能进字节级稳定的系统提示。身体上的那段随状态包从服务端来,
-        // 只有这个客户端才知道的那段在这里现算。
-        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml() + bodyStateXml()
-                + com.dwinovo.numen.api.NumenPlugins.stateFragments(entityUuid);
+        // 插件身体上的片段(bodyStateXml)和背包、状态效果一样是"此刻的她",会变,所以不能进字节级稳定的系统提示
+        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml() + bodyStateXml();
         String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
         // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。开一次 debug 就有答案。
