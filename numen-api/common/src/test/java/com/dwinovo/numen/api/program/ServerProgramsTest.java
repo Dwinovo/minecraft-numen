@@ -11,8 +11,6 @@ import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.SdkFixture;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -183,6 +181,36 @@ class ServerProgramsTest {
                 return tostring(ok)
                 """);
         assertEquals("false", next.returned().getAsString(), "the file is gone, so the next program lacks the module");
+    }
+
+    // ---- 回执交出去时,这段程序已经不占位 ----
+
+    /**
+     * 回调里马上起下一段(模型拿到回执就接着派下一个程序)不能被"上一段还没摘掉"拒绝。一段接一段连着起,
+     * 主线程一直在推车道,回执一排上就被取走执行;登记若在回执之后才摘,总有几段撞上。
+     */
+    @Test
+    void aProgramStartedFromTheCallbackOfTheOneThatJustEndedIsNeverRefusedForItsPredecessor() {
+        UUID companion = UUID.randomUUID();
+        int rounds = 4000;
+        List<String> refusals = new CopyOnWriteArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger finished = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicReference<Runnable> chain = new AtomicReference<>();
+        chain.set(() -> ServerPrograms.run(null, companion, companion,
+                new ServerPrograms.Request("chain-" + UUID.randomUUID(), "return 1", Modules.factory(), true),
+                new LoopbackTransport(), CallObserver.NONE, outcome -> {
+                    if (outcome.receipt().contains("already running")) {
+                        refusals.add(outcome.receipt());
+                    }
+                    if (finished.incrementAndGet() < rounds) {
+                        chain.get().run();
+                    }
+                }));
+        chain.get().run();
+
+        pumpUntil(() -> finished.get() >= rounds);
+
+        assertTrue(refusals.isEmpty(), refusals.size() + " of " + rounds + " programs were refused for the one before");
     }
 
     // ---- 并发上限 ----

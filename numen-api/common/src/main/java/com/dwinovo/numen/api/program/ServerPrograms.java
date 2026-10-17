@@ -129,14 +129,17 @@ public final class ServerPrograms {
                 new ProgramPort(her, request.modules(), calls), new SerialExecutor(THREADS), outcome -> {
                     // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉
                     client.close();
-                    // 回执先排进车道、再摘掉登记:从外面看"没有程序在跑"时,它的回执一定已经排着了
-                    running.lane.post(() -> {
-                        observer.ended(outcome);
-                        tally(request.modules(), outcome);
-                        done.accept(outcome);
-                    });
-                    running.lane.close();
-                    RUNNING.remove(companion, running);
+                    // 排回执与摘登记在同一把锁里做完:看登记的人(准入、idle、running)要么看见它还在跑、回执还没排,
+                    // 要么看见它不在了、回执已经排着。回执一交出去它就不占位了,回调里马上起下一段不会被它挡住
+                    synchronized (RUNNING) {
+                        running.lane.post(() -> {
+                            observer.ended(outcome);
+                            tally(request.modules(), outcome);
+                            done.accept(outcome);
+                        });
+                        running.lane.close();
+                        RUNNING.remove(companion, running);
+                    }
                 });
         running.program.start();
     }
@@ -218,13 +221,18 @@ public final class ServerPrograms {
      * 闲着又没有调用可执行才算停稳。
      */
     public static boolean idle(UUID companion) {
-        Running running = RUNNING.get(companion);
+        Running running;
+        synchronized (RUNNING) {
+            running = RUNNING.get(companion);
+        }
         return running == null || running.program == null || running.program.idle();
     }
 
     /** 这具身体上此刻有没有程序在跑。 */
     public static boolean running(UUID companion) {
-        return RUNNING.containsKey(companion);
+        synchronized (RUNNING) {
+            return RUNNING.containsKey(companion);
+        }
     }
 
     /** 让她正在跑的这段程序停在调用之间,{@code why} 是给模型的原因。不是这一段(已经结束了、换了一段)不理。 */
