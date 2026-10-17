@@ -1,12 +1,14 @@
 package com.dwinovo.numen.api.program;
 
+import com.dwinovo.numen.api.agent.script.Program;
+
 import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 工具口({@code CompanionToolPort})把她的 Lua 程序交给谁去跑:一整段程序送去,答复({@link RunResult})恰好交回一次;
+ * 工具口({@code CompanionToolPort})把她的 Lua 程序交给谁去跑:一整段程序送去,结局({@link Program.Outcome})恰好交回一次;
  * 跑着的程序可以被叫停在调用之间、当场切断;身体上的活可以叫停。服务端大脑直接交给本进程里的 {@link ServerPrograms}
- * ({@link LocalPrograms});还在主人客户端上的循环经网络送去服务端({@link ProgramUplink})。
+ * ({@link LocalPrograms})。
  */
 public interface ProgramHost {
 
@@ -15,13 +17,13 @@ public interface ProgramHost {
      *
      * @param programId 这段程序的编号,调用方保证不重
      */
-    void run(UUID companion, String programId, String code, Consumer<RunResult> done);
+    void run(UUID companion, String programId, String code, Consumer<Program.Outcome> done);
 
     /**
      * 这段程序所在的那一批作废了(切断),但程序照常停下、交出回执:晚到的结果交给 {@code late},而不是原来等的那一方。
      * 已经回来或根本没送出的,不做什么。
      */
-    void afterwards(String programId, Consumer<RunResult> late);
+    void afterwards(String programId, Consumer<Program.Outcome> late);
 
     /** 不再等这段程序的答复:晚到的答复不理。 */
     void forget(String programId);

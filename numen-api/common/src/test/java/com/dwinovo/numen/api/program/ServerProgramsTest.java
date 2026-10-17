@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 整段程序在服务端跑:服务端函数与客户端函数在一段程序里交替调都对,她的模块缓存按内容(命中、缺失、程序中途存了新的)、
+ * 整段程序在服务端跑:服务端函数与客户端函数在一段程序里交替调都对,她的模块(程序中途存了新的、删了)、
  * 并发上限、停止与打断。客户端函数走回环传输(请求与答复各过一遍线上的编码),没有真客户端的地方用同一条路。
  */
 class ServerProgramsTest {
@@ -80,7 +80,7 @@ class ServerProgramsTest {
 
     /** 反向请求停在这里,测试决定什么时候答。 */
     private static final class Held implements ClientTransport {
-        record Request(String callId, String function, Consumer<Answer> done) {}
+        record Request(String callId, String function, Consumer<String> done) {}
 
         final List<Request> held = new CopyOnWriteArrayList<>();
         /** 传输被告知不再要答复的调用编号。 */
@@ -88,7 +88,7 @@ class ServerProgramsTest {
 
         @Override
         public void request(com.dwinovo.numen.api.entity.NumenPlayer her,
-                            com.dwinovo.numen.api.network.payload.ClientCallPayload request, Consumer<Answer> done) {
+                            com.dwinovo.numen.api.network.payload.ClientCallPayload request, Consumer<String> done) {
             held.add(new Request(request.callId(), request.function(), done));
         }
 
@@ -98,18 +98,17 @@ class ServerProgramsTest {
         }
 
         void answer(int index, Object value) {
-            held.get(index).done().accept(new Answer(ApiReply.value(new com.google.gson.Gson().toJsonTree(value))
-                    .toString(), null));
+            held.get(index).done().accept(ApiReply.value(new com.google.gson.Gson().toJsonTree(value)).toString());
         }
     }
 
     /** 跑一段程序,回执在 {@link #result}。 */
     private static final class Started {
         final String id = "p-" + UUID.randomUUID();
-        final AtomicReference<RunResult> result = new AtomicReference<>();
+        final AtomicReference<Program.Outcome> result = new AtomicReference<>();
 
         Program.Outcome outcome() {
-            return ((RunResult.Ended) result.get()).outcome();
+            return result.get();
         }
 
         /** 程序 {@code return} 的值:同进程,从结局对象读,不经线。 */
@@ -118,15 +117,15 @@ class ServerProgramsTest {
         }
 
         String message() {
-            return RunResult.messageOf(outcome().receipt());
+            return outcome().message();
         }
     }
 
-    private static Started start(UUID companion, UUID owner, String code, ClientTransport transport,
-                                 ModuleSet modules) {
+    private static Started start(UUID companion, UUID owner, String code, ClientTransport transport) {
         Started started = new Started();
-        ServerPrograms.run(null, companion, owner, new ServerPrograms.Request(started.id, code, modules, true),
-                transport, CallObserver.NONE, started.result::set);
+        ServerPrograms.run(null, companion, owner,
+                new ServerPrograms.Request(started.id, code, Modules.factory(), true), transport, CallObserver.NONE,
+                started.result::set);
         return started;
     }
 
@@ -148,17 +147,16 @@ class ServerProgramsTest {
 
     // ---- 她的模块 ----
 
-    /** 跑一段程序,她的模块是 SdkFixture 给的目录里的文件(客户端的真源)。 */
+    /** 跑一段程序,她的模块是 {@link #register} 给的目录里的文件。 */
     private static ApiTester.Run files(UUID companion, String code) {
-        return ApiTester.run(null, companion, code, Modules::of);
+        return ApiTester.run(null, companion, code, Modules.of(companion));
     }
 
     @Test
     void aModuleTheProgramSavesIsUsedByTheSameProgramAndKeptForTheNext() {
         UUID companion = UUID.randomUUID();
         // 程序开跑时就有的名字空间里,中途存的模块同一段程序就能用
-        ApiTester.Run seed = ApiTester.run(null, companion,
-                "numen.module.save([[" + PIT + "]], {name = \"my.pit_seed\"})");
+        ApiTester.Run seed = files(companion, "numen.module.save([[" + PIT + "]], {name = \"my.pit_seed\"})");
         assertTrue(seed.ok(), seed.message());
         ApiTester.Run run = files(companion, "numen.module.save([[" + PIT + "]], {name = \"my.pit_mid\"})\n"
                 + "return my.pit_mid.seven()");
@@ -167,7 +165,7 @@ class ServerProgramsTest {
 
         ApiTester.Run next = files(companion, "return my.pit_mid.seven()");
         assertTrue(next.ok(), next.message());
-        assertEquals(7, next.returned().getAsInt(), "the file on the client is the one source: the next program sees it");
+        assertEquals(7, next.returned().getAsInt(), "the file is the one source: the next program sees it");
     }
 
     @Test
@@ -184,59 +182,14 @@ class ServerProgramsTest {
                 local ok = pcall(function() return my.pit_gone.seven() end)
                 return tostring(ok)
                 """);
-        assertEquals("false", next.returned().getAsString(), "the client's file is gone, so the next manifest lacks it");
-    }
-
-    @Test
-    void theSecondRunNeedsNoModuleTextsAndAnotherOwnersFirstRunDoes() {
-        String hash = Modules.fingerprint(PIT);
-        ModuleSet whole = new ModuleSet(java.util.Map.of("my.cached", hash), java.util.Map.of(hash, PIT));
-        ModuleSet manifestOnly = new ModuleSet(java.util.Map.of("my.cached", hash), java.util.Map.of());
-        UUID owner = UUID.randomUUID();
-        ClientTransport none = new LoopbackTransport(new ModuleSync(), uuid -> Modules.factory());
-
-        Started first = start(UUID.randomUUID(), owner, "return my.cached.seven()", none, whole);
-        pumpUntil(() -> first.result.get() != null);
-        assertEquals(7, first.returned().getAsInt());
-
-        Started second = start(UUID.randomUUID(), owner, "return my.cached.seven()", none, manifestOnly);
-        pumpUntil(() -> second.result.get() != null);
-        assertEquals(7, second.returned().getAsInt(), "found by its fingerprint");
-
-        Started stranger = start(UUID.randomUUID(), UUID.randomUUID(), "return my.cached.seven()", none, manifestOnly);
-        assertEquals(new RunResult.Missing(List.of(hash)), stranger.result.get(),
-                "another owner's cache does not have it: the program is not run, the client is told what is missing");
-    }
-
-    @Test
-    void whenTheOwnerLeavesHisCachedModulesGoWithHim() {
-        String hash = Modules.fingerprint(PIT);
-        UUID owner = UUID.randomUUID();
-        ClientTransport none = new LoopbackTransport(new ModuleSync(), uuid -> Modules.factory());
-        Started first = start(UUID.randomUUID(), owner, "return my.cached.seven()", none,
-                new ModuleSet(java.util.Map.of("my.cached", hash), java.util.Map.of(hash, PIT)));
-        pumpUntil(() -> first.result.get() != null);
-
-        ServerPrograms.ownerLeft(owner);
-
-        Started again = start(UUID.randomUUID(), owner, "return my.cached.seven()", none,
-                new ModuleSet(java.util.Map.of("my.cached", hash), java.util.Map.of()));
-        assertEquals(new RunResult.Missing(List.of(hash)), again.result.get());
-    }
-
-    @Test
-    void aBodyThatDoesNotMatchItsFingerprintIsNotRun() {
-        UUID owner = UUID.randomUUID();
-        Started started = start(UUID.randomUUID(), owner, "return 1", new LoopbackTransport(new ModuleSync(), uuid -> Modules.factory()),
-                new ModuleSet(java.util.Map.of("my.cached", "000000000000"), java.util.Map.of("000000000000", PIT)));
-        assertTrue(started.message().contains("does not match its fingerprint"), started.message());
+        assertEquals("false", next.returned().getAsString(), "the file is gone, so the next program lacks the module");
     }
 
     // ---- 并发上限 ----
 
     /** 停在一个客户端函数上的程序:在 {@code held} 里等答复。 */
     private static Started waiting(UUID companion, UUID owner, Held held) {
-        Started started = start(companion, owner, "return gt.gt_mix.twice(1)", held, ModuleSet.factory());
+        Started started = start(companion, owner, "return gt.gt_mix.twice(1)", held);
         int before = held.held.size();
         pumpUntil(() -> held.held.size() > before || started.result.get() != null);
         return started;
@@ -250,7 +203,7 @@ class ServerProgramsTest {
         List<UUID> all = new ArrayList<>(List.of(first));
         waiting(first, owner, held);
 
-        Started again = start(first, owner, "return 1", held, ModuleSet.factory());
+        Started again = start(first, owner, "return 1", held);
         assertTrue(again.message().contains("another program is already running"), again.message());
 
         for (int i = 1; i < ProgramLimits.PER_OWNER; i++) {
@@ -258,7 +211,7 @@ class ServerProgramsTest {
             all.add(more);
             waiting(more, owner, held);
         }
-        Started over = start(UUID.randomUUID(), owner, "return 1", held, ModuleSet.factory());
+        Started over = start(UUID.randomUUID(), owner, "return 1", held);
         assertEquals(com.dwinovo.numen.api.agent.script.ScriptCall.Status.ERROR, over.outcome().ending().status());
         assertTrue(over.message().contains("the most one owner may have at a time"), over.message());
 
@@ -281,7 +234,7 @@ class ServerProgramsTest {
             }
         }
         UUID late = UUID.randomUUID();
-        Started over = start(UUID.randomUUID(), late, "return 1", held, ModuleSet.factory());
+        Started over = start(UUID.randomUUID(), late, "return 1", held);
         assertTrue(over.message().contains("as many programs as it allows"), over.message());
 
         owners.forEach(ServerPrograms::ownerLeft);
@@ -294,7 +247,7 @@ class ServerProgramsTest {
     void anInterruptStopsTheProgramWhenTheCallInFlightIsAnswered() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held, ModuleSet.factory());
+        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held);
         pumpUntil(() -> !held.held.isEmpty());
 
         ServerPrograms.interrupt(companion, "some-other-program", "your owner spoke");
@@ -312,9 +265,9 @@ class ServerProgramsTest {
     void anInterruptWhileTheProgramWaitsForAJobStopsItAndTheJobKeepsRunning() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held, ModuleSet.factory());
+        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held);
         pumpUntil(() -> !held.held.isEmpty());
-        held.held.get(0).done().accept(new ClientTransport.Answer(ApiReply.job("t9").toString(), null));
+        held.held.get(0).done().accept(ApiReply.job("t9").toString());
         // 受理的回执处理完,程序停在等 t9 收尾上
         long until = System.nanoTime() + 300_000_000L;
         while (System.nanoTime() < until) {
@@ -332,7 +285,7 @@ class ServerProgramsTest {
     void cuttingTheTurnOffStopsTheProgramAtOnceAndALateAnswerIsDropped() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held, ModuleSet.factory());
+        Started program = start(companion, companion, "gt.gt_mix.twice(1)\ngt.gt_mix.up(2)", held);
         pumpUntil(() -> !held.held.isEmpty());
 
         ServerPrograms.cutOff(companion, program.id, false);
@@ -363,7 +316,7 @@ class ServerProgramsTest {
     void aClientFunctionTheClientNeverAnswersFailsWhenItsTimeIsUpAndTheProgramGoesOn() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, TWICE_THEN_UP, held, ModuleSet.factory());
+        Started program = start(companion, companion, TWICE_THEN_UP, held);
         pumpUntil(() -> !held.held.isEmpty());
 
         tick(ProgramLimits.CLIENT_ANSWER_TICKS - 1);
@@ -387,7 +340,7 @@ class ServerProgramsTest {
         Started program = start(companion, companion, """
                 local ok, err = pcall(gt.gt_mix.twice, 7)
                 return err.message .. "|" .. err.hint
-                """, held, ModuleSet.factory());
+                """, held);
         pumpUntil(() -> !held.held.isEmpty());
         tick(ProgramLimits.CLIENT_ANSWER_TICKS);
         pumpUntil(() -> program.result.get() != null);
@@ -402,7 +355,7 @@ class ServerProgramsTest {
     void aClientAnswerBeforeTheTimeIsUpIsTheCallsResult() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, TWICE_THEN_UP, held, ModuleSet.factory());
+        Started program = start(companion, companion, TWICE_THEN_UP, held);
         pumpUntil(() -> !held.held.isEmpty());
 
         tick(ProgramLimits.CLIENT_ANSWER_TICKS - 1);
@@ -420,8 +373,8 @@ class ServerProgramsTest {
         UUID owner = UUID.randomUUID();
         UUID cutOff = UUID.randomUUID();
         UUID leaver = UUID.randomUUID();
-        Started a = start(cutOff, owner, "return gt.gt_mix.twice(1)", held, ModuleSet.factory());
-        Started b = start(leaver, owner, "return gt.gt_mix.twice(2)", held, ModuleSet.factory());
+        Started a = start(cutOff, owner, "return gt.gt_mix.twice(1)", held);
+        Started b = start(leaver, owner, "return gt.gt_mix.twice(2)", held);
         pumpUntil(() -> held.held.size() == 2);
 
         ServerPrograms.cutOff(cutOff, a.id, false);
@@ -442,7 +395,7 @@ class ServerProgramsTest {
     void aProgramThatEndsBeforeItsRequestWasSentNeverSendsIt() {
         UUID companion = UUID.randomUUID();
         Held held = new Held();
-        Started program = start(companion, companion, "return gt.gt_mix.twice(1)", held, ModuleSet.factory());
+        Started program = start(companion, companion, "return gt.gt_mix.twice(1)", held);
         // 请求排在车道里、没有推进,程序就被切断了:等它收尾(登记摘掉)之后才推进车道
         ServerPrograms.cutOff(companion, program.id, false);
         while (ServerPrograms.running(companion)) {
@@ -458,7 +411,7 @@ class ServerProgramsTest {
         Started program = start(companion, companion, """
                 local ok, err = pcall(gt.gt_mix.twice, 1)
                 return err.kind .. "|" .. err.message
-                """, NetworkTransport.INSTANCE, ModuleSet.factory());
+                """, NetworkTransport.INSTANCE);
         pumpUntil(() -> program.result.get() != null);
         assertEquals("failed|gt.gt_mix.twice runs on your owner's client, and its owner is not connected",
                 program.returned().getAsString());

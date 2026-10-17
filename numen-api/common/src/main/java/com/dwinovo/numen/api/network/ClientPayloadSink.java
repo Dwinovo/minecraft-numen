@@ -2,17 +2,14 @@ package com.dwinovo.numen.api.network;
 
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
-import com.dwinovo.numen.api.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
-import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.api.network.payload.NumenEventPayload;
 import com.dwinovo.numen.api.network.payload.NumenStatePayload;
 import com.dwinovo.numen.api.network.payload.NumenLocationsPayload;
-import com.dwinovo.numen.api.network.payload.NumenRespawnPayload;
 
 import java.util.function.Consumer;
 
@@ -28,13 +25,10 @@ public final class ClientPayloadSink {
     private ClientPayloadSink() {}
 
     public static volatile Consumer<CompanionListPayload> companionList = p -> {};
-    public static volatile Consumer<CurrentTaskPayload> currentTask = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.ConsentRequestPayload> consent = p -> {};
-    public static volatile Consumer<NumenDeathPayload> death = p -> {};
     public static volatile Consumer<NumenEventPayload> event = p -> {};
     public static volatile Consumer<NumenStatePayload> state = p -> {};
     public static volatile Consumer<NumenLocationsPayload> locations = p -> {};
-    public static volatile Consumer<NumenRespawnPayload> respawn = p -> {};
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};
     public static volatile Consumer<HelloAckPayload> helloAck = p -> {};
     public static volatile Consumer<FeedPayload> feed = p -> {};

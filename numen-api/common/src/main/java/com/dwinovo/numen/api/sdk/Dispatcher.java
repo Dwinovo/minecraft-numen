@@ -122,8 +122,12 @@ public final class Dispatcher {
     /**
      * 服务端执行一次调用:{@code function} 是函数的全名,{@code args} 是读好的参数。没有这个服务端函数、参数读不成,都是一条失败。结果经
      * {@code reply} 恰好回一次。
+     *
+     * @param her       她的身体;没有世界的单测是 null
+     * @param companion 她的 UUID
      */
-    public static void serve(String function, JsonObject args, NumenPlayer her, String callId, Consumer<String> reply) {
+    public static void serve(String function, JsonObject args, NumenPlayer her, UUID companion, String callId,
+                             Consumer<String> reply) {
         ApiFunction fn = ApiRegistry.function(function);
         if (fn == null || fn.side() != ApiFunction.Side.SERVER) {
             reply.accept(ApiReply.error(ErrorKind.NO_FUNCTION, "there is no API function " + function
@@ -134,7 +138,7 @@ public final class Dispatcher {
         if (values == null && fn.argsType() != null) {
             return;
         }
-        run(fn, () -> fn.invoke(new ServerCall(her, fn, values, callId), values), her, values, callId, reply);
+        run(fn, () -> fn.invoke(new ServerCall(her, companion, fn, values, callId), values), her, values, callId, reply);
     }
 
     /** 这次调用写成脚本里的那一行:失败的下一步是同一行再来一次。 */

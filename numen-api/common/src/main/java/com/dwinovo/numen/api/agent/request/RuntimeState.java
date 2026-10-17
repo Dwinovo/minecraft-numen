@@ -24,8 +24,8 @@ public final class RuntimeState {
     private CurrentTask currentTask;
 
     /**
-     * 她此刻在做什么——<b>服务端推来的镜像</b>,不是本地推断的账本
-     * (见 {@link com.dwinovo.numen.api.network.payload.CurrentTaskPayload})。{@code standing} = 这件活没有终点
+     * 她此刻在做什么——<b>任务槽交来的镜像</b>,不是本地推断的账本
+     * (见 {@link TaskReport})。{@code standing} = 这件活没有终点
      * (不会有 task_finished),只能被换掉——模型必须分得清,否则会干等一个永不到来的事件。
      */
     private record CurrentTask(String id, String tool, String describe, Activity activity, long sinceMs,
@@ -40,14 +40,14 @@ public final class RuntimeState {
     }
 
     /**
-     * 服务端说她在做什么——直接照抄,不判断、不合并、不推断。
+     * 任务槽说她在做什么——直接照抄,不判断、不合并、不推断。
      *
      * <p>这是 {@code currentTask} 的写入点(按停止与断线时清掉本地镜像除外,见 {@link #on})。
-     * 客户端不靠"我派出去过什么"自己记账:那样服务器重启重放、死亡复活重放起来的活它一概不知道,
+     * 不靠"我派出去过什么"自己记账:那样服务器重启重放、死亡复活重放起来的活它一概不知道,
      * 头顶没气泡、模型也看不见。
      */
-    public void onCurrentTask(com.dwinovo.numen.api.network.payload.CurrentTaskPayload p) {
-        if (p.idle()) {
+    public void onCurrentTask(TaskReport p) {
+        if (p.isIdle()) {
             currentTask = null;
             return;
         }

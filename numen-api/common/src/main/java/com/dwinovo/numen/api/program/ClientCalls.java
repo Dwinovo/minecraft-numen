@@ -17,7 +17,7 @@ import java.util.function.LongSupplier;
 
 /**
  * 客户端函数向主人客户端发反向请求:程序线程挂着等答复(同 MCP 的 sampling、LSP 的 workspace/configuration),客户端用
- * {@code Dispatcher.client} 执行完答回来。答复里带着她的新模块时,先换进这段程序的模块({@link RunModules#learn}),再让程序往下走。
+ * {@code Dispatcher.client} 执行完答回来。
  *
  * <p>一段程序在等的反向请求都记在这里,到结局只有三种:客户端答了;主人的客户端在 {@link ProgramLimits#CLIENT_ANSWER_TICKS} 刻内没答
  * ({@link #expire},服务器每刻在主线程上查一次),这次调用以 {@link ErrorKind#TIMEOUT} 失败,程序拿到失败接着往下走;程序结束了
@@ -32,7 +32,6 @@ final class ClientCalls implements ProgramCalls {
     private final UUID companion;
     private final MainQueue.Lane lane;
     private final ClientTransport transport;
-    private final RunModules modules;
     /** 服务器刻数:期限按它量。 */
     private final LongSupplier ticks;
 
@@ -40,13 +39,11 @@ final class ClientCalls implements ProgramCalls {
     private final Map<String, Pending> pending = new LinkedHashMap<>();
     private boolean closed;
 
-    ClientCalls(NumenPlayer her, UUID companion, MainQueue.Lane lane, ClientTransport transport, RunModules modules,
-                LongSupplier ticks) {
+    ClientCalls(NumenPlayer her, UUID companion, MainQueue.Lane lane, ClientTransport transport, LongSupplier ticks) {
         this.her = her;
         this.companion = companion;
         this.lane = lane;
         this.transport = transport;
-        this.modules = modules;
         this.ticks = ticks;
     }
 
@@ -63,7 +60,7 @@ final class ClientCalls implements ProgramCalls {
                 pending.put(callId, new Pending(ticks.getAsLong() + ProgramLimits.CLIENT_ANSWER_TICKS, invocation,
                         done));
             }
-            transport.request(her, request, answer -> answered(callId, answer));
+            transport.request(her, request, reply -> answered(callId, reply));
             sent.run();
         });
     }
@@ -98,26 +95,14 @@ final class ClientCalls implements ProgramCalls {
         ids.forEach(transport::cancel);
     }
 
-    private void answered(String callId, ClientTransport.Answer answer) {
+    private void answered(String callId, String reply) {
         Pending waiting;
         synchronized (this) {
             waiting = pending.remove(callId);
         }
         if (waiting != null) {
-            waiting.done().accept(learned(answer));
+            waiting.done().accept(reply);
         }
-    }
-
-    private String learned(ClientTransport.Answer answer) {
-        if (answer.modules() != null) {
-            try {
-                modules.learn(answer.modules());
-            } catch (IllegalArgumentException wrong) {
-                return ApiReply.error(ErrorKind.FAILED, "your client sent a module that does not match its "
-                        + "fingerprint: " + wrong.getMessage(), null, null).toString();
-            }
-        }
-        return answer.reply();
     }
 
     private static String timedOut(Invocation invocation) {

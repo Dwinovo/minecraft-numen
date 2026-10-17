@@ -25,7 +25,7 @@ public final class NetworkTransport implements ClientTransport {
     private NetworkTransport() {}
 
     @Override
-    public void request(NumenPlayer her, ClientCallPayload request, Consumer<Answer> done) {
+    public void request(NumenPlayer her, ClientCallPayload request, Consumer<String> done) {
         ServerPlayer owner = her == null ? null : her.resolveOwnerPlayer();
         if (owner == null) {
             done.accept(failure(request.function(), "its owner is not connected"));
@@ -33,8 +33,8 @@ public final class NetworkTransport implements ClientTransport {
         }
         int size = request.size();
         if (!Wire.TO_CLIENT.carries(size)) {
-            done.accept(new Answer(ApiReply.error(ErrorKind.FAILED, Wire.TO_CLIENT.tooBigMessage("This call", size)
-                    + ", so it was not sent. Give it less at a time.", null, null).toString(), null));
+            done.accept(ApiReply.error(ErrorKind.FAILED, Wire.TO_CLIENT.tooBigMessage("This call", size)
+                    + ", so it was not sent. Give it less at a time.", null, null).toString());
             return;
         }
         table.expect(request.callId(), owner.getUUID(), done);
@@ -48,7 +48,7 @@ public final class NetworkTransport implements ClientTransport {
 
     /** 主人的客户端答了(服务端主线程)。 */
     public void answered(UUID from, ClientCallResultPayload p) {
-        table.complete(p.callId(), from, new Answer(p.replyJson(), p.modules().orElse(null)));
+        table.complete(p.callId(), from, p.replyJson());
     }
 
     /** 这位主人断线了:等着他答复的调用都以失败结束。 */
@@ -61,8 +61,7 @@ public final class NetworkTransport implements ClientTransport {
         table.clear();
     }
 
-    private static Answer failure(String what, String why) {
-        return new Answer(ApiReply.error(ErrorKind.FAILED, what + " runs on your owner's client, and " + why, null,
-                null).toString(), null);
+    private static String failure(String what, String why) {
+        return ApiReply.error(ErrorKind.FAILED, what + " runs on your owner's client, and " + why, null, null).toString();
     }
 }

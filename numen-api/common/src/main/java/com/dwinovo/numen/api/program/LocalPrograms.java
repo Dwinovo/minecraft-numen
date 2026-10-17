@@ -15,7 +15,7 @@ import java.util.function.Consumer;
 
 /**
  * 服务端大脑把她的程序交给本进程里的 {@link ServerPrograms}:没有网络,没有包,模块直接读主人目录里的文件
- * ({@link Modules#of})。答复和 {@link ServerPrograms#run} 一样在服务端主线程上交回。
+ * ({@link Modules#of})。结局和 {@link ServerPrograms#run} 一样在服务端主线程上交回。
  *
  * <p>线程:都在服务端主线程上。
  */
@@ -23,52 +23,39 @@ public final class LocalPrograms implements ProgramHost {
 
     private final MinecraftServer server;
     /** 等答复的程序;切断后晚到的结果换一个收件人({@link #afterwards}),不等了的摘掉。 */
-    private final Map<String, Consumer<RunResult>> waiting = new ConcurrentHashMap<>();
+    private final Map<String, Consumer<Program.Outcome>> waiting = new ConcurrentHashMap<>();
 
     public LocalPrograms(MinecraftServer server) {
         this.server = server;
     }
 
     @Override
-    public void run(UUID companion, String programId, String code, Consumer<RunResult> done) {
+    public void run(UUID companion, String programId, String code, Consumer<Program.Outcome> done) {
         CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
         if (entry == null) {
-            done.accept(RunResult.refused("companion not found (never summoned, or its data is gone)"));
+            done.accept(Program.Outcome.refused("companion not found (never summoned, or its data is gone)"));
             return;
         }
         NumenPlayer her = OwnedBody.of(server, entry.owner(), companion,
-                message -> done.accept(RunResult.refused(message)));
+                message -> done.accept(Program.Outcome.refused(message)));
         if (her == null) {
             return;
         }
         waiting.put(programId, done);
-        Modules mine = Modules.of(companion);
         ServerPrograms.run(her, companion, entry.owner(),
-                new ServerPrograms.Request(programId, code, new ModuleSync().pack(mine.sources()), true),
-                NetworkTransport.INSTANCE, CallObserver.NONE, result -> answered(programId, mine, result));
+                new ServerPrograms.Request(programId, code, Modules.of(companion), true),
+                NetworkTransport.INSTANCE, CallObserver.NONE, outcome -> answered(programId, outcome));
     }
 
-    private void answered(String programId, Modules mine, RunResult result) {
-        Consumer<RunResult> to = waiting.remove(programId);
-        if (to == null) {
-            return;   // 不等了的
-        }
-        if (result instanceof RunResult.Ended ended) {
-            tally(mine, ended);
-        }
-        to.accept(result);
-    }
-
-    /** 用到的每个模块记一次战绩:战绩记在模块账本里,和模块的真源在一处。 */
-    static void tally(Modules mine, RunResult.Ended ended) {
-        for (Program.Used used : ended.outcome().used()) {
-            mine.tally(used.module(), used.tally().ok(), used.tally().line(), used.tally().error(),
-                    System.currentTimeMillis());
+    private void answered(String programId, Program.Outcome outcome) {
+        Consumer<Program.Outcome> to = waiting.remove(programId);
+        if (to != null) {
+            to.accept(outcome);   // 不等了的就没有收件人
         }
     }
 
     @Override
-    public void afterwards(String programId, Consumer<RunResult> late) {
+    public void afterwards(String programId, Consumer<Program.Outcome> late) {
         waiting.computeIfPresent(programId, (id, was) -> late);
     }
 

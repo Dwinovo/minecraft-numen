@@ -20,9 +20,6 @@ public final class ProgramLimits {
      */
     public static final int SERVER_WIDE = 64;
 
-    /** 服务端为一位主人缓存的模块正文最多多少字节(UTF-8):出厂那一套约 35 KB,她自己的模块都很小;4 MB 够几十个版本,满了丢最久没用的。 */
-    public static final long MODULE_CACHE_BYTES = 4L << 20;
-
     /**
      * 每个服务器刻里,所有程序的服务端调用在主线程上最多花多久:10 毫秒,是一刻 50 毫秒的五分之一。照 CC: Tweaked 的
      * {@code max_main_global_time} 取同一个数——它的定法是让玩家的程序占不了一刻里世界自己要用的时间,又够几十个程序每刻各做一两件事。

@@ -26,7 +26,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -34,7 +33,7 @@ import java.util.stream.Stream;
  * 她能用的 Lua 模块:每个模块返回一张函数表,程序里以模块名直接用({@code numen.work.collect()}),和第 ① 层的组同名的给那一组加函数。
  *
  * <h2>名字就是路径,只读磁盘</h2>
- * 目录按主人分({@code config/numen/lua/<主人>/}),同一主人的同伴共用,主人也能拿编辑器直接改。模块名两段 {@code 名字空间.组},文件就在
+ * 目录按主人分(服务器上世界存档里主人名下的 {@code lua/}),同一主人的同伴共用,主人也能拿编辑器直接改。模块名两段 {@code 名字空间.组},文件就在
  * {@code <名字空间>/<组>.lua}:{@code numen/work.lua} 是 {@code numen.work},{@code tlm/skin.lua} 是 {@code tlm.skin},
  * {@code my/lumber.lua} 是 {@code my.lumber}。程序运行时只读这个目录这一个来源;随模组与插件发布的模块({@link BuiltinModules},
  * 下称"出厂的")只是安装包。她能增删改其中任何一个文件,定死不可覆盖的只有 Java 登记的函数(沙箱那一处管)。
@@ -56,7 +55,7 @@ import java.util.stream.Stream;
  *
  * <p>它就是程序的模块来源({@link ScriptCatalog.ModuleSource}):程序用到一个模块时才来读那个文件。
  *
- * <p>线程:装、存、删、记战绩在大脑那一侧的线程上;读可以在脚本的线程上。改文件与账本的几处串行。
+ * <p>线程:装、存、删、记战绩在服务端主线程上;读可以在脚本的线程上。读与改文件、账本的几处都在同一把锁里串行。
  */
 public final class Modules implements ScriptCatalog.ModuleSource {
 
@@ -106,10 +105,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     /** 这个进程里已经装过的目录。 */
     private static final Set<Path> INSTALLED = ConcurrentHashMap.newKeySet();
 
-    /** 模块被存、删、还原的次数,这个进程里一共:变了,说明跑着的程序之后读到的模块可能不是它开跑时的那一份。 */
-    private static final AtomicLong REVISION = new AtomicLong();
-
-    /** 每只同伴的模块目录(同一主人的同伴是同一个);由大脑所在的那一侧注入,见 {@link #init}。 */
+    /** 每只同伴的模块目录(同一主人的同伴是同一个);由服务端大脑的接线注入,见 {@link #init}。 */
     private static Function<UUID, Path> dirs;
 
     private final Path dir;
@@ -119,7 +115,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     }
 
     /**
-     * 模块目录在哪:主人客户端给 {@code config/numen/lua/<主人>/};评测与 GameTest 给这一次运行专用、开场清空的目录。
+     * 模块目录在哪:服务器给世界里主人名下的 {@code lua/} 目录;评测与 GameTest 给这一次运行专用、开场清空的目录。
      */
     public static void init(Function<UUID, Path> companionDirs) {
         dirs = companionDirs;
@@ -128,7 +124,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     /** 这只同伴能用的模块;这个进程第一次用到这个目录时先把出厂的装进去。{@link #init} 之前调用是编程错误。 */
     public static Modules of(UUID companion) {
         if (dirs == null) {
-            throw new IllegalStateException("Modules.init(...) 还没被调用——大脑所在的那一侧该在启动时注入模块目录");
+            throw new IllegalStateException("Modules.init(...) 还没被调用——服务端该在启动时注入模块目录");
         }
         return at(dirs.apply(companion));
     }
@@ -241,39 +237,25 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                 && entry(ledger(), name).has(FACTORY);
     }
 
-    /** 程序用到这个名字时装的正文:磁盘上此刻的那一份。 */
+    /**
+     * 程序用到这个名字时装的正文:磁盘上此刻的那一份。只读文件——能不能编译、战绩、出厂关系({@link #get} 才算)与装进虚拟机
+     * 无关,读不通就是用它的那个程序的错。
+     */
     @Override
     public String code(String name) {
-        Module m = get(name);
-        return m == null ? null : m.code();
+        if (problem(name) != null) {
+            return null;
+        }
+        if (dir == null) {
+            BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+            return builtin == null ? null : builtin.code();
+        }
+        return read(file(name));
     }
 
     @Override
     public List<String> names() {
-        return List.copyOf(all().keySet());
-    }
-
-    /** 见 {@link #REVISION}。 */
-    public static long revision() {
-        return REVISION.get();
-    }
-
-    /**
-     * 每个模块此刻的正文,按名字排:程序开跑时连同指纹一起交给服务端。只有出厂那一套时是出厂的。
-     */
-    public SortedMap<String, String> sources() {
-        SortedMap<String, String> out = new TreeMap<>();
-        if (dir == null) {
-            BuiltinModules.all().forEach((name, builtin) -> out.put(name, builtin.code()));
-            return out;
-        }
-        for (String name : onDisk()) {
-            String code = read(file(name));
-            if (code != null) {
-                out.put(name, code);
-            }
-        }
-        return out;
+        return dir == null ? List.copyOf(BuiltinModules.all().keySet()) : onDisk();
     }
 
     /** 全部的,按名字排:目录里每个 {@code <名字空间>/<组>.lua};只有出厂那一套时是出厂的。 */
@@ -342,7 +324,6 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             clearStats(entry);
             ledger.add(name, entry);
             writeLedger(ledger);
-            REVISION.incrementAndGet();
             return BuiltinModules.get(name) != null && entry.has(FACTORY) ? Saved.CHANGED
                     : existed ? Saved.REPLACED : Saved.NEW;
         }
@@ -372,7 +353,6 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                 ledger.remove(name);
             }
             writeLedger(ledger);
-            REVISION.incrementAndGet();
             return before;
         }
     }
@@ -395,7 +375,6 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             entry.addProperty(FACTORY, fingerprint(builtin.code()));
             ledger.add(name, entry);
             writeLedger(ledger);
-            REVISION.incrementAndGet();
             return builtin.code();
         }
     }
@@ -460,13 +439,16 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     }
 
     /** 文件的正文;不在是 null。 */
+    /** 读一个文件。在锁里读:程序的线程读模块、大脑的线程存模块是常态,Windows 上正被读的文件换不掉(写是"写临时文件再改名")。 */
     private static String read(Path file) {
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (NoSuchFileException absent) {
-            return null;
-        } catch (IOException e) {
-            throw new UncheckedIOException("读不了 " + file, e);
+        synchronized (LOCK) {
+            try {
+                return Files.readString(file, StandardCharsets.UTF_8);
+            } catch (NoSuchFileException absent) {
+                return null;
+            } catch (IOException e) {
+                throw new UncheckedIOException("读不了 " + file, e);
+            }
         }
     }
 
@@ -482,11 +464,13 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         if (dir == null) {
             return new JsonObject();
         }
-        try {
-            return ledgerDoc().read().orElseGet(JsonObject::new);
-        } catch (StoreException unreadable) {
-            Constants.LOG.warn("[numen-script] 模块账本读不通,当作空的: {}", dir.resolve(LEDGER));
-            return new JsonObject();
+        synchronized (LOCK) {   // 同 read:账本也是写临时文件再改名
+            try {
+                return ledgerDoc().read().orElseGet(JsonObject::new);
+            } catch (StoreException unreadable) {
+                Constants.LOG.warn("[numen-script] 模块账本读不通,当作空的: {}", dir.resolve(LEDGER));
+                return new JsonObject();
+            }
         }
     }
 

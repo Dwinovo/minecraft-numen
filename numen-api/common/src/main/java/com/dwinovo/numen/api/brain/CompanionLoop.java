@@ -31,15 +31,15 @@ import com.dwinovo.numen.api.agent.request.AgentRequestContext;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.agent.request.MemoryPreamble;
 import com.dwinovo.numen.api.agent.request.RuntimeState;
+import com.dwinovo.numen.api.agent.request.TaskReport;
+import com.dwinovo.numen.api.agent.script.Program;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
-import com.dwinovo.numen.api.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.api.program.ProgramHost;
-import com.dwinovo.numen.api.program.RunResult;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
@@ -451,15 +451,15 @@ public final class CompanionLoop {
         loop.respawned();
     }
 
-    /** 服务端说她在做什么(见 {@link RuntimeState#onCurrentTask})。 */
-    public void onCurrentTask(CurrentTaskPayload p) {
+    /** 任务槽说她在做什么(见 {@link RuntimeState#onCurrentTask})。 */
+    public void onCurrentTask(TaskReport p) {
         runtime.onCurrentTask(p);
     }
 
     /** 切断后程序交出的回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱。 */
     private void receiptAfterCut(String program, String receipt) {
         loop.push(List.of(NumenEvents.programStopped(parts.dayTime().getAsLong(), program,
-                RunResult.messageOf(receipt), System.currentTimeMillis())));
+                Program.Outcome.messageOf(receipt), System.currentTimeMillis())));
     }
 
     // ---- 长期目标 ----

@@ -8,23 +8,24 @@ import com.dwinovo.numen.api.agent.script.ScriptCatalog;
 import com.dwinovo.numen.api.agent.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
+import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 
 import java.util.function.Consumer;
 
 /**
- * 一段在服务端跑的程序要的几样东西({@link Program.Port}),各交给负责那件事的部件:函数目录来自这段程序的模块({@link RunModules})、
+ * 一段在服务端跑的程序要的几样东西({@link Program.Port}),各交给负责那件事的部件:函数目录来自这段程序的模块({@link Modules})、
  * 读参数是 {@link Dispatcher#invocation}、执行调用是 {@link ProgramCalls}、认收尾是 {@link NumenEvents#finishOf}。
  */
 final class ProgramPort implements Program.Port {
 
     private final NumenPlayer her;
-    private final RunModules modules;
+    private final Modules modules;
     private final ProgramCalls calls;
 
     /** @param her 她的身体;没有世界的单测是 null */
-    ProgramPort(NumenPlayer her, RunModules modules, ProgramCalls calls) {
+    ProgramPort(NumenPlayer her, Modules modules, ProgramCalls calls) {
         this.her = her;
         this.modules = modules;
         this.calls = calls;

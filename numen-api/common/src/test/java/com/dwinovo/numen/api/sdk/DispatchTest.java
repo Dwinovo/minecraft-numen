@@ -170,7 +170,7 @@ class DispatchTest {
         JsonObject args = new JsonObject();
         args.addProperty("thing", "cake");
         List<String> replies = new java.util.ArrayList<>();
-        Dispatcher.serve("gt.gt_wait.mislabel", args, null, "c1", replies::add);
+        Dispatcher.serve("gt.gt_wait.mislabel", args, null, java.util.UUID.randomUUID(), "c1", replies::add);
         assertEquals(1, replies.size(), replies.toString());
         JsonObject error = com.google.gson.JsonParser.parseString(replies.get(0)).getAsJsonObject().getAsJsonObject("error");
         assertEquals("failed", error.get("kind").getAsString());

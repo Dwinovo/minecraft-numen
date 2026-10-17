@@ -14,6 +14,7 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -40,12 +41,14 @@ public final class ServerCall {
     }
 
     private final NumenPlayer her;
+    private final UUID companion;
     private final ApiFunction function;
     private final Record args;
     private final String callId;
 
-    ServerCall(NumenPlayer her, ApiFunction function, Record args, String callId) {
+    ServerCall(NumenPlayer her, UUID companion, ApiFunction function, Record args, String callId) {
         this.her = her;
+        this.companion = companion;
         this.function = function;
         this.args = args;
         this.callId = callId;
@@ -54,6 +57,11 @@ public final class ServerCall {
     /** 这具身体。 */
     public NumenPlayer her() {
         return her;
+    }
+
+    /** 她是谁:身体之外的事(她的模块、帮助)只要这个。 */
+    public UUID companion() {
+        return companion;
     }
 
     /** 这次调用的 id:派下的活要跟着它。 */

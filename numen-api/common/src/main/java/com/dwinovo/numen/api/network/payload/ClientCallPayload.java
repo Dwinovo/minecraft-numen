@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.network.payload;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.program.ClientEndpoint;
 import io.netty.buffer.ByteBuf;
@@ -14,8 +15,8 @@ import java.util.UUID;
 
 /**
  * Server-to-client payload: a request the other way round. A program running on the server called an API function that
- * only the owner's client can answer (a {@code ClientCall} function: {@code numen.module.save}, {@code numen.api.help},
- * anything reading data only the client has); the program waits while the client runs it and answers with a
+ * only the owner's client can answer (a {@code ClientCall} function: anything reading data only the client has, such as
+ * a skin the owner's client holds); the program waits while the client runs it and answers with a
  * {@link ClientCallResultPayload}. Same shape as the server asking the client for something in the protocols this is
  * modelled on (MCP sampling, LSP {@code workspace/configuration}).
  *
@@ -50,6 +51,6 @@ public record ClientCallPayload(UUID entityUuid, String callId, String function,
     /** Client-side handler. */
     public static void handle(ClientCallPayload p) {
         Constants.LOG.debug("[numen-net] client_call entity={} id={} {}", p.entityUuid(), p.callId(), p.function());
-        ClientEndpoint.CONNECTION.handle(p);
+        ClientEndpoint.handle(p, NumenNetwork::sendToServer);
     }
 }

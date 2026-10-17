@@ -1,6 +1,12 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
+import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.sdk.ClientCall;
+import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.Example;
+import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.EventOutbox;
@@ -11,12 +17,10 @@ import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.ClientCallPayload;
 import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
-import com.dwinovo.numen.api.network.payload.ProgramResultPayload;
-import com.dwinovo.numen.api.network.payload.RunProgramPayload;
+import com.dwinovo.numen.api.program.CallObserver;
 import com.dwinovo.numen.api.program.ClientEndpoint;
-import com.dwinovo.numen.api.program.ModuleSync;
-import com.dwinovo.numen.api.program.ProgramUplink;
-import com.dwinovo.numen.api.program.RunResult;
+import com.dwinovo.numen.api.program.NetworkTransport;
+import com.dwinovo.numen.api.program.ServerPrograms;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -549,46 +553,75 @@ public class ScriptGameTests {
         });
     }
 
+    /** 夹具组 {@code gt.gt_client}:只有主人的客户端答得了的函数(客户端函数)。 */
+    public static final class ClientFns {
+
+        private ClientFns() {}
+
+        public record Size(@Doc("How many characters.") int size) {}
+
+        public record Text(@Doc("Any text.") String text) {}
+
+        @Fn("Say hello from the owner's client.")
+        @Example("gt.gt_client.hello()")
+        public static String hello(ClientCall call) {
+            return "hello from the client";
+        }
+
+        @Fn("Return a long text.")
+        @Example("gt.gt_client.big(100000)")
+        public static String big(ClientCall call, Size args) {
+            return "y".repeat(args.size());
+        }
+
+        @Fn("Return how long the text it was given is.")
+        @Example("gt.gt_client.length(\"abc\")")
+        public static int length(ClientCall call, Text args) {
+            return args.text().length();
+        }
+    }
+
+    static {
+        if (GameTestKit.numenTestsEnabled()) {
+            NumenPlugins.register("gt", numen -> numen.api("gt_client",
+                    "Test fixture: functions only the owner's client answers.", ClientFns.class));
+        }
+    }
+
     /**
-     * 整段程序经线上的包送进来:主人的连接是 {@code OwnerLine}(没有客户端),服务端认身体、跑程序;程序里的客户端函数向主人发
-     * {@code ClientCallPayload},这里扮他的客户端答({@code ClientEndpoint}),整张回执作为 {@code ProgramResultPayload} 回来。
-     * 服务端从包进到包出的路——认主人、量大小、反向请求、答复——都真走一遍,只是没有网线。
+     * 程序里的客户端函数向主人的连接发 {@code ClientCallPayload}:主人的连接是 {@code OwnerLine}(没有客户端),这里扮他的客户端答
+     * ({@code ClientEndpoint}),答复经上行的处理函数回到服务端。服务端从包进到包出的路——认主人、量大小、反向请求、答复——
+     * 都真走一遍,只是没有网线。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_program_sent_as_a_packet_runs_and_the_clients_functions_are_asked_over_the_wire(
+    public static void a_client_function_is_asked_over_the_owners_connection_and_answered_by_his_client(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_wire", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_wire_owner");
-        ModuleSync sync = new ModuleSync();
-        ClientEndpoint endpoint = new ClientEndpoint(sync,
-                payload -> ClientCallResultPayload.handle((ClientCallResultPayload) payload, owner), Modules::of);
-        AtomicReference<RunResult> result = new AtomicReference<>();
-        ProgramUplink uplink = new ProgramUplink(sync, payload -> RunProgramPayload.handle((RunProgramPayload) payload,
-                owner), Modules::of);
-        uplink.run(her.getUUID(), "wire-" + UUID.randomUUID(), """
+        AtomicReference<Program.Outcome> result = new AtomicReference<>();
+        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("wire-" + UUID.randomUUID(),
+                """
                 local me = numen.status.self()
-                local words = numen.api.help("numen.status")
-                return me.name .. ":" .. (#words > 0 and "help" or "none")
-                """, result::set);
+                local words = gt.gt_client.hello()
+                return me.name .. ":" .. words
+                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
                     for (CustomPacketPayload payload : received(owner)) {
                         if (payload instanceof ClientCallPayload call) {
-                            endpoint.handle(call);
-                        } else if (payload instanceof ProgramResultPayload answer) {
-                            uplink.deliver(answer.programId(), RunResult.fromJson(answer.resultJson()));
+                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
                         }
                     }
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
-                    String receipt = ((RunResult.Ended) result.get()).outcome().receipt();
+                    String receipt = result.get().receipt();
                     JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
                     helper.assertTrue(data.get("success").getAsBoolean()
-                                    && data.get("message").getAsString().endsWith("\nreturned: gametest_wire:help"),
-                            "the program did not run over the wire: " + receipt);
-                    helper.assertTrue(((RunResult.Ended) result.get()).outcome().calls().size() == 2,
+                                    && data.get("message").getAsString().endsWith("\nreturned: gametest_wire:hello from the client"),
+                            "the program did not run with its client function answered over the wire: " + receipt);
+                    helper.assertTrue(result.get().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
@@ -596,77 +629,39 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
-    /** 几百 KB 的模块正文:合法的 Lua,第一行注释说它做什么,后面是填充,最后返回一张表。 */
-    private static String bigModule(int lines) {
-        return "-- A big one.\nlocal M = {}\n---Give the answer.\nfunction M.answer() return 42 end\n"
-                + "-- filler filler filler filler filler filler filler filler filler\n".repeat(lines) + "return M\n";
-    }
-
-    /**
-     * 带着几百 KB 模块的程序上送:程序加模块正文远超一个上行的包(32767 字节),切成片、过线上的编解码、服务端的收件箱拼回,
-     * 交给服务端的入口,程序用到这个模块并跑到最后。走的是回环客户端,和产品里同一批部件。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
-    public static void a_program_with_a_module_of_several_hundred_kilobytes_goes_up_in_fragments_and_runs(
-            GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_big_module", new BlockPos(2, 2, 2), true);
-        String module = bigModule(7_000);
-        Modules.of(her.getUUID()).save("my.gt_big", module);
-        helper.assertTrue(module.length() > 10 * Wire.TO_SERVER.bytes(), "the module is not bigger than ten packets");
-
-        ToolRun run = lua(her, "return my.gt_big.answer()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: 42"),
-                    "the program with the big module did not run: " + run.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        });
-    }
-
-    /**
-     * 一个客户端函数交回的结果超过一个上行的包:{@code numen.module.show} 读出几百 KB 的模块正文,答复经分片送回服务端,
-     * 程序拿到的是完整的正文。
-     */
+    /** 一个客户端函数交回的结果超过一个上行的包:答复经分片送回服务端,程序拿到的是完整的文字。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
     public static void a_client_function_result_over_one_packet_comes_back_to_the_program_in_fragments(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_result", new BlockPos(2, 2, 2), true);
-        String module = bigModule(7_000);
-        Modules.of(her.getUUID()).save("my.gt_big", module);
+        int size = 10 * Wire.TO_SERVER.bytes();
 
-        ToolRun run = lua(her, "return #numen.module.show(\"my.gt_big\").code");
+        ToolRun run = lua(her, "return #gt.gt_client.big(" + size + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: " + module.length()),
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: " + size),
                     "the program did not get the whole text back: " + run.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
     }
 
     /**
-     * 下行也分片:程序存一个 1.5 MB 的模块,反向请求({@code ClientCallPayload})超过一个下行的包(1 MB),真实的
+     * 下行也分片:程序给客户端函数一段 1.5 MB 的文字,反向请求({@code ClientCallPayload})超过一个下行的包(1 MB),真实的
      * {@code NumenNetwork.sendToPlayer} 把它切成片经主人的连接({@code OwnerLine})发出;这里扮主人的客户端,收件箱拼回、
-     * 交给客户端执行体,答复(带着新模块正文,同样超过一个上行的包)经分片上送。模块存进了她的目录,程序跑到最后。
+     * 交给客户端执行体,答复经上行回到服务端,程序跑到最后。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
     public static void a_request_over_one_downward_packet_reaches_the_owners_client_in_fragments(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_request", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_big_request_owner");
-        String module = bigModule(24_000);
-        helper.assertTrue(module.length() > Wire.TO_CLIENT.bytes(), "the module is not bigger than a downward packet");
-        ModuleSync sync = new ModuleSync();
-        ClientEndpoint endpoint = new ClientEndpoint(sync, payload -> ClientCallResultPayload.handle(
-                Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, (ClientCallResultPayload) payload),
-                owner), Modules::of);
-        ProgramUplink uplink = new ProgramUplink(sync, payload -> RunProgramPayload.handle(
-                Fragments.crossed(Wire.TO_SERVER, RunProgramPayload.STREAM_CODEC, (RunProgramPayload) payload), owner),
-                Modules::of);
+        String text = "z".repeat(Wire.TO_CLIENT.bytes() + Wire.TO_CLIENT.bytes() / 2);
         Fragments.Inbox inbox = new Fragments.Inbox(Wire.TO_CLIENT);
-        AtomicReference<RunResult> result = new AtomicReference<>();
+        AtomicReference<Program.Outcome> result = new AtomicReference<>();
         int[] fragments = new int[1];
-        uplink.run(her.getUUID(), "big-" + UUID.randomUUID(), "numen.module.save([==[\n" + module
-                + "]==], {name = \"my.gt_huge\"})\nreturn \"saved\"", result::set);
+        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("big-" + UUID.randomUUID(),
+                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID()), true),
+                NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
@@ -678,19 +673,18 @@ public class ScriptGameTests {
                             payload = NumenNetwork.assembled(inbox, FragmentPayload.TO_CLIENT_CODEC.decode(wire));
                         }
                         if (payload instanceof ClientCallPayload call) {
-                            endpoint.handle(call);
-                        } else if (payload instanceof ProgramResultPayload answer) {
-                            uplink.deliver(answer.programId(), RunResult.fromJson(answer.resultJson()));
+                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(
+                                    Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, answer),
+                                    owner));
                         }
                     }
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
-                    String receipt = ((RunResult.Ended) result.get()).outcome().receipt();
+                    String receipt = result.get().receipt();
                     helper.assertTrue(fragments[0] > 1, "the request did not come down as fragments: " + fragments[0]);
-                    helper.assertTrue(receipt.contains("returned: saved"), "the program did not run to the end: " + receipt);
-                    helper.assertTrue(module.equals(Modules.of(her.getUUID()).code("my.gt_huge")),
-                            "the module was not saved whole");
+                    helper.assertTrue(receipt.contains("returned: " + text.length()),
+                            "the program did not run to the end with the whole text: " + receipt);
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
@@ -706,9 +700,9 @@ public class ScriptGameTests {
     public static void a_client_function_the_client_never_answers_times_out_and_the_program_goes_on(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_mute_client", new BlockPos(2, 2, 2), false);
-        client(her).silence();
+        programs(her).silence();
         ToolRun run = lua(her, """
-                local ok, err = pcall(numen.module.list)
+                local ok, err = pcall(gt.gt_client.hello)
                 local me = numen.status.self()
                 return tostring(ok) .. "|" .. err.kind .. "|" .. me.name
                 """);
@@ -719,8 +713,8 @@ public class ScriptGameTests {
             helper.assertTrue(run.receipt() != null, "the program is still waiting for the client's answer");
             helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gametest_mute_client"),
                     "the call did not fail as a timeout with the program going on: " + run.receipt());
-            helper.assertTrue(run.receipt().contains("numen.module.list: timeout — your owner's client did not answer "
-                            + "numen.module.list within " + com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20
+            helper.assertTrue(run.receipt().contains("gt.gt_client.hello: timeout — your owner's client did not answer "
+                            + "gt.gt_client.hello within " + com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20
                             + " seconds"),
                     "the receipt does not say which function the client did not answer: " + run.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
@@ -745,8 +739,8 @@ public class ScriptGameTests {
         cells.forEach(cell -> code.append("numen.work.dig(").append(xyz(cell)).append(")\n"));
         List<String> afterwards = new java.util.ArrayList<>();
         com.dwinovo.numen.api.agent.tool.CompanionToolPort port = new com.dwinovo.numen.api.agent.tool.CompanionToolPort(
-                her.getUUID(), () -> () -> her.getUUID(), client(her).uplink(), (program, receipt) ->
-                        afterwards.add(com.dwinovo.numen.api.program.RunResult.messageOf(receipt)));
+                her.getUUID(), () -> () -> her.getUUID(), programs(her), (program, receipt) ->
+                        afterwards.add(Program.Outcome.messageOf(receipt)));
         List<String> handedToTheModel = new java.util.ArrayList<>();
         port.run(List.of(programCall(code.toString())), new com.dwinovo.numen.api.agent.loop.ToolPort.Sink() {
             @Override

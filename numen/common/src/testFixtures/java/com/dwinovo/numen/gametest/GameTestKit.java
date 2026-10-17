@@ -529,18 +529,86 @@ public final class GameTestKit {
         player.getServer().getPlayerList().remove(player);
     }
 
-    /** 每只同伴一个扮主人客户端的"客户端"(各有各的"送过哪些模块正文"):程序、停止、反向请求都经它,走产品里同一批部件。 */
-    private static final java.util.Map<UUID, com.dwinovo.numen.api.program.LoopbackClient> CLIENTS =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * 每只同伴一个扮大脑的程序宿主:程序、停止都交给产品里同一个入口({@link com.dwinovo.numen.api.program.ServerPrograms}),
+     * 客户端函数的反向请求经回环传输(编码、解码再执行)答;她的模块是这一次运行专用的目录。身体不必登记在名册上,
+     * 主人就是她自己——用例造的同伴没有真主人。
+     */
+    static final class Programs implements com.dwinovo.numen.api.program.ProgramHost {
 
-    static com.dwinovo.numen.api.program.LoopbackClient client(NumenPlayer body) {
-        net.minecraft.server.MinecraftServer server = body.getServer();
-        return CLIENTS.computeIfAbsent(body.getUUID(), uuid -> new com.dwinovo.numen.api.program.LoopbackClient(
-                id -> NumenPlayer.findByUuid(server, id), com.dwinovo.numen.api.script.Modules::of));
+        private final net.minecraft.server.MinecraftServer server;
+        private final com.dwinovo.numen.api.program.LoopbackTransport transport =
+                new com.dwinovo.numen.api.program.LoopbackTransport();
+        private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome>>
+                waiting = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private Programs(net.minecraft.server.MinecraftServer server) {
+            this.server = server;
+        }
+
+        /** 跑一段程序,{@code observer} 看着它的每次调用。 */
+        void run(UUID companion, String programId, String code, com.dwinovo.numen.api.program.CallObserver observer,
+                 java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> done) {
+            waiting.put(programId, done);
+            com.dwinovo.numen.api.program.ServerPrograms.run(NumenPlayer.findByUuid(server, companion), companion,
+                    companion, new com.dwinovo.numen.api.program.ServerPrograms.Request(programId, code,
+                            com.dwinovo.numen.api.script.Modules.of(companion), true), transport, observer, outcome -> {
+                        var to = waiting.remove(programId);
+                        if (to != null) {
+                            to.accept(outcome);
+                        }
+                    });
+        }
+
+        @Override
+        public void run(UUID companion, String programId, String code,
+                        java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> done) {
+            run(companion, programId, code, com.dwinovo.numen.api.program.CallObserver.NONE, done);
+        }
+
+        @Override
+        public void afterwards(String programId,
+                               java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> late) {
+            waiting.computeIfPresent(programId, (id, was) -> late);
+        }
+
+        @Override
+        public void forget(String programId) {
+            waiting.remove(programId);
+        }
+
+        @Override
+        public void interrupt(UUID companion, String programId, String why) {
+            com.dwinovo.numen.api.program.ServerPrograms.interrupt(companion, programId, why);
+        }
+
+        @Override
+        public void cutOff(UUID companion, String programId, boolean stopBody) {
+            com.dwinovo.numen.api.program.ServerPrograms.cutOff(companion, programId, stopBody);
+        }
+
+        @Override
+        public void stopBody(UUID companion) {
+            NumenPlayer her = NumenPlayer.findByUuid(server, companion);
+            if (her != null) {
+                CompanionTickDispatcher.cancelFor(her);
+            }
+        }
+
+        /** 让这个"客户端"从此不再答复反向请求(扮一个卡住的客户端):程序里的客户端函数要等到时限才以失败结束。 */
+        void silence() {
+            transport.silence();
+        }
+    }
+
+    private static final java.util.Map<UUID, Programs> HOSTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static Programs programs(NumenPlayer body) {
+        return HOSTS.computeIfAbsent(body.getUUID(), uuid -> new Programs(body.getServer()));
     }
 
     /**
-     * 按模型的样子跑一段程序:和主人客户端一样,整段送去服务端的入口({@link com.dwinovo.numen.api.program.ServerPrograms}),服务端函数
+     * 按模型的样子跑一段程序:和她的大脑一样,整段交给服务端的入口({@link com.dwinovo.numen.api.program.ServerPrograms}),服务端函数
      * 在服务端主线程排队执行、客户端函数经回环传输答;她派的活的收尾归这段程序,写进回执。
      *
      * <p>程序在自己的线程上跑,每次调用在服务端主线程轮到它时执行。产品里主线程不等程序;用例的这一步要在同一刻读到查询类程序的回执,
@@ -592,9 +660,7 @@ public final class GameTestKit {
                 uuid -> new java.util.concurrent.ConcurrentLinkedDeque<>());
         Runnable send = () -> {
             ACTIVE.put(body.getUUID(), new Active(programId, run));
-            client(body).run(body.getUUID(), programId, code, new Watch(body, run), result -> {
-                com.dwinovo.numen.api.agent.script.Program.Outcome outcome =
-                        ((com.dwinovo.numen.api.program.RunResult.Ended) result).outcome();
+            programs(body).run(body.getUUID(), programId, code, new Watch(body, run), outcome -> {
                 run.receipt.set(outcome.receipt());
                 live.ended().set(true);
                 ACTIVE.remove(body.getUUID());
@@ -612,7 +678,7 @@ public final class GameTestKit {
         }
         backlog.add(send);
         if (current.run().awaitingJob()) {
-            client(body).interrupt(body.getUUID(), current.programId(), "your owner spoke");
+            programs(body).interrupt(body.getUUID(), current.programId(), "your owner spoke");
         }
     }
 
@@ -742,12 +808,12 @@ public final class GameTestKit {
 
         @Override
         public void interrupt(LlmToolCall program, String why) {
-            client(body).interrupt(body.getUUID(), program.id(), why);
+            programs(body).interrupt(body.getUUID(), program.id(), why);
         }
 
         @Override
         public void cutOff(LlmToolCall program, boolean stopBody) {
-            client(body).cutOff(body.getUUID(), program.id(), stopBody);
+            programs(body).cutOff(body.getUUID(), program.id(), stopBody);
         }
 
         /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱;是急件、而一段程序在跑,客户端叫它停在调用之间。 */

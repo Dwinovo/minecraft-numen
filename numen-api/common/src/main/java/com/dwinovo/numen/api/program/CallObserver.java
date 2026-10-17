@@ -22,8 +22,8 @@ public interface CallObserver {
     }
 
     /**
-     * 程序结束了,在服务端主线程上,先于答复交给客户端。这里的结局带着程序 {@code return} 的值原样和完整的错误值——它们不上网线,
-     * 同进程的测试与工具从这里读。
+     * 程序结束了,在服务端主线程上,先于回执交给等它的人。这里的结局带着程序 {@code return} 的值原样和完整的错误值,
+     * 测试与工具从这里读。
      */
     default void ended(Program.Outcome outcome) {
     }

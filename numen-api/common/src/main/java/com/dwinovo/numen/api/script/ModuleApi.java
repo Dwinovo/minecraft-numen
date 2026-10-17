@@ -6,13 +6,13 @@ import com.dwinovo.numen.api.agent.script.ErrorKind;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.Call;
-import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Flatten;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
+import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 
 import java.util.ArrayList;
@@ -21,9 +21,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。模块是主人客户端上目录里的文件,路径就是
- * 名字;随模组发布的那一套装进去(出厂的),她能看、改、存、删任何一份,改坏了的出厂模块 {@code reset} 还原。都在主人客户端执行(她的
- * 大脑与 Lua 虚拟机就在那儿),当场回,不占身体;存、改、删不问主人,每一次写进回执与客户端日志。每份都记战绩:用到它的程序跑了几段、
+ * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。模块是服务器上主人目录里的文件,路径就是
+ * 名字;随模组发布的那一套装进去(出厂的),她能看、改、存、删任何一份,改坏了的出厂模块 {@code reset} 还原。当场回,不占身体;
+ * 存、改、删不问主人,每一次写进回执与服务端日志。每份都记战绩:用到它的程序跑了几段、
  * 跑完几段、最近一次在什么时候、最近一段没跑完停在哪一行、为什么——只给事实,不替她评判。战绩由跑程序的大脑在程序结束时记
  * ({@link Modules#tally})。
  */
@@ -50,7 +50,7 @@ public final class ModuleApi {
     @Example("for _, m in ipairs(numen.module.list()) do print(m.name, m.whose, m.finished .. \"/\" .. m.runs) end")
     @Note("Instant and read-only. numen.api.help(\"<module>\") lists a module's functions with their types.")
     @SeeAlso("numen.module.show")
-    public static List<ModuleInfo> list(ClientCall call) {
+    public static List<ModuleInfo> list(ServerCall call) {
         Modules modules = Modules.of(call.companion());
         List<ModuleInfo> out = new ArrayList<>();
         java.util.SortedSet<String> names = new java.util.TreeSet<>(modules.all().keySet());
@@ -104,7 +104,7 @@ public final class ModuleApi {
     @Note("Instant and read-only. Read one before you change it or write your own: it shows how its functions are "
             + "put together.")
     @SeeAlso("numen.module.save")
-    public static Shown show(ClientCall call, Show args) {
+    public static Shown show(ServerCall call, Show args) {
         Modules modules = Modules.of(call.companion());
         String name = args.name();
         boolean factory = args.factory().orElse(false);
@@ -148,7 +148,7 @@ public final class ModuleApi {
             + "under a name that has a file replaces it and resets its record. Your owner can edit the files too; the "
             + "next program reads them as they are.")
     @SeeAlso({"numen.module.delete", "numen.module.reset"})
-    public static Saved save(ClientCall call, Save args) {
+    public static Saved save(ServerCall call, Save args) {
         Modules modules = Modules.of(call.companion());
         String name = args.name().orElseGet(() -> freeName(modules));
         String code = args.code();
@@ -178,7 +178,7 @@ public final class ModuleApi {
     @Example("numen.module.delete(\"my.pit\")")
     @Note("Instant.")
     @SeeAlso({"numen.module.list", "numen.module.reset"})
-    public static void delete(ClientCall call, Named args) {
+    public static void delete(ServerCall call, Named args) {
         Modules modules = Modules.of(call.companion());
         if (modules.delete(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, missing(args.name(), modules), Call.of("numen.module.list"));
@@ -191,7 +191,7 @@ public final class ModuleApi {
     @Note("Instant. numen.module.list says which built-in ones you changed and which have a newer version you have "
             + "not taken because you changed yours.")
     @SeeAlso("numen.module.list")
-    public static void reset(ClientCall call, Named args) {
+    public static void reset(ServerCall call, Named args) {
         Modules modules = Modules.of(call.companion());
         if (modules.reset(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "nothing named " + args.name() + " ships with this version; only "

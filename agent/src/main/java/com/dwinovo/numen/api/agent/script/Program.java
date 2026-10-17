@@ -64,21 +64,37 @@ public final class Program {
      * 一段程序跑完了。
      *
      * @param receipt 回执:成败与文字({@code success}、{@code message}),交给模型的全部
-     * @param ending  怎么结束的(跑完、出错、被停下),出错时错误值的种类;客户端与评测读它,不读回执的文字
+     * @param ending  怎么结束的(跑完、出错、被停下),出错时错误值的种类;大脑与评测读它,不读回执的文字
      * @param calls   每次 API 调用的结局,按先后
      * @param used    用到的每个模块和这段程序的结局
      * @param stoppedFor 程序是被叫停的(主人开口、急件、切断)时,为什么停,一句话,含等着的那件活怎样了("your owner spoke; t8 keeps
-     *                   running");别的结局是 null。客户端据此给同一批里没执行的调用写原因,不去读回执的文字
-     * @param returned   程序 {@code return} 的值原样;只在程序跑的进程里有(同进程的测试与工具读),不上网线,从线上读回来的是 null
-     * @param failure    出错时完整的错误值({@code kind}、{@code message}、{@code hint}、{@code fn}、{@code data});同 {@code returned},不上网线
+     *                   running");别的结局是 null。工具口据此给同一批里没执行的调用写原因,不去读回执的文字
+     * @param returned   程序 {@code return} 的值原样;进程内的测试与工具读它,回执里是截过的文字
+     * @param failure    出错时完整的错误值({@code kind}、{@code message}、{@code hint}、{@code fn}、{@code data});同 {@code returned}
      */
     public record Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
                           String stoppedFor, Object returned, java.util.Map<String, Object> failure) {
 
-        /** 从线上读回来的结局:没有 {@code returned} 与 {@code failure}。 */
+        /** 没有 {@code return} 的值与完整错误值的结局。 */
         public Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
                        String stoppedFor) {
             this(receipt, ending, calls, used, stoppedFor, null, null);
+        }
+
+        /** 一段没能开跑的程序的结局:一张失败的回执,没有调用,没有模块。 */
+        public static Outcome refused(String why) {
+            return new Outcome(ToolOutcome.failure(why), new ScriptCall.Ending(ScriptCall.Status.ERROR,
+                    ErrorKind.FAILED.wire()), List.of(), List.of(), null);
+        }
+
+        /** 一张回执(服务端写的那份 JSON)里的文字,模型读的就是它。 */
+        public static String messageOf(String receipt) {
+            return com.google.gson.JsonParser.parseString(receipt).getAsJsonObject().get("message").getAsString();
+        }
+
+        /** 这段程序的回执里的文字。 */
+        public String message() {
+            return messageOf(receipt);
         }
     }
 

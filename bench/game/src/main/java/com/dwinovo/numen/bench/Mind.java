@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.api.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.loop.ModelOutcome;
+import com.dwinovo.numen.api.agent.loop.ModelPort;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
@@ -16,19 +17,15 @@ import com.dwinovo.numen.api.agent.tool.ScriptTool;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
- * 回话的那一方:真实模型,或者两种基线。评测大脑的模型口({@link Brain})把请求交给它、把结果切回主线程;请求怎么组装
- * 与产品是同一份代码,它只管"谁来答"。
+ * 回话的那一方:真实模型,或者两种基线。就是产品大脑({@code CompanionLoop})的模型口({@link com.dwinovo.numen.api.brain.Mind}),
+ * 评测里换上它;请求怎么组装、什么时候调模型都是产品的代码,它只管"谁来答"。评测不分档案,所以档案 id 一概不看。
+ * 加上一样评测才有的:最近一次失败的原话,和调模型的次数预算——用完了这次调用不发,运行器随即按超轮数收场。
  */
-interface Mind {
-
-    /** 现在发不了请求的理由;能发是 null。 */
-    Cause unavailable();
-
-    /** 答这一次。{@code done} 恰好调一次,可以在任何线程上;取消之后调不调都行,调了也会被丢掉。 */
-    void ask(ModelRequest request, CancelToken cancel, Consumer<ModelOutcome> done);
+interface Mind extends com.dwinovo.numen.api.brain.Mind {
 
     /** 最近一次失败的 HTTP 状态与服务端原话;没失败过是 null。 */
     default Failure lastFailure() {
@@ -58,20 +55,31 @@ interface Mind {
     final class Live implements Mind {
 
         private final LlmEndpoint endpoint;
+        private final BooleanSupplier mayCall;
         private volatile Failure lastFailure;
 
-        Live(LlmEndpoint endpoint) {
+        Live(LlmEndpoint endpoint, BooleanSupplier mayCall) {
             this.endpoint = endpoint;
+            this.mayCall = mayCall;
         }
 
         @Override
-        public Cause unavailable() {
+        public Cause unavailable(String provider) {
             return endpoint.hasApiKey() ? null : Cause.of(Cause.NO_KEY, "环境变量 " + Settings.KEY_ENV);
+        }
+
+        @Override
+        public LlmEndpoint endpoint(String provider) {
+            return endpoint;
         }
 
         /** 不要流式增量:评测不落思考,正文等整条回复。 */
         @Override
-        public void ask(ModelRequest request, CancelToken cancel, Consumer<ModelOutcome> done) {
+        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+                        Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> done) {
+            if (!mayCall.getAsBoolean()) {
+                return;
+            }
             CompletableFuture<NumenLlmClient.ChatResult> result;
             try {
                 result = NumenLlmClient.forEndpoint(endpoint).chatStreaming(request.messages(), request.tools(),
@@ -114,22 +122,36 @@ interface Mind {
      */
     final class Scripted implements Mind {
 
+        private final LlmEndpoint endpoint;
+        private final BooleanSupplier mayCall;
         private final String program;
         private final String words;
         private boolean acted;
 
-        Scripted(String program, String words) {
+        /** @param endpoint 上下文窗口取自它,与真实模型同一个口径 */
+        Scripted(LlmEndpoint endpoint, BooleanSupplier mayCall, String program, String words) {
+            this.endpoint = endpoint;
+            this.mayCall = mayCall;
             this.program = program;
             this.words = words;
         }
 
         @Override
-        public Cause unavailable() {
+        public Cause unavailable(String provider) {
             return null;
         }
 
         @Override
-        public void ask(ModelRequest request, CancelToken cancel, Consumer<ModelOutcome> done) {
+        public LlmEndpoint endpoint(String provider) {
+            return endpoint;
+        }
+
+        @Override
+        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+                        Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> done) {
+            if (!mayCall.getAsBoolean()) {
+                return;
+            }
             AssistantTurn turn;
             if (!acted && program != null) {
                 acted = true;

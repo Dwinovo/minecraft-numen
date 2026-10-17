@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.sdk.ApiFunction;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -17,12 +18,14 @@ import java.util.function.Consumer;
 final class ServerCalls implements ProgramCalls {
 
     private final NumenPlayer her;
+    private final UUID companion;
     private final MainQueue.Lane lane;
     /** 受理了一件占身体的活,收到它的编号:程序要等的这件活的收尾归程序({@link ServerPrograms})。 */
     private final Consumer<String> accepted;
 
-    ServerCalls(NumenPlayer her, MainQueue.Lane lane, Consumer<String> accepted) {
+    ServerCalls(NumenPlayer her, UUID companion, MainQueue.Lane lane, Consumer<String> accepted) {
         this.her = her;
+        this.companion = companion;
         this.lane = lane;
         this.accepted = accepted;
     }
@@ -39,7 +42,7 @@ final class ServerCalls implements ProgramCalls {
             done.accept(reply);
         };
         lane.post(() -> {
-            Dispatcher.serve(invocation.function(), invocation.args(), her, callId, landed);
+            Dispatcher.serve(invocation.function(), invocation.args(), her, companion, callId, landed);
             sent.run();
         });
     }

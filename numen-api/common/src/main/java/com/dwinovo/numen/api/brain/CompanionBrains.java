@@ -19,6 +19,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
+import java.util.function.IntSupplier;
 
 /**
  * 一只同伴的服务端大脑怎么从服务器的各处接起来——这个接线只在这里,产品和 GameTest 走同一个 {@link #create}:
@@ -47,10 +49,26 @@ public final class CompanionBrains {
     public static CompanionLoop create(MinecraftServer server, UUID companion, UUID owner, Home home, Mind mind,
                                        CompanionLoops.Link link, BooleanSupplier ownerOnline,
                                        BooleanSupplier driving) {
+        PersonaLibrary personas = PersonaLibraries.of(server, owner);
+        return create(server, companion, owner, home, mind, link, ownerOnline, driving,
+                OwnerPrefs.of(server, owner)::initiative, id -> {
+                    PersonaLibrary.Persona persona = personas.get(id);
+                    return persona == null ? null : persona.text();
+                });
+    }
+
+    /**
+     * 同上,主动性与人设正文不从主人的偏好和人设库取,由调用方给:评测用它把这两样定死,模型之外的一切仍是产品的零件。
+     *
+     * @param initiative 主动性档位 1~10
+     * @param persona    人设 id 对应的正文;没有这个人设返回 {@code null}
+     */
+    public static CompanionLoop create(MinecraftServer server, UUID companion, UUID owner, Home home, Mind mind,
+                                       CompanionLoops.Link link, BooleanSupplier ownerOnline,
+                                       BooleanSupplier driving, IntSupplier initiative,
+                                       Function<String, String> persona) {
         CompanionRegistry registry = CompanionRegistry.get(server);
         Conversations rooms = Conversations.of(server, owner);
-        PersonaLibrary personas = PersonaLibraries.of(server, owner);
-        OwnerPrefs prefs = OwnerPrefs.of(server, owner);
         CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, home, server, mind,
                 new LocalPrograms(server),
                 () -> NumenPlayer.findByUuid(server, companion),
@@ -63,11 +81,7 @@ public final class CompanionBrains {
                     CompanionRegistry.Entry entry = registry.find(companion);
                     return entry != null && entry.diedAt() > 0L;
                 },
-                ownerOnline, driving, prefs::initiative,
-                id -> {
-                    PersonaLibrary.Persona persona = personas.get(id);
-                    return persona == null ? null : persona.text();
-                },
+                ownerOnline, driving, initiative, persona,
                 () -> server.overworld().getDayTime(), rooms));
         CompanionLoops.install(owner, loop, link, rooms);
         return loop;

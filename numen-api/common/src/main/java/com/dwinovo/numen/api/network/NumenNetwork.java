@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.network;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
-import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.api.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.api.network.payload.LocateNumenPayload;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
@@ -241,22 +240,6 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);
 
-        // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).
-        toServer(
-                com.dwinovo.numen.api.network.payload.RunProgramPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.RunProgramPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.RunProgramPayload::handle);
-        toClient(
-                com.dwinovo.numen.api.network.payload.ProgramResultPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ProgramResultPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ProgramResultPayload::handle);
-
-        // C→S: stop the program I sent (the owner spoke, the stop button, an external brain took over).
-        toServer(
-                com.dwinovo.numen.api.network.payload.StopProgramPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.StopProgramPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.StopProgramPayload::handle);
-
         // S→C: a running program calls a function only the owner's client can answer; C→S: the answer.
         toClient(
                 com.dwinovo.numen.api.network.payload.ClientCallPayload.TYPE,
@@ -266,13 +249,6 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.ClientCallResultPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.ClientCallResultPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ClientCallResultPayload::handle);
-
-        // S→C: 她此刻在做什么 —— 「她在做什么」的唯一真源。槽一变就推，
-        // 派发/重放/顶替/干完走同一个出口（见 CurrentTaskPayload）。
-        toClient(
-                com.dwinovo.numen.api.network.payload.CurrentTaskPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.CurrentTaskPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.CurrentTaskPayload::handle);
 
         // S→C: 同伴在等主人点头的那条征询(或撤回)——答复框与轮廓只照它画(见 ConsentDesk)。
         toClient(
@@ -286,29 +262,11 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.ConsentReplyPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConsentReplyPayload::handle);
 
-        // C→S: owner pressed Stop — cancel the companion's queued + running tasks.
-        toServer(
-                com.dwinovo.numen.api.network.payload.CancelTasksPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.CancelTasksPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.CancelTasksPayload::handle);
-
         // C→S: 大脑开始/结束输出——身体据此在说话期间注视主人(纯姿态信号)。
         toServer(
                 com.dwinovo.numen.api.network.payload.SpeakingStatePayload.TYPE,
                 com.dwinovo.numen.api.network.payload.SpeakingStatePayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.SpeakingStatePayload::handle);
-
-        // S→C: an Numen body died; suspend the owner's agent loop (records the cut-off turn
-        // with the death cause). Recoverable — see NumenRespawnPayload.
-        toClient(
-                NumenDeathPayload.TYPE, NumenDeathPayload.STREAM_CODEC,
-                NumenDeathPayload::handle);
-
-        // S→C: the dead companion has respawned at its owner; resume the suspended loop.
-        toClient(
-                com.dwinovo.numen.api.network.payload.NumenRespawnPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.NumenRespawnPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.NumenRespawnPayload::handle);
 
         // S→C: a generic async world event (dimension change, hazard, …) for a companion's brain.
         toClient(

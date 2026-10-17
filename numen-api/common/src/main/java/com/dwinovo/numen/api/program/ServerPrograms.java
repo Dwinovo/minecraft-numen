@@ -10,6 +10,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
+import com.dwinovo.numen.api.script.Modules;
 
 import java.util.Map;
 import java.util.UUID;
@@ -19,7 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * 在服务端跑她的 Lua 程序的<b>唯一入口</b>:主人客户端送来的整段程序({@code RunProgramPayload})、管理员的
+ * 在服务端跑她的 Lua 程序的<b>唯一入口</b>:她的大脑({@link LocalPrograms})、管理员的
  * {@code /numen drive <同伴> <程序>}、重启后接回她手上那件活(记下的那一行 Lua 再跑一遍)、GameTest 与单测都经它。
  *
  * <h2>谁做什么</h2>
@@ -27,7 +28,7 @@ import java.util.function.Consumer;
  *   <li>{@link Program}(agent):一段程序从头到回执,在它自己的执行体上;</li>
  *   <li>{@link ProgramCalls}:一次调用在哪一端执行——{@link ServerCalls} 排进主线程的车道({@link MainQueue}),
  *       {@link ClientCalls} 向主人客户端发反向请求({@link ClientTransport}),{@link RoutedCalls} 按函数的端分流;</li>
- *   <li>{@link RunModules}/{@link ModuleCache}:她的模块,客户端是真源,服务端只按内容缓存;</li>
+ *   <li>{@link Modules}:她的模块,服务器上主人目录里的文件,程序用到一个才去读那个文件;</li>
  *   <li>这里:登记在跑的程序、准入(每只同伴一段,每位主人、全服各有上限)、把服务端发出的事件交给程序、停、清理。</li>
  * </ul>
  *
@@ -70,13 +71,13 @@ public final class ServerPrograms {
     /**
      * 一次跑程序的请求。
      *
-     * @param reportsToModel 回执是给模型看的(主人客户端送来的、GameTest 与单测里扮主人客户端的):程序等着的那件活的收尾就写进回执,
+     * @param modules        她的模块;程序结束时用到的每个模块在这里记一次战绩
+     * @param reportsToModel 回执是给模型看的(她的大脑、GameTest 与单测里扮大脑的):程序等着的那件活的收尾就写进回执,
      *                       不再作为事件另送。管理员的 drive、重启后再跑的那一行没有模型读回执,它们派的活的收尾照常作为事件送到她手里
      */
-    public record Request(String programId, String code, ModuleSet modules, boolean reportsToModel) {}
+    public record Request(String programId, String code, Modules modules, boolean reportsToModel) {}
 
     private static final MainQueue QUEUE = new MainQueue();
-    private static final ModuleCache CACHE = new ModuleCache(ProgramLimits.MODULE_CACHE_BYTES);
     /** 在跑的程序,按同伴:一只同伴同一时刻至多一段。 */
     private static final Map<UUID, Running> RUNNING = new ConcurrentHashMap<>();
     /** 每段程序的执行体各用虚拟线程:停在等结果上不占平台线程。 */
@@ -92,31 +93,19 @@ public final class ServerPrograms {
     private ServerPrograms() {}
 
     /**
-     * 跑一段程序。结果({@link RunResult})经 {@code done} 恰好交回一次,在服务端主线程上:跑完的回执;缺模块正文时是
-     * {@link RunResult.Missing},程序没跑,客户端带上再来;同伴已有一段在跑、主人或全服到了并发上限,当场是一张失败的回执。
+     * 跑一段程序。结局({@link Program.Outcome})经 {@code done} 恰好交回一次,在服务端主线程上:跑完的回执;同伴已有一段在跑、
+     * 主人或全服到了并发上限,当场是一张失败的回执。
      *
      * @param her       她的身体;没有世界的单测是 null
      * @param companion 她的 UUID
-     * @param owner     主人的 UUID:模块缓存与并发上限按他算
+     * @param owner     主人的 UUID:并发上限按他算
      * @param transport 反向请求怎么到主人的客户端
      * @param observer  看着它的每次调用
      */
     public static void run(NumenPlayer her, UUID companion, UUID owner, Request request, ClientTransport transport,
-                           CallObserver observer, Consumer<RunResult> done) {
-        RunModules.Opened opened;
-        try {
-            opened = RunModules.open(owner, request.modules(), CACHE);
-        } catch (IllegalArgumentException wrong) {
-            done.accept(RunResult.refused("a module text sent with the program does not match its fingerprint: "
-                    + wrong.getMessage()));
-            return;
-        }
-        if (!opened.missing().isEmpty()) {
-            done.accept(new RunResult.Missing(opened.missing()));
-            return;
-        }
+                           CallObserver observer, Consumer<Program.Outcome> done) {
         MainQueue.Lane lane = QUEUE.lane();
-        ClientCalls client = new ClientCalls(her, companion, lane, transport, opened.modules(), () -> ticks);
+        ClientCalls client = new ClientCalls(her, companion, lane, transport, () -> ticks);
         Running running = new Running(companion, owner, request.programId(), lane, client);
         String refused;
         synchronized (RUNNING) {
@@ -127,22 +116,24 @@ public final class ServerPrograms {
         }
         if (refused != null) {
             running.lane.close();
-            done.accept(RunResult.refused(refused));
+            done.accept(Program.Outcome.refused(refused));
             return;
         }
         ProgramCalls calls = new ObservedCalls(new RoutedCalls(
-                new ServerCalls(her, running.lane, job -> running.claimed = request.reportsToModel() ? job : null),
+                new ServerCalls(her, companion, running.lane,
+                        job -> running.claimed = request.reportsToModel() ? job : null),
                 client), observer);
         Constants.LOG.info("[numen-program] {} runs {} on the server ({} chars)", companion, request.programId(),
                 request.code().length());
         running.program = new Program(request.programId(), request.code(),
-                new ProgramPort(her, opened.modules(), calls), new SerialExecutor(THREADS), outcome -> {
+                new ProgramPort(her, request.modules(), calls), new SerialExecutor(THREADS), outcome -> {
                     // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉
                     client.close();
                     // 回执先排进车道、再摘掉登记:从外面看"没有程序在跑"时,它的回执一定已经排着了
                     running.lane.post(() -> {
                         observer.ended(outcome);
-                        done.accept(new RunResult.Ended(outcome));
+                        tally(request.modules(), outcome);
+                        done.accept(outcome);
                     });
                     running.lane.close();
                     RUNNING.remove(companion, running);
@@ -150,8 +141,16 @@ public final class ServerPrograms {
         running.program.start();
     }
 
+    /** 用到的每个模块记一次战绩:战绩记在模块账本里,和模块的文件在一处。 */
+    private static void tally(Modules modules, Program.Outcome outcome) {
+        for (Program.Used used : outcome.used()) {
+            modules.tally(used.module(), used.tally().ok(), used.tally().line(), used.tally().error(),
+                    System.currentTimeMillis());
+        }
+    }
+
     /**
-     * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):没有主人的客户端送模块,用随模组发布的那一套;
+     * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):用她的模块;
      * 它调的客户端函数照样向她的主人的客户端发反向请求(主人不在线就是一条失败)。整张回执经 {@code receipt} 交回一次。
      *
      * @param tag 程序编号的前缀,日志里认它
@@ -159,12 +158,8 @@ public final class ServerPrograms {
     public static void launch(NumenPlayer her, String tag, String code, CallObserver observer,
                               Consumer<String> receipt) {
         UUID owner = her.getOwnerUuid() != null ? her.getOwnerUuid() : her.getUUID();
-        run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, ModuleSet.factory(), false),
-                NetworkTransport.INSTANCE, observer, result -> receipt.accept(switch (result) {
-                    case RunResult.Ended ended -> ended.outcome().receipt();
-                    case RunResult.Missing missing -> throw new IllegalStateException(
-                            "the built-in modules were sent whole, yet the server lacks " + missing.hashes());
-                }));
+        run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, Modules.of(her.getUUID()),
+                false), NetworkTransport.INSTANCE, observer, outcome -> receipt.accept(outcome.receipt()));
     }
 
     /** 能不能再开一段:不能就是给模型的那句话。 */
@@ -256,11 +251,10 @@ public final class ServerPrograms {
         }
     }
 
-    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,缓存清掉,没收完的分片消息丢掉。 */
+    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,没收完的分片消息丢掉。 */
     public static void ownerLeft(UUID owner) {
         RUNNING.values().stream().filter(r -> r.owner.equals(owner)).forEach(r -> r.program.cancel(false));
         NetworkTransport.INSTANCE.ownerLeft(owner);
-        CACHE.drop(owner);
         NumenNetwork.disconnected(owner);
     }
 
@@ -269,7 +263,6 @@ public final class ServerPrograms {
         RUNNING.values().forEach(r -> r.program.cancel(false));
         RUNNING.clear();
         QUEUE.clear();
-        CACHE.clear();
         NetworkTransport.INSTANCE.clear();
     }
 }

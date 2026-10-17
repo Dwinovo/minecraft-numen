@@ -5,9 +5,9 @@ import com.dwinovo.numen.api.agent.script.ScriptCatalog;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.agent.script.Program;
 import com.dwinovo.numen.api.program.CallObserver;
-import com.dwinovo.numen.api.program.LoopbackClient;
-import com.dwinovo.numen.api.program.RunResult;
+import com.dwinovo.numen.api.program.LoopbackTransport;
 import com.dwinovo.numen.api.program.ServerPrograms;
 import com.dwinovo.numen.api.script.BuiltinModules;
 import com.dwinovo.numen.api.script.Modules;
@@ -235,7 +235,7 @@ public final class ApiTester {
      * @param outcome 程序的结局;回执在 {@code outcome.receipt()}
      * @param replies 每次调用的结果({@link com.dwinovo.numen.api.agent.script.ApiReply} 的那一份)
      */
-    public record Run(com.dwinovo.numen.api.agent.script.Program.Outcome outcome, List<String> replies) {
+    public record Run(Program.Outcome outcome, List<String> replies) {
 
         /** 跑到了最后。 */
         public boolean ok() {
@@ -244,7 +244,7 @@ public final class ApiTester {
 
         /** 回执那段话。 */
         public String message() {
-            return RunResult.messageOf(outcome.receipt());
+            return outcome.message();
         }
 
         /** 程序 {@code return} 的值(JSON);没有是 null。 */
@@ -267,26 +267,21 @@ public final class ApiTester {
      * @throws IllegalStateException 程序没在当场跑完(在等身体的活或主人的答复)
      */
     public static Run run(NumenPlayer her, UUID companion, String code) {
-        return run(her, companion, code, uuid -> Modules.factory());
+        return run(her, companion, code, Modules.factory());
     }
 
-    /** 同上,她的模块是 {@code modules} 给的(如 {@code Modules::of},程序里存的模块落在那个目录里,下一段程序读得到)。 */
-    public static Run run(NumenPlayer her, UUID companion, String code, java.util.function.Function<UUID, Modules> modules) {
+    /** 同上,她的模块是 {@code modules}(如 {@code Modules.of(companion)},程序里存的模块落在那个目录里,下一段程序读得到)。 */
+    public static Run run(NumenPlayer her, UUID companion, String code, Modules modules) {
         List<String> replies = new java.util.concurrent.CopyOnWriteArrayList<>();
-        java.util.concurrent.atomic.AtomicReference<RunResult> result = new java.util.concurrent.atomic.AtomicReference<>();
-        java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.api.agent.script.Program.Outcome> outcome =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        new LoopbackClient(uuid -> her, modules).run(companion, "test-" + UUID.randomUUID(), code, new CallObserver() {
-            @Override
-            public void replied(String callId, String reply) {
-                replies.add(reply);
-            }
-
-            @Override
-            public void ended(com.dwinovo.numen.api.agent.script.Program.Outcome ended) {
-                outcome.set(ended);
-            }
-        }, result::set);
+        java.util.concurrent.atomic.AtomicReference<Program.Outcome> result = new java.util.concurrent.atomic.AtomicReference<>();
+        ServerPrograms.run(her, companion, companion,
+                new ServerPrograms.Request("test-" + UUID.randomUUID(), code, modules, true), new LoopbackTransport(),
+                new CallObserver() {
+                    @Override
+                    public void replied(String callId, String reply) {
+                        replies.add(reply);
+                    }
+                }, result::set);
         // 程序在自己的线程上跑,调用在这里推进;闲着又没有调用可执行,就是停在等身体的活或主人的答复上了
         while (result.get() == null) {
             boolean idle = ServerPrograms.idle(companion);
@@ -296,13 +291,10 @@ public final class ApiTester {
             }
             Thread.onSpinWait();
         }
-        if (!(result.get() instanceof RunResult.Ended ended)) {
+        if (result.get() == null) {
             throw new IllegalStateException("the program did not end at once: it waits for a body job or an answer; "
                     + "run it in a GameTest");
         }
-        if (outcome.get() == null) {
-            throw new IllegalStateException("the program did not run: " + RunResult.messageOf(ended.outcome().receipt()));
-        }
-        return new Run(outcome.get(), List.copyOf(replies));
+        return new Run(result.get(), List.copyOf(replies));
     }
 }

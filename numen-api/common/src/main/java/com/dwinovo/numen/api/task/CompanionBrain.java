@@ -227,17 +227,16 @@ final class CompanionBrain {
         pushedTaskId = id;
         pushedDescribe = desc;
         ticksSinceTaskPush = 0;
-        com.dwinovo.numen.api.network.payload.CurrentTaskPayload msg;
+        com.dwinovo.numen.api.agent.request.TaskReport msg;
         if (rec == null) {
-            msg = com.dwinovo.numen.api.network.payload.CurrentTaskPayload.idle(companion.getUUID());
+            msg = com.dwinovo.numen.api.agent.request.TaskReport.none();
         } else {
             long startedTick = Math.max(0, rec.getStartedGameTime());
             long elapsedMs = Math.max(0, companion.level().getGameTime() - startedTick) * 50L;
-            msg = new com.dwinovo.numen.api.network.payload.CurrentTaskPayload(
-                    companion.getUUID(), id, rec.getToolName(), desc, rec.activity(),
+            msg = new com.dwinovo.numen.api.agent.request.TaskReport(id, rec.getToolName(), desc, rec.activity(),
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
-        // 服务端大脑直接读这一份(主人在不在线都要,她下一轮读 <current_task>);主人客户端上的循环等包
+        // 她的大脑直接收这一份(主人在不在线都要,她下一轮读 <current_task>)
         com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).ifPresent(brain -> brain.onCurrentTask(msg));
     }
 

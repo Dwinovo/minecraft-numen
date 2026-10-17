@@ -3,9 +3,6 @@ package com.dwinovo.numen.api.network;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
-import com.dwinovo.numen.api.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.api.task.Activity;
-import com.dwinovo.numen.api.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.api.network.payload.NumenEventPayload;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -68,12 +65,9 @@ class WireTest {
         assertEquals(32767, Wire.TO_SERVER.bytes());
     }
 
-    /**
-     * 一条消息的总上限要大过正当消息的最大值:服务端为一位主人缓存的模块正文至多 4 MB,缺了整批重送时加上程序与清单也装得下。
-     */
+    /** 一条消息的总上限:整条装得下的才分片送,多一个字节就当场失败;比一个包大一个字节的整包装不下。 */
     @Test
-    void aMessageCanCarryAWholeModuleCachePlusAProgram() {
-        assertTrue(Wire.MESSAGE_BYTES >= com.dwinovo.numen.api.program.ProgramLimits.MODULE_CACHE_BYTES * 2);
+    void aMessageIsBoundedByTheTotalLimitAndAPacketByItsOwn() {
         assertTrue(Wire.TO_SERVER.carries(Wire.MESSAGE_BYTES));
         assertFalse(Wire.TO_SERVER.carries(Wire.MESSAGE_BYTES + 1));
         assertFalse(Wire.TO_SERVER.holds(Wire.TO_SERVER.bytes() + 1));
@@ -119,24 +113,6 @@ class WireTest {
                 replaced.text());
     }
 
-    @Test
-    void aTaskDescriptionOrADeathCauseTooBigIsReplacedBySayingSo() {
-        String big = "z".repeat(Wire.TO_CLIENT.bytes() + 1);
-        CurrentTaskPayload task = fit(new CurrentTaskPayload(A, "t1", "work dig", big,
-                Activity.of("numen.activity.dig", big, 3, 64), false, 1200L));
-        assertEquals("t1", task.taskId());
-        assertEquals(1200L, task.elapsedMs());
-        assertTrue(task.describe().startsWith("Its description came to "), task.describe());
-        assertEquals(Activity.of(Activity.DEFAULT_KEY, "work dig"), task.activity(), "给主人看的那句缩成只说工具名");
-
-        Activity said = Activity.of("numen.activity.dig", "oak_log", 3, 64);
-        assertEquals(said, fit(new CurrentTaskPayload(A, "t1", "work dig", "short", said, false, 1200L)).activity(),
-                "装得下的原样送到");
-
-        NumenDeathPayload death = fit(new NumenDeathPayload(A, big));
-        assertTrue(death.cause().startsWith("The cause of death came to "), death.cause());
-    }
-
     /** 内容本来有界的包装不下,是填它的代码错了:当场抛出、指名是哪一种包,不交给 netty。 */
     @Test
     void aBoundedPayloadThatDoesNotFitFailsLoudlyInsteadOfReachingTheWire() {
@@ -164,8 +140,6 @@ class WireTest {
         net.minecraft.network.codec.StreamCodec<ByteBuf, T> codec = (net.minecraft.network.codec.StreamCodec<ByteBuf, T>)
                 (Object) switch (payload) {
                     case NumenEventPayload p -> NumenEventPayload.STREAM_CODEC;
-                    case CurrentTaskPayload p -> CurrentTaskPayload.STREAM_CODEC;
-                    case NumenDeathPayload p -> NumenDeathPayload.STREAM_CODEC;
                     default -> throw new IllegalArgumentException(payload.toString());
                 };
         T sent = Wire.TO_CLIENT.fit(codec, payload, Unpooled::buffer);
