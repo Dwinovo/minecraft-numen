@@ -139,16 +139,15 @@ public interface NumenApi {
     Path configDir();
 
     /**
-     * 主人客户端每次发请求时现算一段,挂进这只同伴的 {@code <runtime_state>}。
+     * 大脑每次发请求时(在服务端)现算一段,挂进这只同伴的 {@code <runtime_state>}。
      *
      * <p>解决的是这么个事:你的工具把同伴改了(换了外观、接了什么设备),她只在
      * <b>调用工具那一轮</b>知道,下一轮、下一次进游戏就忘了。挂在这儿的东西每轮都在,
      * 她随时知道自己现在是什么状态。
      *
-     * <p><b>只放只有主人客户端才知道的事</b>——比如客户端渲染的外观。算的时候读得到的只是
-     * 客户端手里的数据:她走远了、换了维度,客户端里就没有她的实体。身体上的事实住在服务端:
+     * <p><b>只放不在身体上的事</b>——比如外部服务给的状态。身体上的事实:
      * 穿戴位置用 {@link #registerGear},别的用 {@link #contributeBodyState};一个事实只从一边来,
-     * 两边都报就是两个会对不上的答案。
+     * 两边都报就是两个会对不上的答案。只有主人的客户端才知道的事,这里读不到。
      *
      * <pre>{@code
      * numen.contributeState(companion -> wearing(companion) == null ? ""
@@ -167,7 +166,7 @@ public interface NumenApi {
      * <p>给身体上的事实用——模组给她身上加的、背包和穿戴之外的东西。穿戴位置上戴着什么不走这里,
      * 用 {@link #registerGear}:Numen API 把它渲染成 {@code <worn>},排在所有片段的最前面。它和背包、状态效果同一条路:
      * Numen API 在检查身体有没有变化时一并算,和上次不同就随状态包推给主人的客户端,于是她走远了、
-     * 换了维度也照样在请求里。只有主人客户端才知道的事(客户端渲染的外观)用 {@link #contributeState};
+     * 换了维度也照样在请求里。不在身体上的事(外部服务给的状态)用 {@link #contributeState};
      * 一个事实只从一边来。
      *
      * <p><b>别放每 tick 都在变的值</b>(剩余秒数、坐标、耐久):变化检测按字符串比,
@@ -209,8 +208,7 @@ public interface NumenApi {
      * 服务端:她身上发生了一件事,告诉她。
      *
      * <p>和 Numen API 自带的事件走同一个发出口:按类型查表,盖上游戏内时间戳,拼成
-     * {@code <event kind="type" …>text</event>};主人在线直接送到他的客户端,离线进出箱,
-     * 等他登录时补发。
+     * {@code <event kind="type" …>text</event>},送进她的收件箱(她的大脑在服务端,主人在不在线都一样,离线只是攒着)。
      *
      * @param type   {@link #registerEventType} 登记过的种类
      * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null

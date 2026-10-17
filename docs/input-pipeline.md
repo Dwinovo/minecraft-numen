@@ -21,8 +21,8 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 三层两管:渠道把话送进收件箱;驾驶席上的大脑从收件箱取件、交出 Lua 程序;身体在服务端跑程序,最后落到她的键盘和鼠标上。
 加一个渠道不碰大脑,换一个大脑不碰渠道,谁驱动她都用同一副身体。
 
-**现在与目标。** 10-05 "客户端想、服务端做"已经把 Lua 程序搬到服务端,身体那一段已经在服务端;收件箱、循环、她的记忆、模型配置、外部大脑的端点还在主人客户端,
-所以主人一下线,她能把手上的活干完,但听不见、想不了。下文每节先写现状,再写目标。
+**现在。** 第 2 步已落地(§十四):收件箱、循环、她的记忆、模型配置、外部大脑的端点(单人游戏是本机端口,专用服等第 4 步)都在服务端,
+主人一下线她照样想、照样干,话和事都攒在收件箱里,他回来再处理。声线与皮肤库、语音在客户端(第 3、5 步搬)。下文各节先写当时的现状,再写目标;已落地的在 §十二 与 §十四 标明。
 
 ## 二、渠道
 
@@ -54,12 +54,11 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 
 ## 三、收件箱
 
-现状:每只同伴一个,在主人客户端,入队即落盘、取走即清;投递方式(叫不叫醒她、随哪一次调模型交出去)写在类型表里,见 `agent-loop.md` §七。
+现状(第 2 步已落地):每只同伴一个,在服务端她的家里(`companions/<uuid>/inbox.jsonl`),入队即落盘、取走即清;投递方式(叫不叫醒她、随哪一次调模型交出去)写在类型表里,见 `agent-loop.md` §七。
+`EventQueue`、`EventTypes`、`JsonlJournal` 本来就在纯 Java 的 `agent` 模块里,原样搬的。
 
-目标:**搬到服务端,跟着她。** `EventQueue`、`EventTypes`、`JsonlJournal` 本来就在纯 Java 的 `agent` 模块里,原样搬。
-
-- 入口合成服务端一个:`NumenEvents.emit` 与 `NumenGateway.emit` 并成一处,客户端的输入经网络包送进来。
-- 出箱 `EventOutbox` 删掉:它存在是因为收件箱在客户端、主人离线时事件没处放;收件箱在服务端,离线只是"攒着"。
+- 入口合成服务端一个:世界上的事经 `NumenEvents.emit` 直接进她的收件箱,客户端的输入(`NumenGateway.emit`)作为 `OwnerInput.Emit` 经网络包送进来,收件箱的去处只有这一个。
+- 没有出箱:它存在是因为收件箱在客户端、主人离线时事件没处放;收件箱在服务端,离线只是"攒着"。旧版存档里留下的 `numen_event_outbox.dat` 在服务器第一次起来时一次性读进各同伴的收件箱(`LegacyMigration.outbox`),读完改名 `.migrated`。
 
 ## 四、大脑
 
@@ -279,7 +278,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
    技能状态、模块账本改用它:记录带 id、压缩改指针,格式升一版、迁移一次;日志不写对话内容。数据仍在原处,行为不变——先把地基换好,搬家时只换"存在哪"。
    没有换的:世界存档里的 `SavedData`(同伴名册、权限、放置记录、定时器、离线输出箱)由 Minecraft 自己写盘,跟着第 3 步的服务端存档一起定;
    札记、人设、技能、模块是一条一个文件的内容文件,只换了原子写;待办没有落盘(只在一局的内存里)。
-2. **收件箱、日志、循环与模型配置一起搬服务端**:四者互相咬着,分开搬就得在中间写一层"客户端循环读服务端收件箱"的胶水,所以一步搬完。
+2. **收件箱、日志、循环与模型配置一起搬服务端(已落地,§十四)**:四者互相咬着,分开搬就得在中间写一层"客户端循环读服务端收件箱"的胶水,所以一步搬完。
    入口合一、出箱删掉、条目带渠道与说话人;日志落世界存档;服务端大脑跑 `AgentLoop`;档案、目录、协议随 `ai` 模块搬;
    呈现订阅经网络包;客户端面板按 id 分页读;驾驶席二选一;旧数据首次上线迁上去。
 3. **记忆与玩家的库搬服务端**:札记、待办、目标、人设落在同伴存档;人设、皮肤、声线库按玩家落在服务器;模块与技能副本落盘;面板导出与清空。
@@ -304,9 +303,10 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 - 待定:外部大脑的端口,先走"服主自开端口 + 反向代理",文档给隧道的办法;共用 MC 端口另行调研(§五)。
 - 已定(10-16):多模态的画面交给客户端画,服务端只出清单;暂缓,排在输入管线之后(§九)。
 
-## 十四、第 2 步落地计划(进行中:提交 1 到 10 已落地,清理等协调者的通知)
+## 十四、第 2 步落地(已落地)
 
-基底:第 1 步 dcc02130d,加包名归入 `com.dwinovo.numen.api.store`(7b4d33538)。下面九节对应任务的九个问题。读代码得出的事实都写了出处;"我的判断"与"待定"分开标。
+基底:第 1 步 dcc02130d,加包名归入 `com.dwinovo.numen.api.store`(7b4d33538)。下面九节是当时的方案,末尾"落地时与本节的出入"逐条记了每个提交实际做的与方案的差别,
+最后一条(提交 12,清理)说明旧路径怎样一并撤掉、现在每件事只剩哪一条路。读代码得出的事实都写了出处;"我的判断"与"待定"分开标。
 
 ### 14.1 循环读写的全清单:谁是真源、搬到哪
 
@@ -347,7 +347,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 
 ### 14.2 客户端剩下什么、怎么变成纯前端
 
-原则:**客户端不存真源、不留副本**;内存里的只是"订阅来的视图",关面板即弃。所有视图读自一个只读模型 `CompanionView`(显示行、在飞的打字机与思考、状态、用量、目标、会话),它的实现只有一个 `RemoteCompanion`,数据来自服务端。
+原则:**客户端不存真源、不留副本**;内存里的只是"订阅来的视图",关面板即弃。所有视图读自 `RemoteCompanion`(显示行、在飞的打字机与思考、状态、用量、目标、会话),数据来自服务端。
 
 | 客户端功能 | 订阅服务端的什么 | 往服务端发什么 |
 |---|---|---|
@@ -433,7 +433,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 
 ### 14.7 切换方式与提交序列
 
-办法:**抽象分支**。先把客户端界面改成只读 `CompanionView`,让旧的 `EntityAgentLoop` 也实现它;服务端循环在主源码集里另建、只被测试驱动;一个常量 `BrainSite{CLIENT, SERVER}` 在翻转前是 CLIENT;最后一个提交删掉旧路径与常量。每个提交都编译、测试全绿。
+办法:服务端循环先在主源码集里另建、只被测试驱动;翻转提交一次把大脑交给服务端;最后一个提交(清理)删掉旧路径。每个提交都编译、测试全绿。
 
 | # | 提交 | 验收 |
 |---|---|---|
@@ -443,15 +443,15 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 | 3 | 存储根:`Homes`(世界/玩家/服务器)、每同伴串行 `Io` 车道与停机排空、`Authority` | 单测:路径、车道保序、停机排空、管理员判据 |
 | 4 | 库搬主源码集:`ProviderLibrary`、`PersonaLibrary`、`JsonLibrary` 按路径注入(服务端按主人放在 `players/<主人>/`);模块线的删除推迟到清理提交 | 单测;GameTest 全过 |
 | 5 | 服务端大脑:`CompanionLoop`(原 `EntityAgentLoop` 的服务端版,端口接服务端的身体/日志/库)、`CompanionLoops` 注册表、`OwnerInput`、`Voice.said`、`FeedEncoder`、`RuntimeState` 直读身体;**只被测试驱动** | 新 GameTest:主人的话(Lua 入口)、脚本化的 `Mind`、`lua` 工具、回执,日志里有 user/assistant/tool 行;死亡冻结与复活;停止;两个会话旁听 |
-| 6 | 协议与客户端视图:`Hello`、`Feed/Status/Snapshot/HistoryPage/…` 包与处理器;`CompanionView` 接口、`RemoteCompanion` 实现;界面改读 `CompanionView`(旧循环也实现它) | 编解码与分页单测;GameTest:假客户端订阅收到 `Feed`、按 id 分页翻到底;两加载器构建 |
+| 6 | 协议与客户端视图:`Hello`、`Feed/Status/Snapshot/HistoryPage/…` 包与处理器;`RemoteCompanion` 视图;界面改读它 | 编解码与分页单测;GameTest:假客户端订阅收到 `Feed`、按 id 分页翻到底;两加载器构建 |
 | 7 | 迁移(单人路径):`LegacyMigration`、`EventOutbox` 导入、会话拆分 | 单测:崩溃点逐个注入再重跑结果一致;已迁的再进不重复 |
 | 8 | 库协议、脱敏、管理员页:人设页、模型配置页改走协议(`RemoteLibrary`) | 单测:脱敏视图无 key;非管理员写被拒;GameTest:普通玩家改档案被拒 |
 | 9 | (等另一执行者的 MCP 提交并入后)MCP 宿主进主源码集,`Actuator` 服务端实现与客户端实现并存 | MCP 现有测试;GameTest 用进程内 HTTP 走一遍 `get_events`/`say`/`invoke` |
-| 10 | **翻转**:`BrainSite=SERVER`;启用服务端 MCP;客户端不再创建循环 | 全套验证;服务端 GameTest 通过完整对话回路;真机清单 |
+| 10 | **翻转**:服务端给每只同伴建大脑;启用服务端 MCP;客户端不再创建循环 | 全套验证;服务端 GameTest 通过完整对话回路;真机清单 |
 | 11 | 多人迁移上传路径(可推后) | 单测:上限、归属、不重复;GameTest:假客户端上传一只 |
-| 12 | **清理**:删 `EntityAgentLoop`、`AgentLoopRegistry`、`ToolDispatcher`、`CompanionHome`、客户端 MCP 宿主与库、`EventOutbox`、`McpTranscript`、`ClientHands`/`ClientMcp`、`BrainSite`、`ClientNumenState` 的循环用法、下行的旧包;评测的 `Brain` 收口到 `CompanionLoop`;文档与宪法 §二/§三 改成现状 | 全套验证;grep 无旧路径引用 |
+| 12 | **清理**:删客户端的旧循环及其全部配件、客户端 MCP 宿主与库、模块同步那条线、离线出箱、下行的旧包;评测的 `Brain` 收口到 `CompanionLoop`;文档与宪法 §二/§三 改成现状(逐项见本节末"提交 12") | 全套验证;grep 无旧路径引用 |
 
-测试的增删改(预告,动手时逐条列):删 `ModuleSync`/`ModuleCache`/`RunProgramPayload` 大小/`Missing` 重试相关用例(功能没了);`ServerProgramsTest` 里"缺模块正文"的用例随之删,**其余用例保留,入口从"客户端送程序"改为直接调**,断言主语从"回执经上行回到客户端"变为"回执交给调用方";`OutboxReplayTest`/`NumenEventPayloadTest` 随功能删,覆盖的"离线攒着、回来时按原时间戳交出"改由收件箱落盘的用例接手。不跑 bench 真模型。
+测试的增删改:删模块同步、模块缓存、程序上下行包大小、"缺模块正文"重试相关的用例(功能没了);`ServerProgramsTest` 其余用例保留,入口从"客户端送程序"改为直接调,断言主语从"回执经上行回到客户端"变为"回执交给调用方";事件包与离线出箱的用例随功能删,覆盖的"离线攒着、回来时按原时间戳交出"由收件箱落盘的用例接手。不跑 bench 真模型。
 
 真机清单(翻转前后各过一遍):流式打字机与思考块、语音硬停与衔接、头顶气泡、停止键、死亡与复活、登出重登后收件箱里的收尾、外部大脑接管与交还、`/compact` 进度、`/goal` 续跑、群聊 @ 与旁听、没装客户端的原版客户端进服不崩(聊天 @ 是第 6 步,这一步只保证不崩)。
 
@@ -471,7 +471,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 3. **单人游戏暂停**:集成服务端暂停时不 tick,打字机与"攒够时长"熟度停住;模型回调仍会处理。行为与现在略有不同,需要真机看一眼。
 4. **向后兼容**:新服务端遇到旧客户端(无 `Hello`)按"没装客户端"处理,不推 `Feed`;协议版本不一致时客户端拒绝订阅并提示。
 5. **`NumenGateway.emit`**:外部模组在客户端调的公开入口。服务端版直接入箱;客户端版变成发包,只能回 `HANDED_OFF`,`Delivery` 的 `QUEUED/SEEN/TO_EXTERNAL_BRAIN` 报不出来(要报就得加回包)。
-6. **评测的 `Brain` 与产品零件重复**:它和 `EntityAgentLoop` 各接一遍端口。服务端循环落地后可以让 `CompanionLoop` 接受注入的模型、人设、主动性,评测复用同一个类。不在这一步强做,列为提交 5 的可选收口。
+6. **评测的 `Brain` 与产品零件重复**:它和旧的客户端循环各接一遍端口。服务端循环落地后让 `CompanionLoop` 接受注入的模型、人设、主动性,评测复用同一个类;在提交 12 收口。
 7. **专用服 MCP OAuth**:见 14.5。
 
 已定(协调者代用户先定,各点只在一处、容易改):
@@ -482,58 +482,63 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 4. 管理员判据:单人游戏的房主,或 op 等级 4;只在 `Authority` 一处,用常量写(`ADMIN_LEVEL`)。
 5. 主动性档位按主人存:`players/<主人>/prefs.json`。
 6. 专用服的 MCP OAuth 留到第 4 步;这一步只保证单人游戏。
-7. 评测 `Brain` 与 `CompanionLoop` 的收口不在这一步做,列入第 12 步清理清单。
+7. 评测 `Brain` 与 `CompanionLoop` 的收口不在翻转时做,放在第 12 步清理。
 8. 展示偏好(置顶、文件夹、草稿、已读)留客户端文件,与 §六表一致。
 
 落地时与本节的出入(逐条):
 - **提交 2**:Fabric 的网络 API 总在服务端主线程上调接收器,网络线程拼装只在 NeoForge 上生效(见 §二);每玩家的**信箱**挪到提交 6(它的使用者 `OwnerInput` 等在那时才出现,先写就是没人调的代码),带宽预算先落在分片这条路上。
 - **提交 1**:没有加日志记录的 `from` 字段:面板把"待发"换成落盘行靠同一包里 `Feed.Line` 与 `Feed.Pending` 按序到达,不需要在日志里再记一份对应关系。
-- **提交 4**:模块那条线(`ProgramUplink`、`ModuleSync`、`ModuleCache`、`RunModules`、`RunResult.Missing`)**推迟到清理提交删除**:翻转之前客户端循环还靠它送程序,
+- **提交 4**:模块那条线(客户端送程序时带模块清单与正文、服务端按内容缓存)**推迟到清理提交删除**:翻转之前客户端循环还靠它送程序,
   服务端循环(提交 5)直接调 `ServerPrograms`,不经过它;提交 4 只做库的搬家(`ProviderLibrary`、`PersonaLibrary`、`JsonLibrary` 进主源码集,按路径注入、不再取客户端单例)。
-- **提交 5**:内核新增停牌 `Hold.AWAY`(主人不在线,现算不存,`HostPort.ownerPresent`),输入照收、他回来再处理;程序交给谁跑抽成 `ProgramHost`(旧的 `ProgramUplink` 走网络,新的 `LocalPrograms` 直调 `ServerPrograms`);工具口的兜底超时去掉了——它救的是网络丢掉的回执,程序在本进程里不会丢结果。
+- **提交 5**:内核新增停牌 `Hold.AWAY`(主人不在线,现算不存,`HostPort.ownerPresent`),输入照收、他回来再处理;程序交给谁跑抽成 `ProgramHost`(服务端大脑用的 `LocalPrograms` 直调 `ServerPrograms`);工具口的兜底超时去掉了——它救的是网络丢掉的回执,程序在本进程里不会丢结果。
   `NoteBook` 改成内存模型:写走车道是异步的,读不能指望文件已更新,所以札记第一次用时读进内存、之后读写都走内存;代价是**进程运行期间手改札记文件要到下次启动才读到**。
 - **提交 6a(协议)**:实际的包是 `Hello`/`HelloAck`(报到、协议版本、是否管理员)、`OwnerInput`(主人做的事,JSON,网络线程读懂后投进每位玩家一个 256 条的信箱,主线程每刻取 8 条)、
   `Feed`(一刻的事件,JSON 一包,可分片;进服补课也是 `Feed`:`CompanionState` 加在飞的半截)、`HistoryRequest`/`HistoryPage`(按游标翻,游标是各成员各翻到哪一行,服务端给、原样带回)、
   `Conversations`(落过盘的成员表)。服务端不产出任何翻译过的字:原因、理由、在做的事都是语言键加现场的词(`CompanionState`、`LoopStatus.Doing`、`EventQueue.Preview`),控制条目(整理、清空)的字是语言键。
   群聊的成员表与送话路由在服务端 `Conversations`(落在世界存档),就是循环读的"谁在场";`Rooms` 的默认空实现已删。她说出口的话只经 `Voice` 一处:旁听给同会话的成员,主人没装客户端就只发他一条系统消息。
-- **提交 6b(客户端视图)**:界面经 `CompanionView` 读和做,旧的 `EntityAgentLoop` 与新的 `RemoteCompanion` 都实现它,谁是哪一个只在 `CompanionViews`/`BrainSite` 判;会话记录经 `CompanionViews.transcript`。
-  留到翻转提交的:客户端 `Conversations` 的成员半边(现在仍是旧的本地文件)与展示偏好分家;技能补全的 `SkillList`;`ChatView` 往上翻页后保持滚动位置(现在新翻出的行会把画面推下去);
-  `ConversationPreview`/`ProfilePage` 里用 `display()` 的两处在服务端模式下只有实时到的行(翻转时让状态带上最后一行与条数)。
+- **提交 6b(客户端视图)**:界面读和做都经 `RemoteCompanion`(显示行、状态、会话记录),数据来自服务端的 `Feed`/`Status`/`HistoryPage`。
+  翻转提交做的:客户端 `Conversations` 的成员半边与展示偏好分家;技能补全;`ChatView` 往上翻页后保持滚动位置;
+  `ConversationPreview`/`ProfilePage` 的最后一行与条数由状态带来。
 - **提交 7(迁移)**:`LegacyMigration` 是纯路径的函数(她的家、主人的库、会话成员表),复制不移动、目标在了就不动、半成品先清;`blocks.json` 没人读,不搬;绑定只搬档案与人设两项,声线与皮肤还在客户端读旧文件。
   **调用点在翻转提交**(她的大脑在服务端创建那一刻):翻转之前就搬会冻结一份过时的快照,翻转时客户端循环里新写的对话就搬不过去了。
 - **提交 8(库协议)**:`Libraries` 三种库——人设(每位主人自己的,`PersonaLibrary.at`,写走他的车道)、模型档案(仅管理员写,别人只看到 id、名字、型号)、服务器配置(仅管理员);脱敏发生在编码的那一处。
   客户端是 `RemoteLibrary`(视图加请求),人设页与模型配置页接它在翻转提交;`providers.json` 的写已改走服务器那条车道。
-- **提交 9(MCP 宿主)**:`McpServer`/`McpMode`/`McpConfig`/`McpAccessPrompt`/`NumenMcp` 进主源码集,对同伴的全部接触收在 `ExternalHands` 一个口里;两个实现并存到清理提交——`ClientHands`(旧循环,经 `NumenActuator`,动作行喂 `McpTranscript`)、
-  `ServerActuator`(服务端,直接操作 `CompanionLoop`)。装载由大脑所在的一端做:客户端 `ClientMcp` 只在 `BrainSite.CLIENT` 时起服;**服务端的启动(`NumenMcp.start` 配 `ServerActuator`、每刻 `McpMode.tick`、`Parts.driving` 接 `McpMode.driving()`)属于翻转提交**,
-  因为在那之前没有服务端大脑可驱动。外脑驾驶的那段由 `CompanionLoop` 自己记进日志(取走的事件是 user、替她说的话经 `AgentLoop.said` 成为 assistant 回复并走 `Voice`/`Feed` 同一个出口、跑的程序是 assistant 的调用加 tool 的结果),
+- **提交 9(MCP 宿主)**:`McpServer`/`McpMode`/`McpConfig`/`McpAccessPrompt`/`NumenMcp` 进主源码集,对同伴的全部接触收在 `ExternalHands` 一个口里;实现是 `ServerActuator`(服务端,直接操作 `CompanionLoop`)。装载由大脑所在的一端做:服务端的启动(`NumenMcp.start` 配 `ServerActuator`、每刻 `McpMode.tick`、`Parts.driving` 接 `McpMode.driving()`)。外脑驾驶的那段由 `CompanionLoop` 自己记进日志(取走的事件是 user、替她说的话经 `AgentLoop.said` 成为 assistant 回复并走 `Voice`/`Feed` 同一个出口、跑的程序是 assistant 的调用加 tool 的结果),
   交还后内脑从历史里就知道这期间做了什么;驾驶席翻成外接的那一下和旧循环一样 `halt(EXTERNAL)`。ADR(control 0012)与落地没有出入。
-  **没有搬的**:接进来的 MCP 工具(`McpClientManager`、`McpOAuth`、`RemoteMcpTool`,约 2000 行,绑着客户端的 `Minecraft`/`I18n`/浏览器弹窗)——服务端循环的工具表读不到它们,**翻转之前必须搬**;设置页"外部大脑"改走库协议 `mcp-server` 也在翻转提交(现在仍读客户端的 `McpMode.instance()`)。
-  清理提交的清单另加:`ExternalHands.activity` 钩子、`ClientHands`/`ClientMcp`、评测 `Brain` 与 `CompanionLoop` 的收口。
+  接进来的 MCP 工具(`McpClientManager`、`McpOAuth`、`RemoteMcpTool`)服务端循环的工具表要读,所以在 9b 里搬;设置页"外部大脑"改走库协议 `mcp-server`。
 - **提交 9a(长轮询丢事件)**:`get_events` 的期限与叫醒撞在同一刻时,叫醒已把批次取走、期限那边却在撤销,批次没人读。根因是"取件"与"交付"分在两步:现在 `ExternalWait` 的等待者要么在叫醒时取走批次、要么已撤销,由它自己的锁裁决,
   撤销返回"叫醒抢先取走的批次",宿主以它为准;跨线程的登记与撤销(`parkOn`)同理,撤销在登记之前到达时登记不再做,不会留下一个没人读的等待者。
-- **提交 9b(接进来的 MCP 工具)**:`McpClientManager`、`McpClientConfig`、`McpOAuth`、`RemoteMcpTool` 与传输类整体进主源码集(同一份代码,不留客户端副本);大脑所在的线程(`Executor`)和"状态变了"的回调由装载方给——
-  客户端(旧循环)是 `ClientMcp.initClients`,服务端的装载在翻转提交。配置(`mcp_clients.json`)与令牌库(`mcp_oauth.json`)在大脑所在那一端的配置目录,**令牌只存那一端**。
+- **提交 9b(接进来的 MCP 工具)**:`McpClientManager`、`McpClientConfig`、`McpOAuth`、`RemoteMcpTool` 与传输类整体进主源码集(同一份代码,不留客户端副本);大脑所在的线程(`Executor`)和"状态变了"的回调由装载方给——服务端的装载是 `ServerBrains`。配置(`mcp_clients.json`)与令牌库(`mcp_oauth.json`)在大脑所在那一端的配置目录,**令牌只存那一端**。
   库协议新增 `mcp-client`:管理员看到整份配置加连接状态,别人只有名字、连没连上、工具数;写、删、接上、断开、交回授权回调网址都只有管理员。
   **安全(补进 §十)**:stdio 类型的 MCP 服务器起的是**服务器机器上的进程**,所以只有管理员能配;这是"服主信任管理员"这条线,不是玩家能碰的东西。
   **OAuth**:服务端没有浏览器,授权网址作为服务器状态的一项(`authUrl`)经库协议推给管理员的客户端去开;code 只靠"回调网址"一个机制回来——回调地址是本机回环上的一个临时 HTTP 端点,
   把每个请求交给 `McpOAuth.complete`;专用服务器上管理员的浏览器跳回的是他自己的回环,页面打不开,他把地址栏里的网址贴回设置页(库协议 `auth`),同样进 `complete`。授权码 + PKCE(S256)、动态客户端注册、`resource` 指示符照 MCP 授权规范。
-  回调页的两句话不再走语言键(服务端没有语言环境,浏览器页中英并列),`MCP_OAUTH_OK`/`MCP_OAUTH_FAILED` 两个键随之删掉。旧的客户端设置页在翻转提交改读库协议,`ClientMcp.initClients` 和客户端设置页对 `McpClientManager` 的直接调用留到清理提交。
+  回调页的两句话不再走语言键(服务端没有语言环境,浏览器页中英并列),`MCP_OAUTH_OK`/`MCP_OAUTH_FAILED` 两个键随之删掉。设置页读库协议,不直接碰 `McpClientManager`。
 - **提交 10a(服务端接线,翻转的准备)**:`CompanionBrains.create` 是一只同伴的大脑怎么从服务器各处接起来的唯一一处(世界里的家、服主的档案、主人库里现取的人设、主人的偏好、本进程的程序、直读身体的状态),产品与 GameTest 的 `Brain` 走同一个;
   `ensure` 在其上加"名册上有她就有大脑":先搬旧版客户端的家(`LegacyMigration`),再把离线出箱里攒的事件倒进收件箱。主动性档位住在 `OwnerPrefs`(`players/<主人>/prefs.json`)。
   库协议再加三种:`prefs`(主人自己的)、`skill`(人人能看,开关仅管理员)、`mcp-server`(外接大脑宿主,仅管理员,令牌由服务端铸)。`ServerLifecycle` 加"服务器起好"一档。这一提交没有任何地方调 `ensure`,翻转提交接上。
-- **提交 10(翻转)**:`BrainSite.CURRENT = SERVER`。服务器起好(`ServerLifecycle.fireStarted`)时 `ServerBrains` 备好札记与模块的落点、技能(插件随包的加 `config/numen/skills`)、型号目录、接进来的 MCP 工具、外接大脑宿主(单人游戏才起,专用服等第 4 步),
-  房主在旧版留下的人设库、模块、会话成员表复制进来(`LegacyMigration`),然后名册上每只同伴一个大脑;召唤、登录恢复也经 `CompanionBrains.ensure`。同一进程里客户端不再起 MCP 宿主与 MCP 工具(`ClientMcp` 看 `BrainSite`),只有服务端起,不会两边抢端口。
-  - **服务端不再给客户端推**死亡、复活、当前任务、离线补发(`NumenDeathPayload`/`NumenRespawnPayload`/`CurrentTaskPayload`/出箱补发):大脑直接读身体,这些包的类和客户端挂点留到清理提交。**没有大脑的身体**(GameTest 里直接 `spawnAt` 的那些)的事件仍进 `EventOutbox`,
-    用例靠它收事件——清理提交删出箱时要先给这些用例换一个收事件的办法。
+- **提交 10(翻转)**:服务器起好(`ServerLifecycle.fireStarted`)时 `ServerBrains` 备好札记与模块的落点、技能(插件随包的加 `config/numen/skills`)、型号目录、接进来的 MCP 工具、外接大脑宿主(单人游戏才起,专用服等第 4 步),
+  房主在旧版留下的人设库、模块、会话成员表复制进来(`LegacyMigration`),然后名册上每只同伴一个大脑;召唤、登录恢复也经 `CompanionBrains.ensure`。同一进程里只有服务端起 MCP 宿主与 MCP 工具,不会两边抢端口。
+  - **服务端不再给客户端推**死亡、复活、当前任务、离线补发:大脑直接读身体。
   - **召唤请求**多带人设与档案的 id(`SummonRequestPayload`),服务端校验、绑定;声线与皮肤还是这台机器的,名册到达时按名字记进绑定。
   - **`OwnerInput`** 加 `Emit`(渠道输入,`NumenGateway.emit` 就是发它,只回 `HANDED_OFF`/`REJECTED`,`Delivery` 的其余三个值没人报得出来,删了)、`Pull` 带客户端起的新群 id(界面马上要指着刚建的群);会话改动办不成也把真表推回去。
   - **库协议**再加 `notes`(她的札记索引,资料页读)、persona 的 `reload`;人设改名由服务端把在用的同伴改指新名字;`/numen reset` 改成服务端把名下大脑放掉重建。
   - **客户端**:`Conversations` 只剩展示偏好(`conversation_prefs.json`,首次从旧会话文件接过选中、置顶、文件夹、草稿、已读)加服务端成员表的视图,改动先按办成画、真表来了对齐;人设页、模型配置页、MCP 工具页、外接大脑页、技能页、召唤卡、编辑卡、资料页、主动性滑块全读服务器的库
     (`ServerLibraries`),写经库协议;普通玩家的页面只有读(列表与选择),写按钮不画。接进来的 MCP 服务器要 OAuth 时授权网址推到让它接上的那个管理员客户端去开浏览器,专用服务器上管理员把回调网址贴回(`McpAuthFormPanel`)。
   - **外接大脑驾驶期间**对话流不再换成现场缓冲(她的话和外脑的动作都在日志里),输入框上方多一行"外接大脑正在驾驶她";"谁接进来了"留在设置页的外接大脑页。
-  - **左栏的最后一句与未读**读 `CompanionViews.transcript`(与正文同一个出口,服务端大脑下按会话要最近一页);资料页的"上下文里 N 条消息"来自状态(`CompanionState.messages`);往上翻出更早一页时 `ChatView` 把视图挪开新长出的高度。
-  - **测试的增删改**:删 `OutboxReplayTest`(出箱补发的函数没了,覆盖由 `a_brain_made_on_demand_takes_in_what_waited_in_the_outbox` 接手);`ConversationsDissolveTest` 从客户端 `Conversations` 搬到服务端 `Conversations`(判据在服务端了,断言不变);
+  - **左栏的最后一句与未读**读 `RemoteCompanion` 的会话记录(与正文同一个出口,按会话要最近一页);资料页的"上下文里 N 条消息"来自状态(`CompanionState.messages`);往上翻出更早一页时 `ChatView` 把视图挪开新长出的高度。
+  - **测试的增删改**:`ConversationsDissolveTest` 从客户端 `Conversations` 搬到服务端 `Conversations`(判据在服务端了,断言不变);
     `FeedTest`/`RemoteCompanionTest`/`OwnerInputTest`/`LibrariesTest` 的改动只是构造函数多了参数。
-  - 留给清理提交的:`EntityAgentLoop`、`AgentLoopRegistry`、`ToolDispatcher`、`TokenLedger` 的客户端用法、`CompanionHome` 里循环用的部分、`ClientPrefs.initiative`、`ClientHands`/`ClientMcp.init*`/`NumenActuator`、`McpTranscript`、`McpClientManager` 的客户端装载、模块那条线、
-    下行包 `NumenDeathPayload`/`NumenRespawnPayload`/`CurrentTaskPayload`/`NumenEventPayload` 与 `EventOutbox`(连同上一条的用例)、`BrainSite`、评测 `Brain` 收口到 `CompanionLoop`。
 
+- **提交 12(清理)**:客户端的旧循环及其全部配件一并撤掉,每件事只剩一条路:
+  - **循环只有服务端一个**:删 `EntityAgentLoop`、`AgentLoopRegistry`、`ToolDispatcher`、`BrainSite`、`CompanionView`/`CompanionViews`(界面直接读 `RemoteCompanion`)、`CompanionHome`(声线与皮肤的选择留在 `CompanionLooks`,一个 `looks.json`,
+    首次从旧版 `companions/<uuid>/binding.json` 接过来)、`ClientHands`/`ClientMcp`/`McpTranscript`/`NumenActuator`、客户端的 `ProviderLibrary`/`PersonaLibrary`/`JsonLibrary` 单例与 MCP 装载;
+    `ClientPrefs.initiative` 随之删,旧值在服务器第一次起来时搬进主人的偏好文件(`LegacyMigration.initiative`)。`TokenLedger` 只在服务端。
+  - **模块线整条撤**:`ModuleSet`/`ModuleSync`/`ModuleCache`/`RunModules`/`RunResult`(含 `Missing`)/`ProgramUplink`/`LoopbackClient` 与上行下行的程序包(`RunProgramPayload`/`ProgramResultPayload`/`StopProgramPayload`/`CancelTasksPayload`)都删。
+    程序的模块就是服务器上主人目录里的文件(`Modules` 直接做模块来源,读写在同一把锁里),程序结束时战绩记在 `ServerPrograms` 一处;结局就是 `Program.Outcome`,不再有第二种结果类型。
+    `numen.module.*` 与 `numen.api.help` 本来是反向请求的客户端函数,现在是普通服务端函数(`ServerCall.companion()` 给出她是谁);`ClientEndpoint` 留着、不再有模块清单,只替服务端执行插件的客户端函数(`ClientCall`:FTB 任务书、TLM 皮肤),
+    没有真客户端的地方(GameTest、单测、评测)用同样经过包编解码的回环传输(`LoopbackTransport`)。
+  - **事件只有收件箱一个去处**:删 `EventOutbox` 与 `NumenEventPayload`,`NumenEvents.deliver` 直接送进她的大脑;`NumenDeathPayload`/`NumenRespawnPayload`/`CurrentTaskPayload` 也删(当前任务是任务槽交给大脑的 `TaskReport`)。
+    GameTest 里直接造的同伴也配一个不思考的脑(`GameTestKit.withBrain`),用例从 `GameTestKit.events` 读她的收件箱,不为测试另留一条路。
+  - **评测用产品的大脑**:删评测自己的 `Brain`,`Attempt` 经 `CompanionBrains.create` 建 `CompanionLoop`,只注入模型(`Mind` 即产品的 `brain.Mind`)、人设(内置默认人设)、主动性(默认档位);死亡与复活、事件、程序都走产品的路,评测只接主人的征询。
+  - **设置页不留第二个出处**:模型目录、草稿解析成的端点、连通性检测在服务端算(库协议 `catalog`、`provider-check`),档案表单只画答案;技能目录是服务器全局的,管理员在技能页用 ↻ 让服务器重扫。

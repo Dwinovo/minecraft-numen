@@ -65,7 +65,7 @@ public class MovementGameTests {
     }
 
     /**
-     * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与 CancelTasksPayload
+     * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与停止键
      * 同一个入口),收尾的消息以"the owner pressed Stop"开头——模型不用猜是谁、为什么停的。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_smoke")

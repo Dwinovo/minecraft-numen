@@ -20,7 +20,7 @@ import java.util.List;
  * <h2>What providers DON'T do</h2>
  * No HTTP I/O (that's {@link com.dwinovo.numen.api.agent.http.HttpLlmTransport}),
  * no convo state (that's {@code ConvoState}), no LLM-side loop control
- * (that's {@code EntityAgentLoop}).
+ * (that's {@code AgentLoop}).
  */
 public interface LlmProvider {
 

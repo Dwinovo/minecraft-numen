@@ -51,7 +51,7 @@ class InjectedMarkupIsStrippedTest {
         assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "续跑那句漏出来了");
     }
 
-    /** 场合挂在 {@code <query>} 外面(见 {@code EntityAgentLoop.audienceLine}):模型看得到,面板只画标记里的话。 */
+    /** 场合挂在 {@code <query>} 外面(见 {@code CompanionLoop.Rooms#audienceLine}):模型看得到,面板只画标记里的话。 */
     @Test
     void theAudienceAfterAQueryStaysOutOfTheChatFlow() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);

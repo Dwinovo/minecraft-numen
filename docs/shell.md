@@ -127,8 +127,8 @@
 - 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
   (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进 Numen API
   (`numen-api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
-- **程序整段在服务端跑**(§十四):客户端只送程序文本、她的模块清单与服务端还没有的模块正文,服务端在身体与数据旁边跑完,回一张
-  回执。客户端的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
+- **程序整段在服务端跑**(§十四):大脑把程序整段交给服务端入口,在身体与数据旁边跑完,回一张
+  回执。大脑的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
 
 ### 运行:一个程序两条虚拟线程,服务端主线程不等脚本
 
@@ -159,12 +159,12 @@
 
 - 等某件身体活收尾时服务端发出了急件(她饿了、背包满了、主人挨打……):不再等,程序停,回执写 `an urgent hungry event arrived; t8 keeps running`
   (那件活照常跑)。一次调用在跑时来了急件:这一次的结果到了就停,停在调用之间。
-- 主人说话、按停止、外接大脑接管、断线这类客户端那边的事,客户端上行一个"停止程序"(`StopProgramPayload`):说话与急件是"停在调用之间"
-  (原因是 `your owner spoke`),切断(停止键、死亡、登出、接管)是"当场停下"(`this turn was cut off; t8 was stopped too` 或 `keeps running`,
-  身体叫停与否照实写)。停止键叫停身体另发 `CancelTasksPayload`。
-- 程序是被叫停的,服务端交回的结局里带**结构化的原因**(`Outcome.stoppedFor`):客户端据此给这一批里还没派的调用各写一条"没执行",
-  不去读回执的文字。切断时客户端不等回执,这一批的调用作废、切断点由内核记下;服务端照常为被切断的程序生成回执并下发,客户端的工具口
-（`CompanionToolPort`）认出它属于已作废的那一批,把它作为一条 `program_stopped` 事件放进她的收件箱——正文就是服务端写的那份有界回执
+- 主人说话、按停止、外接大脑接管、断线这类事,大脑经 `ProgramHost` 叫停程序:说话与急件是"停在调用之间" (`interrupt`,
+  原因是 `your owner spoke`),切断(停止键、死亡、登出、接管)是"当场停下"(`cutOff`;`this turn was cut off; t8 was stopped too` 或 `keeps running`,
+  身体叫停与否照实写)。停止键叫停身体另调 `stopBody`。
+- 程序是被叫停的,交回的结局里带**结构化的原因**(`Outcome.stoppedFor`):工具口据此给这一批里还没派的调用各写一条"没执行",
+  不去读回执的文字。切断时这一批的调用作废、切断点由内核记下;程序照常停下、生成回执,工具口
+（`CompanionToolPort`）认出它属于已作废的那一批,把它作为一条 `program_stopped` 事件放进她的收件箱——正文就是程序写的那份有界回执
 本身，写明切断前做了什么、停在哪。投递档是捎带（`AMBIENT`）：她没要求这份回执，但身体做了的事必须让她知道，随下一次调模型交出；不叫醒她——
 切断本来是主人的决定，停止键之后停牌要等主人再开口，为这份回执多开一轮没有意义；也不进聊天流。主人断线导致的切断，回执无处可送，不下发。
 - 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
@@ -187,7 +187,7 @@
 
 框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。
 
-**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些上网线(`RunResult`);程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不上网线**,只在服务端进程里的结局对象上,同进程的 GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
+**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些都交给大脑的工具口;程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不进回执**,只在结局对象上,GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
 
 **有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
 多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
@@ -274,10 +274,10 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
-  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,主人客户端
+  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
   当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
   与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo, memory]`,外接大脑经 `ToolRegistry` 拿到同一套。
-- **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在主人客户端、管她自己的事。照 Anthropic 的 memory 工具,一个
+- **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在她的家里(服务器)、管她自己的事。照 Anthropic 的 memory 工具,一个
   `memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
   每轮作为 `<memory>` 注入。`numen.memory.*` 删了。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
@@ -331,7 +331,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明。都由登记处与库的注释生成,
   没有手写的第二份。
 
-## 九、模块统一成库,存在主人客户端(10-04)
+## 九、模块统一成库,存在服务器上主人名下(10-04)
 
 ### 五层
 
@@ -339,8 +339,8 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 出厂模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布,装进主人客户端的模块目录 |
-| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人客户端 `config/numen/lua/<主人>/<名字空间>/<组>.lua` |
+| ② 出厂模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布,装进服务器上主人名下的模块目录 |
+| ③ 她的模块 | 她存下来或改过的函数表 | Lua,服务器上主人名下 `lua/<名字空间>/<组>.lua` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
@@ -361,7 +361,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 
 规矩只在 Numen API 的 `Modules` 一处:
 
-- **名字就是路径。** 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改。模块名两段
+- **名字就是路径。** 服务器上主人名下一个目录 `lua/`,同一主人的同伴共用,主人能拿编辑器改(单人游戏就是本机文件)。模块名两段
   `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
   是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这个目录这一个来源。
 - **出厂的只是安装包,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleModules` 交来的目录(Numen 是 jar 里的 `modules/`,
@@ -372,9 +372,9 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   `numen.module.list()` 标出每一份是出厂的、改过的还是她的,`numen.module.show(name, {factory = true})` 看出厂原文。
 - 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
   给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
-- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与客户端日志。
-- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是客户端动作,
-  外接大脑(MCP)同在客户端,走同一处。
+- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与服务端日志。
+- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是服务端函数,
+  外接大脑(MCP)走同一处。
 
 ### 第 ① 层不可覆盖
 
@@ -523,7 +523,7 @@ public final class LocateApi {                         // 一组:一个公开类
   Numen 的任务基类 `AbstractCompanionTask<记录, R>` 的 `value()` 也按同一个 `R` 写。
 - **客户端函数的约定**(指导,登记时不检查;好写法由评测的分数说话):① 只读查询、不产生副作用——主人的客户端在
   `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
-  权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,服务端发 `NumenEventPayload`),不走反向请求;
+  权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,进她的收件箱),不走反向请求;
   ④ 一次收一批键、在客户端就地过滤只回小结果,别在循环里逐条问(N+1)。`ClientCall` 的 Javadoc 是这条的全文。
 - **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.to", pos,
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
@@ -567,7 +567,7 @@ public final class LocateApi {                         // 一组:一个公开类
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
 | `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
 | `ApiTester` | 进程里跑一段程序看回执(`run`)、lint 报告 |
-| `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):客户端送来的程序、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
+| `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):她的大脑、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
 `{"ok": false, "error": {kind, message, hint, data}}`,等到的值另带 `stderr`(API 报告的话)。
@@ -643,11 +643,11 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 一张表,`Compare` 把前后两份按函数并排(调用、失败率、参数错率、查帮助/调用)。插件作者给自己的函数打分:用 `Bench.suite` 登记自己的
 场景,看这张表。
 
-## 十四、程序整段在服务端跑,客户端想、服务端做(10-05)
+## 十四、程序整段在服务端跑,大脑也在服务端(10-05 起)
 
-此前模型写的 Lua 在主人客户端跑,程序里每调一次服务端函数就经网络往返一次(一轮评测 36 次运行共 4469 次调用,98% 是服务端函数)。
-现在倒过来:**程序整段在服务端、身体与数据旁边执行**,客户端只把"程序文本 + 她的模块清单 + 这个连接还没送过的模块正文"发上去,
-服务端跑完回一份回执。函数仍然两端都有(`ServerCall` 在服务端、`ClientCall` 在主人客户端,按第一个参数定端):程序在服务端遇到
+最早模型写的 Lua 在主人客户端跑,程序里每调一次服务端函数就经网络往返一次(一轮评测 36 次运行共 4469 次调用,98% 是服务端函数)。
+后来**程序整段在服务端、身体与数据旁边执行**,再后来大脑本身也搬到了服务端(`input-pipeline.md` §十四):大脑把程序整段交给本进程里的
+服务端入口,跑完得到一份回执,不过网络。函数仍然两端都有(`ServerCall` 在服务端、`ClientCall` 在主人客户端,按第一个参数定端):程序在服务端遇到
 服务端函数就进程内执行,遇到客户端函数就向主人客户端发**反向请求**,Lua 线程挂着等客户端用 `Dispatcher.client` 执行完答回来
 (同 MCP 的 sampling、LSP 的 workspace/configuration);对 API 作者完全透明。
 
@@ -660,15 +660,13 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 | `ProgramCalls`:`ServerCalls` / `ClientCalls` / `RoutedCalls` / `ObservedCalls` | 一次调用在哪一端执行:进程内排进主线程车道、向客户端发反向请求、按函数的端分流、套一层给 GameTest 看每次调用;分流的逻辑只在 `RoutedCalls` |
 | `MainQueue` | 程序的服务端调用排队等主线程。每段程序一条车道,每刻开头 `ServerPrograms.tick()` 在预算里取:全部 10 ms、每段 5 ms(取 CC: Tweaked 的 `max_main_global_time` / `max_main_computer_time`),起点每刻轮一段;主线程只执行,从不等程序 |
 | `ClientTransport`:`NetworkTransport` / `LoopbackTransport` | 反向请求的传输端口。产品是网络;没有真客户端的地方(GameTest、单测)是同样过一遍包编解码的回环 |
-| `ModuleSet` / `ModuleSync` / `ModuleCache` / `RunModules` | 她的模块:清单(名字 → `Modules.fingerprint`)加没送过的正文。客户端 `ModuleSync` 记这个连接送过哪些;服务端 `ModuleCache` 按主人按指纹缓存(每位主人 4 MB,最久没用的先丢,主人断线清掉,不落盘);`RunModules` 是一段程序握着的那份 |
-| `ProgramUplink` / `ClientEndpoint` | 客户端:送程序、停止、收回执(服务端说缺正文就带上重发)、记模块战绩;替服务端执行客户端函数并答回 |
-| `LoopbackClient` | 在本进程里扮主人客户端(GameTest、评测之外的单测),用的就是上面那些部件 |
+| `ProgramHost`:`LocalPrograms` | 大脑的工具口把程序交给谁跑:整段交出、结局(`Program.Outcome`)恰好交回一次;叫停在调用之间、当场切断、叫停身体。产品是 `LocalPrograms`,直调 `ServerPrograms` |
+| `ClientEndpoint` | 主人客户端:替服务端执行客户端函数(`ClientCall`)并答回;没有真客户端的地方由 `LoopbackTransport` 同样过一遍包编解码后交给它 |
 
 ### 包
 
-`RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, status, error_kind, calls, used, stopped_for}`,回执只有成败与文字,`return` 的值原样不在里面);
-`StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
-她的模块时带上新清单与新正文)。单包上限上行 32767 字节、下行 1 MB,超过的程序、反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,见下一节)。
+程序与它的回执不过网络。过网络的只有反向请求:`ClientCallPayload`(下行:调哪个客户端函数、参数)与 `ClientCallResultPayload`(上行:这次调用的结果)。
+单包上限上行 32767 字节、下行 1 MB,超过的反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,见下一节)。
 
 ### 反向请求有时限,程序结束即撤销
 
@@ -685,17 +683,16 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 ### 她的模块:真源只有一个
 
-真源仍是主人客户端 `config/numen/lua/<主人>/` 里的文件。服务端缓存只是内容的副本(指纹就是内容的名字,存入时核对),一段程序开跑时
-就把清单里每个指纹的正文握在手里。程序里 `numen.module.save/delete/reset` 是客户端函数:`Modules.revision()` 变了,说明这次调用改了文件,
-答复里带上客户端此刻的全清单和新正文,服务端先换进这段程序的 `RunModules` 再让程序往下走,所以同一段程序往后用到的就是新的;
-已经装进虚拟机的那份不变。服务端缺某些正文(缓存丢了)时回 `Missing`,客户端清掉"已送过"、带上重发一次。
+真源是服务器上主人名下的 `lua/` 目录里的文件。`Modules` 就是程序的模块来源:程序用到一个模块才去读那个文件(只读正文,不查能不能编译),
+读与存、删、还原、记战绩都在同一把锁里(Windows 上正被读的文件换不掉)。程序里 `numen.module.save/delete/reset` 与 `numen.api.help` 是普通服务端函数
+(`ServerCall.companion()` 给出她是谁),改了文件之后同一段程序往后用到的就是新的;已经装进虚拟机的那份不变。战绩在程序结束时由 `ServerPrograms` 一处记。
 
 ### 回执:给模型读的,按构造有界
 
 回执在生成它的地方就有界(`ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`(超出的整行省略并写明还有多少字)、整栏至多 `STDERR_CHARS`(超出的写明
 另外几条、几个字),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长),stdout 至多 `PRINTED_CHARS`(写明少了
 多少字);大表在进这些栏之前先经渲染器缩略(§四"回执");每次调用的结局只带写成的文字(超长的头部加摘要)。
-所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
+所以一张回执不会撑爆模型的上下文,也不会在哪里"装不下"。
 身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。
 
 ### 线上的上限与分片
@@ -710,7 +707,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 - **防滥用**:拼装中的消息超过整条上限、片数或编号不对、除最后一片外不是满的,当场丢弃;同一连接同时拼装多过 8 条拒收新的;断线清掉残片。拒收只写一行警告,不答复。
 - **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:先用包自己的编解码器量字节。装得下照发;可分片的分片;内容随数据长、装不下就缩的包实现
   `Wire.Oversized`,缩成如实说明的样子;别的包内容本来有界,装不下是代码错,当场抛,不交给 Netty 去断开连接。
-- 上行的程序连整条消息的上限都装不下才不送,客户端就地给模型一条失败;下行的回执在生成处有界(见上一节),装不下当场抛。
+- 反向请求与它的答复连整条消息的上限都装不下才不送,当场给程序一条失败;回执不过网络,在生成处有界(见上一节)。
 
 ### 线程
 

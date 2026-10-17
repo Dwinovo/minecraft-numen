@@ -61,8 +61,8 @@ public final class ToolRegistry {
      *
      * <p>Added for the MCP client's live enable/disable: disabling a server pulls
      * its borrowed tools back out so the built-in brain stops seeing them on the
-     * next turn ({@code EntityAgentLoop} re-reads {@link #all()} every turn). Must
-     * be called on the client main thread — same invariant as {@link #all()},
+     * next turn ({@code AgentLoop} re-reads {@link #all()} every turn). Must
+     * be called on the server main thread — same invariant as {@link #all()},
      * since the backing map is not synchronized.
      */
     public static NumenTool remove(String name) {

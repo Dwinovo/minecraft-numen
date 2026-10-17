@@ -26,8 +26,8 @@
 
 Numen API 提供这些东西：
 
-- **客户端对话回路**（`EntityAgentLoop`）——听一句话 → 选一个工具 → 干活 → 看结果 → 决定下一步。这条回路跑在**玩家自己的游戏客户端**上，用**玩家自己的 API key**。
-- **程序在服务端跑**——跑 Lua 的那个工具的调用是一整段程序：客户端把程序、她的模块清单与服务端还没有的模块正文发上去，服务端在身体旁边跑完、回一张回执；只有客户端才有数据的 `ClientCall` 函数由服务端向主人客户端发反向请求。详见 `docs/shell.md` §十四。
+- **服务端对话回路**（`CompanionLoop`）——听一句话 → 选一个工具 → 干活 → 看结果 → 决定下一步。这条回路跑在**服务器**上，用**服主配的模型档案**，主人在不在线它都在；客户端是可选的前端。
+- **程序在服务端跑**——跑 Lua 的那个工具的调用是一整段程序：大脑把它整段交给本进程的服务端入口，在身体旁边跑完、回一张回执；她的模块是服务器上主人目录里的文件。只有客户端才有数据的 `ClientCall` 函数由服务端向主人客户端发反向请求。详见 `docs/shell.md` §十四。
 - **工具契约**——`NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`。工具就是同伴能调用的一种能力；Numen API 负责调度它，并把结果送回对话。
 - **兼容 OpenAI 接口的模型接入**——DeepSeek、DashScope（通义千问）、OpenAI、Moonshot（Kimi）、Zhipu（GLM）、Minimax、SiliconFlow、Volcengine（豆包）。传输层用 JDK 自带的 `HttpClient` + Gson 手搓，**不带任何第三方运行时依赖**。
 - **对话记忆**——跨存档持久化，聊长了自动摘要压缩（Claude Code 式的压缩策略）。
@@ -39,42 +39,30 @@ Numen API 提供这些东西：
 
 ## 公共 API
 
-插件通过三扇门接触 Numen API：两扇门给同伴喂输入，一扇门教它一项新能力。下面的一切都在稳定的、已发布的 API 面上。
+插件通过两扇门接触 Numen API：一扇门给同伴喂输入，一扇门教它一项新能力。外部大脑不走 Java 门，走下面的 MCP 端点。下面的一切都在稳定的、已发布的 API 面上。
 
 ### 门一 —— `NumenGateway`：喂给内置大脑
 
-把一条消息原样交给同伴的**内置大脑**。Numen API 会在对话协议允许的下一个位置把它拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。接入外部渠道的插件就是这样工作的——QQ 插件把一条 QQ 消息变成一次 `enqueue`。
+把一条输入原样交给同伴的**内置大脑**（客户端调用，作为主人的一个动作送到服务端）。它进同伴的收件箱，在对话协议允许的下一个位置被拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。接入外部渠道的插件就是这样工作的——QQ 插件把一条 QQ 消息变成一次 `emit`。
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 
 // 一条消息从 QQ / Discord / 直播弹幕进来，原样交给同伴的大脑。
-boolean queued = NumenGateway.enqueue(companionUuid, "QQ 里有人说：去给我挖一组铁");
-// queued 只有在消息为空、或该同伴本局从未召唤过时才为 false。
+Delivery delivery = NumenGateway.emit(companionUuid, EventTypes.QUERY, "QQ 里有人说：去给我挖一组铁");
+// delivery 是 HANDED_OFF（交给了服务端），或 REJECTED（消息为空、或这只同伴不在名册上）。
 ```
 
-同伴的回复通过**调用工具**（门三）离开，不走回调。入站 = 消息队列，出站 = 工具调用。任意线程都可安全调用，`enqueue` 内部会切到客户端主线程。
+同伴的回复通过**调用工具**（门二）离开，不走回调。入站 = 消息队列，出站 = 工具调用。任意线程都可安全调用。
 
-### 门二 —— `NumenActuator`：用外部大脑驱动身体
+### 外部大脑 —— 服务端的 MCP 端点
 
-完全绕过内置 LLM，直接驱动同伴的**身体**。契约是 **`acquire` → `invoke*` → `release`**：`acquire` 暂停内置大脑并腾出身体，让两个大脑不会抢同一具身体；`invoke` 无头地跑任意已注册工具，返回一个装着结果 JSON 的 `CompletableFuture`；`release` 把控制权交还。每次调用都指向一个同伴 UUID，各具身体独立跑任务，所以一个外部大脑可以 `acquire` 多个同伴、驱动一支**并行舰队**。MCP 服务器（numen-mcp）就是这样工作的。
+完全绕过内置模型,让外部的 agent 驱动同伴的**身体**。这不是一个 Java 门,而是服务端起的一个 MCP 端点(设置页"外接大脑"页由管理员开关):外部大脑经它列出同伴、`get_events` 取事件、`say` 替她说话、调任意已注册的工具。
+驾驶期间内置大脑停牌(`Hold.EXTERNAL`),两个大脑不会抢同一具身体;每次调用都指向一个同伴 UUID,各具身体独立跑任务,所以一个外部大脑可以驱动多个同伴、一支**并行舰队**。
+外部大脑驾驶的那段和内置大脑的一样进同伴的会话历史,交还之后内置大脑也知道这期间做了什么。接入方式见 `docs/input-pipeline.md` §五。
 
-```java
-import com.dwinovo.numen.api.NumenActuator;
-import java.util.UUID;
-
-NumenActuator.companions().thenAccept(fleet -> {
-    UUID body = fleet.get(0).uuid();
-    NumenActuator.acquire(body)                                            // 暂停它的内置大脑
-        .thenCompose(ok -> NumenActuator.invoke(body, "move_to", "{\"x\":100,\"y\":64,\"z\":-200}"))
-        .thenAccept(resultJson -> System.out.println(resultJson))          // 一个 TaskResult JSON 字符串
-        .whenComplete((r, e) -> NumenActuator.release(body));              // 始终把身体交还
-});
-```
-
-无头的 `invoke` 从不触碰同伴的对话记录——上下文由外部大脑自己持有。各类失败（未知工具、参数错误、工具抛异常）都以 `TaskResult.fail` 的 JSON 返回，`CompletableFuture` 不会异常完成。任意线程可调。
-
-### 门三 —— `NumenTool` + `ToolRegistry.register`：教它一项新能力
+### 门二 —— `NumenTool` + `ToolRegistry.register`：教它一项新能力
 
 工具就是同伴能调用的一种能力。实现四个方法，在 mod 初始化时注册实例即可。契约上**刻意一个 Minecraft 概念都没有**——工具可以驱动身体、可以对接外部服务、可以调用某个 Web API；Numen API 只负责把它呈现给 LLM、把调用送达、把结果送回。
 
@@ -115,7 +103,7 @@ ToolRegistry.register(new SendQqMessageTool());
 
 | 包 | 公共类型 | 作用 |
 |---|---|---|
-| `com.dwinovo.numen.api` | `NumenGateway`、`NumenActuator` | 喂输入 / 驱动同伴的两扇门 |
+| `com.dwinovo.numen.api` | `NumenGateway` | 喂输入的门 |
 | `com.dwinovo.numen.api.agent.tool` | `NumenTool`、`ToolRegistry`、`ToolCall` | 工具契约 + 注册 |
 | `com.dwinovo.numen.api.agent.tool.api` | `ToolContext` | 服务端工具的单次调用上下文 |
 | `com.dwinovo.numen.api.task` | `TaskResult` | 工具交回的结果信封 |

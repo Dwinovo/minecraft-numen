@@ -26,7 +26,8 @@
 
 What Numen API provides:
 
-- **A client-side agent loop** (`EntityAgentLoop`) — hears a message, picks a tool, runs it, reads the result, decides the next move. The brain runs on the owner's own game client with the owner's own API key.
+- **A server-side agent loop** (`CompanionLoop`) — hears a message, picks a tool, runs it, reads the result, decides the next move. The brain runs on the server with the server's model profiles, whether or not the owner is online; the client is an optional front end.
+- **Programs run on the server** — a call to the Lua tool is a whole program: the brain hands it to the server's entry point in this process, it runs beside the body and comes back as one receipt; her modules are files in the owner's directory on the server. Functions only the owner's client has data for (`ClientCall`) are answered by a reverse request from the server to the owner's client.
 - **A tool contract** — `NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`. A tool is any capability the companion can call; Numen API schedules it and routes the result back into the conversation.
 - **OpenAI-compatible LLM providers** — DeepSeek, DashScope (Qwen), OpenAI, Moonshot (Kimi), Zhipu (GLM), Minimax, SiliconFlow, Volcengine (Doubao). Transport is hand-rolled on the JDK's `HttpClient` + Gson, so there are **zero third-party runtime dependencies**.
 - **Conversation memory** — persists across saves and auto-compacts (Claude-Code-style) when it grows long.
@@ -38,42 +39,28 @@ What Numen API provides:
 
 ## Public API
 
-Addons touch Numen API through three doors. Two feed a companion; one teaches it a new capability. Everything below is on the stable, published API surface.
+Addons touch Numen API through two doors: one feeds a companion, one teaches it a new capability. An outside brain does not use a Java door but the MCP endpoint below. Everything below is on the stable, published API surface.
 
 ### Door 1 — `NumenGateway`: feed the built-in brain
 
-Hand a companion's **built-in brain** a message, verbatim. Numen API splices it into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `enqueue`.
+Hand a companion's **built-in brain** an input, verbatim (called on the client; it goes to the server as one of the owner's actions). It lands in the companion's inbox and is spliced into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `emit`.
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 
 // A message arrives from QQ / Discord / stream chat. Hand it to the companion's brain as-is.
-boolean queued = NumenGateway.enqueue(companionUuid, "someone in QQ says: go mine me a stack of iron");
-// queued == false only when the message is blank or that companion was never summoned this session.
+Delivery delivery = NumenGateway.emit(companionUuid, EventTypes.QUERY, "someone in QQ says: go mine me a stack of iron");
+// HANDED_OFF (given to the server), or REJECTED (blank text, or that companion is not on the roster).
 ```
 
-Replies leave the companion by **calling a tool** (Door 3), not through a callback. Inbound = message queue; outbound = tool call. Safe to call from any thread; the enqueue is marshalled onto the client main thread.
+Replies leave the companion by **calling a tool** (Door 2), not through a callback. Inbound = message queue; outbound = tool call. Safe to call from any thread.
 
-### Door 2 — `NumenActuator`: drive the body from an external brain
+### The external brain — the server's MCP endpoint
 
-Skip the built-in LLM entirely and drive a companion's **body** directly. The contract is **`acquire` → `invoke*` → `release`**: `acquire` pauses the built-in brain and frees the body so the two brains never fight over it; `invoke` runs any registered tool headlessly and returns a `CompletableFuture` of the result JSON; `release` hands control back. Every call is addressed to a companion UUID and bodies run tasks independently, so an external brain can acquire several companions and drive a **parallel fleet**. This is how the MCP server (numen-mcp) works.
+Skip the built-in LLM entirely and let an outside agent drive a companion's **body**. This is not a Java door but an MCP endpoint the server hosts (an admin switches it on in the "External brain" settings page): the outside brain lists companions, takes events with `get_events`, speaks for her with `say`, and calls any registered tool. While it drives, the built-in brain is held (`Hold.EXTERNAL`), so the two never fight over one body; every call is addressed to a companion UUID and bodies run tasks independently, so one outside brain can drive a **parallel fleet**. What the outside brain does goes into the companion's conversation history like the built-in brain's own turns, so after the hand-back the built-in brain knows what happened in between. See `docs/input-pipeline.md` §5.
 
-```java
-import com.dwinovo.numen.api.NumenActuator;
-import java.util.UUID;
-
-NumenActuator.companions().thenAccept(fleet -> {
-    UUID body = fleet.get(0).uuid();
-    NumenActuator.acquire(body)                                            // pause its built-in brain
-        .thenCompose(ok -> NumenActuator.invoke(body, "move_to", "{\"x\":100,\"y\":64,\"z\":-200}"))
-        .thenAccept(resultJson -> System.out.println(resultJson))          // a TaskResult JSON string
-        .whenComplete((r, e) -> NumenActuator.release(body));              // always hand the body back
-});
-```
-
-A headless `invoke` never touches the companion's conversation log — the external brain owns the context. Failures (unknown tool, bad args, a thrown tool) come back as a `TaskResult.fail` JSON, never an exceptional future. Any thread.
-
-### Door 3 — `NumenTool` + `ToolRegistry.register`: teach a new capability
+### Door 2 — `NumenTool` + `ToolRegistry.register`: teach a new capability
 
 A tool is any capability the companion can call. Implement four methods and register the instance during mod init. There is deliberately **nothing about Minecraft on the contract** — a tool can drive the body, hook an external service, or call a web API; Numen API only presents it to the LLM, delivers the call, and routes the result back.
 
@@ -114,7 +101,7 @@ The public API is the set of packages whose `package-info` declares them so, mir
 
 | Package | Public types | Role |
 |---|---|---|
-| `com.dwinovo.numen.api` | `NumenGateway`, `NumenActuator` | the two doors that feed / drive a companion |
+| `com.dwinovo.numen.api` | `NumenGateway` | the door that feeds a companion |
 | `com.dwinovo.numen.api.agent.tool` | `NumenTool`, `ToolRegistry`, `ToolCall` | the tool contract + registration |
 | `com.dwinovo.numen.api.agent.tool.api` | `ToolContext` | per-call context for a server-side tool |
 | `com.dwinovo.numen.api.task` | `TaskResult` | the result envelope a tool hands back |

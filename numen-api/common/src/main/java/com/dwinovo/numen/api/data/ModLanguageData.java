@@ -250,7 +250,7 @@ public final class ModLanguageData {
         public static final String SUMMON_WARN_PROVIDER    = "numen.summon.warn_provider";
         public static final String SUMMON_NO_PROVIDER      = "numen.summon.no_provider";
 
-        // Endpoint problems: the kernel holds BLOCKED with this text as the reason (EntityAgentLoop#endpointProblem).
+        // Endpoint problems: the kernel holds BLOCKED with this text as the reason (AgentLoop).
         public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";

@@ -7,9 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 外接大脑伸向同伴的手:{@link McpServer} 对她们的全部接触都收在这一个口里。宿主不关心同伴的大脑跑在哪——
- * 服务端实现 {@link ServerActuator} 直接操作进程内的 {@code CompanionLoop};客户端实现(旧循环还在主人客户端时用)
- * 在 {@code ClientHands}。
+ * 外接大脑伸向同伴的手:{@link McpServer} 对她们的全部接触都收在这一个口里。宿主不关心同伴的大脑怎么接——
+ * 实现 {@link ServerActuator} 直接操作进程内的 {@code CompanionLoop}。
  *
  * <p>每个方法可在任意线程调,工作由实现切到自己的主线程,结果经 future 回来。每个调用都寻址到一只同伴的 UUID,
  * 各同伴独立执行,所以一个外脑可以并行驱动好几只。
@@ -52,12 +51,4 @@ public interface ExternalHands {
      * @param argsJson 工具参数的 JSON 对象串;空视作 {@code {}}
      */
     CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson);
-
-    /**
-     * 外脑的一次动作(一行摘要)交给实现留底。服务端把外脑驾驶的那段写进同伴的日志(见 {@code CompanionLoop}),
-     * 不需要这一行,所以默认不做事;旧的客户端循环没有日志可写,靠它喂 {@code McpTranscript}。
-     *
-     * @param companion 动作针对的同伴;不针对具体同伴(列名册、召唤)是 null
-     */
-    default void activity(UUID companion, String line, boolean error) {}
 }

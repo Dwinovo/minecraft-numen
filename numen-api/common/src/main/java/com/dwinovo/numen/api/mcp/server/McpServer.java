@@ -59,8 +59,6 @@ public final class McpServer {
      *  判据见 {@code ExternalWait}）立刻返回。最长 50 秒，给桥接层（mcp-remote 等）和客户端的请求超时留余量
      *  （Codex 的工具超时默认 60 秒）；到点返回空，外脑再调一次接着等。 */
     private static final int MAX_WAIT_SECONDS = 50;
-    /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
-    private static final int SUMMARY_LIMIT = 90;
 
     /**
      * 外接大脑读的那条身体规则:内脑读的同一句({@link NumenPrompts#ONE_BODY}),接上这一侧怎么把几件活排开——外接大脑的
@@ -407,27 +405,7 @@ public final class McpServer {
         JsonObject args = params.has("arguments") && params.get("arguments").isJsonObject()
                 ? params.getAsJsonObject("arguments") : new JsonObject();
 
-        JsonObject out = dispatchToolCall(name, args);
-        recordActivity(name, args, out);
-        return out;
-    }
-
-    /**
-     * 动作行进现场缓冲（面板聊天区里的淡色工具行）。对话面的两个工具不记：
-     * say 自己就是一条 SAY 气泡，get_events 是轮询心跳，记了全是噪音。
-     * 带 companion 的进它自己的道，不带的（list/create）进全局道。
-     */
-    private void recordActivity(String name, JsonObject args, JsonObject out) {
-        if ("get_events".equals(name) || "say".equals(name)) return;
-        UUID who = null;
-        try {
-            who = resolveCompanion(args);
-        } catch (Exception ignored) {
-            // 解析不出就进全局道——记录不因归档失败而丢
-        }
-        String argsLine = argsSummary(args);
-        String head = name + (argsLine.isBlank() ? "" : "  " + argsLine);
-        hands.activity(who, head + " → " + textOf(out), isError(out));
+        return dispatchToolCall(name, args);
     }
 
     private JsonObject dispatchToolCall(String name, JsonObject args) {
@@ -445,35 +423,6 @@ public final class McpServer {
         } catch (Exception ex) {
             return content("call failed: " + ex.getMessage(), true);
         }
-    }
-
-    /** 参数压成一行 {@code companion=Alice, count=5};过长截断,面板一行放得下。 */
-    private static String argsSummary(JsonObject args) {
-        StringBuilder sb = new StringBuilder();
-        for (var entry : args.entrySet()) {
-            if (sb.length() > 0) sb.append(", ");
-            JsonElement v = entry.getValue();
-            String text = v.isJsonPrimitive() ? v.getAsString() : v.toString();
-            sb.append(entry.getKey()).append('=').append(truncate(text, 30));
-            if (sb.length() > SUMMARY_LIMIT) break;
-        }
-        return truncate(sb.toString(), SUMMARY_LIMIT);
-    }
-
-    private static String textOf(JsonObject result) {
-        if (!result.has("content") || !result.get("content").isJsonArray()) return "";
-        JsonArray arr = result.getAsJsonArray("content");
-        if (arr.isEmpty() || !arr.get(0).isJsonObject()) return "";
-        JsonObject first = arr.get(0).getAsJsonObject();
-        return first.has("text") ? truncate(first.get("text").getAsString().replace('\n', ' '), SUMMARY_LIMIT) : "";
-    }
-
-    private static boolean isError(JsonObject result) {
-        return result.has("isError") && result.get("isError").getAsBoolean();
-    }
-
-    private static String truncate(String s, int limit) {
-        return s.length() <= limit ? s : s.substring(0, limit) + "…";
     }
 
     private String listCompanions() throws Exception {

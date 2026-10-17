@@ -14,7 +14,7 @@ import java.util.Map;
  * ({@code numen.move.to})用同一种语言写成,程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *
  * <p>程序由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐个派调用、等身体收尾、在调用之间停下),
- * 不经 {@link #invoke}。外接大脑经 {@code NumenActuator} 跑它,交给的是同伴自己的那一个派发器(内脑闲着时借用)。
+ * 不经 {@link #invoke}。外接大脑经 {@code ServerActuator} 跑它,交给的是同伴自己的那一个派发器(内脑闲着时借用)。
  */
 public final class ScriptTool implements NumenTool {
 

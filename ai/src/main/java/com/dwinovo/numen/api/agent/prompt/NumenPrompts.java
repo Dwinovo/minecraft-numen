@@ -127,7 +127,7 @@ public final class NumenPrompts {
      *
      * <h2>为什么规矩在这儿而内容不在</h2>
      * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一记就变),所以走注入块,
-     * 见 {@code EntityAgentLoop.injectionPreamble}。
+     * 见 {@code CompanionLoop} 的宿主端口 {@code injectionPreamble}。
      *
      * <p>同一份说明不写两处:memory 工具的说明只讲参数怎么填,什么值得记的判断
      * 只在这里说——和本能名册同一条规矩。
@@ -149,7 +149,7 @@ public final class NumenPrompts {
 
     /**
      * 场面上还有谁。规矩是静态的,和札记的规矩一样躺在缓存前缀里;谁在场会变,所以随每句话
-     * 以 {@code <audience>} 注入(见 {@code EntityAgentLoop.audienceLine})。
+     * 以 {@code <audience>} 注入(见 {@code CompanionLoop.Rooms#audienceLine})。
      *
      * <p>不告诉她谁在场就指望她守口如瓶,是我们的错不是她的错——她的上下文是一条流,单聊里说的和
      * 群里说的混在一起,不标场合她会漏嘴。最后一条尤其要紧:不写的话她会说"阿岚你去西边",

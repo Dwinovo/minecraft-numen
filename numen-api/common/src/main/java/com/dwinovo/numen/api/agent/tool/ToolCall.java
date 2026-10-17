@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  *
  * The agent loop neither knows nor cares <em>how</em> a tool finishes — that
  * choice belongs entirely to the tool. This is the seam that makes tool execution
- * transparent to {@code EntityAgentLoop}: it dispatches a call and is notified of
+ * transparent to {@code AgentLoop}: it dispatches a call and is notified of
  * the result, with no branch on tool category.
  *
  * <p>Numen API is a scheduler, not an executor: there is exactly one verb,

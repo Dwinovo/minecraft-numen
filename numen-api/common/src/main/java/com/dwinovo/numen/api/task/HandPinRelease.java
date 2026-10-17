@@ -5,8 +5,8 @@ package com.dwinovo.numen.api.task;
  * spec point: 任务结束边沿解除手持钉), as a pure tick counter so it is
  * headless-testable.
  *
- * <p>Why not release on the bare {@code hasWork() true→false} edge: the client
- * ToolDispatcher is strictly serial — between two tool calls of the SAME turn
+ * <p>Why not release on the bare {@code hasWork() true→false} edge: the brain's
+ * tool port is strictly serial — between two tool calls of the SAME turn
  * (gear wear result shipped, auto_mine not yet arrived) the LLM chain is
  * momentarily idle while the model thinks, and a bare-edge release would strip
  * the pin exactly between "equip the fast-breaking tool" and "mine with it",

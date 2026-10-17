@@ -190,8 +190,8 @@ public final class CompanionTickDispatcher {
 
     /**
      * Drop a companion's running task WITHOUT shipping a result — used on death, where the client's
-     * {@code NumenDeathPayload} already abandons the in-flight tool call and records the death cause (so a
-     * result here would be a late arrival the client ignores).
+     * the brain's death halt ({@code CompanionLoop#onDied}) already abandons the in-flight tool call and records the death
+     * cause (so a result here would be a late arrival nobody reads).
      */
     public static void clearActiveTask(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death

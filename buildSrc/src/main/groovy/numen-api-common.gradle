@@ -129,7 +129,7 @@ tasks.register('apiJar', Jar) {
     dependsOn shippedJar
     from({ zipTree(shippedJar().archiveFile) })
     // common 自己的成品 jar 不含 client 源码集,而公共 API 有两个门住在那里
-    // (NumenGateway/NumenActuator)。加载器模块把 common 的两个源码集都并进了
+    // (NumenGateway)。加载器模块把 common 的两个源码集都并进了
     // 成品,这里取到空集,不会引入第二套映射。
     from({ def c = sourceSets.findByName('client'); c != null ? c.output : [] })
     // public API surface (see the package-info of each). This list is the
@@ -141,7 +141,6 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/CompanionPortrait*.class'
     include 'com/dwinovo/numen/api/Delivery*.class'
     include 'com/dwinovo/numen/api/Internal*.class'
-    include 'com/dwinovo/numen/api/NumenActuator*.class'
     include 'com/dwinovo/numen/api/NumenApi*.class'
     include 'com/dwinovo/numen/api/NumenGateway*.class'
     include 'com/dwinovo/numen/api/NumenPlugin*.class'  // NumenPlugin 与 NumenPlugins

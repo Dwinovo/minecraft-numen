@@ -84,7 +84,7 @@ public final class NoteBook {
     }
 
     /**
-     * 安家的位置与当前天数——{@code CompanionHome} 独占目录布局的知识,这里只接受它给的落点,
+     * 安家的位置与当前天数——{@code Homes} 独占目录布局的知识,这里只接受它给的落点,
      * 不自己拼 {@code companions/<uuid>/}:布局写在两处,改一处就开始对不上。
      */
     public static void init(Function<UUID, Home> companionMemoryHomes, IntSupplier gameDay) {
