@@ -156,8 +156,7 @@ public class BodyReportGameTests {
         remaining.forEach(criterion -> advancements.award(holder, criterion));
 
         succeedWhen(helper, () -> {
-            List<String> told = com.dwinovo.numen.api.entity.EventOutbox.get(companion.getServer())
-                    .peek(companion.getUUID()).entries().stream()
+            List<String> told = GameTestKit.events(companion).stream()
                     .filter(e -> EventTypes.ADVANCEMENT_REWARD.equals(e.type()))
                     .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text).toList();
             helper.assertTrue(told.size() == 1 && told.get(0).contains("experience +40 points"),

@@ -37,14 +37,14 @@ import java.util.UUID;
  *
  * <h2>存的是绝对到期刻</h2>
  * 不能存「还剩多少秒」:那是相对量,重启一次就从头开始算。落盘走存档
- * ({@link SavedData}),跟 {@code EventOutbox} / {@link CompanionRegistry} 同一制式。
+ * ({@link SavedData}),跟 {@link CompanionRegistry} 同一制式。
  *
  * <p>也<b>不能</b>走 {@link TaskPersistence}——它靠重放那次工具调用来恢复,
  * 而重放 {@code task timer … --after 60} 等于把表按回 60 秒重新计时。
  *
  * <h2>到点之后</h2>
- * 一句 {@link NumenEvents#emit} 就够:主人在线立刻送达并开一轮,主人离线进出箱等他回来,
- * 她死着则停牌不开 run、复活时一起走。这三件事各自已有归属,这里不重复实现。
+ * 一句 {@link NumenEvents#emit} 就够:事件进她的收件箱,主人在线立刻开一轮,主人离线就攒着等他回来,
+ * 她死着则停牌不开 run、复活时一起走。这几件事各自已有归属,这里不重复实现。
  *
  * <p>服务端专用。
  */

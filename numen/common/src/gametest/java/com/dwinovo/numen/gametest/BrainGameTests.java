@@ -12,7 +12,6 @@ import com.dwinovo.numen.api.agent.loop.ModelPort;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
-import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.agent.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
@@ -673,27 +672,24 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 她存在就有大脑:按需建起来,离线出箱里攒着的事件倒进她的收件箱,再要一次是同一个。 */
+    /** 她存在就有大脑:按需建起来,再要一次是同一个。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
-    public static void a_brain_made_on_demand_takes_in_what_waited_in_the_outbox(GameTestHelper helper)
+    public static void a_brain_is_made_on_demand_and_asking_again_gives_the_same_one(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
-        NumenPlayer body = spawnAt(helper, "gametest_ondemand", new BlockPos(3, 2, 3), false);
+        BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
+        NumenPlayer body = com.dwinovo.numen.api.entity.CompanionFactory.spawn(server, UUID.randomUUID(),
+                "gametest_ondemand", UUID.randomUUID(), helper.getLevel(),
+                new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         CompanionRegistry.get(server).put(body.getUUID(), new CompanionRegistry.Entry("gametest_ondemand",
                 body.getOwnerUuid(), Level.OVERWORLD, body.blockPosition()));
         Io io = NumenIo.inline("numen-gametest");
         Path notes = Files.createTempDirectory("numen-gametest-notes-");
         NoteBook.init(uuid -> new Home(notes, io), () -> 0);
-        com.dwinovo.numen.api.entity.EventOutbox.get(server).put(body.getUUID(), new com.dwinovo.numen.api.agent.inbox
-                .EventQueue.Entry(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\">矿挖完了</event>", 1234L, true));
 
         CompanionLoop loop = com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID());
 
         helper.assertTrue(loop != null, "no brain was made");
-        helper.assertTrue(loop.inbox().entries().stream().anyMatch(e -> e.text().contains("矿挖完了") && e.ts() == 1234L),
-                "the outbox did not reach her inbox with its time: " + loop.inbox().entries());
-        helper.assertTrue(com.dwinovo.numen.api.entity.EventOutbox.get(server).peek(body.getUUID()).isEmpty(),
-                "the outbox still holds what was handed over");
         helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID()) == loop,
                 "asking again made another brain");
         CompanionLoops.dismissed(server, body.getUUID());

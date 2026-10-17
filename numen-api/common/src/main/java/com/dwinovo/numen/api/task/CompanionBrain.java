@@ -332,7 +332,7 @@ final class CompanionBrain {
     /**
      * 把结算好的记录送出去。
      *
-     * <p>异步任务的收尾走 {@link com.dwinovo.numen.api.event.NumenEvents}:主人离线时<b>照发</b>,它自己会进出箱等主人
+     * <p>异步任务的收尾走 {@link com.dwinovo.numen.api.event.NumenEvents}:主人离线时<b>照发</b>,它自己会进她的收件箱等主人
      * 回来。同步动作的结果交回派它的那次调用自己的回信口({@link TaskDispatch#runSync} 绑在记录上):模型的调用由
      * 网络入口回给发来它的主人客户端——主人已经下线时那条调用属于一个随客户端一起消失的回合,重登后发请求时由
      * {@code ProtocolView} 给它补上失败结果;{@code /numen drive} 派的回给发令人。

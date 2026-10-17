@@ -289,7 +289,7 @@ class EventQueueTest {
 
     @Test
     void eventsAreSortedByWhenTheyHappened() {
-        // 入队顺序≠发生顺序：服务端离线出箱里攒的、死亡期间锁着攒下的，
+        // 入队顺序≠发生顺序：旧版迁进来的离线事件、死亡期间锁着攒下的，
         // 都是后来才进队的。模型要拿它们理因果，时间必须是对的。
         EventQueue q = fresh();
         q.push(EventTypes.TASK_FINISHED, "<event>后发生的</event>", T0 + 5_000L, false);

@@ -434,7 +434,7 @@ public class InteractGameTests {
 
     /**
      * 正午右键一张床:原版在动作栏里告诉她只能在夜里睡,这句话作为一条 {@code server_message} 事件交给了模型
-     * (主人不在,进了出箱)。
+     * (进了她的收件箱)。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
     public static void a_bed_at_noon_tells_her_why_as_an_event(GameTestHelper helper) {
@@ -453,8 +453,7 @@ public class InteractGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(lie.done(), "use block has not finished");
-            java.util.List<String> told = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer())
-                    .peek(companion.getUUID()).entries().stream()
+            java.util.List<String> told = GameTestKit.events(companion).stream()
                     .filter(e -> com.dwinovo.numen.api.agent.inbox.EventTypes.SERVER_MESSAGE.equals(e.type()))
                     .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text)
                     .toList();

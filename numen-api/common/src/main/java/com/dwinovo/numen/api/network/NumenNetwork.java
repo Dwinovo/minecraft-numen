@@ -268,12 +268,6 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.SpeakingStatePayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.SpeakingStatePayload::handle);
 
-        // S→C: a generic async world event (dimension change, hazard, …) for a companion's brain.
-        toClient(
-                com.dwinovo.numen.api.network.payload.NumenEventPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.NumenEventPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.NumenEventPayload::handle);
-
         // S→C: the owner's companion roster (UUID + name), pushed on login + summon
         // so the client panel knows which fake players are its companions.
         toClient(

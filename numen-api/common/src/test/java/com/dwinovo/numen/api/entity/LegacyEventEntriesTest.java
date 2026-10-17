@@ -3,8 +3,10 @@ package com.dwinovo.numen.api.entity;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
+import com.dwinovo.numen.api.brain.LegacyMigration;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 存档里已经躺着的旧条目:服务端出箱与客户端收件箱都存过类型叫 {@code event} 的条目,文本是当时拼好的
+ * 存档里已经躺着的旧条目:旧版的服务端出箱(迁进收件箱时读)与客户端收件箱都存过类型叫 {@code event} 的条目,文本是当时拼好的
  * {@code <event kind="…">}。
  *
  * <p>这些条目不改写,原样读回来。表里已经没有 {@code event} 这一行,它们按没登记的类型处理——那一行
@@ -35,15 +37,18 @@ class LegacyEventEntriesTest {
     @TempDir
     Path dir;
 
-    /** 升级前的出箱存档:手搭,不经今天的写入代码。 */
+    /** 升级前的出箱存档(世界的 {@code data/numen_event_outbox.dat} 的内容):手搭,不经今天的写入代码。 */
     private static CompoundTag oldOutboxSave() {
         ListTag entries = new ListTag();
         entries.add(oldEntry("<event kind=\"task_finished\" day=\"3\" t=\"12:00\" id=\"t1\">矿挖完了</event>", T0, true));
         entries.add(oldEntry("<event kind=\"body_log\" day=\"3\" t=\"12:01\">nearly drowned</event>", T0 + 5, false));
         CompoundTag boxes = new CompoundTag();
         boxes.put(A.toString(), entries);
+        CompoundTag saved = new CompoundTag();
+        saved.put("outboxes", boxes);
         CompoundTag root = new CompoundTag();
-        root.put("outboxes", boxes);
+        root.put("data", saved);
+        root.putInt("DataVersion", 3955);
         return root;
     }
 
@@ -57,10 +62,15 @@ class LegacyEventEntriesTest {
     }
 
     @Test
-    void anOldOutboxIsReplayedAsTheWorldFactsItHeld() {
-        EventOutbox box = EventOutbox.load(oldOutboxSave(), null);
+    void anOldOutboxIsReplayedAsTheWorldFactsItHeld() throws IOException {
+        Path file = dir.resolve("data").resolve("numen_event_outbox.dat");
+        Files.createDirectories(file.getParent());
+        NbtIo.writeCompressed(oldOutboxSave(), file);
 
-        List<EventQueue.Entry> taken = box.take(A, T0 + 10);
+        List<EventQueue.Entry> taken = LegacyMigration.outbox(file).get(A);
+        assertFalse(Files.exists(file), "读过的文件改了名,只做一次");
+        assertTrue(Files.exists(file.resolveSibling("numen_event_outbox.dat.migrated")));
+        assertTrue(LegacyMigration.outbox(file).isEmpty(), "再读什么也没有");
 
         assertEquals(List.of("event", "event"), taken.stream().map(EventQueue.Entry::type).toList(),
                 "条目原样读回,不改写");

@@ -12,8 +12,8 @@ package com.dwinovo.numen.api.agent.loop;
  * DISPOSE     遣散、RESET_LOOPS     否        否(队列随同伴一起删)       保留      不变
  * </pre>
  *
- * <p>登出不叫停身体:她还在服务器里跑,收尾进离线出箱等主人回来;也不删目标、不置停牌,
- * 离线补发的 {@code task_finished} 回来照样叫得醒她。
+ * <p>登出不叫停身体:她还在服务器里跑,收尾进她的收件箱等主人回来;也不删目标、不置停牌,
+ * 攒在收件箱里的 {@code task_finished} 回来照样叫得醒她。
  */
 public enum HaltReason {
     OWNER_STOP("halt.owner_stop", "被主人打断", true, true, true, Hold.OWNER_STOP),

@@ -9,7 +9,6 @@ import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.Fragments;
 import com.dwinovo.numen.api.network.NumenNetwork;
@@ -84,7 +83,6 @@ public class ScriptGameTests {
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted(xyz(first), xyz(second)));
         Round round = round(helper, her, script);
-        EventOutbox outbox = EventOutbox.get(level.getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
@@ -95,7 +93,6 @@ public class ScriptGameTests {
             helper.assertTrue(msg.startsWith("ok · 2 calls"), msg);
             helper.assertTrue(msg.matches("(?s).*\nstderr:\nline 1 numen\\.build\\.place: .*\nline 2 numen\\.build\\.place: .*"),
                     "a line did not wait for its task to finish and report its account: " + msg);
-            outbox.forget(her.getUUID());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -145,7 +142,6 @@ public class ScriptGameTests {
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
-        EventOutbox outbox = EventOutbox.get(level.getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
@@ -166,7 +162,6 @@ public class ScriptGameTests {
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.to\\) after 1 call: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
-                    outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
@@ -183,7 +178,6 @@ public class ScriptGameTests {
                 numen.move.to({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
-        EventOutbox outbox = EventOutbox.get(level.getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
@@ -197,7 +191,6 @@ public class ScriptGameTests {
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.to"),
                             "the walk is no longer running: " + now);
-                    outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
@@ -352,7 +345,6 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_saver", new BlockPos(2, 2, 2), true);
         BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-        EventOutbox outbox = EventOutbox.get(level.getServer());
         java.nio.file.Path dir = com.dwinovo.numen.api.script.Modules.of(her.getUUID()).dir();
         helper.assertTrue(dir.getFileName().toString().startsWith("numen-gametest-lua-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
@@ -389,8 +381,6 @@ public class ScriptGameTests {
                     helper.assertTrue(msg.startsWith("ok · ") && msg.contains("\nline 1 numen.build.place: "), msg);
                     helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-                    // 第一次的收尾事件已经读过;下一轮从空出箱读起,和主人客户端上取走即清一样
-                    outbox.forget(her.getUUID());
                 })
                 .thenExecute(() -> second[0] = round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(second[0].hasSettled() && level.getBlockState(cell).isAir(),
@@ -428,7 +418,6 @@ public class ScriptGameTests {
                     helper.assertTrue(deleted.succeeded(), deleted.reply());
                     helper.assertTrue(!lua(her, "numen.module.show(\"my.gt_clear\")").succeeded(),
                             "the deleted module is still there");
-                    outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
@@ -480,7 +469,6 @@ public class ScriptGameTests {
                     "the two digs did not hand back one cell each as data: " + receipt);
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "a block handed on as it was is still standing: " + receipt);
-            EventOutbox.get(level.getServer()).forget(her.getUUID());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -510,7 +498,6 @@ public class ScriptGameTests {
                             && round.data().get("returned").getAsInt() == cow.getId(),
                     "the walk to the cow failed: " + receipt);
             helper.assertTrue(her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
-            EventOutbox.get(level.getServer()).forget(her.getUUID());
             cow.discard();
             CompanionFactory.despawn(level.getServer(), her);
         });

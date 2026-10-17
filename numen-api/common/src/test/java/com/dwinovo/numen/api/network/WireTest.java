@@ -1,11 +1,6 @@
 package com.dwinovo.numen.api.network;
 
-import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
-import com.dwinovo.numen.api.network.payload.NumenEventPayload;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.DecoderException;
@@ -16,7 +11,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -91,28 +85,6 @@ class WireTest {
         assertEquals(4, over.readableBytes());
     }
 
-    @Test
-    void aBatchOfEventsTooBigLosesItsLongestTextsFirstAndKeepsTheRest() {
-        String big = "y".repeat(Wire.TO_CLIENT.bytes() / 2);
-        List<EventQueue.Entry> entries = new ArrayList<>();
-        entries.add(new EventQueue.Entry(EventTypes.TASK_FINISHED, "short one", 1L, true));
-        entries.add(new EventQueue.Entry(EventTypes.TASK_FINISHED, big + big, 2L, true));
-        entries.add(new EventQueue.Entry(EventTypes.REFLEX, "another short one", 3L, false));
-
-        NumenEventPayload sent = fit(new NumenEventPayload(A, entries));
-
-        assertEquals(3, sent.entries().size(), "一条不少");
-        assertEquals("short one", sent.entries().get(0).text());
-        assertEquals("another short one", sent.entries().get(2).text());
-        EventQueue.Entry replaced = sent.entries().get(1);
-        assertEquals(EventTypes.TASK_FINISHED, replaced.type(), "种类、时刻、急不急都留着");
-        assertEquals(2L, replaced.ts());
-        assertTrue(replaced.urgent());
-        assertTrue(replaced.text().startsWith("A task_finished event came to "), replaced.text());
-        assertTrue(replaced.text().endsWith(" together with the rest, so its text was not delivered."),
-                replaced.text());
-    }
-
     /** 内容本来有界的包装不下,是填它的代码错了:当场抛出、指名是哪一种包,不交给 netty。 */
     @Test
     void aBoundedPayloadThatDoesNotFitFailsLoudlyInsteadOfReachingTheWire() {
@@ -133,24 +105,5 @@ class WireTest {
         ByteBuf over = Unpooled.buffer();
         Wire.TO_SERVER.text().encode(over, "q".repeat(Wire.MESSAGE_BYTES + 1));
         assertThrows(DecoderException.class, () -> Wire.TO_SERVER.text().decode(over));
-    }
-
-    private static <T extends net.minecraft.network.protocol.common.custom.CustomPacketPayload> T fit(T payload) {
-        @SuppressWarnings("unchecked")
-        net.minecraft.network.codec.StreamCodec<ByteBuf, T> codec = (net.minecraft.network.codec.StreamCodec<ByteBuf, T>)
-                (Object) switch (payload) {
-                    case NumenEventPayload p -> NumenEventPayload.STREAM_CODEC;
-                    default -> throw new IllegalArgumentException(payload.toString());
-                };
-        T sent = Wire.TO_CLIENT.fit(codec, payload, Unpooled::buffer);
-        encodes(codec, sent);
-        return sent;
-    }
-
-    private static <T> void encodes(net.minecraft.network.codec.StreamCodec<ByteBuf, T> codec, T payload) {
-        ByteBuf buf = Unpooled.buffer();
-        codec.encode(buf, payload);
-        assertTrue(Wire.TO_CLIENT.holds(buf.readableBytes()), "送出去的装得下");
-        assertEquals(payload, codec.decode(buf), "收得回来");
     }
 }

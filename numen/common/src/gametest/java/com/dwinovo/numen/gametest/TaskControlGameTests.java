@@ -7,7 +7,6 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -23,7 +22,6 @@ import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.task.TimerRegistry;
-import com.google.gson.JsonParser;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,7 +38,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
  * 她手上在办的事:{@code numen.task.status} 查进度、{@code numen.task.stop} 叫停、{@code numen.task.timer} 定表。
- * 主人不在线,收尾与到点的事件进出箱,测试从那里读模型会收到的原话。
+ * 收尾与到点的事件进她的收件箱,测试从那里读模型会收到的原话。
  *
  * <p>只有 {@code numen.task.stop} 提升成了快捷工具 {@code task_stop}:同一件事从工具和从命令各调一次,回执与世界上的结果
  * 一样。{@code numen.task.status}、{@code numen.task.timer} 只作命令,工具表里没有它们。
@@ -154,7 +152,6 @@ public class TaskControlGameTests {
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(far) + ")");
         AtomicReference<ToolRun> stop = new AtomicReference<>();
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
@@ -162,11 +159,10 @@ public class TaskControlGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded()
                                 && walk.task().getState() == TaskState.CANCELLED,
                         "the walk was not stopped: " + stop.get().reply()))
-                .thenWaitUntil(() -> helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                .thenWaitUntil(() -> helper.assertTrue(GameTestKit.events(companion).stream()
                                 .anyMatch(e -> e.type().equals("task_finished") && e.text().contains("stopped")),
-                        "no task_finished with status stopped went out: " + outbox.peek(companion.getUUID()).entries()))
+                        "no task_finished with status stopped went out: " + GameTestKit.events(companion)))
                 .thenExecute(() -> {
-                    outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
@@ -194,14 +190,12 @@ public class TaskControlGameTests {
     public static void set_timer_fires_its_reason_back(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_alarmed", new BlockPos(2, 2, 2), false);
         ToolRun timer = lua(companion, "numen.task.timer(\"the bread should be baked\", {after = 1})");
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
-            helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+            helper.assertTrue(GameTestKit.events(companion).stream()
                             .anyMatch(e -> e.type().equals("timer") && e.text().contains("the bread should be baked")),
-                    "the timer has not fired with its reason: " + outbox.peek(companion.getUUID()).entries());
-            outbox.forget(companion.getUUID());
+                    "the timer has not fired with its reason: " + GameTestKit.events(companion));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -293,7 +287,6 @@ public class TaskControlGameTests {
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         ToolRun linger = lua(body, "gt.gt_long.linger(20)");
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(body.getUUID());
-        EventOutbox outbox = EventOutbox.get(server);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(linger.task() != null && linger.task().getToolName().equals("gt.gt_long.linger")
@@ -306,7 +299,6 @@ public class TaskControlGameTests {
             // 程序等着的这件活的收尾写在它的回执里,不另发事件
             helper.assertTrue(linger.receipt() != null && linger.receipt().contains("line 1 gt.gt_long.linger: stood for 20 ticks"),
                     "the receipt does not name the task's end: " + linger.receipt());
-            outbox.forget(body.getUUID());
             Companions.dismiss(server, body);
         });
     }
@@ -504,7 +496,6 @@ public class TaskControlGameTests {
         LlmToolCall clearFirst = programCall("numen.build.place({{name = \"air\", pos = " + xyz(first) + "}})");
         LlmToolCall clearSecond = programCall("numen.build.place({{name = \"air\", pos = " + xyz(second) + "}})");
         Round round = round(helper, companion, clearFirst, clearSecond);
-        EventOutbox outbox = EventOutbox.get(level.getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(round.hasSettled(), "the round has not settled: " + round.result(clearFirst) + " / "
@@ -513,10 +504,9 @@ public class TaskControlGameTests {
                     "not both cells were cleared");
             helper.assertTrue(!round.result(clearSecond).contains("It replaced"),
                     "the second set replaced the first: " + round.result(clearSecond));
-            helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+            helper.assertTrue(GameTestKit.events(companion).stream()
                             .noneMatch(e -> e.text().contains("status=\"stopped\"")),
-                    "a set was stopped: " + outbox.peek(companion.getUUID()).entries());
-            outbox.forget(companion.getUUID());
+                    "a set was stopped: " + GameTestKit.events(companion));
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -529,7 +519,6 @@ public class TaskControlGameTests {
         LlmToolCall walk = programCall("numen.move.to({x = " + far.getX() + ", z = " + far.getZ() + "})");
         LlmToolCall look = programCall("return numen.status.self()");
         Round round = round(helper, companion, walk, look);
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(round.hasSettled(), "the round has not settled");
@@ -538,7 +527,6 @@ public class TaskControlGameTests {
             helper.assertTrue(off < 1.5, "status self ran " + off + " blocks from where the walk ends");
             helper.assertTrue(round.result(look).contains("pos = {"), "status self did not answer: "
                     + round.result(look));
-            outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -579,7 +567,6 @@ public class TaskControlGameTests {
         LlmToolCall look = programCall("return numen.status.self()");
         LlmToolCall around = programCall("numen.scan.map()");
         Round round = round(helper, companion, walk, look, around);
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
                 .thenExecuteAfter(5, () -> {
@@ -598,7 +585,6 @@ public class TaskControlGameTests {
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.to"),
                             "the walk is no longer running: " + now);
-                    outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
@@ -612,7 +598,6 @@ public class TaskControlGameTests {
         BlockPos near = helper.absolutePos(new BlockPos(2, 2, 8));
         ToolRun walk = lua(companion, "numen.move.to({x = " + far.getX() + ", z = " + far.getZ() + "})");
         AtomicReference<ToolRun> instead = new AtomicReference<>();
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "the first walk has not been accepted: "
@@ -623,13 +608,12 @@ public class TaskControlGameTests {
                     helper.assertTrue(walk.task().getState() == TaskState.CANCELLED,
                             "the first walk was not stopped: " + walk.task().getState());
                 })
-                .thenWaitUntil(() -> helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                .thenWaitUntil(() -> helper.assertTrue(GameTestKit.events(companion).stream()
                                 .anyMatch(e -> e.type().equals("task_finished")
                                         && e.text().contains("id=\"" + walk.task().publicId() + "\"")
                                         && e.text().contains("status=\"stopped\"")),
-                        "the replaced walk did not wind down as stopped: " + outbox.peek(companion.getUUID()).entries()))
+                        "the replaced walk did not wind down as stopped: " + GameTestKit.events(companion)))
                 .thenExecute(() -> {
-                    outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
@@ -647,7 +631,6 @@ public class TaskControlGameTests {
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(far) + ")");
         AtomicReference<ToolRun> follow = new AtomicReference<>();
         AtomicReference<ToolRun> blocked = new AtomicReference<>();
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.reply() != null, "the first walk has not replied"))
@@ -678,15 +661,14 @@ public class TaskControlGameTests {
                 })
                 .thenExecuteAfter(10, () -> {
                     // 收件箱里只有那段路自己的收尾:被拒的调用没有任务编号,也就没有 task_finished
-                    helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                    helper.assertTrue(GameTestKit.events(companion).stream()
                                     .filter(e -> e.type().equals("task_finished"))
                                     .allMatch(e -> e.text().contains("id=\"" + walk.task().publicId() + "\"")
                                             && e.text().contains("status=\"done\"")),
-                            "a refused call sent task_finished: " + outbox.peek(companion.getUUID()).entries());
+                            "a refused call sent task_finished: " + GameTestKit.events(companion));
                     helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == follow.get().task()
                                     && follow.get().task().getState() == TaskState.RUNNING,
                             "the work in hand stopped after the refusal");
-                    outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
@@ -702,7 +684,6 @@ public class TaskControlGameTests {
         helper.getLevel().setBlockAndUpdate(bedrock, Blocks.BEDROCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_bedrock_digger", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(bedrock) + ")");
 
         steps(helper)
@@ -716,18 +697,17 @@ public class TaskControlGameTests {
                             "the refused dig reached the task slot");
                 })
                 .thenExecuteAfter(10, () -> {
-                    helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                    helper.assertTrue(GameTestKit.events(companion).stream()
                                     .noneMatch(e -> e.type().equals("task_finished")),
-                            "a refused dig sent task_finished: " + outbox.peek(companion.getUUID()).entries());
+                            "a refused dig sent task_finished: " + GameTestKit.events(companion));
                     helper.assertTrue(helper.getLevel().getBlockState(bedrock).is(Blocks.BEDROCK), "the bedrock is gone");
-                    outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
     }
 
-    private static boolean finishedAs(EventOutbox outbox, NumenPlayer body, String task) {
-        return outbox.peek(body.getUUID()).entries().stream().anyMatch(e -> e.type().equals("task_finished")
+    private static boolean finishedAs(NumenPlayer body, String task) {
+        return GameTestKit.events(body).stream().anyMatch(e -> e.type().equals("task_finished")
                 && e.text().contains("task=\"" + task + "\"") && e.text().contains("status=\"done\""));
     }
 }

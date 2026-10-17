@@ -2,7 +2,6 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Mode;
 import com.dwinovo.numen.api.permission.Permission;
@@ -58,7 +57,7 @@ public class TlmGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 野生女仆拿蛋糕驯服:她归了她,{@code tlm maids} 列出她,驯服的事件进了出箱。 */
+    /** 野生女仆拿蛋糕驯服:她归了她,{@code tlm maids} 列出她,驯服的事件进了她的收件箱。 */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
     public static void a_wild_maid_tamed_with_cake_is_listed_as_hers(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_tamer", new BlockPos(3, 2, 3));
@@ -75,8 +74,8 @@ public class TlmGameTests {
                     String reply = listed.get().reply();
                     helper.assertTrue(reply != null && listed.get().succeeded()
                             && hasRow(reply, maid.getId()), "tlm maids leaves her out: " + reply);
-                    helper.assertTrue(outboxHas(her, "maid_tamed", maid.getId()),
-                            "no maid_tamed event: " + outbox(her).peek(her.getUUID()).entries());
+                    helper.assertTrue(told(her, "maid_tamed", maid.getId()),
+                            "no maid_tamed event: " + GameTestKit.events(her));
                 })
                 .thenExecute(() -> leave(helper, her, maid))
                 .thenSucceed();
@@ -408,7 +407,7 @@ public class TlmGameTests {
         });
     }
 
-    /** 她的女仆死了:急件进出箱,带着墓碑的编号;{@code tlm maids} 列出那块墓碑。 */
+    /** 她的女仆死了:急件进她的收件箱,带着墓碑的编号;{@code tlm maids} 列出那块墓碑。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
     public static void her_maid_dying_reports_the_tombstone(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_mourner", new BlockPos(3, 2, 3));
@@ -418,10 +417,10 @@ public class TlmGameTests {
         maid.kill();
 
         succeedWhen(helper, () -> {
-            var died = outbox(her).peek(her.getUUID()).entries().stream()
+            var died = GameTestKit.events(her).stream()
                     .filter(e -> e.type().equals("maid_died") && e.text().contains("maid=\"" + id + "\"")).toList();
             helper.assertTrue(died.size() == 1 && died.get(0).urgent() && died.get(0).text().contains("tombstone=\""),
-                    "no urgent maid_died event with a tombstone: " + outbox(her).peek(her.getUUID()).entries());
+                    "no urgent maid_died event with a tombstone: " + GameTestKit.events(her));
             ToolRun listed = lua(her, "tlm.maid.list()");
             helper.assertTrue(listed.succeeded() && dataIn(listed.reply()).getAsJsonArray("tombstones").size() == 1,
                     "tlm maids does not list the tombstone: " + listed.reply());
@@ -429,7 +428,7 @@ public class TlmGameTests {
         });
     }
 
-    /** 喂食的女仆喂了饿着的她:她的饱食度上去了,喂食的事件进了出箱。 */
+    /** 喂食的女仆喂了饿着的她:她的饱食度上去了,喂食的事件进了她的收件箱。 */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
     public static void her_feeding_maid_feeds_her_and_she_is_told(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_hungry", new BlockPos(3, 2, 3));
@@ -441,8 +440,8 @@ public class TlmGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.succeeded(), "tlm task feed failed: " + task.reply());
-            helper.assertTrue(outboxHas(her, "maid_fed_you", -1),
-                    "no maid_fed_you event: " + outbox(her).peek(her.getUUID()).entries());
+            helper.assertTrue(told(her, "maid_fed_you", -1),
+                    "no maid_fed_you event: " + GameTestKit.events(her));
             helper.assertTrue(her.getFoodData().getFoodLevel() > 6, "her food did not go up");
             leave(helper, her, maid);
         });
@@ -465,13 +464,9 @@ public class TlmGameTests {
         return maid;
     }
 
-    private static EventOutbox outbox(NumenPlayer her) {
-        return EventOutbox.get(her.getServer());
-    }
-
-    /** 出箱里有这一种事件;{@code maid} 不小于 0 时还要点名这只女仆。 */
-    private static boolean outboxHas(NumenPlayer her, String type, int maid) {
-        return outbox(her).peek(her.getUUID()).entries().stream()
+    /** 她的收件箱里有这一种事件;{@code maid} 不小于 0 时还要点名这只女仆。 */
+    private static boolean told(NumenPlayer her, String type, int maid) {
+        return GameTestKit.events(her).stream()
                 .anyMatch(e -> e.type().equals(type) && (maid < 0 || e.text().contains("maid=\"" + maid + "\"")));
     }
 
@@ -486,9 +481,8 @@ public class TlmGameTests {
         return false;
     }
 
-    /** 收场:她的出箱清掉、她离开世界、女仆收走。 */
+    /** 收场:她离开世界、女仆收走。 */
     private static void leave(GameTestHelper helper, NumenPlayer her, EntityMaid maid) {
-        outbox(her).forget(her.getUUID());
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         maid.discard();
     }

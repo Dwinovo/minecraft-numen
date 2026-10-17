@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
-import com.dwinovo.numen.api.network.payload.NumenEventPayload;
 import com.dwinovo.numen.api.network.payload.NumenStatePayload;
 import com.dwinovo.numen.api.network.payload.NumenLocationsPayload;
 
@@ -26,7 +25,6 @@ public final class ClientPayloadSink {
 
     public static volatile Consumer<CompanionListPayload> companionList = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.ConsentRequestPayload> consent = p -> {};
-    public static volatile Consumer<NumenEventPayload> event = p -> {};
     public static volatile Consumer<NumenStatePayload> state = p -> {};
     public static volatile Consumer<NumenLocationsPayload> locations = p -> {};
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};

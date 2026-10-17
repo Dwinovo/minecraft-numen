@@ -298,8 +298,7 @@ public class CombatGameTests {
     /**
      * 打不过就跑归逃跑本能,跑不掉就就地还手:她只剩四颗心、手里有剑,一只僵尸追着她,脚下是悬在半空的一块 5×5 石台——四下
      * 三十二格内没有能站的落点。逃跑本能先接过身体,找不到落点就让出来,留下一条说"没有退路"的本能事件;自卫接着打,僵尸挨了她的剑。
-     * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;那一块区块钉住让实体照常走刻。主人不在线,
-     * 本能事件进出箱,读得到。
+     * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;那一块区块钉住让实体照常走刻。本能事件进她的收件箱,读得到。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
@@ -316,14 +315,13 @@ public class CombatGameTests {
                 level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
             }
         }
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), java.util.UUID.randomUUID(),
-                "gametest_cornered", java.util.UUID.randomUUID(), level,
-                new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5));
+        NumenPlayer companion = GameTestKit.withBrain(CompanionFactory.spawn(level.getServer(),
+                java.util.UUID.randomUUID(), "gametest_cornered", java.util.UUID.randomUUID(), level,
+                new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5)));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
         Zombie zombie = EntityType.ZOMBIE.create(level);
         helper.assertTrue(zombie != null, "zombie did not spawn");
-        var outbox = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer());
 
         steps(helper)
                 .thenIdle(40)
@@ -335,18 +333,17 @@ public class CombatGameTests {
                     level.addFreshEntity(zombie);
                 })
                 .thenWaitUntil(() -> {
-                    var flee = outbox.peek(companion.getUUID()).entries().stream()
+                    var flee = GameTestKit.events(companion).stream()
                             .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX)
                                     && e.text().contains("reflex=\"flee\""))
                             .toList();
                     helper.assertTrue(!flee.isEmpty() && flee.get(0).text().contains("no way out"),
                             "the flee instinct did not report that there was nowhere to run: "
-                                    + outbox.peek(companion.getUUID()).entries());
+                                    + GameTestKit.events(companion));
                     helper.assertTrue(zombie.getLastHurtByMob() == companion,
                             "cornered, she did not fight back (zombie health " + zombie.getHealth() + ")");
                 })
                 .thenExecute(() -> {
-                    outbox.forget(companion.getUUID());
                     zombie.discard();
                     CompanionFactory.despawn(level.getServer(), companion);
                     level.setChunkForced(cx, cz, false);

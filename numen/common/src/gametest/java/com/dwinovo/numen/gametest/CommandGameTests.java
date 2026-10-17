@@ -3,7 +3,6 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenCommands;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
@@ -497,7 +496,6 @@ public class CommandGameTests {
     public static void command_long_work_is_accepted_and_finished_under_one_id(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_worker", new BlockPos(4, 2, 4), false);
         ToolRun run = lua(companion, "gt.gt_long.linger(10)");
-        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.task() != null, "the long work was not found under the call's id: " + run.reply());
@@ -509,7 +507,6 @@ public class CommandGameTests {
             helper.assertTrue(run.receipt() != null
                             && run.receipt().contains("line 1 gt.gt_long.linger: stood for 10 ticks"),
                     "the receipt does not answer the reply with the task's end: " + run.receipt());
-            outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

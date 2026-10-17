@@ -23,8 +23,8 @@ public class PluginGameTests {
 
     /**
      * 插件经那扇门挂上的东西,和 Numen API 自带的走同一条路:测试里登记一个假插件,它从身体上读一段状态
-     * (只对这只同伴说话),再登记一种事件并发一条。{@code status_self} 里有那段状态;主人不在线,
-     * 那条事件以插件登记的类型进出箱,kind 就是那个类型。
+     * (只对这只同伴说话),再登记一种事件并发一条。{@code status_self} 里有那段状态;
+     * 那条事件以插件登记的类型进她的收件箱,kind 就是那个类型。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
     public static void a_plugins_body_state_and_event_reach_her(GameTestHelper helper) {
@@ -39,7 +39,6 @@ public class PluginGameTests {
                     "put on a gametest charm", false);
         });
         ToolRun reply = lua(companion, "numen.status.self()");
-        var outbox = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "status_self has not replied");
@@ -49,13 +48,12 @@ public class PluginGameTests {
                             && status.get("body_state").getAsString()
                             .endsWith("</worn><gametest_charm>wearing a gametest charm</gametest_charm>"),
                     "status_self leaves out what the plugin reads off her body: " + reply.reply());
-            var kept = outbox.peek(self).entries().stream()
+            var kept = GameTestKit.events(companion).stream()
                     .filter(e -> e.type().equals("gametest_charm_changed")).toList();
             helper.assertTrue(kept.size() == 1
                             && kept.get(0).text().startsWith("<event kind=\"gametest_charm_changed\"")
                             && kept.get(0).text().contains("slot=\"neck\""),
-                    "the plugin's event did not go out as its own kind: " + outbox.peek(self).entries());
-            outbox.forget(self);
+                    "the plugin's event did not go out as its own kind: " + GameTestKit.events(companion));
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

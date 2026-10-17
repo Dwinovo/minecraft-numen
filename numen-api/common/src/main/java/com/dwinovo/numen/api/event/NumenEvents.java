@@ -1,22 +1,18 @@
 package com.dwinovo.numen.api.event;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.script.ScriptCall;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.network.payload.NumenEventPayload;
-import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.task.TaskResult;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,7 +23,7 @@ import java.util.regex.Pattern;
  * <h2>为什么收成一个口</h2>
  * 多开一条发事件的路,就多一套"带不带时间戳""主人离线怎么办""攒不攒",而它们
  * 必然分叉:同样是"主人下线时任务做完了",一条路直接丢、另一条能留六条。
- * 一个问题只能有一个答案,所以只有这一个入口。
+ * 一个问题只能有一个答案,所以只有这一个入口,也只有一个去处:她的收件箱。
  *
  * <h2>种类查表</h2>
  * 发的是哪一种事由类型表({@link EventTypes})说了算:条目的 {@code type} 就是种类,
@@ -38,12 +34,12 @@ import java.util.regex.Pattern;
  * <ol>
  *   <li><b>盖时间戳</b>——每条事件都带游戏内日期与时刻。模型能自己判断哪些信息
  *       过期了(死前捡的铁矿在死亡地点掉了),我们就不必替它清箱;</li>
- *   <li><b>主人离线不丢</b>——进 {@link EventOutbox} 跟着存档落盘,主人登录时补发。
- *       每一种事件都享受这条,没有例外。</li>
+ *   <li><b>主人离线不丢</b>——她的大脑在服务端,事件直接进她的收件箱,收件箱跟着她的家落盘,主人在不在线都一样
+ *       (离线只是攒着,他回来再处理)。每一种事件都享受这条,没有例外。</li>
  * </ol>
  *
  * <h2>urgent</h2>
- * {@code true} = <em>她不知道这件事,正在做的事就是错的</em>。到了客户端队列,
+ * {@code true} = <em>她不知道这件事,正在做的事就是错的</em>。到了她的收件箱,
  * urgent 会立刻带走队列里攒的一切并开一轮;非 urgent 攒着,等够数、够久、
  * 或者主人说话时搭车。类型表说某种事恒为急件的,发送方怎么标都是急件;其余由
  * 发事件的人判断——判断错了主人会觉得同伴很吵,那是内容包自己的名声。
@@ -210,7 +206,7 @@ public final class NumenEvents {
     }
 
     /**
-     * 发一条世界事件。主人在线直接送达,离线进出箱等他回来。
+     * 发一条世界事件,送进她的收件箱。
      *
      * @param type   事件种类,类型表里登记过的世界的事
      * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null
@@ -240,49 +236,18 @@ public final class NumenEvents {
     }
 
     /**
-     * 一条造好的事件送给主人的大脑:主人在线直接送达,离线进出箱等他回来。归了在跑的程序、之后程序却没能用上的收尾也经这里。
+     * 一条造好的事件送进她的收件箱:她的大脑在服务端,主人在不在线都一样(离线只是攒着)。归了在跑的程序、之后程序却没能用上的
+     * 收尾也经这里。没有大脑的身体(还没配上大脑、已经遣散)没有收件箱,留一行日志。
      */
     public static void deliver(NumenPlayer companion, EventQueue.Entry entry) {
-        MinecraftServer server = companion.level().getServer();
         UUID uuid = companion.getUUID();
-        String type = entry.type();
-        boolean urgent = entry.urgent();
-        // 她有服务端大脑:事件直接进她的收件箱,主人在不在线都一样(离线只是攒着)
-        var brain = com.dwinovo.numen.api.brain.CompanionLoops.get(uuid);
-        if (brain.isPresent()) {
-            brain.get().push(List.of(entry));
-            Constants.LOG.info("[numen-event] {} kind={}{} → 服务端大脑", uuid, type, urgent ? " URGENT" : "");
+        var brain = CompanionLoops.get(uuid);
+        if (brain.isEmpty()) {
+            Constants.LOG.warn("[numen-event] {} kind={} 没有大脑,这条事件没人收", uuid, entry.type());
             return;
         }
-        ServerPlayer owner = companion.resolveOwnerPlayer();
-        route(uuid, entry,
-                owner == null ? null : payload -> {
-                    NumenNetwork.sendToPlayer(owner, payload);
-                    Constants.LOG.info("[numen-event] {} kind={}{} → 客户端", uuid, type,
-                            urgent ? " URGENT" : "");
-                },
-                kept -> {
-                    // 主人不在:留着。他下线期间她照样在干活,回来该知道发生了什么。
-                    EventOutbox outbox = EventOutbox.get(server);
-                    outbox.put(uuid, kept);
-                    Constants.LOG.info("[numen-event] {} kind={}{} → 暂存(主人离线,已攒 {} 条)",
-                            uuid, type, urgent ? " URGENT" : "", outbox.peek(uuid).size());
-                });
-    }
-
-    /**
-     * 一条造好的事件往哪去:主人在线({@code toOwner} 不为 null)装进一个包直送他的客户端,
-     * 离线交给 {@code keep} 进出箱。
-     *
-     * <p>纯逻辑,不碰网络与存档——留这个缝是为了"在线直送、离线进出箱"能被单测钉住。
-     */
-    static void route(UUID companion, EventQueue.Entry entry,
-                      Consumer<NumenEventPayload> toOwner, Consumer<EventQueue.Entry> keep) {
-        if (toOwner != null) {
-            toOwner.accept(new NumenEventPayload(companion, List.of(entry)));
-        } else {
-            keep.accept(entry);
-        }
+        brain.get().push(List.of(entry));
+        Constants.LOG.info("[numen-event] {} kind={}{} → 大脑", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
     }
 
     /**
@@ -339,18 +304,6 @@ public final class NumenEvents {
             }
         }
         return sb.append('>').append(escape(text)).append("</event>").toString();
-    }
-
-    /**
-     * 同一条事件换一段正文:开头的 {@code <event …>} 连同种类、时刻与编号原样留着,只把正文换成 {@code body}。
-     * 包装不下时缩短正文用它({@code NumenEventPayload#shrunk}),{@link #finishOf} 照样读得出是哪件活。
-     * 不是 {@code <event>} 的条目没有开头可留,整段换成 {@code body}。
-     */
-    public static String withBody(String text, String body) {
-        if (!text.startsWith("<event ")) {
-            return body;
-        }
-        return text.substring(0, text.indexOf('>') + 1) + escape(body) + "</event>";
     }
 
     /** 游戏内时刻 HH:mm。原版 0 刻 = 早上 6 点。 */

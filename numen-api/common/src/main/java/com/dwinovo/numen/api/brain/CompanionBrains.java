@@ -1,12 +1,9 @@
 package com.dwinovo.numen.api.brain;
 
-import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenPaths;
-import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.home.Homes;
@@ -16,7 +13,6 @@ import com.dwinovo.numen.api.program.LocalPrograms;
 import net.minecraft.server.MinecraftServer;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -29,7 +25,7 @@ import java.util.function.IntSupplier;
  * ({@link Conversations})、驾驶席归外接大脑宿主。
  *
  * <p>{@link #ensure} 是"她存在,她就有大脑":名册上有、大脑表里没有就建,建之前先把旧版客户端留下的数据搬进来
- * ({@link LegacyMigration},复制不移动、只做一次),再把离线出箱里攒着的事件放进她的收件箱。
+ * ({@link LegacyMigration},复制不移动、只做一次)。
  *
  * <p>线程:服务端主线程。
  */
@@ -106,12 +102,6 @@ public final class CompanionBrains {
                 new LlmMind(ProviderLibrary.instance()), Replies.link(server, owner),
                 () -> server.getPlayerList().getPlayer(owner) != null,
                 com.dwinovo.numen.api.mcp.server.McpMode.instance()::driving);
-        // 离线出箱里攒着的:从此她的收件箱就是离线时攒东西的地方,出箱里的一次性倒进来
-        List<EventQueue.Entry> pending = EventOutbox.get(server).take(companion, System.currentTimeMillis());
-        if (!pending.isEmpty()) {
-            loop.push(pending);
-            Constants.LOG.info("[numen-outbox] {} 的 {} 条离线输入进了收件箱", companion, pending.size());
-        }
         return loop;
     }
 

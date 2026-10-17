@@ -154,13 +154,79 @@ public final class GameTestKit {
                                        boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(rel);
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = withBrain(CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
-                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5)));
         if (creative) {
             companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         }
         return companion;
+    }
+
+    /** 不思考的脑:GameTest 造的同伴只要一个收事件的收件箱,主人不在线,她待命,事件原样攒着;真被叫去想是用例写错了。 */
+    private static final com.dwinovo.numen.api.brain.Mind SILENT = new com.dwinovo.numen.api.brain.Mind() {
+        @Override
+        public com.dwinovo.numen.api.agent.loop.Cause unavailable(String provider) {
+            return com.dwinovo.numen.api.agent.loop.Cause.of(com.dwinovo.numen.api.agent.loop.Cause.NO_KEY, "gametest");
+        }
+
+        @Override
+        public com.dwinovo.numen.api.agent.llm.LlmEndpoint endpoint(String provider) {
+            return com.dwinovo.numen.api.agent.llm.LlmEndpoint.unresolved("");
+        }
+
+        @Override
+        public void ask(String provider, UUID companion, com.dwinovo.numen.api.agent.loop.ModelRequest request,
+                        com.dwinovo.numen.api.agent.http.CancelToken cancel,
+                        java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelPort.Delta> onDelta,
+                        java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelOutcome> onDone) {
+            throw new IllegalStateException("a GameTest companion's brain does not think");
+        }
+    };
+
+    /** 主人那一头什么也没有:不推界面,她的话也不告诉谁。 */
+    private static final com.dwinovo.numen.api.brain.CompanionLoops.Link NO_OWNER =
+            new com.dwinovo.numen.api.brain.CompanionLoops.Link() {
+                @Override
+                public boolean hasClient() {
+                    return false;
+                }
+
+                @Override
+                public void send(UUID companion, List<com.dwinovo.numen.api.brain.Feed> events) {
+                }
+
+                @Override
+                public void tell(UUID companion, String said) {
+                }
+            };
+
+    /**
+     * 给一具直接造出来的身体配上收事件的大脑({@link #SILENT}):世界上发生的事经产品里同一个口({@code NumenEvents})进她的收件箱,
+     * 用例从 {@link #events} 读。
+     */
+    static NumenPlayer withBrain(NumenPlayer companion) {
+        try {
+            com.dwinovo.numen.api.store.Io io = com.dwinovo.numen.api.NumenIo.inline("numen-gametest");
+            com.dwinovo.numen.api.brain.CompanionBrains.create(companion.getServer(), companion.getUUID(),
+                    companion.getOwnerUuid(), new com.dwinovo.numen.api.home.Home(
+                            java.nio.file.Files.createTempDirectory("numen-gametest-brain-"), io), SILENT, NO_OWNER,
+                    () -> false, () -> false, () -> EventQueue.DEFAULT_LEVEL, id -> null);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return companion;
+    }
+
+    /** 她收件箱里此刻的条目,只看不取:世界上发生的事(任务收尾、本能、服务器的话……)的唯一去处。 */
+    static List<EventQueue.Entry> events(NumenPlayer companion) {
+        return com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().inbox().entries();
+    }
+
+    /** 同 {@link #events},取走并清空。 */
+    static List<EventQueue.Entry> takeEvents(NumenPlayer companion) {
+        return com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().inbox()
+                .takeEntries(System.currentTimeMillis());
     }
 
     /** 图纸夹具从测试结构目录拷进蓝图目录(幂等)。 */

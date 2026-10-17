@@ -5,7 +5,6 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.entity.CompanionFactory;
-import com.dwinovo.numen.api.entity.EventOutbox;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.List;
@@ -22,7 +21,7 @@ import net.minecraft.world.level.block.Blocks;
 /**
  * 她在水里的三件事分开管:在水面上浮着(身体的基本面,不发消息)、真缺氧才上来换气(换气本能,每次只报一条)、
  * 自己的状态进 {@code <runtime_state>}。场地是一只五乘五的水箱:基岩围壁,底是模板的地板,水从地板上一层起;
- * 事件条数从身体真发出去的出箱({@link EventOutbox},主人不在线时事件就存在那里)里数。
+ * 事件条数从她的收件箱({@link GameTestKit#events})里数:世界上发生的事都进那里。
  */
 public class FloatGameTests {
 
@@ -62,12 +61,11 @@ public class FloatGameTests {
 
     /** 这具身体至今发出去的本能事件。 */
     private static List<EventQueue.Entry> reflexes(ServerLevel level, NumenPlayer companion) {
-        return EventOutbox.get(level.getServer()).peek(companion.getUUID()).entries().stream()
+        return GameTestKit.events(companion).stream()
                 .filter(e -> e.type().equals(EventTypes.REFLEX)).toList();
     }
 
     private static void finish(ServerLevel level, NumenPlayer companion) {
-        EventOutbox.get(level.getServer()).forget(companion.getUUID());
         CompanionFactory.despawn(level.getServer(), companion);
     }
 

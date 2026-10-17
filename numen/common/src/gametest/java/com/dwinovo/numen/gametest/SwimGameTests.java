@@ -101,7 +101,6 @@ public class SwimGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(30, 2, Z));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(there) + ")");
-        var outbox = com.dwinovo.numen.api.entity.EventOutbox.get(level.getServer());
         double wallX = helper.absolutePos(new BlockPos(25, 0, Z)).getX() + 0.5;
         boolean[] walled = {false};
         int[] plannedAir = {Integer.MAX_VALUE};
@@ -125,14 +124,13 @@ public class SwimGameTests {
             helper.assertTrue(plannedAir[0] >= Breath.RESERVE,
                     "the navigation still called the dive planned with only " + plannedAir[0] + " air left");
             helper.assertTrue(lowest[0] >= companion.getMaxHealth(), "she drowned a little: lowest health " + lowest[0]);
-            var told = outbox.peek(companion.getUUID()).entries().stream()
+            var told = GameTestKit.events(companion).stream()
                     .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
                     .map(e -> e.text()).toList();
             helper.assertTrue(told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("to swim up for a breath")),
                     "no breath reflex event: " + told);
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("I went under water"),
                     "the reply does not tell the failed walk and the dive: " + walk.outcome());
-            outbox.forget(companion.getUUID());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

@@ -829,9 +829,9 @@ public class InventoryGameTests {
                 .thenSucceed();
     }
 
-    /** 主人不在线,她的事件都在出箱里:其中 inventory_full 的原文。 */
+    /** 她的事件都在她的收件箱里:其中 inventory_full 的原文。 */
     private static java.util.List<String> fullEvents(NumenPlayer companion) {
-        return com.dwinovo.numen.api.entity.EventOutbox.get(companion.getServer()).peek(companion.getUUID()).entries()
+        return GameTestKit.events(companion)
                 .stream()
                 .filter(e -> com.dwinovo.numen.api.agent.inbox.EventTypes.INVENTORY_FULL.equals(e.type()))
                 .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text)

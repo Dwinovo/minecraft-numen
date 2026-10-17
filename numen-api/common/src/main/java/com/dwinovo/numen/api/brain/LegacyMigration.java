@@ -2,20 +2,30 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.dwinovo.numen.api.store.StoreException;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -103,6 +113,42 @@ public final class LegacyMigration {
             throw new StoreException(e.getMessage(), e);
         })).write(prefs);
         return true;
+    }
+
+    /**
+     * 旧版服务端为主人离线攒的事件({@code <世界>/data/numen_event_outbox.dat}):读成她们各自该进收件箱的条目,条目原样——
+     * 类型、事发时刻、急不急都留着,她不会把"三小时前的事"当成刚发生的。读完把文件改名成 {@code .migrated},
+     * 只做一次。读不通的当作没有,文件留着。
+     *
+     * @return 各只同伴攒下的条目,按事发先后;没有旧文件是空表
+     */
+    public static Map<UUID, List<EventQueue.Entry>> outbox(Path file) {
+        if (!Files.isRegularFile(file)) {
+            return Map.of();
+        }
+        Map<UUID, List<EventQueue.Entry>> out = new LinkedHashMap<>();
+        try {
+            CompoundTag boxes = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap())
+                    .getCompound("data").getCompound("outboxes");
+            for (String key : boxes.getAllKeys()) {
+                UUID companion = UUID.fromString(key);
+                List<EventQueue.Entry> entries = new ArrayList<>();
+                ListTag list = boxes.getList(key, Tag.TAG_COMPOUND);
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag e = list.getCompound(i);
+                    entries.add(new EventQueue.Entry(e.getString("type"), e.getString("text"), e.getLong("ts"),
+                            e.getBoolean("urgent")));
+                }
+                entries.sort(Comparator.comparingLong(EventQueue.Entry::ts));
+                out.put(companion, entries);
+            }
+            Files.move(file, file.resolveSibling(file.getFileName() + ".migrated"), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | IllegalArgumentException unreadable) {
+            Constants.LOG.warn("[numen-migrate] 旧版的离线事件 {} 读不通,留着不动: {}", file, unreadable.toString());
+            return Map.of();
+        }
+        Constants.LOG.info("[numen-migrate] 旧版的离线事件 {} 条进了收件箱", out.values().stream().mapToInt(List::size).sum());
+        return out;
     }
 
     /**

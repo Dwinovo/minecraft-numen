@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.mcp.server.ServerMcp;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.script.Modules;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -63,6 +64,10 @@ public final class ServerBrains {
                 Constants.LOG.error("[numen] 同伴 {} 的大脑没能起来,跳过", companion, ex);
             }
         }
+        // 旧版为主人离线攒下的事件:一次性倒进她们的收件箱
+        Path outbox = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve("numen_event_outbox.dat");
+        LegacyMigration.outbox(outbox).forEach((companion, entries) ->
+                CompanionLoops.get(companion).ifPresent(loop -> loop.push(entries)));
     }
 
     private static void stop() {
