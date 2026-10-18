@@ -1,13 +1,9 @@
 package com.dwinovo.numen.api.home;
 
 import com.dwinovo.numen.api.store.Io;
-import com.dwinovo.numen.api.store.StoreException;
+import com.dwinovo.numen.api.store.Trees;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.stream.Stream;
 
 /**
  * 一处落盘的地方:一个目录,加上写它用的那条车道({@link Io})。用的一方拿到它就够了,不自己拼路径、不自己挑线程。
@@ -25,17 +21,6 @@ public record Home(Path dir, Io io) {
      * 目录本来就不在是什么也不做。
      */
     public void delete() {
-        io.write(() -> {
-            if (!Files.isDirectory(dir)) {
-                return;
-            }
-            try (Stream<Path> walk = Files.walk(dir)) {
-                for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) {
-                    Files.deleteIfExists(p);
-                }
-            } catch (IOException e) {
-                throw new StoreException("删不掉 " + dir + ": " + e, e);
-            }
-        });
+        io.write(() -> Trees.delete(dir));
     }
 }
