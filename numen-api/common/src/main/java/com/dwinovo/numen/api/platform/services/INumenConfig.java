@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.platform.services;
 
 /**
- * Cross-loader read surface for user-editable mod configuration. Each loader
+ * Cross-loader surface for the user-editable server configuration. Each loader
  * ships its own implementation hooked into its native config system —
  * NeoForge wraps a {@code ModConfigSpec} (TOML), Fabric reads a Gson JSON
  * file under {@code <gameDir>/config/numen.json}.
@@ -12,11 +12,7 @@ package com.dwinovo.numen.api.platform.services;
  * the parsed values in memory. Editing the config file therefore takes effect
  * on the next server restart, not immediately.
  *
- * <h2>Why no setters</h2>
- * Mutation paths differ wildly between loaders (NeoForge needs the screen
- * config GUI, Fabric needs an external editor or our own command). Keep
- * this interface read-only; a future {@code INumenConfigEditor} can layer
- * on top when we need it.
+ * <p>只有服务端用的项(代理、系统提示词)。语音识别的设置是这台电脑(客户端)的,在 {@code ISttSettings}。
  */
 public interface INumenConfig {
 
@@ -36,35 +32,11 @@ public interface INumenConfig {
      */
     String getSystemPrompt();
 
-    // ---- write surface (client-side: invoked by the settings panels) ----
+    // ---- 写入口:管理员在客户端的设置面板里改服务器的这两项(经 Libraries 的 ServerConfig) ----
 
     void setProxy(String value);
 
     void setSystemPrompt(String value);
-
-    // ---- STT (voice input) — global, one microphone / one transcription service ----
-
-    /** STT provider id selecting the preset (wire adapter + default endpoint). Default {@code siliconflow}. */
-    String getSttProvider();
-
-    // 识别服务的 key 不在这里:它在这台电脑的钥匙串里(config/numen/client/keys/),按识别服务商存。
-
-    /** STT base URL override. Empty = use the provider preset's default endpoint. */
-    String getSttBaseUrl();
-
-    /** STT model id (e.g. {@code whisper-1}, {@code FunAudioLLM/SenseVoiceSmall}). */
-    String getSttModel();
-
-    /** Chosen input device name; empty = first available microphone. */
-    String getSttMicrophone();
-
-    void setSttProvider(String value);
-
-    void setSttBaseUrl(String value);
-
-    void setSttModel(String value);
-
-    void setSttMicrophone(String value);
 
     /**
      * Flush in-memory changes to the loader-native config file. Best-effort:
@@ -74,7 +46,7 @@ public interface INumenConfig {
      * <p>Fabric impl rewrites {@code config/numen.json} directly. NeoForge
      * impl writes through {@code ModConfigSpec.ConfigValue.set()}, which
      * NeoForge persists to {@code numen-common.toml} on its own schedule
-     * (this method nudges that schedule when possible).
+     * (this method nudges that schedule when possible). Paper rewrites {@code plugins/numen/config.json}.
      */
     void save();
 }

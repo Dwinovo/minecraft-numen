@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.stt;
 
 import com.dwinovo.numen.api.client.voice.VoiceWords;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.platform.services.INumenConfig;
+import com.dwinovo.numen.api.platform.services.ISttSettings;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
@@ -31,7 +31,7 @@ public final class VoiceInputController {
      * 只在回调口径——增量与最终分开,方便"松开后拿最终转写直接发送"的用法。
      * 已在录音中则直接返回 false(两条路共用一只麦克风,不并录)。
      */
-    public static synchronized boolean start(INumenConfig cfg, Consumer<String> onPartial,
+    public static synchronized boolean start(ISttSettings cfg, Consumer<String> onPartial,
                                              Consumer<String> onFinal, Consumer<String> onStatus) {
         if (isActive()) {
             return false;
@@ -119,7 +119,7 @@ public final class VoiceInputController {
      * 切换录音。{@code onText} 收到(增量/最终)转写文本刷输入框;{@code onStatus}
      * 收到状态/错误提示(如未配置、无麦克风、请求失败)。
      */
-    public static synchronized void toggle(INumenConfig cfg, Consumer<String> onText, Consumer<String> onStatus) {
+    public static synchronized void toggle(ISttSettings cfg, Consumer<String> onText, Consumer<String> onStatus) {
         if (isActive()) {
             MicrophoneManager.stop();   // 采集线程收尾时回调 session.finish()
             active = false;

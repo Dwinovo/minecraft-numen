@@ -4,7 +4,8 @@ import com.dwinovo.numen.api.platform.services.INumenConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * NeoForge implementation of {@link INumenConfig}. Backed by a
+ * NeoForge implementation of {@link INumenConfig} (and the one TOML spec that also holds the client's voice-input
+ * settings, see {@link NeoForgeSttSettings}). Backed by a
  * {@code ModConfigSpec} that NeoForge serialises as TOML under
  * {@code <gameDir>/config/numen-common.toml}. Editable in-game via
  * NeoForge's built-in config screen (Mods → Numen → Config).
@@ -69,27 +70,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
         return safe(PROXY);
     }
 
-    @Override
-    public String getSttProvider() {
-        String s = safe(STT_PROVIDER);
-        return s.isEmpty() ? "siliconflow" : s;
-    }
-
-    @Override
-    public String getSttBaseUrl() {
-        return safe(STT_BASE_URL);
-    }
-
-    @Override
-    public String getSttModel() {
-        return safe(STT_MODEL);
-    }
-
-    @Override
-    public String getSttMicrophone() {
-        return safe(STT_MICROPHONE);
-    }
-
     // ---- mutations ----
 
     @Override
@@ -100,26 +80,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     @Override
     public void setSystemPrompt(String value) {
         SYSTEM_PROMPT.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttProvider(String value) {
-        STT_PROVIDER.set(value == null || value.isBlank() ? "siliconflow" : value);
-    }
-
-    @Override
-    public void setSttBaseUrl(String value) {
-        STT_BASE_URL.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttModel(String value) {
-        STT_MODEL.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttMicrophone(String value) {
-        STT_MICROPHONE.set(value == null ? "" : value);
     }
 
     /**
@@ -149,7 +109,7 @@ public final class NeoForgeNumenConfig implements INumenConfig {
      * before the spec is fully bound — returns the empty string instead of
      * letting an exception escape into the LLM call site.
      */
-    private static String safe(ModConfigSpec.ConfigValue<String> v) {
+    static String safe(ModConfigSpec.ConfigValue<String> v) {
         try {
             String s = v.get();
             return s == null ? "" : s;

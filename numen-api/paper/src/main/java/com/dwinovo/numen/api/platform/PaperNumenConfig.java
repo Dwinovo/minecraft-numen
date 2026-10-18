@@ -16,8 +16,8 @@ import java.nio.file.Path;
 
 /**
  * Paper 上的 {@link INumenConfig}:配置根下的 {@code config.json},第一次用到时没有就写一份带出厂值的。
- * 服务端只用代理与系统提示词两项;语音识别是客户端的设置,服务端没有设置面板,也就没有写入口。
- * 文件改了要重启才生效。
+ * 只有代理与系统提示词两项(语音识别是客户端的设置,见 {@code ISttSettings})。管理员在客户端面板里改的会写回这个文件;
+ * 手改文件要重启才生效。
  *
  * <p>文件坏了(不是合法的 JSON)是启动期的错,直接抛出并指明是哪个文件,不动原文件,也不悄悄换成出厂值顶上。
  */
@@ -65,71 +65,23 @@ public final class PaperNumenConfig implements INumenConfig {
         }
     }
 
-    // ---- 写入口:Paper 服务端没有设置面板 ----
+    // ---- 写入口:管理员在客户端的设置面板里改服务器的这两项,落在内存里,save 写回文件 ----
 
     @Override
-    public void setProxy(String value) {
-        throw readOnly();
-    }
-
-    @Override
-    public void setSystemPrompt(String value) {
-        throw readOnly();
+    public synchronized void setProxy(String value) {
+        data().proxy = value == null ? "" : value;
     }
 
     @Override
-    public void save() {
-        throw readOnly();
-    }
-
-    // ---- 语音识别:客户端的设置 ----
-
-    @Override
-    public String getSttProvider() {
-        throw clientOnly();
+    public synchronized void setSystemPrompt(String value) {
+        data().systemPrompt = value == null ? "" : value;
     }
 
     @Override
-    public String getSttBaseUrl() {
-        throw clientOnly();
-    }
-
-    @Override
-    public String getSttModel() {
-        throw clientOnly();
-    }
-
-    @Override
-    public String getSttMicrophone() {
-        throw clientOnly();
-    }
-
-    @Override
-    public void setSttProvider(String value) {
-        throw clientOnly();
-    }
-
-    @Override
-    public void setSttBaseUrl(String value) {
-        throw clientOnly();
-    }
-
-    @Override
-    public void setSttModel(String value) {
-        throw clientOnly();
-    }
-
-    @Override
-    public void setSttMicrophone(String value) {
-        throw clientOnly();
-    }
-
-    private static UnsupportedOperationException readOnly() {
-        return new UnsupportedOperationException("Paper 服务端的 Numen 配置只读:改 " + FILE_NAME + " 后重启");
-    }
-
-    private static UnsupportedOperationException clientOnly() {
-        return new UnsupportedOperationException("语音识别是客户端的设置,服务端没有");
+    public synchronized void save() {
+        Path file = NumenPaths.config().resolve(FILE_NAME);
+        Atomic.write(file, GSON.toJson(data()));
+        Constants.LOG.info("[numen-config] saved {}", file);
     }
 
     /** 文件的内容。字段名就是 JSON 的键。 */
