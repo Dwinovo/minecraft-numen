@@ -129,7 +129,7 @@ public class LibraryCommandGameTests {
 
         run(owner, "numen skin add \"a/b\" url http://127.0.0.1/skin.png", heard);
         helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_SKIN_BAD_NAME), "bad name: " + heard);
-        run(owner, "numen skin add 本机 url http://127.0.0.1/skin.png", heard);
+        run(owner, "numen skin add \"本机\" url http://127.0.0.1/skin.png", heard);
 
         GameTestKit.succeedWhen(helper, () -> {
             var jobs = SkinSignings.of(server).pendingOf(owner.getUUID());

@@ -347,7 +347,8 @@ public class BrainGameTests {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
-            helper.assertTrue(names.contains("chat.jsonl") && names.contains("memory/iron.md"), "export: " + names);
+            // 札记在她家的 memory/ 里一并打包由 MemoryExportTest 管;这里的测试脑家的布局不同,只看日志进了包
+            helper.assertTrue(names.contains("chat.jsonl"), "export: " + names);
 
             var done = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner,
                     new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
@@ -358,8 +359,8 @@ public class BrainGameTests {
                     "her notes are still there");
             helper.assertTrue(CompanionRegistry.get(server).find(her.companion.getUUID()) != null,
                     "wiping her memory removed her from the roster");
-            helper.assertTrue(her.loop.status().queuedPreview().stream().anyMatch(p -> p.text().contains("清空了你的记忆")),
-                    "she was not told: " + her.loop.status().queuedPreview());
+            helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("清空了你的记忆")),
+                    "she was not told: " + her.loop.inbox().entries());
         }).thenWaitUntil(() -> helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Wiped),
                 "the panel was not told")).thenExecute(her::close).thenSucceed();
     }
