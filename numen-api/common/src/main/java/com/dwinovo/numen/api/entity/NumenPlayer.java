@@ -350,15 +350,20 @@ public final class NumenPlayer extends ServerPlayer {
      * cache; empty when the name is unknown.
      */
     public static String playerName(net.minecraft.server.MinecraftServer server, UUID player) {
-        return profileOf(server, player).map(com.mojang.authlib.GameProfile::getName).orElse("");
+        return profileOf(server, player).getName();
     }
 
-    /** A player's profile: the online player's (a companion is one too), else the server's profile cache. */
-    public static java.util.Optional<com.mojang.authlib.GameProfile> profileOf(
-            net.minecraft.server.MinecraftServer server, UUID player) {
+    /**
+     * A player's profile: the online player's (a companion is one too), else the server's profile cache, else what is
+     * known of him without it — his id and no name (op lists are keyed by id).
+     */
+    public static com.mojang.authlib.GameProfile profileOf(net.minecraft.server.MinecraftServer server, UUID player) {
         ServerPlayer online = server.getPlayerList().getPlayer(player);
-        return online != null ? java.util.Optional.of(online.getGameProfile())
-                : java.util.Optional.ofNullable(server.getProfileCache()).flatMap(cache -> cache.get(player));
+        if (online != null) {
+            return online.getGameProfile();
+        }
+        return java.util.Optional.ofNullable(server.getProfileCache()).flatMap(cache -> cache.get(player))
+                .orElseGet(() -> new com.mojang.authlib.GameProfile(player, ""));
     }
 
     /** True if {@code item} sits anywhere in the inventory (hotbar/main/offhand all count). */

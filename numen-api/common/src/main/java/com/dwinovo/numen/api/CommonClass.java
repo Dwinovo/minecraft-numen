@@ -69,7 +69,7 @@ public class CommonClass {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> {
             numen.api("api", "The API itself: the typed signatures of a group's or a module's functions, or one "
                     + "function in full.", com.dwinovo.numen.api.sdk.HelpApi.class);
-            numen.api("mc", "Minecraft and mod commands, as a player types them in chat, with your own permission "
+            numen.api("mc", "Minecraft and mod commands, as a player types them in chat, with your owner's permission "
                     + "level.", com.dwinovo.numen.api.mc.McApi.class);
             numen.api("task", "The background task and your pending timers.", com.dwinovo.numen.api.task.TaskApi.class);
             numen.api(com.dwinovo.numen.api.script.ModuleApi.GROUP, "Modules — functions written in "
