@@ -483,6 +483,12 @@ public final class BrainPanel {
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
+        // 表单里任何一个框里按回车 = 点保存(保存键不可用时回车不办事)
+        if (keyCode == com.dwinovo.numen.api.client.ui.KeyCodes.ENTER && saveButton != null && saveButton.enabled()
+                && ui.focusedWidget() instanceof com.dwinovo.numen.api.client.ui.widget.TextField) {
+            save();
+            return true;
+        }
         return fixedUi.keyPressed(keyCode, modifiers) || ui.keyPressed(keyCode, modifiers);
     }
 
