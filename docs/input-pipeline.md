@@ -565,7 +565,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 ### 14.4 谁能改服务端的配置
 
 - 判据**只在一处**:`Authority.isAdmin(ServerPlayer)` = 单人游戏的房主(`server.isSingleplayerOwner`)或 op。库协议里每种 `kind` 声明自己的访问级别(`OWN`:只能改自己名下;`ADMIN`:仅管理员),分发层统一查,工具和界面里不再另写。
-- `kind`:`persona`(OWN)、`provider`(ADMIN 改;其他人只读**脱敏视图**:id、名字、型号,没有 key、地址、代理)、`mcp-client`、`mcp-server`、`server-config`(代理、默认人设;ADMIN)、`prefs`(OWN)。脱敏发生在服务端编码那一处,客户端拿不到就不存在泄露。
+- `kind`:`persona`(OWN)、`provider`(ADMIN 改;其他人只读**脱敏视图**:id、名字、型号,没有 key、地址、代理)、`mcp-client`、`mcp-server`、`server-config`(代理、默认人设;ADMIN)、`prefs`(OWN)、`permission`(OWN:主人的规则与同伴的模式,管理员也只摸得到自己那份)。脱敏发生在服务端编码那一处,客户端拿不到就不存在泄露。
 - 普通玩家给同伴绑档案,只能从脱敏视图里选;选择也过 `OwnerInput`,服务端校验这个档案存在。
 - 待定:op 取几级(建议 4,key 会花服主的钱;但不少服只给 2-3 级)。
 

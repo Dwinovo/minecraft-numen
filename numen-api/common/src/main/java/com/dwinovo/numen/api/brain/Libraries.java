@@ -19,6 +19,9 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.mcp.client.McpOAuth;
 import com.dwinovo.numen.api.mcp.server.McpMode;
+import com.dwinovo.numen.api.permission.PermissionConfig;
+import com.dwinovo.numen.api.permission.PermissionLibrary;
+import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.SkinError;
@@ -31,7 +34,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -57,6 +62,8 @@ import java.util.UUID;
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
  *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
+ *   <li><b>权限</b>({@link #PERMISSION}):主人自己的规则与他名下每只同伴的模式,只有他读写他那一份(管理员也一样),
+ *       见 {@link PermissionLibrary};</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
  *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
  *       别人只看得到名字、连没连上、有几个工具。授权网址只给管理员,授权回来的网址也由管理员贴回({@link #AUTH})。</li>
@@ -80,6 +87,7 @@ public final class Libraries {
     public static final String KEY = "key";
     public static final String VOICE = "voice";
     public static final String SKIN = "skin";
+    public static final String PERMISSION = "permission";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
@@ -101,6 +109,9 @@ public final class Libraries {
     public static final String RESTORE = "restore";
     /** MCP 服务器专有:交回授权回调网址。 */
     public static final String AUTH = "auth";
+    /** 权限专有:清空主人层的规则;设一只同伴的模式。加一行、删一行用 {@link #PUT}、{@link #DELETE}。 */
+    public static final String RESET = PermissionLibrary.RESET;
+    public static final String MODE = PermissionLibrary.MODE;
     /** 连通性检测专有:试连一份草稿。 */
     public static final String RUN = "run";
     /** 皮肤专有:撤掉一张排着的签名(或不再显示一条失败)。 */
@@ -159,6 +170,9 @@ public final class Libraries {
         Keychain ownerKeys(UUID owner);
 
         Keychain serverKeys();
+
+        /** 这位主人的权限:他的规则存档、服主的开关、他名下的同伴。 */
+        PermissionLibrary.Ground permission(UUID owner);
 
         /** 服务器那一处 MCP 连接;没有就是 {@code null}。 */
         McpClientManager sharedMcp();
@@ -222,6 +236,28 @@ public final class Libraries {
             @Override
             public Keychain serverKeys() {
                 return models.serverKeychain();
+            }
+
+            @Override
+            public PermissionLibrary.Ground permission(UUID owner) {
+                return new PermissionLibrary.Ground() {
+                    @Override
+                    public PermissionStore store() {
+                        return PermissionStore.of(server, owner);
+                    }
+
+                    @Override
+                    public boolean hardRules() {
+                        return PermissionConfig.of(server).hardRules();
+                    }
+
+                    @Override
+                    public Map<UUID, String> companions() {
+                        Map<UUID, String> out = new LinkedHashMap<>();
+                        CompanionRegistry.get(server).ownedBy(owner).forEach(e -> out.put(e.getKey(), e.getValue().name()));
+                        return out;
+                    }
+                };
             }
 
             @Override
@@ -311,6 +347,7 @@ public final class Libraries {
                     (from, to) -> CompanionLoops.rebind(owner, Slot.VOICE, from.toString(), to.toString()));
             case SKIN -> skin(owner, admin, op, body);
             case KEY -> key(owner, admin, op, body);
+            case PERMISSION -> permission(owner, op, body);
             case SERVER_CONFIG -> Done.of(serverConfig(admin, op, body), true);
             case MCP_CLIENT -> mcpClient(owner, admin, op, body);
             case MCP_SERVER -> Done.of(mcpServer(admin, op, body), true);
@@ -319,16 +356,14 @@ public final class Libraries {
             default -> Done.of("unknown library", false);
         };
         JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
-        if (done.notice() != null) {
-            JsonObject notice = new JsonObject();
-            notice.addProperty("notice", done.notice());
-            entries.add(notice);
+        if (done.extra() != null) {
+            entries.add(done.extra());
         }
         return new Result(entries.toString(), done.problem(), null, done.shared() && done.problem() == null);
     }
 
-    /** 一次操作的结局:办不成的原因,是不是改了所有人共用的东西,以及要随答复带给这位玩家的一句提醒。 */
-    private record Done(String problem, boolean shared, String notice) {
+    /** 一次操作的结局:办不成的原因,是不是改了所有人共用的东西,以及要随答复附在整表后面带给这位玩家的一行(提醒、规则错在哪)。 */
+    private record Done(String problem, boolean shared, JsonObject extra) {
 
         static Done ok() {
             return new Done(null, false, null);
@@ -403,6 +438,7 @@ public final class Libraries {
             }
             case CATALOG -> out.add(ProviderForm.answer(catalog, ask));
             case PREFS -> out.add(sources.prefs(owner).toJson());
+            case PERMISSION -> out.addAll(PermissionLibrary.view(sources.permission(owner)));
             case NOTES -> sources.companions(owner).forEach(companion -> NoteBook.of(companion).index().forEach(note -> {
                 JsonObject o = new JsonObject();
                 o.addProperty("companion", companion.toString());
@@ -779,7 +815,12 @@ public final class Libraries {
             sources.serverKeys().put(service, key);
             return Done.ok();
         }
-        return saveOwnKey(owner, service, key) ? new Done(null, false, NOTICE_OWNER_SEES_KEY) : Done.ok();
+        if (!saveOwnKey(owner, service, key)) {
+            return Done.ok();
+        }
+        JsonObject notice = new JsonObject();
+        notice.addProperty("notice", NOTICE_OWNER_SEES_KEY);
+        return new Done(null, false, notice);
     }
 
     /**
@@ -796,6 +837,28 @@ public final class Libraries {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 权限:每位玩家只摸得到自己那一份,不看是不是管理员。规则写错了,整表后面多一行 {@code {"mistake": {"code", "args"}}},
+     * 界面照码翻成主人的语言(和命令同一套 {@code numen.command.rule_mistake.<码>});原因的英文原话照常在 {@code problem} 里。
+     */
+    private Done permission(UUID owner, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return Done.ok();
+        }
+        PermissionLibrary.Outcome outcome = PermissionLibrary.write(sources.permission(owner), op, body);
+        if (outcome.mistake() == null) {
+            return Done.problem(outcome.problem());
+        }
+        JsonObject mistake = new JsonObject();
+        mistake.addProperty("code", outcome.mistake().code());
+        JsonArray args = new JsonArray();
+        outcome.mistake().args().forEach(args::add);
+        mistake.add("args", args);
+        JsonObject extra = new JsonObject();
+        extra.add("mistake", mistake);
+        return new Done(outcome.problem(), false, extra);
     }
 
     /** 外接大脑宿主的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在游戏里用命令发的。 */

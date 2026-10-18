@@ -26,6 +26,17 @@ public final class RemoteLibrary {
     private final Map<String, String> problems = new HashMap<>();
     private final Map<String, Long> revisions = new HashMap<>();
     private final Map<String, Long> edits = new HashMap<>();
+    /** 等答复的请求:请求号 → 发请求的那一处。答复一到(带着同一个号)交过去、摘掉。 */
+    private final Map<Long, Consumer<Reply>> waiting = new HashMap<>();
+    private long nextRequest = 1;
+
+    /** 服务端对一次请求的答复:没办成的原因(办成是 null)。 */
+    public record Reply(String problem) {
+
+        public boolean ok() {
+            return problem == null;
+        }
+    }
 
     public RemoteLibrary(Consumer<LibraryRequestPayload> send) {
         this.send = send;
@@ -68,6 +79,20 @@ public final class RemoteLibrary {
         send.accept(new LibraryRequestPayload(kind, "put", entry.toString()));
     }
 
+    /**
+     * 存一条并等它的答复:{@code onReply} 在服务端答这一次请求时(只答这一次,推送不算)调一次,这时表已经是答复里的那张。
+     */
+    public void put(String kind, JsonObject entry, Consumer<Reply> onReply) {
+        request(kind, "put", entry, onReply);
+    }
+
+    /** 这种库的一个专有操作,并等它的答复(见 {@link #put(String, JsonObject, Consumer)})。 */
+    public void request(String kind, String op, JsonObject body, Consumer<Reply> onReply) {
+        long id = nextRequest++;
+        waiting.put(id, onReply);
+        send.accept(new LibraryRequestPayload(kind, op, body.toString(), id));
+    }
+
     /** 这种库的一个专有操作(接上、断开、重扫、交回授权网址……),能不能办由服务端判。 */
     public void request(String kind, String op, JsonObject body) {
         send.accept(new LibraryRequestPayload(kind, op, body.toString()));
@@ -108,6 +133,10 @@ public final class RemoteLibrary {
         } else {
             problems.put(p.kind(), p.problem());
         }
+        Consumer<Reply> asked = p.request() == 0 ? null : waiting.remove(p.request());
+        if (asked != null) {
+            asked.accept(new Reply(p.problem().isEmpty() ? null : p.problem()));
+        }
     }
 
     /** 断线:服务器上的东西都不算数了。 */
@@ -117,5 +146,6 @@ public final class RemoteLibrary {
         problems.clear();
         revisions.clear();
         edits.clear();
+        waiting.clear();
     }
 }

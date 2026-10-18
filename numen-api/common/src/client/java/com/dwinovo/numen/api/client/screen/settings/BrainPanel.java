@@ -17,6 +17,7 @@ import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.mcp.server.McpConfig;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.RemoteLibrary;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.mcp.server.McpAccessPrompt;
 import com.google.gson.JsonArray;
@@ -84,9 +85,6 @@ public final class BrainPanel {
 
     /** 搭这一页时的宿主状态;{@code null} = 不是管理员(或服务端还没说)。配置变了才重搭,谁连着这类随时在变的不重搭。 */
     private ServerLibraries.McpServerState builtFor;
-    /** 发出去等回执的保存:发的时候这张表被推来几次,变了就是服务端答了。 */
-    private boolean awaitingSave;
-    private long savedAtRevision;
     private long lastAskMs;
 
     /** 手绘几条的基线(滚动层坐标,画的时候减 {@link ScrollBox#offset()})。 */
@@ -293,30 +291,19 @@ public final class BrainPanel {
         body.addProperty("port", portValue());
         body.addProperty("callTimeoutSeconds", Math.max(1, timeout));
         body.add("hiddenTools", hidden);
-        send(body);
-        awaitingSave = true;
+        RemoteCompanions.library().put(Libraries.MCP_SERVER, body, this::settleSave);
     }
 
     /** 拨一个开关,只改这一项。 */
     private void put(String key, boolean value) {
         JsonObject body = new JsonObject();
         body.addProperty(key, value);
-        send(body);
-    }
-
-    private void send(JsonObject body) {
-        savedAtRevision = RemoteCompanions.library().revision(Libraries.MCP_SERVER);
         RemoteCompanions.library().put(Libraries.MCP_SERVER, body);
     }
 
     /** 服务端答了保存:办成,草稿作废、配置重新成为真源;没办成(最常见是端口被占),话挂回出错的那个框。 */
-    private void settleSave() {
-        if (!awaitingSave || RemoteCompanions.library().revision(Libraries.MCP_SERVER) == savedAtRevision) {
-            return;
-        }
-        awaitingSave = false;
-        String problem = RemoteCompanions.library().problem(Libraries.MCP_SERVER);
-        if (problem == null) {
+    private void settleSave(RemoteLibrary.Reply reply) {
+        if (reply.ok()) {
             portText = timeoutText = hiddenText = null;
             lanOn = null;
             notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
@@ -343,7 +330,6 @@ public final class BrainPanel {
             lastAskMs = nowMs;
             RemoteCompanions.library().ask(Libraries.MCP_SERVER);
         }
-        settleSave();
         if (mcp == null || !mcp.sameConfig(builtFor)) {
             if (mcp != null || builtFor != null) build(x, y, w, h);
             mcp = state();

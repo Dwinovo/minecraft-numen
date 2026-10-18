@@ -382,6 +382,25 @@ public final class ModLanguageData {
         public static final String COMMAND_RULES_RESET       = "numen.command.rules_reset";
         /** 规则写错了({@code Rule.Mistake}),后接原因码。 */
         public static final String COMMAND_RULE_MISTAKE_PREFIX = "numen.command.rule_mistake.";
+        // 设置里的"权限"页
+        public static final String PERMISSION_ADD            = "numen.permission.panel.add";
+        public static final String PERMISSION_EMPTY          = "numen.permission.panel.empty";
+        public static final String PERMISSION_CLEAR          = "numen.permission.panel.clear";
+        public static final String PERMISSION_CLEAR_CONFIRM  = "numen.permission.panel.clear_confirm";
+        public static final String PERMISSION_DELETE_CONFIRM = "numen.permission.panel.delete_confirm";
+        public static final String PERMISSION_HARD_ON        = "numen.permission.panel.hard_on";
+        public static final String PERMISSION_HARD_OFF       = "numen.permission.panel.hard_off";
+        public static final String PERMISSION_NO_COMPANIONS  = "numen.permission.panel.no_companions";
+        public static final String PERMISSION_SOURCE_OWNER   = "numen.permission.panel.source_owner";
+        public static final String PERMISSION_FORM_VERDICT   = "numen.permission.panel.form_verdict";
+        public static final String PERMISSION_FORM_RULE      = "numen.permission.panel.form_rule";
+        public static final String PERMISSION_FORM_HINT      = "numen.permission.panel.form_hint";
+        /** 同伴模式的名字,后接 {@code ask}、{@code bypass}、{@code observe}。 */
+        public static final String PERMISSION_MODE_PREFIX    = "numen.permission.panel.mode.";
+        /** 判决的名字,后接 {@code deny}、{@code ask}、{@code allow}。 */
+        public static final String PERMISSION_TABLE_PREFIX   = "numen.permission.panel.table.";
+        /** 规则列表的分组标题,后接 {@code <层>.<判决>},如 {@code owner.deny}。 */
+        public static final String PERMISSION_GROUP_PREFIX   = "numen.permission.panel.group.";
         public static final String COMMAND_CONSENT_ANSWERED  = "numen.command.consent_answered";
         public static final String COMMAND_CONSENT_NOT_OWNER = "numen.command.consent_not_owner";
         public static final String COMMAND_CONSENT_NOT_PENDING = "numen.command.consent_not_pending";
@@ -550,6 +569,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.brain", "MCP Brain");
         adder.add("numen.settings.nav.skills", "Skills");
         adder.add("numen.settings.nav.theme", "Theme");
+        adder.add("numen.settings.nav.permission", "Permissions");
         // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
         adder.add("numen.brain.title", "External Brain (MCP)");
         adder.add("numen.brain.enable", "Enable external brain");
@@ -1042,6 +1062,30 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_NO_ROW,       "%s has no row %s (it has %s); /numen permission rules list shows the numbers");
         adder.add(Keys.COMMAND_RULE_REMOVED,      "Removed from %s: %s");
         adder.add(Keys.COMMAND_RULES_RESET,       "Cleared your deny, ask and allow tables; the factory rules still apply");
+        adder.add(Keys.PERMISSION_ADD,            "Add a rule");
+        adder.add(Keys.PERMISSION_EMPTY,          "No rules to show yet");
+        adder.add(Keys.PERMISSION_CLEAR,          "Clear");
+        adder.add(Keys.PERMISSION_CLEAR_CONFIRM,  "Clear all of your own rules? The factory rules and the server's hard rules still apply.");
+        adder.add(Keys.PERMISSION_DELETE_CONFIRM, "Remove this rule: %s");
+        adder.add(Keys.PERMISSION_HARD_ON,        "Hard rules are on: the server owner's, nothing lifts them");
+        adder.add(Keys.PERMISSION_HARD_OFF,       "The server owner has switched the hard rules off");
+        adder.add(Keys.PERMISSION_NO_COMPANIONS,  "No companions yet");
+        adder.add(Keys.PERMISSION_SOURCE_OWNER,   "yours");
+        adder.add(Keys.PERMISSION_FORM_VERDICT,   "Verdict");
+        adder.add(Keys.PERMISSION_FORM_RULE,      "Rule");
+        adder.add(Keys.PERMISSION_FORM_HINT,      "Written verb(what): break, place, attack, use_block, use_entity, take, drop or command; what combines owner, other, nature, structure, ids, #tags with & | ! and parentheses. Add @Name to limit it to one companion.");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "ask",     "Ask");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "bypass",  "Bypass");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "observe", "Observe");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "deny",   "Deny");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "ask",    "Ask");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "allow",  "Allow");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "hard.deny",     "Hard rules · the server owner's, read-only");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.deny",    "Your rules · deny");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.ask",     "Your rules · ask");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.allow",   "Your rules · allow");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "factory.ask",   "Factory rules · ask, read-only");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "factory.allow", "Factory rules · allow, read-only");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "shape", "A rule looks like verb(term & term), e.g. break(owner & !block_entity): '%s'");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "subject", "After the closing ) a rule may only name one companion, like break(owner) @Aria: '%s'");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "verb", "Unknown verb '%1$s' in rule '%2$s'; verbs are %3$s, or * for any");
@@ -1225,6 +1269,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.brain", "外接大脑");
         adder.add("numen.settings.nav.skills", "技能");
         adder.add("numen.settings.nav.theme", "主题");
+        adder.add("numen.settings.nav.permission", "权限");
         // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
         adder.add("numen.brain.title", "外接大脑 (MCP)");
         adder.add("numen.brain.enable", "开启外接大脑");
@@ -1717,6 +1762,30 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_NO_ROW,       "%s 没有第 %s 行(一共 %s 行);行号用 /numen permission rules list 看");
         adder.add(Keys.COMMAND_RULE_REMOVED,      "已从 %s 删掉:%s");
         adder.add(Keys.COMMAND_RULES_RESET,       "清空了你的 deny、ask、allow 三张表;出厂规则照旧生效");
+        adder.add(Keys.PERMISSION_ADD,            "加一条规则");
+        adder.add(Keys.PERMISSION_EMPTY,          "还没有规则可看");
+        adder.add(Keys.PERMISSION_CLEAR,          "清空");
+        adder.add(Keys.PERMISSION_CLEAR_CONFIRM,  "清空你自己写的所有规则?出厂规则和服主的硬规则照旧生效。");
+        adder.add(Keys.PERMISSION_DELETE_CONFIRM, "删掉这条规则:%s");
+        adder.add(Keys.PERMISSION_HARD_ON,        "硬规则已开启:服主定的,什么都解不开");
+        adder.add(Keys.PERMISSION_HARD_OFF,       "服主已关闭硬规则");
+        adder.add(Keys.PERMISSION_NO_COMPANIONS,  "还没有同伴");
+        adder.add(Keys.PERMISSION_SOURCE_OWNER,   "你写的");
+        adder.add(Keys.PERMISSION_FORM_VERDICT,   "判决");
+        adder.add(Keys.PERMISSION_FORM_RULE,      "规则");
+        adder.add(Keys.PERMISSION_FORM_HINT,      "写法 动词(对象):动词有 break、place、attack、use_block、use_entity、take、drop、command;对象可以拿 owner、other、nature、structure、方块或物品 id、#标签 用 & | ! 和括号组合。末尾加 @名字 只管某一只同伴。");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "ask",     "询问");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "bypass",  "放行");
+        adder.add(Keys.PERMISSION_MODE_PREFIX + "observe", "只看");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "deny",   "拒绝");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "ask",    "询问");
+        adder.add(Keys.PERMISSION_TABLE_PREFIX + "allow",  "允许");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "hard.deny",     "硬规则 · 服主管,只读");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.deny",    "你的规则 · 拒绝");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.ask",     "你的规则 · 询问");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "owner.allow",   "你的规则 · 允许");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "factory.ask",   "出厂规则 · 询问,只读");
+        adder.add(Keys.PERMISSION_GROUP_PREFIX + "factory.allow", "出厂规则 · 允许,只读");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "shape", "规则要写成 动作(项 & 项),例如 break(owner & !block_entity):'%s'");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "subject", "规则的右括号后面只能点一只同伴的名字,例如 break(owner) @Aria:'%s'");
         adder.add(Keys.COMMAND_RULE_MISTAKE_PREFIX + "verb", "规则 '%2$s' 里的动作 '%1$s' 不认识;可用的动作有 %3$s,或 * 表示任何动作");

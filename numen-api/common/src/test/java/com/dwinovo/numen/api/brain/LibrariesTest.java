@@ -15,6 +15,8 @@ import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.entity.MojangSkins;
+import com.dwinovo.numen.api.permission.PermissionLibrary;
+import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.MojangSkinLookup;
@@ -27,6 +29,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -64,6 +67,8 @@ class LibrariesTest {
     /** 假的签名队:不联网,签出来的都是 value=v-手臂模型;签好一条(写进货架之后)闸门放行一次。 */
     private SkinSigning signer;
     private java.util.concurrent.Semaphore signed;
+    private final Map<UUID, PermissionStore> permissionStores = new HashMap<>();
+    private final Map<UUID, Map<UUID, String>> companionsOf = new HashMap<>();
 
     private Libraries libraries(Path dir) {
         return libraries(dir, LibraryHub.headless(dir));
@@ -140,6 +145,27 @@ class LibrariesTest {
             @Override
             public Keychain serverKeys() {
                 return serverKeys;
+            }
+
+            @Override
+            public PermissionLibrary.Ground permission(UUID owner) {
+                PermissionStore store = permissionStores.computeIfAbsent(owner, id -> new PermissionStore());
+                return new PermissionLibrary.Ground() {
+                    @Override
+                    public PermissionStore store() {
+                        return store;
+                    }
+
+                    @Override
+                    public boolean hardRules() {
+                        return true;
+                    }
+
+                    @Override
+                    public Map<UUID, String> companions() {
+                        return companionsOf.getOrDefault(owner, Map.of());
+                    }
+                };
             }
 
             @Override
@@ -374,6 +400,45 @@ class LibrariesTest {
 
         assertFalse(libraries.handle(PLAYER, false, Libraries.KEY, Libraries.PUT,
                 body("service", "deepseek", "key", "sk-1")).entries().contains("notice"));
+    }
+
+    // ---- 权限 ----
+
+    @Test
+    @Tag("mc")
+    void everyPlayerReadsAndWritesOnlyHisOwnRulesNotEvenAnAdminSeesAnothers(@TempDir Path dir) {
+        org.junit.jupiter.api.Assumptions.assumeTrue(com.dwinovo.numen.api.FakeWorld.boot(), "Minecraft 引导不可用");
+        Libraries libraries = libraries(dir);
+
+        Libraries.Result added = libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.PUT,
+                body("table", "deny", "rule", "break(owner & #c:chests)"));
+
+        assertNull(added.problem());
+        assertTrue(added.entries().contains("break(owner & #c:chests)"), "他自己读到刚加的");
+        assertFalse(libraries.view(OTHER, false, Libraries.PERMISSION).contains("#c:chests"), "别人读不到");
+        assertFalse(libraries.view(ADMIN, true, Libraries.PERMISSION).contains("#c:chests"), "管理员也读不到");
+        assertNull(libraries.handle(OTHER, false, Libraries.PERMISSION, Libraries.RESET, new JsonObject()).problem());
+        assertTrue(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("#c:chests"), "别人清空动不了他的");
+        assertNotNull(libraries.handle(OTHER, false, Libraries.PERMISSION, Libraries.DELETE,
+                body("table", "deny", "rule", "break(owner & #c:chests)")).problem(), "别人删不到他的行");
+        assertTrue(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("#c:chests"));
+    }
+
+    @Test
+    @Tag("mc")
+    void aMistakenRuleIsRefusedWithTheCodeThatTheClientTranslates(@TempDir Path dir) {
+        org.junit.jupiter.api.Assumptions.assumeTrue(com.dwinovo.numen.api.FakeWorld.boot(), "Minecraft 引导不可用");
+        Libraries libraries = libraries(dir);
+
+        Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.PUT,
+                body("table", "deny", "rule", "dig(owner)"));
+
+        assertNotNull(refused.problem());
+        JsonArray rows = array(refused.entries());
+        JsonObject mistake = rows.get(rows.size() - 1).getAsJsonObject().getAsJsonObject("mistake");
+        assertEquals("verb", mistake.get("code").getAsString());
+        assertEquals("dig", mistake.getAsJsonArray("args").get(0).getAsString(), "原话也带着,界面填进译文");
+        assertFalse(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("dig("), "写错的没进表");
     }
 
     // ---- 服务器配置、偏好、外接大脑 ----

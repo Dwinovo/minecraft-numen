@@ -131,8 +131,11 @@ public final class PermissionStore extends SavedData {
     private final Map<Verdict.Kind, List<Row>> tables = new EnumMap<>(Verdict.Kind.class);
     private RuleSet rules = RuleSet.EMPTY;
     private final Map<String, Hit> hits = new HashMap<>();
+    /** 存档任何一处变了就叫一声({@link #of} 接上):面板据此把新表推给主人,见 {@link PermissionFeed}。 */
+    private Runnable onChange = () -> { };
 
-    PermissionStore() {
+    /** 空的一份,不连世界存档;真正的存档由 {@link #of} 取,这个给不经服务器的使用(测试的替身)。 */
+    public PermissionStore() {
         for (Verdict.Kind table : Verdict.Kind.values()) {
             tables.put(table, List.of());
         }
@@ -150,7 +153,17 @@ public final class PermissionStore extends SavedData {
     }
 
     public static PermissionStore of(MinecraftServer server, UUID owner) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_permissions_" + owner);
+        PermissionStore store = server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_permissions_" + owner);
+        store.onChange = () -> PermissionFeed.changed(owner);
+        return store;
+    }
+
+    @Override
+    public void setDirty(boolean dirty) {
+        super.setDirty(dirty);
+        if (dirty) {
+            onChange.run();
+        }
     }
 
     static PermissionStore load(CompoundTag tag, HolderLookup.Provider registries) {
