@@ -31,7 +31,7 @@ import java.util.UUID;
  *
  * <h2>改会话:先按办成画,再让服务端判</h2>
  * 拉人、移人、改名、解散、说话都发给服务端办。界面马上要指着办完的那个会话(刚建的群、改过名的),等不起一个来回,所以这里按服务端会做的
- * 同一套纯函数({@link Conversation})先算出结果、记在 {@link #pending},发出请求;服务端下一次推来真表时,pending 作废,以真表为准
+ * 同一套纯函数({@link Conversation})先算出结果、记在 {@link PendingChanges},发出请求;服务端下一次推来真表时,pending 作废,以真表为准
  * ——办不成的,服务端也把真表推回来。新群的 id 由这里起,随请求带去。
  *
  * <p>客户端主线程专用。
@@ -54,10 +54,8 @@ public final class Conversations {
     /** 会话分组(Telegram 的 Chat Folders):主人建的分组、选中哪个分组。 */
     private final ChatFolders folders = new ChatFolders();
 
-    /** 已经按办成画了、服务端还没回真表的会话改动:id → 改后的会话,{@code null} = 解散了。真表一到就清空。 */
-    private final Map<String, Conversation> pending = new LinkedHashMap<>();
-    /** 上一次看到的服务端真表,用来发现它换了一份。 */
-    private List<Conversation> lastSaved = List.of();
+    /** 已经按办成画了、服务端还没回真表的会话改动({@code null} = 解散了)。 */
+    private final PendingChanges<Conversation> pending = new PendingChanges<>();
 
     private Conversations(Path prefsFile, Path legacyFile) {
         this.prefsFile = prefsFile;
@@ -270,22 +268,7 @@ public final class Conversations {
 
     /** 服务端那份落过盘的会话,盖上还没回真表的改动。 */
     private List<Conversation> saved() {
-        List<Conversation> truth = RemoteCompanions.savedConversations();
-        if (truth != lastSaved) {   // 换了一份真表:先画的改动作废
-            lastSaved = truth;
-            pending.clear();
-        }
-        if (pending.isEmpty()) {
-            return truth;
-        }
-        Map<String, Conversation> out = new LinkedHashMap<>();
-        for (Conversation c : truth) {
-            out.put(c.id(), c);
-        }
-        pending.forEach((id, c) -> {
-            if (c == null) out.remove(id); else out.put(id, c);
-        });
-        return new ArrayList<>(out.values());
+        return pending.over(RemoteCompanions.savedConversations(), Conversation::id);
     }
 
     /** 落过盘的那条记录;没有是 null("就他俩"没有记录)。 */

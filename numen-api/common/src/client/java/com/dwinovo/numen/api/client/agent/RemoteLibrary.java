@@ -3,22 +3,26 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
 /**
  * 服务器上那几种库(人设、模型档案、服务器配置)在客户端的视图:最近一次服务端说的那张整表,和最近一次请求没办成的原因。
  * 内存里的,不落盘、不是副本——真源在服务器,关了就丢,界面打开时再要。存和删不在这里办,只变成请求发给服务端,
- * 能不能由它判;办成之后它把新表推回来,视图才变。
+ * 能不能由它判;办成之后它把新表推回来,视图才变。删是例外:那一行先画成没了({@link PendingChanges}),真表一到以真表为准。
  */
 public final class RemoteLibrary {
 
     private final Consumer<LibraryRequestPayload> send;
-    private final Map<String, JsonArray> entries = new HashMap<>();
+    private final Map<String, List<JsonElement>> tables = new HashMap<>();
+    /** 删了、服务端还没回真表的行,按库分:先画成办成,真表一到以真表为准。 */
+    private final Map<String, PendingChanges<JsonElement>> pending = new HashMap<>();
     private final Map<String, String> problems = new HashMap<>();
     private final Map<String, Long> revisions = new HashMap<>();
 
@@ -26,9 +30,16 @@ public final class RemoteLibrary {
         this.send = send;
     }
 
-    /** 这种库最近一次读到的整表;还没读过是空表。 */
+    /** 这种库最近一次读到的整表,盖着删了还没回真表的行;还没读过是空表。 */
     public JsonArray entries(String kind) {
-        return entries.getOrDefault(kind, new JsonArray());
+        JsonArray out = new JsonArray();
+        List<JsonElement> table = tables.get(kind);
+        if (table != null) {
+            pending.computeIfAbsent(kind, k -> new PendingChanges<>())
+                    .over(table, row -> row.getAsJsonObject().get("id").getAsString())
+                    .forEach(out::add);
+        }
+        return out;
     }
 
     /** 这种库的表被服务端推来过几次——界面发了请求等回执时,看它变没变。 */
@@ -56,8 +67,9 @@ public final class RemoteLibrary {
         send.accept(new LibraryRequestPayload(kind, op, body.toString()));
     }
 
-    /** 删一条。 */
+    /** 删一条;这一行马上从表里消失,服务端的真表一到以它为准。 */
     public void delete(String kind, String id) {
+        pending.computeIfAbsent(kind, k -> new PendingChanges<>()).put(id, null);
         JsonObject body = new JsonObject();
         body.addProperty("id", id);
         send.accept(new LibraryRequestPayload(kind, "delete", body.toString()));
@@ -65,7 +77,7 @@ public final class RemoteLibrary {
 
     /** 服务端推来一张表。 */
     public void onPayload(LibraryPayload p) {
-        entries.put(p.kind(), JsonParser.parseString(p.entries()).getAsJsonArray());
+        tables.put(p.kind(), List.copyOf(JsonParser.parseString(p.entries()).getAsJsonArray().asList()));
         revisions.merge(p.kind(), 1L, Long::sum);
         if (p.problem().isEmpty()) {
             problems.remove(p.kind());
@@ -76,7 +88,8 @@ public final class RemoteLibrary {
 
     /** 断线:服务器上的东西都不算数了。 */
     public void clear() {
-        entries.clear();
+        tables.clear();
+        pending.clear();
         problems.clear();
         revisions.clear();
     }

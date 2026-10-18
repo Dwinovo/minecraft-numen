@@ -45,4 +45,20 @@ class RemoteLibraryTest {
                 new LibraryRequestPayload("provider", "delete", "{\"id\":\"p1\"}")), sent);
         assertEquals(0, library.entries("provider").size(), "表等服务端推回来才变");
     }
+
+    @Test
+    void aDeletedRowGoesAtOnceAndTheServersNextTableTakesOver() {
+        library.onPayload(new LibraryPayload("provider",
+                "[{\"id\":\"p1\",\"name\":\"甲\"},{\"id\":\"p2\",\"name\":\"乙\"}]", ""));
+
+        library.delete("provider", "p1");
+
+        assertEquals(1, library.entries("provider").size(), "删了的先画成办成,不等一个来回");
+        assertEquals("p2", library.entries("provider").get(0).getAsJsonObject().get("id").getAsString());
+
+        library.onPayload(new LibraryPayload("provider", "[{\"id\":\"p1\",\"name\":\"甲\"}]", "no such profile"));
+        assertEquals(1, library.entries("provider").size());
+        assertEquals("p1", library.entries("provider").get(0).getAsJsonObject().get("id").getAsString(),
+                "服务端没办成就推回真表,以真表为准");
+    }
 }
