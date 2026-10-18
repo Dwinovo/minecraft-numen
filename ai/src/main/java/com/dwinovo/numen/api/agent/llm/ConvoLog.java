@@ -168,6 +168,15 @@ public final class ConvoLog {
     }
 
     /**
+     * 把这本日志整本删掉(主人清空她的记忆):文件删了,上下文索引与最近的模型 / 档位记录也归零,
+     * 之后写的第一条从一个新文件的头写起。删的活排在这本日志的写车道上,在它前面还没写下去的先落完。
+     */
+    public void wipe() {
+        log.rewrite(List.of());
+        state = new State();
+    }
+
+    /**
      * 记一条"这里清空过上下文"的边界。{@link #load} 从它之后从零重放——对模型是真空白;
      * {@link #loadDisplay} 渲染成 {@link #CLEAR_DIVIDER}。文件 append-only,清空不删任何历史,
      * 之前的对话全部留档、界面照常能翻。

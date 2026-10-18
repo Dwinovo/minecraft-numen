@@ -80,6 +80,12 @@ public final class FeedEncoder {
         }
     }
 
+    /** 主人清空了她的记忆:告诉面板把她的记录作废,在飞的半截文字也不要了。 */
+    public void wiped() {
+        clearPartial();
+        events.add(new Feed.Wiped());
+    }
+
     private void clearPartial() {
         partial.setLength(0);
         reasoning.setLength(0);

@@ -308,6 +308,62 @@ public class BrainGameTests {
         });
     }
 
+    /**
+     * 主人清空她的记忆:对话日志与札记删掉,名册与身体不动,面板收到"清空了",并且如实告诉她;导出的 zip 在清空之前带着
+     * 日志和札记。只有主人能做;她正在想事情的时候不清,什么也不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void wiping_her_memory_deletes_the_log_and_notes_tells_her_and_waits_until_she_is_idle(
+            GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_forgetful");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+        her.mind.holding = true;
+        her.mind.say("好的");
+        her.loop.submitPrompt("记一下铁在东边");
+        com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID())
+                .write("iron", "铁在东边", "reference", "东边 30 格");
+
+        var busy = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner,
+                new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+        helper.assertTrue(busy.problem() != null, "she was wiped in the middle of a thought");
+        helper.assertTrue(!com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID()).index().isEmpty(),
+                "a refused wipe deleted her notes");
+        var stranger = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, UUID.randomUUID(),
+                new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+        helper.assertTrue(stranger.problem() != null, "someone else wiped her");
+        her.mind.holding = false;
+        her.mind.release();
+
+        GameTestKit.steps(helper).thenWaitUntil(() -> helper.assertTrue(
+                her.conversation().size() == 2 && her.loop.status().phase() == null,
+                "she has not finished: " + her.conversation())).thenExecute(() -> {
+            byte[] zip = her.loop.exportMemory().join();
+            java.util.Set<String> names = new java.util.HashSet<>();
+            try (var in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+                for (var e = in.getNextEntry(); e != null; e = in.getNextEntry()) {
+                    names.add(e.getName());
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            helper.assertTrue(names.contains("chat.jsonl") && names.contains("memory/iron.md"), "export: " + names);
+
+            var done = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner,
+                    new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+            helper.assertTrue(done.problem() == null, "the wipe was refused: " + done.problem());
+            helper.assertTrue(her.conversation().stream().noneMatch(m -> m instanceof ConvoState.Msg.User u
+                    && u.content().contains("铁在东边")), "the old words are still in the log: " + her.conversation());
+            helper.assertTrue(com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID()).index().isEmpty(),
+                    "her notes are still there");
+            helper.assertTrue(CompanionRegistry.get(server).find(her.companion.getUUID()) != null,
+                    "wiping her memory removed her from the roster");
+            helper.assertTrue(her.loop.status().queuedPreview().stream().anyMatch(p -> p.text().contains("清空了你的记忆")),
+                    "she was not told: " + her.loop.status().queuedPreview());
+        }).thenWaitUntil(() -> helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Wiped),
+                "the panel was not told")).thenExecute(her::close).thenSucceed();
+    }
+
     /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {

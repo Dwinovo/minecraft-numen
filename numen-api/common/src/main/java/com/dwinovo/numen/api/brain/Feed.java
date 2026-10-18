@@ -43,6 +43,9 @@ public sealed interface Feed {
     /** 日志里写下的一行面板记录。 */
     record Line(ConvoLog.Line line) implements Feed {}
 
+    /** 主人清空了她的记忆:面板上她的对话记录作废(之后翻页取到的是空的新日志)。 */
+    record Wiped() implements Feed {}
+
     /** 排着的输入(整份,变了才发)。 */
     record Pending(List<EventQueue.Preview> items) implements Feed {
 
@@ -92,6 +95,7 @@ public sealed interface Feed {
                 o.add("line", ConvoLog.toJson(l.line()));
                 yield o;
             }
+            case Wiped w -> tagged("wiped");
             case Pending p -> {
                 JsonObject o = tagged("pending");
                 JsonArray items = new JsonArray();
@@ -142,6 +146,7 @@ public sealed interface Feed {
                 ConvoLog.Line line = ConvoLog.lineFromJson(o.getAsJsonObject("line"));
                 yield line == null ? null : new Line(line);
             }
+            case "wiped" -> new Wiped();
             case "pending" -> {
                 List<EventQueue.Preview> items = new ArrayList<>();
                 for (JsonElement p : o.getAsJsonArray("items")) {

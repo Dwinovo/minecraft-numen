@@ -85,6 +85,7 @@ final class TurnPresenter {
                 interruptVoice();
                 SpeechBubbles.clear(entityUuid);
             }
+            case Feed.Wiped wiped -> endTurn();   // 记忆清空了:在飞的半截文字与语音收掉
             case Feed.Line line -> { }
             case Feed.Pending pending -> { }
             case Feed.Status status -> { }

@@ -60,6 +60,10 @@ public final class RemoteCompanion {
                 }
                 case Feed.Replied replied -> clearPartial();
                 case Feed.TurnCut cut -> clearPartial();
+                case Feed.Wiped wiped -> {
+                    lines.clear();
+                    clearPartial();
+                }
                 case Feed.Line line -> {
                     lines.add(line.line());
                     lineSink.accept(line.line());
@@ -230,6 +234,16 @@ public final class RemoteCompanion {
         }
         send.accept(new OwnerInput.Clear(uuid));
         return null;
+    }
+
+    /** 导出她的记忆:服务端打成 zip 推回来,存成文件见 {@code MemoryFiles}。 */
+    public void requestExport() {
+        send.accept(new OwnerInput.Export(uuid));
+    }
+
+    /** 清空她的记忆(界面在主人确认之后才调);服务端办完推 {@link Feed.Wiped}。 */
+    public void requestWipe() {
+        send.accept(new OwnerInput.Wipe(uuid));
     }
 
     /** 主人按停止。 */

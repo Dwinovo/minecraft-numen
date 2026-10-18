@@ -52,7 +52,7 @@ class FeedTest {
         ConvoLog.Line cut = new ConvoLog.Line("c0ffee02", 1300, null, new ConvoState.Msg.Halt("主人按了停止", null, List.of()));
         List<Feed> events = List.of(new Feed.TurnStart(true), new Feed.Delta("你", "想"), new Feed.Replied("你好", true),
                 new Feed.TurnCut(), new Feed.Halted(), new Feed.Failed(Cause.of(Cause.NETWORK)),
-                new Feed.Blocked(Cause.of(Cause.UNBOUND)), new Feed.Line(line), new Feed.Line(cut),
+                new Feed.Blocked(Cause.of(Cause.UNBOUND)), new Feed.Wiped(), new Feed.Line(line), new Feed.Line(cut),
                 new Feed.Pending(List.of(new EventQueue.Preview("x", "compact", "numen.loop.compact"))),
                 new Feed.Status(STATE));
 

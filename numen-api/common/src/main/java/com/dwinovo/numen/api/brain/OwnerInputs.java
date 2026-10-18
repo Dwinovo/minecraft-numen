@@ -140,6 +140,24 @@ public final class OwnerInputs {
                 String problem = CompanionBinding.apply(server, owner, bind.companion(), bind.slot(), bind.entry());
                 yield problem == null ? Applied.done() : Applied.refused(problem);
             }
+            case OwnerInput.Export export -> loop(server, owner, export.companion(), brain ->
+                    brain.exportMemory().whenComplete((zip, failure) -> server.execute(() ->
+                            Replies.exported(server, owner, export.companion(), zip, failure))));
+            case OwnerInput.Wipe wipe -> {
+                if (!owns(server, owner, wipe.companion())) {
+                    yield Applied.refused("not your companion");
+                }
+                Optional<CompanionLoop> brain = CompanionLoops.get(wipe.companion());
+                if (brain.isEmpty()) {
+                    yield Applied.refused("she has no brain here");
+                }
+                String problem = brain.get().wipeMemory();
+                if (problem != null) {
+                    yield Applied.refused(problem);
+                }
+                CompanionLoops.wiped(wipe.companion());
+                yield Applied.done();
+            }
             case OwnerInput.Emit emit -> {
                 // 上行的类型不可信:主人的话,或登记过的世界事件,别的不收
                 try {

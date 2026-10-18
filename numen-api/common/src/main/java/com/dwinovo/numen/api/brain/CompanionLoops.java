@@ -144,6 +144,14 @@ public final class CompanionLoops {
         }
     }
 
+    /** 她的记忆被清空了:推给主人的面板,把她的记录作废。 */
+    static void wiped(UUID companion) {
+        Entry entry = LOOPS.get(companion);
+        if (entry != null) {
+            entry.feed.wiped();
+        }
+    }
+
     /** 这位主人名下绑着这一条库条目的同伴。 */
     static List<UUID> boundTo(UUID owner, Slot slot, String entryId) {
         return LOOPS.values().stream()

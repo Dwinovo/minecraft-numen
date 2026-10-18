@@ -565,6 +565,53 @@ public final class CompanionLoop {
         return null;
     }
 
+    // ---- 她的记忆:导出与清空(只有主人能做) ----
+
+    /**
+     * 她的对话日志与札记打成的 zip。在她的写车道上读,所以排在前面已交的写之后——刚说的话也在里面。
+     */
+    public java.util.concurrent.CompletableFuture<byte[]> exportMemory() {
+        return read(() -> {
+            try {
+                return MemoryExport.zip(parts.home().dir());
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        });
+    }
+
+    /**
+     * 主人清空她的记忆:对话日志、札记、长期目标都删掉,名册与身体不动,然后如实告诉她——这条进她的上下文,她下一次开口
+     * 之前就读到。她正在想事情的时候不清(在飞的回合会把刚清掉的又写回日志),等她停下来。
+     *
+     * @return 拒绝的理由(语言键);{@code null} = 清了
+     */
+    public String wipeMemory() {
+        String problem = clearProblem();
+        if (problem == null && loop.status().phase() != null) {
+            problem = Keys.LOOP_WIPE_BUSY;
+        }
+        if (problem != null) {
+            Constants.LOG.info("[numen-entity#{}] memory wipe refused: {}", companion, problem);
+            return problem;
+        }
+        goals.clear(null);
+        NoteBook notes = NoteBook.of(companion);
+        for (NoteBook.Note note : notes.index()) {
+            notes.forget(note.name());
+        }
+        log.wipe();
+        requestClearContext();   // 内存里的上下文走清空的控制条目;日志已经是空的
+        loop.push(List.of(new EventQueue.Entry(EventTypes.SERVER_MESSAGE, WIPED_NOTICE, System.currentTimeMillis(),
+                false)));
+        Constants.LOG.info("[numen-entity#{}] 记忆被主人清空", companion);
+        return null;
+    }
+
+    /** 清空之后她读到的第一件事。 */
+    private static final String WIPED_NOTICE =
+            "主人清空了你的记忆:对话记录、札记和长期目标都没有了。你不记得之前聊过什么、做过什么,这是他的决定;需要的话可以问他。";
+
     // ---- 绑定 ----
 
     /**

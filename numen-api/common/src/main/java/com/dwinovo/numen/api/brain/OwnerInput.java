@@ -40,6 +40,12 @@ public sealed interface OwnerInput {
     /** 客户端的朗读此刻在不在放:身体据此在说话期间注视主人。 */
     record Speaking(UUID companion, boolean playing) implements OwnerInput {}
 
+    /** 导出她的记忆(对话日志与札记)到主人客户端存成文件。 */
+    record Export(UUID companion) implements OwnerInput {}
+
+    /** 清空她的记忆(对话日志、札记、长期目标);名册与身体不动。界面在主人确认之后才发。 */
+    record Wipe(UUID companion) implements OwnerInput {}
+
     /** 往会话里拉一个人;从"就他俩"拉则新群用 {@code newId}。 */
     record Pull(String conversation, UUID companion, String newId) implements OwnerInput {}
 
@@ -69,6 +75,8 @@ public sealed interface OwnerInput {
                 put(o, "speaking", "companion", s.companion().toString());
                 o.addProperty("playing", s.playing());
             }
+            case Export e -> put(o, "export", "companion", e.companion().toString());
+            case Wipe w -> put(o, "wipe", "companion", w.companion().toString());
             case Pull p -> put(o, "pull", "conversation", p.conversation(), "companion", p.companion().toString(),
                     "newId", p.newId());
             case Drop d -> put(o, "drop", "conversation", d.conversation(), "companion", d.companion().toString());
@@ -98,6 +106,8 @@ public sealed interface OwnerInput {
                 case "bind" -> bind(o);
                 case "emit" -> new Emit(uuid(o, "companion"), text(o, "type"), text(o, "text"));
                 case "speaking" -> new Speaking(uuid(o, "companion"), o.get("playing").getAsBoolean());
+                case "export" -> new Export(uuid(o, "companion"));
+                case "wipe" -> new Wipe(uuid(o, "companion"));
                 case "pull" -> new Pull(text(o, "conversation"), uuid(o, "companion"), text(o, "newId"));
                 case "drop" -> new Drop(text(o, "conversation"), uuid(o, "companion"));
                 case "rename" -> new Rename(text(o, "conversation"), text(o, "name"));

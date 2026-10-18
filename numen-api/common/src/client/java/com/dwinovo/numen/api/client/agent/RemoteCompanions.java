@@ -65,7 +65,12 @@ public final class RemoteCompanions {
         RemoteCompanion[] self = new RemoteCompanion[1];
         TurnPresenter presenter = new TurnPresenter(companion, () -> self[0].status(), () -> self[0].personaName(),
                 playing -> send(new OwnerInput.Speaking(companion, playing)));
-        self[0] = new RemoteCompanion(companion, RemoteCompanions::send, presenter::on,
+        self[0] = new RemoteCompanion(companion, RemoteCompanions::send, feed -> {
+            if (feed instanceof com.dwinovo.numen.api.brain.Feed.Wiped) {
+                TRANSCRIPTS.clear();   // 她的日志没了;群里别的会话里她说过的也在其中,都重新取
+            }
+            presenter.on(feed);
+        },
                 line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
         return new Entry(self[0], presenter);
     }
@@ -117,6 +122,7 @@ public final class RemoteCompanions {
         ClientPayloadSink.feed = RemoteCompanions::onFeed;
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
         ClientPayloadSink.conversations = RemoteCompanions::onConversations;
+        ClientPayloadSink.export = MemoryFiles::save;
         ClientPayloadSink.library = p -> {
             LIBRARY.onPayload(p);
             if (Libraries.MCP_CLIENT.equals(p.kind())) {

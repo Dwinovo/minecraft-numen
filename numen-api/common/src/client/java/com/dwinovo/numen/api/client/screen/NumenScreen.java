@@ -920,6 +920,30 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
+    /**
+     * 清空她的记忆的确认:对话记录、札记、长期目标都会删掉(并告诉她),确认之后才发给服务端。她正在想事情、死着、外接大脑
+     * 驾驶着的时候服务端不清,这里先把原因说出来,不让主人白点一遍确认。
+     */
+    private void openWipeConfirm(UUID target) {
+        var her = RemoteCompanions.getOrCreate(target);
+        String problem = her.clearProblem() != null ? her.clearProblem()
+                : her.status().phase() != null ? ModLanguageData.Keys.LOOP_WIPE_BUSY : null;
+        if (problem != null) {
+            com.dwinovo.numen.api.client.hud.NumenHudToasts.push(
+                    com.dwinovo.numen.api.client.ui.NumenToasts.Severity.WARN, I18n.get(problem));
+            return;
+        }
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                I18n.get(ModLanguageData.Keys.WIPE_TITLE, nameFor(target)),
+                I18n.get(ModLanguageData.Keys.WIPE_WARNING),
+                I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.WIPE_CONFIRM),
+                () -> {
+                    her.requestWipe();
+                    rebuild();
+                });
+        rebuild();
+    }
+
     /** 解散确认:记录留在成员各自的日志里,所以副文本说的是"不会丢",不是"无法撤销"。 */
     private void openDissolveConfirm(Conversation target) {
         dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
@@ -1238,6 +1262,8 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Message ignored -> openConversation(Conversations.instance().of(who));
             case ProfilePage.Hit.Edit ignored -> editCompanion(who);
             case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
+            case ProfilePage.Hit.Export ignored -> RemoteCompanions.getOrCreate(who).requestExport();
+            case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
             case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }
         return true;

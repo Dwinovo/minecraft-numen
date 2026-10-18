@@ -141,6 +141,30 @@ public final class Replies {
         }
     }
 
+    /**
+     * 她的记忆导出好了(或没成):装了客户端的,打成的 zip 交给他存成文件;太大一次送不了、读不出来、他没装客户端,
+     * 都如实说给他听。
+     */
+    public static void exported(MinecraftServer server, UUID owner, UUID companion, byte[] zip, Throwable failure) {
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
+        CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
+        if (player == null || entry == null) {
+            return;
+        }
+        if (failure != null) {
+            Constants.LOG.warn("[numen-entity#{}] 导出记忆失败: {}", companion, failure.toString());
+            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_FAILED,
+                    entry.name()));
+        } else if (!Presence.hasClient(owner)) {
+            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_NEEDS_CLIENT));
+        } else if (!com.dwinovo.numen.api.network.Wire.TO_CLIENT.carries(zip.length)) {
+            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_TOO_BIG,
+                    entry.name(), zip.length / 1024));
+        } else {
+            NumenNetwork.sendToPlayer(player, new com.dwinovo.numen.api.network.payload.ExportPayload(entry.name(), zip));
+        }
+    }
+
     /** 这位主人那一头:他的客户端在不在、事件怎么推给他、她的话怎么交到他手里。 */
     public static CompanionLoops.Link link(MinecraftServer server, UUID owner) {
         return new CompanionLoops.Link() {
