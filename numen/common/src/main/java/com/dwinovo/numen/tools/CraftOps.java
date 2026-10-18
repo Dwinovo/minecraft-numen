@@ -24,7 +24,7 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 
-import com.dwinovo.numen.mixin.CraftingMenuAccessor;
+import com.dwinovo.numen.platform.NumenServices;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -210,7 +210,7 @@ public final class CraftOps {
         Container cells = menu.slots.get(grid.cells()[0]).container;
         Container out = menu.slots.get(grid.result()).container;
         if (cells instanceof CraftingContainer craft && out instanceof ResultContainer result) {
-            CraftingMenuAccessor.numen$recompute(menu, level, self, craft, result, hint);
+            NumenServices.VANILLA.recomputeCraftingResult(menu, level, self, craft, result, hint);
         }
     }
 
