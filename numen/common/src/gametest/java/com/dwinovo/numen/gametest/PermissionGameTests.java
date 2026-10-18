@@ -817,27 +817,8 @@ public class PermissionGameTests {
     /** 以玩家 {@code who} 的身份跑一条命令,和在聊天栏里敲的一样;回话(成功与失败的)收进返回的列表。 */
     private static List<String> runAs(ServerPlayer who, String command) {
         List<String> said = new ArrayList<>();
-        net.minecraft.commands.CommandSource capture = new net.minecraft.commands.CommandSource() {
-            @Override
-            public void sendSystemMessage(net.minecraft.network.chat.Component message) {
-                said.add(message.getString());
-            }
-
-            @Override
-            public boolean acceptsSuccess() {
-                return true;
-            }
-
-            @Override
-            public boolean acceptsFailure() {
-                return true;
-            }
-
-            @Override
-            public boolean shouldInformAdmins() {
-                return false;
-            }
-        };
+        net.minecraft.commands.CommandSource capture =
+                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.hearing(message -> said.add(message.getString()));
         who.getServer().getCommands().performPrefixedCommand(who.createCommandSourceStack().withSource(capture),
                 command);
         return said;

@@ -12,6 +12,7 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gametest.GameTestSuites;
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -82,9 +83,9 @@ public final class GameTestKit {
      * 哈希排序,谁在谁前面跑说不准;和平难度会把战斗用例里的僵尸当场收走,那条用例就成了空转。
      */
     static void settleWorld(ServerLevel level, Difficulty difficulty, long dayTime) {
-        level.getServer().setDifficulty(difficulty, true);
+        GameTestWorld.INSTANCE.setDifficulty(level, difficulty);
         level.setDayTime(dayTime);
-        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+        GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING), false);
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
         // 无头测试服是专用服,说不清是谁的方块默认按别人的算(服务器设置)。多数用例要的是"问主人"那一半,所以写明不按。
         com.dwinovo.numen.api.brain.ModelServices.of(level.getServer()).settings().setPermission(true, false);
