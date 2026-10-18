@@ -28,8 +28,8 @@ public final class Visits {
         /** 她说话了。 */
         void said(UUID companion, String text);
 
-        /** 她要问主人一件事;渠道接下了(会去问人)是 true。 */
-        boolean ask(ConsentVenues.Offer offer);
+        /** 她要问主人一件事:渠道去问人。 */
+        void ask(ConsentVenues.Offer offer);
 
         /** 那一条不用答了。 */
         void clear(long id, ConsentDesk.Withdrawal why);
@@ -42,9 +42,11 @@ public final class Visits {
     /** 征询的场所:来访着的渠道。 */
     private static final ConsentVenues.Venue VENUE = new ConsentVenues.Venue() {
         @Override
-        public boolean show(UUID owner, ConsentVenues.Offer offer) {
+        public void show(UUID owner, ConsentVenues.Offer offer) {
             Visit visit = VISITS.get(offer.companion());
-            return visit != null && visit.channel.ask(offer);
+            if (visit != null) {
+                visit.channel.ask(offer);
+            }
         }
 
         @Override

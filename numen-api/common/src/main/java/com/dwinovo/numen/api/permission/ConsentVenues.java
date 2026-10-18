@@ -35,8 +35,8 @@ public final class ConsentVenues {
     /** 一个场所。 */
     public interface Venue {
 
-        /** 问这位主人这一条;这个场所问不了(没有能答的人)返回 false。 */
-        boolean show(UUID owner, Offer offer);
+        /** 问这位主人这一条;这个场所问不了(没有能答的人)就什么也不做。 */
+        void show(UUID owner, Offer offer);
 
         /** 这一条不用答了(主人在别处答了、到期、任务收场):撤掉。没问过这一条的场所什么也不做。 */
         void clear(UUID owner, long id, ConsentDesk.Withdrawal why);
@@ -54,13 +54,8 @@ public final class ConsentVenues {
         VENUES.remove(venue);
     }
 
-    /** @return 有没有场所接下了这一条 */
-    static boolean show(UUID owner, Offer offer) {
-        boolean asked = false;
-        for (Venue venue : VENUES) {
-            asked |= venue.show(owner, offer);
-        }
-        return asked;
+    static void show(UUID owner, Offer offer) {
+        VENUES.forEach(venue -> venue.show(owner, offer));
     }
 
     static void clear(UUID owner, long id, ConsentDesk.Withdrawal why) {

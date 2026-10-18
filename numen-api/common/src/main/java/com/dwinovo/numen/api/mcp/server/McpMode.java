@@ -59,9 +59,11 @@ public final class McpMode {
     /** 外部大脑客户端上的人:经 elicitation 问。服务器在跑才有;跟着服务器起停。 */
     private final ConsentVenues.Venue elicitation = new ConsentVenues.Venue() {
         @Override
-        public boolean show(UUID owner, ConsentVenues.Offer offer) {
+        public void show(UUID owner, ConsentVenues.Offer offer) {
             McpServer s = server;
-            return s != null && s.elicit(owner, offer);
+            if (s != null) {
+                s.elicit(owner, offer);
+            }
         }
 
         @Override

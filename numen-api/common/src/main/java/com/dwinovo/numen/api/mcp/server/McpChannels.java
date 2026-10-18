@@ -49,7 +49,7 @@ final class McpChannels {
             }
 
             @Override
-            public boolean ask(ConsentVenues.Offer offer) {
+            public void ask(ConsentVenues.Offer offer) {
                 JsonObject item = new JsonObject();
                 item.addProperty("type", "consent");
                 item.addProperty("id", offer.id());
@@ -65,7 +65,6 @@ final class McpChannels {
                 choices.add("deny");
                 item.add("choices", choices);
                 post(token, item);
-                return true;
             }
 
             @Override

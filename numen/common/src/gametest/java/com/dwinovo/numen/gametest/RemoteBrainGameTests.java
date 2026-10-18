@@ -328,9 +328,8 @@ public class RemoteBrainGameTests {
                     }
 
                     @Override
-                    public boolean ask(com.dwinovo.numen.api.permission.ConsentVenues.Offer offer) {
+                    public void ask(com.dwinovo.numen.api.permission.ConsentVenues.Offer offer) {
                         offered.add(offer);
-                        return true;
                     }
 
                     @Override
