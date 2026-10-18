@@ -178,8 +178,12 @@ final class Attempt {
         server.getPlayerList().placeNewPlayer(ownerLine, owner, CommonListenerCookie.createInitial(ownerProfile, false));
         Vec3 ownerAt = standOn(scenario.ownerAt());
         owner.teleportTo(level, ownerAt.x, ownerAt.y, ownerAt.z, 0, 0);
-        her = CompanionFactory.spawn(server, UUID.randomUUID(), HER_NAME, owner.getUUID(), level,
-                standOn(scenario.start()));
+        // 考场只在平台当场接纳她的环境里跑(NeoForge):回调在调用里就跑完了
+        CompanionFactory.spawn(server, UUID.randomUUID(), HER_NAME, owner.getUUID(), level, standOn(scenario.start()),
+                () -> true, arrival -> her = arrival.body());
+        if (her == null) {
+            throw new IllegalStateException("评测的考场里平台没有当场接纳她");
+        }
         scene = new Scene(level, origin, her, owner);
         // 札记、会话日志、她的 Lua 模块与技能落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,模块与技能只用内置原版
         // (jar 同步下来的)、不读主人目录里的,评测也从不读它们

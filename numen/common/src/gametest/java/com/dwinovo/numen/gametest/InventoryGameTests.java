@@ -98,7 +98,7 @@ public class InventoryGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
-        NumenPlayer first = com.dwinovo.numen.api.entity.Companions.summon(server, UUID.randomUUID(),
+        NumenPlayer first = com.dwinovo.numen.api.gametest.Bodies.summon(server, UUID.randomUUID(),
                 "gametest_reskin", level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();

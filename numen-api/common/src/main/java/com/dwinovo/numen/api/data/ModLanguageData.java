@@ -355,6 +355,7 @@ public final class ModLanguageData {
         public static final String NOTICE_CREATIVE_NEEDS_OP = "numen.notice.creative_needs_op";
         public static final String NOTICE_NAME_TAKEN      = "numen.notice.name_taken";
         public static final String NOTICE_ADMISSION_REFUSED = "numen.notice.admission_refused";
+        public static final String NOTICE_ARRIVING = "numen.notice.arriving";
 
         // /numen 指令回给执行它的玩家的话
         public static final String COMMAND_NO_COMPANION_HERE = "numen.command.no_companion_here";
@@ -1044,6 +1045,7 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_CREATIVE_NEEDS_OP, "[Numen] Creative mode needs cheats or OP; set to Survival");
         adder.add(Keys.NOTICE_NAME_TAKEN,      "[Numen] The name \"%s\" is taken by a player who is online; pick another");
         adder.add(Keys.NOTICE_ADMISSION_REFUSED, "[Numen] %s could not enter the world: %s");
+        adder.add(Keys.NOTICE_ARRIVING, "[Numen] %s is already on her way into the world");
         adder.add(Keys.COMMAND_NO_COMPANION_HERE, "No companion named '%s' is here");
         adder.add(Keys.COMMAND_SEVERAL_NAMED,     "%s companions here are named '%s'");
         adder.add(Keys.COMMAND_SUMMONED,          "Summoned companion '%s' (%s)");
@@ -1749,6 +1751,7 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_CREATIVE_NEEDS_OP, "[Numen] 创造档需要作弊/OP 权限,已按生存");
         adder.add(Keys.NOTICE_NAME_TAKEN,      "[Numen] 名字「%s」已被在线玩家占用,换一个吧");
         adder.add(Keys.NOTICE_ADMISSION_REFUSED, "[Numen] %s 没能进入世界:%s");
+        adder.add(Keys.NOTICE_ARRIVING, "[Numen] %s 已经在进入世界的路上了");
         adder.add(Keys.COMMAND_NO_COMPANION_HERE, "这里没有叫「%s」的同伴");
         adder.add(Keys.COMMAND_SEVERAL_NAMED,     "这里有 %s 个同伴都叫「%s」");
         adder.add(Keys.COMMAND_SUMMONED,          "召唤了同伴「%s」(%s)");

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenPlugins;
@@ -283,7 +284,7 @@ public class TaskControlGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer body = Companions.summon(server, UUID.randomUUID(), "gametest_lingerer", level,
+        NumenPlayer body = Bodies.summon(server, UUID.randomUUID(), "gametest_lingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         ToolRun linger = lua(body, "gt.gt_long.linger(20)");
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(body.getUUID());
@@ -369,7 +370,7 @@ public class TaskControlGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_relingerer", level,
+        NumenPlayer first = Bodies.summon(server, UUID.randomUUID(), "gametest_relingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         UUID uuid = first.getUUID();
         ToolRun before = lua(first, "gt.gt_long.linger(1000)");
@@ -377,7 +378,7 @@ public class TaskControlGameTests {
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
-        NumenPlayer second = Companions.respawn(server, uuid);
+        NumenPlayer second = Bodies.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
         AtomicReference<TaskRecord<?>> restored = new AtomicReference<>();
@@ -412,7 +413,7 @@ public class TaskControlGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_unlingerer", level,
+        NumenPlayer first = Bodies.summon(server, UUID.randomUUID(), "gametest_unlingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         UUID uuid = first.getUUID();
         ToolRun before = lua(first, "gt.gt_long.linger(1000)");
@@ -420,7 +421,7 @@ public class TaskControlGameTests {
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), "gt.gt_long.linger(\"soon\")"));
-        NumenPlayer second = Companions.respawn(server, uuid);
+        NumenPlayer second = Bodies.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
 
@@ -449,7 +450,7 @@ public class TaskControlGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_woken", level,
+        NumenPlayer first = Bodies.summon(server, UUID.randomUUID(), "gametest_woken", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         UUID uuid = first.getUUID();
         ToolRun before = lua(first, "gt.gt_long.linger(1000)");
@@ -459,7 +460,7 @@ public class TaskControlGameTests {
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
         inbox.takeEntries(System.currentTimeMillis());   // 先清掉第一次派活留下的
-        NumenPlayer second = Companions.respawn(server, uuid);
+        NumenPlayer second = Bodies.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         ToolRun woken = lua(second, "gt.gt_long.linger(900)");
 

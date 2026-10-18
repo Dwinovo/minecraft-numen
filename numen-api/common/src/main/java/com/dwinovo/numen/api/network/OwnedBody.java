@@ -49,11 +49,19 @@ public final class OwnedBody {
                 refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
                 return null;
             }
-            if (CompanionFactory.isArriving(entityUuid)) {
-                refuse.accept("她正在回到世界里(平台还在接纳她)——稍等一下再派");
-                return null;
+            Companions.bringBack(server, entityUuid);
+            companion = NumenPlayer.findByUuid(server, entityUuid);
+            if (companion == null && reg != null) {
+                CompanionRegistry.Entry after = CompanionRegistry.get(server).find(entityUuid);
+                if (after != null && after.removed()) {
+                    refuse.accept("服务器没让她进来(" + after.removedFor() + "),要主人再召唤她才能回来");
+                    return null;
+                }
+                if (CompanionFactory.isArriving(entityUuid)) {
+                    refuse.accept("她正在回到世界里(平台还在接纳她)——稍等一下再派");
+                    return null;
+                }
             }
-            companion = Companions.respawn(server, entityUuid);
         }
         if (companion == null) {
             refuse.accept("companion not found (never summoned, or its data is gone)");

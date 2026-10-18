@@ -204,7 +204,7 @@ public class CommandGameTests {
         var server = level.getServer();
         var owner = presentVanillaPlayer(helper, null, "gametest_kick_owner", "en_us");
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        NumenPlayer her = com.dwinovo.numen.api.entity.Companions.summon(server, owner.getUUID(), "Kickable", level,
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Kickable", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
         java.util.UUID id = her.getUUID();
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
@@ -227,7 +227,7 @@ public class CommandGameTests {
         helper.assertTrue(com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
                 "a packet pulled her back without a summon");
 
-        NumenPlayer back = com.dwinovo.numen.api.entity.Companions.summon(server, owner.getUUID(), "Kickable", level,
+        NumenPlayer back = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Kickable", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
         helper.assertTrue(back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
                 "the summon did not bring the same companion back");

@@ -13,6 +13,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -33,32 +34,21 @@ public final class CompanionFactory {
 
     private CompanionFactory() {}
 
-    /**
-     * 一具身体进世界的结果:进来了({@link #body});平台不接纳({@link #refusal},说给玩家听的原因);或者平台的接纳还在路上
-     * ({@link #underWay},异步的平台上同一具身体的第二次召唤碰到的)。
-     */
-    public record Arrival(NumenPlayer body, net.minecraft.network.chat.Component refusal, boolean underWay) {
-        static final Arrival UNDER_WAY = new Arrival(null, null, true);
-
-        static Arrival arrived(NumenPlayer body) {
-            return new Arrival(body, null, false);
-        }
-
-        static Arrival refused(net.minecraft.network.chat.Component reason) {
-            return new Arrival(null, reason, false);
-        }
-    }
-
-    /** 接纳还在路上的身体(主线程)。同一具身体此时再来一次召唤不另起一趟,免得进来两具同 UUID 的。 */
-    private static final Set<UUID> ARRIVING = new HashSet<>();
+    /** 在路上的身体的登记与编排(主线程),见 {@link Arrivals}。 */
+    private static final Arrivals<NumenPlayer> ARRIVALS = new Arrivals<>();
 
     static {
-        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(ARRIVING::clear);
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(ARRIVALS::clear);
     }
 
     /** 这具身体正在被平台接纳、还没进世界。 */
     public static boolean isArriving(UUID companionUuid) {
-        return ARRIVING.contains(companionUuid);
+        return ARRIVALS.isArriving(companionUuid);
+    }
+
+    /** 哪具在路上的身体占着这个名字;没有是空。 */
+    public static java.util.Optional<UUID> arrivingNamed(String name) {
+        return ARRIVALS.arrivingNamed(name);
     }
 
     /**
@@ -68,14 +58,14 @@ public final class CompanionFactory {
      *
      * <p>先问平台接不接纳这具身体({@link com.dwinovo.numen.api.platform.services.IBodyAdmission}):模组上当场答应,
      * {@code then} 在这个调用里就跑完;异步的平台(Paper 要给登录插件发事件)答复在以后的某一刻,{@code then} 在那时的主线程上跑。
+     * 受理的那一刻起她就"在路上"(编排见 {@link Arrivals});答复回来、加入之前再问一次 {@code stillWanted}。
      * 接纳之后的加入、读档、定位都在 {@code then} 之前做完。
+     *
+     * @param stillWanted 平台答复回来时,调用方是不是仍然要她(名册里还有这一条、没被遣散)
      */
     public static void spawn(MinecraftServer server, UUID companionUuid, String name,
-                             UUID ownerUuid, ServerLevel level, Vec3 pos, Consumer<Arrival> then) {
-        if (!ARRIVING.add(companionUuid)) {
-            then.accept(Arrival.UNDER_WAY);
-            return;
-        }
+                             UUID ownerUuid, ServerLevel level, Vec3 pos, BooleanSupplier stillWanted,
+                             Consumer<Arrivals.Arrival<NumenPlayer>> then) {
         GameProfile profile = new GameProfile(companionUuid, name);
         // 借来的正版皮肤(Mojang 签名的 textures,注册表持久化)注入档案——客户端只认
         // 签过名的皮肤数据;没有则回落原版默认皮肤(按 UUID 哈希抽取)。
@@ -84,30 +74,17 @@ public final class CompanionFactory {
             profile.getProperties().put("textures", new com.mojang.authlib.properties.Property(
                     "textures", reg.skinValue(), reg.skinSig().isEmpty() ? null : reg.skinSig()));
         }
-        NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
-        FakeConnection connection = new FakeConnection();
-        Services.admission().admit(player, connection, refusal -> {
-            ARRIVING.remove(companionUuid);
-            if (refusal != null) {
-                then.accept(Arrival.refused(refusal));
-                return;
-            }
-            join(server, player, connection, profile, ownerUuid, pos);
-            then.accept(Arrival.arrived(player));
-        });
-    }
-
-    /** 同上,当场要结果的写法,给平台一定当场接纳的调用方(GameTest、评测);被拒或还在路上是 {@code null}。 */
-    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
-                                     UUID ownerUuid, ServerLevel level, Vec3 pos) {
+        // 身体与连接在受理之后才造:已经在路上的那一具再来,不白造一个
         NumenPlayer[] body = new NumenPlayer[1];
-        spawn(server, companionUuid, name, ownerUuid, level, pos, arrival -> {
-            body[0] = arrival.body();
-            if (arrival.refusal() != null) {
-                com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", name, arrival.refusal().getString());
-            }
-        });
-        return body[0];
+        FakeConnection[] connection = new FakeConnection[1];
+        ARRIVALS.arrive(companionUuid, name, verdict -> {
+            body[0] = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
+            connection[0] = new FakeConnection();
+            Services.admission().admit(body[0], connection[0], verdict);
+        }, stillWanted, () -> {
+            join(server, body[0], connection[0], profile, ownerUuid, pos);
+            return body[0];
+        }, then);
     }
 
     private static void join(MinecraftServer server, NumenPlayer player, FakeConnection connection, GameProfile profile,
