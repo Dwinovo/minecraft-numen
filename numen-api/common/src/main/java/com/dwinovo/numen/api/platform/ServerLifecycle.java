@@ -37,6 +37,9 @@ public final class ServerLifecycle {
 
     private static final List<Runnable> ON_STOPPED = new CopyOnWriteArrayList<>();
     private static final List<Consumer<MinecraftServer>> ON_STARTED = new CopyOnWriteArrayList<>();
+    private static final List<Consumer<MinecraftServer>> ON_RELOADED = new CopyOnWriteArrayList<>();
+    /** 起好了、还没停的那台服务器;{@link #fireReloaded} 对它调。 */
+    private static volatile MinecraftServer running;
 
     private ServerLifecycle() {}
 
@@ -54,8 +57,14 @@ public final class ServerLifecycle {
         ON_STARTED.add(start);
     }
 
+    /** 报到:管理员用 {@code /reload} 重载数据之后调 {@code reload}——磁盘上手改的库、钥匙串和设置在这里重新读。 */
+    public static void onReloaded(Consumer<MinecraftServer> reload) {
+        ON_RELOADED.add(reload);
+    }
+
     /** 由各 loader 在服务器起好的事件上调用。一个失败不连累其余。 */
     public static void fireStarted(MinecraftServer server) {
+        running = server;
         for (Consumer<MinecraftServer> start : ON_STARTED) {
             try {
                 start.accept(server);
@@ -65,8 +74,27 @@ public final class ServerLifecycle {
         }
     }
 
+    /**
+     * 由各 loader 在数据重载完成时调用(服务器起好之前的那次装载不算:此时没有起好的服务器,什么也不做)。
+     * 一个失败不连累其余。
+     */
+    public static void fireReloaded() {
+        MinecraftServer server = running;
+        if (server == null) {
+            return;
+        }
+        for (Consumer<MinecraftServer> reload : ON_RELOADED) {
+            try {
+                reload.accept(server);
+            } catch (RuntimeException e) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 重载时有一项失败,其余继续", e);
+            }
+        }
+    }
+
     /** 由各 loader 在服务器停止事件上调用。一个清理失败不连累其余。 */
     public static void fireStopped() {
+        running = null;
         for (Runnable drop : ON_STOPPED) {
             try {
                 drop.run();

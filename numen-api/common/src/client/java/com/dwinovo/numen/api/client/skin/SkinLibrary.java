@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.library.JsonLibrary;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.StoreException;
@@ -11,8 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * 玩家的命名皮肤库,存于 {@code config/numen/skin.json} + 原图
- * {@code config/numen/skins/<id>.png}——设置面板"皮肤"tab 背后的数据层,
+ * 玩家的命名皮肤库,存于 {@code config/numen/client/skin.json} + 原图
+ * {@code config/numen/client/skins/<id>.png}——设置面板"皮肤"tab 背后的数据层,
  * 形状对齐 {@code VoiceLibrary}(声线库)。条目保存 MineSkin 代签好的
  * Mojang 签名 textures(value+signature):签名发生在<b>保存时</b>,
  * 召唤时直接取用,零等待零网络。客户端单例。
@@ -46,8 +47,8 @@ public final class SkinLibrary extends JsonLibrary<SkinLibrary.Entry> {
 
     public static SkinLibrary instance() {
         if (instance == null) {
-            instance = new SkinLibrary(configDir().resolve("skin.json"),
-                    configDir().resolve("skins"));
+            instance = new SkinLibrary(Homes.clientDir().resolve("skin.json"),
+                    Homes.clientDir().resolve("skins"));
         }
         return instance;
     }

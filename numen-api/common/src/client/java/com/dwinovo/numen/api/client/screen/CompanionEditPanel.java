@@ -125,7 +125,7 @@ public final class CompanionEditPanel extends ModalCard {
         List<String> pIds = new ArrayList<>();
         pIds.add(PERSONA_NONE);
         personaNames.add(t(ModLanguageData.Keys.SUMMON_PERSONA_NONE));
-        for (ServerLibraries.Persona p : ServerLibraries.personas()) {
+        for (ServerLibraries.Persona p : ServerLibraries.personasInUse()) {
             pIds.add(p.id());
             personaNames.add(p.name());
         }
@@ -157,7 +157,7 @@ public final class CompanionEditPanel extends ModalCard {
             ids.add("");
             provNames.add(t(ModLanguageData.Keys.EDIT_PROVIDER_UNBOUND));
         }
-        for (var e : ServerLibraries.providers()) {
+        for (var e : ServerLibraries.providersInUse()) {
             ids.add(e.id());
             provNames.add(e.name());
         }

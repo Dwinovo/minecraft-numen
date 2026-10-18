@@ -1,10 +1,12 @@
 package com.dwinovo.numen.api.agent.tool;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Mod-global registry of {@link NumenTool} instances. Populated once during
@@ -12,6 +14,10 @@ import java.util.Map;
  * read-only thereafter. Insertion order is preserved so the LLM sees tools
  * in a stable order across requests — useful for prompt caching on backends
  * that hash tool definitions.
+ *
+ * <h2>Tools owned by one player</h2>
+ * 接进来的 MCP 工具有两处来源:服务器的(管理员配的,人人可见)与玩家自己的(只有他的同伴看得到)。后者登记在
+ * {@link #register(UUID, NumenTool)} 名下,{@link #all(UUID)}、{@link #resolve(UUID, String)} 把它们接在全局的后面。
  *
  * <h2>Why static singleton instead of per-entity</h2>
  * The tool set is a deployment-level decision (which capabilities does the
@@ -24,6 +30,8 @@ import java.util.Map;
 public final class ToolRegistry {
 
     private static final Map<String, NumenTool> TOOLS = new LinkedHashMap<>();
+    /** 玩家自己的工具:玩家 → 工具名 → 工具。 */
+    private static final Map<UUID, Map<String, NumenTool>> OWNED = new HashMap<>();
 
     private ToolRegistry() {}
 
@@ -40,18 +48,39 @@ public final class ToolRegistry {
      * 时就会撞上;借来的工具由调用方接住并跳过(见 {@code McpClientManager})。
      */
     public static void register(NumenTool tool) {
+        checkName(tool);
+        NumenTool prior = TOOLS.put(tool.name(), tool);
+        if (prior != null) {
+            throw new IllegalStateException(
+                    "Duplicate NumenTool name: " + tool.name()
+                            + " (was " + prior.getClass().getName()
+                            + ", now " + tool.getClass().getName() + ")");
+        }
+    }
+
+    /**
+     * 登记一个只有这位玩家的同伴看得到的工具。名字不能撞全局的,也不能撞他自己已有的——撞了抛出,由调用方接住并跳过
+     * (见 {@code McpClientManager})。
+     */
+    public static void register(UUID owner, NumenTool tool) {
+        checkName(tool);
+        String name = tool.name();
+        if (TOOLS.containsKey(name)) {
+            throw new IllegalStateException("Duplicate NumenTool name: " + name + " (a server tool has it)");
+        }
+        NumenTool prior = OWNED.computeIfAbsent(owner, id -> new LinkedHashMap<>()).put(name, tool);
+        if (prior != null) {
+            throw new IllegalStateException("Duplicate NumenTool name: " + name + " (was " + prior.getClass().getName()
+                    + ", now " + tool.getClass().getName() + ")");
+        }
+    }
+
+    private static void checkName(NumenTool tool) {
         String name = tool.name();
         if (name == null || !LEGAL_NAME.matcher(name).matches()) {
             throw new IllegalArgumentException(
                     "工具名不合规(只允许 [a-zA-Z0-9_-],1~64 字符): '" + name
                             + "' — " + tool.getClass().getName());
-        }
-        NumenTool prior = TOOLS.put(name, tool);
-        if (prior != null) {
-            throw new IllegalStateException(
-                    "Duplicate NumenTool name: " + name
-                            + " (was " + prior.getClass().getName()
-                            + ", now " + tool.getClass().getName() + ")");
         }
     }
 
@@ -69,8 +98,38 @@ public final class ToolRegistry {
         return TOOLS.remove(name);
     }
 
+    /** 撤掉这位玩家自己的一个工具;没有是 {@code null}。 */
+    public static NumenTool remove(UUID owner, String name) {
+        Map<String, NumenTool> mine = OWNED.get(owner);
+        return mine == null ? null : mine.remove(name);
+    }
+
     public static NumenTool get(String name) {
         return TOOLS.get(name);
+    }
+
+    /** 这位玩家的同伴看得到的工具里叫这个名字的:全局的先,他自己的在后;宽松匹配同 {@link #resolve(String)}。 */
+    public static NumenTool resolve(UUID owner, String name) {
+        NumenTool tool = resolve(name);
+        if (tool != null || name == null) {
+            return tool;
+        }
+        Map<String, NumenTool> mine = OWNED.get(owner);
+        if (mine == null) {
+            return null;
+        }
+        NumenTool exact = mine.get(name);
+        return exact != null ? exact : mine.get(name.toLowerCase(Locale.ROOT));
+    }
+
+    /** 这位玩家的同伴看得到的全部工具:全局的,接着是他自己的。 */
+    public static List<NumenTool> all(UUID owner) {
+        List<NumenTool> out = all();
+        Map<String, NumenTool> mine = OWNED.get(owner);
+        if (mine != null) {
+            out.addAll(mine.values());
+        }
+        return out;
     }
 
     /**

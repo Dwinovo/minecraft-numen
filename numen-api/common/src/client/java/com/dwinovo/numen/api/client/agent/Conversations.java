@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.NumenPaths;
 import com.dwinovo.numen.api.brain.LegacyMigration;
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.store.JsonDoc;
@@ -64,8 +65,8 @@ public final class Conversations {
 
     public static Conversations instance() {
         if (instance == null) {
-            Path root = NumenPaths.config();
-            instance = new Conversations(root.resolve("conversation_prefs.json"), LegacyMigration.conversationsFile(root));
+            instance = new Conversations(Homes.clientDir().resolve("conversation_prefs.json"),
+                    LegacyMigration.conversationsFile(NumenPaths.config()));
             instance.load();
         }
         return instance;

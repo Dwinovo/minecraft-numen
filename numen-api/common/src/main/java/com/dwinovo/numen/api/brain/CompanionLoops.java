@@ -110,6 +110,15 @@ public final class CompanionLoops {
         }
     }
 
+    /** 这位主人的模型档案改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
+    public static void reprovider(UUID owner, String from, String to) {
+        for (Entry entry : LOOPS.values()) {
+            if (entry.owner.equals(owner) && from.equals(entry.loop.providerId())) {
+                entry.loop.setProvider(to);
+            }
+        }
+    }
+
     /** 主人客户端的朗读开始、停止放音。 */
     public static void voicePlaying(UUID companion, boolean playing) {
         Entry entry = LOOPS.get(companion);

@@ -34,33 +34,19 @@ public class NumenContentNeoForge {
                 e.registrar("1").playToClient(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC,
                         (payload, ctx) -> PathDebugPayload.handle(payload)));
 
-        // Numen 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
-        // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
-        declareBundledSkills();
-        declareBundledModules();
+        // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,
+        // 服务器起来时同步进 config/numen/server/。Numen 是插件之一,没有特殊待遇。
+        declareBundledContent();
 
         Constants.LOG.info("Numen content initialised on NeoForge.");
     }
 
-    private static void declareBundledSkills() {
-        Path root = ModJar.find("skills");
-        if (root != null) {
-            com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(root));
-        } else {
-            Constants.LOG.warn("[numen-content] no bundled skills/ dir found in jar");
-        }
-    }
-
-    /**
-     * Numen 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
-     * GameTest 在服务端),所以直接登记,不等客户端。
-     */
-    private static void declareBundledModules() {
-        Path root = ModJar.find("modules");
+    private static void declareBundledContent() {
+        Path root = ModJar.find("numen");
         if (root == null) {
-            throw new IllegalStateException("[numen-content] no bundled modules/ dir found in jar");
+            throw new IllegalStateException("[numen-content] no bundled numen/ dir found in jar");
         }
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(root));
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleContent(root));
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

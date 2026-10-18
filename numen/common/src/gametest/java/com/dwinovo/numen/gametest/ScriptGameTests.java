@@ -281,8 +281,9 @@ public class ScriptGameTests {
 
     static {
         if (GameTestKit.numenTestsEnabled()) {
-            com.dwinovo.numen.api.script.BuiltinModules.register(COPIED, """
-                    -- Test fixture: a factory module to change, delete and reset.
+            // 放进这次 GameTest 专用的服务器目录里,和 jar 同步下来的内置模块在同一处
+            GameTestKit.builtinModule(COPIED, """
+                    -- Test fixture: a built-in module to change, delete and reset.
                     local M = {}
                     ---Say which version this is.
                     function M.version() return 1 end
@@ -346,7 +347,7 @@ public class ScriptGameTests {
         BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
         java.nio.file.Path dir = com.dwinovo.numen.api.script.Modules.of(her.getUUID()).dir();
-        helper.assertTrue(dir.getFileName().toString().startsWith("numen-gametest-lua-"),
+        helper.assertTrue(dir.toString().contains("numen-gametest-lib-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
 
         ToolRun flat = lua(her, "numen.module.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
@@ -395,7 +396,7 @@ public class ScriptGameTests {
                     helper.assertTrue(work != null && work.get("whose").getAsString().equals("built in"), list.reply());
                 })
                 .thenExecute(() -> {
-                    // 主人拿编辑器改了文件:不重启,下一段程序就用新的
+                    // 主人拿编辑器改了文件:/reload 之后,下一段程序就用新的
                     try {
                         java.nio.file.Files.writeString(dir.resolve("my").resolve("gt_clear.lua"),
                                 "-- Clearing cells.\nlocal M = {}\n---Say which version this is.\n"
@@ -404,6 +405,7 @@ public class ScriptGameTests {
                     } catch (java.io.IOException e) {
                         throw new java.io.UncheckedIOException(e);
                     }
+                    Modules.of(her.getUUID()).reload();
                     ToolRun edited = lua(her, "return my.gt_clear.version()");
                     helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
                             "the edited file was not used: " + edited.receipt());
@@ -726,8 +728,18 @@ public class ScriptGameTests {
         cells.forEach(cell -> code.append("numen.work.dig(").append(xyz(cell)).append(")\n"));
         List<String> afterwards = new java.util.ArrayList<>();
         com.dwinovo.numen.api.agent.tool.CompanionToolPort port = new com.dwinovo.numen.api.agent.tool.CompanionToolPort(
-                her.getUUID(), () -> () -> her.getUUID(), programs(her), (program, receipt) ->
-                        afterwards.add(Program.Outcome.messageOf(receipt)));
+                her.getUUID(), () -> () -> her.getUUID(), programs(her),
+                new com.dwinovo.numen.api.agent.tool.ToolBook() {
+                    @Override
+                    public List<com.dwinovo.numen.api.agent.tool.NumenTool> all() {
+                        return com.dwinovo.numen.api.agent.tool.ToolRegistry.all();
+                    }
+
+                    @Override
+                    public com.dwinovo.numen.api.agent.tool.NumenTool resolve(String name) {
+                        return com.dwinovo.numen.api.agent.tool.ToolRegistry.resolve(name);
+                    }
+                }, (program, receipt) -> afterwards.add(Program.Outcome.messageOf(receipt)));
         List<String> handedToTheModel = new java.util.ArrayList<>();
         port.run(List.of(programCall(code.toString())), new com.dwinovo.numen.api.agent.loop.ToolPort.Sink() {
             @Override

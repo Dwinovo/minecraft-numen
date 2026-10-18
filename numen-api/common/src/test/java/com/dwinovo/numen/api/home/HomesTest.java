@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -23,7 +24,15 @@ class HomesTest {
         assertEquals(Path.of("save", "numen", "companions", HER.toString()), homes.companion(HER).dir());
         assertEquals(Path.of("save", "numen", "players", HIM.toString()), homes.worldOwner(HIM).dir());
         assertEquals(Path.of("config", "numen", "players", HIM.toString()), homes.owner(HIM).dir());
-        assertEquals(Path.of("config", "numen"), homes.server().dir());
+        assertEquals(Path.of("config", "numen", "server"), homes.server().dir());
+    }
+
+    @Test
+    void everyOwnerOfAThingHasItsOwnRootAndNothingLivesLooseUnderTheConfigRoot() {
+        assertEquals(Path.of("config", "numen", "server", "keys"), homes.server().file("keys"), "服主的钥匙串在服务器根下");
+        assertEquals(Path.of("config", "numen", "players", HIM.toString(), "keys"), homes.owner(HIM).file("keys"),
+                "玩家的钥匙串在他自己的根下");
+        assertFalse(homes.server().dir().equals(homes.owner(HIM).dir().getParent()), "服务器的根不是玩家们的根");
     }
 
     @Test

@@ -339,8 +339,8 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 出厂模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布,装进服务器上主人名下的模块目录 |
-| ③ 她的模块 | 她存下来或改过的函数表 | Lua,服务器上主人名下 `lua/<名字空间>/<组>.lua` |
+| ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
+| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人的"我的":`players/<uuid>/modules/<名字空间>/<组>.lua` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
@@ -361,15 +361,18 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 
 规矩只在 Numen API 的 `Modules` 一处:
 
-- **名字就是路径。** 服务器上主人名下一个目录 `lua/`,同一主人的同伴共用,主人能拿编辑器改(单人游戏就是本机文件)。模块名两段
+- **名字就是路径,库是内置加我的。** 模块是一种库(`docs/input-pipeline.md` §六"库:内置与我的"):服务器目录里的是内置(管理员管),
+  主人目录里的是他的"我的",同一主人的同伴共用,主人能拿编辑器改(单人游戏就是本机文件;改了 `/reload` 才读到)。模块名两段
   `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
-  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这个目录这一个来源。
-- **出厂的只是安装包,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleModules` 交来的目录(Numen 是 jar 里的 `modules/`,
-  插件挨着它的技能放在 `plugins/<插件>/modules/`)第一次用到目录时装进对应的文件,账本 `modules.json` 记下每个文件上次装进去的
-  出厂指纹:没改过的换成这一版出厂的;改过的留着她的、出厂变了就标"出厂有新版";删了的尊重删除、不再装回;她新建的撞上新出厂的
-  同名一份当作改过;出厂不再发的,没改过的删掉、改过的留给她。`numen.module.reset(name)` 还原成这一版出厂的。
-- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删,
-  `numen.module.list()` 标出每一份是出厂的、改过的还是她的,`numen.module.show(name, {factory = true})` 看出厂原文。
+  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这两个目录,同名时她的优先。
+- **jar 只把内置放进去,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleContent` 交来 jar 里的 `numen/` 目录(模块在
+  `numen/modules/<名字空间>/`,Numen 自己也这样,没有特殊待遇),服务器起来时同步进服务器目录,清单 `.shipped.json` 记每个文件
+  的来源与指纹:没改过的换成这一版;管理员改过的留着、新版写在旁边的 `.new` 并提示;删了的不再放回;来源卸载了,没改过的一起删、改过的
+  留下标"来源已卸载"。她不碰服务器目录:存一份和内置同名的,写进主人的"我的"(复制再改),盖着内置的;账本 `modules/modules.json`
+  记下她改它时那份内置的指纹,内置后来变了就标"内置有新版"。
+- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删(她自己的删掉;
+  内置的对她关掉,开关记在主人的偏好里,文件原样在服务器上),`numen.module.reset(name)` 删掉她盖着的那份、打开关着的,还原成内置的,
+  `numen.module.list()` 标出每一份是内置的、改过的还是她的,`numen.module.show(name, {factory = true})` 看内置原文。
 - 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
   给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
 - 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与服务端日志。
@@ -384,7 +387,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 
 ### 评测与 GameTest
 
-评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,装进去的是没改过的出厂一套,不读主人目录里的改动。
+评测每次运行、GameTest 每次启动,库指向这一次专用的空目录(`LibraryHub.headless`),同步下来的是没改过的内置一套,不读主人目录里的改动。
 
 ## 十、API 第二版(10-04)
 

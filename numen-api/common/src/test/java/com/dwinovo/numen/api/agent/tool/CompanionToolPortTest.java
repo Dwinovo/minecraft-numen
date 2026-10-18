@@ -82,8 +82,17 @@ class CompanionToolPortTest {
 
     private final Host host = new Host();
     private final List<String> afterCut = new ArrayList<>();
-    private final CompanionToolPort port = new CompanionToolPort(HER, () -> () -> HER, host,
-            (program, receipt) -> afterCut.add(program + " | " + receipt));
+    private final CompanionToolPort port = new CompanionToolPort(HER, () -> () -> HER, host, new ToolBook() {
+        @Override
+        public List<NumenTool> all() {
+            return ToolRegistry.all();
+        }
+
+        @Override
+        public NumenTool resolve(String name) {
+            return ToolRegistry.resolve(name);
+        }
+    }, (program, receipt) -> afterCut.add(program + " | " + receipt));
     private final List<String> finished = new ArrayList<>();
     private final ToolPort.Sink sink = new ToolPort.Sink() {
         @Override

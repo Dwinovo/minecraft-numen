@@ -107,7 +107,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
             }
         }
         if (!p.provider().isEmpty()
-                && com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().get(p.provider()) != null) {
+                && com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID()).get(p.provider()) != null) {
             brain.get().setProvider(p.provider());
         }
     }

@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * 装技能的工具,照 Claude Code 的 Skill 工具:她在系统提示的 {@code <available_skills>} 里看到一份技能合用,调它,技能正文就是这次
- * 调用的结果。技能表在主人客户端({@link SkillRegistry}),工具当场在那里答;外接大脑(MCP)调的是同一个工具。
+ * 调用的结果。技能表是这位主人看到的那一份({@link SkillRegistry#of}),工具当场答;外接大脑(MCP)调的是同一个工具。
  *
  * <p>正文成型交给 {@link SkillInjection},和主人打斜杠命令进上下文的是同一个样子。技能与附属文件是文件,按输出预算一页一页给
  * ({@link Listing}),和 pi、Claude Code 读文件一样。
@@ -58,7 +58,7 @@ public final class SkillTool implements NumenTool {
     public void invoke(ToolCall call) {
         String result;
         try {
-            result = load(call.args());
+            result = load(SkillRegistry.of(call.ctx().entityUuid()), call.args());
         } catch (IllegalArgumentException bad) {
             result = ToolOutcome.failure(bad.getMessage());
         }
@@ -68,8 +68,7 @@ public final class SkillTool implements NumenTool {
     /**
      * 技能正文(或它的一个附属文件)要的那一页,原文交给模型;没有这份技能、没有这个文件、没有这一页时是一条失败,说清有什么。
      */
-    private static String load(JsonObject args) {
-        SkillRegistry registry = SkillRegistry.instance();
+    private static String load(SkillRegistry registry, JsonObject args) {
         String name = text(args, "skill");
         if (name == null) {
             throw new IllegalArgumentException("argument 'skill' is missing: the skill's name");

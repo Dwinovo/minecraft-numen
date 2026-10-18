@@ -21,6 +21,8 @@ public class CommonClass {
 
         registerTools();
         registerApi();
+        // 管理员查服主的 key 今天每个人用了多少
+        com.dwinovo.numen.api.entity.NumenCommands.plug(com.dwinovo.numen.api.brain.UsageCommand.node());
         wireTaskMachine();
         com.dwinovo.numen.api.brain.ServerBrains.register();
     }
@@ -74,7 +76,7 @@ public class CommonClass {
             numen.api("task", "The background task and your pending timers.", com.dwinovo.numen.api.task.TaskApi.class);
             numen.api(com.dwinovo.numen.api.script.ModuleApi.GROUP, "Modules — functions written in "
                     + com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.language() + " that programs use by name, kept "
-                    + "as files on your owner's computer (numen/work.lua is numen.work): the built-in ones, your own, "
+                    + "as files (numen/work.lua is numen.work): the built-in ones, your own, "
                     + "and how the programs that used them went.", com.dwinovo.numen.api.script.ModuleApi.class);
         });
     }

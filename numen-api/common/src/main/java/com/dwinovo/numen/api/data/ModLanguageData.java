@@ -254,6 +254,24 @@ public final class ModLanguageData {
         public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
+        public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
+
+        // Libraries: the built-in / mine groups every content library shows, and what is said about a built-in entry.
+        public static final String LIBRARY_BUILTIN  = "numen.library.builtin";
+        public static final String LIBRARY_MINE     = "numen.library.mine";
+        public static final String LIBRARY_MODIFIED = "numen.library.modified";
+        public static final String LIBRARY_UPDATE   = "numen.library.update";
+        public static final String LIBRARY_GONE     = "numen.library.gone";
+        public static final String LIBRARY_COVERED  = "numen.library.covered";
+        public static final String LIBRARY_COVERS   = "numen.library.covers";
+        public static final String LIBRARY_OFF      = "numen.library.off";
+        public static final String LIBRARY_ACCEPT   = "numen.library.accept";
+        public static final String LIBRARY_DISMISS  = "numen.library.dismiss";
+        public static final String KEY_OWNER_SEES   = "numen.key.owner_sees";
+        public static final String USAGE_HEADER     = "numen.usage.header";
+        public static final String USAGE_UNLIMITED  = "numen.usage.unlimited";
+        public static final String USAGE_NOBODY     = "numen.usage.nobody";
+        public static final String USAGE_LINE       = "numen.usage.line";
 
         // Voice (TTS) section: nav label, global switch, entry list/form, preview, bindings.
         public static final String VOICE_TITLE          = "numen.voice.title";
@@ -425,7 +443,6 @@ public final class ModLanguageData {
         public static final String USAGE_WASTE = "numen.usage.waste";
         public static final String SCREEN_RENDER_FAILED = "numen.screen.render_failed";
         public static final String PERSONA_NAME_PLACEHOLDER = "numen.persona.name_placeholder";
-        public static final String PERSONA_COPY = "numen.persona.copy";
         public static final String STT_DOUBAO_KEY_PLACEHOLDER = "numen.stt.doubao_key_placeholder";
         public static final String THEME_TALK_HINT = "numen.theme.talk_hint";
         public static final String THEME_INITIATIVE = "numen.theme.initiative";
@@ -578,6 +595,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "None · click Add");
         adder.add("numen.mcp.add", "Add");
+        adder.add("numen.mcp.form_service", "Key service (optional)");
         adder.add("numen.mcp.type_http", "HTTP");
         adder.add("numen.mcp.type_stdio", "stdio");
         adder.add("numen.mcp.form_name", "Name");
@@ -593,7 +611,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · connecting…");
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
-        adder.add("numen.skill.empty", "None · drop into config/numen/skills");
+        adder.add("numen.skill.empty", "None");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
@@ -684,7 +702,7 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "Mark as read");
         adder.add("numen.menu.night", "Night mode");
         adder.add("numen.menu.day", "Day mode");
-        adder.add("numen.menu.clone", "Clone");
+        adder.add("numen.menu.clone", "Copy to mine");
         adder.add("numen.menu.use", "Use for her");
         adder.add("numen.menu.stop_using", "Stop using");
         adder.add("numen.chat.reply_to", "Reply to %s");
@@ -724,7 +742,7 @@ public final class ModLanguageData {
         adder.add("numen.skin.name_placeholder", "3-16 letters, digits or _");
         adder.add("numen.bubble.doing",      "▸ %s");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
-        adder.add("numen.gui.list.cloned",   "Cloned as an editable copy");
+        adder.add("numen.gui.list.cloned",   "Copied to mine");
         adder.add(Keys.SKIN_WARN_IMAGE,      "Pick a skin png first");
         adder.add(Keys.SKIN_PICKER_TITLE,    "Numen skin (64x64 PNG)");
         adder.add(Keys.SKIN_WARN_SIZE,       "Skin must be 64x64 (or legacy 64x32), got %s");
@@ -741,6 +759,22 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_KEY,  "Model config \"%s\" has no API Key yet — add it in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_URL,  "Model config \"%s\" has no base URL — add it in Settings → Model Configs");
+        adder.add(Keys.LIBRARY_BUILTIN,  "Built-in");
+        adder.add(Keys.LIBRARY_MINE,     "Mine");
+        adder.add(Keys.LIBRARY_MODIFIED, "modified");
+        adder.add(Keys.LIBRARY_UPDATE,   "new default available");
+        adder.add(Keys.LIBRARY_GONE,     "source uninstalled");
+        adder.add(Keys.LIBRARY_COVERED,  "covered by mine");
+        adder.add(Keys.LIBRARY_COVERS,   "overrides the built-in");
+        adder.add(Keys.LIBRARY_OFF,      "off");
+        adder.add(Keys.LIBRARY_ACCEPT,   "Take the new default");
+        adder.add(Keys.LIBRARY_DISMISS,  "Keep my version");
+        adder.add(Keys.KEY_OWNER_SEES,   "The server owner can see this key — use one with a spending limit.");
+        adder.add(Keys.USAGE_HEADER,     "Tokens used today with the server's keys (limit per player: %s)");
+        adder.add(Keys.USAGE_UNLIMITED,  "none");
+        adder.add(Keys.USAGE_NOBODY,     "Nobody has used the server's keys today.");
+        adder.add(Keys.USAGE_LINE,       "%s: %s"); 
+        adder.add(Keys.ENDPOINT_QUOTA,   "The server's shared key has hit today's token limit for you — put your own key in Settings → Model Configs, or try again tomorrow");
 
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "Voice");
@@ -1007,7 +1041,7 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_SKILLS, "Turn skills on and off");
         adder.add(Keys.CMD_SKILLS_TITLE, "Skills   ↑↓ select · Enter toggles · Esc back");
         adder.add(Keys.CMD_SKILLS_EMPTY, "(no skills yet)");
-        adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "Put a folder with a SKILL.md into config/numen/skills");
+        adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "Put a folder with a SKILL.md into config/numen/server/skills/<namespace>/");
         adder.add(Keys.CMD_USAGE, "Token usage");
         adder.add(Keys.USAGE_TITLE, "Token usage   Esc back");
         adder.add(Keys.USAGE_NONE, "No usage yet");
@@ -1022,7 +1056,6 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_WASTE, "⚠ Cache paid again: %s tokens · %s times");
         adder.add(Keys.SCREEN_RENDER_FAILED, "The Numen panel failed to render and fell back — see latest.log for details");
         adder.add(Keys.PERSONA_NAME_PLACEHOLDER, "Name (also the file name), e.g. Ember");
-        adder.add(Keys.PERSONA_COPY, "%s copy");
         adder.add(Keys.STT_DOUBAO_KEY_PLACEHOLDER, "API Key (old console: appid:access_token)");
         adder.add(Keys.THEME_TALK_HINT, "Quick-talk hint (shows the key when your crosshair is on a companion)");
         adder.add(Keys.THEME_INITIATIVE, "Initiative");
@@ -1173,6 +1206,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "无 · 点「添加」");
         adder.add("numen.mcp.add", "添加");
+        adder.add("numen.mcp.form_service", "密钥用的服务名(可选)");
         adder.add("numen.mcp.type_http", "HTTP");
         adder.add("numen.mcp.type_stdio", "stdio");
         adder.add("numen.mcp.form_name", "名称");
@@ -1188,7 +1222,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · 连接中…");
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
-        adder.add("numen.skill.empty", "无 · 放入 config/numen/skills");
+        adder.add("numen.skill.empty", "无");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
@@ -1279,7 +1313,7 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "标为已读");
         adder.add("numen.menu.night", "夜间模式");
         adder.add("numen.menu.day", "日间模式");
-        adder.add("numen.menu.clone", "克隆");
+        adder.add("numen.menu.clone", "复制到我的");
         adder.add("numen.menu.use", "给她用");
         adder.add("numen.menu.stop_using", "不再使用");
         adder.add("numen.chat.reply_to", "回复 %s");
@@ -1319,7 +1353,7 @@ public final class ModLanguageData {
         adder.add("numen.skin.name_placeholder", "3~16 位英文/数字/下划线");
         adder.add("numen.bubble.doing",      "▸ 正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
-        adder.add("numen.gui.list.cloned",   "已克隆为可编辑副本");
+        adder.add("numen.gui.list.cloned",   "已复制到我的");
         adder.add(Keys.SKIN_WARN_IMAGE,      "先选一张皮肤 png");
         adder.add(Keys.SKIN_PICKER_TITLE,    "Numen 皮肤(64x64 PNG)");
         adder.add(Keys.SKIN_WARN_SIZE,       "皮肤需为 64x64(或旧版 64x32),拖入的是 %s");
@@ -1336,6 +1370,22 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
         adder.add(Keys.ENDPOINT_NO_KEY,  "模型配置「%s」还没填 API Key——到 设置 → 模型配置 补上");
         adder.add(Keys.ENDPOINT_NO_URL,  "模型配置「%s」没有接口地址——到 设置 → 模型配置 补上");
+        adder.add(Keys.LIBRARY_BUILTIN,  "内置");
+        adder.add(Keys.LIBRARY_MINE,     "我的");
+        adder.add(Keys.LIBRARY_MODIFIED, "已修改");
+        adder.add(Keys.LIBRARY_UPDATE,   "默认内容有更新");
+        adder.add(Keys.LIBRARY_GONE,     "来源已卸载");
+        adder.add(Keys.LIBRARY_COVERED,  "被我的盖着");
+        adder.add(Keys.LIBRARY_COVERS,   "盖着内置的");
+        adder.add(Keys.LIBRARY_OFF,      "已关");
+        adder.add(Keys.LIBRARY_ACCEPT,   "采用新的默认内容");
+        adder.add(Keys.LIBRARY_DISMISS,  "保留我的版本");
+        adder.add(Keys.KEY_OWNER_SEES,   "服主看得到这把 key,请用设了花费上限的那一个。");
+        adder.add(Keys.USAGE_HEADER,     "今天用服主的 key 烧掉的 token(每人上限:%s)");
+        adder.add(Keys.USAGE_UNLIMITED,  "不限");
+        adder.add(Keys.USAGE_NOBODY,     "今天还没有人用过服主的 key。");
+        adder.add(Keys.USAGE_LINE,       "%s:%s");
+        adder.add(Keys.ENDPOINT_QUOTA,   "服主提供的 key 今天给你的 token 额度用完了——到 设置 → 模型配置 填上你自己的 key,或明天再来");
 
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "语音");
@@ -1603,7 +1653,7 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_SKILLS, "技能开关");
         adder.add(Keys.CMD_SKILLS_TITLE, "技能   ↑↓ 选择 · 回车开关 · Esc 返回");
         adder.add(Keys.CMD_SKILLS_EMPTY, "(还没有技能)");
-        adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "往 config/numen/skills 放一个带 SKILL.md 的目录");
+        adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "往 config/numen/server/skills/<命名空间>/ 放一个带 SKILL.md 的目录");
         adder.add(Keys.CMD_USAGE, "看 token 账");
         adder.add(Keys.USAGE_TITLE, "Token 账   Esc 返回");
         adder.add(Keys.USAGE_NONE, "还没有用量记录");
@@ -1618,7 +1668,6 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_WASTE, "⚠ 缓存重付 %s tokens · %s 次");
         adder.add(Keys.SCREEN_RENDER_FAILED, "Numen 面板渲染出错,已兜底——详情见 latest.log");
         adder.add(Keys.PERSONA_NAME_PLACEHOLDER, "名称(即文件名),如 小焰");
-        adder.add(Keys.PERSONA_COPY, "%s 副本");
         adder.add(Keys.STT_DOUBAO_KEY_PLACEHOLDER, "API Key(旧版控制台填 appid:access_token)");
         adder.add(Keys.THEME_TALK_HINT, "快捷对话提醒(准星指着同伴时提示按键)");
         adder.add(Keys.THEME_INITIATIVE, "主动性");

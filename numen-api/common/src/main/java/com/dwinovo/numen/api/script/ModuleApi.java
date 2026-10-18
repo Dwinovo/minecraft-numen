@@ -21,8 +21,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。模块是服务器上主人目录里的文件,路径就是
- * 名字;随模组发布的那一套装进去(出厂的),她能看、改、存、删任何一份,改坏了的出厂模块 {@code reset} 还原。当场回,不占身体;
+ * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。模块是文件,路径就是名字;
+ * 她看到服务器上内置的(随模组发布)与主人目录里她自己的叠在一起,她能看、改、存、删任何一份:改一份内置的,是在主人目录里存一份
+ * 同名的盖着它(服务器上的原样不动),删一份内置的是对她自己关掉它,{@code reset} 都还原。当场回,不占身体;
  * 存、改、删不问主人,每一次写进回执与服务端日志。每份都记战绩:用到它的程序跑了几段、
  * 跑完几段、最近一次在什么时候、最近一段没跑完停在哪一行、为什么——只给事实,不替她评判。战绩由跑程序的大脑在程序结束时记
  * ({@link Modules#tally})。
@@ -54,10 +55,10 @@ public final class ModuleApi {
         Modules modules = Modules.of(call.companion());
         List<ModuleInfo> out = new ArrayList<>();
         java.util.SortedSet<String> names = new java.util.TreeSet<>(modules.all().keySet());
-        BuiltinModules.all().keySet().stream().filter(modules::deletedFactory).forEach(names::add);
+        names.addAll(modules.deletedFactory());
         for (String name : names) {
             Modules.Module m = modules.get(name);
-            String summary = m != null ? m.summary() : BuiltinModules.get(name).summary();
+            String summary = m != null ? m.summary() : modules.builtin(name).summary();
             out.add(listed(name, summary == null ? "" : summary, whose(m, name), modules.stats(name)));
         }
         return out;
@@ -108,7 +109,7 @@ public final class ModuleApi {
         Modules modules = Modules.of(call.companion());
         String name = args.name();
         boolean factory = args.factory().orElse(false);
-        BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+        Modules.Module builtin = modules.builtin(name);
         if (factory && builtin == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "nothing named " + name + " ships with this version",
                     Call.of("numen.module.show", name));
@@ -145,8 +146,8 @@ public final class ModuleApi {
             + "it does, and the comment lines above each function say what that one does: that is how the list and "
             + "numen.api.help describe them.")
     @Note("A module named after an API group (numen.move, numen.work, ...) adds its functions to that group. Saving "
-            + "under a name that has a file replaces it and resets its record. Your owner can edit the files too; the "
-            + "next program reads them as they are.")
+            + "under a name that has a file replaces it and resets its record. Your owner can edit the files too; "
+            + "/reload makes the next program read them.")
     @SeeAlso({"numen.module.delete", "numen.module.reset"})
     public static Saved save(ServerCall call, Save args) {
         Modules modules = Modules.of(call.companion());

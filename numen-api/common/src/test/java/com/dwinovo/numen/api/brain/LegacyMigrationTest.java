@@ -134,34 +134,28 @@ class LegacyMigrationTest {
     }
 
     @Test
-    void theOwnersPersonasAndModulesGoToHisPlayerDirectoryOnce(@TempDir Path dir) throws IOException {
-        Path config = dir.resolve("config");
-        UUID profile = UUID.randomUUID();
-        text(config.resolve("persona").resolve("小焰.md"), "傲娇");
-        text(config.resolve("lua").resolve(profile.toString()).resolve("my").resolve("lumber.lua"), "return {}");
-        text(config.resolve("lua").resolve(profile.toString()).resolve("modules.json"), "{}");
-        Path owner = dir.resolve("server").resolve("players").resolve(profile.toString());
+    void aFileIsCopiedOnceAndNeverOverwritten(@TempDir Path dir) throws IOException {
+        text(dir.resolve("old").resolve("ui.json"), "旧的");
 
-        assertTrue(LegacyMigration.ownerLibraries(config, profile, owner));
+        assertTrue(LegacyMigration.file(dir.resolve("old").resolve("ui.json"), dir.resolve("client").resolve("ui.json")));
+        text(dir.resolve("client").resolve("ui.json"), "新的");
 
-        assertEquals("傲娇", Files.readString(owner.resolve("persona").resolve("小焰.md")));
-        assertEquals("return {}", Files.readString(owner.resolve("lua").resolve("my").resolve("lumber.lua")));
-        assertTrue(Files.exists(owner.resolve("lua").resolve("modules.json")), "账本跟着模块");
-        assertFalse(LegacyMigration.ownerLibraries(config, profile, owner), "第二次什么也不搬");
+        assertFalse(LegacyMigration.file(dir.resolve("old").resolve("ui.json"), dir.resolve("client").resolve("ui.json")));
+        assertEquals("新的", Files.readString(dir.resolve("client").resolve("ui.json")));
+        assertEquals("旧的", Files.readString(dir.resolve("old").resolve("ui.json")), "旧的原样留着");
+        assertFalse(Files.exists(dir.resolve("client").resolve("ui.json.migrating")), "暂存不留");
     }
 
     @Test
-    void aLibraryTheOwnerAlreadyHasOnTheServerIsNotOverwritten(@TempDir Path dir) throws IOException {
-        Path config = dir.resolve("config");
-        UUID profile = UUID.randomUUID();
-        text(config.resolve("persona").resolve("小焰.md"), "旧的");
-        Path owner = dir.resolve("server").resolve("players").resolve(profile.toString());
-        text(owner.resolve("persona").resolve("团子.md"), "服务器上他新建的");
+    void aTreeIsCopiedWholeOnceAndItsHalfDoneLeftoverIsCleared(@TempDir Path dir) throws IOException {
+        text(dir.resolve("old").resolve("skins").resolve("a.png"), "png");
+        text(dir.resolve("client").resolve("skins.migrating").resolve("stray"), "上次的残留");
 
-        assertFalse(LegacyMigration.ownerLibraries(config, profile, owner));
+        assertTrue(LegacyMigration.tree(dir.resolve("old").resolve("skins"), dir.resolve("client").resolve("skins")));
 
-        assertFalse(Files.exists(owner.resolve("persona").resolve("小焰.md")));
-        assertEquals("服务器上他新建的", Files.readString(owner.resolve("persona").resolve("团子.md")));
+        assertEquals("png", Files.readString(dir.resolve("client").resolve("skins").resolve("a.png")));
+        assertFalse(Files.exists(dir.resolve("client").resolve("skins").resolve("stray")));
+        assertFalse(LegacyMigration.tree(dir.resolve("old").resolve("skins"), dir.resolve("client").resolve("skins")));
     }
 
     @Test

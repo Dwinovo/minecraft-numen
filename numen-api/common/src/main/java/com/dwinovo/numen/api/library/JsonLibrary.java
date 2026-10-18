@@ -41,11 +41,6 @@ public abstract class JsonLibrary<E> {
         this.doc = new JsonDoc(file, format, io);
     }
 
-    /** 配置目录 {@code config/numen};见 {@link com.dwinovo.numen.api.NumenPaths}。 */
-    protected static Path configDir() {
-        return com.dwinovo.numen.api.NumenPaths.config();
-    }
-
     // ---- 子类钩子 ----
 
     /** 日志标签(如 {@code numen-voice})。 */

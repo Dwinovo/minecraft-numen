@@ -14,7 +14,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code llm.*}(调用没成):{@code [HTTP 状态码(没有是 "0"), 回话的主机, 厂家的原话]},后两项可为空;
  *       {@code llm.stream_failed} 例外,只有 {@code [原话]};</li>
- *   <li>{@code endpoint.no_key}、{@code endpoint.no_url}:{@code [档案的名字]};{@code endpoint.unbound} 没有;</li>
+ *   <li>{@code endpoint.no_key}、{@code endpoint.no_url}:{@code [档案的名字]};{@code endpoint.unbound}、{@code endpoint.quota} 没有;</li>
  *   <li>{@code halt.*}(切断,见 {@link HaltReason}):死因这类现场的话,没有就空。</li>
  * </ul>
  *
@@ -44,6 +44,8 @@ public record Cause(String code, List<String> args) {
     public static final String UNBOUND = "endpoint.unbound";
     public static final String NO_KEY = "endpoint.no_key";
     public static final String NO_URL = "endpoint.no_url";
+    /** 档案用的是服主的 key,而这位玩家今天用服主的 key 的额度用完了。 */
+    public static final String QUOTA = "endpoint.quota";
 
     /**
      * 一次模型调用抛出来的错归成哪个码:有 HTTP 回话的按状态码分,没有回话(连不上、超时)是 {@link #NETWORK}。
@@ -106,6 +108,7 @@ public record Cause(String code, List<String> args) {
             case UNBOUND -> "没绑模型配置";
             case NO_KEY -> "模型配置没填密钥";
             case NO_URL -> "模型配置没有地址";
+            case QUOTA -> "服主提供的模型额度今天用完了";
             default -> code;
         };
         if (code.startsWith("llm.") && !arg(2).isEmpty()) {

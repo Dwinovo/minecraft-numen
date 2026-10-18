@@ -23,7 +23,7 @@ class FtbqApiLintReport {
         NumenPlugins.register(FtbqApi.NAMESPACE, FtbqApi::install);
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("ftbquests.")).toList());
-        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/ftbquests/skills")));
+        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/ftbquests/numen/skills")));
         ApiLintReport.write(lint);
     }
 }

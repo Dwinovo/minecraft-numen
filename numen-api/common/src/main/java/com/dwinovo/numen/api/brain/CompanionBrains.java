@@ -1,18 +1,17 @@
 package com.dwinovo.numen.api.brain;
 
-import com.dwinovo.numen.api.NumenPaths;
-import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.library.LibraryHub;
+import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.program.LocalPrograms;
 import net.minecraft.server.MinecraftServer;
 
-import java.nio.file.Path;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -24,8 +23,7 @@ import java.util.function.IntSupplier;
  * ({@link OwnerPrefs})、程序在本进程里跑({@link LocalPrograms})、身体状态直接读身体、谁在场读主人的会话
  * ({@link Conversations})、驾驶席归外接大脑宿主。
  *
- * <p>{@link #ensure} 是"她存在,她就有大脑":名册上有、大脑表里没有就建,建之前先把旧版客户端留下的数据搬进来
- * ({@link LegacyMigration},复制不移动、只做一次)。
+ * <p>{@link #ensure} 是"她存在,她就有大脑":名册上有、大脑表里没有就建。
  *
  * <p>线程:服务端主线程。
  */
@@ -67,6 +65,7 @@ public final class CompanionBrains {
         Conversations rooms = Conversations.of(server, owner);
         CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, home, server, mind,
                 new LocalPrograms(server),
+                new OwnerTools(owner, LibraryHub.of(server).library(McpClientConfig.KIND, owner)),
                 () -> NumenPlayer.findByUuid(server, companion),
                 () -> {
                     NumenPlayer body = NumenPlayer.findByUuid(server, companion);
@@ -97,9 +96,10 @@ public final class CompanionBrains {
         }
         UUID owner = entry.owner();
         Homes homes = Homes.of(server);
-        migrateLegacy(server, companion, owner, homes);
+        McpClients.of(server).owner(owner);   // 他自己接进来的 MCP 服务器,从这一刻起连着
         CompanionLoop loop = create(server, companion, owner, homes.companion(companion),
-                new LlmMind(ProviderLibrary.instance()), Replies.link(server, owner),
+                new LlmMind(ModelServices.of(server).providers(owner), owner, ModelServices.of(server).quota()),
+                Replies.link(server, owner),
                 () -> server.getPlayerList().getPlayer(owner) != null,
                 com.dwinovo.numen.api.mcp.server.McpMode.instance()::driving);
         return loop;
@@ -115,20 +115,5 @@ public final class CompanionBrains {
         if (player != null && Presence.hasClient(owner)) {
             CompanionLoops.sendSnapshots(owner, Replies.link(server, owner));
         }
-    }
-
-    /** 旧版客户端留在 {@code config/numen/companions/<uuid>/} 里的她的家:单人游戏的房主,搬进世界里她的家。 */
-    private static void migrateLegacy(MinecraftServer server, UUID companion, UUID owner, Homes homes) {
-        if (!isHost(server, owner)) {
-            return;
-        }
-        Path legacy = NumenPaths.config().resolve("companions").resolve(companion.toString());
-        LegacyMigration.companion(legacy, homes.companion(companion).dir());
-    }
-
-    /** 这位主人是不是单人游戏的房主:旧版留下的数据只可能是他的。 */
-    static boolean isHost(MinecraftServer server, UUID owner) {
-        var profile = server.getSingleplayerProfile();
-        return profile != null && owner.equals(profile.getId());
     }
 }

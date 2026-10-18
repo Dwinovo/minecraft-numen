@@ -50,6 +50,10 @@ public class NumenMod {
                 com.dwinovo.numen.api.platform.ServerLifecycle.fireStarted(e.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppedEvent e) ->
                 com.dwinovo.numen.api.platform.ServerLifecycle.fireStopped());
+        // /reload:磁盘上手改的库、钥匙串、设置重新读(服务器起好之前的那次装载 fireReloaded 不理)
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.AddReloadListenerEvent e) ->
+                e.addListener((net.minecraft.server.packs.resources.ResourceManagerReloadListener) manager ->
+                        com.dwinovo.numen.api.platform.ServerLifecycle.fireReloaded()));
 
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on NeoForge.");

@@ -23,7 +23,7 @@ class TlmApiLintReport {
         NumenPlugins.register(NumenTlm.NAMESPACE, SkinApi::install);
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("tlm.")).toList());
-        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/tlm/skills")));
+        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/tlm/numen/skills")));
         ApiLintReport.write(lint);
     }
 }

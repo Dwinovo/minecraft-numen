@@ -43,12 +43,12 @@ class ChatInputBarCommandTest {
 
     @BeforeEach
     void useTempHome() {
-        CompanionLooks.init(home);
+        CompanionLooks.init(home, home);
     }
 
     @AfterEach
     void restore() {
-        CompanionLooks.init(null);
+        CompanionLooks.init(null, null);
     }
 
     /** 记下输入行交给宿主的两样东西:说出去的话、命令的回话。 */

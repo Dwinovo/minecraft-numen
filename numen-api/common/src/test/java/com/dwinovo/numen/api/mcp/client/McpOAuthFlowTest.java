@@ -64,7 +64,7 @@ class McpOAuthFlowTest {
 
     private McpClientConfig.ServerSpec spec() {
         return new McpClientConfig.ServerSpec("files", "http", base + "/mcp", Map.of(), "", List.of(), Map.of(),
-                true, 20, 120);
+                "", true, 20, 120);
     }
 
     private static Map<String, String> query(String url) {

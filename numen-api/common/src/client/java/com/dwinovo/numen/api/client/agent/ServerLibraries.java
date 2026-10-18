@@ -32,22 +32,63 @@ public final class ServerLibraries {
         return o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsString() : null;
     }
 
+    // ---- 内容库(人设、模型档案、技能、接进来的 MCP 服务器)共有的几项 ----
+
+    /**
+     * 一行内容库条目共有的几项:内置还是我的、玩家有没有把它关掉、另一组有没有同名的、内置的和 jar 的关系
+     * (改过没有、有没有新版、来源卸载了没有)。
+     *
+     * @param id 库里的名字({@code 命名空间:名字})
+     */
+    public record Base(String id, String name, boolean builtin, boolean enabled, boolean paired, boolean modified,
+                       boolean update, boolean gone) {}
+
+    /** 叠起来之后算数的:内置的被我的同名盖着时,内置那一行不算。 */
+    private static boolean effective(Base b) {
+        return !(b.builtin() && b.paired());
+    }
+
+    private static Base base(JsonObject o) {
+        return new Base(text(o, "id"), text(o, "name"), "builtin".equals(text(o, "group")),
+                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "modified"),
+                flag(o, "update"), flag(o, "gone"));
+    }
+
+    private static boolean flag(JsonObject o, String key) {
+        return o.has(key) && o.get(key).getAsBoolean();
+    }
+
     // ---- 人设 ----
 
-    public record Persona(String id, String name, String text) {}
+    public record Persona(Base base, String text) {
 
+        public String id() {
+            return base.id();
+        }
+
+        public String name() {
+            return base.name();
+        }
+    }
+
+    /** 内置的在前,我的在后。 */
     public static List<Persona> personas() {
         List<Persona> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.PERSONA)) {
             JsonObject o = e.getAsJsonObject();
-            out.add(new Persona(text(o, "id"), text(o, "name"), text(o, "text") == null ? "" : text(o, "text")));
+            out.add(new Persona(base(o), text(o, "text") == null ? "" : text(o, "text")));
         }
         return out;
     }
 
+    /** 选人设时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    public static List<Persona> personasInUse() {
+        return personas().stream().filter(p -> effective(p.base()) && p.base().enabled()).toList();
+    }
+
     public static Persona persona(String id) {
         for (Persona p : personas()) {
-            if (p.id().equals(id)) {
+            if (effective(p.base()) && p.id().equals(id)) {
                 return p;
             }
         }
@@ -56,11 +97,22 @@ public final class ServerLibraries {
 
     // ---- 模型档案 ----
 
-    /** {@code full} 只有管理员有(含 key、地址);别人只有 id、名字、厂家、型号。 */
-    public record Provider(String id, String name, String provider, String model, ProviderLibrary.Entry full) {
+    /**
+     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看内置的、人人看自己的;
+     * 别人看内置的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
+     */
+    public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, String keySource) {
+
+        public String id() {
+            return base.id();
+        }
+
+        public String name() {
+            return base.name();
+        }
 
         public boolean hasKey() {
-            return full != null && full.profile().apiKey() != null && !full.profile().apiKey().isBlank();
+            return !keySource.isEmpty();
         }
     }
 
@@ -69,10 +121,57 @@ public final class ServerLibraries {
         boolean admin = RemoteCompanions.admin();
         for (JsonElement e : entries(Libraries.PROVIDER)) {
             JsonObject o = e.getAsJsonObject();
-            out.add(new Provider(text(o, "id"), text(o, "name"), text(o, "provider"), text(o, "model"),
-                    admin ? ProviderLibrary.entryFromJson(o) : null));
+            Base base = base(o);
+            boolean visible = admin || !base.builtin();
+            out.add(new Provider(base, text(o, "provider"), text(o, "model"),
+                    visible && !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
+                            ProviderLibrary.profileFromJson(o)) : null,
+                    text(o, "keySource") == null ? "" : text(o, "keySource")));
         }
         return out;
+    }
+
+    /** 选模型档案时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    public static List<Provider> providersInUse() {
+        return providers().stream().filter(p -> effective(p.base()) && p.base().enabled()).toList();
+    }
+
+    // ---- 钥匙串 ----
+
+    /** 一个服务商的 key:{@code mine} 是他自己的(没有是 null);{@code server} 只有管理员看得到。 */
+    public record KeyRow(String service, String mine, boolean serverSet, String server) {}
+
+    public static List<KeyRow> keys() {
+        List<KeyRow> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.KEY)) {
+            JsonObject o = e.getAsJsonObject();
+            if (o.has("service")) {
+                out.add(new KeyRow(text(o, "service"), text(o, "mine"), flag(o, "serverSet"), text(o, "server")));
+            }
+        }
+        return out;
+    }
+
+    /** 这个服务商他自己的 key;没存过是空串。 */
+    public static String mineKey(String service) {
+        return keys().stream().filter(k -> k.service().equals(service)).map(KeyRow::mine)
+                .filter(java.util.Objects::nonNull).findFirst().orElse("");
+    }
+
+    /** 这个服务商服主的 key;没有或看不到是空串。 */
+    public static String serverKey(String service) {
+        return keys().stream().filter(k -> k.service().equals(service)).map(KeyRow::server)
+                .filter(java.util.Objects::nonNull).findFirst().orElse("");
+    }
+
+    /** 答复里带的提醒({@link Libraries#NOTICE_OWNER_SEES_KEY});没有是 null。 */
+    public static String keyNotice() {
+        for (JsonElement e : entries(Libraries.KEY)) {
+            if (e.getAsJsonObject().has("notice")) {
+                return text(e.getAsJsonObject(), "notice");
+            }
+        }
+        return null;
     }
 
     // ---- 型号目录与连通性检测(管理员的档案表单问的;目录、端点解析、检测都在服务端算) ----
@@ -189,15 +288,31 @@ public final class ServerLibraries {
 
     // ---- 技能 ----
 
-    public record Skill(String name, String description, boolean enabled) {}
+    public record Skill(Base base, String skill, String description) {
 
+        /** 模型看到的技能名({@code SKILL.md} 里的 {@code name:})。 */
+        public String name() {
+            return skill;
+        }
+
+        public boolean enabled() {
+            return base.enabled();
+        }
+    }
+
+    /** 内置的在前,我的在后。 */
     public static List<Skill> skills() {
         List<Skill> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.SKILL)) {
             JsonObject o = e.getAsJsonObject();
-            out.add(new Skill(text(o, "name"), text(o, "description"), !o.has("enabled") || o.get("enabled").getAsBoolean()));
+            out.add(new Skill(base(o), text(o, "skill"), text(o, "description")));
         }
         return out;
+    }
+
+    /** 叠起来之后算数的技能,含被玩家关掉的(开关面板要列出来让他再打开)。 */
+    public static List<Skill> skillsEffective() {
+        return skills().stream().filter(s -> effective(s.base())).toList();
     }
 
     // ---- 偏好 ----
@@ -222,12 +337,23 @@ public final class ServerLibraries {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 一台接进来的 MCP 服务器。管理员有 {@code spec}(地址、命令行、请求头)、状态、工具名、授权网址;别人只有名字、连没连上、工具数。
+     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看内置的、人人看自己的,别人看内置的只有名字、连没连上、
+     * 工具数。{@code connect} 是条目主人的"连不连",{@code base.enabled} 是玩家自己的开关(只管他的同伴看不看得到它的工具)。
      */
-    public record McpClientRow(String name, boolean connected, int toolCount, McpClientConfig.ServerSpec spec,
-                               McpClientManager.Status status, List<String> tools, String error, String authUrl) {
+    public record McpClientRow(Base base, boolean connect, boolean connected, int toolCount,
+                               McpClientConfig.ServerSpec spec, McpClientManager.Status status, List<String> tools,
+                               String error, String authUrl) {
 
-        public boolean admin() {
+        public String id() {
+            return base.id();
+        }
+
+        public String name() {
+            return base.name();
+        }
+
+        /** 看得到配置的全貌。 */
+        public boolean full() {
             return spec != null;
         }
     }
@@ -236,20 +362,19 @@ public final class ServerLibraries {
         List<McpClientRow> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.MCP_CLIENT)) {
             JsonObject o = e.getAsJsonObject();
-            int count = o.has("toolCount") ? o.get("toolCount").getAsInt() : 0;
-            if (!o.has("status")) {
-                out.add(new McpClientRow(text(o, "name"), o.has("connected") && o.get("connected").getAsBoolean(), count,
-                        null, null, List.of(), "", null));
+            if (flag(o, "unreadable")) {
                 continue;
             }
+            Base base = base(o);
+            int count = o.has("toolCount") ? o.get("toolCount").getAsInt() : 0;
             McpClientManager.Status status = McpClientManager.Status.valueOf(text(o, "status"));
             List<String> tools = new ArrayList<>();
             if (o.has("tools")) {
                 o.getAsJsonArray("tools").forEach(t -> tools.add(t.getAsString()));
             }
-            out.add(new McpClientRow(text(o, "name"), status == McpClientManager.Status.CONNECTED, count,
-                    McpClientConfig.parseServer(o), status, tools, text(o, "error") == null ? "" : text(o, "error"),
-                    text(o, "authUrl")));
+            out.add(new McpClientRow(base, flag(o, "connect"), flag(o, "connected"), count,
+                    o.has("spec") ? McpClientConfig.parseServer(base.name(), o.getAsJsonObject("spec")) : null,
+                    status, tools, text(o, "error") == null ? "" : text(o, "error"), text(o, "authUrl")));
         }
         return out;
     }

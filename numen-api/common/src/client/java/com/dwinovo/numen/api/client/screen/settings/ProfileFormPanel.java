@@ -116,6 +116,8 @@ public final class ProfileFormPanel {
     private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
+    /** 换到另一个厂家时,表单上的 key 换成这个厂家已存的(key 按厂家存,不跟着档案走);没存过是空串。 */
+    private final java.util.function.Function<String, String> keyOf;
 
     /** 表单行装不下卡片时整体上下位移(记账在 {@link ScrollBox})。 */
     private final ScrollBox scroll = new ScrollBox();
@@ -151,9 +153,11 @@ public final class ProfileFormPanel {
     /** 上一次问的草稿里会改变答案的那几项:没变就不再问。 */
     private String askedKey = "";
 
-    public ProfileFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
+    public ProfileFormPanel(Consumer<Draft> onSave, Runnable onCancel,
+                            java.util.function.Function<String, String> keyOf) {
         this.onSave = onSave;
         this.onCancel = onCancel;
+        this.keyOf = keyOf;
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -357,7 +361,7 @@ public final class ProfileFormPanel {
             modelsAsked = provider;
         }
         JsonObject body = new JsonObject();
-        body.add("draft", ProviderLibrary.entryToJson(new ProviderLibrary.Entry(null, "", profile)));
+        body.add("draft", ProviderLibrary.profileToJson(profile));
         body.addProperty("models", wantModels);
         RemoteCompanions.library().request(Libraries.CATALOG, Libraries.LIST, body);
     }
@@ -469,6 +473,7 @@ public final class ProfileFormPanel {
     /** 厂家变了:型号换成该厂家第一个能调工具的,思考回自动,地址与厂家专属的覆盖项清空回目录缺省。 */
     private void adaptToVendor(String vendorId) {
         draft.provider = vendorId;
+        draft.apiKey = keyOf.apply(vendorId);
         draft.protocol = ConnectionProfile.CUSTOM.equals(vendorId) ? Api.CHAT.id() : "";
         draft.compat = null;
         ServerLibraries.Vendor vendor = vendor(vendorId);
@@ -669,7 +674,8 @@ public final class ProfileFormPanel {
         checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         JsonObject body = new JsonObject();
-        body.add("draft", ProviderLibrary.entryToJson(new ProviderLibrary.Entry(null, draft.name, draft.toProfile())));
+        body.add("draft", ProviderLibrary.profileToJson(draft.toProfile()));
+        body.addProperty("key", draft.apiKey);
         RemoteCompanions.library().request(Libraries.PROVIDER_CHECK, Libraries.RUN, body);
     }
 

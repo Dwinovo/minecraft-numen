@@ -122,6 +122,12 @@ public final class RemoteCompanions {
             if (Libraries.MCP_CLIENT.equals(p.kind())) {
                 McpAuthPrompt.onServers();
             }
+            if (Libraries.KEY.equals(p.kind()) && ServerLibraries.keyNotice() != null) {
+                com.dwinovo.numen.api.client.hud.NumenHudToasts.push(
+                        com.dwinovo.numen.api.client.ui.NumenToasts.Severity.WARN,
+                        net.minecraft.client.resources.language.I18n.get(
+                                com.dwinovo.numen.api.data.ModLanguageData.Keys.KEY_OWNER_SEES));
+            }
         };
     }
 

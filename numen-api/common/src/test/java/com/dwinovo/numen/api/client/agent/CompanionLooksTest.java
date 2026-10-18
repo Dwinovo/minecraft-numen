@@ -22,15 +22,15 @@ class CompanionLooksTest {
 
     @AfterEach
     void release() {
-        CompanionLooks.init(null);
+        CompanionLooks.init(null, null);
     }
 
     @Test
     void whatWasChosenIsReadBackAfterARestart(@TempDir Path dir) {
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
         CompanionLooks.set(HER, CompanionLooks.of(HER).withVoice("v1").withSkin("s1"));
 
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
 
         assertEquals(new Looks("v1", "s1"), CompanionLooks.of(HER));
         assertTrue(CompanionLooks.of(OTHER).isEmpty());
@@ -38,23 +38,23 @@ class CompanionLooksTest {
 
     @Test
     void clearingBothChoicesForgetsHer(@TempDir Path dir) {
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
         CompanionLooks.set(HER, new Looks("v1", null));
         CompanionLooks.set(HER, CompanionLooks.of(HER).withVoice(null));
 
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
 
         assertTrue(CompanionLooks.of(HER).isEmpty());
     }
 
     @Test
     void forgettingOneLeavesTheOthers(@TempDir Path dir) {
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
         CompanionLooks.set(HER, new Looks("v1", null));
         CompanionLooks.set(OTHER, new Looks(null, "s2"));
 
         CompanionLooks.forget(HER);
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
 
         assertTrue(CompanionLooks.of(HER).isEmpty());
         assertEquals("s2", CompanionLooks.of(OTHER).skinId());
@@ -67,7 +67,7 @@ class CompanionLooksTest {
         Files.writeString(home.resolve("binding.json"),
                 "{\"v\":1,\"provider\":\"p\",\"voice\":\"v9\",\"skin\":\"s9\"}", StandardCharsets.UTF_8);
 
-        CompanionLooks.init(dir);
+        CompanionLooks.init(dir, dir);
 
         assertEquals(new Looks("v9", "s9"), CompanionLooks.of(HER));
         assertTrue(Files.isRegularFile(dir.resolve("looks.json")), "接过来的落在新文件里");

@@ -24,7 +24,7 @@ public final class NumenYsm {
     private NumenYsm() {}
 
     /** 由宿主加载器的 {@code Builtin} 在确认 YSM 在场后调用。 */
-    public static void install(YsmHost host, Path skillsRoot) {
+    public static void install(YsmHost host, Path content) {
         Ysm ysm = new Ysm(host.storage());
         OwnerSync sync = new OwnerSync(ysm);
 
@@ -33,7 +33,7 @@ public final class NumenYsm {
             // ysm.model.switch 派下来的换装由谁来跑
             TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, record));
 
-            if (skillsRoot != null) numen.bundleSkills(skillsRoot);
+            if (content != null) numen.bundleContent(content);
 
             // 同伴刚进世界:把主人的授权镜像过去
             numen.on(CompanionEvent.SPAWN, sync::onSpawn);

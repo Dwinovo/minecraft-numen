@@ -117,7 +117,7 @@ public final class SummonPanel extends ModalCard {
         List<String> pIds = new ArrayList<>();
         pIds.add(PERSONA_NONE);
         personaNames.add(t(ModLanguageData.Keys.SUMMON_PERSONA_NONE));
-        for (ServerLibraries.Persona p : ServerLibraries.personas()) {
+        for (ServerLibraries.Persona p : ServerLibraries.personasInUse()) {
             pIds.add(p.id());
             personaNames.add(p.name());
         }
@@ -133,7 +133,7 @@ public final class SummonPanel extends ModalCard {
         // 模型配置必选(无默认项无兜底):库空则这一行写"没有——去设置里新建"(警告色),点它跳去新建。
         List<String> provNames = new ArrayList<>();
         List<String> ids = new ArrayList<>();
-        for (var e : ServerLibraries.providers()) {
+        for (var e : ServerLibraries.providersInUse()) {
             ids.add(e.id());
             provNames.add(e.name());
         }

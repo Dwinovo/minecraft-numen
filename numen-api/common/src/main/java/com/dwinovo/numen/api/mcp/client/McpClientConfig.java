@@ -1,50 +1,40 @@
 package com.dwinovo.numen.api.mcp.client;
 
-import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.NumenIo;
-import com.dwinovo.numen.api.store.JsonDoc;
+import com.dwinovo.numen.api.library.LibraryKind;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Client config at {@code config/numen/mcp_clients.json} — the list of external
- * MCP servers a companion's built-in brain may reach out to and borrow tools
- * from. Plain Gson-over-file, created with a self-documenting (all-disabled)
- * example on first launch. Mirrors the style of numen-mcp's {@code McpConfig}:
- * per-key defaults, and an unreadable file degrades to disabled rather than
- * throwing.
+ * 接进来的 MCP 服务器({@link McpClientManager})是一种库({@link #KIND}):一台服务器一个 JSON 文件——
+ * {@code mcp/<命名空间>/<名字>.json},同伴的大脑能向它借工具。玩家看到"内置"(服务器目录里,管理员配的)与"我的"两组;
+ * 玩家只能加 HTTP 类的,stdio 类起的是服务器机器上的进程,只有管理员能加。文件名就是服务器的名字,里面是这台服务器怎么连:
  *
  * <ul>
- *   <li>{@code enabled} — master switch (default true).</li>
- *   <li>{@code servers} — one entry per external MCP server.</li>
- * </ul>
- *
- * Each server:
- * <ul>
- *   <li>{@code name} — short id; prefixes every borrowed tool ({@code name__tool}).</li>
- *   <li>{@code type} — {@code "http"} (default) or {@code "stdio"}.</li>
- *   <li>{@code url} + {@code headers} — for {@code http}.</li>
- *   <li>{@code command} + {@code args} + {@code env} — for {@code stdio}
- *       (on Windows a bare {@code npx} won't launch; use
- *       {@code "command":"cmd","args":["/c","npx", ...]}).</li>
- *   <li>{@code enabled} — per-server switch.</li>
- *   <li>{@code connect_timeout_seconds} / {@code call_timeout_seconds}.</li>
+ *   <li>{@code type} — {@code "http"}(缺省)或 {@code "stdio"}。</li>
+ *   <li>{@code url} + {@code headers} — 给 {@code http}。</li>
+ *   <li>{@code command} + {@code args} + {@code env} — 给 {@code stdio}(Windows 上裸的 {@code npx} 起不来,
+ *       用 {@code "command":"cmd","args":["/c","npx", ...]})。</li>
+ *   <li>{@code service} — 这台服务器用钥匙串里哪个服务的 key:有就作为 {@code Authorization: Bearer} 带上
+ *       (先找主人的钥匙串、再找服主的)。key 不写在条目里。</li>
+ *   <li>{@code enabled} — 连不连(缺省连)。这是条目主人的开关;玩家对别人的条目关掉它只对自己生效,记在他的偏好里。</li>
+ *   <li>{@code connect_timeout_seconds} / {@code call_timeout_seconds}。</li>
  * </ul>
  */
-public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
+public final class McpClientConfig {
 
-    private static JsonDoc doc(Path file) {
-        return new JsonDoc(file, JsonDoc.Format.of(1), NumenIo.inline("numen-mcp-client"));
-    }
+    /** 接进来的 MCP 服务器这种库:一条一个 {@code .json}。 */
+    public static final LibraryKind KIND = LibraryKind.files("mcp", ".json");
 
-    /** One external MCP server the client may connect to. */
+    private McpClientConfig() {}
+
+    /** 一台接进来的 MCP 服务器怎么连。 */
     public record ServerSpec(
             String name,
             String type,
@@ -53,6 +43,7 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
             String command,
             List<String> args,
             Map<String, String> env,
+            String service,
             boolean enabled,
             int connectTimeoutSeconds,
             int callTimeoutSeconds) {
@@ -61,84 +52,44 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
             return "stdio".equalsIgnoreCase(type);
         }
 
-        /** Default when {@code type} is absent/blank/"http". */
+        /** 缺省(没写、空、"http")是 http。 */
         public boolean isHttp() {
             return !isStdio();
         }
     }
 
-    public static McpClientConfig load(Path file) {
-        try {
-            JsonObject o = doc(file).read().orElse(null);
-            if (o == null) {
-                McpClientConfig def = defaultConfig();
-                writeDefault(file, def);
-                return def;
-            }
-            boolean enabled = !o.has("enabled") || o.get("enabled").getAsBoolean();
-            List<ServerSpec> servers = new ArrayList<>();
-            if (o.has("servers") && o.get("servers").isJsonArray()) {
-                for (JsonElement el : o.getAsJsonArray("servers")) {
-                    if (el.isJsonObject()) servers.add(parseServer(el.getAsJsonObject()));
-                }
-            }
-            return new McpClientConfig(enabled, List.copyOf(servers));
-        } catch (RuntimeException ex) {
-            Constants.LOG.warn("[numen-mcp-client] unreadable config {} — client disabled: {}", file, ex.toString());
-            return new McpClientConfig(false, List.of());
-        }
+    /** 一个条目文件的正文读成服务器;{@code name} 是文件名。写法不对抛 {@link RuntimeException}。 */
+    public static ServerSpec read(String name, String json) {
+        return parseServer(name, JsonParser.parseString(json).getAsJsonObject());
     }
 
-    /** One server as the config file (and the library protocol) writes it. */
-    public static ServerSpec parseServer(JsonObject o) {
+    /** 请求体或条目文件里的一台服务器;{@code name} 是库里的名字。 */
+    public static ServerSpec parseServer(String name, JsonObject o) {
         return new ServerSpec(
-                strOr(o, "name", "unnamed"),
+                name,
                 strOr(o, "type", "http"),
                 strOr(o, "url", ""),
                 map(o, "headers"),
                 strOr(o, "command", ""),
                 strings(o, "args"),
                 map(o, "env"),
+                strOr(o, "service", ""),
                 !o.has("enabled") || o.get("enabled").getAsBoolean(),
                 o.has("connect_timeout_seconds") ? o.get("connect_timeout_seconds").getAsInt() : 20,
                 o.has("call_timeout_seconds") ? o.get("call_timeout_seconds").getAsInt() : 120);
     }
 
-    private static McpClientConfig defaultConfig() {
-        ServerSpec http = new ServerSpec(
-                "example-http", "http", "http://127.0.0.1:9000/mcp",
-                Map.of(), "", List.of(), Map.of(), false, 20, 120);
-        ServerSpec stdio = new ServerSpec(
-                "example-stdio", "stdio", "", Map.of(),
-                "npx", List.of("-y", "@modelcontextprotocol/server-everything"), Map.of(),
-                false, 20, 120);
-        return new McpClientConfig(true, List.of(http, stdio));
-    }
-
-    /**
-     * Write the config back to disk (pretty-printed). Used both for the first-launch
-     * default and to persist live enable/disable toggles from the panel. The record
-     * is immutable, so callers rebuild it with the changed {@link ServerSpec} before
-     * saving. Best-effort — a write failure is logged, not thrown.
-     */
-    public static void save(Path file, McpClientConfig cfg) {
-        JsonObject root = new JsonObject();
-        root.addProperty("enabled", cfg.enabled());
-        JsonArray servers = new JsonArray();
-        for (ServerSpec s : cfg.servers()) servers.add(serverToJson(s));
-        root.add("servers", servers);
-        doc(file).write(root);
-    }
-
-    private static void writeDefault(Path file, McpClientConfig def) {
-        save(file, def);
-        Constants.LOG.info("[numen-mcp-client] wrote default config {}", file);
+    /** 条目文件的正文:{@link #serverToJson} 不含名字的那一份。 */
+    public static String write(ServerSpec spec) {
+        JsonObject o = serverToJson(spec);
+        o.remove("name");
+        return o.toString();
     }
 
     /** A copy of {@code s} with its {@code enabled} flag set to {@code enabled}. */
     public static ServerSpec withEnabled(ServerSpec s, boolean enabled) {
         return new ServerSpec(s.name(), s.type(), s.url(), s.headers(), s.command(),
-                s.args(), s.env(), enabled, s.connectTimeoutSeconds(), s.callTimeoutSeconds());
+                s.args(), s.env(), s.service(), enabled, s.connectTimeoutSeconds(), s.callTimeoutSeconds());
     }
 
     public static JsonObject serverToJson(ServerSpec s) {
@@ -154,6 +105,9 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
         } else {
             o.addProperty("url", s.url());
             o.add("headers", strMapToJson(s.headers()));
+        }
+        if (!s.service().isBlank()) {
+            o.addProperty("service", s.service());
         }
         o.addProperty("enabled", s.enabled());
         o.addProperty("connect_timeout_seconds", s.connectTimeoutSeconds());

@@ -30,6 +30,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     /** 每个调用派出那一刻取一次:客户端上它带着此刻看得见的那具身体(出了视距是 null)。 */
     private final Supplier<? extends ToolAnchor> anchor;
     private final ProgramHost programs;
+    private final ToolBook tools;
     private final AfterCut afterCut;
     private final SerialCalls calls;
 
@@ -45,12 +46,16 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         void receipt(String programId, String receipt);
     }
 
-    /** @param programs 程序交给谁跑:大脑是本进程里的 {@code LocalPrograms} */
+    /**
+     * @param programs 程序交给谁跑:大脑是本进程里的 {@code LocalPrograms}
+     * @param tools    她看得到的工具:模型点名的工具从这里取
+     */
     public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramHost programs,
-                             AfterCut afterCut) {
+                             ToolBook tools, AfterCut afterCut) {
         this.companion = companion;
         this.anchor = anchor;
         this.programs = programs;
+        this.tools = tools;
         this.afterCut = afterCut;
         this.calls = new SerialCalls(this);
     }
@@ -130,7 +135,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     @Override
     public boolean isProgram(LlmToolCall call) {
-        return ToolRegistry.resolve(call.name()) instanceof ScriptTool;
+        return tools.resolve(call.name()) instanceof ScriptTool;
     }
 
     @Override
@@ -149,7 +154,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
      */
     @Override
     public void invoke(LlmToolCall call, java.util.function.Consumer<SerialCalls.Settled> done) {
-        NumenTool tool = ToolRegistry.resolve(call.name());
+        NumenTool tool = tools.resolve(call.name());
         if (tool == null) {
             Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
                     companion, call.name(), call.id());

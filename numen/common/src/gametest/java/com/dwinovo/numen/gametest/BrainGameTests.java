@@ -424,17 +424,19 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 普通玩家经协议改不了服务器上的模型档案和配置,回话说明原因;看到的档案表里没有 key。 */
+    /** 普通玩家经协议改不了服务器上的内置模型档案和配置,回话说明原因;自己的档案存得下,服主的 key 他读不到。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void an_ordinary_player_cannot_change_the_servers_model_profiles(GameTestHelper helper)
             throws Exception {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
         helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
-        int before = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().list().size();
+        var builtin = com.dwinovo.numen.api.library.LibraryHub.of(helper.getLevel().getServer())
+                .builtin(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
+        int before = builtin.items().size();
         GameTestKit.received(player);
 
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"偷偷加的\",\"provider\":\"openai\",\"api_key\":\"sk-stolen\"}");
+                "{\"name\":\"偷偷加的\",\"group\":\"builtin\",\"provider\":\"openai\"}");
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
                 "{\"proxy\":\"evil:1\"}");
 
@@ -442,8 +444,7 @@ public class BrainGameTests {
         helper.assertTrue(sent.size() == 2 && sent.stream().allMatch(p ->
                         p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
                 "the refusals were not told: " + sent);
-        helper.assertTrue(com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().list().size() == before,
-                "a profile was added by an ordinary player");
+        helper.assertTrue(builtin.items().size() == before, "a built-in profile was added by an ordinary player");
         helper.assertTrue(!com.dwinovo.numen.api.platform.Services.CONFIG.getProxy().equals("evil:1"),
                 "the proxy was changed by an ordinary player");
         GameTestKit.leave(player);
@@ -626,8 +627,9 @@ public class BrainGameTests {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_summoner");
         var persona = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID())
                 .create("gametest_persona", "你是测试员");
-        var profile = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().create("gametest_profile",
-                new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", "sk-test",
+        var profiles = com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID());
+        var profile = profiles.create("gametest_profile",
+                new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", null,
                         "https://relay.example", null, null, 0, null, 0, null));
 
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
@@ -642,7 +644,7 @@ public class BrainGameTests {
         helper.assertTrue(profile.id().equals(brain.get().providerId()), "profile not bound: " + brain.get().providerId());
 
         com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
-        com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance().remove(profile.id());
+        profiles.remove(profile.id());
         com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
         GameTestKit.leave(owner);
         helper.succeed();
@@ -666,8 +668,9 @@ public class BrainGameTests {
                 com.dwinovo.numen.api.brain.Libraries.PERSONA, com.dwinovo.numen.api.brain.Libraries.PUT, body);
 
         helper.assertTrue(result.problem() == null, "the rename was refused: " + result.problem());
-        helper.assertTrue("gametest_new_name".equals(her.loop.personaId()), "she still points at " + her.loop.personaId());
-        library.remove("gametest_new_name");
+        helper.assertTrue("my:gametest_new_name".equals(her.loop.personaId()),
+                "she still points at " + her.loop.personaId());
+        library.remove("my:gametest_new_name");
         her.close();
         helper.succeed();
     }
@@ -698,7 +701,10 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 管理员经协议存了模型档案:他收到带 key 的整表,在线的别人收到去了 key 的新表。 */
+    /**
+     * 管理员经协议存了内置的模型档案、再存服主的 key:档案里没有 key,key 在钥匙串里,只有他读得到;在线的别人收到新档案的表,
+     * 表里没有 key。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void an_admin_adds_a_model_profile_and_everyone_online_hears_of_it_without_the_key(
             GameTestHelper helper) {
@@ -713,35 +719,45 @@ public class BrainGameTests {
         GameTestKit.received(other);
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"gametest_admin_profile\",\"provider\":\"openai\",\"api_key\":\"sk-admin\"}");
+                "{\"name\":\"gametest_admin_profile\",\"group\":\"builtin\",\"provider\":\"openai\"}");
 
         var told = GameTestKit.received(admin);
         var heard = GameTestKit.received(other);
         helper.assertTrue(told.size() == 1 && told.get(0) instanceof com.dwinovo.numen.api.network.payload.LibraryPayload a
-                        && a.problem().isEmpty() && a.entries().contains("sk-admin"),
-                "the admin was not given the whole table: " + told);
+                        && a.problem().isEmpty() && a.entries().contains("server:gametest_admin_profile"),
+                "the admin was not given the table with the new profile: " + told);
         helper.assertTrue(heard.size() == 1 && heard.get(0) instanceof com.dwinovo.numen.api.network.payload.LibraryPayload h
-                        && h.entries().contains("gametest_admin_profile") && !h.entries().contains("sk-admin"),
-                "the other player was not told of the new profile without its key: " + heard);
+                        && h.entries().contains("gametest_admin_profile"),
+                "the other player was not told of the new profile: " + heard);
 
-        var library = com.dwinovo.numen.api.agent.llm.ProviderLibrary.instance();
-        library.list().stream().filter(e -> "gametest_admin_profile".equals(e.name())).map(e -> e.id()).toList()
-                .forEach(library::remove);
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.KEY, "put",
+                "{\"service\":\"openai\",\"key\":\"sk-admin\",\"scope\":\"server\"}");
+        com.dwinovo.numen.api.brain.Replies.library(other, com.dwinovo.numen.api.brain.Libraries.KEY, "list", "{}");
+        var keys = GameTestKit.received(admin);
+        var othersKeys = GameTestKit.received(other);
+        helper.assertTrue(keys.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload k
+                        && k.entries().contains("sk-admin")), "the admin cannot read the server's key: " + keys);
+        helper.assertTrue(othersKeys.stream().noneMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload k
+                        && k.entries().contains("sk-admin")), "the server's key reached another player: " + othersKeys);
+
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.KEY, "put",
+                "{\"service\":\"openai\",\"key\":\"\",\"scope\":\"server\"}");
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "delete",
+                "{\"id\":\"server:gametest_admin_profile\",\"group\":\"builtin\"}");
         server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(other);
         GameTestKit.leave(admin);
         helper.succeed();
     }
 
-    /** 管理员经协议关掉一个技能、再打开它:两次都办成,他收到的整表里那一条先是关、后是开。 */
+    /** 玩家经协议关掉一个技能、再打开它:两次都办成,他收到的整表里那一条先是关、后是开;开关是他自己的。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
-    public static void an_admin_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
+    public static void a_player_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
-        var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_boss");
-        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
-        String skill = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().all().iterator().next().name();
-        String body = "{\"name\":\"" + skill + "\"}";
+        var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
+        String skill = com.dwinovo.numen.api.library.LibraryHub.of(server)
+                .builtin(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
+        String body = "{\"id\":\"" + skill + "\"}";
         GameTestKit.received(admin);
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.SKILL, "disable", body);
@@ -751,7 +767,6 @@ public class BrainGameTests {
         helper.assertTrue(skillEnabled(GameTestKit.received(admin), skill) == Boolean.TRUE,
                 "the skill was not switched on again");
 
-        server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(admin);
         helper.succeed();
     }
@@ -763,7 +778,7 @@ public class BrainGameTests {
                     && com.dwinovo.numen.api.brain.Libraries.SKILL.equals(table.kind())) {
                 for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
                     var o = row.getAsJsonObject();
-                    if (skill.equals(o.get("name").getAsString())) {
+                    if (skill.equals(o.get("id").getAsString()) && "builtin".equals(o.get("group").getAsString())) {
                         return o.get("enabled").getAsBoolean();
                     }
                 }

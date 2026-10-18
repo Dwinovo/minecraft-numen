@@ -1,11 +1,9 @@
 package com.dwinovo.numen.api.agent.skill;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.NumenIo;
-import com.dwinovo.numen.api.store.JsonDoc;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.library.Library;
+import com.dwinovo.numen.api.library.LibraryKind;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -14,59 +12,34 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * Client-side registry of skills. Skills are markdown directories the LLM can
- * load on demand via the {@code skill} tool, deferring long "how to do X"
- * instructions out of the system prompt and into the tool-call conversation
- * only when relevant.
+ * 一位玩家的技能。技能是 markdown 目录,她按需用 {@code skill} 工具装进来:把"怎么做某件事"的长篇说明从系统提示挪到工具调用的
+ * 对话里,只在相关时才出现。
  *
- * <h2>Why client-side only</h2>
- * Skills feed the LLM, and the LLM runs on the player's client (each player
- * pays their own tokens). Dedicated servers don't even instantiate this
- * registry — the {@code skill} tool answers on the owner's client, so its
- * execute path never crosses the network.
+ * <h2>一个库:内置加我的</h2>
+ * 技能是一种库({@link #KIND}),每条是一个目录——{@code skills/<命名空间>/<技能>/SKILL.md} 加它指着的其余文件。玩家看到两组叠在
+ * 一起:<b>内置</b>是服务器目录里的(Numen 与各插件随包带来、同步进去的,管理员可改),<b>我的</b>是玩家目录里的;同名时我的优先
+ * (复制一份内置的到我的再改,就是 Claude Code 里"任何一层都能盖过随包的技能")。玩家可以关掉某条,开关记在他自己的偏好里。
+ * 系统提示的清单、{@code skill} 工具、斜杠命令读的都是这一位玩家的这一份。
  *
- * <h2>Two sources, scanned in place and merged</h2>
- * Following the same model as Claude Code and opencode, skills are read from
- * multiple roots and merged by name — nothing is ever copied between them:
- * <ul>
- *   <li><b>Bundled (mod) skills</b> — a mod {@linkplain #declareBundled declares}
- *       a skills root inside its own jar; it is read <em>in place</em> from the
- *       jar every {@link #scan}, so it is never stale and vanishes when the mod
- *       is removed.</li>
- *   <li><b>Player skills</b> — {@code config/numen/skills} on disk, the
- *       {@code userRoot} passed to {@link #scan}. Plain files the player owns.</li>
- * </ul>
- * On a name clash the <b>player skill wins</b> (it is scanned last, on top of
- * the bundled set) — so a player re-tunes a mod's skill by dropping a same-named
- * directory in their config, exactly the Claude Code "any level overrides a
- * bundled skill" rule.
- *
- * <h2>Layout — one directory per skill</h2>
- * A skill is a whole <em>directory</em>, not a lone file: {@code SKILL.md} is
- * required (its {@code name:}/{@code description:} frontmatter is what the model
- * sees), and the directory may carry any supporting material the body points at.
+ * <h2>目录里的样子</h2>
+ * {@code SKILL.md} 必须有,它的 {@code name:}/{@code description:} 开头是模型看到的东西;目录里可以带正文指着的其他材料。
+ * 目录名只是版面,技能的名字是 {@code name:} 这一项。
  * <pre>
- * &lt;root&gt;/
- *   &lt;name&gt;/
- *     SKILL.md       (required — YAML frontmatter + markdown body)
- *     references/    (optional — extra docs the SKILL.md points at)
- *     scripts/       (optional — anything else the skill ships)
+ * &lt;名字空间&gt;/&lt;技能&gt;/
+ *   SKILL.md       (必须——YAML 开头加 markdown 正文)
+ *   references/    (可选)
  * </pre>
- * The directory name is informational; the canonical skill id is the
- * {@code name:} frontmatter key. {@link SkillInfo#location()} is the path to the
- * skill's {@code SKILL.md} (a jar path for a bundled skill, a real file for a
- * player skill); {@code location.getParent()} reaches its supporting files.
  *
- * <h2>Wire format injected into the system prompt</h2>
- * {@link #formatXml()} produces, every turn, a block of the form
+ * <h2>送进系统提示的清单</h2>
+ * {@link #formatXml()} 每轮生成一块:
  * <pre>
  * Skills are reference knowledge: how the game and the mods in this world work, their numbers and ids.
  * Use the skill tool to read a skill when what you are about to do touches its topic.
@@ -77,242 +50,108 @@ import java.util.stream.Stream;
  *   &lt;/skill&gt;
  * &lt;/available_skills&gt;
  * </pre>
- * Verified against opencode's {@code Skill.fmt(verbose:true)} (anomalyco/opencode
- * {@code packages/opencode/src/skill/index.ts:262-281}); descriptionless
- * skills are intentionally hidden so the model doesn't pick them blindly.
+ * 照 opencode 的 {@code Skill.fmt(verbose:true)};没有描述的技能故意不列,免得模型盲选。
  *
- * <h2>Thread safety</h2>
- * All access from the client main thread. The backing collections are
- * non-thread-safe; {@link #declareBundled} and {@link #scan} run synchronously
- * on whatever thread the caller chooses (currently the client init thread,
- * which is the main thread before the game loop starts).
+ * <p>线程:读任何线程。技能从库的内存表里解析出来,库变了(复制、重扫)下一次读自动重新解析;手改磁盘上的文件要 {@code /reload}。
  */
 public final class SkillRegistry {
 
-    /** Required filename inside each skill directory. Matches opencode's convention. */
+    /** 每个技能目录里必须有的文件。 */
     public static final String SKILL_FILENAME = "SKILL.md";
 
-    /** Sidecar file (next to the skills dir) holding the player's disabled-skill names. */
-    public static final String STATE_FILENAME = "skills_state.json";
+    /** 技能这种库:一条一个目录,里面有 {@value #SKILL_FILENAME}。 */
+    public static final LibraryKind KIND = LibraryKind.directories("skills", SKILL_FILENAME);
 
-    private static final SkillRegistry INSTANCE = new SkillRegistry();
+    /** 每只同伴的技能库(同一主人的同伴是同一个);由服务端大脑的接线注入,见 {@link #init}。 */
+    private static Function<UUID, Library> libraries;
 
-    /** The live merged set, keyed by skill name. Insertion-ordered for stable XML output. */
-    private final Map<String, SkillInfo> skills = new LinkedHashMap<>();
+    private final Library library;
+    private long parsedAt = -1;
+    private Map<String, Parsed> skills = Map.of();
 
-    /**
-     * Names the player has switched off from the panel. Filtered out of both the
-     * {@code <available_skills>} listing and {@link #get} (so the {@code skill} tool
-     * refuses a disabled skill even if the model guesses its name). Persisted to a
-     * sidecar {@code skills_state.json} — a bundled skill lives inside the mod jar
-     * and can't carry an {@code enabled:false} flag in its own {@code SKILL.md}, so
-     * the disabled set has to live outside the skill.
-     */
-    private final Set<String> disabled = new LinkedHashSet<>();
+    /** 一个技能连同它在库里的名字(开关按库里的名字记)。 */
+    private record Parsed(SkillInfo info, EntryId id) {}
 
-    /** {@code config/numen/skills_state.json}; derived from {@code userRoot} in {@link #scan}. */
-    private JsonDoc state;
-
-    /**
-     * Bundled skill roots a mod has declared, in declaration order. Each is a
-     * directory (typically a path inside a mod jar) holding {@code <name>/SKILL.md}
-     * subdirectories. Read in place on every {@link #scan}; never copied.
-     */
-    private final List<Path> bundledRoots = new ArrayList<>();
-
-    /** The player skills root ({@code config/numen/skills}); kept so {@link #rescan} can re-run. */
-    private Path userRoot;
-
-    /** Whether {@link #scan} has run at least once (so {@link #declareBundled} knows to re-merge). */
-    private boolean scanned;
-
-    private SkillRegistry() {}
-
-    public static SkillRegistry instance() {
-        return INSTANCE;
+    private SkillRegistry(Library library) {
+        this.library = library;
     }
 
-    /**
-     * Declare a skills root a mod ships inside its jar, so players don't have to
-     * copy any files by hand. The root is a directory holding one subdirectory
-     * per skill ({@code <name>/SKILL.md} plus optional supporting files); it is
-     * read in place from the jar on every {@link #scan} — never copied to disk —
-     * so it is always current and disappears when the mod is removed.
-     *
-     * <p>Call once at mod init. Resolving the jar path is loader-specific and so
-     * lives in the mod, not here:
-     * <pre>{@code
-     * // Fabric
-     * FabricLoader.getInstance().getModContainer("mymod")
-     *     .flatMap(c -> c.findPath("skills"))
-     *     .ifPresent(root -> SkillRegistry.instance().declareBundled(root));
-     * // NeoForge
-     * SkillRegistry.instance().declareBundled(
-     *     ModList.get().getModFileById("mymod").getFile().findResource("skills"));
-     * }</pre>
-     *
-     * <p>If a {@link #scan} has already happened, this re-scans so a late
-     * declaration (mod init order across loaders is not guaranteed) still takes
-     * effect — cheap, since skills are few.
-     */
-    public void declareBundled(Path skillsRoot) {
-        if (skillsRoot == null) {
-            Constants.LOG.warn("[numen-skill] declareBundled: null root ignored");
-            return;
+    /** 技能库在哪:服务器给主人的那一份(内置加我的);评测与 GameTest 给这一次运行专用的。 */
+    public static void init(Function<UUID, Library> companionLibraries) {
+        libraries = companionLibraries;
+    }
+
+    /** 这只同伴能用的技能。{@link #init} 之前调用是编程错误。 */
+    public static SkillRegistry of(UUID companion) {
+        if (libraries == null) {
+            throw new IllegalStateException("SkillRegistry.init(...) 还没被调用——服务端该在启动时注入技能库");
         }
-        bundledRoots.add(skillsRoot);
-        Constants.LOG.info("[numen-skill] declared bundled skills root {}", skillsRoot);
-        if (scanned) rescan();
+        return at(libraries.apply(companion));
     }
 
-    /**
-     * Rebuild the live set: scan every declared bundled root (low precedence, in
-     * declaration order), then the player {@code userRoot} on top (high
-     * precedence, so a same-named player skill overrides a bundled one).
-     *
-     * @param userRoot the player skills directory ({@code config/numen/skills});
-     *                 may be {@code null} or absent — then only bundled skills load
-     * @return number of skills in the merged live set
-     */
-    public int scan(Path userRoot) {
-        this.userRoot = userRoot;
-        this.scanned = true;
-        // Sidecar disabled-state lives next to the skills dir (config/numen/skills_state.json).
-        this.state = userRoot == null ? null
-                : new JsonDoc(userRoot.resolveSibling(STATE_FILENAME), JsonDoc.Format.of(1), NumenIo.inline("numen-skill"));
-        loadDisabled();
-
-        Map<String, SkillInfo> next = new LinkedHashMap<>();
-        int bundledCount = 0;
-        for (Path root : bundledRoots) {
-            bundledCount += scanInto(root, next);
-        }
-        scanInto(userRoot, next);
-
-        this.skills.clear();
-        this.skills.putAll(next);
-        Constants.LOG.info("[numen-skill] loaded {} skill(s) ({} bundled root(s), userRoot={})",
-                this.skills.size(), bundledRoots.size(), userRoot);
-        return this.skills.size();
+    /** 直接给一个技能库。 */
+    public static SkillRegistry at(Library library) {
+        return new SkillRegistry(library);
     }
 
-    /** Re-run {@link #scan} on the last {@code userRoot}. */
-    public int rescan() {
-        return scan(this.userRoot);
-    }
-
-    /**
-     * Walk one level deep under {@code root}, parse each {@code <sub>/SKILL.md},
-     * and put it into {@code dest}. Entries already present are overridden — this
-     * is how a later root (the player config) wins over an earlier one (a bundled
-     * mod). A no-op when {@code root} is {@code null} or not a directory.
-     *
-     * @return number of skills loaded from this root
-     */
-    private static int scanInto(Path root, Map<String, SkillInfo> dest) {
-        if (root == null || !Files.isDirectory(root)) return 0;
-        int loaded = 0;
-        try (Stream<Path> dirs = Files.list(root)) {
-            for (Path dir : (Iterable<Path>) dirs.sorted()::iterator) {
-                if (!Files.isDirectory(dir)) continue;
-                Path skillFile = dir.resolve(SKILL_FILENAME);
-                if (!Files.isRegularFile(skillFile)) continue;
-                try {
-                    SkillInfo info = loadFile(skillFile);
-                    if (info == null) continue;
-                    SkillInfo prev = dest.put(info.name(), info);
-                    if (prev != null) {
-                        Constants.LOG.debug("[numen-skill] '{}' from {} overrides {}",
-                                info.name(), info.location(), prev.location());
-                    }
-                    loaded++;
-                } catch (IOException | RuntimeException ex) {
-                    Constants.LOG.warn("[numen-skill] failed to parse {}: {}", skillFile, ex.toString());
+    /** 库变了就重新解析;解析不了的一条记一笔并跳过。 */
+    private synchronized Map<String, Parsed> skills() {
+        long now = library.version();
+        if (now != parsedAt) {
+            Map<String, Parsed> next = new LinkedHashMap<>();
+            for (Library.Entry entry : library.effective()) {
+                SkillInfo info = read(entry.path());
+                if (info != null) {
+                    next.put(info.name(), new Parsed(info, entry.id()));
                 }
             }
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-skill] failed to list {}: {}", root, ex.toString());
+            skills = next;
+            parsedAt = now;
         }
-        return loaded;
+        return skills;
     }
 
-    /** 已知的技能,不论开关:"有没有这个技能"问这里。管理面(开关、重扫)用它判存在。 */
+    /** 已知的技能,不论开关:"有没有这个技能"问这里。 */
     public Optional<SkillInfo> find(String name) {
-        return Optional.ofNullable(skills.get(name));
+        Parsed parsed = skills().get(name);
+        return Optional.ofNullable(parsed == null ? null : parsed.info());
     }
 
     /** 开着的技能:对 skill 工具与技能命令,关掉的技能不可见。"能不能用"问这里。 */
     public Optional<SkillInfo> get(String name) {
-        return find(name).filter(skill -> !disabled.contains(name));
+        return find(name).filter(skill -> !isDisabled(name));
     }
 
     /** 所有已知的技能,含关掉的。 */
     public Collection<SkillInfo> all() {
-        return skills.values();
+        return skills().values().stream().map(Parsed::info).toList();
     }
 
     /**
-     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),主人在面板里关掉的不算。系统提示的
+     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),玩家没关掉的。系统提示的
      * {@code <available_skills>} 索引与点错名字时列出的"有哪些"都是这一份。
      */
     public List<SkillInfo> available() {
-        return skills.values().stream()
-                .filter(s -> s.description() != null && !s.description().isBlank())
-                .filter(s -> !disabled.contains(s.name()))
+        return skills().values().stream()
+                .filter(p -> p.info().description() != null && !p.info().description().isBlank())
+                .filter(p -> library.enabled(p.id()))
+                .map(Parsed::info)
                 .toList();
     }
 
     public int size() {
-        return skills.size();
+        return skills().size();
     }
 
-    // ---- enable/disable (panel-facing; all on the client main thread) ----
-
-    /** Whether {@code name} is currently switched off. */
+    /** 这个技能是不是被玩家关着。 */
     public boolean isDisabled(String name) {
-        return disabled.contains(name);
-    }
-
-    /** Enable ({@code enabled=true}) or disable a skill by name; persists the change. */
-    public void setEnabled(String name, boolean enabled) {
-        if (name == null) return;
-        boolean changed = enabled ? disabled.remove(name) : disabled.add(name);
-        if (changed) saveDisabled();
-    }
-
-    private void loadDisabled() {
-        disabled.clear();
-        if (state == null) return;
-        try {
-            JsonObject o = state.read().orElse(null);
-            if (o == null) return;
-            if (o.has("disabled") && o.get("disabled").isJsonArray()) {
-                for (JsonElement el : o.getAsJsonArray("disabled")) {
-                    if (!el.isJsonNull()) disabled.add(el.getAsString());
-                }
-            }
-        } catch (RuntimeException ex) {
-            Constants.LOG.warn("[numen-skill] unreadable {}: {}", state.file(), ex.toString());
-        }
-    }
-
-    private void saveDisabled() {
-        if (state == null) return;
-        JsonObject o = new JsonObject();
-        JsonArray arr = new JsonArray();
-        disabled.forEach(arr::add);
-        o.add("disabled", arr);
-        state.write(o);
+        Parsed parsed = skills().get(name);
+        return parsed != null && !library.enabled(parsed.id());
     }
 
     /**
-     * Build the XML block that gets appended to the system prompt every turn.
-     * Returns the empty string when there are no described skills, so callers
-     * can unconditionally append it.
-     *
-     * <p>Format reproduces opencode {@code Skill.fmt(verbose:true)} verbatim,
-     * minus the {@code <location>} child (which opencode uses for IDE display
-     * and the LLM doesn't need).
+     * 每轮追加进系统提示的那块 XML。没有带描述的技能时返回空串,调用方可以无条件追加。
+     * 照 opencode {@code Skill.fmt(verbose:true)} 原样,去掉 {@code <location>}(那是 opencode 给 IDE 显示用的,模型不需要)。
      */
     public String formatXml() {
         List<SkillInfo> described = available();
@@ -331,15 +170,6 @@ public final class SkillRegistry {
         }
         sb.append("</available_skills>");
         return sb.toString();
-    }
-
-    private static SkillInfo loadFile(Path skillFile) throws IOException {
-        SkillInfo info = parse(Files.readString(skillFile), skillFile.toAbsolutePath());
-        if (info == null) {
-            Constants.LOG.warn("[numen-skill] {} missing required 'name:' frontmatter; skipping",
-                    skillFile);
-        }
-        return info;
     }
 
     /** 附属文件尺寸上限(角色是"给模型看的文本",不是数据仓)。 */
@@ -385,7 +215,7 @@ public final class SkillRegistry {
         List<String> out = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(dir)) {
             stream.filter(Files::isRegularFile)
-                    .filter(f -> !f.getFileName().toString().equals("SKILL.md"))
+                    .filter(f -> !f.getFileName().toString().equals(SKILL_FILENAME))
                     .forEach(f -> out.add(dir.relativize(f).toString().replace('\\', '/')));
         } catch (IOException e) {
             Constants.LOG.warn("[numen-skill] cannot list support files of {}", skillName, e);
@@ -394,9 +224,23 @@ public final class SkillRegistry {
         return out;
     }
 
+    /** 读一个技能目录的 {@code SKILL.md};读不了或没有 {@code name:} 记一笔并返回 {@code null}。 */
+    public static SkillInfo read(Path skillDir) {
+        Path file = skillDir.resolve(SKILL_FILENAME);
+        try {
+            SkillInfo info = parse(Files.readString(file, StandardCharsets.UTF_8), file.toAbsolutePath());
+            if (info == null) {
+                Constants.LOG.warn("[numen-skill] {} missing required 'name:' frontmatter; skipping", file);
+            }
+            return info;
+        } catch (IOException | RuntimeException ex) {
+            Constants.LOG.warn("[numen-skill] failed to parse {}: {}", file, ex.toString());
+            return null;
+        }
+    }
+
     /**
-     * Parse {@code SKILL.md} text into a {@link SkillInfo}, or {@code null} if it
-     * lacks a {@code name:} frontmatter key.
+     * 把 {@code SKILL.md} 的文字解析成 {@link SkillInfo};没有 {@code name:} 就是 {@code null}。
      */
     private static SkillInfo parse(String raw, Path location) {
         SkillMarkdown.Parsed parsed = SkillMarkdown.parse(raw);

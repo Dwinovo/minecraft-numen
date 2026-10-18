@@ -1,7 +1,9 @@
 package com.dwinovo.numen.api.agent.tool;
 
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import org.junit.jupiter.api.AfterAll;
+import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.library.Library;
+import com.dwinovo.numen.api.library.LibraryHub;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,12 +23,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SkillToolTest {
 
+    private static final UUID HER = UUID.randomUUID();
+
     @TempDir
     static Path home;
 
+    private static SkillRegistry skills;
+
     @BeforeAll
     static void install() throws IOException {
-        Path skill = Files.createDirectories(home.resolve("skills").resolve("lumber"));
+        // 技能是内置组里的目录:服务器目录 skills/<命名空间>/<技能>/SKILL.md
+        Path skill = Files.createDirectories(home.resolve("server").resolve("skills").resolve("gt").resolve("lumber"));
         Files.writeString(skill.resolve(SkillRegistry.SKILL_FILENAME), """
                 ---
                 name: lumber
@@ -36,7 +44,7 @@ class SkillToolTest {
 
                 Start from the lowest log.
                 """);
-        Path off = Files.createDirectories(home.resolve("skills").resolve("masonry"));
+        Path off = Files.createDirectories(home.resolve("server").resolve("skills").resolve("gt").resolve("masonry"));
         Files.writeString(off.resolve(SkillRegistry.SKILL_FILENAME), """
                 ---
                 name: masonry
@@ -45,18 +53,16 @@ class SkillToolTest {
 
                 # Walls
                 """);
-        SkillRegistry.instance().scan(home.resolve("skills"));
-        SkillRegistry.instance().setEnabled("masonry", false);
-    }
-
-    @AfterAll
-    static void uninstall() {
-        SkillRegistry.instance().scan(null);
+        LibraryHub hub = LibraryHub.headless(home);
+        Library library = hub.library(SkillRegistry.KIND, UUID.randomUUID());
+        library.setEnabled(new EntryId("gt", "masonry"), false);   // 玩家在设置里把它关了
+        SkillRegistry.init(companion -> library);
+        skills = SkillRegistry.of(HER);
     }
 
     private static String call(String args) {
         AtomicReference<String> result = new AtomicReference<>();
-        new SkillTool().invoke(new com.dwinovo.numen.api.agent.tool.ToolCall("t1", SkillTool.NAME, args, null,
+        new SkillTool().invoke(new com.dwinovo.numen.api.agent.tool.ToolCall("t1", SkillTool.NAME, args, () -> HER,
                 result::set));
         return result.get();
     }
@@ -76,7 +82,7 @@ class SkillToolTest {
         String result = call("{\"skill\": \"no_such_skill\"}");
         assertTrue(result.contains("\"success\":false"), result);
         assertTrue(result.contains("unknown skill: no_such_skill; the skills are: lumber\""), result);
-        assertTrue(SkillRegistry.instance().formatXml().contains("<name>lumber</name>")
-                && !SkillRegistry.instance().formatXml().contains("masonry"), SkillRegistry.instance().formatXml());
+        assertTrue(skills.formatXml().contains("<name>lumber</name>") && !skills.formatXml().contains("masonry"),
+                skills.formatXml());
     }
 }

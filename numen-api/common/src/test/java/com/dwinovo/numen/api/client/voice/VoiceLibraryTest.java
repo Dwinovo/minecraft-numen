@@ -25,12 +25,12 @@ class VoiceLibraryTest {
 
     @org.junit.jupiter.api.BeforeEach
     void homeInTemp() {
-        com.dwinovo.numen.api.client.agent.CompanionLooks.init(dir);
+        com.dwinovo.numen.api.client.agent.CompanionLooks.init(dir, dir);
     }
 
     @org.junit.jupiter.api.AfterEach
     void homeRestore() {
-        com.dwinovo.numen.api.client.agent.CompanionLooks.init(null);
+        com.dwinovo.numen.api.client.agent.CompanionLooks.init(null, null);
     }
 
     private VoiceLibrary fresh() {
