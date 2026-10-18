@@ -350,14 +350,16 @@ public final class NumenPlayer extends ServerPlayer {
      * cache; empty when the name is unknown.
      */
     public static String playerName(net.minecraft.server.MinecraftServer server, UUID player) {
-        ServerPlayer online = server.getPlayerList().getPlayer(player);
-        return online != null ? online.getGameProfile().getName()
-                : java.util.Optional.ofNullable(server.getProfileCache())
-                        .flatMap(cache -> cache.get(player))
-                        .map(com.mojang.authlib.GameProfile::getName)
-                        .orElse("");
+        return profileOf(server, player).map(com.mojang.authlib.GameProfile::getName).orElse("");
     }
 
+    /** A player's profile: the online player's (a companion is one too), else the server's profile cache. */
+    public static java.util.Optional<com.mojang.authlib.GameProfile> profileOf(
+            net.minecraft.server.MinecraftServer server, UUID player) {
+        ServerPlayer online = server.getPlayerList().getPlayer(player);
+        return online != null ? java.util.Optional.of(online.getGameProfile())
+                : java.util.Optional.ofNullable(server.getProfileCache()).flatMap(cache -> cache.get(player));
+    }
 
     /** True if {@code item} sits anywhere in the inventory (hotbar/main/offhand all count). */
     public boolean ensureInInventory(Item item) {
@@ -384,6 +386,15 @@ public final class NumenPlayer extends ServerPlayer {
             setYHeadRot(vehicle.getYRot());
         }
         return true;
+    }
+
+    /**
+     * 她跑命令的权限等级(指令源、指令解析与补全都取它):只取主人的,她自己在不在 op 名单里不起作用,
+     * 判据见 {@link com.dwinovo.numen.api.config.Authority#commandLevel}。
+     */
+    @Override
+    protected int getPermissionLevel() {
+        return com.dwinovo.numen.api.config.Authority.commandLevel(this);
     }
 
     /**
