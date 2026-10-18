@@ -170,7 +170,7 @@ public class InteractGameTests {
                 .setProfession(net.minecraft.world.entity.npc.VillagerProfession.FARMER));
         helper.getLevel().addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_trader", new BlockPos(6, 2, 8), false);
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         ToolRun press = lua(companion, "numen.use.entity(" + villager.getId() + ")");
 
         succeedWhen(helper, () -> {
@@ -191,7 +191,7 @@ public class InteractGameTests {
         cow.setNoAi(true);
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_swinger", new BlockPos(6, 2, 8), false);
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.OBSERVE);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
 
         steps(helper)
                 .thenExecute(() -> companion.look().at(cow.getEyePosition()))
@@ -200,7 +200,7 @@ public class InteractGameTests {
                     helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
                                     && cow.getHealth() == cow.getMaxHealth(),
                             "the mouse hit the cow in observe mode: " + blow);
-                    com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+                    com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
                 })
                 .thenExecute(() -> {
                     var blow = companion.mouse().attack();
@@ -370,9 +370,9 @@ public class InteractGameTests {
         });
     }
 
-    /** 右键别人驯服的狼:没有一行放行,问主人;主人不在,问不到就不点,狼没坐下。 */
+    /** 右键别人驯服的狼:别人的东西是硬规则 use_entity(other) 拒绝的,不问谁,狼没坐下。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
-    public static void use_entity_on_someone_elses_wolf_asks_the_owner(GameTestHelper helper) {
+    public static void use_entity_on_someone_elses_wolf_is_forbidden_outright(GameTestHelper helper) {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
         wolf.setTame(true, true);
         wolf.setOwnerUUID(java.util.UUID.randomUUID());
@@ -381,8 +381,8 @@ public class InteractGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pet.done(), "use entity has not finished");
-            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("owner"),
-                    "the refusal does not come from asking the owner: " + pet.outcome());
+            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("hard rule use_entity(other)"),
+                    "the refusal does not come from the hard rule: " + pet.outcome());
             helper.assertTrue(!wolf.isOrderedToSit(), "someone else's wolf was told to sit");
             wolf.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

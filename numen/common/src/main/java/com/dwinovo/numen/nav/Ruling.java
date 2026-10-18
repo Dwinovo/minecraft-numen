@@ -43,6 +43,6 @@ public record Ruling(@Doc("The cell.") BlockPos pos,
 
     private static List<Ruling> rulings(List<ConsentItem> asked, boolean allowed, String by) {
         return asked.stream().filter(item -> item.pos() != null)
-                .map(item -> new Ruling(item.pos(), item.kind().verb() + " " + item.subject(), allowed, by)).toList();
+                .map(item -> new Ruling(item.pos(), item.kind().word() + " " + item.subject(), allowed, by)).toList();
     }
 }

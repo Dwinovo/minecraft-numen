@@ -1,5 +1,6 @@
 package com.dwinovo.numen.nav;
 
+import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.entity.Mouse;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -257,7 +258,7 @@ public final class Trip {
 
     /** 主人不答应的这一条,在这一趟里不许动哪样:放就不许放,挖或别的就不许挖也不许放。 */
     private static EnumSet<PositionCosts.Use> wallsFor(ConsentItem item) {
-        return item.kind() == Action.Kind.PLACE ? EnumSet.of(PositionCosts.Use.PLACE)
+        return item.kind() == Verb.PLACE ? EnumSet.of(PositionCosts.Use.PLACE)
                 : EnumSet.of(PositionCosts.Use.DIG, PositionCosts.Use.PLACE);
     }
 

@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.agent.script.ErrorKind;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -24,16 +25,19 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
- * 每维度一份:玩家放过方块的格子,和是谁放的。{@code placed}、{@code self_placed} 信号的来源,也是"这东西是谁的"这个概念在
+ * 每维度一份:玩家放过方块的格子,和是谁放的。对象组 {@code self}、{@code owner}、{@code other} 的来源,也是"这东西是谁的"这个概念在
  * 全仓唯一的落点。
  *
- * <p>记:放的人只在 {@link #placedBy} 一处认——谁放的就记谁,真玩家、同伴都一样,双格方块连它带出来的另一半一起记。
+ * <p>记:放的人只在 {@link #placedBy} 一处认——谁放的就记谁,真玩家、同伴都一样;同伴连她的主人一起记({@link Placer#owner}),
+ * 于是主人名下别的同伴放的也算主人这一边,她被遣散以后也不变。双格方块连它带出来的另一半一起记。
  * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
- * 由信号对着要动手的同伴判。
+ * 由对象组对着要动手的同伴判。
  * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
  *
  * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
@@ -42,12 +46,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PlacedBlocks extends SavedData {
 
     /**
-     * 放下这一格的玩家:{@code id} 认人,{@code name} 是放的那一刻的名字(主人看的"xxx 放的";查不到名字为空串)。
+     * 放下这一格的玩家:{@code id} 认人,{@code name} 是放的那一刻的名字(主人看的"xxx 放的";查不到名字为空串),
+     * {@code owner} 是放的人是同伴时她的主人(真玩家为 null)。
      * 记下放的人之前的存档里的格子不知道是谁放的,是 {@link #UNKNOWN}。
      */
-    public record Placer(UUID id, String name) {
+    public record Placer(UUID id, String name, UUID owner) {
 
-        public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "");
+        public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "", null);
+
+        /** 一位真玩家。 */
+        public Placer(UUID id, String name) {
+            this(id, name, null);
+        }
 
         /** 说得出是谁:有名字。 */
         public boolean known() {
@@ -56,10 +66,11 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /** 同一个人放的格子存成一组。 */
-    private record PlacerCells(UUID id, String name, List<Long> cells) {
+    private record PlacerCells(UUID id, String name, Optional<UUID> owner, List<Long> cells) {
         static final Codec<PlacerCells> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(PlacerCells::id),
                 Codec.STRING.fieldOf("name").forGetter(PlacerCells::name),
+                UUIDUtil.CODEC.optionalFieldOf("owner").forGetter(PlacerCells::owner),
                 Codec.LONG.listOf().fieldOf("cells").forGetter(PlacerCells::cells)
         ).apply(i, PlacerCells::new));
     }
@@ -86,7 +97,7 @@ public final class PlacedBlocks extends SavedData {
             put(cell, Placer.UNKNOWN);
         }
         for (PlacerCells group : groups) {
-            Placer placer = new Placer(group.id(), group.name());
+            Placer placer = new Placer(group.id(), group.name(), group.owner().orElse(null));
             for (long cell : group.cells()) {
                 put(cell, placer);
             }
@@ -114,7 +125,8 @@ public final class PlacedBlocks extends SavedData {
      */
     public static void placedBy(ServerLevel level, BlockPos pos, ServerPlayer by) {
         PlacedBlocks placed = of(level);
-        Placer placer = new Placer(by.getUUID(), by.getGameProfile().getName());
+        Placer placer = new Placer(by.getUUID(), by.getGameProfile().getName(),
+                by instanceof NumenPlayer companion ? companion.getOwnerUuid() : null);
         placed.record(pos, placer);
         BlockPos other = otherHalfOf(pos, level.getBlockState(pos));
         if (other != null && !level.getBlockState(other).isAir()) {
@@ -191,11 +203,11 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
-     * {@code center} 周围 {@code radius} 格(切比雪夫)内有没有别人放的方块(含自身)。
+     * {@code center} 周围 {@code radius} 格(切比雪夫)内有没有符合条件的人放的方块(含自身)。
      *
-     * @param notBy 这个人放的不算(要动手的同伴自己);null = 谁放的都算
+     * @param counts 放的人算不算
      */
-    public boolean anyPlacedWithin(BlockPos center, int radius, BlockGetter view, UUID notBy) {
+    public boolean anyPlacedWithin(BlockPos center, int radius, BlockGetter view, Predicate<Placer> counts) {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dy = -radius; dy <= radius; dy++) {
@@ -206,7 +218,7 @@ public final class PlacedBlocks extends SavedData {
                         continue;
                     }
                     Placer placer = placerAt(cursor.immutable(), view.getBlockState(cursor));
-                    if (placer != null && !placer.id().equals(notBy)) {
+                    if (placer != null && counts.test(placer)) {
                         return true;
                     }
                 }
@@ -255,7 +267,8 @@ public final class PlacedBlocks extends SavedData {
             }
         }
         List<PlacerCells> out = new ArrayList<>();
-        groups.forEach((placer, cells) -> out.add(new PlacerCells(placer.id(), placer.name(), cells)));
+        groups.forEach((placer, cells) -> out.add(
+                new PlacerCells(placer.id(), placer.name(), Optional.ofNullable(placer.owner()), cells)));
         return out;
     }
 

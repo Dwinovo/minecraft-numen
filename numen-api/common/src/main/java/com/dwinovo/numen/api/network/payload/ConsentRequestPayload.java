@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.network.payload;
 
+import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -52,7 +53,7 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
      * @param icon         物品图标;没有(实体、没有物品形态的方块)为 null,这时画名字
      * @param irreversible 撤不回:答复框把这一堆画成警示色
      */
-    public record Line(Action.Kind kind, Item icon, Component name, int count, Component cause, boolean irreversible) {}
+    public record Line(Verb kind, Item icon, Component name, int count, Component cause, boolean irreversible) {}
 
     private static final StreamCodec<RegistryFriendlyByteBuf, Item> ITEM = ByteBufCodecs.registry(Registries.ITEM);
 
@@ -134,7 +135,7 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         int n = buf.readVarInt();
         List<Line> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            Action.Kind kind = buf.readEnum(Action.Kind.class);
+            Verb kind = buf.readEnum(Verb.class);
             Item icon = buf.readBoolean() ? ITEM.decode(buf) : null;
             Component name = ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf);
             int count = buf.readVarInt();

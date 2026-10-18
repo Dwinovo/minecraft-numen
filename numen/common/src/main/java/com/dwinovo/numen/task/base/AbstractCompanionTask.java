@@ -20,7 +20,7 @@ import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.TaskResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;

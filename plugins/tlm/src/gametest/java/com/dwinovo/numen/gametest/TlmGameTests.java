@@ -3,7 +3,7 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Mode;
+import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.plugins.tlm.MaidLook;
 import com.dwinovo.numen.plugins.tlm.Outfit;

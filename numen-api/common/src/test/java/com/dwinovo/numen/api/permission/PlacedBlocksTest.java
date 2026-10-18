@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.FakeWorld;
 
 import net.minecraft.core.BlockPos;
@@ -85,14 +86,14 @@ class PlacedBlocksTest {
         placed.record(b, STEVE);
         assertTrue(placed.isPlaced(a, world.getBlockState(a)));
         assertTrue(placed.isPlaced(b, world.getBlockState(b)));
-        assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, null));
-        assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world, null));
-        assertFalse(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, STEVE.id()),
-                "放的人自己不算:邻域里只有他放的");
+        assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, anyone -> true));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world, anyone -> true));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, p -> !p.id().equals(STEVE.id())),
+                "不合条件的人放的不算:邻域里只有他放的");
         // 邻域查询也按视图清空气
         world.set(a, Blocks.AIR.defaultBlockState());
         world.set(b, Blocks.AIR.defaultBlockState());
-        assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world, null));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world, anyone -> true));
         assertEquals(0, placed.size());
     }
 
@@ -106,6 +107,19 @@ class PlacedBlocksTest {
         assertEquals(STEVE, back.placerAt(a, Blocks.STONE.defaultBlockState()), "是谁放的跟着存档来回");
         assertEquals(1, back.size());
         assertEquals(0, PlacedBlocks.load(new CompoundTag(), null).size(), "坏档退回空记录,不炸");
+    }
+
+    @Test
+    void aCompanionIsRecordedWithHerOwnerAndItSurvivesASaveLoadCycle() {
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos a = new BlockPos(3, 64, 3);
+        BlockPos b = new BlockPos(4, 64, 3);
+        PlacedBlocks.Placer companion = new PlacedBlocks.Placer(UUID.randomUUID(), "Aria", STEVE.id());
+        placed.record(a, companion);
+        placed.record(b, STEVE);
+        PlacedBlocks back = PlacedBlocks.load(placed.save(new CompoundTag(), null), null);
+        assertEquals(companion, back.placerAt(a, Blocks.STONE.defaultBlockState()), "同伴连她的主人一起记");
+        assertEquals(null, back.placerAt(b, Blocks.STONE.defaultBlockState()).owner(), "真玩家没有主人");
     }
 
     @Test

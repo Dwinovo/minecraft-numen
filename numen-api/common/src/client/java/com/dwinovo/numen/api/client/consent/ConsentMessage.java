@@ -187,7 +187,7 @@ public final class ConsentMessage {
     }
 
     private static String verb(ConsentRequestPayload.Line line) {
-        return I18n.get(ModLanguageData.Keys.CONSENT_VERB_PREFIX + line.kind().verb());
+        return I18n.get(ModLanguageData.Keys.CONSENT_VERB_PREFIX + line.kind().word());
     }
 
     private static String count(ConsentRequestPayload.Line line) {

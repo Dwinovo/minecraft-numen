@@ -8,7 +8,7 @@ import com.dwinovo.numen.scan.NearbyEntities;
 import com.dwinovo.numen.tools.ScanOps;
 import com.dwinovo.numen.tools.ToolParse;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Signals;
+import com.dwinovo.numen.api.permission.Groups;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Call;
@@ -200,10 +200,10 @@ public final class ScanApi {
 
     /**
      * 这只是谁的:{@code you}(她自己驯服的)、{@code your owner}(她主人的)、别的玩家的名字,名字查不到就是 UUID;没有主人为 null。
-     * 主人只从权限层的同一处读({@link Signals#ownerOf}),{@code self_owned} 与这里说的是同一回事。
+     * 主人只从权限层的同一处读({@link Groups#ownerOf}),{@code self_owned} 与这里说的是同一回事。
      */
     private static String ownerOf(Entity e, NumenPlayer self) {
-        UUID owner = Signals.ownerOf(e);
+        UUID owner = Groups.ownerOf(e);
         if (owner == null) {
             return null;
         }

@@ -72,7 +72,7 @@ public class InventoryGameTests {
         pick.enchant(efficiency, 3);
         companion.getInventory().add(pick);
         // 这条测的是丢出去的是不是原物;丢东西要不要问主人另有用例,这里让主人选"全放行"
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         lua(companion, "numen.inv.drop(\"minecraft:diamond_pickaxe\", {count = 1})");
 
         succeedWhen(helper, () -> {

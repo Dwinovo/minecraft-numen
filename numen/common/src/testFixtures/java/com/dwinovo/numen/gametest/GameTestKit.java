@@ -70,6 +70,18 @@ public final class GameTestKit {
 
     private GameTestKit() {}
 
+    static {
+        // 无头测试服是专用服,说不清是谁的方块默认按别人的算(PermissionConfig)。多数用例要的是"问主人"那一半,所以写明不按;
+        // 配置一个世界读一次,第一次裁决之前写好。
+        try {
+            java.nio.file.Path file = com.dwinovo.numen.api.NumenPaths.config().resolve("permission.json");
+            java.nio.file.Files.createDirectories(file.getParent());
+            java.nio.file.Files.writeString(file, "{\"hard_rules\": true, \"unknown_as_other\": false}");
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     /** 正午:白天的活都在这时候跑。 */
     static final long NOON = 6000;
     /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
@@ -149,9 +161,28 @@ public final class GameTestKit {
         return cells;
     }
 
-    /** floor20 上拉起同伴的公共步骤;creative = 召后切创造档。 */
-    static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel,
-                                       boolean creative) {
+    /**
+     * floor20 上拉起同伴的公共步骤;creative = 召后切创造档。用例搭好的场景在放置记录里没有主人,权限层看它是"说不清是谁的"
+     * (装模组前盖的东西),要问主人;这些用例测的是挖、搬、走的机制,主人又不在场,所以把场景里的方块记成她自己放的
+     * (她的东西她可以拆)。权限用例要的正是没有记录的场景,用 {@link #spawnBare}。
+     */
+    static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
+        NumenPlayer companion = spawnBare(helper, name, rel, creative);
+        ServerLevel level = helper.getLevel();
+        var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+        var her = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(companion.getUUID(), name);
+        var box = helper.getBounds().inflate(0, 10, 0);   // 树冠一类搭得比模板高
+        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ),
+                BlockPos.containing(box.maxX - 1, box.maxY - 1, box.maxZ - 1))) {
+            if (!level.getBlockState(pos).isAir() && placed.placerAt(pos, level.getBlockState(pos)) == null) {
+                placed.record(pos.immutable(), her);
+            }
+        }
+        return companion;
+    }
+
+    /** 拉起同伴,不碰放置记录:场景里的方块对她来说没有主人。 */
+    static NumenPlayer spawnBare(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(rel);
         NumenPlayer companion = withBrain(CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),

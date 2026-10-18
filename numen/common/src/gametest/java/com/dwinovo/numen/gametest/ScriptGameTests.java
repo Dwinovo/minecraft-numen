@@ -448,11 +448,11 @@ public class ScriptGameTests {
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
     public static void what_a_query_returns_goes_into_an_action_as_it_is(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_lua_handover", new BlockPos(4, 2, 4), true);
         BlockPos first = helper.absolutePos(new BlockPos(6, 2, 4));
         BlockPos second = helper.absolutePos(new BlockPos(4, 2, 6));
         level.setBlockAndUpdate(first, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+        NumenPlayer her = spawnAt(helper, "gametest_lua_handover", new BlockPos(4, 2, 4), true);
         LlmToolCall script = programCall("""
                 local found = numen.scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
                 local a = numen.work.dig(found[1].nearest)

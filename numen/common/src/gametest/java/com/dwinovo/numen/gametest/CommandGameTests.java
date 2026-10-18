@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -11,8 +12,8 @@ import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.ConsentRequest;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.api.permission.Rule;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -278,7 +279,7 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_proxy", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_proxy_owner");
         grantOp(owner);
-        storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(give)"));
+        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
         ToolRun online = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
         helper.assertTrue(online.done() && online.succeeded(), "an op owner's companion could not give: " + online.outcome());
         leave(owner);
@@ -302,7 +303,7 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_op", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_admin");
         grantOp(owner);
-        storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(give)"));
+        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond 2\")");
@@ -344,7 +345,7 @@ public class CommandGameTests {
                 ConsentRequest pending = ConsentDesk.of(companion).pending();
                 helper.assertTrue(pending != null, "setblock did not ask: " + run.outcome());
                 ConsentItem item = pending.items().get(0);
-                helper.assertTrue(item.kind() == Action.Kind.COMMAND
+                helper.assertTrue(item.kind() == Verb.COMMAND
                                 && item.name().getString().equals("/" + line) && item.icon() == null,
                         "the card does not show the command: " + item);
                 helper.assertTrue("command(setblock)".equals(item.remember().toString()),
@@ -396,7 +397,7 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_forbidden", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_strict");
         grantOp(owner);
-        storeOf(owner).add(Verdict.Kind.DENY, Rule.parse("command(setblock)"));
+        storeOf(owner).add(Verdict.Kind.DENY, com.dwinovo.numen.api.permission.Groups.parse("command(setblock)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun run = lua(companion, "numen.mc.run(\"" + setblock(helper, target) + "\")");

@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.entity.Mouse.Strike;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.api.entity.Sight;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;

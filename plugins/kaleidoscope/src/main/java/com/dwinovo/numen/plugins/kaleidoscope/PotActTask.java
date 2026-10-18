@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.Task;

@@ -1,5 +1,10 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Verb;
+import com.dwinovo.numen.permission.Mode;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.RuleSet;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.FakeWorld;
 
 import com.dwinovo.numen.api.data.ModLanguageData;
@@ -65,16 +70,16 @@ class CommandRuleTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过指令规则钉桩");
     }
 
-    private static final Facts NO_WORLD = new Facts(null, null, null, null);
+    private static final Facts NO_WORLD = new Facts(null, null, null, Actor.NOBODY, Structures.NONE, false);
 
     private static Action run(String line) {
         return Action.command(line, tree);
     }
 
     private static Gate gate(Mode mode, List<String> deny, List<String> ask, List<String> allow) {
-        RuleSet owner = new RuleSet(deny.stream().map(Rule::parse).toList(), ask.stream().map(Rule::parse).toList(),
-                allow.stream().map(Rule::parse).toList());
-        return new Gate(null, mode, owner, RuleSet.factory(), new PlacedBlocks(), List.of());
+        RuleSet owner = new RuleSet(deny.stream().map(Groups::parse).toList(), ask.stream().map(Groups::parse).toList(),
+                allow.stream().map(Groups::parse).toList());
+        return new Gate(Actor.NOBODY, Layers.policy(mode, FactoryRules.hard(), owner, FactoryRules.layer()), new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE);
     }
 
     // ==================== 动作 ====================
@@ -82,7 +87,7 @@ class CommandRuleTest {
     @Test
     void theActionCarriesTheLineAndTheNamesItAnswersTo() {
         Action tp = run("tp 1 64 1");
-        assertEquals(Action.Kind.COMMAND, tp.kind());
+        assertEquals(Verb.COMMAND, tp.kind());
         assertEquals("tp 1 64 1", tp.command().line());
         assertEquals("tp", tp.command().root());
         assertEquals(Set.of("tp", "teleport"), tp.command().names(), "别名与它重定向去的那个同认");
@@ -97,31 +102,31 @@ class CommandRuleTest {
 
     @Test
     void commandRulesNameRootsAndTeachTheSlashMistake() {
-        Rule rule = Rule.parse("command(setblock)");
-        assertEquals(Action.Kind.COMMAND, rule.kind());
-        assertEquals("runs /setblock", rule.describe());
-        assertEquals("command(!msg & !trigger)", Rule.parse("command(!msg & !trigger)").toString());
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> Rule.parse("command(/tp)"))
+        Rule rule = Groups.parse("command(setblock)");
+        assertEquals(Verb.COMMAND, rule.verb());
+        assertEquals("runs /setblock", rule.describe(new ActView(run("setblock 0 64 0 stone"), NO_WORLD)));
+        assertEquals("command(!msg & !trigger)", Groups.parse("command(!msg & !trigger)").toString());
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> Groups.parse("command(/tp)"))
                 .getMessage().contains("without the slash"));
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> Rule.parse("chew(tp)"))
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> Groups.parse("chew(tp)"))
                 .getMessage().contains("command"), "认得的动词里列出 command");
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> Rule.parse("break(tp)"))
-                .getMessage().contains("unknown signal 'tp'"), "别的动词里的裸词仍是信号");
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> Groups.parse("break(tp)"))
+                .getMessage().contains("unknown name 'tp'"), "别的动词里的裸词仍是信号");
     }
 
     // ==================== 匹配 ====================
 
     @Test
     void aRootNameMatchesTheCommandAndItsAliases() {
-        assertTrue(Rule.parse("command(tp)").matches(run("teleport 0 64 0"), NO_WORLD), "写别名盖得住本名");
-        assertTrue(Rule.parse("command(teleport)").matches(run("tp 0 64 0"), NO_WORLD), "写本名盖得住别名");
-        assertTrue(Rule.parse("command(msg)").matches(run("tell Steve hi"), NO_WORLD));
-        assertFalse(Rule.parse("command(msg)").matches(run("setblock 0 64 0 stone"), NO_WORLD));
-        assertTrue(Rule.parse("command(!msg)").matches(run("setblock 0 64 0 stone"), NO_WORLD), "取反");
-        assertTrue(Rule.parse("command(*)").matches(run("msg Steve hi"), NO_WORLD));
-        assertTrue(Rule.parse("*(*)").matches(run("msg Steve hi"), NO_WORLD), "任何动作包括指令");
-        assertFalse(Rule.parse("drop(*)").matches(run("msg Steve hi"), NO_WORLD), "别的动词不认指令");
-        assertFalse(Rule.parse("*(placed)").matches(run("setblock 0 64 0 stone"), NO_WORLD),
+        assertTrue(Groups.parse("command(tp)").matches(new ActView(run("teleport 0 64 0"), NO_WORLD)), "写别名盖得住本名");
+        assertTrue(Groups.parse("command(teleport)").matches(new ActView(run("tp 0 64 0"), NO_WORLD)), "写本名盖得住别名");
+        assertTrue(Groups.parse("command(msg)").matches(new ActView(run("tell Steve hi"), NO_WORLD)));
+        assertFalse(Groups.parse("command(msg)").matches(new ActView(run("setblock 0 64 0 stone"), NO_WORLD)));
+        assertTrue(Groups.parse("command(!msg)").matches(new ActView(run("setblock 0 64 0 stone"), NO_WORLD)), "取反");
+        assertTrue(Groups.parse("command(*)").matches(new ActView(run("msg Steve hi"), NO_WORLD)));
+        assertTrue(Groups.parse("*(*)").matches(new ActView(run("msg Steve hi"), NO_WORLD)), "任何动作包括指令");
+        assertFalse(Groups.parse("drop(*)").matches(new ActView(run("msg Steve hi"), NO_WORLD)), "别的动词不认指令");
+        assertFalse(Groups.parse("*(owner)").matches(new ActView(run("setblock 0 64 0 stone"), NO_WORLD)),
                 "信号说的是方块与实体,一条指令没有它们");
     }
 
@@ -151,12 +156,12 @@ class CommandRuleTest {
 
     @Test
     void theFactoryRowsAreCommandRulesLikeAnyOther() {
-        List<Rule> commands = RuleSet.factory().allow().stream()
-                .filter(r -> r.kind() == Action.Kind.COMMAND).toList();
+        List<Rule> commands = FactoryRules.layer().allow().stream()
+                .filter(r -> r.verb() == Verb.COMMAND).toList();
         assertEquals(List.of("command(help)", "command(list)", "command(me)", "command(msg)",
                 "command(teammsg)", "command(seed)", "command(random)"),
                 commands.stream().map(Rule::toString).toList(), "出厂指令行与别的规则同一种写法、同一个解析");
-        assertTrue(RuleSet.factory().ask().stream().noneMatch(r -> r.kind() == Action.Kind.COMMAND),
+        assertTrue(FactoryRules.layer().ask().stream().noneMatch(r -> r.verb() == Verb.COMMAND),
                 "出厂 ask 表不写指令:没说到的本来就问");
     }
 
@@ -196,11 +201,10 @@ class CommandRuleTest {
         PermissionStore store = new PermissionStore();
         store.remember(List.of(item.remember()));
 
-        assertEquals(List.of(Rule.parse("command(setblock)")), store.rules().allow(), "以后都允许写进主人层");
-        assertEquals(RuleSet.FACTORY_ALLOW, RuleSet.factory().allow().stream().map(Rule::toString).toList(),
+        assertEquals(List.of(Groups.parse("command(setblock)")), store.rules().allow(), "以后都允许写进主人层");
+        assertEquals(FactoryRules.ALLOW, FactoryRules.layer().allow().stream().map(Rule::toString).toList(),
                 "出厂层不跟着变");
-        Gate after = new Gate(null, Mode.ASK, store.rules(), RuleSet.factory(),
-                new PlacedBlocks(), List.of());
+        Gate after = new Gate(Actor.NOBODY, Layers.policy(Mode.ASK, FactoryRules.hard(), store.rules(), FactoryRules.layer()), new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE);
         assertTrue(after.judge(run("setblock 1 64 1 dirt"), null).allowed(), "记住以后 setblock 不再问");
         assertTrue(after.judge(run("help"), null).allowed(), "出厂行照旧放行");
         assertTrue(after.judge(run("give @s diamond"), null).asks(), "别的照旧问");
@@ -213,12 +217,12 @@ class CommandRuleTest {
         Gate bare = gate(Mode.ASK, List.of(), List.of(), List.of());
         Action setblock = run("setblock 0 64 0 stone");
         ConsentItem item = bare.consentItem(setblock, bare.judge(setblock, null), null);
-        assertEquals(Action.Kind.COMMAND, item.kind());
+        assertEquals(Verb.COMMAND, item.kind());
         assertNull(item.pos());
         assertNull(item.icon(), "指令没有图标,给主人看名字");
         assertEquals(Component.literal("/setblock 0 64 0 stone"), item.name());
         assertEquals("command(setblock)", item.remember().toString(), "记住的是根名:以后的 setblock 都不再问");
-        assertTrue(item.remember().matches(setblock, NO_WORLD), "记下的规则盖得住这次问的动作");
+        assertTrue(item.remember().matches(new ActView(setblock, NO_WORLD)), "记下的规则盖得住这次问的动作");
         assertEquals("command 1 /setblock 0 64 0 stone: " + Verdict.UNCOVERED,
                 ConsentItem.listingText(List.of(item)));
 
@@ -237,8 +241,7 @@ class CommandRuleTest {
         Gate ungranted = gate(Mode.ASK, List.of(), List.of(), List.of());
         Action first = run("setblock 0 64 0 stone");
         ConsentItem grant = ungranted.consentItem(first, ungranted.judge(first, null), null);
-        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
-                new PlacedBlocks(), List.of(grant));
+        Gate granted = new Gate(Actor.NOBODY, Layers.policy(Mode.ASK, FactoryRules.hard(), RuleSet.EMPTY, FactoryRules.layer()), new PlacedBlocks(), Structures.NONE, false, List.of(grant), Hits.NONE);
         assertTrue(granted.judge(first, null).allowed());
         assertTrue(granted.judge(run("setblock 0 65 0 stone"), null).asks(), "答应的是这一整行,换一行另问");
     }
@@ -250,9 +253,9 @@ class CommandRuleTest {
         for (String locale : List.of("en_us", "zh_cn")) {
             Map<String, String> lang = new HashMap<>();
             ModLanguageData.addTranslations(locale, lang::put);
-            for (Action.Kind kind : Action.Kind.values()) {
-                assertTrue(lang.containsKey(ModLanguageData.Keys.CONSENT_VERB_PREFIX + kind.verb()),
-                        locale + " has no word for " + kind.verb());
+            for (Verb kind : Verb.values()) {
+                assertTrue(lang.containsKey(ModLanguageData.Keys.CONSENT_VERB_PREFIX + kind.word()),
+                        locale + " has no word for " + kind.word());
             }
         }
         Map<String, String> en = new HashMap<>();

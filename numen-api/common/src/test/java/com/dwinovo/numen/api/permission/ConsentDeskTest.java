@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Verb;
+import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.api.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
@@ -49,14 +51,14 @@ class ConsentDeskTest {
     }
 
     /** 记住的那一行只用种类项:解析信号名要引导 MC,这里不起。 */
-    private static final Rule REMEMBER_LOGS = Rule.parse("break(minecraft:oak_log)");
+    private static final Rule REMEMBER_LOGS = Groups.parse("break(minecraft:oak_log)");
 
     private static final Component LOG_NAME = Component.translatable("block.minecraft.oak_log");
-    private static final Component PLACED = Component.translatable("numen.permission.signal.placed");
+    private static final Component OWNERS = Component.translatable("numen.permission.name.owner");
 
     private static ConsentItem log(int x) {
-        return new ConsentItem(Action.Kind.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", null, LOG_NAME,
-                "break(placed)", "placed by a player", PLACED, false, REMEMBER_LOGS);
+        return new ConsentItem(Verb.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", null, LOG_NAME,
+                "break(owner)", "belongs to the owner", OWNERS, false, REMEMBER_LOGS);
     }
 
     private FakeLine line;
@@ -124,6 +126,22 @@ class ConsentDeskTest {
         desk.answer(no.request().id(), ConsentAnswer.Decision.DENY, "");
         assertTrue(line.remembered.isEmpty());
         assertFalse(once.poll().allowance(List.of(log(1))).contains("remembered"));
+    }
+
+    @Test
+    void aRuleEditCanBeAllowedButNeverRemembered() {
+        ConsentItem edit = ConsentItem.ruleEdit("numen permission rules add allow break(owner)", "");
+        assertNull(edit.remember(), "她不能给自己发许可:改规则的征询没有可记住的行");
+        assertEquals("/numen permission rules add allow break(owner)", edit.name().getString());
+        assertEquals("/numen permission rules remove deny 2  (break(owner))",
+                ConsentItem.ruleEdit("numen permission rules remove deny 2", "break(owner)").name().getString());
+        assertTrue(ConsentItem.rememberedRows(List.of(edit)).isEmpty());
+
+        ConsentDesk.Ticket ticket = desk.ask(new Task(), List.of(edit));
+        desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_REMEMBER, "");
+        assertTrue(ticket.poll().allowed());
+        assertTrue(line.remembered.isEmpty(), "点了记住也没有东西写进 allow 表");
+        assertFalse(ticket.poll().allowance(List.of(edit)).contains("remembered"), "回执不谎称记住了");
     }
 
     @Test
@@ -242,20 +260,20 @@ class ConsentDeskTest {
             items.add(log(x));
         }
         Component rex = Component.literal("Rex");
-        Component owned = Component.translatable("numen.permission.signal.owned");
-        Rule rememberRex = Rule.parse("attack(entity:00000000-0000-0000-0000-00000000002a)");
-        items.add(new ConsentItem(Action.Kind.ATTACK, null, 42, "wolf", null, rex, "attack(owned)", "has an owner", owned,
+        Component owned = OWNERS;
+        Rule rememberRex = Groups.parse("attack(entity:00000000-0000-0000-0000-00000000002a)");
+        items.add(new ConsentItem(Verb.ATTACK, null, 42, "wolf", null, rex, "attack(owner)", "belongs to the owner", owned,
                 true, rememberRex));
-        items.add(new ConsentItem(Action.Kind.ATTACK, null, 43, "wolf", null, Component.literal("Fang"), "attack(owned)",
-                "has an owner", owned, true, rememberRex));
+        items.add(new ConsentItem(Verb.ATTACK, null, 43, "wolf", null, Component.literal("Fang"), "attack(owner)",
+                "belongs to the owner", owned, true, rememberRex));
         List<ConsentItem.Group> groups = ConsentItem.listing(items);
         assertEquals(3, groups.size(), "两只起了不同名字的狼各是一堆");
-        assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): placed by a player",
+        assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): belongs to the owner",
                 groups.get(0).text());
         assertEquals(8, groups.get(0).count(), "给主人看的数量是这一堆有几条");
-        assertEquals(PLACED, groups.get(0).head().shownCause(), "给主人看的理由是可翻译的,不带坐标");
+        assertEquals(OWNERS, groups.get(0).head().shownCause(), "给主人看的理由是可翻译的,不带坐标");
         assertFalse(groups.get(0).irreversible());
-        assertEquals("attack 1 wolf: has an owner", groups.get(1).text(), "实体只点名是哪一种,不报它此刻站在哪");
+        assertEquals("attack 1 wolf: belongs to the owner", groups.get(1).text(), "实体只点名是哪一种,不报它此刻站在哪");
         assertEquals(1, groups.get(1).count());
         assertEquals(rex, groups.get(1).head().name(), "起了名字的叫它的名字");
         assertTrue(groups.get(1).irreversible(), "撤不回的那一堆带着标记给答复框");
