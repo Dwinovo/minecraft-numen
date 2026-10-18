@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -284,7 +285,7 @@ public class TlmGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
-        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_tlm_wardrobe", level,
+        NumenPlayer first = Bodies.summon(server, UUID.randomUUID(), "gametest_tlm_wardrobe", level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         String model = ServerCustomPackLoader.SERVER_MAID_MODELS.getModelIdSet().stream().findFirst().orElseThrow();
@@ -294,7 +295,7 @@ public class TlmGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(wear.succeeded(), "tlm.skin.wear failed: " + wear.reply()))
                 .thenExecute(() -> {
                     Companions.dormant(server, first);
-                    Companions.respawn(server, uuid);
+                    Bodies.respawn(server, uuid);
                 })
                 .thenWaitUntil(() -> {
                     NumenPlayer live = NumenPlayer.findByUuid(server, uuid);

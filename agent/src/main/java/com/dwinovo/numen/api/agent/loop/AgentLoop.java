@@ -140,7 +140,7 @@ public final class AgentLoop {
         if (urgent) {
             release(Hold.Release.URGENT);
         }
-        announceHold(null);
+        announceHold();
         pump();
     }
 
@@ -201,20 +201,20 @@ public final class AgentLoop {
     /** 身体复活了。复活的叙事事件由调用方在这之前推进队列,解开后一起走。 */
     public void respawned() {
         release(Hold.Release.RESPAWN);
-        announceHold(null);
+        announceHold();
         pump();
     }
 
     /** 这只同伴改绑了模型档案。 */
     public void bindingChanged() {
         release(Hold.Release.BINDING_CHANGED);
-        announceHold(null);
+        announceHold();
         pump();
     }
 
     /** 每个客户端 tick 一次:报告现算停牌的变化(外接交还),并为"攒够时长"再问一次熟度。 */
     public void tick() {
-        announceHold(null);
+        announceHold();
         pump();
     }
 
@@ -449,7 +449,7 @@ public final class AgentLoop {
         if (end instanceof RunEnd.Failed failed) {
             afterFailure(finished, failed);
         }
-        announceHold(null);
+        announceHold();
         pump();   // 端口当场回话、run 在推进那一步里就结束时,这里只记一笔"再看一眼",不重入
     }
 
@@ -501,7 +501,7 @@ public final class AgentLoop {
         run = new Run(++lastRunId, true, false, false);
         compact(false, () -> {
             run = null;
-            announceHold(null);
+            announceHold();
             pump();
         });
         return true;
@@ -608,7 +608,7 @@ public final class AgentLoop {
                 name, reason, detail == null ? "" : " (" + detail + ")",
                 cut == null ? "idle" : cut.phase, abandoned.size(), cleared, inbox.size());
         emit(new LoopEvent.Halted(reason));
-        announceHold(null);
+        announceHold();
     }
 
     /** 切断点:{@code words} 是给模型看的那句,{@code cause} 是给界面的结构化原因,两句各自生成、互不拼接。 */
@@ -679,16 +679,17 @@ public final class AgentLoop {
         }
         stopped = Hold.BLOCKED;
         stoppedReason = problem;
-        announceHold(problem);
+        announceHold();
     }
 
-    private void announceHold(Cause reason) {
+    /** 原因跟着停牌本身走({@link #status} 同此):别的停牌遮住又解开后重新露出的 BLOCKED,仍带着当初的原因。 */
+    private void announceHold() {
         Hold now = hold();
         if (now == announced) {
             return;
         }
         announced = now;
-        emit(new LoopEvent.HoldChanged(now, reason));
+        emit(new LoopEvent.HoldChanged(now, now != null && now == stopped ? stoppedReason : null));
     }
 
     private void emit(LoopEvent event) {

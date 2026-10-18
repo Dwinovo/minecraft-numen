@@ -823,13 +823,13 @@ public class BrainGameTests {
         var settings = com.dwinovo.numen.api.brain.ModelServices.of(server).settings();
         settings.setMaxCompanions(1);
         try {
-            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_a", false)
+            helper.assertTrue(com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_a", false)
                     .problem() == null, "the first one was refused");
-            var second = com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_b", false);
+            var second = com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_b", false);
             helper.assertTrue(second.problem() != null && second.body() == null, "the limit did not hold");
-            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_a", false)
+            helper.assertTrue(com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_a", false)
                     .problem() == null, "waking the one she has took a slot");
-            helper.assertTrue(!com.dwinovo.numen.api.entity.Companions.summonFor(owner, "x", false).problem()
+            helper.assertTrue(!com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "x", false).problem()
                     .getString().isEmpty(), "a name that is not a name was summoned");
         } finally {
             settings.setMaxCompanions(0);
@@ -872,7 +872,7 @@ public class BrainGameTests {
             throws Exception {
         var server = helper.getLevel().getServer();
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
-        NumenPlayer body = com.dwinovo.numen.api.entity.CompanionFactory.spawn(server, UUID.randomUUID(),
+        NumenPlayer body = com.dwinovo.numen.api.gametest.Bodies.spawn(server, UUID.randomUUID(),
                 "gametest_ondemand", UUID.randomUUID(), helper.getLevel(),
                 new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         CompanionRegistry.get(server).put(body.getUUID(), new CompanionRegistry.Entry("gametest_ondemand",

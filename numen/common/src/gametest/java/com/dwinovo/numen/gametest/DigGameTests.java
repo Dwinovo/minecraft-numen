@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.List;
@@ -236,7 +237,7 @@ public class DigGameTests {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DEEPSLATE_DIAMOND_ORE.defaultBlockState());
         }
         BlockPos spawn = helper.absolutePos(new BlockPos(9, 8, 9));
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_miner", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));

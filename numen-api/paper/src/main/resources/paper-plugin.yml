@@ -7,3 +7,10 @@ api-version: '1.21'
 authors:
   - dwinovo
 website: https://github.com/Dwinovo/minecraft-numen
+dependencies:
+  server:
+    # 主人不在线时她的权限经 Vault 查主人;没装也行
+    Vault:
+      load: BEFORE
+      required: false
+      join-classpath: true

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -51,7 +52,7 @@ public class MovementGameTests {
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
 
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_scout", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
@@ -73,7 +74,7 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_stopped", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         ToolRun walk = lua(companion, "numen.move.to({x = " + target.getX() + ", z = " + target.getZ() + "})");
@@ -328,7 +329,7 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 6));
-        NumenPlayer first = com.dwinovo.numen.api.entity.Companions.summon(server, UUID.randomUUID(),
+        NumenPlayer first = com.dwinovo.numen.api.gametest.Bodies.summon(server, UUID.randomUUID(),
                 "gametest_restorer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         com.dwinovo.numen.api.entity.Companions.dormant(server, first);
@@ -336,7 +337,7 @@ public class MovementGameTests {
         BlockPos gone = helper.absolutePos(new BlockPos(8, 2, 6));
         registry.put(uuid, registry.find(uuid).doing("numen.work.dig", "numen.work.dig({name = \"minecraft:iron_ore\", "
                 + "pos = " + xyz(gone) + "}, {count = 1})"));
-        NumenPlayer second = com.dwinovo.numen.api.entity.Companions.respawn(server, uuid);
+        NumenPlayer second = com.dwinovo.numen.api.gametest.Bodies.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();
         succeedWhen(helper, () -> {
@@ -618,7 +619,7 @@ public class MovementGameTests {
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 3));
-        NumenPlayer first = com.dwinovo.numen.api.entity.Companions.summon(server, UUID.randomUUID(),
+        NumenPlayer first = com.dwinovo.numen.api.gametest.Bodies.summon(server, UUID.randomUUID(),
                 "gametest_uuid_follower", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         ToolRun follow = lua(first, "numen.move.follow(" + pig.getId() + ", {distance = 3})");
@@ -636,7 +637,7 @@ public class MovementGameTests {
                             "the replayed line does not name the pig by its UUID: " + recorded.taskLua());
                     com.dwinovo.numen.api.entity.Companions.dormant(server, first);
                     registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
-                    second[0] = com.dwinovo.numen.api.entity.Companions.respawn(server, uuid);
+                    second[0] = com.dwinovo.numen.api.gametest.Bodies.respawn(server, uuid);
                     helper.assertTrue(second[0] != null, "the body was not rebuilt");
                 })
                 .thenWaitUntil(() -> {
