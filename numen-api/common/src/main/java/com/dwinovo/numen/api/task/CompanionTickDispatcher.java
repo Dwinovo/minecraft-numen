@@ -111,6 +111,7 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件
         Companions.tickRespawns(server);   // timed death recoveries
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
+        com.dwinovo.numen.api.permission.PermissionFeed.tick(server);   // 规则表变了,合并推给主人的面板
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
                 // 她没有客户端,服务端等的那几个回执由假客户端代答。和下面的加载垫同一个理由
