@@ -204,7 +204,7 @@ public final class Libraries {
         ModelServices models = ModelServices.of(server);
         return new Libraries(new Sources() {
             private final com.dwinovo.numen.api.platform.services.INumenConfig config =
-                    com.dwinovo.numen.api.platform.Services.CONFIG;
+                    com.dwinovo.numen.api.platform.Services.config();
 
             @Override
             public Library library(LibraryKind kind, UUID owner) {

@@ -16,7 +16,7 @@ public final class Authority {
     private Authority() {}
 
     public static boolean isAdmin(ServerPlayer player) {
-        return Services.PERMISSIONS.isAdmin(player.createCommandSourceStack());
+        return Services.permissions().isAdmin(player.createCommandSourceStack());
     }
 
     /**
@@ -25,6 +25,6 @@ public final class Authority {
      * 指令解析与补全都取这个等级,判据只在这里(平台服务 {@code IPermissions.commandLevel})。
      */
     public static int commandLevel(NumenPlayer her) {
-        return Services.PERMISSIONS.commandLevel(her.server, her.getOwnerUuid());
+        return Services.permissions().commandLevel(her.server, her.getOwnerUuid());
     }
 }

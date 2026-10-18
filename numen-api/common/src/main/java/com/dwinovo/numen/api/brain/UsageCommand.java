@@ -23,7 +23,7 @@ public final class UsageCommand {
 
     /** 挂在 {@code /numen} 下的一格,只有管理员用得了。 */
     public static LiteralArgumentBuilder<CommandSourceStack> node() {
-        return Commands.literal("usage").requires(source -> Services.PERMISSIONS.isAdmin(source))
+        return Commands.literal("usage").requires(source -> Services.permissions().isAdmin(source))
                 .executes(UsageCommand::run);
     }
 

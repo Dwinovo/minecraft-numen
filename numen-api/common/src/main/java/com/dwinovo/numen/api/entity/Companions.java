@@ -399,7 +399,7 @@ public final class Companions {
      */
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
         if (body == null) return;
-        if (creative && !com.dwinovo.numen.api.platform.Services.PERMISSIONS.isGameMaster(owner.createCommandSourceStack()) && !owner.isCreative()) {
+        if (creative && !com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(owner.createCommandSourceStack()) && !owner.isCreative()) {
             owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_CREATIVE_NEEDS_OP));
             creative = false;

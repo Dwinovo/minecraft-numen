@@ -30,7 +30,7 @@ public final class PathCommands {
     private static int toggle(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
         // 线与框是客户端画的:连接上没有这个频道(原版客户端)就开了也看不到,说一声
-        if (!Services.NETWORK.canSend(caller, PathDebugPayload.TYPE)) {
+        if (!Services.network().canSend(caller, PathDebugPayload.TYPE)) {
             ctx.getSource().sendFailure(Component.translatable(NEEDS_CLIENT));
             return 0;
         }

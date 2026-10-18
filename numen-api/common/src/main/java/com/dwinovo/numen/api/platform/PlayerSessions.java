@@ -46,7 +46,7 @@ public final class PlayerSessions {
      */
     public static void channelReady(ServerPlayer player) {
         if (player instanceof NumenPlayer || !player.server.getPlayerList().getPlayers().contains(player)
-                || !Services.NETWORK.canSend(player, CompanionListPayload.TYPE)
+                || !Services.network().canSend(player, CompanionListPayload.TYPE)
                 || !ANNOUNCED.add(player.getUUID())) {
             return;
         }

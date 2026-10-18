@@ -81,12 +81,12 @@ public final class NumenNetwork {
      * {@link com.dwinovo.numen.api.brain.Presence} 说了算;这里问的只是"这个包他的连接装不装得下"。
      */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        if (!Services.NETWORK.canSend(player, payload.type())) {
+        if (!Services.network().canSend(player, payload.type())) {
             return;
         }
         for (CustomPacketPayload packet : Fragments.packets(Wire.TO_CLIENT, route(TO_CLIENT, payload).codec(), payload,
                 () -> new RegistryFriendlyByteBuf(Unpooled.buffer(), player.registryAccess()))) {
-            Services.NETWORK.sendToPlayer(player, packet);
+            Services.network().sendToPlayer(player, packet);
         }
     }
 
@@ -94,7 +94,7 @@ public final class NumenNetwork {
     public static void sendToServer(CustomPacketPayload payload) {
         for (CustomPacketPayload packet : Fragments.packets(Wire.TO_SERVER, route(TO_SERVER, payload).codec(), payload,
                 NumenNetwork::registryFreeBuffer)) {
-            Services.NETWORK.sendToServer(packet);
+            Services.network().sendToServer(packet);
         }
     }
 
@@ -195,7 +195,7 @@ public final class NumenNetwork {
                                                                  StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
                                                                  Consumer<T> handler) {
         TO_CLIENT.put(type, new Route<>(erased(codec), erased(handler), Execution.MAIN));
-        Services.NETWORK.registerServerToClient(type, codec, handler);
+        Services.network().registerServerToClient(type, codec, handler);
     }
 
     private static <T extends CustomPacketPayload> void toServer(CustomPacketPayload.Type<T> type,
@@ -209,7 +209,7 @@ public final class NumenNetwork {
                                                                  BiConsumer<T, ServerPlayer> handler,
                                                                  Execution execution) {
         TO_SERVER.put(type, new Route<>(erased(codec), erased(handler), execution));
-        Services.NETWORK.registerClientToServer(type, codec, handler, execution);
+        Services.network().registerClientToServer(type, codec, handler, execution);
     }
 
     public static void register() {

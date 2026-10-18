@@ -25,7 +25,7 @@ public final class SystemPromptComposer {
         // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
         // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText != null && !personaText.isBlank())
-                ? personaText : Services.CONFIG.getSystemPrompt();
+                ? personaText : Services.config().getSystemPrompt();
         if (base == null || base.isBlank()) base = NumenPrompts.DEFAULT_PERSONA;
         String skillsXml = skills.formatXml();
 

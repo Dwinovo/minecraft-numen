@@ -513,7 +513,7 @@ public class BrainGameTests {
                         p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
                 "the refusals were not told: " + sent);
         helper.assertTrue(builtin.items().size() == before, "a built-in profile was added by an ordinary player");
-        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.CONFIG.getProxy().equals("evil:1"),
+        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.config().getProxy().equals("evil:1"),
                 "the proxy was changed by an ordinary player");
         GameTestKit.leave(player);
         helper.succeed();
