@@ -149,7 +149,7 @@ public final class ServerLang {
     // ---- 从 jar 里读 ----
 
     private static ServerLang read(String locale) {
-        return read(locale, Services.PLATFORM.modIds(), Services.PLATFORM::modResource);
+        return read(locale, Services.platform().modIds(), Services.platform()::modResource);
     }
 
     /** @param resource 模组 id 与 jar 内路径到文件;没有是 {@code null} */

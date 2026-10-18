@@ -1,14 +1,17 @@
 package com.dwinovo.numen.api.mixin.inject;
 
 import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.FakeConnection;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.text.ServerLang;
 import net.minecraft.network.Connection;
+import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Final;
@@ -52,6 +55,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 不认识 {@code numen.*} 的键,所以这里按他客户端报上来的语言把 Numen 的键翻成字再放行({@link ServerLang})。
  * 指令的回话、她的话、征询、动作栏都是系统聊天包,在这一处一并解决,发话的地方不必各自管语言。
  *
+ * <h2>外面把她断开 = 她的身体被移除</h2>
+ * 假连接把断开吞了({@link FakeConnection#disconnect}),所以服主的 {@code /kick}、别的模组踢人在她身上本来什么也不发生。
+ * 这里是断开落到她的假连接上的最窄一处:调 {@link Companions#removedFromOutside},再由我们把身体移出玩家列表
+ * (原版真玩家是断开后由连接层回调 {@code onDisconnect} 来做这一步,她的假连接不回调)。关服时 {@code removeAll} 也会
+ * 对每个玩家断开,那是关服不是外面的人踢她,不走这条。
+ *
  * <p>Common (all environments): the integrated server hits this path in singleplayer too,
  * so it must NOT be a {@code server}-only (dedicated) mixin.
  */
@@ -76,6 +85,20 @@ public abstract class MixinServerCommonPacketListener {
             companion.fakeClient().onOutbound(packet);
         }
         ci.cancel();
+    }
+
+    @Shadow
+    @Final
+    protected MinecraftServer server;
+
+    @Inject(method = "disconnect(Lnet/minecraft/network/DisconnectionDetails;)V", at = @At("HEAD"))
+    private void numen$bodyRemovedFromOutside(DisconnectionDetails details, CallbackInfo ci) {
+        if (this.connection instanceof FakeConnection && !this.server.isStopped()
+                && (Object) this instanceof ServerGamePacketListenerImpl game
+                && game.getPlayer() instanceof NumenPlayer companion) {
+            Companions.removedFromOutside(companion, details.reason());
+            this.server.getPlayerList().remove(companion);
+        }
     }
 
     @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V",

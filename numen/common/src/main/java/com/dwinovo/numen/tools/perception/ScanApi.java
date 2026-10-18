@@ -306,7 +306,7 @@ public final class ScanApi {
             throw new ApiError(ErrorKind.NOT_FOUND, "the block at " + pos.getX() + "," + pos.getY() + "," + pos.getZ()
                     + " is air — nothing to read", null);
         }
-        return new Storage(BlockAt.of(pos, state), Services.CAPS.read(self.level(), pos).lines());
+        return new Storage(BlockAt.of(pos, state), Services.caps().read(self.level(), pos).lines());
     }
 
     // ---- sight ----

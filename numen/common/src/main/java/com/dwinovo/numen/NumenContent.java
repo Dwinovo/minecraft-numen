@@ -87,7 +87,7 @@ public final class NumenContent {
      * 没有平台的网络服务。处理体由客户端入口挂上({@code PathDebugPayload.onClient});包是可选的,原版客户端没有它也进得来。
      */
     public static void registerNetwork() {
-        com.dwinovo.numen.api.platform.Services.NETWORK.registerServerToClient(PathDebugPayload.TYPE,
+        com.dwinovo.numen.api.platform.Services.network().registerServerToClient(PathDebugPayload.TYPE,
                 PathDebugPayload.STREAM_CODEC, PathDebugPayload::handle);
     }
 

@@ -32,7 +32,7 @@ public final class NetworkTransport implements ClientTransport {
             done.accept(failure(request.function(), "its owner is not connected"));
             return;
         }
-        if (!Services.NETWORK.canSend(owner, ClientCallPayload.TYPE)) {
+        if (!Services.network().canSend(owner, ClientCallPayload.TYPE)) {
             done.accept(failure(request.function(), "its owner has not installed the Numen client"));
             return;
         }

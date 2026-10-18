@@ -7,8 +7,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.function.Consumer;
 
@@ -17,9 +19,9 @@ import java.util.function.Consumer;
  * 这里代替客户端把回话送回去。服务端对她说的话(系统聊天与动作栏)真客户端会显示给玩家看,这里交给模型。
  *
  * <h2>边界:只回握手、只传话,不报物理</h2>
- * 这里只认两类下行包:<b>服务端会等回执</b>的握手,和<b>服务端对她说的话</b>。走路、视角这些"客户端本地算、
+ * 这里只认三类下行包:<b>服务端会等回执</b>的握手、<b>服务端对她说的话</b>,和<b>本该由客户端应用的击退</b>。走路、视角这些"客户端本地算、
  * 再上报给服务端"的东西不归这儿——那是 {@link NumenPlayer#tick()} 里自己跑的物理:服务端算出来就是结果,
- * 没有谁在等一个回复。所以这个类不会长成一个客户端实现,它的面就是原版那几处握手加上聊天栏与动作栏。
+ * 没有谁在等一个回复。所以这个类不会长成一个客户端实现,它的面就是原版那几处握手加上聊天栏与动作栏、玩家打她的击退。
  *
  * <h2>对她说的话,各有一个出处</h2>
  * <ul>
@@ -44,6 +46,12 @@ import java.util.function.Consumer;
  * 跨维度搬运流程中途重入它的包处理器——那时她已经 {@code setServerLevel} 了但还没
  * {@code addDuringTeleport}。真客户端本来也要一个来回才答,晚一刻既更像真的,也不必赌
  * 原版中途的状态是自洽的。
+ *
+ * <h2>玩家打她的击退:客户端本该应用的那个速度包</h2>
+ * 原版玩家攻击另一名玩家时,把击退算进目标的速度、给目标发一个速度包,随即把服务端上的速度清回原值——击退是由目标的客户端
+ * 收到包后应用的。她没有客户端,所以不接的话玩家打她纹丝不动。这里只接这一种:发给她自己的速度包、而且发的当时
+ * {@code hurtMarked} 为真(原版清它在发包之后)。别的速度包不归这里:怪打她的击退由服务端实体追踪发出,那时 {@code hurtMarked}
+ * 已经清了,而且服务端上的速度本来就是对的。
  *
  * <h2>答话挂在服务端 tick 上,不挂实体 tick</h2>
  * {@link #answer()} 由 {@code CompanionTickDispatcher} 每刻遍历玩家列表时调用。挂
@@ -71,6 +79,9 @@ public final class FakeClient {
      */
     private int awaitingTeleport = -1;
 
+    /** 待应用的击退速度(原版交给目标客户端的那个),下一刻应用;没有是 null。 */
+    private Vec3 knockback;
+
     /** 服务端对她说的话,折叠后交成事件。 */
     private final ServerMessages messages;
 
@@ -92,6 +103,9 @@ public final class FakeClient {
     public void onOutbound(Packet<?> packet) {
         if (packet instanceof ClientboundPlayerPositionPacket teleport) {
             awaitingTeleport = teleport.getId();
+        } else if (packet instanceof ClientboundSetEntityMotionPacket motion
+                && motion.getId() == player.getId() && player.hurtMarked) {
+            knockback = new Vec3(motion.getXa(), motion.getYa(), motion.getZa());
         } else if (packet instanceof ClientboundSystemChatPacket said) {
             heard(said.content(), said.overlay());
         } else if (packet instanceof ClientboundPlayerChatPacket chat
@@ -129,9 +143,13 @@ public final class FakeClient {
         messages.heard(text, overlay, player.server.getTickCount());
     }
 
-    /** 每刻一次:把攒下的回执交还服务端,剩下的全由原版自己做;折叠窗口到了的话交出去。 */
+    /** 每刻一次:把攒下的回执交还服务端、应用待应用的击退,剩下的全由原版自己做;折叠窗口到了的话交出去。 */
     public void answer() {
         messages.tick(player.server.getTickCount());
+        if (knockback != null) {
+            player.setDeltaMovement(knockback);
+            knockback = null;
+        }
         if (awaitingTeleport < 0) {
             return;
         }

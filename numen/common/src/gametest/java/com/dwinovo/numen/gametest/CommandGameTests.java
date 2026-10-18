@@ -194,6 +194,53 @@ public class CommandGameTests {
         }
     }
 
+    /**
+     * 服主踢她({@code /kick} 对目标做的就是 {@code connection.disconnect}):身体被外面移除。身体不在、大脑停牌、她的收件箱里留下一条事实、主人收到消息、名册记着;
+     * 主人再召唤她就回来,停牌解开。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void a_kick_removes_her_body_and_the_owner_can_summon_her_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var owner = presentVanillaPlayer(helper, null, "gametest_kick_owner", "en_us");
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        NumenPlayer her = com.dwinovo.numen.api.entity.Companions.summon(server, owner.getUUID(), "Kickable", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
+        java.util.UUID id = her.getUUID();
+        var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+
+        // /kick 只在专用服务器上注册,测试服务器里没有;它做的事就是这一句
+        her.connection.disconnect(Component.literal("cheating at cards"));
+
+        helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "her body is still in the world");
+        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+                "her loop was not held: " + loop.status().hold());
+        helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
+                        entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REMOVED)
+                                && entry.text().contains("cheating at cards")),
+                "her inbox has no removal fact: " + loop.inbox().entries());
+        helper.assertTrue(registry.find(id) != null && registry.find(id).removed(), "the roster does not record it");
+        helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(line ->
+                        line.text().getString().contains("Kickable") && line.text().getString().contains("cheating at cards")),
+                "her owner was not told");
+        helper.assertTrue(com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
+                "a packet pulled her back without a summon");
+
+        NumenPlayer back = com.dwinovo.numen.api.entity.Companions.summon(server, owner.getUUID(), "Kickable", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
+        helper.assertTrue(back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
+                "the summon did not bring the same companion back");
+        helper.assertTrue(!registry.find(id).removed(), "the roster still says she is out");
+        helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+                "her loop is still held for the missing body");
+        CompanionFactory.despawn(server, back);
+        com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
+        registry.remove(id);
+        leave(owner);
+        helper.succeed();
+    }
+
     private static PermissionStore storeOf(net.minecraft.server.level.ServerPlayer owner) {
         return PermissionStore.of(owner.getServer(), owner.getUUID());
     }

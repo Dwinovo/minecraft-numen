@@ -92,7 +92,7 @@ public final class CompanionLoop {
      * @param main        服务端主线程的执行器:模型回调经它回来
      * @param body        她此刻的身体;没加载是 {@code null}
      * @param snapshot    她的身体状态,给 {@code <runtime_state>};没有是 {@code null}
-     * @param dead        她现在是不是死着(重进世界时按状态恢复死亡停牌)
+     * @param absent      她的身体现在为什么不在世界里(死着、被外面请出了服务器);在就是 {@code null}。重进世界时按它恢复停牌
      * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
      * @param initiative  主动性档位 1~10
@@ -101,7 +101,7 @@ public final class CompanionLoop {
      * @param dayTime     游戏内时刻,给事件盖时间戳
      */
     public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
-                        Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, BooleanSupplier dead,
+                        Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
                         Function<String, String> persona, LongSupplier dayTime, Rooms rooms) {}
 
@@ -190,10 +190,11 @@ public final class CompanionLoop {
         }
         tokens.load();
         log.migrateIfNeeded();
-        // 重进后内核是全新的,死亡停牌按状态恢复:她死着的时候队列里可能躺着急件,不补这一下她会在还没复活的时候就开口。
-        if (parts.dead().getAsBoolean()) {
-            loop.halt(HaltReason.DEATH);
-            Constants.LOG.info("[numen-entity#{}] 恢复时她还死着 — 停牌等复活", companion);
+        // 重进后内核是全新的,身体不在的停牌按状态恢复:她不在的时候队列里可能躺着急件,不补这一下她会在身体回来之前就开口。
+        HaltReason absent = parts.absent().get();
+        if (absent != null) {
+            loop.halt(absent);
+            Constants.LOG.info("[numen-entity#{}] 恢复时她的身体还不在世界里({}) — 停牌等它回来", companion, absent);
         }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (!history.isEmpty()) {
@@ -480,6 +481,24 @@ public final class CompanionLoop {
         loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;现已在主人身边复活。先看看状况再决定下一步。",
                 System.currentTimeMillis(), true)));
+        loop.respawned();
+    }
+
+    /**
+     * 身体被外面的人或插件请出了服务器:内核冻结(同死亡),收件箱照收,并留下这条事实——她再回来时第一眼看到它。
+     * 先停牌再入队:反过来这条急件会在停牌之前把她叫醒,开一轮模型调用再被作废。
+     */
+    public void onRemoved(String reason) {
+        loop.halt(HaltReason.REMOVED, reason);
+        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.REMOVED, null,
+                "你的身体被服务器上的管理员或插件请出去了(" + reason.replace('<', '(').replace('>', ')')
+                        + ")。这不是主人的决定,也不是你做错了什么;从那以后你不在世界里,主人再召唤你才能回来,背包和落点照旧。",
+                System.currentTimeMillis(), true)));
+    }
+
+    /** 主人再召唤了被请出去的她:身体回到世界里,解开停牌,刚才留下的那条事实一并交给她。 */
+    public void onReturned() {
+        Constants.LOG.info("[numen-entity#{}] summoned back after removal — loop thawed", companion);
         loop.respawned();
     }
 

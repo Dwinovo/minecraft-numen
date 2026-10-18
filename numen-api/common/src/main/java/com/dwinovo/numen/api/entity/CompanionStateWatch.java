@@ -98,7 +98,7 @@ public final class CompanionStateWatch {
         // 主人不在线、或他没装我们的客户端(这个包他的连接装不下)就直接走,而且<b>不碰镜像</b>:走一趟把变化吃掉的话,
         // 他回来时镜像已经是最新的,再也检测不出那段时间发生过什么,她的背包就一直是他离线前那份。
         ServerPlayer owner = companion.resolveOwnerPlayer();
-        if (owner == null || !Services.NETWORK.canSend(owner, NumenStatePayload.TYPE)) {
+        if (owner == null || !Services.network().canSend(owner, NumenStatePayload.TYPE)) {
             return;
         }
         // 节流先行:没到间隔连遍历都省了。只对"已经推过一次"成立——第一次必须放行,

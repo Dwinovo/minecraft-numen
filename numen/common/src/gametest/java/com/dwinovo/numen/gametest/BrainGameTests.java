@@ -513,7 +513,7 @@ public class BrainGameTests {
                         p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
                 "the refusals were not told: " + sent);
         helper.assertTrue(builtin.items().size() == before, "a built-in profile was added by an ordinary player");
-        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.CONFIG.getProxy().equals("evil:1"),
+        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.config().getProxy().equals("evil:1"),
                 "the proxy was changed by an ordinary player");
         GameTestKit.leave(player);
         helper.succeed();
@@ -902,7 +902,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_boss");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+                4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_hand");
         helper.assertTrue(com.dwinovo.numen.api.config.Authority.isAdmin(admin), "the test admin is not an admin");
         com.dwinovo.numen.api.brain.Replies.hello(other, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
@@ -988,7 +988,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_form_boss");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+                4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_form_hand");
         GameTestKit.received(admin);
         GameTestKit.received(other);

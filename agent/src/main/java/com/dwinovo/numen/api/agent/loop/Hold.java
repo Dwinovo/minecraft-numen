@@ -5,7 +5,7 @@ package com.dwinovo.numen.api.agent.loop;
  *
  * <pre>
  * Hold        什么时候进入                          什么解开
- * DEAD        身体死亡                              复活
+ * DEAD        身体不在世界里:死亡,或被外面请出服务器  复活,或主人再召唤她(都是"身体回来了")
  * EXTERNAL    外接模型驾驶(现算,不存)              驾驶席交还内脑——现算的值自己变回来,不经 Release
  * AWAY        主人不在线(现算,不存)                主人回来——现算的值自己变回来,不经 Release
  * OWNER_STOP  主人按停止                            主人再说话
