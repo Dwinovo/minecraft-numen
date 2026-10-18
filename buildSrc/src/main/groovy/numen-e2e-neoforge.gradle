@@ -1,0 +1,108 @@
+/**
+ * 端到端测试的起服层之一:NeoForge 专用服。应用在 numen/neoforge 的构建脚本末尾(它要用到模组 numen)。
+ *
+ * <p>场景(e2e/ 里的 JUnit)只认一份规格——e2e/build.gradle 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
+ * 配置根里要预先放哪些文件(种子)。怎么把满足这份规格的服务端起起来,是这一层的事;换一种服务端(Paper)就是另写一层,
+ * 同样提供 {@code e2eServerStart}/{@code e2eServerStop} 两个任务、守同一份规格,场景一行不用改。
+ *
+ * <ul>
+ *   <li>{@code e2eServerStart}:清空独立的运行目录 {@code runs/e2e}(每次一个新世界),写入 eula 与 server.properties
+ *       (离线模式、规格里的端口、平坦世界),把种子铺进配置根 {@code config/numen/},起服并等它报"起好了";</li>
+ *   <li>{@code e2eServerStop}:关服并保证进程收干净(构建服务在构建结束时也会关);场景失败时把服务端日志的关键段打出来。</li>
+ * </ul>
+ *
+ * <p>起的就是模组的 {@code server} 运行配置那一条命令行(同样的类路径与 JVM 参数),只换运行目录。
+ */
+import com.dwinovo.numen.buildsrc.E2eServer
+
+def spec = rootProject.project(':e2e').ext.e2e
+
+// 独立的运行目录:每次起服前整个清空重建,所以只能是 runs/ 下这一个固定的位置
+def gameDir = project.file('runs/e2e')
+
+neoForge {
+    runs {
+        e2e {
+            server()
+            gameDirectory = project.mkdir(gameDir)
+            // 玩家服务器上有的就这些:Numen 与它依赖的 Numen API。GameTest 的支持模组不在里面
+            loadedMods = [mods.numen]
+            programArguments.add('--nogui')
+        }
+    }
+}
+
+def server = gradle.sharedServices.registerIfAbsent('e2eServer', E2eServer) {}
+def game = tasks.named('runE2e')
+def tests = rootProject.project(':e2e').tasks.named('e2eTest')
+
+tasks.register('e2eServerStart') {
+    group = 'verification'
+    description = '起一台端到端测试用的 NeoForge 专用服(新世界、离线模式),等它起好'
+    usesService(server)
+    // runE2e 依赖的那些(编译、模板、运行配置的参数文件),不含 runE2e 本身
+    dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
+    dependsOn ':e2e:e2eSeed'
+    doLast {
+        def run = game.get()
+        def dir = gameDir
+        dir.deleteDir()
+        dir.mkdirs()
+        new File(dir, 'eula.txt').text = 'eula=true\n'
+        new File(dir, 'server.properties').text = [
+                'online-mode=false',
+                // 不签名的客户端(MCProtocolLib)进得来、私聊指令的参数不带签名也收
+                'enforce-secure-profile=false',
+                "server-ip=${spec.host}",
+                "server-port=${spec.port}",
+                'enable-rcon=true',
+                "rcon.port=${spec.rconPort}",
+                "rcon.password=${spec.rconPassword}",
+                'broadcast-rcon-to-ops=false',
+                'level-type=minecraft\\:flat',
+                'generator-settings={"biome":"minecraft:plains","layers":[{"block":"minecraft:bedrock","height":1},'
+                        + '{"block":"minecraft:dirt","height":2},{"block":"minecraft:grass_block","height":1}],'
+                        + '"features":false,"lakes":false,"structure_overrides":[]}',
+                'generate-structures=false',
+                'spawn-protection=0',
+                'difficulty=peaceful',
+                'spawn-monsters=false',
+                'view-distance=4',
+                'simulation-distance=4',
+                'max-tick-time=-1',
+                'sync-chunk-writes=false',
+                'motd=numen e2e',
+        ].join('\n') + '\n'
+        ant.copy(todir: new File(dir, 'config/numen')) { fileset(dir: spec.seed.get().asFile) }
+
+        def java = run.javaLauncher.get().executablePath.asFile.absolutePath
+        def cp = run.classpathProvider.asPath
+        def command = [java] + run.allJvmArgs + (cp.isEmpty() ? [] : ['-cp', cp]) + [run.mainClass.get()] + run.args
+        def env = new HashMap<String, String>(System.getenv())
+        env.putAll(run.environmentProperty.get())
+        def log = new File(dir, 'e2e-server.log')
+        server.get().start(command.collect { it.toString() }, dir, env, log)
+        logger.lifecycle("[numen-e2e] 起服,日志 ${log}")
+        if (!server.get().awaitReady('Done (', 5 * 60 * 1000L)) {
+            server.get().stop()
+            throw new GradleException("服务端没有起好,日志末尾:\n" + log.readLines('UTF-8').takeRight(80).join('\n'))
+        }
+        logger.lifecycle("[numen-e2e] 服务端就绪 ${spec.host}:${spec.port}")
+    }
+}
+
+tasks.register('e2eServerStop') {
+    group = 'verification'
+    description = '关掉端到端测试用的专用服;场景没过时打出服务端日志的关键段'
+    usesService(server)
+    doLast {
+        def log = server.get().logFile()
+        server.get().stop()
+        if (log != null && log.exists() && tests.get().state.failure != null) {
+            def lines = log.readLines('UTF-8')
+            logger.lifecycle("[numen-e2e] 场景没过,服务端日志的错误与警告行:\n"
+                    + lines.findAll { it =~ /\] \[.*\/(ERROR|WARN)\]/ }.takeRight(60).join('\n')
+                    + "\n[numen-e2e] 服务端日志末尾 80 行(全文 ${log}):\n" + lines.takeRight(80).join('\n'))
+        }
+    }
+}
