@@ -82,13 +82,22 @@ final class McpAudit {
         append("connect", body);
     }
 
-    /** 接入被拒(令牌不对、会话开满)——没有会话号,令牌认不出来就没有令牌编号。 */
+    /** 认出了令牌却被拒(限流、会话开满)。 */
     void refused(String why, String tokenId) {
         JsonObject body = new JsonObject();
         body.addProperty("why", why);
-        if (tokenId != null) {
-            body.addProperty("token", tokenId);
-        }
+        body.addProperty("token", tokenId);
+        append("refused", body);
+    }
+
+    /** 没认出令牌的一波请求:同一来源地址在一个时间窗内合并成一条,记次数与首末时刻(毫秒)。 */
+    void strangers(String address, String why, int count, long first, long last) {
+        JsonObject body = new JsonObject();
+        body.addProperty("why", why);
+        body.addProperty("address", address);
+        body.addProperty("count", count);
+        body.addProperty("first", first);
+        body.addProperty("last", last);
         append("refused", body);
     }
 

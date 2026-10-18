@@ -115,6 +115,8 @@ class McpServerTest {
     private McpServer server;
     private final McpChannels channels = new McpChannels();
     private McpConfig config;
+    private McpAudit audit;
+    private McpStrangers strangers;
 
     @BeforeEach
     void start() throws Exception {
@@ -130,7 +132,9 @@ class McpServerTest {
             server.stop();
         }
         config = with;
-        server = new McpServer(with, tokens, new McpLimits(with.limits(), now::get), sessions, new McpAudit(home),
+        audit = new McpAudit(home);
+        strangers = new McpStrangers(audit, now::get);
+        server = new McpServer(with, tokens, new McpLimits(with.limits(), now::get), sessions, audit, strangers,
                 channels, owner -> hands);
         server.start();
     }
@@ -408,10 +412,42 @@ class McpServerTest {
     }
 
     @Test
-    void aRefusedConnectionIsAuditedToo() throws Exception {
+    void aRefusedConnectionIsAuditedOnceItsWindowCloses() throws Exception {
+        post("numen_wrong", null, rpc(1, "initialize", initParams(false)));
         post("numen_wrong", null, rpc(1, "initialize", initParams(false)));
 
-        assertTrue(Files.readString(dir.resolve(McpAudit.FILE)).contains("\"type\":\"refused\""));
+        now.addAndGet(McpStrangers.WINDOW_MS);
+        strangers.flushClosed();
+
+        String audit = Files.readString(dir.resolve(McpAudit.FILE));
+        assertEquals(1, audit.lines().filter(l -> l.contains("\"type\":\"refused\"")).count(), audit);
+        assertTrue(audit.contains("\"count\":2") && audit.contains("\"address\":\"127.0.0.1\""), audit);
+    }
+
+    @Test
+    void aFloodOfStrangersIsThrottledAndLeavesOneAuditLine() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        int total = McpStrangers.FAILURES_PER_WINDOW + 20;
+
+        int refused = 0;
+        int throttled = 0;
+        for (int i = 0; i < total; i++) {
+            int status = post("numen_guess" + i, null, rpc(1, "initialize", initParams(false))).statusCode();
+            if (status == 401) refused++;
+            if (status == 429) throttled++;
+        }
+
+        assertEquals(McpStrangers.FAILURES_PER_WINDOW, refused);
+        assertEquals(20, throttled, "窗里失败满了,之后的不再查令牌就拒绝");
+        assertEquals(429, post(secret, null, rpc(1, "initialize", initParams(false))).statusCode(),
+                "被限的地址这个窗里连对的令牌也先不收");
+        now.addAndGet(McpStrangers.WINDOW_MS);
+        assertEquals(200, post(secret, null, rpc(1, "initialize", initParams(false))).statusCode(), "窗过了就恢复");
+        strangers.flushClosed();
+        String audit = Files.readString(dir.resolve(McpAudit.FILE));
+        assertEquals(1, audit.lines().filter(l -> l.contains("\"type\":\"refused\"")).count(),
+                "洪水只合成一条审计:" + audit);
+        assertTrue(audit.contains("\"count\":" + (total + 1)), audit);
     }
 
     // ---- 流与线程 ----

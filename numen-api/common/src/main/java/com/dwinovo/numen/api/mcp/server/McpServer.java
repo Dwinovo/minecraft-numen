@@ -56,7 +56,7 @@ import java.util.function.Function;
  *
  * <h2>限流与审计</h2>
  * 工具调用与接入受 {@link McpLimits} 限;每次接入与调用记一条审计({@link McpAudit}),只记编号、令牌编号、工具名、
- * 成败与字节数。
+ * 成败与字节数。没认出令牌的请求按来源地址限流并合并审计({@link McpStrangers})。
  */
 public final class McpServer {
 
@@ -136,6 +136,7 @@ public final class McpServer {
     private final McpLimits limits;
     private final McpSessions sessions;
     private final McpAudit audit;
+    private final McpStrangers strangers;
     private final McpChannels channels;
     private final Function<UUID, ExternalHands> handsOf;
     private final Gson gson = new Gson();
@@ -143,12 +144,14 @@ public final class McpServer {
     private ExecutorService workers;
 
     McpServer(McpConfig config, McpTokens tokens, McpLimits limits, McpSessions sessions, McpAudit audit,
+              McpStrangers strangers,
               McpChannels channels, Function<UUID, ExternalHands> handsOf) {
         this.config = config;
         this.tokens = tokens;
         this.limits = limits;
         this.sessions = sessions;
         this.audit = audit;
+        this.strangers = strangers;
         this.channels = channels;
         this.handsOf = handsOf;
     }
@@ -186,6 +189,7 @@ public final class McpServer {
     }
 
     void stop() {
+        strangers.flushAll();
         for (McpSessions.Session session : sessions.all()) {
             sessions.end(session);
         }
@@ -208,7 +212,14 @@ public final class McpServer {
                 respond(ex, 403, "");
                 return;
             }
-            McpToken token = authenticate(ex);
+            String address = ex.getRemoteAddress().getAddress().getHostAddress();
+            if (strangers.blocked(address)) {
+                strangers.failed(address, "too many failed requests from this address");
+                ex.getResponseHeaders().add("Retry-After", "60");
+                respond(ex, 429, "");
+                return;
+            }
+            McpToken token = authenticate(ex, address);
             if (token == null) {
                 ex.getResponseHeaders().add("WWW-Authenticate", "Bearer realm=\"numen\"");
                 respond(ex, 401, "");
@@ -249,14 +260,14 @@ public final class McpServer {
         }
     }
 
-    private McpToken authenticate(HttpExchange ex) {
+    private McpToken authenticate(HttpExchange ex, String address) {
         String auth = ex.getRequestHeaders().getFirst("Authorization");
         if (auth == null || !auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            audit.refused("no bearer token", null);
+            strangers.failed(address, "no bearer token");
             return null;
         }
         return tokens.authenticate(auth.substring(7).trim()).orElseGet(() -> {
-            audit.refused("unknown or expired token", null);
+            strangers.failed(address, "unknown or expired token");
             return null;
         });
     }

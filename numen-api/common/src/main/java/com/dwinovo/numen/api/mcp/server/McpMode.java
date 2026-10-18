@@ -50,6 +50,7 @@ public final class McpMode {
     private McpLimits limits;
     private McpChannels channels;
     private McpAudit audit;
+    private McpStrangers strangers;
     private Function<UUID, ExternalHands> hands;
     private Watch watch;
     /** 上一刻有大脑连着的主人,找连上、断开的边沿。只在主线程碰。 */
@@ -90,6 +91,7 @@ public final class McpMode {
         this.sessions = new McpSessions(System::currentTimeMillis);
         this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
         this.audit = new McpAudit(serverHome);
+        this.strangers = new McpStrangers(audit, System::currentTimeMillis);
         this.channels = new McpChannels();
         this.connectedOwners = Set.of();
         if (config.enabled()) {
@@ -161,6 +163,7 @@ public final class McpMode {
         tokens = null;
         limits = null;
         audit = null;
+        strangers = null;
         channels = null;
         hands = null;
         watch = null;
@@ -173,7 +176,7 @@ public final class McpMode {
     private boolean startServer() {
         lastError = null;
         limits.configure(config.limits());
-        McpServer s = new McpServer(config, tokens, limits, sessions, audit, channels, hands);
+        McpServer s = new McpServer(config, tokens, limits, sessions, audit, strangers, channels, hands);
         try {
             s.start();
         } catch (Exception ex) {
@@ -232,6 +235,7 @@ public final class McpMode {
             return;
         }
         s.sweep(tokens::valid);
+        strangers.flushClosed();
         Set<UUID> now = enabled ? s.brainOwners() : Set.of();
         for (UUID owner : now) {
             if (!connectedOwners.contains(owner)) {
