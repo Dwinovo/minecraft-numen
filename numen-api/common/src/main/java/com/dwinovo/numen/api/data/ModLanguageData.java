@@ -735,7 +735,7 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_CREATE,           "Create");
         adder.add(Keys.SUMMON_WARN_NAME,        "Name is required");
         adder.add(Keys.SUMMON_WARN_PROVIDER,    "No model configs — create one in Settings → Model Configs first");
-        adder.add(Keys.SUMMON_NO_PROVIDER,      "None — create one in Settings");
+        adder.add(Keys.SUMMON_NO_PROVIDER,      "None — click to create");
 
         // Endpoint problems (chat warn line)
         adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
@@ -1330,7 +1330,7 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_CREATE,           "创建");
         adder.add(Keys.SUMMON_WARN_NAME,        "请填名字");
         adder.add(Keys.SUMMON_WARN_PROVIDER,    "模型配置为空,请先到 设置 → 模型配置 新建一条");
-        adder.add(Keys.SUMMON_NO_PROVIDER,      "没有——去设置里新建");
+        adder.add(Keys.SUMMON_NO_PROVIDER,      "没有——点此新建");
 
         // Endpoint problems (chat warn line)
         adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
