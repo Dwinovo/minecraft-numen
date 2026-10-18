@@ -17,6 +17,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.event.server.ServerLoadEvent;
 
 /**
@@ -28,6 +29,15 @@ final class PaperEvents implements Listener {
     @EventHandler
     void onJoin(PlayerJoinEvent event) {
         PlayerSessions.joined(handle(event.getPlayer()));
+    }
+
+    /**
+     * Fabric 客户端进游戏之后才登记频道(NeoForge 在配置阶段就登记了,登入时已经成立):登记到来时他若已在世界里,
+     * 就是"能收我们的包了"的那一刻。每个频道的登记都会来一次,谁是我们的、推没推过由 {@code channelReady} 判。
+     */
+    @EventHandler
+    void onChannelRegistered(PlayerRegisterChannelEvent event) {
+        PlayerSessions.channelReady(handle(event.getPlayer()));
     }
 
     @EventHandler
