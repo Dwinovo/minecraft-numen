@@ -405,4 +405,89 @@ public final class ServerLibraries {
                 o.get("lanExposed").getAsBoolean(), o.get("callTimeoutSeconds").getAsInt(), hidden,
                 text(o, "endpoint"), text(o, "clientName"), o.get("lastActivityMs").getAsLong(), text(o, "lastError"));
     }
+
+    // ---- 权限 ----
+
+    /**
+     * 规则页的一行规则。{@code layer}:{@code hard}(服主的)、{@code owner}(主人自己的,可改)、{@code factory}(随模组发的);
+     * {@code table}:{@code deny}、{@code ask}、{@code allow};{@code byHer} 与 {@code note} 只有主人层有意义。
+     */
+    public record PermissionRule(String layer, String table, String rule, boolean byHer, String note, int count,
+                                 long lastMillis) {
+
+        public boolean editable() {
+            return "owner".equals(layer);
+        }
+    }
+
+    /** 一只同伴的模式:{@code ask}、{@code bypass}、{@code observe}。 */
+    public record CompanionMode(java.util.UUID companion, String name, String mode) {}
+
+    /** 规则写错了:错在哪(码与现场的原话),界面按码翻成主人的语言。 */
+    public record RuleMistake(String code, List<String> args) {}
+
+    /**
+     * 权限页读到的整份:服主开没开硬规则、名下每只同伴的模式、三层规则(硬规则、主人层、出厂层,每层内部是服务端排好的
+     * deny、ask、allow 次序)。{@code mistake} 只有刚被拒的那次写的答复里有。
+     */
+    public record Permission(boolean hardRules, List<CompanionMode> modes, List<PermissionRule> rules, RuleMistake mistake) {
+
+        public static final Permission EMPTY = new Permission(true, List.of(), List.of(), null);
+    }
+
+    public static Permission permission() {
+        boolean hardRules = true;
+        List<CompanionMode> modes = new ArrayList<>();
+        List<PermissionRule> rules = new ArrayList<>();
+        RuleMistake mistake = null;
+        for (JsonElement e : entries(Libraries.PERMISSION)) {
+            JsonObject o = e.getAsJsonObject();
+            if (o.has("mistake")) {
+                JsonObject m = o.getAsJsonObject("mistake");
+                List<String> args = new ArrayList<>();
+                m.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
+                mistake = new RuleMistake(text(m, "code"), List.copyOf(args));
+                continue;
+            }
+            switch (text(o, "row")) {
+                case "settings" -> hardRules = flag(o, "hardRules");
+                case "mode" -> modes.add(new CompanionMode(java.util.UUID.fromString(text(o, "companion")),
+                        text(o, "name"), text(o, "mode")));
+                case "rule" -> rules.add(new PermissionRule(text(o, "layer"), text(o, "table"), text(o, "rule"),
+                        "her".equals(text(o, "source")), text(o, "note") == null ? "" : text(o, "note"),
+                        o.get("count").getAsInt(), o.get("last").getAsLong()));
+                default -> { }
+            }
+        }
+        return new Permission(hardRules, List.copyOf(modes), List.copyOf(rules), mistake);
+    }
+
+    /** 加一行规则:{@code table} 是 deny、ask 或 allow。办成与否由服务端答复。 */
+    public static void addRule(String table, String rule) {
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PUT, ruleBody(table, rule));
+    }
+
+    /** 删主人层的一行(按规则原文认,不按序号:她可能在两次读之间加过行)。 */
+    public static void deleteRule(String table, String rule) {
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.DELETE, ruleBody(table, rule));
+    }
+
+    /** 清空主人层的规则。 */
+    public static void clearRules() {
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.RESET, new JsonObject());
+    }
+
+    public static void setMode(java.util.UUID companion, String mode) {
+        JsonObject body = new JsonObject();
+        body.addProperty("companion", companion.toString());
+        body.addProperty("mode", mode);
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.MODE, body);
+    }
+
+    private static JsonObject ruleBody(String table, String rule) {
+        JsonObject body = new JsonObject();
+        body.addProperty("table", table);
+        body.addProperty("rule", rule);
+        return body;
+    }
 }
