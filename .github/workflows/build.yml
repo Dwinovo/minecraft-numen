@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 目标 JDK 逐分支不同(1.20.x -> 17,1.21.x -> 21,26.1.2 -> 25),从 gradle.properties
       # 读,以后放开别的分支时这一步不用改。
@@ -41,13 +41,14 @@ jobs:
           echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java ${{ steps.props.outputs.java_version }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ steps.props.outputs.java_version }}
           distribution: temurin
 
+      # 停在 v5:v6 起缓存组件改为闭源商业许可(gradle-actions-caching),v5 是 MIT 且已跑 Node 24。
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       # assemble = 全部模块出 jar,不点名 loader 模块——Forge/NeoForge 分支同一份步骤。
       - name: Assemble all loaders
@@ -77,7 +78,7 @@ jobs:
 
       - name: Upload test report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report
           path: "**/build/reports/tests/test/"
