@@ -142,4 +142,21 @@ class MentionsTest {
                 new Mentions.Member(two, "小柚"));
         assertEquals(List.of(one, two), Mentions.mentioned("@小柚 过来", twins));
     }
+
+    /** 补全词只从成员表来,而且正是路由认的那个拼法:补出来的 @名字,话里一写就喊得到。 */
+    @Test
+    void completionWordsAreTheMembersNamesAndEachOneCallsHerBack() {
+        assertEquals(List.of("@小柚", "@阿岚", "@小梅"), Mentions.words(GROUP));
+        for (Mentions.Member member : GROUP) {
+            assertEquals(List.of(member.uuid()), Mentions.mentioned(Mentions.word(member.name()), GROUP));
+        }
+    }
+
+    @Test
+    void twoCompanionsSharingANameGiveOneCompletionWord() {
+        List<Mentions.Member> twins = List.of(
+                new Mentions.Member(UUID.randomUUID(), "小柚"),
+                new Mentions.Member(UUID.randomUUID(), "小柚"));
+        assertEquals(List.of("@小柚"), Mentions.words(twins));
+    }
 }

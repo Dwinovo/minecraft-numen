@@ -47,7 +47,7 @@ public final class MentionCompletions {
         }
         List<Completion> out = new ArrayList<>();
         for (String name : names) {
-            String mention = "@" + name;
+            String mention = Mentions.word(name);
             out.add(Completion.of(text.substring(0, start) + mention + " " + text.substring(at),
                     mention, ""));
         }

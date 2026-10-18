@@ -35,6 +35,11 @@ public class NumenMod implements ModInitializer {
                     }
                 });
 
+        // 聊天栏切进了会话的玩家,他打的字进会话、不广播到公屏(见 ChatRoutes)
+        net.fabricmc.fabric.api.message.v1.ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(
+                (message, sender, params) -> !com.dwinovo.numen.api.brain.ChatRoutes.take(sender,
+                        message.signedContent()));
+
         // The companion crossed a portal on its own — tell its brain (ambient world event).
         net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
                 (player, origin, destination) -> {

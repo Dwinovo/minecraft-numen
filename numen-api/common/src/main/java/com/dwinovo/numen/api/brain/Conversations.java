@@ -157,6 +157,19 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
         return conv == null ? null : titleOf(conv);
     }
 
+    /**
+     * 主人指的是哪个会话:写的是会话的名字(忽略大小写)或 id。名字可能重名,所以给出全部对得上的。
+     */
+    public List<Conversation> matching(String titleOrId) {
+        List<Conversation> out = new ArrayList<>();
+        for (Conversation conv : all()) {
+            if (conv.id().equals(titleOrId) || titleOf(conv).equalsIgnoreCase(titleOrId)) {
+                out.add(conv);
+            }
+        }
+        return out;
+    }
+
     /** 名册上每只一个"就他俩",再加落过盘、还有活人的会话。按 id 去重。 */
     public List<Conversation> all() {
         Map<String, Conversation> out = new LinkedHashMap<>();

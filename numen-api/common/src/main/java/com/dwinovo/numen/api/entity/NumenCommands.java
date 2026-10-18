@@ -57,6 +57,9 @@ import java.util.function.Predicate;
  *   /numen permission rules remove &lt;deny|ask|allow&gt; &lt;n&gt;   remove row n (1-based, as listed)
  *   /numen permission rules reset                         clear the caller's three tables
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
+ *
+ *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
+ *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -118,6 +121,8 @@ public final class NumenCommands {
                                         .executes(ctx -> removeRule(ctx, table)))))
                         .then(Commands.literal("reset").executes(NumenCommands::resetRules))));
         graft(dispatcher, consentCommand());
+        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.group());
+        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.chat());
         graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

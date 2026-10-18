@@ -84,7 +84,7 @@ public final class OwnerInputs {
     }
 
     /**
-     * 办一条,并把结果交代清楚:没办成的写进日志,会话变了的把新列表推回去。客户端的信箱、
+     * 办一条,并把结果交代清楚:没办成的写进日志,会话变了的把新列表推回去(切进会话的聊天补全也跟着换)。客户端的信箱、
      * 聊天里的 {@code /msg} 与会话指令都走这一处。
      */
     public static Applied handle(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
@@ -95,6 +95,7 @@ public final class OwnerInputs {
         }
         if (applied.conversationsChanged()) {
             Replies.conversations(server, owner);
+            ChatRoutes.refresh(server, owner);
         }
         return applied;
     }

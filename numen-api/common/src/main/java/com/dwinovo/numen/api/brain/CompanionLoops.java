@@ -126,6 +126,7 @@ public final class CompanionLoops {
     /** 这位主人下线了:他名下各大脑作废在飞的回应、放弃未决调用,待命;他的客户端不再算在场。 */
     public static void ownerLeft(UUID owner) {
         Presence.left(owner);
+        ChatRoutes.forget(owner);
         OwnerInputs.dropMailbox(owner);
         for (Entry entry : LOOPS.values()) {
             if (entry.owner.equals(owner)) {
