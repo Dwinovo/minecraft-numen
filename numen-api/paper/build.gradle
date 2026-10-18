@@ -1,0 +1,24 @@
+plugins {
+    id 'numen-api-common'
+    id 'numen-paper'
+    id 'io.papermc.paperweight.userdev'
+}
+
+// Numen API 的 Paper 插件(docs/paper.md):common 的服务端源码对着 Paper 开发包重新编译(见 numen-paper.gradle),
+// 纯 JVM 模块的类平铺进这个插件的 jar,和 NeoForge / Fabric 的发行 jar 一样。ui 和 commonmark 只给客户端,不带;
+// Gson、slf4j、Brigadier、netty 用 Paper 自带的。
+// Paper 1.20.5+ 的服务端本身就是 Mojang 名,成品不再重映射(MOJANG_PRODUCTION),Paper 加载时也不重映射。
+paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
+
+def pureModules = [':store', ':ai', ':script', ':agent', ':permission', ':lua']
+
+dependencies {
+    paperweight.paperDevBundle(paper_dev_bundle)
+    pureModules.each { compileOnly project(it) }
+}
+
+tasks.named('jar', Jar) {
+    pureModules.each { path -> from({ project(path).sourceSets.main.output }) }
+    // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
+    from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
+}

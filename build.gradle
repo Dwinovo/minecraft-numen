@@ -5,6 +5,9 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap' version '1.14.10' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.141' apply false
+    // Paper 端:开发包(Mojang 名的服务端)与本地起服。见 docs/paper.md §三。
+    id 'io.papermc.paperweight.userdev' version '1.7.2' apply false
+    id 'xyz.jpenilla.run-paper' version '3.0.2' apply false
 }
 
 // mod_id 与 mod_name 因模组而异(numen=Numen,numen_api=Numen API),不能放全树共享的 gradle.properties,
@@ -36,7 +39,7 @@ ext.numenTerrainProperties = {
                'numen.terrain.bake.region': findProperty('bakeRegion') ?: '0,0']
             : ['numen.gametest.terrain': new File(terrains, numenTerrain).absolutePath]
 }
-['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge'].each { path ->
+['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge', 'numen-api:paper'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'
         // 显示名是模组列表里看到的那个,不是目录名;gradle.properties 的 mod_name 是 Numen 的
