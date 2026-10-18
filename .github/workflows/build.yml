@@ -66,6 +66,13 @@ jobs:
       - name: Run JVM tests
         run: ./gradlew test --no-daemon -x javadoc
 
+      # Paper 端:成品里对服务端类的每一处引用与覆写要在 Paper 服务端 jar 里解析得到(源码对着开发包重编只保证编译那一刻是对的,
+      # 覆写悄悄失效、预编译字节码的签名漂移这类"编得过但不对"的只有它抓得到)。链接检查的单测在 buildSrc 里,根的 test 不带它。
+      - name: Link-check the Paper plugins
+        run: |
+          ./gradlew -p buildSrc test --no-daemon
+          ./gradlew :numen-api:paper:check :numen:paper:check --no-daemon -x javadoc
+
       # 第三方的视角:只用发布出去的坐标。把制品发到临时目录,再让一个独立的最小插件(tools/third-party-nav)只从那里拉
       # Numen API 的瘦 jar 来编译。发布出去的 POM 引用了没发布的模块(0.1.4 就是这样),它在这里当场解析失败。
       - name: Compile a third-party plugin against the published artifacts

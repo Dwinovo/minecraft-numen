@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.platform.PlayerSessions;
 import net.fabricmc.api.ModInitializer;
-import net.minecraft.server.level.ServerPlayer;
 
 public class NumenMod implements ModInitializer {
 
@@ -15,37 +15,18 @@ public class NumenMod implements ModInitializer {
                 (dispatcher, registry, env) ->
                         com.dwinovo.numen.api.entity.NumenCommands.register(dispatcher));
 
-        // When an owner logs in, bring their dormant companions back.
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register(
-                (handler, sender, server) -> {
-                    ServerPlayer player = handler.getPlayer();
-                    if (player instanceof com.dwinovo.numen.api.entity.NumenPlayer) return;  // not the companion itself
-                    // 只排队,不在这儿恢复:JOIN 跑在原版 placeNewPlayer 内部,在这里出的任何
-                    // 异常都会打断主人的入场,客户端只看到"无效的玩家数据"。
-                    com.dwinovo.numen.api.entity.Companions.scheduleRestoreFor(player.getUUID());
-                    com.dwinovo.numen.api.entity.Companions.syncRosterToOwner(server, player);
-                });
-
-        // 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。
+                (handler, sender, server) -> PlayerSessions.joined(handler.getPlayer()));
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
-                (handler, server) -> {
-                    if (!(handler.getPlayer() instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
-                        com.dwinovo.numen.api.brain.OwnerPresence.playerLeft(handler.getPlayer().getUUID());
-                    }
-                });
+                (handler, server) -> PlayerSessions.left(handler.getPlayer()));
 
         // 聊天栏切进了会话的玩家,他打的字进会话、不广播到公屏(见 ChatRoutes)
         net.fabricmc.fabric.api.message.v1.ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(
                 (message, sender, params) -> !com.dwinovo.numen.api.brain.ChatRoutes.take(sender,
                         message.signedContent()));
 
-        // The companion crossed a portal on its own — tell its brain (ambient world event).
         net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
-                (player, origin, destination) -> {
-                    if (player instanceof com.dwinovo.numen.api.entity.NumenPlayer ap) {
-                        com.dwinovo.numen.api.entity.Companions.onDimensionChanged(ap);
-                    }
-                });
+                (player, origin, destination) -> PlayerSessions.changedDimension(player));
 
         // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
         // 挂 START(实体更新之前):任务→导航→执行器落下的移动/按键输入由

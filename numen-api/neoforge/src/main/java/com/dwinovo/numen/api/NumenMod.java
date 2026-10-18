@@ -3,8 +3,8 @@ package com.dwinovo.numen.api;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.platform.NeoForgeNumenConfig;
 import com.dwinovo.numen.api.platform.NeoForgeNetworkChannel;
+import com.dwinovo.numen.api.platform.PlayerSessions;
 import com.dwinovo.numen.api.platform.Services;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -72,28 +72,20 @@ public class NumenMod {
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (player instanceof com.dwinovo.numen.api.entity.NumenPlayer) return;  // not the companion itself
-        MinecraftServer server = player.level().getServer();
-        if (server != null) {
-            // 只排队,不在这儿恢复:本方法跑在原版 placeNewPlayer 内部,在这里出的任何异常
-            // 都会打断主人的入场,客户端只看到"无效的玩家数据"。
-            com.dwinovo.numen.api.entity.Companions.scheduleRestoreFor(player.getUUID());
-            com.dwinovo.numen.api.entity.Companions.syncRosterToOwner(server, player);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PlayerSessions.joined(player);
         }
     }
 
-    /** 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。 */
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && !(player instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
-            com.dwinovo.numen.api.brain.OwnerPresence.playerLeft(player.getUUID());
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PlayerSessions.left(player);
         }
     }
 
-    /** The companion crossed a portal on its own — tell its brain (ambient world event). */
     private static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof com.dwinovo.numen.api.entity.NumenPlayer ap) {
-            com.dwinovo.numen.api.entity.Companions.onDimensionChanged(ap);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PlayerSessions.changedDimension(player);
         }
     }
 }

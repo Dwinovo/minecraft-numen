@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mc;
 
+import com.dwinovo.numen.api.platform.Services;
 import net.minecraft.commands.CommandResultCallback;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.network.chat.Component;
@@ -19,9 +20,10 @@ import java.util.List;
  * 回执不是聊天栏。要不要知会别的管理员照执行它的那一方来(她这具身体,或服务器)——那是服务器的审计,不因为换了去处
  * 而变。
  */
-public final class Echo implements CommandSource, CommandResultCallback {
+public final class Echo implements CommandResultCallback {
 
     private final boolean informAdmins;
+    private final CommandSource source;
     private final List<String> lines = new ArrayList<>();
     private boolean ran;
     private boolean anySuccess;
@@ -30,6 +32,13 @@ public final class Echo implements CommandSource, CommandResultCallback {
     /** @param informAdmins 执行它的那一方要不要知会别的管理员 */
     public Echo(boolean informAdmins) {
         this.informAdmins = informAdmins;
+        // 原版的 CommandSource 在 Paper 上多一个抽象方法(返回 Bukkit 的类型),common 写不出来,所以来源由平台造
+        this.source = Services.COMMAND_SOURCES.echoing(this);
+    }
+
+    /** 交给 {@code CommandSourceStack.withSource} 的来源:指令说的话都收进本回话。 */
+    public CommandSource source() {
+        return source;
     }
 
     /** 跑成了:执行完有回调,且有一支成功。 */
@@ -47,8 +56,8 @@ public final class Echo implements CommandSource, CommandResultCallback {
         return List.copyOf(lines);
     }
 
-    @Override
-    public void sendSystemMessage(Component message) {
+    /** 来源收到的一句。 */
+    void said(Component message) {
         lines.add(message.getString());
     }
 
@@ -67,18 +76,8 @@ public final class Echo implements CommandSource, CommandResultCallback {
     /** 原版把指令说的话抄给管理员时用的那个翻译键({@code CommandSourceStack.broadcastToAdmins})。 */
     private static final String ADMIN_AUDIT = "chat.type.admin";
 
-    @Override
-    public boolean acceptsSuccess() {
-        return true;
-    }
-
-    @Override
-    public boolean acceptsFailure() {
-        return true;
-    }
-
-    @Override
-    public boolean shouldInformAdmins() {
+    /** 执行它的那一方要不要知会别的管理员。 */
+    boolean informAdmins() {
         return informAdmins;
     }
 

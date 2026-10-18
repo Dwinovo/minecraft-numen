@@ -4,7 +4,8 @@ import com.dwinovo.numen.api.platform.services.INumenConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * NeoForge implementation of {@link INumenConfig}. Backed by a
+ * NeoForge implementation of {@link INumenConfig} (and the one TOML spec that also holds the client's voice-input
+ * settings, see {@link NeoForgeSttSettings}). Backed by a
  * {@code ModConfigSpec} that NeoForge serialises as TOML under
  * {@code <gameDir>/config/numen-common.toml}. Editable in-game via
  * NeoForge's built-in config screen (Mods → Numen → Config).
@@ -37,15 +38,8 @@ public final class NeoForgeNumenConfig implements INumenConfig {
                 .define("proxy", "");
         b.pop();
         b.comment("Behaviour tuning.").push("agent");
-        // Deliberately short. The planning behaviour (the todo tool for
-        // multi-step tasks, the skill tool to read reference knowledge) emerges
-        // entirely from those tools' own descriptions plus the runtime-injected
-        // <available_skills> XML block — adding rules here just dilutes
-        // attention. Mirrors opencode's default.txt minimalist style.
         SYSTEM_PROMPT = b.comment("System prompt prepended to every conversation.")
-                .define("system_prompt",
-                        "You are Numen, a Minecraft entity controlled by the player who owns you.\n"
-                                + "Use the tools provided to act in the world; output text only to talk to your owner.");
+                .define("system_prompt", DEFAULT_SYSTEM_PROMPT);
         b.pop();
 
         b.comment("Voice input (STT) — global, one microphone / one transcription service.").push("stt");
@@ -76,27 +70,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
         return safe(PROXY);
     }
 
-    @Override
-    public String getSttProvider() {
-        String s = safe(STT_PROVIDER);
-        return s.isEmpty() ? "siliconflow" : s;
-    }
-
-    @Override
-    public String getSttBaseUrl() {
-        return safe(STT_BASE_URL);
-    }
-
-    @Override
-    public String getSttModel() {
-        return safe(STT_MODEL);
-    }
-
-    @Override
-    public String getSttMicrophone() {
-        return safe(STT_MICROPHONE);
-    }
-
     // ---- mutations ----
 
     @Override
@@ -107,26 +80,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     @Override
     public void setSystemPrompt(String value) {
         SYSTEM_PROMPT.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttProvider(String value) {
-        STT_PROVIDER.set(value == null || value.isBlank() ? "siliconflow" : value);
-    }
-
-    @Override
-    public void setSttBaseUrl(String value) {
-        STT_BASE_URL.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttModel(String value) {
-        STT_MODEL.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSttMicrophone(String value) {
-        STT_MICROPHONE.set(value == null ? "" : value);
     }
 
     /**
@@ -156,7 +109,7 @@ public final class NeoForgeNumenConfig implements INumenConfig {
      * before the spec is fully bound — returns the empty string instead of
      * letting an exception escape into the LLM call site.
      */
-    private static String safe(ModConfigSpec.ConfigValue<String> v) {
+    static String safe(ModConfigSpec.ConfigValue<String> v) {
         try {
             String s = v.get();
             return s == null ? "" : s;

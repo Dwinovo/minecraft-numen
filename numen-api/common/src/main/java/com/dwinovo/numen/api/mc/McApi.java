@@ -120,7 +120,7 @@ public final class McApi {
         Echo echo = new Echo(her.shouldInformAdmins());
         CommandDispatcher<CommandSourceStack> dispatcher = her.getServer().getCommands().getDispatcher();
         her.fakeClient().runCommand(echo::toHer, () -> her.getServer().getCommands().performPrefixedCommand(
-                her.createCommandSourceStack().withSource(echo).withCallback(echo), line));
+                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), line));
         List<String> output = new ArrayList<>(echo.lines());
         Ran ran = new Ran("/" + line, output, echo.result());
         if (!echo.succeeded()) {

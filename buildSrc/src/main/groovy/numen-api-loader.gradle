@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-api-common'
 }
@@ -15,23 +17,10 @@ configurations {
 }
 
 dependencies {
-    // 消费面契约:NumenTool 继承 ai 的 IToolSpec,编译期消费者(如 Numen 的
-    // loader 模块)需要看见 ai 的类型。发行 jar 已把 ai 的类平铺进来(见下方
-    // jar 块),运行时自含,这条声明只服务编译期与 pom 的如实陈述。
-    api project(':store')
-    api project(':ai')
-    // 大脑本身(纯 JVM,输入队列与长期目标)同理:发行 jar 里的类由下方 jar 块平铺进来。
-    // 她写的一段程序(纯 JVM,回执与 API 答复的类型)同理。
-    api project(':script')
-    api project(':agent')
-    // 权限层的规则核心(纯 JVM)同理:发行 jar 里的类由下方 jar 块平铺进来。
-    api project(':permission')
-    // 沙箱 Lua(纯 JVM,agent 的脚本跑在它里面)同理:发行 jar 里的类由下方 jar 块平铺进来。包名是本仓自己的
-    // com.dwinovo.lua,不会和别的模组带的 LuaJ(org.luaj)撞包。
-    api project(':lua')
-    // UI 组件库(纯 JVM)同理:屏幕组装层引用 widget/令牌类型,编译期要看得见;
-    // 发行 jar 里的类由下方 jar 块平铺进来。
-    api project(':ui')
+    // 纯 JVM 模块(清单在 buildSrc 的 Modules):编译期要看得见——NumenTool 继承 ai 的 IToolSpec,屏幕组装层引用 ui 的 widget 与令牌类型,
+    // 权限、程序、大脑的公开签名里的类型也在它们里面;发行 jar 里它们的类由下方 jar 块平铺进来,运行时自含。
+    // 沙箱 Lua 的包名是本仓自己的 com.dwinovo.lua,不会和别的模组带的 LuaJ(org.luaj)撞包。
+    Modules.ALL.each { api project(it) }
     compileOnly(project(':numen-api:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
@@ -72,26 +61,14 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
-    from({ project(':store').sourceSets.main.allSource })
-    from({ project(':ai').sourceSets.main.allSource })
-    from({ project(':script').sourceSets.main.allSource })
-    from({ project(':agent').sourceSets.main.allSource })
-    from({ project(':permission').sourceSets.main.allSource })
-    from({ project(':lua').sourceSets.main.allSource })
-    from({ project(':ui').sourceSets.main.allSource })
+    Modules.ALL.each { path -> from({ project(path).sourceSets.main.allSource }) }
 }
 
 // numen-ai 的类平铺进加载器发行 jar——http/prompt 从 common 源码集迁去 ai
 // 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
 // numen-agent 同理:队列与目标从 common 迁去 agent 模块,类在这里平铺回来。
 tasks.named('jar', Jar) {
-    from({ project(':store').sourceSets.main.output })
-    from({ project(':ai').sourceSets.main.output })
-    from({ project(':script').sourceSets.main.output })
-    from({ project(':agent').sourceSets.main.output })
-    from({ project(':permission').sourceSets.main.output })
-    from({ project(':lua').sourceSets.main.output })
+    Modules.ALL.each { path -> from({ project(path).sourceSets.main.output }) }
     // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
     from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
-    from({ project(':ui').sourceSets.main.output })
 }

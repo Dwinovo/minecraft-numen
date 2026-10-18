@@ -13,8 +13,8 @@ import com.dwinovo.numen.api.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.platform.Services;
-import com.dwinovo.numen.api.platform.services.INumenConfig;
+import com.dwinovo.numen.api.client.platform.ClientServices;
+import com.dwinovo.numen.api.platform.services.ISttSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -73,7 +73,7 @@ public final class SttPanel {
         this.panelW = w;
         this.panelH = h;
         this.window = window;
-        INumenConfig cfg = Services.CONFIG;
+        ISttSettings cfg = ClientServices.STT;
         if (!seeded) {
             seeded = true;
             provider = cfg.getSttProvider();
@@ -241,7 +241,7 @@ public final class SttPanel {
     }
 
     private void save() {
-        INumenConfig cfg = Services.CONFIG;
+        ISttSettings cfg = ClientServices.STT;
         cfg.setSttProvider(provider);
         ClientKeys.keychain().put(ClientKeys.stt(provider), key.trim());
         cfg.setSttModel(model.trim());

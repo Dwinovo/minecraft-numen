@@ -18,7 +18,6 @@ import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.platform.Services;
-import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -1124,7 +1123,7 @@ public final class NumenScreen extends Screen {
     /** 麦克风按钮:点击开录/再点停;转写文本(批量结尾一次、流式边说边刷)落进输入框。 */
     private void onMicToggle() {
         com.dwinovo.numen.api.client.stt.VoiceInputController.toggle(
-                Services.CONFIG,
+                com.dwinovo.numen.api.client.platform.ClientServices.STT,
                 text -> { if (inputBar != null) inputBar.setText(text); },
                 // 状态提示(未配置/无麦克风/失败)落在输入框的占位文案上——眼睛正看的
                 // 地方,醒目却不写进真实输入(输入行每帧现取 hint());框里已有文字时

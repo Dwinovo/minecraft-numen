@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-api-common'
     id 'net.neoforged.moddev'
@@ -35,21 +37,9 @@ sourceSets {
 neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
 
 dependencies {
-    // 落盘的基础件(纯 JVM):库、绑定、札记、模块等各存储只保留自己的记录格式。
-    api project(':store')
-    // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
-    // 消费方以及下游 loader 都能透视到 ai 的类型。
-    api project(':ai')
-    // 她写的一段程序(纯 JVM):语言接口、回执、API 答复与错误。api 配置同理,下游 loader 与插件透视得到。
-    api project(':script')
-    // 大脑本身(纯 JVM):输入队列、长期目标、循环。api 配置同理,下游 loader 透视得到。
-    api project(':agent')
-    // 权限层的规则核心(纯 JVM):Numen API 的 com.dwinovo.numen.api.permission 是它的游戏适配。api 配置让下游 loader 与插件透视得到
-    // 动词、判决、模式这些公开签名里的类型。
-    api project(':permission')
-    // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
-    // api 配置让下游 loader 也透视得到 widget/令牌类型。
-    api project(':ui')
+    // 纯 JVM 模块(清单在 buildSrc 的 Modules):落盘的基础件、LLM 连接层、她写的程序、大脑、权限规则、沙箱 Lua、界面组件库。
+    // api 配置让本模块里的消费方、下游 loader 与插件都透视得到公开签名里的类型(IToolSpec、动词、判决、widget 与令牌……)。
+    Modules.ALL.each { api project(it) }
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common

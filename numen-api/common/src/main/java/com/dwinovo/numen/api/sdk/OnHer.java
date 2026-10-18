@@ -41,7 +41,7 @@ public final class OnHer {
         MinecraftServer server = her.getServer();
         Echo echo = new Echo(server.shouldInformAdmins());
         her.fakeClient().runCommand(echo::toHer, () -> server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack().withSource(echo).withCallback(echo), line(name(), command, values)));
+                server.createCommandSourceStack().withSource(echo.source()).withCallback(echo), line(name(), command, values)));
         return echo.lines();
     }
 

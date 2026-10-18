@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.stt;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.platform.Services;
-import com.dwinovo.numen.api.platform.services.INumenConfig;
+import com.dwinovo.numen.api.platform.services.ISttSettings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -100,7 +100,7 @@ public final class SttProviders {
      * 据全局配置实例化后端;key 取这台电脑钥匙串里这家服务的。无 API key 时返回 {@code null}(=语音输入未启用)。
      * baseUrl / model 留空时回落到所选预设的默认值。
      */
-    public static SttBackend fromConfig(INumenConfig cfg) {
+    public static SttBackend fromConfig(ISttSettings cfg) {
         Option opt = byId(cfg.getSttProvider());
         String saved = com.dwinovo.numen.api.client.ClientKeys.keychain().get(com.dwinovo.numen.api.client.ClientKeys.stt(opt.id()));
         String key = saved == null ? "" : saved;

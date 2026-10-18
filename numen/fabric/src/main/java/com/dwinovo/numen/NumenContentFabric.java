@@ -1,10 +1,8 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.debug.PathDebugPayload;
 import com.dwinovo.numen.debug.PathDebugRenderer;
 import com.dwinovo.numen.scan.BlockSearch;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 /**
@@ -19,6 +17,7 @@ public class NumenContentFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         NumenContent.init();
+        NumenContent.registerNetwork();
 
         // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
         com.dwinovo.numen.plugins.Builtin.registerAll();
@@ -34,9 +33,8 @@ public class NumenContentFabric implements ModInitializer {
         // 排程机器的心跳随机器归了 Numen API;Numen 只 tick 自己的工具配套。
         // Advance budget-sliced block searches each tick (and sweep their shared index).
         ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);
-        // 寻路调试:把在走的同伴的路发给开了调试的玩家;下行包的类型在这里登记,处理体在客户端入口挂上
+        // 寻路调试:把在走的同伴的路发给开了调试的玩家
         ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
-        PayloadTypeRegistry.playS2C().register(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC);
 
         Constants.LOG.info("Numen content initialised on Fabric.");
     }

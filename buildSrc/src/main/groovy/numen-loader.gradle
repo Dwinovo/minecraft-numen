@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-common'
 }
@@ -22,11 +24,7 @@ dependencies {
     // Numen 是 Numen API 的插件:编译期只看得见瘦 api jar 里公开的那部分(见 numen/common/build.gradle)。瘦 jar 取 common 那份
     // (Mojang 名),Fabric 的 intermediary 成品另有重映射,编译期用不着。
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
-    compileOnly project(':ai')
-    compileOnly project(':script')
-    compileOnly project(':agent')
-    compileOnly project(':permission')
-    compileOnly project(':ui')
+    Modules.PLUGIN_VISIBLE.each { compileOnly project(it) }
     compileOnly(project(':numen:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {

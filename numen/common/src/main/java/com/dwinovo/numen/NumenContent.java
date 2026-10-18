@@ -2,6 +2,7 @@ package com.dwinovo.numen;
 
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.task.TaskFactory;
+import com.dwinovo.numen.debug.PathDebugPayload;
 import com.dwinovo.numen.task.build.BuildCompanionTask;
 import com.dwinovo.numen.task.build.BuildTaskRecord;
 import com.dwinovo.numen.task.inventory.DropCompanionTask;
@@ -79,6 +80,15 @@ public final class NumenContent {
                 numen.command(com.dwinovo.numen.debug.PathCommands.verb()));
         Constants.LOG.info("[numen-content] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), TaskFactory.size());
+    }
+
+    /**
+     * 登记 Numen 的网络包(寻路调试的下行包),各加载器入口在 {@link #init()} 之后调一次。不并进 init:单测只要登记处,
+     * 没有平台的网络服务。处理体由客户端入口挂上({@code PathDebugPayload.onClient});包是可选的,原版客户端没有它也进得来。
+     */
+    public static void registerNetwork() {
+        com.dwinovo.numen.api.platform.Services.NETWORK.registerServerToClient(PathDebugPayload.TYPE,
+                PathDebugPayload.STREAM_CODEC, PathDebugPayload::handle);
     }
 
     /** 把 Numen 的五条生存本能链插进 Numen API 的竞价调度(链登记口)。 */

@@ -1,0 +1,20 @@
+name: numen
+version: '${version}'
+description: 'Numen: the first plugin of Numen API - tools, tasks, pathfinding, instincts and bundled skills for the AI companion.'
+main: com.dwinovo.numen.NumenContentPlugin
+bootstrapper: com.dwinovo.numen.NumenBootstrap
+api-version: '1.21'
+authors:
+  - dwinovo
+website: https://github.com/Dwinovo/minecraft-numen
+dependencies:
+  bootstrap:
+    numen_api:
+      load: BEFORE
+      required: true
+      join-classpath: true
+  server:
+    numen_api:
+      load: BEFORE
+      required: true
+      join-classpath: true

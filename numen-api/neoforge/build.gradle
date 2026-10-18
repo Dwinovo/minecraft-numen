@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-api-loader'
     id 'net.neoforged.moddev'
@@ -70,13 +72,7 @@ neoForge {
             // 发行 jar 把 store / ai / script / agent / permission / ui / lua 的类平铺进来(见 numen-api-loader.gradle 的 jar 块),运行时它们
             // 就是本模组的一部分。开发期的 run 不走那个 jar,所以要在这里同样声明——否则
             // 模组构造时找不到 IToolSpec,runData 直接起不来。
-            sourceSet project(':store').sourceSets.main
-            sourceSet project(':ai').sourceSets.main
-            sourceSet project(':script').sourceSets.main
-            sourceSet project(':agent').sourceSets.main
-            sourceSet project(':permission').sourceSets.main
-            sourceSet project(':lua').sourceSets.main
-            sourceSet project(':ui').sourceSets.main
+            Modules.ALL.each { path -> sourceSet project(path).sourceSets.main }
         }
     }
 }
