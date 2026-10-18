@@ -55,6 +55,20 @@ class CompanionRegistryTest {
     }
 
     @Test
+    void beingRemovedFromTheServerSurvivesUntilTheOwnerSummonsHerAgain() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        reg.markRemoved(A, "cheating at cards");
+
+        CompanionRegistry back = roundTrip(reg);
+        assertTrue(back.find(A).removed(), "被请出去必须活过读档——否则主人一上线就把她悄悄重建了");
+        assertEquals("cheating at cards", back.find(A).removedFor());
+
+        back.markReturned(A);
+        assertFalse(roundTrip(back).find(A).removed());
+    }
+
+    @Test
     void aSaveFromBeforeTheWorldIdExistedStillLoads() {
         // 老存档里没有 worldId 这个字段。要是 codec 把它当必填,解析就会失败,
         // load 静默返回空注册表 —— 全世界的同伴一起消失。

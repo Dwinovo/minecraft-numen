@@ -62,7 +62,8 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 | 谁放的这一格 | `PlacedBlocks.placedBy` | `BlockItem.place` | `BlockPlaceEvent`、`BlockMultiPlaceEvent` |
 | 进度奖励 | `NumenEvents.advancementReward` | 包住 `PlayerAdvancements.award` | `PlayerAdvancementDoneEvent`(在发奖励之前触发:事件里拍快照,下一刻比) |
 | 方块变了 | `BlockSearch.onBlockChange` | `ServerLevel.onBlockStateChange` | 没有通用事件,见下 |
-| 发给她的包 | `FakeClient.onOutbound` | `ServerCommonPacketListenerImpl.send`(NeoForge 在 `Connection.send` 之前就会因频道检查抛异常,只能在这里截) | `FakeConnection.send`(Paper 的发送最终落在这里) |
+| 发给她的包(含玩家打她的击退:发给她自己、当时 `hurtMarked` 为真的速度包,下一刻应用) | `FakeClient.onOutbound` | `ServerCommonPacketListenerImpl.send`(NeoForge 在 `Connection.send` 之前就会因频道检查抛异常,只能在这里截) | `FakeConnection.send`(Paper 的发送最终落在这里) |
+| 她的身体被外面移除(踢人) | `Companions.removedFromOutside(body, reason)`:调用时身体还在世界里,**身体本身由平台移除**,入口管之后的一切(停牌、收件箱里的事实、名册记下理由且不重建、告诉主人、发 `REMOVE`);同一次踢人调两次,第二次忽略;Numen 自己造成的移除(遣散、休眠、关服)不调 | `ServerCommonPacketListenerImpl.disconnect` 落到她的假连接上(关服不调),调完由挂点把她移出玩家列表 | `PlayerKickEvent`、`PlayerQuitEvent` |
 | 给没装客户端的玩家翻译 | `ServerLang` | 出口包改写 | 注册成 Adventure 的翻译源(`GlobalTranslator`):Paper 编码组件时按玩家语言渲染,原版的可翻译组件也走它 |
 | 登入、登出、换维度、聊天、刻前、刻后、起服、停服、重载、指令注册 | 与模组相同的那几个入口 | 加载器事件 | 对应的 Bukkit/Paper 事件,见 §八 |
 
