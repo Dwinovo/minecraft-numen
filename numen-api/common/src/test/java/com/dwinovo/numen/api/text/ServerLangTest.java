@@ -5,6 +5,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 import java.util.Map;
 
@@ -67,5 +73,27 @@ class ServerLangTest {
         Component broken = Component.translatable("numen.broken", 1);
         assertSame(broken, LANG.translate(broken));
         assertTrue(LANG.has("numen.broken"));
+    }
+
+    /** 不论模组叫什么,它的语言文件都读进表(英文打底、他的语言盖上);原版命名空间那份不读,原版的键原样留着。 */
+    @Test
+    void everyLoadedModsKeysAreTranslatedWhateverItIsCalledAndVanillaIsLeftAlone(@TempDir Path dir) throws IOException {
+        Map<String, String> files = Map.of(
+                "somepack/en_us", "{\"somepack.hello\":\"Hello\",\"somepack.only_en\":\"English only\"}",
+                "somepack/zh_cn", "{\"somepack.hello\":\"你好\"}",
+                "minecraft/en_us", "{\"block.minecraft.stone\":\"Stone\"}");
+        for (Map.Entry<String, String> file : files.entrySet()) {
+            Path path = dir.resolve(file.getKey().replace('/', '_'));
+            Files.writeString(path, file.getValue());
+        }
+        ServerLang lang = ServerLang.read("zh_cn", List.of("minecraft", "somepack", "absent"), (mod, resource) -> {
+            Path path = dir.resolve(mod + "_" + resource.substring(resource.lastIndexOf('/') + 1, resource.length() - 5));
+            return Files.exists(path) ? path : null;
+        });
+
+        assertEquals("你好", lang.translate(Component.translatable("somepack.hello")).getString());
+        assertEquals("English only", lang.translate(Component.translatable("somepack.only_en")).getString());
+        Component stone = Component.translatable("block.minecraft.stone");
+        assertSame(stone, lang.translate(stone));
     }
 }

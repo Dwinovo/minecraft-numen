@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.text;
 
-import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.platform.Services;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -22,16 +21,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 替没装我们客户端的玩家把 Numen 的可翻译文字翻好。原版客户端不认识 {@code numen.*} 这些键,收到带键的消息只会显示键本身;
+ * 替没装我们客户端的玩家把原版客户端认不得的可翻译文字翻好。原版客户端不认识 {@code numen.*} 这些键,收到带键的消息只会显示键本身;
  * 装了我们的客户端的玩家照旧收带键的消息,由他的客户端按他的语言(与资源包)翻。
  *
- * <p>语言表就是客户端用的那份:各 Numen 模组 jar 里的 {@code assets/<模组 id>/lang/<语言>.json}(Numen API 的由数据生成产出)。
- * 英文打底,玩家客户端报上来的语言盖在上面——缺的键退回英文,和客户端自己的规矩一样。只读 Numen 一家的模组({@link #family}):
- * 别的模组的键(原版的、别的模组的)原样留着,原版客户端自己翻得了的不碰。
+ * <p>语言表就是客户端用的那份:每个已加载模组 jar 里的 {@code assets/<模组 id>/lang/<语言>.json},不论模组叫什么
+ * (Numen API 的由数据生成产出)。英文打底,玩家客户端报上来的语言盖在上面——缺的键退回英文,和客户端自己的规矩一样。
+ * 只有原版自己的那份({@link #VANILLA} 命名空间)不读:原版客户端认得,原样留着让它自己翻。
  *
  * <p>线程:任何线程。
  */
@@ -39,6 +39,8 @@ public final class ServerLang {
 
     /** 原版 {@code TranslatableContents} 的占位符写法:{@code %s}、{@code %1$s}、{@code %%}。 */
     private static final Pattern PLACEHOLDER = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
+    /** 原版客户端自带语言文件的那个命名空间。 */
+    private static final String VANILLA = "minecraft";
     private static final String FALLBACK_LOCALE = "en_us";
 
     private static final Map<String, ServerLang> BY_LOCALE = new ConcurrentHashMap<>();
@@ -140,26 +142,27 @@ public final class ServerLang {
 
     // ---- 从 jar 里读 ----
 
-    /** Numen 一家的模组:Numen API、Numen、联动({@code numen_*})。 */
-    static boolean family(String modId) {
-        return modId.equals(Constants.MOD_ID) || modId.equals("numen") || modId.startsWith("numen_");
+    private static ServerLang read(String locale) {
+        return read(locale, Services.PLATFORM.modIds(), Services.PLATFORM::modResource);
     }
 
-    private static ServerLang read(String locale) {
-        Map<String, String> table = new HashMap<>(load(FALLBACK_LOCALE));
+    /** @param resource 模组 id 与 jar 内路径到文件;没有是 {@code null} */
+    static ServerLang read(String locale, List<String> modIds, BiFunction<String, String, Path> resource) {
+        Map<String, String> table = new HashMap<>(load(FALLBACK_LOCALE, modIds, resource));
         if (!locale.equals(FALLBACK_LOCALE)) {
-            table.putAll(load(locale));
+            table.putAll(load(locale, modIds, resource));
         }
         return new ServerLang(table);
     }
 
-    private static Map<String, String> load(String locale) {
+    private static Map<String, String> load(String locale, List<String> modIds,
+                                            BiFunction<String, String, Path> resource) {
         Map<String, String> out = new HashMap<>();
-        for (String modId : Services.PLATFORM.modIds()) {
-            if (!family(modId)) {
+        for (String modId : modIds) {
+            if (modId.equals(VANILLA)) {
                 continue;
             }
-            Path file = Services.PLATFORM.modResource(modId, "assets/" + modId + "/lang/" + locale + ".json");
+            Path file = resource.apply(modId, "assets/" + modId + "/lang/" + locale + ".json");
             if (file == null) {
                 continue;
             }

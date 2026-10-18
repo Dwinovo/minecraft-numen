@@ -79,9 +79,9 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 - **原版客户端进得来**:NeoForge 上我们登记的频道全是 `optional()`(Numen API 的,与 Numen 自己的寻路调试包);Fabric 本来不拒。证据:`NeoForgeHandshakeTests` 对着本进程登记的全部频道原样跑
   NeoForge 对非 NeoForge 客户端的配置阶段协商(`NetworkRegistry.initializeOtherConnection`)——它第一次跑是红的,就是被寻路调试包一条非可选的登记拦下。
   没有证到的:真的原版客户端进服(不启动客户端)、Velocity 与 BungeeCord 的转发。Numen 没有注册物品、方块、实体,也没有 `SERVER` 类配置,这条协商是仅有的关口。
-- **翻译在发包的出口一处做**(`MixinServerCommonPacketListener`):没装客户端的玩家的系统聊天与动作栏包,按他客户端报上来的语言(`clientInformation().language()`)把 Numen 的键换成字再放行;装了客户端的照旧发带键的消息。
-  所以指令回话、她的话、征询、动作栏都不必各管语言。语言表读 `numen_api`、`numen`、`numen_*` 这几家模组 jar 里的 `assets/<模组 id>/lang/<语言>.json`(英文打底,缺的键退回英文);
-  别家的键(原版的、别的模组的)原样留着让原版客户端自己翻。**代价**:第三方插件的语言文件要被翻到,它的模组 id 得是 `numen_` 开头。
+- **翻译在发包的出口一处做**(`MixinServerCommonPacketListener`):没装客户端的玩家的系统聊天与动作栏包,按他客户端报上来的语言(`clientInformation().language()`)把原版客户端认不得的键换成字再放行;装了客户端的照旧发带键的消息。
+  所以指令回话、她的话、征询、动作栏都不必各管语言。语言表读每个已加载模组 jar 里的 `assets/<模组 id>/lang/<语言>.json`(英文打底,缺的键退回英文),不论模组叫什么;
+  只有原版自己的键(`minecraft` 命名空间)原样留着让原版客户端自己翻。别的模组的物品、方块名出现在她的话里,原版客户端同样不认得,一并翻好。
 - **`/msg`**:私聊的包到她的"客户端"(`FakeClient`)——聊天类型是 `msg_command_incoming` 的玩家聊天包,带发话人的 uuid,交给 `Whispers`。主人的话经 `OwnerInputs`(和面板输入框同一个入口)进她的单聊会话;别的玩家的话按旁听档进收件箱。
   控制台与命令方块发的私聊是不带发话人的 disguised 包,不接。GameTest 里没法发一条真客户端那样签了名的指令,所以照原版 `MsgCommand` 最后一步的写法直接把包送到她手里。
 - **她的回话在哪问就在哪答**用 `Venue`(面板 / 命令切进的会话 / 私聊)记在她的循环上,和"最后被哪个会话叫醒"一样是会话态、不落盘;`Voice` 按它交给 `Link.said`。装了客户端的主人用 `/msg` 或 `/numen chat` 说话时,面板照旧也收到(`Feed` 不变),另有一行聊天。
