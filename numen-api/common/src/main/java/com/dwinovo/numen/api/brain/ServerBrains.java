@@ -54,6 +54,7 @@ public final class ServerBrains {
         ModelServices.start(server);
         McpClients.start(server);
         ServerMcp.start(server);
+        Visits.start();
         for (UUID companion : registry.all()) {
             try {
                 CompanionBrains.ensure(server, companion);
@@ -88,6 +89,7 @@ public final class ServerBrains {
     }
 
     private static void stop() {
+        Visits.stop();
         McpMode.instance().shutdown();
     }
 

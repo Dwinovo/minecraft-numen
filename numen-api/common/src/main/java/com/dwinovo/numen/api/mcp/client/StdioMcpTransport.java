@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * newline-delimited JSON-RPC over its stdin/stdout. A daemon reader thread
  * correlates responses back to their request by id; stderr is drained to a
  * capped buffer and logged so a server's diagnostics don't get lost or grow
- * unbounded. {@link #close()} kills the subprocess.
+ * unbounded. {@link #close()} kills the subprocess and everything it started.
  */
 public final class StdioMcpTransport implements McpTransport {
 
@@ -84,7 +84,10 @@ public final class StdioMcpTransport implements McpTransport {
     @Override
     public void close() {
         closed = true;
-        process.destroy();
+        // 整棵进程树一起收:Windows 上 npx、uvx 是脚本,起的是 cmd 包着的 node,只杀最外层,里面的成了孤儿,
+        // 游戏退出后还活着、占着管道
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
         RuntimeException dead = new RuntimeException("stdio transport closed");
         pending.values().forEach(f -> f.completeExceptionally(dead));
         pending.clear();

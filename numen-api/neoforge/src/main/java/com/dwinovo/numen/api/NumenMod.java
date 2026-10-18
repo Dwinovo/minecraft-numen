@@ -86,8 +86,7 @@ public class NumenMod {
     /** 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。 */
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player && !(player instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
-            com.dwinovo.numen.api.program.ServerPrograms.ownerLeft(player.getUUID());
-            com.dwinovo.numen.api.brain.CompanionLoops.ownerLeft(player.getUUID());
+            com.dwinovo.numen.api.brain.OwnerPresence.playerLeft(player.getUUID());
         }
     }
 

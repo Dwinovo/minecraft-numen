@@ -790,6 +790,21 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void aRoundIsSettledOnlyWhenNothingIsRunningAndNothingIsAboutToStart() {
+            assertTrue(loop.settled(), "什么都没发生:闲着");
+
+            ownerSays("在吗");
+            assertFalse(loop.settled(), "请求在飞");
+
+            model.last().say("在");
+            assertTrue(loop.settled(), "回话收场了");
+
+            host.away = true;
+            ownerSays("还在吗");
+            assertTrue(loop.settled(), "待命时开不了 run,不会动:不算没做完");
+        }
+
+        @Test
         void awayNeverReleasesByItselfSoOnlyThePresenceOfTheOwnerEndsIt() {
             host.away = true;
             ownerSays("在吗");

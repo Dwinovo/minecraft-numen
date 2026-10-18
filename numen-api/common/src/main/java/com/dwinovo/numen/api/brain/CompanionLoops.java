@@ -161,14 +161,22 @@ public final class CompanionLoops {
         }
     }
 
-    /** 这位主人下线了:他名下各大脑作废在飞的回应、放弃未决调用,待命;他的客户端不再算在场。 */
-    public static void ownerLeft(UUID owner) {
+    /** 这位主人的玩家下线了:他的客户端不再算在场,他的朗读不再在放。 */
+    static void clientLeft(UUID owner) {
         Presence.left(owner);
         ChatRoutes.forget(owner);
         OwnerInputs.dropMailbox(owner);
         for (Entry entry : LOOPS.values()) {
             if (entry.owner.equals(owner)) {
                 entry.voicePlaying = false;
+            }
+        }
+    }
+
+    /** 这位主人不在了({@link OwnerPresence}):他名下各大脑作废在飞的回应、放弃未决调用,待命。 */
+    static void ownerGone(UUID owner) {
+        for (Entry entry : LOOPS.values()) {
+            if (entry.owner.equals(owner)) {
                 entry.loop.ownerLeft();
             }
         }

@@ -2,21 +2,20 @@ package com.dwinovo.numen.api.mcp.server;
 
 /**
  * 「复制接入提示词」按钮的内容——把"哪个客户端该写哪种配置文件"这摊活外包给
- * 用户自己的 AI:用户复制这段话发给 Claude/任何助手,对方照着把本机 MCP 配好。
+ * 用户自己的 AI:用户复制这段话发给 Claude/任何助手,对方照着把 MCP 配好。
  *
  * <p>用英文写:收这段话的可能是任何模型、任何客户端,英文的指令遵循度最稳;
  * 末尾单独叮嘱它用用户的语言回话,所以用户侧体验仍是母语。
  *
- * <p>端点与令牌直接内嵌进文本,用户零填空——这也是为什么按钮旁必须提示
- * "提示词含你的本机令牌,只发给你信任的 AI"。
+ * <p>端点内嵌进文本;令牌不在里面——令牌是主人在游戏里用 {@code /numen token create} 另发的,
+ * 提示词里只写头怎么带,所以这段话本身可以放心发给任何 AI。
  */
 public final class McpAccessPrompt {
 
     private McpAccessPrompt() {}
 
-    /** 为当前端点/令牌生成整段提示词。 */
-    public static String build(String endpoint, String token) {
-        String auth = token == null || token.isBlank() ? "" : token;
+    /** 为当前端点生成整段提示词。 */
+    public static String build(String endpoint) {
         return """
                 I'm playing Minecraft with a mod called Numen, and I want you to connect to it.
 
@@ -32,7 +31,10 @@ public final class McpAccessPrompt {
                 Set up the MCP connection on this machine, then confirm it works. Here are the details:
 
                 - MCP endpoint: %s
-                %s
+                - Auth: every request must carry the header `Authorization: Bearer <token>`. The token is \
+                issued in the game by the owner with `/numen token create brain` (the game prints it once); \
+                ask me to paste it, and put it where `<token>` is below. Never write it into a shared file.
+
                 ### Step 1 — figure out which client you're running in
 
                 You might be Claude Desktop, Claude Code, Cursor, Cline, Windsurf, or something else. \
@@ -51,7 +53,7 @@ public final class McpAccessPrompt {
                   "mcpServers": {
                     "numen": {
                       "command": "npx",
-                      "args": [%s]
+                      "args": ["-y", "mcp-remote", "%s", "--header", "Authorization: Bearer <token>"]
                     }
                   }
                 }
@@ -108,15 +110,7 @@ public final class McpAccessPrompt {
                 One more thing: talk to me in the language I'm writing to you in, even though these \
                 instructions are in English.""".formatted(
                         endpoint,
-                        auth.isBlank()
-                                ? "- No auth token is set — the endpoint is loopback-only, so no "
-                                        + "Authorization header is needed.\n"
-                                : "- Auth token: `" + auth + "` — every request must carry the header "
-                                        + "`Authorization: Bearer " + auth + "`.\n",
-                        auth.isBlank()
-                                ? "\"-y\", \"mcp-remote\", \"" + endpoint + "\""
-                                : "\"-y\", \"mcp-remote\", \"" + endpoint + "\", \"--header\", "
-                                        + "\"Authorization: Bearer " + auth + "\"",
+                        endpoint,
                         com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName(),
                         McpServer.ONE_BODY);
     }

@@ -657,11 +657,7 @@ public final class SettingsView {
                         left(), top(), panelW(), panelH());
                 if (addingSkin) buildSkinForm();
             }
-            case BRAIN -> {
-                // 换令牌的确认卡要盖住整个设置面板,不是只盖这个分区
-                brainPanel().setDimBounds(left(), top(), panelW(), panelH());
-                brainPanel().build(secX(), secY0(), secW(), secH());
-            }
+            case BRAIN -> brainPanel().build(secX(), secY0(), secW(), secH());
             case STT -> sttPanel().build(secX(), secY0(), secW(), secH(), pageWindow());
             case THEME -> themePanel().build(secX(), secY0(), secW(), secH());
         }

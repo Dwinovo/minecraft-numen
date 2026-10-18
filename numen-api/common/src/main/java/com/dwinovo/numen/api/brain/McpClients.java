@@ -137,6 +137,8 @@ public final class McpClients {
     }
 
     private void shutdown() {
+        // 等授权回调的线程一并放掉:浏览器那头可能永远不回来,关服不该被它拖住
+        com.dwinovo.numen.api.mcp.client.McpOAuth.cancelAll();
         shared.shutdown();
         owned.values().forEach(McpClientManager::shutdown);
         owned.clear();

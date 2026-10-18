@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
+import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
@@ -45,6 +46,7 @@ public final class Replies {
         }
         CompanionLoops.sendSnapshots(player.getUUID(), link(player.server, player.getUUID()));
         conversations(player.server, player.getUUID());
+        ConsentDesk.resendTo(player);
     }
 
     /** 这位主人落过盘的会话(成员表与名字),整份。"就他俩"不用推:客户端按名册自己有。 */

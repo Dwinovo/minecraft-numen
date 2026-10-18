@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
  *   <li>主人那一头按他是在哪儿问的({@link Venue})接话({@link CompanionLoops.Link#said}):面板里问的,装了客户端的
  *       随 {@link Feed.Replied} 在面板里看到,没装的得到一行聊天;命令切进会话问的,回在带 {@code [会话名]} 的聊天行;
  *       {@code /msg} 问的,回私信。</li>
+ *   <li>渠道来访着的(主人从 QQ 等渠道说的话,见 {@link Visits}),话回给那个渠道。</li>
  * </ul>
  * 外部大脑替她说的话以后也走这一处。
  */
@@ -26,6 +27,7 @@ final class Voice {
                     return;
                 }
                 rooms.heard(loop.companion(), said);
+                Visits.said(loop.companion(), said);
                 link.said(loop.companion(), said, loop.venue(),
                         rooms.titleFor(loop.companion(), loop.conversation()));
             }

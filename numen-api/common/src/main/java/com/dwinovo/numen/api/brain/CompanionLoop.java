@@ -92,7 +92,7 @@ public final class CompanionLoop {
      * @param body        她此刻的身体;没加载是 {@code null}
      * @param snapshot    她的身体状态,给 {@code <runtime_state>};没有是 {@code null}
      * @param dead        她现在是不是死着(重进世界时按状态恢复死亡停牌)
-     * @param ownerOnline 主人在不在线
+     * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
      * @param initiative  主动性档位 1~10
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
@@ -386,6 +386,11 @@ public final class CompanionLoop {
     /** 同伴离场或遣散:在飞的回合作废,不再往她的会话里写任何东西。 */
     public void dispose() {
         loop.halt(HaltReason.DISPOSE);
+    }
+
+    /** 这一轮做完了:没有在飞的回合,也没有马上要开的,见 {@link AgentLoop#settled}。 */
+    public boolean settled() {
+        return loop.settled();
     }
 
     /** 每个服务器刻一次:驾驶席翻转、停牌变化的播报,和"攒够时长"的熟度。 */

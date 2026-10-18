@@ -18,7 +18,6 @@ import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
 import com.dwinovo.numen.api.mcp.client.McpOAuth;
-import com.dwinovo.numen.api.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.google.gson.JsonArray;
@@ -595,21 +594,19 @@ public final class Libraries {
         return Done.of(null, false);
     }
 
-    /** 外接大脑宿主的整份状态:配置、令牌、谁连着、起服失败的原因。 */
+    /** 外接大脑宿主的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在游戏里用命令发的。 */
     private static JsonObject mcpServerView() {
         McpMode mode = McpMode.instance();
-        McpConfig cfg = mode.config();
+        var cfg = mode.config();
         JsonObject o = new JsonObject();
         o.addProperty("enabled", mode.enabled());
         o.addProperty("host", cfg.host());
         o.addProperty("port", cfg.port());
         o.addProperty("lanExposed", cfg.lanExposed());
-        o.addProperty("token", cfg.token());
         o.addProperty("callTimeoutSeconds", cfg.callTimeoutSeconds());
         JsonArray hidden = new JsonArray();
         cfg.hiddenTools().forEach(hidden::add);
         o.add("hiddenTools", hidden);
-        o.addProperty("quietFallback", cfg.quietFallback());
         o.addProperty("endpoint", mode.endpoint());
         if (mode.clientName() != null) {
             o.addProperty("clientName", mode.clientName());
@@ -650,7 +647,7 @@ public final class Libraries {
     }
 
     /**
-     * 外接大脑宿主:开关、端点与超时、不暴露的工具、令牌、失联回退,哪些字段在 {@code put} 里就改哪些。起服失败的原因当作办不成的原因交回。
+     * 外接大脑宿主:开关、端点与超时、不暴露的工具,哪些字段在 {@code put} 里就改哪些。起服失败的原因当作办不成的原因交回。
      */
     private String mcpServer(boolean admin, String op, JsonObject body) {
         if (LIST.equals(op)) {
@@ -663,29 +660,23 @@ public final class Libraries {
             return "unknown operation";
         }
         McpMode mode = McpMode.instance();
-        McpConfig cfg = mode.config();
-        if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")
-                || body.has("token") || body.has("regenerateToken")) {
+        var cfg = mode.config();
+        if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")) {
             List<String> hidden = new ArrayList<>(cfg.hiddenTools());
             if (body.get("hiddenTools") instanceof JsonArray names) {
                 hidden.clear();
                 names.forEach(n -> hidden.add(n.getAsString()));
             }
-            String token = body.has("regenerateToken") ? McpConfig.mintToken()
-                    : body.has("token") ? string(body, "token") : cfg.token();
             String host = string(body, "host") == null ? cfg.host() : string(body, "host");
             int port = body.has("port") ? body.get("port").getAsInt() : cfg.port();
             int timeout = body.has("callTimeoutSeconds") ? body.get("callTimeoutSeconds").getAsInt()
                     : cfg.callTimeoutSeconds();
-            if (!mode.applySettings(host, port, Math.max(1, timeout), hidden, token == null ? "" : token)) {
+            if (!mode.applySettings(host, port, Math.max(1, timeout), hidden)) {
                 return mode.lastError();
             }
         }
         if (body.has("enabled") && !mode.setEnabled(body.get("enabled").getAsBoolean())) {
             return mode.lastError();
-        }
-        if (body.has("quietFallback")) {
-            mode.setQuietFallback(body.get("quietFallback").getAsBoolean());
         }
         return null;
     }

@@ -619,6 +619,20 @@ public final class AgentLoop {
 
     // ---- 读 ----
 
+    /**
+     * 没有在飞的回合,也没有哪一条马上要开出回合:此刻停牌的、以及没熟的收件箱都算(开不了 run 的就是不会动)。
+     * 渠道来访做完了没有,问的是它。
+     */
+    public boolean settled() {
+        if (run != null || aside != null) {
+            return false;
+        }
+        if (hold() != null) {
+            return true;
+        }
+        return !inbox.ripeness(host.now(), host.initiativeLevel()).ripe() && inbox.nextControls().isEmpty();
+    }
+
     /** 合成后的停牌;{@code null} = 没有。 */
     public Hold hold() {
         if (dead) {

@@ -38,7 +38,7 @@ class ConsentDeskTest {
         @Override public long gameTime() { return now; }
         @Override public boolean ownerPresent() { return ownerOnline; }
         @Override public void show(ConsentRequest request) { shown.add(request); }
-        @Override public void clear(ConsentDesk.Withdrawal why) { cleared++; clears.add(why); }
+        @Override public void clear(long id, ConsentDesk.Withdrawal why) { cleared++; clears.add(why); }
         @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
     }
 

@@ -60,6 +60,7 @@ import java.util.function.Predicate;
  *
  *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
  *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
+ *   /numen token create|list|revoke                       the remote endpoint's tokens (see {@code TokenCommands})
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -123,6 +124,7 @@ public final class NumenCommands {
         graft(dispatcher, consentCommand());
         graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.group());
         graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.chat());
+        graft(dispatcher, com.dwinovo.numen.api.mcp.server.TokenCommands.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

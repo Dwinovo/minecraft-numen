@@ -30,8 +30,7 @@ public class NumenMod implements ModInitializer {
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
                 (handler, server) -> {
                     if (!(handler.getPlayer() instanceof com.dwinovo.numen.api.entity.NumenPlayer)) {
-                        com.dwinovo.numen.api.program.ServerPrograms.ownerLeft(handler.getPlayer().getUUID());
-                        com.dwinovo.numen.api.brain.CompanionLoops.ownerLeft(handler.getPlayer().getUUID());
+                        com.dwinovo.numen.api.brain.OwnerPresence.playerLeft(handler.getPlayer().getUUID());
                     }
                 });
 
