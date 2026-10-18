@@ -401,6 +401,7 @@ public final class McpClientManager {
      * server, so the next {@link #init} starts clean (the next world, or the next test). Safe to call more than once.
      */
     public static synchronized void shutdown() {
+        McpOAuth.cancelAll();
         for (ServerHandle h : HANDLES.values()) {
             closeTransport(h);
             for (String tool : h.toolNames) ToolRegistry.remove(tool);

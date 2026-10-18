@@ -149,6 +149,13 @@ public final class McpOAuth {
     }
 
     /**
+     * 关停时放弃所有还在等回调网址的授权:等的线程立刻结束,它起的回调端点随之停掉(不然要等满授权期限)。
+     */
+    public static void cancelAll() {
+        WAITING.values().forEach(waiting -> waiting.completeExceptionally(new IllegalStateException("shutting down")));
+    }
+
+    /**
      * The callback URL of an authorization has arrived — the redirect itself, or the address-bar text an admin pasted
      * (a full URL, or just its query). The {@code state} picks the authorization it belongs to.
      *
