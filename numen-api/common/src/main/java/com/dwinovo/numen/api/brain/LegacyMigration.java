@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.dwinovo.numen.api.store.StoreException;
+import com.dwinovo.numen.api.store.Trees;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -63,31 +64,17 @@ public final class LegacyMigration {
      * @return 这一次搬了;没有旧的、或世界里已经有她的家是 {@code false}
      */
     public static boolean companion(Path legacyHome, Path worldHome) {
-        if (Files.isDirectory(worldHome) || !Files.isDirectory(legacyHome)) {
+        if (!Files.isDirectory(legacyHome)) {
             return false;
         }
-        Path staging = staging(worldHome);
-        copyTree(legacyHome, staging, name -> !LEFT_BEHIND.contains(name));
-        keepOnlyWhatTheLoopReads(staging.resolve("binding.json"));
-        verify(legacyHome, staging, "binding.json");
-        place(staging, worldHome);
-        Constants.LOG.info("[numen-migrate] 同伴的家 {} 搬进了世界", legacyHome.getFileName());
-        return true;
-    }
-
-    /**
-     * 主人自己的库:旧的人设目录和他的 Lua 模块目录(连同账本)搬到服务器上他的玩家目录。旧的两处都是全局的、
-     * 按客户端登录的那个账号放,所以只对单人游戏的房主做。哪一边目标已经在,那一边就不动。
-     *
-     * @param legacyRoot 旧的 {@code config/numen/}
-     * @param profileId  旧模块目录用的账号 id(客户端登录的那个)
-     * @param ownerHome  服务器上他的玩家目录
-     * @return 这一次搬了东西
-     */
-    public static boolean ownerLibraries(Path legacyRoot, java.util.UUID profileId, Path ownerHome) {
-        boolean moved = false;
-        moved |= tree(legacyRoot.resolve("persona"), ownerHome.resolve("persona"));
-        moved |= tree(legacyRoot.resolve("lua").resolve(profileId.toString()), ownerHome.resolve("lua"));
+        boolean moved = stage(worldHome, staging -> {
+            Trees.copy(legacyHome, staging, name -> !LEFT_BEHIND.contains(name));
+            keepOnlyWhatTheLoopReads(staging.resolve("binding.json"));
+            verify(legacyHome, staging, "binding.json");
+        });
+        if (moved) {
+            Constants.LOG.info("[numen-migrate] 同伴的家 {} 搬进了世界", legacyHome.getFileName());
+        }
         return moved;
     }
 
@@ -187,20 +174,48 @@ public final class LegacyMigration {
     // ---- 小件 ----
 
     /** 一个目录整个搬过去:目标不在、旧的在才搬。 */
-    private static boolean tree(Path legacy, Path target) {
-        if (Files.exists(target) || !Files.isDirectory(legacy)) {
+    public static boolean tree(Path legacy, Path target) {
+        return Files.isDirectory(legacy) && stage(target, staging -> {
+            Trees.copy(legacy, staging);
+            verify(legacy, staging, null);
+        });
+    }
+
+    /** 一个文件搬过去:目标不在、旧的在才搬;先复制到暂存再改名,目标要么不在、要么完整。 */
+    public static boolean file(Path legacy, Path target) {
+        if (Files.exists(target) || !Files.isRegularFile(legacy)) {
+            return false;
+        }
+        Path staging = target.resolveSibling(target.getFileName() + STAGING);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(legacy, staging, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new StoreException("搬不动 " + legacy + ": " + e, e);
+        }
+        place(staging, target);
+        return true;
+    }
+
+    /**
+     * 目标不在才做:{@code fill} 把内容放进目标旁边的暂存目录,放完整个原子改名成目标。中途崩溃留下的半成品下次先清掉重来,
+     * 目标要么不在、要么完整。
+     *
+     * @return 这一次做了;目标已经在(迁过了,或本来就有)是 {@code false}
+     */
+    public static boolean stage(Path target, java.util.function.Consumer<Path> fill) {
+        if (Files.exists(target)) {
             return false;
         }
         Path staging = staging(target);
-        copyTree(legacy, staging, name -> true);
-        verify(legacy, staging, null);
+        fill.accept(staging);
         place(staging, target);
         return true;
     }
 
     private static Path staging(Path target) {
         Path staging = target.resolveSibling(target.getFileName() + STAGING);
-        deleteTree(staging);   // 上次崩在半路留下的
+        Trees.delete(staging);   // 上次崩在半路留下的
         return staging;
     }
 
@@ -218,26 +233,6 @@ public final class LegacyMigration {
             doc.delete();
         } else {
             doc.write(o);
-        }
-    }
-
-    private static void copyTree(Path from, Path to, Predicate<String> topLevel) {
-        try (Stream<Path> walk = Files.walk(from)) {
-            for (Path source : walk.toList()) {
-                Path relative = from.relativize(source);
-                if (relative.getNameCount() > 0 && !topLevel.test(relative.getName(0).toString())) {
-                    continue;
-                }
-                Path target = to.resolve(relative.toString());
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(target);
-                } else {
-                    Files.createDirectories(target.getParent());
-                    Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES);
-                }
-            }
-        } catch (IOException e) {
-            throw new StoreException("搬不动 " + from + ": " + e, e);
         }
     }
 
@@ -265,19 +260,6 @@ public final class LegacyMigration {
             Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             throw new StoreException("放不进 " + target + ": " + e, e);
-        }
-    }
-
-    private static void deleteTree(Path dir) {
-        if (!Files.isDirectory(dir)) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(dir)) {
-            for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(p);
-            }
-        } catch (IOException e) {
-            throw new StoreException("清不掉 " + dir + ": " + e, e);
         }
     }
 }
