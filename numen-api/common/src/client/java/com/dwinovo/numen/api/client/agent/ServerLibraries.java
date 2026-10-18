@@ -462,9 +462,9 @@ public final class ServerLibraries {
         return new Permission(hardRules, List.copyOf(modes), List.copyOf(rules), mistake);
     }
 
-    /** 加一行规则:{@code table} 是 deny、ask 或 allow。办成与否由服务端答复。 */
-    public static void addRule(String table, String rule) {
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PUT, ruleBody(table, rule));
+    /** 加一行规则:{@code table} 是 deny、ask 或 allow。办成与否由服务端答复,交给 {@code onReply}。 */
+    public static void addRule(String table, String rule, java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PUT, ruleBody(table, rule), onReply);
     }
 
     /** 删主人层的一行(按规则原文认,不按序号:她可能在两次读之间加过行)。 */

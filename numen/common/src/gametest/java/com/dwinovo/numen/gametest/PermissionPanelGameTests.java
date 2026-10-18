@@ -109,9 +109,9 @@ public class PermissionPanelGameTests {
         PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
         String rule = "break(nature & minecraft:stone)";
 
-        Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"brek(owner)\"}");
+        Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"brek(owner)\"}", 7);
         LibraryPayload refused = lastTable(received(owner));
-        helper.assertTrue(refused != null && !refused.problem().isEmpty() && refused.entries().contains("\"code\":\"verb\"")
+        helper.assertTrue(refused != null && refused.request() == 7 && !refused.problem().isEmpty() && refused.entries().contains("\"code\":\"verb\"")
                         && store.rows(Verdict.Kind.DENY).isEmpty(),
                 "a mistyped rule was not refused with its code: " + refused);
 
@@ -209,7 +209,7 @@ public class PermissionPanelGameTests {
             got.addAll(received(owner));
             helper.assertTrue(deny.done() && deny.succeeded(), "the deny has not been written: " + deny.outcome());
             LibraryPayload pushed = lastTable(got);
-            helper.assertTrue(pushed != null, "nothing was pushed to the owner's panel");
+            helper.assertTrue(pushed != null && pushed.request() == 0, "nothing was pushed to the owner's panel");
             JsonObject row = ruleRow(pushed, "owner", "break(owner & minecraft:chest)");
             helper.assertTrue(row != null && "her".equals(row.get("source").getAsString())
                             && "leave the chests".equals(row.get("note").getAsString()),

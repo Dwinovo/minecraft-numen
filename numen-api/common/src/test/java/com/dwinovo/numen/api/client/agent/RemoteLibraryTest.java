@@ -32,6 +32,47 @@ class RemoteLibraryTest {
     }
 
     @Test
+    void anAnswerGoesToTheAskerByRequestNumberAndAPushSqueezedInBetweenIsNotTheAnswer() {
+        List<RemoteLibrary.Reply> replies = new ArrayList<>();
+        library.request("permission", "put", new JsonObject(), replies::add);
+        long id = sent.get(0).request();
+        assertEquals(1, id);
+
+        library.onPayload(new LibraryPayload("permission", "[]", ""));   // 服务端主动推的,不答任何请求
+        assertEquals(0, replies.size(), "推送不是答复");
+
+        library.onPayload(new LibraryPayload("permission", "[]", "unknown verb", id));
+        assertEquals(1, replies.size());
+        assertEquals("unknown verb", replies.get(0).problem());
+
+        library.onPayload(new LibraryPayload("permission", "[]", "", id));
+        assertEquals(1, replies.size(), "一个号只答一次");
+    }
+
+    @Test
+    void aSuccessfulAnswerIsOkAndTwoRequestsAreAnsweredEachByItsOwnNumber() {
+        List<String> order = new ArrayList<>();
+        library.request("permission", "put", new JsonObject(), r -> order.add("first:" + r.ok()));
+        library.request("permission", "put", new JsonObject(), r -> order.add("second:" + r.ok()));
+
+        library.onPayload(new LibraryPayload("permission", "[]", "no", sent.get(1).request()));
+        library.onPayload(new LibraryPayload("permission", "[]", "", sent.get(0).request()));
+
+        assertEquals(List.of("second:false", "first:true"), order);
+    }
+
+    @Test
+    void theRequestNumberSurvivesTheWireBothWays() {
+        io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer();
+        LibraryRequestPayload.STREAM_CODEC.encode(buf, new LibraryRequestPayload("permission", "put", "{}", 42));
+        assertEquals(42, LibraryRequestPayload.STREAM_CODEC.decode(buf).request());
+        LibraryPayload.STREAM_CODEC.encode(buf, new LibraryPayload("permission", "[]", "no", 42));
+        assertEquals(42, LibraryPayload.STREAM_CODEC.decode(buf).request());
+        LibraryPayload.STREAM_CODEC.encode(buf, new LibraryPayload("permission", "[]", ""));
+        assertEquals(0, LibraryPayload.STREAM_CODEC.decode(buf).request(), "推送不带号");
+    }
+
+    @Test
     void askingPuttingAndDeletingAreRequestsNotChanges() {
         JsonObject entry = new JsonObject();
         entry.addProperty("name", "乙");

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
-import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.RemoteLibrary;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
@@ -40,9 +39,8 @@ public final class RuleFormPanel {
     private Draft draft = new Draft();
     private TextField ruleField;
     private Button saveButton;
-    /** 发出去等答复:发的时候这种库被服务端推来几次,变了就是它答了。 */
+    /** 发出去等答复:答复按请求号交回 {@link #settle},推送插队不影响。 */
     private boolean awaiting;
-    private long sentRevision;
 
     /**
      * @param onDone   服务端办成了:卡该收了
@@ -99,7 +97,6 @@ public final class RuleFormPanel {
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        settle();
         ui.render(s, c, mouseX, mouseY, nowMs);
     }
 
@@ -122,26 +119,22 @@ public final class RuleFormPanel {
             ruleField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));
             return;
         }
-        sentRevision = RemoteCompanions.library().revision(Libraries.PERMISSION);
         awaiting = true;
         saveButton.setEnabled(false);
-        ServerLibraries.addRule(TABLES.get(draft.table), draft.rule.strip());
+        ServerLibraries.addRule(TABLES.get(draft.table), draft.rule.strip(), this::settle);
     }
 
     /** 服务端答了:办成就收卡;规则写错了,把错在哪挂回输入框,保存钮放开让主人改。 */
-    private void settle() {
-        if (!awaiting || RemoteCompanions.library().revision(Libraries.PERMISSION) == sentRevision) {
-            return;
-        }
+    void settle(RemoteLibrary.Reply reply) {
         awaiting = false;
         saveButton.setEnabled(true);
-        String problem = RemoteCompanions.library().problem(Libraries.PERMISSION);
-        if (problem == null) {
+        if (reply.ok()) {
             onDone.run();
             return;
         }
+        // 答复里的表此刻就是当前的表,错在哪的那一行在里面
         ServerLibraries.RuleMistake mistake = ServerLibraries.permission().mistake();
-        ruleField.setError(mistake == null ? problem
+        ruleField.setError(mistake == null ? reply.problem()
                 : I18n.get(ModLanguageData.Keys.COMMAND_RULE_MISTAKE_PREFIX + mistake.code(), mistake.args().toArray()));
     }
 

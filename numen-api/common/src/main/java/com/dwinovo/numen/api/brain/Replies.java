@@ -82,6 +82,11 @@ public final class Replies {
      * 改成了,在线的其他玩家也各收到他们看得到的新表——档案选择器里的名单不能是旧的。
      */
     public static void library(ServerPlayer player, String kind, String op, String json) {
+        library(player, kind, op, json, 0);
+    }
+
+    /** 同上;{@code request} 是客户端起的请求号,原样带在答复里(0 = 他不等答复)。 */
+    public static void library(ServerPlayer player, String kind, String op, String json, long request) {
         JsonObject body = new JsonObject();
         try {
             if (JsonParser.parseString(json) instanceof JsonObject parsed) {
@@ -94,7 +99,7 @@ public final class Replies {
         Libraries libraries = Libraries.of(server);
         Libraries.Result result = libraries.handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
         NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
-                result.problem() == null ? "" : result.problem()));
+                result.problem() == null ? "" : result.problem(), request));
         if (result.later() != null) {
             result.later().thenAccept(entries -> server.execute(
                     () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, ""))));
