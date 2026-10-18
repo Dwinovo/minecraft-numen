@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
+import com.dwinovo.numen.permission.Verb;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -27,7 +28,7 @@ class ConsentChatTest {
     }
 
     private static ConsentRequestPayload.Line line(String name, int count) {
-        return new ConsentRequestPayload.Line(Action.Kind.BREAK, null, Component.literal(name), count,
+        return new ConsentRequestPayload.Line(Verb.BREAK, null, Component.literal(name), count,
                 Component.literal("placed by a player"), false);
     }
 

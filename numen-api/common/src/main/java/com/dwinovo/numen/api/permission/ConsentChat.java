@@ -54,7 +54,7 @@ public final class ConsentChat {
 
     /** 一件事本身:动词、对象(名字)、数量。 */
     private static Component thing(ConsentRequestPayload.Line line) {
-        return Component.translatable(Keys.CONSENT_VERB_PREFIX + line.kind().verb()).append(" ").append(line.name())
+        return Component.translatable(Keys.CONSENT_VERB_PREFIX + line.kind().word()).append(" ").append(line.name())
                 .append(line.count() > 1 ? "×" + line.count() : "");
     }
 
