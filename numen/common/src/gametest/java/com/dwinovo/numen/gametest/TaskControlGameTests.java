@@ -219,7 +219,7 @@ public class TaskControlGameTests {
                     helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null
                                     && ToolRegistry.get("task_stop") == null,
                             "task_status, set_timer or task_stop is still a tool");
-                    helper.assertTrue(ToolRegistry.get(com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName())
+                    helper.assertTrue(ToolRegistry.get(com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName())
                             != null, "the lua tool is missing");
                     helper.assertTrue(walk.task() != null && timer.succeeded(), "setup failed: " + timer.reply());
                     helper.assertTrue(status.get().succeeded()

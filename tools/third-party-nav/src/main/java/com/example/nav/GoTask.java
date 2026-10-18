@@ -1,6 +1,6 @@
 package com.example.nav;
 
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.entity.NumenPlayer;

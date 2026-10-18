@@ -1,8 +1,8 @@
 package com.dwinovo.numen.tools.interact;
 
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.tools.BlockActionOps;

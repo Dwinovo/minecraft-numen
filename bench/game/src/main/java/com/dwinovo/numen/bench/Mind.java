@@ -11,7 +11,7 @@ import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 
 import java.util.List;

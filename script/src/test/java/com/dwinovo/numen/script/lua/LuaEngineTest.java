@@ -1,7 +1,7 @@
-package com.dwinovo.numen.api.agent.script.lua;
+package com.dwinovo.numen.script.lua;
 
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptRun;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptRun;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -46,19 +46,19 @@ class LuaEngineTest {
             "numen.move", WALK, "my.greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
 
     /** 一个测试用的函数:按顺序的对象不限,{@code options} 是选项表里能写的名字,返回 {@code returns}。 */
-    private static ScriptCatalog.Function fn(com.dwinovo.numen.api.agent.script.ScriptType returns, String... options) {
+    private static ScriptCatalog.Function fn(com.dwinovo.numen.script.ScriptType returns, String... options) {
         return new ScriptCatalog.Function(Integer.MAX_VALUE, java.util.Set.of(options), ScriptCatalog.Kind.VALUE,
                 returns, null);
     }
 
-    private static final com.dwinovo.numen.api.agent.script.ScriptType ANY =
-            new com.dwinovo.numen.api.agent.script.ScriptType.Simple("table");
+    private static final com.dwinovo.numen.script.ScriptType ANY =
+            new com.dwinovo.numen.script.ScriptType.Simple("table");
 
     private static final ScriptCatalog CATALOG = new ScriptCatalog(Map.of(
             "numen.work", Map.of("dig", fn(ANY, "count"), "collect", fn(ANY)),
             "numen.move", Map.of("go", fn(ANY)),
             "numen.route", Map.of("plan", fn(ANY, "arrive", "range")),
-            "numen.scan", Map.of("blocks", fn(ANY), "sight", fn(com.dwinovo.numen.api.agent.script.ScriptType.BOOLEAN))),
+            "numen.scan", Map.of("blocks", fn(ANY), "sight", fn(com.dwinovo.numen.script.ScriptType.BOOLEAN))),
             new ScriptCatalog.ModuleSource() {
                 @Override
                 public String code(String name) {
@@ -90,7 +90,7 @@ class LuaEngineTest {
 
     /** 返回这个值的成功(JSON 写成 Lua 的值,和线上读回来的一样)。 */
     private static ScriptRun.Result value(com.google.gson.JsonElement value) {
-        return ScriptRun.Result.ok(com.dwinovo.numen.api.agent.script.JsonValues.toJava(value));
+        return ScriptRun.Result.ok(com.dwinovo.numen.script.JsonValues.toJava(value));
     }
 
     /** 返回一张只有一个字段的表的成功。 */
@@ -144,11 +144,11 @@ class LuaEngineTest {
 
     @Test
     void theFunctionsAModuleDefinesComeWithTheCommentsAboveThem() {
-        List<com.dwinovo.numen.api.agent.script.ScriptEngine.Defined> defined = LUA.functions("numen.move", WALK);
+        List<com.dwinovo.numen.script.ScriptEngine.Defined> defined = LUA.functions("numen.move", WALK);
         assertEquals(List.of(
-                new com.dwinovo.numen.api.agent.script.ScriptEngine.Defined("numen.move.to", List.of("place", "opts"),
+                new com.dwinovo.numen.script.ScriptEngine.Defined("numen.move.to", List.of("place", "opts"),
                         List.of("-- Plan a walk to a place, then walk it.")),
-                new com.dwinovo.numen.api.agent.script.ScriptEngine.Defined("numen.move.sweep", List.of("a", "b"), List.of())),
+                new com.dwinovo.numen.script.ScriptEngine.Defined("numen.move.sweep", List.of("a", "b"), List.of())),
                 defined);
         assertEquals("Plan a walk to a place, then walk it.", LUA.summaryOf(defined.get(0)));
     }
@@ -167,7 +167,7 @@ class LuaEngineTest {
         assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
         assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "numen.work.dig(", CATALOG),
                 "语法错读不通");
-        com.dwinovo.numen.api.agent.script.ScriptEngine.Reading stopped = LUA.calls("example", """
+        com.dwinovo.numen.script.ScriptEngine.Reading stopped = LUA.calls("example", """
                 numen.work.dig("ores")
                 for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.dig(c.blocks) end
                 """, CATALOG);
@@ -204,7 +204,7 @@ class LuaEngineTest {
     }
 
     /**
-     * 回执数据里收起来的字段({@link com.dwinovo.numen.api.agent.script.JsonValues#FOLDED} 下的):脚本照常读得到,{@code pairs} 数不到,
+     * 回执数据里收起来的字段({@link com.dwinovo.numen.script.JsonValues#FOLDED} 下的):脚本照常读得到,{@code pairs} 数不到,
      * 返回出去、印出来都不带它——一条路的每一步不把回执撑满。
      */
     @Test
@@ -225,7 +225,7 @@ class LuaEngineTest {
         folded.add("path", path);
         JsonObject data = new JsonObject();
         data.addProperty("picked", 3);
-        data.add(com.dwinovo.numen.api.agent.script.JsonValues.FOLDED, folded);
+        data.add(com.dwinovo.numen.script.JsonValues.FOLDED, folded);
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(value(data)));
         assertTrue(done.ok(), done.error());
         assertEquals(List.of("1\twalk\t1"), printed);
@@ -247,7 +247,7 @@ class LuaEngineTest {
         data.add("nearest", nearest);
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.failed(ScriptRun.failure(
                 "out_of_reach", "too far", "numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})", null,
-                com.dwinovo.numen.api.agent.script.JsonValues.toJava(data))))).ok());
+                com.dwinovo.numen.script.JsonValues.toJava(data))))).ok());
         assertEquals(List.of("numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})\t7",
                 "numen.work.dig: out_of_reach — too far\nhint: numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"), printed);
     }
@@ -301,9 +301,9 @@ class LuaEngineTest {
      */
     @Test
     void aReturnedValueOfAClassWithMethodsCarriesThem() {
-        com.dwinovo.numen.api.agent.script.ScriptType.Class pos = new com.dwinovo.numen.api.agent.script.ScriptType.Class("Pos",
-                "A position.", null, List.of(com.dwinovo.numen.api.agent.script.ScriptType.field("x",
-                com.dwinovo.numen.api.agent.script.ScriptType.NUMBER, null))).methodsIn("geo.shape");
+        com.dwinovo.numen.script.ScriptType.Class pos = new com.dwinovo.numen.script.ScriptType.Class("Pos",
+                "A position.", null, List.of(com.dwinovo.numen.script.ScriptType.field("x",
+                com.dwinovo.numen.script.ScriptType.NUMBER, null))).methodsIn("geo.shape");
         String shape = """
                 -- Positions.
                 local M = {}
@@ -322,7 +322,7 @@ class LuaEngineTest {
                 """;
         ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Function(
                 Integer.MAX_VALUE, java.util.Set.of(), ScriptCatalog.Kind.VALUE,
-                com.dwinovo.numen.api.agent.script.ScriptType.listOf(pos.type()), List.of(Map.of("x", 0L))))),
+                com.dwinovo.numen.script.ScriptType.listOf(pos.type()), List.of(Map.of("x", 0L))))),
                 new ScriptCatalog.ModuleSource() {
                     @Override
                     public String code(String name) {
@@ -385,8 +385,8 @@ class LuaEngineTest {
     void aRefusedCallFailsAtTheCallWithoutRunning() {
         ScriptRun run = run("local ok, err = pcall(function() numen.work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
         run.start();
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse(new com.dwinovo.numen.api.agent.script.ApiError(
-                com.dwinovo.numen.api.agent.script.ErrorKind.BAD_ARGUMENT, "takes 1 object, got 2", null))).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse(new com.dwinovo.numen.script.ApiError(
+                com.dwinovo.numen.script.ErrorKind.BAD_ARGUMENT, "takes 1 object, got 2", null))).ok());
         assertEquals(List.of("bad_argument\tnumen.work.dig: bad_argument — takes 1 object, got 2"), printed);
     }
 

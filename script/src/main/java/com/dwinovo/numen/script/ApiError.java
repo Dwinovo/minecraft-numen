@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.agent.script;
+package com.dwinovo.numen.script;
 
 /**
  * 一次 API 调用失败:API 函数只经它说失败,脚本在调用处收到同样字段的错误值({@link ScriptRun#failure}),{@code pcall} 接住后按

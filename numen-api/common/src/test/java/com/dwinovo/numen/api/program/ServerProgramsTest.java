@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.ApiReply;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import com.dwinovo.numen.api.sdk.ClientCall;
@@ -113,7 +113,7 @@ class ServerProgramsTest {
 
         /** 程序 {@code return} 的值:同进程,从结局对象读,不经线。 */
         JsonElement returned() {
-            return com.dwinovo.numen.api.agent.script.JsonValues.toJson(outcome().returned());
+            return com.dwinovo.numen.script.JsonValues.toJson(outcome().returned());
         }
 
         String message() {
@@ -242,7 +242,7 @@ class ServerProgramsTest {
             waiting(more, owner, held);
         }
         Started over = start(UUID.randomUUID(), owner, "return 1", held);
-        assertEquals(com.dwinovo.numen.api.agent.script.ScriptCall.Status.ERROR, over.outcome().ending().status());
+        assertEquals(com.dwinovo.numen.script.ScriptCall.Status.ERROR, over.outcome().ending().status());
         assertTrue(over.message().contains("the most one owner may have at a time"), over.message());
 
         ServerPrograms.ownerLeft(owner);

@@ -65,15 +65,16 @@ tasks.register('datagenAll') {
     }
 }
 
-/** 发布制品的统一入口:Numen API 与 Numen 两个模组、本分支两个 loader,外加 ai/agent/ui。 */
+/** 发布制品的统一入口:Numen API 与 Numen 两个模组、本分支两个 loader,外加 ai/script/agent/ui。 */
 tasks.register('publishAll') {
     group = 'publishing'
     description = '把 Numen API 与 Numen 两个模组、本分支两个 loader 的制品发到 local_maven_url'
-    // store/ai/agent/lua/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
+    // store/ai/script/agent/lua/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
     // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
     // Numen API 发布出去的 pom 引用了哪个纯 JVM 模块,这里就得发哪个,否则第三方当场解析失败。
     dependsOn ':store:publish'
     dependsOn ':ai:publish'
+    dependsOn ':script:publish'
     dependsOn ':agent:publish'
     dependsOn ':permission:publish'
     dependsOn ':lua:publish'

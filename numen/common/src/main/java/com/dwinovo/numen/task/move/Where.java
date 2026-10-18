@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.permission.Listing;
 import com.dwinovo.numen.api.sdk.BadValue;
 import com.dwinovo.numen.api.sdk.Codec;

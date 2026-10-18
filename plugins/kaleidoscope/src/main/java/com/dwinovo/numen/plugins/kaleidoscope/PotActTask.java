@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentAnswer;

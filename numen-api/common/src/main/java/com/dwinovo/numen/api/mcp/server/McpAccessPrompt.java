@@ -111,7 +111,7 @@ public final class McpAccessPrompt {
                 instructions are in English.""".formatted(
                         endpoint,
                         endpoint,
-                        com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName(),
+                        com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName(),
                         McpServer.ONE_BODY);
     }
 }

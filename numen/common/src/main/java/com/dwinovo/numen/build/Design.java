@@ -1,6 +1,6 @@
 package com.dwinovo.numen.build;
 
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.sdk.BadValue;
 import com.dwinovo.numen.api.sdk.Codec;
 import com.dwinovo.numen.api.sdk.LuaCodecs;

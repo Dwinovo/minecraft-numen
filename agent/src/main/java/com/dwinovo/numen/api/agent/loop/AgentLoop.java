@@ -422,15 +422,15 @@ public final class AgentLoop {
             }
 
             @Override
-            public void ended(LlmToolCall program, com.dwinovo.numen.api.agent.script.ScriptCall.Ending ending,
-                              java.util.List<com.dwinovo.numen.api.agent.script.ScriptCall.Called> calls) {
+            public void ended(LlmToolCall program, com.dwinovo.numen.script.ScriptCall.Ending ending,
+                              java.util.List<com.dwinovo.numen.script.ScriptCall.Called> calls) {
                 if (current(id)) {
                     emit(new LoopEvent.ProgramEnded(id, program, ending, calls.size()));
                 }
             }
 
             @Override
-            public void called(LlmToolCall program, com.dwinovo.numen.api.agent.script.ScriptCall.Called called) {
+            public void called(LlmToolCall program, com.dwinovo.numen.script.ScriptCall.Called called) {
                 if (current(id)) {
                     emit(new LoopEvent.ApiCalled(id, program, called));
                 }

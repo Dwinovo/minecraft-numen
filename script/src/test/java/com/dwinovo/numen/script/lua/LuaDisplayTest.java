@@ -1,6 +1,6 @@
-package com.dwinovo.numen.api.agent.script.lua;
+package com.dwinovo.numen.script.lua;
 
-import com.dwinovo.numen.api.agent.script.ScriptLimits;
+import com.dwinovo.numen.script.ScriptLimits;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

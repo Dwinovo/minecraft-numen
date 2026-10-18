@@ -1,9 +1,16 @@
-package com.dwinovo.numen.api.agent.script;
+package com.dwinovo.numen.api.agent.loop;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.ai.AiLog;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptRun;
 
 import java.util.ArrayList;
 import java.util.List;

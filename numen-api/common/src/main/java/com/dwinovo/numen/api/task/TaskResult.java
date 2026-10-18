@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.task;
 
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 
 /**
  * 一件身体活交回的结果:成没成、它做了什么的实际账、值,失败时还有种类与能照抄的下一步。

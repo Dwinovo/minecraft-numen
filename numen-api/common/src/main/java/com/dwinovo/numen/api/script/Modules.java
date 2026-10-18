@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.script;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.Fingerprint;
 import com.dwinovo.numen.api.library.Library;

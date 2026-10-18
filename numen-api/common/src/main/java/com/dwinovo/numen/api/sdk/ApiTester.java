@@ -1,11 +1,11 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptRun;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.CallObserver;
 import com.dwinovo.numen.api.program.LoopbackTransport;
 import com.dwinovo.numen.api.program.ServerPrograms;
@@ -233,13 +233,13 @@ public final class ApiTester {
      * 跑完的一段程序:服务端交出的结局(同进程,所以带着 {@code return} 的值原样),与它派出的每次调用的结果,按先后。
      *
      * @param outcome 程序的结局;回执在 {@code outcome.receipt()}
-     * @param replies 每次调用的结果({@link com.dwinovo.numen.api.agent.script.ApiReply} 的那一份)
+     * @param replies 每次调用的结果({@link com.dwinovo.numen.script.ApiReply} 的那一份)
      */
     public record Run(Program.Outcome outcome, List<String> replies) {
 
         /** 跑到了最后。 */
         public boolean ok() {
-            return outcome.ending().status() == com.dwinovo.numen.api.agent.script.ScriptCall.Status.OK;
+            return outcome.ending().status() == com.dwinovo.numen.script.ScriptCall.Status.OK;
         }
 
         /** 回执那段话。 */
@@ -250,7 +250,7 @@ public final class ApiTester {
         /** 程序 {@code return} 的值(JSON);没有是 null。 */
         public com.google.gson.JsonElement returned() {
             return outcome.returned() == null ? null
-                    : com.dwinovo.numen.api.agent.script.JsonValues.toJson(outcome.returned());
+                    : com.dwinovo.numen.script.JsonValues.toJson(outcome.returned());
         }
 
         /** 最后一次调用的结果;一次都没派出是 null。 */

@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.event;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
-import com.dwinovo.numen.api.agent.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptCall;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.task.TaskResult;

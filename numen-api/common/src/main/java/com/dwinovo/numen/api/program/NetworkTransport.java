@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.ApiReply;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;

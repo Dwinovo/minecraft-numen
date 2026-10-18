@@ -1,7 +1,7 @@
 package com.dwinovo.numen.tools.work;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.script.Modules;

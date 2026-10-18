@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptEngine;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 

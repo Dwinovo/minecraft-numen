@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 
 import java.util.UUID;
 import java.util.function.Consumer;

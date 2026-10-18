@@ -151,7 +151,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             denied.add(refusal(id, verdict.reason()));
         }
         return denied.isEmpty() ? Preparation.READY
-                : Preparation.refused(TaskResult.fail(com.dwinovo.numen.api.agent.script.ErrorKind.DENIED,
+                : Preparation.refused(TaskResult.fail(com.dwinovo.numen.script.ErrorKind.DENIED,
                         "could not attack: " + String.join("; ", denied), null));
     }
 

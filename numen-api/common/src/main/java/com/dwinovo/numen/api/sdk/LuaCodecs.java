@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
@@ -219,7 +219,7 @@ public final class LuaCodecs {
             case Float f -> (double) f;
             case Number n -> n.longValue();
             case Enum<?> e -> e.name().toLowerCase(Locale.ROOT);
-            case com.dwinovo.numen.api.agent.script.JsonValues.Folded f -> f;
+            case com.dwinovo.numen.script.JsonValues.Folded f -> f;
             case List<?> list -> {
                 List<Object> out = new ArrayList<>(list.size());
                 list.forEach(v -> out.add(encode(v)));

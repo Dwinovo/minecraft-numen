@@ -34,11 +34,11 @@ public sealed interface LoopEvent {
     /**
      * 程序 {@code program} 怎么结束的(结构化的,不在回执的文字里)与它做了几次 API 调用;先于它的 {@link ToolFinished}。
      */
-    record ProgramEnded(long runId, LlmToolCall program, com.dwinovo.numen.api.agent.script.ScriptCall.Ending ending,
+    record ProgramEnded(long runId, LlmToolCall program, com.dwinovo.numen.script.ScriptCall.Ending ending,
                         int calls) implements LoopEvent {}
 
     /** 程序 {@code program} 里的一次 API 调用有了结局。 */
-    record ApiCalled(long runId, LlmToolCall program, com.dwinovo.numen.api.agent.script.ScriptCall.Called called)
+    record ApiCalled(long runId, LlmToolCall program, com.dwinovo.numen.script.ScriptCall.Called called)
             implements LoopEvent {}
 
     record RunEnded(long runId, RunEnd end) implements LoopEvent {}

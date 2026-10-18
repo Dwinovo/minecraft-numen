@@ -127,7 +127,7 @@ public final class McpServer {
             happenings. Reply with say(companion, text): the words appear in-game as the companion's chat line, \
             speech bubble, and voice. Keep your own conversation history — the game stores none for you; events \
             queue up until you take them.""".formatted(
-            com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.api.agent.tool.SkillTool.NAME,
+            com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.api.agent.tool.SkillTool.NAME,
             com.dwinovo.numen.api.agent.tool.TodoTool.NAME, com.dwinovo.numen.api.agent.tool.MemoryTool.NAME, ONE_BODY,
             MAX_WAIT_SECONDS);
 

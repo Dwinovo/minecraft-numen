@@ -1,9 +1,9 @@
 package com.dwinovo.numen.api.script;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;

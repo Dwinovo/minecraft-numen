@@ -1,7 +1,7 @@
 package com.dwinovo.numen.tools;
 
-import com.dwinovo.numen.api.agent.script.ErrorKind;
-import com.dwinovo.numen.api.agent.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.blueprint.BlueprintStore;
 import com.dwinovo.numen.build.BuildStates;

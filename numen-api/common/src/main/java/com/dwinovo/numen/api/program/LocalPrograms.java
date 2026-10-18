@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.OwnedBody;

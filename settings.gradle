@@ -23,7 +23,7 @@ plugins {
 // This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
 // 目录与项目路径从模组 id 推出:numen/(模组 numen)、numen-api/(模组 numen_api)、ai/(LLM 连接层,纯 JVM)。
-// 单一构建:numen 直接以 project 依赖消费 numen-api,numen-api 消费 agent,agent 消费 ai,不经 maven 中转。
+// 单一构建:numen 直接以 project 依赖消费 numen-api,numen-api 消费 agent,agent 消费 script 与 ai,不经 maven 中转。
 include('numen:common')
 include('numen:fabric')
 include('numen:neoforge')
@@ -34,7 +34,9 @@ include('numen-api:neoforge')
 include('store')
 // numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
 include('ai')
-// numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 Numen API 依赖(详见 agent/build.gradle 头注)。
+// numen-script:她写的一段程序(语言接口、回执、API 答复与错误、Lua 适配),纯 JVM,依赖 lua 与 ai、被 agent 与 Numen API 依赖(详见 script/build.gradle 头注)。
+include('script')
+// numen-agent:大脑本身(队列、目标、循环),纯 JVM,依赖 ai 与 script、被 Numen API 依赖(详见 agent/build.gradle 头注)。
 include('agent')
 // numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
 include('permission')

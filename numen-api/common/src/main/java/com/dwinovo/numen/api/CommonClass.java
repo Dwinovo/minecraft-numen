@@ -77,7 +77,7 @@ public class CommonClass {
                     + "yourself, ask your owner to loosen them.", com.dwinovo.numen.api.permission.PermissionApi.class);
             numen.api("task", "The background task and your pending timers.", com.dwinovo.numen.api.task.TaskApi.class);
             numen.api(com.dwinovo.numen.api.script.ModuleApi.GROUP, "Modules — functions written in "
-                    + com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.language() + " that programs use by name, kept "
+                    + com.dwinovo.numen.script.ScriptEngine.IN_USE.language() + " that programs use by name, kept "
                     + "as files (numen/work.lua is numen.work): the built-in ones, your own, "
                     + "and how the programs that used them went.", com.dwinovo.numen.api.script.ModuleApi.class);
         });

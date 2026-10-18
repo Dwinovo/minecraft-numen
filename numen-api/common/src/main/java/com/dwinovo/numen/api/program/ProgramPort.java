@@ -1,11 +1,11 @@
 package com.dwinovo.numen.api.program;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.script.Invocation;
-import com.dwinovo.numen.api.agent.script.Program;
-import com.dwinovo.numen.api.agent.script.ScriptCall;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptRun;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.api.agent.loop.Program;
+import com.dwinovo.numen.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.script.Modules;
