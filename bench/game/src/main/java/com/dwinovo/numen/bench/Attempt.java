@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.script.Modules;
@@ -420,7 +421,7 @@ final class Attempt {
         }
 
         @Override
-        public void tell(UUID companion, String said) {
+        public void said(UUID companion, String said, Venue venue, String conversation) {
         }
     }
 

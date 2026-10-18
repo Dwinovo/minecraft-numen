@@ -1,8 +1,11 @@
 package com.dwinovo.numen.api.entity;
 
+import com.dwinovo.numen.api.brain.Whispers;
 import com.dwinovo.numen.api.event.NumenEvents;
+import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
@@ -23,7 +26,8 @@ import java.util.function.Consumer;
  *   <li>她自己执行的指令说的话(指令回给来源的、指令直接对她说的)是那条指令的回执,执行期间由
  *       {@link #runCommand} 收给那条指令,不再当事件交;</li>
  *   <li>她自己的死亡广播就是死亡事件里那句死因({@link NumenPlayer#deathMessage}),不再交一遍;</li>
- *   <li>玩家聊天是另一种包,群聊那一路管,这里不碰;</li>
+ *   <li>别的玩家私聊她({@code /msg},聊天类型 {@code msg_command_incoming} 的玩家聊天包)是对她说的话,交给 {@link Whispers}:
+ *       主人的进她的单聊会话,别人的按旁听档进收件箱;公屏上的聊天(别的类型)不是对她说的,不读;</li>
  *   <li>其余的交成 {@code server_message} 事件:聊天栏同一句刷屏折叠,动作栏当一格、最新的为准,见
  *       {@link ServerMessages}。这种事件捎带投递,不单独叫醒她。</li>
  * </ul>
@@ -85,6 +89,12 @@ public final class FakeClient {
             awaitingTeleport = teleport.getId();
         } else if (packet instanceof ClientboundSystemChatPacket said) {
             heard(said.content(), said.overlay());
+        } else if (packet instanceof ClientboundPlayerChatPacket chat
+                && chat.chatType().chatType().is(ChatType.MSG_COMMAND_INCOMING)) {
+            // 签了名的私聊带着发话人的 uuid;正文是服务端加工过的那一版,没有就是原文
+            Component text = chat.unsignedContent();
+            Whispers.heard(player, chat.sender(), chat.chatType().name().getString(),
+                    text != null ? text.getString() : chat.body().content());
         }
     }
 

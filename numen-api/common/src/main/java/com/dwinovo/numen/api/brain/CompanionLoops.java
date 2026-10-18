@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CompanionLoops {
 
-    /** 主人那一头:他的客户端在不在、怎么把东西推给他、没有客户端时怎么把她的话告诉他。 */
+    /** 主人那一头:他的客户端在不在、怎么把东西推给他、她的话怎么交到他手里。 */
     public interface Link {
 
         /** 主人在线,而且装着可用的客户端。 */
@@ -33,8 +33,13 @@ public final class CompanionLoops {
         /** 推给主人的客户端。 */
         void send(UUID companion, List<Feed> events);
 
-        /** 主人没装客户端:她的话只发给他的系统消息。 */
-        void tell(UUID companion, String said);
+        /**
+         * 她说出口的一句话交给主人,按他是在哪儿问的({@link Venue})接:该回在面板的,装了客户端的随 {@link #send} 的
+         * {@link Feed.Replied} 看到,这里什么也不做;其余回成一行聊天。
+         *
+         * @param conversation 她此刻所在会话的名字;会话已经解散了是 {@code null}
+         */
+        void said(UUID companion, String said, Venue venue, String conversation);
     }
 
     private static final class Entry {
@@ -74,7 +79,7 @@ public final class CompanionLoops {
     /** 登记一只同伴的大脑;她原来的先收掉(它在飞的回合作废,不再写她的日志)。 */
     public static void install(UUID owner, CompanionLoop loop, Link link, Conversations rooms) {
         Entry entry = new Entry(owner, loop, link);
-        Voice.attach(loop, rooms, link::hasClient, said -> link.tell(loop.companion(), said));
+        Voice.attach(loop, rooms, link);
         Entry old = LOOPS.put(loop.companion(), entry);
         if (old != null) {
             old.loop.dispose();

@@ -197,7 +197,8 @@ public final class GameTestKit {
                 }
 
                 @Override
-                public void tell(UUID companion, String said) {
+                public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue,
+                                 String conversation) {
                 }
             };
 

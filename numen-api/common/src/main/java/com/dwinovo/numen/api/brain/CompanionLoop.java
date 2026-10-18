@@ -128,6 +128,11 @@ public final class CompanionLoop {
      * 记录盖印(见 {@link ConvoLog#append})和她说出口的话该让谁听见,读的是同一个事实。会话态,不落盘。
      */
     private String conversation;
+    /**
+     * 主人最后一句话是在哪儿说的({@link Venue})——她的回话回到那里({@link Voice})。和 {@link #conversation} 一样是
+     * "最后一次被怎么叫醒"的会话态,不落盘。
+     */
+    private Venue venue = Venue.PANEL;
     /** 绑定的档案 id;{@code null} = 没绑。落盘在 {@code binding.json}。 */
     private String providerId;
     /** 绑定的人设 id;{@code null} = 默认人格。人设正文每轮现取,没有副本。 */
@@ -306,6 +311,11 @@ public final class CompanionLoop {
         this.conversation = conversationId;
     }
 
+    /** 主人最后一句话是在哪儿说的。 */
+    public Venue venue() {
+        return venue;
+    }
+
     /** 与自动整理同一口径的上下文窗口,取自她绑定的档案解析出的端点;没绑是 0。 */
     public int modelWindow() {
         return parts.mind().endpoint(providerId).contextWindow();
@@ -319,6 +329,12 @@ public final class CompanionLoop {
      * @return 这句话有没有被压着(内脑没能当场把请求发出去);只是观察,不是预测
      */
     public boolean submitPrompt(String text) {
+        return submitPrompt(text, Venue.PANEL);
+    }
+
+    /** 同上,指明是在哪儿说的:她的回话回到那里。 */
+    public boolean submitPrompt(String text, Venue spokenIn) {
+        this.venue = spokenIn;
         return enqueueOwnerWords(EventQueue.query(text));
     }
 
@@ -327,6 +343,7 @@ public final class CompanionLoop {
      * 跟在标记外面:模型看得到,聊天流不画。
      */
     public boolean submitCommand(String echo, String expanded) {
+        this.venue = Venue.PANEL;
         return enqueueOwnerWords(EventQueue.query(echo)
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded));
     }

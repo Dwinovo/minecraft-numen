@@ -1,21 +1,29 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.entity.Companions;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.OutgoingChatMessage;
+import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
 
 /**
  * 没装我们的客户端的主人(原版客户端):服务端不往他的连接上发我们的包,他能用的原版手段(私聊、指令、可点的聊天消息)见本类其余用例。
@@ -99,5 +107,66 @@ public class ClientlessGameTests {
         }
         players.forEach(GameTestKit::leave);
         helper.succeed();
+    }
+
+    /**
+     * 原版 {@code /msg} 把话送到收话人手里的最后一步(它的 {@code MsgCommand.sendMessage} 是私有的,所以照它的写法重做):
+     * 签了名的私聊带着发话人的 uuid,聊天类型是 {@code msg_command_incoming}。经指令的字符串走会被当成无来源的系统私聊,
+     * 真客户端发的签名指令不会。
+     */
+    private static void whisper(ServerPlayer from, NumenPlayer to, String text) {
+        to.sendChatMessage(OutgoingChatMessage.create(PlayerChatMessage.unsigned(from.getUUID(), text)), false,
+                ChatType.bind(ChatType.MSG_COMMAND_INCOMING, from.createCommandSourceStack()));
+    }
+
+    /** 主人私聊她:话进她的单聊会话,她回的话以私信的样子回到他手里。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    public static void the_owners_whisper_reaches_her_and_she_whispers_back(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_whisperer", "en_us");
+        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_whispered",
+                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
+                Replies.link(server, owner.getUUID()));
+        her.mind.say("在呢");
+
+        whisper(owner, her.companion, "你好");
+
+        List<OwnerLine.Said> heard = new ArrayList<>();
+        succeedWhen(helper, () -> {
+            heard.addAll(GameTestKit.said(owner));
+            helper.assertTrue(her.conversation().stream().anyMatch(m -> m instanceof
+                            com.dwinovo.numen.api.agent.llm.ConvoState.Msg.User u && u.content().contains("你好")),
+                    "the whisper is not in her log: " + her.conversation());
+            helper.assertTrue(heard.stream().anyMatch(said -> said.text().getContents() instanceof TranslatableContents t
+                            && t.getKey().equals("commands.message.display.incoming")
+                            && said.text().getString().contains("在呢") && !said.overlay()),
+                    "her answer did not come back as a whisper: " + heard);
+            her.close();
+            GameTestKit.leave(owner);
+        });
+    }
+
+    /** 别的玩家私聊她:按旁听档进收件箱、标着是谁说的,不叫醒她。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    public static void a_strangers_whisper_is_overheard_and_does_not_wake_her(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_host", "en_us");
+        ServerPlayer stranger = GameTestKit.presentVanillaPlayer(helper, null, "gametest_passerby", "en_us");
+        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_overhearer",
+                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
+                Replies.link(server, owner.getUUID()));
+
+        whisper(stranger, her.companion, "借把镐子");
+
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
+                        && e.text().contains("gametest_passerby → gametest_overhearer") && e.text().contains("借把镐子")),
+                "the stranger's whisper is not in her inbox, marked with who said it: " + her.loop.inbox().entries());
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(her.mind.asked.isEmpty(), "a stranger's whisper woke her");
+            her.close();
+            GameTestKit.leave(owner);
+            GameTestKit.leave(stranger);
+            helper.succeed();
+        });
     }
 }

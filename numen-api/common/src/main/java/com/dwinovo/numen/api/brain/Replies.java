@@ -13,7 +13,6 @@ import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -110,7 +109,7 @@ public final class Replies {
         }
     }
 
-    /** 这位主人那一头:他的客户端在不在、事件怎么推给他、没有客户端时她的话怎么告诉他。 */
+    /** 这位主人那一头:他的客户端在不在、事件怎么推给他、她的话怎么交到他手里。 */
     public static CompanionLoops.Link link(MinecraftServer server, UUID owner) {
         return new CompanionLoops.Link() {
             @Override
@@ -127,12 +126,13 @@ public final class Replies {
             }
 
             @Override
-            public void tell(UUID companion, String said) {
+            public void said(UUID companion, String said, Venue venue, String conversation) {
                 ServerPlayer player = server.getPlayerList().getPlayer(owner);
                 CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
-                if (player != null && entry != null) {
-                    player.sendSystemMessage(Component.literal("<" + entry.name() + "> " + said));
+                if (player == null || entry == null || venue == Venue.PANEL && hasClient()) {
+                    return;
                 }
+                player.sendSystemMessage(Voice.line(venue, entry.name(), conversation, said));
             }
         };
     }
