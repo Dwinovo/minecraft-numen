@@ -67,7 +67,8 @@ class RuleTest {
         assertEquals("empty_term", assertThrows(Rule.Mistake.class, () -> rule("break(| mine)")).code());
         assertEquals("syntax", assertThrows(Rule.Mistake.class, () -> rule("break(mine hollow)")).code(), "漏了运算符");
         assertEquals("shape", assertThrows(Rule.Mistake.class, () -> rule("break((mine)")).code(), "括号没配上");
-        assertEquals("shape", assertThrows(Rule.Mistake.class, () -> rule("break(mine) extra")).code());
+        assertEquals("subject", assertThrows(Rule.Mistake.class, () -> rule("break(mine) extra")).code());
+        assertEquals("subject", assertThrows(Rule.Mistake.class, () -> rule("break(mine) @")).code());
     }
 
     @Test
@@ -96,6 +97,25 @@ class RuleTest {
         assertEquals("command_name", assertThrows(Rule.Mistake.class, () -> rule("command(/tp)")).code());
         assertEquals("name", assertThrows(Rule.Mistake.class, () -> rule("break(tp)")).code(),
                 "别的动词里的裸词仍要是登记的名字");
+    }
+
+    // ==================== 主体 ====================
+
+    @Test
+    void aRuleMayNameTheOneCompanionItIsFor() {
+        Rule scoped = rule("break(mine & !hollow) @Aria");
+        assertEquals("break(mine & !hollow) @Aria", scoped.toString());
+        assertEquals("Aria", scoped.companion());
+        assertEquals(scoped, rule("  break( mine&!hollow )   @Aria "), "写法规范以后可以直接比较");
+        assertNull(rule("break(mine)").companion());
+        assertEquals("break(mine) @小蓝", rule("break(mine) @小蓝").toString(), "名字不限英文");
+
+        FakeAct byAria = new FakeAct(Verb.BREAK, "Aria").with("mine");
+        FakeAct byBea = new FakeAct(Verb.BREAK, "Bea").with("mine");
+        assertTrue(scoped.matches(byAria));
+        assertFalse(scoped.matches(byBea), "别的同伴不受这一行管");
+        assertFalse(scoped.matches(breaking().with("mine")), "不知道是谁动手,不算点名的那一只");
+        assertTrue(rule("break(mine)").matches(byBea), "不写 @ 就是每一只");
     }
 
     // ==================== 匹配 ====================
@@ -183,6 +203,9 @@ class RuleTest {
         assertEquals("break((mine | theirs) & minecraft:cobblestone)",
                 remembering(cobble, cobble, "break(mine | theirs)").toString(), "Or 在 And 里加括号");
         assertEquals("break(minecraft:stone)", remembering(stone, stone, null).toString(), "没有规则覆盖:只钉对象");
+        FakeAct byAria = new FakeAct(Verb.BREAK, "Aria").with("mine").kind("minecraft:cobblestone");
+        assertEquals("break(mine & minecraft:cobblestone) @Aria", remembering(byAria, byAria, "break(mine) @Aria").toString(),
+                "问出它的那一行限定了同伴,记下的也只管那一只");
     }
 
     @Test

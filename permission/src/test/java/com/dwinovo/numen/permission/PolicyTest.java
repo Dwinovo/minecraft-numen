@@ -99,6 +99,38 @@ class PolicyTest {
         assertEquals("belongs to somebody else: needs the owner's consent", v.reason());
     }
 
+    @Test
+    void theVerdictNamesTheRowThatDecidedAndTheLayerItIsOn() {
+        RuleSet top = layer(List.of(), List.of("break(mine)"), List.of("break(theirs)"));
+        RuleSet bottom = layer(List.of("break(hollow)"), List.of(), List.of("break(minecraft:dirt)"));
+        Policy policy = policy(Mode.ASK, top, bottom);
+
+        Verdict allowed = policy.judge(breaking().with("theirs"), Policy.NO_GRANTS);
+        assertEquals(Verdict.Kind.ALLOW, allowed.kind());
+        assertEquals("break(theirs)", allowed.rule().toString());
+        assertEquals(0, allowed.layer());
+        Verdict allowedLower = policy.judge(breaking().kind("minecraft:dirt"), Policy.NO_GRANTS);
+        assertEquals(1, allowedLower.layer(), "第二层的 allow 行");
+        Verdict asked = policy.judge(breaking().with("mine"), Policy.NO_GRANTS);
+        assertEquals(0, asked.layer());
+        Verdict denied = policy.judge(breaking().with("hollow"), Policy.NO_GRANTS);
+        assertEquals("break(hollow)", denied.rule().toString());
+        assertEquals(1, denied.layer(), "任何一层的 deny 行");
+
+        Verdict hard = new Policy(Mode.ASK, rules("break(mine)"), List.of(top)).judge(breaking().with("mine"),
+                Policy.NO_GRANTS);
+        assertEquals(Verdict.HARD, hard.layer());
+        assertEquals("break(mine)", hard.rule().toString());
+
+        for (Verdict none : List.of(policy.judge(breaking().kind("minecraft:stone"), Policy.NO_GRANTS),
+                policy(Mode.OBSERVE, top).judge(breaking(), Policy.NO_GRANTS),
+                policy(Mode.BYPASS, top).judge(breaking(), Policy.NO_GRANTS),
+                policy(Mode.ASK, top).judge(breaking().with("mine"), hit -> true))) {
+            assertNull(none.rule(), "模式、授权与没有规则覆盖都不是哪一行定的");
+            assertEquals(Verdict.NO_LAYER, none.layer());
+        }
+    }
+
     // ==================== 模式与硬规则 ====================
 
     @Test

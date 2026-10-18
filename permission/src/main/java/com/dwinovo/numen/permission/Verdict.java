@@ -8,30 +8,48 @@ package com.dwinovo.numen.permission;
  * 原因归堆时读 {@link #cause}。
  *
  * @param kind  答复
- * @param cause 命中的那条规则、那个模式的自述,如 {@code placed by a player};放行为空串
- * @param rule  问的是哪一行 ask 规则;没有任何一行覆盖、以及放行与拒绝时为 null
+ * @param cause 命中的那条规则、那个模式的自述,如 {@code belongs to the owner};放行为空串
+ * @param rule  定下这个答复的那一行规则(allow、ask、deny 行与硬规则);模式、任务期授权与"没有任何一行覆盖"为 null
+ * @param layer {@code rule} 在哪一层:{@link #HARD}、{@link Policy} 里的第几层;没有规则为 {@link #NO_LAYER}
  */
-public record Verdict(Kind kind, String cause, Rule rule) {
+public record Verdict(Kind kind, String cause, Rule rule, int layer) {
 
     public enum Kind { ALLOW, DENY, ASK }
 
     /** 没有任何一行规则覆盖这个动作时的自述。 */
     public static final String UNCOVERED = "no rule covers this action";
 
-    private static final Verdict ALLOW = new Verdict(Kind.ALLOW, "", null);
-    private static final Verdict ASK_UNCOVERED = new Verdict(Kind.ASK, UNCOVERED, null);
+    /** 定下答复的是硬规则。 */
+    public static final int HARD = -1;
+    /** 答复不是哪一行规则定的(模式、任务期授权、没有规则覆盖)。 */
+    public static final int NO_LAYER = -2;
 
+    private static final Verdict ALLOW = new Verdict(Kind.ALLOW, "", null, NO_LAYER);
+    private static final Verdict ASK_UNCOVERED = new Verdict(Kind.ASK, UNCOVERED, null, NO_LAYER);
+
+    /** 放行,不是哪一行规则定的:bypass 与任务期授权。 */
     public static Verdict allow() {
         return ALLOW;
     }
 
+    /** 一行 allow 规则放行。 */
+    public static Verdict allow(Rule by, int layer) {
+        return new Verdict(Kind.ALLOW, "", by, layer);
+    }
+
+    /** 不是哪一行规则定的拒绝:observe 模式。 */
     public static Verdict deny(String cause) {
-        return new Verdict(Kind.DENY, cause, null);
+        return new Verdict(Kind.DENY, cause, null, NO_LAYER);
+    }
+
+    /** 一行 deny 规则或硬规则拒绝。 */
+    public static Verdict deny(String cause, Rule by, int layer) {
+        return new Verdict(Kind.DENY, cause, by, layer);
     }
 
     /** 命中一行 ask 规则;{@code cause} 是这行规则就这个动作的自述。 */
-    public static Verdict ask(Rule hit, String cause) {
-        return new Verdict(Kind.ASK, cause, hit);
+    public static Verdict ask(Rule hit, String cause, int layer) {
+        return new Verdict(Kind.ASK, cause, hit, layer);
     }
 
     /** 哪一行规则都没说到:问,不放行。 */

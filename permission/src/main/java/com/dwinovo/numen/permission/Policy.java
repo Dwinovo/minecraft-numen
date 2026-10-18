@@ -53,30 +53,31 @@ public final class Policy {
         }
         Rule forbidden = RuleSet.firstMatch(hard, act);
         if (forbidden != null) {
-            return Verdict.deny("denied by hard rule " + forbidden + " (" + forbidden.describe(act) + ")");
+            return Verdict.deny("denied by hard rule " + forbidden + " (" + forbidden.describe(act) + ")", forbidden,
+                    Verdict.HARD);
         }
         if (mode == Mode.BYPASS) {
             return Verdict.allow();
         }
-        for (RuleSet layer : layers) {
-            Rule denied = RuleSet.firstMatch(layer.deny(), act);
+        for (int i = 0; i < layers.size(); i++) {
+            Rule denied = RuleSet.firstMatch(layers.get(i).deny(), act);
             if (denied != null) {
-                return Verdict.deny("denied by rule " + denied + " (" + denied.describe(act) + ")");
+                return Verdict.deny("denied by rule " + denied + " (" + denied.describe(act) + ")", denied, i);
             }
         }
         Rule hit = null;
-        for (RuleSet layer : layers) {
-            if (RuleSet.firstMatch(layer.allow(), act) != null) {
-                return Verdict.allow();
+        int hitLayer = Verdict.NO_LAYER;
+        for (int i = 0; i < layers.size() && hit == null; i++) {
+            Rule allowed = RuleSet.firstMatch(layers.get(i).allow(), act);
+            if (allowed != null) {
+                return Verdict.allow(allowed, i);
             }
-            hit = RuleSet.firstMatch(layer.ask(), act);
-            if (hit != null) {
-                break;
-            }
+            hit = RuleSet.firstMatch(layers.get(i).ask(), act);
+            hitLayer = i;
         }
         if (grants.covers(hit)) {
             return Verdict.allow();
         }
-        return hit != null ? Verdict.ask(hit, hit.describe(act)) : Verdict.uncovered();
+        return hit != null ? Verdict.ask(hit, hit.describe(act), hitLayer) : Verdict.uncovered();
     }
 }
