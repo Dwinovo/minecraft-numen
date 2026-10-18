@@ -29,9 +29,10 @@ public class NumenContentNeoForge {
         com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
 
         NeoForge.EVENT_BUS.addListener(NumenContentNeoForge::onServerTickPost);
-        // 寻路调试的下行包:类型在这里登记,处理体在客户端入口挂上(见 NumenContentNeoForgeClient)。
+        // 寻路调试的下行包:类型在这里登记,处理体在客户端入口挂上(见 NumenContentNeoForgeClient)。可选的:原版客户端没有它
+        // 也进得来(Numen API 的频道同理)。
         eventBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent e) ->
-                e.registrar("1").playToClient(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC,
+                e.registrar("1").optional().playToClient(PathDebugPayload.TYPE, PathDebugPayload.STREAM_CODEC,
                         (payload, ctx) -> PathDebugPayload.handle(payload)));
 
         // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,

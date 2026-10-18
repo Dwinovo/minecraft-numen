@@ -13,6 +13,10 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 public final class NeoForgeGameTestMod {
 
     public NeoForgeGameTestMod(IEventBus modBus) {
-        modBus.addListener((RegisterGameTestsEvent event) -> event.register(GameTestSuites.class));
+        modBus.addListener((RegisterGameTestsEvent event) -> {
+            event.register(GameTestSuites.class);
+            // NeoForge 的联网协商只有 NeoForge 的类看得见,这条用例放在这里,不进模块的套件
+            event.register(NeoForgeHandshakeTests.class);
+        });
     }
 }

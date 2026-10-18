@@ -1,6 +1,7 @@
 {
   "numen.debug.path_on": "寻路调试已开:同伴正在走的路会画在世界里",
   "numen.debug.path_off": "寻路调试已关",
+  "numen.debug.path_needs_client": "寻路调试要由 Numen 客户端来画,你这边没装",
   "numen.activity.dig_all": "挖 %1$s,已挖 %2$s 格",
   "numen.activity.dig": "挖 %1$s %2$s/%3$s 格",
   "numen.activity.move_at": "走向 %s",

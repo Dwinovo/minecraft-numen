@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
@@ -173,7 +174,7 @@ final class Attempt {
         scenario.arena().build(level, origin);
         GameProfile ownerProfile = new GameProfile(UUID.randomUUID(), OWNER_NAME);
         owner = new ServerPlayer(server, level, ownerProfile, ClientInformation.createDefault());
-        ownerLine = new OwnerLine();
+        ownerLine = new OwnerLine(true);
         server.getPlayerList().placeNewPlayer(ownerLine, owner, CommonListenerCookie.createInitial(ownerProfile, false));
         Vec3 ownerAt = standOn(scenario.ownerAt());
         owner.teleportTo(level, ownerAt.x, ownerAt.y, ownerAt.z, 0, 0);
@@ -425,7 +426,11 @@ final class Attempt {
         }
 
         @Override
-        public void tell(UUID companion, String said) {
+        public void said(UUID companion, String said, Venue venue, String conversation) {
+        }
+
+        @Override
+        public void activities(Map<UUID, LoopStatus.Doing> doing) {
         }
     }
 

@@ -74,8 +74,16 @@ public final class NumenNetwork {
 
     private NumenNetwork() {}
 
-    /** 发给一位玩家的客户端:量过、装得下一个包的才交给加载器,超过的可分片的包分成片(见 {@link Fragments#packets})。 */
+    /**
+     * 发给一位玩家的客户端:量过、装得下一个包的才交给加载器,超过的可分片的包分成片(见 {@link Fragments#packets})。
+     * 我们的频道是可选的(原版客户端不装我们也进得来),他的连接上没有这个频道(没装我们的客户端)就什么也不发——
+     * 可选频道下这不是错,而是这位玩家没有东西可收。谁装着<b>可用</b>的客户端(报到过、协议对得上)由
+     * {@link com.dwinovo.numen.api.brain.Presence} 说了算;这里问的只是"这个包他的连接装不装得下"。
+     */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+        if (!Services.NETWORK.canSend(player, payload.type())) {
+            return;
+        }
         for (CustomPacketPayload packet : Fragments.packets(Wire.TO_CLIENT, route(TO_CLIENT, payload).codec(), payload,
                 () -> new RegistryFriendlyByteBuf(Unpooled.buffer(), player.registryAccess()))) {
             Services.NETWORK.sendToPlayer(player, packet);

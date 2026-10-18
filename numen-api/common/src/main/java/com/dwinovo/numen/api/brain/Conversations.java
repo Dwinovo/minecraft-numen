@@ -143,6 +143,33 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
         }
     }
 
+    /** 会话在界面上叫什么:主人起了名就是那个,没起就拼成员名(成员此刻在名册上的名字)。 */
+    public String titleOf(Conversation conv) {
+        return conv.displayName(roster::name);
+    }
+
+    /**
+     * 她此刻在的那个会话叫什么:{@code conversation} 是她的 {@link CompanionLoop#conversation()},{@code null} 是"就他俩"
+     * (那就叫她的名字)。会话已经解散了是 {@code null}。
+     */
+    public String titleFor(UUID companion, String conversation) {
+        Conversation conv = conversation == null ? of(companion) : get(conversation);
+        return conv == null ? null : titleOf(conv);
+    }
+
+    /**
+     * 主人指的是哪个会话:写的是会话的名字(忽略大小写)或 id。名字可能重名,所以给出全部对得上的。
+     */
+    public List<Conversation> matching(String titleOrId) {
+        List<Conversation> out = new ArrayList<>();
+        for (Conversation conv : all()) {
+            if (conv.id().equals(titleOrId) || titleOf(conv).equalsIgnoreCase(titleOrId)) {
+                out.add(conv);
+            }
+        }
+        return out;
+    }
+
     /** 名册上每只一个"就他俩",再加落过盘、还有活人的会话。按 id 去重。 */
     public List<Conversation> all() {
         Map<String, Conversation> out = new LinkedHashMap<>();
@@ -266,8 +293,10 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
     /**
      * 在这个会话里说一句话——主人说话的唯一入口(面板输入框、快捷对话、语音转写、命令都经它)。点了名的醒,其余的旁听;
      * 旁听走 {@link EventTypes#TALK},是捎带投递,不会把人叫醒——群聊唯一的那条不变量。
+     *
+     * @param venue 主人是在哪儿说的:被叫醒的那几只回话回到那里
      */
-    public Said say(Conversation conv, String text) {
+    public Said say(Conversation conv, String text, Venue venue) {
         List<Mentions.Member> members = named(conv);
         if (members.isEmpty() || text == null || text.isBlank()) {
             return new Said(conv, false);
@@ -290,7 +319,7 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
                 continue;
             }
             if (routing.awake().contains(m.uuid())) {
-                loop.get().submitPrompt(text);
+                loop.get().submitPrompt(text, venue);
             } else {
                 loop.get().submitEvent(EventTypes.TALK, heard);
             }
@@ -379,7 +408,7 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
     // ---- 拼 ----
 
     /** 旁听到的那一行的<b>正文</b>:{@code [谁] 说了什么}。事件的壳由投递口盖。 */
-    private static String overheardLine(String speaker, String text) {
+    static String overheardLine(String speaker, String text) {
         return "[" + speaker + "] " + text;
     }
 

@@ -197,7 +197,12 @@ public final class GameTestKit {
                 }
 
                 @Override
-                public void tell(UUID companion, String said) {
+                public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue,
+                                 String conversation) {
+                }
+
+                @Override
+                public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
                 }
             };
 
@@ -551,18 +556,37 @@ public final class GameTestKit {
         return owner;
     }
     /**
-     * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时也用它。没有客户端,连接是
-     * {@link OwnerLine}:她的世界事件照主人客户端那样交给在跑的程序,下行的模组载荷记下来({@link #received}),别的包丢掉。{@code companion} 非空时认他作主人。
+     * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时也用它。没有真客户端,装着我们的客户端的样子,
+     * 连接是 {@link OwnerLine}:她的世界事件照主人客户端那样交给在跑的程序,下行的模组载荷记下来({@link #received}),别的包丢掉。
+     * 它没有报到过({@code Presence}),要当"报到了的客户端"得自己调 {@code Replies.hello}。{@code companion} 非空时认他作主人。
      * 用完经 {@link #leave} 离开。
      */
     static net.minecraft.server.level.ServerPlayer presentPlayer(GameTestHelper helper, NumenPlayer companion,
                                                                  String name) {
+        return join(helper, companion, name, true, "en_us");
+    }
+
+    /**
+     * 一个<b>没装我们的客户端</b>的玩家:原版客户端的样子——连接上没有我们的频道,下行的聊天({@link #said})与聊天补全
+     * ({@link #completions})记下来,{@code language} 是他客户端报上来的语言。{@code companion} 非空时认他作主人。
+     * 用完经 {@link #leave} 离开。
+     */
+    static net.minecraft.server.level.ServerPlayer presentVanillaPlayer(GameTestHelper helper, NumenPlayer companion,
+                                                                        String name, String language) {
+        return join(helper, companion, name, false, language);
+    }
+
+    private static net.minecraft.server.level.ServerPlayer join(GameTestHelper helper, NumenPlayer companion,
+                                                                String name, boolean installed, String language) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
+        var info = net.minecraft.server.level.ClientInformation.createDefault();
         var player = new net.minecraft.server.level.ServerPlayer(server, level, profile,
-                net.minecraft.server.level.ClientInformation.createDefault());
-        OwnerLine line = new OwnerLine();
+                new net.minecraft.server.level.ClientInformation(language, info.viewDistance(), info.chatVisibility(),
+                        info.chatColors(), info.modelCustomisation(), info.mainHand(), info.textFilteringEnabled(),
+                        info.allowsListing()));
+        OwnerLine line = new OwnerLine(installed);
         LINES.put(profile.getId(), line);
         server.getPlayerList().placeNewPlayer(line, player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));
@@ -585,6 +609,30 @@ public final class GameTestKit {
         List<net.minecraft.network.protocol.common.custom.CustomPacketPayload> out = new ArrayList<>();
         for (net.minecraft.network.protocol.common.custom.CustomPacketPayload p; (p = line.sent.poll()) != null; ) {
             out.add(p);
+        }
+        return out;
+    }
+
+    /** 服务端发给这位玩家的系统聊天与动作栏,按先后,取走就清空。 */
+    static List<OwnerLine.Said> said(net.minecraft.server.level.ServerPlayer player) {
+        return drain(LINES.get(player.getUUID()).said);
+    }
+
+    /** 服务端设给这位玩家聊天框的补全,按先后,取走就清空。 */
+    static List<net.minecraft.network.protocol.game.ClientboundCustomChatCompletionsPacket> completions(
+            net.minecraft.server.level.ServerPlayer player) {
+        return drain(LINES.get(player.getUUID()).completions);
+    }
+
+    /** 公屏上别人说给这位玩家的话(正文),按先后,取走就清空。 */
+    static List<String> publicChat(net.minecraft.server.level.ServerPlayer player) {
+        return drain(LINES.get(player.getUUID()).chat).stream().map(line -> line.body().content()).toList();
+    }
+
+    private static <T> List<T> drain(java.util.Queue<T> queue) {
+        List<T> out = new ArrayList<>();
+        for (T item; (item = queue.poll()) != null; ) {
+            out.add(item);
         }
         return out;
     }

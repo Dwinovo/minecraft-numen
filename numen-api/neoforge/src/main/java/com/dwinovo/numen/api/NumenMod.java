@@ -37,6 +37,12 @@ public class NumenMod {
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);
+        // 聊天栏切进了会话的玩家,他打的字进会话、不广播到公屏(见 ChatRoutes)
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.ServerChatEvent e) -> {
+            if (com.dwinovo.numen.api.brain.ChatRoutes.take(e.getPlayer(), e.getRawText())) {
+                e.setCanceled(true);
+            }
+        });
         // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
         // 挂 Pre(实体更新之前):任务→导航→执行器落下的移动/按键输入由
         // 本 tick 的实体物理立即消费——"在位置 P 做的决策作用于从 P 出发

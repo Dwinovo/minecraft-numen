@@ -1,5 +1,6 @@
 package com.dwinovo.numen.debug;
 
+import com.dwinovo.numen.api.platform.Services;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -17,6 +18,7 @@ public final class PathCommands {
 
     static final String ON = "numen.debug.path_on";
     static final String OFF = "numen.debug.path_off";
+    static final String NEEDS_CLIENT = "numen.debug.path_needs_client";
 
     private PathCommands() {}
 
@@ -27,6 +29,11 @@ public final class PathCommands {
 
     private static int toggle(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        // 线与框是客户端画的:连接上没有这个频道(原版客户端)就开了也看不到,说一声
+        if (!Services.NETWORK.canSend(caller, PathDebugPayload.TYPE)) {
+            ctx.getSource().sendFailure(Component.translatable(NEEDS_CLIENT));
+            return 0;
+        }
         boolean on = PathDebug.toggle(caller.getUUID());
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? ON : OFF), false);
         return 1;

@@ -60,7 +60,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
 public class BrainGameTests {
 
     /** 按事先排好的回复答的"模型";记下每次收到的请求。{@code holding} 时回复先扣着,等 {@link #release}。 */
-    private static final class Scripted implements Mind {
+    static final class Scripted implements Mind {
         final Deque<ModelOutcome> replies = new ArrayDeque<>();
         final List<ModelRequest> asked = new ArrayList<>();
         boolean holding;
@@ -109,7 +109,7 @@ public class BrainGameTests {
     }
 
     /** 主人那一头:记下推给他的每一包事件。 */
-    private static final class Owner implements CompanionLoops.Link {
+    static final class Owner implements CompanionLoops.Link {
         final List<Feed> events = new ArrayList<>();
         final List<String> told = new ArrayList<>();
         boolean client = true;
@@ -125,13 +125,17 @@ public class BrainGameTests {
         }
 
         @Override
-        public void tell(UUID companion, String said) {
+        public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue, String conversation) {
             told.add(said);
+        }
+
+        @Override
+        public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
         }
     }
 
     /** 一只带服务端大脑的同伴:家在临时目录里,写在调用线程上直接做(用例读日志不必等车道)。 */
-    private static final class Brain {
+    static final class Brain {
         final NumenPlayer companion;
         final Scripted mind = new Scripted();
         final Owner owner = new Owner();
@@ -153,6 +157,12 @@ public class BrainGameTests {
 
         /** {@code ownerId} 非空时认他作主人(扮主人的真玩家在场时用)。 */
         Brain(GameTestHelper helper, String name, Path dir, UUID ownerId) throws java.io.IOException {
+            this(helper, name, dir, ownerId, null);
+        }
+
+        /** {@code link} 非空时用它当主人那一头(产品里真正的 {@code Replies.link}),否则是记下推送的 {@link #owner}。 */
+        Brain(GameTestHelper helper, String name, Path dir, UUID ownerId, CompanionLoops.Link link)
+                throws java.io.IOException {
             this.server = helper.getLevel().getServer();
             this.companion = spawnAt(helper, name, new BlockPos(3, 2, 3), false);
             if (ownerId != null) {
@@ -164,7 +174,8 @@ public class BrainGameTests {
             NoteBook.init(uuid -> new Home(dir.resolve("memory"), io), () -> 0);
             this.rooms = Conversations.of(server, companion.getOwnerUuid());
             this.loop = CompanionBrains.create(server, companion.getUUID(), companion.getOwnerUuid(),
-                    new Home(dir.resolve("her"), io), mind, owner, () -> ownerOnline, () -> driving);
+                    new Home(dir.resolve("her"), io), mind, link == null ? owner : link, () -> ownerOnline,
+                    () -> driving);
         }
 
         void close() {

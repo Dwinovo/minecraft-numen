@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.ClientCallPayload;
 import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
+import com.dwinovo.numen.api.platform.Services;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
@@ -14,7 +15,7 @@ import java.util.function.Consumer;
 
 /**
  * 反向请求走网络:请求作为 {@link ClientCallPayload} 发给她的主人,主人的客户端答 {@link ClientCallResultPayload}。
- * 主人不在线、请求连整条消息的上限都装不下,或主人在等答复时断线,都是这次调用的一条失败,程序按失败往下走。
+ * 主人不在线或没装客户端、请求连整条消息的上限都装不下,或主人在等答复时断线,都是这次调用的一条失败,程序按失败往下走。
  */
 public final class NetworkTransport implements ClientTransport {
 
@@ -29,6 +30,10 @@ public final class NetworkTransport implements ClientTransport {
         ServerPlayer owner = her == null ? null : her.resolveOwnerPlayer();
         if (owner == null) {
             done.accept(failure(request.function(), "its owner is not connected"));
+            return;
+        }
+        if (!Services.NETWORK.canSend(owner, ClientCallPayload.TYPE)) {
+            done.accept(failure(request.function(), "its owner has not installed the Numen client"));
             return;
         }
         int size = request.size();

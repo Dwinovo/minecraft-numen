@@ -99,4 +99,10 @@ public interface INetworkChannel {
      * Server-only — call from server-thread code.
      */
     void sendToPlayer(ServerPlayer player, CustomPacketPayload payload);
+
+    /**
+     * 这位玩家的连接上有没有这种包的频道。我们的频道都是可选的(原版客户端没装我们也进得来),发给没有频道的连接:
+     * NeoForge 在发送时就抛异常,Fabric 的客户端收到不认识的包也无从处理——所以发之前先问。
+     */
+    boolean canSend(ServerPlayer player, CustomPacketPayload.Type<?> type);
 }

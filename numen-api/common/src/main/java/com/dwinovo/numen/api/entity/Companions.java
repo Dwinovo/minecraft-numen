@@ -422,6 +422,7 @@ public final class Companions {
             if (gone != null) {
                 // 和她同过会话的告诉一声她走了;名册上已经没有她,成员表按名册过滤
                 com.dwinovo.numen.api.brain.Conversations.of(server, gone.owner()).left(uuid, gone.name());
+                com.dwinovo.numen.api.brain.ChatRoutes.refresh(server, gone.owner());   // 他聊天栏切进的会话少了她
             }
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
             com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉

@@ -3,21 +3,27 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.config.Authority;
+import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
+import com.dwinovo.numen.api.permission.ConsentChat;
+import com.dwinovo.numen.api.text.ServerLang;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -119,7 +125,21 @@ public final class Replies {
         }
     }
 
-    /** 这位主人那一头:他的客户端在不在、事件怎么推给他、没有客户端时她的话怎么告诉他。 */
+    /**
+     * 她的征询交到主人面前,或者撤回了(撤回的 {@code request} 是 {@link ConsentRequestPayload#none})。装了客户端的,推给他的
+     * 客户端画答复框;没装的,发给他一条带可点按钮的聊天消息,撤回时说一声为什么。他答复的唯一入口不变:{@code ConsentDesk.reply}。
+     */
+    public static void consent(ServerPlayer owner, String companion, ConsentRequestPayload request) {
+        if (Presence.hasClient(owner.getUUID())) {
+            NumenNetwork.sendToPlayer(owner, request);
+        } else if (!request.withdrawn()) {
+            owner.sendSystemMessage(ConsentChat.ask(companion, request));
+        } else if (request.withdrawnBecause() != null) {
+            owner.sendSystemMessage(ConsentChat.withdrawn(companion, request.withdrawnBecause()));
+        }
+    }
+
+    /** 这位主人那一头:他的客户端在不在、事件怎么推给他、她的话怎么交到他手里。 */
     public static CompanionLoops.Link link(MinecraftServer server, UUID owner) {
         return new CompanionLoops.Link() {
             @Override
@@ -136,11 +156,32 @@ public final class Replies {
             }
 
             @Override
-            public void tell(UUID companion, String said) {
+            public void said(UUID companion, String said, Venue venue, String conversation) {
                 ServerPlayer player = server.getPlayerList().getPlayer(owner);
                 CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
-                if (player != null && entry != null) {
-                    player.sendSystemMessage(Component.literal("<" + entry.name() + "> " + said));
+                if (player == null || entry == null || venue == Venue.PANEL && hasClient()) {
+                    return;
+                }
+                player.sendSystemMessage(Voice.line(venue, entry.name(), conversation, said));
+            }
+
+            @Override
+            public void activities(Map<UUID, LoopStatus.Doing> doing) {
+                ServerPlayer player = server.getPlayerList().getPlayer(owner);
+                if (player == null) {
+                    return;
+                }
+                ServerLang lang = ServerLang.of(player.clientInformation().language());
+                MutableComponent bar = Component.empty();
+                for (Map.Entry<UUID, LoopStatus.Doing> each : doing.entrySet()) {
+                    CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(each.getKey());
+                    if (entry != null) {
+                        bar.append(bar.getSiblings().isEmpty() ? "" : " | ").append(entry.name() + ": ")
+                                .append(DoingText.of(each.getValue(), lang::has));
+                    }
+                }
+                if (!bar.getSiblings().isEmpty()) {
+                    player.displayClientMessage(bar, true);
                 }
             }
         };

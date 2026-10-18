@@ -2,8 +2,8 @@ package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
-import com.dwinovo.numen.api.network.NumenNetwork;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>征询</h2>
  * 同一只同伴同时只挂一条;新的顶掉旧的,旧的按拒绝收尾({@link #SUPERSEDED})。发起那一刻主人
  * 不在线,或者挂着的时候主人下线、到了 {@link #TIMEOUT_TICKS},都按拒绝收尾({@link #OWNER_ABSENT})。
- * 请求与撤回都推给主人的客户端({@link ConsentRequestPayload}),撤回带着为什么撤({@link Withdrawal});答复经
+ * 请求与撤回都交给主人({@link Replies#consent}:装了客户端的是推给他的 {@link ConsentRequestPayload},没装的是带按钮的聊天消息,
+ * 见 {@link ConsentChat}),撤回带着为什么撤({@link Withdrawal});答复经
  * {@link #answer} 回来。发起者每刻读自己那张 {@link Ticket},模型不参与。
  *
  * <h2>附言</h2>
@@ -312,7 +313,7 @@ public final class ConsentDesk {
         public void show(ConsentRequest request) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
-                NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.of(request));
+                Replies.consent(owner, body.getName().getString(), ConsentRequestPayload.of(request));
             }
         }
 
@@ -320,7 +321,7 @@ public final class ConsentDesk {
         public void clear(Withdrawal why) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
-                NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));
+                Replies.consent(owner, body.getName().getString(), ConsentRequestPayload.none(body.getUUID(), why));
             }
         }
 

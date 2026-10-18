@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.entity.CompanionSpeech;
 import com.dwinovo.numen.api.home.Home;
@@ -7,6 +8,7 @@ import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CompanionLoops {
 
-    /** 主人那一头:他的客户端在不在、怎么把东西推给他、没有客户端时怎么把她的话告诉他。 */
+    /** 主人那一头:他的客户端在不在、怎么把东西推给他、她的话怎么交到他手里。 */
     public interface Link {
 
         /** 主人在线,而且装着可用的客户端。 */
@@ -33,8 +35,19 @@ public final class CompanionLoops {
         /** 推给主人的客户端。 */
         void send(UUID companion, List<Feed> events);
 
-        /** 主人没装客户端:她的话只发给他的系统消息。 */
-        void tell(UUID companion, String said);
+        /**
+         * 她说出口的一句话交给主人,按他是在哪儿问的({@link Venue})接:该回在面板的,装了客户端的随 {@link #send} 的
+         * {@link Feed.Replied} 看到,这里什么也不做;其余回成一行聊天。
+         *
+         * @param conversation 她此刻所在会话的名字;会话已经解散了是 {@code null}
+         */
+        void said(UUID companion, String said, Venue venue, String conversation);
+
+        /**
+         * 主人没装客户端时,她们此刻各在干什么,显示在他的动作栏上(装了客户端的,头顶气泡与档案页读同一份状态)。
+         * 只含正在干着具体活的。
+         */
+        void activities(Map<UUID, LoopStatus.Doing> doing);
     }
 
     private static final class Entry {
@@ -59,6 +72,10 @@ public final class CompanionLoops {
 
     private static final Map<UUID, Entry> LOOPS = new ConcurrentHashMap<>();
 
+    /** 动作栏的字几刻刷新一次:原版的动作栏字约留三秒,一秒一刷既不断也不刷屏。 */
+    private static final int ACTION_BAR_TICKS = 20;
+    private static int ticks;
+
     static {
         ServerLifecycle.onStopped(CompanionLoops::dropAll);
     }
@@ -74,7 +91,7 @@ public final class CompanionLoops {
     /** 登记一只同伴的大脑;她原来的先收掉(它在飞的回合作废,不再写她的日志)。 */
     public static void install(UUID owner, CompanionLoop loop, Link link, Conversations rooms) {
         Entry entry = new Entry(owner, loop, link);
-        Voice.attach(loop, rooms, link::hasClient, said -> link.tell(loop.companion(), said));
+        Voice.attach(loop, rooms, link);
         Entry old = LOOPS.put(loop.companion(), entry);
         if (old != null) {
             old.loop.dispose();
@@ -90,6 +107,23 @@ public final class CompanionLoops {
             CompanionSpeech.setSpeaking(entry.loop.companion(),
                     phase == Phase.MODEL || phase == Phase.TOOLS || entry.voicePlaying);
         }
+        if (++ticks % ACTION_BAR_TICKS == 0) {
+            showActivities();
+        }
+    }
+
+    /** 没装客户端的主人:他名下各只正在干的活合成一行,放在他的动作栏上(读的是 {@link LoopStatus#activity} 那一处)。 */
+    private static void showActivities() {
+        Map<UUID, Map<UUID, LoopStatus.Doing>> byOwner = new LinkedHashMap<>();
+        Map<UUID, Link> links = new LinkedHashMap<>();
+        for (Entry entry : LOOPS.values()) {
+            LoopStatus.Doing doing = entry.link.hasClient() ? null : entry.loop.status().activity();
+            if (doing != null) {
+                byOwner.computeIfAbsent(entry.owner, owner -> new LinkedHashMap<>()).put(entry.loop.companion(), doing);
+                links.putIfAbsent(entry.owner, entry.link);
+            }
+        }
+        byOwner.forEach((owner, doing) -> links.get(owner).activities(doing));
     }
 
     /** 主人的客户端报到(或重连)了:把他名下各大脑此刻的样子补给他。 */
@@ -130,6 +164,7 @@ public final class CompanionLoops {
     /** 这位主人下线了:他名下各大脑作废在飞的回应、放弃未决调用,待命;他的客户端不再算在场。 */
     public static void ownerLeft(UUID owner) {
         Presence.left(owner);
+        ChatRoutes.forget(owner);
         OwnerInputs.dropMailbox(owner);
         for (Entry entry : LOOPS.values()) {
             if (entry.owner.equals(owner)) {

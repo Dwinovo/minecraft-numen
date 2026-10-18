@@ -78,22 +78,37 @@ public final class OwnerInputs {
         BOX.drop(player);
     }
 
-    /** 每个服务器刻一次:每位玩家的信箱里取几条,处理;会话变了的把新列表推回去。 */
+    /** 每个服务器刻一次:每位玩家的信箱里取几条,处理。 */
     public static void tick(MinecraftServer server) {
-        BOX.drain(PER_TICK, (player, input) -> {
-            Applied applied = apply(server, player, input);
-            if (applied.problem() != null) {
-                Constants.LOG.info("[numen-net] {} 的 {} 没办成: {}", player, input.getClass().getSimpleName(),
-                        applied.problem());
-            }
-            if (applied.conversationsChanged()) {
-                Replies.conversations(server, player);
-            }
-        });
+        BOX.drain(PER_TICK, (player, input) -> handle(server, player, input, Venue.PANEL));
+    }
+
+    /**
+     * 办一条,并把结果交代清楚:没办成的写进日志,会话变了的把新列表推回去(切进会话的聊天补全也跟着换)。客户端的信箱、
+     * 聊天里的 {@code /msg} 与会话指令都走这一处。
+     */
+    public static Applied handle(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
+        Applied applied = apply(server, owner, input, venue);
+        if (applied.problem() != null) {
+            Constants.LOG.info("[numen-net] {} 的 {} 没办成: {}", owner, input.getClass().getSimpleName(),
+                    applied.problem());
+        }
+        if (applied.conversationsChanged()) {
+            Replies.conversations(server, owner);
+            ChatRoutes.refresh(server, owner);
+        }
+        return applied;
     }
 
     /** 办一条。{@code owner} 是发这条的玩家,不是客户端自称的谁。 */
     public static Applied apply(MinecraftServer server, UUID owner, OwnerInput input) {
+        return apply(server, owner, input, Venue.PANEL);
+    }
+
+    /**
+     * 同上,{@code venue} 是主人说话的地方:{@link OwnerInput.Say} 的回话回到那里。别的输入里没有"说话的地方"。
+     */
+    public static Applied apply(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
         Conversations rooms = Conversations.of(server, owner);
         return switch (input) {
             case OwnerInput.Say say -> {
@@ -101,7 +116,7 @@ public final class OwnerInputs {
                 if (conv == null) {
                     yield Applied.refused("no such conversation");
                 }
-                yield rooms.say(conv, say.text()).reached() ? Applied.done() : Applied.refused("nobody heard it");
+                yield rooms.say(conv, say.text(), venue).reached() ? Applied.done() : Applied.refused("nobody heard it");
             }
             case OwnerInput.Command command -> loop(server, owner, command.companion(),
                     brain -> brain.submitCommand(command.echo(), skillBody(command.companion(), command.echo())));

@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.Route;
 
@@ -43,7 +44,8 @@ public final class PathDebugRenderer {
             ServerLevel level = companion.serverLevel();
             List<ServerPlayer> viewers = new ArrayList<>();
             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                if (PathDebug.isEnabled(p.getUUID()) && p.level() == level) {
+                if (PathDebug.isEnabled(p.getUUID()) && p.level() == level
+                        && Services.NETWORK.canSend(p, PathDebugPayload.TYPE)) {
                     viewers.add(p);
                 }
             }

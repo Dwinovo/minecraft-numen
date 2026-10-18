@@ -45,6 +45,22 @@ public final class Mentions {
 
     private Mentions() {}
 
+    /** 喊一个名字的写法:路由认的、补全给的、面板画亮的都是这一个拼法。 */
+    public static String word(String name) {
+        return "@" + name;
+    }
+
+    /** 这些成员的补全词(每个名字一个,重名的只一个),按成员顺序。补全只从成员表来。 */
+    public static List<String> words(List<Member> members) {
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (Member m : members) {
+            if (m != null && m.name() != null && !m.name().isBlank()) {
+                out.add(word(m.name()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /**
      * @param text    主人说的那句话原文
      * @param members 群成员
@@ -103,7 +119,7 @@ public final class Mentions {
         // 位置 → 那一段,用来还原"话里出现的先后"
         Map<Integer, Span> hits = new java.util.TreeMap<>();
         for (String name : names) {
-            String needle = "@" + name;
+            String needle = word(name);
             int from = 0;
             while (true) {
                 int at = haystack.indexOf(needle, from);

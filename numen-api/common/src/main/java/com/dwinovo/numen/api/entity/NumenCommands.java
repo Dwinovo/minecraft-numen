@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
+import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -56,6 +57,9 @@ import java.util.function.Predicate;
  *   /numen permission rules remove &lt;deny|ask|allow&gt; &lt;n&gt;   remove row n (1-based, as listed)
  *   /numen permission rules reset                         clear the caller's three tables
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
+ *
+ *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
+ *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -117,6 +121,8 @@ public final class NumenCommands {
                                         .executes(ctx -> removeRule(ctx, table)))))
                         .then(Commands.literal("reset").executes(NumenCommands::resetRules))));
         graft(dispatcher, consentCommand());
+        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.group());
+        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.chat());
         graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
@@ -224,6 +230,9 @@ public final class NumenCommands {
     /** {@code /numen debug}:翻转调试模式,主人的客户端聊天 UI 切到不过滤直出。 */
     private static int toggleDebugText(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        if (needsClient(ctx, caller)) {
+            return 0;
+        }
         boolean on = DEBUG_TEXT.add(caller.getUUID());
         if (!on) {
             DEBUG_TEXT.remove(caller.getUUID());
@@ -246,8 +255,20 @@ public final class NumenCommands {
                                     ClientUiActionPayload.Action action)
             throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        if (needsClient(ctx, caller)) {
+            return 0;
+        }
         NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(action));
         return 1;
+    }
+
+    /** 这条指令作用在调用者自己的客户端上:他没装(原版客户端)就说一声,不是悄悄什么都没发生。 */
+    private static boolean needsClient(CommandContext<CommandSourceStack> ctx, ServerPlayer caller) {
+        if (Presence.hasClient(caller.getUUID())) {
+            return false;
+        }
+        ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NEEDS_CLIENT));
+        return true;
     }
 
     // ==================== 权限:模式 ====================
