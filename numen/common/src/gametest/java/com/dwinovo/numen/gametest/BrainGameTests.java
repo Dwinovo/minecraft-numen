@@ -902,7 +902,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_boss");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+                4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_hand");
         helper.assertTrue(com.dwinovo.numen.api.config.Authority.isAdmin(admin), "the test admin is not an admin");
         com.dwinovo.numen.api.brain.Replies.hello(other, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
@@ -988,7 +988,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_form_boss");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+                4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_form_hand");
         GameTestKit.received(admin);
         GameTestKit.received(other);

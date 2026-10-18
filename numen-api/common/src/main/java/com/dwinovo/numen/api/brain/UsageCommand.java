@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.brain;
 
-import com.dwinovo.numen.api.config.Authority;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.keys.ServerKeyQuota;
+import com.dwinovo.numen.api.platform.Services;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -23,7 +23,7 @@ public final class UsageCommand {
 
     /** 挂在 {@code /numen} 下的一格,只有管理员用得了。 */
     public static LiteralArgumentBuilder<CommandSourceStack> node() {
-        return Commands.literal("usage").requires(source -> source.hasPermission(Authority.ADMIN_LEVEL))
+        return Commands.literal("usage").requires(source -> Services.PERMISSIONS.isAdmin(source))
                 .executes(UsageCommand::run);
     }
 

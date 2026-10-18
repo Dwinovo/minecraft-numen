@@ -133,7 +133,7 @@ public final class NumenCommands {
         graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());
         graft(dispatcher, com.dwinovo.numen.api.brain.KeyCommand.node());
         graft(dispatcher, com.dwinovo.numen.api.brain.SkinCommand.node());
-        graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
+        graft(dispatcher, Commands.literal("drive").requires(source -> com.dwinovo.numen.api.platform.Services.PERMISSIONS.isGameMaster(source))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
                                 .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))

@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.platform;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.platform.services.IBoatPhysics;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
+import com.dwinovo.numen.api.platform.services.IPermissions;
 import com.dwinovo.numen.api.platform.services.INetworkChannel;
 import com.dwinovo.numen.api.platform.services.IPlatformHelper;
 import com.dwinovo.numen.api.platform.services.IBlockCapabilityReader;
@@ -16,6 +17,7 @@ public class Services {
     public static final INumenConfig CONFIG = load(INumenConfig.class);
     public static final IBlockCapabilityReader CAPS = load(IBlockCapabilityReader.class);
     public static final IBoatPhysics BOATS = load(IBoatPhysics.class);
+    public static final IPermissions PERMISSIONS = load(IPermissions.class);
     // 语音工厂是客户端专属服务,注册在 client 包的 ClientServices 里——
     // 其实现类引用 client-only 的 Sound 类,放这里急加载会在专用服务端
     // 掀翻 mod 构造(dist 边界由类结构表达,共享注册表只放两侧通用的服务)。

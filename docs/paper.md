@@ -40,6 +40,7 @@ Paper 子项目编译 common 时整包排除 `mixin`,这条规矩由编译本身
 | `INumenConfig` | 服务端用到的那几项(代理、系统提示词)存在配置根下;语音识别那几项是客户端的,Paper 不提供 |
 | `IBlockCapabilityReader` | 只有原版容器(`Container`/`WorldlyContainer`),流体与能量为空 |
 | `INetworkChannel` | 见 §七 |
+| `IPermissions`(common 里凡问"这人有什么权限"都经它,不读 op 等级) | `isAdmin`(Numen 管理员):权限节点 `numen.admin`,默认给 op;`isGameMaster`(原版游戏管理那一档指令,如 `/numen drive`、召唤时选创造):对应的 Bukkit 节点;`commandLevel`(她跑命令的等级,模组上取主人的 op 等级)在 Paper 上不起作用,她的权限由委托主人的 `Permissible` 管(§九)。模组实现 `ModPermissions`:房主或 op 4 级 / op 2 级 |
 | 私有访问(新) | 见 §五 |
 
 ## 五、私有访问
