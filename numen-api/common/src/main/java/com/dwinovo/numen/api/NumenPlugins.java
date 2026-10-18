@@ -32,19 +32,16 @@ import java.util.function.Function;
  *
  * <h2>时机不必你操心</h2>
  * 插件在自己模组的构造期登记就行。Numen API 内部该就绪的东西各有各的时机(工具注册表在
- * 类加载时就有,技能与头像要等客户端起来),这里替你等——先登记的先跑,能跑的立刻跑,
+ * 类加载时就有,头像要等客户端起来),这里替你等——先登记的先跑,能跑的立刻跑,
  * 跑不了的等它就绪。
  *
  * <h2>专用服务器上会安静地少几样</h2>
  * 头像只活在玩家的客户端上,它由客户端启动时{@linkplain #bindClient 接上来};专用服务器上没人接,
- * 于是 {@code registerPortrait} 与 {@code onClient} 就是空操作。技能归服务端的大脑,
- * 服务端起来时{@linkplain #bindSkills 接上}。<b>"有没有接上"本身就是判据</b>,不必再去问一遍
+ * 于是 {@code registerPortrait} 与 {@code onClient} 就是空操作。<b>"有没有接上"本身就是判据</b>,不必再去问一遍
  * "我现在是不是客户端"——那种问法每个加载器一个写法,写在插件里就是每个插件一个写法。
  */
 public final class NumenPlugins {
 
-    /** 服务端大脑接上来的技能表入口;没接上之前登记的技能先攒在 {@link #PENDING_SKILLS}。 */
-    private static volatile Consumer<Path> skills;
     /** 客户端接上来的输入口;专用服务器上一直是 null。 */
     private static volatile ClientInput clientInput;
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
@@ -83,20 +80,6 @@ public final class NumenPlugins {
         clientReady = true;
         for (Runnable r : PENDING) runClientBlock(r);
         PENDING.clear();
-    }
-
-    /**
-     * 服务端起来时把技能表接上来(评测的进程也是一个"服务端")。已经登记的技能这时一并交出去。
-     * <b>Numen API 内部调用</b>,插件不该碰。
-     */
-    public static void bindSkills(Consumer<Path> skillSink) {
-        skills = skillSink;
-        flushSkills(skillSink);
-    }
-
-    private static void flushSkills(Consumer<Path> skillSink) {
-        for (Path root : PENDING_SKILLS) skillSink.accept(root);
-        PENDING_SKILLS.clear();
     }
 
     /**
@@ -194,7 +177,6 @@ public final class NumenPlugins {
     }
 
     private static final List<Runnable> PENDING = new ArrayList<>();
-    private static final List<Path> PENDING_SKILLS = new ArrayList<>();
 
     private static void runClientBlock(Runnable r) {
         try {
@@ -229,15 +211,12 @@ public final class NumenPlugins {
         }
 
         @Override
-        public void bundleSkills(Path skillsRoot) {
-            if (skillsRoot == null) return;
-            Consumer<Path> sink = skills;
-            if (sink != null) sink.accept(skillsRoot); else PENDING_SKILLS.add(skillsRoot);
-        }
-
-        @Override
-        public void bundleModules(Path modulesRoot) {
-            com.dwinovo.numen.api.script.BuiltinModules.bundle(namespace, modulesRoot);
+        public void bundleContent(Path root) {
+            if (root == null) return;
+            Path modules = root.resolve(com.dwinovo.numen.api.script.Modules.KIND.dir());
+            if (com.dwinovo.numen.api.library.Shipped.bundle(namespace, root) && java.nio.file.Files.isDirectory(modules)) {
+                com.dwinovo.numen.api.script.BuiltinModules.bundle(modules);
+            }
         }
 
         @Override

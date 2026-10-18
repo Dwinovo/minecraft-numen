@@ -24,7 +24,9 @@ public final class SdkFixture {
         try {
             Path modules = Files.createTempDirectory("numen-test-lua-");
             modules.toFile().deleteOnExit();
-            Modules.init(uuid -> modules);
+            var hub = com.dwinovo.numen.api.library.LibraryHub.headless(modules);
+            java.util.UUID owner = java.util.UUID.randomUUID();
+            Modules.init(uuid -> hub.library(Modules.KIND, owner));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

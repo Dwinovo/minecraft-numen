@@ -24,7 +24,7 @@ class YsmApiLintReport {
         NumenPlugins.register(YsmApi.NAMESPACE, numen -> YsmApi.install(numen, ysm));
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("ysm.")).toList());
-        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/ysm/skills")));
+        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/ysm/numen/skills")));
         ApiLintReport.write(lint);
     }
 }

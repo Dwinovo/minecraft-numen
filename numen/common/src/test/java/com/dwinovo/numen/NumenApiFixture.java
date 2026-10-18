@@ -17,14 +17,18 @@ public final class NumenApiFixture {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         NumenContent.init();
-        // 内置的 Lua 模块产品里由加载器从 jar 里的 modules/ 交出去,单测从类路径上同一个目录交
+        // 内置内容产品里由加载器从 jar 里的 numen/ 交出去,单测从类路径上同一个目录交
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN,
-                numen -> numen.bundleModules(resource("modules")));
-        // 她的 Lua 模块落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
+                numen -> numen.bundleContent(resource("numen")));
+        // 她的库落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
         try {
-            java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-test-lua-");
-            modules.toFile().deleteOnExit();
-            com.dwinovo.numen.api.script.Modules.init(uuid -> modules);
+            java.nio.file.Path root = java.nio.file.Files.createTempDirectory("numen-test-lib-");
+            root.toFile().deleteOnExit();
+            java.util.UUID owner = java.util.UUID.randomUUID();
+            com.dwinovo.numen.api.library.LibraryHub hub = com.dwinovo.numen.api.library.LibraryHub.headless(root);
+            com.dwinovo.numen.api.script.Modules.init(uuid -> hub.library(com.dwinovo.numen.api.script.Modules.KIND, owner));
+            com.dwinovo.numen.api.agent.skill.SkillRegistry.init(
+                    uuid -> hub.library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, owner));
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }

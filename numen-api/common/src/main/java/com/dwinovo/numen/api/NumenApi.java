@@ -19,7 +19,7 @@ import java.util.function.Function;
  * <pre>{@code
  * NumenPlugins.register("mymod", numen -> {
  *     numen.api("machine", "What your mod lets her do.", MachineApi.class);
- *     numen.bundleSkills(myJarSkillsRoot());
+ *     numen.bundleContent(myJarNumenRoot());
  *     numen.on(CompanionEvent.SPAWN, body -> ...);
  * });
  * }</pre>
@@ -81,26 +81,23 @@ public interface NumenApi {
     <T> void codec(Class<T> type, Codec<T> codec);
 
     /**
-     * 把一个目录里的技能交给 Numen API。就地读,不复制:你的 jar 一卸载技能跟着消失。
-     * 玩家在 {@code config/numen/skills/} 放同名目录可以覆盖你这份。
+     * 把你 jar 里的内置内容交给 Numen API:一个 {@code numen/} 目录,里面是 {@code <库>/<命名空间>/<名字>}——技能
+     * ({@code skills/<命名空间>/<技能>/SKILL.md})、Lua 模块({@code modules/<命名空间>/<组名>.lua})、人设
+     * ({@code persona/<命名空间>/<名字>.md})、模型档案({@code provider/…})、MCP 工具({@code mcp/…})。命名空间写你自己的 id。
      *
-     * <p>通常传你自己 jar 里的 {@code skills/}。技能由服务端的大脑读,客户端与服务端都会走到这里。
+     * <p>服务器起来时 Numen API 把它同步进 {@code config/numen/server/},此后读的只有那个目录:管理员改过的不会被你下一版覆盖
+     * (新版写在旁边的 {@code .new} 并提示),管理员删掉的不会被放回,你的模组卸载了没改过的跟着删。玩家看到的是"内置"与"我的"
+     * 两组,同名时我的优先;她改内置模块是复制到主人的"我的"再改,不碰服务器目录。
+     *
+     * <p>模块的说明、写法与登记那一刻拦什么:模块返回一张函数表({@code local M = {} … function M.harvest(field) … end … return M}),
+     * 她的程序以模块名直接用({@code mymod.farm.harvest("wheat")},第一次用到才装);和你的组同名的模块给那一组加函数。登记那一刻只拦
+     * 名字不合规矩、撞名、读不通;没写说明、装出来不是一张表这类写法问题在 {@code ApiTester.lint} 的报告里。两侧都登记,所以
+     * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
+     *
+     * @param root 你 jar 里的 {@code numen/} 目录
+     * @throws IllegalArgumentException 同一个文件另一个来源也带了、模块名不合规矩或撞名、模块正文读不通
      */
-    void bundleSkills(Path skillsRoot);
-
-    /**
-     * 把一个目录里的 Lua 模块交给 Numen API:每个 {@code <组名><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
-     * {@code .lua}),模块名是你的名字空间加文件名({@code farm.lua} 是 {@code mymod.farm})。模块返回一张函数表
-     * ({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用({@code mymod.farm.harvest("wheat")},
-     * 第一次用到才装);和你的组同名的模块给那一组加函数,把几个原子函数组合成一件事。系统提示的 API 索引列出每个模块与它的函数,
-     * 说明是开头那行注释与每个函数上面的几行注释;{@code numen.module.show(<名字>)} 读全文。
-     *
-     * <p>登记那一刻只拦名字不合规矩、撞名、读不通;没写说明、装出来不是一张表这类写法问题在 {@code ApiTester.lint} 的报告里。两侧都
-     * 登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
-     *
-     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通
-     */
-    void bundleModules(Path modulesRoot);
+    void bundleContent(Path root);
 
     /**
      * 服务端:往 {@code /numen} 下挂一格给<b>玩家</b>用的指令(如 {@code /numen mynav debug})。

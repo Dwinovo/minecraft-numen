@@ -20,15 +20,15 @@ class KaleidoscopeApiLintReport {
     @Test
     void writeTheReport() throws IOException, URISyntaxException {
         NumenApiFixture.install();
-        java.nio.file.Path modules = java.nio.file.Path.of(KaleidoscopeApiLintReport.class.getClassLoader()
-                .getResource("plugins/kaleidoscope/modules").toURI());
+        java.nio.file.Path content = java.nio.file.Path.of(KaleidoscopeApiLintReport.class.getClassLoader()
+                .getResource("plugins/kaleidoscope/numen").toURI());
         NumenPlugins.register(KaleidoscopeApi.NAMESPACE, numen -> {
             KaleidoscopeApi.install(numen);
-            numen.bundleModules(modules);
+            numen.bundleContent(content);
         });
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("kaleidoscope.")).toList());
-        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/kaleidoscope/skills")));
+        lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/kaleidoscope/numen/skills")));
         ApiLintReport.write(lint);
     }
 }

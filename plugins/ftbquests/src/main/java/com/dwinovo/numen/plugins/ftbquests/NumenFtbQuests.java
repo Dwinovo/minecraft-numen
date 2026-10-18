@@ -28,7 +28,7 @@ public final class NumenFtbQuests {
     private NumenFtbQuests() {}
 
     /** 由 {@code Builtin} 在确认 FTB Quests 在场后调用。 */
-    public static void install(Path skillsRoot) {
+    public static void install(Path content) {
         NumenPlugins.register(FtbqApi.NAMESPACE, numen -> {
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以直接调,不放进 onClient
             FtbqEvents.bind(numen);
@@ -53,8 +53,8 @@ public final class NumenFtbQuests {
                 InviteWatch.clear();
             });
 
-            if (skillsRoot != null) {
-                numen.bundleSkills(skillsRoot);
+            if (content != null) {
+                numen.bundleContent(content);
             }
         });
     }

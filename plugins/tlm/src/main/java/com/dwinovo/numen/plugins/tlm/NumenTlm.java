@@ -28,7 +28,7 @@ public final class NumenTlm {
     private NumenTlm() {}
 
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
-    public static void install(IEventBus modBus, Path skillsRoot) {
+    public static void install(IEventBus modBus, Path content) {
         Outfit.register(modBus);
         NumenPlugins.register(NAMESPACE, numen -> {
             // 几组 API 两侧都登记(帮助要它们的说明);查模型名册的在主人客户端跑,穿脱模型、管女仆与祭坛的在服务端跑
@@ -57,7 +57,7 @@ public final class NumenTlm {
                         (ClientPlayerNetworkEvent.LoggingOut e) -> MaidBody.forget());
             });
 
-            if (skillsRoot != null) numen.bundleSkills(skillsRoot);
+            if (content != null) numen.bundleContent(content);
         });
     }
 }

@@ -31,20 +31,20 @@ public final class Builtin {
 
     public static void registerAll(IEventBus modBus) {
         Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
-        gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnNeoForge.install(skills));
+        gate.open("yes_steve_model", "ysm", content -> () -> YsmOnNeoForge.install(content));
         gate.open("touhou_little_maid", "tlm",
-                skills -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, skills));
+                content -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, content));
         gate.open("kaleidoscope_cookery", "kaleidoscope",
-                skills -> () -> com.dwinovo.numen.plugins.kaleidoscope.NumenKaleidoscope.install(skills));
+                content -> () -> com.dwinovo.numen.plugins.kaleidoscope.NumenKaleidoscope.install(content));
         gate.open("curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
         gate.open("ftbquests", "ftbquests",
-                skills -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(skills));
+                content -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(content));
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */
     private static final class YsmOnNeoForge implements YsmHost {
-        static void install(Path skills) {
-            com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnNeoForge(), skills);
+        static void install(Path content) {
+            com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnNeoForge(), content);
         }
 
         @Override

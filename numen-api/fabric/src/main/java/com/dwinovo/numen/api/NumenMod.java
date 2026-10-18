@@ -56,6 +56,9 @@ public class NumenMod implements ModInitializer {
                 com.dwinovo.numen.api.platform.ServerLifecycle::fireStarted);
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(
                 server -> com.dwinovo.numen.api.platform.ServerLifecycle.fireStopped());
+        // /reload:磁盘上手改的库、钥匙串、设置重新读
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(
+                (server, resources, success) -> com.dwinovo.numen.api.platform.ServerLifecycle.fireReloaded());
 
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on Fabric.");

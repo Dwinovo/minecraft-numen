@@ -22,7 +22,7 @@ public final class NumenKaleidoscope {
     private NumenKaleidoscope() {}
 
     /** 由 {@code Builtin} 在确认森罗在场后调用。 */
-    public static void install(Path skillsRoot) {
+    public static void install(Path content) {
         NumenPlugins.register(KaleidoscopeApi.NAMESPACE, numen -> {
             KaleidoscopeApi.install(numen);
 
@@ -33,10 +33,9 @@ public final class NumenKaleidoscope {
             // 所以直接调,不放进 onClient
             KcEvents.bind(numen);
 
-            if (skillsRoot != null) {
-                numen.bundleSkills(skillsRoot);
-                // 随它发的 Lua 模块(kaleidoscope.pot.cook)和技能挨着放:plugins/kaleidoscope/modules/
-                numen.bundleModules(skillsRoot.resolveSibling("modules"));
+            // 随它发的技能与 Lua 模块(kaleidoscope.pot)都在它自己的 numen/ 目录里
+            if (content != null) {
+                numen.bundleContent(content);
             }
         });
     }
