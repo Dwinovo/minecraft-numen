@@ -324,3 +324,17 @@ deny place(hazard_item & near(other))
 - #10 GlariaLuminous 的 Protection API 提案:`ProtectedAction`、`ProtectionRule`、服务端权威、在真实动作前检查。
 - Baritone `isPossiblyProtected()` 与 issue #4643:按形状猜玩家建筑七年没走通。
 - 原版 `LeavesBlock`:玩家放下的树叶 `persistent = true`;`StructureManager`:结构件范围随区块存档。
+
+## 落地时的出入(第 1 到 4 步)
+
+- **命中账在主人的存档里。** 硬规则、出厂层、主人层三处的账都记在这位主人的 `PermissionStore`,按"层名 | 表 | 规则原文"认。
+  规则本身随模组发、不进存档,账只能跟着主人走。只有真动手前的那一问(`Gate.judgeLive`)记账,规划时逐格定价的 `judge` 不记;
+  模式、任务期授权、没有规则覆盖定下的答复不是哪一行规则定的,也不记。`Verdict` 因此带上定下答复的规则与它所在的层。
+- **服主的两个开关在 `config/numen/permission.json`。** `hard_rules`(默认开)与 `unknown_as_other`(专用服默认开,单机与局域网默认关)。
+  专用服上文件不存在时写出一份默认的;读不懂的文件记错误日志、取默认。
+- **她加 `allow`、删行的征询卡是命令项。** 卡上写成她没法自己跑的那条命令(`/numen permission rules add allow …`、
+  `/numen permission rules remove <表> <序号>`),主人看得懂也能自己敲;不提供"允许并记住",她不能给自己发许可。
+- **旧存档行改写。** `placed`、`self_placed`、`owned`、`self_owned`、`near_placed` 按 §十一 改写并记日志;
+  改写后的行经规则核心规范打印,所以 `!placed` 成了 `!(owner | other)`。
+- **放置记录里不知道是谁放的**(记下放的人之前的存档)直接算 `unknown`:有人放过,不能当地形。
+- **第 5 步(面板规则页)未做**;规则列表只在命令输出里显示来源与计数。
