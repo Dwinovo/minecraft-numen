@@ -36,6 +36,23 @@ class ServerLangTest {
     }
 
     @Test
+    void placeholdersBecomeMessageFormatSlotsAndQuotesAreEscaped() {
+        assertEquals("拿 {0} 个", LANG.asMessageFormat("numen.one"));
+        assertEquals("{1} 在 {0}", LANG.asMessageFormat("numen.two"));
+        assertEquals("100% 完成,还剩 {0}", LANG.asMessageFormat("numen.pct"));
+        ServerLang tricky = new ServerLang(Map.of("numen.q", "it's {braced} %s"));
+        assertEquals("it''s '{'braced'}' {0}", tricky.asMessageFormat("numen.q"));
+        assertEquals("it's {braced} 5",
+                new java.text.MessageFormat(tricky.asMessageFormat("numen.q")).format(new Object[] {5}));
+    }
+
+    @Test
+    void aKeyWithoutATranslationOrWithAnUnknownPlaceholderHasNoMessageFormat() {
+        assertEquals(null, LANG.asMessageFormat("numen.missing"));
+        assertEquals(null, LANG.asMessageFormat("numen.broken"));
+    }
+
+    @Test
     void aKeyThatIsNotNumensIsLeftForTheClientToTranslate() {
         Component vanilla = Component.translatable("block.minecraft.stone");
         assertSame(vanilla, LANG.translate(vanilla));

@@ -326,7 +326,7 @@ public class GearGameTests {
         // 照正式召唤入册:遣散认的是注册表(按名遣散只查它),没入册的身体在正式游戏里不存在
         var owner = presentPlayer(helper, null, ownerName);
         BlockPos at = helper.absolutePos(new BlockPos(4, 2, 4));
-        NumenPlayer companion = com.dwinovo.numen.api.entity.Companions.summon(level.getServer(), owner.getUUID(), name,
+        NumenPlayer companion = com.dwinovo.numen.api.gametest.Bodies.summon(level.getServer(), owner.getUUID(), name,
                 level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         FakeGear gear = dress(companion);
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);

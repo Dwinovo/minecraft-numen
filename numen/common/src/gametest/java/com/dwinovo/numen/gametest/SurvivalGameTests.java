@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.List;
@@ -139,7 +140,7 @@ public class SurvivalGameTests {
     private static NumenPlayer plainCompanion(GameTestHelper helper, BlockPos rel) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(rel);
-        NumenPlayer companion = GameTestKit.withBrain(CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_faller", UUID.randomUUID(), level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5)));
         companion.getFoodData().setFoodLevel(20);

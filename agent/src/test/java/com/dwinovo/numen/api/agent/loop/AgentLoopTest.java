@@ -183,6 +183,20 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void blockedHoldUncoveredAgainStillCarriesItsReason() {
+            model.unavailable = UNBOUND;
+            ownerSays("你好");
+            loop.halt(HaltReason.REMOVED, "被踢");
+            events.clear();
+
+            loop.respawned();
+
+            LoopEvent.HoldChanged back = eventsOf(LoopEvent.HoldChanged.class).get(0);
+            assertEquals(Hold.BLOCKED, back.hold());
+            assertEquals(UNBOUND, back.cause(), "遮住又解开后重新露出的停牌,原因还在");
+        }
+
+        @Test
         void failedIsReleasedByUrgentInputButNotByAmbientInput() {
             ownerSays("挖矿");
             model.last().fail(NETWORK);

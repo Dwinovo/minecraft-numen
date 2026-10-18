@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.combat.Menace;
 import com.dwinovo.numen.combat.Swing;
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -178,10 +179,10 @@ public class CombatGameTests {
         }
         // 加载垫只在主人在线时续:主人站在场地里(GameTest 没有真玩家,拿另一个同伴的身份顶上,它自己不带区块)
         BlockPos home = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer owner = CompanionFactory.spawn(level.getServer(), java.util.UUID.randomUUID(),
+        NumenPlayer owner = Bodies.spawn(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_far_owner", java.util.UUID.randomUUID(), level,
                 new net.minecraft.world.phys.Vec3(home.getX() + 0.5, home.getY(), home.getZ() + 0.5));
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), java.util.UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_far_fighter", owner.getUUID(), level,
                 new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
@@ -253,7 +254,7 @@ public class CombatGameTests {
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer companion = com.dwinovo.numen.api.entity.Companions.summon(server, java.util.UUID.randomUUID(),
+        NumenPlayer companion = com.dwinovo.numen.api.gametest.Bodies.summon(server, java.util.UUID.randomUUID(),
                 "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
                         spawn.getZ() + 0.5));
         ToolRun nobody = lua(companion, "numen.fight.attack(999998)");
@@ -316,7 +317,7 @@ public class CombatGameTests {
                 level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
             }
         }
-        NumenPlayer companion = GameTestKit.withBrain(CompanionFactory.spawn(level.getServer(),
+        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(),
                 java.util.UUID.randomUUID(), "gametest_cornered", java.util.UUID.randomUUID(), level,
                 new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5)));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));

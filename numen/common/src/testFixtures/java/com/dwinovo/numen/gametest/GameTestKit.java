@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.script.ApiReply;
@@ -126,7 +127,7 @@ public final class GameTestKit {
     static NumenPlayer armedCompanion(GameTestHelper helper, BlockPos rel) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(rel);
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_fighter", UUID.randomUUID(), level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
@@ -175,7 +176,7 @@ public final class GameTestKit {
     static NumenPlayer spawnBare(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(rel);
-        NumenPlayer companion = withBrain(CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5)));
         if (creative) {

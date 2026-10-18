@@ -76,11 +76,24 @@ public final class FakeConnection extends Connection {
         return LOOPBACK;
     }
 
-    /** Discard every outbound packet — there is no client to receive it.
+    /** 发出去的包先交给谁看一眼(默认谁也不给);见 {@link #deliverOutboundTo}。 */
+    private Consumer<Packet<?>> outbound = packet -> { };
+
+    /**
+     * 让平台把发给这条连接的每个包在丢弃之前交给 {@code sink}(她的 {@code FakeClient})。模组上这一步在更上一层做
+     * ({@code MixinServerCommonPacketListener},NeoForge 的频道检查在 {@code Connection.send} 之前就会抛),不用这里;
+     * Paper 的发送最终落在 {@link #send},由 {@code IBodyAdmission} 接上。
+     */
+    public void deliverOutboundTo(Consumer<Packet<?>> sink) {
+        this.outbound = sink;
+    }
+
+    /** Discard every outbound packet — there is no client to receive it (after offering it to {@link #deliverOutboundTo}).
      *  The 1-arg and 2-arg {@code send} overloads route through this one. */
     @Override
     public void send(Packet<?> packet, PacketSendListener listener, boolean flush) {
-        // no-op: drop it on the floor (no channel, no pendingActions growth)
+        outbound.accept(packet);
+        // then drop it on the floor (no channel, no pendingActions growth)
     }
 
     /** Vanilla queues these until "connected"; we never connect, so run nothing. */

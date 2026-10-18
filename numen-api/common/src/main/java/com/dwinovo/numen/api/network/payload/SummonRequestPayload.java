@@ -36,9 +36,10 @@ public record SummonRequestPayload(String name, boolean creative) implements Cus
 
     /** Server main thread. */
     public static void handle(SummonRequestPayload p, ServerPlayer owner) {
-        Companions.Summoned summoned = Companions.summonFor(owner, p.name() == null ? "" : p.name().trim(), p.creative());
-        if (summoned.problem() != null) {
-            owner.sendSystemMessage(summoned.problem());
-        }
+        Companions.summonFor(owner, p.name() == null ? "" : p.name().trim(), p.creative(), summoned -> {
+            if (summoned.problem() != null) {
+                owner.sendSystemMessage(summoned.problem());
+            }
+        });
     }
 }

@@ -127,16 +127,25 @@ public final class Drops {
 
     /**
      * 并堆:{@code from} 那一堆里 {@code moved} 件并进了 {@code into},记着账的件数跟过去。<b>平台挂点。</b>模组上由
-     * {@code ItemEntityDropsMixin} 在 {@code ItemEntity.merge} 调;Paper 上由 {@code ItemMergeEvent} 调。
+     * {@code ItemEntityDropsMixin} 在 {@code ItemEntity.merge} 之后调;Paper 的 {@code ItemMergeEvent} 在并之前触发,
+     * 走 {@link #merged(ItemEntity, ItemEntity, int, int, int)} 把并完以后的件数算好交来。
      * 调用方保证:并堆刚刚发生(不是被取消的),{@code moved} 是并过去的件数。
      */
     public static void merged(ItemEntity into, ItemEntity from, int moved) {
+        merged(into, from, moved, into.getItem().getCount(), from.getItem().getCount());
+    }
+
+    /**
+     * 同 {@link #merged(ItemEntity, ItemEntity, int)},并完以后两堆各剩几件由调用方给——平台的事件在并之前触发、此刻两堆还是并之前的
+     * 件数时,调用方按原版的并法算好交来;这里的账不在乎是并之前还是并之后调,只在乎这一对"并完以后是几件"。
+     */
+    public static void merged(ItemEntity into, ItemEntity from, int moved, int intoAfter, int fromAfter) {
         Track source = TRACKED.get(from);
         Track target = TRACKED.get(into);
         if (source != null && moved > 0) {
             int ours = Math.min(source.ours, moved);
             source.ours -= ours;
-            source.seen = from.getItem().getCount();
+            source.seen = fromAfter;
             if (target == null && ours > 0) {
                 target = source.drops.claim(into, 0);
             }
@@ -145,18 +154,27 @@ public final class Drops {
             }
         }
         if (target != null) {
-            target.seen = into.getItem().getCount();
+            target.seen = intoAfter;
         }
     }
 
     /**
      * 掉落物挨了一下打;打没了就记下是什么打的。<b>平台挂点。</b>模组上由 {@code ItemEntityDropsMixin} 在 {@code ItemEntity.hurt}
-     * 之后调;Paper 上由 {@code EntityDamageEvent} 加 {@code EntityRemoveEvent} 拼出。调用方保证:在这一下打完之后调,
-     * 这样 {@code item.isRemoved()} 已经反映它是不是被打没了。
+     * 之后调;调用方保证:在这一下打完之后调,这样 {@code item.isRemoved()} 已经反映它是不是被打没了。
      */
     public static void hurt(ItemEntity item, DamageSource source) {
+        if (item.isRemoved()) {
+            destroyed(item, source);
+        }
+    }
+
+    /**
+     * 掉落物被这一下打没了(是什么打的)。<b>平台挂点。</b>Paper 上由 {@code EntityRemoveEvent}(原因 DEATH)给出——它触发在实体
+     * 标成已移除之前,{@link #hurt} 的"打完再看 {@code isRemoved}"用不上,所以由平台自己断定"打没了"直接交来。
+     */
+    public static void destroyed(ItemEntity item, DamageSource source) {
         Track track = TRACKED.get(item);
-        if (track != null && item.isRemoved()) {
+        if (track != null) {
             track.destroyedBy = source;
         }
     }

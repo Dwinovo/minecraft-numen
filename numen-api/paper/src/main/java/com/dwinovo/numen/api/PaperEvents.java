@@ -2,9 +2,13 @@ package com.dwinovo.numen.api;
 
 import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import com.dwinovo.numen.api.brain.ChatRoutes;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.Companions;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.platform.PlayerSessions;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
+import io.papermc.paper.adventure.PaperAdventure;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import io.papermc.paper.event.server.ServerResourcesReloadedEvent;
 import net.minecraft.server.MinecraftServer;
@@ -16,6 +20,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.event.server.ServerLoadEvent;
@@ -42,7 +47,27 @@ final class PaperEvents implements Listener {
 
     @EventHandler
     void onQuit(PlayerQuitEvent event) {
-        PlayerSessions.left(handle(event.getPlayer()));
+        ServerPlayer player = handle(event.getPlayer());
+        if (player instanceof NumenPlayer her) {
+            // Numen 自己收她(遣散、休眠、死亡后的收尸)走 CompanionFactory.despawn,那里自己知道;不是它收的,就是被外面请出去的
+            // (踢人先到 PlayerKickEvent,已经处理过,入口对第二次调用是空操作)
+            if (!CompanionFactory.isLeaving(her)) {
+                net.kyori.adventure.text.Component said = event.quitMessage();
+                Companions.removedFromOutside(her, said != null ? PaperAdventure.asVanilla(said)
+                        : net.minecraft.network.chat.Component.literal(
+                                event.getReason().name().toLowerCase(java.util.Locale.ROOT)));
+            }
+            return;
+        }
+        PlayerSessions.left(player);
+    }
+
+    /** 服主的 {@code /kick}、别的插件踢人:在她被移除之前把理由交给 common。 */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    void onKick(PlayerKickEvent event) {
+        if (handle(event.getPlayer()) instanceof NumenPlayer her && !CompanionFactory.isLeaving(her)) {
+            Companions.removedFromOutside(her, PaperAdventure.asVanilla(event.reason()));
+        }
     }
 
     @EventHandler

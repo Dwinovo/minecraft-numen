@@ -12,8 +12,18 @@ plugins {
 // Paper 1.20.5+ 的服务端本身就是 Mojang 名,成品不再重映射(MOJANG_PRODUCTION),Paper 加载时也不重映射。
 paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
 
+repositories {
+    // Vault 的接口(只用来编译):装了 Vault 的服务器上,主人不在线时她的权限经它查主人
+    maven {
+        url = 'https://jitpack.io'
+        content { includeGroup 'com.github.MilkBowl' }
+    }
+}
+
 dependencies {
     paperweight.paperDevBundle(paper_dev_bundle)
+    // 它依赖一份老的 Bukkit API,传递进来会盖掉 Paper 的
+    compileOnly('com.github.MilkBowl:VaultAPI:1.7') { transitive = false }
     Modules.SERVER.each { compileOnly project(it) }
 }
 
