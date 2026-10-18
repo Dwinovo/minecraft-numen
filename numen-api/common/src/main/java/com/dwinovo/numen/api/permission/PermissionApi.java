@@ -59,23 +59,16 @@ public final class PermissionApi {
     @SeeAlso({"numen.permission.deny", "numen.permission.ask", "numen.permission.allow", "numen.permission.remove"})
     public static Rules rules(ServerCall call) {
         NumenPlayer her = call.her();
-        PermissionConfig config = PermissionConfig.of(her.getServer());
+        RuleBook book = RuleBook.of(storeOf(her), PermissionConfig.of(her.getServer()).hardRules());
         List<String> hard = new ArrayList<>();
-        if (config.hardRules()) {
-            FactoryRules.hard().forEach(rule -> hard.add("deny " + rule));
-        }
+        book.hard().forEach(row -> hard.add(line(row.table(), row.rule())));
         List<String> yours = new ArrayList<>();
-        PermissionStore store = storeOf(her);
-        if (store != null) {
-            for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
-                for (PermissionStore.Row row : store.rows(table)) {
-                    yours.add(line(table, row.rule()) + note(row, store.hitsOf(Layers.OWNER, table, row.rule())));
-                }
-            }
+        for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
+            book.owner().get(table).forEach(row -> yours.add(line(table, row.rule()) + note(row)));
         }
         List<String> factory = new ArrayList<>();
         for (Verdict.Kind table : List.of(Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
-            FactoryRules.layer().table(table).forEach(rule -> factory.add(line(table, rule)));
+            book.factory().get(table).forEach(row -> factory.add(line(table, row.rule())));
         }
         return new Rules(hard, yours, factory);
     }
@@ -218,9 +211,10 @@ public final class PermissionApi {
     }
 
     /** 列表里一行后面的注:她写的(带理由)和命中几次。 */
-    private static String note(PermissionStore.Row row, PermissionStore.Hit hit) {
+    private static String note(RuleBook.Line row) {
+        PermissionStore.Hit hit = row.hit();
         StringBuilder sb = new StringBuilder();
-        if (row.source() == PermissionStore.Source.HER) {
+        if (row.byHer()) {
             sb.append(NOTE_MARK).append("you added it").append(row.note().isEmpty() ? "" : ": " + row.note());
         }
         sb.append(sb.isEmpty() ? NOTE_MARK : "; ").append(hit.count() == 0 ? "never fired" : "fired " + hit.count() + "x");

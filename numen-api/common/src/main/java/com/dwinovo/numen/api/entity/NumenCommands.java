@@ -5,13 +5,12 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.dwinovo.numen.api.permission.FactoryRules;
 import com.dwinovo.numen.api.permission.Groups;
-import com.dwinovo.numen.api.permission.Layers;
 import com.dwinovo.numen.api.permission.PermissionConfig;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.api.permission.PermissionStore;
+import com.dwinovo.numen.api.permission.RuleBook;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonObject;
@@ -337,33 +336,29 @@ public final class NumenCommands {
      */
     private static int listRules(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
-        PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
+        RuleBook book = RuleBook.of(PermissionStore.of(owner.getServer(), owner.getUUID()),
+                PermissionConfig.of(owner.getServer()).hardRules());
         MutableComponent text = Component.translatable(Keys.COMMAND_RULES_YOURS);
         for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
-            List<PermissionStore.Row> rows = store.rows(table);
+            List<RuleBook.Line> rows = book.owner().get(table);
             text.append("\n  " + tableName(table) + ":");
             if (rows.isEmpty()) {
                 text.append(" ").append(Component.translatable(Keys.COMMAND_RULES_NONE));
             }
             for (int i = 0; i < rows.size(); i++) {
-                PermissionStore.Row row = rows.get(i);
-                text.append("\n    " + (i + 1) + ". " + row.rule()).append(sourceNote(row))
-                        .append(hitNote(store.hitsOf(Layers.OWNER, table, row.rule())));
+                RuleBook.Line row = rows.get(i);
+                text.append("\n    " + (i + 1) + ". " + row.rule()).append(sourceNote(row)).append(hitNote(row.hit()));
             }
         }
-        boolean hard = PermissionConfig.of(owner.getServer()).hardRules();
-        text.append("\n").append(Component.translatable(hard ? Keys.COMMAND_RULES_HARD : Keys.COMMAND_RULES_HARD_OFF));
-        if (hard) {
-            for (Rule rule : FactoryRules.hard()) {
-                text.append("\n    - deny " + rule)
-                        .append(hitNote(store.hitsOf(Verdict.HARD, Verdict.Kind.DENY, rule)));
-            }
+        text.append("\n").append(Component.translatable(book.hardOn() ? Keys.COMMAND_RULES_HARD : Keys.COMMAND_RULES_HARD_OFF));
+        for (RuleBook.Line line : book.hard()) {
+            text.append("\n    - deny " + line.rule()).append(hitNote(line.hit()));
         }
         text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_FACTORY));
         for (Verdict.Kind table : List.of(Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
             text.append("\n  " + tableName(table) + ":");
-            for (Rule rule : FactoryRules.layer().table(table)) {
-                text.append("\n    - " + rule).append(hitNote(store.hitsOf(Layers.FACTORY, table, rule)));
+            for (RuleBook.Line line : book.factory().get(table)) {
+                text.append("\n    - " + line.rule()).append(hitNote(line.hit()));
             }
         }
         text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_UNMATCHED));
@@ -372,8 +367,8 @@ public final class NumenCommands {
     }
 
     /** 她加的行后面注明,带她说的理由;主人写的不注。 */
-    private static Component sourceNote(PermissionStore.Row row) {
-        if (row.source() != PermissionStore.Source.HER) {
+    private static Component sourceNote(RuleBook.Line row) {
+        if (!row.byHer()) {
             return Component.empty();
         }
         return Component.literal(" · ").append(row.note().isEmpty() ? Component.translatable(Keys.COMMAND_RULES_HER)
@@ -385,11 +380,8 @@ public final class NumenCommands {
         if (hit.count() == 0) {
             return Component.literal(" · ").append(Component.translatable(Keys.COMMAND_RULES_NEVER));
         }
-        long seconds = Math.max(0, (System.currentTimeMillis() - hit.lastMillis()) / 1000);
-        String ago = seconds < 90 ? seconds + "s" : seconds < 5400 ? seconds / 60 + "m"
-                : seconds < 172800 ? seconds / 3600 + "h" : seconds / 86400 + "d";
         return Component.literal(" · ").append(Component.translatable(Keys.COMMAND_RULES_HITS, hit.count(),
-                Component.translatable(Keys.COMMAND_RULES_AGO, ago)));
+                Component.translatable(Keys.COMMAND_RULES_AGO, RuleBook.ago(hit.lastMillis(), System.currentTimeMillis()))));
     }
 
     /** 主人加一行规则。 */
