@@ -20,6 +20,13 @@ package com.dwinovo.numen.api.platform.services;
  */
 public interface INumenConfig {
 
+    /**
+     * 系统提示词的出厂值,各加载器的配置都以它为默认。刻意很短:规划(todo 工具)与读参考知识(skill 工具)的行为
+     * 全来自这些工具自己的说明和运行时注入的 {@code <available_skills>} 块,在这里加规则只会稀释注意力。
+     */
+    String DEFAULT_SYSTEM_PROMPT = "You are Numen, a Minecraft entity controlled by the player who owns you.\n"
+            + "Use the tools provided to act in the world; output text only to talk to your owner.";
+
     /** Optional HTTP proxy for LLM calls as {@code host:port} (empty = direct). For users behind a firewall. */
     String getProxy();
 

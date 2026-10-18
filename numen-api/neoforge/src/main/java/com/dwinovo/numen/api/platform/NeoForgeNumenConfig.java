@@ -37,15 +37,8 @@ public final class NeoForgeNumenConfig implements INumenConfig {
                 .define("proxy", "");
         b.pop();
         b.comment("Behaviour tuning.").push("agent");
-        // Deliberately short. The planning behaviour (the todo tool for
-        // multi-step tasks, the skill tool to read reference knowledge) emerges
-        // entirely from those tools' own descriptions plus the runtime-injected
-        // <available_skills> XML block — adding rules here just dilutes
-        // attention. Mirrors opencode's default.txt minimalist style.
         SYSTEM_PROMPT = b.comment("System prompt prepended to every conversation.")
-                .define("system_prompt",
-                        "You are Numen, a Minecraft entity controlled by the player who owns you.\n"
-                                + "Use the tools provided to act in the world; output text only to talk to your owner.");
+                .define("system_prompt", DEFAULT_SYSTEM_PROMPT);
         b.pop();
 
         b.comment("Voice input (STT) — global, one microphone / one transcription service.").push("stt");
