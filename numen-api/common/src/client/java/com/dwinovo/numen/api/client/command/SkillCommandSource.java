@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * 每个技能一条命令:{@code /build 在河边盖个木屋}。
  *
- * <p>按服务器上当前的技能表现算(技能目录是服务器全局的)——往 {@code config/numen/skills} 里丢个目录、或者管理员在面板里
+ * <p>按服务器上当前的技能表现算(技能目录是服务器全局的)——往 {@code config/numen/server/skills} 里丢个目录、或者管理员在面板里
  * 把某个技能关掉,命令表跟着变,不用重启也不用去哪儿登记。
  */
 final class SkillCommandSource implements CommandSource {
@@ -19,7 +19,7 @@ final class SkillCommandSource implements CommandSource {
     @Override
     public List<ChatCommand> commands(RemoteCompanion loop) {
         List<ChatCommand> out = new ArrayList<>();
-        for (ServerLibraries.Skill skill : ServerLibraries.skills()) {
+        for (ServerLibraries.Skill skill : ServerLibraries.skillsEffective()) {
             // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
             // 否则打得出来、按下去却说"已经不在了"。
             if (skill.enabled()) {
@@ -44,7 +44,7 @@ final class SkillCommandSource implements CommandSource {
 
         @Override
         public String description() {
-            String desc = ServerLibraries.skills().stream().filter(s -> s.name().equals(skill))
+            String desc = ServerLibraries.skillsEffective().stream().filter(s -> s.name().equals(skill))
                     .map(ServerLibraries.Skill::description).findFirst().orElse(null);
             return desc == null || desc.isBlank() ? I18n.get(Keys.CMD_SKILL) : desc;
         }
@@ -68,7 +68,7 @@ final class SkillCommandSource implements CommandSource {
          */
         @Override
         public String run(RemoteCompanion loop, String args) {
-            boolean there = ServerLibraries.skills().stream().anyMatch(s -> s.name().equals(skill) && s.enabled());
+            boolean there = ServerLibraries.skillsEffective().stream().anyMatch(s -> s.name().equals(skill) && s.enabled());
             if (!there) {
                 return I18n.get(Keys.CMD_SKILL_GONE, skill);
             }

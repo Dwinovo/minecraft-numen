@@ -182,7 +182,7 @@ public final class BrainPanel {
         ry += SettingsRows.ROW_H;
         // 端口与「允许局域网」= 上面那条地址的两截。后者是 host 的人话面:关=127.0.0.1,
         // 开=0.0.0.0。玩家不必知道那五个字符,想绑具体网卡的高级用户改
-        // config/numen/mcp_server.json —— 配置文件就是逃生舱。
+        // config/numen/server/mcp_server.json —— 配置文件就是逃生舱。
         SettingsRows.label(ui, t("numen.brain.port"), x, ry, w - NUM_FIELD_W - 8);
         portText = portText != null ? portText : String.valueOf(st.port());
         portField = ui.add(new TextField(portText, v -> {

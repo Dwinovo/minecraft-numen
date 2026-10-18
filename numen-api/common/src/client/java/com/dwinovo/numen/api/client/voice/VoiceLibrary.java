@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.voice;
 
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.library.JsonLibrary;
 import com.google.gson.JsonObject;
 
@@ -9,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 玩家的命名声线库,存于 {@code config/numen/voice.json}——设置面板"语音"tab
+ * 玩家的命名声线库,存于 {@code config/numen/client/voice.json}——设置面板"语音"tab
  * 背后的数据层,存储与 API 形状对齐 {@code ProviderLibrary}(模型配置库):
  * 两段式 = <b>声线条目</b>(命名的 TTS 配置)+ <b>每同伴绑定</b>(uuid → 条目 id),
  * 外加一个全局总开关。没绑定/关总开关的同伴静音,零开销。客户端单例。
@@ -127,7 +128,7 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
 
     public static VoiceLibrary instance() {
         if (instance == null) {
-            instance = new VoiceLibrary(configDir().resolve("voice.json"));
+            instance = new VoiceLibrary(Homes.clientDir().resolve("voice.json"));
         }
         return instance;
     }

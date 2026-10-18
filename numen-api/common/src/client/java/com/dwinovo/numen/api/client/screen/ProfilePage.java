@@ -299,7 +299,7 @@ final class ProfilePage {
         cy = settingRow(g, t, I18n.get("numen.profile.persona"), persona, x, cy, w, mouseX, mouseY);
         String model = I18n.get("numen.profile.model_none");
         if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
-            var entry = ServerLibraries.providers().stream()
+            var entry = ServerLibraries.providersInUse().stream()
                     .filter(p -> p.id().equals(loop.providerEntryId())).findFirst().orElse(null);
             model = entry == null ? I18n.get("numen.profile.model_deleted")
                     : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();

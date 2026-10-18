@@ -24,7 +24,7 @@ import java.util.Map;
  * models.json 同构。
  *
  * <p>USER-EDITABLE:首次加载把内置 {@code /numen_stt.json} 拷到
- * {@code config/numen/stt.json} 供编辑。加载时<b>内置打底、用户文件按 id 覆盖</b>:用户改过的
+ * {@code config/numen/client/stt.json} 供编辑。加载时<b>内置打底、用户文件按 id 覆盖</b>:用户改过的
  * 条目照他的算,同时我们以后新加的 provider 不会被早就落盘的那份快照挡在外面。
  */
 public final class SttProviders {
@@ -157,10 +157,10 @@ public final class SttProviders {
         return List.copyOf(byId.values());
     }
 
-    /** 读 {@code config/numen/stt.json};没有就先拿内置的播一份下去供编辑。 */
+    /** 读 {@code config/numen/client/stt.json};没有就先拿内置的播一份下去供编辑。 */
     private static String readOrSeedUserFile(String bundled) {
         try {
-            Path file = com.dwinovo.numen.api.NumenPaths.config().resolve("stt.json");
+            Path file = com.dwinovo.numen.api.home.Homes.clientDir().resolve("stt.json");
             if (Files.exists(file)) {
                 return Files.readString(file, StandardCharsets.UTF_8);
             }
@@ -168,7 +168,7 @@ public final class SttProviders {
                 Atomic.write(file, bundled);
             }
         } catch (Exception e) {
-            Constants.LOG.warn("[numen] couldn't read/seed config/numen/stt.json", e);
+            Constants.LOG.warn("[numen] couldn't read/seed config/numen/client/stt.json", e);
         }
         return null;
     }

@@ -8,7 +8,7 @@ import com.google.gson.JsonObject;
 import java.nio.file.Path;
 
 /**
- * 主人的客户端偏好——{@code config/numen/ui.json}。
+ * 主人的客户端偏好——{@code config/numen/client/ui.json}。
  *
  * <pre>
  * { "theme": "light", "talkHint": true, "messageNotices": true }

@@ -36,11 +36,24 @@ public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
      *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
-     *  {@code preset}=只读预设行:点行克隆成自定义副本,菜单里没有编辑与删除。 */
-    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
+     *  {@code preset}=只读行(玩家对内置只读):点行复制到我的,菜单里没有编辑与删除。
+     *  {@code canClone}=菜单里有"复制到我的"(内置的行:管理员的可编辑,玩家的只读,都能复制)。 */
+    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone) {
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked) {
-            this(name, meta, metaDanger, marked, false);
+            this(name, meta, metaDanger, marked, false, false);
+        }
+
+        public Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
+            this(name, meta, metaDanger, marked, preset, preset);
+        }
+    }
+
+    /** 列表里的一行:条目,或分组的标题(两组并排时,"内置"与"我的"各一条标题行)。 */
+    private record Line<T>(T item, String heading) {
+
+        boolean isHeading() {
+            return item == null;
         }
     }
 
@@ -70,6 +83,10 @@ public final class LibraryListPanel<T> {
     private final String emptyKey;
     private final Supplier<List<T>> source;
     private final Function<T, Row> rowOf;
+    /** 条目属于哪一组(标题文字);组变了就插一行标题。没有分组是 {@code null}。 */
+    private Function<T, String> groupOf;
+    /** 某一行右键菜单里除了通用几项以外的(如管理员采用内置的新版)。 */
+    private Function<T, List<PopupMenu.Item>> extraMenu;
     private final Function<T, String> deleteMessage;
     private final Consumer<T> onDeleteConfirmed;
     private final Runnable onAdd;
@@ -103,9 +120,10 @@ public final class LibraryListPanel<T> {
     private String titleActionLabel;
     private Runnable titleAction;
 
-    private ListView<T> list;
+    private ListView<Line<T>> list;
     private Label emptyLabel;
     private List<T> entries = List.of();
+    private List<Line<T>> lines = List.of();
     /** 这张表在客户端的版本(服务端推来一张、或本地先画了删除就变);没有 = 本地的库,只在动作之后刷新。 */
     private java.util.function.LongSupplier version;
     private long seenVersion;
@@ -134,6 +152,18 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
+    /** 条目按组排开:{@code groupOf} 给每个条目的组名,相邻的同组条目前面插一行标题;条目要按组排好序给。 */
+    public LibraryListPanel<T> withGroups(Function<T, String> groupOf) {
+        this.groupOf = groupOf;
+        return this;
+    }
+
+    /** 右键菜单里再加几项(在通用几项的前面,与它们之间一道分隔线)。 */
+    public LibraryListPanel<T> withMenu(Function<T, List<PopupMenu.Item>> extra) {
+        this.extraMenu = extra;
+        return this;
+    }
+
     /** 行内启停开关(行右端的小开关;有编辑的库行体点击仍=编辑,没有的整行都是开关)。 */
     public LibraryListPanel<T> withRowToggle(java.util.function.Predicate<T> isOn, Consumer<T> flip) {
         this.toggleOn = isOn;
@@ -145,9 +175,9 @@ public final class LibraryListPanel<T> {
     public T entryAtBody(double mx, double my) {
         if (list == null || ui.hasOverlay()) return null;
         int row = list.rowAt(my);
-        if (row < 0 || row >= entries.size() || !list.contains(mx, my)) return null;
+        if (row < 0 || row >= lines.size() || !list.contains(mx, my) || lines.get(row).isHeading()) return null;
         if (toggleOn != null && mx - list.x() >= listW - TOGGLE_ZONE) return null;
-        return entries.get(row);
+        return lines.get(row).item();
     }
 
     /** 行首图标列(条目自绘,如皮肤脸);行内容右移让位。 */
@@ -233,7 +263,7 @@ public final class LibraryListPanel<T> {
         emptyLabel = ui.add(new Label(t(emptyKey), Label.Role.SECONDARY));
         emptyLabel.setBounds(x, body + 2, w, 9);
 
-        list = ui.add(new ListView<T>(entries, ROW_H, this::renderRow, null)
+        list = ui.add(new ListView<Line<T>>(lines, ROW_H, this::renderRow, null)
                 .rowClick(this::rowClicked));
         list.setBounds(x, body, w, y + h - body);
         ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
@@ -262,11 +292,11 @@ public final class LibraryListPanel<T> {
     private void advanceRowToggleAnim(long nowMs) {
         long dt = lastAnimMs < 0 ? 16 : nowMs - lastAnimMs;
         lastAnimMs = nowMs;
-        if (animRow < 0 || animRow >= entries.size()) {
+        if (animRow < 0 || animRow >= lines.size() || lines.get(animRow).isHeading()) {
             animRow = -1;
             return;
         }
-        float target = toggleOn.test(entries.get(animRow)) ? 1f : 0f;
+        float target = toggleOn.test(lines.get(animRow).item()) ? 1f : 0f;
         float speed = Math.min(1f, dt / 16f * 0.35f);
         animKnob = com.dwinovo.numen.api.client.ui.Animation.lerpTo(animKnob, target, speed, 0.01f);
         if (Math.abs(animKnob - target) < 0.01f) animRow = -1;
@@ -281,8 +311,8 @@ public final class LibraryListPanel<T> {
             return !menu.isOpen() || ui.mouseClicked(mx, my, button);
         }
         int index = list.contains(mx, my) ? list.rowAt(my) : -1;
-        if (index < 0 || index >= entries.size()) return false;
-        List<PopupMenu.Item> items = menuItems(entries.get(index));
+        if (index < 0 || index >= lines.size() || lines.get(index).isHeading()) return false;
+        List<PopupMenu.Item> items = menuItems(lines.get(index).item());
         if (items.isEmpty()) return false;
         menuX = (int) mx;
         menuY = (int) my;
@@ -308,12 +338,30 @@ public final class LibraryListPanel<T> {
             seenVersion = version.getAsLong();
         }
         entries = source.get();
-        list.setItems(entries);
+        List<Line<T>> next = new ArrayList<>();
+        String group = null;
+        for (T e : entries) {
+            String now = groupOf == null ? null : groupOf.apply(e);
+            if (now != null && !now.equals(group)) {
+                next.add(new Line<>(null, now));
+            }
+            group = now;
+            next.add(new Line<>(e, null));
+        }
+        lines = next;
+        list.setItems(lines);
         emptyLabel.setVisible(entries.isEmpty());
     }
 
-    private void renderRow(IDrawSurface s, NumenTheme.Colors c, T e, int index,
+    private void renderRow(IDrawSurface s, NumenTheme.Colors c, Line<T> line, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
+        if (line.isHeading()) {
+            // 分组标题:淡字压在行的下沿,和下面第一条贴着
+            s.drawText(TextClip.fit(s, line.heading(), rw - 2 * ROW_INSET), rx + ROW_INSET, ry + rh - 12,
+                    c.textMuted(), false);
+            return;
+        }
+        T e = line.item();
         Row row = rowOf.apply(e);   // 行悬停底由 ListView 统一画(带淡入),这里只画内容
         int tx = rx + ROW_INSET;
         if (rowIcon != null) {
@@ -351,14 +399,14 @@ public final class LibraryListPanel<T> {
                 c.textPrimary(), false);
         s.drawText(TextClip.fit(s, row.meta(), textW), tx, ry + 15,
                 row.metaDanger() ? c.danger() : c.textSecondary(), false);
-        if (index < entries.size() - 1) {   // 行间细线从文字左缘起,最后一行下面不画
+        if (index < lines.size() - 1 && !lines.get(index + 1).isHeading()) {   // 行间细线从文字左缘起,最后一行与组尾不画
             s.fillRect(tx, ry + rh - 1, rx + rw - tx, 1, c.divider());
         }
     }
 
     private boolean rowClicked(int index, double xInRow) {
-        if (index < 0 || index >= entries.size()) return false;
-        T e = entries.get(index);
+        if (index < 0 || index >= lines.size() || lines.get(index).isHeading()) return false;
+        T e = lines.get(index).item();
         if (toggleOn != null && (onEdit == null || xInRow >= listW - TOGGLE_ZONE)) {
             // 点开关翻转;没有编辑的库(技能)整行都是开关——Telegram 设置里带开关的行点哪儿都翻
             animRow = index;                                  // 从翻转前的位置起步滑动
@@ -366,7 +414,7 @@ public final class LibraryListPanel<T> {
             toggleFlip.accept(e);
             return true;
         }
-        if (rowOf.apply(e).preset()) {   // 只读预设:点行 = 克隆成可编辑副本
+        if (rowOf.apply(e).preset()) {   // 只读行:点行 = 复制到我的
             if (onClone != null) clone(e);
             return true;
         }
@@ -378,11 +426,15 @@ public final class LibraryListPanel<T> {
     private List<PopupMenu.Item> menuItems(T e) {
         Row row = rowOf.apply(e);
         List<PopupMenu.Item> items = new ArrayList<>();
+        if (extraMenu != null) {
+            items.addAll(extraMenu.apply(e));
+            if (!items.isEmpty()) items.add(PopupMenu.SEPARATOR);
+        }
         if (onEdit != null && !row.preset()) {
             items.add(new PopupMenu.Item(Sprites.EDIT, t(ModLanguageData.Keys.EDIT_TITLE), false,
                     () -> onEdit.accept(e)));
         }
-        if (onClone != null) {
+        if (onClone != null && row.canClone()) {
             items.add(new PopupMenu.Item(Sprites.COPY, t("numen.menu.clone"), false, () -> clone(e)));
         }
         if (onBind != null && row.marked() != null) {

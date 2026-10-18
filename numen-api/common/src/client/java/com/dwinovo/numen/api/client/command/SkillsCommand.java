@@ -47,7 +47,7 @@ final class SkillsCommand implements PopupCommand {
         @Override
         public List<SelectPanel.Row> rows() {
             List<SelectPanel.Row> out = new ArrayList<>();
-            for (ServerLibraries.Skill skill : ServerLibraries.skills()) {
+            for (ServerLibraries.Skill skill : ServerLibraries.skillsEffective()) {
                 String desc = skill.description() == null || skill.description().isBlank()
                         ? "" : skill.description();
                 out.add(new SelectPanel.Row(skill.name(), desc, skill.enabled()));
@@ -60,13 +60,13 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public boolean activate(int index) {
-            List<ServerLibraries.Skill> all = ServerLibraries.skills();
+            List<ServerLibraries.Skill> all = ServerLibraries.skillsEffective();
             if (index < 0 || index >= all.size()) {
                 return false;   // 空库时那条占位行:按了也没有东西可开关
             }
             ServerLibraries.Skill skill = all.get(index);
             JsonObject body = new JsonObject();
-            body.addProperty("name", skill.name());
+            body.addProperty("id", skill.base().id());
             RemoteCompanions.library().request(Libraries.SKILL, skill.enabled() ? Libraries.DISABLE : Libraries.ENABLE, body);
             return true;
         }

@@ -30,7 +30,7 @@ public final class McpAuthPrompt {
         EXPECTING.removeIf(name -> {
             ServerLibraries.McpClientRow row = ServerLibraries.mcpClients().stream()
                     .filter(r -> r.name().equals(name)).findFirst().orElse(null);
-            if (row == null || !row.admin()) {
+            if (row == null || !row.full()) {
                 return true;
             }
             if (row.authUrl() != null) {

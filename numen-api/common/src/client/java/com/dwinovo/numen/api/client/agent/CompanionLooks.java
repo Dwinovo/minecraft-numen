@@ -51,16 +51,20 @@ public final class CompanionLooks {
     private static final String LEGACY_BINDING = "binding.json";
 
     private static Path root;
+    private static Path legacyRoot;
     private static final Map<UUID, Looks> LOOKS = new HashMap<>();
 
     private CompanionLooks() {}
 
     /**
-     * 安家的位置——{@code <config>/numen/}。由 loader 给,不问 {@code Minecraft}(datagen 里模组照样构造);测试传临时目录,
-     * 走的是同一条路。传 {@code null} 是放手。
+     * 安家的位置——这台电脑的目录({@code <config>/numen/client/})。由 loader 给,不问 {@code Minecraft}(datagen 里模组照样构造);
+     * 测试传临时目录,走的是同一条路。传 {@code null} 是放手。
+     *
+     * @param legacy 旧的 {@code <config>/numen/}:第一次读不到 {@code looks.json} 时,旧的同伴绑定在它的 {@code companions/} 下
      */
-    public static void init(Path numenConfigRoot) {
-        root = numenConfigRoot;
+    public static void init(Path clientDir, Path legacy) {
+        root = clientDir;
+        legacyRoot = legacy;
         LOOKS.clear();
         if (root == null) {
             return;
@@ -120,7 +124,7 @@ public final class CompanionLooks {
     }
 
     private static void seedFromLegacy() {
-        Path legacy = root.resolve(LEGACY_DIR);
+        Path legacy = legacyRoot.resolve(LEGACY_DIR);
         if (!Files.isDirectory(legacy)) {
             return;
         }

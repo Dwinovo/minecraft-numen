@@ -38,7 +38,7 @@ class RemoteLibraryTest {
 
         library.ask("provider");
         library.put("provider", entry);
-        library.delete("provider", "p1");
+        library.delete("provider", "p1", false);
 
         assertEquals(List.of(new LibraryRequestPayload("provider", "list", "{}"),
                 new LibraryRequestPayload("provider", "put", "{\"name\":\"乙\"}"),
@@ -51,7 +51,7 @@ class RemoteLibraryTest {
         library.onPayload(new LibraryPayload("provider",
                 "[{\"id\":\"p1\",\"name\":\"甲\"},{\"id\":\"p2\",\"name\":\"乙\"}]", ""));
 
-        library.delete("provider", "p1");
+        library.delete("provider", "p1", false);
 
         assertEquals(1, library.entries("provider").size(), "删了的先画成办成,不等一个来回");
         assertEquals("p2", library.entries("provider").get(0).getAsJsonObject().get("id").getAsString());
@@ -60,6 +60,22 @@ class RemoteLibraryTest {
         assertEquals(1, library.entries("provider").size());
         assertEquals("p1", library.entries("provider").get(0).getAsJsonObject().get("id").getAsString(),
                 "服务端没办成就推回真表,以真表为准");
+    }
+
+    @Test
+    void aBuiltinAndAMineRowOfTheSameNameAreTwoRowsAndDeletingOneKeepsTheOther() {
+        library.onPayload(new LibraryPayload("persona",
+                "[{\"id\":\"numen:小焰\",\"group\":\"builtin\"},{\"id\":\"numen:小焰\",\"group\":\"mine\"}]", ""));
+
+        library.delete("persona", "numen:小焰", false);
+
+        assertEquals(1, library.entries("persona").size());
+        assertEquals("builtin", library.entries("persona").get(0).getAsJsonObject().get("group").getAsString());
+        assertEquals(new LibraryRequestPayload("persona", "delete", "{\"id\":\"numen:小焰\"}"), sent.get(0));
+
+        library.delete("persona", "numen:小焰", true);
+        assertEquals(0, library.entries("persona").size());
+        assertEquals("{\"id\":\"numen:小焰\",\"group\":\"builtin\"}", sent.get(1).json(), "删内置的带上组");
     }
 
     @Test
@@ -74,7 +90,7 @@ class RemoteLibraryTest {
         library.ask("provider");
         assertEquals(told, library.version("provider"), "读与发请求都不动版本");
 
-        library.delete("provider", "p1");
+        library.delete("provider", "p1", false);
         assertEquals(true, library.version("provider") != told, "删了的行先画掉也算变");
     }
 }

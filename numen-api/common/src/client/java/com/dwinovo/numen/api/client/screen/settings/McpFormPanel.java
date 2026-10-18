@@ -22,26 +22,30 @@ import com.dwinovo.numen.api.data.ModLanguageData;
 
 public final class McpFormPanel {
 
-    /** 表单草稿;{@code editOriginal} 非空 = 编辑替换该名字的条目。 */
+    /** 表单草稿。 */
     public static final class Draft {
-        public String editOriginal;
         public boolean stdio;
         public String name = "";
         public String target = "";
         public String extra = "";
+        /** 这台服务器用钥匙串里哪个服务的 key(作为 Bearer 带上);空 = 不带。 */
+        public String service = "";
     }
 
     private final UiRoot ui = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
+    /** stdio 类起的是服务器机器上的进程,只有管理员能加:不是管理员就没有类型这一行。 */
+    private final boolean allowStdio;
 
     private Draft draft = new Draft();
     private TextField nameField, targetField;
     private int formX, formY, formW, formH;
 
-    public McpFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
+    public McpFormPanel(Consumer<Draft> onSave, Runnable onCancel, boolean allowStdio) {
         this.onSave = onSave;
         this.onCancel = onCancel;
+        this.allowStdio = allowStdio;
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -69,12 +73,14 @@ public final class McpFormPanel {
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
-        // 类型行:自标注按钮循环 http ↔ stdio(草稿字段全保,行标签/占位符随切换)。
-        Button typeBtn = ui.add(new Button(
-                t(draft.stdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
-                Button.Style.NORMAL, this::onTypeToggle));
-        typeBtn.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.CONTROL_H + 5;   // 钮的底边下面留一道缝,下一行的标签才不压在钮上
+        // 类型行:自标注按钮循环 http ↔ stdio(草稿字段全保,行标签/占位符随切换);只有管理员能选 stdio。
+        if (allowStdio) {
+            Button typeBtn = ui.add(new Button(
+                    t(draft.stdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
+                    Button.Style.NORMAL, this::onTypeToggle));
+            typeBtn.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+            ry += NumenStyle.CONTROL_H + 5;   // 钮的底边下面留一道缝,下一行的标签才不压在钮上
+        }
 
         ry = label(x, ry, draft.stdio ? "numen.mcp.form_command" : "numen.mcp.form_url");
         targetField = ui.add(new TextField(draft.target, v -> draft.target = v)
@@ -87,6 +93,13 @@ public final class McpFormPanel {
         TextField extraField = ui.add(new TextField(draft.extra, v -> draft.extra = v)
                 .placeholder(draft.stdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>"));
         extraField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
+
+        // 第五行:要带 key 的服务器写它用钥匙串里哪个服务的 key(key 本身在 设置 → 模型配置 的钥匙串里存,不写在这里)
+        ry = label(x, ry, "numen.mcp.form_service");
+        TextField serviceField = ui.add(new TextField(draft.service, v -> draft.service = v)
+                .placeholder("kfc"));
+        serviceField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
 
         DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
     }
