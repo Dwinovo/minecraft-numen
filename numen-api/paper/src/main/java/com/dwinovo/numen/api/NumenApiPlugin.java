@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.platform.PaperPermissions;
 import com.dwinovo.numen.api.platform.PluginJars;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import net.kyori.adventure.translation.GlobalTranslator;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -24,6 +25,11 @@ public final class NumenApiPlugin extends JavaPlugin {
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> PaperCommands.register(event.registrar()));
 
         CommonClass.init();
+
+        // 翻译源在服务器起好之后才登记:语言表按语言缓存,要等所有带 Numen 内容的插件都启用了才读,免得缓存里缺它们的键
+        NumenTranslator translator = new NumenTranslator();
+        ServerLifecycle.onStarted(server -> GlobalTranslator.translator().addSource(translator));
+        ServerLifecycle.onStopped(() -> GlobalTranslator.translator().removeSource(translator));
         Constants.LOG.info("Numen API initialised on Paper.");
     }
 
