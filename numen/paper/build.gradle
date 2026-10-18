@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-common'
     id 'numen-paper'
@@ -18,10 +20,7 @@ dependencies {
     // Numen 是 Numen API 的插件:编译期只看得见瘦 api jar 里公开的那部分,取 Paper 那一份(Numen 就跑在它上面),
     // 运行时完整的类由 numen_api 插件提供,不随 Numen 发。
     compileOnly files(project(':numen-api:paper').tasks.named('apiJar'))
-    compileOnly project(':ai')
-    compileOnly project(':script')
-    compileOnly project(':agent')
-    compileOnly project(':permission')
+    (Modules.PLUGIN_VISIBLE - Modules.CLIENT).each { compileOnly project(it) }
 }
 
 tasks.named('compileJava', JavaCompile) {

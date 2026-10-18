@@ -1,3 +1,5 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-api-common'
     id 'numen-paper'
@@ -10,15 +12,13 @@ plugins {
 // Paper 1.20.5+ 的服务端本身就是 Mojang 名,成品不再重映射(MOJANG_PRODUCTION),Paper 加载时也不重映射。
 paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
 
-def pureModules = [':store', ':ai', ':script', ':agent', ':permission', ':lua']
-
 dependencies {
     paperweight.paperDevBundle(paper_dev_bundle)
-    pureModules.each { compileOnly project(it) }
+    Modules.SERVER.each { compileOnly project(it) }
 }
 
 tasks.named('jar', Jar) {
-    pureModules.each { path -> from({ project(path).sourceSets.main.output }) }
+    Modules.SERVER.each { path -> from({ project(path).sourceSets.main.output }) }
     // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
     from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
 }
