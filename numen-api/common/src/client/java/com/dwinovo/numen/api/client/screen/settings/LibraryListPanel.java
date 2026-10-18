@@ -228,7 +228,7 @@ public final class LibraryListPanel<T> {
                 .rowClick(this::rowClicked));
         list.setBounds(x, body, w, y + h - body);
         ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
-        refresh();
+        show(source.get());
         list.scrollBy(keepScroll);   // 重建(换主题/改窗口)不丢滚动位
     }
 
@@ -239,6 +239,7 @@ public final class LibraryListPanel<T> {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
         if (list == null) return;
+        refresh();   // 服务端推来了新表,这一帧就跟上
         advanceRowToggleAnim(nowMs);
         // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
         boolean menuUp = menu.isOpen();
@@ -290,8 +291,16 @@ public final class LibraryListPanel<T> {
 
     // ---- 内部 ----
 
+    /** 条目集变了才换进列表(换了会动滚动位):动作之后与每一帧都问,所以表一变这一行就跟着变。 */
     private void refresh() {
-        entries = source.get();
+        List<T> now = source.get();
+        if (!now.equals(entries)) {
+            show(now);
+        }
+    }
+
+    private void show(List<T> now) {
+        entries = now;
         list.setItems(entries);
         emptyLabel.setVisible(entries.isEmpty());
     }
