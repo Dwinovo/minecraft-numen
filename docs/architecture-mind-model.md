@@ -254,7 +254,7 @@ interface Reflex {
 **对象组与属性。** 规则判的是"这东西是谁的"。方块恰好属于六类之一,按次序判、判出来就停:`self`(放置记录:她放的)、
 `owner`(放置记录:主人或主人名下别的同伴放的)、`other`(别的玩家或别人名下同伴放的)、`structure`(世界生成时记下的结构件范围,
 `structure(#minecraft:village)` 按结构类型分)、`nature`(种类在数据标签 `numen:natural` 里;树叶要不持久,原木要连着不持久的树叶)、
-`unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/permission.json` 改)。实体用 `self`、`owner`、`other`、`nature`,
+`unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/server/server.json` 的 `unknownAsOther` 改)。实体用 `self`、`owner`、`other`、`nature`,
 认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性:`block_entity`、`contents`(只在主线程读;搜索线程按"有")、
 `named`、`villager`、`hostile`、`hazard_item`、`near(<组>)`。组与属性的名字登记在规则核心的 `Vocabulary`,判断在 `Groups`。
 

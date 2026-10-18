@@ -330,7 +330,7 @@ deny place(hazard_item & near(other))
 - **命中账在主人的存档里。** 硬规则、出厂层、主人层三处的账都记在这位主人的 `PermissionStore`,按"层名 | 表 | 规则原文"认。
   规则本身随模组发、不进存档,账只能跟着主人走。只有真动手前的那一问(`Gate.judgeLive`)记账,规划时逐格定价的 `judge` 不记;
   模式、任务期授权、没有规则覆盖定下的答复不是哪一行规则定的,也不记。`Verdict` 因此带上定下答复的规则与它所在的层。
-- **服主的两个开关在 `config/numen/permission.json`。** `hard_rules`(默认开)与 `unknown_as_other`(专用服默认开,单机与局域网默认关)。
+- **服主的两个开关在服务器设置 `config/numen/server/server.json`。** `hardRules`(默认开)与 `unknownAsOther`(专用服默认开,单机与局域网默认关)。
   专用服上文件不存在时写出一份默认的;读不懂的文件记错误日志、取默认。
 - **她加 `allow`、删行的征询卡是命令项。** 卡上写成她没法自己跑的那条命令(`/numen permission rules add allow …`、
   `/numen permission rules remove <表> <序号>`),主人看得懂也能自己敲;不提供"允许并记住",她不能给自己发许可。
