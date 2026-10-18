@@ -48,7 +48,7 @@ class LlmMindTest {
         Files.writeString(dir.resolve("server/server.json"), "{\"dailyTokenLimit\":" + dailyLimit + "}");
         ownerKeys = new Keychain(new Home(dir.resolve("players/a"), io));
         serverKeys = new Keychain(new Home(dir.resolve("server"), io));
-        quota = new ServerKeyQuota(new ServerSettings(new Home(dir.resolve("server"), io)),
+        quota = new ServerKeyQuota(new ServerSettings(new Home(dir.resolve("server"), io), false),
                 new Home(dir.resolve("server"), io), () -> LocalDate.of(2026, 10, 18));
         ProviderLibrary providers = new ProviderLibrary(LibraryHub.headless(dir).library(ProviderLibrary.KIND, OWNER),
                 new Keys(ownerKeys, serverKeys), new ModelCatalog(dir.resolve("cache.json"), () -> ""));

@@ -95,7 +95,7 @@ class KeysTest {
     private ServerKeyQuota quota(long limit, AtomicReference<LocalDate> today) throws IOException {
         Files.createDirectories(dir.resolve("server"));
         Files.writeString(dir.resolve("server/server.json"), "{\"v\":1,\"dailyTokenLimit\":" + limit + "}");
-        return new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
+        return new ServerKeyQuota(new ServerSettings(home("server"), false), home("server"), today::get);
     }
 
     @Test
@@ -131,17 +131,17 @@ class KeysTest {
         AtomicReference<LocalDate> today = new AtomicReference<>(LocalDate.of(2026, 10, 18));
         quota(1000, today).charge(HER_OWNER, 700);
 
-        ServerKeyQuota restarted = new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
+        ServerKeyQuota restarted = new ServerKeyQuota(new ServerSettings(home("server"), false), home("server"), today::get);
         assertEquals(700, restarted.used(HER_OWNER));
 
         today.set(LocalDate.of(2026, 10, 19));
-        ServerKeyQuota nextDay = new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
+        ServerKeyQuota nextDay = new ServerKeyQuota(new ServerSettings(home("server"), false), home("server"), today::get);
         assertEquals(0, nextDay.used(HER_OWNER));
     }
 
     @Test
     void theServerSettingsFileIsWrittenWithTheDefaultsForTheAdminToFindAndEditAndReread() throws IOException {
-        ServerSettings settings = new ServerSettings(home("server"));
+        ServerSettings settings = new ServerSettings(home("server"), false);
 
         assertEquals(0, settings.dailyTokenLimit(), "缺省不限");
         assertTrue(Files.readString(dir.resolve("server/server.json")).contains("dailyTokenLimit"));
