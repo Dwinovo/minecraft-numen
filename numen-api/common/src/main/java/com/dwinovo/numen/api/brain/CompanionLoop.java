@@ -91,7 +91,7 @@ public final class CompanionLoop {
      * @param body        她此刻的身体;没加载是 {@code null}
      * @param snapshot    她的身体状态,给 {@code <runtime_state>};没有是 {@code null}
      * @param dead        她现在是不是死着(重进世界时按状态恢复死亡停牌)
-     * @param ownerOnline 主人在不在线
+     * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
      * @param initiative  主动性档位 1~10
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}

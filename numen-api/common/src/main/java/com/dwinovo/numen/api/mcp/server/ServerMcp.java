@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.api.brain.OwnerPresence;
 import com.dwinovo.numen.api.home.Homes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -26,6 +27,7 @@ public final class ServerMcp {
                     @Override
                     public void gone(UUID owner) {
                         tell(server, owner, "numen.brain.quiet_fallback");
+                        OwnerPresence.brainGone(server, owner);
                     }
                 });
     }

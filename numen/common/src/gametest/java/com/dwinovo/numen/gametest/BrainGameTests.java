@@ -450,61 +450,6 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 一个 MCP 客户端:进程内 HTTP,带令牌接入、带会话号调用。 */
-    private static final class McpClient {
-        private final int port;
-        private final String secret;
-        private String session;
-
-        McpClient(int port, String secret) {
-            this.port = port;
-            this.secret = secret;
-        }
-
-        private java.net.http.HttpResponse<String> post(JsonObject req) throws Exception {
-            var builder = java.net.http.HttpRequest
-                    .newBuilder(java.net.URI.create("http://127.0.0.1:" + port + "/mcp"))
-                    .header("Authorization", "Bearer " + secret)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json, text/event-stream");
-            if (session != null) {
-                builder.header("Mcp-Session-Id", session);
-            }
-            return java.net.http.HttpClient.newHttpClient().send(
-                    builder.POST(java.net.http.HttpRequest.BodyPublishers.ofString(req.toString())).build(),
-                    java.net.http.HttpResponse.BodyHandlers.ofString());
-        }
-
-        private static JsonObject rpc(String method, JsonObject params) {
-            JsonObject req = new JsonObject();
-            req.addProperty("jsonrpc", "2.0");
-            req.addProperty("id", 1);
-            req.addProperty("method", method);
-            req.add("params", params);
-            return req;
-        }
-
-        /** initialize:拿会话号。 */
-        void connect() throws Exception {
-            JsonObject params = new JsonObject();
-            params.addProperty("protocolVersion", "2025-06-18");
-            params.add("capabilities", new JsonObject());
-            var response = post(rpc("initialize", params));
-            session = response.headers().firstValue("Mcp-Session-Id")
-                    .orElseThrow(() -> new IllegalStateException("no session: " + response.statusCode()));
-        }
-
-        /** 一次 tools/call,返回回执的第一段文本。 */
-        String call(String tool, JsonObject args) throws Exception {
-            JsonObject params = new JsonObject();
-            params.addProperty("name", tool);
-            params.add("arguments", args);
-            return com.google.gson.JsonParser.parseString(post(rpc("tools/call", params)).body()).getAsJsonObject()
-                    .getAsJsonObject("result").getAsJsonArray("content").get(0).getAsJsonObject().get("text")
-                    .getAsString();
-        }
-    }
-
     private static int indexOf(List<ConvoState.Msg> messages, java.util.function.Predicate<ConvoState.Msg> match) {
         for (int i = 0; i < messages.size(); i++) {
             if (match.test(messages.get(i))) {
@@ -539,7 +484,7 @@ public class BrainGameTests {
         McpMode mcp = McpMode.instance();
         helper.assertTrue(mcp.applySettings(McpConfig.LOOPBACK, port, 30, List.of()) && mcp.setEnabled(true),
                 "the endpoint did not start: " + mcp.lastError());
-        McpClient client = new McpClient(port, mcp.tokens().issue(her.companion.getOwnerUuid(),
+        McpTestClient client = new McpTestClient(port, mcp.tokens().issue(her.companion.getOwnerUuid(),
                 McpToken.Role.BRAIN, McpToken.Scope.ALL, "gametest", 0).secret());
         List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();

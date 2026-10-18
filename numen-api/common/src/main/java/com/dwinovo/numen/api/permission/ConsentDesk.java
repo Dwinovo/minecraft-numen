@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.brain.OwnerPresence;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.network.NumenNetwork;
@@ -305,7 +306,7 @@ public final class ConsentDesk {
 
         @Override
         public boolean ownerPresent() {
-            return body.resolveOwnerPlayer() != null;
+            return OwnerPresence.present(body.getServer(), body.getOwnerUuid());
         }
 
         @Override

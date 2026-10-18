@@ -39,7 +39,7 @@ public final class CompanionBrains {
      * @param home        她的家(产品是世界里的 {@code companions/<uuid>/})
      * @param mind        怎么跟模型说话
      * @param link        主人那一头:事件推给谁、没有客户端时她的话怎么告诉他
-     * @param ownerOnline 主人在不在线
+     * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
      */
     public static CompanionLoop create(MinecraftServer server, UUID companion, UUID owner, Home home, Mind mind,
@@ -100,7 +100,7 @@ public final class CompanionBrains {
         migrateLegacy(server, companion, owner, homes);
         CompanionLoop loop = create(server, companion, owner, homes.companion(companion),
                 new LlmMind(ProviderLibrary.instance()), Replies.link(server, owner),
-                () -> server.getPlayerList().getPlayer(owner) != null,
+                () -> OwnerPresence.present(server, owner),
                 () -> com.dwinovo.numen.api.mcp.server.McpMode.instance().driving(owner, companion));
         return loop;
     }

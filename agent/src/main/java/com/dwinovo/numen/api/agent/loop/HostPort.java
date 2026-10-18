@@ -16,8 +16,8 @@ public interface HostPort {
     boolean externallyDriven();
 
     /**
-     * 主人在线。不在线时内脑待命({@link Hold#AWAY}):输入照收进收件箱,等他回来再处理。现算,不存。缺省恒在线——
-     * 主人本来就在身边的宿主(评测)不用管。
+     * 主人在场:人在游戏里,或他的外部大脑连着——怎么算是宿主的事,只在宿主那一处。不在场时内脑待命({@link Hold#AWAY}):
+     * 输入照收进收件箱,等他回来再处理。现算,不存。缺省恒在场——主人本来就在身边的宿主(评测)不用管。
      */
     default boolean ownerPresent() {
         return true;
