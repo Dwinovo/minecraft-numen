@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
+import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -224,6 +225,9 @@ public final class NumenCommands {
     /** {@code /numen debug}:翻转调试模式,主人的客户端聊天 UI 切到不过滤直出。 */
     private static int toggleDebugText(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        if (needsClient(ctx, caller)) {
+            return 0;
+        }
         boolean on = DEBUG_TEXT.add(caller.getUUID());
         if (!on) {
             DEBUG_TEXT.remove(caller.getUUID());
@@ -246,8 +250,20 @@ public final class NumenCommands {
                                     ClientUiActionPayload.Action action)
             throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        if (needsClient(ctx, caller)) {
+            return 0;
+        }
         NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(action));
         return 1;
+    }
+
+    /** 这条指令作用在调用者自己的客户端上:他没装(原版客户端)就说一声,不是悄悄什么都没发生。 */
+    private static boolean needsClient(CommandContext<CommandSourceStack> ctx, ServerPlayer caller) {
+        if (Presence.hasClient(caller.getUUID())) {
+            return false;
+        }
+        ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NEEDS_CLIENT));
+        return true;
     }
 
     // ==================== 权限:模式 ====================

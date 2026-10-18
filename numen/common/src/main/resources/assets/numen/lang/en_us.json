@@ -1,6 +1,7 @@
 {
   "numen.debug.path_on": "Path debug on: the routes companions are walking are drawn in the world",
   "numen.debug.path_off": "Path debug off",
+  "numen.debug.path_needs_client": "Path debug is drawn by the Numen client, and yours does not have it",
   "numen.activity.dig_all": "Digging %1$s, %2$s dug",
   "numen.activity.dig": "Digging %1$s %2$s/%3$s",
   "numen.activity.move_at": "Walking to %s",

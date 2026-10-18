@@ -79,13 +79,20 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
         PacketDistributor.sendToPlayer(player, payload);
     }
 
+    @Override
+    public boolean canSend(ServerPlayer player, CustomPacketPayload.Type<?> type) {
+        return player.connection.hasChannel(type);
+    }
+
     /**
      * Apply every buffered registration against the live registrar. Called
      * exactly once per mod load from the {@code RegisterPayloadHandlersEvent}
      * subscriber in {@code NumenMod}.
      */
     public void flushPending(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        // 全部可选:协商时服务端有而客户端没有的可选频道不算缺——原版客户端(与没装我们的 NeoForge 客户端)才进得来。
+        // 谁装着我们的客户端由它报到(Presence)说了算,发包前问 canSend。
+        PayloadRegistrar registrar = event.registrar("1").optional();
         PayloadRegistrar onNetwork = registrar.executesOn(HandlerThread.NETWORK);
         for (C2SRegistration<?> r : pendingC2S) {
             applyC2S(r.execution() == Execution.NETWORK ? onNetwork : registrar, r);

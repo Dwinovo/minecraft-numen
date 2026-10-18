@@ -359,6 +359,7 @@ public final class ModLanguageData {
         public static final String COMMAND_CONSENT_ANSWERED  = "numen.command.consent_answered";
         public static final String COMMAND_CONSENT_NOT_OWNER = "numen.command.consent_not_owner";
         public static final String COMMAND_CONSENT_NOT_PENDING = "numen.command.consent_not_pending";
+        public static final String COMMAND_NEEDS_CLIENT      = "numen.command.needs_client";
         public static final String DEBUG_ON          = "numen.debug.on";
         public static final String DEBUG_OFF         = "numen.debug.off";
 
@@ -958,6 +959,7 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "Answered consent request #%s for %s: %s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "Consent request #%s belongs to a companion that is not yours");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "No pending consent request #%s (already answered, expired or replaced)");
+        adder.add(Keys.COMMAND_NEEDS_CLIENT,      "This needs the Numen client, and yours does not have it");
         adder.add(Keys.DEBUG_ON,          "Debug mode on: UI text shown unfiltered");
         adder.add(Keys.DEBUG_OFF,         "Debug mode off");
         adder.add(Keys.LOOP_GONE, "She is gone");
@@ -1554,6 +1556,7 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "已答复征询 #%s(%s):%s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "征询 #%s 属于别人的同伴");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "没有待答复的征询 #%s(已答复、过期或被顶掉)");
+        adder.add(Keys.COMMAND_NEEDS_CLIENT,      "这条要装了 Numen 客户端才用得上,你这边没装");
         adder.add(Keys.DEBUG_ON,          "调试模式已开:UI 文本不过滤直出");
         adder.add(Keys.DEBUG_OFF,         "调试模式已关");
         adder.add(Keys.LOOP_GONE, "她已经不在了");

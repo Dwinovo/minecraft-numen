@@ -14,6 +14,7 @@ public final class NumenGameTestSuite implements GameTestSuite {
                 BrainGameTests.class,
                 BuildGameTests.class,
                 CellRouteGameTests.class,
+                ClientlessGameTests.class,
                 CollectGameTests.class,
                 CombatGameTests.class,
                 CommandGameTests.class,

@@ -171,7 +171,7 @@ final class Attempt {
         scenario.arena().build(level, origin);
         GameProfile ownerProfile = new GameProfile(UUID.randomUUID(), OWNER_NAME);
         owner = new ServerPlayer(server, level, ownerProfile, ClientInformation.createDefault());
-        ownerLine = new OwnerLine();
+        ownerLine = new OwnerLine(true);
         server.getPlayerList().placeNewPlayer(ownerLine, owner, CommonListenerCookie.createInitial(ownerProfile, false));
         Vec3 ownerAt = standOn(scenario.ownerAt());
         owner.teleportTo(level, ownerAt.x, ownerAt.y, ownerAt.z, 0, 0);
