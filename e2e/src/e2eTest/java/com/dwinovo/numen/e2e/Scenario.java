@@ -62,9 +62,10 @@ abstract class Scenario {
     /** 主人召唤她,绑上假模型的档案,等服务端回话召唤成了、绑定成了。 */
     void summon(Bot owner, String her) {
         int mark = owner.mark();
+        // 先记下再等回话:等不到回话的场景收场时也要把她遣散,否则同名的她留在服务端,拖累后面的场景
+        companions.add(new Companion(owner, her));
         owner.command("numen player summon " + her);
         owner.await(mark, m -> m.text().contains(her) && (m.text().contains("Summoned") || m.text().contains("召唤了")), WAIT, "召唤的回话");
-        companions.add(new Companion(owner, her));
         mark = owner.mark();
         owner.command("numen companion " + her + " profile " + SPEC.modelProfile());
         owner.await(mark, m -> m.text().contains(SPEC.modelProfile()), WAIT, "绑定档案的回话");
