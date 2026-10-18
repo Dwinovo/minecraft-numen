@@ -79,6 +79,10 @@ public final class NumenEvents {
     /**
      * 她达成了一个进度,奖励进了她的身上。不急:东西已经在她背包里,她下次开口自然带上。{@code change} 是同一刻里她背包与经验实际的变化
      * ({@code Belongings}),不是从进度配置推算的——战利品表每次抽的不一样。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code PlayerAdvancementsRewardMixin} 包住 {@code PlayerAdvancements.award} 调;Paper 上由
+     * {@code PlayerAdvancementDoneEvent} 调(它在发奖励之前触发,所以平台要在事件里拍背包与经验的快照,下一刻再比)。
+     * 调用方保证:主线程,奖励已经发到她身上,{@code change} 非空(没变的不调),{@code title} 是进度的显示名(没有就用 id)。
      */
     public static void advancementReward(NumenPlayer companion, String id, String title, String change) {
         emit(companion, EventTypes.ADVANCEMENT_REWARD, Map.of("id", id),

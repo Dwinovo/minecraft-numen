@@ -73,7 +73,10 @@ public final class Drops {
     public record Record(String item, int count, Fate fate, BlockPos pos, String by, String cause, boolean fire,
                          Integer id) {}
 
-    // ---- 认领:原版的几处挂点交来(都在服务端主线程) ----
+    // ---- 认领:平台挂点(都在服务端主线程) ----
+    // 下面六个入口是平台挂点:平台把"这一挖的掉落物发生了什么"告诉这里,common 不知道是谁在调。
+    // 调用方保证:都在服务端主线程;breakStarts/breakEnds 成对嵌套(destroyBlock 里可再触发 destroyBlock),
+    // breakEnds 在 breakStarts 之后无论挖成没成都要调;其余四个对世界里每一次真实发生的事各调一次,不认识的实体 Drops 自己会忽略。
 
     /** 正在挖掉一格的玩家,按 destroyBlock 的嵌套。 */
     private static final Deque<ServerPlayer> BREAKING = new ArrayDeque<>();
@@ -82,17 +85,25 @@ public final class Drops {
     /** 记着账、还没落定的掉落物。 */
     private static final Map<ItemEntity, Track> TRACKED = new IdentityHashMap<>();
 
-    /** {@code destroyBlock} 开始:{@code player} 的手正在挖掉一格。 */
+    /**
+     * {@code destroyBlock} 开始:{@code player} 的手正在挖掉一格。<b>平台挂点。</b>模组上由 {@code ServerPlayerGameModeDropsMixin}
+     * 包住 {@code ServerPlayerGameMode.destroyBlock} 调;Paper 上由 {@code BlockDropItemEvent}(它在 {@code destroyBlock} 里触发,
+     * 带这一挖生成的全部掉落物)给出同一段起止。调用方保证:在这一挖生成任何掉落物之前调,每次对应一次 {@link #breakEnds}。
+     */
     public static void breakStarts(ServerPlayer player) {
         BREAKING.push(player);
     }
 
-    /** {@code destroyBlock} 结束。 */
+    /** {@code destroyBlock} 结束(成败都调)。<b>平台挂点</b>,与 {@link #breakStarts} 同一处调,见那里。 */
     public static void breakEnds() {
         BREAKING.pop();
     }
 
-    /** 一只实体进了世界:正挖着一格、开着账的那具身体,掉落物记进她的账。 */
+    /**
+     * 一只实体进了世界:正挖着一格、开着账的那具身体,掉落物记进她的账。<b>平台挂点。</b>模组上由 {@code ServerLevelDropsMixin}
+     * 在 {@code ServerLevel.addFreshEntity} 真把实体放进世界时调;Paper 上由 {@code BlockDropItemEvent} 把这一挖的每件掉落物交来。
+     * 调用方保证:实体已经进了世界(不是被取消的),且在 {@link #breakStarts}/{@link #breakEnds} 之间。
+     */
     public static void added(Entity entity) {
         if (entity instanceof ItemEntity item && !BREAKING.isEmpty()) {
             Drops drops = OPEN.get(BREAKING.peek());
@@ -102,7 +113,11 @@ public final class Drops {
         }
     }
 
-    /** 原版一次捡:{@code taker} 正把 {@code entity} 收进去,件数随后从那一堆里少掉。 */
+    /**
+     * 原版一次捡:{@code taker} 正把 {@code entity} 收进去,件数随后从那一堆里少掉。<b>平台挂点。</b>模组上由
+     * {@code LivingEntityTakeMixin} 在 {@code LivingEntity.take} 调;Paper 上由 {@code EntityPickupItemEvent} 调。
+     * 调用方保证:在件数被减掉之前调,{@code taker} 是真正收下它的实体。
+     */
     public static void taken(Entity entity, LivingEntity taker) {
         Track track = TRACKED.get(entity);
         if (track != null) {
@@ -110,7 +125,11 @@ public final class Drops {
         }
     }
 
-    /** 并堆:{@code from} 那一堆里 {@code moved} 件并进了 {@code into},记着账的件数跟过去。 */
+    /**
+     * 并堆:{@code from} 那一堆里 {@code moved} 件并进了 {@code into},记着账的件数跟过去。<b>平台挂点。</b>模组上由
+     * {@code ItemEntityDropsMixin} 在 {@code ItemEntity.merge} 调;Paper 上由 {@code ItemMergeEvent} 调。
+     * 调用方保证:并堆刚刚发生(不是被取消的),{@code moved} 是并过去的件数。
+     */
     public static void merged(ItemEntity into, ItemEntity from, int moved) {
         Track source = TRACKED.get(from);
         Track target = TRACKED.get(into);
@@ -130,7 +149,11 @@ public final class Drops {
         }
     }
 
-    /** 掉落物挨了一下打;打没了就记下是什么打的。 */
+    /**
+     * 掉落物挨了一下打;打没了就记下是什么打的。<b>平台挂点。</b>模组上由 {@code ItemEntityDropsMixin} 在 {@code ItemEntity.hurt}
+     * 之后调;Paper 上由 {@code EntityDamageEvent} 加 {@code EntityRemoveEvent} 拼出。调用方保证:在这一下打完之后调,
+     * 这样 {@code item.isRemoved()} 已经反映它是不是被打没了。
+     */
     public static void hurt(ItemEntity item, DamageSource source) {
         Track track = TRACKED.get(item);
         if (track != null && item.isRemoved()) {
