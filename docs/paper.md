@@ -89,11 +89,22 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 身体照旧经 `PlayerList.placeNewPlayer` 加入(Carpet 与插件形态的假人都这么做),所以她出现在玩家列表里,会触发 `PlayerJoinEvent`,别的插件把她当玩家处理。
 这和 FTB 联动时定的立场一致:她是真玩家。由此要定的几件事:
 
-- **区块**:Paper 的区块系统(Moonrise)按 `isRealPlayer` 把她当成观察者,给她加载区块并编区块包。她不该是观察者,要退出玩家区块加载;有界加载仍由 `CompanionChunkLoader` 的区域票管。
-- **被踢**:Paper 上 `/kick`、空闲超时、登录插件超时都会立即移除她的身体。身体没了必须如实告诉她和主人(知情权),不能悄悄重建。
-- **登录事件与权限**:`placeNewPlayer` 不触发 `AsyncPlayerPreLoginEvent`/`PlayerLoginEvent`,LuckPerms 这类插件靠它们装载用户。她的指令权限等于主人的,
-  Paper 上权限是节点不是 op 等级,要定"她的权限检查怎么落到主人身上"。
-- **击退**:原版由客户端应用发给自己的速度包,她没有客户端;`FakeClient` 接住发给她自己的速度包,下一刻应用。
+- **区块**:Paper 的区块系统(Moonrise)按 `isRealPlayer` 把她当成观察者,给她加载 9×9 并编区块包。召唤后把她从玩家区块加载里摘掉
+  (`removePlayer` 后再 `setRealPlayer(false)`,顺序不能反;或在 `PlayerSpawnLocationEvent` 里提前置 false,连初始的包也不发),有界加载仍由 `CompanionChunkLoader`
+  的区域票管(Moonrise 重复加票整张替换、超时重置,续票成立)。实测摘掉后区块包为 0,3×3 实体刻,移动、碰撞、跨区块、换维度、被别人看见都正常。
+  **刷怪不同**:Paper 的刷怪与随机刻认"附近有没有非旁观者玩家",与观察者无关,所以她周围照常刷怪;模组上 `ChunkMapCompanionMixin` 让她不触发刷怪。两边哪种对,留给用户定,定了以后两边做成一样。
+- **被踢 = 被服主请出去**:Paper 上 `/kick` 与插件踢人当场移除身体(先 `PlayerKickEvent`,再 `PlayerQuitEvent`);空闲超时与保活超时碰不到她(检查在假连接不跑的 `tick` 里)。
+  模组上今天踢她什么也不发生(假连接把断开吞了)。两边统一:被踢就是身体被移除,和主人下线的收拾走同一条路,如实告诉她和主人是谁、为什么踢的,不重建;主人可以再召唤。
+  common 有一个入口"身体被外部移除(原因)",模组从断开的那一处调它,Paper 从 `PlayerKickEvent`/`PlayerQuitEvent` 调它。
+- **登录事件**:`placeNewPlayer` 不触发 `AsyncPlayerPreLoginEvent`/`PlayerLoginEvent`,LuckPerms 因此不装载她。Paper 上召唤时照真玩家的顺序补发这两个事件(插件形态假人的主流做法),
+  被拒就召唤失败并说明原因。不打 `NPC` 元数据:实测没有好处,还和"她是真玩家"冲突。AuthMe 这类登录插件会在登录超时后踢她——走上面"被踢"那条路如实报告;服主要让她留下,按登录插件自己的豁免配置(如 AuthMe 的免登录名单)来,Numen 不替登录插件做特例。
+- **她的权限 = 主人的**:Paper 上权限是节点。她的 `Permissible` 换成委托给主人的一份(与 LuckPerms 注入的方式相同):主人在线问主人;主人不在线(外部大脑驾驶)时经 Vault 的权限接口查离线玩家,
+  没装 Vault 时按主人是不是 op 定(Bukkit 对离线玩家的默认语义)。Numen 自己的"管理员"判定在 Paper 上是权限节点 `numen.admin`(默认给 op),模组上是 op 4 级或房主——
+  common 只问平台"这人是不是 Numen 管理员",两种来源由平台服务给出。
+- **击退**:怪打她击退正常;玩家打她,原版发完速度包就把服务端速度清零了(本该由客户端应用),她就纹丝不动——模组上也一样。`FakeClient` 接住发给她自己的速度包,
+  当时 `hurtMarked` 为真就下一刻应用;这是 common 的修复,两边同时受益。摔落伤害正常,不用改。
+- **私聊的样子随插件变**:原版 `/msg` 到她这里是私聊包(`Whispers` 认);EssentialsX 的 `/msg` 是一条系统消息,她当作服务端消息收到(话还在,发话人在文字里)。
+  要认成私聊得接 EssentialsX 的事件,属于 Paper 上的插件联动,以后按需要做。
 - 移动类插件看不到她的移动(`PlayerMoveEvent` 只在收到移动包时触发),这是平台事实,不补。
 
 ## 十、内容与资源
@@ -105,27 +116,28 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 ## 十一、验证
 
 - common 的行为继续由 NeoForge 的 GameTest 验(主力)。
-- Paper 上能否直接跑我们的 GameTest(原版框架在服务端 jar 里,只在 `IS_RUNNING_IN_IDE` 时启用)待实测;能跑就是最好的验证。
+- 我们的 GameTest 拿到 Paper 上跑:不开 `IS_RUNNING_IN_IDE`(开了会把测试参数类型塞进内置注册表,有 op 的客户端进服就断),
+  而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。现有用例要一层登记适配。
 - Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服,进 CI。
-- 网络与翻译:MCProtocolLib(MIT,有 1.21.1 的版本)做无头客户端,原版客户端那一套交互(私聊、会话指令、可点的消息、翻译)对着 Paper 跑。
+- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21-1` 线;仓库里只有快照)做无头客户端,原版客户端那一套交互(私聊、会话指令、可点的消息、翻译)对着 Paper 跑。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
-## 十二、待实测
+## 十二、实测结论(10-19)
 
-1. Moonrise 下让假人退出玩家区块加载的做法与副作用(刷怪、随机刻、作物)。
-2. 被踢、空闲超时的路径;手动补登录事件后 LuckPerms、AuthMe、EssentialsX 对她的行为;要不要打 `NPC` 元数据。
-3. 原版 Brigadier 树交给 Paper 的注册器;重载后是否还在;原版客户端的补全。
-4. 在 Paper 上跑原版 GameTest 框架。
-5. 插件怎么带标签数据包。
-6. `DiscardedPayload` 复用导致的空包。
-7. Adventure 翻译源渲染带 `%s` 参数的原版可翻译组件。
+实验代码与日志在 `D:_Projects\paper-refs\pw-probe-1.21.1`、`numen-probe-client`、`numen-probe-run`。结论已写进上文各节,另有几条:
+
+- 指令:原版 Brigadier 树无检查强转后交给 `LifecycleEvents.COMMANDS` 的注册器可行(原版参数类型也被接受),`/minecraft:reload` 后还在,原版客户端补全正常;以她的身份执行原版与插件指令正常。
+- 网络:`DiscardedPayload` 发送会消耗缓冲,同一实例发两次第二次是空包,所以每人各包一份。NeoForge 客户端在配置阶段登记频道(那时玩家还没进世界),Fabric 客户端进游戏后才登记:`canSend` 跟着 `PlayerRegisterChannelEvent`,处理器要接受玩家还没进世界的情况。
+- 翻译:Adventure 翻译源按玩家语言渲染系统聊天、动作栏、点击与悬停;语言文件载入时把 `%s`/`%2$s` 改写成 MessageFormat 的 `{n}`。**缺口**:根组件是字面量时,悬停里的可翻译文本不渲染(Paper 只认根是可翻译的)。
+- 没测:死亡重生是否恢复 `isRealPlayer`;封禁、白名单、关服造成的移除;Vault;没有 LuckPerms 时的权限委托。
 
 ## 十三、分步
 
 1. **平台无关化(模组侧)**:私有访问改服务;载具改 `isLocalPlayer`;common 的 `mixin` 包外不再引用 `mixin` 包;热索引取用时核对。模组行为不变,GameTest 全过。
 2. **Paper 工程与引导**:两个子项目、重编 common、链接检查、run-paper;四个服务;生命周期事件;指令;网络;内容、语言、标签。服务端能起、两个插件能加载、指令在、原版客户端能进。
-3. **身体**:召唤、区块、被踢、权限、击退、所有挂点的 Paper 实现、翻译源。
-4. **验证工具**:Paper 上的场景测试、MCProtocolLib 无头客户端、真客户端实测;进 CI。
+3. **身体**:先做两边共用的 common 部分(被踢走"身体被外部移除"一条路、击退、"是不是 Numen 管理员"成平台服务),模组上 GameTest 验;
+   再做 Paper 部分(召唤补登录事件、摘出区块加载、权限委托、所有挂点的 Paper 实现、翻译源)。
+4. **验证工具**:MCProtocolLib 无头客户端的端到端测试(先对 NeoForge 专用服,再对 Paper);现有 GameTest 拿到 Paper 上跑;真客户端实测;进 CI。
 5. **收尾**:文档、发布(Hangar/Modrinth 的插件页)、`publishAll` 带上 Paper 产物。
 
 参考与许可:Carpet、Axiom、LuckPerms、BlueMap、FancyNpcs、MCProtocolLib 是 MIT,tanyaofei/minecraft-fakeplayer 与 run-task 是 Apache-2.0,可以借代码(保留声明);
