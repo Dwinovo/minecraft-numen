@@ -15,6 +15,7 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.phys.Vec3;
 
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
@@ -349,6 +350,61 @@ public class CombatGameTests {
                     level.setChunkForced(cx, cz, false);
                 })
                 .thenSucceed();
+    }
+
+    /** 原版玩家刚进世界的 60 刻里不受伤害,打她要等这段过去。 */
+    private static final long SPAWN_PROTECTION_TICKS = 70;
+
+    /**
+     * 玩家打她一下,她被击退。原版玩家攻击后发完速度包就把服务端速度清零,击退本该由目标的客户端应用;她没有客户端,
+     * 靠 {@code FakeClient} 接住这个包。攻击者站在她西边,她该被推向东。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_players_hit_knocks_her_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnBare(helper, "knocked_by_player", new BlockPos(8, 2, 8), false);
+        var attacker = presentPlayer(helper, null, "gametest_puncher");
+        Vec3 start = companion.position();
+        attacker.teleportTo(level, start.x - 1.0, start.y, start.z, 270.0f, 0.0f);
+        // 测试服务器默认不许玩家互相伤害(专用服务器读 server.properties 的 pvp)
+        boolean pvp = level.getServer().isPvpAllowed();
+        level.getServer().setPvpAllowed(true);
+        boolean[] hit = {false};
+        long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
+        succeedWhen(helper, () -> {
+            helper.assertTrue(level.getGameTime() >= ready, "she is still under spawn protection");
+            if (!hit[0]) {
+                hit[0] = true;
+                attacker.attack(companion);
+            }
+            helper.assertTrue(companion.getX() - start.x > 0.3,
+                    "the hit did not move her: dx=" + (companion.getX() - start.x));
+            level.getServer().setPvpAllowed(pvp);
+            leave(attacker);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 怪打她,击退照旧(服务端上的速度本来就是对的,不经 {@code FakeClient})。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_zombies_hit_knocks_her_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnBare(helper, "knocked_by_zombie", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(7, 2, 8));
+        Vec3 start = companion.position();
+        boolean[] hit = {false};
+        long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
+        succeedWhen(helper, () -> {
+            helper.assertTrue(level.getGameTime() >= ready, "she is still under spawn protection");
+            if (!hit[0]) {
+                hit[0] = true;
+                zombie.doHurtTarget(companion);
+            }
+            helper.assertTrue(companion.getX() - start.x > 0.3,
+                    "the hit did not move her: dx=" + (companion.getX() - start.x));
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /** 一只不动不还手的僵尸。 */
