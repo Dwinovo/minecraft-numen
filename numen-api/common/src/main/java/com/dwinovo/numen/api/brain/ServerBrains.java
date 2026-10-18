@@ -19,6 +19,8 @@ import net.minecraft.world.level.storage.LevelResource;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 
@@ -96,7 +98,8 @@ public final class ServerBrains {
 
     /**
      * 单人游戏的房主在旧版留下的、归他自己的东西,搬进现在的布局:模型档案与 key、人设、Lua 模块、技能、接进来的 MCP 服务器、
-     * 会话成员表、主动性档位、每只同伴的家(以及它们绑定里的档案与人设的新名字)。只做一次,复制不移动
+     * 会话成员表、主动性档位、每只同伴的家(以及它们绑定里的档案与人设的新名字),和这台电脑上旧的声线库、皮肤库、
+     * 每只同伴的声线皮肤选择({@link LegacyLooks})。只做一次,复制不移动
      * ({@link LegacyMigration}、{@link LegacyLibraries});多人服务器上旧客户端的数据没法这样读到,不迁也不上传。
      * 要在库开张、大脑建起来之前做完,它们读的是搬好的。
      */
@@ -130,11 +133,23 @@ public final class ServerBrains {
         LegacyLibraries.mcp(legacy.resolve("mcp_clients.json"), serverDir.resolve("mcp"));
 
         List<Path> bindings = new ArrayList<>();
+        Map<UUID, Path> justMoved = new LinkedHashMap<>();
         for (UUID companion : registry.all()) {
-            LegacyMigration.companion(legacy.resolve("companions").resolve(companion.toString()),
+            boolean moved = LegacyMigration.companion(legacy.resolve("companions").resolve(companion.toString()),
                     homes.companion(companion).dir());
             bindings.add(homes.companion(companion).file("binding.json"));
+            if (moved) {
+                justMoved.put(companion, homes.companion(companion).file("binding.json"));
+            }
         }
         LegacyLibraries.bindings(bindings, providerIds, personaIds);
+
+        // 声线库、皮肤库和每只同伴的声线皮肤选择在这台电脑的 client/ 里(客户端先把更旧的位置接了过去)
+        Path clientDir = legacy.resolve("client");
+        var voiceIds = LegacyLooks.voices(clientDir.resolve("voice.json"), hostDir.resolve("voice").resolve(EntryId.MINE),
+                clientDir.resolve("keys"));
+        var skinIds = LegacyLooks.skins(clientDir.resolve("skin.json"), clientDir.resolve("skins"),
+                hostDir.resolve("skin").resolve(EntryId.MINE));
+        LegacyLooks.bindings(clientDir.resolve("looks.json"), legacy.resolve("companions"), justMoved, voiceIds, skinIds);
     }
 }

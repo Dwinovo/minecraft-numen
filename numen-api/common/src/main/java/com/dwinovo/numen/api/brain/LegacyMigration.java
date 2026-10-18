@@ -47,7 +47,7 @@ public final class LegacyMigration {
 
     /** 旧家里不搬的:世界归属标记(世界自己就是归属),以及没有人再读的 {@code blocks.json}。 */
     private static final Set<String> LEFT_BEHIND = Set.of("world", "blocks.json");
-    /** 绑定里留在客户端的两项(声线、皮肤):朗读和皮肤库还在客户端,循环不读它们。 */
+    /** 旧绑定里声线、皮肤的 id 是旧客户端库里的,新库认不得;它们的新名字由 {@link LegacyLooks} 写。 */
     private static final List<String> CLIENT_BINDINGS = List.of("voice", "skin");
     private static final String STAGING = ".migrating";
 
@@ -219,7 +219,7 @@ public final class LegacyMigration {
         return staging;
     }
 
-    /** 绑定里只留循环读的档案和人设;声线、皮肤是客户端的。留不下什么就不要这个文件。 */
+    /** 绑定里只留档案和人设(声线、皮肤的旧 id 在新库里没有意义,见 {@link LegacyLooks})。留不下什么就不要这个文件。 */
     private static void keepOnlyWhatTheLoopReads(Path binding) {
         if (!Files.isRegularFile(binding)) {
             return;
