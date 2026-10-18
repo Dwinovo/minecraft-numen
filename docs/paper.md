@@ -171,3 +171,26 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 - **`INumenConfig` 只留服务端的项**(代理、系统提示词,及管理员经客户端面板改它们的写入口,Paper 同样写回 `plugins/numen/config.json`);语音识别设置拆成客户端源码集里的服务
   `ISttSettings`(`ClientServices.STT`),NeoForge 与 Fabric 各实现,Paper 不需要。
 - **纯 JVM 模块清单只在 buildSrc 的 `Modules` 里有一份**;`releaseJars` 把 Paper 的两个 jar 收进 `paper/`,并核对 datagen 产出的每个文件都在 jar 里。
+
+## 附:第 3 步 Paper 部分落地时的出入
+
+- **接纳是平台服务 `IBodyAdmission`**(`admit` 加入前问、`joined` 加入后做),召唤与恢复的整条链(`CompanionFactory.spawn`、`Companions.summon/respawn/summonFor`、死亡复活、登入恢复)改成带回调的写法:
+  模组上答复当场回来、`then` 在同一个调用里跑完,行为不变;Paper 上登录事件在异步线程上发,答复回到主线程再加入。当场要结果的旧写法(`spawn`/`summon`/`respawn`/`summonFor` 的同名重载)留给一定当场接纳的调用方(GameTest、评测),
+  都是同一份实现上的薄薄一层。"能当场判断的当场拒绝"不变:名字、重名、名额的拒绝让 `summonFor` 返回 `false` 且 `then` 当场带着原因;受理了返回 `true`,平台的拒绝(登录插件说不行)经 `then` 带着原因回来,
+  登记的新同伴随之作废。她正在路上时再来的召唤/派活得到"在路上"而不是第二具身体(`CompanionFactory.isArriving`)。死着的同伴被平台拒了,过一分钟再试,只在第一次拒的时候告诉主人。
+- **摘出区块加载放在 `joined`**(`placeNewPlayer` 一开头就把旗标置真,所以不能在加入前置假):`removePlayer` 后 `setRealPlayer(false)`,实测区块包为 0(只有两个视距/中心包),换维度、死亡重生(重新加入时再摘一次)都不会被加回。
+- **权限委托也在 `joined`**,晚于权限插件在 `PlayerLoginEvent` 里的注入,所以取代它的。主人在线问主人;离线经 Vault(装了的话)查离线玩家,没装按主人是不是 op 套默认值;没有任何权限插件的专属代码。
+  实测(LuckPerms,她经 `numen.mc.run` 以自己的身份跑指令):主人在线有授权/无授权、主人离线不装 Vault 时授权不算数(按 op)、装了 Vault 时授权经 LuckPerms 算数、主人是 op 时放行。Vault 的接口取 JitPack 的 VaultAPI 1.7(`transitive = false`:它依赖的老 Bukkit API 会盖掉 Paper 的)。
+- **被踢与被收的区分不靠猜**:Numen 自己收她只有 `CompanionFactory.despawn` 一条路,收之前把她记进"正被 Numen 移出"的集合(`isLeaving`);`PlayerKickEvent`(MONITOR)与 `PlayerQuitEvent` 里不在这个集合里的,就是外面请出去的,交给 `Companions.removedFromOutside`
+  (踢人先到 Kick 再到 Quit,入口对第二次是空操作)。关服时 Paper 先停插件、后踢人,监听器已经不在,不会误报。
+- **掉落物的几处挂点**:`BlockDropItemEvent` 里包住 `breakStarts/added/breakEnds`(Paper 在这一挖期间把进世界的物品实体都截下来交给它,事件之后才真进世界);`EntityPickupItemEvent`(件数减掉之前)→ `taken`;
+  `ItemMergeEvent` 在并之前触发,按原版的并法算好并完以后两堆各剩几件,走 `Drops.merged` 的五参数写法;掉落物被打没了,`EntityRemoveEvent`(DEATH)触发在实体标成已移除**之前**,`Drops.hurt` 的"打完再看 `isRemoved`"用不上,
+  所以 common 加了入口 `Drops.destroyed`(平台自己断定"被这一下打没了"),`hurt` 是模组上看得到 `isRemoved` 的那一种。**不能把这些往后拖一刻**:她的账在她自己的玩家刻里就可能结算,拖了会记成"不见了"(实测过:岩浆里的掉落物拖了就是 gone,不拖是"烧没了")。
+  `PlayerAttemptPickupItemEvent` → `touchedItem`(事件只在拾取冷却已过时触发、在归属检查之前,归属自己判);`BlockPlaceEvent` → `placedBy`(双格方块的另一半它自己带出来);
+  `PlayerAdvancementDoneEvent` 在发奖励之前,事件里拍背包快照,同一刻末尾再比;方块变化:事件里只记"哪一格、之前是什么",刻末读此刻真正是什么、变了才报,报上去的前后状态是真的。
+  `FakeConnection.send` 经 `deliverOutboundTo` 交给 `FakeClient.onOutbound`(在 `admit` 里接上,加入时发出的传送编号也看得到)。
+- **翻译源**:Paper 编码组件时按玩家语言渲染(`PacketEncoder` 的语言来自客户端报上来的 `ClientInformation`,原版客户端在配置阶段就发;MCProtocolLib 默认不发,测试要自己发),NMS 的可翻译组件和 API 的一样走 `GlobalTranslator`。
+  翻译源在服务器起好之后才登记(语言表按语言缓存,要等所有带 Numen 内容的插件都启用)。`ServerLang.asMessageFormat` 把 `%s`/`%2$s`/`%%` 改写成 MessageFormat,语法与 `translate` 同一套。
+  Numen 发的消息里没有"根是字面量、悬停里是可翻译"的形状(悬停只有 `ConsentChat` 一处,里面是字面量),不用改消息。
+- **关服顺序**:Paper 先停插件(`onDisable` 清状态)、再存玩家并把她请出去、再存世界。实测她的背包(三颗钻石)、位置、名册重启后都在,她手上的活(寻路)随之恢复。
+- **没有做**:同名并发召唤(两个主人同时召唤同一个新名字)只在她们都进了玩家列表之后才挡得住;接纳进行中被遣散的话,她进来后没有名册条目(窗口是一次登录事件的时间)。
