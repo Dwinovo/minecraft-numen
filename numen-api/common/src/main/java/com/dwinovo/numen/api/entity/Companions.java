@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Coordinates companion lifecycle on top of {@link CompanionFactory} (body
@@ -41,24 +42,29 @@ public final class Companions {
      * <p>她是什么样子(档案、人设、声线、皮肤)不在这里定:召唤之后再绑({@code CompanionBinding})。玩家的召唤走
      * {@link #summonFor},这里是它和 GameTest 共用的那一步。
      */
-    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
-                                      ServerLevel level, Vec3 pos) {
+    public static void summon(MinecraftServer server, UUID ownerUuid, String name,
+                              ServerLevel level, Vec3 pos, Consumer<CompanionFactory.Arrival> then) {
         CompanionRegistry reg = CompanionRegistry.get(server);
         UUID existing = findByOwnerName(server, ownerUuid, name);
         if (existing != null) {
             // 被外面请出去的她只有主人再召唤才回来:召唤就是主人的决定,清掉"被请出去"的状态,身体回来后解开停牌
             boolean returning = reg.find(existing).removed();
             reg.markReturned(existing);
-            NumenPlayer body = respawn(server, existing);
-            if (body != null) {
-                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
-                if (returning) {
-                    com.dwinovo.numen.api.brain.CompanionLoops.get(existing)
-                            .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
+            if (respawn(server, existing, arrival -> {
+                if (arrival.body() != null) {
+                    com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
+                    if (returning) {
+                        com.dwinovo.numen.api.brain.CompanionLoops.get(existing)
+                                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
+                    }
                 }
-                return body;
+                then.accept(arrival);
+            })) {
+                return;
             }
-            reg.remove(existing);   // stale entry (no .dat) — replace it
+        }
+        if (existing != null) {
+            reg.remove(existing);   // stale entry — replace it
         }
         UUID companionUuid = UUID.randomUUID();
         Vec3 safe = SafeSpawn.findNear(level, pos);
@@ -67,10 +73,27 @@ public final class Companions {
         CompanionRegistry.Entry fresh = new CompanionRegistry.Entry(
                 name, ownerUuid, level.dimension(), net.minecraft.core.BlockPos.containing(pos));
         reg.put(companionUuid, fresh);
-        NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
-        reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
-        com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
-        return body;
+        CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos, arrival -> {
+            NumenPlayer body = arrival.body();
+            if (body == null) {
+                if (arrival.refusal() != null) {
+                    reg.remove(companionUuid);   // 没被接纳:这只同伴不存在
+                }
+                then.accept(arrival);
+                return;
+            }
+            reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
+            com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
+            then.accept(arrival);
+        });
+    }
+
+    /** 同上,当场要结果的写法,给平台一定当场接纳的调用方(GameTest);被拒或还在路上是 {@code null}。 */
+    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
+                                      ServerLevel level, Vec3 pos) {
+        NumenPlayer[] body = new NumenPlayer[1];
+        summon(server, ownerUuid, name, level, pos, arrival -> body[0] = arrival.body());
+        return body[0];
     }
 
     /** 召唤的结果:成了是她的身体;没成是要说给玩家听的话。 */
@@ -81,34 +104,62 @@ public final class Companions {
      * 名字要合 Minecraft 的命名规则、不能撞上在线的别人;每人最多养几只是服主在 {@code server.json} 里设的(缺省不限)——
      * 再召唤自己已有的同名同伴是叫醒她,不占名额。召唤成了把新名册推给他。
      *
+     * <p>受理即能开始、能当场判断的当场拒绝:不合规矩的(名字、重名、名额)返回 {@code false},{@code then} 当场带着原因跑完;
+     * 受理了返回 {@code true},结果经 {@code then} 交回——平台的接纳可以是异步的(Paper 要给登录插件发事件),
+     * {@code then} 在那时的主线程上跑;被平台拒了,{@code then} 里是平台给的原因。她正在路上时再召唤同一只,
+     * 结果是"在路上"({@code Summoned} 的两项都是 {@code null}),不另起一趟。
+     *
      * @param creative 玩家在召唤卡上选的模式;{@code null} = 不动她的模式(命令没有这一项)
      */
-    public static Summoned summonFor(ServerPlayer owner, String name, Boolean creative) {
+    public static boolean summonFor(ServerPlayer owner, String name, Boolean creative, Consumer<Summoned> then) {
         MinecraftServer server = owner.server;
         if (!MojangSkins.validName(name)) {
-            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
-                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_INVALID));
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_INVALID)));
+            return false;
         }
         // 重名闸:同名玩家已在线(真人/别的主人的同伴)一律拒绝——例外是自己的同名同伴(那是叫醒她)。
         var online = server.getPlayerList().getPlayerByName(name);
         boolean ownSameName = online instanceof NumenPlayer np && np.isOwnedByPlayer(owner.getUUID());
         if (online != null && !ownSameName) {
-            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
-                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name));
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name)));
+            return false;
         }
         int limit = com.dwinovo.numen.api.brain.ModelServices.of(server).settings().maxCompanions();
         if (limit > 0 && findByOwnerName(server, owner.getUUID(), name) == null
                 && CompanionRegistry.get(server).ownedBy(owner.getUUID()).size() >= limit) {
-            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
-                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit));
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit)));
+            return false;
         }
         ServerLevel level = (ServerLevel) owner.level();
-        NumenPlayer body = summon(server, owner.getUUID(), name, level, owner.position());
-        if (creative != null) {
-            applyGameMode(owner, body, creative);
-        }
-        syncRosterToOwner(server, owner);
-        return new Summoned(body, null);
+        summon(server, owner.getUUID(), name, level, owner.position(), arrival -> {
+            NumenPlayer body = arrival.body();
+            if (body == null) {
+                then.accept(new Summoned(null, arrival.refusal() == null ? null : refusedMessage(name, arrival.refusal())));
+                return;
+            }
+            if (creative != null) {
+                applyGameMode(owner, body, creative);
+            }
+            syncRosterToOwner(server, owner);
+            then.accept(new Summoned(body, null));
+        });
+        return true;
+    }
+
+    /** 同上,当场要结果的写法,给平台一定当场接纳的调用方(GameTest)。 */
+    public static Summoned summonFor(ServerPlayer owner, String name, Boolean creative) {
+        Summoned[] result = {new Summoned(null, null)};
+        summonFor(owner, name, creative, summoned -> result[0] = summoned);
+        return result[0];
+    }
+
+    /** 平台不接纳她:说是谁、为什么。 */
+    private static net.minecraft.network.chat.Component refusedMessage(String name, net.minecraft.network.chat.Component reason) {
+        return net.minecraft.network.chat.Component.translatable(
+                com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_ADMISSION_REFUSED, name, reason);
     }
 
     /**
@@ -148,18 +199,30 @@ public final class Companions {
 
     /**
      * Bring a dormant companion back from its catalog entry + {@code .dat}
-     * (position/inventory restored from disk). Returns the already-live body if
-     * it is spawned, or {@code null} if it is unknown to the registry.
+     * (position/inventory restored from disk). Already live → {@code then} gets her as-is. Returns {@code false}
+     * (and never calls {@code then}) when she is unknown to the registry. 平台的接纳可以是异步的,见
+     * {@link CompanionFactory#spawn}。
      */
-    public static NumenPlayer respawn(MinecraftServer server, UUID companionUuid) {
+    public static boolean respawn(MinecraftServer server, UUID companionUuid, Consumer<CompanionFactory.Arrival> then) {
         NumenPlayer live = NumenPlayer.findByUuid(server, companionUuid);
-        if (live != null) return live;
+        if (live != null) {
+            then.accept(CompanionFactory.Arrival.arrived(live));
+            return true;
+        }
         CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companionUuid);
-        if (entry == null) return null;
+        if (entry == null) return false;
         ServerLevel level = server.getLevel(entry.dimension());
         if (level == null) level = server.overworld();
         // pos=null: keep the position restored from the .dat.
-        return CompanionFactory.spawn(server, companionUuid, entry.name(), entry.owner(), level, null);
+        CompanionFactory.spawn(server, companionUuid, entry.name(), entry.owner(), level, null, then);
+        return true;
+    }
+
+    /** 同上,当场要结果的写法:已经在世界里的、或平台当场接纳的才有身体;注册表不认得、被拒、还在路上都是 {@code null}。 */
+    public static NumenPlayer respawn(MinecraftServer server, UUID companionUuid) {
+        NumenPlayer[] body = new NumenPlayer[1];
+        respawn(server, companionUuid, arrival -> body[0] = arrival.body());
+        return body[0];
     }
 
     /**
@@ -237,7 +300,11 @@ public final class Companions {
                     // 她是被外面请出去的,不替主人重建;他上线了就把这件事告诉他
                     if (owner != null) tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
                 } else {
-                    respawn(server, e.getKey());
+                    respawn(server, e.getKey(), arrival -> {
+                        if (arrival.refusal() != null) {
+                            refused(server, e.getValue().owner(), e.getValue().name(), arrival.refusal());
+                        }
+                    });
                 }
             } catch (RuntimeException ex) {
                 com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
@@ -338,6 +405,8 @@ public final class Companions {
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).pendingDead()) {
             CompanionRegistry.Entry entry = e.getValue();
             if (now - entry.diedAt() < RESPAWN_DELAY_TICKS) continue;
+            Long retryAt = REFUSED.get(e.getKey());
+            if (retryAt != null && now < retryAt) continue;                  // 平台刚拒过她,过一阵再试
             ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
             if (owner == null) continue;                            // owner offline — wait for login
             // No safe spot right now → quietly retry next tick until the owner reaches open
@@ -360,13 +429,44 @@ public final class Companions {
             pos = owner.position();   // non-full-block floor (slab/carpet): the owner's own spot fits
         }
         if (pos == null) return false;
-        NumenPlayer body = CompanionFactory.spawn(server, uuid, entry.name(), entry.owner(), level, pos);
-        body.setHealth(body.getMaxHealth());
-        body.clearFire();
-        CompanionRegistry.get(server).markAlive(uuid);
-        syncRosterToOwner(server, owner);
-        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onRespawned(entry.deathCause()));
+        CompanionFactory.spawn(server, uuid, entry.name(), entry.owner(), level, pos, arrival -> {
+            NumenPlayer body = arrival.body();
+            if (body == null) {
+                if (arrival.refusal() != null) {
+                    // 平台不接纳她:死亡状态留着,过一阵再试;只在第一次拒的时候告诉主人
+                    long now = server.overworld().getGameTime();
+                    if (REFUSED.put(uuid, now + REFUSED_RETRY_TICKS) == null) {
+                        refused(server, entry.owner(), entry.name(), arrival.refusal());
+                    }
+                }
+                return;
+            }
+            REFUSED.remove(uuid);
+            body.setHealth(body.getMaxHealth());
+            body.clearFire();
+            CompanionRegistry.get(server).markAlive(uuid);
+            syncRosterToOwner(server, owner);
+            com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onRespawned(entry.deathCause()));
+        });
         return true;
+    }
+
+    /** 平台拒了她(登录插件说不行):记下来,并告诉主人是谁、为什么。 */
+    private static void refused(MinecraftServer server, UUID ownerUuid, String name,
+                                net.minecraft.network.chat.Component reason) {
+        com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", name, reason.getString());
+        ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+        if (owner != null) {
+            owner.sendSystemMessage(refusedMessage(name, reason));
+        }
+    }
+
+    /** 死着的同伴被平台拒了之后,再试复活要等到的游戏刻。 */
+    private static final Map<UUID, Long> REFUSED = new java.util.HashMap<>();
+    private static final long REFUSED_RETRY_TICKS = 60 * 20;
+
+    static {
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(REFUSED::clear);
     }
 
     /**

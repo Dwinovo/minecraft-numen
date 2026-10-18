@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.network;
 
+import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -46,6 +47,10 @@ public final class OwnedBody {
             // 被外面请出去的同理:回来只能是主人再召唤(Companions.summon),不是一个包把她拉起来
             if (reg != null && reg.removed()) {
                 refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
+                return null;
+            }
+            if (CompanionFactory.isArriving(entityUuid)) {
+                refuse.accept("她正在回到世界里(平台还在接纳她)——稍等一下再派");
                 return null;
             }
             companion = Companions.respawn(server, entityUuid);

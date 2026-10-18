@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.platform;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.platform.services.IBoatPhysics;
+import com.dwinovo.numen.api.platform.services.IBodyAdmission;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.dwinovo.numen.api.platform.services.IPermissions;
 import com.dwinovo.numen.api.platform.services.INetworkChannel;
@@ -23,6 +24,7 @@ public class Services {
     private static final Lazy<IBoatPhysics> BOATS = new Lazy<>(IBoatPhysics.class);
     private static final Lazy<IPermissions> PERMISSIONS = new Lazy<>(IPermissions.class);
     private static final Lazy<ICommandSources> COMMAND_SOURCES = new Lazy<>(ICommandSources.class);
+    private static final Lazy<IBodyAdmission> ADMISSION = new Lazy<>(IBodyAdmission.class);
     // 语音工厂是客户端专属服务,注册在 client 包的 ClientServices 里——
     // 其实现类引用 client-only 的 Sound 类,放这里急加载会在专用服务端
     // 掀翻 mod 构造(dist 边界由类结构表达,共享注册表只放两侧通用的服务)。
@@ -53,6 +55,10 @@ public class Services {
 
     public static ICommandSources commandSources() {
         return COMMAND_SOURCES.get();
+    }
+
+    public static IBodyAdmission admission() {
+        return ADMISSION.get();
     }
 
     /** 第一次要用时才去 {@code META-INF/services} 里找的一个服务。 */

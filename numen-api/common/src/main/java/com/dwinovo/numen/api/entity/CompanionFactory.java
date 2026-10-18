@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.api.platform.Services;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
@@ -9,7 +10,10 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Spawns and despawns companion {@link NumenPlayer} bodies through the vanilla
@@ -30,12 +34,48 @@ public final class CompanionFactory {
     private CompanionFactory() {}
 
     /**
+     * 一具身体进世界的结果:进来了({@link #body});平台不接纳({@link #refusal},说给玩家听的原因);或者平台的接纳还在路上
+     * ({@link #underWay},异步的平台上同一具身体的第二次召唤碰到的)。
+     */
+    public record Arrival(NumenPlayer body, net.minecraft.network.chat.Component refusal, boolean underWay) {
+        static final Arrival UNDER_WAY = new Arrival(null, null, true);
+
+        static Arrival arrived(NumenPlayer body) {
+            return new Arrival(body, null, false);
+        }
+
+        static Arrival refused(net.minecraft.network.chat.Component reason) {
+            return new Arrival(null, reason, false);
+        }
+    }
+
+    /** 接纳还在路上的身体(主线程)。同一具身体此时再来一次召唤不另起一趟,免得进来两具同 UUID 的。 */
+    private static final Set<UUID> ARRIVING = new HashSet<>();
+
+    static {
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(ARRIVING::clear);
+    }
+
+    /** 这具身体正在被平台接纳、还没进世界。 */
+    public static boolean isArriving(UUID companionUuid) {
+        return ARRIVING.contains(companionUuid);
+    }
+
+    /**
      * Bring a companion into the world. On first creation pass a {@code pos}
      * (the spawn location, e.g. beside the owner); on a respawn from dormancy
      * pass {@code null} to keep the position restored from its {@code .dat}.
+     *
+     * <p>先问平台接不接纳这具身体({@link com.dwinovo.numen.api.platform.services.IBodyAdmission}):模组上当场答应,
+     * {@code then} 在这个调用里就跑完;异步的平台(Paper 要给登录插件发事件)答复在以后的某一刻,{@code then} 在那时的主线程上跑。
+     * 接纳之后的加入、读档、定位都在 {@code then} 之前做完。
      */
-    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
-                                     UUID ownerUuid, ServerLevel level, Vec3 pos) {
+    public static void spawn(MinecraftServer server, UUID companionUuid, String name,
+                             UUID ownerUuid, ServerLevel level, Vec3 pos, Consumer<Arrival> then) {
+        if (!ARRIVING.add(companionUuid)) {
+            then.accept(Arrival.UNDER_WAY);
+            return;
+        }
         GameProfile profile = new GameProfile(companionUuid, name);
         // 借来的正版皮肤(Mojang 签名的 textures,注册表持久化)注入档案——客户端只认
         // 签过名的皮肤数据;没有则回落原版默认皮肤(按 UUID 哈希抽取)。
@@ -46,6 +86,32 @@ public final class CompanionFactory {
         }
         NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
         FakeConnection connection = new FakeConnection();
+        Services.admission().admit(player, connection, refusal -> {
+            ARRIVING.remove(companionUuid);
+            if (refusal != null) {
+                then.accept(Arrival.refused(refusal));
+                return;
+            }
+            join(server, player, connection, profile, ownerUuid, pos);
+            then.accept(Arrival.arrived(player));
+        });
+    }
+
+    /** 同上,当场要结果的写法,给平台一定当场接纳的调用方(GameTest、评测);被拒或还在路上是 {@code null}。 */
+    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
+                                     UUID ownerUuid, ServerLevel level, Vec3 pos) {
+        NumenPlayer[] body = new NumenPlayer[1];
+        spawn(server, companionUuid, name, ownerUuid, level, pos, arrival -> {
+            body[0] = arrival.body();
+            if (arrival.refusal() != null) {
+                com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", name, arrival.refusal().getString());
+            }
+        });
+        return body[0];
+    }
+
+    private static void join(MinecraftServer server, NumenPlayer player, FakeConnection connection, GameProfile profile,
+                             UUID ownerUuid, Vec3 pos) {
         // Restore saved state (position, inventory, health, owner) before joining so the body is at its
         // real location as early as possible. (This explicit restore is kept because placeNewPlayer's own
         // player-data load has not reliably restored a hand-built fake player's .dat in this setup; it is
@@ -57,6 +123,8 @@ public final class CompanionFactory {
         }
         server.getPlayerList().placeNewPlayer(connection, player,
                 CommonListenerCookie.createInitial(profile, false));
+        // 加入之后平台要做的事(Paper:退出玩家区块加载、权限委托给主人),在定位之前做:定位之后她周围的区块就不该再按玩家的方式去加载
+        Services.admission().joined(player);
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
         // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
@@ -86,7 +154,6 @@ public final class CompanionFactory {
         player.setGameMode(mode);
         // 身体齐了、进了玩家列表,插件此刻可以对它下命令(改外观、发指令都需要它在列表里)
         CompanionEvents.fire(CompanionEvent.SPAWN, player);
-        return player;
     }
 
     /**
@@ -105,12 +172,25 @@ public final class CompanionFactory {
         return maybe.orElse(null);
     }
 
+    /** 正由 Numen 自己移出世界的身体(主线程)。有的平台移除玩家时会发"玩家退出"事件,靠这个分得清是 Numen 收的还是外面请出去的。 */
+    private static final Set<NumenPlayer> LEAVING = new HashSet<>();
+
+    /** 这具身体此刻正被 Numen 自己移出世界({@link #despawn}):不是被外面的人或插件请出去的。 */
+    public static boolean isLeaving(NumenPlayer player) {
+        return LEAVING.contains(player);
+    }
+
     /** Save the companion's data and remove it from the world (dormancy). */
     public static void despawn(MinecraftServer server, NumenPlayer player) {
         // Tell tool packs the body is leaving so they can finalize their own
         // per-companion work (e.g. clear a mining crack overlay) instead of leaving
         // it orphaned once the body drops out of the tick loop's player list.
         CompanionEvents.fire(CompanionEvent.REMOVE, player);
-        server.getPlayerList().remove(player);
+        LEAVING.add(player);
+        try {
+            server.getPlayerList().remove(player);
+        } finally {
+            LEAVING.remove(player);
+        }
     }
 }
