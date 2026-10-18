@@ -56,6 +56,7 @@ import java.util.function.Predicate;
  *   /numen permission rules remove &lt;deny|ask|allow&gt; &lt;n&gt;   remove row n (1-based, as listed)
  *   /numen permission rules reset                         clear the caller's three tables
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
+ *   /numen token create|list|revoke                       the remote endpoint's tokens (see {@code TokenCommands})
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -117,6 +118,7 @@ public final class NumenCommands {
                                         .executes(ctx -> removeRule(ctx, table)))))
                         .then(Commands.literal("reset").executes(NumenCommands::resetRules))));
         graft(dispatcher, consentCommand());
+        graft(dispatcher, com.dwinovo.numen.api.mcp.server.TokenCommands.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

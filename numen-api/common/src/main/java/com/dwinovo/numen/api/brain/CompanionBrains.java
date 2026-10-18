@@ -101,7 +101,7 @@ public final class CompanionBrains {
         CompanionLoop loop = create(server, companion, owner, homes.companion(companion),
                 new LlmMind(ProviderLibrary.instance()), Replies.link(server, owner),
                 () -> server.getPlayerList().getPlayer(owner) != null,
-                com.dwinovo.numen.api.mcp.server.McpMode.instance()::driving);
+                () -> com.dwinovo.numen.api.mcp.server.McpMode.instance().driving(owner, companion));
         return loop;
     }
 

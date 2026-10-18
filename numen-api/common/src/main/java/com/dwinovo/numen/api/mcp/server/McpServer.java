@@ -17,44 +17,55 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 /**
- * A minimal MCP (Model Context Protocol) server, hand-rolled as JSON-RPC 2.0
- * over the JDK's built-in HTTP server — no third-party MCP SDK, no Reactor. It
- * implements exactly the surface an external agent needs to drive companions:
- * {@code initialize}, {@code tools/list}, {@code tools/call}, {@code ping}, and
- * the {@code notifications/initialized} handshake.
+ * 远程端点:MCP 的 Streamable HTTP(规范 2025-06-18),手写的 JSON-RPC 2.0,跑在 JDK 自带的 HTTP 服务器上——
+ * 没有第三方 MCP SDK。一个端点 {@code /mcp}:
+ * <ul>
+ *   <li>{@code POST}:客户端的请求、通知与对我们请求的答复。{@code initialize} 开一个会话,答复里带 {@code Mcp-Session-Id},
+ *       之后每个请求都要带;回复都是 {@code application/json};</li>
+ *   <li>{@code GET}:客户端开的服务端→客户端的 SSE 流,征询(elicitation)等服务端主动发的东西走它;</li>
+ *   <li>{@code DELETE}:客户端结束会话。</li>
+ * </ul>
  *
- * <h2>Transport</h2>
- * Binds a loopback HTTP endpoint at {@code /mcp}. Claude Desktop can't dial an
- * HTTP MCP server directly, so the user points it at this endpoint through the
- * {@code mcp-remote} stdio bridge; every JSON-RPC frame arrives here as an HTTP
- * POST and its response goes straight back in the HTTP body.
+ * <h2>认人</h2>
+ * 每个请求都要 {@code Authorization: Bearer <令牌>}({@link McpTokens}),令牌不进查询串。令牌带着主人、作用域和身份
+ * ({@link McpToken}):这个会话只能指挥那位主人名下被作用域管着的同伴,不会因为令牌变得能做权限层不让做的事——
+ * 外部大脑的程序走的是她自己的工具口,过的是同一个权限层。
  *
- * <h2>Tool surface</h2>
- * Every Numen API tool (from {@link ToolRegistry}, minus the config's hidden set) —
- * the script tool, the skill tool, the todo tool, plus the tools of remote MCP servers the owner connected — is
- * advertised with an extra {@code companion} argument, and calls route to
- * {@link ExternalHands#invoke}: a program runs through the companion's own
- * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
- * {@code create_companion}, {@code delete_companion} — wrap the hands' roster
- * methods. There is no take-control handshake: 模式开启期间内置大脑一轮都不开
- * (见 {@link McpMode}), 所以外部驱动者直接派活即可。Since every call is addressed
- * to a companion and each body runs its tasks independently, an agent can drive
- * several companions in parallel.
+ * <h2>工具</h2>
+ * 身份是大脑的令牌看到:{@code list_companions}/{@code create_companion}/{@code delete_companion}/{@code get_events}/
+ * {@code say},加上 {@link ToolRegistry} 里的每个工具(各带一个 {@code companion} 参数),调用路由到
+ * {@link ExternalHands#invoke}:程序在她自己的派发器里跑,做完回执。没有"接管"握手——会话连着,驾驶席就是它的
+ * ({@link McpMode#driving})。
+ *
+ * <h2>限流与审计</h2>
+ * 工具调用与接入受 {@link McpLimits} 限;每次接入与调用记一条审计({@link McpAudit}),只记编号、令牌编号、工具名、
+ * 成败与字节数。
  */
 public final class McpServer {
 
     private static final String PROTOCOL_VERSION = "2025-06-18";
-    private static final String SERVER_VERSION = "0.1.0";
+    /** 认得的协议版本;客户端要的在其中就照它答,否则答最新的。 */
+    private static final Set<String> PROTOCOL_VERSIONS = Set.of("2025-06-18", "2025-03-26", "2024-11-05");
+    private static final String SERVER_VERSION = "0.2.0";
     /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
+    /** 请求体上限:一段程序或一句话远用不到,挡住灌内存的。 */
+    private static final int MAX_BODY_BYTES = 1 << 20;
+    /** 服务端→客户端的流多久写一次保活;写不出去就是对方走了。 */
+    private static final long KEEPALIVE_SECONDS = 15;
     /** get_events 长等待：外脑每调一次工具就是一次完整的模型请求，所以没事就一直等，有事（会叫醒她的条目，
      *  判据见 {@code ExternalWait}）立刻返回。最长 50 秒，给桥接层（mcp-remote 等）和客户端的请求超时留余量
      *  （Codex 的工具超时默认 60 秒）；到点返回空，外脑再调一次接着等。 */
@@ -76,11 +87,11 @@ public final class McpServer {
     private static final String INSTRUCTIONS = """
             Numen companions are AI-controlled, player-like characters inside a live Minecraft game. \
             Through this server you take control of a companion's body and play the game as it — perceive, \
-            move, mine, build, craft, fight. You ARE its brain while this server runs: the built-in AI \
-            stands aside entirely, and even the owner's in-game chat reaches you (via get_events) instead \
+            move, mine, build, craft, fight. You ARE its brain while this session is connected: the built-in AI \
+            stands aside, and even the owner's in-game chat reaches you (via get_events) instead \
             of it. Drive the body directly — there is no 'take control' handshake.
 
-            Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
+            Loop: (1) list_companions to see who you can drive — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) everything else is one tool, %s: a program \
             whose functions are the companion's API — perceive with numen.status.self(), numen.scan.blocks(...), \
             numen.scan.entities(...); act with numen.move.to(...), numen.work.dig(...), numen.build.place(...), numen.fight.attack(...), \
@@ -99,7 +110,9 @@ public final class McpServer {
             Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
             drive several companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) \
-            work natively.
+            work natively. Your programs go through the same permission layer as the companion's own: \
+            when it needs the owner's approval, the owner is asked (not you) and the answer arrives as the \
+            program's outcome.
 
             You also carry the companion's conversation. To wait for the owner to speak or for something to happen, \
             call get_events(companion): it returns as soon as there is news and otherwise waits up to %d seconds, \
@@ -115,88 +128,316 @@ public final class McpServer {
             MAX_WAIT_SECONDS);
 
     private final McpConfig config;
-    private final ExternalHands hands;
+    private final McpTokens tokens;
+    private final McpLimits limits;
+    private final McpSessions sessions;
+    private final McpAudit audit;
+    private final Function<UUID, ExternalHands> handsOf;
     private final Gson gson = new Gson();
     private HttpServer http;
+    private ExecutorService workers;
 
-    public McpServer(McpConfig config, ExternalHands hands) {
+    McpServer(McpConfig config, McpTokens tokens, McpLimits limits, McpSessions sessions, McpAudit audit,
+              Function<UUID, ExternalHands> handsOf) {
         this.config = config;
-        this.hands = hands;
+        this.tokens = tokens;
+        this.limits = limits;
+        this.sessions = sessions;
+        this.audit = audit;
+        this.handsOf = handsOf;
     }
 
-    public void start() throws IOException {
+    void start() throws IOException {
         http = HttpServer.create(new InetSocketAddress(config.host(), config.port()), 0);
         http.createContext("/mcp", this::handle);
-        // get_events 长轮询会让整条线程停靠最长 50 秒，动作类工具也会阻到任务结束——
-        // 池得容下几个同伴各自的轮询加并行动作。
-        http.setExecutor(Executors.newFixedThreadPool(16, r -> {
-            Thread t = new Thread(r, "numen-mcp-http");
-            t.setDaemon(true);
-            return t;
-        }));
-        http.start();
+        // get_events 长轮询与动作类工具都会让一条线程停靠很久,GET 流更是一直占着:每个请求一条虚拟线程,
+        // 不设一个会被长轮询占满的池;停服时整个执行器一并收掉。
+        workers = Executors.newVirtualThreadPerTaskExecutor();
+        http.setExecutor(workers);
+        startOnDaemonThread(http);
     }
 
-    public void stop() {
-        if (http != null) http.stop(0);
+    /**
+     * JDK 的 HTTP 服务器在 {@code start()} 里开调度线程 {@code HTTP-Dispatcher},它的守护属性继承自调用线程——
+     * 从服务器主线程(非守护)调,调度线程就是非守护的。正常关服会 {@link #stop},但崩溃、被强杀时 stop 到不了,
+     * 一个非守护线程会拖住 JVM 退出,所以在守护线程里起。
+     */
+    private static void startOnDaemonThread(HttpServer http) throws IOException {
+        Thread starter = new Thread(http::start, "numen-mcp-start");
+        starter.setDaemon(true);
+        starter.start();
+        try {
+            starter.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted while starting the endpoint", e);
+        }
+    }
+
+    /** 实际绑到的端口(配置里写 0 让系统挑时用,测试用)。 */
+    int port() {
+        return http.getAddress().getPort();
+    }
+
+    void stop() {
+        for (McpSessions.Session session : sessions.all()) {
+            sessions.end(session);
+        }
+        if (http != null) {
+            http.stop(0);
+            http = null;
+        }
+        if (workers != null) {
+            workers.shutdownNow();
+            workers = null;
+        }
     }
 
     // ---- HTTP layer ----
 
     private void handle(HttpExchange ex) throws IOException {
+        boolean keepOpen = false;
         try {
-            if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
-                respond(ex, 405, "");
+            if (!originAllowed(ex)) {
+                respond(ex, 403, "");
                 return;
             }
-            if (!authorized(ex)) {
+            McpToken token = authenticate(ex);
+            if (token == null) {
+                ex.getResponseHeaders().add("WWW-Authenticate", "Bearer realm=\"numen\"");
                 respond(ex, 401, "");
                 return;
             }
-            // 任何通过鉴权的请求都算"对方还在"——面板的活跃时间靠它,ping 也算数。
-            McpMode.instance().touch();
-            String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            JsonElement parsed;
-            try {
-                parsed = JsonParser.parseString(body);
-            } catch (RuntimeException parseErr) {
-                respondJson(ex, errorResponse(null, -32700, "parse error: " + parseErr.getMessage()));
-                return;
-            }
-
-            if (parsed.isJsonArray()) {   // JSON-RPC batch
-                JsonArray out = new JsonArray();
-                for (JsonElement el : parsed.getAsJsonArray()) {
-                    JsonObject r = dispatch(el.getAsJsonObject());
-                    if (r != null) out.add(r);
-                }
-                if (out.isEmpty()) respond(ex, 202, "");
-                else respondJson(ex, out);
-            } else {
-                JsonObject r = dispatch(parsed.getAsJsonObject());
-                if (r == null) respond(ex, 202, "");   // notification: no response
-                else respondJson(ex, r);
+            switch (ex.getRequestMethod().toUpperCase(java.util.Locale.ROOT)) {
+                case "POST" -> post(ex, token);
+                case "GET" -> keepOpen = openStream(ex, token);
+                case "DELETE" -> delete(ex, token);
+                default -> respond(ex, 405, "");
             }
         } catch (RuntimeException fatal) {
             Constants.LOG.warn("[numen-mcp] request failed: {}", fatal.toString());
             try { respond(ex, 500, ""); } catch (IOException ignored) {}
         } finally {
-            ex.close();
+            if (!keepOpen) {
+                ex.close();
+            }
         }
     }
 
-    private boolean authorized(HttpExchange ex) {
-        if (config.token().isBlank()) return true;
-        String auth = ex.getRequestHeaders().getFirst("Authorization");
-        if (auth != null && auth.equals("Bearer " + config.token())) return true;
-        String query = ex.getRequestURI().getQuery();
-        return query != null && query.contains("token=" + config.token());
+    /**
+     * 浏览器发的请求带 {@code Origin}:规范要求服务端核对,防 DNS 重绑定。合法的客户端是命令行或桌面程序,不带它;
+     * 带了就必须是访问这个地址的同一个源。
+     */
+    private static boolean originAllowed(HttpExchange ex) {
+        String origin = ex.getRequestHeaders().getFirst("Origin");
+        if (origin == null) {
+            return true;
+        }
+        String host = ex.getRequestHeaders().getFirst("Host");
+        try {
+            URI uri = URI.create(origin);
+            String originHost = uri.getPort() < 0 ? uri.getHost() : uri.getHost() + ":" + uri.getPort();
+            return host != null && host.equalsIgnoreCase(originHost);
+        } catch (IllegalArgumentException bad) {
+            return false;
+        }
     }
 
-    private void respondJson(HttpExchange ex, JsonElement json) throws IOException {
+    private McpToken authenticate(HttpExchange ex) {
+        String auth = ex.getRequestHeaders().getFirst("Authorization");
+        if (auth == null || !auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            audit.refused("no bearer token", null);
+            return null;
+        }
+        return tokens.authenticate(auth.substring(7).trim()).orElseGet(() -> {
+            audit.refused("unknown or expired token", null);
+            return null;
+        });
+    }
+
+    private void post(HttpExchange ex, McpToken token) throws IOException {
+        byte[] raw = ex.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
+        if (raw.length > MAX_BODY_BYTES) {
+            respond(ex, 413, "");
+            return;
+        }
+        JsonObject req;
+        try {
+            JsonElement parsed = JsonParser.parseString(new String(raw, StandardCharsets.UTF_8));
+            if (!parsed.isJsonObject()) {   // 2025-06-18 起不再有 JSON-RPC 批
+                respondJson(ex, 400, errorResponse(null, -32600, "a request must be one JSON object"));
+                return;
+            }
+            req = parsed.getAsJsonObject();
+        } catch (RuntimeException parseErr) {
+            respondJson(ex, 400, errorResponse(null, -32700, "parse error: " + parseErr.getMessage()));
+            return;
+        }
+        String method = req.has("method") ? req.get("method").getAsString() : "";
+        if ("initialize".equals(method)) {
+            initialize(ex, token, req);
+            return;
+        }
+        McpSessions.Session session = sessionOf(ex, token);
+        if (session == null) {
+            return;
+        }
+        session.touch();
+        JsonElement id = req.get("id");
+        if (method.isEmpty()) {   // 对我们请求的答复(征询)
+            if (id != null && id.isJsonPrimitive()) {
+                session.answered(id.getAsString(), req);
+            }
+            respond(ex, 202, "");
+            return;
+        }
+        if (id == null || id.isJsonNull()) {   // 通知:不回话
+            respond(ex, 202, "");
+            return;
+        }
+        JsonObject response = dispatch(session, req, id, method, raw.length);
+        respondJson(ex, 200, response);
+    }
+
+    /** 请求带的会话:没带 400,不认识或属于别的令牌 404(规范:404 让客户端重新 initialize)。已回过话则返回 null。 */
+    private McpSessions.Session sessionOf(HttpExchange ex, McpToken token) throws IOException {
+        String header = ex.getRequestHeaders().getFirst("Mcp-Session-Id");
+        if (header == null) {
+            respond(ex, 400, "");
+            return null;
+        }
+        McpSessions.Session session = sessions.find(header);
+        if (session == null || !session.token.hash().equals(token.hash())) {
+            respond(ex, 404, "");
+            return null;
+        }
+        String version = ex.getRequestHeaders().getFirst("MCP-Protocol-Version");
+        if (version != null && !PROTOCOL_VERSIONS.contains(version)) {
+            respond(ex, 400, "");
+            return null;
+        }
+        return session;
+    }
+
+    private void initialize(HttpExchange ex, McpToken token, JsonObject req) throws IOException {
+        JsonElement id = req.get("id");
+        JsonObject params = req.has("params") && req.get("params").isJsonObject()
+                ? req.getAsJsonObject("params") : new JsonObject();
+        McpLimits.Permit permit = limits.acquire(token.id());
+        try {
+            if (permit.refusal() != null) {
+                audit.refused("rate limited", token.id());
+                ex.getResponseHeaders().add("Retry-After", "5");
+                respond(ex, 429, permit.refusal());
+                return;
+            }
+            String requested = params.has("protocolVersion") ? params.get("protocolVersion").getAsString() : "";
+            boolean elicits = params.has("capabilities") && params.get("capabilities").isJsonObject()
+                    && params.getAsJsonObject("capabilities").has("elicitation");
+            McpSessions.Session session = sessions.open(token, clientLabel(params), elicits);
+            if (session == null) {
+                audit.refused("too many sessions", token.id());
+                respond(ex, 429, "this token already has " + McpSessions.MAX_PER_TOKEN + " sessions open");
+                return;
+            }
+            audit.connected(session.id, token, session.client);
+            JsonObject result = new JsonObject();
+            result.addProperty("protocolVersion", PROTOCOL_VERSIONS.contains(requested) ? requested : PROTOCOL_VERSION);
+            JsonObject caps = new JsonObject();
+            caps.add("tools", new JsonObject());
+            result.add("capabilities", caps);
+            JsonObject info = new JsonObject();
+            info.addProperty("name", "numen-mcp");
+            info.addProperty("version", SERVER_VERSION);
+            result.add("serverInfo", info);
+            result.addProperty("instructions", INSTRUCTIONS);
+            ex.getResponseHeaders().add("Mcp-Session-Id", session.id);
+            respondJson(ex, 200, okResponse(id, result));
+        } finally {
+            permit.close();
+        }
+    }
+
+    /** {@code GET}:开服务端→客户端的流,一直开到对方走了或会话结束。返回 true 表示交换留着不关。 */
+    private boolean openStream(HttpExchange ex, McpToken token) throws IOException {
+        String accept = ex.getRequestHeaders().getFirst("Accept");
+        if (accept == null || !accept.contains("text/event-stream")) {
+            respond(ex, 406, "");
+            return false;
+        }
+        McpSessions.Session session = sessionOf(ex, token);
+        if (session == null) {
+            return false;
+        }
+        ex.getResponseHeaders().add("Content-Type", "text/event-stream");
+        ex.getResponseHeaders().add("Cache-Control", "no-cache");
+        ex.sendResponseHeaders(200, 0);
+        SseSink sink = new SseSink(ex.getResponseBody());
+        session.attach(sink);
+        try {
+            sink.comment("stream open");
+            while (!sink.closed.await(KEEPALIVE_SECONDS, TimeUnit.SECONDS)) {
+                if (!sink.comment("keepalive")) {
+                    break;
+                }
+            }
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+        } finally {
+            session.detach(sink);
+            ex.close();
+        }
+        return true;
+    }
+
+    /** 一条 SSE 流的出口;写不出去就是对方走了,流随之结束。 */
+    private static final class SseSink implements McpSessions.Sink {
+        final CountDownLatch closed = new CountDownLatch(1);
+        private final OutputStream out;
+
+        SseSink(OutputStream out) {
+            this.out = out;
+        }
+
+        @Override
+        public boolean send(String event) {
+            return write("data: " + event + "\n\n");
+        }
+
+        /** SSE 注释行:不是消息,客户端忽略,只用来保活和发现对方已走。 */
+        boolean comment(String text) {
+            return write(": " + text + "\n\n");
+        }
+
+        @Override
+        public void close() {
+            closed.countDown();
+        }
+
+        private synchronized boolean write(String text) {
+            try {
+                out.write(text.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                return true;
+            } catch (IOException gone) {
+                closed.countDown();
+                return false;
+            }
+        }
+    }
+
+    private void delete(HttpExchange ex, McpToken token) throws IOException {
+        McpSessions.Session session = sessionOf(ex, token);
+        if (session != null) {
+            sessions.end(session);
+            respond(ex, 200, "");
+        }
+    }
+
+    private void respondJson(HttpExchange ex, int status, JsonElement json) throws IOException {
         byte[] bytes = gson.toJson(json).getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, bytes.length);
+        ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
         }
@@ -214,48 +455,18 @@ public final class McpServer {
 
     // ---- JSON-RPC dispatch ----
 
-    /** @return the response object, or null for a notification (no id → no reply). */
-    private JsonObject dispatch(JsonObject req) {
-        JsonElement id = req.get("id");
-        String method = req.has("method") ? req.get("method").getAsString() : "";
-
-        // Notifications carry no id and expect no response.
-        if (id == null || id.isJsonNull()) {
-            return null;
-        }
-
+    private JsonObject dispatch(McpSessions.Session session, JsonObject req, JsonElement id, String method,
+                                int bytesIn) {
         try {
             return switch (method) {
-                case "initialize" -> okResponse(id, initializeResult(req));
                 case "ping" -> okResponse(id, new JsonObject());
-                case "tools/list" -> okResponse(id, toolsListResult());
-                case "tools/call" -> okResponse(id, toolsCallResult(req));
+                case "tools/list" -> okResponse(id, toolsListResult(session.token));
+                case "tools/call" -> okResponse(id, toolsCallResult(session, req, bytesIn));
                 default -> errorResponse(id, -32601, "method not found: " + method);
             };
         } catch (RuntimeException ex) {
             return errorResponse(id, -32603, "internal error: " + ex.getMessage());
         }
-    }
-
-    private JsonObject initializeResult(JsonObject req) {
-        String clientProto = PROTOCOL_VERSION;
-        if (req.has("params") && req.get("params").isJsonObject()) {
-            JsonObject p = req.getAsJsonObject("params");
-            if (p.has("protocolVersion")) clientProto = p.get("protocolVersion").getAsString();
-            // 握手报的名字就是面板上"谁接进来了"的那一行。
-            McpMode.instance().handshake(clientLabel(p));
-        }
-        JsonObject result = new JsonObject();
-        result.addProperty("protocolVersion", clientProto);
-        JsonObject caps = new JsonObject();
-        caps.add("tools", new JsonObject());
-        result.add("capabilities", caps);
-        JsonObject info = new JsonObject();
-        info.addProperty("name", "numen-mcp");
-        info.addProperty("version", SERVER_VERSION);
-        result.add("serverInfo", info);
-        result.addProperty("instructions", INSTRUCTIONS);
-        return result;
     }
 
     /** {@code params.clientInfo} → "Claude Desktop 1.2.3";没报名字就叫 unknown client。 */
@@ -269,20 +480,21 @@ public final class McpServer {
 
     // ---- tools/list ----
 
-    private JsonObject toolsListResult() {
+    private JsonObject toolsListResult(McpToken token) {
         JsonArray tools = new JsonArray();
 
         tools.add(toolDef("list_companions",
-                "List the owner's live Minecraft companions (name + id). Call this first to see who you can drive.",
+                "List the live Minecraft companions this token may drive (name + id). Call this first to see who you can drive.",
                 objectSchema(null, false)));
         tools.add(toolDef("create_companion",
                 "Summon a new companion into the world by name (3–16 letters, digits, or underscore). It arrives "
-                        + "in a moment; call list_companions to confirm, then drive it directly — no 'take control' step.",
+                        + "in a moment; call list_companions to confirm, then drive it directly — no 'take control' step. "
+                        + "Needs a token that covers all of the owner's companions, and the owner in the game.",
                 requiredStringSchema("name",
                         "The new companion's name (3–16 letters, digits, or underscore).")));
         tools.add(toolDef("delete_companion",
                 "Permanently dismiss a companion — it drops its inventory, armor and accessories and is gone for good. "
-                        + "Takes its name or id.",
+                        + "Takes its name or id. Needs the owner in the game.",
                 requiredStringSchema("companion",
                         "Which companion to dismiss — its name or id (see list_companions).")));
         tools.add(toolDef("get_events",
@@ -397,128 +609,191 @@ public final class McpServer {
 
     // ---- tools/call ----
 
-    /** 派发一次工具调用,并把它记进活动流——面板上那条流就是这里喂的。 */
-    private JsonObject toolsCallResult(JsonObject req) {
+    /** 派发一次工具调用,先过限流,记一条审计。 */
+    private JsonObject toolsCallResult(McpSessions.Session session, JsonObject req, int bytesIn) {
         JsonObject params = req.has("params") && req.get("params").isJsonObject()
                 ? req.getAsJsonObject("params") : new JsonObject();
         String name = params.has("name") ? params.get("name").getAsString() : "";
         JsonObject args = params.has("arguments") && params.get("arguments").isJsonObject()
                 ? params.getAsJsonObject("arguments") : new JsonObject();
-
-        return dispatchToolCall(name, args);
+        McpToken token = session.token;
+        McpLimits.Permit permit = limits.acquire(token.id());
+        if (permit.refusal() != null) {
+            audit.called(session.id, token, name, null, false, bytesIn, 0);
+            return content("rate limited: " + permit.refusal() + ". Wait a few seconds and call again.", true);
+        }
+        session.started();
+        try {
+            UUID[] target = new UUID[1];
+            JsonObject result = dispatchToolCall(session, name, args, target);
+            audit.called(session.id, token, name, target[0], !result.get("isError").getAsBoolean(), bytesIn,
+                    result.toString().length());
+            return result;
+        } finally {
+            session.finished();
+            permit.close();
+        }
     }
 
-    private JsonObject dispatchToolCall(String name, JsonObject args) {
+    private JsonObject dispatchToolCall(McpSessions.Session session, String name, JsonObject args, UUID[] target) {
+        ExternalHands hands = handsOf.apply(session.token.owner());
+        Call call = new Call(session.token, hands, target);
         try {
             return switch (name) {
-                case "list_companions" -> content(listCompanions(), false);
-                case "create_companion" -> handleCreate(args);
-                case "delete_companion" -> handleDelete(args);
-                case "get_events" -> handleGetEvents(args);
-                case "say" -> handleSay(args);
-                default -> handleToolInvoke(name, args);
+                case "list_companions" -> content(call.listCompanions(), false);
+                case "create_companion" -> call.create(args);
+                case "delete_companion" -> call.delete(args);
+                case "get_events" -> call.getEvents(args);
+                case "say" -> call.say(args);
+                default -> call.invoke(name, args);
             };
         } catch (TimeoutException te) {
             return content("timed out waiting for the action to finish", true);
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            return content("the endpoint is shutting down", true);
         } catch (Exception ex) {
             return content("call failed: " + ex.getMessage(), true);
         }
     }
 
-    private String listCompanions() throws Exception {
-        List<ExternalHands.Companion> list = hands.companions()
-                .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        if (list.isEmpty()) {
-            return "No companions are live in the world right now. Summon one in-game first.";
-        }
-        StringBuilder sb = new StringBuilder("Live companions:\n");
-        for (ExternalHands.Companion c : list) {
-            sb.append("- ").append(c.name()).append("  (id: ").append(c.uuid()).append(")\n");
-        }
-        return sb.toString().stripTrailing();
-    }
+    /** 一次调用:这张令牌、这位主人的手;解析到的同伴记进 {@code target} 给审计。 */
+    private final class Call {
+        private final McpToken token;
+        private final ExternalHands hands;
+        private final UUID[] target;
 
-    private JsonObject handleCreate(JsonObject args) throws Exception {
-        String name = args.has("name") && !args.get("name").isJsonNull()
-                ? args.get("name").getAsString().trim() : "";
-        if (name.isEmpty()) {
-            return content("create_companion needs a 'name' (3–16 letters, digits, or underscore)", true);
+        Call(McpToken token, ExternalHands hands, UUID[] target) {
+            this.token = token;
+            this.hands = hands;
+            this.target = target;
         }
-        boolean ok = hands.create(name).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        if (!ok) {
-            return content("could not summon — is the game in a world?", true);
-        }
-        return content("summoning '" + name + "' — it arrives in a moment; call list_companions to confirm, "
-                + "then drive it directly (no acquire needed)", false);
-    }
 
-    private JsonObject handleDelete(JsonObject args) throws Exception {
-        UUID target = resolveCompanion(args);
-        if (target == null) {
-            return content("no such companion — call list_companions to see valid names/ids", true);
+        /** 作用域管得着的、此刻在世界里的同伴。 */
+        private List<ExternalHands.Companion> visible() throws Exception {
+            return hands.companions().get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS).stream()
+                    .filter(c -> token.scope().covers(c.uuid())).toList();
         }
-        boolean ok = hands.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return content(ok ? "dismissed " + target + " — it drops its inventory, armor and accessories and is gone for good"
-                : "could not dismiss " + target, !ok);
-    }
 
-    /** 长等待取件：停靠在收件箱上，会叫醒她的条目一到立即整批返回；到点清扫，
-     *  有什么给什么（捎带的也交），没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
-    private JsonObject handleGetEvents(JsonObject args) throws Exception {
-        UUID target = resolveCompanion(args);
-        if (target == null) {
-            return content("get_events needs a 'companion' argument (a name or id from list_companions)", true);
-        }
-        int wait = MAX_WAIT_SECONDS;
-        if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
-            wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
-        }
-        if (wait > 0) {
-            ExternalWait.Parked parked = hands.awaitEvents(target);
-            String batch = null;
-            try {
-                batch = parked.batch().get(wait, TimeUnit.SECONDS);
-            } catch (TimeoutException deadline) {
-                // 到点，转清扫——叫醒只是提前，正确性由清扫兜底
-            } finally {
-                // 撤销与叫醒谁先谁得：到点那一刻叫醒恰好取走的批次由撤销交回，取走的一定交到外脑手里
-                String late = parked.cancel().get();
-                if (batch == null) batch = late;
+        String listCompanions() throws Exception {
+            List<ExternalHands.Companion> list = visible();
+            if (list.isEmpty()) {
+                return "No companions this token may drive are live in the world right now.";
             }
-            if (batch != null) return content(batch, false);
+            StringBuilder sb = new StringBuilder("Live companions:\n");
+            for (ExternalHands.Companion c : list) {
+                sb.append("- ").append(c.name()).append("  (id: ").append(c.uuid()).append(")\n");
+            }
+            return sb.toString().stripTrailing();
         }
-        String rest = hands.takeEvents(target)
-                .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return content(rest != null ? rest
-                : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
-    }
 
-    private JsonObject handleSay(JsonObject args) throws Exception {
-        UUID target = resolveCompanion(args);
-        if (target == null) {
-            return content("say needs a 'companion' argument (a name or id from list_companions)", true);
+        JsonObject create(JsonObject args) throws Exception {
+            if (!token.scope().all()) {
+                return content("this token is limited to named companions; it cannot summon new ones", true);
+            }
+            String name = args.has("name") && !args.get("name").isJsonNull()
+                    ? args.get("name").getAsString().trim() : "";
+            if (name.isEmpty()) {
+                return content("create_companion needs a 'name' (3–16 letters, digits, or underscore)", true);
+            }
+            boolean ok = hands.create(name).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!ok) {
+                return content("could not summon — the owner has to be in the game", true);
+            }
+            return content("summoning '" + name + "' — it arrives in a moment; call list_companions to confirm, "
+                    + "then drive it directly (no acquire needed)", false);
         }
-        String text = args.has("text") && !args.get("text").isJsonNull()
-                ? args.get("text").getAsString().trim() : "";
-        if (text.isEmpty()) {
-            return content("say needs a non-empty 'text'", true);
-        }
-        boolean ok = hands.say(target, text).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return content(ok ? "said" : "could not say — is the companion live?", !ok);
-    }
 
-    private JsonObject handleToolInvoke(String toolName, JsonObject args) throws Exception {
-        UUID target = resolveCompanion(args);
-        if (target == null) {
-            return content("this tool needs a 'companion' argument (a name or id from list_companions)", true);
+        JsonObject delete(JsonObject args) throws Exception {
+            UUID companion = resolve(args);
+            if (companion == null) {
+                return content("no such companion — call list_companions to see valid names/ids", true);
+            }
+            boolean ok = hands.delete(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return content(ok ? "dismissed " + companion + " — it drops its inventory, armor and accessories and is gone for good"
+                    : "could not dismiss " + companion + " — the owner has to be in the game", !ok);
         }
-        JsonObject toolArgs = args.deepCopy();
-        toolArgs.remove("companion");
-        String result = hands.invoke(target, toolName, toolArgs.toString())
-                .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
-        // the external agent reads what the built-in brain reads: the result's message, never its structured data
-        String events = hands.takeEvents(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return receipt(ToolOutcome.modelText(result), ToolOutcome.failed(result), events);
+
+        /** 长等待取件：停靠在收件箱上，会叫醒她的条目一到立即整批返回；到点清扫，
+         *  有什么给什么（捎带的也交），没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
+        JsonObject getEvents(JsonObject args) throws Exception {
+            UUID companion = resolve(args);
+            if (companion == null) {
+                return content("get_events needs a 'companion' argument (a name or id from list_companions)", true);
+            }
+            int wait = MAX_WAIT_SECONDS;
+            if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
+                wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
+            }
+            if (wait > 0) {
+                ExternalWait.Parked parked = hands.awaitEvents(companion);
+                String batch = null;
+                try {
+                    batch = parked.batch().get(wait, TimeUnit.SECONDS);
+                } catch (TimeoutException deadline) {
+                    // 到点，转清扫——叫醒只是提前，正确性由清扫兜底
+                } finally {
+                    // 撤销与叫醒谁先谁得：到点那一刻叫醒恰好取走的批次由撤销交回，取走的一定交到外脑手里
+                    String late = parked.cancel().get();
+                    if (batch == null) batch = late;
+                }
+                if (batch != null) return content(batch, false);
+            }
+            String rest = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return content(rest != null ? rest
+                    : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
+        }
+
+        JsonObject say(JsonObject args) throws Exception {
+            UUID companion = resolve(args);
+            if (companion == null) {
+                return content("say needs a 'companion' argument (a name or id from list_companions)", true);
+            }
+            String text = args.has("text") && !args.get("text").isJsonNull()
+                    ? args.get("text").getAsString().trim() : "";
+            if (text.isEmpty()) {
+                return content("say needs a non-empty 'text'", true);
+            }
+            boolean ok = hands.say(companion, text).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return content(ok ? "said" : "could not say — is the companion live?", !ok);
+        }
+
+        JsonObject invoke(String toolName, JsonObject args) throws Exception {
+            UUID companion = resolve(args);
+            if (companion == null) {
+                return content("this tool needs a 'companion' argument (a name or id from list_companions)", true);
+            }
+            JsonObject toolArgs = args.deepCopy();
+            toolArgs.remove("companion");
+            String result = hands.invoke(companion, toolName, toolArgs.toString())
+                    .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
+            // the external agent reads what the built-in brain reads: the result's message, never its structured data
+            String events = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return receipt(ToolOutcome.modelText(result), ToolOutcome.failed(result), events);
+        }
+
+        /** 把 {@code companion} 参数(名字或 UUID)解析成这张令牌管得着的、活着的同伴;没有是 null。 */
+        private UUID resolve(JsonObject args) throws Exception {
+            if (!args.has("companion") || args.get("companion").isJsonNull()) return null;
+            String raw = args.get("companion").getAsString().trim();
+            if (raw.isEmpty()) return null;
+            List<ExternalHands.Companion> list = visible();
+            for (ExternalHands.Companion c : list) {
+                if (c.uuid().toString().equalsIgnoreCase(raw)) return found(c);
+            }
+            for (ExternalHands.Companion c : list) {
+                if (c.name().equals(raw)) return found(c);
+            }
+            for (ExternalHands.Companion c : list) {
+                if (c.name().equalsIgnoreCase(raw)) return found(c);
+            }
+            return null;
+        }
+
+        private UUID found(ExternalHands.Companion c) {
+            target[0] = c.uuid();
+            return c.uuid();
+        }
     }
 
     /**
@@ -531,27 +806,6 @@ public final class McpServer {
             out.getAsJsonArray("content").add(textItem(events));
         }
         return out;
-    }
-
-    /** Resolve the {@code companion} argument (name or UUID) to a live companion's UUID, or null. */
-    private UUID resolveCompanion(JsonObject args) throws Exception {
-        if (!args.has("companion") || args.get("companion").isJsonNull()) return null;
-        String raw = args.get("companion").getAsString().trim();
-        if (raw.isEmpty()) return null;
-        List<ExternalHands.Companion> list = hands.companions()
-                .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        // exact id match first
-        for (ExternalHands.Companion c : list) {
-            if (c.uuid().toString().equalsIgnoreCase(raw)) return c.uuid();
-        }
-        // then exact name, then case-insensitive name
-        for (ExternalHands.Companion c : list) {
-            if (c.name().equals(raw)) return c.uuid();
-        }
-        for (ExternalHands.Companion c : list) {
-            if (c.name().equalsIgnoreCase(raw)) return c.uuid();
-        }
-        return null;
     }
 
     // ---- result envelopes ----
@@ -586,12 +840,8 @@ public final class McpServer {
         err.addProperty("message", message);
         JsonObject r = new JsonObject();
         r.addProperty("jsonrpc", "2.0");
-        r.add("id", id == null ? JsonNull() : id);
+        r.add("id", id == null ? com.google.gson.JsonNull.INSTANCE : id);
         r.add("error", err);
         return r;
-    }
-
-    private static JsonElement JsonNull() {
-        return com.google.gson.JsonNull.INSTANCE;
     }
 }

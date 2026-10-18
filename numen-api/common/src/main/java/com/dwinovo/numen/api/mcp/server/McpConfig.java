@@ -12,65 +12,72 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Server config at {@code config/numen/mcp_server.json}. Plain Gson-over-file,
- * created with defaults on first launch.
+ * 远程端点的服务器配置,{@code mcp_server.json}。没有这个文件就按默认值写一份。
  *
  * <ul>
- *   <li>{@code enabled} — master switch (default false; owner opts in);</li>
- *   <li>{@code host}/{@code port} — where the MCP HTTP endpoint binds. Loopback
- *       by default; an external agent reaches it through the {@code mcp-remote}
- *       stdio bridge in {@code claude_desktop_config.json};</li>
- *   <li>{@code token} — optional bearer token; when set, requests must present it
- *       (Authorization header or {@code ?token=}). Empty = no auth (fine on
- *       loopback);</li>
- *   <li>{@code call_timeout_seconds} — how long one {@code tools/call} waits for a
- *       body action to finish before reporting a timeout;</li>
- *   <li>{@code hidden_tools} — tools NOT exposed to the external agent (by default
- *       none: Numen API's tools are the script tool and the skill tool, and they are the
- *       external brain's as much as the built-in one's);</li>
- *   <li>{@code quiet_fallback} — when the external brain goes quiet (no request for
- *       {@link McpMode#QUIET_AFTER_MS} ms) the built-in brain takes over until it
- *       returns. Default false: the companion stands by silently — the owner turned
- *       this mode on deliberately.</li>
+ *   <li>{@code enabled} — 总开关,默认关(服主自己开);</li>
+ *   <li>{@code host}/{@code port} — 端点绑在哪。默认只绑回环;开放给局域网或公网时端点是明文 HTTP,
+ *       建议前面放反向代理加 HTTPS({@link #lanExposed});</li>
+ *   <li>{@code call_timeout_seconds} — 一次 {@code tools/call} 最久等身体做完多久;</li>
+ *   <li>{@code hidden_tools} — 不给外部大脑看的工具;</li>
+ *   <li>{@code limits} — 限流,见 {@link Limits}。</li>
  * </ul>
+ * 谁能连不在这里:每张令牌带着自己的主人、作用域与身份({@link McpToken}),端点永远要令牌。
  */
 public record McpConfig(
         boolean enabled,
         String host,
         int port,
-        String token,
         int callTimeoutSeconds,
         List<String> hiddenTools,
-        boolean quietFallback) {
-
-    private static final List<String> DEFAULT_HIDDEN = List.of();
+        Limits limits) {
 
     /**
-     * 读配置;没有就播一份默认的。
-     *
-     * <p>默认<b>带一个现生成的令牌</b>。空令牌只在回环上无害,而这个文件是可以手改的——
-     * 一旦有人把 host 改成 0.0.0.0(那是 issue 里被要求过的能力),空令牌就是无鉴权全开。
-     * 与其指望他改地址时记得再设一个,不如一开始就有。
+     * 限流。每张令牌限同时在飞的调用数与每分钟的调用数;总量是所有令牌加起来的上限,服主按机器的承受力调。
+     * 长等待的 {@code get_events} 一次占一个并发名额(最长 50 秒),所以每张令牌的并发要留够同时驱动几只同伴的量。
      */
-    public static McpConfig load(Path file) {
+    public record Limits(int perTokenConcurrent, int perTokenPerMinute, int totalConcurrent, int totalPerMinute) {
+
+        public static final Limits DEFAULT = new Limits(8, 240, 64, 1200);
+
+        public Limits {
+            if (perTokenConcurrent < 1 || perTokenPerMinute < 1 || totalConcurrent < 1 || totalPerMinute < 1) {
+                throw new IllegalArgumentException("limits must be positive");
+            }
+        }
+    }
+
+    private static final List<String> DEFAULT_HIDDEN = List.of();
+    /** 只绑回环。默认值,也是"没开局域网"时的地址。 */
+    public static final String LOOPBACK = "127.0.0.1";
+    /** 绑所有网卡——局域网里别的机器就能连上来了。 */
+    public static final String ANY_HOST = "0.0.0.0";
+
+    /** 读配置;没有就播一份默认的。读不懂就当关着,不带着一份读坏的表起服。 */
+    public static McpConfig load(Path file, com.dwinovo.numen.api.store.Io io) {
         try {
-            JsonObject o = doc(file).read().orElse(null);
+            JsonObject o = doc(file, io).read().orElse(null);
             if (o == null) {
-                McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN, false);
-                writeDefault(file, def);
+                McpConfig def = disabledDefault();
+                write(file, io, def);
                 return def;
             }
+            JsonObject lim = o.has("limits") && o.get("limits").isJsonObject() ? o.getAsJsonObject("limits")
+                    : new JsonObject();
+            Limits d = Limits.DEFAULT;
             return new McpConfig(
-                    o.has("enabled") ? o.get("enabled").getAsBoolean() : false,
-                    strOr(o, "host", "127.0.0.1"),
+                    o.has("enabled") && o.get("enabled").getAsBoolean(),
+                    strOr(o, "host", LOOPBACK),
                     o.has("port") ? o.get("port").getAsInt() : 8765,
-                    strOr(o, "token", ""),
                     o.has("call_timeout_seconds") ? o.get("call_timeout_seconds").getAsInt() : 300,
                     o.has("hidden_tools") ? strings(o, "hidden_tools") : DEFAULT_HIDDEN,
-                    o.has("quiet_fallback") && o.get("quiet_fallback").getAsBoolean());
+                    new Limits(intOr(lim, "per_token_concurrent", d.perTokenConcurrent()),
+                            intOr(lim, "per_token_per_minute", d.perTokenPerMinute()),
+                            intOr(lim, "total_concurrent", d.totalConcurrent()),
+                            intOr(lim, "total_per_minute", d.totalPerMinute())));
         } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
-            return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN, false);
+            return disabledDefault();
         }
     }
 
@@ -78,92 +85,53 @@ public record McpConfig(
         return hiddenTools.contains(toolName);
     }
 
-    /** 只绑回环。默认值,也是"没开局域网"时的地址。 */
-    public static final String LOOPBACK = "127.0.0.1";
-    /** 绑所有网卡——局域网里别的机器就能连上来了。 */
-    public static final String ANY_HOST = "0.0.0.0";
-
-    /** 配置文件还没读到时的占位(模式关闭),避免 {@link McpMode} 持 null 配置。 */
+    /** 默认配置(关着)。 */
     static McpConfig disabledDefault() {
-        return new McpConfig(false, LOOPBACK, 8765, "", 300, DEFAULT_HIDDEN, false);
+        return new McpConfig(false, LOOPBACK, 8765, 300, DEFAULT_HIDDEN, Limits.DEFAULT);
     }
 
-    /** 只改开关的副本——设置面板拨动开关时用,其余字段保持用户手改的值。 */
     McpConfig withEnabled(boolean on) {
-        return new McpConfig(on, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
+        return new McpConfig(on, host, port, callTimeoutSeconds, hiddenTools, limits);
     }
 
-    /** 改端点与超时的副本(设置页保存时用)。 */
     McpConfig withEndpoint(String host, int port, int callTimeoutSeconds) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
-    }
-
-    McpConfig withToken(String token) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
+        return new McpConfig(enabled, host, port, callTimeoutSeconds, hiddenTools, limits);
     }
 
     McpConfig withHiddenTools(List<String> hiddenTools) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, List.copyOf(hiddenTools), quietFallback);
+        return new McpConfig(enabled, host, port, callTimeoutSeconds, List.copyOf(hiddenTools), limits);
     }
 
-    /** 拨"失联后内脑接管"的副本。 */
-    McpConfig withQuietFallback(boolean on) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, on);
-    }
-
-    /** 绑的是所有网卡吗——局域网里别人够得着。 */
+    /** 绑的是回环之外吗——别的机器够得着,流量不再只在本机里走。 */
     public boolean lanExposed() {
         return !LOOPBACK.equals(host) && !"localhost".equalsIgnoreCase(host);
     }
 
-    /**
-     * 令牌为空且对局域网开放 = 无鉴权裸奔。
-     *
-     * <p>本类注释里那句 "Empty = no auth (fine on loopback)" 的前提是<b>回环</b>;地址一放开,
-     * 那个 fine 就不成立了。设置页据此拦住保存。
-     */
-    public boolean unguarded() {
-        return lanExposed() && (token == null || token.isBlank());
-    }
-
-    /**
-     * 生成一个新令牌。
-     *
-     * <p>用 {@link java.security.SecureRandom}——这串东西是外部 AI 操控同伴的唯一凭据,
-     * 拿可预测的随机数生成等于没有。
-     */
-    public static String mintToken() {
-        byte[] raw = new byte[18];
-        new java.security.SecureRandom().nextBytes(raw);
-        return "numen-" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-    }
-
     /** 写回配置文件:游戏内拨的开关要跨会话记住。 */
-    void save(Path file) {
-        write(file, this, "saved config");
+    void save(Path file, com.dwinovo.numen.api.store.Io io) {
+        write(file, io, this);
     }
 
-    private static void writeDefault(Path file, McpConfig def) {
-        write(file, def, "wrote default config");
-    }
-
-    private static void write(Path file, McpConfig cfg, String what) {
+    private static void write(Path file, com.dwinovo.numen.api.store.Io io, McpConfig cfg) {
         JsonObject o = new JsonObject();
         o.addProperty("enabled", cfg.enabled());
         o.addProperty("host", cfg.host());
         o.addProperty("port", cfg.port());
-        o.addProperty("token", cfg.token());
         o.addProperty("call_timeout_seconds", cfg.callTimeoutSeconds());
         JsonArray hidden = new JsonArray();
         cfg.hiddenTools().forEach(hidden::add);
         o.add("hidden_tools", hidden);
-        o.addProperty("quiet_fallback", cfg.quietFallback());
-        doc(file).write(o);
-        Constants.LOG.info("[numen-mcp] {} {}", what, file);
+        JsonObject lim = new JsonObject();
+        lim.addProperty("per_token_concurrent", cfg.limits().perTokenConcurrent());
+        lim.addProperty("per_token_per_minute", cfg.limits().perTokenPerMinute());
+        lim.addProperty("total_concurrent", cfg.limits().totalConcurrent());
+        lim.addProperty("total_per_minute", cfg.limits().totalPerMinute());
+        o.add("limits", lim);
+        doc(file, io).write(o);
     }
 
-    private static JsonDoc doc(Path file) {
-        return new JsonDoc(file, JsonDoc.Format.of(1), NumenIo.inline("numen-mcp"));
+    private static JsonDoc doc(Path file, com.dwinovo.numen.api.store.Io io) {
+        return new JsonDoc(file, JsonDoc.Format.of(1), io);
     }
 
     private static List<String> strings(JsonObject o, String key) {
@@ -172,6 +140,10 @@ public record McpConfig(
             for (JsonElement el : o.getAsJsonArray(key)) out.add(el.getAsString());
         }
         return List.copyOf(out);
+    }
+
+    private static int intOr(JsonObject o, String key, int fallback) {
+        return o.has(key) ? o.get(key).getAsInt() : fallback;
     }
 
     private static String strOr(JsonObject o, String key, String fallback) {

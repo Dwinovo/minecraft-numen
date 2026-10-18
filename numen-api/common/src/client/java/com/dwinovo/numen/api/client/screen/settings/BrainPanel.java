@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.TextClip;
 import com.dwinovo.numen.api.client.ui.widget.Badge;
 import com.dwinovo.numen.api.client.ui.widget.Button;
-import com.dwinovo.numen.api.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.api.client.ui.widget.Disclosure;
 import com.dwinovo.numen.api.client.ui.widget.Reveal;
 import com.dwinovo.numen.api.client.ui.widget.InlineAlert;
@@ -20,7 +19,6 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.mcp.server.McpAccessPrompt;
-import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
@@ -36,9 +34,9 @@ import java.util.List;
  * 外接大脑分区——一页说完,高级的收在倒三角后面。
  *
  * <h2>默认只有三件事</h2>
- * 地址、令牌、复制接入提示词。接一个外部 AI 只需要这三样,新手看到的就该只有这三样。
- * 端口、局域网、调用超时、不暴露的工具、外部 AI 不动手时她怎么办——这些收进「高级设置」,
- * 想细调的人点开就是。装不下就滚动({@link ScrollBox}),不再藏一层子页。
+ * 地址、令牌怎么来、复制接入提示词。令牌不在这里:它们是主人在游戏里用 {@code /numen token} 发的,
+ * 每张带着主人、作用域和身份,所以这一页只告诉人去哪发。
+ * 端口、局域网、调用超时、不暴露的工具——这些收进「高级设置」,想细调的人点开就是。装不下就滚动({@link ScrollBox}),不再藏一层子页。
  *
  * <h2>两层:滚的与不滚的</h2>
  * 总开关那一行、话筒那一行、收尾的复制提示词按钮固定不动,其余的行在滚动层里。
@@ -56,8 +54,6 @@ public final class BrainPanel {
 
     /** 图标钮的方块热区:图标 12 格,四周各留一格好点。 */
     private static final int ICON_BTN = Sprites.SIZE + 2;
-    /** 两枚图标并排时的步进。 */
-    private static final int ICON_PITCH = ICON_BTN + 1;
     private static final int SAVE_W = 96;
     /** 高级设置里数值框的宽;所有行的右边沿都对齐在 {@code x + w - RIGHT_INSET}。 */
     private static final int NUM_FIELD_W = 60;
@@ -72,7 +68,6 @@ public final class BrainPanel {
     private final ScrollBox scroll = new ScrollBox();
     /** 页面级回执(已复制/已保存):跨 build 持久,重建不吞在途消息。 */
     private final InlineAlert notice = new InlineAlert();
-    private final ConfirmDialog confirm = new ConfirmDialog();
 
     /** 高级设置开合的进度——状态在这儿,控件只是照着画;跨重建保留,过渡不被打断。 */
     private final Reveal advanced = new Reveal();
@@ -86,7 +81,6 @@ public final class BrainPanel {
     /** 本页所有图标钮:图标不写字,悬停得说得出自己是干嘛的(宿主按命中取 tooltip)。 */
     private final List<Button> iconButtons = new ArrayList<>();
     private int x, y, w, h;
-    private int dimX, dimY, dimW, dimH;
 
     /** 搭这一页时的宿主状态;{@code null} = 不是管理员(或服务端还没说)。配置变了才重搭,谁连着这类随时在变的不重搭。 */
     private ServerLibraries.McpServerState builtFor;
@@ -99,8 +93,6 @@ public final class BrainPanel {
     private int endpointRow, tokenRow, lanRow;
     /** 话筒那一行的顶边(固定层):起服失败与回执胶囊落在这儿,平时空着。 */
     private int msgRow;
-    /** 收尾行的顶边与复制提示词按钮的宽:那句令牌提醒紧挨着它画。 */
-    private int footerRow, promptW;
 
     public BrainPanel() {
         Minecraft mc = Minecraft.getInstance();
@@ -145,8 +137,7 @@ public final class BrainPanel {
         int footer = NumenStyle.footerTop(y, h);
         msgRow = footer - 5 - 9;
         String promptLabel = t("numen.brain.copy_prompt");
-        footerRow = footer;
-        promptW = font.width(promptLabel) + 14;
+        int promptW = font.width(promptLabel) + 14;
         Button prompt = fixedUi.add(new Button(promptLabel, Button.Style.ACCENT,
                 () -> copy(accessPrompt())));
         prompt.setBounds(x, footer, promptW, NumenStyle.CONTROL_H);
@@ -165,11 +156,6 @@ public final class BrainPanel {
 
         tokenRow = ry;
         SettingsRows.label(ui, t("numen.brain.token"), x, ry, labelW());
-        // 没令牌时复制没得复制:留在原地置灰,这一行的排布不跟着跳。
-        iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN - ICON_PITCH, ry,
-                () -> copy(state().token())).setEnabled(!st.token().isBlank());
-        iconButton(Sprites.REFRESH, t("numen.brain.regenerate"), x + w - ICON_BTN, ry,
-                this::askRegenerate);
         ry += SettingsRows.ROW_H;
         SettingsRows.gap(ui, x, ry, w);
         ry += SettingsRows.GAP_H;
@@ -225,16 +211,7 @@ public final class BrainPanel {
                 SAVE_W, NumenStyle.CONTROL_H);
         refreshSaveState();
         ry += SettingsRows.ROW_H;
-
-        // 上面那四行要点保存才算数,下面这个拨了就算——分成两组,中间一道宽缝,别让人以为还得保存。
-        SettingsRows.gap(ui, x, ry, w);
-        ry += SettingsRows.GAP_H;
-
-        SettingsRows.label(ui, I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L),
-                x, ry, w - 28);
-        Toggle quiet = ui.add(new Toggle(st.quietFallback(), on -> put("quietFallback", on)));
-        quiet.setBounds(x + w - 24, SettingsRows.controlY(ry, 11), 22, 11);
-        fullH = ry + SettingsRows.ROW_H - top;
+        fullH = ry - top;
 
         // 视口到话筒那一行为止;内容装不下就滚,装得下连拇指都不画。
         // 视口左右各放宽一圈内边距:组间宽缝铺满整页宽,不能被裁在内容边上。
@@ -257,14 +234,6 @@ public final class BrainPanel {
 
     private boolean lanNow() {
         return lanOn != null ? lanOn : state().lanExposed();
-    }
-
-    /** 遮罩范围由宿主给——确认卡要盖住整个设置面板,不是只盖这个分区。 */
-    public void setDimBounds(int dimX, int dimY, int dimW, int dimH) {
-        this.dimX = dimX;
-        this.dimY = dimY;
-        this.dimW = dimW;
-        this.dimH = dimH;
     }
 
     /** 端点改了且服务在跑 → 这次保存要重开服务,按钮如实说。 */
@@ -290,8 +259,8 @@ public final class BrainPanel {
     /**
      * 每次改动都重算一遍能不能保存。
      *
-     * <p>拦得最死的一条:<b>开了局域网、令牌却是空的</b>。配置注释里那句"空令牌在回环上无害"
-     * 的前提是回环,地址一放开就是谁都能操控主人的同伴。红字挂在局域网那一行,不弹全局警告。
+     * <p>端口要在合法范围里。开了局域网不另拦:端点永远要令牌,只是明文 HTTP 的令牌会在网上明文传输,
+     * 局域网那一行的警告说清并建议加反向代理。
      */
     private void refreshSaveState() {
         if (saveButton == null || portField == null) {
@@ -300,8 +269,7 @@ public final class BrainPanel {
         int port = portValue();
         boolean portOk = port >= 1 && port <= 65535;
         portField.setError(portOk ? null : t("numen.brain.port_range"));
-        boolean tokenOk = !lanNow() || !state().token().isBlank();
-        saveButton.setEnabled(portOk && tokenOk);
+        saveButton.setEnabled(portOk);
         saveButton.setLabel(saveLabel());
     }
 
@@ -363,30 +331,7 @@ public final class BrainPanel {
 
     private static String accessPrompt() {
         ServerLibraries.McpServerState st = state();
-        return McpAccessPrompt.build(st.endpoint(), st.token());
-    }
-
-    // ---- 令牌 ----
-
-    /**
-     * 换令牌要过确认卡。
-     *
-     * <p>我们自己把明文令牌嵌进「接入提示词」、并教主人复制给外部 AI——那就必须给他一条
-     * 作废的路。而作废是有代价的:在线的客户端会当场断开,得说清楚再让他点。
-     */
-    private void askRegenerate() {
-        confirm.open(fixedUi, dimX, dimY, dimW, dimH,
-                t("numen.brain.regen_confirm_title") + "\n" + t("numen.brain.regen_confirm_body"),
-                t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), t("numen.brain.regenerate"),
-                () -> {
-                    put("regenerateToken", true);
-                    notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
-                });
-    }
-
-    private String tokenText() {
-        ServerLibraries.McpServerState mcp = state();
-        return mcp.token().isBlank() ? t("numen.brain.token_none") : mcp.maskedToken();
+        return McpAccessPrompt.build(st.endpoint());
     }
 
     // ---- 渲染 ----
@@ -414,15 +359,12 @@ public final class BrainPanel {
         // 地址与令牌:行右侧的值(Telegram 设置行右侧是强调色的字),右对齐贴着各自的图标钮
         int valueX = x + labelW() + 8;
         rightValue(s, mcp.endpoint(), valueX, x + w - ICON_BTN - 4, endpointRow + dy, c.accent());
-        rightValue(s, tokenText(), valueX, x + w - ICON_BTN - ICON_PITCH - 4, tokenRow + dy,
-                mcp.token().isBlank() ? c.textMuted() : c.accent());
+        rightValue(s, t("numen.brain.token_how"), valueX, x + w - 4, tokenRow + dy, c.textMuted());
         if (advanced.value() > 0f) {
-            // 绑到所有网卡这件事本身会成功,只是降级——按自家判据是 warning 不是 danger。
-            // 但令牌为空时它就变成"这次保存不该发生",那才是 danger。
+            // 绑到所有网卡这件事本身会成功,只是降级:端点是明文 HTTP——按自家判据是 warning 不是 danger。
             if (lanNow()) {
-                boolean noToken = mcp.token().isBlank();
-                s.drawText(t(noToken ? "numen.brain.lan_needs_token" : "numen.brain.lan_warn"),
-                        x, noteBelow(lanRow) + dy, noToken ? c.danger() : c.warning(), false);
+                s.drawText(TextClip.fit(s, t("numen.brain.lan_warn"), w), x, noteBelow(lanRow) + dy,
+                        c.warning(), false);
             }
         }
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
@@ -437,11 +379,6 @@ public final class BrainPanel {
                     SettingsRows.controlY(y, s.lineHeight()),
                     mcp.clientName() == null ? c.warning() : c.success(), 0xFFFFFFFF);
         }
-        // 令牌就在提示词里,这句提醒紧挨着那个按钮——它是按钮的注脚,不是另起一行的公告。
-        s.drawText(TextClip.fit(s, t("numen.brain.prompt_warn"), w - promptW - 8),
-                x + promptW + 8,
-                NumenStyle.centerIn(footerRow, NumenStyle.CONTROL_H, s.lineHeight()),
-                c.textSecondary(), false);
         // 话筒那一行平时空着,只有起服失败时说话(回执胶囊也落在这儿)。
         String err = mcp.lastError();
         if (err != null && !mcp.enabled()) {

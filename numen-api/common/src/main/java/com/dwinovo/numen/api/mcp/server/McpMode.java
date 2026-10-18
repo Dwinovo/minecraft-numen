@@ -1,64 +1,56 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.home.Home;
 
-import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
 
 /**
- * 「外接大脑」模式的唯一状态源——UI、内置大脑闸门、HTTP 服务器三方共读的一处真相。
+ * 远程端点宿主的唯一状态源——界面、驾驶席闸门、命令、HTTP 服务器共读的一处真相。
  *
- * <h2>模式 = 服务器开关</h2>
- * 不另立"模式"概念:{@link McpConfig#enabled} 开着就是模式开着,服务器就在跑。
- * 设置里拨动开关 → {@link #setEnabled} 即时起停服务器并写回配置文件,下次进游戏
- * 自动恢复同一状态。
+ * <h2>端点 = 服务器开关</h2>
+ * {@link McpConfig#enabled} 开着,HTTP 服务器就在跑;关着,没人连得上。设置里拨动开关 → {@link #setEnabled}
+ * 即时起停并写回配置文件。专用服默认关,服主自己开。
  *
- * <h2>谁在驱动这具身体:{@link #driving()}</h2>
- * "两个大脑抢一具身体"的总闸口径:外脑驱动期间内置大脑一轮都不开
- * (循环内核每次推进都现问它,在它手里时停牌 {@code EXTERNAL})。主人在游戏里照样说话——话进
- * 事件队列,由外脑经 {@code get_events} 取走并用 {@code say} 回话;弹幕/QQ 桥接
- * 送进来的消息也走同一条线。身体层面的互斥另有 {@code TaskDispatch} 的
- * "一具身体一件活"闸门兜底,两者各管一层。
- *
- * <p>失联回退({@link McpConfig#quietFallback}):开着时外脑安静超过
- * {@value #QUIET_AFTER_MS} 毫秒就视作不在场,{@code driving()} 翻假、内置大脑
- * 接管;外脑一有动静立即交还。默认关——主人开这个模式是刻意的,她安静待命。
+ * <h2>谁在驾驶:{@link #driving}</h2>
+ * 驾驶席按同伴算:她主人名下有连着的、身份是大脑的会话,且其令牌的作用域管着她,外部大脑就坐在她的驾驶席上,
+ * 内置大脑一轮都不开(循环内核每次推进都现问它,在它手里时停牌 {@code EXTERNAL})。会话断开了,
+ * 驾驶席现算地交还内脑——"连着"的口径只在 {@link McpSessions} 一处。
  *
  * <h2>线程</h2>
- * {@link #enabled()} 被渲染线程和游戏主线程高频读,故用 volatile 裸字段;
- * 握手信息由 HTTP 线程写入、渲染线程读。
+ * {@link #enabled()} 被渲染线程和游戏主线程高频读,故用 volatile 裸字段;会话由 HTTP 线程写入、主线程读。
  */
 public final class McpMode {
 
     private static final McpMode INSTANCE = new McpMode();
 
-    /**
-     * 外脑安静多久算"不在场"(失联播报与 quietFallback 的同一判据)。
-     * get_events 长轮询最长 50 秒,正常在场的外脑请求间隔不会超过它——
-     * 两倍再留余量,误报比漏报伤:错误的"失联"会让内脑抢答。
-     */
-    public static final long QUIET_AFTER_MS = 120_000L;
+    /** 谁连上了、谁断开了:装载方(服务端)据此告诉主人,并重算他在不在。每刻在主线程上查一次边沿。 */
+    public interface Watch {
 
-    private volatile boolean enabled;
-    private volatile String clientName;      // initialize 握手报的对方名字,null = 还没人连过
-    private volatile long lastActivityMs;
-    private volatile String lastError;       // 起服失败的原因,给 UI 显示
-    private boolean announcedQuiet;          // 失联已播报过(边沿检测,只在主线程碰)
+        /** 这位主人的外部大脑连上了。 */
+        void connected(UUID owner);
 
-    /** 失联与回归的播报:谁在场、用什么语言说,是宿主的事(客户端画聊天行,服务端发给主人的系统消息)。 */
-    public interface Notices {
-
-        /** 外脑安静太久了;{@code fallback} 为真时内置大脑已经接管。 */
-        void quiet(boolean fallback);
-
-        /** 外脑回来了。 */
-        void back();
+        /** 这位主人的外部大脑断开了(最后一个会话也不再连着)。 */
+        void gone(UUID owner);
     }
 
-    private Path configFile;
+    private volatile boolean enabled;
+    private volatile String lastError;       // 起服失败的原因,给 UI 显示
+
+    private Home home;
     private McpConfig config = McpConfig.disabledDefault();
     private McpServer server;
-    private ExternalHands hands;
-    private Notices notices;
+    private McpTokens tokens;
+    private McpSessions sessions;
+    private McpLimits limits;
+    private McpAudit audit;
+    private Function<UUID, ExternalHands> hands;
+    private Watch watch;
+    /** 上一刻有大脑连着的主人,找连上、断开的边沿。只在主线程碰。 */
+    private Set<UUID> connectedOwners = Set.of();
 
     private McpMode() {}
 
@@ -68,21 +60,27 @@ public final class McpMode {
 
     // ---- 生命周期 ----
 
-    /**
-     * 装载配置:记住配置文件位置、同伴的手和播报口,enabled 则立刻起服。大脑所在的那一端启动时调一次。
-     */
-    void bootstrap(Path file, McpConfig loaded, ExternalHands hands, Notices notices) {
-        this.configFile = file;
-        this.config = loaded;
+    /** 装载配置:记住服务器的家、同伴的手和通知口,enabled 则立刻起服。大脑所在的那一端启动时调一次。 */
+    void bootstrap(Home serverHome, Function<UUID, ExternalHands> hands, Watch watch) {
+        this.home = serverHome;
         this.hands = hands;
-        this.notices = notices;
-        if (loaded.enabled()) {
+        this.watch = watch;
+        this.config = McpConfig.load(serverHome.file(CONFIG_FILE), serverHome.io());
+        this.tokens = new McpTokens(serverHome, System::currentTimeMillis);
+        this.sessions = new McpSessions(System::currentTimeMillis);
+        this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
+        this.audit = new McpAudit(serverHome);
+        this.connectedOwners = Set.of();
+        if (config.enabled()) {
             startServer();
         } else {
             this.enabled = false;
-            Constants.LOG.info("[numen-mcp] 外接大脑模式关闭(config/numen/mcp_server.json)");
+            Constants.LOG.info("[numen-mcp] 远程端点关闭(服主在 {} 里开)", CONFIG_FILE);
         }
     }
+
+    /** 配置文件名,在服务器的家里。 */
+    static final String CONFIG_FILE = "mcp_server.json";
 
     /**
      * 拨动开关:即时起停服务器并写回配置文件。
@@ -97,7 +95,7 @@ public final class McpMode {
             stopServer();
         }
         config = config.withEnabled(enabled);
-        if (configFile != null) config.save(configFile);
+        config.save(home.file(CONFIG_FILE), home.io());
         return true;
     }
 
@@ -110,21 +108,18 @@ public final class McpMode {
      *
      * @return 起服失败时 {@code false},原因见 {@link #lastError()}
      */
-    public boolean applySettings(String host, int port, int callTimeoutSeconds,
-                                 java.util.List<String> hiddenTools, String token) {
+    public boolean applySettings(String host, int port, int callTimeoutSeconds, java.util.List<String> hiddenTools) {
         boolean wasRunning = enabled;
         if (wasRunning) {
             stopServer();
         }
-        config = config.withEndpoint(host, port, callTimeoutSeconds)
-                .withHiddenTools(hiddenTools)
-                .withToken(token);
+        config = config.withEndpoint(host, port, callTimeoutSeconds).withHiddenTools(hiddenTools);
         boolean ok = true;
         if (wasRunning) {
             ok = startServer();
         }
         config = config.withEnabled(enabled);
-        if (configFile != null) config.save(configFile);
+        config.save(home.file(CONFIG_FILE), home.io());
         return ok;
     }
 
@@ -133,26 +128,30 @@ public final class McpMode {
         return config;
     }
 
-    /**
-     * 大脑所在的那一端关停时放手:服务器停掉,不碰配置文件里的开关(下次起来照旧)。
-     */
+    /** 令牌库;宿主没装载时是 null。 */
+    public McpTokens tokens() {
+        return tokens;
+    }
+
+    /** 大脑所在的那一端关停时放手:服务器停掉,会话结束,不碰配置文件里的开关(下次起来照旧)。 */
     public void shutdown() {
-        if (server != null) {
-            server.stop();
-            server = null;
-        }
-        enabled = false;
-        clientName = null;
+        stopServer();
+        sessions = null;
+        tokens = null;
+        limits = null;
+        audit = null;
         hands = null;
-        notices = null;
-        configFile = null;
+        watch = null;
+        home = null;
+        connectedOwners = Set.of();
         config = McpConfig.disabledDefault();
-        Constants.LOG.info("[numen-mcp] 外接大脑宿主随这一端关停");
+        Constants.LOG.info("[numen-mcp] 远程端点宿主随这一端关停");
     }
 
     private boolean startServer() {
         lastError = null;
-        McpServer s = new McpServer(config, hands);
+        limits.configure(config.limits());
+        McpServer s = new McpServer(config, tokens, limits, sessions, audit, hands);
         try {
             s.start();
         } catch (Exception ex) {
@@ -163,8 +162,11 @@ public final class McpMode {
         }
         server = s;
         enabled = true;
-        Constants.LOG.info("[numen-mcp] 外接大脑模式已开启,端点 {} — 外部客户端经 `npx mcp-remote {}` 接入",
-                endpoint(), endpoint());
+        Constants.LOG.info("[numen-mcp] 远程端点已开启,{};每张令牌由 /numen token 发", endpoint());
+        if (config.lanExposed()) {
+            Constants.LOG.warn("[numen-mcp] 端点绑在 {},是明文 HTTP:令牌会在网上明文传输。"
+                    + "建议在前面放反向代理加 HTTPS,端点本身只绑回环", config.host());
+        }
         return true;
     }
 
@@ -174,81 +176,76 @@ public final class McpMode {
             server = null;
         }
         enabled = false;
-        clientName = null;      // 连接状态随服务器一起归零(现场缓冲留着:那是主人看过的对话)
-        Constants.LOG.info("[numen-mcp] 外接大脑模式已关闭,内置大脑恢复接管");
+        Constants.LOG.info("[numen-mcp] 远程端点已关闭");
     }
 
     // ---- 状态查询(UI / 闸门) ----
 
-    /** 模式(=服务器)是否开启——面板状态、设置页读这个;两脑仲裁读 {@link #driving()}。 */
+    /** 端点(=服务器)是否开启。 */
     public boolean enabled() {
         return enabled;
     }
 
-    /**
-     * 外脑此刻是否驱动着身体——内置大脑的开轮闸门、聊天区形态、现场缓冲挂点
-     * 全读这一处口径。模式开着即驱动;仅当失联回退开着且外脑安静超时,才交还内脑。
-     */
-    public boolean driving() {
-        return enabled && !(config.quietFallback() && quietNow());
+    /** 这只同伴的驾驶席此刻在外部大脑手里吗。 */
+    public boolean driving(UUID owner, UUID companion) {
+        McpSessions s = sessions;
+        return enabled && s != null && s.drives(owner, companion);
     }
 
-    /** 外脑安静超时(或从未有人连过)。 */
-    private boolean quietNow() {
-        return clientName == null || System.currentTimeMillis() - lastActivityMs > QUIET_AFTER_MS;
+    /** 这位主人有外部大脑连着(任何一只同伴上):"主人在不在"的一半,另一半是人在不在游戏里。 */
+    public boolean brainConnected(UUID owner) {
+        McpSessions s = sessions;
+        return enabled && s != null && s.brainConnected(owner);
     }
 
     /**
-     * 每刻一次(大脑所在的那一端驱动):失联/回归的边沿检测。
-     * 主人有知情权——外脑没动静了得说一声,不能让她无声变成"已读不回"。
+     * 每刻一次(大脑所在的那一端驱动):令牌作废、过期的会话结束,外部大脑连上、断开的边沿。
+     * 主人有知情权——外部大脑没了得说一声,不能让她无声变成"已读不回"。
      */
     public void tick() {
-        if (!enabled || clientName == null) {
-            announcedQuiet = false;
+        McpSessions s = sessions;
+        if (s == null) {
             return;
         }
-        boolean quiet = System.currentTimeMillis() - lastActivityMs > QUIET_AFTER_MS;
-        if (quiet && !announcedQuiet) {
-            announcedQuiet = true;
-            notices.quiet(config.quietFallback());
-        } else if (!quiet && announcedQuiet) {
-            announcedQuiet = false;
-            notices.back();
+        s.sweep(tokens::valid);
+        Set<UUID> now = enabled ? s.brainOwners() : Set.of();
+        for (UUID owner : now) {
+            if (!connectedOwners.contains(owner)) {
+                watch.connected(owner);
+            }
         }
+        for (UUID owner : new HashSet<>(connectedOwners)) {
+            if (!now.contains(owner)) {
+                watch.gone(owner);
+            }
+        }
+        connectedOwners = now;
     }
 
-    /** 拨"失联后内脑接管"开关:只写配置,即时生效({@link #driving()} 现算)。 */
-    public void setQuietFallback(boolean on) {
-        config = config.withQuietFallback(on);
-        if (configFile != null) config.save(configFile);
-    }
-
+    /** 端点的地址,给界面与提示词。 */
     public String endpoint() {
         return "http://" + config.host() + ":" + config.port() + "/mcp";
     }
 
-    public String token() {
-        return config.token();
-    }
-
-    /**
-     * 打码后的令牌,给 UI 显示——明文 token 不上屏(截图/录屏泄露过一次就永久泄露),
-     * 要用整份的地方走复制按钮。
-     */
-    public String maskedToken() {
-        String t = config.token();
-        if (t == null || t.isBlank()) return "";
-        return t.length() <= 8 ? "•".repeat(t.length()) : t.substring(0, 8) + "•".repeat(6);
-    }
-
-    /** 最近一次 initialize 握手报上来的客户端名字,或 null(还没人接入)。 */
+    /** 最近一次接入的客户端自报的名字,或 null(还没人接入)。 */
     public String clientName() {
-        return clientName;
+        McpSessions s = sessions;
+        if (s == null) return null;
+        McpSessions.Session latest = null;
+        for (McpSessions.Session one : s.all()) {
+            if (latest == null || one.lastSeen() > latest.lastSeen()) latest = one;
+        }
+        return latest == null ? null : latest.client;
     }
 
     /** 最近一次收到请求的时刻(毫秒),0 = 从未。 */
     public long lastActivityMs() {
-        return lastActivityMs;
+        McpSessions s = sessions;
+        long last = 0;
+        if (s != null) {
+            for (McpSessions.Session one : s.all()) last = Math.max(last, one.lastSeen());
+        }
+        return last;
     }
 
     /** 最近一次起服失败的原因,或 null。 */
@@ -256,24 +253,8 @@ public final class McpMode {
         return lastError;
     }
 
-    /**
-     * 「复制接入提示词」的内容:内嵌当前端点与令牌,用户复制后发给自己的 AI,
-     * 由那个 AI 去配本机 MCP。含明文令牌,故只走剪贴板、不上屏。
-     */
+    /** 「复制接入提示词」的内容:内嵌当前端点,令牌由主人在游戏里另发。 */
     public String accessPrompt() {
-        return McpAccessPrompt.build(endpoint(), token());
-    }
-
-    // ---- HTTP 线程回调 ----
-
-    /** 收到任何请求都刷新活跃时刻(ping 也算——它正是客户端用来证明自己还在的)。 */
-    void touch() {
-        lastActivityMs = System.currentTimeMillis();
-    }
-
-    /** initialize 握手:记下对方是谁("Claude Desktop 1.2.3")。 */
-    void handshake(String name) {
-        clientName = name;
-        touch();
+        return McpAccessPrompt.build(endpoint());
     }
 }

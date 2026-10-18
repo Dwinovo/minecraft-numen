@@ -257,23 +257,14 @@ public final class ServerLibraries {
     // ---- 外接大脑宿主 ----
 
     /** 管理员看到的宿主整份状态;别人读到的表是空的,{@link #mcpServer} 给 {@code null}。 */
-    public record McpServerState(boolean enabled, String host, int port, boolean lanExposed, String token,
-                                 int callTimeoutSeconds, List<String> hiddenTools, boolean quietFallback,
+    public record McpServerState(boolean enabled, String host, int port, boolean lanExposed,
+                                 int callTimeoutSeconds, List<String> hiddenTools,
                                  String endpoint, String clientName, long lastActivityMs, String lastError) {
 
         /** 要不要重搭界面看这个:不含谁连着、多久前活跃、起服失败这些随时在变的状态。 */
         public boolean sameConfig(McpServerState other) {
             return other != null && enabled == other.enabled && host.equals(other.host) && port == other.port
-                    && token.equals(other.token) && callTimeoutSeconds == other.callTimeoutSeconds
-                    && hiddenTools.equals(other.hiddenTools) && quietFallback == other.quietFallback;
-        }
-
-        /** 打码后的令牌,给界面显示——明文令牌不上屏。 */
-        public String maskedToken() {
-            if (token == null || token.isBlank()) {
-                return "";
-            }
-            return token.length() <= 8 ? "•".repeat(token.length()) : token.substring(0, 8) + "•".repeat(6);
+                    && callTimeoutSeconds == other.callTimeoutSeconds && hiddenTools.equals(other.hiddenTools);
         }
     }
 
@@ -286,8 +277,7 @@ public final class ServerLibraries {
         List<String> hidden = new ArrayList<>();
         o.getAsJsonArray("hiddenTools").forEach(t -> hidden.add(t.getAsString()));
         return new McpServerState(o.get("enabled").getAsBoolean(), text(o, "host"), o.get("port").getAsInt(),
-                o.get("lanExposed").getAsBoolean(), text(o, "token") == null ? "" : text(o, "token"),
-                o.get("callTimeoutSeconds").getAsInt(), hidden, o.get("quietFallback").getAsBoolean(),
+                o.get("lanExposed").getAsBoolean(), o.get("callTimeoutSeconds").getAsInt(), hidden,
                 text(o, "endpoint"), text(o, "clientName"), o.get("lastActivityMs").getAsLong(), text(o, "lastError"));
     }
 }

@@ -359,6 +359,14 @@ public final class ModLanguageData {
         public static final String COMMAND_CONSENT_ANSWERED  = "numen.command.consent_answered";
         public static final String COMMAND_CONSENT_NOT_OWNER = "numen.command.consent_not_owner";
         public static final String COMMAND_CONSENT_NOT_PENDING = "numen.command.consent_not_pending";
+        public static final String COMMAND_TOKEN_ISSUED = "numen.command.token_issued";
+        public static final String COMMAND_TOKEN_SECRET = "numen.command.token_secret";
+        public static final String COMMAND_TOKEN_ENDPOINT_OFF = "numen.command.token_endpoint_off";
+        public static final String COMMAND_TOKEN_LIST_NONE = "numen.command.token_list_none";
+        public static final String COMMAND_TOKEN_ROW = "numen.command.token_row";
+        public static final String COMMAND_TOKEN_REVOKED = "numen.command.token_revoked";
+        public static final String COMMAND_TOKEN_NOT_FOUND = "numen.command.token_not_found";
+        public static final String COMMAND_TOKEN_NO_COMPANION = "numen.command.token_no_companion";
         public static final String DEBUG_ON          = "numen.debug.on";
         public static final String DEBUG_OFF         = "numen.debug.off";
 
@@ -470,11 +478,10 @@ public final class ModLanguageData {
         adder.add("numen.brain.enable", "Enable external brain");
         adder.add("numen.brain.start_failed", "Could not start the server: %s");
         adder.add("numen.brain.endpoint", "Endpoint");
-        adder.add("numen.brain.token", "Access token");
-        adder.add("numen.brain.token_none", "not set (loopback only)");
+        adder.add("numen.brain.token", "Access tokens");
+        adder.add("numen.brain.token_how", "issue with /numen token create");
         adder.add("numen.brain.copy", "Copy");
         adder.add("numen.brain.copy_prompt", "Copy setup prompt");
-        adder.add("numen.brain.prompt_warn", "Holds your local token.");
         adder.add("numen.brain.copied", "✔ Copied");
         adder.add("numen.brain.status_waiting", "waiting");
         adder.add("numen.brain.status_connected", "%s · %s");
@@ -482,20 +489,12 @@ public final class ModLanguageData {
         adder.add("numen.brain.since_min", "%dmin ago");
         adder.add("numen.brain.driving", "An external brain is driving her");
         adder.add("numen.brain.admin_only", "Only server admins can set up the external brain.");
-        adder.add("numen.brain.quiet_standby", "The external brain has gone quiet — your companion is standing by.");
-        adder.add("numen.brain.quiet_fallback", "The external brain has gone quiet — the built-in brain is taking over until it returns.");
+        adder.add("numen.brain.quiet_fallback", "The external brain disconnected — the built-in brain is back in charge.");
         adder.add("numen.brain.advanced", "Advanced");
-        adder.add("numen.brain.back_active", "The external brain is back.");
-        adder.add("numen.brain.quiet_toggle", "Disconnect after %s min of silence");
-        adder.add("numen.brain.regenerate", "New token");
-        adder.add("numen.brain.regen_confirm_title", "Issue a new token?");
-        adder.add("numen.brain.regen_confirm_body",
-                "Any AI already connected is disconnected at once and needs the new setup prompt.");
+        adder.add("numen.brain.back_active", "An external brain connected — it is driving her now.");
         adder.add("numen.brain.lan", "Allow LAN connections");
         adder.add("numen.brain.lan_warn",
-                "Anyone on your network can drive your companions — keep the token set.");
-        adder.add("numen.brain.lan_needs_token",
-                "A token is required once the network can reach it.");
+                "Plain HTTP: tokens cross the network in the clear. Put an HTTPS reverse proxy in front.");
         adder.add("numen.brain.port", "Port");
         adder.add("numen.brain.timeout", "Timeout (s)");
         adder.add("numen.brain.hidden_tools", "Hidden tools");
@@ -958,6 +957,15 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "Answered consent request #%s for %s: %s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "Consent request #%s belongs to a companion that is not yours");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "No pending consent request #%s (already answered, expired or replaced)");
+        adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once — click it to copy:");
+        adder.add(Keys.COMMAND_TOKEN_SECRET, "%s");
+        adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF,
+                "The remote endpoint is off. The server owner turns it on in config/numen/mcp_server.json.");
+        adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "You have no tokens.");
+        adder.add(Keys.COMMAND_TOKEN_ROW, "%s — %s, %s, %s");
+        adder.add(Keys.COMMAND_TOKEN_REVOKED, "Revoked token %s; sessions using it are disconnected.");
+        adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "You have no token %s");
+        adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "You have no companion named '%s'");
         adder.add(Keys.DEBUG_ON,          "Debug mode on: UI text shown unfiltered");
         adder.add(Keys.DEBUG_OFF,         "Debug mode off");
         adder.add(Keys.LOOP_GONE, "She is gone");
@@ -1068,10 +1076,9 @@ public final class ModLanguageData {
         adder.add("numen.brain.start_failed", "服务器启动失败:%s");
         adder.add("numen.brain.endpoint", "接入端点");
         adder.add("numen.brain.token", "访问令牌");
-        adder.add("numen.brain.token_none", "未设置(仅本机回环)");
+        adder.add("numen.brain.token_how", "游戏里用 /numen token create 发");
         adder.add("numen.brain.copy", "复制");
         adder.add("numen.brain.copy_prompt", "复制接入提示词");
-        adder.add("numen.brain.prompt_warn", "里面有你的本机令牌,只发给信任的 AI");
         adder.add("numen.brain.copied", "✔ 已复制");
         adder.add("numen.brain.status_waiting", "等待接入");
         adder.add("numen.brain.status_connected", "%s · %s");
@@ -1079,18 +1086,11 @@ public final class ModLanguageData {
         adder.add("numen.brain.since_min", "%d 分钟前");
         adder.add("numen.brain.driving", "外接大脑正在驾驶她");
         adder.add("numen.brain.admin_only", "只有服务器管理员能设置外接大脑。");
-        adder.add("numen.brain.quiet_standby", "外接大脑没动静了——她先安静待命。");
-        adder.add("numen.brain.quiet_fallback", "外接大脑没动静了——内置大脑先接管,它回来就交还。");
+        adder.add("numen.brain.quiet_fallback", "外接大脑断开了——内置大脑接回驾驶席。");
         adder.add("numen.brain.advanced", "高级设置");
-        adder.add("numen.brain.back_active", "外接大脑回来了。");
-        adder.add("numen.brain.quiet_toggle", "%s 分钟无响应自动断开");
-        adder.add("numen.brain.regenerate", "重新生成");
-        adder.add("numen.brain.regen_confirm_title", "换一个新令牌?");
-        adder.add("numen.brain.regen_confirm_body",
-                "已经接入的 AI 会立刻断开,需要重新复制接入提示词给它。");
+        adder.add("numen.brain.back_active", "外接大脑连上了——现在由它驾驶她。");
         adder.add("numen.brain.lan", "允许局域网连接");
-        adder.add("numen.brain.lan_warn", "局域网内任何人都能操控你的同伴,必须保留令牌。");
-        adder.add("numen.brain.lan_needs_token", "对局域网开放时必须有令牌。");
+        adder.add("numen.brain.lan_warn", "明文 HTTP:令牌会在网上明文传输,建议前面放反向代理加 HTTPS。");
         adder.add("numen.brain.port", "端口");
         adder.add("numen.brain.timeout", "调用超时(秒)");
         adder.add("numen.brain.hidden_tools", "不暴露的工具");
@@ -1554,6 +1554,14 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "已答复征询 #%s(%s):%s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "征询 #%s 属于别人的同伴");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "没有待答复的征询 #%s(已答复、过期或被顶掉)");
+        adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次——点它复制:");
+        adder.add(Keys.COMMAND_TOKEN_SECRET, "%s");
+        adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF, "远程端点没开。服主在 config/numen/mcp_server.json 里开。");
+        adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "你还没有令牌。");
+        adder.add(Keys.COMMAND_TOKEN_ROW, "%s — %s,%s,%s");
+        adder.add(Keys.COMMAND_TOKEN_REVOKED, "已作废令牌 %s,用它的会话已断开。");
+        adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "你没有令牌 %s");
+        adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "你没有叫「%s」的同伴");
         adder.add(Keys.DEBUG_ON,          "调试模式已开:UI 文本不过滤直出");
         adder.add(Keys.DEBUG_OFF,         "调试模式已关");
         adder.add(Keys.LOOP_GONE, "她已经不在了");
