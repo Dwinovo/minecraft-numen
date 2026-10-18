@@ -37,23 +37,38 @@ public final class ChatRoutes {
     private ChatRoutes() {}
 
     /**
+     * 这位玩家此刻在聊天栏里打的字归不归 Numen(他切进了会话)。只读判断,任何线程都能调:聊天事件在异步线程上的平台
+     * (Paper)要当场回答"取消不取消",接下来的处理交回主线程({@link #deliver})。
+     */
+    public static boolean routed(UUID player) {
+        return ROUTES.containsKey(player);
+    }
+
+    /**
      * 聊天栏里的一行。切进了会话的,这一行进会话、不再往公屏广播(返回 {@code true},各加载器的聊天事件据此取消广播);
-     * 在公屏上的不碰(返回 {@code false})。
+     * 在公屏上的不碰(返回 {@code false})。主线程。
      */
     public static boolean take(ServerPlayer player, String message) {
-        String id = ROUTES.get(player.getUUID());
-        if (id == null) {
+        if (!routed(player.getUUID())) {
             return false;
         }
-        Conversation conv = Conversations.of(player.server, player.getUUID()).find(id);
+        deliver(player, message);
+        return true;
+    }
+
+    /**
+     * 把一行送进他切进的会话——对 {@link #routed} 答过"是"的那一行。主线程。判定与送达之间他可能已经切回公屏或会话没了:
+     * 这行话不能漏到公屏上去,所以吞下,并说清楚。
+     */
+    public static void deliver(ServerPlayer player, String message) {
+        String id = ROUTES.get(player.getUUID());
+        Conversation conv = id == null ? null : Conversations.of(player.server, player.getUUID()).find(id);
         if (conv == null) {
-            // 会话没了:这行话不能漏到公屏上去,所以吞下,并说清楚
             leave(player);
             player.sendSystemMessage(Component.translatable(Keys.COMMAND_CHAT_GONE_UNSENT));
-            return true;
+            return;
         }
         say(player, conv, message);
-        return true;
     }
 
     /** 在这个会话里说一句:先把这一行以 {@code [会话名] <他> 话} 回给他自己看,再照会话的规则送出去。 */
