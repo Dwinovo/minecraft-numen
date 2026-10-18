@@ -168,6 +168,10 @@ public final class NumenPlayer extends ServerPlayer {
      * 一件掉落物碰到了她,原版正要往背包里放(由 {@code ItemEntityTouchMixin} 交来)。放不放得下照原版背包找格子的两步:有一格还能
      * 叠上它({@code getSlotWithRemainingSpace}),或者有空格({@code getFreeSlot});创造模式什么都收。放不下的记下来,由
      * {@link #pollInventoryFull} 交出去。"满了"只在这里判:挖、捡、合成这些活不各自判。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code ItemEntityTouchMixin} 在 {@code ItemEntity.playerTouch} 开头调;Paper 上由
+     * {@code PlayerAttemptPickupItemEvent} 调(它在归属检查之前触发)。调用方保证:主线程,<b>已经自己判过</b>原版真会去捡的
+     * 两个条件——拾取冷却已过、这件东西没指名给别人;这里只判背包放不放得下。
      */
     public void touchedItem(ItemEntity item) {
         if (fullReported || leftBehind != null || hasInfiniteMaterials()) {
@@ -390,6 +394,18 @@ public final class NumenPlayer extends ServerPlayer {
             setYRot(vehicle.getYRot());
             setYHeadRot(vehicle.getYRot());
         }
+        return true;
+    }
+
+    /**
+     * 载具的服务端权威开关。原版把"谁驱动这个载具"交给控制乘客的客户端:{@code Entity.isControlledByLocalInstance}
+     * 对玩家骑手看的就是 {@code isLocalPlayer()},不是本机驱动时,船的 {@code tick} 每刻把速度清零、等一个客户端移动包,
+     * 骑乘生物(马)的 {@code travelRidden} 同理——而她没有客户端,那个包永远不来,载具就冻死在原地。
+     * 她的身体就在服务端、由服务端驱动,所以对原版声明自己是本机玩家,载具的浮力、摩擦、移动整条物理链在服务端照常跑
+     * (原版 GameTest 的模拟玩家同此做法)。服务端只有这一处读它,各平台一致,不需要任何注入。
+     */
+    @Override
+    public boolean isLocalPlayer() {
         return true;
     }
 
