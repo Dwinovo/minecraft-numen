@@ -1,0 +1,36 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-common'
+    id 'numen-paper'
+    id 'io.papermc.paperweight.userdev'
+    id 'xyz.jpenilla.run-paper'
+}
+
+// 要读 Numen API 的 Paper 插件的 apiJar 任务与寻路模块的源码集,它们得先配置好
+evaluationDependsOn(':numen-api:paper')
+evaluationDependsOn(':numen:pathing')
+
+// Numen 的 Paper 插件(docs/paper.md):common 的服务端源码与寻路模块的源码一起对着 Paper 开发包重新编译——寻路也是对着原版编的,
+// 同样要在 Paper 上重编(见 numen-paper.gradle)。内嵌联动(plugins/*)是模组的东西,Paper 上不存在。
+paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
+
+dependencies {
+    paperweight.paperDevBundle(paper_dev_bundle)
+    // Numen 是 Numen API 的插件:编译期只看得见瘦 api jar 里公开的那部分,取 Paper 那一份(Numen 就跑在它上面),
+    // 运行时完整的类由 numen_api 插件提供,不随 Numen 发。
+    compileOnly files(project(':numen-api:paper').tasks.named('apiJar'))
+    (Modules.PLUGIN_VISIBLE - Modules.CLIENT).each { compileOnly project(it) }
+}
+
+tasks.named('compileJava', JavaCompile) {
+    source(project(':numen:pathing').sourceSets.main.java)
+}
+
+tasks.named('runServer') {
+    minecraftVersion(minecraft_version)
+    runDirectory = layout.projectDirectory.dir('runs/paper')
+    // 两个插件一起挂:本项目的 jar 是 run-paper 默认带的,Numen API 的要点名
+    pluginJars.from(project(':numen-api:paper').tasks.named('jar'))
+    systemProperty('com.mojang.eula.agree', 'true')
+}

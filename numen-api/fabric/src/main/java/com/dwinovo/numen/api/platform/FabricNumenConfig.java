@@ -43,14 +43,23 @@ public final class FabricNumenConfig implements INumenConfig {
     private static final DateTimeFormatter BACKUP_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
-    private final ConfigData data;
+    /**
+     * 服务端配置与客户端的语音识别设置({@link FabricSttSettings})存在同一份文件里,所以共用同一份读进内存的数据:
+     * 谁先用到谁读,改动和保存也都落在它上面。
+     */
+    private static ConfigData shared;
 
     /** Default constructor used by {@code ServiceLoader}. */
-    public FabricNumenConfig() {
-        this.data = loadOrCreate();
+    public FabricNumenConfig() {}
+
+    static synchronized ConfigData data() {
+        if (shared == null) {
+            shared = loadOrCreate();
+        }
+        return shared;
     }
 
-    private ConfigData loadOrCreate() {
+    private static ConfigData loadOrCreate() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         if (Files.exists(configPath)) {
             try (Reader r = Files.newBufferedReader(configPath)) {
@@ -87,7 +96,7 @@ public final class FabricNumenConfig implements INumenConfig {
         return writeDefaultTemplate(configPath);
     }
 
-    private ConfigData writeDefaultTemplate(Path configPath) {
+    private static ConfigData writeDefaultTemplate(Path configPath) {
         ConfigData defaults = ConfigData.defaults();
         try {
             Atomic.write(configPath, GSON.toJson(defaults));
@@ -119,48 +128,29 @@ public final class FabricNumenConfig implements INumenConfig {
     }
 
     @Override
-    public String getSystemPrompt() { return data.systemPrompt == null ? "" : data.systemPrompt; }
+    public String getSystemPrompt() { return data().systemPrompt == null ? "" : data().systemPrompt; }
 
     @Override
-    public String getProxy() { return data.proxy == null ? "" : data.proxy; }
+    public String getProxy() { return data().proxy == null ? "" : data().proxy; }
 
     // ---- mutations ----
 
     @Override
-    public void setProxy(String value) { data.proxy = value == null ? "" : value; }
+    public void setProxy(String value) { data().proxy = value == null ? "" : value; }
 
     @Override
-    public void setSystemPrompt(String value) { data.systemPrompt = value == null ? "" : value; }
-
-    @Override
-    public String getSttProvider() { return data.sttProvider == null || data.sttProvider.isBlank() ? "siliconflow" : data.sttProvider; }
-
-    @Override
-    public String getSttBaseUrl() { return data.sttBaseUrl == null ? "" : data.sttBaseUrl; }
-
-    @Override
-    public String getSttModel() { return data.sttModel == null ? "" : data.sttModel; }
-
-    @Override
-    public String getSttMicrophone() { return data.sttMicrophone == null ? "" : data.sttMicrophone; }
-
-    @Override
-    public void setSttProvider(String value) { data.sttProvider = value == null || value.isBlank() ? "siliconflow" : value; }
-
-    @Override
-    public void setSttBaseUrl(String value) { data.sttBaseUrl = value == null ? "" : value; }
-
-    @Override
-    public void setSttModel(String value) { data.sttModel = value == null ? "" : value; }
-
-    @Override
-    public void setSttMicrophone(String value) { data.sttMicrophone = value == null ? "" : value; }
+    public void setSystemPrompt(String value) { data().systemPrompt = value == null ? "" : value; }
 
     @Override
     public void save() {
+        saveFile();
+    }
+
+    /** 整份写回文件(服务端的项与语音识别的项都在里面)。 */
+    static void saveFile() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         try {
-            Atomic.write(configPath, GSON.toJson(data));
+            Atomic.write(configPath, GSON.toJson(data()));
             Constants.LOG.info("[numen-config] saved {}", configPath);
         } catch (StoreException ex) {
             Constants.LOG.warn("[numen-config] save failed for {}: {}", configPath, ex.getMessage());
@@ -183,12 +173,7 @@ public final class FabricNumenConfig implements INumenConfig {
         public String sttBaseUrl = "";
         public String sttModel = "FunAudioLLM/SenseVoiceSmall";
         public String sttMicrophone = "";
-        // Deliberately short. The planning behaviour (the todo tool for
-        // multi-step tasks, the skill tool to read reference knowledge) emerges
-        // entirely from those tools' own descriptions plus the runtime-injected
-        // <available_skills> XML block — adding rules here just dilutes
-        // attention. Mirrors opencode's default.txt minimalist style.
-        public String systemPrompt = "You are Numen, a Minecraft entity controlled by the player who owns you.\nUse the tools provided to act in the world; output text only to talk to your owner.";
+        public String systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
         static ConfigData defaults() {
             return new ConfigData();

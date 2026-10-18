@@ -61,7 +61,8 @@ neoForge {
     }
     runs {
         configureEach {
-            if (it.name != 'bench') {
+            // e2e 是玩家服务器的样子,不带 GameTest 的支持模组(它自己声明加载哪些,见 numen-e2e-neoforge)
+            if (it.name != 'bench' && it.name != 'e2e') {
                 loadedMods = [mods.numen, mods.numen_api_gametest]
             }
         }

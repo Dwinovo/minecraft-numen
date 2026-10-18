@@ -4,13 +4,29 @@ import com.dwinovo.numen.pathing.world.CellFlags;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.material.FluidState;
 
 /**
  * 规划读的只读世界:方块、世界边界,以及这个维度倒不倒得出水。搜索时是派发那一刻的快照,执行复核时是活世界,前提函数对
  * 两者一视同仁。
  */
 public interface WorldView extends BlockGetter {
+
+    /**
+     * Paper 给 {@code BlockGetter} 加了两个抽象方法({@code getBlockStateIfLoaded}、{@code getFluidIfLoaded}:只读已加载的,
+     * 没加载是 null),不实现就编不过。原版的 {@code BlockGetter} 没有它们,下面两个默认实现在原版上只是两个无关的方法。
+     * 视图读的时候从不加载区块(没加载的读出来是空气或带标记),所以答案与 {@code getBlockState} / {@code getFluidState} 一致,
+     * 和原版调 {@code getBlockState} 的行为相同。
+     */
+    default BlockState getBlockStateIfLoaded(BlockPos pos) {
+        return getBlockState(pos);
+    }
+
+    default FluidState getFluidIfLoaded(BlockPos pos) {
+        return getFluidState(pos);
+    }
 
     WorldBorder border();
 

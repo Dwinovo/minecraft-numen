@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.api.client.agent.Conversations;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.stt.VoiceInputController;
-import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.api.client.platform.ClientServices;
 
 import net.minecraft.client.Minecraft;
 
@@ -43,7 +43,7 @@ public final class QuickVoice {
         }
         target = t;
         livePartial = "";
-        boolean ok = VoiceInputController.start(Services.CONFIG,
+        boolean ok = VoiceInputController.start(ClientServices.STT,
                 partial -> livePartial = partial,
                 QuickVoice::deliver,
                 status -> { recording = false; transcribing = false; flash(status); });

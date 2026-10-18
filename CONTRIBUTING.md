@@ -20,6 +20,9 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 ./gradlew :numen:fabric:build :numen:neoforge:build
 ./gradlew :ai:test :script:test :agent:test :numen-api:common:test :numen:common:test
 ./gradlew :numen:neoforge:runGameTestServer
+# 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟,不进 CI)
+# End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min, not in CI)
+./gradlew :e2e:e2eTest
 ```
 
 ## 授权 / License

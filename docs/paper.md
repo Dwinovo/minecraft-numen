@@ -121,7 +121,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 - 我们的 GameTest 拿到 Paper 上跑:不开 `IS_RUNNING_IN_IDE`(开了会把测试参数类型塞进内置注册表,有 op 的客户端进服就断),
   而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。现有用例要一层登记适配。
 - Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服,进 CI。
-- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21-1` 线;仓库里只有快照)做无头客户端,原版客户端那一套交互(私聊、会话指令、可点的消息、翻译)对着 Paper 跑。
+- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`),起服是可替换的一层:Paper 另写一层,提供同名的 `e2eServerStart`/`e2eServerStop`、满足同一份规格,把 `e2e/build.gradle` 里的 `serverProject` 指过去。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
 ## 十二、实测结论(10-19)
@@ -144,3 +144,30 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 
 参考与许可:Carpet、Axiom、LuckPerms、BlueMap、FancyNpcs、MCProtocolLib 是 MIT,tanyaofei/minecraft-fakeplayer 与 run-task 是 Apache-2.0,可以借代码(保留声明);
 Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens 是 OSL,只借思路;Simple Voice Chat 是 All Rights Reserved,不借。
+
+## 附:第 2 步落地时的出入
+
+- **run-paper 用 3.0.2**,不是 2.3.1:2.x 走已下线的 `api.papermc.io/v2`(410),找不到 Paper 版本;3.x 走 `fill.papermc.io`。本仓库 Gradle 是 9.2,paperweight-userdev 1.7.2 照常工作。
+- **配置根是 `plugins/numen/`(小写)**,不是 `plugins/Numen/`:`NumenPaths.config()` 是"配置目录 + `Constants.CONFIG_ROOT`(`numen`)",Linux 区分大小写,
+  只有小写是同一个答案。插件名也用模组 id(`numen_api`、`numen`),`modIds()` 因此直接等于资源命名空间;`modIds()` 列的是 Numen API 自己和声明依赖它的插件。
+- **纯 JVM 模块不用 shadow 插件**,和 NeoForge / Fabric 的发行 jar 一样把各模块的输出平铺进 jar(Gson、slf4j 等用 Paper 自带的,本来就不该打进去),少一个构建插件。
+- **`canSend` 不听 `PlayerRegisterChannelEvent`**:Paper 把客户端登记的频道(NeoForge 在配置阶段末尾、Fabric 在进入游戏之后)都记在这位玩家身上,
+  `getListeningPluginChannels()` 随时是答案,没有要缓存的状态,也就没有要同步的事件。上行包在 Paper 里已经交到主线程再回调,`NETWORK` 与 `MAIN` 都直接调。
+- **common 重编遇到的两处 Paper 补丁**(原版编得过、Paper 编不过):`CommandSource` 多了抽象方法 `getBukkitSender`(返回 Bukkit 类型),
+  `BlockGetter` 多了 `getBlockStateIfLoaded` / `getFluidIfLoaded`。前者新增服务 `ICommandSources`,`Echo` 不再自己是 `CommandSource`,由平台造;
+  后者在寻路的 `WorldView` 里给默认实现。**寻路模块也要在 Paper 上重编**(它同样对着原版),不只是 common。
+- **common 里重复的加载器胶水收成 common 入口**:`PlayerSessions`(登入、登出、换维度)、`ChatRoutes.routed/deliver`(聊天判断与送达分两段,`take` 由前两者组成,模组上照用),
+  系统提示词出厂值 `INumenConfig.DEFAULT_SYSTEM_PROMPT`;寻路调试的下行包改走 `Services.NETWORK` 登记与发送(原先各加载器各登记一次、common 直接构造原版的 `ClientboundCustomPayloadPacket`,
+  那在 Paper 上编不出来)。`Services.load` 多一个按类加载器取的重载:Paper 上每个插件一个类加载器,Numen 的服务实现不在 Numen API 的加载器里。
+- **标签**:Paper 1.21.1 的插件没有带数据包的 API,但有标签的生命周期事件 `LifecycleEvents.TAGS.preFlatten`(起服与 `/reload` 都会触发),只认引导阶段(`PluginBootstrap`)登记的处理器。
+  做法是插件 jar 里本来就有的数据包写法的标签文件(手写的在 common 资源里,数据生成的由 `datagenAll` 产出,Paper 的 jar 取 NeoForge 子项目的生成目录)
+  由 `PluginTags` 在引导阶段读出来加进去,内容只有一个出处。只支持方块与物品两个注册表。验证:控制台 `execute if block … #numen:natural`、`clear @a #numen:tame_foods 0` 解析通过,不存在的标签报 Unknown tag。
+  联想到的另一种做法(在 `world/datapacks` 里写数据包文件、要重启或 `/reload`)主流插件里常见,但要写服主的世界目录,这里没采用。
+- **链接检查默认对着编译用的开发包里的服务端**(`-PlinkCheckPaperServer=` 可换成实际运行的 `versions/<mc>/paper-<mc>.jar`);Paper 的 Paperclip 里是二进制补丁不是 jar,所以不解包。
+  它读三样东西:成品、原版服务端 jar(取 common 编译用的那份,是"本来是覆写"的依据)、Paper 服务端 jar。对原版 jar 当目标时它会报出 `PlayerList.remove` 那类差异。
+- **名册要等"在世界里 + 能收我们的包"都成立才推**:客户端收到名册才向服务端报到。模组上登入时两者同时成立;Paper 上 Fabric 客户端进游戏之后才登记频道,
+  登入那一刻 `canSend` 为假。`PlayerSessions.channelReady` 是推名册的唯一入口(一次会话只推一次,重复调用无害),登入里调一次,Paper 再在 `PlayerRegisterChannelEvent` 里调。
+  `canSend` 本身仍直接查 `getListeningPluginChannels()`。
+- **`INumenConfig` 只留服务端的项**(代理、系统提示词,及管理员经客户端面板改它们的写入口,Paper 同样写回 `plugins/numen/config.json`);语音识别设置拆成客户端源码集里的服务
+  `ISttSettings`(`ClientServices.STT`),NeoForge 与 Fabric 各实现,Paper 不需要。
+- **纯 JVM 模块清单只在 buildSrc 的 `Modules` 里有一份**;`releaseJars` 把 Paper 的两个 jar 收进 `paper/`,并核对 datagen 产出的每个文件都在 jar 里。
