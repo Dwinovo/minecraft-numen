@@ -57,6 +57,7 @@ public final class ServerBrains {
         migrateHost(server, homes, registry);
         McpClientManager.init(NumenPaths.config(), server, () -> Replies.share(server, null, Libraries.MCP_CLIENT));
         ServerMcp.start(server);
+        Visits.start();
         for (UUID companion : registry.all()) {
             try {
                 CompanionBrains.ensure(server, companion);
@@ -71,6 +72,7 @@ public final class ServerBrains {
     }
 
     private static void stop() {
+        Visits.stop();
         McpClientManager.shutdown();
         McpMode.instance().shutdown();
     }

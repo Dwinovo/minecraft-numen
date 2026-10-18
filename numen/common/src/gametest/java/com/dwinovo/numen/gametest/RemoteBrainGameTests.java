@@ -6,6 +6,10 @@ import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
+import com.dwinovo.numen.api.brain.Mind;
+import com.dwinovo.numen.api.brain.OwnerPresence;
+import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -46,13 +50,29 @@ public class RemoteBrainGameTests {
 
         /** @param ownerPlayer 扮主人的在场玩家;null = 主人不在游戏里 */
         Rig(GameTestHelper helper, String name, ServerPlayer ownerPlayer) throws Exception {
+            this(helper, name, ownerPlayer, null, McpToken.Role.BRAIN);
+        }
+
+        /**
+         * @param mind 她的大脑用的"模型";null = 产品线路接的真模型(没绑档案,不会真去想)
+         * @param role 扮外部大脑还是渠道的令牌身份
+         */
+        Rig(GameTestHelper helper, String name, ServerPlayer ownerPlayer, Mind mind, McpToken.Role role)
+                throws Exception {
             this.server = helper.getLevel().getServer();
             this.companion = spawnAt(helper, name, new BlockPos(3, 2, 3), false);
             this.owner = ownerPlayer != null ? ownerPlayer.getUUID() : UUID.randomUUID();
             companion.setOwnerUuid(owner);
             CompanionRegistry.get(server).put(companion.getUUID(), new CompanionRegistry.Entry(name, owner,
                     Level.OVERWORLD, companion.blockPosition()));
-            CompanionBrains.reset(server, owner);   // 换掉 spawnAt 配的不思考的脑,换成产品线路接的
+            if (mind == null) {
+                CompanionBrains.reset(server, owner);   // 换掉 spawnAt 配的不思考的脑,换成产品线路接的
+            } else {
+                // 同样的产品线路,只是模型换成用例脚本化的;"主人在不在""驾驶席"仍是产品里真算的
+                CompanionBrains.create(server, companion.getUUID(), owner, Homes.of(server).companion(companion.getUUID()),
+                        mind, Replies.link(server, owner), () -> OwnerPresence.present(server, owner),
+                        () -> McpMode.instance().driving(owner, companion.getUUID()));
+            }
             this.loop = CompanionLoops.get(companion.getUUID()).orElseThrow();
             loop.subscribe(event -> {
                 if (event instanceof LoopEvent.Halted halted) {
@@ -67,7 +87,7 @@ public class RemoteBrainGameTests {
             if (!mcp.applySettings(McpConfig.LOOPBACK, port, 30, List.of()) || !mcp.setEnabled(true)) {
                 throw new IllegalStateException("the endpoint did not start: " + mcp.lastError());
             }
-            this.brain = new McpTestClient(port, mcp.tokens().issue(owner, McpToken.Role.BRAIN,
+            this.brain = new McpTestClient(port, mcp.tokens().issue(owner, role,
                     McpToken.Scope.ALL, "gametest", 0).secret());
         }
 
@@ -244,9 +264,94 @@ public class RemoteBrainGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(ticket[0].poll() != null && !ticket[0].poll().allowed(),
-                    "not refused once nobody was left to answer: " + ticket[0].poll());
+            helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && !ticket[0].poll().allowed(),
+                    "not refused once nobody was left to answer: " + (ticket[0] == null ? null : ticket[0].poll()));
             her.close();
         });
+    }
+
+    /**
+     * 渠道来的话:主人不在游戏里,话由服务端大脑去想,回话回那个渠道;这一轮做完他还不在,她回到收拾好的样子
+     * (待命,收拾一次),不因来过一句话一直醒着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_remote_6")
+    public static void a_channels_words_are_thought_about_and_answered_then_she_goes_back_to_standing_by(
+            GameTestHelper helper) throws Exception {
+        BrainGameTests.Scripted mind = new BrainGameTests.Scripted();
+        mind.say("在的,马上来");
+        Rig her = new Rig(helper, "gametest_remote_chat", null, mind, McpToken.Role.CHANNEL);
+        helper.assertTrue(her.hold() == Hold.AWAY, "not standing by before anyone spoke: " + her.hold());
+        java.util.concurrent.atomic.AtomicReference<String> sent = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> replies = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        // 工具调用要等服务端主线程办事,所以另起一条线程扮渠道桥
+        Thread bridge = new Thread(() -> {
+            try {
+                her.brain.connect();
+                com.google.gson.JsonObject words = new com.google.gson.JsonObject();
+                words.addProperty("companion", "gametest_remote_chat");
+                words.addProperty("text", "在吗");
+                sent.set(her.brain.call("send", words));
+                com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
+                wait.addProperty("wait_seconds", 20);
+                replies.set(her.brain.call("get_replies", wait));
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "gametest-channel-bridge");
+        bridge.setDaemon(true);
+        bridge.start();
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(failure.get() == null, "the bridge failed: " + failure.get());
+            helper.assertTrue(replies.get() != null, "no reply came back to the channel (sent: " + sent.get() + ")");
+            helper.assertTrue(mind.asked.size() == 1, "her brain was not asked once: " + mind.asked.size());
+            helper.assertTrue(replies.get().contains("在的,马上来") && replies.get().contains("\"said\""),
+                    "the channel did not get her answer: " + replies.get());
+            helper.assertTrue(her.hold() == Hold.AWAY, "she did not go back to standing by: " + her.hold());
+            helper.assertTrue(her.disconnects() == 1, "not collected once after the round: " + her.halts);
+            her.close();
+        });
+    }
+
+    /** 渠道来访期间她要问主人的事:不当场按"主人不在"拒绝,以通用形式交给渠道;主人在渠道上的答复走征询台。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_7")
+    public static void a_consent_during_a_channel_visit_is_handed_to_the_channel(GameTestHelper helper)
+            throws Exception {
+        Rig her = new Rig(helper, "gametest_remote_visited", null, new BrainGameTests.Scripted(),
+                McpToken.Role.CHANNEL);
+        List<com.dwinovo.numen.api.permission.ConsentVenues.Offer> offered = new CopyOnWriteArrayList<>();
+        com.dwinovo.numen.api.brain.Visits.begin(her.companion.getUUID(), her.owner,
+                new com.dwinovo.numen.api.brain.Visits.Channel() {
+                    @Override
+                    public void said(UUID companion, String text) {
+                    }
+
+                    @Override
+                    public boolean ask(com.dwinovo.numen.api.permission.ConsentVenues.Offer offer) {
+                        offered.add(offer);
+                        return true;
+                    }
+
+                    @Override
+                    public void clear(long id, com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal why) {
+                    }
+                });
+        var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
+
+        var ticket = desk.ask(new Object(), List.of(oakLog()));
+
+        helper.assertTrue(ticket.poll() == null, "refused at once although the owner is on a channel: " + ticket.poll());
+        helper.assertTrue(offered.size() == 1 && offered.get(0).id() == ticket.request().id()
+                        && offered.get(0).doing().contains("oak_log") && offered.get(0).companion().equals(her.companion.getUUID()),
+                "the channel was not handed the question in the general form: " + offered);
+        var reply = com.dwinovo.numen.api.permission.ConsentDesk.reply(her.owner, her.companion, ticket.request().id(),
+                com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "用箱子里的");
+        helper.assertTrue(reply == com.dwinovo.numen.api.permission.ConsentDesk.Reply.ANSWERED, "answer refused: " + reply);
+        helper.assertTrue(ticket.poll() != null && !ticket.poll().allowed()
+                && ticket.poll().words().equals("用箱子里的"), "the owner's answer did not reach the asker: " + ticket.poll());
+        com.dwinovo.numen.api.brain.Visits.end(her.companion.getUUID());
+        her.close();
+        helper.succeed();
     }
 }

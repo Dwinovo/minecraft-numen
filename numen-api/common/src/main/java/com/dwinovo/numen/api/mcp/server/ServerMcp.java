@@ -27,7 +27,7 @@ public final class ServerMcp {
                     @Override
                     public void gone(UUID owner) {
                         tell(server, owner, "numen.brain.quiet_fallback");
-                        OwnerPresence.brainGone(server, owner);
+                        OwnerPresence.settle(server, owner);
                     }
                 });
     }

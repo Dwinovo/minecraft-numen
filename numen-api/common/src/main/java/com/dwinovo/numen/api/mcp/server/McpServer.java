@@ -6,7 +6,9 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentVenues;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -134,18 +136,20 @@ public final class McpServer {
     private final McpLimits limits;
     private final McpSessions sessions;
     private final McpAudit audit;
+    private final McpChannels channels;
     private final Function<UUID, ExternalHands> handsOf;
     private final Gson gson = new Gson();
     private HttpServer http;
     private ExecutorService workers;
 
     McpServer(McpConfig config, McpTokens tokens, McpLimits limits, McpSessions sessions, McpAudit audit,
-              Function<UUID, ExternalHands> handsOf) {
+              McpChannels channels, Function<UUID, ExternalHands> handsOf) {
         this.config = config;
         this.tokens = tokens;
         this.limits = limits;
         this.sessions = sessions;
         this.audit = audit;
+        this.channels = channels;
         this.handsOf = handsOf;
     }
 
@@ -484,6 +488,12 @@ public final class McpServer {
 
     private JsonObject toolsListResult(McpToken token) {
         JsonArray tools = new JsonArray();
+        if (token.role() == McpToken.Role.CHANNEL) {
+            channelTools(tools);
+            JsonObject result = new JsonObject();
+            result.add("tools", tools);
+            return result;
+        }
 
         tools.add(toolDef("list_companions",
                 "List the live Minecraft companions this token may drive (name + id). Call this first to see who you can drive.",
@@ -522,6 +532,58 @@ public final class McpServer {
         JsonObject result = new JsonObject();
         result.add("tools", tools);
         return result;
+    }
+
+    /** 渠道看到的四个工具:点名、把主人的话送进收件箱、收她的回话与征询、答征询。 */
+    private void channelTools(JsonArray tools) {
+        tools.add(toolDef("list_companions",
+                "List the live companions this token may speak to (name + id).", objectSchema(null, false)));
+        JsonObject send = objectSchema("companion", true);
+        JsonObject text = new JsonObject();
+        text.addProperty("type", "string");
+        text.addProperty("description", "What the owner said, as the owner said it.");
+        send.getAsJsonObject("properties").add("text", text);
+        send.getAsJsonArray("required").add("text");
+        tools.add(toolDef("send",
+                "Hand the owner's words to a companion, from this channel. Her own brain thinks about it (with the "
+                        + "owner's model key) and her answer and any question for the owner come back through "
+                        + "get_replies. When the round is done and the owner is not in the game, she goes back to "
+                        + "standing by.", send));
+        JsonObject wait = new JsonObject();
+        wait.addProperty("type", "integer");
+        wait.addProperty("description", "The longest to wait, in seconds (0–" + MAX_WAIT_SECONDS
+                + ", default " + MAX_WAIT_SECONDS + "). 0 = return at once.");
+        JsonObject replies = objectSchema(null, false);
+        replies.getAsJsonObject("properties").add("wait_seconds", wait);
+        tools.add(toolDef("get_replies",
+                "Wait for what her brain has for this channel: {\"items\":[...]} where an item is "
+                        + "{\"type\":\"said\",\"companion\",\"text\"}, {\"type\":\"consent\",\"id\",\"companion\","
+                        + "\"name\",\"doing\",\"remember\",\"choices\"} (a question for the owner: show it, then call "
+                        + "answer_consent) or {\"type\":\"consent_withdrawn\",\"id\"} (no need to answer any more). "
+                        + "Returns as soon as something is there, or after the wait with an empty list.", replies));
+        JsonObject answer = objectSchema("companion", true);
+        JsonObject id = new JsonObject();
+        id.addProperty("type", "integer");
+        id.addProperty("description", "The id of the consent item.");
+        JsonObject decision = new JsonObject();
+        decision.addProperty("type", "string");
+        JsonArray choices = new JsonArray();
+        choices.add("allow");
+        choices.add("remember");
+        choices.add("deny");
+        decision.add("enum", choices);
+        JsonObject note = new JsonObject();
+        note.addProperty("type", "string");
+        note.addProperty("description", "Only with deny: what the owner wants her to do instead.");
+        JsonObject props = answer.getAsJsonObject("properties");
+        props.add("id", id);
+        props.add("decision", decision);
+        props.add("note", note);
+        answer.getAsJsonArray("required").add("id");
+        answer.getAsJsonArray("required").add("decision");
+        tools.add(toolDef("answer_consent",
+                "Pass on the owner's answer to a consent item from get_replies, exactly as he gave it. Only the "
+                        + "owner's own choice counts here; do not answer for him.", answer));
     }
 
     private JsonObject toolDef(String name, String description, JsonObject inputSchema) {
@@ -641,6 +703,16 @@ public final class McpServer {
         ExternalHands hands = handsOf.apply(session.token.owner());
         Call call = new Call(session.token, hands, target);
         try {
+            if (session.token.role() == McpToken.Role.CHANNEL) {
+                return switch (name) {
+                    case "list_companions" -> content(call.listCompanions(), false);
+                    case "send" -> call.send(args, channels.channel(session.token.id()));
+                    case "get_replies" -> call.getReplies(args, session.token.id());
+                    case "answer_consent" -> call.answerConsent(args);
+                    default -> content("a channel token can only use list_companions, send, get_replies and "
+                            + "answer_consent", true);
+                };
+            }
             return switch (name) {
                 case "list_companions" -> content(call.listCompanions(), false);
                 case "create_companion" -> call.create(args);
@@ -744,6 +816,53 @@ public final class McpServer {
             String rest = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return content(rest != null ? rest
                     : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
+        }
+
+        /** 渠道:把主人的话送给她。 */
+        JsonObject send(JsonObject args, Visits.Channel channel) throws Exception {
+            UUID companion = resolve(args);
+            String text = args.has("text") && !args.get("text").isJsonNull() ? args.get("text").getAsString().trim() : "";
+            if (companion == null || text.isEmpty()) {
+                return content("send needs a 'companion' (name or id from list_companions) and a non-empty 'text'", true);
+            }
+            boolean ok = hands.hear(companion, text, channel).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return content(ok ? "sent — her answer comes back through get_replies" : "could not send to her", !ok);
+        }
+
+        /** 渠道:收她的回话与征询。 */
+        JsonObject getReplies(JsonObject args, String tokenId) throws Exception {
+            int wait = MAX_WAIT_SECONDS;
+            if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
+                wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
+            }
+            JsonArray items = new JsonArray();
+            channels.take(tokenId, wait * 1000L).forEach(items::add);
+            JsonObject out = new JsonObject();
+            out.add("items", items);
+            return content(out.toString(), false);
+        }
+
+        /** 渠道:把主人的选择交给征询台,和游戏里答复框同一个入口。 */
+        JsonObject answerConsent(JsonObject args) throws Exception {
+            UUID companion = resolve(args);
+            if (companion == null || !args.has("id") || !args.has("decision")) {
+                return content("answer_consent needs 'companion', 'id' and 'decision' (allow, remember or deny)", true);
+            }
+            ConsentAnswer.Decision decision = switch (args.get("decision").getAsString()) {
+                case "allow" -> ConsentAnswer.Decision.ALLOW_ONCE;
+                case "remember" -> ConsentAnswer.Decision.ALLOW_REMEMBER;
+                case "deny" -> ConsentAnswer.Decision.DENY;
+                default -> null;
+            };
+            String note = args.has("note") && !args.get("note").isJsonNull() ? args.get("note").getAsString() : "";
+            if (decision == null || (decision != ConsentAnswer.Decision.DENY && !note.isBlank())) {
+                return content("'decision' is allow, remember or deny; a note only goes with deny", true);
+            }
+            ConsentDesk.Reply reply = hands.answer(companion, args.get("id").getAsLong(), decision, note)
+                    .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return content(reply == ConsentDesk.Reply.ANSWERED ? "answered"
+                    : "nothing to answer: that request is not pending any more (answered, expired or replaced)",
+                    reply != ConsentDesk.Reply.ANSWERED);
         }
 
         JsonObject say(JsonObject args) throws Exception {

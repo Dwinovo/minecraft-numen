@@ -60,7 +60,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
 public class BrainGameTests {
 
     /** 按事先排好的回复答的"模型";记下每次收到的请求。{@code holding} 时回复先扣着,等 {@link #release}。 */
-    private static final class Scripted implements Mind {
+    static final class Scripted implements Mind {
         final Deque<ModelOutcome> replies = new ArrayDeque<>();
         final List<ModelRequest> asked = new ArrayList<>();
         boolean holding;

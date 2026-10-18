@@ -48,6 +48,7 @@ public final class McpMode {
     private McpTokens tokens;
     private McpSessions sessions;
     private McpLimits limits;
+    private McpChannels channels;
     private McpAudit audit;
     private Function<UUID, ExternalHands> hands;
     private Watch watch;
@@ -89,6 +90,7 @@ public final class McpMode {
         this.sessions = new McpSessions(System::currentTimeMillis);
         this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
         this.audit = new McpAudit(serverHome);
+        this.channels = new McpChannels();
         this.connectedOwners = Set.of();
         if (config.enabled()) {
             startServer();
@@ -159,6 +161,7 @@ public final class McpMode {
         tokens = null;
         limits = null;
         audit = null;
+        channels = null;
         hands = null;
         watch = null;
         home = null;
@@ -170,7 +173,7 @@ public final class McpMode {
     private boolean startServer() {
         lastError = null;
         limits.configure(config.limits());
-        McpServer s = new McpServer(config, tokens, limits, sessions, audit, hands);
+        McpServer s = new McpServer(config, tokens, limits, sessions, audit, channels, hands);
         try {
             s.start();
         } catch (Exception ex) {

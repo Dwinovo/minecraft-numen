@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 
@@ -9,7 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 外接大脑伸向同伴的手:{@link McpServer} 对她们的全部接触都收在这一个口里。宿主不关心同伴的大脑怎么接——
+ * 远程端点伸向同伴的手(外部大脑与渠道共用):{@link McpServer} 对她们的全部接触都收在这一个口里。宿主不关心同伴的大脑怎么接——
  * 实现 {@link ServerActuator} 直接操作进程内的 {@code CompanionLoop}。
  *
  * <p>每个方法可在任意线程调,工作由实现切到自己的主线程,结果经 future 回来。每个调用都寻址到一只同伴的 UUID,
@@ -45,6 +46,12 @@ public interface ExternalHands {
 
     /** 替她说话:气泡、聊天行、她绑定的声线,与内置大脑的回复同一套表现。 */
     CompletableFuture<Boolean> say(UUID companion, String text);
+
+    /**
+     * 渠道上主人的话:渠道来访开始(她的回话与征询回到 {@code channel}),话和游戏里主人的话同走 {@code OwnerInputs}
+     * 的一个入口。送不进去(不是他的同伴……)是 false,来访随之作废。
+     */
+    CompletableFuture<Boolean> hear(UUID companion, String text, Visits.Channel channel);
 
     /**
      * 主人在游戏之外答了一条征询(外部大脑客户端上的人经 elicitation 答的),和游戏里的答复框、{@code /numen consent}

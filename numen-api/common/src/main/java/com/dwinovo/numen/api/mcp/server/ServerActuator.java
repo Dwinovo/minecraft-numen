@@ -7,7 +7,11 @@ import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.brain.CompanionLoop;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.brain.CompanionLoops;
+import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.brain.OwnerInputs;
+import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -112,6 +116,22 @@ public final class ServerActuator implements ExternalHands {
             loop.externalSay(text);
             return true;
         }).orElse(false)));
+        return f;
+    }
+
+    @Override
+    public CompletableFuture<Boolean> hear(UUID companion, String text, Visits.Channel channel) {
+        CompletableFuture<Boolean> f = new CompletableFuture<>();
+        server.execute(() -> {
+            // 先开来访再送话:话一进收件箱内核就可能开轮,那一刻主人必须已经算在场
+            Visits.begin(companion, owner, channel);
+            boolean sent = OwnerInputs.apply(server, owner,
+                    new OwnerInput.Emit(companion, EventTypes.QUERY, text)).problem() == null;
+            if (!sent) {
+                Visits.end(companion);
+            }
+            f.complete(sent);
+        });
         return f;
     }
 

@@ -368,6 +368,11 @@ public final class CompanionLoop {
         loop.halt(HaltReason.DISPOSE);
     }
 
+    /** 这一轮做完了:没有在飞的回合,也没有马上要开的,见 {@link AgentLoop#settled}。 */
+    public boolean settled() {
+        return loop.settled();
+    }
+
     /** 每个服务器刻一次:驾驶席翻转、停牌变化的播报,和"攒够时长"的熟度。 */
     public void tick() {
         // 驾驶席翻成外接的那一下作废在飞的回合:接管之后内脑的回复不该再派工具、整理不该再换历史。

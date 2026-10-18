@@ -10,7 +10,8 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>同会话的其他成员旁听到一份({@link Conversations#heard});</li>
  *   <li>主人没装客户端时,话作为只发给他的系统消息说出口(装了客户端的,同一句话随 {@link Feed.Replied} 推给他,
- *       由客户端画气泡、聊天行、语音)。</li>
+ *       由客户端画气泡、聊天行、语音);</li>
+ *   <li>渠道来访着的(主人从 QQ 等渠道说的话,见 {@link Visits}),话回给那个渠道。</li>
  * </ul>
  * 外部大脑替她说的话以后也走这一处。
  */
@@ -31,6 +32,7 @@ final class Voice {
                     return;
                 }
                 rooms.heard(loop.companion(), said);
+                Visits.said(loop.companion(), said);
                 if (!ownerHasClient.getAsBoolean()) {
                     tellOwner.accept(said);
                 }

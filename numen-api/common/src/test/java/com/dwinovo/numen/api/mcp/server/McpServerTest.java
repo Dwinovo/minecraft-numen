@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -50,6 +51,7 @@ class McpServerTest {
     private static final class Hands implements ExternalHands {
         final List<String> said = new ArrayList<>();
         final List<String> answers = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final List<String> heard = new ArrayList<>();
 
         @Override
         public CompletableFuture<List<Companion>> companions() {
@@ -83,6 +85,13 @@ class McpServerTest {
         }
 
         @Override
+        public CompletableFuture<Boolean> hear(UUID companion, String text, Visits.Channel channel) {
+            heard.add(companion + ":" + text);
+            channel.said(companion, "heard: " + text);
+            return CompletableFuture.completedFuture(true);
+        }
+
+        @Override
         public CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id,
                                                            ConsentAnswer.Decision decision, String note) {
             answers.add(companion + "#" + id + ":" + decision + ":" + note);
@@ -104,6 +113,7 @@ class McpServerTest {
     private McpTokens tokens;
     private McpSessions sessions;
     private McpServer server;
+    private final McpChannels channels = new McpChannels();
     private McpConfig config;
 
     @BeforeEach
@@ -121,7 +131,7 @@ class McpServerTest {
         }
         config = with;
         server = new McpServer(with, tokens, new McpLimits(with.limits(), now::get), sessions, new McpAudit(home),
-                owner -> hands);
+                channels, owner -> hands);
         server.start();
     }
 
@@ -605,5 +615,100 @@ class McpServerTest {
         reply(secret, session[0], ask.get("id").getAsString(), accepted("allow", null));
         Thread.sleep(200);
         assertTrue(hands.answers.isEmpty(), "撤掉之后迟到的答复不再算");
+    }
+
+    // ---- 渠道 ----
+
+    private McpTokens.Issued channel(McpToken.Scope scope) {
+        return tokens.issue(OWNER, McpToken.Role.CHANNEL, scope, "", 0);
+    }
+
+    private static List<String> toolNames(JsonObject listResult) {
+        List<String> names = new ArrayList<>();
+        listResult.getAsJsonArray("tools").forEach(t -> names.add(t.getAsJsonObject().get("name").getAsString()));
+        return names;
+    }
+
+    @Test
+    void aChannelOnlySeesAndMayUseTheChannelTools() throws Exception {
+        String secret = channel(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+
+        HttpResponse<String> listed = post(secret, session, rpc(2, "tools/list", new JsonObject()));
+        List<String> names = toolNames(JsonParser.parseString(listed.body()).getAsJsonObject().getAsJsonObject("result"));
+        assertEquals(List.of("list_companions", "send", "get_replies", "answer_consent"), names);
+
+        JsonObject driving = args("companion", "alice");
+        driving.addProperty("text", "hi");
+        JsonObject refused = call(secret, session, "say", driving);
+        assertTrue(refused.get("isError").getAsBoolean(), "渠道不能驾驶");
+        assertTrue(hands.said.isEmpty());
+        assertTrue(call(secret, session, "get_events", args("companion", "alice")).get("isError").getAsBoolean());
+    }
+
+    @Test
+    void aChannelsWordsGoInAndHerAnswerComesBackToThatChannelOnly() throws Exception {
+        String secret = channel(McpToken.Scope.of(Set.of(ALICE))).secret();
+        String other = channel(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+        String otherSession = connect(other);
+
+        JsonObject words = args("companion", "alice");
+        words.addProperty("text", "你好");
+        assertFalse(call(secret, session, "send", words).get("isError").getAsBoolean());
+        assertEquals(List.of(ALICE + ":你好"), hands.heard);
+
+        JsonObject wait = new JsonObject();
+        wait.addProperty("wait_seconds", 1);
+        JsonObject replies = JsonParser.parseString(textOf(call(secret, session, "get_replies", wait)))
+                .getAsJsonObject();
+        assertEquals(1, replies.getAsJsonArray("items").size());
+        JsonObject item = replies.getAsJsonArray("items").get(0).getAsJsonObject();
+        assertEquals("said", item.get("type").getAsString());
+        assertEquals("heard: 你好", item.get("text").getAsString());
+
+        JsonObject nothing = JsonParser.parseString(textOf(call(other, otherSession, "get_replies", wait)))
+                .getAsJsonObject();
+        assertEquals(0, nothing.getAsJsonArray("items").size(), "别的渠道不该收到这一份");
+    }
+
+    @Test
+    void aChannelCannotSpeakToCompanionsOutsideItsScope() throws Exception {
+        String secret = channel(McpToken.Scope.of(Set.of(ALICE))).secret();
+        String session = connect(secret);
+        JsonObject words = args("companion", "bob");
+        words.addProperty("text", "hi");
+
+        assertTrue(call(secret, session, "send", words).get("isError").getAsBoolean());
+        assertTrue(hands.heard.isEmpty());
+    }
+
+    @Test
+    void theOwnersAnswerOnAChannelGoesToTheDeskLikeAnyOther() throws Exception {
+        String secret = channel(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+        JsonObject answer = args("companion", "alice");
+        answer.addProperty("id", 7);
+        answer.addProperty("decision", "remember");
+
+        assertFalse(call(secret, session, "answer_consent", answer).get("isError").getAsBoolean());
+        assertEquals(List.of(ALICE + "#7:ALLOW_REMEMBER:"), hands.answers);
+
+        JsonObject allowWithNote = args("companion", "alice");
+        allowWithNote.addProperty("id", 8);
+        allowWithNote.addProperty("decision", "allow");
+        allowWithNote.addProperty("note", "sneaky");
+        assertTrue(call(secret, session, "answer_consent", allowWithNote).get("isError").getAsBoolean(),
+                "附言只随拒绝");
+        assertEquals(1, hands.answers.size());
+    }
+
+    @Test
+    void aChannelSessionDoesNotMakeTheOwnerPresentOrTakeTheSeat() throws Exception {
+        String secret = channel(McpToken.Scope.ALL).secret();
+        connect(secret);
+
+        assertFalse(sessions.brainConnected(OWNER));
+        assertFalse(sessions.drives(OWNER, ALICE));
     }
 }
