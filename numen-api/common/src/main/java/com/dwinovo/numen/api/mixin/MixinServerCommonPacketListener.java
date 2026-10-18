@@ -1,10 +1,14 @@
 package com.dwinovo.numen.api.mixin;
 
+import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.entity.FakeConnection;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.text.ServerLang;
 import net.minecraft.network.Connection;
 import net.minecraft.network.PacketSendListener;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Final;
@@ -43,6 +47,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * floor — there is no client), so there is no behavioural regression: vanilla position/chunk/keep-alive
  * packets were already discarded.
  *
+ * <h2>没装我们客户端的玩家:系统聊天与动作栏在这里翻好</h2>
+ * 同一个出口也是发给真玩家的话的最后一站。装着我们的客户端的玩家照旧收带语言键的消息,由他的客户端翻;没装的(原版客户端)
+ * 不认识 {@code numen.*} 的键,所以这里按他客户端报上来的语言把 Numen 的键翻成字再放行({@link ServerLang})。
+ * 指令的回话、她的话、征询、动作栏都是系统聊天包,在这一处一并解决,发话的地方不必各自管语言。
+ *
  * <p>Common (all environments): the integrated server hits this path in singleplayer too,
  * so it must NOT be a {@code server}-only (dedicated) mixin.
  */
@@ -67,5 +76,21 @@ public abstract class MixinServerCommonPacketListener {
             companion.fakeClient().onOutbound(packet);
         }
         ci.cancel();
+    }
+
+    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V",
+            at = @At("HEAD"), cancellable = true)
+    private void numen$translateForClientsWithoutNumen(Packet<?> packet, PacketSendListener listener, CallbackInfo ci) {
+        if (this.connection instanceof FakeConnection || !(packet instanceof ClientboundSystemChatPacket chat)
+                || !((Object) this instanceof ServerGamePacketListenerImpl game)
+                || Presence.hasClient(game.getPlayer().getUUID())) {
+            return;
+        }
+        Component translated = ServerLang.forPlayer(game.getPlayer(), chat.content());
+        if (translated != chat.content()) {
+            // 翻好的包里没有 Numen 的键了,重进这里时原样放行
+            game.send(new ClientboundSystemChatPacket(translated, chat.overlay()), listener);
+            ci.cancel();
+        }
     }
 }

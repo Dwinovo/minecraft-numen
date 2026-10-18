@@ -1,6 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
@@ -71,6 +72,32 @@ public class ClientlessGameTests {
                 "a command that acts on his client did not say he has none: " + heard);
 
         GameTestKit.leave(plain);
+        helper.succeed();
+    }
+
+    /**
+     * 没装客户端的玩家收到的是翻好的字:按他客户端报上来的语言,语言表读自 Numen 的 jar(客户端用的是同一份)。认不得的语言
+     * 退回英文,和客户端自己的规矩一样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
+    public static void a_player_without_our_client_is_told_in_the_language_his_client_reports(GameTestHelper helper) {
+        ServerPlayer chinese = GameTestKit.presentVanillaPlayer(helper, null, "gametest_zh", "zh_cn");
+        ServerPlayer english = GameTestKit.presentVanillaPlayer(helper, null, "gametest_en", "en_us");
+        ServerPlayer elsewhere = GameTestKit.presentVanillaPlayer(helper, null, "gametest_xx", "xx_xx");
+        List<ServerPlayer> players = List.of(chinese, english, elsewhere);
+        for (ServerPlayer player : players) {
+            GameTestKit.said(player);
+            player.getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), "numen settings");
+        }
+
+        helper.assertTrue(GameTestKit.said(chinese).stream().anyMatch(s -> s.text().getString().contains("要装了 Numen 客户端")),
+                "the Chinese client was not told in Chinese");
+        for (ServerPlayer player : List.of(english, elsewhere)) {
+            List<OwnerLine.Said> said = GameTestKit.said(player);
+            helper.assertTrue(said.stream().anyMatch(s -> s.text().getString().contains("This needs the Numen client")),
+                    "a client with no matching language was not told in English: " + said);
+        }
+        players.forEach(GameTestKit::leave);
         helper.succeed();
     }
 }

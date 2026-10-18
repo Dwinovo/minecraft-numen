@@ -28,4 +28,20 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 
         return !FMLLoader.isProduction();
     }
+
+    @Override
+    public java.util.List<String> modIds() {
+        return ModList.get().getMods().stream().map(net.neoforged.neoforgespi.language.IModInfo::getModId).toList();
+    }
+
+    @Override
+    public java.nio.file.Path modResource(String modId, String path) {
+        var file = ModList.get().getModFileById(modId);
+        if (file == null) {
+            return null;
+        }
+        // findResource 对不存在的路径也给一个 Path,存在与否在这里判
+        java.nio.file.Path found = file.getFile().findResource(path);
+        return java.nio.file.Files.exists(found) ? found : null;
+    }
 }
