@@ -6,11 +6,12 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.BlockPos;
-import com.dwinovo.numen.api.permission.Rule;
+import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -194,9 +195,9 @@ public class ClientlessGameTests {
     }
 
     private static ConsentItem oakLog(GameTestHelper helper) {
-        return new ConsentItem(Action.Kind.BREAK, helper.absolutePos(new BlockPos(5, 2, 5)), ConsentItem.NO_ENTITY,
-                "oak_log", Items.OAK_LOG, Blocks.OAK_LOG.getName(), "ask break(placed)", "placed by a player",
-                Component.literal("you placed it"), false, Rule.parse("break(placed & minecraft:oak_log)"));
+        return new ConsentItem(Verb.BREAK, helper.absolutePos(new BlockPos(5, 2, 5)), ConsentItem.NO_ENTITY,
+                "oak_log", Items.OAK_LOG, Blocks.OAK_LOG.getName(), "ask break(owner)", "belongs to the owner",
+                Component.literal("it is yours"), false, Rule.parse("break(owner & minecraft:oak_log)", Groups.VOCABULARY));
     }
 
     /**
