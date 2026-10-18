@@ -16,12 +16,10 @@ public class NumenFabricClient implements ClientModInitializer {
         // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
         com.dwinovo.numen.api.client.ConfigRootMigration.run(FabricLoader.getInstance().getConfigDir());
         // 这台电脑自己的文件住在 config/numen/client/;旧版散放在 config/numen/ 根下的先接过来。
-        // 每只同伴用哪条声线、穿哪张皮肤是这台机器的偏好。根从 loader 拿,不问 Minecraft
+        // 根从 loader 拿,不问 Minecraft
         // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
         com.dwinovo.numen.api.client.ClientFiles.migrate(com.dwinovo.numen.api.NumenPaths.config(),
                 com.dwinovo.numen.api.home.Homes.clientDir());
-        com.dwinovo.numen.api.client.agent.CompanionLooks.init(com.dwinovo.numen.api.home.Homes.clientDir(),
-                com.dwinovo.numen.api.NumenPaths.config());
 
         // 把只在客户端存在的能力接给插件那扇门。接上了本身就是"这是客户端"的判据——
         // 专用服务器上没人接,插件的 onClient 自然成空操作,不必让每个插件自己去问一遍加载器"我在哪一侧"。

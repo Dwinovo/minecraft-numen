@@ -22,7 +22,7 @@ public class VoicePreviewSound extends AbstractSoundInstance implements VoicePcm
     public VoicePreviewSound(PcmAudio audio, float volume) {
         super(VoicePcmSource.SOUND_EVENT, SoundSource.VOICE, SoundInstance.createUnseededRandom());
         this.audio = audio;
-        this.volume = VoiceLibrary.clampVolume(volume);
+        this.volume = com.dwinovo.numen.api.voice.VoiceProfile.clampVolume(volume);
         this.looping = false;
         this.delay = 0;
         this.relative = true;                                   // 坐标相对监听者

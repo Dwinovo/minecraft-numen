@@ -11,7 +11,7 @@ import com.dwinovo.numen.api.client.chat.ChatLines;
 import com.dwinovo.numen.api.client.hud.NumenHudToasts;
 import com.dwinovo.numen.api.client.hud.SpeechBubbles;
 import com.dwinovo.numen.api.client.ui.NumenToasts;
-import com.dwinovo.numen.api.client.voice.VoiceLibrary;
+import com.dwinovo.numen.api.client.voice.SpokenVoice;
 import com.dwinovo.numen.api.client.voice.VoicePipeline;
 import net.minecraft.client.Minecraft;
 
@@ -120,13 +120,13 @@ final class TurnPresenter {
 
     /**
      * 要调一次模型了:清掉上一次的半截文字,开一轮语音(若该同伴绑定了声线)。每次都
-     * 重新 resolve——声线库/绑定的编辑下一次生效;开新轮会打断上一轮还在播的残句。
+     * 重新读——声线库/绑定的编辑下一次生效;开新轮会打断上一轮还在播的残句。
      *
      * @param ownerBargeIn 主人的话还没被回应(硬停上一轮);否则句界衔接
      */
     private void beginTurn(boolean ownerBargeIn) {
         clearPartial();
-        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
+        SpokenVoice cfg = SpokenVoice.of(entityUuid);
         if (cfg == null) {
             if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
             voiceTurn = SILENT_VOICE;
@@ -199,7 +199,7 @@ final class TurnPresenter {
 
     /** 整段读出来:按当前绑定现取声线;未绑声线 = 静默(气泡与聊天行照旧)。 */
     private void readAloud(String text) {
-        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
+        SpokenVoice cfg = SpokenVoice.of(entityUuid);
         if (cfg == null) {
             return;
         }

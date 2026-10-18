@@ -102,6 +102,7 @@ public final class Shipped {
         for (Bundle bundle : bundles) {
             files(bundle.root()).forEach((path, file) -> shipped.put(path, new Shipment(bundle.source(), file)));
         }
+        manifest.jar = shipped;
         shipped.forEach((path, shipment) -> manifest.place(path, shipment));
         for (String path : List.copyOf(manifest.files.keySet())) {
             if (!shipped.containsKey(path)) {
@@ -165,6 +166,8 @@ public final class Shipped {
         private final Path serverRoot;
         private final JsonDoc doc;
         private final Map<String, Tracked> files = new LinkedHashMap<>();
+        /** 这一次同步时 jar 里带的每个文件("恢复默认"要取回的就是它);没同步过是空的。 */
+        private Map<String, Shipment> jar = Map.of();
 
         private Manifest(Path serverRoot) {
             this.serverRoot = serverRoot;
@@ -274,6 +277,15 @@ public final class Shipped {
             }
         }
 
+        /** {@code path} 是不是这一条的文件:文件型的条目是那一个文件,目录型的是目录里的每一个。 */
+        private static boolean belongs(LibraryKind kind, String base, String path) {
+            return kind.isDirectory() ? path.startsWith(base + "/") : path.equals(base + kind.suffix());
+        }
+
+        private static String baseOf(LibraryKind kind, EntryId id) {
+            return kind.dir() + "/" + id.namespace() + "/" + id.name();
+        }
+
         private static Path pending(Path target) {
             return target.resolveSibling(target.getFileName() + NEW_SUFFIX);
         }
@@ -290,14 +302,13 @@ public final class Shipped {
 
         @Override
         public Provenance of(LibraryKind kind, Shelf.Item item) {
-            String base = kind.dir() + "/" + item.id().namespace() + "/" + item.id().name();
+            String base = baseOf(kind, item.id());
             boolean modified = false;
             boolean update = false;
             boolean gone = false;
             for (Map.Entry<String, Tracked> e : files.entrySet()) {
                 String path = e.getKey();
-                boolean ours = kind.isDirectory() ? path.startsWith(base + "/") : path.equals(base + kind.suffix());
-                if (!ours) {
+                if (!belongs(kind, base, path)) {
                     continue;
                 }
                 Path target = serverRoot.resolve(path);
@@ -313,18 +324,46 @@ public final class Shipped {
             resolve(kind, id, true);
         }
 
+        /**
+         * 恢复默认:管理员改过的内置条目,丢掉他的改动,取回 jar 里这一版——条目的每个文件换回 jar 版,{@code .new} 删掉,清单记成
+         * 这一版是它的底(之后没人动它就是没改过)。
+         *
+         * @return jar 里有这一条;来源已经卸载的没有默认可恢复,是 {@code false}
+         */
+        public boolean restore(LibraryKind kind, EntryId id) {
+            String base = baseOf(kind, id);
+            boolean found = false;
+            for (Map.Entry<String, Shipment> e : jar.entrySet()) {
+                if (!belongs(kind, base, e.getKey())) {
+                    continue;
+                }
+                Path target = serverRoot.resolve(e.getKey());
+                write(e.getValue().file(), target);
+                Trees.deleteFile(pending(target));
+                Tracked record = files.computeIfAbsent(e.getKey(), k -> new Tracked());
+                record.source = e.getValue().source();
+                record.fingerprint = fingerprint(e.getValue().file());
+                record.deleted = false;
+                record.gone = false;
+                found = true;
+            }
+            if (found) {
+                save();
+            }
+            return found;
+        }
+
         /** 不采用新版:删掉 {@code <文件>.new},现在的文件保持被改过的样子,等下一版再提示。 */
         public void dismiss(LibraryKind kind, EntryId id) {
             resolve(kind, id, false);
         }
 
         private void resolve(LibraryKind kind, EntryId id, boolean take) {
-            String base = kind.dir() + "/" + id.namespace() + "/" + id.name();
+            String base = baseOf(kind, id);
             for (Map.Entry<String, Tracked> e : files.entrySet()) {
                 String path = e.getKey();
-                boolean ours = kind.isDirectory() ? path.startsWith(base + "/") : path.equals(base + kind.suffix());
                 Path target = serverRoot.resolve(path);
-                if (!ours || !Files.isRegularFile(pending(target))) {
+                if (!belongs(kind, base, path) || !Files.isRegularFile(pending(target))) {
                     continue;
                 }
                 // 不采用也把底记成这一版:这一版不再提示,等下一版

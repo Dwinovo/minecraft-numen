@@ -52,6 +52,7 @@ public final class ServerBrains {
         Modules.init(companion -> hub.library(Modules.KIND, ownerOf(registry, companion)));
         SkillRegistry.init(companion -> hub.library(SkillRegistry.KIND, ownerOf(registry, companion)));
         ModelServices.start(server);
+        SkinSignings.start(server);
         McpClients.start(server);
         ServerMcp.start(server);
         Visits.start();

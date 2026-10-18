@@ -26,13 +26,15 @@ import java.util.List;
  * @param compactProblem  现在不能整理的理由(语言键);{@code null} = 能
  * @param clearProblem    现在不能清空的理由;{@code null} = 能
  * @param messages        她此刻的上下文里有几条消息
+ * @param voiceId         她绑定的声线(库条目的名字);没绑是 {@code null},客户端据此朗读
+ * @param skinId          她绑定的皮肤;没绑是 {@code null}
  */
 public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean bodyTaskRunning,
                              LoopStatus.Doing activity, double compactProgress, List<EventQueue.Preview> queued,
                              String compactProblem, String clearProblem, JsonObject goal,
                              long totalTokens, Usage usageSum, Usage usageLast, long wastedTokens, int wasteCount,
                              int contextPercent, int window, String personaId, String providerId,
-                             String conversation, List<String> outstanding, int messages) {
+                             String voiceId, String skinId, String conversation, List<String> outstanding, int messages) {
 
     public CompanionState {
         queued = List.copyOf(queued);
@@ -42,7 +44,7 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
     /** 还没听说过她的任何事时的样子:闲着,什么都没排,没有目标。 */
     public static CompanionState idle() {
         return new CompanionState(null, null, null, false, null, 0.0, List.of(), null, null, null, 0, Usage.ZERO,
-                Usage.ZERO, 0, 0, 0, 0, null, null, null, List.of(), 0);
+                Usage.ZERO, 0, 0, 0, 0, null, null, null, null, null, List.of(), 0);
     }
 
     /** 停止键此刻有东西可停:在干活,或者排着主人的指令。 */
@@ -91,6 +93,8 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         o.addProperty("window", window);
         put(o, "personaId", personaId);
         put(o, "providerId", providerId);
+        put(o, "voiceId", voiceId);
+        put(o, "skinId", skinId);
         put(o, "conversation", conversation);
         o.add("outstanding", strings(outstanding));
         o.addProperty("messages", messages);
@@ -119,7 +123,8 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
                 o.get("goal") instanceof JsonObject g ? g : null,
                 longOf(o, "totalTokens"), usage(o.getAsJsonObject("usageSum")), usage(o.getAsJsonObject("usageLast")),
                 longOf(o, "wastedTokens"), (int) longOf(o, "wasteCount"), (int) longOf(o, "contextPercent"),
-                (int) longOf(o, "window"), string(o, "personaId"), string(o, "providerId"), string(o, "conversation"),
+                (int) longOf(o, "window"), string(o, "personaId"), string(o, "providerId"), string(o, "voiceId"),
+                string(o, "skinId"), string(o, "conversation"),
                 list(o.get("outstanding")), (int) longOf(o, "messages"));
     }
 

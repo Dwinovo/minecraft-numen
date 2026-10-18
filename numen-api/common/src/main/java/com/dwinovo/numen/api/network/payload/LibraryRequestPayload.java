@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
  * Client → Server: 读写服务器上的一种库(人设、模型档案、服务器配置)。{@code op} 是 list / put / delete,{@code json} 是
  * 存和删带的内容。谁能做什么、能看到什么由服务端判(见 {@code Libraries}),答复是 {@link LibraryPayload}。
  */
-public record LibraryRequestPayload(String kind, String op, String json) implements CustomPacketPayload {
+public record LibraryRequestPayload(String kind, String op, String json) implements CustomPacketPayload, Wire.Fragmentable {
 
     public static final Type<LibraryRequestPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "library_request"));

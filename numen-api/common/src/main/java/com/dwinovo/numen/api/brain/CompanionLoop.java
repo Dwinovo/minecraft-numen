@@ -46,6 +46,7 @@ import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -135,10 +136,14 @@ public final class CompanionLoop {
      * "最后一次被怎么叫醒"的会话态,不落盘。
      */
     private Venue venue = Venue.PANEL;
-    /** 绑定的档案 id;{@code null} = 没绑。落盘在 {@code binding.json}。 */
+    /** 绑定的档案 id;{@code null} = 没绑。落盘在 {@code binding.json},四项绑定一个文件。 */
     private String providerId;
     /** 绑定的人设 id;{@code null} = 默认人格。人设正文每轮现取,没有副本。 */
     private String personaId;
+    /** 绑定的声线 id;{@code null} = 不出声。声线定义在库里,朗读在主人的客户端。 */
+    private String voiceId;
+    /** 绑定的皮肤 id;{@code null} = 默认皮肤。穿在身上的签名数据在名册里,这里记的是库里的哪一条。 */
+    private String skinId;
     /** 死亡原因,复活时放进复活事件(活着是 {@code null})。 */
     private String deathCause;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
@@ -179,8 +184,9 @@ public final class CompanionLoop {
     private void restore() {
         JsonObject binding = readDoc(bindingDoc);
         if (binding != null) {
-            providerId = text(binding, "provider");
-            personaId = text(binding, "persona");
+            for (Slot slot : Slot.values()) {
+                set(slot, text(binding, slot.wire()));
+            }
         }
         tokens.load();
         log.migrateIfNeeded();
@@ -224,16 +230,15 @@ public final class CompanionLoop {
     }
 
     private void persistBinding() {
-        if (providerId == null && personaId == null) {
+        if (providerId == null && personaId == null && voiceId == null && skinId == null) {
             bindingDoc.delete();
             return;
         }
         JsonObject o = new JsonObject();
-        if (providerId != null) {
-            o.addProperty("provider", providerId);
-        }
-        if (personaId != null) {
-            o.addProperty("persona", personaId);
+        for (Slot slot : Slot.values()) {
+            if (bound(slot) != null) {
+                o.addProperty(slot.wire(), bound(slot));
+            }
         }
         bindingDoc.write(o);
     }
@@ -264,7 +269,7 @@ public final class CompanionLoop {
                 status.activity(), status.compactProgress(), status.queuedPreview(), compactProblem(), clearProblem(),
                 goal == null ? null : goal.toJson(), tokens.total(), tokens.sum(), tokens.latest(),
                 tokens.waste().missedTokens(), tokens.waste().missCount(), contextPercent(), modelWindow(),
-                personaId, providerId, conversation, tools.outstanding(), convo.snapshot().size());
+                personaId, providerId, voiceId, skinId, conversation, tools.outstanding(), convo.snapshot().size());
     }
 
     /** 她的对话日志:面板按 id 往前翻它。 */
@@ -296,12 +301,14 @@ public final class CompanionLoop {
         return tools.holds(callId);
     }
 
-    public String providerId() {
-        return providerId;
-    }
-
-    public String personaId() {
-        return personaId;
+    /** 她绑定的这一项的库条目 id({@code 命名空间:名字});没绑是 {@code null}。 */
+    public String bound(Slot slot) {
+        return switch (slot) {
+            case PROVIDER -> providerId;
+            case PERSONA -> personaId;
+            case VOICE -> voiceId;
+            case SKIN -> skinId;
+        };
     }
 
     /** 她此刻在哪个会话里;{@code null} = 就他俩。 */
@@ -560,32 +567,40 @@ public final class CompanionLoop {
 
     // ---- 绑定 ----
 
-    /** 换她用的模型档案(null = 不绑)。下一次请求生效;因端点不可用停着的会再试一次。 */
-    public void setProvider(String entryId) {
-        this.providerId = entryId == null || entryId.isBlank() ? null : entryId;
-        persistBinding();
-        Constants.LOG.info("[numen-entity#{}] provider entry set to {}", companion,
-                providerId == null ? "(none)" : providerId);
-        loop.bindingChanged();
-    }
-
     /**
-     * 运行时换人设:改绑定(下一轮系统提示现取正文,不打断在飞的请求),再往聊天流插一条分隔记号。
-     * 不给模型注入"从现在起你是…"的和解消息——新系统提示本身就是最强的指令。
+     * 换她的一项绑定({@code null} = 不绑),落盘在她的家里。这里只记"绑的是哪一条";条目在不在库里、皮肤穿到身上
+     * 这些是 {@link CompanionBinding} 的事。
+     * <ul>
+     *   <li>模型档案:下一次请求生效;因端点不可用停着的会再试一次;</li>
+     *   <li>人设:下一轮系统提示现取正文,不打断在飞的请求,再往聊天流插一条分隔记号。不给模型注入"从现在起你是…"的和解消息——
+     *       新系统提示本身就是最强的指令;</li>
+     *   <li>声线、皮肤:界面读状态,客户端据此朗读。</li>
+     * </ul>
      */
-    public void setPersona(String id) {
-        this.personaId = id;
+    public void bind(Slot slot, String entryId) {
+        String id = entryId == null || entryId.isBlank() ? null : entryId;
+        boolean changed = !Objects.equals(bound(slot), id);
+        set(slot, id);
         persistBinding();
-        log.appendPersonaDivider();
+        Constants.LOG.info("[numen-entity#{}] {} entry set to {}", companion, slot.wire(), id == null ? "(none)" : id);
+        switch (slot) {
+            case PROVIDER -> loop.bindingChanged();   // 再绑同一份也要再试:可能是补上了 key
+            case PERSONA -> {
+                if (changed) {
+                    log.appendPersonaDivider();
+                }
+            }
+            case VOICE, SKIN -> { }
+        }
     }
 
-    /** 召唤时定下的初始人设:不插分隔记号;已经有就不动。 */
-    public void setInitialPersona(String id) {
-        if (personaId != null) {
-            return;
+    private void set(Slot slot, String id) {
+        switch (slot) {
+            case PROVIDER -> providerId = id;
+            case PERSONA -> personaId = id;
+            case VOICE -> voiceId = id;
+            case SKIN -> skinId = id;
         }
-        this.personaId = id;
-        persistBinding();
     }
 
     private String personaText() {

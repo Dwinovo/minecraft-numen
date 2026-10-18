@@ -6,46 +6,49 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * 皮肤库条目的预览纹理缓存:把 {@code config/numen/client/skins/<id>.png} 注册成
- * 动态纹理,供列表行画头像(PlayerFaceRenderer)。按条目 id 缓存,换图/删除
- * 时 {@link #evict} 作废。仅客户端渲染线程使用。
+ * 皮肤库条目的预览纹理缓存:把条目的原图(服务端推来的 png 字节)注册成动态纹理,供列表行画头像
+ * (PlayerFaceRenderer)。按条目的 key 缓存,同一个 key 来了不同的图(重签换了图)就换掉旧纹理。仅客户端渲染线程使用。
  */
 public final class SkinTextures {
 
-    private static final Map<String, ResourceLocation> CACHE = new HashMap<>();
+    private record Cached(int hash, ResourceLocation texture) {}
+
+    private static final Map<String, Cached> CACHE = new HashMap<>();
 
     private SkinTextures() {}
 
-    /** 条目原图的纹理位置;读不到图返回 null(调用方跳过头像)。 */
-    public static ResourceLocation faceOf(String id, Path png) {
-        if (CACHE.containsKey(id)) return CACHE.get(id);   // 含"读取失败"的 null 负缓存
+    /** 这张图的纹理位置;读不到图返回 null(调用方跳过头像)。 */
+    public static ResourceLocation faceOf(String key, byte[] png) {
+        if (png.length == 0) {
+            return null;
+        }
+        int hash = Arrays.hashCode(png);
+        Cached cached = CACHE.get(key);
+        if (cached != null && cached.hash() == hash) {
+            return cached.texture();   // 含"读取失败"的 null 负缓存
+        }
+        if (cached != null && cached.texture() != null) {
+            Minecraft.getInstance().getTextureManager().release(cached.texture());
+        }
         ResourceLocation rl = null;
-        try (InputStream in = Files.newInputStream(png)) {
+        try (ByteArrayInputStream in = new ByteArrayInputStream(png)) {
             NativeImage img = NativeImage.read(in);
             rl = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID,
-                    "skin_preview/" + id.toLowerCase(Locale.ROOT));
+                    "skin_preview/" + Integer.toHexString(key.toLowerCase(Locale.ROOT).hashCode()) + "_"
+                            + Integer.toHexString(hash));
             Minecraft.getInstance().getTextureManager().register(rl, new DynamicTexture(img));
         } catch (IOException | RuntimeException e) {
-            Constants.LOG.warn("[numen-skin] 预览纹理加载失败 {}: {}", id, e.toString());
+            Constants.LOG.warn("[numen-skin] 预览纹理加载失败 {}: {}", key, e.toString());
         }
-        CACHE.put(id, rl);
+        CACHE.put(key, new Cached(hash, rl));
         return rl;
-    }
-
-    /** 换图/删除后作废(纹理管理器里的旧注册随之释放)。 */
-    public static void evict(String id) {
-        ResourceLocation rl = CACHE.remove(id);
-        if (rl != null) {
-            Minecraft.getInstance().getTextureManager().release(rl);
-        }
     }
 }

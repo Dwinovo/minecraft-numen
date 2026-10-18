@@ -64,6 +64,9 @@ import java.util.function.Predicate;
  *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
  *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
  *   /numen token create|list|revoke                       the remote endpoint's tokens (see {@code TokenCommands})
+ *   /numen companion &lt;her&gt; profile|persona|voice|skin [&lt;entry&gt;]  bind one of her four library entries (see BindingCommands)
+ *   /numen key &lt;service&gt; &lt;key&gt;                            store a key in the caller's own keychain (see KeyCommand)
+ *   /numen skin add &lt;name&gt; player|url &lt;…&gt;                  add a skin to the caller's library, signed in the server's queue (see SkinCommand)
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -128,6 +131,9 @@ public final class NumenCommands {
         graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.group());
         graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.chat());
         graft(dispatcher, com.dwinovo.numen.api.mcp.server.TokenCommands.node());
+        graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());
+        graft(dispatcher, com.dwinovo.numen.api.brain.KeyCommand.node());
+        graft(dispatcher, com.dwinovo.numen.api.brain.SkinCommand.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
@@ -203,14 +209,13 @@ public final class NumenCommands {
 
     private static int summon(CommandContext<CommandSourceStack> ctx, String name)
             throws CommandSyntaxException {
-        ServerPlayer owner = ctx.getSource().getPlayerOrException();
-        ServerLevel level = (ServerLevel) owner.level();
-        NumenPlayer body = Companions.summon(
-                level.getServer(), owner.getUUID(), name, level, owner.position());
-        // Push the updated roster so the owner's G panel can reach the new companion.
-        Companions.syncRosterToOwner(level.getServer(), owner);
+        Companions.Summoned summoned = Companions.summonFor(ctx.getSource().getPlayerOrException(), name, null);
+        if (summoned.problem() != null) {
+            ctx.getSource().sendFailure(summoned.problem());
+            return 0;
+        }
         ctx.getSource().sendSuccess(() ->
-                Component.translatable(Keys.COMMAND_SUMMONED, name, body.getUUID().toString()), false);
+                Component.translatable(Keys.COMMAND_SUMMONED, name, summoned.body().getUUID().toString()), false);
         return 1;
     }
 

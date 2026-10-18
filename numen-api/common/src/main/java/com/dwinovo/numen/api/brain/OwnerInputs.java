@@ -133,8 +133,13 @@ public final class OwnerInputs {
             case OwnerInput.SetGoal goal -> loop(server, owner, goal.companion(), brain ->
                     brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo()));
             case OwnerInput.ClearGoal goal -> loop(server, owner, goal.companion(), brain -> brain.clearGoal(null));
-            case OwnerInput.SetProvider p -> loop(server, owner, p.companion(), brain -> brain.setProvider(p.provider()));
-            case OwnerInput.SetPersona p -> loop(server, owner, p.companion(), brain -> brain.setPersona(p.persona()));
+            case OwnerInput.Bind bind -> {
+                if (!owns(server, owner, bind.companion())) {
+                    yield Applied.refused("not your companion");
+                }
+                String problem = CompanionBinding.apply(server, owner, bind.companion(), bind.slot(), bind.entry());
+                yield problem == null ? Applied.done() : Applied.refused(problem);
+            }
             case OwnerInput.Emit emit -> {
                 // 上行的类型不可信:主人的话,或登记过的世界事件,别的不收
                 try {

@@ -8,6 +8,9 @@ import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
+import com.dwinovo.numen.api.skin.SkinError;
+import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -313,6 +316,105 @@ public final class ServerLibraries {
     /** 叠起来之后算数的技能,含被玩家关掉的(开关面板要列出来让他再打开)。 */
     public static List<Skill> skillsEffective() {
         return skills().stream().filter(s -> effective(s.base())).toList();
+    }
+
+    // ---- 声线 ----
+
+    /** {@code profile} 是声线的全部参数(没有 key);读不通的条目是 {@code null}。 */
+    public record Voice(Base base, VoiceProfile profile) {
+
+        public String id() {
+            return base.id();
+        }
+
+        public String name() {
+            return base.name();
+        }
+    }
+
+    /** 内置的在前,我的在后。 */
+    public static List<Voice> voices() {
+        List<Voice> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.VOICE)) {
+            JsonObject o = e.getAsJsonObject();
+            out.add(new Voice(base(o), flag(o, "unreadable") ? null : VoiceProfile.fromJson(o)));
+        }
+        return out;
+    }
+
+    /** 选声线时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    public static List<Voice> voicesInUse() {
+        return voices().stream().filter(v -> effective(v.base()) && v.base().enabled() && v.profile() != null).toList();
+    }
+
+    /** 叫这个名字、此刻在用的声线;没有是 {@code null}。 */
+    public static Voice voice(String id) {
+        for (Voice v : voicesInUse()) {
+            if (v.id().equals(id)) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    // ---- 皮肤 ----
+
+    /** {@code png} 是原图;借来的正版皮肤取不到图时是空数组。读不通的条目 {@code variant} 为 {@code null}。 */
+    public record Skin(Base base, String variant, boolean signed, byte[] png) {
+
+        public String id() {
+            return base.id();
+        }
+
+        public String name() {
+            return base.name();
+        }
+    }
+
+    /** 一张在服务端队里等签的,或刚失败的;失败的 {@code failure} 非空,排着的 {@code position} 是排第几。 */
+    public record SkinJob(long job, String name, String state, int position, SkinError failure) {
+
+        public boolean failed() {
+            return failure != null;
+        }
+    }
+
+    /** 内置的在前,我的在后;不含排队中的({@link #skinJobs})。 */
+    public static List<Skin> skins() {
+        List<Skin> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SKIN)) {
+            JsonObject o = e.getAsJsonObject();
+            if (!flag(o, "pending")) {
+                out.add(new Skin(base(o), flag(o, "unreadable") ? null : text(o, "variant"), flag(o, "signed"),
+                        o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0]));
+            }
+        }
+        return out;
+    }
+
+    /** 选皮肤时能选的:叠起来之后算数的、没被玩家关掉的、签过名的。 */
+    public static List<Skin> skinsInUse() {
+        return skins().stream().filter(s -> effective(s.base()) && s.base().enabled() && s.signed()).toList();
+    }
+
+    /** 这位玩家在服务端队里的与刚失败的。 */
+    public static List<SkinJob> skinJobs() {
+        List<SkinJob> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SKIN)) {
+            JsonObject o = e.getAsJsonObject();
+            if (flag(o, "pending")) {
+                SkinError failure = null;
+                if (o.has("problem")) {
+                    JsonObject p = o.getAsJsonObject("problem");
+                    List<String> args = new ArrayList<>();
+                    p.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
+                    failure = SkinError.of(text(p, "code"), args);
+                }
+                out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
+                        o.get("position").getAsInt(), failure));
+            }
+        }
+        return out;
     }
 
     // ---- 偏好 ----

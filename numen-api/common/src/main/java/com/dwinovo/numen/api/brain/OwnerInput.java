@@ -28,11 +28,8 @@ public sealed interface OwnerInput {
 
     record ClearGoal(UUID companion) implements OwnerInput {}
 
-    /** 给她换模型档案;{@code null} = 不绑。 */
-    record SetProvider(UUID companion, String provider) implements OwnerInput {}
-
-    /** 给她换人设;{@code null} = 默认人格。 */
-    record SetPersona(UUID companion, String persona) implements OwnerInput {}
+    /** 给她换一项绑定(档案、人设、声线、皮肤);{@code entry} 是库条目的名字,{@code null} = 不绑。 */
+    record Bind(UUID companion, Slot slot, String entry) implements OwnerInput {}
 
     /**
      * 渠道(桥接、弹幕、别的客户端模组)往她那里送一条输入:{@code type} 是主人的话({@code query})或一个登记过的世界事件。
@@ -66,8 +63,7 @@ public sealed interface OwnerInput {
             case SetGoal g -> put(o, "set_goal", "companion", g.companion().toString(), "objective", g.objective(),
                     "echo", g.echo());
             case ClearGoal g -> put(o, "clear_goal", "companion", g.companion().toString());
-            case SetProvider p -> put(o, "set_provider", "companion", p.companion().toString(), "provider", p.provider());
-            case SetPersona p -> put(o, "set_persona", "companion", p.companion().toString(), "persona", p.persona());
+            case Bind b -> put(o, "bind", "companion", b.companion().toString(), "slot", b.slot().wire(), "entry", b.entry());
             case Emit e -> put(o, "emit", "companion", e.companion().toString(), "type", e.type(), "text", e.text());
             case Speaking s -> {
                 put(o, "speaking", "companion", s.companion().toString());
@@ -99,8 +95,7 @@ public sealed interface OwnerInput {
                 case "clear" -> new Clear(uuid(o, "companion"));
                 case "set_goal" -> new SetGoal(uuid(o, "companion"), text(o, "objective"), text(o, "echo"));
                 case "clear_goal" -> new ClearGoal(uuid(o, "companion"));
-                case "set_provider" -> new SetProvider(uuid(o, "companion"), text(o, "provider"));
-                case "set_persona" -> new SetPersona(uuid(o, "companion"), text(o, "persona"));
+                case "bind" -> bind(o);
                 case "emit" -> new Emit(uuid(o, "companion"), text(o, "type"), text(o, "text"));
                 case "speaking" -> new Speaking(uuid(o, "companion"), o.get("playing").getAsBoolean());
                 case "pull" -> new Pull(text(o, "conversation"), uuid(o, "companion"), text(o, "newId"));
@@ -112,6 +107,14 @@ public sealed interface OwnerInput {
         } catch (RuntimeException unreadable) {
             return null;
         }
+    }
+
+    private static Bind bind(JsonObject o) {
+        Slot slot = Slot.ofWire(text(o, "slot"));
+        if (slot == null) {
+            throw new IllegalArgumentException("no such slot");
+        }
+        return new Bind(uuid(o, "companion"), slot, text(o, "entry"));
     }
 
     private static void put(JsonObject o, String kind, String... keyValues) {

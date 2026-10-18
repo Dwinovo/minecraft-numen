@@ -91,7 +91,7 @@ public class InventoryGameTests {
     /**
      * 换肤走的是"改注册表 + 原地回收":休眠存盘、按注册表重建之后,GameProfile 挂上
      * textures,而 UUID 与背包(经 .dat)原样回来——换的是皮,不是人。
-     * ChangeSkinPayload 对活体执行的正是这一串。
+     * 绑定皮肤时 {@code Companions.applySkin} 对活体执行的正是这一串。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
     public static void reskin_recycle_keeps_identity_and_items(GameTestHelper helper) {
@@ -103,10 +103,8 @@ public class InventoryGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         first.getInventory().add(new ItemStack(Items.DIAMOND));
-        var reg = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
-        reg.put(uuid, reg.find(uuid).withSkin("ZmFrZQ==", ""));
-        com.dwinovo.numen.api.entity.Companions.dormant(server, first);
-        com.dwinovo.numen.api.entity.Companions.respawn(server, uuid);
+        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid,
+                new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""));
 
         succeedWhen(helper, () -> {
             NumenPlayer live = NumenPlayer.findByUuid(server, uuid);

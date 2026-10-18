@@ -11,7 +11,7 @@ import java.nio.file.Path;
  * 主人的客户端偏好——{@code config/numen/client/ui.json}。
  *
  * <pre>
- * { "theme": "light", "talkHint": true, "messageNotices": true }
+ * { "theme": "light", "talkHint": true, "messageNotices": true, "voiceEnabled": true }
  * </pre>
  *
  * <p>跟 {@code UiTheme} 分开:那个类只管颜色,这里只管主人选了什么。混在一起的话,
@@ -27,6 +27,7 @@ public final class ClientPrefs {
     private static String theme = "light";
     private static boolean talkHint = true;
     private static boolean messageNotices = true;
+    private static boolean voiceEnabled = true;
     /** 最近用过的斜杠命令名,最新在前。排序归命令层,这里只负责存。 */
     private static final java.util.List<String> recentCommands = new java.util.ArrayList<>();
 
@@ -43,6 +44,7 @@ public final class ClientPrefs {
             if (o.has("theme")) theme = o.get("theme").getAsString();
             if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
             if (o.has("messageNotices")) messageNotices = o.get("messageNotices").getAsBoolean();
+            if (o.has("voiceEnabled")) voiceEnabled = o.get("voiceEnabled").getAsBoolean();
             if (o.has("recentCommands") && o.get("recentCommands").isJsonArray()) {
                 for (var el : o.getAsJsonArray("recentCommands")) recentCommands.add(el.getAsString());
             }
@@ -80,6 +82,16 @@ public final class ClientPrefs {
         persist();
     }
 
+    /** 语音总开关:关了,她不论绑没绑声线都不出声(这台电脑自己的设置,不跟着她走)。 */
+    public static boolean voiceEnabled() {
+        return voiceEnabled;
+    }
+
+    public static void setVoiceEnabled(boolean enabled) {
+        voiceEnabled = enabled;
+        persist();
+    }
+
     /** 最近用过的斜杠命令,最新的在前。补全列表按它排序。 */
     public static java.util.List<String> recentCommands() {
         return java.util.List.copyOf(recentCommands);
@@ -99,6 +111,7 @@ public final class ClientPrefs {
         o.addProperty("theme", theme);
         o.addProperty("talkHint", talkHint);
         o.addProperty("messageNotices", messageNotices);
+        o.addProperty("voiceEnabled", voiceEnabled);
         com.google.gson.JsonArray recent = new com.google.gson.JsonArray();
         for (String name : recentCommands) recent.add(name);
         o.add("recentCommands", recent);

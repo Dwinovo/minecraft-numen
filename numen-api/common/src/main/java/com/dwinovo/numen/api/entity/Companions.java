@@ -37,30 +37,15 @@ public final class Companions {
      * exists it is reused — already live → returned as-is; dormant → brought back. Only a name with no
      * existing companion mints a fresh one. (The old "fresh random UUID every summon" minted same-name
      * duplicates that all respawned on login — that's the duplicate-companion bug.)
+     *
+     * <p>她是什么样子(档案、人设、声线、皮肤)不在这里定:召唤之后再绑({@code CompanionBinding})。玩家的召唤走
+     * {@link #summonFor},这里是它和 GameTest 共用的那一步。
      */
     public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
                                       ServerLevel level, Vec3 pos) {
-        return summon(server, ownerUuid, name, level, pos, null);
-    }
-
-    /** As {@link #summon(MinecraftServer, UUID, String, ServerLevel, Vec3)} with an optional
-     *  borrowed skin (Mojang 签名的 textures,见 {@link MojangSkins})。重复召唤携带皮肤 =
-     *  换肤:注册表更新后,休眠体这次重建就生效,活体等下次重建。 */
-    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
-                                      ServerLevel level, Vec3 pos, MojangSkins.Skin skin) {
         CompanionRegistry reg = CompanionRegistry.get(server);
         UUID existing = findByOwnerName(server, ownerUuid, name);
         if (existing != null) {
-            if (skin != null) {
-                CompanionRegistry.Entry e = reg.find(existing);
-                if (e != null) reg.put(existing, e.withSkin(skin.value(), skin.signature()));
-                // 换肤必须重建身体才看得见(GameProfile 只在构造时注入):活体先落盘
-                // 休眠,紧接着的 respawn 立即以带新皮肤的档案重建,位置物品全保留。
-                NumenPlayer live = NumenPlayer.findByUuid(server, existing);
-                if (live != null) {
-                    CompanionFactory.despawn(server, live);
-                }
-            }
             NumenPlayer body = respawn(server, existing);
             if (body != null) {
                 com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
@@ -74,12 +59,69 @@ public final class Companions {
         // 先入册再造体:CompanionFactory.spawn 从注册表读皮肤,所有出生路径共用一个注入点。
         CompanionRegistry.Entry fresh = new CompanionRegistry.Entry(
                 name, ownerUuid, level.dimension(), net.minecraft.core.BlockPos.containing(pos));
-        if (skin != null) fresh = fresh.withSkin(skin.value(), skin.signature());
         reg.put(companionUuid, fresh);
         NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
         reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
         com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
         return body;
+    }
+
+    /** 召唤的结果:成了是她的身体;没成是要说给玩家听的话。 */
+    public record Summoned(NumenPlayer body, net.minecraft.network.chat.Component problem) {}
+
+    /**
+     * <b>玩家召唤的唯一入口</b>:召唤卡与 {@code /numen player summon} 都走这里,谁都能召唤,只要一个名字,不设任何前提。
+     * 名字要合 Minecraft 的命名规则、不能撞上在线的别人;每人最多养几只是服主在 {@code server.json} 里设的(缺省不限)——
+     * 再召唤自己已有的同名同伴是叫醒她,不占名额。召唤成了把新名册推给他。
+     *
+     * @param creative 玩家在召唤卡上选的模式;{@code null} = 不动她的模式(命令没有这一项)
+     */
+    public static Summoned summonFor(ServerPlayer owner, String name, Boolean creative) {
+        MinecraftServer server = owner.server;
+        if (!MojangSkins.validName(name)) {
+            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_INVALID));
+        }
+        // 重名闸:同名玩家已在线(真人/别的主人的同伴)一律拒绝——例外是自己的同名同伴(那是叫醒她)。
+        var online = server.getPlayerList().getPlayerByName(name);
+        boolean ownSameName = online instanceof NumenPlayer np && np.isOwnedByPlayer(owner.getUUID());
+        if (online != null && !ownSameName) {
+            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name));
+        }
+        int limit = com.dwinovo.numen.api.brain.ModelServices.of(server).settings().maxCompanions();
+        if (limit > 0 && findByOwnerName(server, owner.getUUID(), name) == null
+                && CompanionRegistry.get(server).ownedBy(owner.getUUID()).size() >= limit) {
+            return new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit));
+        }
+        ServerLevel level = (ServerLevel) owner.level();
+        NumenPlayer body = summon(server, owner.getUUID(), name, level, owner.position());
+        if (creative != null) {
+            applyGameMode(owner, body, creative);
+        }
+        syncRosterToOwner(server, owner);
+        return new Summoned(body, null);
+    }
+
+    /**
+     * 给一只同伴换上这副皮肤(Mojang 签名的 textures);{@code null} = 回到默认皮肤。皮肤只在构造身体时注入 GameProfile,所以
+     * 活体要原地重建(存盘离场再按名册重建,背包位置在做的活全走既有持久化通道回来);休眠和死着的只改名册,下次重建自然生效。
+     * 穿的本来就是这一副就什么也不做。
+     */
+    public static void applySkin(MinecraftServer server, UUID companion, MojangSkins.Skin skin) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(companion);
+        String value = skin == null ? "" : skin.value();
+        if (entry == null || entry.skinValue().equals(value)) {
+            return;
+        }
+        reg.put(companion, entry.withSkin(value, skin == null ? "" : skin.signature()));
+        NumenPlayer body = NumenPlayer.findByUuid(server, companion);
+        if (body != null) {
+            dormant(server, body);
+            respawn(server, companion);
+        }
     }
 
     /** 主人名下叫这个名字的同伴,没有则 null。判断规则在 {@link CompanionRoster#findByName}

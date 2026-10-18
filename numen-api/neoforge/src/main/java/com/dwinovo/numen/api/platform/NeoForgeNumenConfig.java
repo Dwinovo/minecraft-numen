@@ -24,7 +24,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     public static final ModConfigSpec.ConfigValue<String> PROXY;
     public static final ModConfigSpec.ConfigValue<String> SYSTEM_PROMPT;
     public static final ModConfigSpec.ConfigValue<String> STT_PROVIDER;
-    public static final ModConfigSpec.ConfigValue<String> STT_API_KEY;
     public static final ModConfigSpec.ConfigValue<String> STT_BASE_URL;
     public static final ModConfigSpec.ConfigValue<String> STT_MODEL;
     public static final ModConfigSpec.ConfigValue<String> STT_MICROPHONE;
@@ -53,8 +52,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
         STT_PROVIDER = b.comment("Provider preset (whisper-http adapter).",
                 "siliconflow | openai | groq | custom (fill base_url + model yourself)")
                 .define("provider", "siliconflow");
-        STT_API_KEY = b.comment("Voice-input service API key (bearer). Empty = voice input off.")
-                .define("api_key", "");
         STT_BASE_URL = b.comment("Base URL override. Empty = provider preset default.")
                 .define("base_url", "");
         STT_MODEL = b.comment("Transcription model id (e.g. whisper-1, FunAudioLLM/SenseVoiceSmall).")
@@ -83,11 +80,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     public String getSttProvider() {
         String s = safe(STT_PROVIDER);
         return s.isEmpty() ? "siliconflow" : s;
-    }
-
-    @Override
-    public String getSttApiKey() {
-        return safe(STT_API_KEY);
     }
 
     @Override
@@ -120,11 +112,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     @Override
     public void setSttProvider(String value) {
         STT_PROVIDER.set(value == null || value.isBlank() ? "siliconflow" : value);
-    }
-
-    @Override
-    public void setSttApiKey(String value) {
-        STT_API_KEY.set(value == null ? "" : value);
     }
 
     @Override

@@ -305,7 +305,7 @@ final class ProfilePage {
                     : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
         }
         cy = settingRow(g, t, I18n.get("numen.profile.model"), model, x, cy, w, mouseX, mouseY);
-        var voice = com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().resolve(who);
+        var voice = loop == null ? null : ServerLibraries.voice(loop.voiceId());
         cy = settingRow(g, t, I18n.get("numen.profile.voice"),
                 voice != null ? voice.name() : I18n.get("numen.profile.voice_none"), x, cy, w, mouseX, mouseY);
         var conn = mc.getConnection();

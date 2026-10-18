@@ -26,6 +26,7 @@ public final class NumenGameTestSuite implements GameTestSuite {
                 GearGameTests.class,
                 InteractGameTests.class,
                 InventoryGameTests.class,
+                LibraryCommandGameTests.class,
                 LocateGameTests.class,
                 ModeGameTests.class,
                 MovementGameTests.class,

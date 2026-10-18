@@ -135,22 +135,20 @@ public final class CompanionLoops {
         }
     }
 
-    /** 这位主人的人设改了名(文件名就是 id):名下用它的大脑改指新的 id。 */
-    public static void repersona(UUID owner, String from, String to) {
+    /** 这位主人的某一项库条目改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
+    public static void rebind(UUID owner, Slot slot, String from, String to) {
         for (Entry entry : LOOPS.values()) {
-            if (entry.owner.equals(owner) && from.equals(entry.loop.personaId())) {
-                entry.loop.setPersona(to);
+            if (entry.owner.equals(owner) && from.equals(entry.loop.bound(slot))) {
+                entry.loop.bind(slot, to);
             }
         }
     }
 
-    /** 这位主人的模型档案改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
-    public static void reprovider(UUID owner, String from, String to) {
-        for (Entry entry : LOOPS.values()) {
-            if (entry.owner.equals(owner) && from.equals(entry.loop.providerId())) {
-                entry.loop.setProvider(to);
-            }
-        }
+    /** 这位主人名下绑着这一条库条目的同伴。 */
+    static List<UUID> boundTo(UUID owner, Slot slot, String entryId) {
+        return LOOPS.values().stream()
+                .filter(entry -> entry.owner.equals(owner) && entryId.equals(entry.loop.bound(slot)))
+                .map(entry -> entry.loop.companion()).toList();
     }
 
     /** 主人客户端的朗读开始、停止放音。 */

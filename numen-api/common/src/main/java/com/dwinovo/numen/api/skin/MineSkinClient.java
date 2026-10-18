@@ -1,6 +1,5 @@
-package com.dwinovo.numen.api.client.skin;
+package com.dwinovo.numen.api.skin;
 
-import com.dwinovo.numen.api.Constants;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -11,21 +10,22 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 
 /**
- * MineSkin 代签客户端:把任意皮肤 png 换成 Mojang 签名的 textures
- * (value+signature)。原版客户端只认 Mojang 签过名的皮肤数据,MineSkin 用
- * 正版账号池"代穿一次抠下签名"。免费匿名档按调用方 IP 限流(约 10 张/分),
- * 本客户端跑在每个玩家自己的机器上,额度天然按人头分摊,分发无瓶颈。
+ * MineSkin 代签:把任意皮肤 png 换成 Mojang 签名的 textures(value+signature)。原版客户端只认 Mojang 签过名的
+ * 皮肤数据,MineSkin 用正版账号池"代穿一次抠下签名"。免费匿名档按调用方 IP 限流,所以整台服务器的签名请求在服务端排成一队
+ * 一个一个发({@link SkinSigning}),服主可以在服务器钥匙串里填 MineSkin 的 API key 提高额度。
  *
- * <p>跟随模组的代理设置(Services.CONFIG.getProxy);失败返回带原因码的
- * {@link SkinError}(限流/网络/服务端拒绝,界面经 {@link SkinWords} 翻),绝不同步抛。
+ * <p>同步:调用的一方是签名队的工作线程。走服务器的代理设置(见 {@link ProxiedHttp});失败抛带原因码的 {@link SkinError}
+ * (限流带着对方说的等待秒数)。
  */
 public final class MineSkinClient {
 
     /** 代签结果。 */
     public record Signed(String value, String signature) {}
+
+    /** 钥匙串里放 MineSkin API key 的服务名。 */
+    public static final String KEY_SERVICE = "mineskin";
 
     private static final String SERVICE = "MineSkin";
     private static final String GENERATE_URL = "https://api.mineskin.org/v2/generate";
@@ -34,37 +34,42 @@ public final class MineSkinClient {
     private MineSkinClient() {}
 
     /**
-     * 上传 png 换签名。{@code variant} 取 {@link SkinLibrary#VARIANT_CLASSIC}/
-     * {@link SkinLibrary#VARIANT_SLIM}。失败的 future 携带 {@link SkinError}。
+     * 上传 png 换签名。
+     *
+     * @param variant {@link SkinProfile#VARIANT_CLASSIC} 或 {@link SkinProfile#VARIANT_SLIM}
+     * @param apiKey  服主填的 MineSkin API key;没有是 {@code null}(匿名档)
      */
-    public static CompletableFuture<Signed> generate(byte[] png, String variant, String name) {
-        HttpRequest request;
-        try {
-            String boundary = "numenskin" + Long.toHexString(System.nanoTime());
-            request = HttpRequest.newBuilder()
-                    .uri(URI.create(GENERATE_URL))
-                    .timeout(TIMEOUT)
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .header("Accept", "application/json")
-                    .header("User-Agent", "numen-companion-mod (github.com/dwinovo)")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipart(boundary, png, variant, name)))
-                    .build();
-        } catch (RuntimeException e) {
-            return CompletableFuture.failedFuture(e);
+    public static Signed generate(byte[] png, String variant, String apiKey) {
+        String boundary = "numenskin" + Long.toHexString(System.nanoTime());
+        HttpRequest.Builder request = HttpRequest.newBuilder()
+                .uri(URI.create(GENERATE_URL))
+                .timeout(TIMEOUT)
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Accept", "application/json")
+                .header("User-Agent", "numen-companion-mod (github.com/dwinovo)")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(multipart(boundary, png, variant)));
+        if (apiKey != null && !apiKey.isBlank()) {
+            request.header("Authorization", "Bearer " + apiKey.strip());
         }
-        return ProxiedHttp.client().sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                .thenApply(MineSkinClient::parse);
+        try {
+            return parse(ProxiedHttp.client().send(request.build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)));
+        } catch (IOException e) {
+            throw SkinError.of(e, SkinError.NETWORK, SERVICE);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw SkinError.of(e, SkinError.INTERRUPTED);
+        }
     }
 
-    private static byte[] multipart(String boundary, byte[] png, String variant, String name) {
+    /** 图片是玩家的私事,不挂在 MineSkin 的公开图库里。 */
+    private static byte[] multipart(String boundary, byte[] png, String variant) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream(png.length + 512);
-            // name 与同伴名同一套规则(3~16 位英文/数字/下划线),由表单把关——
-            // MineSkin 有服务端字符白名单,不合规直接 400 Validation error。
             String head = "--" + boundary + "\r\n"
                     + "Content-Disposition: form-data; name=\"variant\"\r\n\r\n" + variant + "\r\n"
                     + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"name\"\r\n\r\n" + name + "\r\n"
+                    + "Content-Disposition: form-data; name=\"visibility\"\r\n\r\nunlisted\r\n"
                     + "--" + boundary + "\r\n"
                     + "Content-Disposition: form-data; name=\"file\"; filename=\"skin.png\"\r\n"
                     + "Content-Type: image/png\r\n\r\n";
@@ -77,11 +82,10 @@ public final class MineSkinClient {
         }
     }
 
-
     /** 容错解析:v2({@code skin.texture.data})与 v1({@code data.texture})两种形状都吃。 */
-    private static Signed parse(HttpResponse<String> resp) {
+    static Signed parse(HttpResponse<String> resp) {
         if (resp.statusCode() == 429) {
-            throw SkinError.of(SkinError.RATE_LIMITED, SERVICE);
+            throw SkinError.rateLimited(SERVICE, retryAfter(resp));
         }
         JsonObject root;
         try {
@@ -117,6 +121,15 @@ public final class MineSkinClient {
         String why = firstError(root);
         throw why.isEmpty() ? SkinError.of(SkinError.REPLY_MISSING, SERVICE)
                 : SkinError.http(SERVICE, resp.statusCode(), why);
+    }
+
+    /** 对方在 {@code Retry-After} 里说的秒数;没说或不是秒数是 0。 */
+    private static int retryAfter(HttpResponse<String> resp) {
+        try {
+            return resp.headers().firstValue("Retry-After").map(v -> Integer.parseInt(v.strip())).orElse(0);
+        } catch (NumberFormatException notSeconds) {
+            return 0;
+        }
     }
 
     private static String firstError(JsonObject root) {

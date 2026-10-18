@@ -14,7 +14,13 @@ import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.client.McpClientManager;
+import com.dwinovo.numen.api.entity.MojangSkins;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.dwinovo.numen.api.skin.MineSkinClient;
+import com.dwinovo.numen.api.skin.MojangSkinLookup;
+import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.skin.SkinSigning;
+import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonArray;
@@ -55,6 +61,9 @@ class LibrariesTest {
     private Keychain serverKeys;
     private ModelCatalog catalog;
     private boolean multiplayer;
+    /** 假的签名队:不联网,签出来的都是 value=v-手臂模型;签好一条(写进货架之后)闸门放行一次。 */
+    private SkinSigning signer;
+    private java.util.concurrent.Semaphore signed;
 
     private Libraries libraries(Path dir) {
         return libraries(dir, LibraryHub.headless(dir));
@@ -72,6 +81,28 @@ class LibrariesTest {
                 new ConnectionProfile("deepseek", null, "deepseek-chat", null, "https://relay.example",
                         "127.0.0.1:7890", null, 0, null, 0, null)));
         serverKeys.put("deepseek", "sk-secret");
+        signed = new java.util.concurrent.Semaphore(0);
+        signer = new SkinSigning(new SkinSigning.Backend() {
+            @Override
+            public MineSkinClient.Signed sign(byte[] png, String variant, String apiKey) {
+                return new MineSkinClient.Signed("v-" + variant, "s");
+            }
+
+            @Override
+            public byte[] fetch(String url) {
+                return PNG_64;
+            }
+
+            @Override
+            public MojangSkinLookup.Result lookup(String playerName) {
+                return new MojangSkinLookup.Result(new MojangSkins.Skin("mojang-value", "mojang-sig"), null);
+            }
+
+            @Override
+            public byte[] texture(String url) {
+                return PNG_64;
+            }
+        }, () -> null, Runnable::run, owner -> { }, (request, outcome) -> signed.release(), ms -> { });
         return new Libraries(new Libraries.Sources() {
             @Override
             public Library library(LibraryKind kind, UUID owner) {
@@ -131,6 +162,11 @@ class LibrariesTest {
             }
 
             @Override
+            public com.dwinovo.numen.api.skin.SkinSigning signer() {
+                return signer;
+            }
+
+            @Override
             public Libraries.ServerConfig config() {
                 return new Libraries.ServerConfig() {
                     @Override
@@ -151,6 +187,25 @@ class LibrariesTest {
                 };
             }
         }, catalog);
+    }
+
+    /** 一张 64×64 png 的头部(检查只看文件头与宽高)。 */
+    private static final byte[] PNG_64 = pngHeader(64, 64);
+
+    static byte[] pngHeader(int width, int height) {
+        byte[] png = new byte[33];
+        byte[] magic = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        System.arraycopy(magic, 0, png, 0, 8);
+        png[11] = 13;
+        png[12] = 'I';
+        png[13] = 'H';
+        png[14] = 'D';
+        png[15] = 'R';
+        for (int i = 0; i < 4; i++) {
+            png[16 + i] = (byte) (width >> (24 - 8 * i));
+            png[20 + i] = (byte) (height >> (24 - 8 * i));
+        }
+        return png;
     }
 
     private static JsonObject body(String... keyValues) {
@@ -670,6 +725,132 @@ class LibrariesTest {
         typed.addProperty("key", "sk-x");
         Libraries.Result noUrl = libraries.handle(PLAYER, false, Libraries.PROVIDER_CHECK, Libraries.RUN, typed);
         assertEquals("need_url", array(noUrl.later().get()).get(0).getAsJsonObject().get("state").getAsString());
+    }
+
+    // ---- 声线与皮肤 ----
+
+    @Test
+    void aVoiceIsAnEntryWithoutAKeyAndOnlyAdminsWriteTheBuiltinOnes(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+        JsonObject voice = body("name", "派蒙", "backend", "minimax", "service", "minimax-cn", "voice", "paimon",
+                "api_key", "sk-never-stored");
+        assertNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT, voice).problem());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT,
+                body("name", "全服的", "group", "builtin")).problem(), "玩家不能写内置");
+        voice.addProperty("group", "builtin");
+        Libraries.Result added = libraries.handle(ADMIN, true, Libraries.VOICE, Libraries.PUT, voice);
+        assertNull(added.problem());
+        assertTrue(added.shared());
+
+        JsonObject mine = row(libraries.view(PLAYER, false, Libraries.VOICE), "my:派蒙", "mine");
+        assertEquals("minimax", mine.get("backend").getAsString());
+        assertEquals("minimax-cn", mine.get("service").getAsString());
+        assertEquals("paimon", mine.get("voice").getAsString());
+        assertFalse(libraries.view(PLAYER, false, Libraries.VOICE).contains("sk-never-stored"), "声线条目里没有 key");
+        assertNotNull(row(libraries.view(PLAYER, false, Libraries.VOICE), "server:派蒙", "builtin"), "玩家看得到内置");
+    }
+
+    @Test
+    void renamingAVoiceMovesTheEntry(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+        libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT, body("name", "旧", "backend", "openai"));
+        Libraries.Result renamed = libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT,
+                body("id", "my:旧", "name", "新", "backend", "openai"));
+        assertNull(renamed.problem());
+        assertNull(row(renamed.entries(), "my:旧", "mine"));
+        assertNotNull(row(renamed.entries(), "my:新", "mine"));
+    }
+
+    @Test
+    void aSkinIsQueuedFirstAndOnlyBecomesAnEntryOnceSigned(@TempDir Path dir) throws Exception {
+        Libraries libraries = libraries(dir);
+        JsonObject put = body("name", "小红", "variant", "slim");
+        put.addProperty("png", java.util.Base64.getEncoder().encodeToString(PNG_64));
+
+        Libraries.Result queued = libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put);
+        assertNull(queued.problem());
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS), "签名队没有把它签完");
+
+        JsonObject entry = row(libraries.view(PLAYER, false, Libraries.SKIN), "my:小红", "mine");
+        assertEquals("slim", entry.get("variant").getAsString());
+        assertTrue(entry.get("signed").getAsBoolean());
+        assertEquals(java.util.Base64.getEncoder().encodeToString(PNG_64), entry.get("png").getAsString(), "条目存着原图");
+        assertEquals("v-slim", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("小红")).text()).value());
+    }
+
+    @Test
+    void aRefusedImageNeverGetsInTheQueue(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+        JsonObject wrongSize = body("name", "大图");
+        wrongSize.addProperty("png", java.util.Base64.getEncoder().encodeToString(pngHeader(128, 128)));
+
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wrongSize).problem());
+        assertTrue(signer.pendingOf(PLAYER).isEmpty());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, body("name", "空")).problem(),
+                "新皮肤要有图、网址或正版名");
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
+                body("name", "全服", "group", "builtin", "player", "Notch")).problem(), "玩家不能写内置");
+    }
+
+    @Test
+    void aBorrowedPlayerSkinGoesThroughTheSameQueue(@TempDir Path dir) throws Exception {
+        Libraries libraries = libraries(dir);
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
+                body("name", "借来的", "player", "Notch")).problem());
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+        SkinProfile borrowed = SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("借来的")).text());
+        assertEquals("mojang-value", borrowed.value(), "借来的本来就是 Mojang 签好的,不经 MineSkin");
+    }
+
+    @Test
+    void renamingASignedSkinKeepsItsSignatureAndChangingTheArmsSignsItAgain(@TempDir Path dir) throws Exception {
+        Libraries libraries = libraries(dir);
+        JsonObject put = body("name", "原名");
+        put.addProperty("png", java.util.Base64.getEncoder().encodeToString(PNG_64));
+        libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put);
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+
+        Libraries.Result renamed = libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
+                body("id", "my:原名", "name", "新名"));
+        assertNull(renamed.problem());
+        assertNotNull(row(renamed.entries(), "my:新名", "mine"));
+        assertNull(row(renamed.entries(), "my:原名", "mine"));
+        assertEquals("v-classic", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("新名")).text())
+                .value(), "只改名不重签");
+
+        libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, body("id", "my:新名", "name", "新名", "variant", "slim"));
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals("v-slim", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("新名")).text())
+                .value(), "换了手臂模型,用存着的原图重签");
+    }
+
+    @Test
+    void anAdminRestoresAModifiedBuiltinToTheJarsVersion(@TempDir Path dir) throws IOException {
+        Path jar = dir.resolve("jar");
+        Path file = dir.resolve("server").resolve("voice").resolve("numen").resolve("默认.json");
+        List<Shipped.Bundle> bundles = List.of(new Shipped.Bundle("numen", jar));
+        String shipped = new VoiceProfile("", "openai", "", "", "m", "alex", "", "", "", 1f).write();
+        write(jar.resolve("voice").resolve("numen").resolve("默认.json"), shipped);
+        LibraryHub.headless(dir, bundles);
+        write(file, new VoiceProfile("", "openai", "", "", "m", "改过的音色", "", "", "", 1f).write());
+        Libraries libraries = libraries(dir, LibraryHub.headless(dir, bundles));
+        assertTrue(row(libraries.view(ADMIN, true, Libraries.VOICE), "numen:默认", "builtin").get("modified").getAsBoolean());
+
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.RESTORE, body("id", "numen:默认")).problem());
+        Libraries.Result restored = libraries.handle(ADMIN, true, Libraries.VOICE, Libraries.RESTORE, body("id", "numen:默认"));
+
+        assertNull(restored.problem());
+        assertTrue(restored.shared());
+        JsonObject row = row(restored.entries(), "numen:默认", "builtin");
+        assertEquals("alex", row.get("voice").getAsString());
+        assertFalse(row.get("modified").getAsBoolean());
+    }
+
+    @Test
+    void aKeyForTheSkinSignerIsOfferedToAdminsOnly(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+        assertTrue(libraries.keyServices(ADMIN, true).contains(MineSkinClient.KEY_SERVICE));
+        assertFalse(libraries.keyServices(PLAYER, false).contains(MineSkinClient.KEY_SERVICE));
     }
 
     private static JsonObject bodyInt(String key, int value) {

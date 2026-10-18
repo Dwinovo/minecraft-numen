@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.brain.Slot;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,6 +176,16 @@ public final class RemoteCompanion {
         return state.providerId();
     }
 
+    /** 她绑定的声线 id;没绑是 {@code null}。 */
+    public String voiceId() {
+        return state.voiceId();
+    }
+
+    /** 她绑定的皮肤 id;没绑是 {@code null}。 */
+    public String skinId() {
+        return state.skinId();
+    }
+
     /** 她此刻在哪个会话里(最后一次是被哪个会话叫醒的);{@code null} = 就他俩。 */
     public String conversation() {
         return state.conversation();
@@ -236,13 +247,8 @@ public final class RemoteCompanion {
         send.accept(new OwnerInput.ClearGoal(uuid));
     }
 
-    /** 换人设;{@code null} = 默认人格。 */
-    public void setPersona(String id) {
-        send.accept(new OwnerInput.SetPersona(uuid, id));
-    }
-
-    /** 换模型档案;{@code null} = 不绑。 */
-    public void setProviderEntry(String entryId) {
-        send.accept(new OwnerInput.SetProvider(uuid, entryId));
+    /** 换她的一项绑定(档案、人设、声线、皮肤);{@code null} = 不绑。条目在不在库里由服务端判。 */
+    public void bind(Slot slot, String entryId) {
+        send.accept(new OwnerInput.Bind(uuid, slot, entryId));
     }
 }

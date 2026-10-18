@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
 import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.api.client.ClientKeys;
 import com.dwinovo.numen.api.client.stt.MicrophoneManager;
 import com.dwinovo.numen.api.client.stt.SttProviders;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
@@ -76,7 +77,7 @@ public final class SttPanel {
         if (!seeded) {
             seeded = true;
             provider = cfg.getSttProvider();
-            key = cfg.getSttApiKey();
+            key = savedKey(provider);
             baseUrl = cfg.getSttBaseUrl();
             model = cfg.getSttModel();
             mic = cfg.getSttMicrophone() == null ? "" : cfg.getSttMicrophone();
@@ -204,6 +205,7 @@ public final class SttPanel {
         String id = providerIds.get(Math.clamp(index, 0, providerIds.size() - 1));
         if (id.equals(provider)) return;
         provider = id;
+        key = savedKey(id);   // 各家的 key 各存各的
         SttProviders.Option o = SttProviders.byId(id);
         customModel = o.models().isEmpty();
         model = o.defaultModel();
@@ -232,10 +234,16 @@ public final class SttPanel {
         build(panelX, panelY, panelW, panelH, window);
     }
 
+    /** 这家识别服务在这台电脑钥匙串里的 key;没存过是空串。 */
+    private static String savedKey(String provider) {
+        String saved = ClientKeys.keychain().get(ClientKeys.stt(provider));
+        return saved == null ? "" : saved;
+    }
+
     private void save() {
         INumenConfig cfg = Services.CONFIG;
         cfg.setSttProvider(provider);
-        cfg.setSttApiKey(key.trim());
+        ClientKeys.keychain().put(ClientKeys.stt(provider), key.trim());
         cfg.setSttModel(model.trim());
         cfg.setSttBaseUrl(baseUrl.trim());
         cfg.setSttMicrophone(mic);

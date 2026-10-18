@@ -11,8 +11,9 @@ import com.dwinovo.numen.api.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.api.client.ui.widget.Slider;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
-import com.dwinovo.numen.api.client.voice.VoiceLibrary;
+import com.dwinovo.numen.api.client.voice.SpokenVoice;
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.voice.VoiceProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -23,15 +24,19 @@ import java.util.function.Consumer;
  * 声线的编辑表单——NumenUI 版的瓤:后端下拉切换字段行(MiniMax 最多八行,
  * 躺进模型配置表单同款的滚动底盘)、音量滑条、试听按钮真合成真播放、
  * 结果走页面级 InlineAlert(试听中驻留/成功自动淡出/失败驻留),校验错误
- * 内联在字段上。编辑的是 {@link Draft} 草稿,保存才落库(与旧表单同语义)。
+ * 内联在字段上。编辑的是 {@link Draft} 草稿,保存才落库。
+ *
+ * <p>声线条目(服务端的库)是服务商、音色、参数,不含 key;表单上的 key 是这台电脑钥匙串里那个"服务"的 key,
+ * 由宿主存进本机({@code ClientKeys}),试听用的就是这里填的。
  */
 public final class VoiceFormPanel {
 
-    /** 表单草稿:与 VoiceLibrary.Entry 字段一一对应(id 由宿主管理);
+    /** 表单草稿:与 VoiceProfile 字段一一对应(id 由宿主管理),另有本机钥匙串里的 key;
      *  {@code volume} 用 UI 档位 1~10(5 档 = 原始响度 1.0)。 */
     public static final class Draft {
-        public String backend = VoiceLibrary.BACKEND_OPENAI;
+        public String backend = VoiceProfile.BACKEND_OPENAI;
         public String name = "";
+        public String service = "";
         public String url = "";
         public String apiKey = "";
         public String groupId = "";
@@ -50,33 +55,29 @@ public final class VoiceFormPanel {
         return d;
     }
 
-    /** 草稿 → 库条目(档位换算增益;试听与保存共用同一转换,试出来的就是存进去的)。 */
-    public static VoiceLibrary.Entry entryOf(Draft d, String id, String name) {
-        float vol = Math.clamp(d.volume, 1, 10) / 5.0f;
-        return new VoiceLibrary.Entry(id, name, d.backend,
-                d.url.trim(), d.apiKey.trim(), d.groupId.trim(),
-                d.model.trim(), d.voice.trim(),
-                d.refAudio.trim(), d.promptText.trim(), d.textLang.trim(),
-                VoiceLibrary.clampVolume(vol));
+    /** 草稿 → 声线(档位换算增益;试听与保存共用同一转换,试出来的就是存进去的)。 */
+    public static VoiceProfile profileOf(Draft d) {
+        return new VoiceProfile(d.service, d.backend, d.url, d.groupId, d.model, d.voice, d.refAudio, d.promptText,
+                d.textLang, Math.clamp(d.volume, 1, 10) / 5.0f);
     }
 
     public static String defaultUrl(String backend) {
         return switch (backend) {
-            case VoiceLibrary.BACKEND_SOVITS -> com.dwinovo.numen.api.client.voice.GptSovitsTts.DEFAULT_BASE;
-            case VoiceLibrary.BACKEND_MINIMAX -> com.dwinovo.numen.api.client.voice.MiniMaxTts.DEFAULT_BASE;
-            case VoiceLibrary.BACKEND_FISH -> com.dwinovo.numen.api.client.voice.FishAudioTts.DEFAULT_BASE;
-            case VoiceLibrary.BACKEND_DASHSCOPE -> com.dwinovo.numen.api.client.voice.DashScopeTts.DEFAULT_BASE;
-            case VoiceLibrary.BACKEND_MIMO -> com.dwinovo.numen.api.client.voice.MimoTts.DEFAULT_BASE;
-            case VoiceLibrary.BACKEND_DOUBAO -> com.dwinovo.numen.api.client.voice.DoubaoTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_SOVITS -> com.dwinovo.numen.api.client.voice.GptSovitsTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_MINIMAX -> com.dwinovo.numen.api.client.voice.MiniMaxTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_FISH -> com.dwinovo.numen.api.client.voice.FishAudioTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_DASHSCOPE -> com.dwinovo.numen.api.client.voice.DashScopeTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_MIMO -> com.dwinovo.numen.api.client.voice.MimoTts.DEFAULT_BASE;
+            case VoiceProfile.BACKEND_DOUBAO -> com.dwinovo.numen.api.client.voice.DoubaoTts.DEFAULT_BASE;
             default -> com.dwinovo.numen.api.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
         };
     }
 
     private static final List<String> BACKENDS = List.of(
-            VoiceLibrary.BACKEND_OPENAI, VoiceLibrary.BACKEND_SOVITS,
-            VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
-            VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_MIMO,
-            VoiceLibrary.BACKEND_DOUBAO);
+            VoiceProfile.BACKEND_OPENAI, VoiceProfile.BACKEND_SOVITS,
+            VoiceProfile.BACKEND_MINIMAX, VoiceProfile.BACKEND_FISH,
+            VoiceProfile.BACKEND_DASHSCOPE, VoiceProfile.BACKEND_MIMO,
+            VoiceProfile.BACKEND_DOUBAO);
 
     /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
@@ -148,6 +149,9 @@ public final class VoiceFormPanel {
         backendPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
+        ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_SERVICE, draft.backend, false, draft.service,
+                v -> draft.service = v);
+
         ry = label(x, ry, ModLanguageData.Keys.VOICE_FORM_URL);
         TextField urlField = ui.add(new TextField(draft.url, v -> draft.url = v)
                 .placeholder(defaultUrl(draft.backend)));
@@ -156,7 +160,7 @@ public final class VoiceFormPanel {
 
         // 后端专属行(行序与旧表单一致,占位符沿用旧示例)。
         switch (draft.backend) {
-            case VoiceLibrary.BACKEND_SOVITS -> {
+            case VoiceProfile.BACKEND_SOVITS -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_REF,
                         "D:/refs/voice.wav", false, draft.refAudio, v -> draft.refAudio = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_PROMPT,
@@ -164,7 +168,7 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_LANG,
                         "zh", false, draft.textLang, v -> draft.textLang = v);
             }
-            case VoiceLibrary.BACKEND_MINIMAX -> {
+            case VoiceProfile.BACKEND_MINIMAX -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_MINIMAX,
                         "eyJ…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_GROUP,
@@ -174,7 +178,7 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_MINIMAX_VOICE,
                         "male-qn-qingse", false, draft.voice, v -> draft.voice = v);
             }
-            case VoiceLibrary.BACKEND_FISH -> {
+            case VoiceProfile.BACKEND_FISH -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_FISH,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_REFERENCE,
@@ -183,7 +187,7 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_FISH_MODEL,
                         "s1 / s2.1-pro-free", false, draft.model, v -> draft.model = v);
             }
-            case VoiceLibrary.BACKEND_DASHSCOPE -> {
+            case VoiceProfile.BACKEND_DASHSCOPE -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_DASHSCOPE,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DASHSCOPE_MODEL,
@@ -193,7 +197,7 @@ public final class VoiceFormPanel {
                         com.dwinovo.numen.api.client.voice.DashScopeTts.DEFAULT_VOICE,
                         false, draft.voice, v -> draft.voice = v);
             }
-            case VoiceLibrary.BACKEND_MIMO -> {
+            case VoiceProfile.BACKEND_MIMO -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_MIMO,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_MIMO_MODEL,
@@ -203,7 +207,7 @@ public final class VoiceFormPanel {
                         com.dwinovo.numen.api.client.voice.MimoTts.DEFAULT_VOICE,
                         false, draft.voice, v -> draft.voice = v);
             }
-            case VoiceLibrary.BACKEND_DOUBAO -> {
+            case VoiceProfile.BACKEND_DOUBAO -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_DOUBAO,
                         "", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DOUBAO_RESOURCE,
@@ -333,8 +337,7 @@ public final class VoiceFormPanel {
      * mixin 取数路径)。结果进页面级胶囊:成功自动淡出,失败驻留到下次操作。
      */
     private void runVoiceTest() {
-        var probe = entryOf(draft, "__preview__",
-                draft.name.isBlank() ? "preview" : draft.name.trim());
+        var probe = new SpokenVoice(profileOf(draft), draft.apiKey.trim());
         resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.VOICE_TEST_RUNNING));
         final int gen = ++testGen;
         final float vol = probe.volume();

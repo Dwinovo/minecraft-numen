@@ -202,7 +202,7 @@ final class Attempt {
                 level.dimension(), her.blockPosition()));
         loop = CompanionBrains.create(server, her.getUUID(), owner.getUUID(), new Home(home.resolve("her"), io), mind,
                 new OwnerEnd(), () -> true, () -> false, () -> EventQueue.DEFAULT_LEVEL, id -> NumenPrompts.DEFAULT_PERSONA);
-        loop.setInitialPersona(BENCH_PERSONA);
+        loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, BENCH_PERSONA);
         loop.subscribe(meter);
         loop.subscribe(this::onLoopEvent);
         scenario.setup(scene);

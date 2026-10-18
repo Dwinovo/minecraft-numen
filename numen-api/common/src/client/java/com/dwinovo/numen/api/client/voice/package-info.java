@@ -14,9 +14,10 @@
  * </pre>
  *
  * <h2>开关与配置</h2>
- * 一切由声线库驱动:{@code config/numen/client/voice.json} = 全局开关 + 命名声线
- * 条目 + 每同伴绑定（{@link com.dwinovo.numen.api.client.voice.VoiceLibrary}
- * 有完整样例）,设置面板"语音"tab 是它的编辑界面。未绑定的同伴静音且零开销。
+ * 一切由声线库驱动:声线是服务端的一种库（{@link com.dwinovo.numen.api.voice.VoiceProfile}
+ * 有完整样例,不含 key）,她用哪条记在她的绑定里;合成用的 key 在这台电脑的钥匙串里,全局开关在
+ * {@link com.dwinovo.numen.api.client.data.ClientPrefs}。{@link com.dwinovo.numen.api.client.voice.SpokenVoice}
+ * 把三处合成一条能出声的声线,设置面板"语音"tab 是库的编辑界面。未绑定的同伴静音且零开销。
  *
  * <h2>生命周期</h2>
  * 管线归 {@code TurnPresenter} 所有:服务端大脑每次调模型推来 {@code TurnStart} 就 beginTurn,主人打断 /
