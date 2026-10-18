@@ -128,6 +128,10 @@ public class BrainGameTests {
         public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue, String conversation) {
             told.add(said);
         }
+
+        @Override
+        public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
+        }
     }
 
     /** 一只带服务端大脑的同伴:家在临时目录里,写在调用线程上直接做(用例读日志不必等车道)。 */

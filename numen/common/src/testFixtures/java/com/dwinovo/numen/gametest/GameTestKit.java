@@ -200,6 +200,10 @@ public final class GameTestKit {
                 public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue,
                                  String conversation) {
                 }
+
+                @Override
+                public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
+                }
             };
 
     /**

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.entity.CompanionSpeech;
 import com.dwinovo.numen.api.home.Home;
@@ -7,6 +8,7 @@ import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,6 +42,12 @@ public final class CompanionLoops {
          * @param conversation 她此刻所在会话的名字;会话已经解散了是 {@code null}
          */
         void said(UUID companion, String said, Venue venue, String conversation);
+
+        /**
+         * 主人没装客户端时,她们此刻各在干什么,显示在他的动作栏上(装了客户端的,头顶气泡与档案页读同一份状态)。
+         * 只含正在干着具体活的。
+         */
+        void activities(Map<UUID, LoopStatus.Doing> doing);
     }
 
     private static final class Entry {
@@ -63,6 +71,10 @@ public final class CompanionLoops {
     }
 
     private static final Map<UUID, Entry> LOOPS = new ConcurrentHashMap<>();
+
+    /** 动作栏的字几刻刷新一次:原版的动作栏字约留三秒,一秒一刷既不断也不刷屏。 */
+    private static final int ACTION_BAR_TICKS = 20;
+    private static int ticks;
 
     static {
         ServerLifecycle.onStopped(CompanionLoops::dropAll);
@@ -95,6 +107,23 @@ public final class CompanionLoops {
             CompanionSpeech.setSpeaking(entry.loop.companion(),
                     phase == Phase.MODEL || phase == Phase.TOOLS || entry.voicePlaying);
         }
+        if (++ticks % ACTION_BAR_TICKS == 0) {
+            showActivities();
+        }
+    }
+
+    /** 没装客户端的主人:他名下各只正在干的活合成一行,放在他的动作栏上(读的是 {@link LoopStatus#activity} 那一处)。 */
+    private static void showActivities() {
+        Map<UUID, Map<UUID, LoopStatus.Doing>> byOwner = new LinkedHashMap<>();
+        Map<UUID, Link> links = new LinkedHashMap<>();
+        for (Entry entry : LOOPS.values()) {
+            LoopStatus.Doing doing = entry.link.hasClient() ? null : entry.loop.status().activity();
+            if (doing != null) {
+                byOwner.computeIfAbsent(entry.owner, owner -> new LinkedHashMap<>()).put(entry.loop.companion(), doing);
+                links.putIfAbsent(entry.owner, entry.link);
+            }
+        }
+        byOwner.forEach((owner, doing) -> links.get(owner).activities(doing));
     }
 
     /** 主人的客户端报到(或重连)了:把他名下各大脑此刻的样子补给他。 */

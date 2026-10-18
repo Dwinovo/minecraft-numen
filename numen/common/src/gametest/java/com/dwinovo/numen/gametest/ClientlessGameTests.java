@@ -3,6 +3,15 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.BlockPos;
+import com.dwinovo.numen.api.permission.Rule;
+import com.dwinovo.numen.api.permission.ConsentItem;
+import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gametest.OwnerLine;
@@ -23,6 +32,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.dwinovo.numen.gametest.GameTestKit.spawnAt;
 import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
 
 /**
@@ -167,6 +177,111 @@ public class ClientlessGameTests {
             GameTestKit.leave(owner);
             GameTestKit.leave(stranger);
             helper.succeed();
+        });
+    }
+
+    // ---- 征询与动作栏 ----
+
+    /** 消息里依次出现的、点下去会敲的命令。 */
+    private static List<String> clickCommands(Component message) {
+        List<String> out = new ArrayList<>();
+        if (message.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent click
+                && click.getAction() == net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND) {
+            out.add(click.getValue());
+        }
+        message.getSiblings().forEach(sibling -> out.addAll(clickCommands(sibling)));
+        return out;
+    }
+
+    private static ConsentItem oakLog(GameTestHelper helper) {
+        return new ConsentItem(Action.Kind.BREAK, helper.absolutePos(new BlockPos(5, 2, 5)), ConsentItem.NO_ENTITY,
+                "oak_log", Items.OAK_LOG, Blocks.OAK_LOG.getName(), "ask break(placed)", "placed by a player",
+                Component.literal("you placed it"), false, Rule.parse("break(placed & minecraft:oak_log)"));
+    }
+
+    /**
+     * 她的征询到了没装客户端的主人那里,是一条带三个可点按钮的聊天消息;点按钮就是他敲了 /numen consent,答复进同一个登记处。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
+    public static void a_consent_request_is_a_chat_message_with_buttons_for_an_owner_without_our_client(
+            GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_asker", new BlockPos(3, 2, 3), false);
+        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, companion, "gametest_asked", "en_us");
+        GameTestKit.said(owner);
+
+        ConsentDesk.Ticket ticket = ConsentDesk.of(companion).ask(new Object(), List.of(oakLog(helper)));
+
+        List<OwnerLine.Said> asked = GameTestKit.said(owner);
+        long id = ticket.request().id();
+        helper.assertTrue(asked.size() == 1 && asked.get(0).text().getString().contains("gametest_asker"),
+                "the request did not reach him as one chat message: " + asked);
+        helper.assertTrue(clickCommands(asked.get(0).text()).equals(List.of("/numen consent allow " + id,
+                        "/numen consent remember " + id, "/numen consent deny " + id)),
+                "the buttons are not allow, always allow and deny: " + clickCommands(asked.get(0).text()));
+
+        owner.getServer().getCommands().performPrefixedCommand(owner.createCommandSourceStack(),
+                clickCommands(asked.get(0).text()).get(0).substring(1));
+        helper.assertTrue(ticket.poll() != null && ticket.poll().decision() == ConsentAnswer.Decision.ALLOW_ONCE,
+                "pressing [allow] did not answer the request: " + ticket.poll());
+
+        CompanionFactory.despawn(owner.getServer(), companion);
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /** 请求没等到答复就撤了,没装客户端的主人在聊天栏里读到为什么。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
+    public static void a_withdrawn_request_says_why_to_an_owner_without_our_client(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_quitter", new BlockPos(3, 2, 3), false);
+        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, companion, "gametest_left_waiting", "en_us");
+        Object scope = new Object();
+        ConsentDesk.of(companion).ask(scope, List.of(oakLog(helper)));
+        GameTestKit.said(owner);
+
+        ConsentDesk.of(companion).release(scope, ConsentDesk.Withdrawal.TASK_ENDED);
+
+        List<OwnerLine.Said> said = GameTestKit.said(owner);
+        helper.assertTrue(said.size() == 1 && said.get(0).text().getString().contains("gametest_quitter")
+                        && said.get(0).text().getString().contains("went away"),
+                "the withdrawal did not say whose request went away: " + said);
+        CompanionFactory.despawn(owner.getServer(), companion);
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /**
+     * 没装客户端的主人在动作栏上看到她在干什么(他客户端的语言);装了客户端的主人不收动作栏——他的头顶气泡与档案页读同一份状态。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_clientless")
+    public static void an_owner_without_our_client_sees_what_she_is_doing_on_the_action_bar(GameTestHelper helper)
+            throws Exception {
+        var server = helper.getLevel().getServer();
+        ServerPlayer plain = GameTestKit.presentVanillaPlayer(helper, null, "gametest_watcher", "zh_cn");
+        ServerPlayer installed = GameTestKit.presentPlayer(helper, null, "gametest_installed");
+        Replies.hello(installed, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        BrainGameTests.Brain worker = new BrainGameTests.Brain(helper, "gametest_worker",
+                Files.createTempDirectory("numen-gametest-brain-"), plain.getUUID(),
+                Replies.link(server, plain.getUUID()));
+        BrainGameTests.Brain other = new BrainGameTests.Brain(helper, "gametest_other",
+                Files.createTempDirectory("numen-gametest-brain-"), installed.getUUID(),
+                Replies.link(server, installed.getUUID()));
+        worker.mind.program("gt.gt_sync.hold(100)").say("好了");
+        other.mind.program("gt.gt_sync.hold(100)").say("好了");
+        worker.loop.submitPrompt("干活");
+        other.loop.submitPrompt("干活");
+
+        List<OwnerLine.Said> bar = new ArrayList<>();
+        List<OwnerLine.Said> installedBar = new ArrayList<>();
+        succeedWhen(helper, () -> {
+            GameTestKit.said(plain).stream().filter(OwnerLine.Said::overlay).forEach(bar::add);
+            GameTestKit.said(installed).stream().filter(OwnerLine.Said::overlay).forEach(installedBar::add);
+            helper.assertTrue(bar.stream().anyMatch(b -> b.text().getString().equals("gametest_worker: 执行")),
+                    "what she is doing is not on his action bar in his language: " + bar);
+            helper.assertTrue(installedBar.isEmpty(), "an owner with our client got an action bar: " + installedBar);
+            worker.close();
+            other.close();
+            GameTestKit.leave(plain);
+            GameTestKit.leave(installed);
         });
     }
 }

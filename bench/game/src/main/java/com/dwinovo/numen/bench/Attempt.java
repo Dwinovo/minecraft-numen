@@ -423,6 +423,10 @@ final class Attempt {
         @Override
         public void said(UUID companion, String said, Venue venue, String conversation) {
         }
+
+        @Override
+        public void activities(Map<UUID, LoopStatus.Doing> doing) {
+        }
     }
 
     private void consent(ConsentRequestPayload request) {
