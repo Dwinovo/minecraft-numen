@@ -208,12 +208,18 @@ public class CommandGameTests {
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
         java.util.UUID id = her.getUUID();
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+        loop.submitPrompt("在吗");   // 没绑模型档案:她停在"端点不可用",被请出去又回来要重新露出这个停牌
+        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.BLOCKED,
+                "her loop is not blocked on the unbound model: " + loop.status().hold());
 
         // /kick 只在专用服务器上注册,测试服务器里没有;它做的事就是这一句
         her.connection.disconnect(Component.literal("cheating at cards"));
 
         helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "her body is still in the world");
-        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+        // 面板收到的就是这样译出来的:被请出去又回来,停牌的变化也要能编成要发给客户端的 JSON
+        var encoded = new java.util.ArrayList<com.google.gson.JsonElement>();
+        var panel = new com.dwinovo.numen.api.brain.FeedEncoder(loop, events -> events.forEach(e -> encoded.add(e.toJson())));
         helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
                 "her loop was not held: " + loop.status().hold());
         helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
@@ -234,6 +240,8 @@ public class CommandGameTests {
         helper.assertTrue(!registry.find(id).removed(), "the roster still says she is out");
         helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
                 "her loop is still held for the missing body");
+        panel.flush();   // 回来后的停牌变化若编不出来,这里抛出
+        helper.assertTrue(!encoded.isEmpty(), "the panel got nothing after she came back");
         CompanionFactory.despawn(server, back);
         com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
         registry.remove(id);

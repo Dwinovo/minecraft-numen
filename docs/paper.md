@@ -181,7 +181,6 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   "能当场判断的当场拒绝":名字、重名(含"同名的身体正在路上")、名额、她自己正在路上,都让 `summonFor` 返回 `false` 且 `then` 当场带着原因;受理了返回 `true`,受理的那一刻起 UUID 与名字就被"在路上"占住;
   答复回到主线程、加入之前再核对一次名册还要不要她(期间被遣散就不加入,不会进来了却没有名册条目)。
   **服务器明确说不**(登录插件、封禁、白名单)是终局:新召唤的同伴作废;已有的同伴和"被请出去"同理——名册记下原因、大脑停牌、如实告诉主人,停在外面,主人再召唤才再试,Numen 不替服务器轮询。
-  她死着等复活时被主人召唤,就是现在复活(死亡状态清掉),免得定时复活再造一具。
 - **摘出区块加载放在 `joined`**(`placeNewPlayer` 一开头就把旗标置真,所以不能在加入前置假):`removePlayer` 后 `setRealPlayer(false)`,实测区块包为 0(只有两个视距/中心包),换维度、死亡重生(重新加入时再摘一次)都不会被加回。
 - **权限委托也在 `joined`**,晚于权限插件在 `PlayerLoginEvent` 里的注入,所以取代它的。主人在线问主人;离线经 Vault(装了的话)查离线玩家,没装按主人是不是 op 套默认值;没有任何权限插件的专属代码。
   实测(LuckPerms,她经 `numen.mc.run` 以自己的身份跑指令):主人在线有授权/无授权、主人离线不装 Vault 时授权不算数(按 op)、装了 Vault 时授权经 LuckPerms 算数、主人是 op 时放行。Vault 的接口取 JitPack 的 VaultAPI 1.7(`transitive = false`:它依赖的老 Bukkit API 会盖掉 Paper 的)。
@@ -197,4 +196,3 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   翻译源在服务器起好之后才登记(语言表按语言缓存,要等所有带 Numen 内容的插件都启用)。`ServerLang.asMessageFormat` 把 `%s`/`%2$s`/`%%` 改写成 MessageFormat,语法与 `translate` 同一套。
   Numen 发的消息里没有"根是字面量、悬停里是可翻译"的形状(悬停只有 `ConsentChat` 一处,里面是字面量),不用改消息。
 - **关服顺序**:Paper 先停插件(`onDisable` 清状态)、再存玩家并把她请出去、再存世界。实测她的背包(三颗钻石)、位置、名册重启后都在,她手上的活(寻路)随之恢复。
-- **已知的缺口**:`CompanionState.cause(null)` 在 Paper 上被踢后主人再召唤时,下一刻的 Feed 编码抛 NPE(`Feed.toJson` 里遇到没有 cause 的状态),出在"被请出去"之后的状态机里,不在第 3 步范围。

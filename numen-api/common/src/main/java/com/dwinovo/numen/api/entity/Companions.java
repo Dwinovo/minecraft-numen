@@ -50,8 +50,6 @@ public final class Companions {
             // 被外面请出去的她只有主人再召唤才回来:召唤就是主人的决定,清掉"被请出去"的状态,身体回来后解开停牌
             boolean returning = reg.find(existing).removed();
             reg.markReturned(existing);
-            // 她死着等复活时被召唤:就是现在复活,死亡状态清掉,免得定时复活再造一具
-            reg.markAlive(existing);
             if (respawn(server, existing, arrival -> {
                 if (arrival.body() != null) {
                     com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
