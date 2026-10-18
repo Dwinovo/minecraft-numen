@@ -107,7 +107,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 - common 的行为继续由 NeoForge 的 GameTest 验(主力)。
 - Paper 上能否直接跑我们的 GameTest(原版框架在服务端 jar 里,只在 `IS_RUNNING_IN_IDE` 时启用)待实测;能跑就是最好的验证。
 - Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服,进 CI。
-- 网络与翻译:MCProtocolLib(MIT,有 1.21.1 的版本)做无头客户端,原版客户端那一套交互(私聊、会话指令、可点的消息、翻译)对着 Paper 跑。
+- 网络与翻译:MCProtocolLib(MIT)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`),起服是可替换的一层:Paper 另写一层,提供同名的 `e2eServerStart`/`e2eServerStop`、满足同一份规格,把 `e2e/build.gradle` 里的 `serverProject` 指过去。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
 ## 十二、待实测
