@@ -8,6 +8,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -26,6 +27,8 @@ import java.util.function.LongSupplier;
  * 令牌库:发、认、列、作废。落在服务器的家里({@value #FILE}),只存哈希——磁盘上的文件被看到也换不到令牌。
  * 令牌是 256 位的随机数,不是人想出来的口令,所以单次 SHA-256 足够,不需要加盐的慢哈希。
  *
+ * <p>文件读不了时整库不可用({@link #unavailable}):认人一律落空,发与作废抛异常,那份文件原样不动。
+ *
  * <p>线程:任何线程(HTTP 线程认人、主线程发与作废),状态在 this 的锁里。
  */
 public final class McpTokens {
@@ -41,6 +44,11 @@ public final class McpTokens {
     private final JsonDoc doc;
     private final LongSupplier clock;
     private final Map<String, McpToken> byHash = new LinkedHashMap<>();
+    /** 令牌库读不了:文件原样留着不动,这一局整库按"不可用"处理;读得了是 null。 */
+    private Unreadable unreadable;
+
+    /** 令牌库读不了的文件与原因。 */
+    public record Unreadable(Path file, String reason) {}
 
     public McpTokens(Home home, LongSupplier clock) {
         this.doc = new JsonDoc(home.file(FILE), JsonDoc.Format.of(1), home.io());
@@ -59,15 +67,29 @@ public final class McpTokens {
                 byHash.put(token.hash(), token);
             }
         } catch (RuntimeException e) {
-            // 读不了就当没有令牌:所有人都得重发,比放行一份读不懂的表安全
-            Constants.LOG.warn("[numen-mcp] 令牌库 {} 读不了,当作没有令牌: {}", doc.file(), e.toString());
+            // 读不了的那份原样留着(不覆盖、不删),这一局不认任何令牌、也不发不作废,免得下一次写把它盖掉;
+            // 服主修好或挪走文件,下次起服再读
             byHash.clear();
+            unreadable = new Unreadable(doc.file(), e.toString());
+            Constants.LOG.warn("[numen-mcp] 令牌库 {} 读不了,原样留着不动,这一局拒绝所有令牌: {}", doc.file(), e.toString());
+        }
+    }
+
+    /** 令牌库这一局能不能用;不能用时说明文件在哪、为什么。 */
+    public synchronized Optional<Unreadable> unavailable() {
+        return Optional.ofNullable(unreadable);
+    }
+
+    private void requireUsable() {
+        if (unreadable != null) {
+            throw new IllegalStateException("token store unreadable: " + unreadable.file());
         }
     }
 
     /** 发一张。 */
     public synchronized Issued issue(UUID owner, McpToken.Role role, McpToken.Scope scope, String label,
                                      long ttlMillis) {
+        requireUsable();
         byte[] raw = new byte[32];
         RANDOM.nextBytes(raw);
         String secret = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
@@ -102,6 +124,7 @@ public final class McpTokens {
 
     /** 作废主人名下编号为 {@code id} 的一张;没有这张是 false。别人的令牌碰不到。 */
     public synchronized boolean revoke(UUID owner, String id) {
+        requireUsable();
         for (McpToken token : byHash.values()) {
             if (token.owner().equals(owner) && token.id().equals(id)) {
                 byHash.remove(token.hash());

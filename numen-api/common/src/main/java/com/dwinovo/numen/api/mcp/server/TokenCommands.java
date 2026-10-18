@@ -81,9 +81,25 @@ public final class TokenCommands {
                 ? tokens.ownedBy(player.getUUID()) : java.util.List.of();
     }
 
+    /** 令牌库;这一局读不了就如实告诉他文件在哪、为什么,返回 null。 */
+    private static McpTokens usable(CommandContext<CommandSourceStack> ctx) {
+        McpTokens tokens = McpMode.instance().tokens();
+        var broken = tokens.unavailable();
+        if (broken.isPresent()) {
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_TOKEN_UNAVAILABLE,
+                    broken.get().file().toString(), broken.get().reason()));
+            return null;
+        }
+        return tokens;
+    }
+
     private static int create(CommandContext<CommandSourceStack> ctx, McpToken.Role role, String scopeName, int days)
             throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
+        McpTokens tokens = usable(ctx);
+        if (tokens == null) {
+            return 0;
+        }
         McpToken.Scope scope = McpToken.Scope.ALL;
         if (!ALL.equals(scopeName)) {
             Set<UUID> only = new HashSet<>();
@@ -99,7 +115,7 @@ public final class TokenCommands {
             }
             scope = McpToken.Scope.of(only);
         }
-        McpTokens.Issued issued = McpMode.instance().tokens().issue(owner.getUUID(), role, scope, "",
+        McpTokens.Issued issued = tokens.issue(owner.getUUID(), role, scope, "",
                 days == 0 ? 0 : TimeUnit.DAYS.toMillis(days));
         ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_TOKEN_ISSUED, issued.token().id(),
                 role.name().toLowerCase(Locale.ROOT), describe(issued.token())), false);
@@ -116,6 +132,9 @@ public final class TokenCommands {
 
     private static int list(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ctx.getSource().getPlayerOrException();
+        if (usable(ctx) == null) {
+            return 0;
+        }
         var tokens = mine(ctx.getSource());
         if (tokens.isEmpty()) {
             ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_TOKEN_LIST_NONE), false);
@@ -133,8 +152,12 @@ public final class TokenCommands {
 
     private static int revoke(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
+        McpTokens tokens = usable(ctx);
+        if (tokens == null) {
+            return 0;
+        }
         String id = StringArgumentType.getString(ctx, "id");
-        if (!McpMode.instance().tokens().revoke(owner.getUUID(), id)) {
+        if (!tokens.revoke(owner.getUUID(), id)) {
             ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_TOKEN_NOT_FOUND, id));
             return 0;
         }
