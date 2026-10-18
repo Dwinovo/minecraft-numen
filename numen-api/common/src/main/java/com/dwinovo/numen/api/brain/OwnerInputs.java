@@ -224,8 +224,7 @@ public final class OwnerInputs {
         int space = line.indexOf(' ');
         String name = space < 0 ? line : line.substring(0, space);
         String args = space < 0 ? "" : line.substring(space + 1).strip();
-        SkillRegistry registry = SkillRegistry.instance();
-        Optional<SkillInfo> info = registry.get(name);
-        return info.isPresent() && !registry.isDisabled(name) ? SkillInjection.body(info.get(), args) : "";
+        Optional<SkillInfo> info = SkillRegistry.instance().get(name);
+        return info.isPresent() ? SkillInjection.body(info.get(), args) : "";
     }
 }

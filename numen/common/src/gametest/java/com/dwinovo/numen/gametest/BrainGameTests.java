@@ -733,6 +733,45 @@ public class BrainGameTests {
         helper.succeed();
     }
 
+    /** 管理员经协议关掉一个技能、再打开它:两次都办成,他收到的整表里那一条先是关、后是开。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void an_admin_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_boss");
+        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
+                com.dwinovo.numen.api.config.Authority.ADMIN_LEVEL, false));
+        String skill = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance().all().iterator().next().name();
+        String body = "{\"name\":\"" + skill + "\"}";
+        GameTestKit.received(admin);
+
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.SKILL, "disable", body);
+        helper.assertTrue(skillEnabled(GameTestKit.received(admin), skill) == Boolean.FALSE,
+                "the skill was not switched off");
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.SKILL, "enable", body);
+        helper.assertTrue(skillEnabled(GameTestKit.received(admin), skill) == Boolean.TRUE,
+                "the skill was not switched on again");
+
+        server.getPlayerList().deop(admin.getGameProfile());
+        GameTestKit.leave(admin);
+        helper.succeed();
+    }
+
+    /** 管理员收到的那张技能表里这一条的开关;没收到表或表里没有这条是 {@code null}。 */
+    private static Boolean skillEnabled(java.util.List<?> told, String skill) {
+        for (Object packet : told) {
+            if (packet instanceof com.dwinovo.numen.api.network.payload.LibraryPayload table
+                    && com.dwinovo.numen.api.brain.Libraries.SKILL.equals(table.kind())) {
+                for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
+                    var o = row.getAsJsonObject();
+                    if (skill.equals(o.get("name").getAsString())) {
+                        return o.get("enabled").getAsBoolean();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * 管理员的档案表单问目录与检测:目录、草稿解析出的端点、"缺 key"的判断都在服务端,答案经他自己的连接送回;
      * 检测先答"在试",结局到了再送一张;别的在线玩家什么也收不到。

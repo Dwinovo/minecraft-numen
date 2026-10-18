@@ -284,6 +284,37 @@ class LibrariesTest {
         }
     }
 
+    @Test
+    void aSkillSwitchedOffCanBeSwitchedOnAgainAndTheSwitchIsKept(@TempDir Path dir) throws java.io.IOException {
+        Libraries libraries = libraries(dir);
+        Path skills = dir.resolve("skills");
+        Path lumber = java.nio.file.Files.createDirectories(skills.resolve("lumber"));
+        java.nio.file.Files.writeString(lumber.resolve(com.dwinovo.numen.api.agent.skill.SkillRegistry.SKILL_FILENAME),
+                "---\nname: lumber\ndescription: Fell a tree.\n---\n\n# Felling\n");
+        com.dwinovo.numen.api.agent.skill.SkillRegistry registry = com.dwinovo.numen.api.agent.skill.SkillRegistry.instance();
+        try {
+            registry.scan(skills);
+            JsonObject named = body("name", "lumber");
+            Path state = dir.resolve("skills_state.json");
+
+            assertNull(libraries.handle(ADMIN, true, Libraries.SKILL, Libraries.DISABLE, named).problem());
+            assertTrue(java.nio.file.Files.readString(state).contains("lumber"), "关了就落盘");
+            assertTrue(libraries.view(ADMIN, true, Libraries.SKILL).contains("\"enabled\":false"));
+            assertTrue(registry.get("lumber").isEmpty(), "关掉的对 skill 工具不可见");
+
+            assertNull(libraries.handle(ADMIN, true, Libraries.SKILL, Libraries.ENABLE, named).problem(),
+                    "关掉的技能仍是已知的技能,能被重新打开");
+            assertFalse(java.nio.file.Files.readString(state).contains("lumber"), "开了也落盘");
+            assertTrue(libraries.view(ADMIN, true, Libraries.SKILL).contains("\"enabled\":true"));
+            assertTrue(registry.get("lumber").isPresent());
+
+            assertNotNull(libraries.handle(ADMIN, true, Libraries.SKILL, Libraries.ENABLE, body("name", "nope")).problem(),
+                    "没有这个技能才是没有");
+        } finally {
+            registry.scan(null);
+        }
+    }
+
     /** 档案表单问目录的问题:{@code draft} 是草稿(一条档案的样子),{@code models} 要不要这个厂家的型号。 */
     private static JsonObject ask(boolean models, String... draftKeyValues) {
         JsonObject o = new JsonObject();

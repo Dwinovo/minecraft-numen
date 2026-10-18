@@ -470,7 +470,7 @@ public final class Libraries {
             return null;
         }
         String name = string(body, "name");
-        if (name == null || SkillRegistry.instance().get(name).isEmpty()) {
+        if (name == null || SkillRegistry.instance().find(name).isEmpty()) {
             return "no such skill";
         }
         switch (op) {

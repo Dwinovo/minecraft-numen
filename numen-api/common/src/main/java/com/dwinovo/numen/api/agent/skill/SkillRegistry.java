@@ -236,12 +236,17 @@ public final class SkillRegistry {
         return loaded;
     }
 
-    public Optional<SkillInfo> get(String name) {
-        // A disabled skill is invisible to the skill tool too, not just the listing.
-        if (name != null && disabled.contains(name)) return Optional.empty();
+    /** 已知的技能,不论开关:"有没有这个技能"问这里。管理面(开关、重扫)用它判存在。 */
+    public Optional<SkillInfo> find(String name) {
         return Optional.ofNullable(skills.get(name));
     }
 
+    /** 开着的技能:对 skill 工具与技能命令,关掉的技能不可见。"能不能用"问这里。 */
+    public Optional<SkillInfo> get(String name) {
+        return find(name).filter(skill -> !disabled.contains(name));
+    }
+
+    /** 所有已知的技能,含关掉的。 */
     public Collection<SkillInfo> all() {
         return skills.values();
     }
