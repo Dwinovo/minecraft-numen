@@ -44,7 +44,7 @@ public final class PathDebugRenderer {
             List<ServerPlayer> viewers = new ArrayList<>();
             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
                 if (PathDebug.isEnabled(p.getUUID()) && p.level() == level
-                        && Services.NETWORK.canSend(p, PathDebugPayload.TYPE)) {
+                        && Services.network().canSend(p, PathDebugPayload.TYPE)) {
                     viewers.add(p);
                 }
             }
@@ -53,7 +53,7 @@ public final class PathDebugRenderer {
             }
             PathDebugPayload payload = snapshot(companion, trip);
             for (ServerPlayer viewer : viewers) {
-                Services.NETWORK.sendToPlayer(viewer, payload);
+                Services.network().sendToPlayer(viewer, payload);
             }
         }
     }

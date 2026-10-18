@@ -28,7 +28,7 @@ public final class NumenContentPlugin extends JavaPlugin implements Listener {
 
         // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,
         // 服务器起来时同步进 plugins/numen/server/。Numen 是插件之一,没有特殊待遇。
-        Path content = Services.PLATFORM.modResource(Constants.MOD_ID, "numen");
+        Path content = Services.platform().modResource(Constants.MOD_ID, "numen");
         if (content == null) {
             throw new IllegalStateException("[numen-content] no bundled numen/ dir found in jar");
         }

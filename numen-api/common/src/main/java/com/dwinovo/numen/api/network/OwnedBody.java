@@ -43,6 +43,11 @@ public final class OwnedBody {
                 refuse.accept("她刚死了,正在复活途中——等复活事件到了再派");
                 return null;
             }
+            // 被外面请出去的同理:回来只能是主人再召唤(Companions.summon),不是一个包把她拉起来
+            if (reg != null && reg.removed()) {
+                refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
+                return null;
+            }
             companion = Companions.respawn(server, entityUuid);
         }
         if (companion == null) {

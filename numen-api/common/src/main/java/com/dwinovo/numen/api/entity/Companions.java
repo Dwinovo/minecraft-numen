@@ -46,9 +46,16 @@ public final class Companions {
         CompanionRegistry reg = CompanionRegistry.get(server);
         UUID existing = findByOwnerName(server, ownerUuid, name);
         if (existing != null) {
+            // 被外面请出去的她只有主人再召唤才回来:召唤就是主人的决定,清掉"被请出去"的状态,身体回来后解开停牌
+            boolean returning = reg.find(existing).removed();
+            reg.markReturned(existing);
             NumenPlayer body = respawn(server, existing);
             if (body != null) {
                 com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
+                if (returning) {
+                    com.dwinovo.numen.api.brain.CompanionLoops.get(existing)
+                            .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
+                }
                 return body;
             }
             reg.remove(existing);   // stale entry (no .dat) — replace it
@@ -226,6 +233,9 @@ public final class Companions {
                 com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
                 if (e.getValue().diedAt() > 0L) {
                     if (owner != null) respawnDead(server, e.getKey(), e.getValue(), owner);
+                } else if (e.getValue().removed()) {
+                    // 她是被外面请出去的,不替主人重建;他上线了就把这件事告诉他
+                    if (owner != null) tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
                 } else {
                     respawn(server, e.getKey());
                 }
@@ -233,6 +243,47 @@ public final class Companions {
                 com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
             }
         }
+    }
+
+    /**
+     * <b>她的身体被外面的人或插件移除了的唯一入口</b>:服主的 {@code /kick}、别的插件踢人、登录插件超时踢人。
+     * Numen 自己造成的移除(遣散、休眠、主人下线、关服)各有各的路,不要调这里。
+     *
+     * <p>平台挂点契约:模组上由 {@code MixinServerCommonPacketListener} 在断开落到她的假连接上那一步调(关服时不调);
+     * Paper 上由 {@code PlayerKickEvent}/{@code PlayerQuitEvent} 调(踢人会连着触发两个,第二次被忽略)。调用时她的身体还在世界里;
+     * <b>身体本身由平台移除</b>,这里只管之后的一切:
+     * <ul>
+     *   <li>大脑停牌、收件箱留下一条事实({@link com.dwinovo.numen.api.brain.CompanionLoop#onRemoved}),她手上的活和程序经
+     *       {@link com.dwinovo.numen.api.CompanionEvent#REMOVE} 收掉——和主人下线、遣散走同一条收拾的路;</li>
+     *   <li>名册记下她被请出去了和理由,在主人再召唤({@link #summon})之前不重建;</li>
+     *   <li>主人在线就告诉他,不在线就等他下次上线({@link #respawnAllOwnedBy})。</li>
+     * </ul>
+     *
+     * @param reason 踢人时说的理由
+     */
+    public static void removedFromOutside(NumenPlayer body, net.minecraft.network.chat.Component reason) {
+        MinecraftServer server = body.level().getServer();
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(body.getUUID());
+        if (entry != null && entry.removed()) {
+            return;
+        }
+        String why = reason.getString();
+        com.dwinovo.numen.api.brain.CompanionLoops.get(body.getUUID()).ifPresent(brain -> brain.onRemoved(why));
+        if (entry != null) {
+            reg.markRemoved(body.getUUID(), why);
+        }
+        CompanionEvents.fire(CompanionEvent.REMOVE, body);
+        ServerPlayer owner = body.resolveOwnerPlayer();
+        if (owner != null) {
+            tellRemoved(owner, body.getName().getString(), why);
+            syncRosterToOwner(server, owner);
+        }
+    }
+
+    private static void tellRemoved(ServerPlayer owner, String name, String why) {
+        owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_COMPANION_REMOVED, name, why));
     }
 
     /**
@@ -336,7 +387,7 @@ public final class Companions {
                 rows, server.overworld().getGameTime(), RESPAWN_DELAY_TICKS)) {
             NumenPlayer body = NumenPlayer.findByUuid(server, l.uuid());
             list.add(new CompanionListPayload.Entry(l.uuid(), l.name(), l.respawnInMs(),
-                    body != null && body.isCreative()));
+                    body != null && body.isCreative(), reg.find(l.uuid()).removedFor()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }
@@ -348,7 +399,7 @@ public final class Companions {
      */
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
         if (body == null) return;
-        if (creative && !owner.hasPermissions(2) && !owner.isCreative()) {
+        if (creative && !com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(owner.createCommandSourceStack()) && !owner.isCreative()) {
             owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_CREATIVE_NEEDS_OP));
             creative = false;

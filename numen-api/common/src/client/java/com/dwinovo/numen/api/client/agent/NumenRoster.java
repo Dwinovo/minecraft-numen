@@ -32,13 +32,18 @@ public final class NumenRoster {
     /**
      * 一只存在的同伴。{@code respawnAtMs} 为 0 = 活着;否则是复活的绝对时刻
      * (毫秒),面板据此画倒计时——存绝对时刻而不是剩余量,两次推送之间也走得动。
-     * {@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。
+     * {@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code removedFor} 非空 = 她被请出了
+     * 服务器、不在世界里(值是理由)。
      */
-    public record Entry(UUID uuid, String name, long respawnAtMs, boolean creative) {
+    public record Entry(UUID uuid, String name, long respawnAtMs, boolean creative, String removedFor) {
 
         /** 活着的一行。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, 0L, false);
+            this(uuid, name, 0L, false, "");
+        }
+
+        public boolean removed() {
+            return !removedFor.isEmpty();
         }
 
         public boolean dead() {
@@ -106,6 +111,18 @@ public final class NumenRoster {
         return e != null && e.dead();
     }
 
+    /** 被请出了服务器、等主人再召唤? */
+    public boolean isRemoved(UUID uuid) {
+        Entry e = entries.get(uuid);
+        return e != null && e.removed();
+    }
+
+    /** 被请出去时说的理由;不是被请出去的返回空串。 */
+    public String removedFor(UUID uuid) {
+        Entry e = entries.get(uuid);
+        return e == null ? "" : e.removedFor();
+    }
+
     /** 还有多久复活(不小于 0);活着或不在名册上返回 -1。 */
     public long remainingMs(UUID uuid) {
         Entry e = entries.get(uuid);
@@ -113,8 +130,8 @@ public final class NumenRoster {
     }
 
     /** 名册行 → 客户端条目:把"还有多久"换算成绝对时刻。 */
-    public static Entry toEntry(UUID uuid, String name, long respawnInMs, boolean creative) {
+    public static Entry toEntry(UUID uuid, String name, long respawnInMs, boolean creative, String removedFor) {
         return new Entry(uuid, name,
-                respawnInMs < 0L ? 0L : System.currentTimeMillis() + respawnInMs, creative);
+                respawnInMs < 0L ? 0L : System.currentTimeMillis() + respawnInMs, creative, removedFor);
     }
 }

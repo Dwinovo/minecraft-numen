@@ -36,7 +36,7 @@ public final class InputDriver {
             float want = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
             float diff = Mth.wrapDegrees(want - boat.getYRot());
             boat.setInput(diff < -BOAT_TURN_DEADBAND, diff > BOAT_TURN_DEADBAND, true, false);
-            Services.BOATS.paddle(boat);
+            Services.boats().paddle(boat);
             p.look().faceToward(target.x, target.z);   // 乘员朝向不驱动船,看向去处只是像个人
             return;
         }

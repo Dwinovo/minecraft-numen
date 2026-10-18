@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.platform.PaperPermissions;
 import com.dwinovo.numen.api.platform.PluginJars;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -16,6 +17,7 @@ public final class NumenApiPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         NumenNetwork.register();
+        PaperPermissions.declare();
 
         getServer().getPluginManager().registerEvents(new PaperEvents(), this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> PaperCommands.register(event.registrar()));

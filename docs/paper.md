@@ -40,6 +40,7 @@ Paper 子项目编译 common 时整包排除 `mixin`,这条规矩由编译本身
 | `INumenConfig` | 服务端用到的那几项(代理、系统提示词)存在配置根下;语音识别那几项是客户端的,Paper 不提供 |
 | `IBlockCapabilityReader` | 只有原版容器(`Container`/`WorldlyContainer`),流体与能量为空 |
 | `INetworkChannel` | 见 §七 |
+| `IPermissions`(common 里凡问"这人有什么权限"都经它,不读 op 等级) | `isAdmin`(Numen 管理员):权限节点 `numen.admin`,默认给 op;`isGameMaster`(原版游戏管理那一档指令,如 `/numen drive`、召唤时选创造):权限节点 `numen.gamemaster`,默认给 op(`PaperPermissions.declare` 启用时登记);`commandLevel`(她跑命令的等级 = 主人的 op 等级)是接口的默认方法,Paper 沿用,她真正的权限由委托主人的 `Permissible` 管(§九)。模组实现 `ModPermissions`:房主或 op 4 级 / op 2 级。服务各自按需取(`Services.permissions()` 等),只用一个服务的代码不必凑齐全部 |
 | 私有访问(新) | 见 §五 |
 
 ## 五、私有访问
@@ -61,7 +62,8 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 | 谁放的这一格 | `PlacedBlocks.placedBy` | `BlockItem.place` | `BlockPlaceEvent`、`BlockMultiPlaceEvent` |
 | 进度奖励 | `NumenEvents.advancementReward` | 包住 `PlayerAdvancements.award` | `PlayerAdvancementDoneEvent`(在发奖励之前触发:事件里拍快照,下一刻比) |
 | 方块变了 | `BlockSearch.onBlockChange` | `ServerLevel.onBlockStateChange` | 没有通用事件,见下 |
-| 发给她的包 | `FakeClient.onOutbound` | `ServerCommonPacketListenerImpl.send`(NeoForge 在 `Connection.send` 之前就会因频道检查抛异常,只能在这里截) | `FakeConnection.send`(Paper 的发送最终落在这里) |
+| 发给她的包(含玩家打她的击退:发给她自己、当时 `hurtMarked` 为真的速度包,下一刻应用) | `FakeClient.onOutbound` | `ServerCommonPacketListenerImpl.send`(NeoForge 在 `Connection.send` 之前就会因频道检查抛异常,只能在这里截) | `FakeConnection.send`(Paper 的发送最终落在这里) |
+| 她的身体被外面移除(踢人) | `Companions.removedFromOutside(body, reason)`:调用时身体还在世界里,**身体本身由平台移除**,入口管之后的一切(停牌、收件箱里的事实、名册记下理由且不重建、告诉主人、发 `REMOVE`);同一次踢人调两次,第二次忽略;Numen 自己造成的移除(遣散、休眠、关服)不调 | `ServerCommonPacketListenerImpl.disconnect` 落到她的假连接上(关服不调),调完由挂点把她移出玩家列表 | `PlayerKickEvent`、`PlayerQuitEvent` |
 | 给没装客户端的玩家翻译 | `ServerLang` | 出口包改写 | 注册成 Adventure 的翻译源(`GlobalTranslator`):Paper 编码组件时按玩家语言渲染,原版的可翻译组件也走它 |
 | 登入、登出、换维度、聊天、刻前、刻后、起服、停服、重载、指令注册 | 与模组相同的那几个入口 | 加载器事件 | 对应的 Bukkit/Paper 事件,见 §八 |
 
@@ -155,7 +157,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   `BlockGetter` 多了 `getBlockStateIfLoaded` / `getFluidIfLoaded`。前者新增服务 `ICommandSources`,`Echo` 不再自己是 `CommandSource`,由平台造;
   后者在寻路的 `WorldView` 里给默认实现。**寻路模块也要在 Paper 上重编**(它同样对着原版),不只是 common。
 - **common 里重复的加载器胶水收成 common 入口**:`PlayerSessions`(登入、登出、换维度)、`ChatRoutes.routed/deliver`(聊天判断与送达分两段,`take` 由前两者组成,模组上照用),
-  系统提示词出厂值 `INumenConfig.DEFAULT_SYSTEM_PROMPT`;寻路调试的下行包改走 `Services.NETWORK` 登记与发送(原先各加载器各登记一次、common 直接构造原版的 `ClientboundCustomPayloadPacket`,
+  系统提示词出厂值 `INumenConfig.DEFAULT_SYSTEM_PROMPT`;寻路调试的下行包改走 `Services.network()` 登记与发送(原先各加载器各登记一次、common 直接构造原版的 `ClientboundCustomPayloadPacket`,
   那在 Paper 上编不出来)。`Services.load` 多一个按类加载器取的重载:Paper 上每个插件一个类加载器,Numen 的服务实现不在 Numen API 的加载器里。
 - **标签**:Paper 1.21.1 的插件没有带数据包的 API,但有标签的生命周期事件 `LifecycleEvents.TAGS.preFlatten`(起服与 `/reload` 都会触发),只认引导阶段(`PluginBootstrap`)登记的处理器。
   做法是插件 jar 里本来就有的数据包写法的标签文件(手写的在 common 资源里,数据生成的由 `datagenAll` 产出,Paper 的 jar 取 NeoForge 子项目的生成目录)

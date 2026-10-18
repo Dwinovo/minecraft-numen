@@ -7,6 +7,7 @@ package com.dwinovo.numen.api.agent.loop;
  * reason      触发                  叫停身体  清被取代的指令             长期目标  之后的停牌
  * OWNER_STOP  停止键                是        是(忙闲都清,含排着的 goal) 收工      OWNER_STOP
  * DEATH       死亡包                否(已死)  否                         保留      DEAD
+ * REMOVED     身体被外面请出服务器  否(已不在) 否                         保留      DEAD
  * DISCONNECT  登出、断线            否        否                         保留      不变
  * EXTERNAL    驾驶翻转为外接        否        否                         保留      不变(现算 EXTERNAL)
  * DISPOSE     遣散、RESET_LOOPS     否        否(队列随同伴一起删)       保留      不变
@@ -18,6 +19,7 @@ package com.dwinovo.numen.api.agent.loop;
 public enum HaltReason {
     OWNER_STOP("halt.owner_stop", "被主人打断", true, true, true, Hold.OWNER_STOP),
     DEATH("halt.death", "你死了", false, false, false, Hold.DEAD),
+    REMOVED("halt.removed", "你的身体被请出了服务器", false, false, false, Hold.DEAD),
     DISCONNECT("halt.disconnect", "主人断线了", false, false, false, null),
     EXTERNAL("halt.external", "外接模型接管了身体", false, false, false, null),
     DISPOSE("halt.dispose", "大脑被重置", false, false, false, null);

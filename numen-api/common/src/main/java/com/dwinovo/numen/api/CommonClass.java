@@ -13,7 +13,7 @@ public class CommonClass {
 
     public static void init() {
         Constants.LOG.info("[numen] common init on {} ({})",
-                Services.PLATFORM.getPlatformName(), Services.PLATFORM.getEnvironmentName());
+                Services.platform().getPlatformName(), Services.platform().getEnvironmentName());
 
         // 老版本落盘格式的搬运先行——必须在任何消费方读盘之前。
         java.nio.file.Path numenDir = NumenPaths.config();

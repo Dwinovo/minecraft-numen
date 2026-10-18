@@ -182,6 +182,10 @@ public final class NumenScreen extends Screen {
             return new HeaderStatus("members", I18n.get(ModLanguageData.Keys.HEADER_MEMBERS,
                     Conversations.instance().membersAlive(conv).size()));
         }
+        if (NumenRoster.instance().isRemoved(her)) {
+            return new HeaderStatus("removed", I18n.get(ModLanguageData.Keys.HEADER_REMOVED,
+                    NumenRoster.instance().removedFor(her)));
+        }
         if (NumenRoster.instance().isDead(her)) {
             // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是一个数字卡死不动——说清楚在等什么。
             long rem = NumenRoster.instance().remainingMs(her);
@@ -2293,7 +2297,10 @@ public final class NumenScreen extends Screen {
             }
             // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
-            if (NumenRoster.instance().isDead(her)) {                 // dead — dim veil + respawn countdown
+            if (NumenRoster.instance().isRemoved(her)) {              // 被请出了服务器 — 灰罩加"×",细节在抬头第二行
+                g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, fade(0xB0101010, a));
+                txt(g, Component.literal("×"), fx + (RAIL_AV - font.width("×")) / 2, fy + (RAIL_AV - 8) / 2, fade(CTA, a));
+            } else if (NumenRoster.instance().isDead(her)) {          // dead — dim veil + respawn countdown
                 g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, fade(0xB0101010, a));
                 long rem = NumenRoster.instance().remainingMs(her);
                 // 头像太小写不下字:归零改画一个"等"字记号,细节在抬头第二行

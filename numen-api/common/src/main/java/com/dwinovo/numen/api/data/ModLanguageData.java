@@ -118,6 +118,7 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_TAG_MULTIMODAL = "numen.gui.providers.tag.multimodal";
         public static final String GUI_PROVIDERS_TAG_NO_TOOLS = "numen.gui.providers.tag.no_tools";
         public static final String GUI_PROVIDERS_TAG_MANUAL = "numen.gui.providers.tag.manual";
+        public static final String HEADER_REMOVED = "numen.header.removed";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
         // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
@@ -440,6 +441,7 @@ public final class ModLanguageData {
         public static final String SKIN_JOB_CANCEL_CONFIRM  = "numen.skin.job_cancel_confirm";
         public static final String NOTICE_NAME_INVALID    = "numen.notice.name_invalid";
         public static final String NOTICE_SUMMON_LIMIT    = "numen.notice.summon_limit";
+        public static final String NOTICE_COMPANION_REMOVED = "numen.notice.companion_removed";
         public static final String COMMAND_BOUND          = "numen.command.bound";
         public static final String COMMAND_UNBOUND        = "numen.command.unbound";
         public static final String COMMAND_BIND_FAILED    = "numen.command.bind_failed";
@@ -641,6 +643,8 @@ public final class ModLanguageData {
         adder.add("numen.cause.halt.owner_stop", "Stopped by you");
         adder.add("numen.cause.halt.death", "She died");
         adder.add("numen.cause.halt.death_by", "She died (%s)");
+        adder.add("numen.cause.halt.removed", "She was removed from the server");
+        adder.add("numen.cause.halt.removed_by", "She was removed from the server (%s)");
         adder.add("numen.cause.halt.disconnect", "You disconnected");
         adder.add("numen.cause.halt.external", "An external brain took over");
         adder.add("numen.cause.halt.dispose", "Her brain was reset");
@@ -971,6 +975,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "No tool calling");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "Manual model");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
+        adder.add(Keys.HEADER_REMOVED,                  "removed from the server (%s)");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
@@ -1138,6 +1143,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_JOB_CANCEL_CONFIRM, "Take \"%s\" off the signing queue?");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] This server lets you have %s companions; dismiss one to summon another");
+        adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s was removed from the server (%2$s). Summon her again to bring her back");
         adder.add(Keys.COMMAND_BOUND,          "%1$s now uses the %2$s %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s no longer has a %2$s");
         adder.add(Keys.COMMAND_BIND_FAILED,    "That did not work: %s");
@@ -1340,6 +1346,8 @@ public final class ModLanguageData {
         adder.add("numen.cause.halt.owner_stop", "被你打断");
         adder.add("numen.cause.halt.death", "她死了");
         adder.add("numen.cause.halt.death_by", "她死了(%s)");
+        adder.add("numen.cause.halt.removed", "她被请出了服务器");
+        adder.add("numen.cause.halt.removed_by", "她被请出了服务器(%s)");
         adder.add("numen.cause.halt.disconnect", "你断线了");
         adder.add("numen.cause.halt.external", "外接大脑接管了");
         adder.add("numen.cause.halt.dispose", "她的大脑被重置了");
@@ -1671,6 +1679,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "不支持工具调用");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "手填的型号");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
+        adder.add(Keys.HEADER_REMOVED,                  "被请出了服务器(%s)");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
@@ -1838,6 +1847,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_JOB_CANCEL_CONFIRM, "把「%s」从签名队里撤掉?");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] 这个服务器每人最多 %s 只同伴,先遣散一只再召唤吧");
+        adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s 被请出了服务器(%2$s)。再召唤她一次就能回来");
         adder.add(Keys.COMMAND_BOUND,          "%1$s 的%2$s换成了 %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s 不再绑定%2$s了");
         adder.add(Keys.COMMAND_BIND_FAILED,    "没办成:%s");

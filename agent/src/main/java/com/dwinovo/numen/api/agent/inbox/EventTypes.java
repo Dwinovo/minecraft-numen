@@ -62,6 +62,11 @@ public final class EventTypes {
     public static final String TASK_FINISHED = "task_finished";
     /** 她死了又复活了(在客户端合成——身体那会儿已经不在了)。恒为急件:她对自己处境的认知几乎全作废了。 */
     public static final String DEATH = "death";
+    /**
+     * 她的身体被外面的人或插件请出了服务器(踢人),不是主人遣散、也不是关服。恒为急件:她在世界里的一切都停了,醒来第一件事是知道这个。
+     * 她不在世界里时停牌压着(见 {@code Hold.DEAD}),主人再召唤她,这条随停牌解开一起交给她。
+     */
+    public static final String REMOVED = "removed";
     /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。恒为急件。 */
     public static final String HUNGRY = "hungry";
     /**
@@ -292,6 +297,7 @@ public final class EventTypes {
         // 其余由发的那一方按事情本身定(任务按 status、主人挨打按血线)。
         register(event(TASK_FINISHED, false));
         register(event(DEATH, true));
+        register(event(REMOVED, true));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));
         register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));

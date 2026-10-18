@@ -33,7 +33,7 @@ public final class Echo implements CommandResultCallback {
     public Echo(boolean informAdmins) {
         this.informAdmins = informAdmins;
         // 原版的 CommandSource 在 Paper 上多一个抽象方法(返回 Bukkit 的类型),common 写不出来,所以来源由平台造
-        this.source = Services.COMMAND_SOURCES.echoing(this);
+        this.source = Services.commandSources().echoing(this);
     }
 
     /** 交给 {@code CommandSourceStack.withSource} 的来源:指令说的话都收进本回话。 */

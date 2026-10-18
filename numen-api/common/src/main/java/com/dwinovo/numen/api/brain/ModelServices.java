@@ -47,7 +47,7 @@ public final class ModelServices {
         this.server = server;
         this.homes = homes;
         this.catalog = new ModelCatalog(homes.server().file("cache").resolve("models-dev.json"),
-                () -> Services.CONFIG.getProxy());
+                () -> Services.config().getProxy());
         this.serverKeys = new Keychain(homes.server());
         this.settings = new ServerSettings(homes.server(), server.isDedicatedServer());
         this.quota = new ServerKeyQuota(settings, homes.server(), LocalDate::now);

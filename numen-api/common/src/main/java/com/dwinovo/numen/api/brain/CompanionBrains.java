@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.api.agent.loop.HaltReason;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -74,7 +75,8 @@ public final class CompanionBrains {
                 },
                 () -> {
                     CompanionRegistry.Entry entry = registry.find(companion);
-                    return entry != null && entry.diedAt() > 0L;
+                    return entry == null ? null : entry.diedAt() > 0L ? HaltReason.DEATH
+                            : entry.removed() ? HaltReason.REMOVED : null;
                 },
                 ownerOnline, driving, initiative, persona,
                 () -> server.overworld().getDayTime(), rooms));

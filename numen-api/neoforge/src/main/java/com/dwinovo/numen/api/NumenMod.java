@@ -66,7 +66,7 @@ public class NumenMod {
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        if (Services.NETWORK instanceof NeoForgeNetworkChannel ch) {
+        if (Services.network() instanceof NeoForgeNetworkChannel ch) {
             ch.flushPending(event);
         }
     }

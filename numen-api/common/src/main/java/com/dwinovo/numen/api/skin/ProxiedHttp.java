@@ -8,7 +8,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 
 /**
- * 跟随服务器代理设置({@code Services.CONFIG.getProxy()},与调模型用的是同一处)的 HTTP 客户端工厂——皮肤相关的外网请求
+ * 跟随服务器代理设置({@code Services.config().getProxy()},与调模型用的是同一处)的 HTTP 客户端工厂——皮肤相关的外网请求
  * (MineSkin 代签、Mojang 档案查询、取图片)共用这一处。
  *
  * <p>每次按当前设置新建:代理可随时改,缓存住的 ProxySelector 会过期。
@@ -27,7 +27,7 @@ final class ProxiedHttp {
         HttpClient.Builder b = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(redirects);
-        String proxy = Services.CONFIG.getProxy();
+        String proxy = Services.config().getProxy();
         if (proxy != null && !proxy.isBlank()) {
             int colon = proxy.lastIndexOf(':');
             if (colon > 0) {
