@@ -397,7 +397,7 @@ public final class ModLanguageData {
         public static final String LOOP_WIPE_BUSY           = "numen.loop.wipe_busy";
         public static final String EXPORT_FAILED            = "numen.export.failed";
         public static final String EXPORT_NEEDS_CLIENT      = "numen.export.needs_client";
-        public static final String EXPORT_TOO_BIG           = "numen.export.too_big";
+        public static final String EXPORT_BUSY              = "numen.export.busy";
         public static final String EXPORT_SAVED             = "numen.export.saved";
         public static final String EXPORT_PICKER_TITLE      = "numen.export.picker_title";
         public static final String PROFILE_MEMORY           = "numen.profile.memory";
@@ -1070,7 +1070,7 @@ public final class ModLanguageData {
         adder.add(Keys.LOOP_WIPE_BUSY,         "She is in the middle of thinking; wait until she stops, then clear her memory");
         adder.add(Keys.EXPORT_FAILED,          "Could not read %s's memory to export it");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "Exporting hands the file to your client, and you are playing without it");
-        adder.add(Keys.EXPORT_TOO_BIG,         "%1$s's memory is %2$s KiB, more than one export can carry");
+        adder.add(Keys.EXPORT_BUSY,            "Another export is still on its way to you");
         adder.add(Keys.EXPORT_SAVED,           "Saved %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "Save her memory");
         adder.add(Keys.PROFILE_MEMORY,         "Memory");
@@ -1745,7 +1745,7 @@ public final class ModLanguageData {
         adder.add(Keys.LOOP_WIPE_BUSY,         "她正在想事情,等她停下来再清空她的记忆");
         adder.add(Keys.EXPORT_FAILED,          "读不出「%s」的记忆,导不了");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "导出是把文件交到你的客户端上,你现在没装客户端");
-        adder.add(Keys.EXPORT_TOO_BIG,         "「%1$s」的记忆有 %2$s KiB,一次导出装不下");
+        adder.add(Keys.EXPORT_BUSY,            "上一份导出还在路上");
         adder.add(Keys.EXPORT_SAVED,           "已存到 %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "保存她的记忆");
         adder.add(Keys.PROFILE_MEMORY,         "记忆");

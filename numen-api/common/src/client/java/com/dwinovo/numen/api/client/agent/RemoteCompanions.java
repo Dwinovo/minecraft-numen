@@ -122,7 +122,7 @@ public final class RemoteCompanions {
         ClientPayloadSink.feed = RemoteCompanions::onFeed;
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
         ClientPayloadSink.conversations = RemoteCompanions::onConversations;
-        ClientPayloadSink.export = MemoryFiles::save;
+        ClientPayloadSink.export = MemoryFiles::receive;
         ClientPayloadSink.library = p -> {
             LIBRARY.onPayload(p);
             if (Libraries.MCP_CLIENT.equals(p.kind())) {
@@ -218,6 +218,7 @@ public final class RemoteCompanions {
     public static void disconnected() {
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
+        MemoryFiles.reset();
         saved = List.of();
         LIBRARY.clear();
         McpAuthPrompt.clear();

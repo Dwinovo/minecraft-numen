@@ -244,9 +244,9 @@ public final class NumenNetwork {
         toClient(com.dwinovo.numen.api.network.payload.LibraryPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.LibraryPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.LibraryPayload::handle);
-        toClient(com.dwinovo.numen.api.network.payload.ExportPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ExportPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ExportPayload::handle);
+        toClient(com.dwinovo.numen.api.network.payload.ExportChunkPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.ExportChunkPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.ExportChunkPayload::handle);
         toClient(com.dwinovo.numen.api.network.payload.ConversationsPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);

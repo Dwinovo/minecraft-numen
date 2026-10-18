@@ -1262,7 +1262,7 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Message ignored -> openConversation(Conversations.instance().of(who));
             case ProfilePage.Hit.Edit ignored -> editCompanion(who);
             case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
-            case ProfilePage.Hit.Export ignored -> RemoteCompanions.getOrCreate(who).requestExport();
+            case ProfilePage.Hit.Export ignored -> com.dwinovo.numen.api.client.agent.MemoryFiles.ask(who, nameFor(who));
             case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
             case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }

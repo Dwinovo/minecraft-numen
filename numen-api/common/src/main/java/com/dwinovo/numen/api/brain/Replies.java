@@ -142,7 +142,7 @@ public final class Replies {
     }
 
     /**
-     * 她的记忆导出好了(或没成):装了客户端的,打成的 zip 交给他存成文件;太大一次送不了、读不出来、他没装客户端,
+     * 她的记忆导出好了(或没成):装了客户端的,打成的 zip 按段下行({@link Exports})交给他存成文件;读不出来、他前一份还在路上、他没装客户端,
      * 都如实说给他听。
      */
     public static void exported(MinecraftServer server, UUID owner, UUID companion, byte[] zip, Throwable failure) {
@@ -157,11 +157,8 @@ public final class Replies {
                     entry.name()));
         } else if (!Presence.hasClient(owner)) {
             player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_NEEDS_CLIENT));
-        } else if (!com.dwinovo.numen.api.network.Wire.TO_CLIENT.carries(zip.length)) {
-            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_TOO_BIG,
-                    entry.name(), zip.length / 1024));
-        } else {
-            NumenNetwork.sendToPlayer(player, new com.dwinovo.numen.api.network.payload.ExportPayload(entry.name(), zip));
+        } else if (!Exports.SERVER.start(owner, companion, entry.name(), zip)) {
+            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_BUSY));
         }
     }
 

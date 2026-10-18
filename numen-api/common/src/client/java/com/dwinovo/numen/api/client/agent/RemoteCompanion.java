@@ -236,7 +236,7 @@ public final class RemoteCompanion {
         return null;
     }
 
-    /** 导出她的记忆:服务端打成 zip 推回来,存成文件见 {@code MemoryFiles}。 */
+    /** 导出她的记忆:服务端打成 zip 推回来,存成文件见 {@code MemoryFiles}(选好存哪儿之后才调)。 */
     public void requestExport() {
         send.accept(new OwnerInput.Export(uuid));
     }
