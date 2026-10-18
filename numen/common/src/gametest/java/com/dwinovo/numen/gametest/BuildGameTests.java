@@ -1659,7 +1659,7 @@ public class BuildGameTests {
         int checked = 0;
         try {
             var url = BuildGameTests.class.getClassLoader()
-                    .getResource("skills/building_design/SKILL.md");
+                    .getResource("numen/skills/numen/building_design/SKILL.md");
             helper.assertTrue(url != null, "skill resources are not on the classpath");
             java.nio.file.Path root = java.nio.file.Path.of(url.toURI()).getParent();
             java.util.List<java.nio.file.Path> docs;

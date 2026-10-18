@@ -753,17 +753,40 @@ public final class GameTestKit {
 
     private static final List<Live> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-    static {
-        // 她的 Lua 模块落在这一次 GameTest 运行专用的空目录里:只用内置原版,不读主人目录里的
-        try {
-            java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-gametest-lua-");
-            com.dwinovo.numen.api.script.Modules.init(uuid -> modules);
-            // 服务器起好时产品把模块落点指到了主人的目录(名册上有的同伴才有主人),这里的同伴没有登记:落点拿回来
-            com.dwinovo.numen.api.platform.ServerLifecycle.onStarted(
-                    server -> com.dwinovo.numen.api.script.Modules.init(uuid -> modules));
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
+    /** 这一次 GameTest 运行专用的库(内置从 jar 同步下来,她的模块与技能落在这里):只用内置原版,不读主人目录里的。 */
+    private static com.dwinovo.numen.api.library.LibraryHub libraries;
+    private static final java.util.UUID LIBRARY_OWNER = java.util.UUID.randomUUID();
+
+    private static synchronized com.dwinovo.numen.api.library.LibraryHub libraries() {
+        if (libraries == null) {
+            try {
+                libraries = com.dwinovo.numen.api.library.LibraryHub.headless(
+                        java.nio.file.Files.createTempDirectory("numen-gametest-lib-"));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
         }
+        return libraries;
+    }
+
+    /** 往这次 GameTest 专用的服务器目录里放一个内置模块(夹具),和 jar 同步下来的内置模块在同一处。 */
+    public static void builtinModule(String name, String code) {
+        int dot = name.indexOf('.');
+        libraries().builtin(com.dwinovo.numen.api.script.Modules.KIND)
+                .write(new com.dwinovo.numen.api.library.EntryId(name.substring(0, dot), name.substring(dot + 1)), code);
+    }
+
+    private static void useTheTestLibraries() {
+        com.dwinovo.numen.api.script.Modules.init(
+                uuid -> libraries().library(com.dwinovo.numen.api.script.Modules.KIND, LIBRARY_OWNER));
+        com.dwinovo.numen.api.agent.skill.SkillRegistry.init(
+                uuid -> libraries().library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, LIBRARY_OWNER));
+    }
+
+    static {
+        useTheTestLibraries();
+        // 服务器起好时产品把模块与技能的落点指到了主人的目录(名册上有的同伴才有主人),这里的同伴没有登记:落点拿回来
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStarted(server -> useTheTestLibraries());
     }
 
     /**
