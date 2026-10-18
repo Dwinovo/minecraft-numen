@@ -519,6 +519,34 @@ public class BrainGameTests {
         helper.succeed();
     }
 
+    /**
+     * 连通性检测要等一会儿才有结局:现在送的"在试"是一张不答任何请求的表,请求号跟着结局那一张回去,
+     * 表单凭号认出这是它的答复。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void a_connection_test_is_answered_by_its_outcome_under_the_request_number(GameTestHelper helper) {
+        var player = GameTestKit.presentPlayer(helper, null, "gametest_checker");
+        GameTestKit.received(player);
+
+        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK, "run",
+                "{\"draft\":{\"provider\":\"moonshotai\"}}", 9);
+
+        var told = new ArrayList<com.dwinovo.numen.api.network.payload.LibraryPayload>();
+        succeedWhen(helper, () -> {
+            GameTestKit.received(player).forEach(p -> {
+                if (p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l) {
+                    told.add(l);
+                }
+            });
+            helper.assertTrue(told.size() == 2, "the test was not answered twice yet: " + told);
+            helper.assertTrue(told.get(0).request() == 0 && told.get(0).entries().contains("checking"),
+                    "the 'trying' table was taken for the answer: " + told.get(0));
+            helper.assertTrue(told.get(1).request() == 9 && told.get(1).entries().contains("need_key"),
+                    "the outcome did not come back under the request number: " + told.get(1));
+            GameTestKit.leave(player);
+        });
+    }
+
     private static int indexOf(List<ConvoState.Msg> messages, java.util.function.Predicate<ConvoState.Msg> match) {
         for (int i = 0; i < messages.size(); i++) {
             if (match.test(messages.get(i))) {

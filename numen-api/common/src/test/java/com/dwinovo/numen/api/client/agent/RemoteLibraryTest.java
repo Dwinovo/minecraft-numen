@@ -62,6 +62,33 @@ class RemoteLibraryTest {
     }
 
     @Test
+    void aFormThatAsksAgainOnlyTakesTheAnswerToItsLatestAskEvenWithAPushInBetween() {
+        LatestReply latest = new LatestReply();
+        List<String> taken = new ArrayList<>();
+        library.request("catalog", "list", new JsonObject(), latest.take(r -> taken.add("first")));
+        library.request("catalog", "list", new JsonObject(), latest.take(r -> taken.add("second")));
+
+        library.onPayload(new LibraryPayload("catalog", "[]", ""));   // 别处推来的表,插在两个答复之前
+        library.onPayload(new LibraryPayload("catalog", "[]", "", sent.get(0).request()));   // 第一问的答复晚到:不属于现在的草稿
+        assertEquals(List.of(), taken, "推送与过时的答复都不算");
+
+        library.onPayload(new LibraryPayload("catalog", "[]", "", sent.get(1).request()));
+        assertEquals(List.of("second"), taken);
+    }
+
+    @Test
+    void anAnswerToARequestFromBeforeTheFormWasReopenedIsNotTaken() {
+        LatestReply latest = new LatestReply();
+        List<String> taken = new ArrayList<>();
+        library.request("provider-check", "run", new JsonObject(), latest.take(r -> taken.add("old")));
+
+        latest.cancel();
+        library.onPayload(new LibraryPayload("provider-check", "[]", "", sent.get(0).request()));
+
+        assertEquals(List.of(), taken);
+    }
+
+    @Test
     void theRequestNumberSurvivesTheWireBothWays() {
         io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer();
         LibraryRequestPayload.STREAM_CODEC.encode(buf, new LibraryRequestPayload("permission", "put", "{}", 42));

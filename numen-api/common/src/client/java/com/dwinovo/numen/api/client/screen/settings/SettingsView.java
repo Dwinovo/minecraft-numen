@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.RemoteLibrary;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.PopupMenu;
@@ -296,11 +297,36 @@ public final class SettingsView {
         if (providerEditBuiltin) {
             body.addProperty("group", "builtin");
         }
-        RemoteCompanions.library().put(Libraries.PROVIDER, body);
+        if (providerEditId == null && host.uuid() != null) {
+            // 新建的这一条直接绑给当前同伴:服务端起的 id 只在答复的表里,比对发请求时的表找出来
+            UUID companion = host.uuid();
+            java.util.Set<String> before = providerIds();
+            RemoteCompanions.library().put(Libraries.PROVIDER, body, reply -> bindCreated(companion, before, reply));
+        } else {
+            RemoteCompanions.library().put(Libraries.PROVIDER, body);
+        }
         saveKey(d.provider, d.apiKey, providerEditBuiltin);
         addingProvider = false;
         providerEditId = null;
         host.rebuild();
+    }
+
+    private static java.util.Set<String> providerIds() {
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        ServerLibraries.providers().forEach(p -> ids.add(p.id()));
+        return ids;
+    }
+
+    /** 新建办成了:答复的表里比发请求时多出的那一条就是新建的,绑给发请求时的那只同伴;办不成、或多出不止一条(认不准)就不绑。 */
+    private static void bindCreated(UUID companion, java.util.Set<String> before, RemoteLibrary.Reply reply) {
+        if (!reply.ok()) {
+            return;
+        }
+        java.util.Set<String> created = providerIds();
+        created.removeAll(before);
+        if (created.size() == 1) {
+            RemoteCompanions.getOrCreate(companion).bind(Slot.PROVIDER, created.iterator().next());
+        }
     }
 
     /** 表单里这个厂家已存的 key:改内置档案是服主的,别的是玩家自己的;没存过是空串。 */

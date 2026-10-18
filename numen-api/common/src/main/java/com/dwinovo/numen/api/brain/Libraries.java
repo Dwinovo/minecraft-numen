@@ -139,7 +139,7 @@ public final class Libraries {
      *
      * @param entries 这位玩家此刻看得到的整表(JSON 数组)
      * @param problem 办不成的原因(给界面和日志);办成是 {@code null}
-     * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去;没有是 {@code null}
+     * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去(请求号随这一张,它才是答复);没有是 {@code null}
      * @param shared  这次改动改了所有人共用的东西(内置、服主的设置):在线的其他玩家各收到他们看得到的新表
      */
     public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later,

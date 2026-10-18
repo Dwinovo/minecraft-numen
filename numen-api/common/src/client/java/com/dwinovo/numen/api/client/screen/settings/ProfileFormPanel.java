@@ -7,7 +7,9 @@ import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.CauseWords;
+import com.dwinovo.numen.api.client.agent.LatestReply;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.RemoteLibrary;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
@@ -139,13 +141,16 @@ public final class ProfileFormPanel {
     private Button checkButton;
     private InlineAlert resultAlert;
     private boolean checking;
-    /** 点检测那一刻检测库已经被推来过几次:比它新的、已经有结局的答复才是这一次的。 */
-    private long checkBase;
+    /** 检测的答复按请求号交回,只认最近一次发的那个(表单重开后,旧的答复也不认)。 */
+    private final LatestReply checkReply = new LatestReply();
     private List<ThinkingLevel> thinkingLevels = List.of(ThinkingLevel.AUTO);
 
-    /** 服务端对目录问题的最近一次答案(厂家、草稿解析出的端点),和它是第几次被推来的。 */
+    /** 服务端对目录问题的最近一次答案(厂家、草稿解析出的端点)。 */
     private ServerLibraries.CatalogAnswer answer = ServerLibraries.CatalogAnswer.EMPTY;
-    private long answerRevision = -1;
+    /** 目录问题的答复按请求号交回,只认最近一次问的那个,更早的答复让位给它。 */
+    private final LatestReply askReply = new LatestReply();
+    /** 最近一次问的答复到了,还没换上。 */
+    private boolean answerArrived = true;
     /** 当前厂家的全部型号:问时要了才有;{@link #modelsFor} 是它们属于哪个厂家,{@link #modelsAsked} 是已经在要的那个厂家。 */
     private List<ServerLibraries.CatalogModel> models = List.of();
     private String modelsFor = "";
@@ -172,6 +177,7 @@ public final class ProfileFormPanel {
         this.advanced.snap(false);
         this.askedKey = "";
         this.checking = false;
+        checkReply.cancel();
     }
 
     /** 下拉与选择框不得越出的区域(通常是整个设置窗口)。在 build 之前给。 */
@@ -328,13 +334,12 @@ public final class ProfileFormPanel {
         build(x, y, w, h);
     }
 
-    /** 服务端新答了一次目录问题:换上它,型号随之更新。答案和原来不同才返回 {@code true}(要重排)。 */
+    /** 服务端答了最近一次目录问题:换上它,型号随之更新。答案和原来不同才返回 {@code true}(要重排)。 */
     private boolean pollAnswer() {
-        long revision = RemoteCompanions.library().revision(Libraries.CATALOG);
-        if (revision == answerRevision) {
+        if (!answerArrived) {
             return false;
         }
-        answerRevision = revision;
+        answerArrived = false;
         ServerLibraries.CatalogAnswer before = answer;
         answer = ServerLibraries.catalog();
         if (answer.models() != null) {
@@ -363,7 +368,11 @@ public final class ProfileFormPanel {
         JsonObject body = new JsonObject();
         body.add("draft", ProviderLibrary.profileToJson(profile));
         body.addProperty("models", wantModels);
-        RemoteCompanions.library().request(Libraries.CATALOG, Libraries.LIST, body);
+        RemoteCompanions.library().request(Libraries.CATALOG, Libraries.LIST, body, askReply.take(reply -> {
+            if (reply.ok()) {
+                answerArrived = true;
+            }
+        }));
     }
 
     // ---- 宿主转发面 ----
@@ -374,7 +383,6 @@ public final class ProfileFormPanel {
     }
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        pollCheck();
         if (pollAnswer()) relayout();
         if (advanced.step(nowMs)) scroll.resize(revealedH());
         // 表单行进裁剪区(滚出视口的部分不画);下拉弹层、选择框与固定层在裁剪区外。
@@ -665,28 +673,29 @@ public final class ProfileFormPanel {
         onSave.accept(draft);
     }
 
-    /** 检测草稿当前值——存不存都能先试连。试连是服务端发的请求,这里只发草稿、等结局({@link #pollCheck})。 */
+    /** 检测草稿当前值——存不存都能先试连。试连是服务端发的请求,这里只发草稿、等结局({@link #settleCheck})。 */
     private void runConnectivityCheck() {
         if (checking) return;
         checking = true;
-        checkBase = RemoteCompanions.library().revision(Libraries.PROVIDER_CHECK);
         checkButton.setEnabled(false);
         checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         JsonObject body = new JsonObject();
         body.add("draft", ProviderLibrary.profileToJson(draft.toProfile()));
         body.addProperty("key", draft.apiKey);
-        RemoteCompanions.library().request(Libraries.PROVIDER_CHECK, Libraries.RUN, body);
+        RemoteCompanions.library().request(Libraries.PROVIDER_CHECK, Libraries.RUN, body, checkReply.take(this::settleCheck));
     }
 
-    /** 服务端交回了这一次检测的结局:缺 key、缺地址标在字段上,连得通连不通进结果胶囊。 */
-    private void pollCheck() {
-        if (!checking || RemoteCompanions.library().revision(Libraries.PROVIDER_CHECK) == checkBase) return;
-        ServerLibraries.Check check = ServerLibraries.check();
-        if (check == null || !check.done()) return;
+    /** 服务端交回了这一次检测的结局:缺 key、缺地址标在字段上,连得通连不通进结果胶囊;没办成的(请求有毛病)把原因挂在胶囊上。 */
+    private void settleCheck(RemoteLibrary.Reply reply) {
         checking = false;
         checkButton.setEnabled(true);
         checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK));
+        if (!reply.ok()) {
+            resultAlert.show(InlineAlert.Severity.ERROR, reply.problem());
+            return;
+        }
+        ServerLibraries.Check check = ServerLibraries.check();
         switch (check.state()) {
             case "need_key" -> {
                 resultAlert.clear();
