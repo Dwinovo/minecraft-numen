@@ -20,6 +20,7 @@ public final class NumenApiPlugin extends JavaPlugin {
         PaperPermissions.declare();
 
         getServer().getPluginManager().registerEvents(new PaperEvents(), this);
+        getServer().getPluginManager().registerEvents(new PaperBodyHooks(), this);
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> PaperCommands.register(event.registrar()));
 
         CommonClass.init();
