@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.Invocation;
+import com.dwinovo.numen.script.Invocation;
 
 import java.util.function.Consumer;
 

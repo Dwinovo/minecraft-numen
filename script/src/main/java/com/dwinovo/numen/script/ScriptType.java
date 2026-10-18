@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.agent.script;
+package com.dwinovo.numen.script;
 
 import java.util.List;
 

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
 import com.google.gson.JsonArray;
@@ -7,6 +8,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +32,8 @@ public final class RemoteLibrary {
     private final Map<Long, Consumer<Reply>> waiting = new HashMap<>();
     private long nextRequest = 1;
 
-    /** 服务端对一次请求的答复:没办成的原因(办成是 null)。 */
-    public record Reply(String problem) {
+    /** 服务端对一次请求的答复:没办成的原因(办成是 null),和新建成功时新条目的 id(其余是 null)。 */
+    public record Reply(String problem, String created) {
 
         public boolean ok() {
             return problem == null;
@@ -126,7 +128,17 @@ public final class RemoteLibrary {
 
     /** 服务端推来一张表。 */
     public void onPayload(LibraryPayload p) {
-        tables.put(p.kind(), List.copyOf(JsonParser.parseString(p.entries()).getAsJsonArray().asList()));
+        // 新建成功的答复在表后附一行 {"created": id}:它不是表里的一行,取出来交给发请求的那一处
+        List<JsonElement> rows = new ArrayList<>();
+        String created = null;
+        for (JsonElement row : JsonParser.parseString(p.entries()).getAsJsonArray()) {
+            if (row.isJsonObject() && row.getAsJsonObject().has(Libraries.CREATED)) {
+                created = row.getAsJsonObject().get(Libraries.CREATED).getAsString();
+            } else {
+                rows.add(row);
+            }
+        }
+        tables.put(p.kind(), List.copyOf(rows));
         revisions.merge(p.kind(), 1L, Long::sum);
         if (p.problem().isEmpty()) {
             problems.remove(p.kind());
@@ -135,7 +147,7 @@ public final class RemoteLibrary {
         }
         Consumer<Reply> asked = p.request() == 0 ? null : waiting.remove(p.request());
         if (asked != null) {
-            asked.accept(new Reply(p.problem().isEmpty() ? null : p.problem()));
+            asked.accept(new Reply(p.problem().isEmpty() ? null : p.problem(), created));
         }
     }
 

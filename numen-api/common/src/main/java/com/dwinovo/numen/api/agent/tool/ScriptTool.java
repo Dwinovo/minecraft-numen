@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.agent.tool;
 
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptLimits;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptLimits;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

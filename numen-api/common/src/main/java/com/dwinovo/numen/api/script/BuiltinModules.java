@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.script;
 
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptEngine;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

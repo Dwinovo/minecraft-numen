@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptEngine;
 
 /**
  * 一个值读不成({@link Codec#decode}):要什么样子、给了什么。看得出她想写什么时(三个数想写一格)带上照这一种写法该写成的那个值,

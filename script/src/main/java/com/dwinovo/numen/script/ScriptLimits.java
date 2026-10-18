@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.agent.script;
+package com.dwinovo.numen.script;
 
 /**
  * 一段脚本跑一次的上限,数值只在这里。到了就停在当前那一行,回执如实说停在哪、因为哪一条。

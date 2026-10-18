@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.Invocation;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.api.agent.loop.Program;
 
 /**
  * 看着一段程序的每次调用派出去、回来。GameTest 与重启后再跑那一行据此认出每次调用派下的活、它的回执;不看就用 {@link #NONE}。

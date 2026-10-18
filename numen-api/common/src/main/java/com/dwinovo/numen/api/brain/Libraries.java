@@ -117,6 +117,9 @@ public final class Libraries {
     /** 皮肤专有:撤掉一张排着的签名(或不再显示一条失败)。 */
     public static final String CANCEL = "cancel";
 
+    /** 新建成功的答复里附的一行 {@code {"created": 新条目的 id}};改已有条目的答复不带。 */
+    public static final String CREATED = "created";
+
     /** 请求里选哪一组:缺省是我的;{@code "builtin"} 是内置(只有管理员)。 */
     public static final String GROUP_BUILTIN = "builtin";
     public static final String GROUP_MINE = "mine";
@@ -139,7 +142,7 @@ public final class Libraries {
      *
      * @param entries 这位玩家此刻看得到的整表(JSON 数组)
      * @param problem 办不成的原因(给界面和日志);办成是 {@code null}
-     * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去;没有是 {@code null}
+     * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去(请求号随这一张,它才是答复);没有是 {@code null}
      * @param shared  这次改动改了所有人共用的东西(内置、服主的设置):在线的其他玩家各收到他们看得到的新表
      */
     public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later,
@@ -586,7 +589,13 @@ public final class Libraries {
                 renamed.accept(old, target);   // 我的某条改了名:id 就是名字,在用它的同伴得重新指过去
             }
         }
-        return Done.of(null, builtin);
+        if (old != null) {
+            return Done.of(null, builtin);
+        }
+        // 新建的:id 由服务端按名字起,客户端要凭它把新条目绑给当前同伴,所以随答复明说
+        JsonObject created = new JsonObject();
+        created.addProperty(CREATED, target.toString());
+        return new Done(null, builtin, created);
     }
 
     // ---- 皮肤:签名在服务端排队 ----

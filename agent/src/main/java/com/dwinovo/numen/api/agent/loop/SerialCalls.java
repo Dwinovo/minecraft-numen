@@ -3,8 +3,7 @@ package com.dwinovo.numen.api.agent.loop;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.agent.script.Program;
-import com.dwinovo.numen.api.agent.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptCall;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

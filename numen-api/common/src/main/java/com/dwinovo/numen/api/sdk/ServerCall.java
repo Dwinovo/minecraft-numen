@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;

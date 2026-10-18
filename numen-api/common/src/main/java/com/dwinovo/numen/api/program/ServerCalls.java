@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.program;
 
-import com.dwinovo.numen.api.agent.script.ApiReply;
-import com.dwinovo.numen.api.agent.script.Invocation;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.script.ScriptCatalog;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.ApiFunction;
 import com.dwinovo.numen.api.sdk.ApiRegistry;

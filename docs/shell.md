@@ -83,9 +83,9 @@
 
 ## 四、脚本:Lua
 
-组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
+组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
 "命令怎么调"那段说明、函数名的改写、读与跑;派发、等待、上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言
-无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `agent.script.lua.LuaEngine`,虚拟机的类型只在
+无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `script.lua.LuaEngine`,虚拟机的类型只在
 这个类里;换语言只改 `ScriptEngine.IN_USE` 与它的实现。
 
 虚拟机是本仓自己的纯 JVM 模块 `lua`(不碰 Minecraft 与 Numen 的类型):LuaJ 主干最后一次提交 `daf3da9`(2020-04-01)
@@ -122,10 +122,10 @@
   `In a script: 组.名字_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
   目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
-### 放在哪:`agent` 模块,程序在服务端跑
+### 放在哪:`script` 模块,程序在服务端跑
 
-- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
-  (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进 Numen API
+- 语言(`script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)是纯 JVM,放在 `script` 模块;`lua` 模块由 `script` 依赖;
+  一段程序从头到回执(`Program`)要读收件箱的急件规则,放在 `agent` 模块的 `loop`;发行 jar 里和 `ai`、`agent` 一样平铺进 Numen API
   (`numen-api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
 - **程序整段在服务端跑**(§十四):大脑把程序整段交给服务端入口,在身体与数据旁边跑完,回一张
   回执。大脑的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
@@ -654,7 +654,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 服务端函数就进程内执行,遇到客户端函数就向主人客户端发**反向请求**,Lua 线程挂着等客户端用 `Dispatcher.client` 执行完答回来
 (同 MCP 的 sampling、LSP 的 workspace/configuration);对 API 作者完全透明。
 
-### 部件(`numen-api/common/.../program` 与 `agent.script`)
+### 部件(`numen-api/common/.../program`、`script` 模块与 `agent.loop`)
 
 | 部件 | 做什么 |
 |---|---|

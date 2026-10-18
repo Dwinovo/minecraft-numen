@@ -2,10 +2,10 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.agent.script.ApiReply;
-import com.dwinovo.numen.api.agent.script.Invocation;
-import com.dwinovo.numen.api.agent.script.JsonValues;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.script.JsonValues;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.task.dig.DigCompanionTask;
 import com.dwinovo.numen.api.sdk.Positions;
 import com.dwinovo.numen.Constants;
@@ -496,7 +496,7 @@ public final class GameTestKit {
      * 一段程序的结构化结局读成 JSON({@code status}、{@code calls}、{@code returned}、{@code error}),给用例看。这些不在回执里、不上网线:
      * 用例和程序同在服务端进程,从服务端交出的结局对象读({@link com.dwinovo.numen.api.program.CallObserver#ended})。
      */
-    static com.google.gson.JsonObject dataOf(com.dwinovo.numen.api.agent.script.Program.Outcome outcome) {
+    static com.google.gson.JsonObject dataOf(com.dwinovo.numen.api.agent.loop.Program.Outcome outcome) {
         com.google.gson.JsonObject data = new com.google.gson.JsonObject();
         data.addProperty("status", outcome.ending().status().wire());
         data.addProperty("calls", outcome.calls().size());
@@ -674,7 +674,7 @@ public final class GameTestKit {
         private final net.minecraft.server.MinecraftServer server;
         private final com.dwinovo.numen.api.program.LoopbackTransport transport =
                 new com.dwinovo.numen.api.program.LoopbackTransport();
-        private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome>>
+        private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome>>
                 waiting = new java.util.concurrent.ConcurrentHashMap<>();
 
         private Programs(net.minecraft.server.MinecraftServer server) {
@@ -683,7 +683,7 @@ public final class GameTestKit {
 
         /** 跑一段程序,{@code observer} 看着它的每次调用。 */
         void run(UUID companion, String programId, String code, com.dwinovo.numen.api.program.CallObserver observer,
-                 java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> done) {
+                 java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome> done) {
             waiting.put(programId, done);
             com.dwinovo.numen.api.program.ServerPrograms.run(NumenPlayer.findByUuid(server, companion), companion,
                     companion, new com.dwinovo.numen.api.program.ServerPrograms.Request(programId, code,
@@ -697,13 +697,13 @@ public final class GameTestKit {
 
         @Override
         public void run(UUID companion, String programId, String code,
-                        java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> done) {
+                        java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome> done) {
             run(companion, programId, code, com.dwinovo.numen.api.program.CallObserver.NONE, done);
         }
 
         @Override
         public void afterwards(String programId,
-                               java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> late) {
+                               java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome> late) {
             waiting.computeIfPresent(programId, (id, was) -> late);
         }
 
@@ -788,7 +788,7 @@ public final class GameTestKit {
      * 同伴手上已有一段,这一段排在它后面;那一段若正等着它派的活(走路、挖),主人就是那时再开口的,叫它停在调用之间,活照常跑。
      */
     private static void runProgram(NumenPlayer body, String programId, String code, ToolRun run,
-                                   java.util.function.Consumer<com.dwinovo.numen.api.agent.script.Program.Outcome> then) {
+                                   java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome> then) {
         Live live = new Live(body, run, new java.util.concurrent.atomic.AtomicBoolean());
         LIVE.add(live);
         java.util.Deque<Runnable> backlog = BACKLOGS.computeIfAbsent(body.getUUID(),
@@ -897,7 +897,7 @@ public final class GameTestKit {
 
     /** 一轮里的一段程序:一条跑脚本的工具调用。 */
     static LlmToolCall programCall(String code) {
-        String tool = com.dwinovo.numen.api.agent.script.ScriptEngine.IN_USE.toolName();
+        String tool = com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName();
         return new LlmToolCall("gametest-" + tool + "-" + UUID.randomUUID(), tool,
                 com.dwinovo.numen.api.agent.tool.ScriptTool.args(code).toString());
     }
@@ -923,7 +923,7 @@ public final class GameTestKit {
         }
 
         @Override
-        public void ended(com.dwinovo.numen.api.agent.script.Program.Outcome outcome) {
+        public void ended(com.dwinovo.numen.api.agent.loop.Program.Outcome outcome) {
             run.outcome.set(outcome);
         }
     }
@@ -1102,7 +1102,7 @@ public final class GameTestKit {
         private final List<Call> calls = new java.util.concurrent.CopyOnWriteArrayList<>();
         final AtomicReference<String> receipt = new AtomicReference<>();
         /** 服务端交出的程序结局(同进程,带着 return 的值与完整的错误值);程序还没结束是 null。 */
-        final AtomicReference<com.dwinovo.numen.api.agent.script.Program.Outcome> outcome = new AtomicReference<>();
+        final AtomicReference<com.dwinovo.numen.api.agent.loop.Program.Outcome> outcome = new AtomicReference<>();
 
         ToolRun(String code) {
             this.code = code;
@@ -1286,7 +1286,7 @@ public final class GameTestKit {
             if (p != null) {
                 return p.ok() || p.error().get(key) == null ? null : String.valueOf(p.error().get(key));
             }
-            com.dwinovo.numen.api.agent.script.Program.Outcome ended = outcome.get();
+            com.dwinovo.numen.api.agent.loop.Program.Outcome ended = outcome.get();
             return ended == null || ended.failure() == null || ended.failure().get(key) == null ? null
                     : String.valueOf(ended.failure().get(key));
         }

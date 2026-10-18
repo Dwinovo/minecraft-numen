@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.program;
 
 /**
  * 服务端跑玩家程序的上限,数值只在这里。一段程序自己的上限(调用数、指令数、字符串字节、墙钟)在
- * {@link com.dwinovo.numen.api.agent.script.ScriptLimits}。
+ * {@link com.dwinovo.numen.script.ScriptLimits}。
  */
 public final class ProgramLimits {
 
@@ -37,7 +37,7 @@ public final class ProgramLimits {
     /**
      * 主人的客户端答一次反向请求最多等多少服务器刻:600 刻(三十秒)。客户端函数是就地的只读查询(读文件、读她的循环状态),正常在毫秒到
      * 几百毫秒内答复,三十秒是它的百倍以上,容得下客户端一次长的卡顿、加载与垃圾回收;又远小于一段程序的墙钟上限(二十分钟,
-     * {@link com.dwinovo.numen.api.agent.script.ScriptLimits#WALL_MILLIS}),也小于可能长时间运行的工具的量级(Anthropic 的程序化工具调用约四分钟):
+     * {@link com.dwinovo.numen.script.ScriptLimits#WALL_MILLIS}),也小于可能长时间运行的工具的量级(Anthropic 的程序化工具调用约四分钟):
      * 一个答不出来的客户端函数只卡掉这一次调用的三十秒,不卡掉整段程序。按刻数而不按墙钟:服务器卡住的那些刻里客户端的答复也在队里等着,
      * 不该算它迟。
      */

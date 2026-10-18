@@ -3,7 +3,7 @@ package com.dwinovo.numen.task.move;
 import java.util.List;
 
 import com.dwinovo.numen.FailureType;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskResult;

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ScriptType;
 
 import java.util.List;
 

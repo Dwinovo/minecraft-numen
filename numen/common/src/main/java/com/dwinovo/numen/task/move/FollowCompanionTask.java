@@ -128,7 +128,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                     seed = leg.reached() ? leg.route() : leg.partial();
                     return Preparation.Readiness.READY;
                 }
-                return Preparation.Readiness.refused(TaskResult.fail(com.dwinovo.numen.api.agent.script.ErrorKind.NO_PATH,
+                return Preparation.Readiness.refused(TaskResult.fail(com.dwinovo.numen.script.ErrorKind.NO_PATH,
                         "can't keep up: " + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, spec,
                                 ThrowawayBlocks.factory()),
                         null, value()));

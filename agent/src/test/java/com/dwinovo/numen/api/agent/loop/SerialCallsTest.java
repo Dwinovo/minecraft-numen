@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.agent.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptCall;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

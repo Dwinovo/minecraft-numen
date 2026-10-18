@@ -2,7 +2,7 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;

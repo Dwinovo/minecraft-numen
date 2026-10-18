@@ -1,7 +1,7 @@
-package com.dwinovo.numen.api.agent.script.lua;
+package com.dwinovo.numen.script.lua;
 
 import com.dwinovo.lua.LuaSandbox;
-import com.dwinovo.numen.api.agent.script.ScriptLimits;
+import com.dwinovo.numen.script.ScriptLimits;
 
 import java.util.ArrayList;
 import java.util.List;

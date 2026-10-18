@@ -60,14 +60,14 @@ public class BuildGameTests {
     }
 
     /**
-     * 一栋大房子一段程序盖不完:一次运行至多 {@link com.dwinovo.numen.api.agent.script.ScriptLimits#COMMANDS} 次调用,到了就停在
+     * 一栋大房子一段程序盖不完:一次运行至多 {@link com.dwinovo.numen.script.ScriptLimits#COMMANDS} 次调用,到了就停在
      * 那里。和模型会做的一样,停在上限就把同一段再交一次——{@code numen.build.raise} 每一轮从 {@code numen.build.diff} 现问,接着上次停下的
      * 地方盖——直到跑完,或停在别的原因上。每刻由 {@link #tick} 推一步。
      */
     private static final class Raising {
 
         private static final String AT_THE_LIMIT = "it reached the limit of "
-                + com.dwinovo.numen.api.agent.script.ScriptLimits.COMMANDS + " calls per run";
+                + com.dwinovo.numen.script.ScriptLimits.COMMANDS + " calls per run";
 
         private final NumenPlayer body;
         private final String code;

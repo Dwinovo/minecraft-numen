@@ -22,7 +22,7 @@ import java.lang.annotation.Target;
  *       是位置参数,{@code Optional} 的进最后的选项表;说明用 {@link Doc},省略时的意思用 {@link Omitted}。不收参数的函数没有第二个参数。</li>
  *   <li>返回类型说它怎么交回:{@code R} 当场;{@link Pending}{@code <R>} 等主人答复或下一刻;{@link Job}{@code <R>} 占身体进任务槽,
  *       收尾才回到脚本。{@code R} 是 record、Minecraft 的值、列表等任何有值转换的类型({@link LuaCodecs}),不返回值写 {@code void}。</li>
- *   <li>失败只抛 {@link com.dwinovo.numen.api.agent.script.ApiError};查不到不是失败,返回空表或 {@code Optional.empty()}。</li>
+ *   <li>失败只抛 {@link com.dwinovo.numen.script.ApiError};查不到不是失败,返回空表或 {@code Optional.empty()}。</li>
  * </ul>
  * 函数名默认是方法名(驼峰换成下划线);和 Java 的关键字撞了时用 {@link #name} 写出来。
  */

@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.task;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.script.ApiReply;
+import com.dwinovo.numen.script.ApiReply;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;

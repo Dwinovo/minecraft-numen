@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.FunctionDoc;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.FunctionDoc;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.script.Modules;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

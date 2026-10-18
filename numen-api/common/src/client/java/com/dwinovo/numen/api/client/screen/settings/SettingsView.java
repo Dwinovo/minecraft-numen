@@ -303,6 +303,7 @@ public final class SettingsView {
         host.rebuild();
     }
 
+
     /** 表单里这个厂家已存的 key:改内置档案是服主的,别的是玩家自己的;没存过是空串。 */
     private String storedKey(String service) {
         return providerEditBuiltin ? ServerLibraries.serverKey(service) : ServerLibraries.mineKey(service);
@@ -760,7 +761,17 @@ public final class SettingsView {
         if (voiceEditBuiltin) {
             body.addProperty("group", "builtin");
         }
-        RemoteCompanions.library().put(Libraries.VOICE, body);
+        if (voiceEditId == null && host.uuid() != null) {
+            // 从某个同伴的设置页新建声线 = 给这只配音:新条目的 id 随答复回来,直接绑给发请求时的那只同伴
+            UUID companion = host.uuid();
+            RemoteCompanions.library().put(Libraries.VOICE, body, reply -> {
+                if (reply.created() != null) {
+                    RemoteCompanions.getOrCreate(companion).bind(Slot.VOICE, reply.created());
+                }
+            });
+        } else {
+            RemoteCompanions.library().put(Libraries.VOICE, body);
+        }
         String service = VoiceFormPanel.profileOf(d).keyService();
         String typed = d.apiKey.strip();
         if (!typed.equals(nv(ClientKeys.keychain().get(service)))) {

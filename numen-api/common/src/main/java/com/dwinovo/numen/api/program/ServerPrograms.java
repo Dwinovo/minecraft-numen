@@ -2,8 +2,8 @@ package com.dwinovo.numen.api.program;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.script.Program;
-import com.dwinovo.numen.api.agent.script.ScriptCall;
+import com.dwinovo.numen.api.agent.loop.Program;
+import com.dwinovo.numen.script.ScriptCall;
 import com.dwinovo.numen.api.store.SerialExecutor;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.api.entity.NumenPlayer;

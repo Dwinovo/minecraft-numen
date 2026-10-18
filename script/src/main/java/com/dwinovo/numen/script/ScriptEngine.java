@@ -1,6 +1,6 @@
-package com.dwinovo.numen.api.agent.script;
+package com.dwinovo.numen.script;
 
-import com.dwinovo.numen.api.agent.script.lua.LuaEngine;
+import com.dwinovo.numen.script.lua.LuaEngine;
 
 import java.util.List;
 import java.util.function.Consumer;

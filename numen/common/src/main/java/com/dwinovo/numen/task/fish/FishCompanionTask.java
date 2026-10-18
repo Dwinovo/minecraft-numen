@@ -104,7 +104,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         }
         BlockPos water = findCastTarget(here, player.getEyePosition());
         if (water == null) {
-            return Preparation.refused(TaskResult.fail(com.dwinovo.numen.api.agent.script.ErrorKind.NOT_FOUND, NO_WATER,
+            return Preparation.refused(TaskResult.fail(com.dwinovo.numen.script.ErrorKind.NOT_FOUND, NO_WATER,
                     null));
         }
         stance = here;

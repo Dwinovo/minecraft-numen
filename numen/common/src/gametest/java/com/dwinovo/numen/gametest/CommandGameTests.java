@@ -223,10 +223,10 @@ public class CommandGameTests {
             helper.assertTrue(receipt != null, "the receipt has not come");
             JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
             helper.assertTrue(data.get("success").getAsBoolean(), "the program failed: " + receipt);
-            helper.assertTrue(receipt.length() < com.dwinovo.numen.api.agent.script.ScriptLimits.RETURNED_CHARS + 500,
+            helper.assertTrue(receipt.length() < com.dwinovo.numen.script.ScriptLimits.RETURNED_CHARS + 500,
                     "the receipt is not bounded: " + receipt.length() + " characters");
             helper.assertTrue(data.get("message").getAsString().contains("[returned value cut at "
-                            + com.dwinovo.numen.api.agent.script.ScriptLimits.RETURNED_CHARS + " characters; it was "
+                            + com.dwinovo.numen.script.ScriptLimits.RETURNED_CHARS + " characters; it was "
                             + (com.dwinovo.numen.api.network.Wire.TO_CLIENT.bytes() + 1) + "]"),
                     "the receipt does not say the value was cut: " + receipt.substring(0, Math.min(400, receipt.length())));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

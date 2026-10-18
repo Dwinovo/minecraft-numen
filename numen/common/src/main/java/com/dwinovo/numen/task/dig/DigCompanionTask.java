@@ -1,7 +1,7 @@
 package com.dwinovo.numen.task.dig;
 
 import com.dwinovo.numen.api.task.TaskResult;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.area.Cells;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.WorkProfile;

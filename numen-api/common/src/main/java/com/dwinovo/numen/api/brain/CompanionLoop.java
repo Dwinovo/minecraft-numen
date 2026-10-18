@@ -32,7 +32,7 @@ import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.agent.request.MemoryPreamble;
 import com.dwinovo.numen.api.agent.request.RuntimeState;
 import com.dwinovo.numen.api.agent.request.TaskReport;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;

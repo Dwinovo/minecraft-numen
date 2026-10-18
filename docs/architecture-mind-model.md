@@ -23,6 +23,32 @@ ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen
 Numen 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
 只在适配层里接;结局与实际账说给模型听只在 `NavText` 一处。
 
+**模块依赖(照各模块的 `build.gradle` 写,编译器守边界)。** `A → B, C` 读作"A 依赖 B 和 C",依赖只许向下,不许回头:
+
+```
+store, lua, ui, permission     纯 JVM,不依赖任何人
+ai        → store              纯 JVM
+script    → lua, ai            纯 JVM
+agent     → ai, script         纯 JVM
+numen-api → store, ai, script, agent, permission, ui, lua + Minecraft
+numen(含 pathing)、plugins/*  → numen-api 的瘦 api jar(只看得见它公开的部分)
+bench:game → bench, numen-api  bench 纯 JVM;考场不认识 numen 与插件
+```
+| 模块 | 干什么 | 依赖谁 | 不许依赖谁 |
+|---|---|---|---|
+| `store` | 落盘的两种基础件(只追加日志、小文档) | 只 Gson | 其余一切 |
+| `lua` | 沙箱里的 Lua 5.2(虚拟机、预算、打断、值互转) | 无 | Minecraft、Numen、其余一切 |
+| `ui` | 控件库、令牌、缓动、排版 | 无 | Minecraft、Numen API |
+| `permission` | 权限规则的语法、判决与判定顺序 | 无 | Minecraft、Numen API(游戏里的适配在 `numen-api` 的 `permission` 包) |
+| `ai` | LLM 传输、服务商适配、型号目录、会话状态、工具结果成败判据 | `store` | Minecraft、`script`、`agent`、Numen API |
+| `script` | 她写的一段程序:语言接口、回执、API 答复与错误、函数说明、资源上限、Lua 适配 | `lua`、`ai` | Minecraft、`agent`、Numen API |
+| `agent` | 大脑本身:收件箱、长期目标、对话、记忆压缩、循环与一段程序的执行(`Program`,要读收件箱的急件规则,所以在这里不在 `script`) | `ai`、`script` | Minecraft、Numen API |
+| `numen-api` | 机器:身体、任务槽、登记口、工具运输、权限适配、程序在服务端的入口;发行 jar 平铺上面所有纯 JVM 模块 | 上面全部 + Minecraft | `numen`、`plugins/*`、`bench` |
+| `numen`(含 `numen/pathing`) | 第一个插件:工具、任务、本能、内容与寻路 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型;`numen/pathing` 只依赖原版与瘦 api jar | `plugins/*`;`numen-api` 不引用它 |
+| `plugins/*` | 与别的模组的联动,一个联动一个目录,目标模组不在就不加载 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型 | `numen`、彼此、被 `numen-api` 引用 |
+| `bench` / `bench:game` | 真模型评测:`bench` 是记录与统计;`bench:game` 是游戏里那一半 | `bench:game` 依赖 `bench` 与 `numen-api`;`bench` 无 | 插件与 `numen` 的类(考场只认 Numen API);不发布、不进发行 jar |
+
+寻路留在 `numen/pathing`:它是 Numen 这个插件的内容,第三方插件要寻路自己带一份;Numen API 不开寻路扩展点,只公开寻路和手动驱动共用的身体机制(键盘、视角、鼠标、快捷栏、物理步进与原版公式几何)。
 ## 零、总纲:她看一眼很贵
 
 **根本约束:人能一直盯着屏幕,看一眼几乎免费;她每看一次要花一轮模型调用。** 所以凡是会改世界的决定,

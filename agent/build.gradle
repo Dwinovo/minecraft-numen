@@ -1,5 +1,5 @@
 // numen-agent:同伴的大脑本身,纯 JVM 库——零 Minecraft 依赖、零 Numen API 回引,
-// 只往下依赖 numen-ai(ai → agent → api 单向三层)。循环要的零件放这里而不是 api:
+// 只往下依赖 numen-ai 与 numen-script(ai → script → agent → api 单向)。循环要的零件放这里而不是 api:
 // Numen API 的类路径上有 Minecraft,"不引用 Minecraft"只能靠自觉;放这里由编译器保证。
 // 代码本身与 Minecraft 版本无关,但各版本分支上的这份源码目前并不相同(功能先落
 // 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
@@ -48,9 +48,8 @@ repositories {
 dependencies {
     // 下一层:传输、会话状态与日志句柄都在 ai。api 配置让本模块的消费方透视得到 ai 的类型。
     api project(':ai')
-    // 脚本的语言是 Lua,跑在本仓自己维护的沙箱里(numen-lua,以 LuaJ 为底)。只在 agent.script.lua 用,对外的类型里不出现它,
-    // 所以是 implementation;发行 jar 由 numen-api-loader.gradle 平铺它的类,和本模块一样。
-    implementation project(':lua')
+    // 她写的一段程序(回执、调用的答复)。循环的端口签名里出现它的类型,所以是 api;Lua 沙箱是它的事,本模块不碰。
+    api project(':script')
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

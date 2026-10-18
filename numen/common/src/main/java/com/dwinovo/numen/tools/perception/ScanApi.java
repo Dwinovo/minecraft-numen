@@ -1,7 +1,7 @@
 package com.dwinovo.numen.tools.perception;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.scan.BlockScan;
 import com.dwinovo.numen.scan.NearbyEntities;

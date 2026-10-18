@@ -1,14 +1,14 @@
 package com.dwinovo.numen.api.sdk;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ApiReply;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
-import com.dwinovo.numen.api.agent.script.Invocation;
-import com.dwinovo.numen.api.agent.script.JsonValues;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptRun;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.script.JsonValues;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskDispatch;
 import com.dwinovo.numen.api.task.TaskRecord;

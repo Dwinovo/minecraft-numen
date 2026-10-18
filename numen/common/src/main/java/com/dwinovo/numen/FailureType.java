@@ -1,6 +1,6 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.task.TaskState;
 
 /**

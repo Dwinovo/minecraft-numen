@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.agent.loop.ToolPort;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.entity.CompanionEvents;
-import com.dwinovo.numen.api.agent.script.Program;
+import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.ProgramHost;
 
 import java.util.List;

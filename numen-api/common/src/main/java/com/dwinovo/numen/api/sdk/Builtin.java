@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ScriptType;
 import net.minecraft.resources.ResourceLocation;
 
 /** 语言自带的几种值的转换:字符串、整数、小数、布尔、不返回值、资源 id。登记在 {@link LuaCodecs}。 */

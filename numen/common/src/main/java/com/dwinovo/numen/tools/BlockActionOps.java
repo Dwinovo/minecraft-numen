@@ -1,7 +1,7 @@
 package com.dwinovo.numen.tools;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.area.Cells;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.ServerCall;

@@ -40,7 +40,9 @@ dependencies {
     // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
     // 消费方以及下游 loader 都能透视到 ai 的类型。
     api project(':ai')
-    // 大脑本身(纯 JVM):输入队列、长期目标。api 配置同理,下游 loader 透视得到。
+    // 她写的一段程序(纯 JVM):语言接口、回执、API 答复与错误。api 配置同理,下游 loader 与插件透视得到。
+    api project(':script')
+    // 大脑本身(纯 JVM):输入队列、长期目标、循环。api 配置同理,下游 loader 透视得到。
     api project(':agent')
     // 权限层的规则核心(纯 JVM):Numen API 的 com.dwinovo.numen.api.permission 是它的游戏适配。api 配置让下游 loader 与插件透视得到
     // 动词、判决、模式这些公开签名里的类型。

@@ -23,6 +23,7 @@ dependencies {
     // (Mojang 名),Fabric 的 intermediary 成品另有重映射,编译期用不着。
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
     compileOnly project(':ai')
+    compileOnly project(':script')
     compileOnly project(':agent')
     compileOnly project(':permission')
     compileOnly project(':ui')

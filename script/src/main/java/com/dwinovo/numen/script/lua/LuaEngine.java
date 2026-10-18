@@ -1,15 +1,15 @@
-package com.dwinovo.numen.api.agent.script.lua;
+package com.dwinovo.numen.script.lua;
 
 import com.dwinovo.lua.LuaSandbox;
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ErrorKind;
-import com.dwinovo.numen.api.agent.script.FunctionDoc;
-import com.dwinovo.numen.api.agent.script.JsonValues;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptEngine;
-import com.dwinovo.numen.api.agent.script.ScriptLimits;
-import com.dwinovo.numen.api.agent.script.ScriptRun;
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.script.FunctionDoc;
+import com.dwinovo.numen.script.JsonValues;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptEngine;
+import com.dwinovo.numen.script.ScriptLimits;
+import com.dwinovo.numen.script.ScriptRun;
+import com.dwinovo.numen.script.ScriptType;
 
 import java.time.Duration;
 import java.util.ArrayList;

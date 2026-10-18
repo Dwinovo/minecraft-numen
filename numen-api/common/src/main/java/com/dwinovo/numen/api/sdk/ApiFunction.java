@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.agent.script.ApiError;
-import com.dwinovo.numen.api.agent.script.ScriptCatalog;
-import com.dwinovo.numen.api.agent.script.ScriptType;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.script.ScriptType;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;

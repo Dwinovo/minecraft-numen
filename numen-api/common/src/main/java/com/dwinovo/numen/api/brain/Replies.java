@@ -98,11 +98,13 @@ public final class Replies {
         MinecraftServer server = player.server;
         Libraries libraries = Libraries.of(server);
         Libraries.Result result = libraries.handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
+        // 还要等一会儿才有结局的请求(连通性检测):现在送的只是"在试"的一张表,不是答复;答复是结局到了的那一张,带请求号
+        long answerNow = result.later() == null ? request : 0;
         NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
-                result.problem() == null ? "" : result.problem(), request));
+                result.problem() == null ? "" : result.problem(), answerNow));
         if (result.later() != null) {
             result.later().thenAccept(entries -> server.execute(
-                    () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, ""))));
+                    () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, "", request))));
         }
         if (result.shared()) {
             share(server, player, kind);

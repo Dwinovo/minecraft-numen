@@ -21,6 +21,8 @@ dependencies {
     api project(':store')
     api project(':ai')
     // 大脑本身(纯 JVM,输入队列与长期目标)同理:发行 jar 里的类由下方 jar 块平铺进来。
+    // 她写的一段程序(纯 JVM,回执与 API 答复的类型)同理。
+    api project(':script')
     api project(':agent')
     // 权限层的规则核心(纯 JVM)同理:发行 jar 里的类由下方 jar 块平铺进来。
     api project(':permission')
@@ -72,6 +74,7 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonResources)
     from({ project(':store').sourceSets.main.allSource })
     from({ project(':ai').sourceSets.main.allSource })
+    from({ project(':script').sourceSets.main.allSource })
     from({ project(':agent').sourceSets.main.allSource })
     from({ project(':permission').sourceSets.main.allSource })
     from({ project(':lua').sourceSets.main.allSource })
@@ -84,6 +87,7 @@ tasks.named('sourcesJar', Jar) {
 tasks.named('jar', Jar) {
     from({ project(':store').sourceSets.main.output })
     from({ project(':ai').sourceSets.main.output })
+    from({ project(':script').sourceSets.main.output })
     from({ project(':agent').sourceSets.main.output })
     from({ project(':permission').sourceSets.main.output })
     from({ project(':lua').sourceSets.main.output })
