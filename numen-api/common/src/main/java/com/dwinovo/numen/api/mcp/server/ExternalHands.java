@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.ConsentDesk;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +45,12 @@ public interface ExternalHands {
 
     /** 替她说话:气泡、聊天行、她绑定的声线,与内置大脑的回复同一套表现。 */
     CompletableFuture<Boolean> say(UUID companion, String text);
+
+    /**
+     * 主人在游戏之外答了一条征询(外部大脑客户端上的人经 elicitation 答的),和游戏里的答复框、{@code /numen consent}
+     * 同走 {@code ConsentDesk.reply}。{@code note} 只随拒绝。
+     */
+    CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id, ConsentAnswer.Decision decision, String note);
 
     /**
      * 用她的身体跑一个工具(与内置大脑用的是同一批工具,不经模型)。结果是 {@code ToolOutcome} 的 JSON 串;

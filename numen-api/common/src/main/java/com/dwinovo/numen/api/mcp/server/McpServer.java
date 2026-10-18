@@ -6,6 +6,8 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.ConsentVenues;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -806,6 +808,128 @@ public final class McpServer {
             out.getAsJsonArray("content").add(textItem(events));
         }
         return out;
+    }
+
+    // ---- 征询(elicitation) ----
+    // 外部大脑驾驶时,要问主人的事问的是坐在电脑前的人,不是驾驶席上的模型:经这个会话里客户端开的流发
+    // elicitation/create,客户端弹给人,人的选择作为 JSON-RPC 答复 POST 回来。客户端没声明会答 elicitation、
+    // 或者没开流的会话问不了;没有会话问得了,征询就挂到主人进游戏答,到期按拒绝。服务端没有任何让模型自己答的口。
+
+    /** 在途的 elicitation,按征询号;主人在别处答了要撤。 */
+    private final java.util.Map<Long, Asked> asked = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record Asked(McpSessions.Session session, java.util.concurrent.CompletableFuture<JsonObject> answer) {}
+
+    /**
+     * 经这位主人的外部大脑客户端问人。
+     *
+     * @return 有会话问了;没有一个会话问得了是 false
+     */
+    boolean elicit(UUID owner, ConsentVenues.Offer offer) {
+        for (McpSessions.Session session : sessions.brains(owner)) {
+            if (!session.elicits || !session.hasStream() || !session.token.scope().covers(offer.companion())) {
+                continue;
+            }
+            var answer = session.request("elicitation/create", elicitationParams(offer));
+            if (answer.isCompletedExceptionally()) {
+                continue;   // 流刚好断了
+            }
+            asked.put(offer.id(), new Asked(session, answer));
+            answer.whenComplete((response, gone) -> {
+                asked.remove(offer.id());
+                if (gone == null) {
+                    settle(owner, offer, response);
+                }
+            });
+            return true;
+        }
+        return false;
+    }
+
+    /** 这一条不用答了:告诉客户端撤掉那个弹窗(规范的取消通知,客户端可以不理)。 */
+    void withdraw(long id) {
+        Asked one = asked.remove(id);
+        if (one != null) {
+            String requestId = one.session.idOf(one.answer);
+            if (requestId != null) {
+                JsonObject params = new JsonObject();
+                params.addProperty("requestId", requestId);
+                params.addProperty("reason", "answered elsewhere or no longer needed");
+                one.session.notifyClient("notifications/cancelled", params);
+            }
+            one.session.abandon(one.answer);
+        }
+    }
+
+    private static JsonObject elicitationParams(ConsentVenues.Offer offer) {
+        StringBuilder message = new StringBuilder(offer.companionName()).append(" asks for your permission (#")
+                .append(offer.id()).append("):\n").append(offer.doing());
+        if (!offer.remembers().isEmpty()) {
+            message.append("\n\"Allow and remember\" also adds: ").append(String.join("; ", offer.remembers()));
+        }
+        JsonObject decision = new JsonObject();
+        decision.addProperty("type", "string");
+        decision.addProperty("title", "Your answer");
+        JsonArray choices = new JsonArray();
+        JsonArray names = new JsonArray();
+        for (String[] choice : CHOICES) {
+            choices.add(choice[0]);
+            names.add(choice[1]);
+        }
+        decision.add("enum", choices);
+        decision.add("enumNames", names);
+        JsonObject note = new JsonObject();
+        note.addProperty("type", "string");
+        note.addProperty("title", "Tell her what to do instead (only when denying)");
+        JsonObject props = new JsonObject();
+        props.add("decision", decision);
+        props.add("note", note);
+        JsonObject schema = new JsonObject();
+        schema.addProperty("type", "object");
+        schema.add("properties", props);
+        JsonArray required = new JsonArray();
+        required.add("decision");
+        schema.add("required", required);
+        JsonObject params = new JsonObject();
+        params.addProperty("message", message.toString());
+        params.add("requestedSchema", schema);
+        return params;
+    }
+
+    private static final String[][] CHOICES = {
+            {"allow", "Allow once"}, {"allow_and_remember", "Allow and remember"}, {"deny", "Deny"}};
+
+    /**
+     * 人的选择交给征询台:accept 按选的那项,decline 是拒绝,cancel(关掉弹窗没选)不算答复——征询仍挂着,
+     * 主人可以进游戏答,到期按拒绝。附言只随拒绝。
+     */
+    private void settle(UUID owner, ConsentVenues.Offer offer, JsonObject response) {
+        JsonObject result = response.has("result") && response.get("result").isJsonObject()
+                ? response.getAsJsonObject("result") : null;
+        String action = result != null && result.has("action") ? result.get("action").getAsString() : "";
+        ConsentAnswer.Decision decision;
+        String note = "";
+        switch (action) {
+            case "accept" -> {
+                JsonObject content = result.has("content") && result.get("content").isJsonObject()
+                        ? result.getAsJsonObject("content") : new JsonObject();
+                String picked = content.has("decision") ? content.get("decision").getAsString() : "";
+                decision = switch (picked) {
+                    case "allow" -> ConsentAnswer.Decision.ALLOW_ONCE;
+                    case "allow_and_remember" -> ConsentAnswer.Decision.ALLOW_REMEMBER;
+                    case "deny" -> ConsentAnswer.Decision.DENY;
+                    default -> null;
+                };
+                if (decision == ConsentAnswer.Decision.DENY && content.has("note")) {
+                    note = content.get("note").getAsString();
+                }
+            }
+            case "decline" -> decision = ConsentAnswer.Decision.DENY;
+            default -> decision = null;
+        }
+        if (decision != null) {
+            handsOf.apply(owner).answer(offer.companion(), offer.id(), decision, note);
+        }
     }
 
     // ---- result envelopes ----

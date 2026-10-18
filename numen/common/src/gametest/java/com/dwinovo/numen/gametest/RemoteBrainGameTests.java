@@ -164,4 +164,89 @@ public class RemoteBrainGameTests {
             her.close();
         });
     }
+
+    private static com.dwinovo.numen.api.permission.ConsentItem oakLog() {
+        return new com.dwinovo.numen.api.permission.ConsentItem(com.dwinovo.numen.api.permission.Action.Kind.BREAK,
+                new BlockPos(1, 64, 1), com.dwinovo.numen.api.permission.ConsentItem.NO_ENTITY, "oak_log", null,
+                net.minecraft.network.chat.Component.translatable("block.minecraft.oak_log"), "break(placed)",
+                "placed by a player", net.minecraft.network.chat.Component.literal("placed by a player"), false,
+                com.dwinovo.numen.api.permission.Rule.parse("break(minecraft:oak_log)"));
+    }
+
+    private static com.google.gson.JsonObject accept(String decision) {
+        com.google.gson.JsonObject content = new com.google.gson.JsonObject();
+        content.addProperty("decision", decision);
+        com.google.gson.JsonObject result = new com.google.gson.JsonObject();
+        result.addProperty("action", "accept");
+        result.add("content", content);
+        return result;
+    }
+
+    /**
+     * 主人不在游戏里、外部大脑驾驶着她:要问主人的事不当场按"主人不在"拒绝,而是经外部大脑的客户端用 elicitation
+     * 问坐在电脑前的人;他的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_4")
+    public static void a_consent_goes_to_the_human_at_the_external_brains_client(GameTestHelper helper)
+            throws Exception {
+        Rig her = new Rig(helper, "gametest_remote_asks", null);
+        her.brain.connect(true);
+        McpTestClient.Tap tap = her.brain.openStream();
+        Object scope = new Object();
+        var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
+        com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
+        com.google.gson.JsonObject[] asked = new com.google.gson.JsonObject[1];
+
+        helper.runAfterDelay(10, () -> {   // 流接上了
+            ticket[0] = desk.ask(scope, List.of(oakLog()));
+            helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
+                    + ticket[0].poll());
+        });
+        helper.runAfterDelay(25, () -> {
+            asked[0] = tap.messages.stream().filter(m -> m.has("method")
+                    && m.get("method").getAsString().equals("elicitation/create")).findFirst().orElse(null);
+            helper.assertTrue(asked[0] != null, "the human was not asked at the external brain's client: "
+                    + tap.messages);
+            String message = asked[0].getAsJsonObject("params").get("message").getAsString();
+            helper.assertTrue(message.contains("gametest_remote_asks") && message.contains("oak_log"),
+                    "the question does not say who wants what: " + message);
+            try {
+                her.brain.answer(asked[0], accept("allow"));
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        succeedWhen(helper, () -> {
+            helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
+                    "his choice did not reach the desk: " + (ticket[0] == null ? null : ticket[0].poll()));
+            helper.assertTrue(desk.pending() == null, "the request is still pending");
+            her.close();
+        });
+    }
+
+    /** 外部大脑的客户端不会答 elicitation:征询不当场拒绝,挂着等主人进游戏答;连外部大脑也走了,才按"主人不在"拒绝。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_5")
+    public static void a_client_that_cannot_elicit_leaves_the_consent_waiting_for_the_owner(GameTestHelper helper)
+            throws Exception {
+        Rig her = new Rig(helper, "gametest_remote_mute", null);
+        her.brain.connect();
+        var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
+        com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
+
+        helper.runAfterDelay(5, () -> ticket[0] = desk.ask(new Object(), List.of(oakLog())));
+        helper.runAfterDelay(15, () -> {
+            helper.assertTrue(ticket[0].poll() == null && desk.pending() != null,
+                    "not waiting for the owner: " + ticket[0].poll());
+            try {
+                her.brain.disconnect();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        succeedWhen(helper, () -> {
+            helper.assertTrue(ticket[0].poll() != null && !ticket[0].poll().allowed(),
+                    "not refused once nobody was left to answer: " + ticket[0].poll());
+            her.close();
+        });
+    }
 }

@@ -2,6 +2,9 @@ package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.dwinovo.numen.api.permission.ConsentVenues;
 import com.dwinovo.numen.api.store.Io;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -46,6 +49,7 @@ class McpServerTest {
     /** 假的手:记下 say 说了什么;名册是固定的两只。 */
     private static final class Hands implements ExternalHands {
         final List<String> said = new ArrayList<>();
+        final List<String> answers = new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
         public CompletableFuture<List<Companion>> companions() {
@@ -76,6 +80,13 @@ class McpServerTest {
         public CompletableFuture<Boolean> say(UUID companion, String text) {
             said.add(companion + ":" + text);
             return CompletableFuture.completedFuture(true);
+        }
+
+        @Override
+        public CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id,
+                                                           ConsentAnswer.Decision decision, String note) {
+            answers.add(companion + "#" + id + ":" + decision + ":" + note);
+            return CompletableFuture.completedFuture(ConsentDesk.Reply.ANSWERED);
         }
 
         @Override
@@ -441,5 +452,158 @@ class McpServerTest {
     private static Thread dispatcherThread() {
         return Thread.getAllStackTraces().keySet().stream()
                 .filter(t -> t.getName().equals("HTTP-Dispatcher") && t.isAlive()).findFirst().orElse(null);
+    }
+
+    // ---- 征询经客户端问人 ----
+
+    private static final ConsentVenues.Offer OFFER = new ConsentVenues.Offer(7, ALICE, "alice",
+            "break 6 oak_log (placed by a player)", List.of("allow break(minecraft:oak_log)"));
+
+    /** 以会声明 elicitation 的客户端接入,并开着流;返回流的读端。 */
+    private BufferedReader eliciting(String secret, String[] sessionOut) throws Exception {
+        HttpResponse<String> init = post(secret, null, rpc(1, "initialize", initParams(true)));
+        sessionOut[0] = init.headers().firstValue("Mcp-Session-Id").orElseThrow();
+        HttpResponse<java.io.InputStream> stream = http.send(HttpRequest.newBuilder(
+                        URI.create("http://127.0.0.1:" + server.port() + "/mcp"))
+                .header("Authorization", "Bearer " + secret).header("Mcp-Session-Id", sessionOut[0])
+                .header("Accept", "text/event-stream").GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+        awaitStream(sessionOut[0]);
+        return new BufferedReader(new InputStreamReader(stream.body(), StandardCharsets.UTF_8));
+    }
+
+    /** 读到下一条 SSE 消息(跳过注释行与保活)。 */
+    private static JsonObject nextMessage(BufferedReader reader) throws Exception {
+        for (String line; (line = reader.readLine()) != null; ) {
+            if (line.startsWith("data: ")) {
+                return JsonParser.parseString(line.substring(6)).getAsJsonObject();
+            }
+        }
+        throw new AssertionError("the stream ended");
+    }
+
+    private void reply(String secret, String session, String id, JsonObject result) throws Exception {
+        JsonObject frame = new JsonObject();
+        frame.addProperty("jsonrpc", "2.0");
+        frame.addProperty("id", id);
+        frame.add("result", result);
+        assertEquals(202, post(secret, session, frame).statusCode());
+    }
+
+    private static JsonObject accepted(String decision, String note) {
+        JsonObject content = new JsonObject();
+        content.addProperty("decision", decision);
+        if (note != null) {
+            content.addProperty("note", note);
+        }
+        JsonObject result = new JsonObject();
+        result.addProperty("action", "accept");
+        result.add("content", content);
+        return result;
+    }
+
+    private void awaitAnswers(int n) throws InterruptedException {
+        for (int i = 0; i < 100 && hands.answers.size() < n; i++) {
+            Thread.sleep(20);
+        }
+    }
+
+    @Test
+    void aConsentIsPutToTheHumanAtTheExternalBrainsClientAndHisChoiceIsTheAnswer() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String[] session = new String[1];
+        BufferedReader stream = eliciting(secret, session);
+
+        assertTrue(server.elicit(OWNER, OFFER));
+
+        JsonObject ask = nextMessage(stream);
+        assertEquals("elicitation/create", ask.get("method").getAsString());
+        String message = ask.getAsJsonObject("params").get("message").getAsString();
+        assertTrue(message.contains("alice") && message.contains("break 6 oak_log"), message);
+        assertEquals(3, ask.getAsJsonObject("params").getAsJsonObject("requestedSchema").getAsJsonObject("properties")
+                .getAsJsonObject("decision").getAsJsonArray("enum").size());
+
+        reply(secret, session[0], ask.get("id").getAsString(), accepted("allow_and_remember", null));
+        awaitAnswers(1);
+
+        assertEquals(List.of(ALICE + "#7:ALLOW_REMEMBER:"), hands.answers);
+    }
+
+    @Test
+    void decliningDeniesAndANoteRidesOnlyWithADenial() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String[] session = new String[1];
+        BufferedReader stream = eliciting(secret, session);
+
+        server.elicit(OWNER, OFFER);
+        JsonObject first = nextMessage(stream);
+        JsonObject declined = new JsonObject();
+        declined.addProperty("action", "decline");
+        reply(secret, session[0], first.get("id").getAsString(), declined);
+        server.elicit(OWNER, new ConsentVenues.Offer(8, ALICE, "alice", "x", List.of()));
+        JsonObject second = nextMessage(stream);
+        reply(secret, session[0], second.get("id").getAsString(), accepted("deny", "use the chest instead"));
+        awaitAnswers(2);
+
+        assertEquals(List.of(ALICE + "#7:DENY:", ALICE + "#8:DENY:use the chest instead"), hands.answers);
+    }
+
+    @Test
+    void closingThePromptWithoutChoosingIsNotAnAnswer() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String[] session = new String[1];
+        BufferedReader stream = eliciting(secret, session);
+
+        server.elicit(OWNER, OFFER);
+        JsonObject ask = nextMessage(stream);
+        JsonObject cancelled = new JsonObject();
+        cancelled.addProperty("action", "cancel");
+        reply(secret, session[0], ask.get("id").getAsString(), cancelled);
+        Thread.sleep(200);
+
+        assertTrue(hands.answers.isEmpty(), "没选就关掉,征询仍挂着等主人进游戏答: " + hands.answers);
+    }
+
+    @Test
+    void aClientThatCannotElicitIsNeverAsked() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String session = connect(secret);   // 没声明 elicitation
+
+        assertFalse(server.elicit(OWNER, OFFER), "不支持就问不了,只能等主人进游戏答");
+        assertFalse(sessions.find(session).elicits);
+    }
+
+    @Test
+    void aClientWithoutAStreamCannotBeAskedEither() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        post(secret, null, rpc(1, "initialize", initParams(true)));
+
+        assertFalse(server.elicit(OWNER, OFFER));
+    }
+
+    @Test
+    void onlyTheOwnersOwnBrainCoveringHerIsAsked() throws Exception {
+        String scopedElsewhere = brain(McpToken.Scope.of(Set.of(BOB))).secret();
+        eliciting(scopedElsewhere, new String[1]);
+
+        assertFalse(server.elicit(OWNER, OFFER), "令牌管不着这只同伴");
+        assertFalse(server.elicit(UUID.randomUUID(), OFFER), "别的主人的外部大脑不该被问");
+    }
+
+    @Test
+    void whenTheOwnerAnswersElsewhereThePromptIsCancelled() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String[] session = new String[1];
+        BufferedReader stream = eliciting(secret, session);
+        server.elicit(OWNER, OFFER);
+        JsonObject ask = nextMessage(stream);
+
+        server.withdraw(OFFER.id());
+
+        JsonObject cancelled = nextMessage(stream);
+        assertEquals("notifications/cancelled", cancelled.get("method").getAsString());
+        assertEquals(ask.get("id").getAsString(), cancelled.getAsJsonObject("params").get("requestId").getAsString());
+        reply(secret, session[0], ask.get("id").getAsString(), accepted("allow", null));
+        Thread.sleep(200);
+        assertTrue(hands.answers.isEmpty(), "撤掉之后迟到的答复不再算");
     }
 }

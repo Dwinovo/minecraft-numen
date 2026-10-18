@@ -92,8 +92,42 @@ final class McpTestClient {
         HTTP.send(request("application/json").DELETE().build(), HttpResponse.BodyHandlers.discarding());
     }
 
-    /** 开服务端→客户端的流;调用方读它。 */
-    HttpResponse<java.io.InputStream> openStream() throws Exception {
-        return HTTP.send(request("text/event-stream").GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+    /**
+     * 开服务端→客户端的流,后台线程把收到的每条消息收进队列;用例在服务端主线程上轮询 {@link Tap#messages},
+     * 不会阻塞在读上。
+     */
+    Tap openStream() throws Exception {
+        HttpResponse<java.io.InputStream> response = HTTP.send(request("text/event-stream").GET().build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        Tap tap = new Tap();
+        Thread reader = new Thread(() -> {
+            try (var in = new java.io.BufferedReader(new java.io.InputStreamReader(response.body(),
+                    java.nio.charset.StandardCharsets.UTF_8))) {
+                for (String line; (line = in.readLine()) != null; ) {
+                    if (line.startsWith("data: ")) {
+                        tap.messages.add(JsonParser.parseString(line.substring(6)).getAsJsonObject());
+                    }
+                }
+            } catch (java.io.IOException ended) {
+                // 流被服务端关了
+            }
+        }, "gametest-mcp-stream");
+        reader.setDaemon(true);
+        reader.start();
+        return tap;
+    }
+
+    /** 流上收到的消息。 */
+    static final class Tap {
+        final java.util.Queue<JsonObject> messages = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    }
+
+    /** 答流上服务端发来的一个请求(如 elicitation)。 */
+    void answer(JsonObject request, JsonObject result) throws Exception {
+        JsonObject frame = new JsonObject();
+        frame.addProperty("jsonrpc", "2.0");
+        frame.add("id", request.get("id"));
+        frame.add("result", result);
+        post(frame);
     }
 }

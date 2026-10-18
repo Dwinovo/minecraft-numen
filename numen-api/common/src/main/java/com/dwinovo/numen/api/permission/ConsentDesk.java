@@ -100,7 +100,7 @@ public final class ConsentDesk {
         void show(ConsentRequest request);
 
         /** 撤掉主人那边挂着的请求。{@code why} 是撤回的原因;主人自己答复的撤回为 null。 */
-        void clear(Withdrawal why);
+        void clear(long id, Withdrawal why);
 
         void remember(List<Rule> allow);
     }
@@ -142,7 +142,7 @@ public final class ConsentDesk {
         }
         if (!line.ownerPresent()) {
             ticket.answer = new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT);
-            line.clear(Withdrawal.OWNER_ABSENT);
+            line.clear(ticket.request.id(), Withdrawal.OWNER_ABSENT);
             Constants.LOG.info("[numen-consent] {} ask #{} refused at once: owner offline", companion,
                     ticket.request.id());
             return ticket;
@@ -160,10 +160,28 @@ public final class ConsentDesk {
      */
     public static Reply reply(ServerPlayer from, NumenPlayer companion, long requestId,
                              ConsentAnswer.Decision decision, String note) {
-        if (!companion.isOwnedByPlayer(from.getUUID())) {
+        return reply(from.getUUID(), companion, requestId, decision, note);
+    }
+
+    /** 同上,答复的人只有 id——外部大脑客户端上的人(elicitation)、渠道上的人不是游戏里的玩家。 */
+    public static Reply reply(UUID from, NumenPlayer companion, long requestId,
+                             ConsentAnswer.Decision decision, String note) {
+        if (!companion.isOwnedByPlayer(from)) {
             return Reply.NOT_OWNER;
         }
         return of(companion).answer(requestId, decision, note) ? Reply.ANSWERED : Reply.NOT_PENDING;
+    }
+
+    /** 主人进游戏了:他不在时挂着的征询那时没有地方显示给他,现在补推。 */
+    public static void resendTo(ServerPlayer owner) {
+        for (ServerPlayer player : owner.server.getPlayerList().getPlayers()) {
+            if (player instanceof NumenPlayer companion && companion.isOwnedByPlayer(owner.getUUID())) {
+                ConsentRequest pending = of(companion).pending();
+                if (pending != null) {
+                    NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.of(pending));
+                }
+            }
+        }
     }
 
     /** 挂着这个请求号的在场同伴;没有是 null。请求号全服唯一,命令只带号不带同伴。 */
@@ -208,7 +226,7 @@ public final class ConsentDesk {
             answer = new ConsentAnswer(decision, "");
         }
         settle(ticket, answer);
-        line.clear(null);
+        line.clear(requestId, null);
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
                 said.isEmpty() ? "" : " (带一句 " + said.length() + " 字的话)");
         return true;
@@ -221,8 +239,9 @@ public final class ConsentDesk {
         }
         if (!line.ownerPresent() || line.gameTime() >= pending.request.expiresAtGameTime()) {
             Constants.LOG.info("[numen-consent] {} #{} expired: {}", companion, pending.request.id(), OWNER_ABSENT);
+            long id = pending.request.id();
             settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT));
-            line.clear(Withdrawal.OWNER_ABSENT);
+            line.clear(id, Withdrawal.OWNER_ABSENT);
         }
     }
 
@@ -249,8 +268,9 @@ public final class ConsentDesk {
 
     /** 挂着的那条撤掉:按拒绝收尾(发起者已经不等它了,理由留空),主人那边收起并看到为什么。 */
     private void withdrawPending(Withdrawal why) {
+        long id = pending.request.id();
         settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, ""));
-        line.clear(why);
+        line.clear(id, why);
     }
 
     /** 全部在册的任务期授权(不可变快照)。 */
@@ -309,20 +329,24 @@ public final class ConsentDesk {
             return OwnerPresence.present(body.getServer(), body.getOwnerUuid());
         }
 
+        /** 主人在游戏里就在游戏里问;不在游戏里(外部大脑连着、渠道在说话)交给游戏之外的场所。 */
         @Override
         public void show(ConsentRequest request) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
                 NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.of(request));
+            } else {
+                ConsentVenues.show(body.getOwnerUuid(), ConsentVenues.Offer.of(body.getName().getString(), request));
             }
         }
 
         @Override
-        public void clear(Withdrawal why) {
+        public void clear(long id, Withdrawal why) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
                 NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));
             }
+            ConsentVenues.clear(body.getOwnerUuid(), id, why);
         }
 
         @Override

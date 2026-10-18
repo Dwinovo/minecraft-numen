@@ -9,6 +9,9 @@ import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.api.network.payload.SummonRequestPayload;
 import net.minecraft.server.MinecraftServer;
@@ -109,6 +112,18 @@ public final class ServerActuator implements ExternalHands {
             loop.externalSay(text);
             return true;
         }).orElse(false)));
+        return f;
+    }
+
+    @Override
+    public CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id, ConsentAnswer.Decision decision,
+                                                       String note) {
+        CompletableFuture<ConsentDesk.Reply> f = new CompletableFuture<>();
+        server.execute(() -> {
+            NumenPlayer body = NumenPlayer.findByUuid(server, companion);
+            f.complete(body == null ? ConsentDesk.Reply.NOT_PENDING
+                    : ConsentDesk.reply(owner, body, id, decision, note));
+        });
         return f;
     }
 

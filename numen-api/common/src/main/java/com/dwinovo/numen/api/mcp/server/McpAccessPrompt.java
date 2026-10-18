@@ -31,7 +31,10 @@ public final class McpAccessPrompt {
                 Set up the MCP connection on this machine, then confirm it works. Here are the details:
 
                 - MCP endpoint: %s
-                - Auth: every request must carry the header `Authorization: Bearer <token>`. The token is                 issued in the game by the owner with `/numen token create brain` (the game prints it once);                 ask me to paste it, and put it where `<token>` is below. Never write it into a shared file.
+                - Auth: every request must carry the header `Authorization: Bearer <token>`. The token is \
+                issued in the game by the owner with `/numen token create brain` (the game prints it once); \
+                ask me to paste it, and put it where `<token>` is below. Never write it into a shared file.
+
                 ### Step 1 — figure out which client you're running in
 
                 You might be Claude Desktop, Claude Code, Cursor, Cline, Windsurf, or something else. \

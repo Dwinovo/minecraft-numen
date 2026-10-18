@@ -2,6 +2,8 @@ package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.dwinovo.numen.api.permission.ConsentVenues;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -51,6 +53,23 @@ public final class McpMode {
     private Watch watch;
     /** 上一刻有大脑连着的主人,找连上、断开的边沿。只在主线程碰。 */
     private Set<UUID> connectedOwners = Set.of();
+
+    /** 外部大脑客户端上的人:经 elicitation 问。服务器在跑才有;跟着服务器起停。 */
+    private final ConsentVenues.Venue elicitation = new ConsentVenues.Venue() {
+        @Override
+        public boolean show(UUID owner, ConsentVenues.Offer offer) {
+            McpServer s = server;
+            return s != null && s.elicit(owner, offer);
+        }
+
+        @Override
+        public void clear(UUID owner, long id, ConsentDesk.Withdrawal why) {
+            McpServer s = server;
+            if (s != null) {
+                s.withdraw(id);
+            }
+        }
+    };
 
     private McpMode() {}
 
@@ -162,6 +181,7 @@ public final class McpMode {
         }
         server = s;
         enabled = true;
+        ConsentVenues.register(elicitation);
         Constants.LOG.info("[numen-mcp] 远程端点已开启,{};每张令牌由 /numen token 发", endpoint());
         if (config.lanExposed()) {
             Constants.LOG.warn("[numen-mcp] 端点绑在 {},是明文 HTTP:令牌会在网上明文传输。"
@@ -171,6 +191,7 @@ public final class McpMode {
     }
 
     private void stopServer() {
+        ConsentVenues.unregister(elicitation);
         if (server != null) {
             server.stop();
             server = null;
