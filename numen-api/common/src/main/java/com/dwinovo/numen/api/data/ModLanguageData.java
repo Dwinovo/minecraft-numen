@@ -360,7 +360,6 @@ public final class ModLanguageData {
         public static final String COMMAND_CONSENT_NOT_OWNER = "numen.command.consent_not_owner";
         public static final String COMMAND_CONSENT_NOT_PENDING = "numen.command.consent_not_pending";
         public static final String COMMAND_TOKEN_ISSUED = "numen.command.token_issued";
-        public static final String COMMAND_TOKEN_SECRET = "numen.command.token_secret";
         public static final String COMMAND_TOKEN_ENDPOINT_OFF = "numen.command.token_endpoint_off";
         public static final String COMMAND_TOKEN_LIST_NONE = "numen.command.token_list_none";
         public static final String COMMAND_TOKEN_ROW = "numen.command.token_row";
@@ -958,7 +957,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "Consent request #%s belongs to a companion that is not yours");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "No pending consent request #%s (already answered, expired or replaced)");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once — click it to copy:");
-        adder.add(Keys.COMMAND_TOKEN_SECRET, "%s");
         adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF,
                 "The remote endpoint is off. The server owner turns it on in config/numen/mcp_server.json.");
         adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "You have no tokens.");
@@ -1555,7 +1553,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "征询 #%s 属于别人的同伴");
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "没有待答复的征询 #%s(已答复、过期或被顶掉)");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次——点它复制:");
-        adder.add(Keys.COMMAND_TOKEN_SECRET, "%s");
         adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF, "远程端点没开。服主在 config/numen/mcp_server.json 里开。");
         adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "你还没有令牌。");
         adder.add(Keys.COMMAND_TOKEN_ROW, "%s — %s,%s,%s");

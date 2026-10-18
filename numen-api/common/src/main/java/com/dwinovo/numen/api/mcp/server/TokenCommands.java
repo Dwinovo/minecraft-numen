@@ -35,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 public final class TokenCommands {
 
     private static final String ALL = "all";
+    /** 聊天栏上显示令牌明文的前几个字符。 */
+    private static final int SHOWN = McpTokens.PREFIX.length() + 6;
 
     private TokenCommands() {}
 
@@ -101,8 +103,9 @@ public final class TokenCommands {
                 days == 0 ? 0 : TimeUnit.DAYS.toMillis(days));
         ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_TOKEN_ISSUED, issued.token().id(),
                 role.name().toLowerCase(Locale.ROOT), describe(issued.token())), false);
-        // 明文令牌点一下复制;只发给发令牌的人,不广播给其他管理员
-        ctx.getSource().sendSuccess(() -> Component.literal(issued.secret()).withStyle(Style.EMPTY
+        // 明文令牌点一下复制;只发给发令牌的人,不广播给其他管理员。聊天栏上显示的文字会被客户端写进 latest.log,
+        // 所以只显示开头,完整明文只在点击事件里
+        ctx.getSource().sendSuccess(() -> Component.literal(issued.secret().substring(0, SHOWN) + "…").withStyle(Style.EMPTY
                 .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, issued.secret()))
                 .withUnderlined(true)), false);
         if (!McpMode.instance().enabled()) {
