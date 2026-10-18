@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mixin;
+package com.dwinovo.numen.api.mixin.inject;
 
 import com.dwinovo.numen.api.client.voice.EntityVoiceSound;
 import com.dwinovo.numen.api.client.voice.VoicePcmSource;

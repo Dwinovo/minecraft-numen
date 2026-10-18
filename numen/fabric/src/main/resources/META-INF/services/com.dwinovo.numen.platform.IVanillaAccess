@@ -1,1 +1,1 @@
-com.dwinovo.numen.platform.FabricVanillaAccess
+com.dwinovo.numen.mixin.VanillaAccessImpl

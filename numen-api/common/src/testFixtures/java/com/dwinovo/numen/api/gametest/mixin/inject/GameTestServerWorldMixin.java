@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.gametest.mixin;
+package com.dwinovo.numen.api.gametest.mixin.inject;
 
 import com.dwinovo.numen.api.gametest.TerrainWorld;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;

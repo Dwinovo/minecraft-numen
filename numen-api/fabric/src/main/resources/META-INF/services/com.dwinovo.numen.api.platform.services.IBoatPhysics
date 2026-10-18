@@ -1,1 +1,1 @@
-com.dwinovo.numen.api.platform.FabricBoatPhysics
+com.dwinovo.numen.api.mixin.BoatPhysicsImpl

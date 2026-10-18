@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mixin;
+package com.dwinovo.numen.api.mixin.inject;
 
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.gui.components.ChatComponent;

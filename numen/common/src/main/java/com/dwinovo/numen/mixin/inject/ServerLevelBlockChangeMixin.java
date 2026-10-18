@@ -1,4 +1,4 @@
-package com.dwinovo.numen.mixin;
+package com.dwinovo.numen.mixin.inject;
 
 import com.dwinovo.numen.scan.BlockSearch;
 import net.minecraft.core.BlockPos;

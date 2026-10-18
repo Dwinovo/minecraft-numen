@@ -1,4 +1,4 @@
-package com.dwinovo.numen.mixin;
+package com.dwinovo.numen.mixin.inject;
 
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;

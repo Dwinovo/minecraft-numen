@@ -282,7 +282,7 @@ public class DigGameTests {
 
     /** 服务端这一刻认不认为她正在挖一格方块。 */
     private static boolean digging(NumenPlayer companion) {
-        return ((com.dwinovo.numen.mixin.ServerPlayerGameModeAccessor) companion.gameMode).numen$isDestroyingBlock();
+        return ((com.dwinovo.numen.mixin.inject.ServerPlayerGameModeAccessor) companion.gameMode).numen$isDestroyingBlock();
     }
 
     /**

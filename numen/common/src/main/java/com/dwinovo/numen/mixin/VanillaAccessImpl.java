@@ -1,9 +1,10 @@
-package com.dwinovo.numen.platform;
+package com.dwinovo.numen.mixin;
 
-import com.dwinovo.numen.mixin.CraftingMenuAccessor;
-import com.dwinovo.numen.mixin.FishingHookAccessor;
-import com.dwinovo.numen.mixin.ItemEntityAccessor;
-import com.dwinovo.numen.mixin.MenuDataSlotsAccessor;
+import com.dwinovo.numen.mixin.inject.CraftingMenuAccessor;
+import com.dwinovo.numen.mixin.inject.FishingHookAccessor;
+import com.dwinovo.numen.mixin.inject.ItemEntityAccessor;
+import com.dwinovo.numen.mixin.inject.MenuDataSlotsAccessor;
+import com.dwinovo.numen.platform.IVanillaAccess;
 
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -19,10 +20,10 @@ import net.minecraft.world.level.Level;
 import java.util.List;
 
 /**
- * {@link IVanillaAccess} 的模组实现,全部经 {@code mixin} 包的 Mixin 访问器。
- * 不能放进 {@code mixin} 包:Mixin 不许直接加载包里的非 Mixin 类。
+ * {@link IVanillaAccess} 的模组实现,全部经 {@code mixin.inject} 包的 Mixin 访问器。
+ * Mixin 配置的包是下一层的 {@code mixin.inject},这里不是 Mixin 声明的包,可以被 ServiceLoader 正常加载。
  */
-public final class NeoForgeVanillaAccess implements IVanillaAccess {
+public final class VanillaAccessImpl implements IVanillaAccess {
 
     @Override
     public int biteCountdown(FishingHook hook) {

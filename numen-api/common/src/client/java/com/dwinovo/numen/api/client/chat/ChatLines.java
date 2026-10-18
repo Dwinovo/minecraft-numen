@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.chat;
 
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.client.screen.UiTheme;
-import com.dwinovo.numen.api.mixin.ChatComponentAccessor;
+import com.dwinovo.numen.api.mixin.inject.ChatComponentAccessor;
 
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.GuiMessageTag;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.mixin;
+package com.dwinovo.numen.mixin.inject;
 
 import com.dwinovo.numen.act.Drops;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
