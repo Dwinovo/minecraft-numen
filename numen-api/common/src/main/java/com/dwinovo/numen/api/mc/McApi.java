@@ -27,7 +27,7 @@ import java.util.List;
  *
  * <ol>
  *   <li><b>先解析</b>:以她的 {@code CommandSourceStack} 在服务器的指令树上解析。写不通(没有这条、服务器不让她用、参数写错)当场
- *       {@code bad_argument} 并附上用法,不打扰主人。能用哪些是服务器按她的权限等级定的,这里不放宽也不收紧。</li>
+ *       {@code bad_argument} 并附上用法,不打扰主人。能用哪些是服务器按她的权限等级定的,她的等级就是主人的({@link com.dwinovo.numen.api.config.Authority#commandLevel}),这里不放宽也不收紧。</li>
  *   <li><b>过权限层</b>:执行一行指令是动作 {@code command(根名)},放行、问主人、拒绝由权限层裁决。</li>
  *   <li><b>执行</b>:{@link Commands#performPrefixedCommand},和玩家在聊天栏里敲的是同一条路,加载器的指令事件照常。来源是她自己的,
  *       只把回话去处换成 {@link Echo}。</li>
@@ -58,7 +58,7 @@ public final class McApi {
     @Fn("Run one Minecraft or mod command and return what it said.")
     @Example("numen.mc.run(\"help give\")")
     @Example("numen.mc.run(\"time query daytime\")")
-    @Note("The server decides which commands you may use at your permission level; `numen.mc.run(\"help\")` lists "
+    @Note("The server decides which commands you may use at your owner's permission level; `numen.mc.run(\"help\")` lists "
             + "them, and `numen.mc.run(\"help give\")` shows one's usage with the types, examples and what you could "
             + "write next.")
     @Note("A command may need your owner's consent first; the call waits for the answer.")

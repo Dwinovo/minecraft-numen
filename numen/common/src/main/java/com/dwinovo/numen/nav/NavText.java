@@ -22,7 +22,7 @@ import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Listing;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;

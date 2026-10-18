@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.config;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -18,6 +19,19 @@ public final class Authority {
     public static boolean isAdmin(ServerPlayer player) {
         return isAdmin(player.server.isSingleplayerOwner(player.getGameProfile()),
                 player.server.getProfilePermissions(player.getGameProfile()));
+    }
+
+    /**
+     * 她跑命令时的权限等级:只取主人的,她自己在不在 op 名单里不起作用——否则服主给她开了 op,
+     * 谁都能借她跑 op 命令。按档案算({@code getProfilePermissions}),主人离线也成立,单人游戏房主照原版规则;
+     * 没有主人是 0;主人不在线又不在用户缓存里时只凭 uuid 查 op 名单(名单按 uuid 记)。她的指令源({@link NumenPlayer#createCommandSourceStack})、
+     * 指令解析与补全都取这个等级,判据只在这里。
+     */
+    public static int commandLevel(NumenPlayer her) {
+        if (her.getOwnerUuid() == null) {
+            return 0;
+        }
+        return her.server.getProfilePermissions(NumenPlayer.profileOf(her.server, her.getOwnerUuid()));
     }
 
     /** 判据本身:房主,或等级够。 */

@@ -4,7 +4,7 @@ import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;

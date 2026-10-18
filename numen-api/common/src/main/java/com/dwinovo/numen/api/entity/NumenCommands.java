@@ -5,12 +5,15 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.dwinovo.numen.api.permission.Mode;
+import com.dwinovo.numen.api.permission.FactoryRules;
+import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.Layers;
+import com.dwinovo.numen.api.permission.PermissionConfig;
+import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.api.permission.Rule;
-import com.dwinovo.numen.api.permission.RuleSet;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
@@ -328,30 +331,65 @@ public final class NumenCommands {
         return root;
     }
 
+    /**
+     * 规则列表:主人层(带序号、谁写的、命中几次)、硬规则、出厂层。表名与规则行照命令里的写法,只有说明的话随主人的语言。
+     * 每一行后面是它的来源(她加的带她说的理由)和命中账,主人一眼看出哪条在起作用、哪条从没用过。
+     */
     private static int listRules(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
-        RuleSet mine = PermissionStore.of(owner.getServer(), owner.getUUID()).rules();
+        PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
         MutableComponent text = Component.translatable(Keys.COMMAND_RULES_YOURS);
-        appendLayer(text, mine, true);
-        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_FACTORY));
-        appendLayer(text, RuleSet.factory(), false);
-        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_UNMATCHED));
-        ctx.getSource().sendSuccess(() -> text, false);
-        return 1;
-    }
-
-    /** 一层规则的三张表:表名与规则行照命令里的写法,只有"没有"一词随主人的语言。 */
-    private static void appendLayer(MutableComponent text, RuleSet layer, boolean numbered) {
         for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
-            List<Rule> rows = layer.table(table);
+            List<PermissionStore.Row> rows = store.rows(table);
             text.append("\n  " + tableName(table) + ":");
             if (rows.isEmpty()) {
                 text.append(" ").append(Component.translatable(Keys.COMMAND_RULES_NONE));
             }
             for (int i = 0; i < rows.size(); i++) {
-                text.append("\n    " + (numbered ? (i + 1) + ". " : "- ") + rows.get(i));
+                PermissionStore.Row row = rows.get(i);
+                text.append("\n    " + (i + 1) + ". " + row.rule()).append(sourceNote(row))
+                        .append(hitNote(store.hitsOf(Layers.OWNER, table, row.rule())));
             }
         }
+        boolean hard = PermissionConfig.of(owner.getServer()).hardRules();
+        text.append("\n").append(Component.translatable(hard ? Keys.COMMAND_RULES_HARD : Keys.COMMAND_RULES_HARD_OFF));
+        if (hard) {
+            for (Rule rule : FactoryRules.hard()) {
+                text.append("\n    - deny " + rule)
+                        .append(hitNote(store.hitsOf(Verdict.HARD, Verdict.Kind.DENY, rule)));
+            }
+        }
+        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_FACTORY));
+        for (Verdict.Kind table : List.of(Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
+            text.append("\n  " + tableName(table) + ":");
+            for (Rule rule : FactoryRules.layer().table(table)) {
+                text.append("\n    - " + rule).append(hitNote(store.hitsOf(Layers.FACTORY, table, rule)));
+            }
+        }
+        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_UNMATCHED));
+        ctx.getSource().sendSuccess(() -> text, false);
+        return 1;
+    }
+
+    /** 她加的行后面注明,带她说的理由;主人写的不注。 */
+    private static Component sourceNote(PermissionStore.Row row) {
+        if (row.source() != PermissionStore.Source.HER) {
+            return Component.empty();
+        }
+        return Component.literal(" · ").append(row.note().isEmpty() ? Component.translatable(Keys.COMMAND_RULES_HER)
+                : Component.translatable(Keys.COMMAND_RULES_HER_WHY, row.note()));
+    }
+
+    /** 命中账:几次、最近一次多久以前;没命中过就说没有。 */
+    private static Component hitNote(PermissionStore.Hit hit) {
+        if (hit.count() == 0) {
+            return Component.literal(" · ").append(Component.translatable(Keys.COMMAND_RULES_NEVER));
+        }
+        long seconds = Math.max(0, (System.currentTimeMillis() - hit.lastMillis()) / 1000);
+        String ago = seconds < 90 ? seconds + "s" : seconds < 5400 ? seconds / 60 + "m"
+                : seconds < 172800 ? seconds / 3600 + "h" : seconds / 86400 + "d";
+        return Component.literal(" · ").append(Component.translatable(Keys.COMMAND_RULES_HITS, hit.count(),
+                Component.translatable(Keys.COMMAND_RULES_AGO, ago)));
     }
 
     /** 主人加一行规则。 */
@@ -360,7 +398,7 @@ public final class NumenCommands {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         Rule rule;
         try {
-            rule = Rule.parse(StringArgumentType.getString(ctx, "rule"));
+            rule = Groups.parse(StringArgumentType.getString(ctx, "rule"));
         } catch (Rule.Mistake mistake) {
             ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_RULE_MISTAKE_PREFIX + mistake.code(),
                     mistake.args().toArray()));

@@ -39,7 +39,7 @@ public record ConsentAnswer(Decision decision, String words) {
      */
     public String allowance(List<ConsentItem> asked) {
         StringBuilder sb = new StringBuilder("the owner allowed: ").append(ConsentItem.listingText(asked));
-        if (decision == Decision.ALLOW_REMEMBER) {
+        if (decision == Decision.ALLOW_REMEMBER && !ConsentItem.rememberedRows(asked).isEmpty()) {
             sb.append("; and remembered it, so these will not be asked again: ")
                     .append(String.join("; ", ConsentItem.rememberedRows(asked)));
         }

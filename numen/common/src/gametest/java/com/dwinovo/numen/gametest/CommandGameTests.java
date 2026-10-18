@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -11,8 +12,8 @@ import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.ConsentRequest;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.api.permission.Rule;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -175,12 +176,11 @@ public class CommandGameTests {
     }
 
     /**
-     * 给她 OP,等级 2(能用 give、setblock 这一档)。测试服的 {@code op} 按服务器设定给 0 级,所以直接写进 OP 表——
-     * 这就是服主给她的等级。
+     * 给一个玩家 OP,等级 2(能用 give、setblock 这一档)。测试服的 {@code op} 按服务器设定给 0 级,所以直接写进 OP 表——
+     * 这就是服主给的等级。她跑命令的等级只取主人的,所以要让她用得了 give,给的是主人。
      */
-    private static void grantOp(NumenPlayer companion) {
-        companion.getServer().getPlayerList().getOps()
-                .add(new ServerOpListEntry(companion.getGameProfile(), 2, false));
+    private static void grantOp(net.minecraft.server.level.ServerPlayer player) {
+        player.getServer().getPlayerList().getOps().add(new ServerOpListEntry(player.getGameProfile(), 2, false));
     }
 
     /** 收回 OP 并送走两具身体:OP 表会落盘,不能留着测试的人。 */
@@ -189,6 +189,7 @@ public class CommandGameTests {
         companion.getServer().getPlayerList().getOps().remove(companion.getGameProfile());
         CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         if (owner != null) {
+            owner.getServer().getPlayerList().getOps().remove(owner.getGameProfile());
             leave(owner);
         }
     }
@@ -251,6 +252,49 @@ public class CommandGameTests {
     }
 
     /**
+     * 她跑命令的权限等级只取主人的:服主把她写进了 OP 表(4 级)、主人不是 OP,她跑 give 仍当场如实失败、背包不变——
+     * 否则普通玩家就能借她跑 OP 命令。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_her_own_op_does_not_lend_the_owner_a_level(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_borrowed", new BlockPos(4, 2, 4), false);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_commoner");
+        companion.getServer().getPlayerList().getOps()
+                .add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
+        ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
+        String help = said(lua(companion, "numen.mc.run(\"help\")"));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(give.refused() && give.outcome().contains("the server does not let you use /give"),
+                    "her own op level ran an op command for a non-op owner: " + give.reply());
+            helper.assertTrue(!help.contains("/give "), "her help lists /give on her own op level: " + help);
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond on her own op");
+            cleanUp(helper, companion, owner);
+        });
+    }
+
+    /** 主人是 OP:她跑得了 give;主人下线之后按档案照样算——OP 表认的是档案,不是在不在线。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_level_follows_the_owners_profile_even_when_offline(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_proxy", new BlockPos(4, 2, 4), false);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_proxy_owner");
+        grantOp(owner);
+        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
+        ToolRun online = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
+        helper.assertTrue(online.done() && online.succeeded(), "an op owner's companion could not give: " + online.outcome());
+        leave(owner);
+        ToolRun offline = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(offline.done() && offline.succeeded(),
+                    "the op level was lost with the owner offline: " + offline.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "not both gives landed");
+            cleanUp(helper, companion, null);
+            companion.getServer().getPlayerList().getOps().remove(owner.getGameProfile());
+        });
+    }
+
+    /**
      * 有 OP、主人允许 give:不问、当场执行,背包里多了钻石,交回的是服务器的原话;执行一行指令不是身体上的活,不进任务槽。
      * 参数写错的当场失败,附上这条的用法。
      */
@@ -258,8 +302,8 @@ public class CommandGameTests {
     public static void command_give_with_op_and_an_allow_rule_runs_and_echoes(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_op", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_admin");
-        grantOp(companion);
-        storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(give)"));
+        grantOp(owner);
+        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond 2\")");
@@ -291,7 +335,7 @@ public class CommandGameTests {
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_builder", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_landlord");
-        grantOp(companion);
+        grantOp(owner);
         String line = setblock(helper, target);
         ToolRun run = lua(companion, "numen.mc.run(\"" + line + "\")");
         int[] waited = new int[1];
@@ -301,7 +345,7 @@ public class CommandGameTests {
                 ConsentRequest pending = ConsentDesk.of(companion).pending();
                 helper.assertTrue(pending != null, "setblock did not ask: " + run.outcome());
                 ConsentItem item = pending.items().get(0);
-                helper.assertTrue(item.kind() == Action.Kind.COMMAND
+                helper.assertTrue(item.kind() == Verb.COMMAND
                                 && item.name().getString().equals("/" + line) && item.icon() == null,
                         "the card does not show the command: " + item);
                 helper.assertTrue("command(setblock)".equals(item.remember().toString()),
@@ -352,8 +396,8 @@ public class CommandGameTests {
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_forbidden", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_strict");
-        grantOp(companion);
-        storeOf(owner).add(Verdict.Kind.DENY, Rule.parse("command(setblock)"));
+        grantOp(owner);
+        storeOf(owner).add(Verdict.Kind.DENY, com.dwinovo.numen.api.permission.Groups.parse("command(setblock)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun run = lua(companion, "numen.mc.run(\"" + setblock(helper, target) + "\")");
@@ -376,16 +420,17 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_help_lists_only_what_the_server_lets_her_run(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_reader", new BlockPos(4, 2, 4), false);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_reader_owner");
         String guest = said(lua(companion, "numen.mc.run(\"help\")"));
         helper.assertTrue(guest.contains("/msg <targets> <message>") && !guest.contains("/give "),
                 "the no-op help lists the wrong commands: " + guest);
         helper.assertTrue(!guest.contains("/numen"), "her help shows the players' /numen: " + guest);
 
-        grantOp(companion);
+        grantOp(owner);
         String op = said(lua(companion, "numen.mc.run(\"help\")"));
         helper.assertTrue(op.contains("/give <targets> <item> [<count>]"), "the op help never lists /give: " + op);
         helper.assertTrue(!op.contains("/numen"), "her op help shows the players' /numen: " + op);
-        cleanUp(helper, companion, null);
+        cleanUp(helper, companion, owner);
         helper.succeed();
     }
 
@@ -606,7 +651,7 @@ public class CommandGameTests {
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_placer", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_placer_owner");
-        grantOp(companion);
+        grantOp(owner);
         var server = level.getServer();
         List<String> heard = new ArrayList<>();
         server.getCommands().performPrefixedCommand(console(server, heard),
@@ -639,7 +684,8 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_help_give_mines_types_examples_and_candidates(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_learner", new BlockPos(4, 2, 4), false);
-        grantOp(companion);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_learner_owner");
+        grantOp(owner);
         ToolRun give = lua(companion, "numen.mc.run(\"help give\")");
         ToolRun item = lua(companion, "numen.mc.run(\"help give @s minecraft:diamond_\")");
         ToolRun groups = lua(companion, "numen.api.help(\"numen.task\")");
@@ -666,7 +712,7 @@ public class CommandGameTests {
                         && Arrays.stream(next.substring(next.indexOf(": ") + 2).split(", "))
                                 .allMatch(id -> id.startsWith("minecraft:diamond_")),
                 "a half-written item id does not narrow the candidates: " + items);
-        cleanUp(helper, companion, null);
+        cleanUp(helper, companion, owner);
         helper.succeed();
     }
 
@@ -677,7 +723,8 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_a_typo_ends_with_the_nearest_candidate(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_typist", new BlockPos(4, 2, 4), false);
-        grantOp(companion);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_typist_owner");
+        grantOp(owner);
         ToolRun item = lua(companion, "numen.mc.run(\"give @s minecraft:dimond\")");
         ToolRun action = lua(companion, "gt.gt_long.lingre(40)");
         String itemSaid = item.outcome();
@@ -695,7 +742,7 @@ public class CommandGameTests {
                         && actionSaid.contains("there is no API function gt.gt_long.lingre")
                         && actionSaid.contains("did you mean gt.gt_long.linger?"),
                 "the function typo does not end with the nearest function: " + actionSaid);
-        cleanUp(helper, companion, null);
+        cleanUp(helper, companion, owner);
         helper.succeed();
     }
 }

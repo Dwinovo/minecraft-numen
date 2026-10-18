@@ -25,6 +25,11 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 /** 权限层:主人的东西要问、分团挖掘、记住的同意与规则分层、右键与拿东西、原生通道上的退回。 */
 public class PermissionGameTests {
 
+    /** 权限用例要的是没有放置记录的场景,同伴拉起来不碰记录。 */
+    private static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
+        return spawnBare(helper, name, rel, creative);
+    }
+
     /** 权限批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_permission")
     public static void preparePermissionBatch(ServerLevel level) {
@@ -32,18 +37,30 @@ public class PermissionGameTests {
     }
 
     /**
-     * 让一个<b>真玩家</b>(不是同伴)把一个方块物品放在 {@code rel} 上:走 {@code BlockItem.place} 的
-     * 真实放置路径,放置记录的 mixin 就在那儿——测的是真机上会发生的那条链,不是手工写记录。
+     * 没登录的真玩家身份:裸的 ServerPlayer,不走登录(登录会给这个没有客户端的假人推同伴名册的载荷),只够
+     * {@code BlockItem.place} 用——它只要一个 ServerPlayer 身份,不要求在玩家列表里。不在线,所以他若是她的主人,主人就不在场。
      */
-    private static void playerPlaces(GameTestHelper helper, BlockPos rel, net.minecraft.world.item.Item item) {
+    private static ServerPlayer barePlayer(GameTestHelper helper, String name) {
+        ServerLevel level = helper.getLevel();
+        return new ServerPlayer(level.getServer(), level, new com.mojang.authlib.GameProfile(UUID.randomUUID(), name),
+                net.minecraft.server.level.ClientInformation.createDefault());
+    }
+
+    /** 请同伴认这位玩家作主人:他放的东西对她来说就是主人的。 */
+    private static NumenPlayer adopted(NumenPlayer companion, ServerPlayer owner) {
+        companion.setOwnerUuid(owner.getUUID());
+        return companion;
+    }
+
+    /**
+     * 让一个<b>真玩家</b>(不是同伴)把一个方块物品放在 {@code rel} 上:走 {@code BlockItem.place} 的
+     * 真实放置路径,放置记录的 mixin 就在那儿——测的是真机上会发生的那条链,不是手工写记录。放的人是谁,这一格对她就是谁的:
+     * 她的主人放的是主人的,别的玩家放的是别人的。
+     */
+    private static void playerPlaces(GameTestHelper helper, ServerPlayer placer, BlockPos rel,
+                                     net.minecraft.world.item.Item item) {
         ServerLevel level = helper.getLevel();
         net.minecraft.world.level.block.Block block = ((net.minecraft.world.item.BlockItem) item).getBlock();
-        // 裸的 ServerPlayer,不走登录(登录会给这个没有客户端的假人推同伴名册的载荷);
-        // BlockItem.place 只要一个 ServerPlayer 身份,不要求它在玩家列表里。
-        net.minecraft.server.level.ServerPlayer placer = new net.minecraft.server.level.ServerPlayer(
-                level.getServer(), level,
-                new com.mojang.authlib.GameProfile(UUID.randomUUID(), "gametest_placer"),
-                net.minecraft.server.level.ClientInformation.createDefault());
         BlockPos floor = helper.absolutePos(rel.below());
         var ctx = new net.minecraft.world.item.context.BlockPlaceContext(placer,
                 net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(item),
@@ -61,12 +78,12 @@ public class PermissionGameTests {
         return com.dwinovo.numen.api.permission.ConsentDesk.of(companion);
     }
 
-    /** 屋子四面墙与脚下地板都记成玩家放的(一间房子的地板也是主人铺的)。 */
-    private static void ownersRoom(GameTestHelper helper, int cx, int cz) {
+    /** 屋子四面墙与脚下地板都记成这位主人放的(一间房子的地板也是主人铺的)。 */
+    private static void ownersRoom(GameTestHelper helper, int cx, int cz, UUID ownerId) {
         plankRoomAround(helper, cx, cz);
         ServerLevel level = helper.getLevel();
         var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-        var owner = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(UUID.randomUUID(), "gametest_owner");
+        var owner = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(ownerId, "gametest_owner");
         for (int x = cx - 2; x <= cx + 2; x++) {
             for (int z = cz - 2; z <= cz + 2; z++) {
                 for (int y = 1; y <= 4; y++) {
@@ -77,6 +94,18 @@ public class PermissionGameTests {
                 }
             }
         }
+    }
+
+    /**
+     * 一根野树干:原木加上贴着它的一圈不持久的树叶(生成的树就是这样,玩家放的树叶带持久标记)。没有叶子的光秃秃一根,
+     * 对她是说不清是谁的。
+     */
+    private static void wildLog(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block log) {
+        ServerLevel level = helper.getLevel();
+        level.setBlockAndUpdate(helper.absolutePos(rel), log.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(rel.above()), log.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(rel.above(2)), Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
     }
 
     /** 主人的屋子西半边那一格:要出去得先走过屋里两格,再挖东墙。 */
@@ -90,10 +119,10 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void a_walk_asks_at_the_owners_wall_and_goes_on_when_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        ownersRoom(helper, 7, 7);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_host");
+        ownersRoom(helper, 7, 7, owner.getUUID());
         int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_tenant", WEST_INSIDE, false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_host");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_tenant", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
@@ -148,10 +177,10 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void a_walk_refused_at_the_owners_wall_stops_there(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        ownersRoom(helper, 7, 7);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_strict");
+        ownersRoom(helper, 7, 7, owner.getUUID());
         int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_squatter", WEST_INSIDE, false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_strict");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_squatter", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
@@ -187,7 +216,8 @@ public class PermissionGameTests {
     public static void asking_costs_extra_so_she_goes_around_the_owners_wall(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-        var placer = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(UUID.randomUUID(), "gametest_owner");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_gardener");
+        var placer = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(owner.getUUID(), "gametest_owner");
         for (int z = 0; z <= 15; z++) {
             for (int y = 2; y <= 3; y++) {
                 if (z != 4) {
@@ -197,8 +227,7 @@ public class PermissionGameTests {
                 }
             }
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_polite", new BlockPos(2, 2, 2), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_gardener");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_polite", new BlockPos(2, 2, 2), false), owner);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 2));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
         boolean[] asked = new boolean[1];
@@ -228,11 +257,11 @@ public class PermissionGameTests {
     public static void mine_asks_once_for_player_logs_then_mines(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_forester");
         for (BlockPos rel : logs) {
-            playerPlaces(helper, rel, Items.OAK_LOG);
+            playerPlaces(helper, owner, rel, Items.OAK_LOG);
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_forester");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 8, "minecraft:oak_log", 2);
         java.util.Set<Long> requests = new java.util.HashSet<>();
@@ -259,11 +288,11 @@ public class PermissionGameTests {
     public static void mine_denied_quotes_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_keeper");
         for (BlockPos rel : logs) {
-            playerPlaces(helper, rel, Items.JUNGLE_LOG);
+            playerPlaces(helper, owner, rel, Items.JUNGLE_LOG);
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_keeper");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 8, "minecraft:jungle_log", 2);
         helper.onEachTick(() -> {
@@ -287,22 +316,22 @@ public class PermissionGameTests {
     }
 
     /**
-     * 同一套定价自然排序:主人放的原木离她三格,野树九格。要两根——她走去砍野树,主人的原木一根不少,
-     * 从头到尾没有弹过一张卡。没有剔除,主人的原木只是贵(需要同意的格乘十倍)。
+     * 同一套定价自然排序:主人放的原木离她三格,野树九格(原木顶上贴着不持久的树叶才是野树)。要两根——她走去砍野树,主人的原木
+     * 一根不少,从头到尾没有弹过一张卡。没有剔除,主人的原木只是贵(需要同意的格乘十倍)。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void mine_prefers_wild_trees_by_price(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> placed = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
         List<BlockPos> wild = List.of(new BlockPos(11, 2, 4), new BlockPos(11, 2, 6));
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_warden");
         for (BlockPos rel : placed) {
-            playerPlaces(helper, rel, Items.ACACIA_LOG);
+            playerPlaces(helper, owner, rel, Items.ACACIA_LOG);
         }
         for (BlockPos rel : wild) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.ACACIA_LOG.defaultBlockState());
+            wildLog(helper, rel, Blocks.ACACIA_LOG);
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_warden");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 12, "minecraft:acacia_log", 2);
         boolean[] asked = new boolean[1];
@@ -337,8 +366,8 @@ public class PermissionGameTests {
         level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_walled_in", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
-        storeOf(owner).add(com.dwinovo.numen.api.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Rule.parse("break(minecraft:white_wool)"));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:white_wool)"));
         Mining mine = mineScanned(helper, companion, 9, "minecraft:pumpkin", 1);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -379,6 +408,11 @@ public class PermissionGameTests {
         }
         for (BlockPos rel : other) {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DARK_OAK_LOG.defaultBlockState());
+        }
+        // 野树:每根树干都贴着不持久的树叶(先砍上头的,剩下的桩子也连着叶子),不然是说不清谁的,要问
+        for (BlockPos log : java.util.stream.Stream.concat(named.stream(), other.stream()).toList()) {
+            level.setBlockAndUpdate(helper.absolutePos(log.east()), Blocks.OAK_LEAVES.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
         }
         NumenPlayer companion = spawnAt(helper, "gametest_feller", new BlockPos(7, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
@@ -467,8 +501,8 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_objector", new BlockPos(3, 2, 6), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_botanist");
-        storeOf(owner).add(com.dwinovo.numen.api.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Rule.parse("break(minecraft:crimson_stem)"));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:crimson_stem)"));
         ToolRun reply = scan(companion, 5, "minecraft:crimson_stem");
         Mining[] mine = new Mining[1];
         boolean[] asked = new boolean[1];
@@ -498,8 +532,8 @@ public class PermissionGameTests {
     }
 
     /**
-     * 她一路往下挖掉的点名格都算她挖的:四根原木叠成一柱,四面黑曜石围成竖井,她站在柱顶。交出这一团,脚下那一根挖掉
-     * 她就落下去、接着挖下一根,为看见下面那根挖开的遮挡本身也是点名格。四格都记成她挖的,没有一格记成"别人动过"。
+     * 她一路往下挖掉的点名格都算她挖的:四块黏土叠成一柱,四面黑曜石围成竖井,她站在柱顶。交出这一团,脚下那一块挖掉
+     * 她就落下去、接着挖下一块,为看见下面那块挖开的遮挡本身也是点名格。四格都记成她挖的,没有一格记成"别人动过"。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void mine_counts_cells_she_broke_on_the_way(GameTestHelper helper) {
@@ -517,7 +551,7 @@ public class PermissionGameTests {
             }
         }
         for (BlockPos rel : column) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.CLAY.defaultBlockState());
         }
         // 原版 GameTest 给测试结构封了一层屏障顶,正好压在竖井里她头顶那一格:竖井上半截明确清空,她才站得直
         for (int y = 6; y <= 9; y++) {
@@ -525,7 +559,7 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_sinker", new BlockPos(7, 6, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ToolRun reply = scan(companion, 6, "minecraft:stripped_spruce_log");
+        ToolRun reply = scan(companion, 6, "minecraft:clay");
         Mining[] mine = new Mining[1];
 
         succeedWhen(helper, () -> {
@@ -555,10 +589,10 @@ public class PermissionGameTests {
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chestRel = new BlockPos(6, 2, 5);
-        playerPlaces(helper, chestRel, Items.CHEST);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_hoarder");
+        playerPlaces(helper, owner, chestRel, Items.CHEST);
         BlockPos chest = helper.absolutePos(chestRel);
-        NumenPlayer companion = spawnAt(helper, "gametest_poker", new BlockPos(4, 2, 5), true);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_hoarder");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_poker", new BlockPos(4, 2, 5), true), owner);
         ToolRun[] dig = new ToolRun[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
@@ -735,7 +769,7 @@ public class PermissionGameTests {
             if (mine[0] == null) {
                 helper.assertTrue(scanned.succeeded(), "the scan has not found the logs: " + scanned.reply());
                 com.dwinovo.numen.api.permission.Permission.setMode(companion,
-                        com.dwinovo.numen.api.permission.Mode.OBSERVE);
+                        com.dwinovo.numen.permission.Mode.OBSERVE);
                 mine[0] = lua(companion, "numen.work.dig(" + blocksIn(scanned.reply()) + ", {count = " + 2 + "})");
             }
             helper.assertTrue(mine[0].done(), "mine has not finished");
@@ -751,18 +785,18 @@ public class PermissionGameTests {
         });
     }
 
-    /** bypass 模式全放行:玩家放的原木照砍,不弹卡。 */
+    /** bypass 模式放行主人的东西:主人放的原木照砍,不弹卡(硬规则不在其内,见 {@link #other_players_blocks_are_out_of_reach_in_every_mode})。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void bypass_mode_allows_everything(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> placed = List.of(new BlockPos(8, 2, 6), new BlockPos(8, 2, 8));
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_trusting");
         for (BlockPos rel : placed) {
-            playerPlaces(helper, rel, Items.SPRUCE_LOG);
+            playerPlaces(helper, owner, rel, Items.SPRUCE_LOG);
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_trusted", new BlockPos(3, 2, 7), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_trusting");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_trusted", new BlockPos(3, 2, 7), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.api.permission.Mode.BYPASS);
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         mineScanned(helper, companion, 8, "minecraft:spruce_log", 2);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -815,7 +849,7 @@ public class PermissionGameTests {
 
     /**
      * 允许并记住:挖主人放的第一块圆石问一次,主人选"允许并记住",他的 allow 表多了
-     * {@code break(placed & minecraft:cobblestone)};第二块圆石另起一次调用,不再问、直接挖掉;主人放的橡木板没被
+     * {@code break(owner & minecraft:cobblestone)};第二块圆石另起一次调用,不再问、直接挖掉;主人放的橡木板没被
      * 记住,照旧问。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -824,11 +858,11 @@ public class PermissionGameTests {
         BlockPos firstRel = new BlockPos(6, 2, 4);
         BlockPos secondRel = new BlockPos(6, 2, 6);
         BlockPos plankRel = new BlockPos(6, 2, 7);
-        playerPlaces(helper, firstRel, Items.COBBLESTONE);
-        playerPlaces(helper, secondRel, Items.COBBLESTONE);
-        playerPlaces(helper, plankRel, Items.OAK_PLANKS);
-        NumenPlayer companion = spawnAt(helper, "gametest_mason", new BlockPos(4, 2, 5), true);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_quarry");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_quarry");
+        playerPlaces(helper, owner, firstRel, Items.COBBLESTONE);
+        playerPlaces(helper, owner, secondRel, Items.COBBLESTONE);
+        playerPlaces(helper, owner, plankRel, Items.OAK_PLANKS);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_mason", new BlockPos(4, 2, 5), true), owner);
         ToolRun[] calls = new ToolRun[3];
         int[] step = {0};
         helper.runAfterDelay(5, () -> {
@@ -840,7 +874,7 @@ public class PermissionGameTests {
             switch (step[0]) {
                 case 1 -> {
                     if (pending != null) {
-                        helper.assertTrue(pending.items().get(0).rule().equals("break(placed)"),
+                        helper.assertTrue(pending.items().get(0).rule().equals("break(owner)"),
                                 "the first cobblestone was asked under another rule: " + pending.items());
                         desk(companion).answer(pending.id(),
                                 com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_REMEMBER, "");
@@ -864,7 +898,7 @@ public class PermissionGameTests {
                 case 3 -> {
                     if (pending != null) {
                         helper.assertTrue(pending.items().get(0).subject().equals("oak_planks")
-                                        && pending.items().get(0).rule().equals("break(placed)"),
+                                        && pending.items().get(0).rule().equals("break(owner)"),
                                 "the planks were asked under another rule: " + pending.items());
                         desk(companion).answer(pending.id(),
                                 com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "木板留着");
@@ -884,7 +918,7 @@ public class PermissionGameTests {
             helper.assertTrue(!calls[1].outcome().contains("the owner allowed"),
                     "the second dig went through a consent: " + calls[1].outcome());
             List<String> allow = storeOf(owner).rules().allow().stream().map(Object::toString).toList();
-            helper.assertTrue(allow.equals(List.of("break(placed & minecraft:cobblestone)")),
+            helper.assertTrue(allow.equals(List.of("break(owner & minecraft:cobblestone)")),
                     "the owner's allow table is not the remembered row: " + allow);
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
@@ -892,7 +926,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人手写的 ask 行压过出厂 allow 行:主人用命令写下 {@code ask break(!placed & !block_entity)},她去挖一块
+     * 主人手写的 ask 行压过出厂 allow 行:主人用命令写下 {@code ask break(!owner & !block_entity)},她去挖一块
      * 自然石头也要问;写错的规则回教学式的错误、一行不进表。主人不让,石头一块不少。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -903,14 +937,14 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_sculptor", new BlockPos(4, 2, 5), true);
         ServerPlayer owner = presentPlayer(helper, companion, "gametest_geologist");
 
-        List<String> mistake = runAs(owner, "numen permission rules add ask brek(placed)");
+        List<String> mistake = runAs(owner, "numen permission rules add ask brek(owner)");
         helper.assertTrue(mistake.stream().anyMatch(m -> m.contains("Unknown verb 'brek'") && m.contains("break")),
                 "a mistyped rule was not taught: " + mistake);
-        List<String> added = runAs(owner, "numen permission rules add ask break(!placed & !block_entity)");
+        List<String> added = runAs(owner, "numen permission rules add ask break(!owner & !block_entity)");
         helper.assertTrue(added.stream().anyMatch(m -> m.contains("Added to ask")), "the row was not added: " + added);
         helper.assertTrue(storeOf(owner).rules().ask().size() == 1, "the owner's ask table: " + storeOf(owner).rules());
         List<String> listed = runAs(owner, "numen permission rules list");
-        helper.assertTrue(listed.stream().anyMatch(m -> m.contains("1. break(!placed & !block_entity)")
+        helper.assertTrue(listed.stream().anyMatch(m -> m.contains("1. break(!owner & !block_entity)")
                 && m.contains("Factory rules")), "the list does not show both layers: " + listed);
 
         ToolRun[] call = new ToolRun[1];
@@ -919,7 +953,7 @@ public class PermissionGameTests {
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             if (pending != null && !answered[0]) {
-                helper.assertTrue(pending.items().get(0).rule().equals("break(!placed & !block_entity)"),
+                helper.assertTrue(pending.items().get(0).rule().equals("break(!owner & !block_entity)"),
                         "asked under another rule: " + pending.items());
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "石头别动");
@@ -1032,14 +1066,19 @@ public class PermissionGameTests {
     }
 
     /**
-     * 放的人照实记:同伴 A 放下一块木板,记在 A 名下;A 自己拆由出厂的 {@code break(self_placed & !contents)} 放行
-     * (她垫的、搭的是她的),同伴 B 要拆就得问——在 B 看来那是别人放的({@code break(placed)})。
+     * 放的人照实记,连她的主人一起记:同伴 A 放下一块木板,记在 A 名下、带着 A 的主人;A 自己拆由出厂的
+     * {@code break(self & !contents)} 放行(她垫的、搭的是她的);同一个主人名下的同伴 B 要拆就得问——在 B 看来那是主人的
+     * ({@code break(owner)});别的主人名下的同伴 C 碰不得,硬规则({@code break(other)})。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_permission")
-    public static void her_own_blocks_are_hers_but_another_companion_asks(GameTestHelper helper) {
+    public static void her_own_blocks_are_hers_a_sisters_are_the_owners_a_rivals_are_off_limits(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
+        UUID shared = UUID.randomUUID();
         NumenPlayer bridger = spawnAt(helper, "gametest_bridger", new BlockPos(3, 2, 3), false);
         NumenPlayer neighbour = spawnAt(helper, "gametest_neighbour", new BlockPos(11, 2, 11), false);
+        NumenPlayer rival = spawnAt(helper, "gametest_rival", new BlockPos(11, 2, 3), false);
+        bridger.setOwnerUuid(shared);
+        neighbour.setOwnerUuid(shared);
         BlockPos rel = new BlockPos(6, 2, 6);
         BlockPos floor = helper.absolutePos(rel.below());
         var ctx = new net.minecraft.world.item.context.BlockPlaceContext(bridger,
@@ -1052,22 +1091,28 @@ public class PermissionGameTests {
                 "the companion failed to place the plank");
 
         var placer = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).placerAt(pos, level.getBlockState(pos));
-        helper.assertTrue(placer != null && placer.id().equals(bridger.getUUID()),
-                "her plank was not recorded as hers: " + placer);
+        helper.assertTrue(placer != null && placer.id().equals(bridger.getUUID()) && shared.equals(placer.owner()),
+                "her plank was not recorded as hers, with her owner: " + placer);
         var dig = com.dwinovo.numen.api.permission.Action.breakBlock(pos, level.getBlockState(pos));
         helper.assertTrue(com.dwinovo.numen.api.permission.Permission.gateFor(bridger).judgeLive(dig, level).allowed(),
                 "she has to ask to take back her own plank");
-        helper.assertTrue(com.dwinovo.numen.api.permission.Permission.gateFor(neighbour).judgeLive(dig, level).asks(),
-                "another companion would break her plank without asking");
+        var sister = com.dwinovo.numen.api.permission.Permission.gateFor(neighbour).judgeLive(dig, level);
+        helper.assertTrue(sister.asks() && sister.rule().toString().equals("break(owner)"),
+                "another companion of the same owner would break her plank without asking: " + sister);
+        var stranger = com.dwinovo.numen.api.permission.Permission.gateFor(rival).judgeLive(dig, level);
+        helper.assertTrue(stranger.kind() == com.dwinovo.numen.permission.Verdict.Kind.DENY
+                        && stranger.reason().contains("hard rule break(other)"),
+                "a companion of another owner may touch her plank: " + stranger);
         CompanionFactory.despawn(level.getServer(), bridger);
         CompanionFactory.despawn(level.getServer(), neighbour);
+        CompanionFactory.despawn(level.getServer(), rival);
         helper.succeed();
     }
 
     /**
-     * 记住的规则按活世界推:空箱子问的是 {@code break(block_entity)},记下的是
-     * {@code break(block_entity & minecraft:chest & !contents)};装着东西的问的是撤不回的那一行,记下的带着
-     * {@code contents};有名字的狼问的是 {@code attack(named)},记下的只认这一只。
+     * 记住的规则按活世界推:没人放过的空箱子(说不清是谁的)问的是 {@code break(unknown)},记下的是
+     * {@code break(unknown & minecraft:chest & !contents)};装着东西了,记下的就不钉 {@code !contents}、盖得住装着东西的;
+     * 有名字的狼问的是 {@code attack(named)},记下的只认这一只。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void remembering_derives_the_scope_from_the_live_world(GameTestHelper helper) {
@@ -1086,10 +1131,10 @@ public class PermissionGameTests {
         var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
         var digEmpty = com.dwinovo.numen.api.permission.Action.breakBlock(chest, level.getBlockState(chest));
         var emptyVerdict = gate.judgeLive(digEmpty, level);
-        helper.assertTrue(emptyVerdict.asks() && emptyVerdict.rule().toString().equals("break(block_entity)"),
-                "an empty chest: " + emptyVerdict);
+        helper.assertTrue(emptyVerdict.asks() && emptyVerdict.rule().toString().equals("break(unknown)"),
+                "an empty chest nobody placed: " + emptyVerdict);
         String emptyRow = gate.consentItemLive(digEmpty, emptyVerdict, level).remember().toString();
-        helper.assertTrue(emptyRow.equals("break(block_entity & minecraft:chest & !contents)"), "remembered " + emptyRow);
+        helper.assertTrue(emptyRow.equals("break(unknown & minecraft:chest & !contents)"), "remembered " + emptyRow);
 
         var attack = com.dwinovo.numen.api.permission.Action.attack(wolf);
         var wolfVerdict = gate.judgeLive(attack, level);
@@ -1103,7 +1148,7 @@ public class PermissionGameTests {
         var digFull = com.dwinovo.numen.api.permission.Action.breakBlock(chest, level.getBlockState(chest));
         var fullVerdict = gate.judgeLive(digFull, level);
         String fullRow = gate.consentItemLive(digFull, fullVerdict, level).remember().toString();
-        helper.assertTrue(fullRow.equals("break(block_entity & contents & minecraft:chest)"), "remembered " + fullRow);
+        helper.assertTrue(fullRow.equals("break(unknown & minecraft:chest)"), "remembered " + fullRow);
 
         wolf.discard();
         CompanionFactory.despawn(level.getServer(), companion);
@@ -1132,7 +1177,7 @@ public class PermissionGameTests {
         helper.runAfterDelay(5, () -> {
             List<String> said = runAs(owner, "numen permission mode gametest_peeker observe");
             helper.assertTrue(com.dwinovo.numen.api.permission.Permission.modeOf(companion)
-                    == com.dwinovo.numen.api.permission.Mode.OBSERVE, "the mode command did not set observe: " + said);
+                    == com.dwinovo.numen.permission.Mode.OBSERVE, "the mode command did not set observe: " + said);
             calls[0] = click(helper, companion, "right", chestRel);
             step[0] = 1;
         });
@@ -1288,9 +1333,10 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void build_tnt_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        playerPlaces(helper, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
+        ServerPlayer absentOwner = barePlayer(helper, "gametest_absent_owner");
+        playerPlaces(helper, absentOwner, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
         BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
-        NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false), absentOwner);
         companion.getInventory().add(new ItemStack(Items.TNT));
         ToolRun build = lua(companion, "numen.build.place({{name = \"tnt\", pos = " + xyz(spot) + "}})");
 
@@ -1384,9 +1430,34 @@ public class PermissionGameTests {
         });
     }
 
-    /** 别人养的狼(有主人):打死了就是人家的宠物没了,要问;主人不在就不打,狼一滴血没掉。 */
+    /** 主人养的狼:打死了就是他的宠物没了,要问;主人不在就不打,狼一滴血没掉。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
-    public static void attack_someones_tamed_wolf_is_refused_without_the_owner(GameTestHelper helper) {
+    public static void attack_the_owners_tamed_wolf_is_refused_without_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var wolf = EntityType.WOLF.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
+        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.setTame(true, false);
+        NumenPlayer companion = spawnAt(helper, "gametest_dogsitter", new BlockPos(3, 2, 4), false);
+        wolf.setOwnerUUID(companion.getOwnerUuid());
+        wolf.setNoAi(true);
+        level.addFreshEntity(wolf);
+        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ToolRun attack = lua(companion, "numen.fight.attack(" + wolf.getId() + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(attack.done(), "attack has not finished");
+            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + attack.outcome());
+            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the owner's wolf was hit");
+            wolf.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 别人养的狼:主人也答应不了,硬规则拒绝,不弹卡;狼一滴血没掉。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void attack_someone_elses_tamed_wolf_is_forbidden_outright(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var wolf = EntityType.WOLF.create(level);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
@@ -1398,18 +1469,21 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         ToolRun attack = lua(companion, "numen.fight.attack(" + wolf.getId() + ")");
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
-                    "the refusal does not come from asking the owner: " + attack.outcome());
+            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("hard rule attack(other)"),
+                    "the refusal does not quote the hard rule: " + attack.outcome());
+            helper.assertTrue(!asked[0], "a hard rule raised a consent card");
             helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the tamed wolf was hit");
             wolf.discard();
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /** 装着钻石的箱子不是玩家放的也一样:拆了东西会洒,要问;主人不在就不挖,箱子和五颗钻石都在。 */
+    /** 装着钻石的箱子没有谁放过的记录,说不清是谁的:拆了东西会洒,要问;主人不在就不挖,箱子和五颗钻石都在。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void mine_a_chest_with_things_in_it_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -1430,7 +1504,7 @@ public class PermissionGameTests {
         });
     }
 
-    /** 活板门出厂就在 ask 表里(门、床、栅栏门同理):主人不在就不挖,活板门还在。 */
+    /** 没有谁放过的活板门(门、床、栅栏门同理)说不清是谁的,要问:主人不在就不挖,活板门还在。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void mine_a_trapdoor_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -1456,9 +1530,10 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        playerPlaces(helper, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
+        ServerPlayer absentOwner = barePlayer(helper, "gametest_absent_owner");
+        playerPlaces(helper, absentOwner, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 5));
-        NumenPlayer companion = spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false), absentOwner);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         ToolRun pour = lua(companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:water_bucket\"})");
 
@@ -1474,7 +1549,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人用命令写 {@code deny break(placed)}:收下这一行。她 numen.use.hit 左键打玩家放的石头被拒、理由是那一行规则,石头还在;
+     * 主人用命令写 {@code deny break(owner)}:收下这一行。她 numen.use.hit 左键打主人放的石头被拒、理由是那一行规则,石头还在;
      * 天然的石头照常挖掉。从头到尾不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -1482,12 +1557,12 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos placedRel = new BlockPos(6, 2, 5);
         BlockPos naturalRel = new BlockPos(6, 2, 3);
-        playerPlaces(helper, placedRel, Items.STONE);
+        ServerPlayer owner = presentPlayer(helper, null, "gametest_house_owner");
+        playerPlaces(helper, owner, placedRel, Items.STONE);
         level.setBlockAndUpdate(helper.absolutePos(naturalRel), Blocks.STONE.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true);
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_house_owner");
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true), owner);
 
-        List<String> added = runAs(owner, "numen permission rules add deny break(placed)");
+        List<String> added = runAs(owner, "numen permission rules add deny break(owner)");
         helper.assertTrue(added.stream().anyMatch(m -> m.contains("Added to deny")), "the row was not added: " + added);
 
         ToolRun[] calls = new ToolRun[2];
@@ -1508,7 +1583,7 @@ public class PermissionGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(step[0] == 2 && calls[1].done(), "the two clicks have not finished");
             String refused = calls[0].outcome();
-            helper.assertTrue(!calls[0].succeeded() && refused.contains("denied by rule break(placed)"),
+            helper.assertTrue(!calls[0].succeeded() && refused.contains("denied by rule break(owner)"),
                     "the dig of the placed stone was not refused by the row: " + refused);
             helper.assertTrue(level.getBlockState(helper.absolutePos(placedRel)).is(Blocks.STONE),
                     "the placed stone was dug");
@@ -1522,7 +1597,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人不许挖玩家放的:谷仓里玩家摆的南瓜离她近,野地里长的远,一次扫描两个都找到。要一个南瓜,{@code arrive = "dig"} 只去挖得成
+     * 主人不许挖他放的:谷仓里主人摆的南瓜离她近,野地里长的远,一次扫描两个都找到。要一个南瓜,{@code arrive = "dig"} 只去挖得成
      * 的那个,她挖野地里那个,谷仓里的一动不动;对同样的方块再要一个,只剩谷仓里的,当场拒绝、理由是那一行规则。不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -1530,13 +1605,13 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos insideRel = new BlockPos(5, 2, 5);
         BlockPos outsideRel = new BlockPos(11, 2, 5);
-        playerPlaces(helper, insideRel, Items.PUMPKIN);
+        ServerPlayer owner = presentPlayer(helper, null, "gametest_farmer");
+        playerPlaces(helper, owner, insideRel, Items.PUMPKIN);
         level.setBlockAndUpdate(helper.absolutePos(outsideRel), Blocks.PUMPKIN.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_harvester", new BlockPos(2, 2, 5), false);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_harvester", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_farmer");
-        storeOf(owner).add(com.dwinovo.numen.api.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Rule.parse("break(placed)"));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(owner)"));
         Mining first = mineScanned(helper, companion, 10, "minecraft:pumpkin", 1);
         Mining[] second = new Mining[1];
         boolean[] asked = new boolean[1];
@@ -1552,7 +1627,7 @@ public class PermissionGameTests {
                 second[0] = mine(companion, first.blocks(), 1);
             }
             helper.assertTrue(second[0].done(), "the second mine has not finished");
-            helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(placed)"),
+            helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(owner)"),
                     "the second mine does not stop on the placed row: " + second[0].outcome());
             helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the placed pumpkin in the barn was mined");
@@ -1563,7 +1638,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 挡着视线的格不许挖,她就换一面看:南瓜在一堵两格高的木板墙后面,墙是玩家砌的、主人不许挖玩家放的,墙向两边伸出
+     * 挡着视线的格不许挖,她就换一面看:南瓜在一堵两格高的木板墙后面,墙是主人砌的、主人不许挖他放的,墙向两边伸出
      * 四格。站在墙前最近,手也够得着,可看得见南瓜的每一面都隔着墙;她绕过墙头,从看得见它的那一面挖到手。墙一块不少,不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -1572,18 +1647,18 @@ public class PermissionGameTests {
         BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
         level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
         List<BlockPos> wall = new ArrayList<>();
+        ServerPlayer owner = presentPlayer(helper, null, "gametest_fencer");
         for (int z = 1; z <= 9; z++) {
             for (int y = 2; y <= 3; y++) {
                 BlockPos rel = new BlockPos(7, y, z);
-                playerPlaces(helper, rel, Items.OAK_PLANKS);
+                playerPlaces(helper, owner, rel, Items.OAK_PLANKS);
                 wall.add(helper.absolutePos(rel));
             }
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_fence_walker", new BlockPos(2, 2, 5), false);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_fence_walker", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_fencer");
-        storeOf(owner).add(com.dwinovo.numen.api.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Rule.parse("break(placed)"));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(owner)"));
         Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", 1);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -1621,8 +1696,8 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_walled_out", new BlockPos(2, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         ServerPlayer owner = presentPlayer(helper, companion, "gametest_weaver");
-        storeOf(owner).add(com.dwinovo.numen.api.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Rule.parse("break(minecraft:white_wool)"));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:white_wool)"));
         Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", 1);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -1649,7 +1724,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着别的玩家放的木板。{@code numen.work.dig} 只挖开天然地形,要问主人的
+     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着主人放的木板。{@code numen.work.dig} 只挖开天然地形,要问主人的
      * 遮挡不挖、也不替她去问,当场回:南瓜的每一面都贴着她不能挖的方块,点名是哪几格、为什么(要主人同意)。木板与南瓜原样,
      * 不弹卡,她一步没动。
      */
@@ -1658,17 +1733,17 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
         level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
-        var neighbour = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(UUID.randomUUID(), "gametest_carpenter");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_joiner");
+        var carpenter = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(owner.getUUID(), "gametest_carpenter");
         List<BlockPos> planks = new ArrayList<>();
         for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
             BlockPos cell = pumpkin.relative(side);
             level.setBlockAndUpdate(cell, Blocks.OAK_PLANKS.defaultBlockState());
-            com.dwinovo.numen.api.permission.PlacedBlocks.of(level).record(cell, neighbour);
+            com.dwinovo.numen.api.permission.PlacedBlocks.of(level).record(cell, carpenter);
             planks.add(cell);
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_boxed_out", new BlockPos(5, 2, 5), false);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_boxed_out", new BlockPos(5, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_joiner");
         BlockPos stand = companion.blockPosition();
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(pumpkin) + ")");
         boolean[] asked = new boolean[1];
@@ -1691,6 +1766,431 @@ public class PermissionGameTests {
             }
             helper.assertTrue(!asked[0], "a block needing consent in the way raised a consent card");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    // ---- 谁的:别人的、装模组前的木屋、野树与木屋原木、生成的结构 ----
+
+    /**
+     * 别的玩家放的方块,规则与模式都解不开:主人写了 {@code allow *(*)},模式切到 bypass,她用 numen.use.hit 打下去仍然被拒、
+     * 理由是硬规则、不弹卡,方块还在。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_permission")
+    public static void other_players_blocks_are_out_of_reach_in_every_mode(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos rel = new BlockPos(6, 2, 5);
+        playerPlaces(helper, barePlayer(helper, "gametest_stranger"), rel, Items.COBBLESTONE);
+        NumenPlayer companion = spawnAt(helper, "gametest_trespasser", new BlockPos(4, 2, 5), true);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_neighbor");
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.ALLOW,
+                com.dwinovo.numen.api.permission.Groups.parse("*(*)"));
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+        ToolRun[] dig = new ToolRun[1];
+        helper.runAfterDelay(5, () -> dig[0] = click(helper, companion, "left", rel));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(dig[0] != null && dig[0].done(), "the click has not finished");
+            helper.assertTrue(!dig[0].succeeded() && dig[0].outcome().contains("hard rule break(other)"),
+                    "someone else's block was not refused by the hard rule: " + dig[0].outcome());
+            helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.COBBLESTONE), "the block was dug");
+            helper.assertTrue(!asked[0], "a hard rule raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 装模组之前就有的木屋(场景里直接写方块、不经放置记录)挖之前问,说不清是谁的;同一片地形里的石头直接挖。
+     * 主人不让动木屋,木板一块不少;石头照常挖掉,不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_permission")
+    public static void a_cabin_from_before_the_mod_asks_but_terrain_stone_does_not(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos plankRel = new BlockPos(6, 2, 4);
+        BlockPos stoneRel = new BlockPos(6, 2, 6);
+        level.setBlockAndUpdate(helper.absolutePos(plankRel), Blocks.OAK_PLANKS.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(4, 2, 5), true);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_builder");
+        ToolRun[] calls = new ToolRun[2];
+        int[] step = {0};
+        helper.runAfterDelay(5, () -> {
+            calls[0] = click(helper, companion, "left", plankRel);
+            step[0] = 1;
+        });
+        helper.onEachTick(() -> {
+            var pending = desk(companion).pending();
+            if (step[0] == 1 && pending != null) {
+                helper.assertTrue(pending.items().get(0).rule().equals("break(unknown)"),
+                        "the cabin was asked under another rule: " + pending.items());
+                desk(companion).answer(pending.id(), com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "留着");
+                step[0] = 2;
+            } else if (step[0] == 2 && calls[0].done()) {
+                calls[1] = click(helper, companion, "left", stoneRel);
+                step[0] = 3;
+            } else if (step[0] == 3) {
+                helper.assertTrue(pending == null, "terrain stone raised a card: " + pending);
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 3 && calls[1].done(), "the two clicks have not finished");
+            helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("留着"),
+                    "the cabin was dug or the refusal does not quote the owner: " + calls[0].outcome());
+            helper.assertTrue(level.getBlockState(helper.absolutePos(plankRel)).is(Blocks.OAK_PLANKS), "the plank was dug");
+            helper.assertTrue(calls[1].succeeded() && level.getBlockState(helper.absolutePos(stoneRel)).isAir(),
+                    "the terrain stone was not dug: " + calls[1].outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 野树砍,木屋原木问,玩家放的树叶不算野树的叶:野树(原木贴着不持久的树叶)直接砍;光秃秃的一根原木是说不清的,问;
+     * 主人放下的树叶带持久标记,是主人的,问;自然长的树叶直接掰。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    public static void wild_trees_are_chopped_but_cabin_logs_and_placed_leaves_ask(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos wildRel = new BlockPos(5, 2, 3);
+        BlockPos cabinRel = new BlockPos(5, 2, 6);
+        BlockPos leafRel = new BlockPos(5, 2, 9);
+        BlockPos wildLeafRel = new BlockPos(5, 2, 12);
+        wildLog(helper, wildRel, Blocks.OAK_LOG);
+        level.setBlockAndUpdate(helper.absolutePos(cabinRel), Blocks.OAK_LOG.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(wildLeafRel), Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
+        ServerPlayer owner = presentOwner(helper, null, "gametest_forest_ranger");
+        playerPlaces(helper, owner, leafRel, Items.OAK_LEAVES);
+        NumenPlayer companion = adopted(spawnAt(helper, "gametest_woodcutter", new BlockPos(3, 2, 7), true), owner);
+        List<BlockPos> targets = List.of(wildRel, cabinRel, leafRel, wildLeafRel);
+        ToolRun[] calls = new ToolRun[4];
+        List<String> asked = new ArrayList<>();
+        int[] step = {-1};
+        helper.runAfterDelay(5, () -> step[0] = 0);
+        helper.onEachTick(() -> {
+            var pending = desk(companion).pending();
+            if (pending != null) {
+                asked.add(pending.items().get(0).subject() + " " + pending.items().get(0).rule());
+                desk(companion).answer(pending.id(), com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "不砍");
+            }
+            if (step[0] >= 0 && step[0] < 4 && (step[0] == 0 || calls[step[0] - 1].done())) {
+                calls[step[0]] = click(helper, companion, "left", targets.get(step[0]));
+                step[0]++;
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 4 && calls[3].done(), "the four clicks have not finished");
+            helper.assertTrue(calls[0].succeeded() && level.getBlockState(helper.absolutePos(wildRel)).isAir(),
+                    "the wild trunk was not chopped: " + calls[0].outcome());
+            helper.assertTrue(!calls[1].succeeded() && level.getBlockState(helper.absolutePos(cabinRel)).is(Blocks.OAK_LOG),
+                    "the bare log was cut without asking: " + calls[1].outcome());
+            helper.assertTrue(!calls[2].succeeded() && level.getBlockState(helper.absolutePos(leafRel)).is(Blocks.OAK_LEAVES),
+                    "the owner's placed leaves were broken without asking: " + calls[2].outcome());
+            helper.assertTrue(calls[3].succeeded() && level.getBlockState(helper.absolutePos(wildLeafRel)).isAir(),
+                    "the natural leaves were not broken: " + calls[3].outcome());
+            helper.assertTrue(asked.equals(List.of("oak_log break(unknown)", "oak_leaves break(owner)")),
+                    "the cards asked were: " + asked);
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 生成的结构记着结构件范围:村庄件里的木板问(村庄是有人住的),废弃矿井的木板直接挖;主人在结构里放的方块仍是主人的。
+     * 结构起点直接写进区块(场景里造不出整座村庄),裁决读的是 StructureManager 同一份区块存档。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void village_planks_ask_and_mineshaft_planks_do_not(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos villageRel = new BlockPos(3, 2, 3);
+        BlockPos shaftRel = new BlockPos(11, 2, 11);
+        BlockPos village = helper.absolutePos(villageRel);
+        BlockPos shaft = helper.absolutePos(shaftRel);
+        level.setBlockAndUpdate(village, Blocks.OAK_PLANKS.defaultBlockState());
+        level.setBlockAndUpdate(shaft, Blocks.OAK_PLANKS.defaultBlockState());
+        var registry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE);
+        var placedStarts = new java.util.ArrayList<Runnable>();
+        for (var entry : List.of(
+                java.util.Map.entry(net.minecraft.world.level.levelgen.structure.BuiltinStructures.VILLAGE_PLAINS, village),
+                java.util.Map.entry(net.minecraft.world.level.levelgen.structure.BuiltinStructures.MINESHAFT, shaft))) {
+            net.minecraft.world.level.levelgen.structure.Structure structure = registry.getOrThrow(entry.getKey());
+            BlockPos at = entry.getValue();
+            var box = new net.minecraft.world.level.levelgen.structure.BoundingBox(at.getX() - 2, at.getY() - 2,
+                    at.getZ() - 2, at.getX() + 2, at.getY() + 4, at.getZ() + 2);
+            var piece = new net.minecraft.world.level.levelgen.structure.StructurePiece(
+                    net.minecraft.world.level.levelgen.structure.pieces.StructurePieceType.MINE_SHAFT_ROOM, 0, box) {
+                @Override
+                protected void addAdditionalSaveData(
+                        net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext context,
+                        net.minecraft.nbt.CompoundTag tag) {
+                }
+
+                @Override
+                public void postProcess(net.minecraft.world.level.WorldGenLevel world,
+                                        net.minecraft.world.level.StructureManager manager,
+                                        net.minecraft.world.level.chunk.ChunkGenerator generator,
+                                        net.minecraft.util.RandomSource random,
+                                        net.minecraft.world.level.levelgen.structure.BoundingBox within,
+                                        net.minecraft.world.level.ChunkPos chunkPos, BlockPos pos) {
+                }
+            };
+            var chunk = level.getChunk(at);
+            var start = new net.minecraft.world.level.levelgen.structure.StructureStart(structure, chunk.getPos(), 0,
+                    new net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer(List.of(piece)));
+            var before = java.util.Map.copyOf(chunk.getAllStarts());
+            var withOurs = new java.util.HashMap<>(before);
+            withOurs.put(structure, start);
+            chunk.setAllStarts(withOurs);
+            placedStarts.add(() -> chunk.setAllStarts(before));
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_surveyor2", new BlockPos(7, 2, 7), false);
+        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+        var inVillage = gate.judgeLive(com.dwinovo.numen.api.permission.Action.breakBlock(village,
+                level.getBlockState(village)), level);
+        var inShaft = gate.judgeLive(com.dwinovo.numen.api.permission.Action.breakBlock(shaft,
+                level.getBlockState(shaft)), level);
+        placedStarts.forEach(Runnable::run);
+        CompanionFactory.despawn(level.getServer(), companion);
+
+        helper.assertTrue(inVillage.asks() && inVillage.rule().toString().equals("break(structure(#minecraft:village))"),
+                "planks in a village: " + inVillage);
+        helper.assertTrue(inShaft.allowed() && inShaft.rule().toString()
+                        .equals("break(structure & !structure(#minecraft:village) & !block_entity)"),
+                "planks in an abandoned mineshaft: " + inShaft);
+        helper.succeed();
+    }
+
+    // ---- 命中账、点名一只同伴、她改规则 ----
+
+    /**
+     * 规则列表:主人层每行带序号、谁写的、命中几次,出厂层与硬规则也各有账。真动手的才记:主人写了不许挖泥土,她挖泥土被那一行拒了,
+     * 又挖了一块石头(出厂放行那一行),列表里这两行的次数跟存档里的账一致,没用到的行写"从没命中过"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    public static void the_rule_list_shows_how_often_each_row_fired(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos dirtRel = new BlockPos(6, 2, 4);
+        BlockPos stoneRel = new BlockPos(6, 2, 6);
+        level.setBlockAndUpdate(helper.absolutePos(dirtRel), Blocks.DIRT.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(4, 2, 5), true);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_bookkeeper");
+        runAs(owner, "numen permission rules add deny break(minecraft:dirt)");
+        ToolRun[] calls = new ToolRun[2];
+        int[] step = {0};
+        helper.runAfterDelay(5, () -> {
+            calls[0] = click(helper, companion, "left", dirtRel);
+            step[0] = 1;
+        });
+        helper.onEachTick(() -> {
+            if (step[0] == 1 && calls[0].done()) {
+                calls[1] = click(helper, companion, "left", stoneRel);
+                step[0] = 2;
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 2 && calls[1].done(), "the two clicks have not finished");
+            helper.assertTrue(!calls[0].succeeded() && calls[1].succeeded(),
+                    "the dirt was dug or the stone was not: " + calls[0].outcome() + " / " + calls[1].outcome());
+            var store = storeOf(owner);
+            var denyRule = com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:dirt)");
+            var factoryRule = com.dwinovo.numen.api.permission.Groups.parse("break(nature & !block_entity)");
+            int denied = store.hitsOf(com.dwinovo.numen.api.permission.Layers.OWNER,
+                    com.dwinovo.numen.permission.Verdict.Kind.DENY, denyRule).count();
+            int allowed = store.hitsOf(com.dwinovo.numen.api.permission.Layers.FACTORY,
+                    com.dwinovo.numen.permission.Verdict.Kind.ALLOW, factoryRule).count();
+            helper.assertTrue(denied >= 1 && allowed >= 1, "the ledger missed the live questions: " + denied + "/" + allowed);
+            List<String> lines = String.join("\n", runAs(owner, "numen permission rules list")).lines().toList();
+            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("1. break(minecraft:dirt)")
+                            && l.contains(denied + " hit(s)")),
+                    "the list does not show the owner's row with its hits: " + lines);
+            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("- break(nature & !block_entity)")
+                            && l.contains(allowed + " hit(s)")),
+                    "the list does not show the factory row with its hits: " + lines);
+            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("- deny break(other)") && l.contains("never hit")),
+                    "the list does not show an unused hard rule as never hit: " + lines);
+            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("Hard rules")), "the list lacks the hard rules");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 规则点名一只同伴({@code @名字}):主人写 {@code deny break(nature) @gametest_aria},主人名下的另一只同伴 Bea 照常挖
+     * 同样的石头,被点名的 Aria 被拒、理由就是那一行;写不出名字的 @ 回教学式的错误。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    public static void a_rule_for_one_companion_leaves_the_others_alone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos ariaStone = new BlockPos(6, 2, 4);
+        BlockPos beaStone = new BlockPos(6, 2, 8);
+        level.setBlockAndUpdate(helper.absolutePos(ariaStone), Blocks.STONE.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(beaStone), Blocks.STONE.defaultBlockState());
+        NumenPlayer aria = spawnAt(helper, "gametest_aria", new BlockPos(4, 2, 4), true);
+        NumenPlayer bea = spawnAt(helper, "gametest_bea", new BlockPos(4, 2, 8), true);
+        ServerPlayer owner = presentOwner(helper, aria, "gametest_maids_owner");
+        bea.setOwnerUuid(owner.getUUID());
+        List<String> mistake = runAs(owner, "numen permission rules add deny break(nature) @");
+        helper.assertTrue(mistake.stream().anyMatch(m -> m.contains("may only name one companion")),
+                "an @ without a name was not taught: " + mistake);
+        List<String> added = runAs(owner, "numen permission rules add deny break(nature) @gametest_aria");
+        helper.assertTrue(added.stream().anyMatch(m -> m.contains("break(nature) @gametest_aria")), "not added: " + added);
+        ToolRun[] calls = new ToolRun[2];
+        helper.runAfterDelay(5, () -> {
+            calls[0] = click(helper, aria, "left", ariaStone);
+            calls[1] = click(helper, bea, "left", beaStone);
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(calls[0] != null && calls[0].done() && calls[1].done(), "the clicks have not finished");
+            helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("denied by rule break(nature) @gametest_aria")
+                            && level.getBlockState(helper.absolutePos(ariaStone)).is(Blocks.STONE),
+                    "the named companion was not held by her row: " + calls[0].outcome());
+            helper.assertTrue(calls[1].succeeded() && level.getBlockState(helper.absolutePos(beaStone)).isAir(),
+                    "the row reached a companion it does not name: " + calls[1].outcome());
+            CompanionFactory.despawn(level.getServer(), aria);
+            CompanionFactory.despawn(level.getServer(), bea);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 她改规则:收紧(deny、ask)当场写进主人那一层、回执说清、主人在场就当场告诉他,写的人记成她、带着她说的理由;写错的规则回教学式
+     * 的错误。放宽(allow)与删行发一张征询卡——卡上就是她没法自己跑的那条命令、不能"允许并记住",主人拒绝了不写,允许了才写(来源记成她)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1000, batch = "numen_permission")
+    public static void she_tightens_at_once_and_loosening_goes_through_a_card(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_scribe", new BlockPos(4, 2, 4), false);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_scribe_owner");
+        var deny = lua(companion, "return numen.permission.deny(\"break(owner & minecraft:chest)\", "
+                + "{why = \"you said to leave the chests\"})");
+        var again = lua(companion, "return numen.permission.deny(\"break(owner & minecraft:chest)\")");
+        var typo = lua(companion, "numen.permission.deny(\"brek(owner)\")");
+        var ask = lua(companion, "return numen.permission.ask(\"break(nature & minecraft:oak_log)\")");
+        ToolRun[] later = new ToolRun[3];
+        int[] step = {0};
+        helper.onEachTick(() -> {
+            var pending = desk(companion).pending();
+            switch (step[0]) {
+                case 0 -> {
+                    if (deny.done() && again.done() && typo.done() && ask.done()) {
+                        later[0] = lua(companion, "return numen.permission.allow(\"break(owner & minecraft:wheat)\", "
+                                + "{why = \"harvest the farm\"})");
+                        step[0] = 1;
+                    }
+                }
+                case 1 -> {
+                    if (pending != null) {
+                        var item = pending.items().get(0);
+                        helper.assertTrue(item.name().getString().equals(
+                                        "/numen permission rules add allow break(owner & minecraft:wheat)")
+                                        && item.remember() == null,
+                                "the card is not the command she cannot run herself, or can be remembered: " + item);
+                        helper.assertTrue(storeOf(owner).rules().allow().isEmpty(), "written before the owner answered");
+                        desk(companion).answer(pending.id(),
+                                com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "还不行");
+                        step[0] = 2;
+                    }
+                }
+                case 2 -> {
+                    if (later[0].done()) {
+                        later[1] = lua(companion, "return numen.permission.allow(\"break(owner & minecraft:wheat)\", "
+                                + "{why = \"harvest the farm\"})");
+                        step[0] = 3;
+                    }
+                }
+                case 3 -> {
+                    if (pending != null) {
+                        desk(companion).answer(pending.id(),
+                                com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_REMEMBER, "");
+                        step[0] = 4;
+                    }
+                }
+                case 4 -> {
+                    if (later[1].done()) {
+                        later[2] = lua(companion, "return numen.permission.remove(\"deny break(owner & minecraft:chest)\")");
+                        step[0] = 5;
+                    }
+                }
+                case 5 -> {
+                    if (pending != null) {
+                        helper.assertTrue(pending.items().get(0).name().getString().startsWith(
+                                        "/numen permission rules remove deny 1")
+                                        && pending.items().get(0).name().getString().contains("break(owner & minecraft:chest)"),
+                                "the removal card: " + pending.items());
+                        desk(companion).answer(pending.id(),
+                                com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
+                        step[0] = 6;
+                    }
+                }
+                default -> { }
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 6 && later[2].done(), "the card round trips have not finished");
+            helper.assertTrue(deny.succeeded() && Boolean.TRUE.equals(deny.field("changed"))
+                            && Boolean.TRUE.equals(deny.field("told"))
+                            && "deny break(owner & minecraft:chest)".equals(deny.field("row")),
+                    "the deny did not report what it wrote and that the owner was told: " + deny.reply());
+            helper.assertTrue(again.succeeded() && Boolean.FALSE.equals(again.field("changed")),
+                    "a row already there was reported as new: " + again.reply());
+            helper.assertTrue(typo.refused() && typo.outcome().contains("unknown verb 'brek'"),
+                    "a mistyped rule was not taught: " + typo.outcome());
+            helper.assertTrue(ask.succeeded(), "ask failed: " + ask.outcome());
+            helper.assertTrue(!later[0].succeeded() && later[0].outcome().contains("还不行"),
+                    "a refused allow did not quote the owner: " + later[0].outcome());
+            helper.assertTrue(later[1].succeeded() && later[2].succeeded(), "an allowed card did not go through: "
+                    + later[1].outcome() + " / " + later[2].outcome());
+            var store = storeOf(owner);
+            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).size() == 1
+                            && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).get(0).source()
+                            == com.dwinovo.numen.api.permission.PermissionStore.Source.HER
+                            && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).get(0).note().equals("harvest the farm"),
+                    "the allow row is not hers, with her reason, and alone: " + store.rows(
+                            com.dwinovo.numen.permission.Verdict.Kind.ALLOW));
+            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.DENY).isEmpty(),
+                    "the removed row is still there");
+            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.ASK).size() == 1
+                            && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ASK).get(0).source()
+                            == com.dwinovo.numen.api.permission.PermissionStore.Source.HER,
+                    "the ask row she added is missing");
+            String listed = String.join("\n", runAs(owner, "numen permission rules list"));
+            helper.assertTrue(listed.contains("she added it: harvest the farm"),
+                    "the owner's list does not mark her rows: " + listed);
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /** 她读规则:硬规则、主人层(她加的带注、记着命中)、出厂层各一张表。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void she_can_read_the_rules_that_bind_her(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_reader", new BlockPos(4, 2, 4), false);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_reader_owner");
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:tnt)"));
+        ToolRun read = lua(companion, "return numen.permission.rules()");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(read.done() && read.succeeded(), "rules() failed: " + read.outcome());
+            helper.assertTrue(read.field("hard") instanceof List<?> hard && hard.contains("deny break(other)"),
+                    "the hard rules are missing: " + read.reply());
+            helper.assertTrue(read.field("yours") instanceof List<?> yours && yours.size() == 1
+                            && String.valueOf(yours.get(0)).startsWith("deny break(minecraft:tnt)")
+                            && String.valueOf(yours.get(0)).contains("never fired"),
+                    "your owner's rows are not listed with their ledger: " + read.reply());
+            helper.assertTrue(read.field("factory") instanceof List<?> factory
+                            && factory.contains("ask break(owner)"), "the factory rows are missing: " + read.reply());
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

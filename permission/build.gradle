@@ -1,0 +1,70 @@
+// numen-permission:权限层的规则核心,纯 JVM——零 Minecraft 依赖、零 Numen 依赖。
+// 只管"一条规则怎么写、怎么读、怎么判":规则语法(解析与打印)、对象条件的语法树(& | ! 括号)、判决与判定顺序、
+// 模式、层与硬规则、"允许并记住"从一次命中推出一行 allow、对象组的登记口(Vocabulary)。
+// 游戏里的一下动作怎么翻成"动词 + 对象"(Act)、原版的对象组怎么判、征询与存档,都在 Numen API 的
+// com.dwinovo.numen.api.permission 里;将来走服务端插件,这里原样带走,只重写那一层适配。
+// 现住户:com.dwinovo.numen.permission。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
+group = 'com.dwinovo.numen'
+
+// 可复现构建:同一份源码重复构建应得到同样的字节。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+base {
+    archivesName = 'numen-permission'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 带 MC 版本后缀,理由同 lua/build.gradle:各分支上的这份源码可能不同,共用坐标会互相覆盖
+            artifactId = "numen-permission-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;这里不写兜底默认值
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

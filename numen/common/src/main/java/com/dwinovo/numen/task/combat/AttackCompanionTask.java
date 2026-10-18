@@ -22,7 +22,7 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskState;
 

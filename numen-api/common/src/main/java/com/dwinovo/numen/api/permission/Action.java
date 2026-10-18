@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Verb;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.core.BlockPos;
@@ -21,40 +22,7 @@ import java.util.TreeSet;
  * @param item    放/拿/丢的物品;规划期还不知道会用哪种耗材时为 null
  * @param command 执行的游戏指令;其余动作为 null
  */
-public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command) {
-
-    /** 动词。{@link #verb} 是规则文本里写的那个词。 */
-    public enum Kind {
-        BREAK("break", true), PLACE("place", true), ATTACK("attack", false), USE_BLOCK("use_block", true),
-        USE_ENTITY("use_entity", false), TAKE("take", true), DROP("drop", false), COMMAND("command", false);
-
-        private final String verb;
-        private final boolean atBlock;
-
-        Kind(String verb, boolean atBlock) {
-            this.verb = verb;
-            this.atBlock = atBlock;
-        }
-
-        public String verb() {
-            return verb;
-        }
-
-        /** 这种动作落在一格上({@link Action#pos} 非空):挖、放、右键方块、从容器拿。 */
-        public boolean atBlock() {
-            return atBlock;
-        }
-
-        /** 规则文本里的动词 → 动词;认不出返回 null。 */
-        public static Kind byVerb(String verb) {
-            for (Kind k : values()) {
-                if (k.verb.equals(verb)) {
-                    return k;
-                }
-            }
-            return null;
-        }
-    }
+public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command) {
 
     /**
      * 一条游戏指令。规则按根名认它({@code command(setblock)}),认的是 {@link #names}:她打的那个根,连同服务器
@@ -76,32 +44,32 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
     }
 
     public static Action breakBlock(BlockPos pos, BlockState state) {
-        return new Action(Kind.BREAK, pos, state, null, null, null);
+        return new Action(Verb.BREAK, pos, state, null, null, null);
     }
 
     /** @param item 要放的物品;规划期未定时传 null */
     public static Action place(BlockPos pos, BlockState current, Item item) {
-        return new Action(Kind.PLACE, pos, current, null, item, null);
+        return new Action(Verb.PLACE, pos, current, null, item, null);
     }
 
     public static Action attack(Entity target) {
-        return new Action(Kind.ATTACK, null, null, target, null, null);
+        return new Action(Verb.ATTACK, null, null, target, null, null);
     }
 
     public static Action useBlock(BlockPos pos, BlockState state) {
-        return new Action(Kind.USE_BLOCK, pos, state, null, null, null);
+        return new Action(Verb.USE_BLOCK, pos, state, null, null, null);
     }
 
     public static Action useEntity(Entity target) {
-        return new Action(Kind.USE_ENTITY, null, null, target, null, null);
+        return new Action(Verb.USE_ENTITY, null, null, target, null, null);
     }
 
     public static Action take(BlockPos container, BlockState state, Item item) {
-        return new Action(Kind.TAKE, container, state, null, item, null);
+        return new Action(Verb.TAKE, container, state, null, item, null);
     }
 
     public static Action drop(Item item) {
-        return new Action(Kind.DROP, null, null, null, item, null);
+        return new Action(Verb.DROP, null, null, null, item, null);
     }
 
     /**
@@ -126,7 +94,7 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
                 }
             }
         }
-        return new Action(Kind.COMMAND, null, null, null, null, new CommandLine(text, root, names));
+        return new Action(Verb.COMMAND, null, null, null, null, new CommandLine(text, root, names));
     }
 
     /** 一个根真正指向的节点:别名重定向去的那个,不是别名就是它自己。 */
@@ -138,7 +106,7 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
      * 回执里点名用:{@code break oak_log at 1,2,3}、{@code attack zombie}、{@code command /give @s diamond}。
      */
     public String describe() {
-        StringBuilder sb = new StringBuilder(kind.verb);
+        StringBuilder sb = new StringBuilder(kind.word());
         if (command != null) {
             sb.append(" /").append(command.line());
         } else if (state != null) {

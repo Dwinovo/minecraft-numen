@@ -4,9 +4,10 @@ import com.dwinovo.numen.api.agent.script.ApiError;
 import com.dwinovo.numen.api.agent.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.TaskDispatch;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -94,6 +95,14 @@ public final class ServerCall {
             case ASK -> Consents.of(her).await(lua(),
                     List.of(gate.consentItemLive(action, verdict, her.serverLevel())));
         };
+    }
+
+    /**
+     * 问主人一件不是世界动作的事(她改自己的规则,见 {@link ConsentItem#ruleEdit}):和 {@link #authorize} 问出来的一样挂着这次调用等
+     * 答复(不占任务槽),答应了有值,拒绝、超时、被叫停如实失败。
+     */
+    public Pending<Void> consent(ConsentItem item) {
+        return Consents.of(her).await(lua(), List.of(item));
     }
 
     /** 没做这件事的失败:{@code what} 是要做的事,理由是规则、模式或主人的原话。 */

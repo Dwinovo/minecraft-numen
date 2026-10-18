@@ -7,17 +7,23 @@ import java.util.UUID;
 
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy.Change;
+import com.dwinovo.numen.api.permission.Actor;
 import com.dwinovo.numen.api.permission.ConsentItem;
+import com.dwinovo.numen.api.permission.FactoryRules;
 import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Mode;
+import com.dwinovo.numen.api.permission.Layers;
+import com.dwinovo.numen.api.permission.Hits;
+import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
-import com.dwinovo.numen.api.permission.RuleSet;
+import com.dwinovo.numen.api.permission.Structures;
+import com.dwinovo.numen.permission.RuleSet;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.tags.BlockTags;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
@@ -27,7 +33,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.Level;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -37,12 +45,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 寻路问"这一格能不能动"时,同伴这一侧怎么答:权限层的裁决原样变成许可——放行;要问,凭据是写给主人的那一条征询;
- * 拒绝,理由是裁决本身。出厂规则下,自然方块放行,带方块实体的(箱子)、玩家放的、门标签里的要问。
+ * 拒绝,理由是裁决本身。出厂规则下,自然方块放行,主人放的、说不清是谁的(带方块实体的箱子)要问,别人放的拒绝。
  */
 @Tag("mc")
 class GateTerrainTest {
 
     private static final BlockPos CELL = new BlockPos(3, 64, 3);
+    private static final UUID OWNER = UUID.randomUUID();
+    private static final Actor HER = new Actor(UUID.randomUUID(), "Aria", OWNER);
+
+    /** 地形自己长的方块表来自数据包,无头引导下手动绑:泥土在里面。 */
+    private static final TagKey<Block> NATURAL = TagKey.create(Registries.BLOCK, ResourceLocation.parse("numen:natural"));
 
     @BeforeAll
     static void boot() {
@@ -50,9 +63,18 @@ class GateTerrainTest {
         net.minecraft.server.Bootstrap.bootStrap();
     }
 
+    @BeforeEach
+    void bindNaturalBlocks() {
+        bindBlockTags(Map.of(NATURAL, List.of(BuiltInRegistries.BLOCK.wrapAsHolder(Blocks.DIRT))));
+    }
+
+    @AfterEach
+    void unbind() {
+        bindBlockTags(Map.of());
+    }
+
     private static Gate gate(PlacedBlocks placed) {
-        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
-                placed, List.of());
+        return new Gate(HER, Layers.policy(Mode.ASK, FactoryRules.hard(), RuleSet.EMPTY, FactoryRules.layer()), placed, Structures.NONE, false, List.of(), Hits.NONE);
     }
 
     private static Permit dig(Gate gate, BlockState state) {
@@ -71,26 +93,22 @@ class GateTerrainTest {
         Permit permit = dig(gate(new PlacedBlocks()), Blocks.CHEST.defaultBlockState());
         Permit.Ask ask = assertInstanceOf(Permit.Ask.class, permit);
         ConsentItem item = assertInstanceOf(ConsentItem.class, ask.credential());
-        assertTrue(item.cause().contains("has a block entity"), item.cause());
+        assertTrue(item.cause().contains("of unknown origin"), item.cause());
     }
 
     @Test
-    void theSameDirtNeedsConsentOnceAPlayerPlacedIt() {
+    void theSameDirtNeedsConsentOnceTheOwnerPlacedIt() {
         PlacedBlocks placed = new PlacedBlocks();
-        placed.record(CELL, new PlacedBlocks.Placer(UUID.randomUUID(), "Steve"));
+        placed.record(CELL, new PlacedBlocks.Placer(OWNER, "Steve"));
         Permit.Ask ask = assertInstanceOf(Permit.Ask.class, dig(gate(placed), Blocks.DIRT.defaultBlockState()));
-        assertTrue(((ConsentItem) ask.credential()).cause().contains("placed by a player"));
+        assertTrue(((ConsentItem) ask.credential()).cause().contains("belongs to the owner"));
     }
 
-    /** 出厂表点名的是门标签;标签内容运行时来自数据包,这里把石头绑进去,钉的是"标签那一行生效"。 */
     @Test
-    void theFactoryDoorRowCoversWhateverTheDoorTagHolds() {
-        bindBlockTags(Map.of(BlockTags.DOORS, List.of(BuiltInRegistries.BLOCK.wrapAsHolder(Blocks.STONE))));
-        try {
-            assertInstanceOf(Permit.Ask.class, dig(gate(new PlacedBlocks()), Blocks.STONE.defaultBlockState()));
-        } finally {
-            bindBlockTags(Map.of());
-        }
+    void someoneElsesBlockIsAWallNoOwnerCanOpen() {
+        PlacedBlocks placed = new PlacedBlocks();
+        placed.record(CELL, new PlacedBlocks.Placer(UUID.randomUUID(), "Alex"));
+        assertInstanceOf(Permit.Deny.class, dig(gate(placed), Blocks.DIRT.defaultBlockState()));
     }
 
     @Test

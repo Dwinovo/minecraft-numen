@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.brain.OwnerPresence;
 import com.dwinovo.numen.api.entity.NumenPlayer;

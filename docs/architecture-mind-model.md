@@ -251,21 +251,13 @@ interface Reflex {
 `attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
 `command(整行)`。不带工具名、不带 JSON。
 
-**信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题,不按种类枚举:
+**对象组与属性。** 规则判的是"这东西是谁的"。方块恰好属于六类之一,按次序判、判出来就停:`self`(放置记录:她放的)、
+`owner`(放置记录:主人或主人名下别的同伴放的)、`other`(别的玩家或别人名下同伴放的)、`structure`(世界生成时记下的结构件范围,
+`structure(#minecraft:village)` 按结构类型分)、`nature`(种类在数据标签 `numen:natural` 里;树叶要不持久,原木要连着不持久的树叶)、
+`unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/permission.json` 改)。实体用 `self`、`owner`、`other`、`nature`,
+认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性:`block_entity`、`contents`(只在主线程读;搜索线程按"有")、
+`named`、`villager`、`hostile`、`hazard_item`、`near(<组>)`。组与属性的名字登记在规则核心的 `Vocabulary`,判断在 `Groups`。
 
-| 信号 | 问题 | 来源 |
-|---|---|---|
-| placed | 这格是不是别人放的 | 放置记录(每维度一份 SavedData):放的人只在 `PlacedBlocks.placedBy` 一处认,谁放的记谁(物品落位的 mixin 与建造照图直写都调它);查询时格子已是空气视为无记号;放的人不是要动手的这只同伴 |
-| self_placed | 这格是不是她自己放的 | 同一份放置记录,放的人就是要动手的这只同伴 |
-| block_entity | 这格有没有方块实体 | 方块状态 |
-| contents | 容器里有没有东西 | 世界(只在主线程读;搜索线程按"有") |
-| owned | 这只实体有没有主人(她自己也算) | `OwnableEntity`,主人只在 `Signals.ownerOf` 一处读 |
-| self_owned | 这只实体的主人是不是她自己 | 同一处读法,主人就是要动手的这只同伴 |
-| named | 有没有自定义名字 | 实体 |
-| villager | 是不是村民 | 实体类型 |
-| hostile | 是不是敌对 | 实体分类 |
-| hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
-| near_placed | 放置点附近有没有别人放的方块 | placed 的邻域查询 |
 权限层只做原版,领地模组之后以联动插件做。原生通道里服务器退回的挖掘,由挖掘落点如实报成被拒,
 那是身体汇报,不是权限裁决。
 
@@ -273,19 +265,15 @@ interface Reflex {
 deny 行与主人选的 observe;其余一律问。身体的物理与安全判断(岩浆、摔落上限、
 挖不动)不属权限,不经裁决。
 
-**规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
-项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`;`command` 的项是指令根名(`command(msg)`),别名同认。查的顺序 deny → allow → ask → 都不中
-也问(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂:
-deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
-!#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、
-`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、
-`use_entity(!owned)`、`use_entity(self_owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
-`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、
-`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、
-`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`。
+**规则(Rule)。** 一条规则一行字符串 `判决 动作(对象条件) [@同伴名]`,条件由组、属性、方块或实体种类 id、`#标签`、`entity:<uuid>`
+用 `&`、`|`、`!` 与括号拼成;`command` 的项是指令根名(`command(msg)`),别名同认。解析与打印只在纯 JVM 模块 `permission/` 的 `Rule` 里。
+判定顺序:模式 → 硬规则(命中即拒,主人解不开,服主可关)→ 任何一层的 deny → 主人层 allow、ask → 出厂层 allow、ask → 都不中也问
+(同层 allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂规则原文在 `FactoryRules`。
+每条规则记命中次数与最近一次命中,账在主人的 `PermissionStore`,规则列表上显示。她(模型)只能收紧:`numen.permission.deny/ask`
+直接写入主人层并回执;`allow` 与删行发一张征询卡,主人答应才写。
 
-**不可逆提示。** `attack(owned)`、`break(block_entity & contents)` 是普通 ask 行,允许与记住都
-盖得住;征询卡片把命中它们的清单项标出"撤不回"。
+**不可逆提示。** 在某个动词下命中即撤不回的名字(`contents`、`owner`/`self`/`other` 对 `attack`)由 `Vocabulary` 登记;
+允许与记住都盖得住,征询卡片把这些清单项标出"撤不回"。
 
 **裁决(Verdict)。** 唯一入口 `Permission`:主线程 `judge(companion, action)` 对活世界问一个动作;
 `gateFor(companion)` 取一份快照(模式、规则、放置记录、任务期授权)交给搜索线程逐格问。答复

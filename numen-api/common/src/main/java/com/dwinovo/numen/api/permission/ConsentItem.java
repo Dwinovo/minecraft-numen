@@ -1,6 +1,9 @@
 package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Verb;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -35,17 +38,33 @@ import java.util.Map;
  *                     指令的整行,区域名
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
- * @param shownCause   给主人看的为什么要问:命中那行规则就这个动作说的那一版({@link Rule#shown}),哪一行都没说到就说没有规则
- * @param irreversible 这件事撤不回(那一行规则的正项里有撤不回的信号)
- * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering})
+ * @param shownCause   给主人看的为什么要问:命中那行规则就这个动作说的那一版({@link ActView#shown}),哪一行都没说到就说没有规则
+ * @param irreversible 这件事撤不回(对象身上有在这个动词下算撤不回的名字,见 {@link com.dwinovo.numen.permission.Vocabulary#irreversible})
+ * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering});改规则的征询({@link #ruleEdit})
+ *                     不能记住,为 null——她不能给自己发许可
  */
-public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, Item icon, Component name,
+public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject, Item icon, Component name,
                           String rule, String cause, Component shownCause, boolean irreversible, Rule remember) {
 
     public static final int NO_ENTITY = -1;
 
     public ConsentItem {
         pos = pos == null ? null : pos.immutable();
+    }
+
+    /**
+     * 她要改主人规则的一条征询:放宽(加 allow)与删行她自己不能做,主人点头才写。卡上就写成她没法自己跑的那条命令
+     * ({@code /numen permission rules add allow …}),主人看得懂,也能自己敲。不能"允许并记住"。
+     *
+     * @param line   不带前导 {@code /} 的整行命令,如 {@code numen permission rules add allow break(owner)}
+     * @param detail 命令本身说不清的补一句给主人看(删第几行,那一行是什么);没有为空串
+     */
+    public static ConsentItem ruleEdit(String line, String detail) {
+        String shown = "/" + line;
+        return new ConsentItem(Verb.COMMAND, null, NO_ENTITY, shown, null,
+                Component.literal(detail.isEmpty() ? shown : shown + "  (" + detail + ")"), "",
+                "changes the owner's rules", Component.translatable(ModLanguageData.Keys.PERMISSION_RULE_EDIT), false,
+                null);
     }
 
     /**
@@ -64,7 +83,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
 
         /** 给模型:{@code break 6 oak_log (1,64,2; …; +2 more): placed by a player}。 */
         public String text() {
-            return head.kind.verb() + ' ' + Listing.part(head.subject, count, cells) + ": " + head.cause;
+            return head.kind.word() + ' ' + Listing.part(head.subject, count, cells) + ": " + head.cause;
         }
     }
 
@@ -75,9 +94,11 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
      */
     static ConsentItem of(Action action, Verdict verdict, Facts facts) {
         String rule = verdict.rule() == null ? "" : verdict.rule().toString();
-        boolean irreversible = verdict.rule() != null && verdict.rule().irreversible();
-        Rule remember = Rule.remembering(action, verdict.rule(), facts);
-        Component why = verdict.rule() != null ? verdict.rule().shown(action, facts)
+        ActView now = new ActView(action, facts);
+        ActView blind = new ActView(action, facts.withoutLive());
+        boolean irreversible = Groups.VOCABULARY.irreversible(now);
+        Rule remember = Rule.remembering(now, blind, verdict.rule(), Groups.VOCABULARY);
+        Component why = verdict.rule() != null ? now.shown(verdict.rule())
                 : Component.translatable(ModLanguageData.Keys.PERMISSION_UNCOVERED);
         return switch (action.kind()) {
             case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), null, action.entity().getId(),
@@ -100,7 +121,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     public static List<Rule> remembered(List<ConsentItem> items) {
         List<Rule> rules = new ArrayList<>();
         for (ConsentItem item : items) {
-            if (!rules.contains(item.remember)) {
+            if (item.remember != null && !rules.contains(item.remember)) {
                 rules.add(item.remember);
             }
         }
@@ -136,7 +157,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         return covers(other.kind, other.rule, other.entityId, other.subject);
     }
 
-    private boolean covers(Action.Kind otherKind, String otherRule, int otherEntity, String otherSubject) {
+    private boolean covers(Verb otherKind, String otherRule, int otherEntity, String otherSubject) {
         if (otherKind != kind || !rule.equals(otherRule)) {
             return false;
         }
@@ -153,7 +174,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     public static List<Group> listing(List<ConsentItem> items) {
         Map<String, List<ConsentItem>> groups = new LinkedHashMap<>();
         for (ConsentItem item : items) {
-            String key = item.kind.verb() + ' ' + item.subject + ' ' + item.name.getString() + ' ' + item.rule
+            String key = item.kind.word() + ' ' + item.subject + ' ' + item.name.getString() + ' ' + item.rule
                     + ' ' + item.shownCause.getString();
             groups.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
         }
@@ -188,7 +209,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
                 return new Subject(line, null, Component.literal(line));
             }
             BlockState state = action.state();
-            if (state != null && action.kind() != Action.Kind.PLACE) {
+            if (state != null && action.kind() != Verb.PLACE) {
                 Item form = state.getBlock().asItem();
                 return new Subject(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath(),
                         form == Items.AIR ? null : form, state.getBlock().getName());

@@ -3,7 +3,7 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Mode;
+import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.plugins.tlm.MaidLook;
 import com.dwinovo.numen.plugins.tlm.Outfit;
@@ -388,21 +388,21 @@ public class TlmGameTests {
         });
     }
 
-    /** 别人的女仆:权限层放行了,车万女仆自己的主人判据不照做;回执说她不是她的,工作没动。 */
+    /** 主人的女仆(别人的女仆是硬规则拒的,到不了这儿):权限层放行了,车万女仆自己的主人判据不照做;回执说她不是她的,工作没动。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
-    public static void someone_elses_maid_keeps_her_task(GameTestHelper helper) {
+    public static void the_owners_maid_keeps_her_task(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_meddler", new BlockPos(3, 2, 3));
         Permission.setMode(her, Mode.BYPASS);
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.setTame(true, false);
-        maid.setOwnerUUID(UUID.randomUUID());
+        maid.setOwnerUUID(her.getOwnerUuid());
 
         ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("not yours"),
-                    "tlm task on someone else's maid did not fail by TLM's owner rule: " + task.reply());
-            helper.assertTrue(!maid.getTask().getUid().equals(FARM), "someone else's maid took her order");
+                    "tlm task on the owner's maid did not fail by TLM's owner rule: " + task.reply());
+            helper.assertTrue(!maid.getTask().getUid().equals(FARM), "the owner's maid took her order");
             leave(helper, her, maid);
         });
     }

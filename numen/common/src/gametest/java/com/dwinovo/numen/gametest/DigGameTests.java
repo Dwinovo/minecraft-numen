@@ -162,10 +162,7 @@ public class DigGameTests {
         spruceTree(helper, new BlockPos(5, 2, 5), 6);
         spruceTree(helper, new BlockPos(13, 2, 6), 6);
         spruceTree(helper, new BlockPos(8, 2, 14), 7);
-        BlockPos spawn = helper.absolutePos(new BlockPos(9, 2, 9));
-        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
-                "gametest_logger", UUID.randomUUID(), level,
-                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        NumenPlayer companion = spawnAt(helper, "gametest_logger", new BlockPos(9, 2, 9), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
         mineScanned(helper, companion, 10, "minecraft:spruce_log", 8);
@@ -604,14 +601,14 @@ public class DigGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_walks_up_to_what_is_out_of_reach_and_digs_it_all(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_vein_edge", new BlockPos(7, 2, 8), false);
-        BlockPos stand = companion.blockPosition();
         List<BlockPos> vein = new java.util.ArrayList<>();
         for (int x = 6; x <= 18; x++) {
             BlockPos cell = helper.absolutePos(new BlockPos(x, 2, 10));
             level.setBlockAndUpdate(cell, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
             vein.add(cell);
         }
+        NumenPlayer companion = spawnAt(helper, "gametest_vein_edge", new BlockPos(7, 2, 8), false);
+        BlockPos stand = companion.blockPosition();
         ToolRun scanned = scan(companion, 18, "minecraft:pearlescent_froglight");
         ToolRun[] dig = new ToolRun[1];
 

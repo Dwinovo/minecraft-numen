@@ -1,7 +1,7 @@
-package com.dwinovo.numen.api.permission;
+package com.dwinovo.numen.permission;
 
 /**
- * 每个同伴一个,主人设。{@link #ASK} 走规则表;{@link #BYPASS} 全放行(单机不想被打扰的人用);
+ * 每个同伴一个,主人设。{@link #ASK} 走规则表;{@link #BYPASS} 全放行(单机不想被打扰的人用),硬规则除外;
  * {@link #OBSERVE} 只看不动,拒绝一切改世界的动作,等于 plan mode。
  */
 public enum Mode {

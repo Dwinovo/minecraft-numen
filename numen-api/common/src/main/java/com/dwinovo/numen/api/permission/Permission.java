@@ -1,9 +1,14 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.permission.Mode;
+import com.dwinovo.numen.permission.Policy;
+import com.dwinovo.numen.permission.RuleSet;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.server.level.ServerLevel;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,8 +30,15 @@ public final class Permission {
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
-        return new Gate(companion.getUUID(), modeOf(companion), ownerRules(companion), RuleSet.factory(),
-                PlacedBlocks.of(level), ConsentDesk.of(companion).granted());
+        PermissionConfig config = PermissionConfig.of(companion.getServer());
+        Actor actor = new Actor(companion.getUUID(), companion.getName().getString(), companion.getOwnerUuid());
+        UUID owner = companion.getOwnerUuid();
+        PermissionStore store = owner == null ? null : PermissionStore.of(companion.getServer(), owner);
+        Policy policy = Layers.policy(modeOf(companion), config.hardRules() ? FactoryRules.hard() : List.of(),
+                store == null ? RuleSet.EMPTY : store.rules(), FactoryRules.layer());
+        return new Gate(actor, policy, PlacedBlocks.of(level),
+                Structures.capture(level, companion.blockPosition(), Structures.CAPTURE_RADIUS_CHUNKS),
+                config.unknownAsOther(), ConsentDesk.of(companion).granted(), store == null ? Hits.NONE : store::hit);
     }
 
     /** 主线程:对活世界裁决一个动作。 */
@@ -50,11 +62,5 @@ public final class Permission {
             return;
         }
         PermissionStore.of(companion.getServer(), owner).setMode(companion.getUUID(), mode);
-    }
-
-    /** 这只同伴的主人写的那一层规则;还没有主人时是空层。 */
-    private static RuleSet ownerRules(NumenPlayer companion) {
-        UUID owner = companion.getOwnerUuid();
-        return owner == null ? RuleSet.EMPTY : PermissionStore.of(companion.getServer(), owner).rules();
     }
 }

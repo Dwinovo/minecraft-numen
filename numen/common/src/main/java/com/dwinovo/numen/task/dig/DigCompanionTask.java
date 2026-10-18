@@ -21,7 +21,7 @@ import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Listing;
-import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskState;
 
