@@ -18,10 +18,11 @@ evaluationDependsOn(':numen:pathing')
 
 dependencies {
     // Numen 是 Numen API 的第一个插件,和别的插件走同一扇门:编译期只看得见瘦 api jar 里公开的那部分,
-    // 由编译器把关;完整的类运行时由 Numen API 这个模组提供,不随 Numen 发。ai / agent / ui 是插件经 POM 传递依赖拿到的模块。
+    // 由编译器把关;完整的类运行时由 Numen API 这个模组提供,不随 Numen 发。ai / agent / permission / ui 是插件经 POM 传递依赖拿到的模块。
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
     compileOnly project(':ai')
     compileOnly project(':agent')
+    compileOnly project(':permission')
     compileOnly project(':ui')
     // 寻路模块(只依赖原版):Numen 的内容,发行 jar 里平铺进 Numen 的加载器 jar,见 numen-loader.gradle
     compileOnly project(':numen:pathing')

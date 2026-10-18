@@ -42,6 +42,9 @@ dependencies {
     api project(':ai')
     // 大脑本身(纯 JVM):输入队列、长期目标。api 配置同理,下游 loader 透视得到。
     api project(':agent')
+    // 权限层的规则核心(纯 JVM):Numen API 的 com.dwinovo.numen.api.permission 是它的游戏适配。api 配置让下游 loader 与插件透视得到
+    // 动词、判决、模式这些公开签名里的类型。
+    api project(':permission')
     // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
     // api 配置让下游 loader 也透视得到 widget/令牌类型。
     api project(':ui')

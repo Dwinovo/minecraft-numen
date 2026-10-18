@@ -36,6 +36,8 @@ include('store')
 include('ai')
 // numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 Numen API 依赖(详见 agent/build.gradle 头注)。
 include('agent')
+// numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
+include('permission')
 include('ui')
 // numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
 include('lua')

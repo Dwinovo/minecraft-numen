@@ -73,6 +73,7 @@ tasks.register('publishAll') {
     // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
     dependsOn ':ai:publish'
     dependsOn ':agent:publish'
+    dependsOn ':permission:publish'
     dependsOn ':lua:publish'
     dependsOn ':ui:publish'
     ['numen-api', 'numen'].each { family ->

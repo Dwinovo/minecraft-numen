@@ -24,6 +24,7 @@ dependencies {
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
     compileOnly project(':ai')
     compileOnly project(':agent')
+    compileOnly project(':permission')
     compileOnly project(':ui')
     compileOnly(project(':numen:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
