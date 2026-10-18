@@ -48,6 +48,11 @@ bench:game → bench, numen-api  bench 纯 JVM;考场不认识 numen 与插件
 | `plugins/*` | 与别的模组的联动,一个联动一个目录,目标模组不在就不加载 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型 | `numen`、彼此、被 `numen-api` 引用 |
 | `bench` / `bench:game` | 真模型评测:`bench` 是记录与统计;`bench:game` 是游戏里那一半 | `bench:game` 依赖 `bench` 与 `numen-api`;`bench` 无 | 插件与 `numen` 的类(考场只认 Numen API);不发布、不进发行 jar |
 
+**平台(10-19 定):服务端代码只碰原版类,加载器只做"服务"与"挂点"两件事。** 服务是 common 问平台要的东西(`platform/services`,每个平台一份实现);
+挂点是平台把世界里发生的事告诉 common——每件事在 common 里有且只有一个入口,NeoForge 与 Fabric 用 Mixin 或加载器事件调它,Paper 用 Bukkit/Paper 事件调它,
+common 不分平台走两条路。Mixin 类只在各自的 `mixin` 包里,`mixin` 包外不引用它们。**客户端与服务端之间的协议是 Numen 自己的规范**:每种包一个频道名,
+字节布局由 common 里的 `StreamCodec` 定,不带任何加载器的封装,所以 Fabric、NeoForge 的客户端与 NeoForge、Fabric、Paper 的服务端两两相通。Paper 端见 `docs/paper.md`。
+
 寻路留在 `numen/pathing`:它是 Numen 这个插件的内容,第三方插件要寻路自己带一份;Numen API 不开寻路扩展点,只公开寻路和手动驱动共用的身体机制(键盘、视角、鼠标、快捷栏、物理步进与原版公式几何)。
 ## 零、总纲:她看一眼很贵
 
