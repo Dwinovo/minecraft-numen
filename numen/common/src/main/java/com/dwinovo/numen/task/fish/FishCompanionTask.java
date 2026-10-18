@@ -3,7 +3,7 @@ import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.FailureType;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.mixin.FishingHookAccessor;
+import com.dwinovo.numen.platform.NumenServices;
 import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
@@ -185,7 +185,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             return failedCast("the hook caught an entity instead of landing in the water");
         }
 
-        int nibble = ((FishingHookAccessor) (Object) hook).numen$getNibble();
+        int nibble = NumenServices.VANILLA.biteCountdown(hook);
         if (isBiteWindow(nibble)) {
             Vec3 at = hook.position();
             reelIn();

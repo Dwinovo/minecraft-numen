@@ -57,7 +57,13 @@ public final class ServerLang {
         return BY_LOCALE.computeIfAbsent(locale.toLowerCase(Locale.ROOT), ServerLang::read);
     }
 
-    /** 要发给这位玩家的话,按他客户端报上来的语言翻好。没有 Numen 的键就是原对象。 */
+    /**
+     * 要发给这位玩家的话,按他客户端报上来的语言翻好。没有 Numen 的键就是原对象。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code MixinServerCommonPacketListener} 在系统聊天包出站时调,改写包再放行;Paper 上把
+     * {@link #translate} 注册成 Adventure 的翻译源({@code GlobalTranslator}),Paper 编码组件时按玩家语言渲染,原版的可翻译组件也走它。
+     * 调用方保证:只对没装 Numen 客户端的真玩家调(装了的由他自己的客户端翻);任何线程。
+     */
     public static Component forPlayer(ServerPlayer player, Component message) {
         return of(player.clientInformation().language()).translate(message);
     }

@@ -14,7 +14,7 @@ import java.util.Comparator;
  * <h2>Why this exists</h2>
  * A vanilla {@link net.minecraft.server.level.ServerPlayer} loads chunks through
  * {@code DistanceManager.addPlayer}, which {@code ChunkMap.updatePlayerStatus} gates on
- * {@code !skipPlayer(player)}. {@link com.dwinovo.numen.api.mixin.ChunkMapCompanionMixin} forces
+ * {@code !skipPlayer(player)}. {@code ChunkMapCompanionMixin} forces
  * {@code skipPlayer == true} for companions — that strips the wasted client chunk-tracking /
  * packet machinery (a fake player has no client), but as a side effect also strips the player
  * loading ticket. This class adds the loading back, but <b>bounded</b>: a {@value #RADIUS}-chunk

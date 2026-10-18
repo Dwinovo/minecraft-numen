@@ -491,4 +491,49 @@ public class PerceptionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 热索引的正确性不押在方块变更挂点上(有的平台没有等价的通用事件):方块被不经挂点的办法改走,
+     * 下一次搜索也不会把已经不是目标的格交出来——取用索引条目时按这一格此刻的方块现读现核。
+     * 这里直接改 section 里的方块,绕开 {@code ServerLevel.onBlockStateChange}。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void a_block_search_never_returns_a_cell_that_stopped_being_the_target(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos gone = helper.absolutePos(new BlockPos(10, 2, 10));
+        BlockPos kept = helper.absolutePos(new BlockPos(12, 2, 12));
+        level.setBlockAndUpdate(gone, Blocks.SPONGE.defaultBlockState());
+        level.setBlockAndUpdate(kept, Blocks.SPONGE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_stale_index", new BlockPos(3, 2, 3), false);
+        java.util.Set<net.minecraft.world.level.block.Block> targets = java.util.Set.of(Blocks.SPONGE);
+        com.dwinovo.numen.scan.BlockSearch.hold(level, targets);   // 整个用例持有登记,条目建好后一直是热的
+        var first = new java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.scan.BlockSearch.ScanResult>();
+        var second = new java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.scan.BlockSearch.ScanResult>();
+        var bypassed = new java.util.concurrent.atomic.AtomicBoolean();
+        com.dwinovo.numen.scan.BlockSearch.start(companion.getUUID(), level, companion.blockPosition(), 24,
+                com.dwinovo.numen.scan.BlockSearch.MAX_COLLECT, targets, first::set);
+
+        succeedWhen(helper, () -> {
+            var before = first.get();
+            helper.assertTrue(before != null, "the first search has not come back");
+            helper.assertTrue(before.matches().stream().anyMatch(h -> h.pos().equals(gone)),
+                    "the first search did not see the sponge, so the index never held it");
+            if (bypassed.compareAndSet(false, true)) {
+                var chunk = level.getChunkAt(gone);
+                chunk.getSection(chunk.getSectionIndex(gone.getY())).setBlockState(
+                        gone.getX() & 15, gone.getY() & 15, gone.getZ() & 15, Blocks.AIR.defaultBlockState(), false);
+                com.dwinovo.numen.scan.BlockSearch.start(companion.getUUID(), level, companion.blockPosition(), 24,
+                        com.dwinovo.numen.scan.BlockSearch.MAX_COLLECT, targets, second::set);
+            }
+            var after = second.get();
+            helper.assertTrue(after != null, "the second search has not come back");
+            helper.assertTrue(after.matches().stream().noneMatch(h -> h.pos().equals(gone)),
+                    "the search returned a cell that is no longer the target");
+            helper.assertTrue(after.matches().stream().anyMatch(h -> h.pos().equals(kept)),
+                    "the search lost the sponge that is still there");
+            com.dwinovo.numen.scan.BlockSearch.release(level, targets);
+            level.removeBlock(kept, false);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

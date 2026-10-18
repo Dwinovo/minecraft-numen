@@ -83,7 +83,12 @@ public final class FakeClient {
                 overlay, repeats, ServerMessages.WINDOW_TICKS / 20));
     }
 
-    /** 服务端刚往"客户端"发了一个包。 */
+    /**
+     * 服务端刚往"客户端"发了一个包。<b>平台挂点。</b>模组上由 {@code MixinServerCommonPacketListener} 在
+     * {@code ServerCommonPacketListenerImpl.send} 开头调(NeoForge 的频道检查在 {@code Connection.send} 之前就会抛异常,只能在这里截);
+     * Paper 上由 {@code FakeConnection.send} 调(Paper 的发送最终落在这里)。调用方保证:主线程,她这一条连接发出的每个下行包
+     * 在被丢弃之前都交来一次,且只交她的连接的。
+     */
     public void onOutbound(Packet<?> packet) {
         if (packet instanceof ClientboundPlayerPositionPacket teleport) {
             awaitingTeleport = teleport.getId();

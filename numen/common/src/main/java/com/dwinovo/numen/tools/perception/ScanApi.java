@@ -180,7 +180,7 @@ public final class ScanApi {
                 ItemStack stack = item.getItem();
                 // 刚掉下来的东西原版要过一小段冷却才让人捡:还剩几刻,捡的模块据此判断走上去没捡到是不是在等冷却
                 out.add(new ItemInfo(info, BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount(),
-                        ((com.dwinovo.numen.mixin.ItemEntityAccessor) item).numen$getPickupDelay()));
+                        com.dwinovo.numen.platform.NumenServices.VANILLA.pickupDelay(item)));
             } else {
                 out.add(info);
             }

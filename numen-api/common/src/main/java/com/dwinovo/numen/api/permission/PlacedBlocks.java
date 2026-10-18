@@ -122,6 +122,10 @@ public final class PlacedBlocks extends SavedData {
     /**
      * {@code by} 在 {@code pos} 放下了方块(主线程):记下这一格和放的人,双格方块连它带出来的另一半(门上半、床头)。
      * 放的人只在这里认,名字取放的那一刻的。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code BlockItemPlaceMixin} 在 {@code BlockItem.place} 成功返回时调;Paper 上由
+     * {@code BlockPlaceEvent}、{@code BlockMultiPlaceEvent} 调。调用方保证:主线程,放置已经成功(方块已在 {@code pos}),
+     * 只对经物品落位的放置调——命令、活塞、生长写下的不算"玩家放的"。
      */
     public static void placedBy(ServerLevel level, BlockPos pos, ServerPlayer by) {
         PlacedBlocks placed = of(level);
