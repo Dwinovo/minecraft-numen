@@ -39,3 +39,4 @@ tasks.named('runServer') {
 
 // 端到端测试(e2e/)与 GameTest 在 Paper 上的起服层。它们要用到上面配置好的 runServer。
 apply plugin: 'numen-e2e-paper'
+apply plugin: 'numen-gametest-paper'
