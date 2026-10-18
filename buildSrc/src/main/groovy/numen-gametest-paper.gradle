@@ -45,7 +45,6 @@ tasks.register('runGameTestServer') {
                 'generate-structures': 'false',
                 'spawn-protection'   : '0',
                 'difficulty'         : 'normal',
-                'spawn-monsters'     : 'false',
                 'view-distance'      : '4',
                 'simulation-distance': '4',
                 'max-tick-time'      : '-1',

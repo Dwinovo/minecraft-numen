@@ -63,13 +63,10 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
 
     /**
-     * 刻速率。GameTestServer 一刻做完接着下一刻、不等墙钟,用例里"搜索在工作线程上要几刻"之类的时序是照这个写的(寻路的
-     * TickRateGameTests 说得很明白);Paper 的服务端循环按刻速率睡,所以把速率调到顶上,让它也一刻接一刻。
+     * 一条用例最多等多少刻(见 {@link #capped})。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
+     * ({@code ServerLevel.getLagCompensationTick}),刻跑得比墙钟快,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。
      */
-    private static final float TICK_RATE = 10000f;
-
-    /** 一条用例最多等多少刻(见 {@link #capped})。 */
-    private static final int MAX_TICKS = 6000;
+    private static final int MAX_TICKS = 2400;
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -137,7 +134,7 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
 
     /**
      * 时限不超过 {@link #MAX_TICKS}。用例给自己留的时限(最长十万刻)是为"本来就能很快做完"的行为留的余量:没做成的那条要等满才失败,
-     * GameTestServer 一刻几乎不花时间,等满不算什么;Paper 上一刻要花得多,一批没做成的用例就能拖出几十分钟。
+     * GameTestServer 一刻几乎不花时间,等满不算什么;Paper 上一刻 50 毫秒,十万刻是一个半小时,一批没做成的用例就能拖住整次运行。
      * 收短的用例在结果里记着它自己写的时限,超时失败的那些要和"真失败"分开看。
      */
     private TestFunction capped(TestFunction f) {
@@ -149,7 +146,7 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
                 f.required(), f.manualOnly(), f.maxAttempts(), f.requiredSuccesses(), f.skyAccess(), f.function());
     }
 
-    /** GameTestServer 的固定游戏规则与天气;刻速率见 {@link #TICK_RATE}。 */
+    /** GameTestServer 的固定游戏规则与天气。 */
     private void settle(ServerLevel level) {
         GameRules rules = level.getGameRules();
         rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level);
@@ -158,7 +155,6 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         rules.getRule(GameRules.RULE_DOFIRETICK).set(false, level);
         level.setDefaultSpawnPos(ORIGIN, 0.0F);
         level.setWeatherParameters(20000000, 20000000, false, false);
-        server.tickRateManager().setTickRate(TICK_RATE);
     }
 
     /**

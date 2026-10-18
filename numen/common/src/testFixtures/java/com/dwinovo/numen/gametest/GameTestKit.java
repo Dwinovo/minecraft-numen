@@ -612,6 +612,9 @@ public final class GameTestKit {
         LINES.put(profile.getId(), line);
         server.getPlayerList().placeNewPlayer(line, player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));
+        if (installed) {
+            com.dwinovo.numen.api.gametest.MockConnection.INSTANCE.installed(player);
+        }
         if (companion != null) {
             companion.setOwnerUuid(player.getUUID());
         }
