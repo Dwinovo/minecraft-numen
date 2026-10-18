@@ -52,6 +52,8 @@ final class ProfilePage {
         record Message() implements Hit {}
         record Edit() implements Hit {}
         record Dismiss() implements Hit {}
+        record Export() implements Hit {}
+        record Wipe() implements Hit {}
         record Open(Conversation conversation) implements Hit {}
     }
 
@@ -305,7 +307,7 @@ final class ProfilePage {
                     : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
         }
         cy = settingRow(g, t, I18n.get("numen.profile.model"), model, x, cy, w, mouseX, mouseY);
-        var voice = com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().resolve(who);
+        var voice = loop == null ? null : ServerLibraries.voice(loop.voiceId());
         cy = settingRow(g, t, I18n.get("numen.profile.voice"),
                 voice != null ? voice.name() : I18n.get("numen.profile.voice_none"), x, cy, w, mouseX, mouseY);
         var conn = mc.getConnection();
@@ -324,14 +326,23 @@ final class ProfilePage {
         }
         cy += 4;
 
+        // ---- 记忆:存在这个服务器上(服主看得到),主人可以整份导出、可以清空(点了还要过确认卡) ----
+        cy = gap(g, t, x, w, cy);
+        cy = sectionHead(g, t, I18n.get(ModLanguageData.Keys.PROFILE_MEMORY), "", x + PAD, cy, iw);
+        for (var line : font.split(Component.translatable(ModLanguageData.Keys.PROFILE_MEMORY_HERE), iw)) {
+            g.drawString(font, line, x + PAD, cy, t.textDim(), false);
+            cy += font.lineHeight + 1;
+        }
+        cy += 3;
+        cy = actionRow(g, t, new Hit.Export(), Sprites.COPY, I18n.get(ModLanguageData.Keys.PROFILE_EXPORT), t.accent(),
+                x, cy, w, mouseX, mouseY);
+        cy = actionRow(g, t, new Hit.Wipe(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.PROFILE_WIPE), t.fail(),
+                x, cy, w, mouseX, mouseY);
+
         // ---- 页底:遣散(红字,点了还要过确认卡) ----
         cy = gap(g, t, x, w, cy);
-        boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + LINE_ROW_H + 2;
-        if (hot) g.fill(x, cy - 2, x + w, cy + LINE_ROW_H + 2, t.over());
-        Sprites.draw(g, Sprites.DELETE, x + PAD, cy + (LINE_ROW_H - Sprites.SIZE) / 2, Sprites.SIZE, t.fail());
-        Nb.text(g, font, I18n.get(ModLanguageData.Keys.EDIT_DISMISS), x + PAD + TEXT_DX, cy + 4, t.fail());
-        rects.add(new Rect(new Hit.Dismiss(), x, cy - 2, w, LINE_ROW_H + 4));
-        cy += LINE_ROW_H + 12;
+        cy = actionRow(g, t, new Hit.Dismiss(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.EDIT_DISMISS), t.fail(),
+                x, cy, w, mouseX, mouseY) + 8;
 
         contentH = cy + Math.round(scroll) - y;
         // 滚动条:只有滑块,内容超出一屏才画
@@ -445,6 +456,17 @@ final class ProfilePage {
         Nb.text(g, font, v, x + w - PAD - font.width(v), ty, t.textDim());
         rects.add(new Rect(new Hit.Edit(), x, y, w, LINE_ROW_H));
         return y + LINE_ROW_H;
+    }
+
+    /** 页里一行可点的操作:图标加字,悬停浅底;返回下一行的顶边。 */
+    private int actionRow(GuiGraphics g, UiTheme t, Hit hit, ResourceLocation icon, String label, int color,
+                          int x, int y, int w, int mouseX, int mouseY) {
+        boolean hot = mouseX >= x && mouseX < x + w && mouseY >= y - 2 && mouseY < y + LINE_ROW_H + 2;
+        if (hot) g.fill(x, y - 2, x + w, y + LINE_ROW_H + 2, t.over());
+        Sprites.draw(g, icon, x + PAD, y + (LINE_ROW_H - Sprites.SIZE) / 2, Sprites.SIZE, color);
+        Nb.text(g, font, label, x + PAD + TEXT_DX, y + 4, color);
+        rects.add(new Rect(hit, x, y - 2, w, LINE_ROW_H + 4));
+        return y + LINE_ROW_H + 4;
     }
 
     /** 操作块(Telegram 名字下面那排):上图标、下字,浅底,悬停深一档。 */

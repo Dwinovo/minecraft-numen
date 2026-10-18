@@ -9,6 +9,7 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.brain.Slot;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -32,7 +33,7 @@ class RemoteCompanionTest {
     private static CompanionState state(Phase phase, String compactProblem, List<String> outstanding) {
         return new CompanionState(phase, null, null, false, null, 0.0,
                 List.of(new EventQueue.Preview("p1", "query", "<query>去挖矿</query>")), compactProblem, null, null,
-                1500, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 900, 2, 33, 64000, "小焰", "prov1", "G",
+                1500, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 900, 2, 33, 64000, "小焰", "prov1", null, null, "G",
                 outstanding, 12);
     }
 
@@ -105,13 +106,15 @@ class RemoteCompanionTest {
         her.abort();
         her.setGoal(GoalState.of("挖铁", 0), "/goal 挖铁");
         her.clearGoal(null);
-        her.setPersona("小焰");
-        her.setProviderEntry("prov2");
+        her.bind(Slot.PERSONA, "my:小焰");
+        her.bind(Slot.PROVIDER, "my:prov2");
+        her.bind(Slot.VOICE, null);
 
         assertEquals(List.of(new OwnerInput.Say(HER.toString(), "你好"), new OwnerInput.Command(HER, "/build 木屋"),
                 new OwnerInput.Compact(HER), new OwnerInput.Clear(HER), new OwnerInput.Stop(HER.toString()),
                 new OwnerInput.SetGoal(HER, "挖铁", "/goal 挖铁"), new OwnerInput.ClearGoal(HER),
-                new OwnerInput.SetPersona(HER, "小焰"), new OwnerInput.SetProvider(HER, "prov2")), sent);
+                new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.PROVIDER, "my:prov2"),
+                new OwnerInput.Bind(HER, Slot.VOICE, null)), sent);
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
-import com.dwinovo.numen.api.client.skin.SkinLibrary;
+import com.dwinovo.numen.api.client.skin.SkinTextures;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.skin.SkinProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -18,45 +19,48 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 皮肤的编辑表单——NumenUI 版的瓤:名称 + 手臂模型下拉 + 「选择文件…」
- * (原生文件对话框/拖拽入窗共用 {@link #importFile});保存 = 需要时先
- * MineSkin 代签再落库(新图/换手臂模型/未签名都要重签,仅改名直接落库)。
- * 签名排队期间按钮自锁,结果走页面级 InlineAlert;导入尺寸校验就地报错。
+ * 皮肤的编辑表单——NumenUI 版的瓤:名称 + 手臂模型下拉 + 「选择文件…」(原生文件对话框/拖拽入窗共用 {@link #importFile}),
+ * 选中的图在本机先预览。保存只是把名字、手臂模型和图交给服务端:签名在服务端排队({@code SkinSigning}),排到第几、
+ * 被限流在等、签好没有都在列表页的行上。界面写明"图片会交给 MineSkin"——这是玩家要知道的外传。
+ * 管理员另有一行 MineSkin 的 API key(服务器钥匙串里的,提高签名额度)。导入尺寸校验就地报错。
  */
 public final class SkinFormPanel {
 
-    /** 表单草稿;{@code editId} 空 = 新建。图字节留在草稿里,保存才签名落盘。 */
+    /** 表单草稿;{@code editId} 空 = 新建。图字节留在草稿里,保存才发给服务端。 */
     public static final class Draft {
         public String editId;
         public String name = "";
-        public String variant = SkinLibrary.VARIANT_CLASSIC;
+        public String variant = SkinProfile.VARIANT_CLASSIC;
         public byte[] dropped;
         public int droppedW;
         public int droppedH;
+        /** 管理员看到的服务器钥匙串里 MineSkin 的 key;非管理员恒为空,不显示这一行。 */
+        public String mineSkinKey = "";
     }
 
     private static final List<String> VARIANTS =
-            List.of(SkinLibrary.VARIANT_CLASSIC, SkinLibrary.VARIANT_SLIM);
+            List.of(SkinProfile.VARIANT_CLASSIC, SkinProfile.VARIANT_SLIM);
+    /** 选中的图预览的边长。 */
+    private static final int PREVIEW = 32;
 
     private final UiRoot ui = new UiRoot();
-    /** 保存完成回调:参数=经 MineSkin 签名的名称(仅改名未重签时为 null)。 */
-    private final Consumer<String> onSaved;
+    private final Consumer<Draft> onSave;
     private final Runnable onCancel;
     private final Runnable onPickFile;
+    private final java.util.function.BooleanSupplier admin;
 
     private Draft draft = new Draft();
     private TextField nameField;
     private Label statusLabel;
-    private Button saveButton;
     private InlineAlert resultAlert;
-    /** 签名在 MineSkin 排队,期间禁止重复点击;gen 作废在途回调。 */
-    private boolean signing;
-    private int gen;
+    private int previewX, previewY;
 
-    public SkinFormPanel(Consumer<String> onSaved, Runnable onCancel, Runnable onPickFile) {
-        this.onSaved = onSaved;
+    public SkinFormPanel(Consumer<Draft> onSave, Runnable onCancel, Runnable onPickFile,
+                         java.util.function.BooleanSupplier admin) {
+        this.onSave = onSave;
         this.onCancel = onCancel;
         this.onPickFile = onPickFile;
+        this.admin = admin;
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -70,12 +74,6 @@ public final class SkinFormPanel {
         this.draft = d;
     }
 
-    /** 表单关闭/切分区:作废在途签名回调。 */
-    public void cancelPending() {
-        gen++;
-        signing = false;
-    }
-
     public void build(int x, int y, int w, int h, UiRoot.Viewport window) {
         ui.clear();
         ui.setViewport(window);
@@ -83,9 +81,7 @@ public final class SkinFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.SKIN_FORM_NAME);
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
-                .placeholder(t("numen.skin.name_placeholder"))   // 规则先说,别等报错才知道
-                .withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -106,13 +102,25 @@ public final class SkinFormPanel {
         Button pick = ui.add(new Button(pickLabel, Button.Style.NORMAL, onPickFile));
         pick.setBounds(x, ry, pickW, 16);
         statusLabel = ui.add(new Label("", Label.Role.SECONDARY));
-        statusLabel.setBounds(x + pickW + 6, ry + 4, Math.max(0, w - pickW - 6), 9);
+        statusLabel.setBounds(x + pickW + 6, ry + 4, Math.max(0, w - pickW - 6 - PREVIEW - 6), 9);
+        previewX = x + w - PREVIEW;
+        previewY = ry - 8;
         refreshStatus();
+        ry += 20;
+        Label notice = ui.add(new Label(t(ModLanguageData.Keys.SKIN_NOTICE), Label.Role.SECONDARY));
+        notice.setBounds(x, ry, w - PREVIEW - 6, 9);
+        ry += NumenStyle.ROW_PITCH;
+
+        if (admin.getAsBoolean()) {
+            ry = label(x, ry, ModLanguageData.Keys.SKIN_FORM_MINESKIN_KEY);
+            TextField key = ui.add(new TextField(draft.mineSkinKey, v -> draft.mineSkinKey = v).masked(true)
+                    .placeholder(t(ModLanguageData.Keys.SKIN_MINESKIN_KEY_HINT)));
+            key.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        }
 
         resultAlert = ui.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        saveButton = DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
-        saveButton.setEnabled(!signing);
+        DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
     }
 
     /** 皮肤导入的统一入口:拖拽、原生文件对话框两条路共用。64×64 或旧版 64×32。 */
@@ -145,6 +153,14 @@ public final class SkinFormPanel {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         ui.render(s, c, mouseX, mouseY, nowMs);
+        // 选中的图先在本机看一眼:画她的脸
+        if (draft.dropped != null && s instanceof com.dwinovo.numen.api.client.ui.mc.McDrawSurface mc) {
+            var face = SkinTextures.faceOf("draft", draft.dropped);
+            if (face != null) {
+                net.minecraft.client.gui.components.PlayerFaceRenderer.draw(mc.graphics(), face, previewX, previewY,
+                        PREVIEW);
+            }
+        }
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
@@ -171,8 +187,7 @@ public final class SkinFormPanel {
 
     private void refreshStatus() {
         if (draft.dropped != null) {
-            statusLabel.setText(t2(ModLanguageData.Keys.SKIN_LOADED,
-                    draft.droppedW + "x" + draft.droppedH));
+            statusLabel.setText(t2(ModLanguageData.Keys.SKIN_LOADED, draft.droppedW + "x" + draft.droppedH));
         } else if (draft.editId != null) {
             statusLabel.setText(t(ModLanguageData.Keys.SKIN_KEEP_OLD));
         } else {
@@ -192,78 +207,17 @@ public final class SkinFormPanel {
         return l;
     }
 
-    /**
-     * 保存 = 签名 + 落库。需要重签的情形:新图、或手臂模型变了(variant 编码在
-     * 签名数据里)、或还没签过;仅改名直接落库。
-     */
+    /** 保存 = 把名字、手臂模型和(新选的)图交给宿主发给服务端;新建一定要有图。 */
     private void save() {
-        if (signing) return;
-        String name = draft.name.trim();
-        if (name.isEmpty()) {
+        if (draft.name.trim().isEmpty()) {
             nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             return;
         }
-        // 皮肤名与同伴名同一套规则:它会原样发给 MineSkin,而那边有服务端
-        // 字符白名单——中文名直接 400(真机实证)。规则复用单一真源。
-        if (!com.dwinovo.numen.api.entity.MojangSkins.validName(name)) {
-            nameField.setError(t(ModLanguageData.Keys.SUMMON_WARN_NAME_FORMAT));
+        if (draft.editId == null && draft.dropped == null) {
+            resultAlert.show(InlineAlert.Severity.ERROR, t(ModLanguageData.Keys.SKIN_WARN_IMAGE));
             return;
         }
-        var lib = SkinLibrary.instance();
-        var old = draft.editId != null ? lib.get(draft.editId) : null;
-        byte[] png = draft.dropped;
-        boolean needSign = png != null || old == null || !old.variant().equals(draft.variant)
-                || !old.signed();
-        if (needSign && png == null) {
-            if (old != null) {   // 不换图重签(改手臂模型):从盘上读原图
-                try {
-                    png = java.nio.file.Files.readAllBytes(lib.pngPath(old.id()));
-                } catch (java.io.IOException ex) {
-                    png = null;
-                }
-            }
-            if (png == null) {
-                resultAlert.show(InlineAlert.Severity.ERROR,
-                        t(ModLanguageData.Keys.SKIN_WARN_IMAGE));
-                return;
-            }
-        }
-        String id = old != null ? old.id() : lib.freshId();
-        if (!needSign) {
-            lib.put(new SkinLibrary.Entry(id, name, draft.variant, old.value(), old.signature()), null);
-            onSaved.accept(null);   // 仅改名:没签名,不报"签名成功"
-            return;
-        }
-        signing = true;
-        saveButton.setEnabled(false);
-        resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.SKIN_SIGNING));
-        final int myGen = ++gen;
-        final byte[] fPng = png;
-        final String fVariant = draft.variant;
-        com.dwinovo.numen.api.client.skin.MineSkinClient.generate(fPng, fVariant, name)
-                .whenComplete((signed, err) -> Minecraft.getInstance().execute(() -> {
-                    if (myGen != gen) return;   // 表单已离开/重开:作废
-                    signing = false;
-                    saveButton.setEnabled(true);
-                    if (err != null) {
-                        // 完整原因进日志(胶囊里被截短,排障全靠这行)。
-                        com.dwinovo.numen.api.Constants.LOG.warn("[numen-skin] MineSkin 签名失败: {}",
-                                com.dwinovo.numen.api.client.skin.SkinError.fromError(err).getMessage());
-                        resultAlert.show(InlineAlert.Severity.ERROR,
-                                t2(ModLanguageData.Keys.SKIN_SIGN_FAIL,
-                                        shorten(com.dwinovo.numen.api.client.skin.SkinWords.text(err))));
-                        return;
-                    }
-                    com.dwinovo.numen.api.Constants.LOG.info("[numen-skin] MineSkin 签名成功: {}", name);
-                    SkinLibrary.instance().put(
-                            new SkinLibrary.Entry(id, name, fVariant, signed.value(), signed.signature()),
-                            fPng);
-                    onSaved.accept(name);
-                }));
-    }
-
-    private static String shorten(String why) {
-        return why.length() > 64 ? why.substring(0, 64) + "…" : why;
+        onSave.accept(draft);
     }
 
     private static String t(String key) {

@@ -37,15 +37,26 @@ public final class LibraryListPanel<T> {
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
      *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
      *  {@code preset}=只读行(玩家对内置只读):点行复制到我的,菜单里没有编辑与删除。
-     *  {@code canClone}=菜单里有"复制到我的"(内置的行:管理员的可编辑,玩家的只读,都能复制)。 */
-    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone) {
+     *  {@code canClone}=菜单里有"复制到我的"(内置的行:管理员的可编辑,玩家的只读,都能复制)。
+     *  {@code toggle}=该行有行尾开关(库配了行开关时;不是库条目的行没有)。 */
+    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone,
+                      boolean toggle) {
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked) {
-            this(name, meta, metaDanger, marked, false, false);
+            this(name, meta, metaDanger, marked, false, false, true);
         }
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
-            this(name, meta, metaDanger, marked, preset, preset);
+            this(name, meta, metaDanger, marked, preset, preset, true);
+        }
+
+        public Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone) {
+            this(name, meta, metaDanger, marked, preset, canClone, true);
+        }
+
+        /** 这一行不是库里的条目(排队中的签名):没有行尾开关。 */
+        public Row withoutToggle() {
+            return new Row(name, meta, metaDanger, marked, preset, canClone, false);
         }
     }
 
@@ -126,7 +137,12 @@ public final class LibraryListPanel<T> {
     private List<Line<T>> lines = List.of();
     /** 这张表在客户端的版本(服务端推来一张、或本地先画了删除就变);没有 = 本地的库,只在动作之后刷新。 */
     private java.util.function.LongSupplier version;
+    private java.util.function.LongSupplier revision;
+    private Supplier<String> problem;
     private long seenVersion;
+    private long seenRevision;
+    /** 管理员才有的第二个"新建":建到内置里(所有玩家都用得到);没有这回事的库是 {@code null}。 */
+    private Runnable onAddBuiltin;
     private int listW;
     private int dimX, dimY, dimW, dimH;
 
@@ -188,9 +204,21 @@ public final class LibraryListPanel<T> {
     }
 
     /** 克隆成可编辑副本并刷新列表:右键菜单里的"克隆",也是只读预设行点下去做的事。 */
-    /** 列表读的是服务器上这一种库:它的版本一变这一帧就重读,没变就一直用手里这份。 */
+    /**
+     * 列表读的是服务器上这一种库:它的版本一变这一帧就重读,没变就一直用手里这份;服务端推来的表带着"没办成"的原因时
+     * (存不下、排不进队……)在列表顶上亮一条错误,不让玩家以为办成了。
+     */
     public LibraryListPanel<T> following(String kind) {
-        this.version = () -> com.dwinovo.numen.api.client.agent.RemoteCompanions.library().version(kind);
+        var library = com.dwinovo.numen.api.client.agent.RemoteCompanions.library();
+        this.version = () -> library.version(kind);
+        this.revision = () -> library.revision(kind);
+        this.problem = () -> library.problem(kind);
+        return this;
+    }
+
+    /** 管理员多一个"新建内置":表单建出来的条目放进服务器目录的内置组,所有玩家都用得到。 */
+    public LibraryListPanel<T> withAddBuiltin(Runnable onAddBuiltin) {
+        this.onAddBuiltin = onAddBuiltin;
         return this;
     }
 
@@ -235,6 +263,11 @@ public final class LibraryListPanel<T> {
             String addLabel = "+ " + t(addKey);
             Button add = ui.add(new Button(addLabel, Button.Style.GHOST, onAdd));
             add.setBounds(x, y, font.width(addLabel) + 12, NumenStyle.HEADER_H);
+            if (onAddBuiltin != null && com.dwinovo.numen.api.client.agent.RemoteCompanions.admin()) {
+                String builtinLabel = "+ " + t(ModLanguageData.Keys.LIBRARY_ADD_BUILTIN);
+                Button addBuiltin = ui.add(new Button(builtinLabel, Button.Style.GHOST, onAddBuiltin));
+                addBuiltin.setBounds(x + font.width(addLabel) + 12, y, font.width(builtinLabel) + 12, NumenStyle.HEADER_H);
+            }
         }
         int actionRight = x + w;   // 右端的动作从右往左排
         if (titleAction != null) {
@@ -279,7 +312,11 @@ public final class LibraryListPanel<T> {
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
         if (list == null) return;
         if (version != null && version.getAsLong() != seenVersion) {
+            boolean pushed = revision != null && revision.getAsLong() != seenRevision;
             refresh();   // 服务端推来了新表,这一帧就跟上
+            if (pushed && problem.get() != null) {
+                notice.show(com.dwinovo.numen.api.client.ui.widget.InlineAlert.Severity.ERROR, problem.get());
+            }
         }
         advanceRowToggleAnim(nowMs);
         // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
@@ -336,6 +373,7 @@ public final class LibraryListPanel<T> {
     private void refresh() {
         if (version != null) {
             seenVersion = version.getAsLong();
+            seenRevision = revision.getAsLong();
         }
         entries = source.get();
         List<Line<T>> next = new ArrayList<>();
@@ -370,7 +408,7 @@ public final class LibraryListPanel<T> {
         }
         int tail = rx + rw - ROW_INSET;   // 行尾那样东西的右缘
         int textRight = tail;
-        if (toggleOn != null) {
+        if (toggleOn != null && row.toggle()) {
             // 行内启停:与 Toggle 组件同制——关闭态描边环+灰轨道(浅面板上不隐形),
             // 翻转时滑块滑动、轨道色随之渐变(动画状态由面板持有,见 animRow)。
             boolean on = toggleOn.test(e);
@@ -407,7 +445,7 @@ public final class LibraryListPanel<T> {
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= lines.size() || lines.get(index).isHeading()) return false;
         T e = lines.get(index).item();
-        if (toggleOn != null && (onEdit == null || xInRow >= listW - TOGGLE_ZONE)) {
+        if (toggleOn != null && rowOf.apply(e).toggle() && (onEdit == null || xInRow >= listW - TOGGLE_ZONE)) {
             // 点开关翻转;没有编辑的库(技能)整行都是开关——Telegram 设置里带开关的行点哪儿都翻
             animRow = index;                                  // 从翻转前的位置起步滑动
             animKnob = toggleOn.test(e) ? 1f : 0f;

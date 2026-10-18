@@ -49,9 +49,9 @@ public final class ConversationCommands {
     /** {@code /numen group …}。 */
     public static LiteralArgumentBuilder<CommandSourceStack> group() {
         return Commands.literal("group")
-                .then(Commands.literal("invite").then(conversation().then(companion()
+                .then(Commands.literal("invite").then(conversation().then(CompanionArgument.of(COMPANION)
                         .executes(ctx -> pull(ctx, true)))))
-                .then(Commands.literal("remove").then(conversation().then(companion()
+                .then(Commands.literal("remove").then(conversation().then(CompanionArgument.of(COMPANION)
                         .executes(ctx -> pull(ctx, false)))))
                 .then(Commands.literal("rename").then(conversation().then(Commands.argument("name",
                         StringArgumentType.greedyString()).executes(ConversationCommands::rename))))
@@ -75,11 +75,6 @@ public final class ConversationCommands {
                 .suggests(ConversationCommands::conversations);
     }
 
-    private static RequiredArgumentBuilder<CommandSourceStack, String> companion() {
-        return Commands.argument(COMPANION, StringArgumentType.string())
-                .suggests(ConversationCommands::companions);
-    }
-
     private static CompletableFuture<Suggestions> conversations(CommandContext<CommandSourceStack> ctx,
                                                                 SuggestionsBuilder builder) {
         ServerPlayer player = ctx.getSource().getPlayer();
@@ -89,16 +84,6 @@ public final class ConversationCommands {
         Conversations rooms = Conversations.of(player.server, player.getUUID());
         return SharedSuggestionProvider.suggest(rooms.all().stream()
                 .map(conv -> StringArgumentType.escapeIfRequired(rooms.titleOf(conv))), builder);
-    }
-
-    private static CompletableFuture<Suggestions> companions(CommandContext<CommandSourceStack> ctx,
-                                                             SuggestionsBuilder builder) {
-        ServerPlayer player = ctx.getSource().getPlayer();
-        if (player == null) {
-            return builder.buildFuture();
-        }
-        return SharedSuggestionProvider.suggest(CompanionRegistry.get(player.server).ownedBy(player.getUUID()).stream()
-                .map(entry -> StringArgumentType.escapeIfRequired(entry.getValue().name())), builder);
     }
 
     /** 话里正在打的那个词是 {@code @} 开头的,补成会话成员的名字:补全词只从会话的成员表来。 */
@@ -122,7 +107,7 @@ public final class ConversationCommands {
     private static int pull(CommandContext<CommandSourceStack> ctx, boolean invite) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         Conversation conv = resolve(ctx, owner);
-        Map.Entry<UUID, CompanionRegistry.Entry> her = conv == null ? null : companionOf(ctx, owner);
+        Map.Entry<UUID, CompanionRegistry.Entry> her = conv == null ? null : CompanionArgument.resolve(ctx, COMPANION, owner);
         if (her == null) {
             return 0;
         }
@@ -207,21 +192,6 @@ public final class ConversationCommands {
                 ? Component.translatable(Keys.COMMAND_GROUP_NO_CONVERSATION, given)
                 : Component.translatable(Keys.COMMAND_GROUP_AMBIGUOUS, given,
                         String.join("、", found.stream().map(Conversation::id).toList())));
-        return null;
-    }
-
-    /** 他名下叫这个名字的同伴;没有或重名就说出来,返回 {@code null}。 */
-    private static Map.Entry<UUID, CompanionRegistry.Entry> companionOf(CommandContext<CommandSourceStack> ctx,
-                                                                         ServerPlayer owner) {
-        String given = StringArgumentType.getString(ctx, COMPANION);
-        List<Map.Entry<UUID, CompanionRegistry.Entry>> named = CompanionRegistry.get(owner.server)
-                .ownedBy(owner.getUUID()).stream().filter(entry -> entry.getValue().name().equalsIgnoreCase(given))
-                .toList();
-        if (named.size() == 1) {
-            return named.get(0);
-        }
-        ctx.getSource().sendFailure(named.isEmpty() ? Component.translatable(Keys.COMMAND_NO_SUCH_COMPANION, given)
-                : Component.translatable(Keys.COMMAND_SEVERAL_NAMED, named.size(), given));
         return null;
     }
 }

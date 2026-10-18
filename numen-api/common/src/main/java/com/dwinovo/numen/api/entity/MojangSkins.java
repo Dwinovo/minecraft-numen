@@ -2,11 +2,10 @@ package com.dwinovo.numen.api.entity;
 
 
 /**
- * 皮肤数据的形状与命名规则——两侧共用的小契约。
+ * 皮肤数据的形状与命名规则——Mojang 签名的 textures 与合法的正版玩家名。
  *
- * <p>查询本身住在客户端({@code MojangSkinLookup}):那里有玩家配的代理,
- * 而服务端的会话服务栈吃 JVM 默认网络,国内经常静默超时。服务端只负责把
- * 客户端备好的签名数据挂上去(Mojang 签名自验证,伪造不了)。
+ * <p>签名只在服务端做({@code SkinSigning}:MineSkin 代签,或向 Mojang 借正版玩家的),结果存进皮肤库的条目;
+ * 绑定时从条目取出来挂到身体上。Mojang 的签名自验证,伪造不了。
  */
 public final class MojangSkins {
 

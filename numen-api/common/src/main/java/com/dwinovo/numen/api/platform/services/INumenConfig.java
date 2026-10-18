@@ -40,8 +40,7 @@ public interface INumenConfig {
     /** STT provider id selecting the preset (wire adapter + default endpoint). Default {@code siliconflow}. */
     String getSttProvider();
 
-    /** STT service API key (bearer). Empty = voice input disabled. */
-    String getSttApiKey();
+    // 识别服务的 key 不在这里:它在这台电脑的钥匙串里(config/numen/client/keys/),按识别服务商存。
 
     /** STT base URL override. Empty = use the provider preset's default endpoint. */
     String getSttBaseUrl();
@@ -53,8 +52,6 @@ public interface INumenConfig {
     String getSttMicrophone();
 
     void setSttProvider(String value);
-
-    void setSttApiKey(String value);
 
     void setSttBaseUrl(String value);
 

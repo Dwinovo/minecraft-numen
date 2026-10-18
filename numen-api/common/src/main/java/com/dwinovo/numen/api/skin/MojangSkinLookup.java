@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.client.skin;
+package com.dwinovo.numen.api.skin;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.entity.MojangSkins;
@@ -12,21 +12,13 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 借正版玩家皮肤——<b>在主人的客户端上查</b>,而不是服务端。
+ * 借正版玩家皮肤——在服务端查,走服务器的代理设置({@link ProxiedHttp}),失败原因能当场告诉玩家。
+ * 拿到的是 Mojang 签名的 textures(自验证,伪造不了),与 MineSkin 代签出来的是同一种东西,存进皮肤库同一种条目。
  *
- * <p>为什么搬过来:服务端那条路走的是 Minecraft 内置的会话服务栈,吃 JVM
- * 默认网络,完全不理会模组的代理设置——国内直连 Mojang 经常超时,于是
- * "有时候皮肤就没了"。客户端这边有玩家自己配的代理,而且失败原因能当场
- * 告诉他,不必埋进服务端日志。
- *
- * <p>拿到的是 Mojang 签名的 textures(自验证,伪造不了),随召唤包发给服务端
- * 直接挂上去——与自定义皮肤走同一条路,服务端不再需要任何皮肤查询。
- *
- * <p>结果按名字缓存(含"查无此人"),同一个名字反复召唤不重复联网。
+ * <p>同步:调用的一方是签名队的工作线程({@link SkinSigning})。结果按名字缓存(含"查无此人"),同一个名字不重复联网。
  */
 public final class MojangSkinLookup {
 
@@ -35,44 +27,42 @@ public final class MojangSkinLookup {
             "https://sessionserver.mojang.com/session/minecraft/profile/";
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
 
-    /** 查询结果。{@code skin} 为 null = 没有可用皮肤;{@code problem} 非 null = 出了错(给主人看,经 {@link SkinWords} 翻)。 */
+    /** 查询结果。{@code skin} 为 null = 没有可用皮肤;{@code problem} 非 null = 出了错。 */
     public record Result(MojangSkins.Skin skin, SkinError problem) {
         public static final Result NONE = new Result(null, null);
     }
 
-    /** 名字 → 结果的进程内缓存(含查无此人的否定结果)。 */
+    /** 名字 → 结果的进程内缓存(含查无此人的否定结果;网络问题不进缓存)。 */
     private static final Map<String, Result> CACHE = new ConcurrentHashMap<>();
 
     private MojangSkinLookup() {}
 
-    /** 异步查 {@code playerName} 的签名皮肤;任何失败都归结为带原因的 Result,不抛。 */
-    public static CompletableFuture<Result> fetch(String playerName) {
+    /** 查 {@code playerName} 的签名皮肤;任何失败都归结为带原因的 Result,不抛。 */
+    public static Result lookup(String playerName) {
         if (!MojangSkins.validName(playerName)) {
-            return CompletableFuture.completedFuture(Result.NONE);
+            return Result.NONE;
         }
         Result cached = CACHE.get(playerName);
         if (cached != null) {
-            return CompletableFuture.completedFuture(cached);
+            return cached;
         }
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                String uuid = fetchUuid(playerName);
-                if (uuid == null) {
-                    return remember(playerName, Result.NONE);   // 不是正版玩家名:正常情况,不报错
-                }
-                MojangSkins.Skin skin = fetchTextures(uuid);
-                if (skin == null) {
-                    return remember(playerName, new Result(null, SkinError.of(SkinError.NO_SKIN)));
-                }
-                Constants.LOG.info("[numen-skin] 借到 {} 的皮肤", playerName);
-                return remember(playerName, new Result(skin, null));
-            } catch (RuntimeException e) {
-                // 网络问题不进缓存:换个网络/开了代理就该能成
-                SkinError why = SkinError.fromError(e);
-                Constants.LOG.warn("[numen-skin] 查 {} 的皮肤失败: {}", playerName, why.getMessage());
-                return new Result(null, why);
+        try {
+            String uuid = fetchUuid(playerName);
+            if (uuid == null) {
+                return remember(playerName, Result.NONE);   // 不是正版玩家名:正常情况,不报错
             }
-        });
+            MojangSkins.Skin skin = fetchTextures(uuid);
+            if (skin == null) {
+                return remember(playerName, new Result(null, SkinError.of(SkinError.NO_SKIN)));
+            }
+            Constants.LOG.info("[numen-skin] 借到 {} 的皮肤", playerName);
+            return remember(playerName, new Result(skin, null));
+        } catch (RuntimeException e) {
+            // 网络问题不进缓存:换个网络/开了代理就该能成
+            SkinError why = SkinError.fromError(e);
+            Constants.LOG.warn("[numen-skin] 查 {} 的皮肤失败: {}", playerName, why.getMessage());
+            return new Result(null, why);
+        }
     }
 
     private static Result remember(String name, Result r) {

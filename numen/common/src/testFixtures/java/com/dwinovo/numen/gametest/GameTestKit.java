@@ -70,18 +70,6 @@ public final class GameTestKit {
 
     private GameTestKit() {}
 
-    static {
-        // 无头测试服是专用服,说不清是谁的方块默认按别人的算(PermissionConfig)。多数用例要的是"问主人"那一半,所以写明不按;
-        // 配置一个世界读一次,第一次裁决之前写好。
-        try {
-            java.nio.file.Path file = com.dwinovo.numen.api.NumenPaths.config().resolve("permission.json");
-            java.nio.file.Files.createDirectories(file.getParent());
-            java.nio.file.Files.writeString(file, "{\"hard_rules\": true, \"unknown_as_other\": false}");
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
-    }
-
     /** 正午:白天的活都在这时候跑。 */
     static final long NOON = 6000;
     /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
@@ -98,6 +86,8 @@ public final class GameTestKit {
         level.setDayTime(dayTime);
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
+        // 无头测试服是专用服,说不清是谁的方块默认按别人的算(服务器设置)。多数用例要的是"问主人"那一半,所以写明不按。
+        com.dwinovo.numen.api.brain.ModelServices.of(level.getServer()).settings().setPermission(true, false);
     }
 
     /**

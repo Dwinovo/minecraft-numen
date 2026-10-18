@@ -264,19 +264,13 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_BAR_H = 22;
 
 
-    /** 召唤页的皮肤下拉:null = 默认(按名字找同名正版)。 */
-
-    /** Provider entry for the new companion — REQUIRED (no default, no fallback). */
-    /** 召唤时的游戏模式选择(默认生存;创造在服务端过权限门)。 */
-    /** Voice entry for the new companion — optional (null = silent). */
-
     /** 聊天输入行(NumenUI):四颗图标钮 + 输入框,见 ChatInputBar。 */
     private com.dwinovo.numen.api.client.screen.chat.ChatInputBar inputBar;
     private String savedInput = "";
     /** 重建输入行时带过去的引用(和 savedInput 一样只活过这一次重建)。 */
     private com.dwinovo.numen.api.client.screen.chat.ChatInputBar.QuoteState savedQuote;
 
-    /** 召唤卡(NumenUI):名字 + 人设/模型配置/模式/声线/皮肤,见 SummonPanel。 */
+    /** 召唤卡(NumenUI):名字 + 模式,见 SummonPanel。 */
     private SummonPanel summonPanel;
     /**
      * 模态卡的槽:召唤、编辑同伴、改会话名、邀请、分组同一时刻只开一张,当前 tab 内容照常渲染作背景。
@@ -746,50 +740,14 @@ public final class NumenScreen extends Screen {
         return summonPanel;
     }
 
-    /** 召唤卡的宿主面:落库(把选择挂到名字上)与发包留在屏幕这边。 */
+    /** 召唤卡的宿主面:发包留在屏幕这边。 */
     private final class SummonHost implements SummonPanel.Host {
         @Override public void onCreate(SummonPanel.Draft d) {
-            // 人设和档案随召唤请求交给服务端绑;声线和皮肤是这台机器的,按名字记账,名册在新同伴到达时套用。
-            if (d.voiceId != null) com.dwinovo.numen.api.client.voice.VoiceLibrary.pendSummon(d.name, d.voiceId);
-            // 自定义皮肤:库里存好的签名数据现成,直接发。选了库条目的同时记账
-            // (UUID 到货时落进绑定),编辑卡才能标出她当前穿的是哪张。
-            var skinEntry = com.dwinovo.numen.api.client.skin.SkinLibrary.instance().get(d.skinId);
-            if (skinEntry != null && skinEntry.signed()) {
-                com.dwinovo.numen.api.client.skin.SkinLibrary.pendSummon(d.name, d.skinId);
-            }
-            if (skinEntry != null && skinEntry.signed()) {
-                com.dwinovo.numen.api.Constants.LOG.info("[numen-skin] 召唤 {}: 用皮肤库条目「{}」",
-                        d.name, skinEntry.name());
-                sendSummon(d, skinEntry.value(), skinEntry.signature());
-                return;
-            }
-            // 默认(按名字):在本机查 Mojang——走玩家自己的代理,失败也说得清原因
-            // (服务端那条路吃 JVM 默认网络,国内经常静默超时)。
-            summonPanel().setBusy(I18n.get("numen.summon.fetching_skin"));
-            com.dwinovo.numen.api.client.skin.MojangSkinLookup.fetch(d.name)
-                    .thenAccept(r -> Minecraft.getInstance().execute(() -> {
-                        if (r.problem() != null) {
-                            // 降级不挡召唤(默认皮肤照样能玩),但得让主人知道为什么。
-                            // 去处是聊天框而不是卡上的提示行:召唤卡这会儿已经关了,
-                            // 而且他多半过一会儿才注意到皮肤不对,那时要能翻得到原因。
-                            com.dwinovo.numen.api.client.chat.ChatLines.notice(d.name,
-                                    I18n.get("numen.summon.skin_failed",
-                                            com.dwinovo.numen.api.client.skin.SkinWords.text(r.problem())));
-                        }
-                        var skin = r.skin();
-                        sendSummon(d, skin == null ? "" : skin.value(),
-                                skin == null ? "" : skin.signature());
-                    }));
-        }
-
-        private void sendSummon(SummonPanel.Draft d, String skinValue, String skinSig) {
-            NumenNetwork.sendToServer(
-                    new com.dwinovo.numen.api.network.payload.SummonRequestPayload(
-                            d.name, skinValue, skinSig, d.creative,
-                            d.personaId == null ? "" : d.personaId, d.providerId == null ? "" : d.providerId));
-            // 查皮肤那一两秒里卡可能已被收掉、换成了别的卡:只收召唤卡自己。
+            // 召唤只要名字和模式;档案、人设、声线、皮肤是召唤之后在编辑卡里绑的。
             // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
-            if (cardLive() && modalCard == summonPanel) closeCard();
+            NumenNetwork.sendToServer(
+                    new com.dwinovo.numen.api.network.payload.SummonRequestPayload(d.name, d.creative));
+            closeCard();
         }
 
         @Override public void onCancel() {
@@ -802,12 +760,6 @@ public final class NumenScreen extends Screen {
                     && minecraft.player.hasPermissions(2);
         }
 
-        @Override public void onNoProvider() {
-            closeCard();
-            selectTab(Tab.SETTINGS);
-            settings.showProviders();
-            settings.beginNewProvider();
-        }
 
         @Override public boolean ownerCreative() {
             return minecraft != null && minecraft.player != null && minecraft.player.isCreative();
@@ -909,7 +861,7 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** 编辑卡的宿主面:身份、网络动作(模式/皮肤发包)与关卡留在屏幕这边。 */
+    /** 编辑卡的宿主面:身份、网络动作(模式发包)与关卡留在屏幕这边。 */
     /** 编辑卡对着哪只:抬头菜单开的是就他俩那只,资料页开的是页上那只(群成员也一样)。 */
     private UUID editTarget;
 
@@ -941,34 +893,6 @@ public final class NumenScreen extends Screen {
             NumenNetwork.sendToServer(
                     new com.dwinovo.numen.api.network.payload.SetGameModePayload(editTarget, creative));
         }
-
-        @Override public void applySkin(String skinId) {
-            UUID target = editTarget;   // 异步查询窗口内可能切换同伴:皮肤落到点选择时的那只
-            var entry = com.dwinovo.numen.api.client.skin.SkinLibrary.instance().get(skinId);
-            if (entry != null && entry.signed()) {
-                sendSkin(target, entry.value(), entry.signature());
-                return;
-            }
-            // 按名字:本机查同名正版(与召唤同一条路);查不到发空值 = 回原版默认皮肤。
-            // 保存即关卡,查询过程不占 UI;失败的原因进聊天框留痕。
-            String n = nameFor(target);
-            com.dwinovo.numen.api.client.skin.MojangSkinLookup.fetch(n)
-                    .thenAccept(r -> Minecraft.getInstance().execute(() -> {
-                        if (r.problem() != null) {
-                            com.dwinovo.numen.api.client.chat.ChatLines.notice(n,
-                                    I18n.get("numen.summon.skin_failed",
-                                            com.dwinovo.numen.api.client.skin.SkinWords.text(r.problem())));
-                        }
-                        var skin = r.skin();
-                        sendSkin(target, skin == null ? "" : skin.value(),
-                                skin == null ? "" : skin.signature());
-                    }));
-        }
-
-        private void sendSkin(UUID target, String value, String sig) {
-            NumenNetwork.sendToServer(
-                    new com.dwinovo.numen.api.network.payload.ChangeSkinPayload(target, value, sig));
-        }
     }
 
     // ---- modal cards(召唤/编辑/改名/邀请/分组): 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
@@ -991,6 +915,30 @@ public final class NumenScreen extends Screen {
                         leave(conv);
                         return;
                     }
+                    rebuild();
+                });
+        rebuild();
+    }
+
+    /**
+     * 清空她的记忆的确认:对话记录、札记、长期目标都会删掉(并告诉她),确认之后才发给服务端。她正在想事情、死着、外接大脑
+     * 驾驶着的时候服务端不清,这里先把原因说出来,不让主人白点一遍确认。
+     */
+    private void openWipeConfirm(UUID target) {
+        var her = RemoteCompanions.getOrCreate(target);
+        String problem = her.clearProblem() != null ? her.clearProblem()
+                : her.status().phase() != null ? ModLanguageData.Keys.LOOP_WIPE_BUSY : null;
+        if (problem != null) {
+            com.dwinovo.numen.api.client.hud.NumenHudToasts.push(
+                    com.dwinovo.numen.api.client.ui.NumenToasts.Severity.WARN, I18n.get(problem));
+            return;
+        }
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                I18n.get(ModLanguageData.Keys.WIPE_TITLE, nameFor(target)),
+                I18n.get(ModLanguageData.Keys.WIPE_WARNING),
+                I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.WIPE_CONFIRM),
+                () -> {
+                    her.requestWipe();
                     rebuild();
                 });
         rebuild();
@@ -1314,6 +1262,8 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Message ignored -> openConversation(Conversations.instance().of(who));
             case ProfilePage.Hit.Edit ignored -> editCompanion(who);
             case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
+            case ProfilePage.Hit.Export ignored -> com.dwinovo.numen.api.client.agent.MemoryFiles.ask(who, nameFor(who));
+            case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
             case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }
         return true;

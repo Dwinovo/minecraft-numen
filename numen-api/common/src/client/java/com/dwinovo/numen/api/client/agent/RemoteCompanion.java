@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.brain.Slot;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +60,10 @@ public final class RemoteCompanion {
                 }
                 case Feed.Replied replied -> clearPartial();
                 case Feed.TurnCut cut -> clearPartial();
+                case Feed.Wiped wiped -> {
+                    lines.clear();
+                    clearPartial();
+                }
                 case Feed.Line line -> {
                     lines.add(line.line());
                     lineSink.accept(line.line());
@@ -175,6 +180,16 @@ public final class RemoteCompanion {
         return state.providerId();
     }
 
+    /** 她绑定的声线 id;没绑是 {@code null}。 */
+    public String voiceId() {
+        return state.voiceId();
+    }
+
+    /** 她绑定的皮肤 id;没绑是 {@code null}。 */
+    public String skinId() {
+        return state.skinId();
+    }
+
     /** 她此刻在哪个会话里(最后一次是被哪个会话叫醒的);{@code null} = 就他俩。 */
     public String conversation() {
         return state.conversation();
@@ -221,6 +236,16 @@ public final class RemoteCompanion {
         return null;
     }
 
+    /** 导出她的记忆:服务端打成 zip 推回来,存成文件见 {@code MemoryFiles}(选好存哪儿之后才调)。 */
+    public void requestExport() {
+        send.accept(new OwnerInput.Export(uuid));
+    }
+
+    /** 清空她的记忆(界面在主人确认之后才调);服务端办完推 {@link Feed.Wiped}。 */
+    public void requestWipe() {
+        send.accept(new OwnerInput.Wipe(uuid));
+    }
+
     /** 主人按停止。 */
     public void abort() {
         send.accept(new OwnerInput.Stop(uuid.toString()));
@@ -236,13 +261,8 @@ public final class RemoteCompanion {
         send.accept(new OwnerInput.ClearGoal(uuid));
     }
 
-    /** 换人设;{@code null} = 默认人格。 */
-    public void setPersona(String id) {
-        send.accept(new OwnerInput.SetPersona(uuid, id));
-    }
-
-    /** 换模型档案;{@code null} = 不绑。 */
-    public void setProviderEntry(String entryId) {
-        send.accept(new OwnerInput.SetProvider(uuid, entryId));
+    /** 换她的一项绑定(档案、人设、声线、皮肤);{@code null} = 不绑。条目在不在库里由服务端判。 */
+    public void bind(Slot slot, String entryId) {
+        send.accept(new OwnerInput.Bind(uuid, slot, entryId));
     }
 }

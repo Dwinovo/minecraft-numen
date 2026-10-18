@@ -3,6 +3,13 @@ package com.dwinovo.numen.api.client.screen.settings;
 
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.client.ClientKeys;
+import com.dwinovo.numen.api.client.data.ClientPrefs;
+import com.dwinovo.numen.api.client.skin.SkinTextures;
+import com.dwinovo.numen.api.skin.MineSkinClient;
+import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
@@ -137,16 +144,26 @@ public final class SettingsView {
         request(kind, b.enabled() ? Libraries.DISABLE : Libraries.ENABLE, b);
     }
 
-    /** 管理员改过内置的、jar 又带来新版时:采用新版,或保留自己的(这一版不再提示)。 */
+    /**
+     * 管理员对内置条目的右键菜单:jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
+     * 自己的改动、取回 jar 里的这一版。
+     */
     private static List<PopupMenu.Item> updateMenu(String kind, ServerLibraries.Base b) {
-        if (!b.builtin() || !b.update() || !RemoteCompanions.admin()) {
+        if (!b.builtin() || !RemoteCompanions.admin()) {
             return List.of();
         }
-        return List.of(
-                new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_ACCEPT), false,
-                        () -> request(kind, Libraries.ACCEPT, b)),
-                new PopupMenu.Item(Sprites.EDIT, I18n.get(ModLanguageData.Keys.LIBRARY_DISMISS), false,
-                        () -> request(kind, Libraries.DISMISS, b)));
+        List<PopupMenu.Item> items = new ArrayList<>();
+        if (b.update()) {
+            items.add(new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_ACCEPT), false,
+                    () -> request(kind, Libraries.ACCEPT, b)));
+            items.add(new PopupMenu.Item(Sprites.EDIT, I18n.get(ModLanguageData.Keys.LIBRARY_DISMISS), false,
+                    () -> request(kind, Libraries.DISMISS, b)));
+        }
+        if (b.modified() && !b.gone()) {
+            items.add(new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_RESTORE), false,
+                    () -> request(kind, Libraries.RESTORE, b)));
+        }
+        return items;
     }
 
     // ---- 模型配置表单:NumenUI ProfileFormPanel(检测/思考/强度/toast/分类报错) ----
@@ -189,16 +206,17 @@ public final class SettingsView {
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
                     e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id(), e.base().builtin()),
-                    this::beginNewProvider,
+                    () -> beginNewProvider(false),
                     this::beginEditProvider)
+                    .withAddBuiltin(() -> beginNewProvider(true))
                     .withGroups(e -> groupOf(e.base()))
                     .withMenu(e -> updateMenu(Libraries.PROVIDER, e.base()))
                     .withClone(e -> request(Libraries.PROVIDER, Libraries.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.PROVIDER, e.base()))
-                    // 换绑走 setProviderEntry(下一次请求即生效);不许解绑——同伴必须有端点
+                    // 换绑走她的绑定(下一次请求即生效);不许解绑——同伴必须有端点
                     .withBind(e -> {
                         if (host.uuid() != null) {
-                            RemoteCompanions.getOrCreate(host.uuid()).setProviderEntry(e.id());
+                            RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PROVIDER, e.id());
                         }
                     }, null)
                     .following(Libraries.PROVIDER);
@@ -206,56 +224,65 @@ public final class SettingsView {
         return profileList;
     }
 
-    // ---- 声线列表:同一底盘,加标题行全局开关与绑定 ----
-    private LibraryListPanel<com.dwinovo.numen.api.client.voice.VoiceLibrary.Entry> voiceListPanel;
+    // ---- 声线列表:同一底盘,内置/我的两组,加标题行全局开关与绑定 ----
+    private LibraryListPanel<ServerLibraries.Voice> voiceListPanel;
 
-    private LibraryListPanel<com.dwinovo.numen.api.client.voice.VoiceLibrary.Entry> voiceListPanel() {
+    /**
+     * 声线:服务端的一种库(内置的管理员配,我的本人配),她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
+     * 没填的那行标红提醒。全局开关是这台电脑自己的设置。
+     */
+    private LibraryListPanel<ServerLibraries.Voice> voiceListPanel() {
         if (voiceListPanel == null) {
-            voiceListPanel = new LibraryListPanel<>(
+            voiceListPanel = new LibraryListPanel<ServerLibraries.Voice>(
                     ModLanguageData.Keys.VOICE_ADD,
                     ModLanguageData.Keys.VOICE_EMPTY,
-                    () -> com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().list(),
+                    ServerLibraries::voices,
                     e -> {
+                        var voice = e.profile();
+                        if (voice == null) {
+                            return new LibraryListPanel.Row(e.name(), meta(e.base(), "?"), true, null);
+                        }
                         String detail;
-                        if (e.isSovits()) detail = nb(e.refAudio()) ? e.refAudio() : "?";
-                        else if (e.isMiniMax() || e.isFishAudio()) detail = nb(e.voice()) ? e.voice() : "?";
-                        else detail = nb(e.model()) ? e.model() : "?";
-                        String meta = I18n.get(ModLanguageData.Keys.VOICE_LIST_META,
-                                nb(e.backend()) ? e.backend() : "openai", detail, Math.round(e.volume() * 5.0f));
+                        if (VoiceProfile.BACKEND_SOVITS.equals(voice.backend())) detail = nb(voice.refAudio()) ? voice.refAudio() : "?";
+                        else if (VoiceProfile.BACKEND_MINIMAX.equals(voice.backend())
+                                || VoiceProfile.BACKEND_FISH.equals(voice.backend())) detail = nb(voice.voice()) ? voice.voice() : "?";
+                        else detail = nb(voice.model()) ? voice.model() : "?";
+                        String line = I18n.get(ModLanguageData.Keys.VOICE_LIST_META, voice.backend(), detail,
+                                Math.round(voice.volume() * 5.0f));
+                        boolean noKey = !VoiceProfile.BACKEND_SOVITS.equals(voice.backend())
+                                && ClientKeys.keychain().get(voice.keyService()) == null;
+                        if (noKey) line += " · " + I18n.get(ModLanguageData.Keys.VOICE_NO_KEY, voice.keyService());
                         // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                com.dwinovo.numen.api.client.agent.CompanionLooks.of(host.uuid()).voiceId());
-                        return new LibraryListPanel.Row(e.name(), meta, false, marked);
+                                RemoteCompanions.getOrCreate(host.uuid()).voiceId());
+                        return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked,
+                                !editable(e.base()), e.base().builtin());
                     },
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().remove(e.id()),
-                    () -> {
-                        addingVoice = true;
-                        voiceEditId = null;
-                        voiceDraft = VoiceFormPanel.freshDraft();
-                        host.rebuild();
-                    },
+                    e -> RemoteCompanions.library().delete(Libraries.VOICE, e.id(), e.base().builtin()),
+                    () -> beginNewVoice(false),
                     this::beginEditVoice)
-                    // 换绑/解绑写进 CompanionLooks,下一句话就用新声线(VoiceLibrary 现查)
+                    .withAddBuiltin(() -> beginNewVoice(true))
+                    .withGroups(e -> groupOf(e.base()))
+                    .withMenu(e -> updateMenu(Libraries.VOICE, e.base()))
+                    .withClone(e -> request(Libraries.VOICE, Libraries.COPY, e.base()))
+                    .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.VOICE, e.base()))
+                    // 换绑/解绑走她的绑定,下一句话就用新声线
                     .withBind(
                             e -> {
                                 if (host.uuid() != null) {
-                                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
-                                            com.dwinovo.numen.api.client.agent.CompanionLooks
-                                                    .of(host.uuid()).withVoice(e.id()));
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.VOICE, e.id());
                                 }
                             },
                             e -> {
                                 if (host.uuid() != null) {
-                                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
-                                            com.dwinovo.numen.api.client.agent.CompanionLooks
-                                                    .of(host.uuid()).withVoice(null));
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.VOICE, null);
                                 }
                             })
-                    .withToggle(ModLanguageData.Keys.VOICE_ENABLED,
-                            () -> com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().enabled(),
-                            v -> com.dwinovo.numen.api.client.voice.VoiceLibrary.instance().setEnabled(v));
+                    .withToggle(ModLanguageData.Keys.VOICE_ENABLED, ClientPrefs::voiceEnabled,
+                            ClientPrefs::setVoiceEnabled)
+                    .following(Libraries.VOICE);
         }
         return voiceListPanel;
     }
@@ -304,13 +331,17 @@ public final class SettingsView {
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
     private String voiceEditId;
+    /** 正在编辑的是内置组里的那一条(只有管理员),不是我的。 */
+    private boolean voiceEditBuiltin;
     // ---- 声线表单:NumenUI VoiceFormPanel(后端切行/滚动/试听/胶囊) ----
     private VoiceFormPanel voiceForm;
     private VoiceFormPanel.Draft voiceDraft = VoiceFormPanel.freshDraft();
 
-    // 皮肤库(列表+表单,照声线库制式)。签名发生在保存时(MineSkin 代签),召唤只读现成结果。
+    // 皮肤库(列表+表单,照声线库制式)。签名在服务端排队,排队的几行和签好的条目一起在列表里。
     private boolean addingSkin;
-    // ---- 皮肤表单:NumenUI SkinFormPanel(名称/手臂模型/文件导入/MineSkin 签名) ----
+    private String skinEditId;
+    private boolean skinEditBuiltin;
+    // ---- 皮肤表单:NumenUI SkinFormPanel(名称/手臂模型/文件导入) ----
     private SkinFormPanel skinForm;
     private SkinFormPanel.Draft skinDraft = new SkinFormPanel.Draft();
 
@@ -444,7 +475,6 @@ public final class SettingsView {
         addingVoice = false; voiceEditId = null;
         if (voiceForm != null) voiceForm.cancelPendingTest();
         addingSkin = false;
-        if (skinForm != null) skinForm.cancelPending();
         addingPersona = false; personaEditId = null;
         addingMcp = false;
         pastingAuth = false;
@@ -614,7 +644,6 @@ public final class SettingsView {
         voiceEditId = null;
         if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
         addingSkin = false;
-        if (skinForm != null) skinForm.cancelPending();   // 离开皮肤表单:在途 MineSkin 签名回调作废
     }
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
@@ -703,27 +732,24 @@ public final class SettingsView {
         return voiceForm;
     }
 
-
-
-
-
-    /** 当前表单(w 值)拼成一个 Entry;id 由调用方给(编辑=原 id,试听=临时)。 */
+    /**
+     * 存一条声线:服务商、音色、参数交给服务端的库(不含 key),表单上的 key 存进这台电脑的钥匙串——合成在这台电脑上,
+     * key 不离开它。
+     */
     private void onVoiceSave(VoiceFormPanel.Draft d) {
-        String name = d.name.trim();
-        var lib = com.dwinovo.numen.api.client.voice.VoiceLibrary.instance();
+        JsonObject body = VoiceFormPanel.profileOf(d).toJson();
+        body.addProperty("name", d.name.trim());
         if (voiceEditId != null) {
-            lib.update(VoiceFormPanel.entryOf(d, voiceEditId, name));
-        } else {
-            var e = VoiceFormPanel.entryOf(d, "", name);
-            var created = lib.create(name, e.backend(), e.url(), e.apiKey(), e.groupId(), e.model(),
-                    e.voice(), e.refAudio(), e.promptText(), e.textLang(), e.volume());
-            // 从某个同伴的设置页新建 → 直接绑给它:用户的心智模型是"建声线就是给
-            // 这只配音",绑定下拉只用于换绑/多同伴共用一条声线。
-            if (host.uuid() != null) {
-                com.dwinovo.numen.api.client.agent.CompanionLooks.set(host.uuid(),
-                        com.dwinovo.numen.api.client.agent.CompanionLooks.of(host.uuid())
-                                .withVoice(created.id()));
-            }
+            body.addProperty("id", voiceEditId);
+        }
+        if (voiceEditBuiltin) {
+            body.addProperty("group", "builtin");
+        }
+        RemoteCompanions.library().put(Libraries.VOICE, body);
+        String service = VoiceFormPanel.profileOf(d).keyService();
+        String typed = d.apiKey.strip();
+        if (!typed.equals(nv(ClientKeys.keychain().get(service)))) {
+            ClientKeys.keychain().put(service, typed);
         }
         addingVoice = false;
         voiceEditId = null;
@@ -737,38 +763,38 @@ public final class SettingsView {
         if (addingVoice) formCard(Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
     }
 
-    private void beginEditVoice(com.dwinovo.numen.api.client.voice.VoiceLibrary.Entry e) {
+    private void beginNewVoice(boolean builtin) {
         addingVoice = true;
-        voiceEditId = e.id();
-        var d = new VoiceFormPanel.Draft();
-        d.backend = normalizeVoiceBackend(e.backend());
-        d.name = nv(e.name());
-        d.url = nv(e.url());
-        d.apiKey = nv(e.apiKey());
-        d.groupId = nv(e.groupId());
-        d.model = nv(e.model());
-        d.voice = nv(e.voice());
-        d.refAudio = nv(e.refAudio());
-        d.promptText = nv(e.promptText());
-        d.textLang = nv(e.textLang());
-        // 存储的是增益(0.2~2.0),表单显示 1~10 档。
-        d.volume = Math.round(Math.clamp(e.volume(), 0.2f, 2.0f) * 5.0f);
-        voiceDraft = d;
+        voiceEditId = null;
+        voiceEditBuiltin = builtin;
+        voiceDraft = VoiceFormPanel.freshDraft();
         host.rebuild();
     }
 
-    /** 存储里的 backend 串归一到下拉的已知 id(未知/留空按 openai)。 */
-    private static String normalizeVoiceBackend(String backend) {
-        String b = backend == null ? "" : backend.toLowerCase(java.util.Locale.ROOT).strip();
-        return switch (b) {
-            case com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_SOVITS,
-                 com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_MINIMAX,
-                 com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_FISH,
-                 com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_DASHSCOPE,
-                 com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_MIMO,
-                 com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_DOUBAO -> b;
-            default -> com.dwinovo.numen.api.client.voice.VoiceLibrary.BACKEND_OPENAI;
-        };
+    private void beginEditVoice(ServerLibraries.Voice e) {
+        if (e.profile() == null) {
+            return;   // 读不通的条目没有可改的
+        }
+        var voice = e.profile();
+        addingVoice = true;
+        voiceEditId = e.id();
+        voiceEditBuiltin = e.base().builtin();
+        var d = new VoiceFormPanel.Draft();
+        d.backend = voice.backend();
+        d.name = nv(e.name());
+        d.service = voice.service();
+        d.url = voice.url();
+        d.apiKey = nv(ClientKeys.keychain().get(voice.keyService()));
+        d.groupId = voice.groupId();
+        d.model = voice.model();
+        d.voice = voice.voice();
+        d.refAudio = voice.refAudio();
+        d.promptText = voice.promptText();
+        d.textLang = voice.textLang();
+        // 存储的是增益(0.2~2.0),表单显示 1~10 档。
+        d.volume = Math.round(Math.clamp(voice.volume(), 0.2f, 2.0f) * 5.0f);
+        voiceDraft = d;
+        host.rebuild();
     }
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
@@ -792,28 +818,23 @@ public final class SettingsView {
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
                     p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id(), p.base().builtin()),
-                    () -> {
-                        addingPersona = true;
-                        personaEditId = null;
-                        personaEditBuiltin = false;
-                        personaDraft = new PersonaFormPanel.Draft();
-                        host.rebuild();
-                    },
+                    () -> beginNewPersona(false),
                     this::beginEditPersona)
+                    .withAddBuiltin(() -> beginNewPersona(true))
                     .withGroups(p -> groupOf(p.base()))
                     .withMenu(p -> updateMenu(Libraries.PERSONA, p.base()))
                     .withClone(p -> request(Libraries.PERSONA, Libraries.COPY, p.base()))
                     .withRowToggle(p -> p.base().enabled(), p -> flip(Libraries.PERSONA, p.base()))
-                    // 换绑 = setPersona(活切,聊天流插分隔记号);解绑回默认人设
+                    // 换绑 = 她的人设绑定(活切,聊天流插分隔记号);解绑回默认人设
                     .withBind(
                             p -> {
                                 if (host.uuid() != null) {
-                                    RemoteCompanions.getOrCreate(host.uuid()).setPersona(p.id());
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PERSONA, p.id());
                                 }
                             },
                             p -> {
                                 if (host.uuid() != null) {
-                                    RemoteCompanions.getOrCreate(host.uuid()).setPersona(null);
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PERSONA, null);
                                 }
                             })
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
@@ -822,6 +843,14 @@ public final class SettingsView {
                     .following(Libraries.PERSONA);
         }
         return personaListPanel;
+    }
+
+    private void beginNewPersona(boolean builtin) {
+        addingPersona = true;
+        personaEditId = null;
+        personaEditBuiltin = builtin;
+        personaDraft = new PersonaFormPanel.Draft();
+        host.rebuild();
     }
 
     /** 存一条人设:{@code id} 为 null 是新建。服务端存,改名时它把在用的同伴一起改指。 */
@@ -882,6 +911,14 @@ public final class SettingsView {
 
     private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel;
 
+    private void beginNewMcp(boolean builtin) {
+        addingMcp = true;
+        mcpEditId = null;
+        mcpEditBuiltin = builtin;
+        mcpDraft = new McpFormPanel.Draft();
+        host.rebuild();
+    }
+
     /** 这一台的配置(地址、令牌、命令行)当前这位玩家能不能看、改:自己的人人能,内置的只有管理员。 */
     private static boolean mcpOwned(ServerLibraries.McpClientRow h) {
         return editable(h.base());
@@ -901,14 +938,9 @@ public final class SettingsView {
                             !mcpOwned(h), h.base().builtin()),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
                     h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().builtin()),
-                    () -> {
-                        addingMcp = true;
-                        mcpEditId = null;
-                        mcpEditBuiltin = false;
-                        mcpDraft = new McpFormPanel.Draft();
-                        host.rebuild();
-                    },
+                    () -> beginNewMcp(false),
                     this::beginEditMcp)
+                    .withAddBuiltin(() -> beginNewMcp(true))
                     .withGroups(h -> groupOf(h.base()))
                     .withMenu(h -> updateMenu(Libraries.MCP_CLIENT, h.base()))
                     .withClone(h -> request(Libraries.MCP_CLIENT, Libraries.COPY, h.base()))
@@ -1088,50 +1120,131 @@ public final class SettingsView {
 
     /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
 
-    // ---- Skin section: the named skin library (upload png → MineSkin-signed textures) ----
+    // ---- Skin section: the named skin library (upload png → MineSkin-signed textures, signed in the server's queue) ----
+
+    /** 皮肤页的一行:签好的条目,或服务端队里排着的、刚失败的一张。 */
+    private record SkinLine(ServerLibraries.Skin skin, ServerLibraries.SkinJob job) {
+
+        String name() {
+            return skin != null ? skin.name() : job.name();
+        }
+    }
 
     // ---- 皮肤列表:通用 LibraryListPanel + 行首脸预览(经 McDrawSurface 取原生画布) ----
-    private LibraryListPanel<com.dwinovo.numen.api.client.skin.SkinLibrary.Entry> skinListPanel;
+    private LibraryListPanel<SkinLine> skinListPanel;
 
-    private LibraryListPanel<com.dwinovo.numen.api.client.skin.SkinLibrary.Entry> skinListPanel() {
+    private static List<SkinLine> skinLines() {
+        List<SkinLine> out = new ArrayList<>();
+        ServerLibraries.skins().forEach(s -> out.add(new SkinLine(s, null)));
+        ServerLibraries.skinJobs().forEach(j -> out.add(new SkinLine(null, j)));
+        return out;
+    }
+
+    /** 排队中的一行说明:正在签、被限流在等、排第几,或失败的原因。 */
+    private static String jobMeta(ServerLibraries.SkinJob job) {
+        if (job.failed()) {
+            return I18n.get(ModLanguageData.Keys.SKIN_JOB_FAILED, job.failure().message().getString());
+        }
+        return switch (job.state()) {
+            case "SIGNING" -> I18n.get(ModLanguageData.Keys.SKIN_JOB_SIGNING);
+            case "WAITING" -> I18n.get(ModLanguageData.Keys.SKIN_JOB_WAITING);
+            default -> I18n.get(ModLanguageData.Keys.SKIN_JOB_QUEUED, job.position());
+        };
+    }
+
+    private LibraryListPanel<SkinLine> skinListPanel() {
         if (skinListPanel == null) {
-            skinListPanel = new LibraryListPanel<>(
+            skinListPanel = new LibraryListPanel<SkinLine>(
                     ModLanguageData.Keys.SKIN_ADD,
                     ModLanguageData.Keys.SKIN_EMPTY,
-                    () -> com.dwinovo.numen.api.client.skin.SkinLibrary.instance().list(),
-                    e -> {
-                        boolean signed = e.signed();
-                        String meta = I18n.get(com.dwinovo.numen.api.client.skin.SkinLibrary.VARIANT_SLIM
-                                .equals(e.variant())
-                                ? ModLanguageData.Keys.SKIN_VARIANT_SLIM
-                                : ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)
-                                + " · " + I18n.get(signed ? ModLanguageData.Keys.SKIN_SIGNED
+                    SettingsView::skinLines,
+                    line -> {
+                        if (line.job() != null) {
+                            return new LibraryListPanel.Row(line.name(), jobMeta(line.job()), line.job().failed(), null).withoutToggle();
+                        }
+                        var e = line.skin();
+                        boolean unreadable = e.variant() == null;
+                        String detail = unreadable ? "?" : I18n.get(SkinProfile.VARIANT_SLIM.equals(e.variant())
+                                ? ModLanguageData.Keys.SKIN_VARIANT_SLIM : ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)
+                                + " · " + I18n.get(e.signed() ? ModLanguageData.Keys.SKIN_SIGNED
                                         : ModLanguageData.Keys.SKIN_UNSIGNED);
-                        return new LibraryListPanel.Row(e.name(), meta, !signed, null);
+                        Boolean marked = host.uuid() == null ? null : e.id().equals(
+                                RemoteCompanions.getOrCreate(host.uuid()).skinId());
+                        return new LibraryListPanel.Row(e.name(), meta(e.base(), detail), unreadable || !e.signed(),
+                                marked, !editable(e.base()), e.base().builtin());
                     },
-                    e -> Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM,
-                            e.name() == null ? "" : e.name()).getString(),
-                    e -> com.dwinovo.numen.api.client.skin.SkinLibrary.instance().remove(e.id()),
-                    () -> {
-                        addingSkin = true;
-                        skinDraft = new SkinFormPanel.Draft();
-                        host.rebuild();
+                    line -> line.job() != null
+                            ? Component.translatable(ModLanguageData.Keys.SKIN_JOB_CANCEL_CONFIRM, line.name()).getString()
+                            : Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM,
+                                    line.name() == null ? "" : line.name()).getString(),
+                    line -> {
+                        if (line.job() != null) {
+                            JsonObject body = new JsonObject();
+                            body.addProperty("job", line.job().job());
+                            RemoteCompanions.library().request(Libraries.SKIN, Libraries.CANCEL, body);
+                        } else {
+                            RemoteCompanions.library().delete(Libraries.SKIN, line.skin().id(), line.skin().base().builtin());
+                        }
                     },
+                    () -> beginNewSkin(false),
                     this::beginEditSkin)
-                    .withRowIcon(16, (s, e, ix, iy, size) -> {
-                        if (!(s instanceof com.dwinovo.numen.api.client.ui.mc.McDrawSurface mc)) return;
-                        var lib = com.dwinovo.numen.api.client.skin.SkinLibrary.instance();
-                        var face = com.dwinovo.numen.api.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
+                    .withAddBuiltin(() -> beginNewSkin(true))
+                    .withGroups(line -> line.skin() == null ? null : groupOf(line.skin().base()))
+                    .withMenu(line -> line.skin() == null ? List.of() : updateMenu(Libraries.SKIN, line.skin().base()))
+                    .withClone(line -> {
+                        if (line.skin() != null) {
+                            request(Libraries.SKIN, Libraries.COPY, line.skin().base());
+                        }
+                    })
+                    .withRowToggle(line -> line.skin() == null || line.skin().base().enabled(), line -> {
+                        if (line.skin() != null) {
+                            flip(Libraries.SKIN, line.skin().base());
+                        }
+                    })
+                    // 换绑/解绑走她的绑定:穿上这张皮肤(原地重建身体);解绑回默认皮肤
+                    .withBind(
+                            line -> {
+                                if (host.uuid() != null && line.skin() != null && line.skin().signed()) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.SKIN, line.skin().id());
+                                }
+                            },
+                            line -> {
+                                if (host.uuid() != null) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.SKIN, null);
+                                }
+                            })
+                    .withRowIcon(16, (s, line, ix, iy, size) -> {
+                        if (line.skin() == null || !(s instanceof com.dwinovo.numen.api.client.ui.mc.McDrawSurface mc)) return;
+                        var face = SkinTextures.faceOf(line.skin().id() + (line.skin().base().builtin() ? "#b" : "#m"),
+                                line.skin().png());
                         if (face != null) {
                             net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
                                     mc.graphics(), face, ix, iy, size);
                         }
-                    });
+                    })
+                    .following(Libraries.SKIN);
         }
         return skinListPanel;
     }
 
-    /** 表单卡里的 NumenUI 皮肤表单(名称/手臂模型/文件导入/签名);卡壳照旧 formModal。 */
+    private void beginNewSkin(boolean builtin) {
+        addingSkin = true;
+        skinEditId = null;
+        skinEditBuiltin = builtin;
+        skinDraft = newSkinDraft();
+        host.rebuild();
+    }
+
+    /** 新建一张皮肤的草稿;管理员的草稿带着服务器钥匙串里现有的 MineSkin key。 */
+    private SkinFormPanel.Draft newSkinDraft() {
+        var d = new SkinFormPanel.Draft();
+        if (RemoteCompanions.admin()) {
+            d.mineSkinKey = ServerLibraries.serverKey(MineSkinClient.KEY_SERVICE);
+        }
+        return d;
+    }
+
+    /** 表单卡里的 NumenUI 皮肤表单(名称/手臂模型/文件导入);卡壳照旧 formModal。 */
     private void buildSkinForm() {
         skinForm().open(skinDraft);
         skinForm().build(fx(), fy0(), fw(), fBottom() - fy0(), formWindow());
@@ -1139,33 +1252,56 @@ public final class SettingsView {
 
     private SkinFormPanel skinForm() {
         if (skinForm == null) {
-            skinForm = new SkinFormPanel(
-                    signedName -> {   // 保存完成;真签过名才在列表页报回执
-                        addingSkin = false;
-                        skinDraft = new SkinFormPanel.Draft();
-                        host.rebuild();
-                        if (signedName != null) {
-                            skinListPanel().noticeSuccess(Component.translatable(
-                                    ModLanguageData.Keys.SKIN_SIGN_OK, signedName).getString());
-                        }
-                    },
+            skinForm = new SkinFormPanel(this::onSkinSave,
                     () -> {   // 取消
                         addingSkin = false;
-                        skinForm.cancelPending();
                         host.rebuild();
                     },
-                    this::openNativeSkinPicker);
+                    this::openNativeSkinPicker,
+                    RemoteCompanions::admin);
         }
         return skinForm;
     }
 
-    private void beginEditSkin(com.dwinovo.numen.api.client.skin.SkinLibrary.Entry e) {
+    /**
+     * 存一张皮肤:名字、手臂模型和(新选的)图交给服务端,它把这一张排进签名队;签到哪一步了在列表里看。
+     * 管理员改了 MineSkin 的 key 一并存进服务器钥匙串。
+     */
+    private void onSkinSave(SkinFormPanel.Draft d) {
+        JsonObject body = new JsonObject();
+        body.addProperty("name", d.name.trim());
+        body.addProperty("variant", d.variant);
+        if (d.dropped != null) {
+            body.addProperty("png", java.util.Base64.getEncoder().encodeToString(d.dropped));
+        }
+        if (skinEditId != null) {
+            body.addProperty("id", skinEditId);
+        }
+        if (skinEditBuiltin) {
+            body.addProperty("group", "builtin");
+        }
+        RemoteCompanions.library().put(Libraries.SKIN, body);
+        if (RemoteCompanions.admin()) {
+            saveKey(MineSkinClient.KEY_SERVICE, d.mineSkinKey, true);
+        }
+        addingSkin = false;
+        skinEditId = null;
+        skinDraft = new SkinFormPanel.Draft();
+        host.rebuild();
+    }
+
+    private void beginEditSkin(SkinLine line) {
+        if (line.skin() == null || line.skin().variant() == null) {
+            return;   // 排队中的与读不通的没有可改的
+        }
         addingSkin = true;
-        var d = new SkinFormPanel.Draft();
-        d.editId = e.id();
-        d.name = e.name();
-        d.variant = e.variant();
-        // 不换图时沿用落盘原图(改手臂模型重签也从盘上读),dropped 留空。
+        skinEditId = line.skin().id();
+        skinEditBuiltin = line.skin().base().builtin();
+        var d = newSkinDraft();
+        d.editId = line.skin().id();
+        d.name = line.skin().name();
+        d.variant = line.skin().variant();
+        // 不换图时服务端用存着的原图(改手臂模型重签也从它来),dropped 留空。
         skinDraft = d;
         host.rebuild();
     }
@@ -1342,17 +1478,12 @@ public final class SettingsView {
     }
 
     /** 新建模型配置:打开空白表单卡。召唤卡上"没有——去设置里新建"也走这里(设置页先由屏幕切到模型配置)。新建的在我的。 */
-    public void beginNewProvider() {
+    private void beginNewProvider(boolean builtin) {
         addingProvider = true;
         providerEditId = null;
-        providerEditBuiltin = false;
+        providerEditBuiltin = builtin;
         providerDraft = new ProfileFormPanel.Draft();
         host.rebuild();
-    }
-
-    /** 直接落在模型配置分区(别处要把人送到这儿新建模型配置时用)。 */
-    public void showProviders() {
-        selectSection(Section.PROVIDER);
     }
 
     private void beginEditProvider(ServerLibraries.Provider e) {

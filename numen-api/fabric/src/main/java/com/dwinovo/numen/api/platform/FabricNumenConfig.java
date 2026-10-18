@@ -136,9 +136,6 @@ public final class FabricNumenConfig implements INumenConfig {
     public String getSttProvider() { return data.sttProvider == null || data.sttProvider.isBlank() ? "siliconflow" : data.sttProvider; }
 
     @Override
-    public String getSttApiKey() { return data.sttApiKey == null ? "" : data.sttApiKey; }
-
-    @Override
     public String getSttBaseUrl() { return data.sttBaseUrl == null ? "" : data.sttBaseUrl; }
 
     @Override
@@ -149,9 +146,6 @@ public final class FabricNumenConfig implements INumenConfig {
 
     @Override
     public void setSttProvider(String value) { data.sttProvider = value == null || value.isBlank() ? "siliconflow" : value; }
-
-    @Override
-    public void setSttApiKey(String value) { data.sttApiKey = value == null ? "" : value; }
 
     @Override
     public void setSttBaseUrl(String value) { data.sttBaseUrl = value == null ? "" : value; }
@@ -186,7 +180,6 @@ public final class FabricNumenConfig implements INumenConfig {
         public String proxy = "";   // optional host:port HTTP proxy for LLM calls
         // STT (voice input) — global. provider picks the preset; empty apiKey = disabled.
         public String sttProvider = "siliconflow";
-        public String sttApiKey = "";
         public String sttBaseUrl = "";
         public String sttModel = "FunAudioLLM/SenseVoiceSmall";
         public String sttMicrophone = "";
@@ -207,7 +200,6 @@ public final class FabricNumenConfig implements INumenConfig {
             if (proxy == null) proxy = d.proxy;
             if (systemPrompt == null) systemPrompt = d.systemPrompt;
             if (sttProvider == null || sttProvider.isBlank()) sttProvider = d.sttProvider;
-            if (sttApiKey == null) sttApiKey = d.sttApiKey;
             if (sttBaseUrl == null) sttBaseUrl = d.sttBaseUrl;
             if (sttModel == null) sttModel = d.sttModel;
             if (sttMicrophone == null) sttMicrophone = d.sttMicrophone;

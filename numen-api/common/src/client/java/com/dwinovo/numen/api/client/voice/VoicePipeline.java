@@ -71,7 +71,7 @@ public final class VoicePipeline {
      * 丢弃,不拦腰、不叠播、不积压陈话。按当前绑定的声线重建后端,返回本轮代际号。
      * 主线程调用。
      */
-    public int beginTurn(VoiceLibrary.Entry cfg, boolean bargeIn) {
+    public int beginTurn(SpokenVoice cfg, boolean bargeIn) {
         generation++;
         if (bargeIn) {
             stopAndClear();
@@ -99,7 +99,7 @@ public final class VoicePipeline {
      * 不碰流式那只 divider,连续调用自然连播。声线按传入配置现取(与 {@link #beginTurn}
      * 同一来源);{@link #interrupt}(主人打断/死亡)照样一刀切停它。主线程调用。
      */
-    public void sayAppend(VoiceLibrary.Entry cfg, String text) {
+    public void sayAppend(SpokenVoice cfg, String text) {
         if (text == null || text.isBlank()) return;
         this.backend = cfg.createBackend();
         this.volume = cfg.volume();

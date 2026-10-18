@@ -1,16 +1,14 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
-import com.dwinovo.numen.api.client.agent.CompanionLooks;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
-import com.dwinovo.numen.api.client.skin.SkinLibrary;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
-import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
@@ -24,8 +22,8 @@ import java.util.Objects;
  * 编辑卡——改一只<b>已创建</b>同伴:人设/模式/模型配置/声线/皮肤五个选择。版式照 Telegram 的"编辑联系人":
  * 标题下面是她的脸和名字,再往下一行一个选择,右下取消/保存。
  * 草稿制:选择行只改草稿,点保存才统一落地,且只发真正变过的项(换肤要原地重建身体,误触代价高);
- * 取消丢弃草稿。草稿基线在开卡时从各自的真源取一次({@link #reset()});皮肤的当前选择记在绑定里
- * (与档案/声线同模)。卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
+ * 取消丢弃草稿。草稿基线在开卡时从她的绑定取一次({@link #reset()},服务端推来的状态);四项绑定
+ * (档案、人设、声线、皮肤)改的都是她存档里的绑定。卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
  */
 public final class CompanionEditPanel extends ModalCard {
 
@@ -44,15 +42,11 @@ public final class CompanionEditPanel extends ModalCard {
         boolean currentCreative();
 
         void setCreative(boolean creative);
-
-        /** {@code skinId} 是皮肤库条目 id,或 {@link #SKIN_BY_NAME}(按名字查同名正版)。 */
-        void applySkin(String skinId);
     }
 
     private static final String PERSONA_NONE = "__default__";
     private static final String VOICE_NONE = "__none__";
-    /** 与召唤卡的"默认(按名字)"同义:本机查同名正版,查不到落回原版默认皮肤。 */
-    public static final String SKIN_BY_NAME = "__default__";
+    private static final String SKIN_DEFAULT = "__default__";
 
     /** 编辑草稿;开卡时从真源取基线,保存时与基线比对只落差异。 */
     private static final class Draft {
@@ -60,7 +54,7 @@ public final class CompanionEditPanel extends ModalCard {
         String providerId;    // null = 未绑定(只出现在老档,不许改回)
         String voiceId;       // null = 无声
         boolean creative;
-        String skinId = SKIN_BY_NAME;
+        String skinId = SKIN_DEFAULT;     // SKIN_DEFAULT = 默认皮肤
     }
 
     private final Host host;
@@ -91,14 +85,13 @@ public final class CompanionEditPanel extends ModalCard {
     void reset() {
         var uuid = host.uuid();
         var loop = RemoteCompanions.getOrCreate(uuid);
-        var binding = CompanionLooks.of(uuid);
         origPersona = loop.personaId();
         origProvider = loop.providerEntryId();
-        origVoice = binding.voiceId();
+        origVoice = loop.voiceId();
         origCreative = host.currentCreative();
-        // 皮肤当前选择从绑定读;没记账或条目已删 = 按名字默认。
-        String sk = binding.skinId();
-        origSkin = sk != null && SkinLibrary.instance().get(sk) != null ? sk : SKIN_BY_NAME;
+        // 皮肤当前选择从绑定读;没绑或条目已删 = 默认皮肤。
+        String sk = loop.skinId();
+        origSkin = sk != null && ServerLibraries.skinsInUse().stream().anyMatch(e -> e.id().equals(sk)) ? sk : SKIN_DEFAULT;
         draft = new Draft();
         draft.personaId = origPersona;
         draft.providerId = origProvider;
@@ -174,7 +167,7 @@ public final class CompanionEditPanel extends ModalCard {
         List<String> vIds = new ArrayList<>();
         vIds.add(VOICE_NONE);
         voiceNames.add(t(ModLanguageData.Keys.VOICE_BIND_NONE));
-        for (var e : VoiceLibrary.instance().list()) {
+        for (var e : ServerLibraries.voicesInUse()) {
             vIds.add(e.id());
             voiceNames.add(e.name());
         }
@@ -191,13 +184,11 @@ public final class CompanionEditPanel extends ModalCard {
         // 皮肤:默认选中当前穿的(绑定里记的选择意图);保存时只有真换了才发包(换肤要原地重建身体)。
         List<String> skinNames = new ArrayList<>();
         List<String> sIds = new ArrayList<>();
-        sIds.add(SKIN_BY_NAME);
+        sIds.add(SKIN_DEFAULT);
         skinNames.add(t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT));
-        for (var e : SkinLibrary.instance().list()) {
-            if (e.signed()) {
-                sIds.add(e.id());
-                skinNames.add(e.name());
-            }
+        for (var e : ServerLibraries.skinsInUse()) {
+            sIds.add(e.id());
+            skinNames.add(e.name());
         }
         skinIds = sIds;
         select(ry, t(ModLanguageData.Keys.SUMMON_SKIN), skinNames,
@@ -211,22 +202,21 @@ public final class CompanionEditPanel extends ModalCard {
     /** 保存:与开卡基线比对,只落真正变过的项,然后关卡。 */
     private void save() {
         var uuid = host.uuid();
+        var her = RemoteCompanions.getOrCreate(uuid);
         if (!Objects.equals(draft.personaId, origPersona)) {
-            RemoteCompanions.getOrCreate(uuid).setPersona(draft.personaId);
+            her.bind(Slot.PERSONA, draft.personaId);
         }
         if (draft.providerId != null && !draft.providerId.equals(origProvider)) {
-            RemoteCompanions.getOrCreate(uuid).setProviderEntry(draft.providerId);
+            her.bind(Slot.PROVIDER, draft.providerId);
         }
         if (!Objects.equals(draft.voiceId, origVoice)) {
-            CompanionLooks.set(uuid, CompanionLooks.of(uuid).withVoice(draft.voiceId));
+            her.bind(Slot.VOICE, draft.voiceId);
         }
         if (!modeLocked && draft.creative != origCreative) {
             host.setCreative(draft.creative);
         }
         if (!draft.skinId.equals(origSkin)) {
-            host.applySkin(draft.skinId);
-            CompanionLooks.set(uuid, CompanionLooks.of(uuid)
-                    .withSkin(SKIN_BY_NAME.equals(draft.skinId) ? null : draft.skinId));
+            her.bind(Slot.SKIN, SKIN_DEFAULT.equals(draft.skinId) ? null : draft.skinId);
         }
         host.onClose();
     }

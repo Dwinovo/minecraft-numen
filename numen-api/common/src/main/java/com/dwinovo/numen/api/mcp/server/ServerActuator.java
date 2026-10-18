@@ -13,11 +13,11 @@ import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.OwnerInputs;
 import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.network.payload.DismissRequestPayload;
-import com.dwinovo.numen.api.network.payload.SummonRequestPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -64,8 +64,12 @@ public final class ServerActuator implements ExternalHands {
 
     @Override
     public CompletableFuture<Boolean> create(String name) {
-        return asOwner(player -> SummonRequestPayload.handle(
-                new SummonRequestPayload(name == null ? "" : name.trim(), "", "", false, "", ""), player));
+        return asOwner(player -> {
+            Companions.Summoned summoned = Companions.summonFor(player, name == null ? "" : name.trim(), null);
+            if (summoned.problem() != null) {
+                player.sendSystemMessage(summoned.problem());
+            }
+        });
     }
 
     @Override

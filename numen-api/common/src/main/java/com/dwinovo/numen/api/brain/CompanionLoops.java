@@ -135,20 +135,36 @@ public final class CompanionLoops {
         }
     }
 
-    /** 这位主人的人设改了名(文件名就是 id):名下用它的大脑改指新的 id。 */
-    public static void repersona(UUID owner, String from, String to) {
+    /** 这位主人的某一项库条目改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
+    public static void rebind(UUID owner, Slot slot, String from, String to) {
         for (Entry entry : LOOPS.values()) {
-            if (entry.owner.equals(owner) && from.equals(entry.loop.personaId())) {
-                entry.loop.setPersona(to);
+            if (entry.owner.equals(owner) && from.equals(entry.loop.bound(slot))) {
+                entry.loop.bind(slot, to);
             }
         }
     }
 
-    /** 这位主人的模型档案改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
-    public static void reprovider(UUID owner, String from, String to) {
+    /** 她的记忆被清空了:推给主人的面板,把她的记录作废。 */
+    static void wiped(UUID companion) {
+        Entry entry = LOOPS.get(companion);
+        if (entry != null) {
+            entry.feed.wiped();
+        }
+    }
+
+    /** 绑着这一条库条目的在场同伴,连同各自的主人(内置条目是所有人共用的,谁名下的都算)。 */
+    static Map<UUID, UUID> boundTo(Slot slot, String entryId) {
+        Map<UUID, UUID> out = new LinkedHashMap<>();
+        LOOPS.values().stream().filter(entry -> entryId.equals(entry.loop.bound(slot)))
+                .forEach(entry -> out.put(entry.loop.companion(), entry.owner));
+        return out;
+    }
+
+    /** 内置的库条目改了名:所有人名下绑着它的大脑都改指新的 id。 */
+    public static void rebindAll(Slot slot, String from, String to) {
         for (Entry entry : LOOPS.values()) {
-            if (entry.owner.equals(owner) && from.equals(entry.loop.providerId())) {
-                entry.loop.setProvider(to);
+            if (from.equals(entry.loop.bound(slot))) {
+                entry.loop.bind(slot, to);
             }
         }
     }

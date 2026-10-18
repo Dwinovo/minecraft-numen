@@ -1,18 +1,13 @@
 package com.dwinovo.numen.api.client.screen.chat;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.client.agent.CompanionLooks;
 import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.command.ChatCommands;
 import com.dwinovo.numen.api.client.ui.KeyCodes;
 import net.minecraft.client.resources.language.NumenTestLanguage;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -32,23 +27,10 @@ class ChatInputBarCommandTest {
 
     private static final UUID HER = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
-    @TempDir
-    Path home;
-
     /** 回主人的话按语言键写,单测里装上英文才读得到它说了什么。 */
     @BeforeAll
     static void english() {
         NumenTestLanguage.install();
-    }
-
-    @BeforeEach
-    void useTempHome() {
-        CompanionLooks.init(home, home);
-    }
-
-    @AfterEach
-    void restore() {
-        CompanionLooks.init(null, null);
     }
 
     /** 记下输入行交给宿主的两样东西:说出去的话、命令的回话。 */

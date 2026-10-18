@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.client.chat.RawMessageMode;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
 import com.dwinovo.numen.api.client.data.ClientNumenLocations;
 import com.dwinovo.numen.api.client.hud.SpeechBubbles;
-import com.dwinovo.numen.api.client.voice.VoiceLibrary;
 import com.dwinovo.numen.api.network.ClientPayloadSink;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
@@ -57,35 +56,10 @@ public final class ClientPayloadHandlers {
         }
         NumenRoster.instance().replaceAll(p.worldId(), snapshot);
 
-        // 遣散的那只在服务端的家、会话里的位置都由服务端收;这里只放掉我们这头她的视图和这台机器上记的外观选择
+        // 遣散的那只在服务端的家、会话里的位置都由服务端收;这里只放掉我们这头她的视图
         for (UUID gone : before.keySet()) {
             if (!onRoster.contains(gone)) {
                 com.dwinovo.numen.api.client.agent.RemoteCompanions.forget(gone);
-                com.dwinovo.numen.api.client.agent.CompanionLooks.forget(gone);
-            }
-        }
-
-        // 新到的同伴:召唤时选的人设和档案在召唤请求里交给了服务端;声线和皮肤是这台机器的,按名字认出来记进绑定。
-        for (CompanionListPayload.Entry e : p.companions()) {
-            if (before.containsKey(e.uuid())) continue;   // not new
-            // And for the voice entry picked at summon (optional — none pended = silent).
-            String voiceEntry = VoiceLibrary.takePendingSummon(e.name());
-            if (voiceEntry != null) {
-                if (VoiceLibrary.instance().get(voiceEntry) != null) {
-                    com.dwinovo.numen.api.client.agent.CompanionLooks.set(e.uuid(),
-                            com.dwinovo.numen.api.client.agent.CompanionLooks.of(e.uuid()).withVoice(voiceEntry));
-                } else {
-                    // 声线条目在召唤途中被删了:她会变哑巴,不说一声主人要找很久
-                    com.dwinovo.numen.api.client.chat.ChatLines.notice(e.name(),
-                            net.minecraft.client.resources.language.I18n.get("numen.summon.voice_missing"));
-                }
-            }
-            // 召唤时选的皮肤库条目记进绑定(编辑卡据此标当前皮肤)。条目途中被删
-            // 不用出声——皮肤按签名值已生效,只是记不上账,编辑卡会按默认显示。
-            String skinEntry = com.dwinovo.numen.api.client.skin.SkinLibrary.takePendingSummon(e.name());
-            if (skinEntry != null && com.dwinovo.numen.api.client.skin.SkinLibrary.instance().get(skinEntry) != null) {
-                com.dwinovo.numen.api.client.agent.CompanionLooks.set(e.uuid(),
-                        com.dwinovo.numen.api.client.agent.CompanionLooks.of(e.uuid()).withSkin(skinEntry));
             }
         }
     }

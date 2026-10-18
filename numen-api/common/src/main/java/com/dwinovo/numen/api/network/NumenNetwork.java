@@ -244,6 +244,9 @@ public final class NumenNetwork {
         toClient(com.dwinovo.numen.api.network.payload.LibraryPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.LibraryPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.LibraryPayload::handle);
+        toClient(com.dwinovo.numen.api.network.payload.ExportChunkPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.ExportChunkPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.ExportChunkPayload::handle);
         toClient(com.dwinovo.numen.api.network.payload.ConversationsPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);
@@ -327,11 +330,5 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.SetGameModePayload.TYPE,
                 com.dwinovo.numen.api.network.payload.SetGameModePayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.SetGameModePayload::handle);
-
-        // C→S: the edit card reskins an existing companion (registry + body recycle).
-        toServer(
-                com.dwinovo.numen.api.network.payload.ChangeSkinPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ChangeSkinPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ChangeSkinPayload::handle);
     }
 }

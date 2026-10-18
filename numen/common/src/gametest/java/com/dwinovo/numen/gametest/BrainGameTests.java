@@ -308,6 +308,63 @@ public class BrainGameTests {
         });
     }
 
+    /**
+     * 主人清空她的记忆:对话日志与札记删掉,名册与身体不动,面板收到"清空了",并且如实告诉她;导出的 zip 在清空之前带着
+     * 日志和札记。只有主人能做;她正在想事情的时候不清,什么也不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void wiping_her_memory_deletes_the_log_and_notes_tells_her_and_waits_until_she_is_idle(
+            GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_forgetful");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+        her.mind.holding = true;
+        her.mind.say("好的");
+        her.loop.submitPrompt("记一下铁在东边");
+        com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID())
+                .write("iron", "铁在东边", "reference", "东边 30 格");
+
+        var busy = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner,
+                new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+        helper.assertTrue(busy.problem() != null, "she was wiped in the middle of a thought");
+        helper.assertTrue(!com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID()).index().isEmpty(),
+                "a refused wipe deleted her notes");
+        var stranger = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, UUID.randomUUID(),
+                new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+        helper.assertTrue(stranger.problem() != null, "someone else wiped her");
+        her.mind.holding = false;
+        her.mind.release();
+
+        GameTestKit.steps(helper).thenWaitUntil(() -> helper.assertTrue(
+                her.conversation().size() == 2 && her.loop.status().phase() == null,
+                "she has not finished: " + her.conversation())).thenExecute(() -> {
+            byte[] zip = her.loop.exportMemory().join();
+            java.util.Set<String> names = new java.util.HashSet<>();
+            try (var in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+                for (var e = in.getNextEntry(); e != null; e = in.getNextEntry()) {
+                    names.add(e.getName());
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            // 札记在她家的 memory/ 里一并打包由 MemoryExportTest 管;这里的测试脑家的布局不同,只看日志进了包
+            helper.assertTrue(names.contains("chat.jsonl"), "export: " + names);
+
+            var done = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner,
+                    new com.dwinovo.numen.api.brain.OwnerInput.Wipe(her.companion.getUUID()));
+            helper.assertTrue(done.problem() == null, "the wipe was refused: " + done.problem());
+            helper.assertTrue(her.conversation().stream().noneMatch(m -> m instanceof ConvoState.Msg.User u
+                    && u.content().contains("铁在东边")), "the old words are still in the log: " + her.conversation());
+            helper.assertTrue(com.dwinovo.numen.api.agent.memory.NoteBook.of(her.companion.getUUID()).index().isEmpty(),
+                    "her notes are still there");
+            helper.assertTrue(CompanionRegistry.get(server).find(her.companion.getUUID()) != null,
+                    "wiping her memory removed her from the roster");
+            helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("清空了你的记忆")),
+                    "she was not told: " + her.loop.inbox().entries());
+        }).thenWaitUntil(() -> helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Wiped),
+                "the panel was not told")).thenExecute(her::close).thenSucceed();
+    }
+
     /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
     public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {
@@ -615,34 +672,144 @@ public class BrainGameTests {
         });
     }
 
-    /** 召唤时选的人设和档案交给服务端绑,而且她从此有服务端大脑。 */
+    /**
+     * 召唤只要名字,不设前提:她有服务端大脑,可是还没绑档案,主人跟她说话时她停在 BLOCKED、原因是"还没配模型档案";
+     * 档案、人设、声线、皮肤是召唤之后经同一个入口绑上的,四项都记进她的绑定、穿上的皮肤落在名册里。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
-    public static void summoning_gives_her_a_brain_with_the_chosen_persona_and_profile(GameTestHelper helper)
+    public static void summoning_takes_only_a_name_and_the_four_bindings_come_afterwards(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_summoner");
-        var persona = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID())
-                .create("gametest_persona", "你是测试员");
-        var profiles = com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID());
-        var profile = profiles.create("gametest_profile",
-                new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", null,
-                        "https://relay.example", null, null, 0, null, 0, null));
 
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
-                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", "", "", false,
-                        persona.id(), profile.id()), owner);
+                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", false), owner);
 
         var born = server.getPlayerList().getPlayerByName("gametest_born");
         helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
         var brain = CompanionLoops.get(born.getUUID());
         helper.assertTrue(brain.isPresent(), "she has no server brain");
-        helper.assertTrue(persona.id().equals(brain.get().personaId()), "persona not bound: " + brain.get().personaId());
-        helper.assertTrue(profile.id().equals(brain.get().providerId()), "profile not bound: " + brain.get().providerId());
+        for (var slot : com.dwinovo.numen.api.brain.Slot.values()) {
+            helper.assertTrue(brain.get().bound(slot) == null, "she came with a " + slot + " already bound");
+        }
+        brain.get().submitPrompt("在吗");
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(brain.get().status().hold() == Hold.BLOCKED, "not held: " + brain.get().status().hold());
+            helper.assertTrue(com.dwinovo.numen.api.agent.loop.Cause.UNBOUND.equals(
+                    brain.get().status().holdReason().code()), "wrong reason: " + brain.get().status().holdReason());
 
-        com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
-        profiles.remove(profile.id());
-        com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
-        GameTestKit.leave(owner);
+            var persona = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID())
+                    .create("gametest_persona", "你是测试员");
+            var profiles = com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID());
+            var profile = profiles.create("gametest_profile",
+                    new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", null,
+                            "https://relay.example", null, null, 0, null, 0, null));
+            var hub = com.dwinovo.numen.api.library.LibraryHub.of(server);
+            var voiceId = com.dwinovo.numen.api.library.EntryId.mine("gametest_voice");
+            hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().write(voiceId,
+                    new com.dwinovo.numen.api.voice.VoiceProfile("", "openai", "", "", "m", "alex", "", "", "", 1f)
+                            .write());
+            var skinId = com.dwinovo.numen.api.library.EntryId.mine("gametest_skin");
+            hub.library(com.dwinovo.numen.api.skin.SkinProfile.KIND, owner.getUUID()).mine().write(skinId,
+                    new com.dwinovo.numen.api.skin.SkinProfile("classic", "gametest-value", "gametest-sig", null).write());
+
+            var slots = com.dwinovo.numen.api.brain.Slot.values();
+            String[] entries = {profile.id(), persona.id(), voiceId.toString(), skinId.toString()};
+            for (int i = 0; i < slots.length; i++) {
+                var applied = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
+                        new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(), slots[i], entries[i]));
+                helper.assertTrue(applied.problem() == null, slots[i] + " was refused: " + applied.problem());
+                helper.assertTrue(entries[i].equals(brain.get().bound(slots[i])), slots[i] + " not bound");
+            }
+            helper.assertTrue("gametest-value".equals(CompanionRegistry.get(server).find(born.getUUID()).skinValue()),
+                    "the skin was not put on her");
+            var refused = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
+                    new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(),
+                            com.dwinovo.numen.api.brain.Slot.VOICE, "my:nowhere"));
+            helper.assertTrue(refused.problem() != null, "an entry that is not in the library was bound");
+            helper.assertTrue(voiceId.toString().equals(brain.get().bound(com.dwinovo.numen.api.brain.Slot.VOICE)),
+                    "a refused bind changed her voice");
+
+            var unbound = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
+                    new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(),
+                            com.dwinovo.numen.api.brain.Slot.SKIN, null));
+            helper.assertTrue(unbound.problem() == null && brain.get().bound(com.dwinovo.numen.api.brain.Slot.SKIN) == null
+                    && CompanionRegistry.get(server).find(born.getUUID()).skinValue().isEmpty(), "unbinding the skin");
+
+            com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
+            profiles.remove(profile.id());
+            com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
+            hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().delete(voiceId);
+            hub.library(com.dwinovo.numen.api.skin.SkinProfile.KIND, owner.getUUID()).mine().delete(skinId);
+            GameTestKit.leave(owner);
+            helper.succeed();
+        });
+    }
+
+    /**
+     * 内置皮肤是所有人共用的:两位主人名下的同伴都穿着同一条,管理员改了它,两只身上都换成新的——绑定与身体只认库里这一条。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void changing_a_builtin_skin_re_dresses_everyone_wearing_it(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        UUID ownerA = UUID.randomUUID();
+        UUID ownerB = UUID.randomUUID();
+        Brain a = new Brain(helper, "gametest_wearer_a", Files.createTempDirectory("numen-gametest-brain-"), ownerA);
+        Brain b = new Brain(helper, "gametest_wearer_b", Files.createTempDirectory("numen-gametest-brain-"), ownerB);
+        var shelf = com.dwinovo.numen.api.library.LibraryHub.of(server)
+                .builtin(com.dwinovo.numen.api.skin.SkinProfile.KIND);
+        var id = new com.dwinovo.numen.api.library.EntryId("server", "gametest_shared");
+        shelf.write(id, new com.dwinovo.numen.api.skin.SkinProfile("classic", "shared-v1", "sig", null).write());
+        var slot = com.dwinovo.numen.api.brain.Slot.SKIN;
+        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBinding.apply(server, ownerA, a.companion.getUUID(), slot,
+                id.toString()) == null, "the first wearer was refused");
+        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBinding.apply(server, ownerB, b.companion.getUUID(), slot,
+                id.toString()) == null, "the second wearer was refused");
+        var registry = CompanionRegistry.get(server);
+        helper.assertTrue("shared-v1".equals(registry.find(a.companion.getUUID()).skinValue())
+                && "shared-v1".equals(registry.find(b.companion.getUUID()).skinValue()), "they do not wear it yet");
+
+        shelf.write(id, new com.dwinovo.numen.api.skin.SkinProfile("classic", "shared-v2", "sig", null).write());
+        com.dwinovo.numen.api.brain.CompanionBinding.skinChanged(server, UUID.randomUUID(), true, id.toString());
+
+        helper.assertTrue("shared-v2".equals(registry.find(a.companion.getUUID()).skinValue()), "the first still wears the old one");
+        helper.assertTrue("shared-v2".equals(registry.find(b.companion.getUUID()).skinValue()),
+                "someone else's companion still wears the old one");
+        for (Brain her : List.of(a, b)) {
+            CompanionLoops.dismissed(server, her.companion.getUUID());
+            NumenPlayer live = NumenPlayer.findByUuid(server, her.companion.getUUID());
+            if (live != null) {
+                CompanionFactory.despawn(server, live);
+            }
+            registry.remove(her.companion.getUUID());
+        }
+        shelf.delete(id);
+        helper.succeed();
+    }
+
+    /** 每人最多几只是服主在 server.json 里设的;再召唤自己已有的同名同伴是叫醒她,不占名额。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    public static void the_summon_limit_comes_from_the_server_settings(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_limited");
+        var settings = com.dwinovo.numen.api.brain.ModelServices.of(server).settings();
+        settings.setMaxCompanions(1);
+        try {
+            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_a", false)
+                    .problem() == null, "the first one was refused");
+            var second = com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_b", false);
+            helper.assertTrue(second.problem() != null && second.body() == null, "the limit did not hold");
+            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.summonFor(owner, "gametest_lim_a", false)
+                    .problem() == null, "waking the one she has took a slot");
+            helper.assertTrue(!com.dwinovo.numen.api.entity.Companions.summonFor(owner, "x", false).problem()
+                    .getString().isEmpty(), "a name that is not a name was summoned");
+        } finally {
+            settings.setMaxCompanions(0);
+            for (var entry : CompanionRegistry.get(server).ownedBy(owner.getUUID())) {
+                com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(entry.getKey()));
+            }
+            GameTestKit.leave(owner);
+        }
         helper.succeed();
     }
 
@@ -654,7 +821,7 @@ public class BrainGameTests {
         UUID owner = her.companion.getOwnerUuid();
         var library = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner);
         var old = library.create("gametest_old_name", "文本");
-        her.loop.setPersona(old.id());
+        her.loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, old.id());
 
         JsonObject body = new JsonObject();
         body.addProperty("id", old.id());
@@ -664,8 +831,8 @@ public class BrainGameTests {
                 com.dwinovo.numen.api.brain.Libraries.PERSONA, com.dwinovo.numen.api.brain.Libraries.PUT, body);
 
         helper.assertTrue(result.problem() == null, "the rename was refused: " + result.problem());
-        helper.assertTrue("my:gametest_new_name".equals(her.loop.personaId()),
-                "she still points at " + her.loop.personaId());
+        helper.assertTrue("my:gametest_new_name".equals(her.loop.bound(com.dwinovo.numen.api.brain.Slot.PERSONA)),
+                "she still points at " + her.loop.bound(com.dwinovo.numen.api.brain.Slot.PERSONA));
         library.remove("my:gametest_new_name");
         her.close();
         helper.succeed();

@@ -106,6 +106,7 @@ public final class CompanionTickDispatcher {
         // 她们的程序排着的服务端调用:在预算里执行,主线程不等任何程序
         com.dwinovo.numen.api.program.ServerPrograms.tick();
         com.dwinovo.numen.api.brain.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理
+        com.dwinovo.numen.api.brain.Exports.tick(server);       // 导出的记忆往主人客户端推下一段
         com.dwinovo.numen.api.mcp.server.McpMode.instance().tick();   // 外脑失联、回归的播报
         com.dwinovo.numen.api.brain.Visits.tick(server);   // 渠道来访:做完这一轮的结束
         com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件

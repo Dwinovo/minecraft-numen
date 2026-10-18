@@ -49,7 +49,7 @@ public final class ModelServices {
         this.catalog = new ModelCatalog(homes.server().file("cache").resolve("models-dev.json"),
                 () -> Services.CONFIG.getProxy());
         this.serverKeys = new Keychain(homes.server());
-        this.settings = new ServerSettings(homes.server());
+        this.settings = new ServerSettings(homes.server(), server.isDedicatedServer());
         this.quota = new ServerKeyQuota(settings, homes.server(), LocalDate::now);
     }
 
