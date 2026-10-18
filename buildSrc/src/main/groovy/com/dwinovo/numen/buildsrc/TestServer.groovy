@@ -6,10 +6,11 @@ import org.gradle.api.services.BuildServiceParameters
 import java.util.concurrent.TimeUnit
 
 /**
- * 端到端测试起的那台服务端进程(见 numen-e2e-neoforge.gradle)。做成构建服务,是为了进程一定收得干净:
+ * 测试起的那台服务端进程(端到端测试见 numen-e2e-neoforge.gradle 与 numen-e2e-paper.gradle,Paper 上的 GameTest 见
+ * numen-gametest-paper.gradle)。做成构建服务,是为了进程一定收得干净:
  * 任务失败、被中断、构建结束,Gradle 都会关闭它,不会留一台还占着端口的服务端。
  */
-abstract class E2eServer implements BuildService<BuildServiceParameters.None>, AutoCloseable {
+abstract class TestServer implements BuildService<BuildServiceParameters.None>, AutoCloseable {
 
     private Process process
     private File log
@@ -39,6 +40,11 @@ abstract class E2eServer implements BuildService<BuildServiceParameters.None>, A
             Thread.sleep(500)
         }
         return false
+    }
+
+    /** 等进程自己退出(服务端跑完该跑的、自己关服)。到点没退是 false,调用方决定怎么收场。 */
+    boolean awaitExit(long timeoutMillis) {
+        return process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
     }
 
     File logFile() {

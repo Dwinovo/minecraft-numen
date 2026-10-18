@@ -10,6 +10,8 @@ plugins {
 // 要读 Numen API 的 Paper 插件的 apiJar 任务与寻路模块的源码集,它们得先配置好
 evaluationDependsOn(':numen-api:paper')
 evaluationDependsOn(':numen:pathing')
+// 端到端测试的起服层(见末尾 numen-e2e-paper)按 e2e 的规格起服,规格先读进来
+evaluationDependsOn(':e2e')
 
 // Numen 的 Paper 插件(docs/paper.md):common 的服务端源码与寻路模块的源码一起对着 Paper 开发包重新编译——寻路也是对着原版编的,
 // 同样要在 Paper 上重编(见 numen-paper.gradle)。内嵌联动(plugins/*)是模组的东西,Paper 上不存在。
@@ -34,3 +36,6 @@ tasks.named('runServer') {
     pluginJars.from(project(':numen-api:paper').tasks.named('jar'))
     systemProperty('com.mojang.eula.agree', 'true')
 }
+
+// 端到端测试(e2e/)与 GameTest 在 Paper 上的起服层。它们要用到上面配置好的 runServer。
+apply plugin: 'numen-e2e-paper'
