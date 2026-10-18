@@ -41,8 +41,9 @@ public final class SkinSignings {
         current = new SkinSigning(SkinSigning.Backend.NETWORK,
                 () -> models.serverKeychain().get(MineSkinClient.KEY_SERVICE), server,
                 owner -> Replies.pushTo(server, owner, Libraries.SKIN), (request, outcome) -> {
-                    CompanionBinding.skinSigned(server, request.owner(), outcome);
-                    if (request.shelf() == LibraryHub.of(server).builtin(SkinProfile.KIND)) {
+                    boolean builtin = request.shelf() == LibraryHub.of(server).builtin(SkinProfile.KIND);
+                    CompanionBinding.skinSigned(server, request.owner(), builtin, outcome);
+                    if (builtin) {
                         Replies.share(server, null, Libraries.SKIN);   // 内置的皮肤变了,别的玩家也要看到
                     }
                 }, Thread::sleep);

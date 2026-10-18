@@ -176,6 +176,9 @@ public final class Libraries {
 
         /** 这台服务器上的皮肤签名队。 */
         SkinSigning signer();
+
+        /** 内置里的一条内容被管理员换了(采用新版、恢复默认):穿着它、读着它的要跟上。缺省什么也不用跟。 */
+        default void builtinChanged(LibraryKind kind, EntryId id) {}
     }
 
     /** 这台服务器上的那一份。 */
@@ -244,6 +247,13 @@ public final class Libraries {
             @Override
             public SkinSigning signer() {
                 return SkinSignings.of(server);
+            }
+
+            @Override
+            public void builtinChanged(LibraryKind kind, EntryId id) {
+                if (kind.equals(SkinProfile.KIND)) {
+                    CompanionBinding.skinChanged(server, null, true, id.toString());
+                }
             }
 
             @Override
@@ -480,6 +490,7 @@ public final class Libraries {
                 }
                 if (ACCEPT.equals(op)) {
                     sources.manifest().accept(kind, id);
+                    sources.builtinChanged(kind, id);
                 } else {
                     sources.manifest().dismiss(kind, id);
                 }
@@ -496,6 +507,7 @@ public final class Libraries {
                     return Done.problem("that entry has no default to go back to");
                 }
                 library.builtin().reload();   // 清单换了磁盘上的文件,内存里的表跟上
+                sources.builtinChanged(kind, id);
                 return Done.of(null, true);
             case PUT:
             case DELETE:
@@ -658,7 +670,9 @@ public final class Libraries {
         EntryId target = shelf.unique(old.namespace(), clean);
         shelf.write(target, shelf.get(old).text());
         shelf.delete(old);
-        if (!builtin) {
+        if (builtin) {
+            CompanionLoops.rebindAll(Slot.SKIN, old.toString(), target.toString());
+        } else {
             CompanionLoops.rebind(owner, Slot.SKIN, old.toString(), target.toString());
         }
         return Done.of(null, builtin);

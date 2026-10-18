@@ -152,11 +152,21 @@ public final class CompanionLoops {
         }
     }
 
-    /** 这位主人名下绑着这一条库条目的同伴。 */
-    static List<UUID> boundTo(UUID owner, Slot slot, String entryId) {
-        return LOOPS.values().stream()
-                .filter(entry -> entry.owner.equals(owner) && entryId.equals(entry.loop.bound(slot)))
-                .map(entry -> entry.loop.companion()).toList();
+    /** 绑着这一条库条目的在场同伴,连同各自的主人(内置条目是所有人共用的,谁名下的都算)。 */
+    static Map<UUID, UUID> boundTo(Slot slot, String entryId) {
+        Map<UUID, UUID> out = new LinkedHashMap<>();
+        LOOPS.values().stream().filter(entry -> entryId.equals(entry.loop.bound(slot)))
+                .forEach(entry -> out.put(entry.loop.companion(), entry.owner));
+        return out;
+    }
+
+    /** 内置的库条目改了名:所有人名下绑着它的大脑都改指新的 id。 */
+    public static void rebindAll(Slot slot, String from, String to) {
+        for (Entry entry : LOOPS.values()) {
+            if (from.equals(entry.loop.bound(slot))) {
+                entry.loop.bind(slot, to);
+            }
+        }
     }
 
     /** 主人客户端的朗读开始、停止放音。 */

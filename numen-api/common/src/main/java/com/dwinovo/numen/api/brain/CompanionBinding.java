@@ -60,18 +60,32 @@ public final class CompanionBinding {
     }
 
     /**
-     * 一条皮肤签好写进了货架:绑着它旧名字的同伴改指新名字,穿着它的同伴穿上新签出来的(换手臂模型重签时数据变了)。
+     * 一条皮肤的内容变了(签好写进货架、管理员采用新版或恢复默认):绑着它的在场同伴都按 {@link Companions#applySkin} 换上,
+     * 不在场的下次重建时自然是新的——绑定与身体只认库里这一条。内置的条目所有人共用,谁名下的同伴都换;我的只换本人的。
+     *
+     * @param builtin 条目在内置组里
      */
-    static void skinSigned(MinecraftServer server, UUID owner, SkinSigning.Outcome outcome) {
+    public static void skinChanged(MinecraftServer server, UUID owner, boolean builtin, String id) {
+        CompanionLoops.boundTo(Slot.SKIN, id).forEach((companion, wearerOwner) -> {
+            if (builtin || wearerOwner.equals(owner)) {
+                apply(server, wearerOwner, companion, Slot.SKIN, id);
+            }
+        });
+    }
+
+    /** 一条皮肤签好写进了货架:绑着它旧名字的同伴改指新名字,再按 {@link #skinChanged} 换上新签出来的。 */
+    static void skinSigned(MinecraftServer server, UUID owner, boolean builtin, SkinSigning.Outcome outcome) {
         if (!outcome.ok()) {
             return;
         }
         String id = outcome.id().toString();
         if (outcome.replaced() != null && !outcome.replaced().equals(outcome.id())) {
-            CompanionLoops.rebind(owner, Slot.SKIN, outcome.replaced().toString(), id);
+            if (builtin) {
+                CompanionLoops.rebindAll(Slot.SKIN, outcome.replaced().toString(), id);
+            } else {
+                CompanionLoops.rebind(owner, Slot.SKIN, outcome.replaced().toString(), id);
+            }
         }
-        for (UUID companion : CompanionLoops.boundTo(owner, Slot.SKIN, id)) {
-            apply(server, owner, companion, Slot.SKIN, id);
-        }
+        skinChanged(server, owner, builtin, id);
     }
 }
