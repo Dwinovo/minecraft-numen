@@ -439,15 +439,17 @@ class McpServerTest {
 
         assertEquals(McpStrangers.FAILURES_PER_WINDOW, refused);
         assertEquals(20, throttled, "窗里失败满了,之后的不再查令牌就拒绝");
-        assertEquals(429, post(secret, null, rpc(1, "initialize", initParams(false))).statusCode(),
-                "被限的地址这个窗里连对的令牌也先不收");
+        assertEquals(200, post(secret, null, rpc(1, "initialize", initParams(false))).statusCode(),
+                "被限期间对的令牌照常通过(代理后面共用地址的合法用户不受连累)");
+        assertEquals(429, post("numen_still-wrong", null, rpc(1, "initialize", initParams(false))).statusCode());
         now.addAndGet(McpStrangers.WINDOW_MS);
-        assertEquals(200, post(secret, null, rpc(1, "initialize", initParams(false))).statusCode(), "窗过了就恢复");
+        assertEquals(401, post("numen_wrong-after-window", null, rpc(1, "initialize", initParams(false))).statusCode(),
+                "窗过了又从头数");
         strangers.flushClosed();
         String audit = Files.readString(dir.resolve(McpAudit.FILE));
         assertEquals(1, audit.lines().filter(l -> l.contains("\"type\":\"refused\"")).count(),
                 "洪水只合成一条审计:" + audit);
-        assertTrue(audit.contains("\"count\":" + (total + 1)), audit);
+        assertTrue(audit.contains("\"count\":" + (total + 1)), audit);   // 洪水加一次被限的错令牌
     }
 
     // ---- 流与线程 ----

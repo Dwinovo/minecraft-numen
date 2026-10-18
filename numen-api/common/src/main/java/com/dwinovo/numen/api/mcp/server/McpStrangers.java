@@ -8,8 +8,8 @@ import java.util.function.LongSupplier;
 /**
  * 没认出令牌的请求,按来源地址管两件事:
  * <ul>
- *   <li><b>限流</b>:一个地址在一个时间窗里认证失败到 {@value #FAILURES_PER_WINDOW} 次,这个窗里它的请求一律不再查令牌就拒绝——
- *       令牌是 256 位随机数猜不中,这一道是不让陌生人白白占着服务器;</li>
+ *   <li><b>限流</b>:一个地址在一个时间窗里认证失败到 {@value #FAILURES_PER_WINDOW} 次,这个窗里它没通过认证的请求回 429。
+ *       令牌照常验、验过的照常放行(令牌是 256 位随机数,按哈希查表,猜不中),所以反向代理后面共用一个地址的合法用户不受外人连累;</li>
  *   <li><b>审计合并</b>:同一个窗里同一个地址的失败只记一条({@link McpAudit#strangers}:次数、首末时刻),
  *       窗收场时才写,所以洪水也只是每个地址每窗一条。</li>
  * </ul>
@@ -52,7 +52,7 @@ final class McpStrangers {
         return burst != null && clock.getAsLong() - burst.first < WINDOW_MS && burst.count >= FAILURES_PER_WINDOW;
     }
 
-    /** 这个地址又一次没通过认证(或因被限而拒)。 */
+    /** 这个地址又一次没通过认证。 */
     synchronized void failed(String address, String why) {
         long now = clock.getAsLong();
         flushClosed(now);

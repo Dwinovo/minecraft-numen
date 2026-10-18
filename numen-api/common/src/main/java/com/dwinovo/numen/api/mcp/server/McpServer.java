@@ -213,16 +213,18 @@ public final class McpServer {
                 return;
             }
             String address = ex.getRemoteAddress().getAddress().getHostAddress();
-            if (strangers.blocked(address)) {
-                strangers.failed(address, "too many failed requests from this address");
-                ex.getResponseHeaders().add("Retry-After", "60");
-                respond(ex, 429, "");
-                return;
-            }
+            // 每个请求都照常验令牌;验过的不受地址牵连(反向代理后面所有人共用一个地址),验不过的才记到地址上,
+            // 这个地址的失败满了,它的未认证请求回 429
+            boolean throttled = strangers.blocked(address);
             McpToken token = authenticate(ex, address);
             if (token == null) {
-                ex.getResponseHeaders().add("WWW-Authenticate", "Bearer realm=\"numen\"");
-                respond(ex, 401, "");
+                if (throttled) {
+                    ex.getResponseHeaders().add("Retry-After", "60");
+                    respond(ex, 429, "");
+                } else {
+                    ex.getResponseHeaders().add("WWW-Authenticate", "Bearer realm=\"numen\"");
+                    respond(ex, 401, "");
+                }
                 return;
             }
             switch (ex.getRequestMethod().toUpperCase(java.util.Locale.ROOT)) {
