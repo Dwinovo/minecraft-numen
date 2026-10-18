@@ -91,7 +91,7 @@ public final class Replies {
             result.later().thenAccept(entries -> server.execute(
                     () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, ""))));
         }
-        if (result.problem() == null && !Libraries.LIST.equals(op) && Libraries.shared(kind)) {
+        if (result.shared()) {
             share(server, player, kind);
         }
     }
@@ -107,6 +107,15 @@ public final class Replies {
                 NumenNetwork.sendToPlayer(other, new LibraryPayload(kind,
                         libraries.view(other.getUUID(), Authority.isAdmin(other), kind), ""));
             }
+        }
+    }
+
+    /** 一种库只在这位玩家看得到的那一份变了(他自己的 MCP 连接连上、断开):推给他。 */
+    public static void pushTo(MinecraftServer server, UUID owner, String kind) {
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
+        if (player != null && Presence.hasClient(owner)) {
+            NumenNetwork.sendToPlayer(player, new LibraryPayload(kind,
+                    Libraries.of(server).view(owner, Authority.isAdmin(player), kind), ""));
         }
     }
 

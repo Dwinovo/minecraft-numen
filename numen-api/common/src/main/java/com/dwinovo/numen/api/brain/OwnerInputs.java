@@ -104,7 +104,7 @@ public final class OwnerInputs {
                 yield rooms.say(conv, say.text()).reached() ? Applied.done() : Applied.refused("nobody heard it");
             }
             case OwnerInput.Command command -> loop(server, owner, command.companion(),
-                    brain -> brain.submitCommand(command.echo(), skillBody(command.echo())));
+                    brain -> brain.submitCommand(command.echo(), skillBody(command.companion(), command.echo())));
             case OwnerInput.Stop stop -> {
                 Conversation conv = conversation(rooms, owner, stop.conversation(), server);
                 if (conv == null) {
@@ -216,7 +216,7 @@ public final class OwnerInputs {
     }
 
     /** 技能命令的正文:{@code /名字 要求} 里名字是个开着的技能就展开,否则没有。聊天流只画主人打的那行。 */
-    private static String skillBody(String echo) {
+    private static String skillBody(UUID companion, String echo) {
         if (echo == null || !echo.startsWith(PREFIX)) {
             return "";
         }
@@ -224,7 +224,7 @@ public final class OwnerInputs {
         int space = line.indexOf(' ');
         String name = space < 0 ? line : line.substring(0, space);
         String args = space < 0 ? "" : line.substring(space + 1).strip();
-        Optional<SkillInfo> info = SkillRegistry.instance().get(name);
+        Optional<SkillInfo> info = SkillRegistry.of(companion).get(name);
         return info.isPresent() ? SkillInjection.body(info.get(), args) : "";
     }
 }

@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 运行时从 models.dev 拉下来的那份目录,缓存在一个小文档里(客户端放 {@code config/numen/cache/models-dev.json}):
+ * 运行时从 models.dev 拉下来的那份目录,缓存在一个小文档里(服务器放 {@code config/numen/server/cache/models-dev.json}):
  * 第 2 版是 {@code {"v":2,"providers":{裁过的目录}}},第 1 版是没有版本号、顶层直接就是目录的那份(读时包一层)。
  * 比随包快照新,所以优先级更高;文件不在或读不动就是空表,目录回头用快照。
  *

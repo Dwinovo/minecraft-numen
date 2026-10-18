@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.NumenPaths;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -23,7 +22,7 @@ public final class ServerMcp {
             Constants.LOG.info("[numen-mcp] 专用服务器不起外接大脑宿主(令牌与作用域是后面的事)");
             return;
         }
-        NumenMcp.start(NumenPaths.config().resolve("mcp_server.json"), new ServerActuator(server, host.getId()),
+        NumenMcp.start(com.dwinovo.numen.api.home.Homes.of(server).server().file("mcp_server.json"), new ServerActuator(server, host.getId()),
                 new McpMode.Notices() {
                     @Override
                     public void quiet(boolean fallback) {

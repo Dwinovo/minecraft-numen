@@ -18,14 +18,16 @@ public final class SystemPromptComposer {
     /**
      * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null}(退到全局配置,再退到内置默认人设)
      * @param modules     她能用的模块(主人那一份):进 API 索引
+     * @param skills      她能用的技能(主人那一份):进技能表
      */
-    public static String compose(String personaText, com.dwinovo.numen.api.script.Modules modules) {
+    public static String compose(String personaText, com.dwinovo.numen.api.script.Modules modules,
+                                 SkillRegistry skills) {
         // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
         // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText != null && !personaText.isBlank())
                 ? personaText : Services.CONFIG.getSystemPrompt();
         if (base == null || base.isBlank()) base = NumenPrompts.DEFAULT_PERSONA;
-        String skillsXml = SkillRegistry.instance().formatXml();
+        String skillsXml = skills.formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
         // 会变化的札记索引随注入的 user 消息进历史(见 MemoryPreamble),

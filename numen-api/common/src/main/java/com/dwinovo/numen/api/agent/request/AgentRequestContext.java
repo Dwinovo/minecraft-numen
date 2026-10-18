@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.agent.request;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
-import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,11 +27,14 @@ public final class AgentRequestContext {
      * @param runtimeXml  这一刻的运行期状态({@link RuntimeState#xml})
      * @param personaText 人设正文;没有为 {@code null}(见 {@link SystemPromptComposer#compose})
      * @param modules     她能用的模块(见 {@link SystemPromptComposer#compose})
+     * @param skills      她能用的技能(见 {@link SystemPromptComposer#compose})
+     * @param tools       她这一轮看得到的工具({@code ToolBook#all})
      */
     public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText,
-                                    com.dwinovo.numen.api.script.Modules modules) {
-        List<NumenTool> tools = ToolRegistry.all();
-        return new ModelRequest(attach(history, runtimeXml), tools, SystemPromptComposer.compose(personaText, modules));
+                                    com.dwinovo.numen.api.script.Modules modules,
+                                    com.dwinovo.numen.api.agent.skill.SkillRegistry skills,
+                                    List<NumenTool> tools) {
+        return new ModelRequest(attach(history, runtimeXml), tools, SystemPromptComposer.compose(personaText, modules, skills));
     }
 
     /**

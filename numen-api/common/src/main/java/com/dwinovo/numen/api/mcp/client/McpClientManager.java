@@ -1,7 +1,8 @@
 package com.dwinovo.numen.api.mcp.client;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec;
 import com.google.gson.JsonObject;
 
@@ -14,40 +15,35 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 /**
- * Wires the MCP client into Numen API and owns the live enable/disable of each
- * external server. It runs where the companions' brains run: on init it reads {@code mcp_clients.json}
- * from the config directory it is given,
- * connects to every enabled server on a background thread, and registers the
- * tools it exposes into the global {@link ToolRegistry} — after which the
- * built-in brain sees those tools automatically (every LLM turn is built from
- * the whole registry, so late registration/removal is fine).
+ * 一处接进来的 MCP 服务器的连接:给定"该连着哪几台"({@link #reconcile}),它让实际连着的和这个一致——新的连上、没了的撤掉
+ * (关掉子进程)、改了的重连、关着的不连——并把它们的工具登记进 {@link Tools} 给的地方,同伴的大脑下一轮就看得到。
+ * 配置不在这里:真源是库里的文件({@link McpClientConfig#KIND}),谁改了库谁调 {@code reconcile}。
  *
- * <h2>Live toggles</h2>
- * The admin's panel calls {@link #enableServer}/{@link #disableServer} at
- * runtime. Enabling connects (on a background thread) and registers; disabling
- * removes that server's tools from the {@link ToolRegistry} and closes its
- * transport (killing any stdio subprocess). Both persist the flip back to
- * {@code mcp_clients.json} so it survives a restart. Every {@link ToolRegistry}
- * mutation is marshalled onto the brain's main thread (the registry's backing map
- * is not synchronized and {@code all()} is read on main).
+ * <p>有两处这样的连接:服务器的(内置组,管理员配的,工具人人可见,登记进全局注册表),和每位玩家自己的(我的组,工具只有
+ * 他的同伴看得到,登记在他名下)。每处一个 {@code McpClientManager}。它跑在大脑所在的线程上:登记表只在那里动,工具的结果也回到那里。
  *
- * <p>A server that needs OAuth shows up as {@link Status#AUTHORIZING} with the {@link ServerHandle#authUrl()} a
- * browser must open; the callback URL comes back through {@link McpOAuth#complete}. Whoever watches the state (the
- * admin's panel) is told of every change through the {@code onChange} callback given to {@link #init}.
- *
- * <p>A server that fails to connect is logged and its handle marked
- * {@link Status#FAILED}; it never crashes init or the toggle. A JVM shutdown hook
- * closes every transport so stdio subprocesses are killed rather than orphaned.
+ * <p>需要 OAuth 的服务器显示为 {@link Status#AUTHORIZING},带着浏览器要打开的 {@link ServerHandle#authUrl()};授权回调的网址经
+ * {@link McpOAuth#complete} 回来。谁在看状态(管理员的页面)靠构造时给的 {@code changed} 回调知道每一次变化。
+ * 连不上的记日志、标 {@link Status#FAILED},不会让 reconcile 抛出。JVM 关闭时关掉所有连接,免得 stdio 子进程成孤儿。
  */
 public final class McpClientManager {
 
     /** Connection state of one configured server, surfaced to the panel. */
     public enum Status { DISABLED, CONNECTING, AUTHORIZING, CONNECTED, FAILED }
 
+    /** 工具登记在哪:服务器的登记进全局注册表,玩家自己的登记在他名下。 */
+    public interface Tools {
+        void register(NumenTool tool);
+
+        void remove(String name);
+    }
+
     /** Live runtime state for one configured server (status + what it registered). */
     public static final class ServerHandle {
+        private final String id;
         private final String name;
         private final String type;                 // "http" | "stdio" — for the panel badge
         private volatile Status status;
@@ -56,12 +52,15 @@ public final class McpClientManager {
         private volatile String error = "";
         private volatile String authUrl;   // set while AUTHORIZING
 
-        ServerHandle(String name, String type, Status status) {
+        ServerHandle(String id, String name, String type, Status status) {
+            this.id = id;
             this.name = name;
             this.type = type;
             this.status = status;
         }
 
+        /** 库里的名字({@code 命名空间:名字})。 */
+        public String id() { return id; }
         public String name() { return name; }
         public String type() { return type; }
         public Status status() { return status; }
@@ -70,181 +69,155 @@ public final class McpClientManager {
         public String error() { return error; }
         /** The authorization URL a browser must open; {@code null} unless {@link Status#AUTHORIZING}. */
         public String authUrl() { return authUrl; }
-        /** The panel's toggle is ON whenever the server isn't disabled (FAILED still reads ON). */
-        public boolean toggledOn() { return status != Status.DISABLED; }
     }
 
-    private static final Map<String, ServerHandle> HANDLES = new ConcurrentHashMap<>();
-    private static volatile McpClientConfig config;
-    private static volatile Path configFile;
-    private static volatile Path configDir;
-    private static volatile boolean initialized;
+    /** 全 JVM 里还开着的连接处,关机钩子收尾用。 */
+    private static final Set<McpClientManager> OPEN = ConcurrentHashMap.newKeySet();
     private static boolean hooked;
-    private static volatile Executor main;
-    private static volatile Runnable onChange;
 
-    private McpClientManager() {}
+    private static final int MAX_CONNECT_ATTEMPTS = 3;
+
+    private final Library.Group group;
+    private final Executor main;
+    private final Runnable onChange;
+    private final Path stateDir;
+    private final Tools tools;
+    private final Function<String, String> keys;
+    private final Map<String, ServerHandle> handles = new ConcurrentHashMap<>();
+    /** 现在连着(或该连着)的各台怎么连,按库里的顺序;只在大脑所在的线程上动。 */
+    private final Map<String, ServerSpec> specs = new LinkedHashMap<>();
 
     /**
-     * @param numenConfigDir the directory holding {@code mcp_clients.json} and {@code mcp_oauth.json}
-     * @param brainThread    the thread the brains run on: the tool registry is touched and tool results arrive there
-     * @param changed        told (on {@code brainThread}) whenever a server's state changes; may be {@code null}
+     * @param group    这一处的连接属于哪一组(服务器的内置,还是玩家的我的):工具带着它,看得见看不见按它判
+     * @param main     大脑所在的线程:登记表只在这里动,工具的结果也回到这里
+     * @param changed  某台的状态变了通知(在 {@code main} 上调);可以是 {@code null}
+     * @param stateDir 存 OAuth 令牌的目录
+     * @param tools    工具登记在哪
+     * @param keys     钥匙串里这个服务的 key(服务名 → key);没有是 {@code null}
      */
-    public static synchronized void init(Path numenConfigDir, Executor brainThread, Runnable changed) {
-        if (initialized) return;
-        initialized = true;
-
-        main = brainThread;
-        onChange = changed;
-        configDir = numenConfigDir;
-        configFile = numenConfigDir.resolve("mcp_clients.json");
-        config = McpClientConfig.load(configFile);
-
-        if (!hooked) {
-            hooked = true;
-            Runtime.getRuntime().addShutdownHook(new Thread(McpClientManager::shutdown, "numen-mcp-client-shutdown"));
+    public McpClientManager(Library.Group group, Executor main, Runnable changed, Path stateDir, Tools tools,
+                            Function<String, String> keys) {
+        this.group = group;
+        this.main = main;
+        this.onChange = changed;
+        this.stateDir = stateDir;
+        this.tools = tools;
+        this.keys = keys;
+        synchronized (McpClientManager.class) {
+            OPEN.add(this);
+            if (!hooked) {
+                hooked = true;
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> List.copyOf(OPEN).forEach(
+                        McpClientManager::shutdown), "numen-mcp-client-shutdown"));
+            }
         }
+    }
 
+    // ---- 让连着的和库一致 ----
+
+    /**
+     * 让实际连着的和 {@code desired}(库里的名字 → 怎么连)一致。没变的不碰;{@code enabled=false} 的不连。
+     * 在大脑所在的线程上调。
+     */
+    public void reconcile(Map<String, ServerSpec> desired) {
+        for (String id : List.copyOf(handles.keySet())) {
+            if (!desired.containsKey(id)) {
+                teardown(id);
+            }
+        }
+        specs.keySet().retainAll(desired.keySet());
         int connecting = 0;
-        for (ServerSpec spec : config.servers()) {
-            boolean on = config.enabled() && spec.enabled();
-            HANDLES.put(spec.name(), new ServerHandle(spec.name(), badge(spec), on ? Status.CONNECTING : Status.DISABLED));
+        for (Map.Entry<String, ServerSpec> e : desired.entrySet()) {
+            String id = e.getKey();
+            ServerSpec spec = e.getValue();
+            ServerSpec before = specs.put(id, spec);
+            ServerHandle handle = handles.get(id);
+            if (handle != null && spec.equals(before)) {
+                continue;   // 没变
+            }
+            if (handle != null) {
+                teardown(id);   // 改了:撤掉旧的,按新的再来
+            }
+            boolean on = spec.enabled();
+            handles.put(id, new ServerHandle(id, spec.name(), badge(spec), on ? Status.CONNECTING : Status.DISABLED));
             if (on) {
-                spawnConnect(spec);
+                spawnConnect(id, spec);
                 connecting++;
             }
         }
-        Constants.LOG.info("[numen-mcp-client] {} server(s) configured, {} connecting",
-                config.servers().size(), connecting);
+        if (connecting > 0) {
+            Constants.LOG.info("[numen-mcp-client] {} server(s) configured ({}), {} connecting", desired.size(), group,
+                    connecting);
+        }
+        changed();
     }
 
     // ---- panel-facing state ----
 
-    /** All configured servers as live handles, in config order (stable for the panel). */
-    public static List<ServerHandle> servers() {
+    /** 所有配置着的服务器,按库里的顺序。 */
+    public List<ServerHandle> servers() {
         List<ServerHandle> out = new ArrayList<>();
-        McpClientConfig cfg = config;
-        if (cfg != null) {
-            for (ServerSpec s : cfg.servers()) {
-                ServerHandle h = HANDLES.get(s.name());
-                if (h != null) out.add(h);
-            }
+        for (String id : specs.keySet()) {
+            ServerHandle h = handles.get(id);
+            if (h != null) out.add(h);
         }
         return out;
     }
 
-    /** The persisted spec for a server (url/command/etc., for the expanded panel row), or null. */
-    public static ServerSpec spec(String name) {
-        return specByName(name);
+    public ServerHandle handle(String id) {
+        return handles.get(id);
     }
 
-    // ---- live toggles (called from the panel, on the main thread) ----
-
-    /** Connect a server that is currently off (or retry a failed one) and register its tools. */
-    public static void enableServer(String name) {
-        ServerSpec spec = specByName(name);
-        if (spec == null) return;
-        ServerHandle handle = HANDLES.computeIfAbsent(name,
-                n -> new ServerHandle(n, badge(spec), Status.DISABLED));
-        if (handle.status == Status.CONNECTING || handle.status == Status.CONNECTED) return;  // already on
-        handle.status = Status.CONNECTING;
-        handle.error = "";
-        setEnabledPersist(name, true);
-        spawnConnect(spec);
-        changed();
-    }
-
-    /** Remove a server's tools, close its transport (killing any subprocess), and mark it off. */
-    public static void disableServer(String name) {
-        setEnabledPersist(name, false);
-        ServerHandle handle = HANDLES.get(name);
-        if (handle == null) return;
-        runOnMain(() -> {
-            for (String tool : handle.toolNames) ToolRegistry.remove(tool);
-            handle.toolNames = List.of();
-            handle.status = Status.DISABLED;
-            handle.authUrl = null;
-            closeTransport(handle);
-            Constants.LOG.info("[numen-mcp-client] '{}' disabled", name);
-            changed();
-        });
-    }
-
-    /** Add (or replace) a server from the panel: persist it to config and connect if enabled. */
-    public static void upsertServer(ServerSpec spec) {
-        if (HANDLES.containsKey(spec.name())) disableServer(spec.name());   // tear down any prior with this name
-        McpClientConfig cfg = config;
-        Path file = configFile;
-        if (cfg == null || file == null) return;
-        List<ServerSpec> updated = new ArrayList<>(cfg.servers().size() + 1);
-        boolean replaced = false;
-        for (ServerSpec s : cfg.servers()) {
-            if (s.name().equals(spec.name())) { updated.add(spec); replaced = true; }
-            else updated.add(s);
-        }
-        if (!replaced) updated.add(spec);
-        config = new McpClientConfig(cfg.enabled(), List.copyOf(updated));
-        McpClientConfig.save(file, config);
-        HANDLES.put(spec.name(),
-                new ServerHandle(spec.name(), badge(spec), spec.enabled() ? Status.CONNECTING : Status.DISABLED));
-        if (spec.enabled()) spawnConnect(spec);
-        changed();
-    }
-
-    /** Remove a server entirely: tear it down, drop it from config + handles, persist. */
-    public static void deleteServer(String name) {
-        disableServer(name);   // removes tools, closes transport (runs on main → synchronous from the panel)
-        McpClientConfig cfg = config;
-        Path file = configFile;
-        if (cfg != null && file != null) {
-            List<ServerSpec> updated = new ArrayList<>(cfg.servers().size());
-            for (ServerSpec s : cfg.servers()) {
-                if (!s.name().equals(name)) updated.add(s);
-            }
-            config = new McpClientConfig(cfg.enabled(), List.copyOf(updated));
-            McpClientConfig.save(file, config);
-        }
-        HANDLES.remove(name);
-        changed();
+    /** 这台服务器怎么连(地址、命令行等,给展开的那一行);没有是 null。 */
+    public ServerSpec spec(String id) {
+        return specs.get(id);
     }
 
     // ---- connect / teardown ----
 
-    private static void spawnConnect(ServerSpec spec) {
-        Thread t = new Thread(() -> connectServer(spec), "numen-mcp-connect-" + spec.name());
+    /** 撤掉一台:工具退出登记,连接关掉(杀子进程),句柄忘掉。 */
+    private void teardown(String id) {
+        ServerHandle handle = handles.remove(id);
+        if (handle == null) return;
+        handle.status = Status.DISABLED;   // 在飞的连接发现被撤了,自己放手
+        runOnMain(() -> {
+            for (String tool : handle.toolNames) tools.remove(tool);
+            handle.toolNames = List.of();
+            handle.authUrl = null;
+            closeTransport(handle);
+            Constants.LOG.info("[numen-mcp-client] '{}' disconnected", handle.name);
+        });
+    }
+
+    private void spawnConnect(String id, ServerSpec spec) {
+        Thread t = new Thread(() -> connectServer(id, spec), "numen-mcp-connect-" + spec.name());
         t.setDaemon(true);
         t.start();
     }
 
-    private static final int MAX_CONNECT_ATTEMPTS = 3;
-
     /** Connect with retries for transient failures, running the OAuth flow once on a 401. */
-    private static void connectServer(ServerSpec spec) {
-        ServerHandle handle = HANDLES.get(spec.name());
+    private void connectServer(String id, ServerSpec spec) {
+        ServerHandle handle = handles.get(id);
         Exception last = null;
         boolean authTried = false;
         for (int attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt++) {
-            if (handle != null && handle.status == Status.DISABLED) return;   // toggled off mid-connect
+            if (handle == null || handle.status == Status.DISABLED || handles.get(id) != handle) return;   // 撤了
             try {
                 connectOnce(spec, handle);
                 return;
             } catch (McpAuthRequired auth) {
-                if (authTried || configDir == null) { last = auth; break; }   // token still rejected — stop
+                if (authTried) { last = auth; break; }   // token still rejected — stop
                 authTried = true;
                 Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — waiting for an authorization", spec.name());
                 try {
-                    McpOAuth.authorize(spec, auth.resourceMetadataUrl(), configDir, url -> {
-                        if (handle != null) {
-                            handle.authUrl = url;
-                            handle.status = Status.AUTHORIZING;
-                            changed();
-                        }
+                    McpOAuth.authorize(spec, auth.resourceMetadataUrl(), stateDir, url -> {
+                        handle.authUrl = url;
+                        handle.status = Status.AUTHORIZING;
+                        changed();
                     });
-                    if (handle != null) {
-                        handle.authUrl = null;
-                        handle.status = Status.CONNECTING;
-                    }
-                    // token stored — the next connectOnce merges it in (see withOAuth); no extra delay
+                    handle.authUrl = null;
+                    handle.status = Status.CONNECTING;
+                    // token stored — the next connectOnce merges it in (see headers); no extra delay
                 } catch (Exception oe) {
                     last = oe;
                     Constants.LOG.warn("[numen-mcp-client] '{}' OAuth failed: {}", spec.name(), oe.toString());
@@ -257,7 +230,7 @@ public final class McpClientManager {
                 if (attempt < MAX_CONNECT_ATTEMPTS) sleepQuiet(1500);
             }
         }
-        if (handle != null && handle.status != Status.DISABLED) {
+        if (handles.get(id) == handle && handle.status != Status.DISABLED) {
             handle.transport = null;
             handle.authUrl = null;
             handle.status = Status.FAILED;
@@ -267,24 +240,22 @@ public final class McpClientManager {
     }
 
     /** One connect attempt: build transport, initialize, list tools, register. Throws on any failure. */
-    private static void connectOnce(ServerSpec spec, ServerHandle handle) throws Exception {
+    private void connectOnce(ServerSpec spec, ServerHandle handle) throws Exception {
         long connectMs = spec.connectTimeoutSeconds() * 1000L;
         long callMs = spec.callTimeoutSeconds() * 1000L;
         McpTransport transport = null;
         try {
             transport = spec.isStdio()
                     ? new StdioMcpTransport(spec.name(), stdioCommand(spec), spec.env())
-                    : new HttpMcpTransport(spec.url(), withOAuth(spec), spec.connectTimeoutSeconds());
+                    : new HttpMcpTransport(spec.url(), headers(spec), spec.connectTimeoutSeconds());
 
             McpClient client = new McpClient(spec.name(), transport);
             client.connect(connectMs);
-            List<JsonObject> tools = client.listTools(connectMs);
+            List<JsonObject> listed = client.listTools(connectMs);
 
-            List<RemoteMcpTool> wrapped = wrap(spec.name(), client, tools, callMs);
-            List<String> names = new ArrayList<>();
-            for (RemoteMcpTool tool : wrapped) names.add(tool.name());
-            if (handle != null) handle.transport = transport;
-            registerOnMainThread(spec.name(), wrapped, names, handle);
+            List<RemoteMcpTool> wrapped = wrap(handle, client, listed, callMs);
+            handle.transport = transport;
+            registerOnMainThread(wrapped, handle);
             // Listen for server-pushed notifications and open the server→client stream (HTTP GET SSE).
             client.setNotificationListener((method, params) -> onServerNotification(spec, client, handle, method));
             client.startServerStream();
@@ -296,7 +267,7 @@ public final class McpClientManager {
     }
 
     /** Handle a server→client notification. Chiefly {@code tools/list_changed} → re-list & re-register. */
-    private static void onServerNotification(ServerSpec spec, McpClient client, ServerHandle handle, String method) {
+    private void onServerNotification(ServerSpec spec, McpClient client, ServerHandle handle, String method) {
         switch (method) {
             case "notifications/tools/list_changed" -> {
                 Constants.LOG.info("[numen-mcp-client] '{}' tools/list_changed — refreshing", spec.name());
@@ -309,16 +280,16 @@ public final class McpClientManager {
     }
 
     /** Re-list a server's tools and swap them in the registry (on a background thread, mutate on main). */
-    private static void refreshTools(ServerSpec spec, McpClient client, ServerHandle handle) {
+    private void refreshTools(ServerSpec spec, McpClient client, ServerHandle handle) {
         Thread t = new Thread(() -> {
             try {
                 long listMs = spec.connectTimeoutSeconds() * 1000L;
                 long callMs = spec.callTimeoutSeconds() * 1000L;
-                List<JsonObject> tools = client.listTools(listMs);
-                List<RemoteMcpTool> wrapped = wrap(spec.name(), client, tools, callMs);
+                List<JsonObject> listed = client.listTools(listMs);
+                List<RemoteMcpTool> wrapped = wrap(handle, client, listed, callMs);
                 runOnMain(() -> {
-                    if (handle == null || handle.status != Status.CONNECTED) return;   // disabled meanwhile
-                    for (String old : handle.toolNames) ToolRegistry.remove(old);
+                    if (handle.status != Status.CONNECTED) return;   // disabled meanwhile
+                    for (String old : handle.toolNames) tools.remove(old);
                     // 只记真的注册上的:记多了,下次刷新会去 remove 一个不存在的名字
                     handle.toolNames = List.copyOf(registerEach(spec.name(), wrapped));
                     Constants.LOG.info("[numen-mcp-client] '{}' now {} tool(s)",
@@ -347,13 +318,12 @@ public final class McpClientManager {
      * <p>名字由 {@link McpToolName} 统一铸出来:同一批共用一个已用名集合,洗过之后撞车的
      * (例如 {@code my.server} 与 {@code my_server})在这里就分开了,不留到注册表去抛异常。
      */
-    private static List<RemoteMcpTool> wrap(String server, McpClient client,
-                                            List<JsonObject> tools, long callMs) {
+    private List<RemoteMcpTool> wrap(ServerHandle handle, McpClient client, List<JsonObject> listed, long callMs) {
         List<RemoteMcpTool> wrapped = new ArrayList<>();
         Set<String> taken = new HashSet<>();
-        for (JsonObject def : tools) {
+        for (JsonObject def : listed) {
             if (def.has("name") && !def.get("name").isJsonNull()) {
-                wrapped.add(new RemoteMcpTool(server, client, def, callMs, main, taken));
+                wrapped.add(new RemoteMcpTool(handle.name, handle.id, group, client, def, callMs, main, taken));
             }
         }
         return wrapped;
@@ -365,11 +335,11 @@ public final class McpClientManager {
      * <p>一个工具进不去不该带走整台服务器的其余工具——工具清单每轮都要发,少一个是少一个能力,
      * 全没了是这台服务器白接。
      */
-    private static List<String> registerEach(String server, List<RemoteMcpTool> tools) {
+    private List<String> registerEach(String server, List<RemoteMcpTool> remote) {
         List<String> registered = new ArrayList<>();
-        for (RemoteMcpTool tool : tools) {
+        for (RemoteMcpTool tool : remote) {
             try {
-                ToolRegistry.register(tool);
+                tools.register(tool);
                 registered.add(tool.name());
             } catch (RuntimeException ex) {
                 Constants.LOG.warn("[numen-mcp-client] '{}' 跳过工具 {}: {}",
@@ -379,67 +349,42 @@ public final class McpClientManager {
         return registered;
     }
 
-    private static void registerOnMainThread(String server, List<RemoteMcpTool> tools,
-                                             List<String> names, ServerHandle handle) {
+    private void registerOnMainThread(List<RemoteMcpTool> remote, ServerHandle handle) {
         runOnMain(() -> {
             // Disabled while this connect was in flight → tear the fresh connection back down.
-            if (handle != null && handle.status == Status.DISABLED) {
+            if (handle.status == Status.DISABLED) {
                 closeTransport(handle);
                 return;
             }
-            List<String> registered = registerEach(server, tools);
-            if (handle != null) {
-                handle.toolNames = List.copyOf(registered);
-                handle.status = Status.CONNECTED;
-            }
+            handle.toolNames = List.copyOf(registerEach(handle.name, remote));
+            handle.status = Status.CONNECTED;
             changed();
         });
     }
 
     /**
-     * Close every transport (kills stdio subprocesses), take the tools back out of the registry and forget every
-     * server, so the next {@link #init} starts clean (the next world, or the next test). Safe to call more than once.
+     * 关掉所有连接(杀 stdio 子进程)、把工具撤出登记表、忘掉每台服务器,下一次 {@link #reconcile} 从头来
+     * (下一个世界,或下一个测试)。可以多次调用。
      */
-    public static synchronized void shutdown() {
-        for (ServerHandle h : HANDLES.values()) {
+    public synchronized void shutdown() {
+        for (ServerHandle h : handles.values()) {
             closeTransport(h);
-            for (String tool : h.toolNames) ToolRegistry.remove(tool);
+            for (String tool : h.toolNames) tools.remove(tool);
             h.toolNames = List.of();
             h.status = Status.DISABLED;
         }
-        HANDLES.clear();
-        config = null;
-        initialized = false;
+        handles.clear();
+        specs.clear();
+        OPEN.remove(this);
     }
 
     /** Tell the watcher something changed; the callback runs on the brain's thread. */
-    private static void changed() {
+    private void changed() {
         Runnable listener = onChange;
         if (listener != null) main.execute(listener);
     }
 
     // ---- helpers ----
-
-    private static void setEnabledPersist(String name, boolean enabled) {
-        McpClientConfig cfg = config;
-        Path file = configFile;
-        if (cfg == null || file == null) return;
-        List<ServerSpec> updated = new ArrayList<>(cfg.servers().size());
-        for (ServerSpec s : cfg.servers()) {
-            updated.add(s.name().equals(name) ? McpClientConfig.withEnabled(s, enabled) : s);
-        }
-        config = new McpClientConfig(cfg.enabled(), List.copyOf(updated));
-        McpClientConfig.save(file, config);
-    }
-
-    private static ServerSpec specByName(String name) {
-        McpClientConfig cfg = config;
-        if (cfg == null) return null;
-        for (ServerSpec s : cfg.servers()) {
-            if (s.name().equals(name)) return s;
-        }
-        return null;
-    }
 
     private static void closeTransport(ServerHandle handle) {
         McpTransport t = handle.transport;
@@ -457,7 +402,7 @@ public final class McpClientManager {
     }
 
     /** Marshal onto the brain's main thread (the executor runs it at once when already there). */
-    private static void runOnMain(Runnable r) {
+    private void runOnMain(Runnable r) {
         main.execute(r);
     }
 
@@ -465,12 +410,20 @@ public final class McpClientManager {
         return spec.isStdio() ? "stdio" : "http";
     }
 
-    /** Merge a stored OAuth bearer token into the HTTP headers (an explicit Authorization header wins). */
-    private static Map<String, String> withOAuth(ServerSpec spec) {
-        String token = configDir == null ? null : McpOAuth.tokenFor(spec.name(), configDir);
-        if (token == null || token.isBlank()) return spec.headers();
+    /**
+     * 连 http 服务器带的请求头:条目自己写的盖过一切;其次是钥匙串里它用的服务的 key(作为 Bearer);再其次是 OAuth 存下的令牌。
+     * key 不进日志。
+     */
+    private Map<String, String> headers(ServerSpec spec) {
         Map<String, String> merged = new LinkedHashMap<>(spec.headers());
-        merged.putIfAbsent("Authorization", "Bearer " + token);
+        String key = spec.service().isBlank() ? null : keys.apply(spec.service());
+        if (key != null && !key.isBlank()) {
+            merged.putIfAbsent("Authorization", "Bearer " + key);
+        }
+        String token = McpOAuth.tokenFor(spec.name(), stateDir);
+        if (token != null && !token.isBlank()) {
+            merged.putIfAbsent("Authorization", "Bearer " + token);
+        }
         return merged;
     }
 

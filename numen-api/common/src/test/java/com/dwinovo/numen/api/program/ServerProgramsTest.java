@@ -59,7 +59,9 @@ class ServerProgramsTest {
         // 这个类自己的模块目录:别的测试类可能已经把目录换成别的了
         java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("numen-programs-lua-");
         dir.toFile().deleteOnExit();
-        Modules.init(uuid -> dir);
+        var hub = com.dwinovo.numen.api.library.LibraryHub.headless(dir);
+        java.util.UUID owner = java.util.UUID.randomUUID();
+        Modules.init(uuid -> hub.library(Modules.KIND, owner));
     }
 
     private static final String PIT = "-- A pit.\nlocal M = {}\n---Seven.\nfunction M.seven() return 7 end\nreturn M\n";

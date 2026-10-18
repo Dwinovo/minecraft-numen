@@ -8,9 +8,11 @@ import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.api.agent.llm.NumenLlmClient;
+import com.dwinovo.numen.api.agent.llm.ModelCatalog;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
+import com.dwinovo.numen.api.keys.Keys;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -20,11 +22,12 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 模型档案表单在服务端的那一半:型号目录、草稿解析成端点、连通性检测都只在这里算,管理员的界面只画答案。
+ * 模型档案表单在服务端的那一半:型号目录、草稿解析成端点、连通性检测都只在这里算,界面只画答案。
  * 目录(随包快照加服务器上每天拉一次的缓存)、端点解析(厂家缺省地址、型号能力、思考计划)、发出去的 ping 用的是同一个
- * {@link ProviderLibrary}——和同伴开口时走的是同一条路,所以表单上看到的"会怎样"就是真会怎样。
+ * {@link ModelCatalog}——和同伴开口时走的是同一条路,所以表单上看到的"会怎样"就是真会怎样。
  *
- * <p>草稿的样子与一条档案相同({@link ProviderLibrary#entryToJson},id 和名字不看),管理员的界面写、这里读,编解码只那一处。
+ * <p>草稿的样子与一条档案的内容相同({@link ProviderLibrary#profileFromJson}),界面写、这里读,编解码只那一处。
+ * 连通性检测用的 key:草稿里带了 {@code key}(表单上正输入、还没保存的)就用它,否则用这位玩家钥匙串里这个服务的(先他的、再服主的)。
  */
 final class ProviderForm {
 
@@ -42,15 +45,15 @@ final class ProviderForm {
      *
      * @param body {@code {"draft": {…}, "models": true}},两项都可缺
      */
-    static JsonObject answer(ProviderLibrary providers, JsonObject body) {
+    static JsonObject answer(ModelCatalog catalog, JsonObject body) {
         JsonObject out = new JsonObject();
         Set<String> popular = new HashSet<>();
         JsonArray vendors = new JsonArray();
-        for (ProviderInfo p : providers.catalog().popular()) {
+        for (ProviderInfo p : catalog.catalog().popular()) {
             popular.add(p.id());
             vendors.add(vendor(p, true));
         }
-        for (ProviderInfo p : providers.catalog().providers()) {
+        for (ProviderInfo p : catalog.catalog().providers()) {
             if (!popular.contains(p.id())) {
                 vendors.add(vendor(p, false));
             }
@@ -59,7 +62,7 @@ final class ProviderForm {
         if (body.has("draft") && body.get("draft").isJsonObject()) {
             ConnectionProfile profile = draft(body);
             if (body.has("models") && body.get("models").getAsBoolean()) {
-                ProviderInfo vendor = providers.catalog().provider(profile.provider());
+                ProviderInfo vendor = catalog.catalog().provider(profile.provider());
                 JsonArray models = new JsonArray();
                 if (vendor != null) {
                     vendor.models().forEach(m -> models.add(model(m)));
@@ -67,7 +70,7 @@ final class ProviderForm {
                 out.add("models", models);
                 out.addProperty("modelsFor", profile.provider() == null ? "" : profile.provider());
             }
-            out.add("preview", preview(providers, profile));
+            out.add("preview", preview(catalog, profile));
         }
         return out;
     }
@@ -78,12 +81,15 @@ final class ProviderForm {
      *
      * @return 结局 {@code {"state": …}};失败时带 {@code cause}(界面按语言翻译)
      */
-    static CompletableFuture<JsonObject> check(ProviderLibrary providers, JsonObject body) {
+    static CompletableFuture<JsonObject> check(ModelCatalog catalog, Keys keys, JsonObject body) {
         ConnectionProfile profile = draft(body);
-        if (profile.apiKey() == null || profile.apiKey().isBlank()) {
+        String typed = body.get("key") instanceof com.google.gson.JsonPrimitive key ? key.getAsString() : "";
+        Keys.Found stored = keys.find(profile.provider());
+        String key = !typed.isBlank() ? typed : stored == null ? "" : stored.key();
+        if (key.isBlank()) {
             return CompletableFuture.completedFuture(state(STATE_NEED_KEY));
         }
-        LlmEndpoint endpoint = providers.resolve(profile.withReasoningEffort("auto"));
+        LlmEndpoint endpoint = catalog.resolve(profile.withApiKey(key).withReasoningEffort("auto"));
         if (!endpoint.hasUrl()) {
             return CompletableFuture.completedFuture(state(STATE_NEED_URL));
         }
@@ -106,7 +112,7 @@ final class ProviderForm {
     }
 
     private static ConnectionProfile draft(JsonObject body) {
-        return ProviderLibrary.entryFromJson(body.getAsJsonObject("draft")).profile();
+        return ProviderLibrary.profileFromJson(body.getAsJsonObject("draft"));
     }
 
     private static JsonObject vendor(ProviderInfo p, boolean popular) {
@@ -146,8 +152,8 @@ final class ProviderForm {
     }
 
     /** 草稿现在对应的端点,不含地址覆盖:目录给的缺省地址、型号能力、思考计划(每档实际会发什么)。 */
-    private static JsonObject preview(ProviderLibrary providers, ConnectionProfile profile) {
-        LlmEndpoint endpoint = providers.resolve(profile.withBaseUrl(""));
+    private static JsonObject preview(ModelCatalog catalog, ConnectionProfile profile) {
+        LlmEndpoint endpoint = catalog.resolve(profile.withBaseUrl(""));
         ThinkingPlan plan = endpoint.thinkingPlan();
         JsonObject o = new JsonObject();
         o.addProperty("baseUrl", endpoint.baseUrl());

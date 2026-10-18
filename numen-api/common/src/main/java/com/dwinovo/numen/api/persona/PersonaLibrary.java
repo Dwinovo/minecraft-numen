@@ -1,287 +1,87 @@
 package com.dwinovo.numen.api.persona;
 
-import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.store.Atomic;
-import com.dwinovo.numen.api.store.Io;
-import com.dwinovo.numen.api.store.StoreException;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.library.Library;
+import com.dwinovo.numen.api.library.LibraryKind;
+import com.dwinovo.numen.api.library.Shelf;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
 
 /**
- * 玩家的人设库:{@code config/numen/persona/} 目录,<b>一个 .md 文件就是一个人设</b>。
- * 文件名即人设名与 id(天然不重名),文件内容想写啥写啥——全文原样注入
- * {@code <persona>},零结构约束,UI 列表用正文截断做预览。
+ * 一位玩家的人设库:库的一种({@link #KIND}),<b>一个 .md 文件就是一个人设</b>——{@code persona/<命名空间>/<名字>.md}。
+ * 文件内容想写啥写啥,全文原样注入 {@code <persona>},零结构约束,界面列表用正文截断做预览。玩家看到"内置"(服务器目录里,
+ * 随 Numen 与插件发布、管理员可改)与"我的"两组,同名时我的优先,存储、开关、同步都是 {@link Library} 这一套;
+ * 这里只声明条目长什么样,并给消费方一个按人设 id 取正文的口。
  *
- * <p>内置示例存在 jar 资源里({@code assets/numen_api/persona/}),目录中的
- * {@code .init} 哨兵文件缺失时(首次运行/被手动删除)从 jar 复制出缺失的示例并
- * 重写哨兵——已存在的同名文件不覆盖,用户的修改不会被吃掉。
- *
- * <p>旧版 {@code personas.json} 的用户条目首次加载时自动迁移为 .md
- * (原文件改名 .bak)。客户端单例。
+ * <p>人设的 id 是 {@code 命名空间:名字}({@link EntryId}),同伴的绑定记的是它。内置的人设不由本类改——玩家想改就复制到我的。
  */
 public final class PersonaLibrary {
 
-    /** One persona. {@code id == name == 文件名};{@code preset} 恒 false(示例落盘后就是普通文件)。 */
-    public record Persona(String id, String name, String text, boolean preset) {}
+    /** 人设这种库:一条一个 {@code .md}。 */
+    public static final LibraryKind KIND = LibraryKind.files("persona", ".md");
 
-    /** 哨兵文件:删掉它,下次启动重新从 jar 复制缺失的内置示例。 */
-    private static final String INIT_MARKER = ".init";
-    /** 哨兵文件里写给人看的话:服务端也会播种,没有玩家的语言可取,两种都写。 */
-    private static final String INIT_MARKER_TEXT = "删除此文件后,下次启动会从模组内恢复内置示例人设(不覆盖已存在的同名文件)。\n"
-            + "Delete this file and the built-in example personas come back from the mod on the next launch "
-            + "(files with the same name are not overwritten).\n";
-    /** jar 里的内置示例(资源路径 assets/numen_api/persona/ 下的文件名)。
-     *  原型覆盖:傲娇(小焰)/猫娘(团子)/温柔守护者(暖暖)/元气伙伴(阿光)/
-     *  沉稳老哥(老墨)——低龄玩家也有零门槛的选择。 */
-    private static final String[] EXAMPLES = {"小焰.md", "团子.md", "暖暖.md", "阿光.md", "老墨.md"};
+    /** 一个人设。{@code id} 是 {@code 命名空间:名字},{@code name} 是名字。 */
+    public record Persona(String id, String name, String text) {}
 
-    private static PersonaLibrary instance;
+    private final Library library;
 
-    private final Path dir;
-    private final Path legacyJson;
-    /** 运行中的写与删走它(服务端是主人那条写车道);装入时的播种与旧格式迁移在它开始被用之前,直接做。 */
-    private final Io io;
-    private final Map<String, Persona> personas = new LinkedHashMap<>();
-
-    private PersonaLibrary(Path dir, Path legacyJson, Io io) {
-        this.dir = dir;
-        this.legacyJson = legacyJson;
-        this.io = io;
+    public PersonaLibrary(Library library) {
+        this.library = library;
     }
 
-    /** 主人客户端上的那一份(旧布局,服务端大脑接手后不再用)。 */
-    public static PersonaLibrary instance() {
-        if (instance == null) {
-            Path cfg = com.dwinovo.numen.api.NumenPaths.config();
-            instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"),
-                    com.dwinovo.numen.api.NumenIo.inline("numen-persona"));
-            instance.load();
-        }
-        return instance;
-    }
-
-    /** 一位主人在服务器上的人设库:目录和写它用的车道由宿主给。 */
-    public static PersonaLibrary at(Path dir, Io io) {
-        PersonaLibrary library = new PersonaLibrary(dir, null, io);
-        library.load();
-        return library;
-    }
-
-    /** 重扫目录——打开人设页/召唤面板时调用,外部编辑器的修改即时可见。 */
+    /** 重扫目录——外部编辑器的修改在这里读到。 */
     public void reload() {
-        load();
+        library.reload();
     }
 
-    /** All personas, 文件名序。 */
+    /** 此刻在用的人设(没关掉的、有正文的),内置在前我的在后。 */
     public List<Persona> list() {
-        return new ArrayList<>(personas.values());
+        return library.active().stream().map(PersonaLibrary::persona).filter(p -> !p.text().isEmpty()).toList();
     }
 
+    /** 叫这个 id、此刻在用的人设;没有、被关掉或没有正文是 {@code null}。 */
     public Persona get(String id) {
-        return id == null ? null : personas.get(id);
+        Library.Entry entry = library.find(EntryId.parse(id));
+        return entry == null || persona(entry).text().isEmpty() ? null : persona(entry);
     }
 
-    /** 新建人设 = 写一个 .md。重名自动加 _2 后缀(文件名即身份)。 */
+    /** 新建我的人设 = 写一个 .md。重名自动加 _2 后缀(文件名即身份)。 */
     public Persona create(String name, String text) {
-        String id = uniqueName(sanitizeName(name));
-        if (!write(id, text)) return null;
-        Persona p = new Persona(id, id, text, false);
-        personas.put(id, p);
-        return p;
+        EntryId id = library.mine().unique(EntryId.MINE, EntryId.clean(name, "persona"));
+        return persona(library.mine().write(id, normalized(text)));
     }
 
-    /** 编辑人设;改名 = 换文件名(旧文件删除,id 随之更换)。返回落盘后的条目。 */
+    /** 编辑我的人设;改名 = 换文件名(旧文件删除,id 随之更换)。返回落盘后的条目;没有这一条(或它是内置的)是 {@code null}。 */
     public Persona update(String id, String name, String text) {
-        Persona old = personas.get(id);
-        if (old == null) return null;
-        String newId = sanitizeName(name);
-        if (!newId.equals(id)) {
-            newId = uniqueName(newId);
-            delete(id);
-            personas.remove(id);
+        EntryId old = EntryId.parse(id);
+        if (old == null || library.mine().get(old) == null) {
+            return null;
         }
-        if (!write(newId, text)) return null;
-        Persona p = new Persona(newId, newId, text, false);
-        personas.put(newId, p);
-        return p;
+        String cleaned = EntryId.clean(name, "persona");
+        EntryId next = cleaned.equals(old.name()) ? old : library.mine().unique(EntryId.MINE, cleaned);
+        if (!next.equals(old)) {
+            library.mine().delete(old);
+        }
+        return persona(library.mine().write(next, normalized(text)));
     }
 
-    /** 删除人设文件。绑定跟着同伴走,这里不管;在用的同伴回落兜底快照,不会失忆。 */
+    /** 删我的人设文件。绑定跟着同伴走,这里不管;在用的同伴回落兜底快照,不会失忆。内置的由管理员在服务器目录里删。 */
     public void remove(String id) {
-        if (personas.remove(id) == null) return;
-        delete(id);
-    }
-
-    private void delete(String id) {
-        Path file = dir.resolve(id + ".md");
-        io.write(() -> {
-            try {
-                Files.deleteIfExists(file);
-            } catch (IOException ex) {
-                throw new StoreException("人设文件删除失败 " + file + ": " + ex, ex);
-            }
-        });
-    }
-
-    // ---- pending summon assignment ----
-    // The persona picked at summon time, keyed by the companion name — the client doesn't know the new
-    // companion's UUID until the roster snapshot arrives, so it's resolved there (CompanionListPayload).
-
-    private static final Map<String, String> PENDING_SUMMON = new LinkedHashMap<>();
-
-    /** Remember the persona chosen for a companion being summoned (by name). {@code personaId} null = default. */
-    public static void pendSummon(String name, String personaId) {
-        if (name == null || personaId == null) return;
-        PENDING_SUMMON.put(name, personaId);
-    }
-
-    /**
-     * 取走(并清除)刚到货同伴名下暂存的人格 <b>id</b>,没选过则 null。
-     *
-     * <p>刻意返回 id 而不是条目:调用方才分得清"没选"与"选了但条目已不在"
-     * (文件被删/改名)——后者要告诉主人,不能默默变成默认人格。形状与
-     * {@code VoiceLibrary.takePendingSummon} 一致。
-     */
-    public static String takePendingSummon(String name) {
-        return PENDING_SUMMON.remove(name);
-    }
-
-    // ---- persistence ----
-
-    private void load() {
-        personas.clear();
-        try {
-            Files.createDirectories(dir);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-persona] 人设目录创建失败 {}: {}", dir, ex.toString());
-            return;
-        }
-        if (!Files.exists(dir.resolve(INIT_MARKER))) {
-            seedExamples();
-        }
-        migrateLegacyJson();
-        try (Stream<Path> files = Files.list(dir)) {
-            files.filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .forEach(p -> {
-                        String stem = p.getFileName().toString();
-                        stem = stem.substring(0, stem.length() - 3);
-                        try {
-                            String text = Files.readString(p, StandardCharsets.UTF_8).strip();
-                            if (!text.isEmpty()) {
-                                personas.put(stem, new Persona(stem, stem, text, false));
-                            }
-                        } catch (IOException ex) {
-                            Constants.LOG.warn("[numen-persona] 人设读取失败 {}: {}", p, ex.toString());
-                        }
-                    });
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-persona] 人设目录扫描失败: {}", ex.toString());
+        EntryId entry = EntryId.parse(id);
+        if (entry != null) {
+            library.mine().delete(entry);
         }
     }
 
-    /** 旧版 personas.json 的用户条目一次性迁移为 .md,原文件改名 .bak。 */
-    private void migrateLegacyJson() {
-        if (legacyJson == null || !Files.isRegularFile(legacyJson)) return;
-        int migrated = 0;
-        try {
-            JsonObject o = JsonParser.parseString(
-                    Files.readString(legacyJson, StandardCharsets.UTF_8)).getAsJsonObject();
-            if (o.has("personas") && o.get("personas").isJsonArray()) {
-                for (JsonElement el : o.getAsJsonArray("personas")) {
-                    if (!el.isJsonObject()) continue;
-                    JsonObject po = el.getAsJsonObject();
-                    if (po.has("preset") && po.get("preset").getAsBoolean()) continue;
-                    String name = str(po, "name");
-                    String text = str(po, "text");
-                    if (text.isBlank()) continue;
-                    String id = uniqueName(sanitizeName(name.isBlank() ? str(po, "id") : name));
-                    if (writeNow(id, text)) migrated++;
-                }
-            }
-            Files.move(legacyJson, legacyJson.resolveSibling("personas.json.bak"),
-                    StandardCopyOption.REPLACE_EXISTING);
-            Constants.LOG.info("[numen-persona] personas.json 已迁移 {} 条用户人设为 .md", migrated);
-        } catch (IOException | RuntimeException ex) {
-            Constants.LOG.warn("[numen-persona] personas.json 迁移失败(保留原文件): {}", ex.toString());
-        }
+    private static Persona persona(Library.Entry entry) {
+        return persona(entry.item());
     }
 
-    /** 运行中写一份人设:内存先到位,落盘排进写车道。 */
-    private boolean write(String id, String text) {
-        Path file = dir.resolve(id + ".md");
-        String body = (text == null ? "" : text.strip()) + "\n";
-        io.write(() -> Atomic.write(file, body));
-        return true;
+    private static Persona persona(Shelf.Item item) {
+        return new Persona(item.id().toString(), item.id().name(), item.text().strip());
     }
 
-    /** 装入时写一份:此刻写车道还没人用,读盘紧跟在后,所以当场落下。 */
-    private boolean writeNow(String id, String text) {
-        try {
-            Atomic.write(dir.resolve(id + ".md"), (text == null ? "" : text.strip()) + "\n");
-            return true;
-        } catch (StoreException ex) {
-            Constants.LOG.warn("[numen-persona] 人设写盘失败 {}: {}", id, ex.toString());
-            return false;
-        }
-    }
-
-    /** 文件名合法化:去掉 Windows 非法字符与首尾空白;空名回落 "persona"。 */
-    private static String sanitizeName(String raw) {
-        String s = raw == null ? "" : raw.strip().replaceAll("[\\\\/:*?\"<>|]", "");
-        return s.isEmpty() ? "persona" : s;
-    }
-
-    /** 已存在同名文件时追加 _2/_3…(文件名即身份,不覆盖别人)。 */
-    private String uniqueName(String base) {
-        String cand = base;
-        int i = 2;
-        while (personas.containsKey(cand) || Files.exists(dir.resolve(cand + ".md"))) {
-            cand = base + "_" + i++;
-        }
-        return cand;
-    }
-
-    private static String str(JsonObject o, String key) {
-        JsonElement el = o.get(key);
-        return el == null || el.isJsonNull() ? "" : el.getAsString();
-    }
-
-    // ---- 内置示例:从 jar 资源复制(.init 哨兵缺失时) ----
-
-    private void seedExamples() {
-        for (String res : EXAMPLES) {
-            Path target = dir.resolve(res);
-            if (Files.exists(target)) continue;   // 用户改过的/已有的不覆盖
-            try (InputStream in = PersonaLibrary.class.getResourceAsStream(
-                    "/assets/numen_api/persona/" + res)) {
-                if (in == null) {
-                    Constants.LOG.warn("[numen-persona] jar 内示例缺失: {}", res);
-                    continue;
-                }
-                Atomic.write(target, in.readAllBytes());
-            } catch (IOException | StoreException ex) {
-                Constants.LOG.warn("[numen-persona] 示例复制失败 {}: {}", res, ex.toString());
-            }
-        }
-        try {
-            Atomic.write(dir.resolve(INIT_MARKER), INIT_MARKER_TEXT);
-        } catch (StoreException ex) {
-            Constants.LOG.warn("[numen-persona] .init 哨兵写入失败: {}", ex.toString());
-        }
+    private static String normalized(String text) {
+        return (text == null ? "" : text.strip()) + "\n";
     }
 }

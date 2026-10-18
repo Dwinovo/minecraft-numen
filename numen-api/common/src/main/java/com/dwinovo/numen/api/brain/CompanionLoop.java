@@ -34,6 +34,7 @@ import com.dwinovo.numen.api.agent.request.RuntimeState;
 import com.dwinovo.numen.api.agent.request.TaskReport;
 import com.dwinovo.numen.api.agent.script.Program;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
+import com.dwinovo.numen.api.agent.tool.ToolBook;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -95,9 +96,10 @@ public final class CompanionLoop {
      * @param driving     驾驶席是不是在外接大脑手里
      * @param initiative  主动性档位 1~10
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
+     * @param tools       她看得到的工具
      * @param dayTime     游戏内时刻,给事件盖时间戳
      */
-    public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs,
+    public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
                         Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, BooleanSupplier dead,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
                         Function<String, String> persona, LongSupplier dayTime, Rooms rooms) {}
@@ -149,7 +151,8 @@ public final class CompanionLoop {
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(BINDING), JsonDoc.Format.of(1), home.io());
         ToolAnchor anchor = () -> companion;
-        this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), this::receiptAfterCut);
+        this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), parts.tools(),
+                this::receiptAfterCut);
         this.tokens = new TokenLedger(companion, new JsonDoc(home.file(STATS), JsonDoc.Format.of(1), home.io()));
         this.compactor = new Compactor(companion.toString(), convo, log, this::modelWindow);
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
@@ -582,7 +585,8 @@ public final class CompanionLoop {
         public ModelRequest turnRequest() {
             // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(parts.mind().endpoint(providerId));
-            return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), personaText(), Modules.of(companion));
+            return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), personaText(), Modules.of(companion),
+                    com.dwinovo.numen.api.agent.skill.SkillRegistry.of(companion), parts.tools().all());
         }
 
         @Override

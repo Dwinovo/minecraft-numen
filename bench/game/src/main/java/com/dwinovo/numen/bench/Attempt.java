@@ -17,6 +17,8 @@ import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.bench.report.EndReason;
@@ -178,12 +180,15 @@ final class Attempt {
         her = CompanionFactory.spawn(server, UUID.randomUUID(), HER_NAME, owner.getUUID(), level,
                 standOn(scenario.start()));
         scene = new Scene(level, origin, her, owner);
-        // 札记、会话日志与她的 Lua 模块落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,模块只用内置原版、不读主人目录
-        // 里的,评测也从不读它们
+        // 札记、会话日志、她的 Lua 模块与技能落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,模块与技能只用内置原版
+        // (jar 同步下来的)、不读主人目录里的,评测也从不读它们
         home = Files.createTempDirectory("numen-bench-");
         Io io = NumenIo.inline("numen-bench");
         NoteBook.init(uuid -> new Home(home.resolve("memory"), io), () -> (int) (level.getDayTime() / 24000L));
-        Modules.init(uuid -> home.resolve("lua"));
+        LibraryHub libraries = LibraryHub.headless(home.resolve("library"));
+        UUID libraryOwner = owner.getUUID();
+        Modules.init(uuid -> libraries.library(Modules.KIND, libraryOwner));
+        SkillRegistry.init(uuid -> libraries.library(SkillRegistry.KIND, libraryOwner));
         BooleanSupplier mayCall = () -> meter.turns <= scenario.budget().turns();
         LlmEndpoint endpoint = settings.endpoint();
         mind = switch (variant) {
@@ -201,7 +206,7 @@ final class Attempt {
         loop.subscribe(this::onLoopEvent);
         scenario.setup(scene);
         promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA,
-                Modules.of(her.getUUID()))).substring(0, 12);
+                Modules.of(her.getUUID()), SkillRegistry.of(her.getUUID()))).substring(0, 12);
     }
 
     /** 每个服务端 tick 一次。 */
