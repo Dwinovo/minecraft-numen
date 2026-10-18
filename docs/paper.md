@@ -124,7 +124,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 
 ## 十二、实测结论(10-19)
 
-实验代码与日志在 `D:_Projects\paper-refs\pw-probe-1.21.1`、`numen-probe-client`、`numen-probe-run`。结论已写进上文各节,另有几条:
+实验代码与日志在 `D:\01_Projects\paper-refs\pw-probe-1.21.1`、`numen-probe-client`、`numen-probe-run`。结论已写进上文各节,另有几条:
 
 - 指令:原版 Brigadier 树无检查强转后交给 `LifecycleEvents.COMMANDS` 的注册器可行(原版参数类型也被接受),`/minecraft:reload` 后还在,原版客户端补全正常;以她的身份执行原版与插件指令正常。
 - 网络:`DiscardedPayload` 发送会消耗缓冲,同一实例发两次第二次是空包,所以每人各包一份。NeoForge 客户端在配置阶段登记频道(那时玩家还没进世界),Fabric 客户端进游戏后才登记:`canSend` 跟着 `PlayerRegisterChannelEvent`,处理器要接受玩家还没进世界的情况。
