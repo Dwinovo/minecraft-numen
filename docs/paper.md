@@ -119,7 +119,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 - 我们的 GameTest 拿到 Paper 上跑:不开 `IS_RUNNING_IN_IDE`(开了会把测试参数类型塞进内置注册表,有 op 的客户端进服就断),
   而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。现有用例要一层登记适配。
 - Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服,进 CI。
-- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21-1` 线;仓库里只有快照)做无头客户端,原版客户端那一套交互(私聊、会话指令、可点的消息、翻译)对着 Paper 跑。
+- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`),起服是可替换的一层:Paper 另写一层,提供同名的 `e2eServerStart`/`e2eServerStop`、满足同一份规格,把 `e2e/build.gradle` 里的 `serverProject` 指过去。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
 ## 十二、实测结论(10-19)

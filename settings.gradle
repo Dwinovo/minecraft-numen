@@ -40,6 +40,7 @@ include('script')
 include('agent')
 // numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
 include('permission')
+include('e2e')
 include('ui')
 // numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
 include('lua')
