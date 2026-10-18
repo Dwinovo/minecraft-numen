@@ -387,7 +387,7 @@ public final class Companions {
                 rows, server.overworld().getGameTime(), RESPAWN_DELAY_TICKS)) {
             NumenPlayer body = NumenPlayer.findByUuid(server, l.uuid());
             list.add(new CompanionListPayload.Entry(l.uuid(), l.name(), l.respawnInMs(),
-                    body != null && body.isCreative()));
+                    body != null && body.isCreative(), reg.find(l.uuid()).removedFor()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }

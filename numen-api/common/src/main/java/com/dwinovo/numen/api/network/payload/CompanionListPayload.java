@@ -32,14 +32,16 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
 
     /** 一行。{@code respawnInMs} = {@link com.dwinovo.numen.api.entity.CompanionRoster#ALIVE} 是活着,
      *  ≥0 是死了、还有这么久复活。{@code creative} 是此刻的游戏模式(不在场按生存),
-     *  编辑卡的模式格用它显示当前值。 */
-    public record Entry(UUID uuid, String name, long respawnInMs, boolean creative) {
+     *  编辑卡的模式格用它显示当前值。{@code removedFor} 非空 = 她被外面的人或插件请出了服务器(值是当时的理由),
+     *  不在世界里,等主人再召唤;空串是在世界里(或正等复活)。 */
+    public record Entry(UUID uuid, String name, long respawnInMs, boolean creative, String removedFor) {
         static final StreamCodec<RegistryFriendlyByteBuf, Entry> CODEC =
                 StreamCodec.composite(
                         UUIDUtil.STREAM_CODEC, Entry::uuid,
                         Wire.TO_CLIENT.text(), Entry::name,
                         ByteBufCodecs.VAR_LONG, Entry::respawnInMs,
                         ByteBufCodecs.BOOL, Entry::creative,
+                        Wire.TO_CLIENT.text(), Entry::removedFor,
                         Entry::new);
     }
 

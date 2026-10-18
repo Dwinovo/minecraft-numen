@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class Presence {
 
     /** 服务端与客户端之间推送与请求的协议版本。改了线上的样子就加一。 */
-    public static final int PROTOCOL = 2;
+    public static final int PROTOCOL = 3;
 
     private static final Map<UUID, Boolean> CLIENTS = new ConcurrentHashMap<>();
 

@@ -118,6 +118,7 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_TAG_MULTIMODAL = "numen.gui.providers.tag.multimodal";
         public static final String GUI_PROVIDERS_TAG_NO_TOOLS = "numen.gui.providers.tag.no_tools";
         public static final String GUI_PROVIDERS_TAG_MANUAL = "numen.gui.providers.tag.manual";
+        public static final String HEADER_REMOVED = "numen.header.removed";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
         // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
@@ -974,6 +975,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "No tool calling");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "Manual model");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
+        adder.add(Keys.HEADER_REMOVED,                  "removed from the server (%s)");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
@@ -1677,6 +1679,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "不支持工具调用");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "手填的型号");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
+        adder.add(Keys.HEADER_REMOVED,                  "被请出了服务器(%s)");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
