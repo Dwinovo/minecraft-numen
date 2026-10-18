@@ -136,7 +136,8 @@ public final class SettingsView {
                         if (host.uuid() != null) {
                             RemoteCompanions.getOrCreate(host.uuid()).setProviderEntry(e.id());
                         }
-                    }, null);
+                    }, null)
+                    .following(Libraries.PROVIDER);
         }
         return profileList;
     }
@@ -718,7 +719,8 @@ public final class SettingsView {
                     .withClone(p -> savePersona(null, I18n.get(ModLanguageData.Keys.PERSONA_COPY, p.name()), p.text()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
                     .withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.PERSONA,
-                            Libraries.RELOAD, new JsonObject()));
+                            Libraries.RELOAD, new JsonObject()))
+                    .following(Libraries.PERSONA);
         }
         return personaListPanel;
     }
@@ -794,7 +796,8 @@ public final class SettingsView {
                         mcpDraft = new McpFormPanel.Draft();
                         host.rebuild();
                     } : null,
-                    admin ? h -> beginEditMcp(h) : null);
+                    admin ? h -> beginEditMcp(h) : null)
+                    .following(Libraries.MCP_CLIENT);
             if (admin) {
                 mcpListPanel.withTitleAction(I18n.get("numen.mcp.paste_auth"), () -> {
                             pastingAuth = true;
@@ -940,7 +943,8 @@ public final class SettingsView {
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, null, null, null);
+                    null, null, null, null)
+                    .following(Libraries.SKILL);
             if (RemoteCompanions.admin()) {
                 // 技能目录在服务器上:管理员往里放了新的,↻ 让服务器重扫
                 skillsListPanel.withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.SKILL,

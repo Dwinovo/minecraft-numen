@@ -61,4 +61,20 @@ class RemoteLibraryTest {
         assertEquals("p1", library.entries("provider").get(0).getAsJsonObject().get("id").getAsString(),
                 "服务端没办成就推回真表,以真表为准");
     }
+
+    @Test
+    void aTablesVersionMovesWhenTheServerSpeaksOrARowIsDrawnAsDeletedAndOnlyThen() {
+        long start = library.version("provider");
+
+        library.onPayload(new LibraryPayload("provider", "[{\"id\":\"p1\",\"name\":\"甲\"}]", ""));
+        long told = library.version("provider");
+        assertEquals(true, told != start, "服务端推来一张表");
+
+        library.entries("provider");
+        library.ask("provider");
+        assertEquals(told, library.version("provider"), "读与发请求都不动版本");
+
+        library.delete("provider", "p1");
+        assertEquals(true, library.version("provider") != told, "删了的行先画掉也算变");
+    }
 }

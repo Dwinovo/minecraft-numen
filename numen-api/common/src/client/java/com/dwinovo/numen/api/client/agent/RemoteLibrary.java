@@ -25,6 +25,7 @@ public final class RemoteLibrary {
     private final Map<String, PendingChanges<JsonElement>> pending = new HashMap<>();
     private final Map<String, String> problems = new HashMap<>();
     private final Map<String, Long> revisions = new HashMap<>();
+    private final Map<String, Long> edits = new HashMap<>();
 
     public RemoteLibrary(Consumer<LibraryRequestPayload> send) {
         this.send = send;
@@ -40,6 +41,11 @@ public final class RemoteLibrary {
                     .forEach(out::add);
         }
         return out;
+    }
+
+    /** 这种库在客户端的版本:服务端推来一张表、或这里先把删了的行画掉,都会变;界面据此知道要不要重读。 */
+    public long version(String kind) {
+        return revision(kind) + edits.getOrDefault(kind, 0L);
     }
 
     /** 这种库的表被服务端推来过几次——界面发了请求等回执时,看它变没变。 */
@@ -70,6 +76,7 @@ public final class RemoteLibrary {
     /** 删一条;这一行马上从表里消失,服务端的真表一到以它为准。 */
     public void delete(String kind, String id) {
         pending.computeIfAbsent(kind, k -> new PendingChanges<>()).put(id, null);
+        edits.merge(kind, 1L, Long::sum);
         JsonObject body = new JsonObject();
         body.addProperty("id", id);
         send.accept(new LibraryRequestPayload(kind, "delete", body.toString()));
@@ -92,5 +99,6 @@ public final class RemoteLibrary {
         pending.clear();
         problems.clear();
         revisions.clear();
+        edits.clear();
     }
 }

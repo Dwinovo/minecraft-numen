@@ -106,6 +106,9 @@ public final class LibraryListPanel<T> {
     private ListView<T> list;
     private Label emptyLabel;
     private List<T> entries = List.of();
+    /** 这张表在客户端的版本(服务端推来一张、或本地先画了删除就变);没有 = 本地的库,只在动作之后刷新。 */
+    private java.util.function.LongSupplier version;
+    private long seenVersion;
     private int listW;
     private int dimX, dimY, dimW, dimH;
 
@@ -155,6 +158,12 @@ public final class LibraryListPanel<T> {
     }
 
     /** 克隆成可编辑副本并刷新列表:右键菜单里的"克隆",也是只读预设行点下去做的事。 */
+    /** 列表读的是服务器上这一种库:它的版本一变这一帧就重读,没变就一直用手里这份。 */
+    public LibraryListPanel<T> following(String kind) {
+        this.version = () -> com.dwinovo.numen.api.client.agent.RemoteCompanions.library().version(kind);
+        return this;
+    }
+
     public LibraryListPanel<T> withClone(Consumer<T> onClone) {
         this.onClone = onClone;
         return this;
@@ -228,7 +237,7 @@ public final class LibraryListPanel<T> {
                 .rowClick(this::rowClicked));
         list.setBounds(x, body, w, y + h - body);
         ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
-        show(source.get());
+        refresh();
         list.scrollBy(keepScroll);   // 重建(换主题/改窗口)不丢滚动位
     }
 
@@ -239,7 +248,9 @@ public final class LibraryListPanel<T> {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
         if (list == null) return;
-        refresh();   // 服务端推来了新表,这一帧就跟上
+        if (version != null && version.getAsLong() != seenVersion) {
+            refresh();   // 服务端推来了新表,这一帧就跟上
+        }
         advanceRowToggleAnim(nowMs);
         // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
         boolean menuUp = menu.isOpen();
@@ -291,16 +302,12 @@ public final class LibraryListPanel<T> {
 
     // ---- 内部 ----
 
-    /** 条目集变了才换进列表(换了会动滚动位):动作之后与每一帧都问,所以表一变这一行就跟着变。 */
+    /** 重读条目换进列表:动作之后、建面板时,以及跟着的那种库版本变了的那一帧。 */
     private void refresh() {
-        List<T> now = source.get();
-        if (!now.equals(entries)) {
-            show(now);
+        if (version != null) {
+            seenVersion = version.getAsLong();
         }
-    }
-
-    private void show(List<T> now) {
-        entries = now;
+        entries = source.get();
         list.setItems(entries);
         emptyLabel.setVisible(entries.isEmpty());
     }
