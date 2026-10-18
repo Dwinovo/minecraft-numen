@@ -70,6 +70,26 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
   上加一个 mixin,各分支写法不同,等真有大消息要在 Fabric 上传时再做。分片已登记为 `NETWORK`;每位玩家分片字节的预算(`UplinkBudget`,256 KiB/s、桶容量一条最大消息)
   已落地。磁盘写走每个归属一条的串行车道(`Lanes`,`Homes` 给出),停机时排空;崩溃最多丢车道里还没写下去的那几毫秒,没有对任何一种写另开同步路径。
 
+**落地时的出入(第 6 步;`/numen key`、`/numen skin`、召唤与绑定命令、1.21.6 的对话框不在这一步)**:
+
+- **"装没装客户端"有两个问法,各管一件事。** 发包之前问"这位玩家的连接上有没有这种包的频道"(`INetworkChannel.canSend`,NeoForge 查协商出来的频道表,
+  Fabric 查对端登记的接收器),没有就不发——频道可选以后这不是错,而 NeoForge 对发往没有该频道的连接的包会在发送处抛异常。
+  **界面怎么走**(推 `Feed` 还是发聊天文字、征询画答复框还是发按钮、`/numen settings` 这类作用在客户端上的指令能不能用)只问 `Presence.hasClient` 一处:报到过 `Hello`、协议版本对得上。
+  不把两者并成一个,是因为客户端在名册包到达后才报到(`RemoteCompanions.hello`),报到之前服务端仍得把名册推给它,"能不能收包"不能等 `Hello`。
+- **原版客户端进得来**:NeoForge 上我们登记的频道全是 `optional()`(Numen API 的,与 Numen 自己的寻路调试包);Fabric 本来不拒。证据:`NeoForgeHandshakeTests` 对着本进程登记的全部频道原样跑
+  NeoForge 对非 NeoForge 客户端的配置阶段协商(`NetworkRegistry.initializeOtherConnection`)——它第一次跑是红的,就是被寻路调试包一条非可选的登记拦下。
+  没有证到的:真的原版客户端进服(不启动客户端)、Velocity 与 BungeeCord 的转发。Numen 没有注册物品、方块、实体,也没有 `SERVER` 类配置,这条协商是仅有的关口。
+- **翻译在发包的出口一处做**(`MixinServerCommonPacketListener`):没装客户端的玩家的系统聊天与动作栏包,按他客户端报上来的语言(`clientInformation().language()`)把 Numen 的键换成字再放行;装了客户端的照旧发带键的消息。
+  所以指令回话、她的话、征询、动作栏都不必各管语言。语言表读 `numen_api`、`numen`、`numen_*` 这几家模组 jar 里的 `assets/<模组 id>/lang/<语言>.json`(英文打底,缺的键退回英文);
+  别家的键(原版的、别的模组的)原样留着让原版客户端自己翻。**代价**:第三方插件的语言文件要被翻到,它的模组 id 得是 `numen_` 开头。
+- **`/msg`**:私聊的包到她的"客户端"(`FakeClient`)——聊天类型是 `msg_command_incoming` 的玩家聊天包,带发话人的 uuid,交给 `Whispers`。主人的话经 `OwnerInputs`(和面板输入框同一个入口)进她的单聊会话;别的玩家的话按旁听档进收件箱。
+  控制台与命令方块发的私聊是不带发话人的 disguised 包,不接。GameTest 里没法发一条真客户端那样签了名的指令,所以照原版 `MsgCommand` 最后一步的写法直接把包送到她手里。
+- **她的回话在哪问就在哪答**用 `Venue`(面板 / 命令切进的会话 / 私聊)记在她的循环上,和"最后被哪个会话叫醒"一样是会话态、不落盘;`Voice` 按它交给 `Link.said`。装了客户端的主人用 `/msg` 或 `/numen chat` 说话时,面板照旧也收到(`Feed` 不变),另有一行聊天。
+- **会话命令**:会话参数写名字(单聊就是她的名字)或 id;名字不是纯 ASCII 字母数字时要加引号(Brigadier 的 `string()` 限制,`drive` 同)。办不成的原因是 `OwnerInputs.Applied.problem` 那句英文开发文字,原样说给主人,没有翻译。
+  聊天栏的拦截靠各加载器的聊天事件(NeoForge `ServerChatEvent`、Fabric `ALLOW_CHAT_MESSAGE`),都只调 `ChatRoutes.take`;Fabric 一侧编过、没跑。
+- **征询的按钮**只有三个([允许]、[以后都允许]、[拒绝]);"说一句再拒绝"没做成按钮,`/numen consent deny <号> <话>` 仍可用。**动作栏**每秒刷一次,只显示正在干着具体活的同伴(`LoopStatus.activity`),闲着或只在想的不显示。
+- Fabric 的 GameTest 模拟连接(`FabricMockConnection`)配不出"频道协商好"的样子,Fabric 上取下行载荷的用例会收不到包;本仓只跑 NeoForge 的 GameTest。
+
 ## 三、收件箱
 
 现状(第 2 步已落地):每只同伴一个,在服务端她的家里(`companions/<uuid>/inbox.jsonl`),入队即落盘、取走即清;投递方式(叫不叫醒她、随哪一次调模型交出去)写在类型表里,见 `agent-loop.md` §七。
@@ -340,7 +360,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 4. **远程端点**:专用服上的外部大脑宿主;令牌、作用域、限流、多会话、审计;插件桥接改用渠道令牌、征询以通用形式交给渠道;征询经外部大脑代主人答(使用策略已落地,§五)。
 5. ~~语音搬服务端~~ 取消(10-18 方案 B):声线定义随第 3 步进库,出声与听写留在客户端(§八)。
 6. **客户端可选**:网络通道改可选并实测原版客户端进服;"装没装客户端"一处判;给原版客户端的字由服务端翻;`/msg` 私聊、会话命令(`/numen group`、`/numen chat`)、
-   可点的征询消息、动作栏状态、`/numen key`、`/numen skin`、1.21.6+ 对话框(§二)。
+   可点的征询消息、动作栏状态(以上已落地,与方案的出入见 §二 末尾)、`/numen key`、`/numen skin`、1.21.6+ 对话框(§二;后三项等库与钥匙串)。
 7. **下线后靠外部大脑接着干**:"主人在不在"改成"人在游戏里或他的外部大脑连着";外部大脑连回来解开 `AWAY`、征询照 MCP 规范用 elicitation 问主人本人;断开且人不在时照登出收拾(§四)。
 
 单独先修(安全,不等哪一步):**她的命令权限改成主人的等级**(§十.3)。
