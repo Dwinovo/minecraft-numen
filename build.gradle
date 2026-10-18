@@ -123,6 +123,24 @@ tasks.register('releaseJars', Sync) {
     ['fabric', secondLoader].each { loader ->
         from({ shipped[loader](project(":numen:${loader}")) }) { into loader }
     }
+    // Paper 的两个插件 jar(Numen API 与 Numen)收进 paper/。它们的语言文件与标签是 NeoForge 子项目的生成目录打进去的,
+    // 上面那道检查管着生成目录在不在,下面这道管它们真进了 jar:datagen 产出的每个文件在 jar 里都要有,缺了就失败。
+    ['numen-api', 'numen'].each { family ->
+        from({ project(":${family}:paper").tasks.getByName('jar') }) { into 'paper' }
+    }
+    doLast {
+        ['numen-api', 'numen'].each { family ->
+            def generated = project(":${family}:neoforge").file('src/generated/resources').toPath()
+            def jarFile = project(":${family}:paper").tasks.getByName('jar').archiveFile.get().asFile
+            def inJar = new java.util.zip.ZipFile(jarFile).withCloseable { z -> z.entries().collect { it.name } as Set }
+            def missing = fileTree(generated.toFile()) { exclude '.cache/**' }.files
+                    .collect { generated.relativize(it.toPath()).toString().replace('\\', '/') }
+                    .findAll { !inJar.contains(it) }
+            if (!missing.isEmpty()) {
+                throw new GradleException("${jarFile.name} 缺数据生成的文件:\n  " + missing.join('\n  '))
+            }
+        }
+    }
     // Forge 的成品还要过一道 reobf(official 名换成 SRG 名),它原地改写 jarJar 的产物,
     // 由 build 挂上、不是 jarJar 自己的一步。这里明确等它:只依赖 jarJar 的话,拷走的是
     // 改写前的开发 jar,线上一调 MC 的方法就 NoSuchMethodError。
