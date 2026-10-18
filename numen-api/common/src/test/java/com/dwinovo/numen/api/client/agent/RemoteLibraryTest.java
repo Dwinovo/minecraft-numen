@@ -89,6 +89,18 @@ class RemoteLibraryTest {
     }
 
     @Test
+    void theCreatedIdRidesTheAnswerToTheAskerAndIsNotARowOfTheTable() {
+        List<RemoteLibrary.Reply> replies = new ArrayList<>();
+        library.put("voice", new JsonObject(), replies::add);
+
+        library.onPayload(new LibraryPayload("voice", "[{\"id\":\"my:甲\",\"name\":\"甲\"},{\"created\":\"my:甲\"}]", "",
+                sent.get(0).request()));
+
+        assertEquals("my:甲", replies.get(0).created());
+        assertEquals(1, library.entries("voice").size(), "那一行不进表");
+    }
+
+    @Test
     void theRequestNumberSurvivesTheWireBothWays() {
         io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer();
         LibraryRequestPayload.STREAM_CODEC.encode(buf, new LibraryRequestPayload("permission", "put", "{}", 42));

@@ -286,6 +286,34 @@ class LibrariesTest {
     }
 
     @Test
+    void aNewEntrysAnswerSaysItsIdAndChangingAnExistingOneDoesNot(@TempDir Path dir) {
+        Libraries libraries = libraries(dir);
+
+        Libraries.Result made = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.PUT,
+                body("name", "新的", "provider", "openai"));
+        assertEquals("my:新的", createdIn(made.entries()), "新建的答复明说新条目的 id");
+
+        Libraries.Result changed = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.PUT,
+                body("name", "新的", "provider", "openai", "model", "gpt", "id", "my:新的"));
+        assertNull(changed.problem());
+        assertNull(createdIn(changed.entries()), "改已有的不带");
+
+        Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.PUT,
+                body("name", "", "provider", "openai"));
+        assertNotNull(refused.problem());
+        assertNull(createdIn(refused.entries()), "没办成的不带");
+    }
+
+    private static String createdIn(String entries) {
+        for (JsonElement e : array(entries)) {
+            if (e.getAsJsonObject().has(Libraries.CREATED)) {
+                return e.getAsJsonObject().get(Libraries.CREATED).getAsString();
+            }
+        }
+        return null;
+    }
+
+    @Test
     void anOrdinaryPlayerCannotChangeABuiltinProfileButOwnsHisOwn(@TempDir Path dir) {
         Libraries libraries = libraries(dir);
 

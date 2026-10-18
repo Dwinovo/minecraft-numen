@@ -117,6 +117,9 @@ public final class Libraries {
     /** 皮肤专有:撤掉一张排着的签名(或不再显示一条失败)。 */
     public static final String CANCEL = "cancel";
 
+    /** 新建成功的答复里附的一行 {@code {"created": 新条目的 id}};改已有条目的答复不带。 */
+    public static final String CREATED = "created";
+
     /** 请求里选哪一组:缺省是我的;{@code "builtin"} 是内置(只有管理员)。 */
     public static final String GROUP_BUILTIN = "builtin";
     public static final String GROUP_MINE = "mine";
@@ -586,7 +589,13 @@ public final class Libraries {
                 renamed.accept(old, target);   // 我的某条改了名:id 就是名字,在用它的同伴得重新指过去
             }
         }
-        return Done.of(null, builtin);
+        if (old != null) {
+            return Done.of(null, builtin);
+        }
+        // 新建的:id 由服务端按名字起,客户端要凭它把新条目绑给当前同伴,所以随答复明说
+        JsonObject created = new JsonObject();
+        created.addProperty(CREATED, target.toString());
+        return new Done(null, builtin, created);
     }
 
     // ---- 皮肤:签名在服务端排队 ----
