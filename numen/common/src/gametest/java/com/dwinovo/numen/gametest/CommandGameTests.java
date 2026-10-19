@@ -232,6 +232,7 @@ public class CommandGameTests {
                 "her owner was not told");
         helper.assertTrue(com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
                 "a packet pulled her back without a summon");
+        CompanionFactory.despawn(server, her);   // 已经被请出去的身体再移一次:什么也不做(Paper 上再移会抛"已经退役")
 
         NumenPlayer back = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Kickable", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
