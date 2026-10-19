@@ -1,20 +1,22 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.screen.PopupMenu;
+import com.dwinovo.numen.api.client.ui.Animation;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.TextClip;
+import com.dwinovo.numen.api.client.ui.TextWrap;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.ConfirmDialog;
-import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.ListView;
-import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,9 +25,13 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * 具名条目库的列表分区(NumenUI):标题行+新建(可选全局开关)、条目行、右键菜单,
- * 删除走 {@link ConfirmDialog} 模态闸。模型配置/声线/人设/皮肤/工具扩展/技能同构——
- * 差异全在构造参数(取数、行文案、删除动作),面板只管几何与交互。
+ * 具名条目库的列表分区(NumenUI):一节一节往下排,右键菜单,删除走 {@link ConfirmDialog} 模态闸。
+ * 模型配置/声线/人设/皮肤/工具扩展/技能同构——差异全在构造参数(取数、行文案、删除动作)
+ * 与各页声明的节({@link Section}),面板只管几何与交互。
+ *
+ * <p>每一节照 Telegram 设置里"聊天文件夹"那页:强调色小标题、本节的条目行、
+ * 一行"图标 + 文字"的新建行(Telegram 的"创建新文件夹"),末尾一两行灰字说明这一节是什么;
+ * 本节还没有条目时,灰字换成空状态的话。节与节之间一道细线。
  *
  * <p>行照 Telegram 设置里的列表行:名字一行、说明淡字一行,行与行之间一道从文字左缘起的细线,
  * 悬停浅底。点行就是编辑(只读预设行点了是克隆);右键一行弹菜单:编辑、克隆、给她用、删除
@@ -60,15 +66,32 @@ public final class LibraryListPanel<T> {
         }
     }
 
-    /** 列表里的一行:条目,或分组的标题(两组并排时,"内置"与"我的"各一条标题行)。 */
-    private record Line<T>(T item, String heading) {
+    /** 新建行:图标 + 文字,点了打开表单。 */
+    public record Add(String label, Runnable run) {}
 
-        boolean isHeading() {
-            return item == null;
+    /**
+     * 列表里的一节。{@code about} 是标题下这一节的说明,一直在;{@code emptyAbout} 是本节没有条目时换上的话(都可空);
+     * {@code add} 空 = 本节没有新建行;{@code always} = 没有条目也显示本节(显示新建行或空状态的话)。
+     */
+    public record Section(String id, String title, String about, String emptyAbout, Add add, boolean always) {}
+
+    /** 一行是什么:页顶的开关行、节标题、条目、新建行、节末的说明。 */
+    private enum Kind { SWITCH, HEADING, ITEM, ADD, ABOUT }
+
+    /**
+     * 列表里的一行。说明行的 {@code key} 是那段话;条目行的 {@code key} 认条目(新增/删除时淡入淡出靠它对账);{@code leaveAt} 非零 = 条目已经没了,
+     * 正在淡出,不再响应点击。
+     */
+    private record Line<T>(Kind kind, T item, Section section, String key, long leaveAt) {
+
+        boolean live() {
+            return kind == Kind.ITEM && leaveAt == 0;
         }
     }
 
     private static final int ROW_H = 26;
+    /** 条目淡入淡出的时长。 */
+    private static final long FADE_MS = 160;
     /** 行内容离行左右两缘的距离。 */
     private static final int ROW_INSET = 4;
     /** 行尾开关的几何,点击热区是它左边再宽出一截到行右缘。 */
@@ -90,17 +113,15 @@ public final class LibraryListPanel<T> {
      *  跨 build 持久(host.rebuild 不吞在途消息)。 */
     private final com.dwinovo.numen.api.client.ui.widget.InlineAlert notice =
             new com.dwinovo.numen.api.client.ui.widget.InlineAlert();
-    private final String addKey;
-    private final String emptyKey;
     private final Supplier<List<T>> source;
     private final Function<T, Row> rowOf;
-    /** 条目属于哪一组(标题文字);组变了就插一行标题。没有分组是 {@code null}。 */
+    /** 条目属于哪一节({@link Section#id});每次重读时现取节的清单(管理员与否随时变)。 */
     private Function<T, String> groupOf;
+    private Supplier<List<Section>> sections = List::of;
     /** 某一行右键菜单里除了通用几项以外的(如管理员采用内置的新版)。 */
     private Function<T, List<PopupMenu.Item>> extraMenu;
     private final Function<T, String> deleteMessage;
     private final Consumer<T> onDeleteConfirmed;
-    private final Runnable onAdd;
     private final Consumer<T> onEdit;
 
     // 可选的标题行全局开关(声线库的"启用语音")。
@@ -127,12 +148,15 @@ public final class LibraryListPanel<T> {
     // 可选的绑定动作:给当前同伴用;onUnbind 为 null 的库不许解绑(必须有一个)。
     private Consumer<T> onBind;
     private Consumer<T> onUnbind;
-    // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
+    /** 页面抬头(← 与标题那一行)右端的图标钮:画与点击都在宿主的抬头上(Telegram 子页抬头右端的图标)。 */
+    public record HeaderAction(ResourceLocation icon, String tooltip, Runnable run) {}
+
+    private HeaderAction headerAction;
+    // 可选的标题行附加文字钮(MCP 的"粘贴授权地址")。
     private String titleActionLabel;
     private Runnable titleAction;
 
     private ListView<Line<T>> list;
-    private Label emptyLabel;
     private List<T> entries = List.of();
     private List<Line<T>> lines = List.of();
     /** 这张表在客户端的版本(服务端推来一张、或本地先画了删除就变);没有 = 本地的库,只在动作之后刷新。 */
@@ -141,25 +165,44 @@ public final class LibraryListPanel<T> {
     private Supplier<String> problem;
     private long seenVersion;
     private long seenRevision;
-    /** 管理员才有的第二个"新建":建到内置里(所有玩家都用得到);没有这回事的库是 {@code null}。 */
-    private Runnable onAddBuiltin;
+    /** 条目新增/删除的淡入淡出:认条目的 key → 它出现的时刻;时钟取最近一帧的。 */
+    private final java.util.Map<String, Long> enteredAt = new java.util.HashMap<>();
+    private long clock;
     private int listW;
     private int dimX, dimY, dimW, dimH;
 
-    public LibraryListPanel(String addKey, String emptyKey,
-                            Supplier<List<T>> source, Function<T, Row> rowOf,
+    public LibraryListPanel(Supplier<List<T>> source, Function<T, Row> rowOf,
                             Function<T, String> deleteMessage,
                             Consumer<T> onDeleteConfirmed,
-                            Runnable onAdd, Consumer<T> onEdit) {
-        this.addKey = addKey;
-        this.emptyKey = emptyKey;
+                            Consumer<T> onEdit) {
         this.source = source;
         this.rowOf = rowOf;
         this.deleteMessage = deleteMessage;
         this.onDeleteConfirmed = onDeleteConfirmed;
-        this.onAdd = onAdd;
         this.onEdit = onEdit;
     }
+
+    /**
+     * 内容库的两节:"内置"(服主给所有人的;管理员多一行为所有人新建)与"我的"(只有自己的;总在)。
+     * 各页只给自己的新建行文案、"我的"空状态的话和两个新建动作;{@code addKey} 为空 = 这库不能新建(技能)。
+     * 节的 id 就是 {@link #BUILTIN}/{@link #MINE},条目按它归节。
+     */
+    public static Supplier<List<Section>> shelves(String addKey, String emptyKey,
+                                                  Runnable onAdd, Runnable onAddBuiltin) {
+        return () -> {
+            Add addBuiltin = onAddBuiltin != null && RemoteCompanions.admin()
+                    ? new Add(t(ModLanguageData.Keys.LIBRARY_ADD_BUILTIN), onAddBuiltin) : null;
+            Add addMine = addKey == null ? null : new Add(t(addKey), onAdd);
+            return List.of(
+                    new Section(BUILTIN, t(ModLanguageData.Keys.LIBRARY_BUILTIN),
+                            t(ModLanguageData.Keys.LIBRARY_BUILTIN_ABOUT), null, addBuiltin, false),
+                    new Section(MINE, t(ModLanguageData.Keys.LIBRARY_MINE),
+                            t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT), t(emptyKey), addMine, true));
+        };
+    }
+
+    public static final String BUILTIN = "builtin";
+    public static final String MINE = "mine";
 
     public LibraryListPanel<T> withToggle(String labelKey, Supplier<Boolean> get, Consumer<Boolean> set) {
         this.toggleLabelKey = labelKey;
@@ -168,9 +211,10 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 条目按组排开:{@code groupOf} 给每个条目的组名,相邻的同组条目前面插一行标题;条目要按组排好序给。 */
-    public LibraryListPanel<T> withGroups(Function<T, String> groupOf) {
+    /** 条目按节排开:{@code groupOf} 给每个条目所在节的 id,节的清单与顺序由 {@code sections} 定。 */
+    public LibraryListPanel<T> withSections(Function<T, String> groupOf, Supplier<List<Section>> sections) {
         this.groupOf = groupOf;
+        this.sections = sections;
         return this;
     }
 
@@ -191,7 +235,7 @@ public final class LibraryListPanel<T> {
     public T entryAtBody(double mx, double my) {
         if (list == null || ui.hasOverlay()) return null;
         int row = list.rowAt(my);
-        if (row < 0 || row >= lines.size() || !list.contains(mx, my) || lines.get(row).isHeading()) return null;
+        if (row < 0 || row >= lines.size() || !list.contains(mx, my) || !lines.get(row).live()) return null;
         if (toggleOn != null && mx - list.x() >= listW - TOGGLE_ZONE) return null;
         return lines.get(row).item();
     }
@@ -209,16 +253,10 @@ public final class LibraryListPanel<T> {
      * (存不下、排不进队……)在列表顶上亮一条错误,不让玩家以为办成了。
      */
     public LibraryListPanel<T> following(String kind) {
-        var library = com.dwinovo.numen.api.client.agent.RemoteCompanions.library();
+        var library = RemoteCompanions.library();
         this.version = () -> library.version(kind);
         this.revision = () -> library.revision(kind);
         this.problem = () -> library.problem(kind);
-        return this;
-    }
-
-    /** 管理员多一个"新建内置":表单建出来的条目放进服务器目录的内置组,所有玩家都用得到。 */
-    public LibraryListPanel<T> withAddBuiltin(Runnable onAddBuiltin) {
-        this.onAddBuiltin = onAddBuiltin;
         return this;
     }
 
@@ -238,7 +276,17 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 标题行附加按钮(新建左侧的小方钮,如人格库的 ↻ 重扫)。 */
+    /** 抬头右端的图标钮(如人格、技能库的 ↻ 重扫)。 */
+    public LibraryListPanel<T> withHeaderAction(ResourceLocation icon, String tooltip, Runnable run) {
+        this.headerAction = new HeaderAction(icon, tooltip, run);
+        return this;
+    }
+
+    public HeaderAction headerAction() {
+        return headerAction;
+    }
+
+    /** 标题行附加按钮(右端的文字钮)。 */
     public LibraryListPanel<T> withTitleAction(String label, Runnable action) {
         this.titleActionLabel = label;
         this.titleAction = action;
@@ -256,20 +304,10 @@ public final class LibraryListPanel<T> {
         ui.clear();
         menu.closeOverlay();   // 浮层通道随重建清空了,开着的菜单跟着收起(淡出)
 
-        // 这一页叫什么写在面板抬头上(Telegram 子页),这一行只放动作:左端"＋ 新建",右端开关与其它动作
+        // 这一页叫什么写在面板抬头上(Telegram 子页),全局开关是列表第一行,新建在各节里(见 Section.add);
+        // 只有文字附加钮才留一行抬头
         var font = Minecraft.getInstance().font;
-        if (addKey != null) {
-            // 新建是轻的:平时只有字,悬停才浮出底(Telegram 列表顶上的"添加"不是一整块色)
-            String addLabel = "+ " + t(addKey);
-            Button add = ui.add(new Button(addLabel, Button.Style.GHOST, onAdd));
-            add.setBounds(x, y, font.width(addLabel) + 12, NumenStyle.HEADER_H);
-            if (onAddBuiltin != null && com.dwinovo.numen.api.client.agent.RemoteCompanions.admin()) {
-                String builtinLabel = "+ " + t(ModLanguageData.Keys.LIBRARY_ADD_BUILTIN);
-                Button addBuiltin = ui.add(new Button(builtinLabel, Button.Style.GHOST, onAddBuiltin));
-                addBuiltin.setBounds(x + font.width(addLabel) + 12, y, font.width(builtinLabel) + 12, NumenStyle.HEADER_H);
-            }
-        }
-        int actionRight = x + w;   // 右端的动作从右往左排
+        boolean headerRow = titleAction != null;
         if (titleAction != null) {
             // 宽随文案实测(写死会被长文案穿底/盖住邻钮)。
             int aw = Math.max(18, font.width(titleActionLabel) + 12);
@@ -277,26 +315,17 @@ public final class LibraryListPanel<T> {
                 titleAction.run();
                 refresh();   // 动作(重扫等)可能改变条目集,当场刷新
             }));
-            act.setBounds(actionRight - aw, y, aw, NumenStyle.HEADER_H);
-            actionRight -= aw + 6;
+            act.setBounds(x + w - aw, y, aw, NumenStyle.HEADER_H);
         }
 
-        if (toggleGet != null) {
-            Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
-            int togX = actionRight - 22;
-            tog.setBounds(togX, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
-            String label = t(toggleLabelKey);
-            int lw = font.width(label);
-            Label togLabel = ui.add(new Label(label, Label.Role.SECONDARY));
-            // 宽度=实测文本宽:标签后加在按钮之上,虚宽会盖住右侧新建钮吞掉点击。
-            togLabel.setBounds(togX - lw - 4, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), lw, 9);
-        }
-
-        int body = NumenStyle.bodyTop(y);
-        emptyLabel = ui.add(new Label(t(emptyKey), Label.Role.SECONDARY));
-        emptyLabel.setBounds(x, body + 2, w, 9);
+        int body = headerRow ? NumenStyle.bodyTop(y) : y;
 
         list = ui.add(new ListView<Line<T>>(lines, ROW_H, this::renderRow, null)
+                .hoverable(i -> i < lines.size() && (switch (lines.get(i).kind()) {
+                    case SWITCH, ADD -> true;
+                    case ITEM -> lines.get(i).live();
+                    case HEADING, ABOUT -> false;
+                }))
                 .rowClick(this::rowClicked));
         list.setBounds(x, body, w, y + h - body);
         ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
@@ -311,6 +340,7 @@ public final class LibraryListPanel<T> {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
         if (list == null) return;
+        clock = nowMs;
         if (version != null && version.getAsLong() != seenVersion) {
             boolean pushed = revision != null && revision.getAsLong() != seenRevision;
             refresh();   // 服务端推来了新表,这一帧就跟上
@@ -318,6 +348,7 @@ public final class LibraryListPanel<T> {
                 notice.show(com.dwinovo.numen.api.client.ui.widget.InlineAlert.Severity.ERROR, problem.get());
             }
         }
+        dropFadedOut(nowMs);
         advanceRowToggleAnim(nowMs);
         // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
         boolean menuUp = menu.isOpen();
@@ -325,15 +356,19 @@ public final class LibraryListPanel<T> {
         ui.renderOverlayLayer(s, c, mx, my, nowMs);
     }
 
+    private boolean isOn(Line<T> line) {
+        return line.kind() == Kind.SWITCH ? toggleGet.get() : toggleOn.test(line.item());
+    }
+
     /** 帧间隔归一化的趋近(与 Toggle 组件同一节律);到位即释放动画行。 */
     private void advanceRowToggleAnim(long nowMs) {
         long dt = lastAnimMs < 0 ? 16 : nowMs - lastAnimMs;
         lastAnimMs = nowMs;
-        if (animRow < 0 || animRow >= lines.size() || lines.get(animRow).isHeading()) {
+        if (animRow < 0 || animRow >= lines.size() || !(lines.get(animRow).live() || lines.get(animRow).kind() == Kind.SWITCH)) {
             animRow = -1;
             return;
         }
-        float target = toggleOn.test(lines.get(animRow).item()) ? 1f : 0f;
+        float target = isOn(lines.get(animRow)) ? 1f : 0f;
         float speed = Math.min(1f, dt / 16f * 0.35f);
         animKnob = com.dwinovo.numen.api.client.ui.Animation.lerpTo(animKnob, target, speed, 0.01f);
         if (Math.abs(animKnob - target) < 0.01f) animRow = -1;
@@ -348,7 +383,7 @@ public final class LibraryListPanel<T> {
             return !menu.isOpen() || ui.mouseClicked(mx, my, button);
         }
         int index = list.contains(mx, my) ? list.rowAt(my) : -1;
-        if (index < 0 || index >= lines.size() || lines.get(index).isHeading()) return false;
+        if (index < 0 || index >= lines.size() || !lines.get(index).live()) return false;
         List<PopupMenu.Item> items = menuItems(lines.get(index).item());
         if (items.isEmpty()) return false;
         menuX = (int) mx;
@@ -377,28 +412,111 @@ public final class LibraryListPanel<T> {
         }
         entries = source.get();
         List<Line<T>> next = new ArrayList<>();
-        String group = null;
-        for (T e : entries) {
-            String now = groupOf == null ? null : groupOf.apply(e);
-            if (now != null && !now.equals(group)) {
-                next.add(new Line<>(null, now));
+        if (toggleGet != null) next.add(new Line<>(Kind.SWITCH, null, null, null, 0));
+        for (Section sec : sections.get()) {
+            List<T> mine = new ArrayList<>();
+            for (T e : entries) {
+                if (sec.id().equals(groupOf.apply(e))) mine.add(e);
             }
-            group = now;
-            next.add(new Line<>(e, null));
+            if (mine.isEmpty() && !sec.always() && sec.add() == null) continue;
+            next.add(new Line<>(Kind.HEADING, null, sec, null, 0));
+            for (T e : mine) {
+                next.add(new Line<>(Kind.ITEM, e, sec, keyOf(e), 0));
+            }
+            if (sec.add() != null) next.add(new Line<>(Kind.ADD, null, sec, null, 0));
+            String about = mine.isEmpty() && sec.emptyAbout() != null ? sec.emptyAbout() : sec.about();
+            if (about != null) next.add(new Line<>(Kind.ABOUT, null, sec, about, 0));
         }
+        fadeChanges(next);
         lines = next;
         list.setItems(lines);
-        emptyLabel.setVisible(entries.isEmpty());
+    }
+
+    /** 条目的身份:同一节里的名字(开关一翻条目内容会变,身份不能跟着变)。 */
+    private String keyOf(T e) {
+        return groupOf.apply(e) + " " + rowOf.apply(e).name();
+    }
+
+    /**
+     * 新出现的条目淡入,没了的条目留一个淡出的影子(不响应点击)再收走。
+     * 上一份列表里还没有条目时(页面刚开、数据刚到)不做,整页一起出现。
+     */
+    private void fadeChanges(List<Line<T>> next) {
+        long now = net.minecraft.Util.getMillis();
+        boolean hadItems = lines.stream().anyMatch(l -> l.kind() == Kind.ITEM);
+        java.util.Set<String> before = new java.util.HashSet<>();
+        for (Line<T> l : lines) {
+            if (l.kind() == Kind.ITEM && l.leaveAt() == 0) before.add(l.key());
+        }
+        java.util.Set<String> after = new java.util.HashSet<>();
+        for (Line<T> l : next) {
+            if (l.kind() == Kind.ITEM) {
+                after.add(l.key());
+                if (hadItems && !before.contains(l.key())) enteredAt.put(l.key(), now);
+            }
+        }
+        enteredAt.values().removeIf(t -> now - t > FADE_MS);
+        for (int i = 0; i < lines.size(); i++) {
+            Line<T> l = lines.get(i);
+            if (l.kind() != Kind.ITEM || after.contains(l.key())) continue;
+            long leaveAt = l.leaveAt() != 0 ? l.leaveAt() : now;
+            if (now - leaveAt >= FADE_MS) continue;
+            next.add(Math.min(i, next.size()), new Line<>(Kind.ITEM, l.item(), l.section(), l.key(), leaveAt));
+        }
+    }
+
+    /** 淡出完了的影子收走。 */
+    private void dropFadedOut(long now) {
+        if (lines.stream().noneMatch(l -> l.leaveAt() != 0 && now - l.leaveAt() >= FADE_MS)) return;
+        lines = lines.stream().filter(l -> l.leaveAt() == 0 || now - l.leaveAt() < FADE_MS).toList();
+        list.setItems(lines);
+    }
+
+    /** 这一行此刻的不透明度:新条目淡入,没了的条目淡出。 */
+    private float alphaOf(Line<T> line) {
+        if (line.leaveAt() != 0) return 1f - Animation.progress(clock - line.leaveAt(), FADE_MS);
+        Long since = enteredAt.get(line.key());
+        return since == null ? 1f : Animation.progress(clock - since, FADE_MS);
+    }
+
+    private static int fade(int argb, float alpha) {
+        return ((int) (((argb >>> 24) & 0xFF) * alpha) << 24) | (argb & 0xFFFFFF);
     }
 
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, Line<T> line, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
-        if (line.isHeading()) {
-            // 分组标题:淡字压在行的下沿,和下面第一条贴着
-            s.drawText(TextClip.fit(s, line.heading(), rw - 2 * ROW_INSET), rx + ROW_INSET, ry + rh - 12,
-                    c.textMuted(), false);
-            return;
+        switch (line.kind()) {
+            case SWITCH -> {
+                // 页顶的全局开关:一行文字 + 行尾开关,整行可点(Telegram 设置页的开关行)
+                float knob = index == animRow ? animKnob : (toggleGet.get() ? 1f : 0f);
+                int tx0 = rx + rw - ROW_INSET - TOGGLE_W;
+                drawSwitch(s, c, tx0, ry + (rh - TOGGLE_H) / 2, knob, 1f);
+                s.drawText(TextClip.fit(s, t(toggleLabelKey), tx0 - TAIL_GAP - rx - ROW_INSET), rx + ROW_INSET,
+                        ry + (rh - s.lineHeight()) / 2 + 1, c.textPrimary(), false);
+                return;
+            }
+            case HEADING -> {
+                // 节标题:强调色小字压在行的下沿,和下面第一行贴着;上面一道细线把它与上一节隔开
+                if (index > 0) s.fillRect(rx, ry, rw, 1, c.divider());
+                s.drawText(TextClip.fit(s, line.section().title(), rw - 2 * ROW_INSET), rx + ROW_INSET, ry + rh - 12,
+                        c.accent(), false);
+                return;
+            }
+            case ADD -> {
+                renderAdd(s, c, line.section().add().label(), rx, ry, rw, rh);
+                return;
+            }
+            case ABOUT -> {
+                // 节末的灰字说明(Telegram 每节下面那几行),至多两行
+                List<String> wrapped = TextWrap.wrap(line.key(), rw - 2 * ROW_INSET, s::textWidth, 2);
+                for (int i = 0; i < wrapped.size(); i++) {
+                    s.drawText(wrapped.get(i), rx + ROW_INSET, ry + 3 + i * (s.lineHeight() + 1), c.textMuted(), false);
+                }
+                return;
+            }
+            default -> { }
         }
+        float alpha = alphaOf(line);
         T e = line.item();
         Row row = rowOf.apply(e);   // 行悬停底由 ListView 统一画(带淡入),这里只画内容
         int tx = rx + ROW_INSET;
@@ -414,37 +532,66 @@ public final class LibraryListPanel<T> {
             boolean on = toggleOn.test(e);
             float knob = index == animRow ? animKnob : (on ? 1f : 0f);
             int tx0 = tail - TOGGLE_W;
-            int ty = ry + (rh - TOGGLE_H) / 2;
-            s.fillRect(tx0, ty, TOGGLE_W, TOGGLE_H,
-                    NumenStyle.mixColor(c.textMuted(), c.accent(), knob));
-            if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
-                int fade = (int) (255 * (1f - knob));
-                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
-                        (fade << 24) | (c.inputBg() & 0xFFFFFF));
-                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
-                        ((int) (0x40 * (1f - knob)) << 24) | (c.textMuted() & 0xFFFFFF));
-            }
-            s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, 0xFFFFFFFF);
+            drawSwitch(s, c, tx0, ry + (rh - TOGGLE_H) / 2, knob, alpha);
             textRight = tx0 - TAIL_GAP;
         } else if (Boolean.TRUE.equals(row.marked())) {
             // 当前同伴在用:行右端一枚强调色的勾(Telegram 列表里选中项的样子)
             CHECK.draw(s, tail - Sprites.SIZE, ry + (rh - Sprites.SIZE) / 2,
-                    Sprites.SIZE, c.accent());
+                    Sprites.SIZE, fade(c.accent(), alpha));
             textRight = tail - Sprites.SIZE - TAIL_GAP;
         }
         int textW = textRight - tx;
         s.drawText(TextClip.fit(s, row.name() == null ? "" : row.name(), textW), tx, ry + 4,
-                c.textPrimary(), false);
+                fade(c.textPrimary(), alpha), false);
         s.drawText(TextClip.fit(s, row.meta(), textW), tx, ry + 15,
-                row.metaDanger() ? c.danger() : c.textSecondary(), false);
-        if (index < lines.size() - 1 && !lines.get(index + 1).isHeading()) {   // 行间细线从文字左缘起,最后一行与组尾不画
-            s.fillRect(tx, ry + rh - 1, rx + rw - tx, 1, c.divider());
+                fade(row.metaDanger() ? c.danger() : c.textSecondary(), alpha), false);
+        if (index < lines.size() - 1 && lines.get(index + 1).kind() == Kind.ITEM) {   // 行间细线从文字左缘起,节里最后一条不画
+            s.fillRect(tx, ry + rh - 1, rx + rw - tx, 1, fade(c.divider(), alpha));
         }
     }
 
+    /** 开关:关闭态描边环+灰轨道(浅面板上不隐形),{@code knob} 0..1 是滑块位置,轨道色随之渐变。 */
+    private static void drawSwitch(IDrawSurface s, NumenTheme.Colors c, int tx0, int ty, float knob, float alpha) {
+        s.fillRect(tx0, ty, TOGGLE_W, TOGGLE_H,
+                fade(NumenStyle.mixColor(c.textMuted(), c.accent(), knob), alpha));
+        if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
+            int off = (int) (255 * (1f - knob) * alpha);
+            s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
+                    (off << 24) | (c.inputBg() & 0xFFFFFF));
+            s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
+                    ((int) (0x40 * (1f - knob) * alpha) << 24) | (c.textMuted() & 0xFFFFFF));
+        }
+        s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, fade(0xFFFFFFFF, alpha));
+    }
+
+    /** 新建行:强调色方块里一个白加号,右边强调色文字(Telegram "创建新文件夹"那一行的样子,方角)。 */
+    private static void renderAdd(IDrawSurface s, NumenTheme.Colors c, String label, int rx, int ry, int rw, int rh) {
+        int box = 12;
+        int bx = rx + ROW_INSET;
+        int by = ry + (rh - box) / 2;
+        s.fillRect(bx, by, box, box, c.accent());
+        s.fillRect(bx + 3, by + box / 2 - 1, box - 6, 2, 0xFFFFFFFF);
+        s.fillRect(bx + box / 2 - 1, by + 3, 2, box - 6, 0xFFFFFFFF);
+        int tx = bx + box + 6;
+        s.drawText(TextClip.fit(s, label, rx + rw - ROW_INSET - tx), tx, ry + (rh - s.lineHeight()) / 2 + 1,
+                c.accent(), false);
+    }
+
     private boolean rowClicked(int index, double xInRow) {
-        if (index < 0 || index >= lines.size() || lines.get(index).isHeading()) return false;
-        T e = lines.get(index).item();
+        if (index < 0 || index >= lines.size()) return false;
+        Line<T> line = lines.get(index);
+        if (line.kind() == Kind.SWITCH) {
+            animRow = index;                                  // 从翻转前的位置起步滑动
+            animKnob = toggleGet.get() ? 1f : 0f;
+            toggleSet.accept(!toggleGet.get());
+            return true;
+        }
+        if (line.kind() == Kind.ADD) {
+            line.section().add().run().run();
+            return true;
+        }
+        if (!line.live()) return false;
+        T e = line.item();
         if (toggleOn != null && rowOf.apply(e).toggle() && (onEdit == null || xInRow >= listW - TOGGLE_ZONE)) {
             // 点开关翻转;没有编辑的库(技能)整行都是开关——Telegram 设置里带开关的行点哪儿都翻
             animRow = index;                                  // 从翻转前的位置起步滑动
