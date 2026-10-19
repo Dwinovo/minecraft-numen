@@ -34,6 +34,12 @@ public interface GameTestWorld {
      */
     void await(MinecraftServer server, BooleanSupplier done);
 
+    /**
+     * 指令回给英文客户端的这句话的文字(翻译键已换成字)。模组上服务端自己的语言表里就有 Numen 的词条,{@code getString()} 即是;
+     * Paper 上词条在 Adventure 的翻译源里,要走和发给客户端同一条本地化编码的路。
+     */
+    String text(Component message);
+
     /** 一个收下指令说的每一句话的发令来源:成功的、失败的都收,不知会管理员。 */
     CommandSource hearing(Consumer<Component> heard);
 }

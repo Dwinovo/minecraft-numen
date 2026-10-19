@@ -609,7 +609,7 @@ public final class GameTestKit {
                 new net.minecraft.server.level.ClientInformation(language, info.viewDistance(), info.chatVisibility(),
                         info.chatColors(), info.modelCustomisation(), info.mainHand(), info.textFilteringEnabled(),
                         info.allowsListing()));
-        OwnerLine line = new OwnerLine(installed);
+        OwnerLine line = new OwnerLine(installed).language(language);
         LINES.put(profile.getId(), line);
         server.getPlayerList().placeNewPlayer(line, player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));

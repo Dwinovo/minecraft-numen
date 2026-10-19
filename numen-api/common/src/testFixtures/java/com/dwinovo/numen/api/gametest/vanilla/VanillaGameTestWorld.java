@@ -24,6 +24,11 @@ public final class VanillaGameTestWorld implements GameTestWorld {
     }
 
     @Override
+    public String text(Component message) {
+        return message.getString();
+    }
+
+    @Override
     public void await(MinecraftServer server, BooleanSupplier done) {
         server.managedBlock(done);
     }

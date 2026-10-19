@@ -819,7 +819,7 @@ public class PermissionGameTests {
     private static List<String> runAs(ServerPlayer who, String command) {
         List<String> said = new ArrayList<>();
         net.minecraft.commands.CommandSource capture =
-                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.hearing(message -> said.add(message.getString()));
+                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.hearing(message -> said.add(com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.text(message)));
         who.getServer().getCommands().performPrefixedCommand(who.createCommandSourceStack().withSource(capture),
                 command);
         return said;

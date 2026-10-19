@@ -652,7 +652,7 @@ public class CommandGameTests {
 
     /** 控制台那样的发令人:她那一段的回执说给它听,一句一条记进 {@code heard}。 */
     private static CommandSourceStack console(net.minecraft.server.MinecraftServer server, List<String> heard) {
-        return server.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(message -> heard.add(message.getString())));
+        return server.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(message -> heard.add(GameTestWorld.INSTANCE.text(message))));
     }
 
     /**

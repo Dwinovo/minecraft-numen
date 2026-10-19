@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.gametest;
 
 import java.util.ServiceLoader;
 import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -21,6 +22,14 @@ public interface MockConnection {
 
     /** 装着我们客户端的主人进服之后,平台还要为这位玩家做的事(模组上频道表在连接上,配过就够了,默认什么也不用做)。 */
     default void installed(ServerPlayer player) {
+    }
+
+    /**
+     * 发给语言为 {@code language} 的玩家的一段文字,在他客户端上的样子(默认就是它自己:模组上翻译键在发出之前就换成了字;
+     * Paper 在编码成包的那一刻才按玩家的语言换,模拟连接要自己走一遍)。
+     */
+    default Component rendered(Component text, String language) {
+        return text;
     }
 
     /** 服务端发出的载荷,在这条连接的对端收到时的样子(默认就是它自己;Paper 发的是字节,要解回来)。 */

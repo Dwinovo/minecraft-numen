@@ -25,6 +25,11 @@ public final class PaperGameTestWorld implements GameTestWorld {
     }
 
     @Override
+    public String text(Component message) {
+        return PaperClientText.rendered(message, "en_us").getString();
+    }
+
+    @Override
     public void setRule(ServerLevel level, GameRules.BooleanValue rule, boolean value) {
         rule.set(value, level);
     }
