@@ -1,7 +1,9 @@
 package com.dwinovo.numen.api.gametest.vanilla;
 
 import com.dwinovo.numen.api.gametest.GameTestWorld;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -19,6 +21,11 @@ public final class VanillaGameTestWorld implements GameTestWorld {
     @Override
     public void setRule(ServerLevel level, GameRules.BooleanValue rule, boolean value) {
         rule.set(value, level.getServer());
+    }
+
+    @Override
+    public void await(MinecraftServer server, BooleanSupplier done) {
+        server.managedBlock(done);
     }
 
     @Override

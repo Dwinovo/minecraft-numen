@@ -1,8 +1,10 @@
 package com.dwinovo.numen.api.gametest;
 
 import java.util.ServiceLoader;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import net.minecraft.commands.CommandSource;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -25,6 +27,12 @@ public interface GameTestWorld {
 
     /** 把 {@code level} 的一条开关式游戏规则定成 {@code value}。 */
     void setRule(ServerLevel level, GameRules.BooleanValue rule, boolean value);
+
+    /**
+     * 在主线程上等 {@code done} 成立,等的时候排给主线程的任务照做。她进世界的接纳在异步的平台上(Paper 的登录事件)要晚一点才有答复,
+     * 答复也是排给主线程的任务,所以用例不能睡等、要在这里推着做;模组上答复当场就有,这里一步不用等。
+     */
+    void await(MinecraftServer server, BooleanSupplier done);
 
     /** 一个收下指令说的每一句话的发令来源:成功的、失败的都收,不知会管理员。 */
     CommandSource hearing(Consumer<Component> heard);
