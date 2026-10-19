@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/logo/svg/numen-mark.svg" alt="言出法随" width="128">
+
 # 言出法随
 
 [English](README_EN.md) · [**简体中文**](README.md)
