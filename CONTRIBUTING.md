@@ -23,6 +23,10 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 # 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟,不进 CI)
 # End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min, not in CI)
 ./gradlew :e2e:e2eTest
+# Paper 端(第一次要下载 Paper 服务端;都不进 CI)
+# Paper side (the first run downloads the Paper server; neither is in CI)
+./gradlew :e2e:e2eTest -Pe2eServer=paper      # 同一批端到端场景对着 Paper 服,约 4 分钟 / the same scenarios against a Paper server, ~4 min
+./gradlew :numen:paper:runGameTestServer      # 同一批 GameTest 在 Paper 上跑,按 20 刻每秒,约 35 分钟 / the same GameTests on Paper, real time at 20 TPS, ~35 min
 ```
 
 ## 授权 / License

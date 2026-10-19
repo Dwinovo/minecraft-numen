@@ -6,6 +6,7 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenCommands;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -36,7 +37,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -652,27 +652,7 @@ public class CommandGameTests {
 
     /** 控制台那样的发令人:她那一段的回执说给它听,一句一条记进 {@code heard}。 */
     private static CommandSourceStack console(net.minecraft.server.MinecraftServer server, List<String> heard) {
-        return server.createCommandSourceStack().withSource(new CommandSource() {
-            @Override
-            public void sendSystemMessage(Component message) {
-                heard.add(message.getString());
-            }
-
-            @Override
-            public boolean acceptsSuccess() {
-                return true;
-            }
-
-            @Override
-            public boolean acceptsFailure() {
-                return true;
-            }
-
-            @Override
-            public boolean shouldInformAdmins() {
-                return false;
-            }
-        });
+        return server.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(message -> heard.add(message.getString())));
     }
 
     /**

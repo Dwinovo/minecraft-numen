@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -42,12 +43,12 @@ public class UpDownGameTests {
         Worlds.settle(level);
         GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION);
         regeneration = rule.get();
-        rule.set(false, level.getServer());
+        GameTestWorld.INSTANCE.setRule(level, rule, false);
     }
 
     @AfterBatch(batch = LANDING)
     public static void restoreLanding(ServerLevel level) {
-        level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION).set(regeneration, level.getServer());
+        GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION), regeneration);
     }
 
     /** 跳上一整块。 */

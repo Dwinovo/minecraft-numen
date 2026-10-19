@@ -281,9 +281,25 @@ public class DigGameTests {
         });
     }
 
+    /**
+     * 服务端挖掘状态机里"正在挖一格方块"的私有字段:挖掘器照真客户端发 START/STOP,服务端收没收下这一下只记在它上面,
+     * 读它区分"服务端还在挖"与"服务端把这一下退回来了"。GameTest 里的名字是 Mojang 名,各平台一致。
+     */
+    private static final java.lang.invoke.VarHandle DESTROYING_BLOCK = destroyingBlock();
+
+    private static java.lang.invoke.VarHandle destroyingBlock() {
+        try {
+            return java.lang.invoke.MethodHandles
+                    .privateLookupIn(net.minecraft.server.level.ServerPlayerGameMode.class, java.lang.invoke.MethodHandles.lookup())
+                    .findVarHandle(net.minecraft.server.level.ServerPlayerGameMode.class, "isDestroyingBlock", boolean.class);
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     /** 服务端这一刻认不认为她正在挖一格方块。 */
     private static boolean digging(NumenPlayer companion) {
-        return ((com.dwinovo.numen.mixin.inject.ServerPlayerGameModeAccessor) companion.gameMode).numen$isDestroyingBlock();
+        return (boolean) DESTROYING_BLOCK.get(companion.gameMode);
     }
 
     /**

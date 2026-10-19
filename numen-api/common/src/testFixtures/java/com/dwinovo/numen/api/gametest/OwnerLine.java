@@ -5,7 +5,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Queue;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 import net.minecraft.network.Connection;
@@ -52,10 +51,7 @@ public final class OwnerLine extends Connection {
         // 把自己挂成内存通道的处理器:channelActive 给连接设上通道,placeNewPlayer 配置管线时要它
         new EmbeddedChannel(this);
         if (installed) {
-            ServiceLoader.load(MockConnection.class, MockConnection.class.getClassLoader())
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("没有 MockConnection 的实现:加载器的开发期源码集要提供一个"))
-                    .configure(this);
+            MockConnection.INSTANCE.configure(this);
         }
     }
 
@@ -67,7 +63,7 @@ public final class OwnerLine extends Connection {
     @Override
     public void send(Packet<?> packet, PacketSendListener listener, boolean flush) {
         if (packet instanceof ClientboundCustomPayloadPacket custom) {
-            sent.add(custom.payload());
+            sent.add(MockConnection.INSTANCE.received(custom.payload()));
         } else if (packet instanceof ClientboundSystemChatPacket chat) {
             said.add(new Said(chat.content(), chat.overlay()));
         } else if (packet instanceof ClientboundPlayerChatPacket line) {

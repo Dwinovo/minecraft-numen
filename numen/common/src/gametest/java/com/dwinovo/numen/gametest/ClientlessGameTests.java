@@ -15,10 +15,10 @@ import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
-import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -44,27 +44,7 @@ public class ClientlessGameTests {
 
     /** 这位玩家敲一条指令,指令回给他的话收进 {@code heard}(在送上线之前,还是带着语言键的 Component)。 */
     static void run(ServerPlayer player, String command, List<Component> heard) {
-        CommandSourceStack source = player.createCommandSourceStack().withSource(new CommandSource() {
-            @Override
-            public void sendSystemMessage(Component message) {
-                heard.add(message);
-            }
-
-            @Override
-            public boolean acceptsSuccess() {
-                return true;
-            }
-
-            @Override
-            public boolean acceptsFailure() {
-                return true;
-            }
-
-            @Override
-            public boolean shouldInformAdmins() {
-                return false;
-            }
-        });
+        CommandSourceStack source = player.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(heard::add));
         player.getServer().getCommands().performPrefixedCommand(source, command);
     }
 

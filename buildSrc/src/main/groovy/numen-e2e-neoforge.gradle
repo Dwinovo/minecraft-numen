@@ -13,7 +13,7 @@
  *
  * <p>起的就是模组的 {@code server} 运行配置那一条命令行(同样的类路径与 JVM 参数),只换运行目录。
  */
-import com.dwinovo.numen.buildsrc.E2eServer
+import com.dwinovo.numen.buildsrc.TestServer
 
 def spec = rootProject.project(':e2e').ext.e2e
 
@@ -32,7 +32,7 @@ neoForge {
     }
 }
 
-def server = gradle.sharedServices.registerIfAbsent('e2eServer', E2eServer) {}
+def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
 def game = tasks.named('runE2e')
 def tests = rootProject.project(':e2e').tasks.named('e2eTest')
 

@@ -1,0 +1,93 @@
+/**
+ * Paper 上的 GameTest(docs/paper.md §十一):应用在 numen/paper 的构建脚本末尾(它要用到 run-paper 的 runServer)。
+ *
+ * <p>{@code runGameTestServer} 和 {@code :numen:neoforge:runGameTestServer} 对齐:一条命令跑完,结尾一行
+ * {@code All N required tests passed},或必过的用例没过时列出失败名单并让构建失败。用例是同一批(套件与 NeoForge 的 GameTest 运行一致,
+ * 取自根 build.gradle 的 numenSuites 表;{@code -Pgametest=numen_pathing} 只跑指定的,逗号分隔),由 :paper-gametest 这个只在测试时挂上的插件
+ * 登记、跑完、把结果写成 JSON 并关服(它怎么做见 PaperGameTestPlugin);这里负责起服(新世界,超平坦,种子可由 {@code -PgametestSeed} 指定)和读结果。
+ *
+ * <p>起的是 {@code runServer} 那一套(同一个 Paper 版本、同样的 JVM 参数、同样的两个插件),再加上测试插件;命令行见 {@link PaperServer}。
+ */
+import com.dwinovo.numen.buildsrc.PaperServer
+import com.dwinovo.numen.buildsrc.TestServer
+import groovy.json.JsonSlurper
+
+def gameDir = project.file('runs/gametest')
+def resultFile = new File(gameDir, 'gametest-result.json')
+def logFile = new File(gameDir, 'gametest-server.log')
+// 套件:默认是 NeoForge 的 GameTest 运行带的那些(numen、numen_pathing)
+def suites = providers.gradleProperty('gametest')
+        .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
+def seed = providers.gradleProperty('gametestSeed')
+def structures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+// 整套用例最长跑多久:超过就当没收场,杀掉服务端
+def limitMinutes = 60
+
+def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
+def game = tasks.named('runServer')
+
+tasks.register('runGameTestServer') {
+    group = 'verification'
+    description = '在 Paper 上跑 GameTest(同一批用例,新世界),结尾一行 All N required tests passed 或失败名单'
+    usesService(server)
+    outputs.upToDateWhen { false }
+    // runServer 依赖的那些(两个插件 jar)、测试插件、结构模板
+    dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
+    dependsOn ':paper-gametest:jar'
+    dependsOn ':numen:common:syncGameTestStructures'
+    doLast {
+        def properties = [
+                'online-mode'        : 'false',
+                // 并行的运行不抢同一个端口
+                'server-port'        : PaperServer.freePort(),
+                'level-type'         : 'minecraft\\:flat',
+                'generator-settings' : PaperServer.FLAT_SETTINGS,
+                'generate-structures': 'false',
+                'spawn-protection'   : '0',
+                'difficulty'         : 'normal',
+                'view-distance'      : '4',
+                'simulation-distance': '4',
+                'max-tick-time'      : '-1',
+                'sync-chunk-writes'  : 'false',
+                'motd'               : 'numen gametest',
+        ]
+        if (seed.present) {
+            properties['level-seed'] = seed.get()
+        }
+        PaperServer.freshDir(gameDir, properties)
+
+        def command = PaperServer.command(game.get(), [
+                "-Dnumen.gametest.suites=${suites.get()}".toString(),
+                "-Dnumen.gametest.structures=${structures.get().asFile.absolutePath}".toString(),
+                "-Dnumen.gametest.result=${resultFile.absolutePath}".toString(),
+        ], [project(':paper-gametest').tasks.named('jar').get().archiveFile.get().asFile])
+        server.get().start(command, gameDir, new HashMap<String, String>(System.getenv()), logFile)
+        logger.lifecycle("[numen-gametest] 起服,套件 ${suites.get()},日志 ${logFile}")
+        def exited = server.get().awaitExit(limitMinutes * 60 * 1000L)
+        server.get().stop()
+
+        if (!exited || !resultFile.exists()) {
+            throw new GradleException((exited ? '服务端在用例收场前就退出了' : "用例 ${limitMinutes} 分钟没跑完")
+                    + ",日志末尾:\n" + logFile.readLines('UTF-8').takeRight(80).join('\n'))
+        }
+        def result = new JsonSlurper().parse(resultFile, 'UTF-8')
+        def failed = result.tests.findAll { !it.passed }
+        def failedRequired = failed.findAll { it.required }
+        def failedOptional = failed.findAll { !it.required }
+        logger.lifecycle("[numen-gametest] ${result.tests.size()} 条用例,用时 ${(result.durationMillis ?: 0).intdiv(1000)} 秒,结果 ${resultFile}")
+        def cappedFailures = failed.findAll { it.cappedFromTicks != null }
+        if (!cappedFailures.isEmpty()) {
+            logger.lifecycle("[numen-gametest] 其中 ${cappedFailures.size()} 条失败的用例被收短了时限(自己写的更长),结果文件里有 cappedFromTicks")
+        }
+        failedOptional.each { logger.lifecycle("  可选未过 ${it.name}: ${it.error}") }
+        if (result.fatal != null) {
+            throw new GradleException("GameTest 没能进行下去:${result.fatal}(服务端日志 ${logFile})")
+        }
+        if (failedRequired.isEmpty()) {
+            logger.lifecycle("All ${result.tests.size()} required tests passed")
+        } else {
+            failedRequired.each { logger.lifecycle("  - ${it.name}: ${it.error}") }
+            throw new GradleException("${failedRequired.size()} required tests failed(服务端日志 ${logFile})")
+        }
+    }
+}

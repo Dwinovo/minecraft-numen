@@ -3,10 +3,12 @@
 //
 // 分两层:
 //  - 场景(src/e2eTest):只认下面 ext.e2e 这份规格——一个地址、一个 RCON 口、一个本地的假模型端点,不知道服务端是怎么起的;
-//  - 起服:谁满足这份规格谁就是一层。NeoForge 专用服的在 buildSrc 的 numen-e2e-neoforge(应用在 numen/neoforge);
-//    Paper 服另写一层,提供同名的 e2eServerStart/e2eServerStop 两个任务,把下面 serverProject 换成它所在的项目即可。
+//  - 起服:谁满足这份规格谁就是一层,各自提供同名的 e2eServerStart/e2eServerStop 两个任务。NeoForge 专用服的在 buildSrc 的
+//    numen-e2e-neoforge(应用在 numen/neoforge),Paper 服的是 numen-e2e-paper(应用在 numen/paper)。
 //
-// 跑法:./gradlew :e2e:e2eTest --no-daemon(起服、跑场景、关服,一条命令)。
+// 跑法(起服、跑场景、关服,一条命令):
+//   ./gradlew :e2e:e2eTest --no-daemon                    对着 NeoForge 专用服(默认)
+//   ./gradlew :e2e:e2eTest -Pe2eServer=paper --no-daemon  对着 Paper 服
 plugins {
     id 'java-library'
 }
@@ -29,26 +31,47 @@ repositories {
 }
 
 /**
- * 场景对服务端的全部要求。固定端口:场景之外没人需要知道它们,固定了才好让种子里的档案指向假模型。
+ * 场景对服务端的全部要求。三个端口(服务端、RCON、假模型)每次运行时由 e2ePorts 现取空闲的填进来,并行的 worktree 与 CI 互不相踩;
+ * 起服层与种子都排在它后面、在执行期读这份规格,所以下面的端口只是占位。
  * 种子是铺进服务端配置根(模组上是 config/numen/)的文件:一份指向假模型的内置模型档案和它用的 key,
  * 这是管理员配档案的正门(往内置库里放一个文件,见 docs/input-pipeline.md §六)。
  */
 ext.e2e = [
         host        : '127.0.0.1',
-        port        : 25599,
-        rconPort    : 25598,
+        port        : 0,
+        rconPort    : 0,
         rconPassword: 'e2e',
-        modelPort   : 25597,
+        modelPort   : 0,
         modelKey    : 'e2e-key',
         modelProfile: 'server:e2e',
         seed        : layout.buildDirectory.dir('seed'),
 ]
 
+tasks.register('e2ePorts') {
+    group = 'verification'
+    description = '现取三个空闲端口(服务端、RCON、假模型)填进规格'
+    outputs.upToDateWhen { false }
+    def spec = e2e
+    doLast {
+        // 三个一起占着再放,不会取到同一个
+        def sockets = (1..3).collect { new ServerSocket(0) }
+        try {
+            spec.port = sockets[0].localPort
+            spec.rconPort = sockets[1].localPort
+            spec.modelPort = sockets[2].localPort
+        } finally {
+            sockets*.close()
+        }
+        logger.lifecycle("[numen-e2e] 端口 服务端 ${spec.port}、RCON ${spec.rconPort}、假模型 ${spec.modelPort}")
+    }
+}
+
 tasks.register('e2eSeed') {
     group = 'verification'
     description = '生成铺进服务端配置根的种子:指向假模型的内置档案与它的 key'
     def spec = e2e
-    inputs.property('spec', [spec.modelPort, spec.modelKey])
+    dependsOn 'e2ePorts'
+    outputs.upToDateWhen { false }
     outputs.dir(spec.seed)
     doLast {
         def root = spec.seed.get().asFile
@@ -62,8 +85,12 @@ tasks.register('e2eSeed') {
     }
 }
 
-// 起服层所在的项目
-def serverProject = ':numen:neoforge'
+// 起服层所在的项目:-Pe2eServer=neoforge|paper,不给就是 neoforge
+def serverKind = providers.gradleProperty('e2eServer').getOrElse('neoforge')
+if (!(serverKind in ['neoforge', 'paper'])) {
+    throw new GradleException("-Pe2eServer 只认 neoforge 或 paper,给的是 ${serverKind}")
+}
+def serverProject = ":numen:${serverKind}"
 
 testing {
     suites {
