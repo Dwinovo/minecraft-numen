@@ -40,6 +40,12 @@ public final class McApi {
     /** 原版的 {@code help}:不带参数列她此刻能执行的指令,带一条指令给出它的用法。 */
     private static final String HELP = "help";
 
+    /**
+     * 原版的指令命名空间别名({@code minecraft:help}):有的服务端(Paper)把 {@code help} 这个名字让给了自己的帮助,原版那条只剩这个别名;
+     * 别名在,她要的原版帮助就走它,不在({@code help} 本来就是原版的)就是 {@code help} 本身。名字是谁占着不重要,取的是树里原版那一条。
+     */
+    private static final String VANILLA_HELP = "minecraft:help";
+
     private McApi() {}
 
     /** 跑的那一行。 */
@@ -111,6 +117,15 @@ public final class McApi {
         }
     }
 
+    /** 这一行真正交给指令树跑的样子:{@code help …} 走原版那一条(见 {@link #VANILLA_HELP}),别的原样。 */
+    static String vanillaHelp(CommandDispatcher<CommandSourceStack> dispatcher, String line) {
+        String[] words = line.split(" ", 2);
+        if (!words[0].equals(HELP) || dispatcher.getRoot().getChild(VANILLA_HELP) == null) {
+            return line;
+        }
+        return words.length == 1 ? VANILLA_HELP : VANILLA_HELP + " " + words[1];
+    }
+
     /**
      * 以她的身份执行,回话去处换成 {@link Echo}。{@code help <指令>} 跑成了,原版那一行用法之后接上从 Brigadier 挖出的几行。
      *
@@ -119,8 +134,9 @@ public final class McApi {
     private static Ran perform(NumenPlayer her, String line) {
         Echo echo = new Echo(her.shouldInformAdmins());
         CommandDispatcher<CommandSourceStack> dispatcher = her.getServer().getCommands().getDispatcher();
+        String runs = vanillaHelp(dispatcher, line);
         her.fakeClient().runCommand(echo::toHer, () -> her.getServer().getCommands().performPrefixedCommand(
-                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), line));
+                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), runs));
         List<String> output = new ArrayList<>(echo.lines());
         Ran ran = new Ran("/" + line, output, echo.result());
         if (!echo.succeeded()) {

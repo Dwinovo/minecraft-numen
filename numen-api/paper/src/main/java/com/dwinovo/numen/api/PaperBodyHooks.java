@@ -63,7 +63,8 @@ final class PaperBodyHooks implements Listener {
 
     /**
      * 她达成一个进度。事件在发奖励<b>之前</b>触发,奖励在同一个调用里随后发到她身上:这里拍背包与经验的快照,
-     * 等这个调用返回(同一刻的末尾,下一刻开始之前)再比,变了就告诉她。没变的不说——配方解锁这类没有物品奖励的进度天天在达成。
+     * 等这个调用返回再比,变了就告诉她。没变的不说——配方解锁这类没有物品奖励的进度天天在达成。
+     * 排的是 {@code scheduleOnMain}:{@code execute} 在主线程上当场就跑(只有已经在跑某个任务时才排队),那样比的时候奖励还没发。
      */
     @EventHandler(priority = EventPriority.MONITOR)
     void onAdvancement(PlayerAdvancementDoneEvent event) {
@@ -72,7 +73,7 @@ final class PaperBodyHooks implements Listener {
         }
         AdvancementHolder holder = ((CraftAdvancement) event.getAdvancement()).getHandle();
         Belongings before = Belongings.of(her);
-        her.server.execute(() -> {
+        her.server.scheduleOnMain(() -> {
             String change = before.changeTo(her);
             if (!change.isEmpty()) {
                 String id = holder.id().toString();

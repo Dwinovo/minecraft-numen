@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.platform;
 
+import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.entity.FakeConnection;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.platform.services.IBodyAdmission;
@@ -39,19 +40,35 @@ public final class PaperBodyAdmission implements IBodyAdmission {
         GameProfile profile = body.getGameProfile();
         JavaPlugin plugin = JavaPlugin.getProvidingPlugin(PaperBodyAdmission.class);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            AsyncPlayerPreLoginEvent pre = new AsyncPlayerPreLoginEvent(profile.getName(), LOOPBACK, profile.getId());
-            Bukkit.getPluginManager().callEvent(pre);
-            server.execute(() -> {
-                if (pre.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-                    verdict.accept(PaperAdventure.asVanilla(pre.kickMessage()));
-                    return;
-                }
-                PlayerLoginEvent login = new PlayerLoginEvent(body.getBukkitEntity(), "localhost", LOOPBACK);
-                Bukkit.getPluginManager().callEvent(login);
-                verdict.accept(login.getResult() == PlayerLoginEvent.Result.ALLOWED ? null
-                        : PaperAdventure.asVanilla(login.kickMessage()));
-            });
+            // 异步线程上的任何异常都要让这一趟以失败收场:任务死在这里,"在路上"的登记就永远放不掉。原因进日志,也作为拒绝的原因交回
+            Component refusal;
+            try {
+                AsyncPlayerPreLoginEvent pre = new AsyncPlayerPreLoginEvent(profile.getName(), LOOPBACK, profile.getId());
+                Bukkit.getPluginManager().callEvent(pre);
+                refusal = pre.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED ? null
+                        : PaperAdventure.asVanilla(pre.kickMessage());
+            } catch (Throwable failure) {
+                refusal = failed(profile.getName(), failure);
+            }
+            Component early = refusal;
+            server.execute(() -> verdict.accept(early != null ? early : login(body)));
         });
+    }
+
+    /** 回到主线程补发 {@code PlayerLoginEvent};出了异常同样以失败收场。 */
+    private static Component login(NumenPlayer body) {
+        try {
+            PlayerLoginEvent login = new PlayerLoginEvent(body.getBukkitEntity(), "localhost", LOOPBACK);
+            Bukkit.getPluginManager().callEvent(login);
+            return login.getResult() == PlayerLoginEvent.Result.ALLOWED ? null : PaperAdventure.asVanilla(login.kickMessage());
+        } catch (Throwable failure) {
+            return failed(body.getGameProfile().getName(), failure);
+        }
+    }
+
+    private static Component failed(String name, Throwable failure) {
+        Constants.LOG.error("[numen] 接纳 {} 时出错", name, failure);
+        return Component.literal("接纳时出错:" + failure);
     }
 
     @Override

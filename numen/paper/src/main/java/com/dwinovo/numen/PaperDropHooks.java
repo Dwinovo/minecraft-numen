@@ -14,13 +14,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.ItemMergeEvent;
-
-import net.minecraft.world.damagesource.DamageSource;
-
-import java.util.Map;
-import java.util.WeakHashMap;
 
 /**
  * 她这一挖的掉落物去了哪({@link Drops})在模组上靠 Mixin 挂在原版上,Paper 上由事件给出;每个入口的 javadoc 写着调用方要保证什么,
@@ -31,14 +25,12 @@ import java.util.WeakHashMap;
  *   <li><b>被捡</b>:{@code EntityPickupItemEvent} 在件数被减掉之前触发,是真正收下它的实体;</li>
  *   <li><b>并堆</b>:{@code ItemMergeEvent} 在并之前触发,按原版的并法({@link ItemEntity#merge(ItemStack, ItemStack, int)})
  *       把并完以后两堆各剩几件算好交来;</li>
- *   <li><b>被毁</b>:掉落物挨打的 {@code EntityDamageEvent} 带着伤害来源,打没了触发 {@code EntityRemoveEvent}(原因 DEATH),
- *       这就是"被这一下打没了",交给 {@link Drops#destroyed}。</li>
+ *   <li><b>被毁</b>:掉落物挨打的 {@code EntityDamageEvent} 触发在扣血之前、带着伤害来源,剩余血量(公开 API {@code Item.getHealth})
+ *       按原版的扣法({@code (int)(血量 - 伤害)})扣完不超过 0,就是"被这一下打没了",当场交给 {@link Drops#destroyed}。
+ *       不听 {@code EntityRemoveEvent}:它对每个实体的移除都触发,Bukkit 把它标成会拖慢服务器,启动时会给服主一行警告。</li>
  * </ul>
  */
 final class PaperDropHooks implements Listener {
-
-    /** 刚挨了打的掉落物和打它的东西,打没了的那一下用。弱引用:没打没的随实体一起放掉。 */
-    private final Map<ItemEntity, DamageSource> hitBy = new WeakHashMap<>();
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     void onDropped(BlockDropItemEvent event) {
@@ -68,18 +60,8 @@ final class PaperDropHooks implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     void onHurt(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Item item) {
-            hitBy.put(handle(item), ((CraftDamageSource) event.getDamageSource()).getHandle());
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    void onRemoved(EntityRemoveEvent event) {
-        if (event.getCause() == EntityRemoveEvent.Cause.DEATH && event.getEntity() instanceof Item item) {
-            DamageSource source = hitBy.remove(handle(item));
-            if (source != null) {
-                Drops.destroyed(handle(item), source);
-            }
+        if (event.getEntity() instanceof Item item && (int) (item.getHealth() - (float) event.getFinalDamage()) <= 0) {
+            Drops.destroyed(handle(item), ((CraftDamageSource) event.getDamageSource()).getHandle());
         }
     }
 
