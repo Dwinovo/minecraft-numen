@@ -249,6 +249,40 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    /**
+     * 服务端对她说的话只从她到达以后才交给大脑:到达之前发来的(同一个 uuid、还没到达的那具身体收到的)不进收件箱,到达以后的照常进。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_command")
+    public static void a_companion_hears_nothing_until_she_has_arrived(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var owner = presentVanillaPlayer(helper, null, "gametest_hearing_owner", "en_us");
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Hearsay", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        java.util.UUID id = her.getUUID();
+        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+        var notArrived = new NumenPlayer(server, level, new com.mojang.authlib.GameProfile(id, "Hearsay"),
+                net.minecraft.server.level.ClientInformation.createDefault());
+
+        notArrived.fakeClient().onOutbound(new net.minecraft.network.protocol.game.ClientboundSystemChatPacket(
+                Component.literal("said-before-arriving"), false));
+        her.fakeClient().onOutbound(new net.minecraft.network.protocol.game.ClientboundSystemChatPacket(
+                Component.literal("said-after-arriving"), false));
+
+        var heard = loop.inbox().entries().stream()
+                .filter(entry -> entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.SERVER_MESSAGE))
+                .map(entry -> entry.text()).toList();
+        helper.assertTrue(heard.stream().noneMatch(text -> text.contains("said-before-arriving")),
+                "she heard what was said before she arrived: " + heard);
+        helper.assertTrue(heard.stream().anyMatch(text -> text.contains("said-after-arriving")),
+                "she did not hear what was said after she arrived: " + heard);
+        CompanionFactory.despawn(server, her);
+        com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
+        com.dwinovo.numen.api.entity.CompanionRegistry.get(server).remove(id);
+        leave(owner);
+        helper.succeed();
+    }
+
     private static PermissionStore storeOf(net.minecraft.server.level.ServerPlayer owner) {
         return PermissionStore.of(owner.getServer(), owner.getUUID());
     }

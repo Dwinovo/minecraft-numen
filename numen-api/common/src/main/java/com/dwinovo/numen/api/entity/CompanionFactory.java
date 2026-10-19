@@ -83,6 +83,7 @@ public final class CompanionFactory {
             Services.admission().admit(body[0], connection[0], verdict);
         }, stillWanted, () -> {
             join(server, body[0], connection[0], profile, ownerUuid, pos);
+            body[0].fakeClient().arrived();
             return body[0];
         }, then);
     }

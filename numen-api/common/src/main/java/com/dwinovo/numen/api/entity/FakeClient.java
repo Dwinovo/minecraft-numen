@@ -88,6 +88,12 @@ public final class FakeClient {
     /** 她正在执行的那条指令收话的地方;没在执行指令时为 null。 */
     private Consumer<Component> commandOutput;
 
+    /**
+     * 她到达了(加入并做完平台的加入后步骤,见 {@link Arrivals})。到达之前发给她的聊天(例如 Paper 在她加入列表之后才广播的、她自己的
+     * 加入消息)不算"听到的话"(她自己执行的指令的回执除外):大脑此时还没建好,模组上本来也听不到,两个平台同一个行为。
+     */
+    private boolean arrived;
+
     FakeClient(NumenPlayer player) {
         this.player = player;
         this.messages = new ServerMessages((text, overlay, repeats) -> NumenEvents.serverMessage(player, text,
@@ -108,13 +114,18 @@ public final class FakeClient {
             knockback = new Vec3(motion.getXa(), motion.getYa(), motion.getZa());
         } else if (packet instanceof ClientboundSystemChatPacket said) {
             heard(said.content(), said.overlay());
-        } else if (packet instanceof ClientboundPlayerChatPacket chat
+        } else if (arrived && packet instanceof ClientboundPlayerChatPacket chat
                 && chat.chatType().chatType().is(ChatType.MSG_COMMAND_INCOMING)) {
             // 签了名的私聊带着发话人的 uuid;正文是服务端加工过的那一版,没有就是原文
             Component text = chat.unsignedContent();
             Whispers.heard(player, chat.sender(), chat.chatType().name().getString(),
                     text != null ? text.getString() : chat.body().content());
         }
+    }
+
+    /** 她到达了:从这一刻起,服务端对她说的话才交给大脑。{@link CompanionFactory} 在到达的加入步骤做完时调。 */
+    void arrived() {
+        arrived = true;
     }
 
     /**
@@ -135,6 +146,9 @@ public final class FakeClient {
         if (commandOutput != null) {
             commandOutput.accept(content);
             return;
+        }
+        if (!arrived) {
+            return;   // 到达之前的话不进事件流(指令回执在上面已经收走)
         }
         String text = content.getString();
         if (player.isDeadOrDying() && text.equals(player.deathMessage())) {
