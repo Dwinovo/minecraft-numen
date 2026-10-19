@@ -87,19 +87,26 @@ tasks.register('runGameTestServer') {
         def failedRequired = failed.findAll { it.required }
         def failedOptional = failed.findAll { !it.required }
         logger.lifecycle("[numen-gametest] ${result.tests.size()} 条用例,用时 ${(result.durationMillis ?: 0).intdiv(1000)} 秒,结果 ${resultFile}")
-        def cappedFailures = failed.findAll { it.cappedFromTicks != null }
-        if (!cappedFailures.isEmpty()) {
-            logger.lifecycle("[numen-gametest] 其中 ${cappedFailures.size()} 条失败的用例被收短了时限(自己写的更长),结果文件里有 cappedFromTicks")
-        }
         failedOptional.each { logger.lifecycle("  可选未过 ${it.name}: ${it.error}") }
         if (result.fatal != null) {
             throw new GradleException("GameTest 没能进行下去:${result.fatal}(服务端日志 ${logFile})")
         }
+        // 用例自己写的时限比收短后的长、又没在收短后的时限里做完的,只说明"收短后的时限里没做完",不等于做不成(慢的几条放宽时限就过);
+        // 其余的才是真失败。两类分开报,放宽用 -PgametestMaxTicks
+        def unfinished = failedRequired.findAll { it.cappedFromTicks != null }
+        def really = failedRequired - unfinished
+        if (!unfinished.isEmpty()) {
+            logger.lifecycle("[numen-gametest] ${unfinished.size()} 条必过的用例被收短了时限、没在时限里做完(不一定是做不成,-PgametestMaxTicks 放宽再看):")
+            unfinished.each { logger.lifecycle("  ~ ${it.name}(自己写的时限 ${it.cappedFromTicks} 刻): ${it.error}") }
+        }
         if (failedRequired.isEmpty()) {
             logger.lifecycle("All ${result.tests.size()} required tests passed")
         } else {
-            failedRequired.each { logger.lifecycle("  - ${it.name}: ${it.error}") }
-            throw new GradleException("${failedRequired.size()} required tests failed(服务端日志 ${logFile})")
+            if (!really.isEmpty()) {
+                logger.lifecycle("[numen-gametest] ${really.size()} 条必过的用例真失败:")
+                really.each { logger.lifecycle("  - ${it.name}: ${it.error}") }
+            }
+            throw new GradleException("${failedRequired.size()} required tests failed(${really.size()} 条真失败、${unfinished.size()} 条被收短后没做完,服务端日志 ${logFile})")
         }
     }
 }
