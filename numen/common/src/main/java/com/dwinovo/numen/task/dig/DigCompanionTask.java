@@ -216,7 +216,9 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord,
         Level level = player.level();
         // 接着挖正在挖的那一格,锁住它直到碎掉或她站的地方够不着了
         if (digTarget != null) {
-            if (r.wantsAt(digTarget, level.getBlockState(digTarget)) && workable(Feet.of(player), digTarget)) {
+            // 送过 STOP 在等服务端的延迟破坏时,方块随时会被服务端挖掉:那一刻它不再"要挖",但那是挖掉了,由鼠标报,不能当"不用挖了"丢掉
+            if (digger.awaitingServer()
+                    || (r.wantsAt(digTarget, level.getBlockState(digTarget)) && workable(Feet.of(player), digTarget))) {
                 return digProgress(digTarget);
             }
             digger.cancel();

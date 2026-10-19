@@ -245,6 +245,11 @@ public class Mouse {
         return progress;
     }
 
+    /** 送过 STOP、方块还没变、服务端还挂着这一格:等它自己挖掉。这时只该再调 {@link #dig},看它报挖掉了还是被退回。 */
+    public boolean awaitingServer() {
+        return stopped != null;
+    }
+
     /** 左键正按在哪一格上(包括送了 STOP 在等服务端落地的那一格);没按为 null。 */
     public BlockPos pressing() {
         return stopped != null ? stopped : destroying;
