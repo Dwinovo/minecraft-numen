@@ -688,7 +688,7 @@ public class ScriptGameTests {
             batch = "numen_scripts")
     public static void a_client_function_the_client_never_answers_times_out_and_the_program_goes_on(
             GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_mute_client", new BlockPos(2, 2, 2), false);
+        NumenPlayer her = spawnAt(helper, "gt_mute_client", new BlockPos(2, 2, 2), false);
         programs(her).silence();
         ToolRun run = lua(her, """
                 local ok, err = pcall(gt.gt_client.hello)
@@ -700,7 +700,7 @@ public class ScriptGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the program is still waiting for the client's answer");
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gametest_mute_client"),
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gt_mute_client"),
                     "the call did not fail as a timeout with the program going on: " + run.receipt());
             helper.assertTrue(run.receipt().contains("gt.gt_client.hello: timeout — your owner's client did not answer "
                             + "gt.gt_client.hello within " + com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20

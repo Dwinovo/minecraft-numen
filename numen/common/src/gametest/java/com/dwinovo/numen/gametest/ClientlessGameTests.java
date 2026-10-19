@@ -143,14 +143,14 @@ public class ClientlessGameTests {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_host", "en_us");
         ServerPlayer stranger = GameTestKit.presentVanillaPlayer(helper, null, "gametest_passerby", "en_us");
-        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_overhearer",
+        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gt_overhearer",
                 Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
                 Replies.link(server, owner.getUUID()));
 
         whisper(stranger, her.companion, "借把镐子");
 
         helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
-                        && e.text().contains("gametest_passerby → gametest_overhearer") && e.text().contains("借把镐子")),
+                        && e.text().contains("gametest_passerby → gt_overhearer") && e.text().contains("借把镐子")),
                 "the stranger's whisper is not in her inbox, marked with who said it: " + her.loop.inbox().entries());
         helper.runAfterDelay(20, () -> {
             helper.assertTrue(her.mind.asked.isEmpty(), "a stranger's whisper woke her");

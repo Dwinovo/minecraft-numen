@@ -617,7 +617,7 @@ public class CommandGameTests {
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_drive_runs_a_program_through_her_entry(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_driven", new BlockPos(4, 2, 4), false);
+        NumenPlayer companion = spawnAt(helper, "gt_mc_driven", new BlockPos(4, 2, 4), false);
         var server = helper.getLevel().getServer();
         List<String> programs = List.of("numen.task.status()", "numen.task.stauts()", "numen.mc.run(\"help help\")",
                 "numen.mc.run(\"gvie @s stone\")");
@@ -629,7 +629,7 @@ public class CommandGameTests {
             int n = i;
             sequence = sequence
                     .thenExecute(() -> server.getCommands().performPrefixedCommand(console,
-                            "/numen drive gametest_mc_driven " + programs.get(n)))
+                            "/numen drive gt_mc_driven " + programs.get(n)))
                     .thenWaitUntil(() -> helper.assertTrue(heard.size() > n, "drive has not answered " + programs.get(n)));
         }
         sequence.thenExecute(() -> {
@@ -684,13 +684,13 @@ public class CommandGameTests {
     public static void command_drive_hears_a_native_line_the_owner_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_placer", new BlockPos(4, 2, 4), false);
+        NumenPlayer companion = spawnAt(helper, "gt_mc_placer", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_placer_owner");
         grantOp(owner);
         var server = level.getServer();
         List<String> heard = new ArrayList<>();
         server.getCommands().performPrefixedCommand(console(server, heard),
-                "numen drive gametest_mc_placer numen.mc.run(\"" + setblock(helper, target) + "\")");
+                "numen drive gt_mc_placer numen.mc.run(\"" + setblock(helper, target) + "\")");
         boolean[] allowed = new boolean[1];
 
         succeedWhen(helper, () -> {

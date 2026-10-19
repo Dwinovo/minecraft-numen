@@ -210,7 +210,7 @@ public class RemoteBrainGameTests {
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_4")
     public static void a_consent_goes_to_the_human_at_the_external_brains_client(GameTestHelper helper)
             throws Exception {
-        Rig her = new Rig(helper, "gametest_remote_asks", null);
+        Rig her = new Rig(helper, "gt_remote_asks", null);
         her.brain.connect(true);
         McpTestClient.Tap tap = her.brain.openStream();
         Object scope = new Object();
@@ -229,7 +229,7 @@ public class RemoteBrainGameTests {
             helper.assertTrue(asked[0] != null, "the human was not asked at the external brain's client: "
                     + tap.messages);
             String message = asked[0].getAsJsonObject("params").get("message").getAsString();
-            helper.assertTrue(message.contains("gametest_remote_asks") && message.contains("oak_log"),
+            helper.assertTrue(message.contains("gt_remote_asks") && message.contains("oak_log"),
                     "the question does not say who wants what: " + message);
             try {
                 her.brain.answer(asked[0], accept("allow"));
