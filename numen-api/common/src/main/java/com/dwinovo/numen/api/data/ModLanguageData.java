@@ -261,6 +261,8 @@ public final class ModLanguageData {
         // Libraries: the built-in / mine groups every content library shows, and what is said about a built-in entry.
         public static final String LIBRARY_BUILTIN  = "numen.library.builtin";
         public static final String LIBRARY_MINE     = "numen.library.mine";
+        public static final String LIBRARY_BUILTIN_ABOUT = "numen.library.builtin.about";
+        public static final String LIBRARY_MINE_ABOUT    = "numen.library.mine.about";
         public static final String LIBRARY_MODIFIED = "numen.library.modified";
         public static final String LIBRARY_UPDATE   = "numen.library.update";
         public static final String LIBRARY_GONE     = "numen.library.gone";
@@ -387,7 +389,6 @@ public final class ModLanguageData {
         public static final String COMMAND_RULE_MISTAKE_PREFIX = "numen.command.rule_mistake.";
         // 设置里的"权限"页
         public static final String PERMISSION_ADD            = "numen.permission.panel.add";
-        public static final String PERMISSION_EMPTY          = "numen.permission.panel.empty";
         public static final String PERMISSION_CLEAR          = "numen.permission.panel.clear";
         public static final String PERMISSION_CLEAR_CONFIRM  = "numen.permission.panel.clear_confirm";
         public static final String PERMISSION_DELETE_CONFIRM = "numen.permission.panel.delete_confirm";
@@ -621,8 +622,8 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "Voice input failed: %s");
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
-        adder.add("numen.persona.empty", "None · click New");
-        adder.add("numen.persona.add", "New");
+        adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a built-in to change it.");
+        adder.add("numen.persona.add", "New persona");
         adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
         adder.add("numen.persona.form_text", "Persona");
@@ -678,8 +679,8 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
-        adder.add("numen.mcp.empty", "None · click Add");
-        adder.add("numen.mcp.add", "Add");
+        adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a built-in to change it.");
+        adder.add("numen.mcp.add", "Add a tool extension");
         adder.add("numen.mcp.form_service", "Key service (optional)");
         adder.add("numen.mcp.type_http", "HTTP");
         adder.add("numen.mcp.type_stdio", "stdio");
@@ -696,7 +697,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · connecting…");
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
-        adder.add("numen.skill.empty", "None");
+        adder.add("numen.skill.empty", "No skills of your own yet. Copy a built-in to make your own version.");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
@@ -710,8 +711,8 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
-        adder.add(Keys.PROVIDER_EMPTY,          "No model config yet — click New to create one");
-        adder.add(Keys.PROVIDER_ADD,            "New");
+        adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.PROVIDER_ADD,            "New model config");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "Name (required)");
@@ -761,8 +762,8 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_DRAFT,             "Draft");
         adder.add(Keys.RAIL_NO_MATCH,          "No matches");
         adder.add(Keys.SKIN_TITLE,           "Skins");
-        adder.add(Keys.SKIN_ADD,             "New");
-        adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then pick a 64×64 skin png.");
+        adder.add(Keys.SKIN_ADD,             "New skin");
+        adder.add(Keys.SKIN_EMPTY,           "No skins of your own yet. Create one and pick a 64×64 skin png.");
         adder.add(Keys.SKIN_FORM_NAME,       "Name (required)");
         adder.add(Keys.SKIN_FORM_VARIANT,    "Arm model");
         adder.add(Keys.SKIN_VARIANT_CLASSIC, "Classic (wide arms)");
@@ -837,6 +838,8 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_NO_URL,  "Model config \"%s\" has no base URL — add it in Settings → Model Configs");
         adder.add(Keys.LIBRARY_BUILTIN,  "Built-in");
         adder.add(Keys.LIBRARY_MINE,     "Mine");
+        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "Shared by the server with everyone. Switch them on or off, or copy one to Mine to change it.");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "Only yours. Nobody else sees these.");
         adder.add(Keys.LIBRARY_MODIFIED, "modified");
         adder.add(Keys.LIBRARY_UPDATE,   "new default available");
         adder.add(Keys.LIBRARY_GONE,     "source uninstalled");
@@ -855,8 +858,8 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "Voice");
         adder.add(Keys.VOICE_ENABLED,        "Enabled");
-        adder.add(Keys.VOICE_EMPTY,          "No voice yet — click New to create one");
-        adder.add(Keys.VOICE_ADD,            "New");
+        adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.VOICE_ADD,            "New voice");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "Delete voice \"%s\"? Companions bound to it fall silent.");
         adder.add(Keys.VOICE_FORM_NAME,      "Name (required)");
         adder.add(Keys.VOICE_BACKEND_OPENAI,  "OpenAI-compatible");
@@ -1072,7 +1075,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_REMOVED,      "Removed from %s: %s");
         adder.add(Keys.COMMAND_RULES_RESET,       "Cleared your deny, ask and allow tables; the factory rules still apply");
         adder.add(Keys.PERMISSION_ADD,            "Add a rule");
-        adder.add(Keys.PERMISSION_EMPTY,          "No rules to show yet");
         adder.add(Keys.PERMISSION_CLEAR,          "Clear");
         adder.add(Keys.PERMISSION_CLEAR_CONFIRM,  "Clear all of your own rules? The factory rules and the server's hard rules still apply.");
         adder.add(Keys.PERMISSION_DELETE_CONFIRM, "Remove this rule: %s");
@@ -1133,7 +1135,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "Clear %s's memory?");
         adder.add(Keys.WIPE_WARNING,           "Her chat log, notes and long-term goal are deleted and she is told so. She stays on your roster and keeps her body. This cannot be undone");
         adder.add(Keys.WIPE_CONFIRM,           "Clear");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "New built-in");
+        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "New for everyone");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
@@ -1326,8 +1328,8 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "语音输入失败：%s");
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");
-        adder.add("numen.persona.empty", "无 · 点「新建」");
-        adder.add("numen.persona.add", "新建");
+        adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把内置的复制过来改。");
+        adder.add("numen.persona.add", "新建人设");
         adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
         adder.add("numen.persona.form_text", "人设描述");
@@ -1383,8 +1385,8 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
-        adder.add("numen.mcp.empty", "无 · 点「添加」");
-        adder.add("numen.mcp.add", "添加");
+        adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把内置的复制过来改。");
+        adder.add("numen.mcp.add", "添加工具扩展");
         adder.add("numen.mcp.form_service", "密钥用的服务名(可选)");
         adder.add("numen.mcp.type_http", "HTTP");
         adder.add("numen.mcp.type_stdio", "stdio");
@@ -1401,7 +1403,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · 连接中…");
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
-        adder.add("numen.skill.empty", "无");
+        adder.add("numen.skill.empty", "还没有自己的技能。把内置的复制过来,就有了自己的版本。");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
@@ -1415,8 +1417,8 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");
-        adder.add(Keys.PROVIDER_EMPTY,          "还没有模型配置——点「新建」创建一条");
-        adder.add(Keys.PROVIDER_ADD,            "新建");
+        adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.PROVIDER_ADD,            "新建模型配置");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "名称(必填)");
@@ -1466,8 +1468,8 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_DRAFT,             "草稿");
         adder.add(Keys.RAIL_NO_MATCH,          "没有对得上的会话");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
-        adder.add(Keys.SKIN_ADD,             "新建");
-        adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点\"新建\",再选一张 64×64 的皮肤 png。");
+        adder.add(Keys.SKIN_ADD,             "新建皮肤");
+        adder.add(Keys.SKIN_EMPTY,           "还没有自己的皮肤。新建一张,选一张 64×64 的 png。");
         adder.add(Keys.SKIN_FORM_NAME,       "名称(必填)");
         adder.add(Keys.SKIN_FORM_VARIANT,    "手臂模型");
         adder.add(Keys.SKIN_VARIANT_CLASSIC, "经典(粗手臂)");
@@ -1542,6 +1544,8 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_NO_URL,  "模型配置「%s」没有接口地址——到 设置 → 模型配置 补上");
         adder.add(Keys.LIBRARY_BUILTIN,  "内置");
         adder.add(Keys.LIBRARY_MINE,     "我的");
+        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "服主给所有人的。能开关,想改就复制到「我的」。");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "只有你自己的。");
         adder.add(Keys.LIBRARY_MODIFIED, "已修改");
         adder.add(Keys.LIBRARY_UPDATE,   "默认内容有更新");
         adder.add(Keys.LIBRARY_GONE,     "来源已卸载");
@@ -1560,8 +1564,8 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "语音");
         adder.add(Keys.VOICE_ENABLED,        "启用");
-        adder.add(Keys.VOICE_EMPTY,          "还没有声线——点「新建」创建一条");
-        adder.add(Keys.VOICE_ADD,            "新建");
+        adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.VOICE_ADD,            "新建声线");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "删除声线「%s」?绑定它的同伴将静音。");
         adder.add(Keys.VOICE_FORM_NAME,      "名称(必填)");
         adder.add(Keys.VOICE_BACKEND_OPENAI,  "OpenAI 兼容");
@@ -1778,7 +1782,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_REMOVED,      "已从 %s 删掉:%s");
         adder.add(Keys.COMMAND_RULES_RESET,       "清空了你的 deny、ask、allow 三张表;出厂规则照旧生效");
         adder.add(Keys.PERMISSION_ADD,            "加一条规则");
-        adder.add(Keys.PERMISSION_EMPTY,          "还没有规则可看");
         adder.add(Keys.PERMISSION_CLEAR,          "清空");
         adder.add(Keys.PERMISSION_CLEAR_CONFIRM,  "清空你自己写的所有规则?出厂规则和服主的硬规则照旧生效。");
         adder.add(Keys.PERMISSION_DELETE_CONFIRM, "删掉这条规则:%s");
@@ -1839,7 +1842,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "清空「%s」的记忆?");
         adder.add(Keys.WIPE_WARNING,           "她的对话记录、札记和长期目标会被删掉,并且告诉她。她还在你的名册里、身体不动。无法撤销");
         adder.add(Keys.WIPE_CONFIRM,           "清空");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "新建内置");
+        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "为所有人新建");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");

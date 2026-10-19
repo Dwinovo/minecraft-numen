@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.client.ui.NumenTheme;
 
 import java.util.List;
 import java.util.function.IntConsumer;
+import java.util.function.IntPredicate;
 
 /**
  * 数据驱动的可滚动列表(站点列表/同伴列表的底盘)。只画可视行(scissor),
@@ -32,6 +33,8 @@ public final class ListView<T> extends Widget {
     private final RowRenderer<T> renderer;
     private final IntConsumer onSelect;
     private RowClick rowClick;
+    /** 哪些行会亮悬停底(标题行、说明行这类不是控件的行不亮)。 */
+    private IntPredicate hoverable = i -> true;
     private int selectedIndex = -1;
     private double scrollY;
     /** 悬停行与其淡入进度(行悬停底由列表统一画,渲染回调只管内容)。 */
@@ -48,6 +51,11 @@ public final class ListView<T> extends Widget {
 
     public ListView<T> rowClick(RowClick rc) {
         this.rowClick = rc;
+        return this;
+    }
+
+    public ListView<T> hoverable(IntPredicate hoverable) {
+        this.hoverable = hoverable;
         return this;
     }
 
@@ -94,6 +102,7 @@ public final class ListView<T> extends Widget {
         s.pushScissor(x, y, w, h);
         int[] range = visibleRange();
         int hoveredRow = contains(mouseX, mouseY) ? rowAt(mouseY) : -1;
+        if (hoveredRow >= 0 && !hoverable.test(hoveredRow)) hoveredRow = -1;
         // 行悬停底统一在这画(短过渡淡入淡出),渲染回调只画内容。
         long dt = lastFrameMs < 0 ? 1000 : nowMs - lastFrameMs;
         lastFrameMs = nowMs;

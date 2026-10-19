@@ -103,9 +103,9 @@ public final class SettingsView {
 
     // ---- 内容库(模型档案、人设、技能、MCP 工具)共有的几样:分组、说明里的标记、给管理员的新版处理 ----
 
-    /** 条目在列表里属于哪一组:内置的在前、我的在后,各一行标题。 */
+    /** 条目在列表里属于哪一节:内置的归"内置",其余归"我的"。 */
     private static String groupOf(ServerLibraries.Base b) {
-        return I18n.get(b.builtin() ? ModLanguageData.Keys.LIBRARY_BUILTIN : ModLanguageData.Keys.LIBRARY_MINE);
+        return b.builtin() ? LibraryListPanel.BUILTIN : LibraryListPanel.MINE;
     }
 
     /** 说明行:关着、改过、有新版、来源卸载了、盖着/被盖着,这些标记在前,各库自己的说明在后。 */
@@ -190,8 +190,6 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Provider> profileList() {
         if (profileList == null) {
             profileList = new LibraryListPanel<ServerLibraries.Provider>(
-                    ModLanguageData.Keys.PROVIDER_ADD,
-                    ModLanguageData.Keys.PROVIDER_EMPTY,
                     ServerLibraries::providers,
                     e -> {
                         String detail = (nb(e.provider()) ? e.provider() : "?") + " · "
@@ -206,10 +204,10 @@ public final class SettingsView {
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
                     e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id(), e.base().builtin()),
-                    () -> beginNewProvider(false),
                     this::beginEditProvider)
-                    .withAddBuiltin(() -> beginNewProvider(true))
-                    .withGroups(e -> groupOf(e.base()))
+                    .withSections(e -> groupOf(e.base()),
+                            LibraryListPanel.shelves(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
+                                    () -> beginNewProvider(false), () -> beginNewProvider(true)))
                     .withMenu(e -> updateMenu(Libraries.PROVIDER, e.base()))
                     .withClone(e -> request(Libraries.PROVIDER, Libraries.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.PROVIDER, e.base()))
@@ -234,8 +232,6 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Voice> voiceListPanel() {
         if (voiceListPanel == null) {
             voiceListPanel = new LibraryListPanel<ServerLibraries.Voice>(
-                    ModLanguageData.Keys.VOICE_ADD,
-                    ModLanguageData.Keys.VOICE_EMPTY,
                     ServerLibraries::voices,
                     e -> {
                         var voice = e.profile();
@@ -261,10 +257,10 @@ public final class SettingsView {
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
                     e -> RemoteCompanions.library().delete(Libraries.VOICE, e.id(), e.base().builtin()),
-                    () -> beginNewVoice(false),
                     this::beginEditVoice)
-                    .withAddBuiltin(() -> beginNewVoice(true))
-                    .withGroups(e -> groupOf(e.base()))
+                    .withSections(e -> groupOf(e.base()),
+                            LibraryListPanel.shelves(ModLanguageData.Keys.VOICE_ADD, ModLanguageData.Keys.VOICE_EMPTY,
+                                    () -> beginNewVoice(false), () -> beginNewVoice(true)))
                     .withMenu(e -> updateMenu(Libraries.VOICE, e.base()))
                     .withClone(e -> request(Libraries.VOICE, Libraries.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.VOICE, e.base()))
@@ -831,7 +827,6 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Persona> personaListPanel() {
         if (personaListPanel == null) {
             personaListPanel = new LibraryListPanel<>(
-                    "numen.persona.add", "numen.persona.empty",
                     ServerLibraries::personas,
                     p -> {
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
@@ -844,10 +839,10 @@ public final class SettingsView {
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
                     p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id(), p.base().builtin()),
-                    () -> beginNewPersona(false),
                     this::beginEditPersona)
-                    .withAddBuiltin(() -> beginNewPersona(true))
-                    .withGroups(p -> groupOf(p.base()))
+                    .withSections(p -> groupOf(p.base()),
+                            LibraryListPanel.shelves("numen.persona.add", "numen.persona.empty",
+                                    () -> beginNewPersona(false), () -> beginNewPersona(true)))
                     .withMenu(p -> updateMenu(Libraries.PERSONA, p.base()))
                     .withClone(p -> request(Libraries.PERSONA, Libraries.COPY, p.base()))
                     .withRowToggle(p -> p.base().enabled(), p -> flip(Libraries.PERSONA, p.base()))
@@ -988,17 +983,16 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel() {
         if (mcpListPanel == null) {
             mcpListPanel = new LibraryListPanel<ServerLibraries.McpClientRow>(
-                    "numen.mcp.add", "numen.mcp.empty",
                     ServerLibraries::mcpClients,
                     h -> new LibraryListPanel.Row(h.name(), meta(h.base(), mcpMeta(h)),
                             h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED, null,
                             !mcpOwned(h), h.base().builtin()),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
                     h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().builtin()),
-                    () -> beginNewMcp(false),
                     this::beginEditMcp)
-                    .withAddBuiltin(() -> beginNewMcp(true))
-                    .withGroups(h -> groupOf(h.base()))
+                    .withSections(h -> groupOf(h.base()),
+                            LibraryListPanel.shelves("numen.mcp.add", "numen.mcp.empty",
+                                    () -> beginNewMcp(false), () -> beginNewMcp(true)))
                     .withMenu(h -> updateMenu(Libraries.MCP_CLIENT, h.base()))
                     .withClone(h -> request(Libraries.MCP_CLIENT, Libraries.COPY, h.base()))
                     .withTitleAction(I18n.get("numen.mcp.paste_auth"), () -> {
@@ -1143,7 +1137,6 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Skill> skillsListPanel() {
         if (skillsListPanel == null) {
             skillsListPanel = new LibraryListPanel<ServerLibraries.Skill>(
-                    null, "numen.skill.empty",
                     ServerLibraries::skills,
                     sk -> {
                         String desc = sk.description() == null || sk.description().isBlank()
@@ -1151,8 +1144,9 @@ public final class SettingsView {
                         return new LibraryListPanel.Row(sk.name(), meta(sk.base(), desc), false, null, false,
                                 sk.base().builtin());
                     },
-                    null, null, null, null)
-                    .withGroups(sk -> groupOf(sk.base()))
+                    null, null, null)
+                    .withSections(sk -> groupOf(sk.base()),
+                            LibraryListPanel.shelves(null, "numen.skill.empty", null, null))
                     .withMenu(sk -> updateMenu(Libraries.SKILL, sk.base()))
                     .withClone(sk -> request(Libraries.SKILL, Libraries.COPY, sk.base()))
                     .withRowToggle(ServerLibraries.Skill::enabled, sk -> flip(Libraries.SKILL, sk.base()))
@@ -1212,8 +1206,6 @@ public final class SettingsView {
     private LibraryListPanel<SkinLine> skinListPanel() {
         if (skinListPanel == null) {
             skinListPanel = new LibraryListPanel<SkinLine>(
-                    ModLanguageData.Keys.SKIN_ADD,
-                    ModLanguageData.Keys.SKIN_EMPTY,
                     SettingsView::skinLines,
                     line -> {
                         if (line.job() != null) {
@@ -1243,10 +1235,10 @@ public final class SettingsView {
                             RemoteCompanions.library().delete(Libraries.SKIN, line.skin().id(), line.skin().base().builtin());
                         }
                     },
-                    () -> beginNewSkin(false),
                     this::beginEditSkin)
-                    .withAddBuiltin(() -> beginNewSkin(true))
-                    .withGroups(line -> line.skin() == null ? null : groupOf(line.skin().base()))
+                    .withSections(line -> line.skin() == null ? LibraryListPanel.MINE : groupOf(line.skin().base()),
+                            LibraryListPanel.shelves(ModLanguageData.Keys.SKIN_ADD, ModLanguageData.Keys.SKIN_EMPTY,
+                                    () -> beginNewSkin(false), () -> beginNewSkin(true)))
                     .withMenu(line -> line.skin() == null ? List.of() : updateMenu(Libraries.SKIN, line.skin().base()))
                     .withClone(line -> {
                         if (line.skin() != null) {

@@ -60,15 +60,12 @@ public final class PermissionPanel {
         Minecraft mc = Minecraft.getInstance();
         top.setClipboard(() -> mc.keyboardHandler.getClipboard(), s -> mc.keyboardHandler.setClipboard(s));
         rules = new LibraryListPanel<ServerLibraries.PermissionRule>(
-                ModLanguageData.Keys.PERMISSION_ADD,
-                ModLanguageData.Keys.PERMISSION_EMPTY,
                 () -> permission().rules(),
                 PermissionPanel::row,
                 r -> I18n.get(ModLanguageData.Keys.PERMISSION_DELETE_CONFIRM, r.rule()),
                 r -> ServerLibraries.deleteRule(r.table(), r.rule()),
-                onAdd,
                 null)
-                .withGroups(PermissionPanel::group)
+                .withSections(PermissionPanel::group, () -> sections(onAdd))
                 .withTitleAction(I18n.get(ModLanguageData.Keys.PERMISSION_CLEAR), this::askClear)
                 .following(Libraries.PERMISSION);
     }
@@ -145,8 +142,24 @@ public final class PermissionPanel {
 
     // ---- 列表的行与分组 ----
 
+    /** 一条规则所在的节:层加表(硬规则、你的拒绝/询问/允许、出厂的询问/允许)。 */
     private static String group(ServerLibraries.PermissionRule r) {
-        return I18n.get(ModLanguageData.Keys.PERMISSION_GROUP_PREFIX + r.layer() + "." + r.table());
+        return r.layer() + "." + r.table();
+    }
+
+    private static final List<String> GROUPS = List.of(
+            "hard.deny", "owner.deny", "owner.ask", "owner.allow", "factory.ask", "factory.allow");
+
+    /** 六节按这个顺序排;有条目才显示,只有挂着新建行的"允许"一节空着也在,"加一条规则"挂在"允许"一节末尾。 */
+    private static List<LibraryListPanel.Section> sections(Runnable onAdd) {
+        List<LibraryListPanel.Section> out = new ArrayList<>();
+        for (String id : GROUPS) {
+            LibraryListPanel.Add add = id.equals("owner.allow")
+                    ? new LibraryListPanel.Add(I18n.get(ModLanguageData.Keys.PERMISSION_ADD), onAdd) : null;
+            out.add(new LibraryListPanel.Section(id, I18n.get(ModLanguageData.Keys.PERMISSION_GROUP_PREFIX + id),
+                    null, null, add, add != null));
+        }
+        return out;
     }
 
     /** 一行:规则原文,下面一行小字是来源和命中账。主人层的能删(不是只读行);硬规则与出厂层只读。 */
