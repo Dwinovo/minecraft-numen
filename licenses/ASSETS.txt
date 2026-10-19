@@ -20,12 +20,9 @@ Creative Commons Attribution 4.0 International license
 (https://creativecommons.org/licenses/by/4.0/), with attribution to
 "Numen (言出法随) by Dwinovo, https://github.com/Dwinovo/minecraft-numen":
 
-  - the screenshots under `assets/showcase/`;
-  - the demo animation `assets/numen-demo.gif`;
   - the diagrams under `assets/diagrams/`.
 
-This covers the project's own rights only. Minecraft content shown in the
-screenshots and the demo remains subject to Mojang's and Microsoft's terms.
+This covers the project's own rights only.
 
 Third-party art (NOT covered by the reservation below)
 ------------------------------------------------------
