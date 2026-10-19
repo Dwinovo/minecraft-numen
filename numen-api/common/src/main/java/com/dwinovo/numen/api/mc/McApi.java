@@ -17,6 +17,7 @@ import com.mojang.brigadier.context.ContextChain;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.commands.Commands;
 
 import java.util.ArrayList;
@@ -37,14 +38,8 @@ import java.util.List;
  */
 public final class McApi {
 
-    /** 原版的 {@code help}:不带参数列她此刻能执行的指令,带一条指令给出它的用法。 */
+    /** {@code help}:不带参数列她此刻能执行的指令,带一条指令给出它的用法(自己从指令树上读,见 {@link #help})。 */
     private static final String HELP = "help";
-
-    /**
-     * 原版的指令命名空间别名({@code minecraft:help}):有的服务端(Paper)把 {@code help} 这个名字让给了自己的帮助,原版那条只剩这个别名;
-     * 别名在,她要的原版帮助就走它,不在({@code help} 本来就是原版的)就是 {@code help} 本身。名字是谁占着不重要,取的是树里原版那一条。
-     */
-    private static final String VANILLA_HELP = "minecraft:help";
 
     private McApi() {}
 
@@ -117,37 +112,46 @@ public final class McApi {
         }
     }
 
-    /** 这一行真正交给指令树跑的样子:{@code help …} 走原版那一条(见 {@link #VANILLA_HELP}),别的原样。 */
-    static String vanillaHelp(CommandDispatcher<CommandSourceStack> dispatcher, String line) {
-        String[] words = line.split(" ", 2);
-        if (!words[0].equals(HELP) || dispatcher.getRoot().getChild(VANILLA_HELP) == null) {
-            return line;
-        }
-        return words.length == 1 ? VANILLA_HELP : VANILLA_HELP + " " + words[1];
-    }
-
     /**
      * 以她的身份执行,回话去处换成 {@link Echo}。{@code help <指令>} 跑成了,原版那一行用法之后接上从 Brigadier 挖出的几行。
      *
      * @throws ApiError {@link ErrorKind#FAILED}:没跑成,说它说了什么
      */
     private static Ran perform(NumenPlayer her, String line) {
-        Echo echo = new Echo(her.shouldInformAdmins());
         CommandDispatcher<CommandSourceStack> dispatcher = her.getServer().getCommands().getDispatcher();
-        String runs = vanillaHelp(dispatcher, line);
+        String[] words = line.split(" ", 2);
+        if (words[0].equals(HELP)) {
+            return help(her, dispatcher, line, words.length == 2 ? words[1] : "");
+        }
+        Echo echo = new Echo(her.shouldInformAdmins());
         her.fakeClient().runCommand(echo::toHer, () -> her.getServer().getCommands().performPrefixedCommand(
-                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), runs));
+                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), line));
         List<String> output = new ArrayList<>(echo.lines());
         Ran ran = new Ran("/" + line, output, echo.result());
         if (!echo.succeeded()) {
             throw new ApiError(ErrorKind.FAILED, "/" + line + " failed: "
                     + (output.isEmpty() ? "(no output)" : String.join("\n", output)), null, ran);
         }
-        String[] words = line.split(" ", 2);
-        if (words[0].equals(HELP) && words.length == 2) {
-            String more = BrigadierHelp.mine(dispatcher, words[1], her.createCommandSourceStack());
-            more.lines().filter(l -> !l.isBlank()).forEach(output::add);
+        return ran;
+    }
+
+    /**
+     * {@code help}:她要的是指令树对某条指令的说明,直接从调度器上读,不执行任何叫 {@code help} 的指令——这个名字在有的服务端
+     * 被别的帮助占着,那一条说的不是这棵树。用法一行一条({@link BrigadierHelp#usage},原版 {@code help} 的写法),
+     * 带了指令的,再接上从 Brigadier 挖出的参数类型、例子与接下来能写什么。
+     */
+    private static Ran help(NumenPlayer her, CommandDispatcher<CommandSourceStack> dispatcher, String line, String command) {
+        CommandSourceStack source = her.createCommandSourceStack();
+        List<String> usage = BrigadierHelp.usage(dispatcher, command, source);
+        if (usage == null) {
+            throw new ApiError(ErrorKind.FAILED, "/" + line + " failed: "
+                    + Component.translatable("commands.help.failed").getString(), null);
         }
-        return new Ran(ran.command(), List.copyOf(output), ran.result());
+        List<String> output = new ArrayList<>(usage);
+        int result = output.size();
+        if (!command.isEmpty()) {
+            BrigadierHelp.mine(dispatcher, command, source).lines().filter(l -> !l.isBlank()).forEach(output::add);
+        }
+        return new Ran("/" + line, List.copyOf(output), result);
     }
 }
