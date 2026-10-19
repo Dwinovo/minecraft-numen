@@ -70,7 +70,7 @@ public final class LibraryListPanel<T> {
     public record Add(String label, Runnable run) {}
 
     /**
-     * 列表里的一节。{@code about} 是标题下这一节的说明,{@code emptyAbout} 是本节没有条目时换上的话(都可空);
+     * 列表里的一节。{@code about} 是标题下这一节的说明,一直在;{@code emptyAbout} 是本节没有条目时换上的话(都可空);
      * {@code add} 空 = 本节没有新建行;{@code always} = 没有条目也显示本节(显示新建行或空状态的话)。
      */
     public record Section(String id, String title, String about, String emptyAbout, Add add, boolean always) {}
@@ -424,7 +424,7 @@ public final class LibraryListPanel<T> {
                 next.add(new Line<>(Kind.ITEM, e, sec, keyOf(e), 0));
             }
             if (sec.add() != null) next.add(new Line<>(Kind.ADD, null, sec, null, 0));
-            String about = mine.isEmpty() ? sec.emptyAbout() : sec.about();
+            String about = mine.isEmpty() && sec.emptyAbout() != null ? sec.emptyAbout() : sec.about();
             if (about != null) next.add(new Line<>(Kind.ABOUT, null, sec, about, 0));
         }
         fadeChanges(next);
