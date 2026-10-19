@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/branding/logo/icon-rounded/white/numen-256.png" alt="言出法随" width="128">
+<img src="assets/branding/logo/svg/numen-mark.svg" alt="言出法随" width="128">
 
 # 言出法随
 

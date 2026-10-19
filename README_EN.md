@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/branding/logo/icon-rounded/white/numen-256.png" alt="Numen" width="128">
+<img src="assets/branding/logo/svg/numen-mark.svg" alt="Numen" width="128">
 
 # Numen
 
