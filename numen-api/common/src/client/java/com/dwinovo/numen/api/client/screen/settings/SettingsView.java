@@ -859,8 +859,8 @@ public final class SettingsView {
                                 }
                             })
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
-                    .withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.PERSONA,
-                            Libraries.RELOAD, new JsonObject()))
+                    .withHeaderAction(Sprites.REFRESH, I18n.get(ModLanguageData.Keys.LIBRARY_RELOAD),
+                            () -> RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject()))
                     .following(Libraries.PERSONA);
         }
         return personaListPanel;
@@ -1151,8 +1151,8 @@ public final class SettingsView {
                     .withClone(sk -> request(Libraries.SKILL, Libraries.COPY, sk.base()))
                     .withRowToggle(ServerLibraries.Skill::enabled, sk -> flip(Libraries.SKILL, sk.base()))
                     // 技能目录在服务器上:往里放了新的,↻ 让服务器重扫
-                    .withTitleAction("↻", () -> RemoteCompanions.library().request(Libraries.SKILL,
-                            Libraries.RELOAD, new JsonObject()))
+                    .withHeaderAction(Sprites.REFRESH, I18n.get(ModLanguageData.Keys.LIBRARY_RELOAD),
+                            () -> RemoteCompanions.library().request(Libraries.SKILL, Libraries.RELOAD, new JsonObject()))
                     .following(Libraries.SKILL);
         }
         return skillsListPanel;
@@ -1724,6 +1724,12 @@ public final class SettingsView {
     }
 
     /** 这个分区是不是条目库(列表页);不是的给 null。 */
+    /** 当前库页要放在页面抬头右端的图标钮;不在库页、在退出途中或表单开着都是 null。 */
+    public LibraryListPanel.HeaderAction headerAction() {
+        LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
+        return lib == null ? null : lib.headerAction();
+    }
+
     private LibraryListPanel<?> libraryOf(Section s) {
         return switch (s) {
             case PROVIDER -> profileList();

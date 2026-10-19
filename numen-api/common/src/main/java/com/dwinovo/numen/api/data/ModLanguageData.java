@@ -432,6 +432,7 @@ public final class ModLanguageData {
         public static final String WIPE_CONFIRM             = "numen.wipe.confirm";
         public static final String LIBRARY_ADD_BUILTIN      = "numen.library.add_builtin";
         public static final String LIBRARY_RESTORE          = "numen.library.restore";
+        public static final String LIBRARY_RELOAD           = "numen.library.reload";
         public static final String VOICE_FORM_SERVICE       = "numen.voice.form_service";
         public static final String VOICE_NO_KEY             = "numen.voice.no_key";
         public static final String SKIN_NOTICE              = "numen.skin.notice";
@@ -1137,6 +1138,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_CONFIRM,           "Clear");
         adder.add(Keys.LIBRARY_ADD_BUILTIN,    "New for everyone");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
+        adder.add(Keys.LIBRARY_RELOAD,         "Rescan the server's folder");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
         adder.add(Keys.SKIN_NOTICE,            "The image is handed to MineSkin to be signed");
@@ -1844,6 +1846,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_CONFIRM,           "清空");
         adder.add(Keys.LIBRARY_ADD_BUILTIN,    "为所有人新建");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
+        adder.add(Keys.LIBRARY_RELOAD,         "重新扫描服务器上的目录");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
         adder.add(Keys.SKIN_NOTICE,            "图片会交给 MineSkin 签名");

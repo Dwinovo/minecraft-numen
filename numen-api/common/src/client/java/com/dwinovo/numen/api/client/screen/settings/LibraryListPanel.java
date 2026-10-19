@@ -11,13 +11,12 @@ import com.dwinovo.numen.api.client.ui.TextWrap;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.ConfirmDialog;
-import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.ListView;
-import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,8 +75,8 @@ public final class LibraryListPanel<T> {
      */
     public record Section(String id, String title, String about, String emptyAbout, Add add, boolean always) {}
 
-    /** 一行是什么:节标题、条目、新建行、节末的说明。 */
-    private enum Kind { HEADING, ITEM, ADD, ABOUT }
+    /** 一行是什么:页顶的开关行、节标题、条目、新建行、节末的说明。 */
+    private enum Kind { SWITCH, HEADING, ITEM, ADD, ABOUT }
 
     /**
      * 列表里的一行。说明行的 {@code key} 是那段话;条目行的 {@code key} 认条目(新增/删除时淡入淡出靠它对账);{@code leaveAt} 非零 = 条目已经没了,
@@ -149,7 +148,11 @@ public final class LibraryListPanel<T> {
     // 可选的绑定动作:给当前同伴用;onUnbind 为 null 的库不许解绑(必须有一个)。
     private Consumer<T> onBind;
     private Consumer<T> onUnbind;
-    // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
+    /** 页面抬头(← 与标题那一行)右端的图标钮:画与点击都在宿主的抬头上(Telegram 子页抬头右端的图标)。 */
+    public record HeaderAction(ResourceLocation icon, String tooltip, Runnable run) {}
+
+    private HeaderAction headerAction;
+    // 可选的标题行附加文字钮(MCP 的"粘贴授权地址")。
     private String titleActionLabel;
     private Runnable titleAction;
 
@@ -273,7 +276,17 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 标题行附加按钮(右端的小方钮,如人格库的 ↻ 重扫)。 */
+    /** 抬头右端的图标钮(如人格、技能库的 ↻ 重扫)。 */
+    public LibraryListPanel<T> withHeaderAction(ResourceLocation icon, String tooltip, Runnable run) {
+        this.headerAction = new HeaderAction(icon, tooltip, run);
+        return this;
+    }
+
+    public HeaderAction headerAction() {
+        return headerAction;
+    }
+
+    /** 标题行附加按钮(右端的文字钮)。 */
     public LibraryListPanel<T> withTitleAction(String label, Runnable action) {
         this.titleActionLabel = label;
         this.titleAction = action;
@@ -291,11 +304,10 @@ public final class LibraryListPanel<T> {
         ui.clear();
         menu.closeOverlay();   // 浮层通道随重建清空了,开着的菜单跟着收起(淡出)
 
-        // 这一页叫什么写在面板抬头上(Telegram 子页);有全局开关或附加动作才留一行抬头,
-        // 新建在各节里(见 Section.add),不在抬头上
+        // 这一页叫什么写在面板抬头上(Telegram 子页),全局开关是列表第一行,新建在各节里(见 Section.add);
+        // 只有文字附加钮才留一行抬头
         var font = Minecraft.getInstance().font;
-        boolean headerRow = titleAction != null || toggleGet != null;
-        int actionRight = x + w;   // 右端的动作从右往左排
+        boolean headerRow = titleAction != null;
         if (titleAction != null) {
             // 宽随文案实测(写死会被长文案穿底/盖住邻钮)。
             int aw = Math.max(18, font.width(titleActionLabel) + 12);
@@ -303,26 +315,17 @@ public final class LibraryListPanel<T> {
                 titleAction.run();
                 refresh();   // 动作(重扫等)可能改变条目集,当场刷新
             }));
-            act.setBounds(actionRight - aw, y, aw, NumenStyle.HEADER_H);
-            actionRight -= aw + 6;
-        }
-
-        if (toggleGet != null) {
-            Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
-            int togX = actionRight - 22;
-            tog.setBounds(togX, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
-            String label = t(toggleLabelKey);
-            int lw = font.width(label);
-            Label togLabel = ui.add(new Label(label, Label.Role.SECONDARY));
-            // 宽度=实测文本宽:标签后加在按钮之上,虚宽会盖住右侧的附加钮吞掉点击。
-            togLabel.setBounds(togX - lw - 4, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), lw, 9);
+            act.setBounds(x + w - aw, y, aw, NumenStyle.HEADER_H);
         }
 
         int body = headerRow ? NumenStyle.bodyTop(y) : y;
 
         list = ui.add(new ListView<Line<T>>(lines, ROW_H, this::renderRow, null)
-                .hoverable(i -> i < lines.size() && lines.get(i).kind() != Kind.HEADING && lines.get(i).kind() != Kind.ABOUT
-                        && (lines.get(i).kind() == Kind.ADD || lines.get(i).live()))
+                .hoverable(i -> i < lines.size() && (switch (lines.get(i).kind()) {
+                    case SWITCH, ADD -> true;
+                    case ITEM -> lines.get(i).live();
+                    case HEADING, ABOUT -> false;
+                }))
                 .rowClick(this::rowClicked));
         list.setBounds(x, body, w, y + h - body);
         ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
@@ -353,15 +356,19 @@ public final class LibraryListPanel<T> {
         ui.renderOverlayLayer(s, c, mx, my, nowMs);
     }
 
+    private boolean isOn(Line<T> line) {
+        return line.kind() == Kind.SWITCH ? toggleGet.get() : toggleOn.test(line.item());
+    }
+
     /** 帧间隔归一化的趋近(与 Toggle 组件同一节律);到位即释放动画行。 */
     private void advanceRowToggleAnim(long nowMs) {
         long dt = lastAnimMs < 0 ? 16 : nowMs - lastAnimMs;
         lastAnimMs = nowMs;
-        if (animRow < 0 || animRow >= lines.size() || !lines.get(animRow).live()) {
+        if (animRow < 0 || animRow >= lines.size() || !(lines.get(animRow).live() || lines.get(animRow).kind() == Kind.SWITCH)) {
             animRow = -1;
             return;
         }
-        float target = toggleOn.test(lines.get(animRow).item()) ? 1f : 0f;
+        float target = isOn(lines.get(animRow)) ? 1f : 0f;
         float speed = Math.min(1f, dt / 16f * 0.35f);
         animKnob = com.dwinovo.numen.api.client.ui.Animation.lerpTo(animKnob, target, speed, 0.01f);
         if (Math.abs(animKnob - target) < 0.01f) animRow = -1;
@@ -405,6 +412,7 @@ public final class LibraryListPanel<T> {
         }
         entries = source.get();
         List<Line<T>> next = new ArrayList<>();
+        if (toggleGet != null) next.add(new Line<>(Kind.SWITCH, null, null, null, 0));
         for (Section sec : sections.get()) {
             List<T> mine = new ArrayList<>();
             for (T e : entries) {
@@ -478,6 +486,15 @@ public final class LibraryListPanel<T> {
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, Line<T> line, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
         switch (line.kind()) {
+            case SWITCH -> {
+                // 页顶的全局开关:一行文字 + 行尾开关,整行可点(Telegram 设置页的开关行)
+                float knob = index == animRow ? animKnob : (toggleGet.get() ? 1f : 0f);
+                int tx0 = rx + rw - ROW_INSET - TOGGLE_W;
+                drawSwitch(s, c, tx0, ry + (rh - TOGGLE_H) / 2, knob, 1f);
+                s.drawText(TextClip.fit(s, t(toggleLabelKey), tx0 - TAIL_GAP - rx - ROW_INSET), rx + ROW_INSET,
+                        ry + (rh - s.lineHeight()) / 2 + 1, c.textPrimary(), false);
+                return;
+            }
             case HEADING -> {
                 // 节标题:强调色小字压在行的下沿,和下面第一行贴着;上面一道细线把它与上一节隔开
                 if (index > 0) s.fillRect(rx, ry, rw, 1, c.divider());
@@ -515,17 +532,7 @@ public final class LibraryListPanel<T> {
             boolean on = toggleOn.test(e);
             float knob = index == animRow ? animKnob : (on ? 1f : 0f);
             int tx0 = tail - TOGGLE_W;
-            int ty = ry + (rh - TOGGLE_H) / 2;
-            s.fillRect(tx0, ty, TOGGLE_W, TOGGLE_H,
-                    fade(NumenStyle.mixColor(c.textMuted(), c.accent(), knob), alpha));
-            if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
-                int off = (int) (255 * (1f - knob) * alpha);
-                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
-                        (off << 24) | (c.inputBg() & 0xFFFFFF));
-                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
-                        ((int) (0x40 * (1f - knob) * alpha) << 24) | (c.textMuted() & 0xFFFFFF));
-            }
-            s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, fade(0xFFFFFFFF, alpha));
+            drawSwitch(s, c, tx0, ry + (rh - TOGGLE_H) / 2, knob, alpha);
             textRight = tx0 - TAIL_GAP;
         } else if (Boolean.TRUE.equals(row.marked())) {
             // 当前同伴在用:行右端一枚强调色的勾(Telegram 列表里选中项的样子)
@@ -541,6 +548,20 @@ public final class LibraryListPanel<T> {
         if (index < lines.size() - 1 && lines.get(index + 1).kind() == Kind.ITEM) {   // 行间细线从文字左缘起,节里最后一条不画
             s.fillRect(tx, ry + rh - 1, rx + rw - tx, 1, fade(c.divider(), alpha));
         }
+    }
+
+    /** 开关:关闭态描边环+灰轨道(浅面板上不隐形),{@code knob} 0..1 是滑块位置,轨道色随之渐变。 */
+    private static void drawSwitch(IDrawSurface s, NumenTheme.Colors c, int tx0, int ty, float knob, float alpha) {
+        s.fillRect(tx0, ty, TOGGLE_W, TOGGLE_H,
+                fade(NumenStyle.mixColor(c.textMuted(), c.accent(), knob), alpha));
+        if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
+            int off = (int) (255 * (1f - knob) * alpha);
+            s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
+                    (off << 24) | (c.inputBg() & 0xFFFFFF));
+            s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
+                    ((int) (0x40 * (1f - knob) * alpha) << 24) | (c.textMuted() & 0xFFFFFF));
+        }
+        s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, fade(0xFFFFFFFF, alpha));
     }
 
     /** 新建行:强调色方块里一个白加号,右边强调色文字(Telegram "创建新文件夹"那一行的样子,方角)。 */
@@ -559,6 +580,12 @@ public final class LibraryListPanel<T> {
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= lines.size()) return false;
         Line<T> line = lines.get(index);
+        if (line.kind() == Kind.SWITCH) {
+            animRow = index;                                  // 从翻转前的位置起步滑动
+            animKnob = toggleGet.get() ? 1f : 0f;
+            toggleSet.accept(!toggleGet.get());
+            return true;
+        }
         if (line.kind() == Kind.ADD) {
             line.section().add().run().run();
             return true;

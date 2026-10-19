@@ -1415,6 +1415,17 @@ public final class NumenScreen extends Screen {
         return mx >= x - 3 && mx < x + ICON_N + 3 && my >= y - 3 && my < y + ICON_N + 3;
     }
 
+    /** 设置页抬头右端的图标钮(当前库页要有),与 ⋮ 同一条右缘。 */
+    private int headerActionX() {
+        return left + panelW - PAD - ICON_N;
+    }
+
+    private boolean overHeaderAction(double mx, double my) {
+        return tab == Tab.SETTINGS && settings.headerAction() != null
+                && mx >= headerActionX() - 3 && mx < headerActionX() + ICON_N + 3
+                && my >= top + 3 && my < top + HEADER_H;
+    }
+
     /** 设置页抬头的 ←。 */
     private boolean backAt(double mx, double my) {
         return tab != Tab.CHAT && mx >= left + PAD - 3 && mx < left + PAD + ICON_N + 3
@@ -1719,6 +1730,10 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY, button)) return true;
+            if (button == 0 && !overlayOpen() && overHeaderAction(mouseX, mouseY)) {
+                settings.headerAction().run().run();
+                return true;
+            }
             if (conv != null && !overlayOpen() && overMore(mouseX, mouseY)) {
                 openHeaderMenu();
                 return true;
@@ -1978,6 +1993,14 @@ public final class NumenScreen extends Screen {
             if (tab == Tab.SETTINGS) {
                 txt(g, Component.literal(settings.title()), tx,
                         top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
+                var action = settings.headerAction();
+                if (action != null) {
+                    // 库页的图标钮在抬头右端(Telegram 子页抬头右端的图标),悬停亮一档、停一会儿出提示
+                    boolean hot = overHeaderAction(mouseX, mouseY) && !modalOpen() && !overlayOpen();
+                    com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g, action.icon(), headerActionX(),
+                            top + (HEADER_H - ICON_N) / 2, ICON_N, hot ? CTA : ON_BAND);
+                    if (hot) tip(java.util.List.of(Component.literal(action.tooltip())), mouseX, mouseY);
+                }
             } else if (tab == Tab.MEMBERS) {
                 String title = name();
                 txt(g, Component.literal(Nb.clip(font, title == null ? "?" : title, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
