@@ -10,9 +10,7 @@ This file covers the project's original art instead, collectively the "Assets":
     `numen-api/common/src/main/resources/assets/numen_api/textures/`;
   - the mod icons `numen-api/common/src/main/resources/numen_api.png` and
     `numen/common/src/main/resources/numen.png`;
-  - the logos and branding images under `assets/branding/`;
-  - the source artwork the textures are made from, i.e. the image files
-    under `numen-api/tools/ui-textures/`.
+  - the logos and branding images under `assets/branding/`.
 
 Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
 -------------------------------------------------------------------------------
@@ -34,7 +32,7 @@ Third-party art (NOT covered by the reservation below)
 
 These icon sprites are not the project's art. They are converted from
 pixelarticons (https://github.com/halfmage/pixelarticons) with
-`numen-api/tools/ui-textures/pixelarticons.py`, and stay under their own licence:
+`tools/pixelarticons.py`, and stay under their own licence:
 
   - `numen-api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
     icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
