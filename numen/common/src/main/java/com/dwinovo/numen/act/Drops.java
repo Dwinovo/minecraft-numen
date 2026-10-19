@@ -169,8 +169,8 @@ public final class Drops {
     }
 
     /**
-     * 掉落物被这一下打没了(是什么打的)。<b>平台挂点。</b>Paper 上由 {@code EntityRemoveEvent}(原因 DEATH)给出——它触发在实体
-     * 标成已移除之前,{@link #hurt} 的"打完再看 {@code isRemoved}"用不上,所以由平台自己断定"打没了"直接交来。
+     * 掉落物被这一下打没了(是什么打的)。<b>平台挂点。</b>Paper 上的伤害事件触发在扣血之前,
+     * {@link #hurt} 的"打完再看 {@code isRemoved}"用不上,所以由平台自己断定"这一下是致命的"直接交来。
      */
     public static void destroyed(ItemEntity item, DamageSource source) {
         Track track = TRACKED.get(item);
