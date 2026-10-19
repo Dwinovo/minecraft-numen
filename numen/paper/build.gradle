@@ -29,6 +29,62 @@ tasks.named('compileJava', JavaCompile) {
     source(project(':numen:pathing').sourceSets.main.java)
 }
 
+/*
+ * Paper 上的 GameTest(docs/paper.md §十一):gametest 源码集,打成只在测试时挂上的测试插件(gametestJar,不进发行 jar)。
+ * 用例仍是原版的 @GameTest,写一次:Numen API 的套件机制与夹具(numen-api/common 的 testFixtures)、Numen 与寻路的用例与夹具
+ * (numen/common、numen/pathing)的源码在这里对着 Paper 开发包重新编译——同 numen-paper.gradle 的理由,对着原版编的字节码在 Paper 上
+ * 会链不上。夹具里的 Mixin(mixin 包)是模组加载器那一侧对原版 GameTestServer 的改动,vanilla 包是原版签名的 GameTestWorld,
+ * 两处都不进来;Mixin 做的三件事各由 Paper 自己的办法替代,见 PaperGameTestPlugin。
+ * 跑法:./gradlew :numen:paper:runGameTestServer --no-daemon(起服在 buildSrc 的 numen-gametest-paper)。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        java {
+            srcDir project(':numen-api:common').file('src/testFixtures/java')
+            srcDir project(':numen:common').file('src/testFixtures/java')
+            srcDir project(':numen:common').file('src/gametest/java')
+            srcDir project(':numen:pathing').file('src/gametest/java')
+            exclude '**/mixin/**', '**/vanilla/**'
+        }
+        resources {
+            // 套件的报到资源(META-INF/numen/gametest/套件名)。夹具的资源(Mixin 配置、真实地形维度的数据包)不要:前者是模组加载器的,
+            // 后者要世界目录里放数据包才有用
+            srcDir project(':numen:common').file('src/gametest/resources')
+            srcDir project(':numen:pathing').file('src/gametest/resources')
+        }
+    }
+}
+
+dependencies {
+    // 用例拉起同伴、直接摸 Numen API 的内部类:看得见完整的 Numen API,运行时由它自己的插件提供
+    gametestCompileOnly project(':numen-api:paper')
+    Modules.SERVER.each { gametestCompileOnly project(it) }
+}
+
+configurations.gametestCompileOnly.extendsFrom(configurations.compileOnly)
+
+tasks.named('compileGametestJava', JavaCompile) {
+    options.release = java_version as int
+}
+
+tasks.named('processGametestResources', ProcessResources) {
+    filesMatching('paper-plugin.yml') {
+        expand(version: project.version)
+    }
+    inputs.property('paperPluginVersion', project.version)
+}
+
+// 测试插件:只含 gametest 源码集的输出(Numen 与 Numen API 的类由它们自己的插件提供)。mappings 命名空间同 paperweight 给发行 jar 写的
+tasks.register('gametestJar', Jar) {
+    group = 'verification'
+    description = 'Paper 上 GameTest 的测试插件(只在测试时挂上,不进发行 jar)'
+    archiveClassifier = 'gametest'
+    from(sourceSets.gametest.output)
+    manifest.attributes('paperweight-mappings-namespace': 'mojang+yarn')
+}
+
 tasks.named('runServer') {
     minecraftVersion(minecraft_version)
     runDirectory = layout.projectDirectory.dir('runs/paper')
