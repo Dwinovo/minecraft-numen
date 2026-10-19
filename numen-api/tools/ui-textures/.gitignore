@@ -2,3 +2,4 @@ node_modules/
 .cache/
 *.mp4
 renders/
+index.html

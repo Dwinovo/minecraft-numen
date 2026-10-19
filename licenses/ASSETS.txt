@@ -12,7 +12,7 @@ This file covers the project's original art instead, collectively the "Assets":
     `numen/common/src/main/resources/numen.png`;
   - the logos and branding images under `assets/branding/`;
   - the source artwork the textures are made from, i.e. the image files
-    under `tools/ui-textures/` and `numen-api/tools/ui-textures/`.
+    under `numen-api/tools/ui-textures/`.
 
 Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
 -------------------------------------------------------------------------------

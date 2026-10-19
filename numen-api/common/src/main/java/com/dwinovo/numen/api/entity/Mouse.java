@@ -9,6 +9,7 @@ import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.Permission;
+import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.advancements.CriteriaTriggers;
@@ -54,8 +55,8 @@ import net.minecraft.world.phys.Vec3;
  * 模式缓 5 刻,秒破的不缓)。手上的东西换了就从头挖;原地变了的(修补附魔吸经验改了耐久)还是同一件,不重开——原版客户端记的是
  * 手上那一叠本身。换了一格挖,或松开({@link #release})进度清零。
  *
- * <p>服务端没挖掉就是没让挖:送 STOP 之后方块没变,再等服务端自己的钟走一阵(它记的进度偶尔比客户端慢,会挂成延迟破坏,过几刻
- * 自己挖掉);还不变就以 {@link Refusal#SERVER} 收场,不空挥到超时。
+ * <p>服务端没挖掉就是没让挖:送 STOP 之后方块没变,看服务端自己的记账({@link Awaiting})——它把这一格挂成延迟破坏(进度比
+ * 客户端慢)就接着等它自己挖掉;没挂着、方块也没变,以 {@link Refusal#SERVER} 收场,不空挥到超时。
  *
  * <h2>右键:用</h2>
  * 照原版客户端的 {@code Minecraft.startUseItem}:两次右键至少隔 4 刻;正在挖时不按;每只手(主手先)先试准星落着的东西——方块
@@ -154,8 +155,6 @@ public class Mouse {
 
     /** 原版客户端两次右键之间的刻数。 */
     private static final int RIGHT_CLICK_DELAY = 4;
-    /** 送了 STOP 之后,最多等服务端这么多刻把延迟破坏落地。 */
-    private static final int STOP_GRACE = 20;
 
     private final ServerPlayer body;
     private int sequence;
@@ -169,7 +168,6 @@ public class Mouse {
     /** 送过 STOP、等服务端落地的那一格与原来的方块;没在等为 null。 */
     private BlockPos stopped;
     private BlockState stoppedState;
-    private long stopDeadline;
 
     public Mouse(ServerPlayer body) {
         this.body = body;
@@ -306,7 +304,6 @@ public class Mouse {
         }
         stopped = pos;
         stoppedState = state;
-        stopDeadline = now() + STOP_GRACE;
         return Strike.SWINGING;
     }
 
@@ -337,18 +334,43 @@ public class Mouse {
                 : new Strike.Refused(pos, Refusal.SERVER);
     }
 
-    /** 送过 STOP 还没碎:服务端挂了延迟破坏会在它自己的刻里挖掉,等一阵;一直不变就是没让挖。 */
+    /** 送过 STOP 还没碎之后,服务端那一头的几种情形。 */
+    enum Awaiting {
+        /** 方块变了:挖掉了。 */
+        BROKE,
+        /** 方块还在,服务端还挂着这一格(延迟破坏,或仍在按进度破坏它):还在挖,等。 */
+        WAIT,
+        /** 方块还在,服务端也没再挂着它:被退回了。 */
+        REFUSED
+    }
+
+    /**
+     * 判据只此一处,读服务端自己的记账而不数刻:挖到一半松手(服务端按它自己的钟算进度不够)会被挂成延迟破坏,它自己走完进度才破坏——
+     * 走得快慢随服务端的钟(Paper 按墙钟补刻),所以不能约定"等几刻"。
+     */
+    static Awaiting awaiting(boolean blockChanged, boolean serverStillBreaking) {
+        if (blockChanged) {
+            return Awaiting.BROKE;
+        }
+        return serverStillBreaking ? Awaiting.WAIT : Awaiting.REFUSED;
+    }
+
+    /** 送过 STOP 还没碎:服务端还挂着这一格就接着等,方块变了是挖掉了,两样都不是就是没让挖。 */
     private Strike awaitStop(ServerLevel level) {
         BlockPos pos = stopped;
-        if (level.getBlockState(pos) != stoppedState) {
-            stopped = null;
-            return new Strike.Broke(pos, stoppedState);
+        switch (awaiting(level.getBlockState(pos) != stoppedState, Services.breaking().breaking(body.gameMode, pos))) {
+            case BROKE -> {
+                stopped = null;
+                return new Strike.Broke(pos, stoppedState);
+            }
+            case WAIT -> {
+                return Strike.SWINGING;
+            }
+            default -> {
+                stopped = null;
+                return new Strike.Refused(pos, Refusal.SERVER);
+            }
         }
-        if (now() < stopDeadline) {
-            return Strike.SWINGING;
-        }
-        stopped = null;
-        return new Strike.Refused(pos, Refusal.SERVER);
     }
 
     /** 松开左键:正在挖的那一格放下,进度清零。没在挖时什么也不做。 */
