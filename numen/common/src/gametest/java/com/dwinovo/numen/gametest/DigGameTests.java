@@ -563,6 +563,35 @@ public class DigGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 服务端把这一格挂成延迟破坏、自己在两次调用之间把它挖掉:挖掉了就是挖掉了,回执报挖到一格、掉落物对得上。
+     * 做法:她带着急迫效果挖黑曜石,这一头的进度累得快;累到九成时去掉效果,于是送 STOP 那一刻服务端按没有效果的速度算,进度不够,
+     * 挂成延迟破坏。服务端随后在自己的刻里挖掉它——那一刻方块不再"要挖",任务不能把它当"不用挖了"丢掉而报"一格没挖"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 800, batch = "numen_dig")
+    public static void dig_counts_a_block_the_server_breaks_as_a_delayed_destroy(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos obsidian = helper.absolutePos(new BlockPos(8, 2, 8));
+        level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_hasty", new BlockPos(6, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
+        companion.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.DIG_SPEED,
+                100000, 4, false, false));
+        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(obsidian) + ")");
+
+        succeedWhen(helper, () -> {
+            if (companion.mouse().progress() >= 0.9f && companion.hasEffect(net.minecraft.world.effect.MobEffects.DIG_SPEED)) {
+                companion.removeAllEffects();
+            }
+            helper.assertTrue(dig.done(), "work dig has not finished");
+            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
+                    "the obsidian the server broke was not counted: " + dig.outcome());
+            var drop = onlyDrop(dig);
+            helper.assertTrue(drop.item().equals("minecraft:obsidian"), "the drop does not match: " + drop);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 这一挖的结果里只有一笔掉落物去向,交回它。 */
     private static com.dwinovo.numen.act.Drops.Drop onlyDrop(ToolRun dig) {
         var drops = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class).drops();
