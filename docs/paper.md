@@ -57,7 +57,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 | 事 | common 入口 | 模组上 | Paper 上 |
 |---|---|---|---|
 | 她这一挖的掉落物 | `Drops.breakStarts/added/breakEnds` | `ServerPlayerGameMode.destroyBlock` 包住、`ServerLevel.addFreshEntity` | `BlockDropItemEvent`(在 `destroyBlock` 里触发,带这一挖生成的全部掉落物) |
-| 掉落物被捡、并堆、被毁 | `Drops.taken/merged/hurt` | `LivingEntity.take`、`ItemEntity.merge/hurt` | `EntityPickupItemEvent`、`ItemMergeEvent`、`EntityDamageEvent` + `EntityRemoveEvent` |
+| 掉落物被捡、并堆、被毁 | `Drops.taken/merged/hurt` | `LivingEntity.take`、`ItemEntity.merge/hurt` | `EntityPickupItemEvent`、`ItemMergeEvent`、`EntityDamageEvent` |
 | 碰到掉落物但背包放不下 | `NumenPlayer.touchedItem` | `ItemEntity.playerTouch` | `PlayerAttemptPickupItemEvent`(在归属检查之前触发,自己判归属) |
 | 谁放的这一格 | `PlacedBlocks.placedBy` | `BlockItem.place` | `BlockPlaceEvent`、`BlockMultiPlaceEvent` |
 | 进度奖励 | `NumenEvents.advancementReward` | 包住 `PlayerAdvancements.award` | `PlayerAdvancementDoneEvent`(在发奖励之前触发:事件里拍快照,下一刻比) |
@@ -181,6 +181,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   Paper 上跑 GameTest 要等回调,是那一层适配的事)。
   "能当场判断的当场拒绝":名字、重名(含"同名的身体正在路上")、名额、她自己正在路上,都让 `summonFor` 返回 `false` 且 `then` 当场带着原因;受理了返回 `true`,受理的那一刻起 UUID 与名字就被"在路上"占住;
   答复回到主线程、加入之前再核对一次名册还要不要她(期间被遣散就不加入,不会进来了却没有名册条目)。
+  她到达(加入并做完加入后步骤)之前,发给她的聊天不交给大脑(`FakeClient`):Paper 在她进玩家列表之后才广播加入消息,她会收到自己的那一句,而那时大脑还没建;模组上本来听不到,两边同一个行为。
   **服务器明确说不**(登录插件、封禁、白名单)是终局:新召唤的同伴作废;已有的同伴和"被请出去"同理——名册记下原因、大脑停牌、如实告诉主人,停在外面,主人再召唤才再试,Numen 不替服务器轮询。
 - **摘出区块加载放在 `joined`**(`placeNewPlayer` 一开头就把旗标置真,所以不能在加入前置假):`removePlayer` 后 `setRealPlayer(false)`,实测区块包为 0(只有两个视距/中心包),换维度、死亡重生(重新加入时再摘一次)都不会被加回。
 - **权限委托也在 `joined`**,晚于权限插件在 `PlayerLoginEvent` 里的注入,所以取代它的。主人在线问主人;离线经 Vault(装了的话)查离线玩家,没装按主人是不是 op 套默认值;没有任何权限插件的专属代码。
@@ -188,8 +189,8 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 - **被踢与被收的区分不靠猜**:Numen 自己收她只有 `CompanionFactory.despawn` 一条路,收之前把她记进"正被 Numen 移出"的集合(`isLeaving`);`PlayerKickEvent`(MONITOR)与 `PlayerQuitEvent` 里不在这个集合里的,就是外面请出去的,交给 `Companions.removedFromOutside`
   (踢人先到 Kick 再到 Quit,入口对第二次是空操作)。关服时 Paper 先停插件、后踢人,监听器已经不在,不会误报。
 - **掉落物的几处挂点**:`BlockDropItemEvent` 里包住 `breakStarts/added/breakEnds`(Paper 在这一挖期间把进世界的物品实体都截下来交给它,事件之后才真进世界);`EntityPickupItemEvent`(件数减掉之前)→ `taken`;
-  `ItemMergeEvent` 在并之前触发,按原版的并法算好并完以后两堆各剩几件,走 `Drops.merged` 的五参数写法;掉落物被打没了,`EntityRemoveEvent`(DEATH)触发在实体标成已移除**之前**,`Drops.hurt` 的"打完再看 `isRemoved`"用不上,
-  所以 common 加了入口 `Drops.destroyed`(平台自己断定"被这一下打没了"),`hurt` 是模组上看得到 `isRemoved` 的那一种。**不能把这些往后拖一刻**:她的账在她自己的玩家刻里就可能结算,拖了会记成"不见了"(实测过:岩浆里的掉落物拖了就是 gone,不拖是"烧没了")。
+  `ItemMergeEvent` 在并之前触发,按原版的并法算好并完以后两堆各剩几件,走 `Drops.merged` 的五参数写法;掉落物被打没了,`EntityDamageEvent` 触发在扣血**之前**,`Drops.hurt` 的"打完再看 `isRemoved`"用不上,
+  所以 common 加了入口 `Drops.destroyed`(平台自己断定"被这一下打没了":`Item.getHealth()` 按原版扣法 `(int)(血量 - 伤害)` 扣完不超过 0),`hurt` 是模组上看得到 `isRemoved` 的那一种。不用 `EntityRemoveEvent`:它对每个实体移除都触发,Bukkit 把它标成会拖慢服务器,启动时给服主一行警告。实测岩浆、火、仙人掌、爆炸四种都对。**不能把这些往后拖一刻**:她的账在她自己的玩家刻里就可能结算,拖了会记成"不见了"(实测过:岩浆里的掉落物拖了就是 gone,不拖是"烧没了")。
   `PlayerAttemptPickupItemEvent` → `touchedItem`(事件只在拾取冷却已过时触发、在归属检查之前,归属自己判);`BlockPlaceEvent` → `placedBy`(双格方块的另一半它自己带出来);
   `PlayerAdvancementDoneEvent` 在发奖励之前,事件里拍背包快照,同一刻末尾再比;方块变化:事件里只记"哪一格、之前是什么",刻末读此刻真正是什么、变了才报,报上去的前后状态是真的。
   `FakeConnection.send` 经 `deliverOutboundTo` 交给 `FakeClient.onOutbound`(在 `admit` 里接上,加入时发出的传送编号也看得到)。

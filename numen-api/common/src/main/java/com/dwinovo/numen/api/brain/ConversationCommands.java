@@ -94,7 +94,7 @@ public final class ConversationCommands {
             return builder.buildFuture();
         }
         Conversations rooms = Conversations.of(player.server, player.getUUID());
-        List<Conversation> found = rooms.matching(StringArgumentType.getString(ctx, CONVERSATION));
+        List<Conversation> found = rooms.matching(conversationArgument(ctx));
         if (found.size() != 1) {
             return builder.buildFuture();
         }
@@ -181,9 +181,21 @@ public final class ConversationCommands {
 
     // ---- 把参数读成会话和同伴 ----
 
+    /**
+     * 他写的会话。补全拿到的是根上的上下文:指令树经重定向挂上来的(Paper 把插件指令登记成重定向到真身的别名),
+     * 重定向之后解出的参数在子上下文里,根上读不到;执行时拿到的已经是最里头那一层。所以从最里头一层读,两种来路同一个答案。
+     */
+    static String conversationArgument(CommandContext<CommandSourceStack> ctx) {
+        CommandContext<CommandSourceStack> innermost = ctx;
+        while (innermost.getChild() != null) {
+            innermost = innermost.getChild();
+        }
+        return StringArgumentType.getString(innermost, CONVERSATION);
+    }
+
     /** 他指的会话;没有或指不准就说出来,返回 {@code null}。 */
     private static Conversation resolve(CommandContext<CommandSourceStack> ctx, ServerPlayer owner) {
-        String given = StringArgumentType.getString(ctx, CONVERSATION);
+        String given = conversationArgument(ctx);
         List<Conversation> found = Conversations.of(owner.server, owner.getUUID()).matching(given);
         if (found.size() == 1) {
             return found.get(0);

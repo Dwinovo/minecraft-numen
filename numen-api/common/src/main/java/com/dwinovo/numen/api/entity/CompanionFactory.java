@@ -83,6 +83,7 @@ public final class CompanionFactory {
             Services.admission().admit(body[0], connection[0], verdict);
         }, stillWanted, () -> {
             join(server, body[0], connection[0], profile, ownerUuid, pos);
+            body[0].fakeClient().arrived();
             return body[0];
         }, then);
     }
@@ -157,8 +158,15 @@ public final class CompanionFactory {
         return LEAVING.contains(player);
     }
 
-    /** Save the companion's data and remove it from the world (dormancy). */
+    /**
+     * Save the companion's data and remove it from the world (dormancy).
+     * 这具身体已经不在玩家列表里(被外面请出去了、或换了一具新的身体)就没有什么可移的:再走一遍移除,
+     * 有的平台(Paper)会因为"已经退役"而抛异常。
+     */
     public static void despawn(MinecraftServer server, NumenPlayer player) {
+        if (server.getPlayerList().getPlayer(player.getUUID()) != player) {
+            return;
+        }
         // Tell tool packs the body is leaving so they can finalize their own
         // per-companion work (e.g. clear a mining crack overlay) instead of leaving
         // it orphaned once the body drops out of the tick loop's player list.
