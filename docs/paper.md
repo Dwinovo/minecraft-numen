@@ -212,8 +212,9 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   `-PgametestSeed`)、把数据包定义的维度并进测试世界(给真实地形套件 `numen_pathing_terrain*`)。最后一件 Paper 没有等价做法(起服后加不了维度),这两个套件不在 Paper 上跑。
 - **结构模板**:原版只在 IDE 旗标下读 SNBT 目录,插件把每个用例要的模板读进结构管理器的缓存(`getOrCreate(id).load(...)`)。
 - **按 20 刻每秒跑,不加速**:`GameTestServer` 一刻接一刻、不等墙钟;Paper 的挖掘进度按墙钟算(`ServerLevel.getLagCompensationTick`),
-  把刻速率调高,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。所以整套要约半小时。用例自己写的时限(最长十万刻)在 Paper 上收到 2400 刻,
-  收短过的用例在结果 JSON 里有 `cappedFromTicks`,超时失败的要和真失败分开看。
+  把刻速率调高,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。所以整套要跑很久(没做成的用例要等满自己写的时限)。
+  默认用每条用例自己写的时限;排查时 `-PgametestMaxTicks=…` 把时限收短,收短过的用例在结果 JSON 里有 `cappedFromTicks`,
+  超时失败的要和真失败分开看(Gradle 输出也分开列)。
 - **用例的几处改写**(都是 Paper 上暴露的用例自身的问题):`skill_docs_name_real_blocks` 从测试所在类加载器找技能文档,改成经平台服务 `modResource` 取(随 Numen 一起发的才是被测的),
   并只接 IO 异常——原先 `catch (Exception)` 把断言失败包成 `Error`,会把整台测试服带崩;`PermissionGameTests.playerPlaces` 从 `ItemStack.useOn` 进去,
   不直接调 `BlockItem.place`(Paper 的方块放置事件在 `useOn` 里发,模组上的放置记录挂在 `BlockItem.place`,从 `useOn` 进两边都走得到)。

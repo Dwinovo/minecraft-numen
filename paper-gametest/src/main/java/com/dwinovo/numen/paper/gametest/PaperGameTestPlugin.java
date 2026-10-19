@@ -67,13 +67,14 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private static final int STEADY_TICKS = 100;
     private static final int STEADY_DRIFT = 2;
 
-    private static final BlockPos ORIGIN =new BlockPos(4096, -59, 4096);
+    private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
 
     /**
-     * 一条用例最多等多少刻(见 {@link #capped}),排查被收短的用例时用系统属性 {@code numen.gametest.maxTicks}({@code -PgametestMaxTicks=…})放宽。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
+     * 排查用:给了系统属性 {@code numen.gametest.maxTicks}({@code -PgametestMaxTicks=…}),每条用例最多等这么多刻(见 {@link #capped}),
+     * 没给就用每条用例自己写的时限。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
      * ({@code ServerLevel.getLagCompensationTick}),刻跑得比墙钟快,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。
      */
-    private static final int MAX_TICKS = Integer.getInteger("numen.gametest.maxTicks", 2400);
+    private static final Integer MAX_TICKS = Integer.getInteger("numen.gametest.maxTicks");
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -167,12 +168,12 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * 时限不超过 {@link #MAX_TICKS}。用例给自己留的时限(最长十万刻)是为"本来就能很快做完"的行为留的余量:没做成的那条要等满才失败,
-     * GameTestServer 一刻几乎不花时间,等满不算什么;Paper 上一刻 50 毫秒,十万刻是一个半小时,一批没做成的用例就能拖住整次运行。
-     * 收短的用例在结果里记着它自己写的时限,超时失败的那些要和"真失败"分开看。
+     * 给了 {@link #MAX_TICKS} 时,时限不超过它:用例给自己留的时限(最长四十万刻)是为"本来就能很快做完"的行为留的余量,Paper 上一刻
+     * 50 毫秒,没做成的那条要等满才失败。排查时收短它能快点看到哪些没做成;收短的用例在结果里记着它自己写的时限,
+     * 超时失败的那些要和"真失败"分开看。
      */
     private TestFunction capped(TestFunction f) {
-        if (f.maxTicks() <= MAX_TICKS) {
+        if (MAX_TICKS == null || f.maxTicks() <= MAX_TICKS) {
             return f;
         }
         capped.put(f.testName(), f.maxTicks());
