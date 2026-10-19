@@ -45,6 +45,15 @@ public final class OwnerLine extends Connection {
     /** 服务端对这条连接说的断开理由。 */
     public final Queue<Component> disconnects = new ConcurrentLinkedQueue<>();
 
+    /** 他客户端报上来的语言,系统聊天按它渲染成他看到的样子({@link MockConnection#rendered})。 */
+    private String language = "en_us";
+
+    /** 他客户端的语言。 */
+    public OwnerLine language(String language) {
+        this.language = language;
+        return this;
+    }
+
     /** @param installed 他装着我们的客户端(频道协商好了);否则是原版客户端 */
     public OwnerLine(boolean installed) {
         super(PacketFlow.SERVERBOUND);
@@ -63,9 +72,12 @@ public final class OwnerLine extends Connection {
     @Override
     public void send(Packet<?> packet, PacketSendListener listener, boolean flush) {
         if (packet instanceof ClientboundCustomPayloadPacket custom) {
-            sent.add(MockConnection.INSTANCE.received(custom.payload()));
+            // 原版自己的载荷(Paper 加入时发的服务端品牌)不是服务端发的"我们的包",不记
+            if (!"minecraft".equals(custom.payload().type().id().getNamespace())) {
+                sent.add(MockConnection.INSTANCE.received(custom.payload()));
+            }
         } else if (packet instanceof ClientboundSystemChatPacket chat) {
-            said.add(new Said(chat.content(), chat.overlay()));
+            said.add(new Said(MockConnection.INSTANCE.rendered(chat.content(), language), chat.overlay()));
         } else if (packet instanceof ClientboundPlayerChatPacket line) {
             chat.add(line);
         } else if (packet instanceof ClientboundCustomChatCompletionsPacket completion) {

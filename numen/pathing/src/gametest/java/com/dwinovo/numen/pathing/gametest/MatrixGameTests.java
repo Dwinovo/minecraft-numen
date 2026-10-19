@@ -26,8 +26,8 @@ import net.minecraft.world.level.block.Blocks;
 public class MatrixGameTests {
 
     private static final String BATCH = "pathing_matrix";
-    /** 一条用例最多跑这么多刻(场景并行铺在 16 格上,按批铺满)。 */
-    private static final int LIMIT = 60000;
+    /** 一条用例最多跑这么多刻(场景并行铺在 16 格上,按批铺满);最慢的 matrix_rotated 实测 7098 刻,留三倍。 */
+    private static final int LIMIT = 21500;
 
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {

@@ -161,7 +161,7 @@ public class InventoryGameTests {
     }
 
     /** numen.inv.make 自己找台:够得着的地方没有,它走到 16 格内最近的那张,打开、合出一口箱子,木板用光,界面合上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void make_walks_to_the_nearest_table(GameTestHelper helper) {
         BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
@@ -183,7 +183,7 @@ public class InventoryGameTests {
     }
 
     /** 附近没有工作台,包里有一张:numen.inv.make 把它放在身边一格,打开、合出一口箱子,界面合上,那张台留在原地。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void make_puts_down_the_table_she_carries(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_tablebearer", new BlockPos(7, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
@@ -208,7 +208,7 @@ public class InventoryGameTests {
     }
 
     /** 工作台就在手边:numen.inv.make 右键打开、摆好、取出一口箱子,木板用光,界面合上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void craft_3x3_at_a_table_within_reach(GameTestHelper helper) {
         helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
                 Blocks.CRAFTING_TABLE.defaultBlockState());
@@ -249,7 +249,7 @@ public class InventoryGameTests {
     // ---- eat ----
 
     /** 饿了吃面包:吃完才生效,饥饿值涨上去、面包少一个,回执报现在的饥饿值。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
     public static void eat_restores_hunger(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_eater", new BlockPos(3, 2, 3), false);
         companion.getFoodData().setFoodLevel(10);
@@ -269,7 +269,7 @@ public class InventoryGameTests {
     }
 
     /** 吃饱了还要吃:原版不让,回执如实说吃不下,面包还在。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
     public static void eat_on_a_full_stomach_keeps_the_food(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_sated", new BlockPos(3, 2, 3), false);
         companion.getFoodData().setFoodLevel(20);
@@ -587,7 +587,7 @@ public class InventoryGameTests {
     }
 
     /** 金苹果饱着也能吃(原版允许):吃掉了,身上有了伤害吸收,回执说吃了。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
     public static void eat_a_golden_apple_on_a_full_stomach(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_gourmet", new BlockPos(3, 2, 3), false);
         companion.getFoodData().setFoodLevel(20);
@@ -606,7 +606,7 @@ public class InventoryGameTests {
     }
 
     /** 嚼到一半主人按停止:按主人停止收场;面包一个没少,饥饿值没变,过了整段咀嚼时长也不再生效。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
     public static void owner_stop_mid_meal_keeps_the_food(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 3), false);
         companion.getFoodData().setFoodLevel(10);
@@ -644,7 +644,7 @@ public class InventoryGameTests {
     }
 
     /** 箱子的配方认"任意木板":四块橡木加四块白桦木板,在手边的工作台合出一口箱子,两种木板都用光。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void craft_a_chest_from_mixed_planks(GameTestHelper helper) {
         helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
                 Blocks.CRAFTING_TABLE.defaultBlockState());
@@ -684,7 +684,7 @@ public class InventoryGameTests {
     }
 
     /** 存进箱子再取出来:numen.inv.store 走过去放进 20 块圆石,numen.inv.fetch 取回 5 块;箱子里剩 15,界面合上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void store_and_fetch_go_through_the_chest(GameTestHelper helper) {
         BlockPos chest = helper.absolutePos(new BlockPos(11, 2, 7));
         helper.getLevel().setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
@@ -710,7 +710,7 @@ public class InventoryGameTests {
     }
 
     /** 烧两块粗铁:numen.inv.smelt 放进粗铁和一块煤,站着等烧完,取出两块铁锭,界面合上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 1326, batch = "numen_inventory")
     public static void smelt_loads_waits_and_takes_the_output(GameTestHelper helper) {
         BlockPos furnace = helper.absolutePos(new BlockPos(5, 2, 7));
         helper.getLevel().setBlockAndUpdate(furnace, Blocks.FURNACE.defaultBlockState());

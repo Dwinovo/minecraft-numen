@@ -200,7 +200,7 @@ public class ScriptGameTests {
      * 一次扫描的每一团:{@code numen.scan.blocks} 直接给出团的列表(近的在前),脚本逐个走过去挖;两团矿都挖掉,打印的是两团最近那一格,
      * 近的在前。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 321, batch = "numen_scripts")
     public static void a_program_goes_through_the_clusters_of_a_scan(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(new BlockPos(4, 2, 4));
@@ -237,7 +237,7 @@ public class ScriptGameTests {
      * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,一段程序扫到它们,把那一团交给 {@code numen.work.mine} 挖空——走到够得着、挖、
      * 捡,直到交给它的一格不剩;铁都进了包,返回挖了几格。它里面没有一处接住错误往下走:哪一步失败,整段就停在那一步。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_scripts")
+    @GameTest(template = "floor20", timeoutTicks = 378, batch = "numen_scripts")
     public static void work_mine_digs_out_ore_buried_in_stone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 6; x <= 12; x++) {
@@ -447,7 +447,7 @@ public class ScriptGameTests {
      * 查到的东西原样交给动作:{@code numen.scan.blocks} 一团的最近一格、{@code numen.scan.block} 读到的一块,都直接进 {@code numen.work.dig};两格都挖掉,
      * 程序拿到的是两份数据({@code dug} 各一格),不是话。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void what_a_query_returns_goes_into_an_action_as_it_is(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos first = helper.absolutePos(new BlockPos(6, 2, 4));
@@ -476,7 +476,7 @@ public class ScriptGameTests {
     }
 
     /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.to},她走到牛跟前。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_herder", new BlockPos(2, 2, 2), false);
@@ -688,7 +688,7 @@ public class ScriptGameTests {
             batch = "numen_scripts")
     public static void a_client_function_the_client_never_answers_times_out_and_the_program_goes_on(
             GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_mute_client", new BlockPos(2, 2, 2), false);
+        NumenPlayer her = spawnAt(helper, "gt_mute_client", new BlockPos(2, 2, 2), false);
         programs(her).silence();
         ToolRun run = lua(her, """
                 local ok, err = pcall(gt.gt_client.hello)
@@ -700,7 +700,7 @@ public class ScriptGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the program is still waiting for the client's answer");
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gametest_mute_client"),
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gt_mute_client"),
                     "the call did not fail as a timeout with the program going on: " + run.receipt());
             helper.assertTrue(run.receipt().contains("gt.gt_client.hello: timeout — your owner's client did not answer "
                             + "gt.gt_client.hello within " + com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20

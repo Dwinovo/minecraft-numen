@@ -43,9 +43,6 @@ include('script')
 include('agent')
 // numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
 include('permission')
-include('e2e')
-// Paper 上的 GameTest(docs/paper.md §十一):只在测试时挂上的 Paper 插件,把现有的 GameTest 用例按原版方式登记、跑完、写出结果;不进发行 jar。
-include('paper-gametest')
 include('ui')
 // numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
 include('lua')

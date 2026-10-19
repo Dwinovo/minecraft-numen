@@ -69,6 +69,30 @@ sourceSets {
 }
 neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
 
+/*
+ * 端到端测试(src/e2e):一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家
+ * 能做的事从头走一遍。场景只认一份规格(地址、RCON 口、种子),不碰 Minecraft 与 Numen 的任何类,所以只是个独立编的源码集,
+ * 不进发行 jar;跑在两个平台项目上:`:numen:neoforge:e2eTest`、`:numen:paper:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
+ */
+sourceSets {
+    e2e
+}
+
+repositories {
+    // MCProtocolLib 不发到 Maven Central。1.21.1 与 1.21 同一个协议号,用的是 1.21 线上最后一个构建(固定到时间戳,不随快照漂移)
+    maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
+    // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
+    maven { url = 'https://repo.opencollab.dev/maven-releases' }
+}
+
+dependencies {
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21-20241010.155958-24'
+    e2eImplementation 'com.google.code.gson:gson:2.10.1'
+    e2eImplementation platform('org.junit:junit-bom:5.11.4')
+    e2eImplementation 'org.junit.jupiter:junit-jupiter'
+    e2eRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
 // GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把 Numen 本体跑批带的各模块的同步进
 // 构建目录里的一处,各加载器的 GameTest 运行配置与联动、评测的运行配置都指向它(模板文件名各模块之间不重名)。
 tasks.register('syncGameTestStructures', Sync) {

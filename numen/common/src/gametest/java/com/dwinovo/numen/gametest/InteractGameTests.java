@@ -86,7 +86,7 @@ public class InteractGameTests {
     }
 
     /** 拿剪刀右键手边的一头羊:剪了毛,羊身上的毛没了。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_shears_a_sheep(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Sheep sheep = net.minecraft.world.entity.EntityType.SHEEP.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 4));
@@ -105,7 +105,7 @@ public class InteractGameTests {
     }
 
     /** 左键手边的一头猪:打了一下,猪掉了血。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_left_click_hits_a_pig(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
@@ -213,7 +213,7 @@ public class InteractGameTests {
     }
 
     /** 目标在工作距离外:numen.use.hit 先自己走到看得见、够得着它的地方,再点一下;石头点一下碎不了,原样。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_walks_up_first(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
@@ -231,7 +231,7 @@ public class InteractGameTests {
     }
 
     /** 有名字的猪要问主人才能打;主人不在,问不到就不打,猪一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_on_a_named_animal_needs_the_owner(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
@@ -254,7 +254,7 @@ public class InteractGameTests {
     // ---- numen.use.entity:挤奶、喂食;numen.use.block:门、拉杆、放方块 ----
 
     /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 7));
@@ -276,7 +276,7 @@ public class InteractGameTests {
     }
 
     /** 拿小麦右键一头成年牛:喂下去一根,牛进了求偶状态。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_feeds_a_cow_wheat(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
@@ -354,7 +354,7 @@ public class InteractGameTests {
     }
 
     /** 右键她自己驯服的狼:出厂的 {@code use_entity(self_owned)} 放行,不问主人,狼坐下了。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_entity_on_her_own_wolf_does_not_ask(GameTestHelper helper) {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 14));
         NumenPlayer companion = spawnAt(helper, "gametest_wolfkeeper", new BlockPos(8, 2, 14), false);
@@ -371,7 +371,7 @@ public class InteractGameTests {
     }
 
     /** 右键别人驯服的狼:别人的东西是硬规则 use_entity(other) 拒绝的,不问谁,狼没坐下。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_entity_on_someone_elses_wolf_is_forbidden_outright(GameTestHelper helper) {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
         wolf.setTame(true, true);

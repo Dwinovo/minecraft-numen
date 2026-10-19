@@ -24,7 +24,7 @@ public class FishGameTests {
     }
 
     /** 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_fish")
+    @GameTest(template = "floor16", timeoutTicks = 924, batch = "numen_fish")
     public static void fish_reels_in_from_a_pool(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_angler", new BlockPos(4, 3, 7), false);
@@ -72,7 +72,7 @@ public class FishGameTests {
     }
 
     /** 钓到一半叫停:活按叫停收场,抛出去的鱼钩收回来了,水里不留浮漂。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_fish")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_fish")
     public static void task_stop_while_fishing_reels_the_line_in(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_recalled", new BlockPos(4, 3, 7), false);

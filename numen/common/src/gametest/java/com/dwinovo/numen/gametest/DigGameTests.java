@@ -30,7 +30,7 @@ public class DigGameTests {
      * 挖掘也走门:黑曜石屋(铁镐非正确工具,成本模型按不可破对待——拆墙不是廉价选项)关住她,矿在屋外,唯一通路是关着的橡木门。
      * 走去挖的寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 324, batch = "numen_dig")
     public static void dig_through_closed_door(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 1; x <= 5; x++) {
@@ -80,7 +80,7 @@ public class DigGameTests {
      * 没有垫脚的方块。爬上去贴着它们是做不到的;站在底下仰头,眼睛离它们 3.38 格、4.38 格,在交互距离里——
      * 斜着看过去挡着的树叶先挖开,再挖原木。原木正下方留空,掉落物落回地面。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 207, batch = "numen_dig")
     public static void dig_canopy_logs_from_the_ground(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockState leaves = Blocks.ACACIA_LEAVES.defaultBlockState().setValue(
@@ -120,7 +120,7 @@ public class DigGameTests {
      * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是收场、说清楚够不着,原因是寻路给的那一条(要垫方块而身上没有)。
      * 场地要够高:原木得在场地的屏障顶棚底下,垫了方块才真够得着。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos logRel = new BlockPos(8, 10, 8);
@@ -157,7 +157,7 @@ public class DigGameTests {
      *
      * <p>超时按游戏刻给得很宽:无头测试服不限速(数百 tps),而寻路搜索在后台线程上要花真实时间。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 927, batch = "numen_dig")
     public static void dig_spruce_grove(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         spruceTree(helper, new BlockPos(5, 2, 5), 6);
@@ -181,7 +181,7 @@ public class DigGameTests {
      *
      * <p>钉的是"挖几格"数的是挖掉的格,与掉落物在哪无关;捡是另一条命令的事。用场地里独一种的去皮橡木,免得看见别的用例的原木。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_fetches_the_counted_drop_instead_of_freezing(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos first = helper.absolutePos(new BlockPos(2, 2, 4));
@@ -221,7 +221,7 @@ public class DigGameTests {
      * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
      * 往下挖进去,采得 2 颗钻石。盯的是埋矿的站位:脚不能高于矿,得一路挖着往下走,再就地挖矿。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 396, batch = "numen_dig")
     public static void dig_buried_diamonds(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 5; x <= 13; x++) {
@@ -254,7 +254,7 @@ public class DigGameTests {
     /**
      * 矿紧挨着岩浆:挖开它岩浆就会淌出来,所以这一格不挖。回执交代它挖不成的原因(贴着流体),矿与岩浆都原样。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_leaves_ore_that_borders_lava(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos ore = helper.absolutePos(new BlockPos(6, 2, 4));
@@ -348,7 +348,7 @@ public class DigGameTests {
      * 点名的方块都不在了:一块绿宝石矿,她看见之后被人挖走了;照看见的样子点名它挖,派发当场拒收,不满世界乱走,如实说点名的都不在了、
      * 下一步照抄哪一行再看。点名的几格本来就只是空气,也当场拒收,说那几格里没有可挖的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_blocks_that_are_gone_says_so_and_how_to_look_again(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_prospector", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
@@ -375,7 +375,7 @@ public class DigGameTests {
     }
 
     /** 挖到一半主人按停止:活按主人停止收场,那块黑曜石还在,挖掘的裂纹也收掉了。 */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_dig")
     public static void owner_stop_mid_dig_leaves_the_block(GameTestHelper helper) {
         BlockPos block = helper.absolutePos(new BlockPos(5, 2, 4));
         helper.getLevel().setBlockAndUpdate(block, Blocks.OBSIDIAN.defaultBlockState());
@@ -405,7 +405,7 @@ public class DigGameTests {
      * <p>进度的口径是<b>背包里的物品</b>,而背包是个滞后指标(原版拾取延迟 10 tick)。"还敲不敲"要算上已经敲掉、还没进包的,
      * 而"完了没"仍然只看到手——这条量的就是这两件事分开了没有(#69)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 1113, batch = "numen_dig")
     public static void dig_stops_at_the_requested_count(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         int field = 0;
@@ -455,7 +455,7 @@ public class DigGameTests {
      * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig(pos)} 当场挖掉;收场说挖了 1 格、掉下来的那一捆落在了哪一格
      * ——那段账与交回的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、还躺在那儿的那一件的编号。她一步没动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos hay = helper.absolutePos(new BlockPos(9, 2, 5));
@@ -489,7 +489,7 @@ public class DigGameTests {
      * 挖岩浆上方的方块:黑曜石压在一池岩浆上,她站在池边够得着的地方挖。黑曜石掉下来落进岩浆烧掉了——挖的结果说清楚:回执那一句
      * 说它掉进岩浆烧掉了,数据里那一笔是 destroyed、毁它的是 minecraft:lava,没有一件落在地上。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 615, batch = "numen_dig")
     public static void digging_above_lava_says_the_drop_burned(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 三乘三的一池岩浆嵌在地面里,底下垫石头;正中上面压一块黑曜石
@@ -576,7 +576,7 @@ public class DigGameTests {
      * 扫描来的一团只挖还是当时那种方块的格:四块铜矿一扫成一团,都在她手边;开挖之前有人把其中一块换成了石头。她照扫描给的方块
      * 原样点名,挖掉另外三块,那块石头原样留着。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 288, batch = "numen_dig")
     public static void dig_a_scanned_cluster_digs_what_still_holds_the_scanned_block(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> ores = List.of(new BlockPos(8, 2, 6), new BlockPos(9, 2, 6), new BlockPos(8, 3, 6),
@@ -613,7 +613,7 @@ public class DigGameTests {
      * 挖点名的格:她手边一个 3×3×3 的盒子(底层石头、中层泥土、顶层是空气),27 格的位置一起交给 {@code numen.work.dig},格里是什么
      * 挖什么,空气跳过;挖完盒子里全是空气。接着 {@code numen.work.collect},泥土与圆石进了她的包。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 879, batch = "numen_dig")
     public static void dig_given_cells_digs_whatever_they_hold(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos low = helper.absolutePos(new BlockPos(7, 2, 5));
@@ -658,7 +658,7 @@ public class DigGameTests {
      * 够不着就走过去:一排珠光蛙明灯从她跟前伸到十格外,一扫成一团,整团交给 {@code numen.work.dig}。她挖掉手够得着的那几块,
      * 走到够得着剩下最多块的地方接着挖,全挖掉才收场,回执说挖了几格、没有剩下够不着的。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 729, batch = "numen_dig")
     public static void dig_walks_up_to_what_is_out_of_reach_and_digs_it_all(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> vein = new java.util.ArrayList<>();
@@ -694,7 +694,7 @@ public class DigGameTests {
      * 先走到一次够得着最多格的地方:一条两格高的石头走廊里,她站在当中;一头是一块孤零零的铁矿,另一头一样远的地方并排两块。路一样长,
      * 她先走到并排那两块跟前,站在那儿两块都挖了,再走去挖孤零零的那块。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 375, batch = "numen_dig")
     public static void dig_goes_first_where_the_hand_reaches_the_most_cells(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 走廊沿 x,宽一格(z=10)、高两格;两侧与顶上是石头,两头各封一块石头
@@ -755,7 +755,7 @@ public class DigGameTests {
     /**
      * 远处的也去挖:两块赭黄蛙明灯在场地另一角、六十多格外,扫到之后整团交给 {@code numen.work.dig},她走过去挖掉两块,回执说挖了两格。
      */
-    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
+    @GameTest(template = "floor52", timeoutTicks = 822, batch = "numen_dig_far")
     public static void dig_walks_a_long_way_to_blocks_in_the_far_corner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos nearer = helper.absolutePos(new BlockPos(50, 2, 50));
@@ -784,7 +784,7 @@ public class DigGameTests {
      * 点名的一团整个在手边以外:一次扫描找到远处一团与近处一团;把远处那一团交给 {@code numen.work.dig},她走过去把它挖光,
      * 近处那一块原样。
      */
-    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
+    @GameTest(template = "floor52", timeoutTicks = 924, batch = "numen_dig_far")
     public static void dig_a_cluster_beyond_her_reach_walks_to_it_and_leaves_the_near_one(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> far = List.of(new BlockPos(48, 2, 50), new BlockPos(49, 2, 50), new BlockPos(50, 2, 50));
@@ -824,7 +824,7 @@ public class DigGameTests {
      * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code numen.work.dig} 自己走到手够得着它的地方,
      * 挖开挡着的石头、把它挖出来,掉落物留在原地;再 {@code numen.work.collect} 捡到手。
      */
-    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
+    @GameTest(template = "floor52", timeoutTicks = 1041, batch = "numen_dig_far")
     public static void work_dig_walks_to_a_buried_block_digs_it_out_and_collect_picks_it_up(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (BlockPos rel : BlockPos.betweenClosed(new BlockPos(28, 2, 28), new BlockPos(32, 5, 32))) {
@@ -862,7 +862,7 @@ public class DigGameTests {
      * 再整串作为要离开的东西交给 {@code numen.move.away}。程序跑在服务端,团不经网线,不受一个上行包的大小管(从前的 32 KB 上限
      * 一团就装不下)。
      */
-    @GameTest(template = "floor52", timeoutTicks = 4000, batch = "numen_dig_far")
+    @GameTest(template = "floor52", timeoutTicks = 200, batch = "numen_dig_far")
     public static void a_scanned_field_of_a_thousand_cells_goes_into_a_server_function_whole(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         int cells = 0;

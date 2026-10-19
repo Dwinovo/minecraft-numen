@@ -59,14 +59,22 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     /** 结果文件的系统属性。 */
     public static final String RESULT = "numen.gametest.result";
 
+    /** 只跑名字(整个)匹配这个正则的用例;没给就是选中套件的全部。排查单条或一个类时用,{@code -Pgametest.only=…}。 */
+    public static final String ONLY = "numen.gametest.only";
+
     /** 场地铺在世界里的起点:离出生点远,不碰默认的出生区块;和 GameTestServer 一样贴着超平坦的地面。 */
+    /** 刻与墙钟的差在这么多刻的窗口里漂移不超过 {@link #STEADY_DRIFT},就算服务端追上了墙钟。 */
+    private static final int STEADY_TICKS = 100;
+    private static final int STEADY_DRIFT = 2;
+
     private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
 
     /**
-     * 一条用例最多等多少刻(见 {@link #capped})。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
+     * 排查用:给了系统属性 {@code numen.gametest.maxTicks}({@code -PgametestMaxTicks=…}),每条用例最多等这么多刻(见 {@link #capped}),
+     * 没给就用每条用例自己写的时限。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
      * ({@code ServerLevel.getLagCompensationTick}),刻跑得比墙钟快,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。
      */
-    private static final int MAX_TICKS = 2400;
+    private static final Integer MAX_TICKS = Integer.getInteger("numen.gametest.maxTicks");
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -75,6 +83,9 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private List<GameTestInfo> infos = List.of();
     private long startedNanos;
     private long ticks;
+    private boolean warmingUp;
+    private long lastSkew;
+    private int steadyTicks;
     /** 被收短了时限的用例:名字 → 它自己写的时限(刻)。 */
     private final Map<String, Integer> capped = new LinkedHashMap<>();
 
@@ -84,17 +95,39 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
     }
 
-    /** 起服完成(世界都在了)。登记要赶在服务器起来之前、开跑要等到第一刻之后,所以这里只排一个下一刻的任务。 */
+    /** 起服完成(世界都在了)。开跑要等服务端的刻追上墙钟,见 {@link #warmUp}。 */
     @EventHandler
     public void onServerLoad(ServerLoadEvent event) {
         if (event.getType() == ServerLoadEvent.LoadType.STARTUP) {
-            getServer().getScheduler().runTask(this, () -> guarded(this::start));
+            warmingUp = true;
+        }
+    }
+
+    /**
+     * 起服花的时间长,服务端的刻欠着墙钟,开服后头几秒是一刻接一刻补回来的,比 20 刻每秒快得多。Paper 的挖掘进度按墙钟算
+     * ({@code getLagCompensationTick}),刻跑得比墙钟快的时候,生存模式的挖会被服务端退回。这不是用例要测的,所以等刻和墙钟
+     * 的差稳住了(在 {@value #STEADY_TICKS} 刻的窗口里漂移不超过 {@value #STEADY_DRIFT})再开跑。
+     */
+    private void warmUp() {
+        server = ((CraftServer) getServer()).getServer();
+        long skew = MinecraftServer.currentTick - server.overworld().getLagCompensationTick();
+        // 追赶的时候差是慢慢漂的(每刻只差半刻),逐刻比看不出来,所以和窗口开头比
+        if (steadyTicks == 0 || Math.abs(skew - lastSkew) > STEADY_DRIFT) {
+            lastSkew = skew;
+            steadyTicks = 0;
+        }
+        if (++steadyTicks >= STEADY_TICKS) {
+            warmingUp = false;
+            start();
         }
     }
 
     @EventHandler
     public void onTickEnd(ServerTickEndEvent event) {
         if (tracker == null) {
+            if (warmingUp) {
+                guarded(this::warmUp);
+            }
             return;
         }
         guarded(() -> {
@@ -114,7 +147,9 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private void start() {
         server = ((CraftServer) getServer()).getServer();
         ServerLevel level = server.overworld();
+        String only = System.getProperty(ONLY);
         List<TestFunction> functions = GameTestRegistry.getAllTestFunctions().stream().filter(f -> !f.manualOnly())
+                .filter(f -> only == null || f.testName().matches(only))
                 .map(this::capped).toList();
         if (functions.isEmpty()) {
             throw new IllegalStateException("没有登记任何用例,选中的套件是 \"" + System.getProperty(GameTestSuites.SELECTION) + "\"");
@@ -133,12 +168,12 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * 时限不超过 {@link #MAX_TICKS}。用例给自己留的时限(最长十万刻)是为"本来就能很快做完"的行为留的余量:没做成的那条要等满才失败,
-     * GameTestServer 一刻几乎不花时间,等满不算什么;Paper 上一刻 50 毫秒,十万刻是一个半小时,一批没做成的用例就能拖住整次运行。
-     * 收短的用例在结果里记着它自己写的时限,超时失败的那些要和"真失败"分开看。
+     * 给了 {@link #MAX_TICKS} 时,时限不超过它:用例给自己留的时限(最长四十万刻)是为"本来就能很快做完"的行为留的余量,Paper 上一刻
+     * 50 毫秒,没做成的那条要等满才失败。排查时收短它能快点看到哪些没做成;收短的用例在结果里记着它自己写的时限,
+     * 超时失败的那些要和"真失败"分开看。
      */
     private TestFunction capped(TestFunction f) {
-        if (f.maxTicks() <= MAX_TICKS) {
+        if (MAX_TICKS == null || f.maxTicks() <= MAX_TICKS) {
             return f;
         }
         capped.put(f.testName(), f.maxTicks());

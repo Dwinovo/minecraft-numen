@@ -1,7 +1,7 @@
 /**
  * 端到端测试的起服层之二:Paper 服。应用在 numen/paper 的构建脚本末尾(它要用到 run-paper 的 runServer)。
  *
- * <p>和 numen-e2e-neoforge 守同一份规格(e2e/build.gradle 里的 {@code ext.e2e}),提供同名的 {@code e2eServerStart}/{@code e2eServerStop},
+ * <p>和 numen-e2e-neoforge 守同一份规格(numen-e2e 里的 {@code ext.e2e}),提供同名的 {@code e2eServerStart}/{@code e2eServerStop},
  * 场景一行不用改:清空独立的运行目录 {@code runs/e2e}(每次一个新世界,Paper 的下载缓存除外),写入 eula 与 server.properties
  * (离线模式、规格里的端口、平坦世界),把种子铺进配置根 {@code plugins/numen/}(Paper 上的配置根,见 docs/paper.md §四),起服并等它报"起好了"。
  *
@@ -10,13 +10,17 @@
 import com.dwinovo.numen.buildsrc.PaperServer
 import com.dwinovo.numen.buildsrc.TestServer
 
-def spec = rootProject.project(':e2e').ext.e2e
+plugins {
+    id 'numen-e2e'
+}
+
+def spec = project.ext.e2e
 
 def gameDir = project.file('runs/e2e')
 
 def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
 def game = tasks.named('runServer')
-def tests = rootProject.project(':e2e').tasks.named('e2eTest')
+def tests = tasks.named('e2eTest')
 
 tasks.register('e2eServerStart') {
     group = 'verification'
@@ -24,7 +28,7 @@ tasks.register('e2eServerStart') {
     usesService(server)
     // runServer 依赖的那些(两个插件 jar),不含 runServer 本身
     dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
-    dependsOn ':e2e:e2eSeed'
+    dependsOn 'e2eSeed'
     doLast {
         def dir = gameDir
         PaperServer.freshDir(dir, [

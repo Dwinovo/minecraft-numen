@@ -199,7 +199,7 @@ public class BrainGameTests {
     }
 
     /** 主人的话 → 模型派一段程序 → 程序在服务端跑 → 回执回到模型 → 最终回复,整条回路都落进她的日志。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void owner_words_run_the_whole_loop_on_the_server(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_thinker");
         her.mind.program("return 1 + 1").say("算好了:2");
@@ -232,7 +232,7 @@ public class BrainGameTests {
     }
 
     /** 主人不在线时事件照收、不开 run;他回来,攒着的一起处理。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_away_owner_leaves_the_events_waiting_in_her_inbox(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_waiter");
         her.ownerOnline = false;
@@ -255,7 +255,7 @@ public class BrainGameTests {
     }
 
     /** 死着时不开 run;复活时死亡的叙事随攒着的输入一起走。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void death_freezes_the_loop_and_the_respawn_tells_her_how_she_died(GameTestHelper helper)
             throws Exception {
         Brain her = new Brain(helper, "gametest_mortal");
@@ -280,7 +280,7 @@ public class BrainGameTests {
     }
 
     /** 主人按停止:在飞的回复作废,日志记下切断点,没有新的 run,直到主人再开口。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void stop_voids_the_reply_in_flight_until_the_owner_speaks_again(GameTestHelper helper)
             throws Exception {
         Brain her = new Brain(helper, "gametest_stopped");
@@ -312,7 +312,7 @@ public class BrainGameTests {
      * 主人清空她的记忆:对话日志与札记删掉,名册与身体不动,面板收到"清空了",并且如实告诉她;导出的 zip 在清空之前带着
      * 日志和札记。只有主人能做;她正在想事情的时候不清,什么也不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void wiping_her_memory_deletes_the_log_and_notes_tells_her_and_waits_until_she_is_idle(
             GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_forgetful");
@@ -366,7 +366,7 @@ public class BrainGameTests {
     }
 
     /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_pager");
         her.mind.program("return 1 + 1").say("算好了:2");
@@ -396,7 +396,7 @@ public class BrainGameTests {
     }
 
     /** 主人经客户端说话:过归属检查,进她的收件箱;别人名下的同伴、不存在的会话一概不收。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_owners_words_reach_only_his_own_companion(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_mine");
         her.mind.say("在的");
@@ -420,7 +420,7 @@ public class BrainGameTests {
     }
 
     /** 旧版本留在客户端的对话、收件箱、目标搬进世界之后,她醒来还记得。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_companion_with_migrated_data_wakes_up_remembering_it(GameTestHelper helper)
             throws Exception {
         Path dir = Files.createTempDirectory("numen-gametest-migrate-");
@@ -450,7 +450,7 @@ public class BrainGameTests {
     }
 
     /** 装了客户端的主人报到:得到回答(协议版本、是不是管理员),并补上名下大脑此刻的样子与会话列表,整条路经真的发包。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_client_that_says_hello_is_answered_and_caught_up(GameTestHelper helper) throws Exception {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_greeter");
         Brain her = new Brain(helper, "gametest_greeted", Files.createTempDirectory("numen-gametest-brain-"),
@@ -475,7 +475,7 @@ public class BrainGameTests {
     }
 
     /** 协议版本对不上的客户端不被服务:回答照给,但不推任何她的东西。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_client_of_another_protocol_is_answered_but_not_served(GameTestHelper helper) throws Exception {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_mismatch");
         Brain her = new Brain(helper, "gametest_unserved", Files.createTempDirectory("numen-gametest-brain-"),
@@ -493,7 +493,7 @@ public class BrainGameTests {
     }
 
     /** 普通玩家经协议改不了服务器上的内置模型档案和配置,回话说明原因;自己的档案存得下,服主的 key 他读不到。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_ordinary_player_cannot_change_the_servers_model_profiles(GameTestHelper helper)
             throws Exception {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
@@ -569,7 +569,7 @@ public class BrainGameTests {
      * 外接大脑经进程内的 MCP 宿主驱动她:点名、取件(主人的话)、替她说话、跑程序。整段进她的日志,主人的客户端收到她说的话,
      * 内脑一轮都没开。外脑是另一条线程,和产品里一样阻塞着等回执。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_external_brain_drives_her_through_the_mcp_host(GameTestHelper helper) throws Exception {
         String name = "gametest_driven";
         Brain her = new Brain(helper, name);
@@ -630,7 +630,7 @@ public class BrainGameTests {
     }
 
     /** 群里 @ 谁谁醒,别人旁听:旁听是捎带的事件,不叫醒她。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void in_a_group_the_one_called_wakes_and_the_other_only_overhears(GameTestHelper helper)
             throws Exception {
         Brain a = new Brain(helper, "gametest_ga");
@@ -657,7 +657,7 @@ public class BrainGameTests {
     }
 
     /** 渠道(桥接、弹幕)送来的输入和主人的话走同一个门:认归属、认类型。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_bridge_input_reaches_her_like_the_owners_words(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_bridged");
         her.mind.say("收到弹幕");
@@ -681,7 +681,7 @@ public class BrainGameTests {
     }
 
     /** 外接大脑把驾驶席交还:驾驶期间攒下的话,内脑回来就接着答。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void handing_the_wheel_back_lets_her_answer_what_waited(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_handback");
         her.mind.say("我在");
@@ -704,7 +704,7 @@ public class BrainGameTests {
      * 召唤只要名字,不设前提:她有服务端大脑,可是还没绑档案,主人跟她说话时她停在 BLOCKED、原因是"还没配模型档案";
      * 档案、人设、声线、皮肤是召唤之后经同一个入口绑上的,四项都记进她的绑定、穿上的皮肤落在名册里。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void summoning_takes_only_a_name_and_the_four_bindings_come_afterwards(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
@@ -713,7 +713,7 @@ public class BrainGameTests {
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
                 new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", false), owner);
 
-        var born = server.getPlayerList().getPlayerByName("gametest_born");
+        var born = com.dwinovo.numen.api.gametest.Bodies.awaitPlayer(server, "gametest_born");
         helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
         var brain = CompanionLoops.get(born.getUUID());
         helper.assertTrue(brain.isPresent(), "she has no server brain");
@@ -777,7 +777,7 @@ public class BrainGameTests {
     /**
      * 内置皮肤是所有人共用的:两位主人名下的同伴都穿着同一条,管理员改了它,两只身上都换成新的——绑定与身体只认库里这一条。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void changing_a_builtin_skin_re_dresses_everyone_wearing_it(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         UUID ownerA = UUID.randomUUID();
@@ -816,7 +816,7 @@ public class BrainGameTests {
     }
 
     /** 每人最多几只是服主在 server.json 里设的;再召唤自己已有的同名同伴是叫醒她,不占名额。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void the_summon_limit_comes_from_the_server_settings(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_limited");
@@ -842,7 +842,7 @@ public class BrainGameTests {
     }
 
     /** 人设改名(文件名即身份):在用它的同伴改指新名字。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void renaming_a_persona_repoints_the_companions_using_it(GameTestHelper helper) throws Exception {
         Brain her = new Brain(helper, "gametest_renamed");
         var server = helper.getLevel().getServer();
@@ -867,7 +867,7 @@ public class BrainGameTests {
     }
 
     /** 她存在就有大脑:按需建起来,再要一次是同一个。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_brain_is_made_on_demand_and_asking_again_gives_the_same_one(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
@@ -896,7 +896,7 @@ public class BrainGameTests {
      * 管理员经协议存了内置的模型档案、再存服主的 key:档案里没有 key,key 在钥匙串里,只有他读得到;在线的别人收到新档案的表,
      * 表里没有 key。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_admin_adds_a_model_profile_and_everyone_online_hears_of_it_without_the_key(
             GameTestHelper helper) {
         var server = helper.getLevel().getServer();
@@ -942,7 +942,7 @@ public class BrainGameTests {
     }
 
     /** 玩家经协议关掉一个技能、再打开它:两次都办成,他收到的整表里那一条先是关、后是开;开关是他自己的。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_player_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
@@ -982,7 +982,7 @@ public class BrainGameTests {
      * 管理员的档案表单问目录与检测:目录、草稿解析出的端点、"缺 key"的判断都在服务端,答案经他自己的连接送回;
      * 检测先答"在试",结局到了再送一张;别的在线玩家什么也收不到。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_brain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void the_profile_form_asks_the_server_for_the_catalog_and_the_connection_test(
             GameTestHelper helper) {
         var server = helper.getLevel().getServer();

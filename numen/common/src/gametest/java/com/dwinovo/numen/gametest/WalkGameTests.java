@@ -42,7 +42,7 @@ public class WalkGameTests {
     /**
      * 关在木板屋里,目标在屋外,什么都没许:她拆墙出去到达,回执如实说拆了什么,路程回执的数字对得上世界里少掉的木板。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 489, batch = BATCH)
     public static void a_walk_out_of_a_closed_room_digs_its_way_and_says_so(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         plankRoomAround(helper, 7, 7);
@@ -70,7 +70,7 @@ public class WalkGameTests {
      * 一条全封死的基岩走廊,中段一道两格高的泥土墙。她走起来之后,前面又被人砌了一道两格高的石墙:没有承诺要守,她从当时的位置接着走,
      * 把石墙也挖穿,到达。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 1185, batch = BATCH)
     public static void a_wall_put_in_her_way_mid_walk_is_dug_like_any_other(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 1; x <= 14; x++) {
@@ -114,7 +114,7 @@ public class WalkGameTests {
     /**
      * 能走就不挖:一道泥土墙横贯场地,近处留了口。她绕到口子过去,墙一格不少;把口子也堵上,绕不过去了,她才挖。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 390, batch = BATCH)
     public static void she_goes_around_a_wall_and_digs_only_when_there_is_no_way_around(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int z = 0; z <= 15; z++) {
@@ -151,7 +151,7 @@ public class WalkGameTests {
     }
 
     /** {@code numen.move.away}:离开一处至少几格,停下时离它够远,回执说还差 0。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void away_gets_far_enough_from_a_place(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_skittish", new BlockPos(7, 2, 7), false);
@@ -173,7 +173,7 @@ public class WalkGameTests {
     }
 
     /** {@code numen.use.dismount}:坐在船上的她下来,交回下来了什么、站在哪;什么都没坐时是失败。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void dismount_steps_off_the_boat(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_rower", new BlockPos(7, 2, 7), false);
@@ -211,7 +211,7 @@ public class WalkGameTests {
     /**
      * 坐着驾驭不了的东西:走路的一趟当场拒绝(没有任务编号、她还坐着),说清下一步是 {@code numen.use.dismount()};从不自己下车。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void a_walk_while_riding_a_minecart_is_refused_and_never_steps_off(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_passenger", new BlockPos(7, 2, 7), false);
@@ -259,7 +259,7 @@ public class WalkGameTests {
     }
 
     /** 远途、一格不改:两百格外的一处,一路走到。一截一截规划,不比对什么。 */
-    @GameTest(template = LONG, timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = LONG, timeoutTicks = 2250, batch = BATCH)
     public static void a_far_walk_that_changes_nothing_walks_all_the_way(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         longFloor(helper);
@@ -282,7 +282,7 @@ public class WalkGameTests {
      * 远途、要改地形:长场地上两面横墙,近的是泥土,远的是石头,都在一次规划看不清的远处。她一截一截走,两面墙都挖穿(各一条两格高的洞),
      * 到达;其余的墙一块不少。
      */
-    @GameTest(template = LONG, timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = LONG, timeoutTicks = 3318, batch = BATCH)
     public static void a_far_walk_digs_through_walls_beyond_what_one_look_sees(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         longFloor(helper);
