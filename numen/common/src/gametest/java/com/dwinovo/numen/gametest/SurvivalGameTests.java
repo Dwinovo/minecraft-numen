@@ -44,7 +44,7 @@ public class SurvivalGameTests {
      * 那个包永远不来 —— 她从任意高度跳下去毫发无伤,而 {@code fallDistance} 恒为 0,
      * 靠它触发的东西一律是死的。这条守 {@code NumenPlayer.tick()} 里补回来的那一趟。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 261, batch = "numen_survival")
     public static void fall_damage_reaches_the_body(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(4, 2, 4));
@@ -87,7 +87,7 @@ public class SurvivalGameTests {
      *
      * <p>收水是这条的重点 —— 桶是消耗品,放完不收就只能救一次,第二次直接摔死。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 210, batch = "numen_survival")
     public static void mlg_breaks_the_fall_and_takes_the_water_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
@@ -112,7 +112,7 @@ public class SurvivalGameTests {
      * 本能替身体做了事,她要听到的是一条 {@code reflex} 事件,带着是哪个本能:摔落时铺水接住自己,
      * 这件事以 {@code reflex} 类型进她的收件箱,文本里写着本能名册里的登记名 {@code mlg}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 255, batch = "numen_survival")
     public static void a_reflex_tells_her_which_instinct_acted(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));

@@ -55,7 +55,7 @@ public class CellRouteGameTests {
     }
 
     /** 走进几格之一:场地一角的一片空地(脚所在的那一层),她从另一角出发,停在其中某一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void goto_several_cells_walks_into_any_of_them(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
@@ -76,7 +76,7 @@ public class CellRouteGameTests {
      * 几个方块走到其中之一旁边:两格各是一口箱子(写成带 name 的 Block),一口在她跟前、一口在场地对角。没说距离,她走到近的那一口旁边,
      * 不走进去。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void goto_several_blocks_goes_beside_the_nearest(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(new BlockPos(7, 2, 2));
@@ -97,7 +97,7 @@ public class CellRouteGameTests {
     }
 
     /** 停在几格附近:离其中某一格不超过 3 格就算到,回执照说;不走进去。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void goto_near_several_cells_stops_within_range_of_them(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hoverer", new BlockPos(2, 2, 2), false);
@@ -121,7 +121,7 @@ public class CellRouteGameTests {
      * 不点名任何禁区,她也挖开别的墙绕出去,东墙一块不少——日式小屋卡在底层来回挖自己刚放下的格,
      * 就是路线把房子的格当成了能挖的地形。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 531, batch = BATCH)
     public static void a_walk_never_digs_a_building_she_built(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         plankRoomAround(helper, 7, 7);

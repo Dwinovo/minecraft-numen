@@ -46,7 +46,7 @@ public class MovementGameTests {
      * 冒烟:同伴能在测试世界里存活并走完一段路。验证的是整条链路——假玩家生成
      * (载档→入场→落位)、任务入队、后台 A* 搜索、逐 tick 执行——在无头环境下全通。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_smoke")
     public static void companion_goto(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -102,7 +102,7 @@ public class MovementGameTests {
      * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的
      * 门交互与 canWalkThroughBlockState 的木门可通行假定。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_smoke")
     public static void goto_through_closed_door(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 周界石墙 rel x,z ∈ [1,5]、y 2..4;南墙中央 (3,*,5) 留门洞
@@ -140,7 +140,7 @@ public class MovementGameTests {
      * 驾船横渡:坐在船上去一处位置,她把船开过水面到离目标最近的水边;再 {@code numen.use.dismount()} 下船、走完最后
      * 一段。守的是整条载具链——服务端权威开关(没有它船每刻被清零)、桨物理驱动、水面 A*、靠岸后下船与步行接力都由她的程序写明。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2400, batch = "numen_vehicle")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_vehicle")
     public static void boat_goto_pilots_across_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 把地板挖成一条水道(x 5..11 × z 5..11),两岸是原地板
@@ -232,7 +232,7 @@ public class MovementGameTests {
     /**
      * 跟得上就垫着去跟:目标在够不着的柱顶,follow 和 move.to 同一套走法——身上有泥土就垫起来,跟到它身边(3 格内),垫了几块泥土。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_builds_up_to_keep_up(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper, Blocks.STONE);
@@ -248,7 +248,7 @@ public class MovementGameTests {
     }
 
     /** 跟不上也说清:目标在够不着的基岩柱顶,她一块能垫的方块也没有——受理当场回,说每条路都要垫方块、她没带料。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_without_blocks_to_build_with_is_refused_at_once(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper, Blocks.BEDROCK);
@@ -269,7 +269,7 @@ public class MovementGameTests {
      * 没搜完——这只是没搜完,不能证明到不了。受理,开始走;不当场回一句"跟不上"。石头铺得比场地大,伸进邻居的场地里,所以自成一批,
      * 收场时还成空气。
      */
-    @GameTest(template = "floor16", timeoutTicks = 3000, batch = "numen_follow_budget")
+    @GameTest(template = "floor16", timeoutTicks = 408, batch = "numen_follow_budget")
     public static void follow_is_accepted_when_the_probe_search_runs_out_of_budget(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos low = helper.absolutePos(new BlockPos(16, 1, -12));
@@ -372,7 +372,7 @@ public class MovementGameTests {
     }
 
     /** 身上带着泥土:垫着爬上高台,泥土用掉了几块。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_up_a_tower_pillars_up(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 7), false);
@@ -392,7 +392,7 @@ public class MovementGameTests {
      * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的泥土记在她名下;主人在场,{@code numen.work.dig} 拆掉其中一格,
      * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
     public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos top = bedrockTower(helper);
@@ -433,7 +433,7 @@ public class MovementGameTests {
     }
 
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_up_a_tower_without_materials_says_so(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_grounded", new BlockPos(3, 2, 7), false);
@@ -448,7 +448,7 @@ public class MovementGameTests {
     }
 
     /** 场地垫高两层,正中一道两格宽、两格深的水沟横着切开:她游过去,爬上对岸,到达目标。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_swims_across_a_water_channel(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 0; x < 16; x++) {
@@ -477,7 +477,7 @@ public class MovementGameTests {
     /**
      * 目标是石头里的一格:一个 Pos 站得进去就站进去——一块 3×3×3 的实心石头,正中那一格是目标,她挖进去,站在里面。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 2013, batch = "numen_terrain")
     public static void goto_a_position_inside_rock_digs_into_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (BlockPos rel : BlockPos.betweenClosed(new BlockPos(10, 2, 6), new BlockPos(12, 4, 8))) {
@@ -503,7 +503,7 @@ public class MovementGameTests {
     }
 
     /** 场地垫高三层,中间一个 3×3、三格深的水池;目标是池底正中那一格:她下水沉到池底,就站在那一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_to_the_bottom_of_a_pool(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 0; x < 16; x++) {
@@ -532,7 +532,7 @@ public class MovementGameTests {
      * 场地垫高一层,中间一道一格宽的岩浆沟横着拦住大半边,只在一头留出通路:她绕过去到达目标,
      * 一路上没着过火、没掉过血。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 213, batch = "numen_terrain")
     public static void goto_goes_around_a_lava_channel(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 0; x < 16; x++) {
@@ -560,7 +560,7 @@ public class MovementGameTests {
     // ---- follow:跟主人、跟的东西没了、编号不对、叫停 ----
 
     /** 跟着主人:主人挪到场地另一头,她跟过去停在身边;跟上了也不收场,跟到时长到了才收。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_the_owner_keeps_up_when_they_move(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_shadow", new BlockPos(4, 2, 4), false);
@@ -583,7 +583,7 @@ public class MovementGameTests {
     }
 
     /** 跟着一头猪:跟到了身边,猪没了,跟随自己收场,回执说跟的东西不在了。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_an_entity_ends_when_it_is_gone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var pig = net.minecraft.world.entity.EntityType.PIG.create(level);
@@ -669,7 +669,7 @@ public class MovementGameTests {
     }
 
     /** 跟着主人的时候主人按停止:跟随按主人停止收场。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void owner_stop_while_following_ends_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_dismissed", new BlockPos(4, 2, 4), false);

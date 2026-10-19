@@ -32,7 +32,7 @@ public class ModeGameTests {
     }
 
     /** 创造 goto:无畏/无饥饿画像下移动与疾跑门照常工作。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void creative_goto(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
@@ -50,7 +50,7 @@ public class ModeGameTests {
      * (生存下金矿需铁镐,空手会 WRONG_TOOL 拒工)、无掉落画像按"破坏的
      * 目标方块"计数(背包增量恒零)、以及确实没有掉落物入包。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor20", timeoutTicks = 200, batch = "numen_mode")
     public static void creative_mine_no_drops(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> ores = List.of(
@@ -76,7 +76,7 @@ public class ModeGameTests {
     }
 
     /** 创造建造:背包全空 + 免耗材记账,想建就建;建完背包依旧全空。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor20", timeoutTicks = 1500, batch = "numen_mode")
     public static void creative_build_empty_inventory(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cmason", new BlockPos(9, 2, 7), true);
@@ -100,7 +100,7 @@ public class ModeGameTests {
     }
 
     /** 生存缺料拒工:空背包 + 消耗记账 → 开工前盘料失败,回执逐项报缺。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor20", timeoutTicks = 200, batch = "numen_mode")
     public static void survival_build_missing_materials(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_broke", new BlockPos(2, 2, 2), false);
@@ -137,7 +137,7 @@ public class ModeGameTests {
      * 背包全空——出路是免耗材画像自动补脚手架泥土后原地垫柱。守两件事:
      * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作,垫的是出厂清单上的第一种。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void creative_pillar_out_empty_handed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int y = 2; y <= 4; y++) {
@@ -168,7 +168,7 @@ public class ModeGameTests {
      * 稀疏丢空气)与 .schem v2(varint 数据、带属性的调色板键),写进蓝图目录
      * 经 BlueprintStore 统一管线加载,逐格断言。不提交二进制夹具。
      */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void blueprint_community_formats(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         java.nio.file.Path dir = com.dwinovo.numen.blueprint.BlueprintStore.dir(level.getServer());
@@ -244,7 +244,7 @@ public class ModeGameTests {
      * 那一格在目标集之外:一件料换三块床方块,还可能覆写掉已砌好的内墙。所以这个
      * 差额不是解码丢了格,恰恰是它没丢:{@code 5857 + 2 == TotalBlocks}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void blueprint_japanese_cottage_decode(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -270,7 +270,7 @@ public class ModeGameTests {
      * 游戏模式切换之后,{@code numen.status.self} 报的模式与挖掘的做法是同一份:切到创造,她报 creative,空手挖黑曜石一下就碎、什么都
      * 不掉;切回生存,她报 survival,空手挖另一块黑曜石当场被拒(手里没有收得到它的工具),那一块原样。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void status_and_digging_follow_a_game_mode_switch(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos first = helper.absolutePos(new BlockPos(8, 2, 5));
@@ -313,7 +313,7 @@ public class ModeGameTests {
     }
 
     /** 创造取物:numen.creative.give 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
@@ -328,7 +328,7 @@ public class ModeGameTests {
     }
 
     /** 生存取物拒绝:numen.creative.give 在生存画像下吃诚实拒绝,背包不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
@@ -343,7 +343,7 @@ public class ModeGameTests {
     }
 
     /** 生存耗料建造:恰好给足一组圆石,9 格平台建成且背包精确少 9。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "floor20", timeoutTicks = 273, batch = "numen_mode")
     public static void survival_build_consumes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(9, 2, 7), false);

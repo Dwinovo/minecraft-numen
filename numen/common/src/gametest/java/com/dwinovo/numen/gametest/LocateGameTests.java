@@ -24,7 +24,7 @@ public class LocateGameTests {
     }
 
     /** 找平原:她就站在平原上,报出来的最近一处带坐标和方向。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_locate")
     public static void locate_biome_finds_the_plains_underfoot(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_cartographer", new BlockPos(3, 2, 3), false);
         ToolRun locate = lua(companion, "numen.locate.biome(\"minecraft:plains\")");
@@ -41,7 +41,7 @@ public class LocateGameTests {
     }
 
     /** 找沙漠:这个世界里没有,回执说没找到、找了多远,不编一个坐标出来。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
+    @GameTest(template = "floor16", timeoutTicks = 477, batch = "numen_locate")
     public static void locate_biome_that_is_not_here_says_how_far_it_looked(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer", new BlockPos(3, 2, 3), false);
         ToolRun locate = lua(companion, "numen.locate.biome(\"minecraft:desert\")");
@@ -71,7 +71,7 @@ public class LocateGameTests {
     }
 
     /** 找村庄:这个世界不生成结构,回执如实说没有,不报一个坐标。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_locate")
     public static void locate_structure_that_is_not_here_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_pilgrim", new BlockPos(3, 2, 3), false);
         ToolRun locate = lua(companion, "numen.locate.structure(\"minecraft:village\")");

@@ -117,7 +117,7 @@ public class PermissionGameTests {
      * 这时墙一块不少;征询列出这一声答应放行的每一格(同一种木板、同一行规则),之后不再问;主人允许,她拆墙出去到达,
      * 回执说主人允许过,路程回执的裁定列表里就是那几格。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 504, batch = "numen_permission")
     public static void a_walk_asks_at_the_owners_wall_and_goes_on_when_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_host");
@@ -175,7 +175,7 @@ public class PermissionGameTests {
      * 同一条路主人说不:走到墙前问,主人不答应,那几格这一趟里当墙、重新规划;屋子四面都是主人的墙,绕不开,她以 denied 收场,
      * 回执里有主人的原话,同一种东西不再问第二遍;墙一块不少,她没出屋。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_permission")
     public static void a_walk_refused_at_the_owners_wall_stops_there(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_strict");
@@ -213,7 +213,7 @@ public class PermissionGameTests {
     /**
      * 问有代价就绕开:主人的一道木板墙横在半路,近处留着口。要问的格比绕过去贵得多,她绕到口子过去,一张卡也不弹,墙一块不少。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void asking_costs_extra_so_she_goes_around_the_owners_wall(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
@@ -254,7 +254,7 @@ public class PermissionGameTests {
      * mine 挖到主人放的原木就问,同种原木只问一次:附近只有两根主人放的橡木,要两根。卡片挂上,
      * 主人允许,她把两根都挖了——第二根不再弹卡(同一行规则问出来的同一种方块本任务内已授权)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_asks_once_for_player_logs_then_mines(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
@@ -285,7 +285,7 @@ public class PermissionGameTests {
     }
 
     /** 主人不让挖:mine 以 refused 收场,理由是主人原话,原木一根不少。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_denied_quotes_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
@@ -320,7 +320,7 @@ public class PermissionGameTests {
      * 同一套定价自然排序:主人放的原木离她三格,野树九格(原木顶上贴着不持久的树叶才是野树)。要两根——她走去砍野树,主人的原木
      * 一根不少,从头到尾没有弹过一张卡。没有剔除,主人的原木只是贵(需要同意的格乘十倍)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 285, batch = "numen_permission")
     public static void mine_prefers_wild_trees_by_price(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> placed = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
@@ -356,7 +356,7 @@ public class PermissionGameTests {
      * 出路全被主人的规则拦着:她关在一间白羊毛小屋里,主人写了 deny 行不许挖白羊毛,南瓜在屋外。她走出去的路规划不出来,收场是
      * denied,回执说哪一格不许动、是哪一行规则,下一步是换个去处或问主人。屋子与南瓜原样,也不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_with_every_way_out_refused_says_which_cell_and_why(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> hut = boxCells(new BlockPos(3, 1, 3), 3, 4, 3, true);
@@ -399,7 +399,7 @@ public class PermissionGameTests {
     /**
      * 只挖交给她的那一团:两棵分开的野树一扫成两团,交出其中一团。她挖完那三格就收场,另一团一格不少。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 261, batch = "numen_permission")
     public static void mine_digs_only_the_given_cluster(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> named = List.of(new BlockPos(4, 2, 4), new BlockPos(4, 3, 4), new BlockPos(4, 4, 4));
@@ -450,7 +450,7 @@ public class PermissionGameTests {
      * "别碰这一格"由程序表达:两根野生诡异菌柄一扫成两团,程序把要留的那一格从扫到的方块里去掉,剩下的交给 {@code numen.work.dig}、
      * 要两个。她挖了另一根就收场(交给她的没有了),留下的那格原样立着。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void dig_leaves_standing_what_the_program_took_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos freeRel = new BlockPos(5, 2, 5);
@@ -492,7 +492,7 @@ public class PermissionGameTests {
      * 交给她的那一团被拒就停:主人写了 deny 行不许挖绯红菌柄;扫描只说找到了什么,不说主人许不许。mine 那一团,派发当场按拒绝收场、
      * 理由是那一行规则,菌柄一根不少,也不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_refused_stops_with_the_reason(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> stems = List.of(new BlockPos(6, 2, 6), new BlockPos(6, 3, 6));
@@ -536,7 +536,7 @@ public class PermissionGameTests {
      * 她一路往下挖掉的点名格都算她挖的:四块黏土叠成一柱,四面黑曜石围成竖井,她站在柱顶。交出这一团,脚下那一块挖掉
      * 她就落下去、接着挖下一块,为看见下面那块挖开的遮挡本身也是点名格。四格都记成她挖的,没有一格记成"别人动过"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 318, batch = "numen_permission")
     public static void mine_counts_cells_she_broke_on_the_way(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> column = List.of(new BlockPos(7, 2, 7), new BlockPos(7, 3, 7), new BlockPos(7, 4, 7),
@@ -586,7 +586,7 @@ public class PermissionGameTests {
     /**
      * numen.use.hit 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chestRel = new BlockPos(6, 2, 5);
@@ -622,7 +622,7 @@ public class PermissionGameTests {
      * 等主人点头的时候那只动物挪了窝,征询还是原来那一张:点名打一头起了名字的猪,征询挂上后每隔几刻把它挪一格,
      * 号始终不变——实体认的是那一只,不是它脚下的格,挪一步不是新的请求。主人拒绝后猪还活着。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_target_that_moves_keeps_its_consent_request(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
@@ -670,7 +670,7 @@ public class PermissionGameTests {
     }
 
     /** numen.inv.drop 每次问:调用悬着等主人;允许后东西丢出来。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void drop_items_waits_for_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
@@ -701,7 +701,7 @@ public class PermissionGameTests {
      * 卡片挂着时主人按停止:numen.inv.drop 悬着等答复,主人没点卡片而是按了停止(与停止键同一个入口)。
      * 这件活按主人停止收场、消息写明是主人停的,挂着的征询随之撤掉,东西一件没丢。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void an_owner_stop_while_a_card_is_up_withdraws_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
@@ -728,7 +728,7 @@ public class PermissionGameTests {
     }
 
     /** 没人答复:到点按拒绝,理由是"主人不在场,无法征得同意";东西还在身上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 7209, batch = "numen_permission")
     public static void unanswered_consent_times_out_as_denied(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
@@ -750,7 +750,7 @@ public class PermissionGameTests {
     }
 
     /** observe 模式拒绝一切改动:自然原木也不砍,任务以 refused 收场,原木一根不少,也不弹卡。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void observe_mode_refuses_every_change(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(8, 2, 6), new BlockPos(8, 2, 8));
@@ -787,7 +787,7 @@ public class PermissionGameTests {
     }
 
     /** bypass 模式放行主人的东西:主人放的原木照砍,不弹卡(硬规则不在其内,见 {@link #other_players_blocks_are_out_of_reach_in_every_mode})。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 204, batch = "numen_permission")
     public static void bypass_mode_allows_everything(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> placed = List.of(new BlockPos(8, 2, 6), new BlockPos(8, 2, 8));
@@ -834,7 +834,7 @@ public class PermissionGameTests {
      * {@code break(owner & minecraft:cobblestone)};第二块圆石另起一次调用,不再问、直接挖掉;主人放的橡木板没被
      * 记住,照旧问。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void remembered_consent_stops_asking_for_that_kind(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos firstRel = new BlockPos(6, 2, 4);
@@ -911,7 +911,7 @@ public class PermissionGameTests {
      * 主人手写的 ask 行压过出厂 allow 行:主人用命令写下 {@code ask break(!owner & !block_entity)},她去挖一块
      * 自然石头也要问;写错的规则回教学式的错误、一行不进表。主人不让,石头一块不少。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void an_owners_ask_row_beats_the_factory_allow(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stoneRel = new BlockPos(6, 2, 5);
@@ -962,7 +962,7 @@ public class PermissionGameTests {
      * 不再问。带附言的允许不收(附言只随拒绝);别人敲命令答不了;
      * 答一个没挂着的号说清楚没有。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void consent_command_answers_like_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_almoner", new BlockPos(4, 2, 4), false);
@@ -1146,7 +1146,7 @@ public class PermissionGameTests {
      * observe 模式只看不动:主人用命令切到 observe,右键开箱子被拒、界面没开;切回 ask 开了箱子,再切到 observe,
      * 从箱子里拿东西被拒,钻石还在箱子里。从头到尾不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void observe_mode_refuses_opening_and_taking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chestRel = new BlockPos(6, 2, 5);
@@ -1214,7 +1214,7 @@ public class PermissionGameTests {
      * 主人写 {@code ask take(*)} 之后,开箱子照出厂规则放行,拿东西要问:transfer 悬着、钻石还在箱子里;主人允许后
      * 钻石进了她的背包。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void an_owners_ask_take_row_asks_before_taking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chestRel = new BlockPos(6, 2, 5);
@@ -1275,7 +1275,7 @@ public class PermissionGameTests {
      * 服务端退回来——以 refused 收场,理由写明服务器没让挖掉,方块一块不少。生存的身体用 numen.work.dig 挖(STOP 那一下被退),
      * 创造的用 numen.use.hit 点(START 那一下被退)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_bounced_dig_is_reported_as_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos survivalRel = new BlockPos(5, 2, 3);
@@ -1312,7 +1312,7 @@ public class PermissionGameTests {
      * 在主人放的木板旁边放 TNT:危险品挨着玩家的东西要问;主人不在,问不到就不放。建造按格交代,
      * 这一格留着没动、回执说是主人没答应,TNT 还在身上。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void build_tnt_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerPlayer absentOwner = barePlayer(helper, "gametest_absent_owner");
@@ -1334,7 +1334,7 @@ public class PermissionGameTests {
     }
 
     /** 同一块 TNT 放在远离玩家东西的空地上:不用问,放下去就是。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void build_tnt_away_from_player_blocks_goes_ahead(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
@@ -1354,7 +1354,7 @@ public class PermissionGameTests {
     // ---- 打村民、打别人的狼、拆装着东西的箱子、拆活板门 ----
 
     /** 村民在出厂 ask 表里:主人不在,问不到就不打;attack 以主人拒绝收场,村民一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_a_villager_with_the_owner_away_is_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var villager = EntityType.VILLAGER.create(level);
@@ -1377,7 +1377,7 @@ public class PermissionGameTests {
     }
 
     /** 同样打村民,主人在场点了允许:征询只挂一次,允许之后才动手,村民挨了打。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_a_villager_asks_then_hits_after_yes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var villager = EntityType.VILLAGER.create(level);
@@ -1413,7 +1413,7 @@ public class PermissionGameTests {
     }
 
     /** 主人养的狼:打死了就是他的宠物没了,要问;主人不在就不打,狼一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_the_owners_tamed_wolf_is_refused_without_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var wolf = EntityType.WOLF.create(level);
@@ -1438,7 +1438,7 @@ public class PermissionGameTests {
     }
 
     /** 别人养的狼:主人也答应不了,硬规则拒绝,不弹卡;狼一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_someone_elses_tamed_wolf_is_forbidden_outright(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var wolf = EntityType.WOLF.create(level);
@@ -1466,7 +1466,7 @@ public class PermissionGameTests {
     }
 
     /** 装着钻石的箱子没有谁放过的记录,说不清是谁的:拆了东西会洒,要问;主人不在就不挖,箱子和五颗钻石都在。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_a_chest_with_things_in_it_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 4), 5);
@@ -1487,7 +1487,7 @@ public class PermissionGameTests {
     }
 
     /** 没有谁放过的活板门(门、床、栅栏门同理)说不清是谁的,要问:主人不在就不挖,活板门还在。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void mine_a_trapdoor_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos trapdoor = helper.absolutePos(new BlockPos(6, 2, 4));
@@ -1509,7 +1509,7 @@ public class PermissionGameTests {
      * 拿水桶对着主人木板旁边的地面右键:倒水是危险品挨着玩家的东西,要问;主人不在,问不到就不倒——
      * 走的是 numen.use.block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerPlayer absentOwner = barePlayer(helper, "gametest_absent_owner");
@@ -1534,7 +1534,7 @@ public class PermissionGameTests {
      * 主人用命令写 {@code deny break(owner)}:收下这一行。她 numen.use.hit 左键打主人放的石头被拒、理由是那一行规则,石头还在;
      * 天然的石头照常挖掉。从头到尾不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_placed_deny_row_guards_what_players_placed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos placedRel = new BlockPos(6, 2, 5);
@@ -1582,7 +1582,7 @@ public class PermissionGameTests {
      * 主人不许挖他放的:谷仓里主人摆的南瓜离她近,野地里长的远,一次扫描两个都找到。要一个南瓜,{@code arrive = "dig"} 只去挖得成
      * 的那个,她挖野地里那个,谷仓里的一动不动;对同样的方块再要一个,只剩谷仓里的,当场拒绝、理由是那一行规则。不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 237, batch = "numen_permission")
     public static void work_dig_leaves_the_denied_placed_blocks_standing(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos insideRel = new BlockPos(5, 2, 5);
@@ -1623,7 +1623,7 @@ public class PermissionGameTests {
      * 挡着视线的格不许挖,她就换一面看:南瓜在一堵两格高的木板墙后面,墙是主人砌的、主人不许挖他放的,墙向两边伸出
      * 四格。站在墙前最近,手也够得着,可看得见南瓜的每一面都隔着墙;她绕过墙头,从看得见它的那一面挖到手。墙一块不少,不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 273, batch = "numen_permission")
     public static void work_dig_goes_around_a_denied_wall_to_see_the_block(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
@@ -1664,7 +1664,7 @@ public class PermissionGameTests {
      * 唯一的视线被不许挖的格挡死:南瓜六面都贴着白羊毛,主人写了 deny 行不许挖白羊毛。站位怎么挑都看不见它,当场回:南瓜的
      * 每一面都贴着不许挖的方块,点名是哪几格、哪一行规则。羊毛与南瓜原样,不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void work_dig_names_the_denied_blocks_walling_in_its_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
@@ -1710,7 +1710,7 @@ public class PermissionGameTests {
      * 遮挡不挖、也不替她去问,当场回:南瓜的每一面都贴着她不能挖的方块,点名是哪几格、为什么(要主人同意)。木板与南瓜原样,
      * 不弹卡,她一步没动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void work_dig_names_the_blocks_needing_consent_walling_in_its_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
@@ -2047,7 +2047,7 @@ public class PermissionGameTests {
      * 她改规则:收紧(deny、ask)当场写进主人那一层、回执说清、主人在场就当场告诉他,写的人记成她、带着她说的理由;写错的规则回教学式
      * 的错误。放宽(allow)与删行发一张征询卡——卡上就是她没法自己跑的那条命令、不能"允许并记住",主人拒绝了不写,允许了才写(来源记成她)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1000, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void she_tightens_at_once_and_loosening_goes_through_a_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_scribe", new BlockPos(4, 2, 4), false);

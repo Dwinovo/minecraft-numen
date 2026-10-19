@@ -59,7 +59,7 @@ public class ArriveGameTests {
      * 狭窄矿道里的熔炉:两条平行的一格宽两格高矿道,一头连通;熔炉嵌在南边那条的北壁上,只有朝矿道的南面敞开。她在北边那条里,
      * 隔着一层石头几何上够得着它、却看不见:use.block 绕到南边矿道、站到正对开口的一侧;她走过去、打开它。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void use_walks_to_the_open_side_of_a_furnace_in_a_narrow_tunnel(GameTestHelper helper) {
         fill(helper, 1, 2, 1, 14, 4, 8, Blocks.STONE.defaultBlockState());
         fill(helper, 3, 2, 3, 12, 3, 3, Blocks.AIR.defaultBlockState());
@@ -81,7 +81,7 @@ public class ArriveGameTests {
     }
 
     /** 箱子三面与顶上罩着(顶上是玻璃),只有西面敞开;她在东面:use.block 绕到西面。 */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void use_walks_to_the_only_open_side_of_a_chest(GameTestHelper helper) {
         set(helper, 8, 2, 8, Blocks.CHEST);
         set(helper, 8, 2, 7, Blocks.STONE);
@@ -107,7 +107,7 @@ public class ArriveGameTests {
      * 工作台在三格高的悬崖上、离崖边三格;她在崖脚,几何上够得着它,隔着崖壁的石头看不见。旁边一道台阶能上去:use.block
      * 不停在崖底,上到崖顶,打开它。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 216, batch = BATCH)
     public static void use_climbs_to_a_table_on_a_cliff_instead_of_stopping_below(GameTestHelper helper) {
         fill(helper, 7, 2, 0, 15, 4, 15, Blocks.STONE.defaultBlockState());
         set(helper, 4, 2, 12, Blocks.STONE);
@@ -147,7 +147,7 @@ public class ArriveGameTests {
      * 箱子前立着高草:{@code numen.work.dig} 走过去挖掉高草,再 {@code numen.use.block} 打开箱子。右键是纯按键,
      * 清视线只归挖掘执行。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void use_block_opens_a_chest_once_work_dig_clears_the_tall_grass(GameTestHelper helper) {
         BlockPos chest = chestBehindTallGrass(helper);
         BlockPos grass = helper.absolutePos(new BlockPos(7, 2, 8));
@@ -176,7 +176,7 @@ public class ArriveGameTests {
      * 同一只箱子、同一株高草,不挖就右键:她走过去,点到的是高草,箱子没开,高草还在;回执说准星落在高草上,写出
      * {@code numen.work.dig} 挖掉它、或从另一面点这两条路。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void use_block_right_clicks_the_tall_grass_in_the_way_and_says_so(GameTestHelper helper) {
         BlockPos chest = chestBehindTallGrass(helper);
         BlockPos grass = helper.absolutePos(new BlockPos(7, 2, 8));
@@ -224,7 +224,7 @@ public class ArriveGameTests {
     }
 
     /** 两格高的石柱,旁边一级台阶:move.to 给柱顶上面那一格,站上柱顶。 */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void at_the_cell_above_a_pillar_stands_on_top_of_it(GameTestHelper helper) {
         fill(helper, 8, 2, 8, 8, 3, 8, Blocks.STONE.defaultBlockState());
         set(helper, 7, 2, 8, Blocks.STONE);
@@ -241,7 +241,7 @@ public class ArriveGameTests {
     }
 
     /** 贴墙一道梯子:move.to 到梯子半截的一格,停在那一格上,挂在梯子上。 */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void at_stops_on_a_cell_of_a_ladder(GameTestHelper helper) {
         fill(helper, 9, 2, 6, 12, 6, 10, Blocks.STONE.defaultBlockState());
         for (int y = 2; y <= 6; y++) {
@@ -261,7 +261,7 @@ public class ArriveGameTests {
     }
 
     /** 场地垫高两层,中间一个两格深的水池:move.to 到水面那一层的一格,她在水里。 */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void at_stops_on_a_cell_in_water(GameTestHelper helper) {
         fill(helper, 0, 2, 0, 15, 3, 15, Blocks.STONE.defaultBlockState());
         fill(helper, 7, 2, 7, 10, 3, 10, Blocks.WATER.defaultBlockState());
@@ -278,7 +278,7 @@ public class ArriveGameTests {
     }
 
     /** move.to 带距离 3:停在离那一格三格以内,不走到跟前。 */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void near_stops_within_the_distance(GameTestHelper helper) {
         BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
         NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
@@ -297,7 +297,7 @@ public class ArriveGameTests {
      * 一格半空(地面上两格、四周什么都没有):{@code numen.build.place} 自己走到手够得着往里放方块的地方,不站进那一格,放进去——
      * 够得着就是放得下。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void place_walks_within_hand_of_a_cell_in_the_air_and_fills_it(GameTestHelper helper) {
         BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
         NumenPlayer companion = spawnAt(helper, "gametest_reacher", new BlockPos(2, 2, 2), false);

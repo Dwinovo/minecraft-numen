@@ -36,7 +36,7 @@ public class CombatGameTests {
      * (实测在 4.0~4.8 之间摆、有效血量 8 掉到 5);内沿一旦叠上格量化补偿,带宽从 1.28 压到
      * 0.57,格分辨率装不下,寻路一路失败,她停在边缘不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 405, batch = "numen_combat")
     public static void combat_holds_the_skirmish_band(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(3, 2, 3));
@@ -73,7 +73,7 @@ public class CombatGameTests {
      * 又挨不着的那条带不存在,走位环的内沿归零,她照样走进够得着的地方砍它,而不是在编走位目标时出错收场。史莱姆不动
      * 不还手,测的只是她走不走过去打。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
     public static void attack_walks_in_on_a_creature_that_outreaches_her(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
@@ -220,7 +220,7 @@ public class CombatGameTests {
      * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
      * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
     public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
@@ -276,7 +276,7 @@ public class CombatGameTests {
      * 库里的 {@code numen.fight.clear}:四周两只僵尸,一次 {@code numen.fight.attack} 打一只,打到范围里一只不剩,返回打了几场。两只都倒在
      * 她手下,一场一个 numen.fight.attack。半径给小,不扫到隔壁场地。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 315, batch = "numen_combat")
     public static void fight_clear_fights_every_hostile_around_her_one_at_a_time(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(8, 2, 8));
@@ -302,7 +302,7 @@ public class CombatGameTests {
      * 三十二格内没有能站的落点。逃跑本能先接过身体,找不到落点就让出来,留下一条说"没有退路"的本能事件;自卫接着打,僵尸挨了她的剑。
      * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;那一块区块钉住让实体照常走刻。本能事件进她的收件箱,读得到。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 201, batch = "numen_combat")
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(BlockPos.ZERO);

@@ -625,7 +625,7 @@ public class TaskControlGameTests {
      * 这时派一趟当场就走不了的 {@code numen.move.to}——目标是一只不存在的实体。直接回错误:说那只实体不在,没有任务编号,不发
      * task_finished;她手上的跟随还是那一件,照旧在跑。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_walk_that_cannot_start_is_refused_and_the_work_in_hand_goes_on(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_undeterred", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(2, 2, 14));
