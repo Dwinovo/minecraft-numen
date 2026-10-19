@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/logo/numen-rounded-white-512.png" alt="Numen" width="128">
+
 # Numen
 
 [**English**](README_EN.md) · [简体中文](README.md)
