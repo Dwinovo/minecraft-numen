@@ -66,10 +66,10 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
 
     /**
-     * 一条用例最多等多少刻(见 {@link #capped})。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
+     * 一条用例最多等多少刻(见 {@link #capped}),排查被收短的用例时用系统属性 {@code numen.gametest.maxTicks}({@code -PgametestMaxTicks=…})放宽。服务端按 20 刻每秒走,不加速:Paper 的挖掘进度按墙钟算
      * ({@code ServerLevel.getLagCompensationTick}),刻跑得比墙钟快,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。
      */
-    private static final int MAX_TICKS = 2400;
+    private static final int MAX_TICKS = Integer.getInteger("numen.gametest.maxTicks", 2400);
 
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 

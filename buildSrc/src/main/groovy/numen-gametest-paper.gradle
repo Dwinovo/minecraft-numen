@@ -22,6 +22,8 @@ def suites = providers.gradleProperty('gametest')
 def seed = providers.gradleProperty('gametestSeed')
 // 只跑名字匹配这个正则的用例(排查用,如 -PgametestOnly='numen\.diggametests\..*')
 def only = providers.gradleProperty('gametestOnly')
+// 一条用例最多等多少刻(默认 2400,用例自己写的更长的会被收短);排查被收短的用例时放宽
+def maxTicks = providers.gradleProperty('gametestMaxTicks')
 def structures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
 // 整套用例最长跑多久:超过就当没收场,杀掉服务端
 def limitMinutes = 60
@@ -64,6 +66,9 @@ tasks.register('runGameTestServer') {
                 "-Dnumen.gametest.structures=${structures.get().asFile.absolutePath}".toString(),
                 "-Dnumen.gametest.result=${resultFile.absolutePath}".toString(),
         ]
+        if (maxTicks.present) {
+            jvmArgs.add("-Dnumen.gametest.maxTicks=${maxTicks.get()}".toString())
+        }
         if (only.present) {
             jvmArgs.add("-Dnumen.gametest.only=${only.get()}".toString())
         }
