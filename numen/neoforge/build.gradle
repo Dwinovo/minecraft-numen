@@ -150,5 +150,5 @@ tasks.named('check') {
 ext.benchModules = [project(':numen:common')]
 apply plugin: 'numen-bench'
 
-// 端到端测试(e2e/):用原版客户端协议连一台真的专用服。这一层只管把 NeoForge 专用服起起来。
+// 端到端测试(numen/common 的 e2e 源码集,任务 e2eTest):用原版客户端协议连一台真的专用服。这一层只管把 NeoForge 专用服起起来。
 apply plugin: 'numen-e2e-neoforge'

@@ -11,6 +11,10 @@
 内容,经四个登记口插入(BrainChains 链、CompanionTaskFactory 任务执行器、
 ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen 地位平等。
 
+**测试是被测项目的源码集(`test`、`gametest`、`e2e`),评测(bench)是独立模块。** 单测、GameTest 用例、端到端场景都放在它们测的那个项目里
+(如 `numen/common/src/gametest`、`numen/common/src/e2e`),按平台跑的任务挂在平台项目上(`:numen:neoforge:runGameTestServer`、
+`:numen:paper:e2eTest`);不为测试另开模块。评测要真模型、有自己的统计与记录,是独立模块 `bench`。
+
 **寻路是 Numen(Numen API 的第一个插件)的内容,独立成模块,经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖
 原版与 Numen API 公开的那部分(瘦 api jar),随 Numen 的加载器 jar 发出,Numen API 不依赖它。设计稿见 `docs/pathing.md`。
 她缺的那半个客户端——一副键盘 `Controls`、一个视角 `Look`、一个鼠标 `Mouse`(准星、左键挖、右键用,动手之前身体是同伴就过权限层)、

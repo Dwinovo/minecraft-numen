@@ -120,9 +120,9 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 - common 的行为继续由 NeoForge 的 GameTest 验(主力)。
 - 我们的 GameTest 拿到 Paper 上跑:不开 `IS_RUNNING_IN_IDE`(开了会把测试参数类型塞进内置注册表,有 op 的客户端进服就断),
   而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。
-  这一层是 `paper-gametest`(只在测试时挂上的 Paper 插件,不进发行 jar),一条命令 `:numen:paper:runGameTestServer`,见文末"第 4 步落地时的出入"。
+  这一层是 `numen/paper` 的 `gametest` 源码集(打成只在测试时挂上的 Paper 插件 `gametestJar`,不进发行 jar),一条命令 `:numen:paper:runGameTestServer`,见文末"第 4 步落地时的出入"。
 - Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服;进 CI 与否另定(耗时见文末)。
-- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`;三个端口每次运行时现取空闲的),起服是可替换的一层,各提供同名的 `e2eServerStart`/`e2eServerStop`:NeoForge 的是 `numen-e2e-neoforge`,Paper 的是 `numen-e2e-paper`;`-Pe2eServer=paper` 选 Paper,默认 NeoForge。
+- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景是 `numen/common` 的 `e2e` 源码集(`src/e2e`,和 GameTest 用例同处),按平台跑:`:numen:neoforge:e2eTest`(NeoForge 专用服)、`:numen:paper:e2eTest`(Paper 服)。场景只认规格(地址、RCON 口、种子,见 buildSrc 的 `numen-e2e`;三个端口每次运行时现取空闲的),起服是可替换的一层,各提供同名的 `e2eServerStart`/`e2eServerStop`:NeoForge 的是 `numen-e2e-neoforge`,Paper 的是 `numen-e2e-paper`。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
 ## 十二、实测结论(10-19)
@@ -204,7 +204,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 - **起服层按鸭子类型取 run-paper 的 `runServer`**:`e2eServerStart` 与 `runGameTestServer` 起的是 `runServer` 同一套(Paper 版本、JVM 参数、两个插件),
   命令行由 `PaperServer.command` 拼:服务端 jar 经 run-paper 的下载服务取(已下载就是缓存),插件用 `-add-plugin`。
   运行目录(`numen/paper/runs/e2e`、`runs/gametest`)每次清空重建,Paper 的下载缓存(`cache`、`libraries`、`versions`)留着,否则每次都要重新打补丁。
-- **GameTest 用例写一次,三个平台都跑**:`paper-gametest` 把 `numen-api` 与 `numen` 的 testFixtures、`numen/common` 与 `numen/pathing` 的 gametest 源码
+- **GameTest 用例写一次,三个平台都跑**:`numen/paper` 的 `gametest` 源码集把 `numen-api` 与 `numen` 的 testFixtures、`numen/common` 与 `numen/pathing` 的 gametest 源码
   对着 Paper 开发包重编(同 common 的理由);不开 `IS_RUNNING_IN_IDE`。夹具里原版与 Paper 签名不同的几处收成一个服务 `GameTestWorld`
   (难度、游戏规则、扮发令人的 `CommandSource`、等异步接纳),原版那份在 `vanilla` 包(Paper 不编),Paper 那份在测试插件里;
   `MockConnection` 多两个默认方法(`installed`:Paper 要替装着客户端的主人登记频道;`received`:Paper 发的是字节,解回原来的载荷)。
