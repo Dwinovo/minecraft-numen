@@ -1,8 +1,8 @@
 /**
  * 端到端测试的起服层之一:NeoForge 专用服。应用在 numen/neoforge 的构建脚本末尾(它要用到模组 numen)。
  *
- * <p>场景(e2e/ 里的 JUnit)只认一份规格——e2e/build.gradle 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
- * 配置根里要预先放哪些文件(种子)。怎么把满足这份规格的服务端起起来,是这一层的事;换一种服务端(Paper)就是另写一层,
+ * <p>场景(numen/common 的 e2e 源码集里的 JUnit)只认一份规格——numen-e2e 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
+ * 配置根里要预先放哪些文件(种子)。怎么把满足这份规格的服务端起起来,是这一层的事;换一种服务端(Paper)是另一层(numen-e2e-paper),
  * 同样提供 {@code e2eServerStart}/{@code e2eServerStop} 两个任务、守同一份规格,场景一行不用改。
  *
  * <ul>
@@ -15,7 +15,11 @@
  */
 import com.dwinovo.numen.buildsrc.TestServer
 
-def spec = rootProject.project(':e2e').ext.e2e
+plugins {
+    id 'numen-e2e'
+}
+
+def spec = project.ext.e2e
 
 // 独立的运行目录:每次起服前整个清空重建,所以只能是 runs/ 下这一个固定的位置
 def gameDir = project.file('runs/e2e')
@@ -34,7 +38,7 @@ neoForge {
 
 def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
 def game = tasks.named('runE2e')
-def tests = rootProject.project(':e2e').tasks.named('e2eTest')
+def tests = tasks.named('e2eTest')
 
 tasks.register('e2eServerStart') {
     group = 'verification'
@@ -42,7 +46,7 @@ tasks.register('e2eServerStart') {
     usesService(server)
     // runE2e 依赖的那些(编译、模板、运行配置的参数文件),不含 runE2e 本身
     dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
-    dependsOn ':e2e:e2eSeed'
+    dependsOn 'e2eSeed'
     doLast {
         def run = game.get()
         def dir = gameDir

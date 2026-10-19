@@ -1,0 +1,102 @@
+/**
+ * 端到端测试在平台项目这一侧的共用部分(numen/neoforge 与 numen/paper 各应用一次,再各应用自己的起服层):
+ * 一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家能做的事从头走一遍:
+ * 进服、翻译、召唤、私聊、会话指令、补全、征询按钮、动作栏。场景是 numen/common 的 e2e 源码集(和 GameTest 用例同处),
+ * 不发布、不进发行 jar。
+ *
+ * <p>分两层:
+ * <ul>
+ *   <li>场景:只认下面 {@code ext.e2e} 这份规格——一个地址、一个 RCON 口、一个本地的假模型端点,不知道服务端是怎么起的;</li>
+ *   <li>起服:谁满足这份规格谁就是一层,各自提供同名的 {@code e2eServerStart}/{@code e2eServerStop} 两个任务
+ *       (buildSrc 的 numen-e2e-neoforge 与 numen-e2e-paper)。</li>
+ * </ul>
+ * 这里提供规格、现取端口、种子和 {@code e2eTest}(起服、跑场景、关服,一条命令):
+ * {@code ./gradlew :numen:neoforge:e2eTest --no-daemon}、{@code ./gradlew :numen:paper:e2eTest --no-daemon}。
+ */
+evaluationDependsOn(':numen:common')
+
+/**
+ * 场景对服务端的全部要求。三个端口(服务端、RCON、假模型)每次运行时由 e2ePorts 现取空闲的填进来,并行的 worktree 与 CI 互不相踩;
+ * 起服层与种子都排在它后面、在执行期读这份规格,所以下面的端口只是占位。
+ * 种子是铺进服务端配置根(模组上是 config/numen/,Paper 上是 plugins/numen/)的文件:一份指向假模型的内置模型档案和它用的 key,
+ * 这是管理员配档案的正门(往内置库里放一个文件,见 docs/input-pipeline.md §六)。
+ */
+ext.e2e = [
+        host        : '127.0.0.1',
+        port        : 0,
+        rconPort    : 0,
+        rconPassword: 'e2e',
+        modelPort   : 0,
+        modelKey    : 'e2e-key',
+        modelProfile: 'server:e2e',
+        seed        : layout.buildDirectory.dir('e2e-seed'),
+]
+
+tasks.register('e2ePorts') {
+    group = 'verification'
+    description = '现取三个空闲端口(服务端、RCON、假模型)填进规格'
+    outputs.upToDateWhen { false }
+    def spec = e2e
+    doLast {
+        // 三个一起占着再放,不会取到同一个
+        def sockets = (1..3).collect { new ServerSocket(0) }
+        try {
+            spec.port = sockets[0].localPort
+            spec.rconPort = sockets[1].localPort
+            spec.modelPort = sockets[2].localPort
+        } finally {
+            sockets*.close()
+        }
+        logger.lifecycle("[numen-e2e] 端口 服务端 ${spec.port}、RCON ${spec.rconPort}、假模型 ${spec.modelPort}")
+    }
+}
+
+tasks.register('e2eSeed') {
+    group = 'verification'
+    description = '生成铺进服务端配置根的种子:指向假模型的内置档案与它的 key'
+    def spec = e2e
+    dependsOn 'e2ePorts'
+    outputs.upToDateWhen { false }
+    outputs.dir(spec.seed)
+    doLast {
+        def root = spec.seed.get().asFile
+        def profile = new File(root, 'server/provider/server/e2e.json')
+        profile.parentFile.mkdirs()
+        profile.text = '{"provider":"custom","protocol":"chat","model":"e2e-fake",' +
+                "\"base_url\":\"http://${spec.host}:${spec.modelPort}/v1\"}\n"
+        def key = new File(root, 'server/keys/custom.key')
+        key.parentFile.mkdirs()
+        key.text = spec.modelKey + '\n'
+    }
+}
+
+def scenes = project(':numen:common').sourceSets.getByName('e2e')
+
+tasks.register('e2eTest', Test) {
+    group = 'verification'
+    description = '端到端测试:起服务端、用原版客户端协议走一遍玩家能做的事、关服'
+    testClassesDirs = scenes.output.classesDirs
+    classpath = scenes.runtimeClasspath
+    useJUnitPlatform()
+    dependsOn 'e2eServerStart'
+    finalizedBy 'e2eServerStop'
+    // 一次起服只跑一遍,不借 Gradle 的最新检查跳过
+    outputs.upToDateWhen { false }
+    // 一个场景一个场景串行:都连同一台服务端,玩家名、会话、模型的预设回复不能互相踩
+    maxParallelForks = 1
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        exceptionFormat = 'full'
+        showStandardStreams = true
+    }
+    def spec = e2e
+    doFirst {
+        systemProperty 'e2e.host', spec.host
+        systemProperty 'e2e.port', spec.port
+        systemProperty 'e2e.rcon.port', spec.rconPort
+        systemProperty 'e2e.rcon.password', spec.rconPassword
+        systemProperty 'e2e.model.port', spec.modelPort
+        systemProperty 'e2e.model.key', spec.modelKey
+        systemProperty 'e2e.model.profile', spec.modelProfile
+    }
+}

@@ -6,8 +6,6 @@ plugins {
 // 要读 Numen 的 gametest 与 testFixtures 源码集、Numen API 的开发期 gametest 源码集,它们得先配置好
 evaluationDependsOn(':numen:common')
 evaluationDependsOn(':numen-api:neoforge')
-// 端到端测试的起服层(见末尾 numen-e2e-neoforge)按 e2e 的规格起服,规格先读进来
-evaluationDependsOn(':e2e')
 
 dependencies {
     // Numen API 同在本构建里。编译期看不见它的内部类(见 numen-loader.gradle),运行与数据生成要它在类路径上,
