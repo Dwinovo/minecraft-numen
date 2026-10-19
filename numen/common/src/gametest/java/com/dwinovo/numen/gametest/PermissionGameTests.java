@@ -53,8 +53,9 @@ public class PermissionGameTests {
     }
 
     /**
-     * 让一个<b>真玩家</b>(不是同伴)把一个方块物品放在 {@code rel} 上:走 {@code BlockItem.place} 的
-     * 真实放置路径,放置记录的 mixin 就在那儿——测的是真机上会发生的那条链,不是手工写记录。放的人是谁,这一格对她就是谁的:
+     * 让一个<b>真玩家</b>(不是同伴)把一个方块物品放在 {@code rel} 上:从 {@code ItemStack.useOn} 进去,走
+     * 真实放置路径(模组上放置记录挂在 {@code BlockItem.place},Paper 上挂在它在 {@code useOn} 里发的方块放置事件)——
+     * 测的是真机上会发生的那条链,不是手工写记录。放的人是谁,这一格对她就是谁的:
      * 她的主人放的是主人的,别的玩家放的是别人的。
      */
     private static void playerPlaces(GameTestHelper helper, ServerPlayer placer, BlockPos rel,
@@ -66,7 +67,7 @@ public class PermissionGameTests {
                 net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(item),
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(floor),
                         net.minecraft.core.Direction.UP, floor, false));
-        var result = ((net.minecraft.world.item.BlockItem) item).place(ctx);
+        var result = ctx.getItemInHand().useOn(ctx);
         helper.assertTrue(result.consumesAction() && level.getBlockState(helper.absolutePos(rel)).is(block),
                 "the mock player failed to place " + item + " at " + rel.toShortString());
         helper.assertTrue(com.dwinovo.numen.api.permission.PlacedBlocks.of(level)
@@ -817,27 +818,8 @@ public class PermissionGameTests {
     /** 以玩家 {@code who} 的身份跑一条命令,和在聊天栏里敲的一样;回话(成功与失败的)收进返回的列表。 */
     private static List<String> runAs(ServerPlayer who, String command) {
         List<String> said = new ArrayList<>();
-        net.minecraft.commands.CommandSource capture = new net.minecraft.commands.CommandSource() {
-            @Override
-            public void sendSystemMessage(net.minecraft.network.chat.Component message) {
-                said.add(message.getString());
-            }
-
-            @Override
-            public boolean acceptsSuccess() {
-                return true;
-            }
-
-            @Override
-            public boolean acceptsFailure() {
-                return true;
-            }
-
-            @Override
-            public boolean shouldInformAdmins() {
-                return false;
-            }
-        };
+        net.minecraft.commands.CommandSource capture =
+                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.hearing(message -> said.add(message.getString()));
         who.getServer().getCommands().performPrefixedCommand(who.createCommandSourceStack().withSource(capture),
                 command);
         return said;
@@ -1085,7 +1067,7 @@ public class PermissionGameTests {
                 net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.OAK_PLANKS),
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(floor),
                         net.minecraft.core.Direction.UP, floor, false));
-        var result = ((net.minecraft.world.item.BlockItem) Items.OAK_PLANKS).place(ctx);
+        var result = ctx.getItemInHand().useOn(ctx);
         BlockPos pos = helper.absolutePos(rel);
         helper.assertTrue(result.consumesAction() && level.getBlockState(pos).is(Blocks.OAK_PLANKS),
                 "the companion failed to place the plank");

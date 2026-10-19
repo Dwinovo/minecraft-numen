@@ -9,7 +9,6 @@
     "CraftingMenuAccessor",
     "MenuDataSlotsAccessor",
     "ServerLevelBlockChangeMixin",
-    "ServerPlayerGameModeAccessor",
     "ServerPlayerGameModeDropsMixin",
     "ServerLevelDropsMixin",
     "ItemEntityDropsMixin",

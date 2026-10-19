@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
@@ -10,9 +11,9 @@ final class Worlds {
     private Worlds() {}
 
     static void settle(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        GameTestWorld.INSTANCE.setDifficulty(level, Difficulty.PEACEFUL);
         level.setDayTime(6000);
-        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+        GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING), false);
         level.setWeatherParameters(24000, 0, false, false);
     }
 }

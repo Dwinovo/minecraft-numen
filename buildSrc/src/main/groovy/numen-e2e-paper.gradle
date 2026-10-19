@@ -1,0 +1,80 @@
+/**
+ * 端到端测试的起服层之二:Paper 服。应用在 numen/paper 的构建脚本末尾(它要用到 run-paper 的 runServer)。
+ *
+ * <p>和 numen-e2e-neoforge 守同一份规格(e2e/build.gradle 里的 {@code ext.e2e}),提供同名的 {@code e2eServerStart}/{@code e2eServerStop},
+ * 场景一行不用改:清空独立的运行目录 {@code runs/e2e}(每次一个新世界,Paper 的下载缓存除外),写入 eula 与 server.properties
+ * (离线模式、规格里的端口、平坦世界),把种子铺进配置根 {@code plugins/numen/}(Paper 上的配置根,见 docs/paper.md §四),起服并等它报"起好了"。
+ *
+ * <p>起的是 {@code runServer} 那一套(同一个 Paper 版本、同样的 JVM 参数、同样的两个插件),命令行见 {@link PaperServer}。
+ */
+import com.dwinovo.numen.buildsrc.PaperServer
+import com.dwinovo.numen.buildsrc.TestServer
+
+def spec = rootProject.project(':e2e').ext.e2e
+
+def gameDir = project.file('runs/e2e')
+
+def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
+def game = tasks.named('runServer')
+def tests = rootProject.project(':e2e').tasks.named('e2eTest')
+
+tasks.register('e2eServerStart') {
+    group = 'verification'
+    description = '起一台端到端测试用的 Paper 服(新世界、离线模式),等它起好'
+    usesService(server)
+    // runServer 依赖的那些(两个插件 jar),不含 runServer 本身
+    dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
+    dependsOn ':e2e:e2eSeed'
+    doLast {
+        def dir = gameDir
+        PaperServer.freshDir(dir, [
+                'online-mode'               : 'false',
+                // 不签名的客户端(MCProtocolLib)进得来、私聊指令的参数不带签名也收
+                'enforce-secure-profile'    : 'false',
+                'server-ip'                 : spec.host,
+                'server-port'               : spec.port,
+                'enable-rcon'               : 'true',
+                'rcon.port'                 : spec.rconPort,
+                'rcon.password'             : spec.rconPassword,
+                'broadcast-rcon-to-ops'     : 'false',
+                'level-type'                : 'minecraft\\:flat',
+                'generator-settings'        : PaperServer.FLAT_SETTINGS,
+                'generate-structures'       : 'false',
+                'spawn-protection'          : '0',
+                'difficulty'                : 'peaceful',
+                'spawn-monsters'            : 'false',
+                'view-distance'             : '4',
+                'simulation-distance'       : '4',
+                'max-tick-time'             : '-1',
+                'sync-chunk-writes'         : 'false',
+                'motd'                      : 'numen e2e',
+        ])
+        ant.copy(todir: new File(dir, 'plugins/numen')) { fileset(dir: spec.seed.get().asFile) }
+
+        def command = PaperServer.command(game.get(), [], [])
+        def log = new File(dir, 'e2e-server.log')
+        server.get().start(command, dir, new HashMap<String, String>(System.getenv()), log)
+        logger.lifecycle("[numen-e2e] 起服,日志 ${log}")
+        if (!server.get().awaitReady('Done (', 5 * 60 * 1000L)) {
+            server.get().stop()
+            throw new GradleException("服务端没有起好,日志末尾:\n" + log.readLines('UTF-8').takeRight(80).join('\n'))
+        }
+        logger.lifecycle("[numen-e2e] 服务端就绪 ${spec.host}:${spec.port}")
+    }
+}
+
+tasks.register('e2eServerStop') {
+    group = 'verification'
+    description = '关掉端到端测试用的 Paper 服;场景没过时打出服务端日志的关键段'
+    usesService(server)
+    doLast {
+        def log = server.get().logFile()
+        server.get().stop()
+        if (log != null && log.exists() && tests.get().state.failure != null) {
+            def lines = log.readLines('UTF-8')
+            logger.lifecycle("[numen-e2e] 场景没过,服务端日志的错误与警告行:\n"
+                    + lines.findAll { it =~ /\[.*\/(ERROR|WARN)\]/ }.takeRight(60).join('\n')
+                    + "\n[numen-e2e] 服务端日志末尾 80 行(全文 ${log}):\n" + lines.takeRight(80).join('\n'))
+        }
+    }
+}

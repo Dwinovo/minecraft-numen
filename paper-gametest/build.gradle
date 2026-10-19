@@ -1,0 +1,58 @@
+// Paper 上的 GameTest(docs/paper.md §十一):一个只在测试时挂上的 Paper 插件,不进发行 jar、不进 releaseJars。
+//
+// 用例仍是原版的 @GameTest,写一次:Numen API 的套件机制与夹具(numen-api/common 的 testFixtures)、Numen 与寻路的用例与夹具
+// (numen/common、numen/pathing)的源码在这里对着 Paper 开发包重新编译——同 numen-paper.gradle 的理由,对着原版编的字节码在 Paper 上
+// 会链不上。夹具里的 Mixin(mixin 包)是模组加载器那一侧对原版 GameTestServer 的改动,Paper 不起 GameTestServer,整包不进来,
+// 它做的三件事各由 Paper 自己的办法替代,见 PaperGameTestPlugin。
+//
+// 跑法:./gradlew :numen:paper:runGameTestServer --no-daemon(起服在 numen/paper,见 buildSrc 的 numen-gametest-paper)。
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'java-library'
+    id 'io.papermc.paperweight.userdev'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
+
+def apiCommon = project(':numen-api:common')
+def numenCommon = project(':numen:common')
+def pathing = project(':numen:pathing')
+
+dependencies {
+    paperweight.paperDevBundle(paper_dev_bundle)
+    // 用例拉起同伴、直接摸 Numen API 与 Numen 的内部类:看得见完整的两个插件,运行时由它们自己提供
+    compileOnly project(':numen-api:paper')
+    compileOnly project(':numen:paper')
+    Modules.SERVER.each { compileOnly project(it) }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+tasks.named('compileJava', JavaCompile) {
+    options.release = java_version as int
+    source(apiCommon.file('src/testFixtures/java'))
+    source(numenCommon.file('src/testFixtures/java'))
+    source(numenCommon.file('src/gametest/java'))
+    source(pathing.file('src/gametest/java'))
+    // mixin:模组加载器那一侧的实现;vanilla:原版签名的 GameTestWorld,Paper 自己有一份
+    exclude '**/mixin/**', '**/vanilla/**'
+}
+
+// 套件的报到资源(META-INF/numen/gametest/套件名)。夹具的资源(Mixin 配置、真实地形维度的数据包)不要:前者是模组加载器的,
+// 后者要世界目录里放数据包才有用,见 PaperGameTestPlugin。
+tasks.named('processResources', ProcessResources) {
+    from(numenCommon.file('src/gametest/resources'))
+    from(pathing.file('src/gametest/resources'))
+    filesMatching('paper-plugin.yml') {
+        expand(version: project.version)
+    }
+    inputs.property('paperPluginVersion', project.version)
+}

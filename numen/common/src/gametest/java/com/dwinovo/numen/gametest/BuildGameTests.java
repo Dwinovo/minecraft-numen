@@ -1658,10 +1658,11 @@ public class BuildGameTests {
         java.util.List<String> bad = new java.util.ArrayList<>();
         int checked = 0;
         try {
-            var url = BuildGameTests.class.getClassLoader()
-                    .getResource("numen/skills/numen/building_design/SKILL.md");
-            helper.assertTrue(url != null, "skill resources are not on the classpath");
-            java.nio.file.Path root = java.nio.file.Path.of(url.toURI()).getParent();
+            // 技能文档随 Numen 一起发:经平台取(各加载器怎么把 jar 里的路径映射成 Path 只有它知道),不是测试所在类加载器的资源
+            java.nio.file.Path skill = com.dwinovo.numen.api.platform.Services.platform()
+                    .modResource(com.dwinovo.numen.Constants.MOD_ID, "numen/skills/numen/building_design/SKILL.md");
+            helper.assertTrue(skill != null, "the skill resources are not shipped with Numen");
+            java.nio.file.Path root = skill.getParent();
             java.util.List<java.nio.file.Path> docs;
             try (var walk = java.nio.file.Files.walk(root)) {
                 docs = walk.filter(p -> p.toString().endsWith(".md")).toList();
@@ -1730,7 +1731,7 @@ public class BuildGameTests {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (java.io.IOException e) {
             throw new AssertionError("could not lint the skill docs: " + e, e);
         }
         helper.assertTrue(bad.isEmpty(), "skill docs name " + bad.size()
