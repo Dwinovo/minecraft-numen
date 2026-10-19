@@ -713,7 +713,7 @@ public class BrainGameTests {
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
                 new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", false), owner);
 
-        var born = server.getPlayerList().getPlayerByName("gametest_born");
+        var born = com.dwinovo.numen.api.gametest.Bodies.awaitPlayer(server, "gametest_born");
         helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
         var brain = CompanionLoops.get(born.getUUID());
         helper.assertTrue(brain.isPresent(), "she has no server brain");

@@ -73,6 +73,16 @@ public final class Bodies {
         return summoned;
     }
 
+    /**
+     * 经玩家的入口(召唤请求的载荷等,没有回调可等)召唤的她:等到这个名字的玩家进了玩家列表。时限内没进来是 {@code null}。
+     */
+    public static ServerPlayer awaitPlayer(MinecraftServer server, String name) {
+        long deadline = System.nanoTime() + WAIT_NANOS;
+        GameTestWorld.INSTANCE.await(server,
+                () -> server.getPlayerList().getPlayerByName(name) != null || System.nanoTime() > deadline);
+        return server.getPlayerList().getPlayerByName(name);
+    }
+
     /** 发起一趟,等它的回调(模组上已经跑完了,不等)。 */
     private static <T> T await(MinecraftServer server, Consumer<Consumer<T>> start) {
         Object[] result = new Object[1];
