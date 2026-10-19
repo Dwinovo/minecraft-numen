@@ -12,7 +12,7 @@ This file covers the project's original art instead, collectively the "Assets":
     `numen/common/src/main/resources/numen.png`;
   - the logos and branding images under `assets/branding/`.
 
-Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
+Diagrams (CC BY 4.0, NOT covered by the reservation below)
 -------------------------------------------------------------------------------
 
 These files may be shared and adapted, including commercially, under the
