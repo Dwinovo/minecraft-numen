@@ -535,7 +535,11 @@ public class CommandGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_viewed");
         var server = helper.getLevel().getServer();
         CommandNode<CommandSourceStack> root = server.getCommands().getDispatcher().getRoot();
+        // Paper 把插件注册的指令在服务端的树上挂成一个转向真树的节点(解析时 Brigadier 顺着转向走),要看有哪些格得看转向的目标
         CommandNode<CommandSourceStack> numen = root.getChild(NumenCommands.ROOT);
+        if (numen.getRedirect() != null) {
+            numen = numen.getRedirect();
+        }
         CommandSourceStack player = server.createCommandSourceStack()
                 .withEntity(helper.makeMockPlayer(GameType.SURVIVAL)).withPermission(4);
 
