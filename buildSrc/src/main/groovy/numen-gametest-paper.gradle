@@ -4,7 +4,8 @@
  * <p>{@code runGameTestServer} 和 {@code :numen:neoforge:runGameTestServer} 对齐:一条命令跑完,结尾一行
  * {@code All N required tests passed},或必过的用例没过时列出失败名单并让构建失败。用例是同一批(套件与 NeoForge 的 GameTest 运行一致,
  * 取自根 build.gradle 的 numenSuites 表;{@code -Pgametest=numen_pathing} 只跑指定的,逗号分隔),由 :paper-gametest 这个只在测试时挂上的插件
- * 登记、跑完、把结果写成 JSON 并关服(它怎么做见 PaperGameTestPlugin);这里负责起服(新世界,超平坦,种子可由 {@code -PgametestSeed} 指定)和读结果。
+ * 登记、跑完、把结果写成 JSON 并关服(它怎么做见 PaperGameTestPlugin);这里负责起服(新世界,超平坦,种子可由 {@code -PgametestSeed} 指定,
+ * 只跑部分用例用 {@code -PgametestOnly=<名字的正则>})和读结果。
  *
  * <p>起的是 {@code runServer} 那一套(同一个 Paper 版本、同样的 JVM 参数、同样的两个插件),再加上测试插件;命令行见 {@link PaperServer}。
  */
@@ -19,6 +20,8 @@ def logFile = new File(gameDir, 'gametest-server.log')
 def suites = providers.gradleProperty('gametest')
         .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
 def seed = providers.gradleProperty('gametestSeed')
+// 只跑名字匹配这个正则的用例(排查用,如 -PgametestOnly='numen\.diggametests\..*')
+def only = providers.gradleProperty('gametestOnly')
 def structures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
 // 整套用例最长跑多久:超过就当没收场,杀掉服务端
 def limitMinutes = 60
@@ -56,11 +59,15 @@ tasks.register('runGameTestServer') {
         }
         PaperServer.freshDir(gameDir, properties)
 
-        def command = PaperServer.command(game.get(), [
+        def jvmArgs = [
                 "-Dnumen.gametest.suites=${suites.get()}".toString(),
                 "-Dnumen.gametest.structures=${structures.get().asFile.absolutePath}".toString(),
                 "-Dnumen.gametest.result=${resultFile.absolutePath}".toString(),
-        ], [project(':paper-gametest').tasks.named('jar').get().archiveFile.get().asFile])
+        ]
+        if (only.present) {
+            jvmArgs.add("-Dnumen.gametest.only=${only.get()}".toString())
+        }
+        def command = PaperServer.command(game.get(), jvmArgs, [project(':paper-gametest').tasks.named('jar').get().archiveFile.get().asFile])
         server.get().start(command, gameDir, new HashMap<String, String>(System.getenv()), logFile)
         logger.lifecycle("[numen-gametest] 起服,套件 ${suites.get()},日志 ${logFile}")
         def exited = server.get().awaitExit(limitMinutes * 60 * 1000L)

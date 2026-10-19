@@ -59,6 +59,9 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     /** 结果文件的系统属性。 */
     public static final String RESULT = "numen.gametest.result";
 
+    /** 只跑名字(整个)匹配这个正则的用例;没给就是选中套件的全部。排查单条或一个类时用,{@code -Pgametest.only=…}。 */
+    public static final String ONLY = "numen.gametest.only";
+
     /** 场地铺在世界里的起点:离出生点远,不碰默认的出生区块;和 GameTestServer 一样贴着超平坦的地面。 */
     private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
 
@@ -114,7 +117,9 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private void start() {
         server = ((CraftServer) getServer()).getServer();
         ServerLevel level = server.overworld();
+        String only = System.getProperty(ONLY);
         List<TestFunction> functions = GameTestRegistry.getAllTestFunctions().stream().filter(f -> !f.manualOnly())
+                .filter(f -> only == null || f.testName().matches(only))
                 .map(this::capped).toList();
         if (functions.isEmpty()) {
             throw new IllegalStateException("没有登记任何用例,选中的套件是 \"" + System.getProperty(GameTestSuites.SELECTION) + "\"");
