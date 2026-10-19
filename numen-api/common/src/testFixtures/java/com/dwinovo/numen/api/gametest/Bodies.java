@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.gametest;
 import com.dwinovo.numen.api.entity.Arrivals;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
+import com.dwinovo.numen.api.entity.MojangSkins;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -26,15 +27,29 @@ public final class Bodies {
     private Bodies() {}
 
     /** 登记里没有这一条也照样进(不经名册的测试用身体):答复回来时总是"仍然要她"。 */
-    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name, UUID ownerUuid,
+    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String label, UUID ownerUuid,
                                     ServerLevel level, Vec3 pos) {
+        String name = compliant(label);
         Arrivals.Arrival<NumenPlayer> arrival = await(server,
                 then -> CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos, () -> true, then));
         return arrived(arrival, name);
     }
 
+    /**
+     * 用例给身体起的名字是写给人看的标签(如 {@code gametest_cartographer}),常常超过产品的名字规则(3 到 16 位字母、数字、下划线,
+     * {@link MojangSkins#validName})。真身体的名字走的是真玩家的登录规矩,Paper 上超长的名字连登录事件都造不出来,
+     * 所以造身体的这一处把不合规的标签收成合规的名字:同一个标签永远得到同一个名字,用例要名字就从身体上取。
+     */
+    public static String compliant(String label) {
+        if (MojangSkins.validName(label)) {
+            return label;
+        }
+        return "gt_" + Integer.toString(label.hashCode() & 0x7fffffff, 36);
+    }
+
     /** 召唤(名册里没有就新建,有就叫醒)。 */
-    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name, ServerLevel level, Vec3 pos) {
+    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String label, ServerLevel level, Vec3 pos) {
+        String name = compliant(label);
         Arrivals.Arrival<NumenPlayer> arrival = await(server,
                 then -> Companions.summon(server, ownerUuid, name, level, pos, then));
         return arrived(arrival, name);
