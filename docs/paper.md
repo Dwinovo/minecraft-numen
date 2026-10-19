@@ -119,9 +119,10 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 
 - common 的行为继续由 NeoForge 的 GameTest 验(主力)。
 - 我们的 GameTest 拿到 Paper 上跑:不开 `IS_RUNNING_IN_IDE`(开了会把测试参数类型塞进内置注册表,有 op 的客户端进服就断),
-  而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。现有用例要一层登记适配。
-- Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服,进 CI。
-- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`),起服是可替换的一层:Paper 另写一层,提供同名的 `e2eServerStart`/`e2eServerStop`、满足同一份规格,把 `e2e/build.gradle` 里的 `serverProject` 指过去。
+  而是自己用 `GameTestRegistry.register` 登记、`GameTestRunner` 启动、在 `ServerTickEndEvent` 里推 `GameTestTicker`;实测可行。
+  这一层是 `paper-gametest`(只在测试时挂上的 Paper 插件,不进发行 jar),一条命令 `:numen:paper:runGameTestServer`,见文末"第 4 步落地时的出入"。
+- Paper 适配层:run-paper 起服,测试插件跑场景、写结果、自动关服;进 CI 与否另定(耗时见文末)。
+- 网络与翻译:MCProtocolLib(MIT,1.21.1 用 `1.21` 线;仓库里只有快照,固定在一个时间戳构建)做无头客户端,原版客户端那一套交互(进服、翻译、召唤、私聊、会话指令与补全、可点的征询、动作栏)的场景在 `e2e/`,已对着 NeoForge 专用服跑通(`:e2e:e2eTest`)。场景只认规格(地址、RCON 口、种子,见 `e2e/build.gradle`;三个端口每次运行时现取空闲的),起服是可替换的一层,各提供同名的 `e2eServerStart`/`e2eServerStop`:NeoForge 的是 `numen-e2e-neoforge`,Paper 的是 `numen-e2e-paper`;`-Pe2eServer=paper` 选 Paper,默认 NeoForge。
 - 真客户端:Fabric、NeoForge 的 Numen 客户端各自 `runClient --quickPlayMultiplayer` 连 Paper 服,面板、征询、皮肤、语音都过一遍。
 
 ## 十二、实测结论(10-19)
@@ -196,3 +197,25 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   翻译源在服务器起好之后才登记(语言表按语言缓存,要等所有带 Numen 内容的插件都启用)。`ServerLang.asMessageFormat` 把 `%s`/`%2$s`/`%%` 改写成 MessageFormat,语法与 `translate` 同一套。
   Numen 发的消息里没有"根是字面量、悬停里是可翻译"的形状(悬停只有 `ConsentChat` 一处,里面是字面量),不用改消息。
 - **关服顺序**:Paper 先停插件(`onDisable` 清状态)、再存玩家并把她请出去、再存世界。实测她的背包(三颗钻石)、位置、名册重启后都在,她手上的活(寻路)随之恢复。
+
+## 附:第 4 步(验证工具)落地时的出入
+
+- **起服层按鸭子类型取 run-paper 的 `runServer`**:`e2eServerStart` 与 `runGameTestServer` 起的是 `runServer` 同一套(Paper 版本、JVM 参数、两个插件),
+  命令行由 `PaperServer.command` 拼:服务端 jar 经 run-paper 的下载服务取(已下载就是缓存),插件用 `-add-plugin`。
+  运行目录(`numen/paper/runs/e2e`、`runs/gametest`)每次清空重建,Paper 的下载缓存(`cache`、`libraries`、`versions`)留着,否则每次都要重新打补丁。
+- **GameTest 用例写一次,三个平台都跑**:`paper-gametest` 把 `numen-api` 与 `numen` 的 testFixtures、`numen/common` 与 `numen/pathing` 的 gametest 源码
+  对着 Paper 开发包重编(同 common 的理由);不开 `IS_RUNNING_IN_IDE`。夹具里原版与 Paper 签名不同的几处收成一个服务 `GameTestWorld`
+  (难度、游戏规则、扮发令人的 `CommandSource`、等异步接纳),原版那份在 `vanilla` 包(Paper 不编),Paper 那份在测试插件里;
+  `MockConnection` 多两个默认方法(`installed`:Paper 要替装着客户端的主人登记频道;`received`:Paper 发的是字节,解回原来的载荷)。
+- **`GameTestServerWorldMixin` 在 Paper 上不需要**:它为原版 `GameTestServer` 做三件事——每次从空世界目录开始(起服层清运行目录)、种子(`server.properties` 的 `level-seed`,
+  `-PgametestSeed`)、把数据包定义的维度并进测试世界(给真实地形套件 `numen_pathing_terrain*`)。最后一件 Paper 没有等价做法(起服后加不了维度),这两个套件不在 Paper 上跑。
+- **结构模板**:原版只在 IDE 旗标下读 SNBT 目录,插件把每个用例要的模板读进结构管理器的缓存(`getOrCreate(id).load(...)`)。
+- **按 20 刻每秒跑,不加速**:`GameTestServer` 一刻接一刻、不等墙钟;Paper 的挖掘进度按墙钟算(`ServerLevel.getLagCompensationTick`),
+  把刻速率调高,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。所以整套要约半小时。用例自己写的时限(最长十万刻)在 Paper 上收到 2400 刻,
+  收短过的用例在结果 JSON 里有 `cappedFromTicks`,超时失败的要和真失败分开看。
+- **用例的几处改写**(都是 Paper 上暴露的用例自身的问题):`skill_docs_name_real_blocks` 从测试所在类加载器找技能文档,改成经平台服务 `modResource` 取(随 Numen 一起发的才是被测的),
+  并只接 IO 异常——原先 `catch (Exception)` 把断言失败包成 `Error`,会把整台测试服带崩;`PermissionGameTests.playerPlaces` 从 `ItemStack.useOn` 进去,
+  不直接调 `BlockItem.place`(Paper 的方块放置事件在 `useOn` 里发,模组上的放置记录挂在 `BlockItem.place`,从 `useOn` 进两边都走得到)。
+  测试用的挖掘状态读 `ServerPlayerGameMode.isDestroyingBlock` 改用反射读私有字段,删掉只给这一条用例用的 Mixin 访问器 `ServerPlayerGameModeAccessor`。
+- **等异步接纳**:`Bodies` 经 `GameTestWorld.await` 等回调;Paper 那份自己推调度器的心跳(接纳的异步任务要等心跳才交给线程池)并在阻塞态里做完排给主线程的任务(答复就是这样排的),
+  用例写法不变。
