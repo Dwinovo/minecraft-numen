@@ -520,6 +520,49 @@ public class DigGameTests {
         });
     }
 
+    /**
+     * 服务端把挖到一半的一格挂成延迟破坏:她这头在一个游戏刻里连按,累满 1 就送 STOP,服务端那头才过了零刻、进度远不够,
+     * 黑曜石要它自己走一百多刻才破。她不能在服务端还挂着它时报"被退回":等服务端自己挖掉,报挖掉了,掉落物对得上。
+     * (判据读服务端的记账,不数刻;固定等几刻的写法在这里 20 刻就判退回。)
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_dig")
+    public static void the_mouse_waits_for_the_delayed_destroy_the_server_still_holds(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos obsidian = helper.absolutePos(new BlockPos(8, 2, 8));
+        level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_delayed", new BlockPos(6, 2, 8), false);
+        companion.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND_PICKAXE));
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        var mouse = companion.mouse();
+
+        steps(helper)
+                .thenExecute(() -> companion.look().at(Vec3.atCenterOf(obsidian)))
+                .thenExecute(() -> {
+                    // 一个刻里连按到她这头送出 STOP(进度清零)为止
+                    for (int presses = 0; presses < 400; presses++) {
+                        mouse.dig();
+                        if (presses > 0 && mouse.progress() == 0f) {
+                            break;
+                        }
+                    }
+                    helper.assertTrue(level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.pressing() != null,
+                            "the server did not hold the block as a delayed destroy: " + level.getBlockState(obsidian));
+                })
+                .thenWaitUntil(() -> {
+                    var strike = mouse.dig();
+                    helper.assertTrue(strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Broke,
+                            "the mouse gave up on a block the server still held: " + strike);
+                    helper.assertTrue(level.getBlockState(obsidian).isAir(), "the block is still there");
+                    boolean dropped = !level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            new net.minecraft.world.phys.AABB(obsidian).inflate(4),
+                            item -> item.getItem().is(Items.OBSIDIAN)).isEmpty()
+                            || companion.getInventory().countItem(Items.OBSIDIAN) > 0;
+                    helper.assertTrue(dropped, "the obsidian drop is nowhere");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     /** 这一挖的结果里只有一笔掉落物去向,交回它。 */
     private static com.dwinovo.numen.act.Drops.Drop onlyDrop(ToolRun dig) {
         var drops = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class).drops();
