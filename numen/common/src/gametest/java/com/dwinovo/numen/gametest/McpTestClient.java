@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.mcp.McpJson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.modelcontextprotocol.client.McpClient;
@@ -33,11 +34,11 @@ final class McpTestClient {
 
     private McpClient.SyncSpec spec() {
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport
-                .builder("http://127.0.0.1:" + port).endpoint("/mcp").openConnectionOnStartup(true)
+                .builder("http://127.0.0.1:" + port).jsonMapper(McpJson.MAPPER).endpoint("/mcp").openConnectionOnStartup(true)
                 .addHttpRequestCustomizer((builder, method, uri, body, context) ->
                         builder.header("Authorization", "Bearer " + secret))
                 .build();
-        return McpClient.sync(transport).requestTimeout(Duration.ofSeconds(60))
+        return McpClient.sync(transport).jsonSchemaValidator(McpJson.SCHEMA_VALIDATOR).requestTimeout(Duration.ofSeconds(60))
                 .clientInfo(new McpSchema.Implementation("gametest-client", "1"));
     }
 

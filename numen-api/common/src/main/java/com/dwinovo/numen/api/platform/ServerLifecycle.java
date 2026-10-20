@@ -37,6 +37,7 @@ public final class ServerLifecycle {
 
     private static final List<Runnable> ON_STOPPED = new CopyOnWriteArrayList<>();
     private static final List<Consumer<MinecraftServer>> ON_STARTED = new CopyOnWriteArrayList<>();
+    private static final List<Consumer<MinecraftServer>> AFTER_STARTED = new CopyOnWriteArrayList<>();
     private static final List<Consumer<MinecraftServer>> ON_RELOADED = new CopyOnWriteArrayList<>();
     /** 起好了、还没停的那台服务器;{@link #fireReloaded} 对它调。 */
     private static volatile MinecraftServer running;
@@ -57,6 +58,14 @@ public final class ServerLifecycle {
         ON_STARTED.add(start);
     }
 
+    /**
+     * 报到:所有 {@link #onStarted} 都跑完之后再调 {@code start}。{@code onStarted} 按登记先后跑,而谁先登记由加载器的模组与类初始化
+     * 次序定;要改写别人开工时定下的东西(夹具把产品的落点换掉),得排在他们之后,靠登记先后保证不了。
+     */
+    public static void afterStarted(Consumer<MinecraftServer> start) {
+        AFTER_STARTED.add(start);
+    }
+
     /** 报到:管理员用 {@code /reload} 重载数据之后调 {@code reload}——磁盘上手改的库、钥匙串和设置在这里重新读。 */
     public static void onReloaded(Consumer<MinecraftServer> reload) {
         ON_RELOADED.add(reload);
@@ -66,11 +75,18 @@ public final class ServerLifecycle {
     public static void fireStarted(MinecraftServer server) {
         running = server;
         for (Consumer<MinecraftServer> start : ON_STARTED) {
-            try {
-                start.accept(server);
-            } catch (RuntimeException e) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 服务器起来时有一项失败,其余继续", e);
-            }
+            started(start, server);
+        }
+        for (Consumer<MinecraftServer> start : AFTER_STARTED) {
+            started(start, server);
+        }
+    }
+
+    private static void started(Consumer<MinecraftServer> start, MinecraftServer server) {
+        try {
+            start.accept(server);
+        } catch (RuntimeException e) {
+            com.dwinovo.numen.api.Constants.LOG.error("[numen] 服务器起来时有一项失败,其余继续", e);
         }
     }
 

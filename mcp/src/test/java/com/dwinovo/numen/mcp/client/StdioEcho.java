@@ -1,6 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.dwinovo.numen.mcp.McpJson;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
@@ -15,7 +15,7 @@ public final class StdioEcho {
 
     public static void main(String[] args) throws Exception {
         McpSchema.Tool echo = McpSchema.Tool.builder("echo", java.util.Map.<String, Object>of("type", "object")).build();
-        McpServer.sync(new StdioServerTransportProvider(McpJsonDefaults.getMapper()))
+        McpServer.sync(new StdioServerTransportProvider(McpJson.MAPPER))
                 .serverInfo("echo", "1")
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
                 .tools(McpServerFeatures.SyncToolSpecification.builder().tool(echo)
