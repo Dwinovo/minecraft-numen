@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -21,6 +22,9 @@ public interface ExternalHands {
     /** 主人的一只同伴:稳定 id + 显示名。 */
     record Companion(UUID uuid, String name) {}
 
+    /** 这位主人的同伴看得到的工具,和内置大脑每轮请求里发出去的是同一份(含他自己接进来的 MCP 工具,减去他关掉的)。 */
+    CompletableFuture<List<NumenTool>> tools();
+
     /** 主人名下此刻在世界里的同伴。 */
     CompletableFuture<List<Companion>> companions();
 
@@ -40,6 +44,13 @@ public interface ExternalHands {
      * @return 取走的事件拼段;没有是 null
      */
     CompletableFuture<String> takeEvents(UUID companion);
+
+    /**
+     * 她此刻的 {@code <runtime_state>}:内置大脑每次请求末尾挂的那一份(同一个渲染,同一份身体快照),不入会话历史。
+     *
+     * @return 渲染结果;她没有大脑或此刻没有可说的是 null 或空串
+     */
+    CompletableFuture<String> runtimeState(UUID companion);
 
     /** 停靠到她有会叫醒她的条目为止,撤销与取走的批次怎么交代见 {@link ExternalWait.Parked}。 */
     ExternalWait.Parked awaitEvents(UUID companion);

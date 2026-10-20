@@ -244,7 +244,7 @@ interface Reflex {
     两端共用同一份代码),程序停下,余下的调用不再执行,各回一条写明原因(取自程序结局里结构化的那一句)的结果,这一轮结算,
     模型读到那条输入再决定;等的那件活照常跑。工具本身有界短,在跑的时候不看输入。
   - 外接大脑的调用没有"同一轮",每一条当场执行;要一件做完再派下一件,它自己用 `task status` 等身体空闲。
-  - 给模型读的说法只在 `NumenPrompts.ONE_BODY` 一处,系统提示与外接大脑的说明都引用它。
+  - 给模型读的说法只在 `NumenPrompts.ONE_BODY` 一处;外接大脑的说明直接带内置系统提示里的同一份操作核心(`SystemPromptComposer.core`),不另写。
   - 同行:pi、Claude Code 让会改东西的调用按顺序执行、一个做完才开始下一个;mc_agent 主人插话时跳过同一轮
     还没开始的调用并写明原因;Mindcraft、chatclef、Baritone 下一轮的新动作替换当前的。
 - **一件活的收尾只说一次**:服务端发 task_finished 的那一刻、主线程上就判这条归谁(`NumenEvents.Watcher`)——在跑的程序等着的那件,

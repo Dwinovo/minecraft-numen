@@ -1,6 +1,9 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
+import com.dwinovo.numen.api.agent.llm.ToolOutcome;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.agent.tool.ToolCall;
 import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -52,6 +55,17 @@ class McpServerTest {
         final List<String> said = new ArrayList<>();
         final List<String> answers = new java.util.concurrent.CopyOnWriteArrayList<>();
         final List<String> heard = new ArrayList<>();
+        volatile String events;
+
+        @Override
+        public CompletableFuture<List<NumenTool>> tools() {
+            return CompletableFuture.completedFuture(List.of(new Probe("zeta"), new Probe("lua")));
+        }
+
+        @Override
+        public CompletableFuture<String> runtimeState(UUID companion) {
+            return CompletableFuture.completedFuture("<runtime_state>of " + companion + "</runtime_state>");
+        }
 
         @Override
         public CompletableFuture<List<Companion>> companions() {
@@ -70,7 +84,7 @@ class McpServerTest {
 
         @Override
         public CompletableFuture<String> takeEvents(UUID companion) {
-            return CompletableFuture.completedFuture(null);
+            return CompletableFuture.completedFuture(events);
         }
 
         @Override
@@ -100,7 +114,25 @@ class McpServerTest {
 
         @Override
         public CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
-            return CompletableFuture.completedFuture("{}");
+            return CompletableFuture.completedFuture(ToolOutcome.success("ran " + toolName));
+        }
+    }
+
+    /** 她的工具表里的一个工具(只有名字有用)。 */
+    private record Probe(String name) implements NumenTool {
+        @Override
+        public String description() {
+            return "probe";
+        }
+
+        @Override
+        public java.util.Map<String, Object> parameterSchema() {
+            return null;
+        }
+
+        @Override
+        public void invoke(ToolCall call) {
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -653,6 +685,47 @@ class McpServerTest {
         reply(secret, session[0], ask.get("id").getAsString(), accepted("allow", null));
         Thread.sleep(200);
         assertTrue(hands.answers.isEmpty(), "撤掉之后迟到的答复不再算");
+    }
+
+    // ---- 外接大脑看到的与内置大脑同一份 ----
+
+    @Test
+    void theToolListIsHerToolBookNotAGlobalRegistry() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+
+        HttpResponse<String> listed = post(secret, session, rpc(2, "tools/list", new JsonObject()));
+
+        List<String> names = toolNames(JsonParser.parseString(listed.body()).getAsJsonObject().getAsJsonObject("result"));
+        assertEquals(List.of("list_companions", "create_companion", "delete_companion", "get_events", "say", "zeta", "lua"),
+                names, "控制工具在前,接着是她的工具表,原样原序");
+    }
+
+    @Test
+    void aProgramsReceiptCarriesItsEventsThenHerRuntimeState() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+        hands.events = "<events>x</events>";
+
+        JsonObject result = call(secret, session, "lua", args("companion", "alice"));
+
+        List<String> texts = new ArrayList<>();
+        result.getAsJsonArray("content").forEach(c -> texts.add(c.getAsJsonObject().get("text").getAsString()));
+        assertEquals(List.of("ran lua", "<events>x</events>", "<runtime_state>of " + ALICE + "</runtime_state>"), texts);
+    }
+
+    @Test
+    void getEventsEndsWithHerRuntimeStateEvenWhenNothingCame() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String session = connect(secret);
+        JsonObject poll = args("companion", "alice");
+        poll.addProperty("wait_seconds", 0);
+
+        JsonObject result = call(secret, session, "get_events", poll);
+
+        assertTrue(textOf(result).contains("no new events"), textOf(result));
+        assertEquals("<runtime_state>of " + ALICE + "</runtime_state>",
+                result.getAsJsonArray("content").get(1).getAsJsonObject().get("text").getAsString());
     }
 
     // ---- 渠道 ----

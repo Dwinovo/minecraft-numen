@@ -72,46 +72,9 @@ public final class McpAccessPrompt {
 
                 ## How to drive a companion once you're in
 
-                - Every tool takes a `companion` argument (name or id), so each call targets one body. \
-                There is no take-control handshake — just call tools.
-                - You are the companion's brain. To wait for the player to speak or for something to happen, call \
-                `get_events(companion)`: it returns as soon as there is news and otherwise waits up to 50 seconds, \
-                so call it again to keep waiting. While you run programs, events that arrive come back with the \
-                program's receipt. The player speaking to the companion in-game arrives as a `<query>`; world \
-                happenings arrive as `<event>`s. Events are consumed on read and nothing is lost between calls. \
-                - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
-                companion's chat line, speech bubble, and voice. Keep your own conversation history; \
-                the game stores none for you.
-                - Besides list_companions, create_companion, delete_companion, get_events and say there \
-                is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore")`, \
-                `numen.move.to({x = 120, y = 12, z = -35})`, `numen.work.dig({x = 120, y = 12, z = -35})`, \
-                `numen.fight.attack("zombie@3f9a1c")`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
-                `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
-                when a next step depends on what a call returned, write the steps as one program \
-                (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c) end`).
-                - A program waits for each body task it starts and returns one receipt when it ends: how \
-                it ended (on an error: the line, the call's error, usage and hint), then stderr (what the body \
-                did and what failed, one entry per call that had something to say; a body task's entry is its account \
-                of what it changed), what it returned and stdout (what it printed). A \
-                program stopped while a task runs leaves it running; that task's end arrives in `get_events` as a \
-                task_finished event. `numen.task.stop()` cancels the body's task.
-                - %s
-                - You're blind between calls: perceive with `numen.status.self()` / `numen.scan.blocks` / \
-                `numen.scan.entities` before and after acting.
-                - `numen.scan.blocks` returns the clusters of touching blocks it found, nearest first, each \
-                with its `blocks` (every Block, nearest first), its `nearest` Block and its `count`. Nothing is \
-                kept: the world is the state, so scan again to see what is left. `numen.work.dig` takes a \
-                cluster (or its blocks) as it is and digs the cells that still hold what the scan saw; cells ({x, y, z}) are dug \
-                whatever they hold. It walks up to what is out of reach, standing where the hand reaches the most of \
-                what is left, and digs on, but never picks up: `numen.work.collect()` picks up the drops. The \
-                built-in module function `numen.work.mine(cluster)` does both until the cluster is gone.
-                - It's survival mode — the API does only what a real player can. No give, no setblock.
+                The server sends its own instructions when you connect (how the tools work, how events and the                 companion's state reach you, and the guide the companion's built-in brain reads); follow those.                 Every tool takes a `companion` argument (name or id), and there is no take-control step.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \
-                instructions are in English.""".formatted(
-                        endpoint,
-                        endpoint,
-                        com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName(),
-                        McpServer.ONE_BODY);
+                instructions are in English.""".formatted(endpoint, endpoint);
     }
 }
