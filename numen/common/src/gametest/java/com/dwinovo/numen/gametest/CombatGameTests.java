@@ -159,11 +159,11 @@ public class CombatGameTests {
     }
 
     /**
-     * 主人在线、却离她很远时,要打的那只站在隔壁区块里:她自己那块加载垫得让伸手所及的邻区块也在跑实体刻,否则那只是冻住的——挨了
+     * 离真玩家很远时,要打的那只站在隔壁区块里:邻区块得和她脚下这块一样在跑实体刻,否则那只是冻住的——挨了
      * 第一下之后受击无敌帧永远不退,她一直等着出第二刀,它也打不死。GameTest 的场地区块是钉住的,这里搬到两千格外、高处
-     * 一块没人钉的地方现搭一条石台,让她的加载垫成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
+     * 一块没人钉的地方现搭一条石台,让她作为玩家带起来的区块成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 1000, batch = "numen_combat")
     public static void attack_finishes_a_target_across_a_chunk_border_far_from_players(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 她站在区块 cx 的东边沿上,僵尸站在隔壁区块 cx + 1 的西边沿上
@@ -177,22 +177,22 @@ public class CombatGameTests {
         for (int x = cx * 16 + 10; x <= cx * 16 + 20; x++) {
             level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         }
-        // 加载垫只在主人在线时续:主人站在场地里(GameTest 没有真玩家,拿另一个同伴的身份顶上,它自己不带区块)
-        BlockPos home = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer owner = Bodies.spawn(level.getServer(), java.util.UUID.randomUUID(),
-                "gametest_far_owner", java.util.UUID.randomUUID(), level,
-                new net.minecraft.world.phys.Vec3(home.getX() + 0.5, home.getY(), home.getZ() + 0.5));
         NumenPlayer companion = Bodies.spawn(level.getServer(), java.util.UUID.randomUUID(),
-                "gametest_far_fighter", owner.getUUID(), level,
+                "gametest_far_fighter", java.util.UUID.randomUUID(), level,
                 new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         Zombie zombie = EntityType.ZOMBIE.create(level);
         helper.assertTrue(zombie != null, "zombie did not spawn");
         ToolRun[] attack = new ToolRun[1];
 
-        // 等她的加载垫把两块区块都立起来,放下僵尸;世界里找得到它了再下命令
+        // 等她带起来的区块把两块都立起来、跑上实体刻,放下僵尸;世界里找得到它了再下命令
         steps(helper)
-                .thenIdle(40)
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(level.isPositionEntityTicking(companion.blockPosition()),
+                            "her own chunk is not entity-ticking yet");
+                    helper.assertTrue(level.isPositionEntityTicking(new BlockPos(cx * 16 + 16, y, z)),
+                            "the chunk across the border is not entity-ticking yet");
+                })
                 .thenExecute(() -> {
                     zombie.moveTo(cx * 16 + 16.5, y, z + 0.5, 0.0f, 0.0f);
                     zombie.setNoAi(true);
@@ -211,7 +211,6 @@ public class CombatGameTests {
                 .thenExecute(() -> {
                     zombie.discard();
                     CompanionFactory.despawn(level.getServer(), companion);
-                    CompanionFactory.despawn(level.getServer(), owner);
                 })
                 .thenSucceed();
     }
@@ -300,9 +299,9 @@ public class CombatGameTests {
     /**
      * 打不过就跑归逃跑本能,跑不掉就就地还手:她只剩四颗心、手里有剑,一只僵尸追着她,脚下是悬在半空的一块 5×5 石台——四下
      * 三十二格内没有能站的落点。逃跑本能先接过身体,找不到落点就让出来,留下一条说"没有退路"的本能事件;自卫接着打,僵尸挨了她的剑。
-     * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去。本能事件进她的收件箱,读得到。
+     * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;她周围的区块由她这个玩家自己带起来,等她脚下进了实体刻再开始。本能事件进她的收件箱,读得到。
      */
-    @GameTest(template = "floor16", timeoutTicks = 201, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 1001, batch = "numen_combat")
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(BlockPos.ZERO);
@@ -325,6 +324,8 @@ public class CombatGameTests {
         helper.assertTrue(zombie != null, "zombie did not spawn");
 
         steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(level.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she stands in is not entity-ticking yet"))
                 .thenIdle(40)
                 .thenExecute(() -> {
                     // 进世界时血是满的:站稳了再压到四颗心,僵尸这才来

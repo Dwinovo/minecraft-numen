@@ -193,21 +193,29 @@ public class SurvivalGameTests {
      * 她的 tickCount 只在她所在维度还在走刻时推进,所以它持续推进就是"这个维度没被停"的直接证据。落点在两万格外,
      * 邻居场地与别的用例的区块都碰不到。
      */
-    @GameTest(template = "floor16", timeoutTicks = 520, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_survival")
     public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
         ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
         helper.assertTrue(nether != null, "this server has no nether to travel to");
         BlockPos floor = new BlockPos(20000, 100, 20000);
+        // 下界的地形在这一带是实心的:先掏出一间空房,再铺地板
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
         for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 0, -6), floor.offset(6, 0, 6))) {
             nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         }
-        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(helper.getLevel().getServer(), UUID.randomUUID(),
-                "gametest_lonely", UUID.randomUUID(), nether, new Vec3(floor.getX() + 0.5, floor.getY() + 1, floor.getZ() + 0.5)));
-        companion.getFoodData().setFoodLevel(20);
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
+        companion.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
+                nether, new Vec3(floor.getX() + 0.5, floor.getY() + 1, floor.getZ() + 0.5), Vec3.ZERO, 0.0f, 0.0f,
+                net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
         int[] ticksAtStart = new int[1];
         Vec3[] start = new Vec3[1];
         ToolRun[] walk = new ToolRun[1];
         steps(helper)
+                // 落脚的区块是新生成的,要等它们起来她才开始走刻;起来之后的 300 刻不许再停
+                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she stands in is not entity-ticking yet"))
                 .thenExecute(() -> {
                     ticksAtStart[0] = companion.tickCount;
                     start[0] = companion.position();
