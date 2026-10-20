@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.ProtocolView;
+import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
@@ -862,6 +863,18 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(historySize, transcript.snapshot().size(), "清表之后旧循环不再往历史里写");
             assertEquals(List.of(false), tools.cancels, "不叫停身体");
             assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "不清队列");
+        }
+
+        @Test
+        void haltReleasesTheExternalCallItVoids() {
+            List<String> replies = new ArrayList<>();
+            assertTrue(loop.runAside(tool("ext-9"), replies::add), "内核闲着:外接借的调用收得下");
+
+            loop.halt(HaltReason.DEATH, "掉进岩浆");
+
+            assertEquals(1, replies.size(), "作废也要回答等它的那个外接大脑");
+            assertTrue(ToolOutcome.failed(replies.get(0)), "回的是失败");
+            assertTrue(loop.runAside(tool("ext-10"), replies::add), "放开之后,下一次外接调用还收得下");
         }
     }
 
