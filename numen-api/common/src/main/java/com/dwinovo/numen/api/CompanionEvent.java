@@ -17,13 +17,16 @@ import java.util.UUID;
  */
 public final class CompanionEvent<T> {
 
-    /** 身体刚进世界(召唤或从休眠唤醒),已经在玩家列表里、可以对它下命令了。 */
+    /**
+     * 身体刚进世界(召唤、从休眠唤醒,或死后经原版重生换上来的新身体),已经在玩家列表里、可以对它下命令了。
+     * 模组上重生出来的是新的身体对象:按身体对象记的东西在 {@link #REMOVE} 时收掉,在这里为新身体重建。
+     */
     public static final CompanionEvent<NumenPlayer> SPAWN = new CompanionEvent<>("companion_spawn");
 
-    /** 身体正在离开世界(休眠 / 注销 / 死亡后消失)。此刻它还在,之后就没了。 */
+    /** 身体正在离开世界(休眠 / 注销 / 被请出服务器 / 死后重生之前)。此刻它还在,之后就没了(重生的话,换上来的是另一具)。 */
     public static final CompanionEvent<NumenPlayer> REMOVE = new CompanionEvent<>("companion_remove");
 
-    /** 身体刚死,尸体还没被清走。 */
+    /** 身体刚死,原版的死亡流程已经走完,还没重生(重生在下一个服务端刻开头)。 */
     public static final CompanionEvent<NumenPlayer> DEATH = new CompanionEvent<>("companion_death");
 
     /** 主人打断了这个同伴的思考——手上没做完的活该放弃了。给的是 UUID,因为身体未必还在。 */

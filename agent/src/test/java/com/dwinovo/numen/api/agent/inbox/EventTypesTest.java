@@ -52,6 +52,7 @@ class EventTypesTest {
         // 恒急的是"她不知道,正在做的事就是错的";其余由发送方按事情本身定
         assertRow(EventTypes.TASK_FINISHED, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.DEATH, EventTypes.Delivery.STEER, true, false, false, false);
+        assertRow(EventTypes.RESPAWNED, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.HUNGRY, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.OWNER_HURT, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.COMPANION_HURT, EventTypes.Delivery.STEER, true, false, false, false);

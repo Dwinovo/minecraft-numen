@@ -33,17 +33,18 @@ import java.util.UUID;
 @com.dwinovo.numen.api.Internal
 public final class CompanionRegistry extends SavedData {
 
-    /** One companion's catalog entry. {@code diedAt > 0} = dead, awaiting a respawn-at-owner (the death
-     *  state is persisted here so it SURVIVES a logout during the respawn window — see Companions).
+    /** One companion's catalog entry.
      *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。
-     *  {@code removedFor} 非空 = 她的身体被外面的人或插件请出了服务器(值是当时说的理由),在主人再召唤她之前不重建。 */
+     *  {@code removedFor} 非空 = 她的身体被外面的人或插件请出了服务器(值是当时说的理由),在主人再召唤她之前不重建。
+     *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
+     *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
-                        String deathCause, long diedAt, String skinValue, String skinSig,
+                        String skinValue, String skinSig,
                         String taskName, String taskLua, String taskOld, String removedFor) {
-        /** A live companion (not dead), no borrowed skin, idle. */
+        /** A companion with no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "", "", "", "", "");
+            this(name, owner, dimension, pos, "", "", "", "", "", "");
         }
 
         /**
@@ -51,35 +52,25 @@ public final class CompanionRegistry extends SavedData {
          * 在做、但接不回来。见 {@code TaskPersistence}。{@code taskOld} 只是读进来的:旧版本按一行命令记下的活,这一版不再跑它。
          */
         public Entry doing(String task, String lua) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
                     task == null ? "" : task, lua == null ? "" : lua, "", removedFor);
         }
 
-        /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
+        /** 刷新落点(休眠/移动时的 respawn 提示),皮肤原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
                     taskName, taskLua, taskOld, removedFor);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt,
+            return new Entry(name, owner, dimension, pos,
                     value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, removedFor);
-        }
-
-        Entry dead(String cause, long at) {
-            return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
-                    taskName, taskLua, taskOld, removedFor);
-        }
-
-        Entry alive() {
-            return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
-                    taskName, taskLua, taskOld, removedFor);
         }
 
         /** 身体被外面请出了服务器({@code reason} 是当时说的理由);主人再召唤之前不重建。 */
         Entry removed(String reason) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
                     taskName, taskLua, taskOld, reason);
         }
 
@@ -93,8 +84,6 @@ public final class CompanionRegistry extends SavedData {
                 UUIDUtil.STRING_CODEC.fieldOf("owner").forGetter(Entry::owner),
                 ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Entry::dimension),
                 BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
-                Codec.STRING.optionalFieldOf("deathCause", "").forGetter(Entry::deathCause),
-                Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
                 Codec.STRING.optionalFieldOf("taskName", "").forGetter(Entry::taskName),
@@ -192,23 +181,6 @@ public final class CompanionRegistry extends SavedData {
         return out;
     }
 
-    /** Every companion currently dead and awaiting respawn (persisted, survives a logout). */
-    public List<Map.Entry<UUID, Entry>> pendingDead() {
-        List<Map.Entry<UUID, Entry>> out = new ArrayList<>();
-        for (Map.Entry<UUID, Entry> e : entries.entrySet()) {
-            if (e.getValue().diedAt() > 0L) out.add(e);
-        }
-        return out;
-    }
-
-    /** Mark a companion dead (records the cause + game-time, persisted for the respawn timer). */
-    public void markDead(UUID uuid, String cause, long diedAt) {
-        Entry e = entries.get(uuid);
-        if (e == null) return;
-        entries.put(uuid, e.dead(cause, diedAt));
-        setDirty();
-    }
-
     /** 记下她的身体被外面请出了服务器(理由 {@code reason} 随名册落盘,主人下次上线还说得出)。 */
     public void markRemoved(UUID uuid, String reason) {
         Entry e = entries.get(uuid);
@@ -222,14 +194,6 @@ public final class CompanionRegistry extends SavedData {
         Entry e = entries.get(uuid);
         if (e == null || !e.removed()) return;
         entries.put(uuid, e.removed(""));
-        setDirty();
-    }
-
-    /** Clear the death state (called when the body is respawned). */
-    public void markAlive(UUID uuid) {
-        Entry e = entries.get(uuid);
-        if (e == null || e.diedAt() == 0L) return;
-        entries.put(uuid, e.alive());
         setDirty();
     }
 }

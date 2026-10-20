@@ -35,16 +35,8 @@ public final class OwnedBody {
     public static NumenPlayer of(MinecraftServer server, UUID ownerUuid, UUID entityUuid, Consumer<String> refuse) {
         NumenPlayer companion = NumenPlayer.findByUuid(server, entityUuid);
         if (companion == null) {
-            // 她死着的时候不许从这儿把她拉起来:复活的唯一出口是定时复活
-            // (Companions.tickRespawns,读注册表的 diedAt)。两条复活路各自不知道对方,
-            // 结果是一次死亡复活出两具同 UUID 的身体同时在玩家列表里 —— 排程器会在
-            // 两具之间无限重建大脑,每次还重放一遍她手上的活。
+            // 被外面请出去的:回来只能是主人再召唤(Companions.summon),不是一个包把她拉起来
             CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(entityUuid);
-            if (reg != null && reg.diedAt() > 0L) {
-                refuse.accept("她刚死了,正在复活途中——等复活事件到了再派");
-                return null;
-            }
-            // 被外面请出去的同理:回来只能是主人再召唤(Companions.summon),不是一个包把她拉起来
             if (reg != null && reg.removed()) {
                 refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
                 return null;

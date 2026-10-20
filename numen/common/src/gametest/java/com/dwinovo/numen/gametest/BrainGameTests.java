@@ -254,19 +254,19 @@ public class BrainGameTests {
         });
     }
 
-    /** 死着时不开 run;复活时死亡的叙事随攒着的输入一起走。 */
+    /** 死着时不开 run;重生时死亡的叙事随攒着的输入一起走。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void death_freezes_the_loop_and_the_respawn_tells_her_how_she_died(GameTestHelper helper)
             throws Exception {
         Brain her = new Brain(helper, "gametest_mortal");
         her.mind.say("我回来了");
 
-        her.loop.onDied("摔死了");
+        her.loop.onDied("摔死了", "你死在 minecraft:overworld。");
         her.loop.submitPrompt("在吗");
         helper.assertTrue(her.loop.status().hold() == Hold.DEAD, "not frozen: " + her.loop.status().hold());
         helper.assertTrue(her.mind.asked.isEmpty(), "she thought while dead");
 
-        her.loop.onRespawned(null);
+        her.loop.onRespawned();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(her.mind.asked.size() == 1, "the respawn did not wake her");

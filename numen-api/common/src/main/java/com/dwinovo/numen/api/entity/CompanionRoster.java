@@ -16,40 +16,22 @@ import java.util.UUID;
  *
  * <h2>规则</h2>
  * {@link #build} —— 名册来自<b>注册表</b>(持久、权威:谁存在),不是玩家列表
- * (瞬时:谁此刻站在世界里)。死了、休眠、正等复活的同伴<b>都在名册上</b>,
- * 因为她们确实还存在。
+ * (瞬时:谁此刻站在世界里)。休眠的同伴<b>也在名册上</b>,因为她们确实还存在。
  */
 public final class CompanionRoster {
 
-    /** 一 tick 二十分之一秒。 */
-    public static final long MS_PER_TICK = 50L;
-
-    /** {@link Line#respawnInMs()} 的活着取值。 */
-    public static final long ALIVE = -1L;
-
     private CompanionRoster() {}
 
-    /** 注册表的一条,剥到决策要用的三个字段({@code diedAtTick <= 0} = 活着)。 */
-    public record Row(UUID uuid, String name, long diedAtTick) {}
-
-    /** 发给主人的一行。{@code respawnInMs} 为 {@link #ALIVE} = 活着/休眠;
-     *  ≥0 = 死了,还要这么久复活(0 = 时候到了,正等一个安全落点)。 */
-    public record Line(UUID uuid, String name, long respawnInMs) {
-        public boolean dead() {
-            return respawnInMs >= 0;
-        }
-    }
+    /** 注册表的一条,剥到决策要用的两个字段。 */
+    public record Row(UUID uuid, String name) {}
 
     /**
      * 注册表 → 名册。按名字排序:注册表是 HashMap,不排的话面板上同伴的顺序
      * 每次推送都可能变。
      */
-    public static List<Line> build(Collection<Row> rows, long nowTick, long respawnDelayTicks) {
-        List<Line> out = new ArrayList<>();
-        for (Row r : rows) {
-            out.add(new Line(r.uuid(), r.name(), respawnInMs(r.diedAtTick(), nowTick, respawnDelayTicks)));
-        }
-        out.sort(Comparator.comparing(Line::name).thenComparing(l -> l.uuid().toString()));
+    public static List<Row> build(Collection<Row> rows) {
+        List<Row> out = new ArrayList<>(rows);
+        out.sort(Comparator.comparing(Row::name).thenComparing(r -> r.uuid().toString()));
         return out;
     }
 
@@ -74,14 +56,5 @@ public final class CompanionRoster {
             }
         }
         return best;
-    }
-
-    /** 还有多久复活;活着返回 {@link #ALIVE}。时候已到但还没落地的返回 0(不返负数)。 */
-    public static long respawnInMs(long diedAtTick, long nowTick, long respawnDelayTicks) {
-        if (diedAtTick <= 0L) {
-            return ALIVE;
-        }
-        long leftTicks = respawnDelayTicks - (nowTick - diedAtTick);
-        return leftTicks <= 0L ? 0L : leftTicks * MS_PER_TICK;
     }
 }

@@ -10,6 +10,8 @@ import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.function.Consumer;
@@ -53,6 +55,13 @@ import java.util.function.Consumer;
  * {@code hurtMarked} 为真(原版清它在发包之后)。别的速度包不归这里:怪打她的击退由服务端实体追踪发出,那时 {@code hurtMarked}
  * 已经清了,而且服务端上的速度本来就是对的。
  *
+ * <h2>死了以后点"重生"</h2>
+ * 真客户端死后看到死亡画面,玩家点"重生"就发一个 {@code PERFORM_RESPAWN},由原版的 {@code PlayerList.respawn} 把玩家按重生点规则放回世界。
+ * {@link #respawn} 代她点这个按钮,重生本身全是原版做的:没有加入广播(不经 {@code placeNewPlayer}),落点、床与重生锚的消耗、
+ * 掉落与经验、{@code keepInventory} 都照原版。原版重生会换一个新的 {@code ServerPlayer} 对象(模组上 {@code PlayerListRespawnMixin}
+ * 让它仍是 {@link NumenPlayer}),所以这一份"客户端"跟着她换身体({@link #movedTo}),等着回的传送回执不会丢给旧身体。
+ * Paper 上重生沿用原来的对象,{@code movedTo} 是原地不动。
+ *
  * <h2>答话挂在服务端 tick 上,不挂实体 tick</h2>
  * {@link #answer()} 由 {@code CompanionTickDispatcher} 每刻遍历玩家列表时调用。挂
  * {@code NumenPlayer.tick()} 是不行的:实体 tick 只在她所在区块已经进入实体刻时才跑,
@@ -62,7 +71,8 @@ import java.util.function.Consumer;
 @com.dwinovo.numen.api.Internal
 public final class FakeClient {
 
-    private final NumenPlayer player;
+    /** 这一份"客户端"此刻代答的身体;原版重生换了身体对象时由 {@link #movedTo} 换成新的。 */
+    private NumenPlayer player;
 
     /**
      * 待回的传送编号,-1 表示没有。
@@ -96,8 +106,28 @@ public final class FakeClient {
 
     FakeClient(NumenPlayer player) {
         this.player = player;
-        this.messages = new ServerMessages((text, overlay, repeats) -> NumenEvents.serverMessage(player, text,
+        this.messages = new ServerMessages((text, overlay, repeats) -> NumenEvents.serverMessage(this.player, text,
                 overlay, repeats, ServerMessages.WINDOW_TICKS / 20));
+    }
+
+    /**
+     * 原版重生给她换了新身体:这一份"客户端"带着手里的一切(等着回的传送编号、折叠中的话、已到达)转交给它。
+     * 由 {@link NumenPlayer#restoreFrom} 调,那是原版重生里新身体接上旧身体的那一处。
+     */
+    FakeClient movedTo(NumenPlayer next) {
+        this.player = next;
+        return this;
+    }
+
+    /**
+     * 代她点"重生"(她的身体已经死了):原版的 {@code PlayerList.respawn} 把她放回世界,返回重生后的身体
+     * (模组上是新对象,Paper 上还是原来那个)。重生期间原版发给她的包照常经 {@link #onOutbound},落点的传送编号随后由 {@link #answer} 回执。
+     */
+    NumenPlayer respawn() {
+        ServerGamePacketListenerImpl connection = player.connection;
+        connection.handleClientCommand(
+                new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+        return (NumenPlayer) connection.getPlayer();
     }
 
     /**

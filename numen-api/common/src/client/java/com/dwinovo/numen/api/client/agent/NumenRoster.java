@@ -1,7 +1,5 @@
 package com.dwinovo.numen.api.client.agent;
 
-import com.dwinovo.numen.api.entity.CompanionRoster;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,12 +11,9 @@ import java.util.UUID;
  * 外接大脑入口都读它。
  *
  * <h2>存在,而不是活着</h2>
- * 名册由服务端从持久的注册表算出来({@code CompanionListPayload}),死了、正等复活、
- * 休眠的同伴<b>都在册</b>:她们确实还存在,只是此刻不在世界里。所以"不在名册上"
+ * 名册由服务端从持久的注册表算出来({@code CompanionListPayload}),休眠的同伴<b>也在册</b>:
+ * 她们确实还存在,只是此刻不在世界里。所以"不在名册上"
  * 只有一个意思——<b>被永久遣散了</b>,客户端据此删掉她的本地数据。
- *
- * <p>死亡倒计时也住在这儿({@link Entry#respawnAtMs}),不另开一份缓存:同一个问题
- * 两处答案,迟早对不上。上一版把倒计时单独存,主人在死亡窗口里重登就丢状态。
  *
  * <h2>换存档必须清空</h2>
  * {@link #clear()} 在断开连接时调。名册残留会让下一个存档的第一份名册看起来
@@ -30,29 +25,18 @@ import java.util.UUID;
 public final class NumenRoster {
 
     /**
-     * 一只存在的同伴。{@code respawnAtMs} 为 0 = 活着;否则是复活的绝对时刻
-     * (毫秒),面板据此画倒计时——存绝对时刻而不是剩余量,两次推送之间也走得动。
-     * {@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code removedFor} 非空 = 她被请出了
+     * 一只存在的同伴。{@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code removedFor} 非空 = 她被请出了
      * 服务器、不在世界里(值是理由)。
      */
-    public record Entry(UUID uuid, String name, long respawnAtMs, boolean creative, String removedFor) {
+    public record Entry(UUID uuid, String name, boolean creative, String removedFor) {
 
-        /** 活着的一行。 */
+        /** 在册的一行,没有被请出去。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, 0L, false, "");
+            this(uuid, name, false, "");
         }
 
         public boolean removed() {
             return !removedFor.isEmpty();
-        }
-
-        public boolean dead() {
-            return respawnAtMs > 0L;
-        }
-
-        /** 还有多久复活(不小于 0);活着返回 -1。 */
-        public long remainingMs() {
-            return respawnAtMs <= 0L ? -1L : Math.max(0L, respawnAtMs - System.currentTimeMillis());
         }
     }
 
@@ -105,12 +89,6 @@ public final class NumenRoster {
         return e == null ? null : e.name();
     }
 
-    /** 死了、正在等复活? */
-    public boolean isDead(UUID uuid) {
-        Entry e = entries.get(uuid);
-        return e != null && e.dead();
-    }
-
     /** 被请出了服务器、等主人再召唤? */
     public boolean isRemoved(UUID uuid) {
         Entry e = entries.get(uuid);
@@ -121,17 +99,5 @@ public final class NumenRoster {
     public String removedFor(UUID uuid) {
         Entry e = entries.get(uuid);
         return e == null ? "" : e.removedFor();
-    }
-
-    /** 还有多久复活(不小于 0);活着或不在名册上返回 -1。 */
-    public long remainingMs(UUID uuid) {
-        Entry e = entries.get(uuid);
-        return e == null ? -1L : e.remainingMs();
-    }
-
-    /** 名册行 → 客户端条目:把"还有多久"换算成绝对时刻。 */
-    public static Entry toEntry(UUID uuid, String name, long respawnInMs, boolean creative, String removedFor) {
-        return new Entry(uuid, name,
-                respawnInMs < 0L ? 0L : System.currentTimeMillis() + respawnInMs, creative, removedFor);
     }
 }

@@ -119,7 +119,6 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_TAG_NO_TOOLS = "numen.gui.providers.tag.no_tools";
         public static final String GUI_PROVIDERS_TAG_MANUAL = "numen.gui.providers.tag.manual";
         public static final String HEADER_REMOVED = "numen.header.removed";
-        public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
         // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
         public static final String CONSENT_ALLOW          = "numen.consent.allow";
@@ -706,7 +705,6 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
         adder.add("numen.dismiss.warning", "Permanent · backpack, armor and accessories drop in place · cannot be undone");
         adder.add("numen.empty.no_companions", "No companions yet");
-        adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
 
@@ -980,7 +978,6 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_MULTIMODAL, "Multimodal %s");
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "No tool calling");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "Manual model");
-        adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
         adder.add(Keys.HEADER_REMOVED,                  "removed from the server (%s)");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
@@ -1413,7 +1410,6 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
         adder.add("numen.dismiss.warning", "永久删除 · 背包与身上的装备、饰品会掉落在原地 · 无法撤销");
         adder.add("numen.empty.no_companions", "还没有同伴");
-        adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
 
@@ -1688,7 +1684,6 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_MULTIMODAL, "多模态 %s");
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "不支持工具调用");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "手填的型号");
-        adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
         adder.add(Keys.HEADER_REMOVED,                  "被请出了服务器(%s)");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");

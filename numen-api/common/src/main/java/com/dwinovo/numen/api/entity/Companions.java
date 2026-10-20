@@ -27,10 +27,6 @@ import java.util.function.Consumer;
 @com.dwinovo.numen.api.Internal
 public final class Companions {
 
-    /** 死后躺多久再在主人身边复活。5 秒:够让主人看清"她死了"这件事,
-     *  又短到不会把她整场战斗排除在外。 */
-    private static final long RESPAWN_DELAY_TICKS = 5 * 20;
-
     private Companions() {}
 
     /**
@@ -186,7 +182,7 @@ public final class Companions {
     private static List<CompanionRoster.Row> rowsOf(MinecraftServer server, UUID ownerUuid) {
         List<CompanionRoster.Row> rows = new ArrayList<>();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            rows.add(new CompanionRoster.Row(e.getKey(), e.getValue().name(), e.getValue().diedAt()));
+            rows.add(new CompanionRoster.Row(e.getKey(), e.getValue().name()));
         }
         return rows;
     }
@@ -223,7 +219,7 @@ public final class Companions {
     }
 
     /**
-     * 没有人在等结果的重建(换皮肤、主人上线时的恢复、死后复活)结束时做的事:服务器说不(登录插件、封禁、白名单)就停在外面——
+     * 没有人在等结果的重建(换皮肤、主人上线时的恢复)结束时做的事:服务器说不(登录插件、封禁、白名单)就停在外面——
      * 记下原因、如实告诉主人,不替它轮询;主人再召唤她才再试。
      */
     private static Consumer<Arrivals.Arrival<NumenPlayer>> afterwards(MinecraftServer server, UUID companionUuid) {
@@ -314,9 +310,7 @@ public final class Companions {
         }
     }
 
-    /** When an owner logs in, bring back every companion of theirs. A companion that DIED while the owner
-     *  was away (death state persisted in the registry — survives the logout) is respawned-at-owner now
-     *  AND told why it died; a live one is just restored from its {@code .dat}.
+    /** When an owner logs in, bring back every companion of theirs, restored from its {@code .dat}.
      *
      *  <p>逐只隔离:一只回不来是少一只同伴,不该把同一个主人的其余同伴也一起拖掉。 */
     public static void respawnAllOwnedBy(MinecraftServer server, UUID ownerUuid) {
@@ -324,9 +318,7 @@ public final class Companions {
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
             try {
                 com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
-                if (e.getValue().diedAt() > 0L) {
-                    if (owner != null) respawnDead(server, e.getKey(), e.getValue(), owner);
-                } else if (e.getValue().removed()) {
+                if (e.getValue().removed()) {
                     // 她是被外面请出去的,不替主人重建;他上线了就把这件事告诉他
                     if (owner != null) tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
                 } else {
@@ -379,13 +371,17 @@ public final class Companions {
                 com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_COMPANION_REMOVED, name, why));
     }
 
+    /** 死了、等着代她点"重生"的身体(主线程)。世界作废时一并清掉——排的是上一个存档的账。 */
+    private static final java.util.Set<NumenPlayer> AWAITING_RESPAWN = new java.util.LinkedHashSet<>();
+
+    static {
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(AWAITING_RESPAWN::clear);
+    }
+
     /**
-     * A companion just DIED (detected in {@link NumenPlayer#tick}). The death itself is left fully
-     * vanilla — drops / a grave mod / keepInventory all run because it's a real ServerPlayer death.
-     * We only: stop the brain (its loop suspends, recording the
-     * cut-off turn with the death cause), heal the body so its saved {@code .dat} is whole, and
-     * queue a timed respawn at the owner. The corpse is removed AFTER this tick (a fake player isn't
-     * auto-removed on death — it would sit at 0 HP forever waiting for a respawn packet that never comes).
+     * 一只同伴刚死了({@link NumenPlayer#die} 里,原版的死亡流程已经走完:掉落、经验、广播、{@code keepInventory} 都是原版的)。
+     * 这里只做三件事:大脑停牌并把死亡告诉她,生命周期钩子发 {@code DEATH},把这具尸体排进待重生。重生在下一个服务端刻开头
+     * ({@link #respawnDead}),不在实体刻里当场做——和真玩家一样,重生是网络阶段处理一个点击,不是死亡那一刻的事。
      */
     public static void onDeath(NumenPlayer body) {
         MinecraftServer server = body.level().getServer();
@@ -400,96 +396,100 @@ public final class Companions {
         if (cause == null || cause.isBlank()) cause = "未知原因";
         // 先让大脑停牌,再触发生命周期钩子——<b>顺序要紧</b>:大脑一停牌 DEAD,
         // 此后钩子里产生的收尾事件(异步任务的 task_finished status="interrupted")
-        // 照样进队列,但不开 run,安静躺到复活。
+        // 照样进队列,但不开 run,安静躺到重生。
         //
         // 反过来的话,那条 urgent 收尾事件会在停牌之前到达、当场开一轮,而紧接着的
         // 停牌又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
-        ServerPlayer owner = body.resolveOwnerPlayer();
+        String where = "你死在 " + body.level().dimension().location() + " "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。"
+                + (body.level().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY)
+                ? "这个世界开着 keepInventory,背包里的东西还在你身上。"
+                : "背包里的东西按原版规则掉在了死亡地点。");
         String diedOf = cause;
-        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf));
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf, where));
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
-        // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
-        // the respawn window — without this, a relog lost the pending state and the body silently respawned
-        // "alive" with an empty inventory and no idea it had died.
-        CompanionRegistry.get(server).markDead(uuid, cause, server.overworld().getGameTime());
-        // 死亡状态进了注册表,名册才说得出"她还在,只是躺着"——面板的倒计时读这个。
-        // 少了这一推,主人在死亡窗口里重登就会看见她凭空消失。
-        if (owner != null) {
-            syncRosterToOwner(server, owner);
-        }
-        body.setHealth(body.getMaxHealth());             // saved .dat is a healthy body for the respawn
-        server.execute(() -> CompanionFactory.despawn(server, body));   // remove the corpse safely after the tick
+        AWAITING_RESPAWN.add(body);
     }
 
     /**
-     * Bring back any companion whose post-death timer has elapsed, AT ITS OWNER (covers dimension
-     * follow too — it returns in whatever dimension the owner is now in). Owner offline → keep waiting
-     * (their client-side brain can't run anyway); it respawns the moment they're back. Called each tick.
+     * 每个服务端刻开头调一次:替排着的死者点"重生"({@link FakeClient#respawn}),由原版的 {@code PlayerList.respawn} 把她放回世界。
+     * 一只重生出错不牵连下一只。
      */
-    public static void tickRespawns(MinecraftServer server) {
-        long now = server.overworld().getGameTime();
-        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).pendingDead()) {
-            CompanionRegistry.Entry entry = e.getValue();
-            if (now - entry.diedAt() < RESPAWN_DELAY_TICKS) continue;
-            if (entry.removed()) continue;                          // 被请出去或被服务器拒了:等主人再召唤
-            ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
-            if (owner == null) continue;                            // owner offline — wait for login
-            // No safe spot right now → quietly retry next tick until the owner reaches open
-            // space (the maid/vanilla-pet convention: never nag about a transient squeeze).
-            respawnDead(server, e.getKey(), entry, owner);
+    public static void respawnDead(MinecraftServer server) {
+        if (AWAITING_RESPAWN.isEmpty()) {
+            return;
+        }
+        List<NumenPlayer> dead = new ArrayList<>(AWAITING_RESPAWN);
+        AWAITING_RESPAWN.clear();
+        for (NumenPlayer body : dead) {
+            try {
+                respawnBody(server, body);
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 重生时出错", body.getUUID(), ex);
+            }
         }
     }
 
-    /** Respawn a dead companion at its owner, clear the death state, and tell the brain it died + why
-     *  (the cause rides the respawn payload, so it works even after a logout cleared the client's memory).
-     *  Returns false when no safe landing spot exists near the owner right now (tight tunnel, crawling,
-     *  deep water) — the death state stays pending and the ticker retries until the owner reaches open
-     *  space. Spawning anyway wedged the body into blocks: suffocate → die → respawn into the same spot,
-     *  a death loop until the owner happened to move. */
-    private static boolean respawnDead(MinecraftServer server, UUID uuid, CompanionRegistry.Entry entry,
-                                       ServerPlayer owner) {
-        ServerLevel level = (ServerLevel) owner.level();
-        Vec3 pos = SafeSpawn.findNear(level, owner.position());
-        if (pos == null && owner.onGround() && SafeSpawn.hasStandingRoom(level, owner.position())) {
-            pos = owner.position();   // non-full-block floor (slab/carpet): the owner's own spot fits
+    /**
+     * 原版重生一具死着的身体,再把换上来的新身体接回 Numen 这一侧。原版决定一切:落在她自己的重生点(睡过的床、充能的重生锚),
+     * 没有或失效就是世界出生点,不经 {@code placeNewPlayer}(没有"加入了游戏"的广播),也不传送到主人身边。
+     *
+     * <p>模组上原版换一个新的身体对象:手上的活、任务槽、各种看护都绑着旧身体,所以按"一具身体离场、一具身体入场"走,
+     * 和休眠再唤醒同一套生命周期钩子({@code REMOVE}、{@code SPAWN});大脑按 UUID 认身体,不用换。
+     */
+    private static void respawnBody(MinecraftServer server, NumenPlayer dead) {
+        if (server.getPlayerList().getPlayer(dead.getUUID()) != dead) {
+            return;   // 排队期间她被移出了世界(遣散、被请出去):没有身体可重生
         }
-        if (pos == null) return false;
+        boolean hadRespawnPoint = dead.getRespawnPosition() != null;
+        CompanionEvents.fire(CompanionEvent.REMOVE, dead);   // 这一条命的身体到头了:手上的活收尾,键盘松开
+        NumenPlayer body = dead.fakeClient().respawn();
+        UUID uuid = body.getUUID();
         CompanionRegistry reg = CompanionRegistry.get(server);
-        CompanionFactory.spawn(server, uuid, entry.name(), entry.owner(), level, pos,
-                () -> reg.find(uuid) != null && reg.find(uuid).diedAt() > 0L, arrival -> {
-            NumenPlayer body = arrival.body();
-            if (body == null) {
-                afterwards(server, uuid).accept(arrival);
-                return;
-            }
-            body.setHealth(body.getMaxHealth());
-            body.clearFire();
-            reg.markAlive(uuid);
-            syncRosterToOwner(server, owner);
-            com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onRespawned(entry.deathCause()));
-        });
-        return true;
+        CompanionRegistry.Entry entry = reg.find(uuid);
+        if (entry != null) {
+            reg.put(uuid, entry.movedTo(body.serverLevel().dimension(), body.blockPosition()));
+        }
+        CompanionEvents.fire(CompanionEvent.SPAWN, body);
+        // 身体动了就得让她知道;事件先于解冻进收件箱,解冻后死亡与重生两条一起交给她
+        com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RESPAWNED,
+                java.util.Map.of("spawn", body.getRespawnPosition() != null ? "respawn_point" : "world_spawn"),
+                respawnedText(body, hadRespawnPoint), true);
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
+                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onRespawned);
+    }
+
+    /** 重生那条事件的话:落在哪、凭什么落在这儿、离主人多远。 */
+    private static String respawnedText(NumenPlayer body, boolean hadRespawnPoint) {
+        String how = body.getRespawnPosition() != null ? "落在你的重生点(睡过的床或充能的重生锚)旁"
+                : hadRespawnPoint ? "你的重生点(床或重生锚)没了或被挡住,落在了世界出生点"
+                : "你没有重生点,落在了世界出生点";
+        ServerPlayer owner = body.resolveOwnerPlayer();
+        String ownerPart = owner == null ? "主人不在线。"
+                : owner.level() != body.level() ? "主人在 " + owner.level().dimension().location() + ",和你不在同一个维度。"
+                : "主人在你" + com.dwinovo.numen.api.sdk.CompassUtil.compass(body, owner) + "方向,约 "
+                        + Math.round(body.distanceTo(owner)) + " 格处。";
+        return "你重生了:" + how + ",位置 " + body.level().dimension().location() + " "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。" + ownerPart
+                + "没有人替你挪动过位置;要不要回主人身边、怎么回,由你定。";
     }
 
     /**
      * 把主人名下<b>存在的</b>同伴推给他的客户端。
      *
-     * <p>取自持久的 {@link CompanionRegistry},不是玩家列表——死了、正等复活、休眠的
-     * 同伴都还存在,只是此刻不在世界里。客户端拿这份名册对账并<b>删除已遣散同伴的
-     * 本地数据</b>,所以名册的语义必须是"存在";用"此刻活着"做过一版,结果是同伴一死
+     * <p>取自持久的 {@link CompanionRegistry},不是玩家列表——休眠的同伴还存在,只是此刻不在世界里。客户端拿这份名册对账并<b>删除已遣散同伴的
+     * 本地数据</b>,所以名册的语义必须是"存在";用"此刻活着"做过一版,结果是同伴一休眠
      * 就被当成遣散,数据整个删掉。判断规则在 {@link CompanionRoster}(纯 JVM,可单测)。
      *
-     * <p>任何"存在或存活状态"的变化之后都要调:登录、召唤、遣散、死亡、复活。
+     * <p>任何"存在状态"的变化之后都要调:登录、召唤、遣散、被请出服务器。
      */
     public static void syncRosterToOwner(MinecraftServer server, ServerPlayer owner) {
         CompanionRegistry reg = CompanionRegistry.get(server);
-        List<CompanionRoster.Row> rows = rowsOf(server, owner.getUUID());
         List<CompanionListPayload.Entry> list = new ArrayList<>();
-        for (CompanionRoster.Line l : CompanionRoster.build(
-                rows, server.overworld().getGameTime(), RESPAWN_DELAY_TICKS)) {
-            NumenPlayer body = NumenPlayer.findByUuid(server, l.uuid());
-            list.add(new CompanionListPayload.Entry(l.uuid(), l.name(), l.respawnInMs(),
-                    body != null && body.isCreative(), reg.find(l.uuid()).removedFor()));
+        for (CompanionRoster.Row row : CompanionRoster.build(rowsOf(server, owner.getUUID()))) {
+            NumenPlayer body = NumenPlayer.findByUuid(server, row.uuid());
+            list.add(new CompanionListPayload.Entry(row.uuid(), row.name(),
+                    body != null && body.isCreative(), reg.find(row.uuid()).removedFor()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }

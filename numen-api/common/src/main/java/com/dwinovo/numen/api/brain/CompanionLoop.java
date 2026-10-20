@@ -145,8 +145,6 @@ public final class CompanionLoop {
     private String voiceId;
     /** 绑定的皮肤 id;{@code null} = 默认皮肤。穿在身上的签名数据在名册里,这里记的是库里的哪一条。 */
     private String skinId;
-    /** 死亡原因,复活时放进复活事件(活着是 {@code null})。 */
-    private String deathCause;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
     /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。主线程上读写。 */
@@ -484,24 +482,23 @@ public final class CompanionLoop {
         loop.said(new AssistantTurn(text, List.of(), null));
     }
 
-    /** 身体死了:内核冻结,收件箱照收。 */
-    public void onDied(String cause) {
-        deathCause = cause;
+    /**
+     * 身体死了:内核冻结,收件箱照收,死亡的叙事作为急件进收件箱——她关于自己处境的认知几乎每一条都作废了(手上的任务没了、血量装备全变了),
+     * 这不分"任务中死"还是"空闲死",所以这里没有任何判据。先停牌再入队:反过来这条急件会在停牌之前把她叫醒,开一轮模型调用再被作废。
+     *
+     * @param cause 死因(原版死亡消息的原文)
+     * @param where 死在哪、身上的东西怎么处置了,说给她听
+     */
+    public void onDied(String cause, String where) {
         loop.halt(HaltReason.DEATH, cause);
+        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.DEATH, null,
+                "你刚才死了(" + cause.replace('<', '(').replace('>', ')') + ")。" + where,
+                System.currentTimeMillis(), true)));
     }
 
-    /** 身体在主人身边复活:死亡的叙事作为急件进收件箱,解开停牌后和死着时攒的一起走。 */
-    public void onRespawned(String payloadCause) {
-        String raw = payloadCause != null && !payloadCause.isBlank() ? payloadCause
-                : (deathCause != null ? deathCause : "未知原因");
-        String cause = raw.replace('<', '(').replace('>', ')');
-        deathCause = null;
-        Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", companion, cause);
-        // 死亡是急件——她关于自己处境的认知几乎每一条都作废了:物品掉在死亡地点、位置从矿洞变成了主人身边、
-        // 手上的任务没了、血量装备全变了。这不分"任务中死"还是"空闲死",所以这里没有任何判据。
-        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.DEATH, null,
-                "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;现已在主人身边复活。先看看状况再决定下一步。",
-                System.currentTimeMillis(), true)));
+    /** 身体经原版重生流程回到了世界:解开停牌,死着期间攒下的事件(死亡、重生)和输入一起走。 */
+    public void onRespawned() {
+        Constants.LOG.info("[numen-entity#{}] respawned — loop thawed", companion);
         loop.respawned();
     }
 
