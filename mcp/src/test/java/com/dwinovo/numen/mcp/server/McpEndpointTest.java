@@ -347,22 +347,27 @@ class McpEndpointTest {
 
     @Test
     void progressComesBackWhenAskedForAndIncreasesOnly() throws Exception {
+        // SDK 把同步的进度回调各自丢到 boundedElastic 上跑:回调可能在 callTool 返回之后才到,彼此先后也不保证,
+        // 所以等够两条再看,按 progress 排好再比
         List<McpSchema.ProgressNotification> seen = new CopyOnWriteArrayList<>();
-        McpSyncClient client = spec(brain(McpToken.Scope.ALL).secret()).progressConsumer(seen::add).build();
+        CountDownLatch two = new CountDownLatch(2);
+        McpSyncClient client = spec(brain(McpToken.Scope.ALL).secret()).progressConsumer(n -> {
+            seen.add(n);
+            two.countDown();
+        }).build();
         client.initialize();
         clients.add(client);
         client.listTools();
 
         client.callTool(call("lua", "tok-1"));
         client.callTool(call("lua", null));
-        for (int i = 0; i < 100 && seen.size() < 2; i++) {
-            Thread.sleep(20);
-        }
+        assertTrue(two.await(10, TimeUnit.SECONDS), "带令牌的那次该有两条进度,收到 " + seen.size());
 
-        assertEquals(List.of("step 1", "step 2"), seen.stream().map(McpSchema.ProgressNotification::message).toList(),
-                "带令牌的那次有两条,不带的那次一条也没有");
-        assertEquals("tok-1", seen.get(0).progressToken());
-        assertTrue(seen.get(1).progress() > seen.get(0).progress());
+        List<McpSchema.ProgressNotification> byProgress = seen.stream()
+                .sorted(java.util.Comparator.comparingDouble(McpSchema.ProgressNotification::progress)).toList();
+        assertEquals(List.of("step 1", "step 2"), byProgress.stream().map(McpSchema.ProgressNotification::message).toList(),
+                "进度只增不减:先报的那条数小");
+        assertTrue(seen.stream().allMatch(n -> "tok-1".equals(n.progressToken())), "不带令牌的那次一条也没有");
     }
 
     @Test
