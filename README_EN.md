@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/logo/svg/numen-square-black.svg">
-  <img src="assets/branding/logo/svg/numen-square-white.svg" alt="Numen" width="128">
-</picture>
+<img src="assets/branding/logo/svg/numen-square-transparent.svg" alt="Numen" width="128">
 
 # Numen
 

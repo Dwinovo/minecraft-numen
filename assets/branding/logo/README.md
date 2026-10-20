@@ -2,14 +2,14 @@
 
 草方块 Bot,10-16 定稿:鲜亮配色,眼睛大一号。这个目录是 logo 的唯一出处,用的时候从这里取。
 
-只给两类:**标志**(图形本身,透明底)与**方形图标**(满版、带底色)。圆角与圆形由各平台自己裁,这里不提前裁。
+只给两类:**标志**(图形本身,透明底)与**方形图标**(方块放大、被方框裁去一角,白底、黑底与透明底)。圆角与圆形由各平台自己裁,这里不提前裁。
 
 | 目录 | 内容 | 用途 |
 |---|---|---|
 | `mark/` | 标志:整块方块不裁切,透明底 `transparent/`、白底 `white/`、黑底 `black/`,64–1024 px | 网页、文档、宣传图,放在任意背景上 |
-| `icon-square/` | 方形满版图标,白底 `white/`、黑底 `black/`,16–1024 px | 头像与应用图标:CurseForge、Modrinth、QQ 群、Discord 用 `white/numen-512.png`;两个模组的图标 `numen_api.png`、`numen.png` 也是它;仓库 README 抬头用它的 svg,GitHub 深色主题换黑底 |
+| `icon-square/` | 方形图标,白底 `white/`、黑底 `black/`、透明底 `transparent/`(白底那张去掉底色,保留下落影),16–1024 px | 头像与应用图标:CurseForge、Modrinth、QQ 群、Discord 用 `white/numen-512.png`;两个模组的图标 `numen_api.png`、`numen.png` 也是它;仓库 README 抬头用透明底的 svg,深浅主题同一张 |
 | `web/` | `favicon.ico`(16/32/48)、`favicon-16/32/48/192.png`、`favicon.svg`:透明底的标志;`apple-touch-icon.png`(180)、`android-chrome-192/512.png`:白底方形(桌面图标不能透明) | 官网 |
-| `svg/` | 矢量源文件:`numen-mark.svg`(标志)、`numen-square-white.svg`、`numen-square-black.svg` | 要别的尺寸就从这里导出 |
+| `svg/` | 矢量源文件:`numen-mark.svg`(标志)、`numen-square-white.svg`、`numen-square-black.svg`、`numen-square-transparent.svg` | 要别的尺寸就从这里导出 |
 
 主色为白底;黑底留作深色场合备用。
 
