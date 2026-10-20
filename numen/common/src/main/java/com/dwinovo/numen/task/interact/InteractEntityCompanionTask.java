@@ -46,6 +46,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
                 // Resolve + cache the target; fail fast if it despawned / moved out of range.
                 () -> {
                     entity = r.entity.in((ServerLevel) player.level());
+                    r.engage(entity);
                     return (entity == null || !entity.isAlive())
                             ? new Precondition.Failure(r.entity
                                     + " is not nearby (it may have despawned or moved out of range)",

@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.loop.HaltReason;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
+import com.dwinovo.numen.api.agent.request.Nearby;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.home.Home;
@@ -72,7 +73,8 @@ public final class CompanionBrains {
                 () -> {
                     NumenPlayer body = NumenPlayer.findByUuid(server, companion);
                     return body == null ? null
-                            : BodySnapshot.of(RequestStatePayload.snapshot(body), System.currentTimeMillis());
+                            : BodySnapshot.of(RequestStatePayload.snapshot(body), System.currentTimeMillis())
+                                    .withNearby(Nearby.of(body));
                 },
                 () -> {
                     CompanionRegistry.Entry entry = registry.find(companion);

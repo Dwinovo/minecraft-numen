@@ -282,6 +282,11 @@ public final class CompanionLoop {
         return queue;
     }
 
+    /** 下一次请求里 {@code <runtime_state>} 此刻的样子(只读,每次现算,不入历史)。 */
+    public String runtimeState() {
+        return runtime.xml();
+    }
+
     /** 订阅循环事件:界面、记账之外的人(推给主人客户端的那一层)在这里接。 */
     public void subscribe(java.util.function.Consumer<? super LoopEvent> listener) {
         loop.subscribe(listener);

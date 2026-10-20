@@ -20,7 +20,7 @@ import net.minecraft.world.phys.Vec3;
 
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
-/** 战斗:走位带与点名攻击({@code attack})。 */
+/** 战斗:走位带与点名攻击({@code attack});她四周的怪:附近栏、被锁定、没了。 */
 public class CombatGameTests {
 
     /** 战斗批次前置:普通难度(和平会把僵尸当场收走)+ 半夜(白天僵尸会被晒死)。 */
@@ -456,6 +456,97 @@ public class CombatGameTests {
                     "the hit did not move her: dx=" + (companion.getX() - start.x));
             zombie.discard();
             CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 她此刻请求里的 {@code <nearby>} 一栏;半径里什么都没有是空串。 */
+    private static String nearbyOf(NumenPlayer companion) {
+        String state = com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().runtimeState();
+        int from = state.indexOf("<nearby");
+        return from < 0 ? "" : state.substring(from, state.indexOf("</nearby>") + "</nearby>".length());
+    }
+
+    /**
+     * 附近栏逐个列出和她有关系的(盯着她的、她名下的)、敌对的,先后是有关系的在前、敌对的在后;锁定了她的注明;其余按种类计数,
+     * 不逐个列。请求里每次现取,她四周什么样它就什么样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void nearby_lists_what_matters_and_counts_the_rest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_nearby_list", new BlockPos(8, 2, 8), false);
+        Zombie hunter = still(helper, new BlockPos(11, 2, 8));
+        hunter.setTarget(companion);
+        Zombie idle = still(helper, new BlockPos(8, 2, 13));
+        var wolf = EntityType.WOLF.create(level);
+        BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 8));
+        wolf.moveTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.setNoAi(true);
+        wolf.tame(companion);
+        level.addFreshEntity(wolf);
+        for (int i = 0; i < 5; i++) {
+            var cow = EntityType.COW.create(level);
+            BlockPos at = helper.absolutePos(new BlockPos(2 + i, 2, 2));
+            cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+            cow.setNoAi(true);
+            level.addFreshEntity(cow);
+        }
+        for (int i = 0; i < 2; i++) {
+            BlockPos at = helper.absolutePos(new BlockPos(12, 2, 3 + i));
+            level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, at.getX() + 0.5, at.getY(),
+                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK)));
+        }
+
+        succeedWhen(helper, () -> {
+            String nearby = nearbyOf(companion);
+            String wolfId = com.dwinovo.numen.api.sdk.EntityLabel.of(wolf);
+            String hunterId = com.dwinovo.numen.api.sdk.EntityLabel.of(hunter);
+            String idleId = com.dwinovo.numen.api.sdk.EntityLabel.of(idle);
+            helper.assertTrue(nearby.startsWith("<nearby radius=\"16\">"), "no nearby block: " + nearby);
+            helper.assertTrue(nearby.contains(hunterId + " 20/20 HP, 3 blocks east, targeting you"),
+                    "the mob after her is not listed as such: " + nearby);
+            String wolfLine = nearby.lines().filter(line -> line.startsWith(wolfId)).findFirst().orElse("");
+            helper.assertTrue(wolfLine.endsWith(" HP, 2 blocks west"), "her wolf is not listed plain: " + nearby);
+            helper.assertTrue(nearby.contains(idleId + " 20/20 HP, 5 blocks south\n"),
+                    "the idle hostile is not listed plain: " + nearby);
+            helper.assertTrue(nearby.indexOf(wolfId) < nearby.indexOf(hunterId) && nearby.indexOf(hunterId) < nearby.indexOf(idleId),
+                    "related first, then hostile, each nearest first: " + nearby);
+            helper.assertTrue(nearby.contains("cow×5") && nearby.contains("item×2") && !nearby.contains("cow@"),
+                    "the rest is not counted by kind: " + nearby);
+            hunter.discard();
+            idle.discard();
+            wolf.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 逐个列最多十二条,多出来的并进计数。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void nearby_lists_twelve_at_most_and_counts_the_overflow(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_nearby_cap", new BlockPos(8, 2, 8), false);
+        List<Zombie> crowd = new java.util.ArrayList<>();
+        for (int i = 0; i < 14; i++) {
+            crowd.add(still(helper, new BlockPos(1 + i, 2, 1 + (i % 2) * 13)));
+        }
+
+        succeedWhen(helper, () -> {
+            String nearby = nearbyOf(companion);
+            long listed = nearby.lines().filter(line -> line.startsWith("zombie@")).count();
+            helper.assertTrue(listed == 12 && nearby.contains("zombie×2"),
+                    "twelve are listed and two counted: " + nearby);
+            crowd.forEach(net.minecraft.world.entity.Entity::discard);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 半径里什么都没有:请求里没有这一栏。 */
+    @GameTest(template = "floor16", timeoutTicks = 60, batch = "numen_combat")
+    public static void nearby_is_left_out_when_nothing_is_around(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_nearby_empty", new BlockPos(8, 2, 8), false);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(nearbyOf(companion).isEmpty(), "an empty surrounding wrote a nearby block: " + nearbyOf(companion));
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 

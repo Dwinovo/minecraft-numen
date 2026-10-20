@@ -15,18 +15,26 @@ import java.util.List;
  * {@code selectedSlot} indexes {@code items} for the main hand.
  * {@code vehicle} 是座驾的身份({@code EntityLabel}),空串 = 没骑任何东西。
  * {@code bodyState} 是插件从身体上读的状态片段,服务端拼好的整段;空串 = 没有。
+ * {@code nearby} 是她四周此刻的样子({@link Nearby}):只有服务端为这一轮请求现取的那份带着它,
+ * 主人客户端收到的状态包里没有这一项({@link Nearby#NONE})。
  */
 public record BodySnapshot(boolean loaded, List<ItemStack> items, List<ItemStack> craft,
                            int foodLevel, float saturation, int selectedSlot, ItemStack offhand,
                            List<MobEffectInstance> effects,
                            String vehicle, String bodyState,
-                           long receivedAtMs) {
+                           long receivedAtMs, Nearby nearby) {
 
     /** 收到的这一包,盖上收到的时刻。 */
     public static BodySnapshot of(NumenStatePayload p, long receivedAtMs) {
         return new BodySnapshot(p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
                 p.selectedSlot(), p.offhand(), p.effects(), p.vehicle(), p.bodyState(),
-                receivedAtMs);
+                receivedAtMs, Nearby.NONE);
+    }
+
+    /** 同一份,带上她四周此刻的样子。 */
+    public BodySnapshot withNearby(Nearby nearby) {
+        return new BodySnapshot(loaded, items, craft, foodLevel, saturation, selectedSlot, offhand, effects, vehicle,
+                bodyState, receivedAtMs, nearby);
     }
 
     /** 主手那一格;槽位越界(空快照)时给空栈。 */

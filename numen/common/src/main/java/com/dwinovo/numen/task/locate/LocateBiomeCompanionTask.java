@@ -1,6 +1,6 @@
 package com.dwinovo.numen.task.locate;
 import com.dwinovo.numen.task.IdSuggest;
-import com.dwinovo.numen.task.CompassUtil;
+import com.dwinovo.numen.api.sdk.CompassUtil;
 import com.dwinovo.numen.scan.SearchBudget;
 import com.dwinovo.numen.scan.RingSpiral;
 import com.dwinovo.numen.FailureType;

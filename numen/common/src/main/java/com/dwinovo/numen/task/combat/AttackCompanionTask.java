@@ -196,6 +196,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();
             abortShot();
             target = chosen;
+            r.engage(chosen);
         }
         if (target != null) {
             lastTargetPosition = target.position();

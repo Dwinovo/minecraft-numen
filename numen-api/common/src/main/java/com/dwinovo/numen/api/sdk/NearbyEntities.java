@@ -1,4 +1,4 @@
-package com.dwinovo.numen.scan;
+package com.dwinovo.numen.api.sdk;
 
 import net.minecraft.world.entity.Entity;
 
@@ -13,6 +13,11 @@ import java.util.function.Predicate;
  * 回来的就得是半径以内的。
  */
 public final class NearbyEntities {
+
+    /**
+     * 她"身边"有多大:{@code <runtime_state>} 的附近栏列到这个半径,防御本能看危险也以它为界。不看视线——墙后面的东西也算身边。
+     */
+    public static final double RADIUS = 16.0;
 
     private NearbyEntities() {}
 

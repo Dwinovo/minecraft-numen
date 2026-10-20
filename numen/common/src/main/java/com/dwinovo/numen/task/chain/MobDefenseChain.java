@@ -5,6 +5,7 @@ import com.dwinovo.numen.task.combat.AttackCompanionTask;
 import com.dwinovo.numen.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.NearbyEntities;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.task.reflex.Reflex;
@@ -43,7 +44,7 @@ public final class MobDefenseChain implements Task, Reflex {
     public static final String ID = "mob_defense";
 
     /** 看多远。超出这个半径的不算"身边"。 */
-    private static final double SCAN_RADIUS = 12.0;
+    private static final double SCAN_RADIUS = NearbyEntities.RADIUS;
 
     /**
      * 寻常近战怪逼到这么近就算危险。

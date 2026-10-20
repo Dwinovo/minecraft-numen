@@ -2,7 +2,7 @@ package com.dwinovo.numen.combat;
 
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.scan.NearbyEntities;
+import com.dwinovo.numen.api.sdk.NearbyEntities;
 
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
