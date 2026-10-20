@@ -35,6 +35,7 @@ public final class NumenGameTestSuite implements GameTestSuite {
                 PermissionPanelGameTests.class,
                 PluginGameTests.class,
                 RemoteBrainGameTests.class,
+                RespawnGameTests.class,
                 WalkGameTests.class,
                 ScriptGameTests.class,
                 SleepGameTests.class,
