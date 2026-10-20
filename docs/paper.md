@@ -91,10 +91,8 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 身体照旧经 `PlayerList.placeNewPlayer` 加入(Carpet 与插件形态的假人都这么做),所以她出现在玩家列表里,会触发 `PlayerJoinEvent`,别的插件把她当玩家处理。
 这和 FTB 联动时定的立场一致:她是真玩家。由此要定的几件事:
 
-- **区块**:Paper 的区块系统(Moonrise)按 `isRealPlayer` 把她当成观察者,给她加载 9×9 并编区块包。召唤后把她从玩家区块加载里摘掉
-  (`removePlayer` 后再 `setRealPlayer(false)`,顺序不能反;或在 `PlayerSpawnLocationEvent` 里提前置 false,连初始的包也不发),有界加载仍由 `CompanionChunkLoader`
-  的区域票管(Moonrise 重复加票整张替换、超时重置,续票成立)。实测摘掉后区块包为 0,3×3 实体刻,移动、碰撞、跨区块、换维度、被别人看见都正常。
-  **刷怪不同**:Paper 的刷怪与随机刻认"附近有没有非旁观者玩家",与观察者无关,所以她周围照常刷怪;模组上 `ChunkMapCompanionMixin` 让她不触发刷怪。两边哪种对,留给用户定,定了以后两边做成一样。
+- **区块**:照真玩家走(body 0005)。Moonrise 按 `isRealPlayer` 把她当观察者,给她加载并编区块包,发到假连接的包被丢弃;不摘出、不另给票。
+  她周围照常刷怪、随机刻照常走,与模组上同一个行为;她独自在一个维度里也不会让它停刻。
 - **被踢 = 被服主请出去**:Paper 上 `/kick` 与插件踢人当场移除身体(先 `PlayerKickEvent`,再 `PlayerQuitEvent`);空闲超时与保活超时碰不到她(检查在假连接不跑的 `tick` 里)。
   模组上今天踢她什么也不发生(假连接把断开吞了)。两边统一:被踢就是身体被移除,和主人下线的收拾走同一条路,如实告诉她和主人是谁、为什么踢的,不重建;主人可以再召唤。
   common 有一个入口"身体被外部移除(原因)",模组从断开的那一处调它,Paper 从 `PlayerKickEvent`/`PlayerQuitEvent` 调它。
@@ -139,7 +137,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 1. **平台无关化(模组侧)**:私有访问改服务;载具改 `isLocalPlayer`;common 的 `mixin` 包外不再引用 `mixin` 包;热索引取用时核对。模组行为不变,GameTest 全过。
 2. **Paper 工程与引导**:两个子项目、重编 common、链接检查、run-paper;四个服务;生命周期事件;指令;网络;内容、语言、标签。服务端能起、两个插件能加载、指令在、原版客户端能进。
 3. **身体**:先做两边共用的 common 部分(被踢走"身体被外部移除"一条路、击退、"是不是 Numen 管理员"成平台服务),模组上 GameTest 验;
-   再做 Paper 部分(召唤补登录事件、摘出区块加载、权限委托、所有挂点的 Paper 实现、翻译源)。
+   再做 Paper 部分(召唤补登录事件、权限委托、所有挂点的 Paper 实现、翻译源)。
 4. **验证工具**:MCProtocolLib 无头客户端的端到端测试(先对 NeoForge 专用服,再对 Paper);现有 GameTest 拿到 Paper 上跑;真客户端实测;进 CI。
 5. **收尾**:文档、发布(Hangar/Modrinth 的插件页)、`publishAll` 带上 Paper 产物。
 
@@ -183,7 +181,6 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   答复回到主线程、加入之前再核对一次名册还要不要她(期间被遣散就不加入,不会进来了却没有名册条目)。
   她到达(加入并做完加入后步骤)之前,发给她的聊天不交给大脑(`FakeClient`):Paper 在她进玩家列表之后才广播加入消息,她会收到自己的那一句,而那时大脑还没建;模组上本来听不到,两边同一个行为。
   **服务器明确说不**(登录插件、封禁、白名单)是终局:新召唤的同伴作废;已有的同伴和"被请出去"同理——名册记下原因、大脑停牌、如实告诉主人,停在外面,主人再召唤才再试,Numen 不替服务器轮询。
-- **摘出区块加载放在 `joined`**(`placeNewPlayer` 一开头就把旗标置真,所以不能在加入前置假):`removePlayer` 后 `setRealPlayer(false)`,实测区块包为 0(只有两个视距/中心包),换维度、死亡重生(重新加入时再摘一次)都不会被加回。
 - **权限委托也在 `joined`**,晚于权限插件在 `PlayerLoginEvent` 里的注入,所以取代它的。主人在线问主人;离线经 Vault(装了的话)查离线玩家,没装按主人是不是 op 套默认值;没有任何权限插件的专属代码。
   实测(LuckPerms,她经 `numen.mc.run` 以自己的身份跑指令):主人在线有授权/无授权、主人离线不装 Vault 时授权不算数(按 op)、装了 Vault 时授权经 LuckPerms 算数、主人是 op 时放行。Vault 的接口取 JitPack 的 VaultAPI 1.7(`transitive = false`:它依赖的老 Bukkit API 会盖掉 Paper 的)。
 - **被踢与被收的区分不靠猜**:Numen 自己收她只有 `CompanionFactory.despawn` 一条路,收之前把她记进"正被 Numen 移出"的集合(`isLeaving`);`PlayerKickEvent`(MONITOR)与 `PlayerQuitEvent` 里不在这个集合里的,就是外面请出去的,交给 `Companions.removedFromOutside`
