@@ -64,6 +64,10 @@ sourcesJar {
 
 jar {
     with licenseTexts
+    // mcp 模块的第三方库随这个 jar 发出:清单、各许可全文与它们的 NOTICE(嵌套 jar 自带 META-INF;
+    // Paper 平铺时不收各库的同名协议文件,以这里为准)
+    from(rootProject.file('licenses/THIRD-PARTY.txt')) { into 'META-INF/third-party' }
+    from(rootProject.file('licenses/third-party')) { into 'META-INF/third-party' }
 
     manifest {
         attributes([

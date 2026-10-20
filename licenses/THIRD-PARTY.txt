@@ -1,27 +1,45 @@
-Numen — third-party libraries shipped inside the jars
-=====================================================
+Numen — third-party libraries of the `mcp` module
+=================================================
 
-The `mcp` module is built on the libraries below. They are bundled unchanged
-(nested jars on Fabric/NeoForge, merged into the Paper plugin jar) and keep
-their own licenses. Full license texts: the MIT License at
-https://opensource.org/license/mit, the Apache License 2.0 at
-https://www.apache.org/licenses/LICENSE-2.0.txt, MIT-0 at
-https://opensource.org/license/mit-0 — each library's jar also carries its
-own LICENSE/NOTICE files.
+The `mcp` module (MCP server and client, OAuth) is built on the libraries below.
+They are shipped unchanged: as nested jars in the Fabric and NeoForge jars of
+Numen API (each nested jar keeps its own META-INF), and merged into the Numen API
+plugin jar on Paper. The texts below travel in every Numen API jar under
+`META-INF/third-party/` (this file and the `third-party/` folder of `licenses/`).
 
-MIT
-  io.modelcontextprotocol.sdk:mcp, mcp-core, mcp-json-jackson3   (Model Context Protocol Java SDK)
+License texts (in `licenses/third-party/`):
+  Apache-2.0.txt                    Apache License 2.0, full text
+  MIT-mcp-java-sdk.txt              MIT License of the MCP Java SDK
+  MIT-0-reactive-streams.txt        MIT No Attribution of Reactive Streams
+  LICENSE-tomcat-embed-core.txt     Apache Tomcat's own LICENSE (Apache 2.0 plus the licenses of the
+                                    components Tomcat bundles)
 
-MIT-0
-  org.reactivestreams:reactive-streams
+NOTICE files, copied verbatim from the META-INF of the jars that carry one:
+  NOTICE-tomcat-embed-core.txt, NOTICE-tomcat-annotations-api.txt,
+  NOTICE-jackson-annotations.txt, NOTICE-jackson-core.txt, NOTICE-jackson-databind.txt,
+  NOTICE-jackson-dataformat-yaml.txt
+The other libraries ship no NOTICE file in their jars.
 
-Apache License 2.0
-  org.apache.tomcat.embed:tomcat-embed-core, org.apache.tomcat:tomcat-annotations-api   (Apache Tomcat)
-  com.nimbusds:oauth2-oidc-sdk, nimbus-jose-jwt, content-type, lang-tag   (Nimbus)
-  net.minidev:json-smart, accessors-smart
-  com.github.stephenc.jcip:jcip-annotations
-  tools.jackson.core:jackson-core, jackson-databind; tools.jackson.dataformat:jackson-dataformat-yaml
-  com.fasterxml.jackson.core:jackson-annotations
-  com.networknt:json-schema-validator, com.ethlo.time:itu
-  org.snakeyaml:snakeyaml-engine
-  io.projectreactor:reactor-core
+Library                                                       Version   License       NOTICE
+-----------------------------------------------------------   -------   -----------   ------------------------------
+io.modelcontextprotocol.sdk:mcp                               2.1.0     MIT           -
+io.modelcontextprotocol.sdk:mcp-core                          2.1.0     MIT           -
+io.modelcontextprotocol.sdk:mcp-json-jackson3                 2.1.0     MIT           -
+org.apache.tomcat.embed:tomcat-embed-core                     11.0.27   Apache-2.0    NOTICE-tomcat-embed-core.txt
+org.apache.tomcat:tomcat-annotations-api                      11.0.27   Apache-2.0    NOTICE-tomcat-annotations-api.txt
+com.nimbusds:oauth2-oidc-sdk                                  11.38.2   Apache-2.0    -
+com.nimbusds:nimbus-jose-jwt                                  10.9.1    Apache-2.0    -
+com.nimbusds:content-type                                     2.3       Apache-2.0    -
+com.nimbusds:lang-tag                                         1.7       Apache-2.0    -
+net.minidev:json-smart                                        2.6.0     Apache-2.0    -
+net.minidev:accessors-smart                                   2.6.0     Apache-2.0    -
+com.github.stephenc.jcip:jcip-annotations                     1.0-1     Apache-2.0    -
+tools.jackson.core:jackson-core                               3.1.4     Apache-2.0    NOTICE-jackson-core.txt
+tools.jackson.core:jackson-databind                           3.1.4     Apache-2.0    NOTICE-jackson-databind.txt
+tools.jackson.dataformat:jackson-dataformat-yaml              3.1.4     Apache-2.0    NOTICE-jackson-dataformat-yaml.txt
+com.fasterxml.jackson.core:jackson-annotations                2.21      Apache-2.0    NOTICE-jackson-annotations.txt
+com.networknt:json-schema-validator                           3.0.6     Apache-2.0    -
+com.ethlo.time:itu                                            1.14.0    Apache-2.0    -
+org.snakeyaml:snakeyaml-engine                                3.0.1     Apache-2.0    -
+io.projectreactor:reactor-core                                3.7.0     Apache-2.0    -
+org.reactivestreams:reactive-streams                          1.0.4     MIT-0         -
