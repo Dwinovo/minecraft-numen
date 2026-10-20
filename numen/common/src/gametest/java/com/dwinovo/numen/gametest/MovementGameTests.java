@@ -333,7 +333,7 @@ public class MovementGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(registry.find(uuid).taskName().isBlank(), "the task that cannot be replayed is still on record");
             for (var entry : com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).orElseThrow().inbox()
-                    .takeEntries(System.currentTimeMillis())) {
+                    .takeEntries(System.currentTimeMillis(), 0L)) {
                 told.append(entry.text());
             }
             helper.assertTrue(told.toString().contains("task_finished")

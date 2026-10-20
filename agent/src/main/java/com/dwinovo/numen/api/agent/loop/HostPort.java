@@ -9,8 +9,8 @@ public interface HostPort {
     /** 墙上时钟(毫秒)。游戏刻在单机退出时是冻结的,拿它算"躺了多久"会以为什么都没老。 */
     long now();
 
-    /** 游戏刻(总刻数)。事件按它算晚到了多久:服务器没跑的时间不算,和事件盖的游戏刻同一把尺。 */
-    long gameTick();
+    /** 游戏里此刻的时刻(主世界的 {@code dayTime}):条目创建时据它盖日期与钟点({@code EventClock})。 */
+    long dayTime();
 
     /** 主动性档位 1~10,决定非急件攒多少条、多久才开 run。 */
     int initiativeLevel();

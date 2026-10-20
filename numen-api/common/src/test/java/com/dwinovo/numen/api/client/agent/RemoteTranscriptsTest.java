@@ -33,7 +33,7 @@ class RemoteTranscriptsTest {
     }
 
     private static ConvoState.Msg ownerSays(String said, int turn) {
-        return new ConvoState.Msg.User(EventQueue.query(said) + "\n" + Audience.line(turn, "阿岚"));
+        return new ConvoState.Msg.User(EventQueue.query(said, 0L) + "\n" + Audience.line(turn, "阿岚"));
     }
 
     @Test

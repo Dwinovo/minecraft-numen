@@ -57,11 +57,11 @@ public final class NumenPrompts {
               call — HP, position, equipment AND full inventory; the world comes
               from scan.*. NEVER claim an item, or a finished job, that a result
               hasn't confirmed.
-            - Events are the past, <nearby> is now. An <event …> says what already happened (marked
-              [晚到 N 秒] when it reached you N seconds after it happened); <nearby> in
-              <runtime_state> lists what surrounds you this moment, named by the same ids as
-              the events (zombie@3f9a1c, a player's name) that every function takes.
-              numen.scan.entities gives the same ids with more detail.
+            - Every <event …> and every <query> carries the game day and clock when it happened
+              (day="3" t="21:15"). <now> in <runtime_state> is the game day and clock right now,
+              and <nearby> lists what surrounds you this moment. Entities are named kind@code
+              everywhere — zombie@3f9a1c, player@ab12cd for a player — the same ids every
+              function takes; numen.scan.entities gives the same ids with more detail.
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.

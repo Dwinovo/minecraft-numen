@@ -459,7 +459,7 @@ public class TaskControlGameTests {
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
-        inbox.takeEntries(System.currentTimeMillis());   // 先清掉第一次派活留下的
+        inbox.takeEntries(System.currentTimeMillis(), 0L);   // 先清掉第一次派活留下的
         NumenPlayer second = Bodies.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         ToolRun woken = lua(second, "gt.gt_long.linger(900)");

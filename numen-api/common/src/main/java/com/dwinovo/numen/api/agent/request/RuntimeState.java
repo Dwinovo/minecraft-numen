@@ -1,9 +1,11 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.inbox.EventClock;
 import com.dwinovo.numen.api.task.Activity;
 
 import java.util.UUID;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -19,6 +21,8 @@ public final class RuntimeState {
     private final UUID entityUuid;
     /** 最近收到的那份身体状态;一份都没收到是 {@code null}。 */
     private final Supplier<BodySnapshot> body;
+    /** 游戏里此刻的时刻(主世界的 {@code dayTime}),{@code <now>} 照它写。 */
+    private final LongSupplier dayTime;
 
     /** 她此刻在做的那件后台活;{@code null} = 身体空闲。 */
     private CurrentTask currentTask;
@@ -34,9 +38,10 @@ public final class RuntimeState {
     /**
      * @param body 最近收到的那份身体状态;一份都没收到时给 {@code null}
      */
-    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body) {
+    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body, LongSupplier dayTime) {
         this.entityUuid = entityUuid;
         this.body = body;
+        this.dayTime = dayTime;
     }
 
     /**
@@ -107,7 +112,7 @@ public final class RuntimeState {
         // 插件身体上的片段(bodyStateXml)和背包、状态效果一样是"此刻的她",会变,所以不能进字节级稳定的系统提示。
         // 身体快照每次请求只取一份:各栏读的是同一刻的她,四周(nearby)也是这一刻现看的
         BodySnapshot snapshot = body.get();
-        String content = currentTaskXml() + inventoryXml(snapshot) + effectsXml(snapshot) + ridingXml(snapshot)
+        String content = nowXml() + currentTaskXml() + inventoryXml(snapshot) + effectsXml(snapshot) + ridingXml(snapshot)
                 + bodyStateXml(snapshot) + nearbyXml(snapshot);
         String xml = content.isEmpty() ? "" : "<runtime_state>" + content + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
@@ -117,6 +122,14 @@ public final class RuntimeState {
         //  镜像还停在旧进度,于是她照着旧数说"还差一点"。)
         Constants.LOG.debug("[numen-ctx#{}] runtime_state → {}", entityUuid, xml);
         return xml;
+    }
+
+    /**
+     * 此刻是游戏里的几点。事件与主人的话各自带着发生那一刻的日期钟点,这一行是"现在",读它才知道它们是多久以前的事。
+     * 和别的栏一样每次现算、不入历史。
+     */
+    private String nowXml() {
+        return "<now" + EventClock.stamp(dayTime.getAsLong()) + "/>";
     }
 
     /** Live async-task state, recomputed for every worker request and never persisted. */

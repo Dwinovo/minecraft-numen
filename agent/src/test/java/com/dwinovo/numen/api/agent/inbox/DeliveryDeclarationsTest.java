@@ -50,13 +50,13 @@ class DeliveryDeclarationsTest {
             assertEquals(d.wakes(), queueOf(id).ripeness(T0, EventQueue.MIN_LEVEL).ripe(), d + ":闲时算不算叫醒她的理由");
             assertEquals(d.wakes(), queueOf(id).hasWaking(), d + ":开不开得起一次 run");
             assertEquals(d.wakes(), queueOf(id).wantsAnswer(), d + ":本来要停时让不让 run 接着走");
-            assertEquals(d.wakes() ? 1 : 0, queueOf(id).takeForCall(false, T0).size(),
+            assertEquals(d.wakes() ? 1 : 0, queueOf(id).takeForCall(false, T0, 0L).size(),
                     d + ":本来要停时,它自己引起的那次调用带不带它");
-            assertEquals(anyCall ? 1 : 0, queueOf(id).takeForCall(true, T0).size(),
+            assertEquals(anyCall ? 1 : 0, queueOf(id).takeForCall(true, T0, 0L).size(),
                     d + ":本来就要调模型时带不带它");
             assertEquals(d.control() ? 1 : 0, queueOf(id).nextControls().size(), d + ":是不是循环自己执行的");
-            assertEquals(d.control() ? 0 : 1, queueOf(id).takeText(T0).size(), d + ":外接大脑取不取");
-            assertEquals(d.control(), queueOf(id, EventTypes.QUERY).takeForCall(true, T0).isEmpty(),
+            assertEquals(d.control() ? 0 : 1, queueOf(id).takeText(T0, 0L).size(), d + ":外接大脑取不取");
+            assertEquals(d.control(), queueOf(id, EventTypes.QUERY).takeForCall(true, T0, 0L).isEmpty(),
                     d + ":是不是墙——排在它后面的主人的话要不要等它");
         }
     }
@@ -70,7 +70,7 @@ class DeliveryDeclarationsTest {
             }
             EventQueue q = queueOf(own, probe(other));
             boolean othersCall = other.wakes() && other.joins() == EventTypes.Delivery.Joins.ANY_CALL;
-            List<String> taken = q.takeForCall(false, T0).stream().map(EventQueue.Entry::type).toList();
+            List<String> taken = q.takeForCall(false, T0, 0L).stream().map(EventQueue.Entry::type).toList();
             assertEquals(!othersCall, taken.contains(own), "旁边是 " + other + " 时接续跟不跟这次调用");
         }
     }

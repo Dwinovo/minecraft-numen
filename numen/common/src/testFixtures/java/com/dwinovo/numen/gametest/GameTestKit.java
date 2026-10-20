@@ -261,7 +261,7 @@ public final class GameTestKit {
     /** 同 {@link #events},取走并清空。 */
     static List<EventQueue.Entry> takeEvents(NumenPlayer companion) {
         return com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().inbox()
-                .takeEntries(System.currentTimeMillis());
+                .takeEntries(System.currentTimeMillis(), 0L);
     }
 
     /** 图纸夹具从测试结构目录拷进蓝图目录(幂等)。 */
@@ -994,7 +994,7 @@ public final class GameTestKit {
         /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱;是急件、而一段程序在跑,客户端叫它停在调用之间。 */
         void ownerSays(String words) {
             EventQueue.Entry entry = new EventQueue.Entry(com.dwinovo.numen.api.agent.inbox.EventTypes.QUERY,
-                    EventQueue.query(words), System.currentTimeMillis(), false);
+                    EventQueue.query(words, 0L), System.currentTimeMillis(), false);
             calls.arrived(entry, inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()));
         }
 

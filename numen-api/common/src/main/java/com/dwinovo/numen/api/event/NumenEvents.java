@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.event;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.inbox.EventClock;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.script.ScriptCall;
@@ -143,7 +144,6 @@ public final class NumenEvents {
         String bearing = CompassUtil.compass(companion, mob);
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put("mob", id);
-        attrs.put("kind", BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getPath());
         attrs.put("distance", String.valueOf(distance));
         attrs.put("bearing", bearing);
         emit(companion, EventTypes.TARGETED, attrs, id + " is now targeting you, about " + distance
@@ -232,8 +232,8 @@ public final class NumenEvents {
      * @param program 程序的编号
      * @param receipt 回执的文字(服务端写的那一份)
      */
-    public static EventQueue.Entry programStopped(Moment moment, String program, String receipt, long now) {
-        return entry(moment, EventTypes.PROGRAM_STOPPED, Map.of("program", program), receipt, now, false);
+    public static EventQueue.Entry programStopped(long dayTime, String program, String receipt, long now) {
+        return entry(dayTime, EventTypes.PROGRAM_STOPPED, Map.of("program", program), receipt, now, false);
     }
 
     /** 服务端发出的每一条事件先交给它们:在服务端跑的程序等它派的活的收尾、也据此判断要不要停({@code ServerPrograms})。 */
@@ -309,9 +309,9 @@ public final class NumenEvents {
     private static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
                              String text, boolean urgent, com.google.gson.JsonObject result) {
         MinecraftServer server = companion.level().getServer();
-        EventQueue.Entry plain = entry(Moment.of(server), type, attrs, text, System.currentTimeMillis(), urgent);
-        EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result,
-                null, plain.tick());
+        EventQueue.Entry plain = entry(server.overworld().getDayTime(), type, attrs, text,
+                System.currentTimeMillis(), urgent);
+        EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
         UUID uuid = companion.getUUID();
         boolean taken = false;
         for (Watcher watcher : WATCHERS) {
@@ -338,27 +338,19 @@ public final class NumenEvents {
     }
 
     /**
-     * 事情发生的这一刻:游戏刻(总刻数,条目记着它,交给模型时据它算晚到了多久)与一天里的时刻(拼进 {@code <event>} 的
-     * {@code day} / {@code t})。
-     */
-    public record Moment(long gameTime, long dayTime) {
-
-        public static Moment of(MinecraftServer server) {
-            return new Moment(server.overworld().getGameTime(), server.overworld().getDayTime());
-        }
-    }
-
-    /**
      * 造一条事件条目——<b>唯一的构造口</b>。条目的类型与 {@code <event kind="…">} 取自同一个
-     * {@code type},{@code day} / {@code t} 与游戏刻由它统一盖上:最该有时间的那条事件不会恰好没盖上。
+     * {@code type},{@code day} / {@code t} 由它统一盖上。
+     *
+     * <p>收 {@code dayTime} 而不是 {@code MinecraftServer},所以客户端也能用同一条路
+     * (死亡事件在客户端合成:那会儿身体已经不在了)。两侧共用这一个构造口,
+     * 才不会出现"最该有时间的那条事件恰好没盖上时间"。
      *
      * @throws IllegalArgumentException 种类没登记,或者登记的不是世界的事
      */
-    public static EventQueue.Entry entry(Moment moment, String type, Map<String, String> attrs,
+    public static EventQueue.Entry entry(long dayTime, String type, Map<String, String> attrs,
                                          String text, long now, boolean urgent) {
         requireWorldEvent(type);
-        return new EventQueue.Entry(type, compose(moment.dayTime(), type, attrs, text), now, urgent, null, null,
-                moment.gameTime());
+        return new EventQueue.Entry(type, compose(dayTime, type, attrs, text), now, urgent);
     }
 
     /**
@@ -391,21 +383,13 @@ public final class NumenEvents {
     /** 拼 {@code <event>}:kind 就是条目的类型,盖上游戏内时间戳。 */
     private static String compose(long dayTime, String type, Map<String, String> attrs, String text) {
         StringBuilder sb = new StringBuilder("<event kind=\"").append(type).append('"');
-        sb.append(" day=\"").append(dayTime / 24000L).append('"');
-        sb.append(" t=\"").append(clockOf(dayTime)).append('"');
+        sb.append(EventClock.stamp(dayTime));
         if (attrs != null) {
             for (Map.Entry<String, String> e : attrs.entrySet()) {
                 sb.append(' ').append(e.getKey()).append("=\"").append(escape(e.getValue())).append('"');
             }
         }
         return sb.append('>').append(escape(text)).append("</event>").toString();
-    }
-
-    /** 游戏内时刻 HH:mm。原版 0 刻 = 早上 6 点。 */
-    static String clockOf(long dayTime) {
-        long inDay = Math.floorMod(dayTime, 24000L);
-        long minutes = (inDay * 60L / 1000L + 6L * 60L) % (24L * 60L);
-        return String.format("%02d:%02d", minutes / 60L, minutes % 60L);
     }
 
     /** {@link #escape} 的反方向。 */

@@ -169,11 +169,12 @@ class GoalStateTest {
         // 续跑期间唯一重复出现的东西 —— 它必须小,因为它进历史、而历史每轮全量重发
         GoalState g = goal();
         g.countTurn();
-        String p = GoalPrompts.progress("背包里只有 30 个铁锭", g, T0 + 3 * MIN);
+        String p = GoalPrompts.progress("背包里只有 30 个铁锭", g, T0 + 3 * MIN, 24000L);
 
         assertTrue(p.contains("背包里只有 30 个铁锭"), p);
         assertTrue(p.contains("turn=\"1\""), p);
         assertTrue(p.contains("3min"), p);
+        assertTrue(p.contains("day=\"1\" t=\"06:00\""), "续跑这一句带着写下它那一刻的游戏日期钟点:" + p);
         assertFalse(p.contains(g.objective()), "目标正文只在设定时说一次,不该每轮重发");
         assertTrue(p.length() < 300, "它每轮都进历史,得小:" + p.length());
     }

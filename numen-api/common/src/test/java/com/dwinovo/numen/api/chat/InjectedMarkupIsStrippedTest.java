@@ -29,7 +29,7 @@ class InjectedMarkupIsStrippedTest {
     private static final long T0 = 1_700_000_000_000L;
 
     private static String render(EventQueue q) {
-        return String.join("\n", EventQueue.render(q.takeEntries(T0), 0L));
+        return String.join("\n", EventQueue.render(q.takeEntries(T0, 0L)));
     }
 
     @Test
@@ -45,7 +45,7 @@ class InjectedMarkupIsStrippedTest {
 
         goal.countTurn();
         q.push(EventTypes.GOAL,
-                com.dwinovo.numen.api.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0),
+                com.dwinovo.numen.api.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0, 0L),
                 T0, true);
 
         assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "续跑那句漏出来了");
@@ -60,13 +60,22 @@ class InjectedMarkupIsStrippedTest {
         assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)), "谁在听不是主人说的话");
     }
 
+    /** 主人的话带着说话时的游戏日期钟点属性,面板画出来的仍只是他的原话。 */
+    @Test
+    void theStampOnAQueryIsNotPartOfWhatTheOwnerSaid() {
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+        q.push(EventTypes.QUERY, EventQueue.query("去挖铁", 3 * 24000L + 15250L), T0, true);
+
+        assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)));
+    }
+
     @Test
     void ownerWordsSurviveAGoalInjectionInTheSameBatch() {
         // 同一条消息里既有目标注入又有主人的话:剥掉前者,后者一个字不能少
         var goal = com.dwinovo.numen.api.agent.goal.GoalState.of("挖 64 个铁锭", T0);
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
         q.push(EventTypes.GOAL,
-                com.dwinovo.numen.api.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0), T0, true);
+                com.dwinovo.numen.api.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0, 0L), T0, true);
         q.push(EventTypes.QUERY, "<query>先回来一下</query>", T0, true);
 
         assertEquals("先回来一下", new OwnerWordsMode().userText(render(q)));
@@ -109,6 +118,6 @@ class InjectedMarkupIsStrippedTest {
 
     @Test
     void anEmptyQueueRendersToNothing() {
-        assertEquals(List.of(), EventQueue.render(new EventQueue(EventQueue.Journal.NONE).takeEntries(T0), 0L));
+        assertEquals(List.of(), EventQueue.render(new EventQueue(EventQueue.Journal.NONE).takeEntries(T0, 0L)));
     }
 }

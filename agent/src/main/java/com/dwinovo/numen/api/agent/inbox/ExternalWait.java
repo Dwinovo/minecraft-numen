@@ -30,13 +30,8 @@ public final class ExternalWait {
      */
     public record Parked(CompletableFuture<String> batch, Supplier<String> cancel) {}
 
-    /**
-     * 先查后登记在同一次调用里完成,"队空"与"登记"之间没有缝隙让一条溜过去。
-     *
-     * @param clock     墙上时钟
-     * @param gameClock 游戏刻(总刻数),取件时据它标晚到
-     */
-    public static Parked park(EventQueue queue, LongSupplier clock, LongSupplier gameClock) {
+    /** 先查后登记在同一次调用里完成,"队空"与"登记"之间没有缝隙让一条溜过去。 */
+    public static Parked park(EventQueue queue, LongSupplier clock, LongSupplier dayClock) {
         CompletableFuture<String> f = new CompletableFuture<>();
         Object lock = new Object();
         boolean[] closed = new boolean[1];
@@ -48,7 +43,7 @@ public final class ExternalWait {
                     queue.removeWakeListener(hook[0]);
                     return;
                 }
-                String batch = queue.takeRenderedText(clock.getAsLong(), gameClock.getAsLong());
+                String batch = queue.takeRenderedText(clock.getAsLong(), dayClock.getAsLong());
                 if (batch == null) {   // 别的取件人抢先了就继续挂着,等下一声
                     return;
                 }

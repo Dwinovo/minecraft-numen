@@ -62,7 +62,7 @@ class AgentLoopTest extends LoopHarness {
             ownerSays("过来");
 
             assertEquals(1, model.calls.size());
-            assertTrue(model.last().lastUser().contains("<query>过来</query>"));
+            assertTrue(model.last().lastUser().contains("<query day=\"0\" t=\"06:00\">过来</query>"));
             assertEquals(1, eventsOf(LoopEvent.RunStarted.class).size());
             assertTrue(eventsOf(LoopEvent.TurnStarted.class).get(0).ownerSpoke(), "主人开口:语音硬停上一轮");
             assertEquals(Phase.MODEL, loop.status().phase());
@@ -110,7 +110,7 @@ class AgentLoopTest extends LoopHarness {
 
             String injected = model.last().lastUser();
             assertTrue(injected.startsWith("<memory"), "札记索引垫在最前");
-            assertTrue(injected.endsWith("<query>箱子在哪</query>"), "主人的话垫底");
+            assertTrue(injected.endsWith("<query day=\"0\" t=\"06:00\">箱子在哪</query>"), "主人的话垫底");
         }
     }
 
@@ -139,7 +139,7 @@ class AgentLoopTest extends LoopHarness {
             assertNull(loop.hold(), "主人说话解开停止");
             assertEquals(2, model.calls.size());
             String injected = model.last().lastUser();
-            assertTrue(injected.contains("任务结束了") && injected.contains("<query>回来吧</query>"),
+            assertTrue(injected.contains("任务结束了") && injected.contains("<query day=\"0\" t=\"06:00\">回来吧</query>"),
                     "停牌期间收下的事件跟着主人的话一起走");
         }
 
@@ -168,7 +168,7 @@ class AgentLoopTest extends LoopHarness {
             loop.bindingChanged();
 
             assertEquals(1, model.calls.size(), "绑定变更解开");
-            assertTrue(model.last().lastUser().contains("<query>你好</query>"));
+            assertTrue(model.last().lastUser().contains("<query day=\"0\" t=\"06:00\">你好</query>"));
         }
 
         @Test
@@ -598,7 +598,7 @@ class AgentLoopTest extends LoopHarness {
             ownerSays("回来吃饭");
 
             String injected = model.last().lastUser();
-            assertTrue(injected.contains("[阿岚] 我去东边") && injected.contains("<query>回来吃饭</query>"),
+            assertTrue(injected.contains("[阿岚] 我去东边") && injected.contains("<query day=\"0\" t=\"06:00\">回来吃饭</query>"),
                     "旁听到的话跟着这一轮进去");
             assertTrue(inbox.isEmpty(), "带走了,不在队里越攒越多");
         }
@@ -1061,7 +1061,7 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(2, model.calls.size());
             List<ConvoState.Msg> sent = model.last().request().messages();
             assertEquals("[摘要] 之前聊过天", ((ConvoState.Msg.User) sent.get(0)).content());
-            assertTrue(model.last().lastUser().contains("<query>挖三个铁,放进左边的箱子</query>"), "逐字保留");
+            assertTrue(model.last().lastUser().contains("<query day=\"0\" t=\"06:00\">挖三个铁,放进左边的箱子</query>"), "逐字保留");
             assertEquals(List.of(LoopEvent.Boundary.COMPACT), eventsOf(LoopEvent.TranscriptBoundary.class).stream()
                     .map(LoopEvent.TranscriptBoundary::kind).toList());
         }
@@ -1100,7 +1100,7 @@ class AgentLoopTest extends LoopHarness {
         ownerSays("你好");
         LoopStatus queued = loop.status();
         assertEquals(Hold.EXTERNAL, queued.hold());
-        assertEquals(List.of("<query>你好</query>"), queued.queuedPreview().stream().map(EventQueue.Preview::text).toList());
+        assertEquals(List.of("<query day=\"0\" t=\"06:00\">你好</query>"), queued.queuedPreview().stream().map(EventQueue.Preview::text).toList());
         assertNotNull(queued.queuedPreview().get(0).id(), "排着的条目有编号");
         assertTrue(queued.canInterrupt(), "排着主人的话:停止键可按");
         assertFalse(queued.busy());

@@ -137,7 +137,7 @@ class EventTypesTest {
         assertTrue(q.chatPreview().isEmpty(), "插件的事件不进聊天流");
         assertEquals(List.of("<events>\n<event kind=\"accessory_changed\">戴上了戒指</event>\n"
                         + "<event kind=\"accessory_broke\">护符碎了</event>\n</events>"),
-                EventQueue.render(q.takeEntries(T0 + 2), 0L), "和内置事件一样按时间排进 <events>");
+                EventQueue.render(q.takeEntries(T0 + 2, 0L)), "和内置事件一样按时间排进 <events>");
     }
 
     @Test
@@ -146,10 +146,10 @@ class EventTypesTest {
         q.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);
         q.push(EventTypes.TASK_FINISHED, "<event>二</event>", T0, false);
 
-        EventQueue.Entry note = q.takeEntries(T0).get(1);
+        EventQueue.Entry note = q.takeEntries(T0, 0L).get(1);
 
         assertEquals(EventTypes.DROPPED, note.type());
-        assertTrue(note.text().startsWith("<event kind=\"" + EventTypes.DROPPED + "\">"), note.text());
+        assertTrue(note.text().startsWith("<event kind=\"" + EventTypes.DROPPED + "\" day=\"0\" t=\"06:00\">"), note.text());
         assertNotNull(EventTypes.get(note.type()).toModel().apply(note.text()));
     }
 

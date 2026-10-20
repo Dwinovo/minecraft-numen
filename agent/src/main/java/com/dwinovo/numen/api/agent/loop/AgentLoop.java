@@ -123,7 +123,7 @@ public final class AgentLoop {
             if (e.text() == null || e.text().isBlank()) {
                 continue;
             }
-            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent(), null, e.tick());
+            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
             AiLog.LOG.info("[numen-entity#{}] queued {}{} ({} chars)", name, e.type(), asUrgent ? " URGENT" : "",
                     e.text().length());
             queued.add(new Queued(e, asUrgent));
@@ -142,6 +142,11 @@ public final class AgentLoop {
         }
         announceHold();
         pump();
+    }
+
+    /** 游戏里此刻的时刻,创建条目的一方({@code GoalSteward})据它盖日期与钟点。 */
+    public long dayTime() {
+        return host.dayTime();
     }
 
     /** 工具口手上有一批没结算的调用:内脑这一轮的,或外接大脑借用的那一个。 */
@@ -328,7 +333,7 @@ public final class AgentLoop {
             compact(true, () -> callModel(answerDue));
             return;
         }
-        inject(inbox.takeForCall(answerDue, host.now()));
+        inject(inbox.takeForCall(answerDue, host.now(), host.dayTime()));
         run.phase = Phase.MODEL;
         ModelRequest request = model.turnRequest();
         transcript.incrementTurn();
@@ -350,7 +355,7 @@ public final class AgentLoop {
      * (排版规则在 {@link EventQueue#render})。
      */
     private void inject(List<EventQueue.Entry> batch) {
-        List<String> rendered = EventQueue.render(batch, host.gameTick());
+        List<String> rendered = EventQueue.render(batch);
         if (rendered.isEmpty()) {
             return;
         }

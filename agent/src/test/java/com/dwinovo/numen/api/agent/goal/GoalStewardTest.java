@@ -42,7 +42,7 @@ class GoalStewardTest extends LoopHarness {
         GoalState goal = GoalState.of(objective, T0);
         assertTrue(goals.set(goal), "活着、没被外接驾驶:当场交给她");
         loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY,
-                EventQueue.query("/goal " + objective) + "\n" + GoalPrompts.initialDirective(goal), 0, false)));
+                EventQueue.query("/goal " + objective, 0L) + "\n" + GoalPrompts.initialDirective(goal), 0, false)));
         model.last().say("好,这就去");
         return goal;
     }
@@ -208,7 +208,7 @@ class GoalStewardTest extends LoopHarness {
     void theDirectiveIsRecognisedByTheSameMarkThatWritesIt() {
         GoalState goal = GoalState.of("挖 64 个铁", T0);
         assertTrue(GoalPrompts.isDirective(GoalPrompts.initialDirective(goal)));
-        assertFalse(GoalPrompts.isDirective(GoalPrompts.progress("还差", goal, T0)));
+        assertFalse(GoalPrompts.isDirective(GoalPrompts.progress("还差", goal, T0, 0L)));
         assertFalse(GoalPrompts.isDirective(new ConvoState.Msg.User("挖 64 个铁").content()));
     }
 }
