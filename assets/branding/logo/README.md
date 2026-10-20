@@ -6,8 +6,8 @@
 
 | 目录 | 内容 | 用途 |
 |---|---|---|
-| `mark/` | 标志:整块方块不裁切,透明底 `transparent/`、白底 `white/`、黑底 `black/`,64–1024 px | README、网页、文档、宣传图,放在任意背景上 |
-| `icon-square/` | 方形满版图标,白底 `white/`、黑底 `black/`,16–1024 px | 头像与应用图标:CurseForge、Modrinth、QQ 群、Discord 用 `white/numen-512.png`;两个模组的图标 `numen_api.png`、`numen.png` 也是它 |
+| `mark/` | 标志:整块方块不裁切,透明底 `transparent/`、白底 `white/`、黑底 `black/`,64–1024 px | 网页、文档、宣传图,放在任意背景上 |
+| `icon-square/` | 方形满版图标,白底 `white/`、黑底 `black/`,16–1024 px | 头像与应用图标:CurseForge、Modrinth、QQ 群、Discord 用 `white/numen-512.png`;两个模组的图标 `numen_api.png`、`numen.png` 也是它;仓库 README 抬头用它的 svg,GitHub 深色主题换黑底 |
 | `web/` | `favicon.ico`(16/32/48)、`favicon-16/32/48/192.png`、`favicon.svg`:透明底的标志;`apple-touch-icon.png`(180)、`android-chrome-192/512.png`:白底方形(桌面图标不能透明) | 官网 |
 | `svg/` | 矢量源文件:`numen-mark.svg`(标志)、`numen-square-white.svg`、`numen-square-black.svg` | 要别的尺寸就从这里导出 |
 
