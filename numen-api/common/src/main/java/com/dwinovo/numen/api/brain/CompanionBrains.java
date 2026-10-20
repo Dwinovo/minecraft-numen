@@ -78,8 +78,7 @@ public final class CompanionBrains {
                 },
                 () -> {
                     CompanionRegistry.Entry entry = registry.find(companion);
-                    return entry == null ? null : entry.diedAt() > 0L ? HaltReason.DEATH
-                            : entry.removed() ? HaltReason.REMOVED : null;
+                    return entry != null && entry.removed() ? HaltReason.REMOVED : null;
                 },
                 ownerOnline, driving, initiative, persona,
                 () -> server.overworld().getDayTime(), rooms));

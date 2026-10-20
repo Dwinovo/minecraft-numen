@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.client.agent;
 
-import com.dwinovo.numen.api.entity.CompanionRoster;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,10 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 客户端这份"我有哪些同伴"的镜像。它是单例、跨存档活着,所以两件事必须钉死:
- * <b>换存档要清干净</b>(残留会让下一个世界的第一份名册看起来少了一堆人,
- * 而少了就意味着删数据),以及<b>死亡倒计时读得对</b>(上一版倒计时另存一份,
- * 重登就丢)。
+ * 客户端这份"我有哪些同伴"的镜像。它是单例、跨存档活着,所以<b>换存档要清干净</b>必须钉死:
+ * 残留会让下一个世界的第一份名册看起来少了一堆人,而少了就意味着删数据。
  */
 class NumenRosterTest {
 
@@ -54,47 +51,17 @@ class NumenRosterTest {
     }
 
     @Test
-    void aliveCompanionHasNoCountdown() {
-        NumenRoster.instance().replaceAll("w1",
-                List.of(NumenRoster.toEntry(A, "小焰", CompanionRoster.ALIVE, false, "")));
-
-        assertFalse(NumenRoster.instance().isDead(A));
-        assertEquals(-1L, NumenRoster.instance().remainingMs(A));
-    }
-
-    @Test
-    void deadCompanionCountsDownFromTheServersNumber() {
-        NumenRoster.instance().replaceAll("w1",
-                List.of(NumenRoster.toEntry(A, "小焰", 30_000L, false, "")));
-
-        assertTrue(NumenRoster.instance().isDead(A));
-        long rem = NumenRoster.instance().remainingMs(A);
-        assertTrue(rem > 28_000L && rem <= 30_000L, "剩余时间应在 30 秒上下,实际 " + rem);
-    }
-
-    @Test
-    void overdueRespawnStillCountsAsDead() {
-        // 服务端说 0 = 时候到了但还没找到安全落点。这时候她仍然不在世界里,面板要继续变灰
-        NumenRoster.instance().replaceAll("w1", List.of(NumenRoster.toEntry(A, "小焰", 0L, false, "")));
-
-        assertTrue(NumenRoster.instance().isDead(A), "0 不是活着");
-        assertEquals(0L, NumenRoster.instance().remainingMs(A));
-    }
-
-    @Test
-    void aCompanionRemovedFromTheServerIsShownAsOutNotAlive() {
+    void aCompanionRemovedFromTheServerIsShownAsOut() {
         NumenRoster.instance().replaceAll("w1", List.of(
-                NumenRoster.toEntry(A, "小焰", CompanionRoster.ALIVE, false, "cheating at cards")));
+                new NumenRoster.Entry(A, "小焰", false, "cheating at cards")));
 
         assertTrue(NumenRoster.instance().isRemoved(A));
         assertEquals("cheating at cards", NumenRoster.instance().removedFor(A));
-        assertFalse(NumenRoster.instance().isDead(A), "被请出去不是死了,没有复活倒计时");
     }
 
     @Test
-    void unknownCompanionIsNotDeadJustAbsent() {
-        assertFalse(NumenRoster.instance().isDead(A));
-        assertEquals(-1L, NumenRoster.instance().remainingMs(A));
+    void unknownCompanionIsJustAbsent() {
+        assertFalse(NumenRoster.instance().isRemoved(A));
         assertNull(NumenRoster.instance().name(A));
     }
 

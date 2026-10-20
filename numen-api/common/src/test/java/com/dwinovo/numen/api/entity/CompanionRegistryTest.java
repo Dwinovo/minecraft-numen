@@ -40,7 +40,6 @@ class CompanionRegistryTest {
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER));
         reg.put(B, entry("阿岩", OTHER_OWNER).withSkin("val", "sig"));
-        reg.markDead(B, "被苦力怕炸死了", 12345L);
 
         CompanionRegistry back = roundTrip(reg);
 
@@ -50,8 +49,26 @@ class CompanionRegistryTest {
         assertEquals(new BlockPos(1, 2, 3), back.find(A).pos());
 
         assertEquals("val", back.find(B).skinValue(), "皮肤不能在读档时丢");
-        assertEquals(12345L, back.find(B).diedAt(), "死亡状态必须活过读档——否则重登会当作没死过");
-        assertEquals("被苦力怕炸死了", back.find(B).deathCause());
+    }
+
+    @Test
+    void aSaveFromWhenDeathWaitedForARespawnTimerStillLoadsWithoutIt() {
+        // 老存档里死着等复活的同伴带着 diedAt 与 deathCause。读档不能因为认不得它们就丢掉整条记录(全世界同伴蒸发),
+        // 读出来她就是一只普通的同伴,下一次存盘这两个字段不再写出
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER).withSkin("val", "sig"));
+        CompoundTag tag = reg.save(new CompoundTag(), null);
+        CompoundTag saved = tag.getCompound("companions").getCompound(A.toString());
+        saved.putLong("diedAt", 12345L);
+        saved.putString("deathCause", "被苦力怕炸死了");
+
+        CompanionRegistry back = CompanionRegistry.load(tag, null);
+
+        assertEquals("小焰", back.find(A).name());
+        assertEquals("val", back.find(A).skinValue());
+        CompoundTag resaved = back.save(new CompoundTag(), null).getCompound("companions").getCompound(A.toString());
+        assertFalse(resaved.contains("diedAt"));
+        assertFalse(resaved.contains("deathCause"));
     }
 
     @Test
@@ -167,43 +184,19 @@ class CompanionRegistryTest {
     }
 
     @Test
-    void deathAndRespawnFlipTheSameFlag() {
-        CompanionRegistry reg = new CompanionRegistry();
-        reg.put(A, entry("小焰", OWNER));
-        assertTrue(reg.pendingDead().isEmpty());
-
-        reg.markDead(A, "掉下去了", 999L);
-        assertEquals(1, reg.pendingDead().size());
-        assertEquals(999L, reg.find(A).diedAt());
-
-        reg.markAlive(A);
-        assertTrue(reg.pendingDead().isEmpty(), "复活了就不该再排队等复活");
-        assertEquals(0L, reg.find(A).diedAt());
-        assertEquals("", reg.find(A).deathCause());
-    }
-
-        @Test
-    void deathStateOfAnUnknownCompanionIsANoOp() {
-        CompanionRegistry reg = new CompanionRegistry();
-        reg.markDead(UUID.randomUUID(), "x", 1L);
-        reg.markAlive(UUID.randomUUID());
-        assertTrue(reg.pendingDead().isEmpty());
-    }
-
-    @Test
     void skinAndPositionUpdatesKeepEverythingElse() {
         CompanionRegistry reg = new CompanionRegistry();
-        reg.put(A, entry("小焰", OWNER));
-        reg.markDead(A, "淹死了", 500L);
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope.pot.stir", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
+        reg.markRemoved(A, "cheating at cards");
 
-        // 换肤 / 挪落点都不该顺手把死亡状态抹掉——抹掉她就永远不会复活了
+        // 换肤 / 挪落点都不该顺手把在做的活和被请出去的状态抹掉
         reg.put(A, reg.find(A).withSkin("v", "s"));
         reg.put(A, reg.find(A).movedTo(Level.NETHER, new BlockPos(9, 9, 9)));
 
-        assertEquals(500L, reg.find(A).diedAt());
-        assertEquals("淹死了", reg.find(A).deathCause());
         assertEquals("v", reg.find(A).skinValue());
         assertEquals(Level.NETHER, reg.find(A).dimension());
         assertEquals("小焰", reg.find(A).name());
+        assertEquals("kaleidoscope.pot.stir", reg.find(A).taskName());
+        assertEquals("cheating at cards", reg.find(A).removedFor());
     }
 }

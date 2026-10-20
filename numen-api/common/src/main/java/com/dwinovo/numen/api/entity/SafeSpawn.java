@@ -12,11 +12,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Finds a safe landing spot for a companion body near a point (its owner). A raw
+ * Finds a safe landing spot for a newly summoned companion body near a point (its owner). A raw
  * {@code owner.position()} spawn suffocates the body when the owner is in a tight
- * tunnel / crawling under a low ceiling: the full player hitbox overlaps blocks,
- * takes in-wall damage every tick, dies, and respawns into the same spot — a
- * death loop until the owner happens to move.
+ * tunnel / crawling under a low ceiling: the full player hitbox overlaps blocks
+ * and takes in-wall damage every tick.
  *
  * <p>Search shape: up to 10 random samples in a 7×3×7 box around the anchor
  * (rejecting spots hugging the anchor so the body isn't shoved into a wall by
@@ -66,16 +65,6 @@ final class SafeSpawn {
             }
         }
         return null;
-    }
-
-    /**
-     * Whether a standing player hitbox fits at this exact (non-grid) point.
-     * Fallback check for anchors on non-full-block floors (slabs, carpet) where
-     * no grid candidate has sturdy footing: wherever the owner can stand, the
-     * body can too.
-     */
-    static boolean hasStandingRoom(ServerLevel level, Vec3 pos) {
-        return level.noCollision(standingBox(pos.x, pos.y, pos.z));
     }
 
     private static boolean isSafe(ServerLevel level, BlockPos pos) {

@@ -132,6 +132,10 @@ public final class CompanionFactory {
         player.setGameMode(mode);
         // 身体齐了、进了玩家列表,插件此刻可以对它下命令(改外观、发指令都需要它在列表里)
         CompanionEvents.fire(CompanionEvent.SPAWN, player);
+        // 存盘时她正死着(死亡到重生之间关了服):和真玩家带着零血上线一样,进来就是死的,还是由原版重生把她放回世界
+        if (player.isDeadOrDying()) {
+            Companions.onDeath(player);
+        }
     }
 
     /**

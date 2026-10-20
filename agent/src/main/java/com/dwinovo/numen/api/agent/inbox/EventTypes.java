@@ -60,8 +60,13 @@ public final class EventTypes {
 
     /** 异步任务收尾(status: done / failed / timeout / stopped / interrupted)。急不急由发送方按 status 定。 */
     public static final String TASK_FINISHED = "task_finished";
-    /** 她死了又复活了(在客户端合成——身体那会儿已经不在了)。恒为急件:她对自己处境的认知几乎全作废了。 */
+    /** 她死了(死因、死在哪、身上的东西怎么处置了)。恒为急件:她对自己处境的认知几乎全作废了。死着期间停牌压着,重生以后随 {@link #RESPAWNED} 一起交给她。 */
     public static final String DEATH = "death";
+    /**
+     * 她按原版的重生规则重生了:落在哪、是重生点还是世界出生点、离主人多远。不传送、不替她回到主人身边——回不回、怎么回由她自己定。
+     * 恒为急件:位置从矿洞变成了别处,她正在做的事的前提全变了。
+     */
+    public static final String RESPAWNED = "respawned";
     /**
      * 她的身体被外面的人或插件请出了服务器(踢人),不是主人遣散、也不是关服。恒为急件:她在世界里的一切都停了,醒来第一件事是知道这个。
      * 她不在世界里时停牌压着(见 {@code Hold.DEAD}),主人再召唤她,这条随停牌解开一起交给她。
@@ -314,6 +319,7 @@ public final class EventTypes {
         // 其余由发的那一方按事情本身定(任务按 status、主人挨打按血线)。
         register(event(TASK_FINISHED, false));
         register(event(DEATH, true));
+        register(event(RESPAWNED, true));
         register(event(REMOVED, true));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));

@@ -9,6 +9,7 @@
     "GameModeAccessor",
     "ItemEntityTouchMixin",
     "PlayerAdvancementsRewardMixin",
+    "PlayerListRespawnMixin",
     "MixinServerCommonPacketListener"
   ],
   "client": [

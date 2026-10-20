@@ -266,6 +266,9 @@ final class CompanionBrain {
         sync.finalizeInline(companion);
         current.finalizeInline(companion);
         holder = null;
+        // 这具身体的这一段到头了:按着的键、按住的本能都不带进下一段(Paper 上重生沿用同一个对象,不会像新对象那样天然是干净的)
+        letGo(companion);
+        companion.resumeAllReflexes();
         // 同 tick():状态先归位再宣布结果 —— 结果一到就同步开轮,那一刻会读 <current_task>。
         syncCurrentTask(companion);
         shipResults(companion);

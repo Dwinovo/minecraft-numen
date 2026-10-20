@@ -49,11 +49,8 @@ public final class NumenPlayer extends ServerPlayer {
     /** Owner's player UUID. Null only transiently before the first assignment. */
     private UUID ownerUuid;
 
-    /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
-    private boolean deathHandled;
-
-    /** 她没有客户端,服务端等的那几个回执由它代答。见 {@link FakeClient}。 */
-    private final FakeClient fakeClient = new FakeClient(this);
+    /** 她没有客户端,服务端等的那几个回执由它代答。见 {@link FakeClient}。原版重生换了身体对象时,旧身体的这一份转交给新身体({@link #restoreFrom})。 */
+    private FakeClient fakeClient = new FakeClient(this);
 
     /** 她的键盘:谁要让身体走、跳、潜行都按它,{@link Physics#step} 每刻落一次。 */
     private final Controls controls = new Controls();
@@ -487,11 +484,31 @@ public final class NumenPlayer extends ServerPlayer {
     /**
      * 死因在这里抄下来——原版广播死亡消息也是在这一刻(清空战斗记录之前)。
      * 抄的是同一句话,所以她知道的和聊天里广播的一字不差。
+     *
+     * <p>原版的死亡流程(掉落、经验、广播)照常走完以后,交给 {@link Companions#onDeath} 收尾并排上重生。没死成的(死亡事件被别的模组或插件取消、
+     * 血量被救回来)不算。
      */
     @Override
     public void die(net.minecraft.world.damagesource.DamageSource cause) {
         this.deathMessage = getCombatTracker().getDeathMessage().getString();
         super.die(cause);
+        if (isDeadOrDying()) {
+            Companions.onDeath(this);
+        }
+    }
+
+    /**
+     * 原版重生里新身体接上旧身体的那一处(模组上新身体是个新对象,{@code PlayerList.respawn} 之后立刻调它;Paper 上重生沿用原来的对象,
+     * 旧身体就是自己)。原版把背包、经验、游戏模式、皮肤层这些玩家级的东西搬过来;这里搬 Numen 的:主人,和代答的那一份"客户端"。
+     * 其余跟着身体走的状态(键盘、本能的按住、同伴级状态)本来就是一条命的事,新身体从干净的开始。
+     */
+    @Override
+    public void restoreFrom(ServerPlayer oldPlayer, boolean alive) {
+        super.restoreFrom(oldPlayer, alive);
+        if (oldPlayer instanceof NumenPlayer previous && previous != this) {
+            this.ownerUuid = previous.ownerUuid;
+            this.fakeClient = previous.fakeClient.movedTo(this);
+        }
     }
 
     /** 上一次的死因(原版死亡消息原文);还没死过则 null。 */
@@ -529,12 +546,8 @@ public final class NumenPlayer extends ServerPlayer {
 
     @Override
     public void tick() {
-        // A fake player isn't auto-removed on death (no client to send a respawn packet), so it would
-        // sit at 0 HP forever. Detect death once, hand off to the recoverable-death routine (stop the
-        // brain, schedule a respawn at the owner), and skip the normal movement/AI tick for this corpse.
-        if (!deathHandled && (getHealth() <= 0.0f || isDeadOrDying())) {
-            deathHandled = true;
-            Companions.onDeath(this);
+        // 死了的身体不再走物理、不再收拾背包:它在等 Companions.respawnDead 代她点"重生",重生以后是原版换上来的新身体
+        if (isDeadOrDying()) {
             return;
         }
         rearmInventoryFull();
