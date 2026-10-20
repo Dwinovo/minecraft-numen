@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.EntityInfo;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Flatten;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -151,10 +152,10 @@ public final class ScanApi {
             + "end`.")
     @Note("Instant and read-only. All of them, nearest first: each is an Entity (id, type, category, pos, distance, "
             + "hp); a dropped item is an Item (also item, count and pickup_delay, ticks before anyone can pick it up); "
-            + "a tamed one has owner: you, your owner, or the other player's name.")
+            + "a tamed one has owner: you, your owner, or the other player's id (name).")
     @Note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
             + "with numen.use.entity(e) or numen.move.to(e.pos). An id is kind@code, like zombie@3f9a1c "
-            + "(a player's name for a player): the code is the start of the entity's UUID, so it is the same "
+            + "(player@ab12cd for a player, with its name in name): the code is the start of the entity's UUID, so it is the same "
             + "after a restart.")
     @SeeAlso({"numen.scan.map", "numen.fight.attack", "numen.use.entity"})
     public static List<Seen> entities(ServerCall call, Entities args) {
@@ -214,8 +215,7 @@ public final class ScanApi {
         if (self.isOwnedByPlayer(owner)) {
             return "your owner";
         }
-        String name = NumenPlayer.playerName(self.getServer(), owner);
-        return name.isEmpty() ? owner.toString() : name;
+        return EntityLabel.shown(owner, NumenPlayer.playerName(self.getServer(), owner));
     }
 
     // ---- block ----

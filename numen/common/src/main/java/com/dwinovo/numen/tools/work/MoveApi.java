@@ -96,7 +96,7 @@ public final class MoveApi {
     }
 
     /** 跟谁、多近、多久。 */
-    public record Follow(@Doc("Who to follow: an Entity from numen.scan.entities, or its id (zombie@3f9a1c, a player's name).")
+    public record Follow(@Doc("Who to follow: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).")
                          @Omitted("follow your owner") @Positional Optional<EntityRef> entity,
                          @Doc("How close to stay, in blocks (" + MIN_DISTANCE + "-" + MAX_DISTANCE + ").")
                          @Omitted("stay within " + DEFAULT_DISTANCE) Optional<Integer> distance,
@@ -110,7 +110,7 @@ public final class MoveApi {
      */
     @Fn("Tag along with your owner, or with an entity you name, for a while.")
     @Example("numen.move.follow()")
-    @Example("numen.move.follow(\"Steve\", {distance = 5, seconds = 30})")
+    @Example("numen.move.follow(\"player@ab12cd\", {distance = 5, seconds = 30})")
     @Note("Background work with an end: it returns after seconds (default " + DEFAULT_FOLLOW_SECONDS + "), or when "
             + "your owner stops it, with the same account of the walk as `numen.move.to`. You go quiet while already "
             + "beside them.")

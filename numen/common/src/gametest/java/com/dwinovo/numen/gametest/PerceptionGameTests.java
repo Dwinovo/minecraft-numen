@@ -193,7 +193,7 @@ public class PerceptionGameTests {
                             && rows.get(1).get("owner").getAsString().equals("your owner"),
                     "her owner's wolf is not marked as his: " + rows.get(1));
             helper.assertTrue(rows.get(2).has("owner")
-                            && rows.get(2).get("owner").getAsString().equals(stranger.toString()),
+                            && rows.get(2).get("owner").getAsString().equals("player@" + com.dwinovo.numen.api.sdk.EntityLabel.code(stranger)),
                     "a stranger's wolf does not name its owner: " + rows.get(2));
             helper.assertTrue(!rows.get(3).has("owner"), "a wild wolf is marked as someone's: " + rows.get(3));
             java.util.stream.Stream.of(hers, owners, strangers, wild).forEach(net.minecraft.world.entity.Entity::discard);

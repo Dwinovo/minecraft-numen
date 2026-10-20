@@ -126,7 +126,7 @@ final class Maids {
         return ((EntityMaid) maid).isOwnedBy(her);
     }
 
-    /** 这只女仆的主人:在线的写名字,不在线的写 UUID;野生的为 null。 */
+    /** 这只女仆的主人:身份,查得到名字就带上;野生的为 null。 */
     static String owner(Entity entity) {
         EntityMaid maid = (EntityMaid) entity;
         UUID id = maid.getOwnerUUID();
@@ -134,7 +134,7 @@ final class Maids {
             return null;
         }
         LivingEntity owner = maid.getOwner();
-        return owner != null ? owner.getName().getString() : id.toString();
+        return EntityLabel.shown(id, owner == null ? null : owner.getName().getString());
     }
 
     // ---- 读 ----

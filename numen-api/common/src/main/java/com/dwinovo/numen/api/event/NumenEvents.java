@@ -138,7 +138,7 @@ public final class NumenEvents {
      * 半径内一只怪盯上了她。<b>恒为急件</b>——它还没动手,不叫醒她就是等着挨打。检测与去抖在 {@code Vigil}:盯着期间只发一次。
      */
     public static void targeted(NumenPlayer companion, Mob mob) {
-        String id = EntityLabel.of(mob);
+        String id = EntityLabel.shown(mob);
         long distance = Math.round(companion.distanceTo(mob));
         String bearing = CompassUtil.compass(companion, mob);
         Map<String, String> attrs = new LinkedHashMap<>();
@@ -158,7 +158,7 @@ public final class NumenEvents {
      * @param killer 打倒它的(原版的击杀归属);没有或不是被打倒的是 null
      */
     public static void gone(NumenPlayer companion, Entity entity, LivingEntity killer) {
-        String id = EntityLabel.of(entity);
+        String id = EntityLabel.shown(entity);
         Entity.RemovalReason removal = entity.getRemovalReason();
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put("mob", id);
@@ -166,7 +166,7 @@ public final class NumenEvents {
         switch (removal) {
             case KILLED -> {
                 attrs.put("reason", "killed");
-                String by = killer == null ? null : killer == companion ? "you" : EntityLabel.of(killer);
+                String by = killer == null ? null : killer == companion ? "you" : EntityLabel.shown(killer);
                 if (by != null) {
                     attrs.put("by", by);
                 }

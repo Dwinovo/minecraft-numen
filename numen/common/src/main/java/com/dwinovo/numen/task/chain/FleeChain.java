@@ -108,7 +108,7 @@ public final class FleeChain implements Task, Reflex {
     public TaskState tick(NumenPlayer companion) {
         if (!fleeing) {
             fleeing = true;
-            fledFrom = chasers(companion).stream().map(com.dwinovo.numen.api.sdk.EntityLabel::of).toList();
+            fledFrom = chasers(companion).stream().map(com.dwinovo.numen.api.sdk.EntityLabel::shown).toList();
             com.dwinovo.numen.Constants.LOG.info("[numen-flee] 扛不住了,跑 —— 身边 {} 只在追",
                     chasers(companion).size());
         }

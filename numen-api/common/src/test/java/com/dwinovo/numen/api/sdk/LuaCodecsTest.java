@@ -89,11 +89,12 @@ class LuaCodecsTest {
     }
 
     @Test
-    void anEntityIsItsIdOrAPlayersName() {
+    void anEntityIsItsId() {
         Codec<EntityRef> entity = codec(EntityRef.class);
         assertEquals(new EntityRef("zombie@3f9a1c"), entity.decode("zombie@3f9a1c"));
         assertEquals(new EntityRef("pig@0a1b2c"), entity.decode(Map.of("id", "pig@0a1b2c", "type", "minecraft:pig")));
-        assertEquals(new EntityRef("Steve"), entity.decode("Steve"));
+        assertEquals(new EntityRef("player@ab12cd"), entity.decode("player@ab12cd"));
+        assertThrows(BadValue.class, () -> entity.decode("Steve"), "a name is not an id");
         assertEquals("zombie@3f9a1c", entity.encode(new EntityRef("zombie@3f9a1c")));
         assertThrows(BadValue.class, () -> entity.decode(184L), "a runtime number no longer names anything");
         assertThrows(BadValue.class, () -> entity.decode("zombie@3f9a"), "the code is six hex digits");

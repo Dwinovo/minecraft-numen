@@ -22,12 +22,13 @@ class EntityLabelTest {
     void aMobIsKindAtSixHexDigitsAndAPlayerIsAName() {
         assertTrue(EntityLabel.valid("zombie@3f9a1c"));
         assertTrue(EntityLabel.valid("touhou_little_maid.maid@0a1b2c"));
-        assertTrue(EntityLabel.valid("Steve_01"));
+        assertTrue(EntityLabel.valid("player@ab12cd"), "玩家和别的实体同一种格式");
+        assertFalse(EntityLabel.valid("Steve"), "名字不是身份");
+        assertFalse(EntityLabel.valid("home"));
         assertFalse(EntityLabel.valid("zombie@3f9a1"), "短码是六位");
         assertFalse(EntityLabel.valid("zombie@3F9A1C"), "短码是小写十六进制");
         assertFalse(EntityLabel.valid("zombie@3f9a1g"));
-        assertFalse(EntityLabel.valid("two words"), "玩家名没有空格");
-        assertFalse(EntityLabel.valid(""));
+                assertFalse(EntityLabel.valid(""));
     }
 
     @Test
