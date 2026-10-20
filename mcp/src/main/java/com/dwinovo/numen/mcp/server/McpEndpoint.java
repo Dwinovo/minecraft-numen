@@ -516,12 +516,26 @@ public final class McpEndpoint {
                     try {
                         hostedFor(token).refresh();
                     } catch (Exception failed) {
+                        // 工具表取不到(宿主停着、主线程长时间不应、宿主自己抛了):如实把原因交给客户端,不拿旧表搪塞
                         LOG.warn("[numen-mcp] 取不到令牌 {} 的工具表: {}", token.id(), failed.toString());
+                        listFailed(resp, (McpSchema.JSONRPCRequest) message, failed);
+                        return;
                     }
                     chain.doFilter(replay, resp);
                 }
                 default -> chain.doFilter(replay, resp);
             }
+        }
+
+        private void listFailed(HttpServletResponse resp, McpSchema.JSONRPCRequest request, Exception failed)
+                throws IOException {
+            McpSchema.JSONRPCResponse error = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+                    new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+                            "The companion's tools cannot be listed right now: " + failed, null));
+            resp.setStatus(200);
+            resp.setContentType("application/json");
+            resp.setCharacterEncoding("UTF-8");
+            resp.getWriter().write(toJson(error));
         }
 
         private void initialize(HttpServletRequest req, HttpServletResponse resp, FilterChain chain, McpToken token,

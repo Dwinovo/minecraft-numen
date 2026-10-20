@@ -71,8 +71,14 @@ class McpEndpointTest {
             return "drive carefully";
         }
 
+        /** 非空时 tools 抛出它:宿主取不到工具表。 */
+        volatile String toolsFailure;
+
         @Override
-        public List<ToolInfo> tools(McpToken who) {
+        public List<ToolInfo> tools(McpToken who) throws Exception {
+            if (toolsFailure != null) {
+                throw new java.util.concurrent.TimeoutException(toolsFailure);
+            }
             return who.role() == McpToken.Role.CHANNEL
                     ? List.of(new ToolInfo("send", null, "sends", "{\"type\":\"object\"}", new Hints(false, false, false, false)))
                     : tools;
@@ -254,6 +260,22 @@ class McpEndpointTest {
         assertEquals(200, post(a, list, "Mcp-Session-Id", session, "MCP-Protocol-Version", "2025-06-18").statusCode());
         assertEquals(404, post(b, list, "Mcp-Session-Id", session, "MCP-Protocol-Version", "2025-06-18").statusCode(),
                 "别的令牌不能用这个会话");
+    }
+
+    @Test
+    void aToolListTheHostCannotProduceIsAnErrorWithTheReasonNotAStaleList() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        String session = post(secret, INIT).headers().firstValue("Mcp-Session-Id").orElseThrow();
+        host.toolsFailure = "main thread did not answer";
+
+        HttpResponse<String> reply = post(secret, "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/list\"}",
+                "Mcp-Session-Id", session, "MCP-Protocol-Version", "2025-06-18");
+
+        assertEquals(200, reply.statusCode());
+        assertTrue(reply.body().contains("\"id\":7") && reply.body().contains("\"error\"")
+                && reply.body().contains("cannot be listed right now") && reply.body().contains("main thread did not answer"),
+                reply.body());
+        assertFalse(reply.body().contains("\"tools\""), "不拿旧表搪塞: " + reply.body());
     }
 
     // ---- 工具表与自我介绍 ----
