@@ -50,14 +50,21 @@ public final class CompanionChunkLoader {
     /**
      * 1.21.5 起 {@code TicketType} 是不带泛型的 record,1.21.9 又把「是否入档 + 用途」
      * 合并成一个 {@code flags} 位图。这里直接构造:超时同为 {@value #TIMEOUT_TICKS}
-     * tick,标志取 {@code FLAG_LOADING | FLAG_SIMULATION}(旧代
+     * tick,标志取 {@code FLAG_LOADING | FLAG_SIMULATION | FLAG_KEEP_DIMENSION_ACTIVE}(旧代
      * {@code TicketUse.LOADING_AND_SIMULATION},即「加载 + 实体 tick」),不置
      * {@code FLAG_PERSIST} —— {@code TicketStorage.packTickets} 只序列化 persist 的票据,
      * 所以这张票不入档,也就不需要进 {@code BuiltInRegistries.TICKET_TYPE}(未注册时
      * {@code Util.getRegisteredName} 回落 "[unregistered]",只影响 toString)。
+     *
+     * <h2>{@code FLAG_KEEP_DIMENSION_ACTIVE} 不能省</h2>
+     * {@code ServerLevel.tick()} 的实体循环外有一道闸:{@code hasActiveTickets()}(= 存在带这一位的票)
+     * 为假时 {@code emptyTime} 每刻 +1,涨到 300 刻(15 秒)整维实体停 tick —— 区块照样报
+     * entity-ticking,人却不动。同伴独自待在一维里(主人换维度/离线)正是这个形状:pad 是她唯一
+     * 的票,少了这一位,她每 15 秒就被原版冻结一次,而且要等某个真玩家踏进这一维才解冻。
      */
     private static final TicketType TICKET = new TicketType(
-            TIMEOUT_TICKS, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION);
+            TIMEOUT_TICKS, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION
+                    | TicketType.FLAG_KEEP_DIMENSION_ACTIVE);
 
     private CompanionChunkLoader() {}
 
