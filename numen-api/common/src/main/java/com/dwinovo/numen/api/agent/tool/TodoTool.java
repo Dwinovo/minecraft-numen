@@ -76,6 +76,12 @@ public final class TodoTool implements NumenTool {
                 + "and add a concrete recovery step.";
     }
 
+    /** 计划是她自己的清单,整份替换上一份:不毁别人的东西,同一份再交一遍没有额外效果。 */
+    @Override
+    public ToolHints hints() {
+        return new ToolHints("Write plan", false, false, true, false);
+    }
+
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object().stringArray(ITEMS, "The whole plan, one string per step in order, each starting with "

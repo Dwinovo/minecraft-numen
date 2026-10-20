@@ -985,7 +985,7 @@ public final class SettingsView {
             mcpListPanel = new LibraryListPanel<ServerLibraries.McpClientRow>(
                     ServerLibraries::mcpClients,
                     h -> new LibraryListPanel.Row(h.name(), meta(h.base(), mcpMeta(h)),
-                            h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED, null,
+                            h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED, null,
                             !mcpOwned(h), h.base().builtin()),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
                     h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().builtin()),
@@ -1002,7 +1002,7 @@ public final class SettingsView {
                     .withRowIcon(8, (surface, h, ix, iy, size) ->
                             surface.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h)))
                     .withRowToggle(
-                            h -> mcpOwned(h) ? h.status() != com.dwinovo.numen.api.mcp.client.McpClientManager.Status.DISABLED
+                            h -> mcpOwned(h) ? h.status() != com.dwinovo.numen.mcp.client.McpConnections.Status.DISABLED
                                     : h.base().enabled(),
                             h -> {
                                 if (!mcpOwned(h)) {
@@ -1011,9 +1011,9 @@ public final class SettingsView {
                                 }
                                 var st = h.status();
                                 // 连接中/等授权/已连接 → 断开;禁用/失败 → (重)连(失败的点一下即重试)
-                                boolean on = st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTED
-                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.CONNECTING
-                                        || st == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.AUTHORIZING;
+                                boolean on = st == com.dwinovo.numen.mcp.client.McpConnections.Status.CONNECTED
+                                        || st == com.dwinovo.numen.mcp.client.McpConnections.Status.CONNECTING
+                                        || st == com.dwinovo.numen.mcp.client.McpConnections.Status.AUTHORIZING;
                                 request(Libraries.MCP_CLIENT, on ? Libraries.DISCONNECT : Libraries.CONNECT, h.base());
                                 if (!on) {
                                     McpAuthPrompt.expect(h.name());
@@ -1068,26 +1068,29 @@ public final class SettingsView {
         String name = d.name.trim();
         String target = d.target.trim();
         String service = d.service.trim();
-        // 改的时候保留这台原来的"连不连":改一下配置不该顺手翻开关
+        // 改的时候保留这台原来的"连不连"与手写在文件里的客户端 ID:改一下配置不该顺手翻开关、丢设置
         boolean connect = true;
+        String clientId = "";
         if (mcpEditId != null) {
-            connect = ServerLibraries.mcpClients().stream()
+            var original = ServerLibraries.mcpClients().stream()
                     .filter(h -> h.id().equals(mcpEditId) && h.base().builtin() == mcpEditBuiltin && h.full())
-                    .map(ServerLibraries.McpClientRow::connect).findFirst().orElse(true);
+                    .findFirst();
+            connect = original.map(ServerLibraries.McpClientRow::connect).orElse(true);
+            clientId = original.map(h -> h.spec().clientId()).orElse("");
         }
-        com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec spec;
+        com.dwinovo.numen.mcp.client.McpServerSpec spec;
         if (d.stdio) {
             String[] parts = target.split("\\s+");
             String command = parts[0];
             List<String> args = new ArrayList<>();
             for (int i = 1; i < parts.length; i++) args.add(parts[i]);
-            spec = new com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec(name, "stdio", "", java.util.Map.of(),
-                    command, List.copyOf(args), parseEnv(d.extra), service, connect, 20, 120);
+            spec = new com.dwinovo.numen.mcp.client.McpServerSpec(name, "stdio", "", java.util.Map.of(),
+                    command, List.copyOf(args), parseEnv(d.extra), service, clientId, connect, 20, 120);
         } else {
-            spec = new com.dwinovo.numen.api.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(d.extra),
-                    "", List.of(), java.util.Map.of(), service, connect, 20, 120);
+            spec = new com.dwinovo.numen.mcp.client.McpServerSpec(name, "http", target, parseHeader(d.extra),
+                    "", List.of(), java.util.Map.of(), service, clientId, connect, 20, 120);
         }
-        JsonObject body = com.dwinovo.numen.api.mcp.client.McpClientConfig.serverToJson(spec);
+        JsonObject body = spec.toJson();
         // 改了名:服务端存新名字的同时把旧的摘掉
         if (mcpEditId != null) {
             body.addProperty("id", mcpEditId);
@@ -1599,7 +1602,7 @@ public final class SettingsView {
         if (h.full()) {
             var spec = h.spec();
             lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_MUTED));
-            if (h.status() == com.dwinovo.numen.api.mcp.client.McpClientManager.Status.FAILED && !h.error().isBlank()) {
+            if (h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED && !h.error().isBlank()) {
                 lines.add(Nb.colored(h.error(), FAIL));
             } else if (!h.tools().isEmpty()) {
                 lines.add(Nb.colored(String.join(", ", h.tools()), TXT_MUTED));

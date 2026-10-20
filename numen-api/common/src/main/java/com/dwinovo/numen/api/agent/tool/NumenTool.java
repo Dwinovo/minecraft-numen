@@ -14,4 +14,9 @@ public interface NumenTool extends IToolSpec {
      * {@link ToolCall} 报结果。
      */
     void invoke(ToolCall call);
+
+    /** 这个工具的性质,见 {@link ToolHints};没声明的按最保守的算。 */
+    default ToolHints hints() {
+        return ToolHints.UNKNOWN;
+    }
 }

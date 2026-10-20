@@ -41,6 +41,8 @@ include('ai')
 include('script')
 // numen-agent:大脑本身(队列、目标、循环),纯 JVM,依赖 ai 与 script、被 Numen API 依赖(详见 agent/build.gradle 头注)。
 include('agent')
+// numen-mcp:MCP 的服务端与客户端,纯 JVM,协议用官方 Java SDK、OAuth 用 Nimbus,不认识同伴与游戏(详见 mcp/build.gradle 头注)。
+include('mcp')
 // numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
 include('permission')
 include('ui')

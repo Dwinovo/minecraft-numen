@@ -57,6 +57,13 @@ public final class ServerActuator implements ExternalHands {
     }
 
     @Override
+    public CompletableFuture<String> guide(UUID companion) {
+        CompletableFuture<String> f = new CompletableFuture<>();
+        server.execute(() -> f.complete(CompanionLoops.get(companion).map(CompanionLoop::systemPrompt).orElse(null)));
+        return f;
+    }
+
+    @Override
     public CompletableFuture<List<Companion>> companions() {
         CompletableFuture<List<Companion>> f = new CompletableFuture<>();
         server.execute(() -> {
@@ -165,7 +172,8 @@ public final class ServerActuator implements ExternalHands {
     }
 
     @Override
-    public CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
+    public CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson,
+                                            java.util.function.Consumer<String> progress) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
             f.complete(ToolOutcome.failure("companion and toolName are required"));
@@ -188,7 +196,7 @@ public final class ServerActuator implements ExternalHands {
                     ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
                 }
                 LlmToolCall call = new LlmToolCall(CALL_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
-                if (!loop.runExternal(call, f::complete)) {
+                if (!loop.runExternal(call, progress, f::complete)) {
                     f.complete(ToolOutcome.failure("a call is already running for this companion, or its "
                             + "built-in brain is acting; wait for it to end"));
                 }

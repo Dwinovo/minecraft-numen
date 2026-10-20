@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.agent.tool;
 
+import com.dwinovo.numen.mcp.client.McpConnections;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -45,7 +46,7 @@ public final class ToolRegistry {
      *
      * <p>名字形状也在这里把关。工具清单每轮都随请求发出去,一个非法名字换来的是整轮 400,
      * 而不是"这个工具用不了"——所以宁可在注册这一刻炸掉,也不能让它混进去。自家工具在初始化
-     * 时就会撞上;借来的工具由调用方接住并跳过(见 {@code McpClientManager})。
+     * 时就会撞上;借来的工具由调用方接住并跳过(见 {@code McpConnections})。
      */
     public static void register(NumenTool tool) {
         checkName(tool);
@@ -60,7 +61,7 @@ public final class ToolRegistry {
 
     /**
      * 登记一个只有这位玩家的同伴看得到的工具。名字不能撞全局的,也不能撞他自己已有的——撞了抛出,由调用方接住并跳过
-     * (见 {@code McpClientManager})。
+     * (见 {@code McpConnections})。
      */
     public static void register(UUID owner, NumenTool tool) {
         checkName(tool);

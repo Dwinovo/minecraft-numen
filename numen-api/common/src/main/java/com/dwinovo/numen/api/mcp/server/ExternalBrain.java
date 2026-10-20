@@ -47,6 +47,13 @@ final class ExternalBrain {
         return body(ToolOutcome.modelText(result), ToolOutcome.failed(result), events, hands, companion);
     }
 
+    /** 内置大脑读的系统提示(人设、操作核心、API 索引、规矩……)。她没有大脑是失败。 */
+    static Body guide(ExternalHands hands, UUID companion) throws Exception {
+        String prompt = hands.guide(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        return prompt == null ? new Body(List.of("this companion has no brain to read the guide of"), true)
+                : new Body(List.of(prompt), false);
+    }
+
     /**
      * 等她的消息:停靠在收件箱上,会叫醒她的条目一到立即整批返回;到点清扫,有什么给什么(捎带的也交),没有就如实说没有。
      * 叫醒只是提前,正确性由到点清扫兜底。正文最后同样是她的运行期状态。

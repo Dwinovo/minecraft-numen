@@ -35,6 +35,12 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public String modVersion(String modId) {
+        return ModList.get().getModContainerById(modId)
+                .map(mod -> mod.getModInfo().getVersion().toString()).orElse(null);
+    }
+
+    @Override
     public java.nio.file.Path modResource(String modId, String path) {
         var file = ModList.get().getModFileById(modId);
         if (file == null) {

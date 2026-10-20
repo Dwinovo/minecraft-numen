@@ -45,6 +45,11 @@ public final class SkillTool implements NumenTool {
     }
 
     @Override
+    public ToolHints hints() {
+        return ToolHints.reads("Read skill");
+    }
+
+    @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
                 .string("skill", "The skill's name, as <available_skills> lists it.")

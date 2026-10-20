@@ -29,9 +29,9 @@ import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
-import com.dwinovo.numen.api.mcp.server.McpConfig;
+import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
-import com.dwinovo.numen.api.mcp.server.McpToken;
+import com.dwinovo.numen.mcp.server.McpToken;
 
 import com.dwinovo.numen.api.store.Io;
 import com.google.gson.JsonObject;

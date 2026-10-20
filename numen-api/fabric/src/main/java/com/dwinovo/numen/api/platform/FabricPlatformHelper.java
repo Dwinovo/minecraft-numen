@@ -33,6 +33,12 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public String modVersion(String modId) {
+        return FabricLoader.getInstance().getModContainer(modId)
+                .map(mod -> mod.getMetadata().getVersion().getFriendlyString()).orElse(null);
+    }
+
+    @Override
     public java.nio.file.Path modResource(String modId, String path) {
         return FabricLoader.getInstance().getModContainer(modId).flatMap(mod -> mod.findPath(path)).orElse(null);
     }

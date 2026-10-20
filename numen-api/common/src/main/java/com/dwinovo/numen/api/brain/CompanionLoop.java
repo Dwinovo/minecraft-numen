@@ -31,6 +31,7 @@ import com.dwinovo.numen.api.agent.request.AgentRequestContext;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.agent.request.MemoryPreamble;
 import com.dwinovo.numen.api.agent.request.RuntimeState;
+import com.dwinovo.numen.api.agent.request.SystemPromptComposer;
 import com.dwinovo.numen.api.agent.request.TaskReport;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
@@ -148,6 +149,8 @@ public final class CompanionLoop {
     private String deathCause;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
+    /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。主线程上读写。 */
+    private Consumer<String> externalProgress;
 
     public CompanionLoop(Parts parts) {
         this.parts = parts;
@@ -281,6 +284,12 @@ public final class CompanionLoop {
     /** 她的收件箱(只读用:条目与编号)。 */
     public EventQueue inbox() {
         return queue;
+    }
+
+    /** 这一轮请求的系统提示:人设、操作核心、技能表、API 索引……内置大脑读的就是它,外接大脑经 MCP 的 guide 工具取同一份。 */
+    public String systemPrompt() {
+        return SystemPromptComposer.compose(personaText(), Modules.of(companion),
+                com.dwinovo.numen.api.agent.skill.SkillRegistry.of(companion));
     }
 
     /** 下一次请求里 {@code <runtime_state>} 此刻的样子(只读,每次现算,不入历史)。 */
@@ -450,17 +459,24 @@ public final class CompanionLoop {
     /**
      * 外接大脑跑一个工具调用:交给她自己的工具口,与内脑同一个派发器({@link AgentLoop#runAside})。
      *
+     * @param progress 调用期间她手上的活有进展(任务槽推来的新描述,{@link #onCurrentTask})时收到那一句话
      * @return 收下了;内脑正在干活、或已有一个外接调用在跑时为 false,什么都没记
      */
-    public boolean runExternal(LlmToolCall call, Consumer<String> done) {
+    public boolean runExternal(LlmToolCall call, Consumer<String> progress, Consumer<String> done) {
         if (!loop.asideFree()) {
             return false;
         }
         convo.addAssistant(new AssistantTurn("", List.of(call), null));
-        return loop.runAside(call, result -> {
+        externalProgress = progress;
+        boolean taken = loop.runAside(call, result -> {
+            externalProgress = null;
             convo.addToolResult(call.id(), result);
             done.accept(result);
         });
+        if (!taken) {
+            externalProgress = null;
+        }
+        return taken;
     }
 
     /** 外接大脑替她说话:和内脑的一条回复同一个出口,见 {@link AgentLoop#said}。 */
@@ -507,9 +523,12 @@ public final class CompanionLoop {
         loop.respawned();
     }
 
-    /** 任务槽说她在做什么(见 {@link RuntimeState#onCurrentTask})。 */
+    /** 任务槽说她在做什么(见 {@link RuntimeState#onCurrentTask});外接大脑有调用在跑时,这一句同时是它的进展。 */
     public void onCurrentTask(TaskReport p) {
         runtime.onCurrentTask(p);
+        if (externalProgress != null && !p.isIdle()) {
+            externalProgress.accept(p.describe());
+        }
     }
 
     /** 切断后程序交出的回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱。 */

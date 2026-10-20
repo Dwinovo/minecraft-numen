@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.mcp.client.McpServerSpec;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
@@ -336,8 +337,8 @@ public final class LegacyLibraries {
                 for (int i = 2; files.containsKey(name); i++) {
                     name = base + "_" + i;
                 }
-                McpClientConfig.ServerSpec spec = McpClientConfig.parseServer(name, el.getAsJsonObject());
-                files.put(name, McpClientConfig.write(masterOn ? spec : McpClientConfig.withEnabled(spec, false)));
+                McpServerSpec spec = McpServerSpec.parse(name, el.getAsJsonObject());
+                files.put(name, (masterOn ? spec : spec.withEnabled(false)).write());
             }
         }
         LegacyMigration.stage(serverMcp.resolve(EntryId.SERVER), staging -> files.forEach((name, text) ->

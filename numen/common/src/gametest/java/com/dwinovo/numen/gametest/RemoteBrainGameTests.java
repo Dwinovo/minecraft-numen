@@ -13,9 +13,9 @@ import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.mcp.server.McpConfig;
+import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
-import com.dwinovo.numen.api.mcp.server.McpToken;
+import com.dwinovo.numen.mcp.server.McpToken;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -115,9 +115,9 @@ public class RemoteBrainGameTests {
         helper.assertTrue(her.hold() == Hold.AWAY, "not away while nobody is here: " + her.hold());
         helper.assertTrue(her.disconnects() == 0, "collected before anyone had been here: " + her.halts);
 
-        her.brain.connect();
+        her.brain.connectLater();
 
-        helper.runAfterDelay(5, () -> {
+        her.brain.afterConnected(helper, 5, () -> {
             helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
             helper.assertTrue(her.disconnects() == 0, "she was collected while the brain was connected");
             try {
@@ -139,23 +139,23 @@ public class RemoteBrainGameTests {
             GameTestHelper helper) throws Exception {
         ServerPlayer owner = GameTestKit.presentPlayer(helper, null, "gametest_remote_owner");
         Rig her = new Rig(helper, "gametest_remote_here", owner);
-        her.brain.connect();
+        her.brain.connectLater();
 
-        helper.runAfterDelay(5, () -> {
+        her.brain.afterConnected(helper, 5, () -> {
             helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
             try {
                 her.brain.disconnect();
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
-        });
-        helper.runAfterDelay(15, () -> {
-            helper.assertTrue(her.hold() != Hold.EXTERNAL && her.hold() != Hold.AWAY,
-                    "the seat did not come back to her own brain: " + her.hold());
-            helper.assertTrue(her.disconnects() == 0, "collected although the owner is in the game: " + her.halts);
-            her.close();
-            GameTestKit.leave(owner);
-            helper.succeed();
+            helper.runAfterDelay(10, () -> {
+                helper.assertTrue(her.hold() != Hold.EXTERNAL && her.hold() != Hold.AWAY,
+                        "the seat did not come back to her own brain: " + her.hold());
+                helper.assertTrue(her.disconnects() == 0, "collected although the owner is in the game: " + her.halts);
+                her.close();
+                GameTestKit.leave(owner);
+                helper.succeed();
+            });
         });
     }
 
@@ -165,18 +165,19 @@ public class RemoteBrainGameTests {
             throws Exception {
         ServerPlayer owner = GameTestKit.presentPlayer(helper, null, "gametest_remote_leaver");
         Rig her = new Rig(helper, "gametest_remote_stays", owner);
-        her.brain.connect();
-        helper.runAfterDelay(3, () -> GameTestKit.leave(owner));
-
-        helper.runAfterDelay(10, () -> {
-            helper.assertTrue(her.hold() == Hold.EXTERNAL, "she stopped driving when only the player left: "
-                    + her.hold());
-            helper.assertTrue(her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
-            try {
-                her.brain.disconnect();
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
+        her.brain.connectLater();
+        her.brain.afterConnected(helper, 3, () -> {
+            GameTestKit.leave(owner);
+            helper.runAfterDelay(7, () -> {
+                helper.assertTrue(her.hold() == Hold.EXTERNAL, "she stopped driving when only the player left: "
+                        + her.hold());
+                helper.assertTrue(her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
+                try {
+                    her.brain.disconnect();
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            });
         });
         succeedWhen(helper, () -> {
             helper.assertTrue(her.hold() == Hold.AWAY, "not put away after both were gone: " + her.hold());
@@ -194,15 +195,6 @@ public class RemoteBrainGameTests {
                         com.dwinovo.numen.api.permission.Groups.VOCABULARY));
     }
 
-    private static com.google.gson.JsonObject accept(String decision) {
-        com.google.gson.JsonObject content = new com.google.gson.JsonObject();
-        content.addProperty("decision", decision);
-        com.google.gson.JsonObject result = new com.google.gson.JsonObject();
-        result.addProperty("action", "accept");
-        result.add("content", content);
-        return result;
-    }
-
     /**
      * 主人不在游戏里、外部大脑驾驶着她:要问主人的事不当场按"主人不在"拒绝,而是经外部大脑的客户端用 elicitation
      * 问坐在电脑前的人;他的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。
@@ -211,33 +203,31 @@ public class RemoteBrainGameTests {
     public static void a_consent_goes_to_the_human_at_the_external_brains_client(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gt_remote_asks", null);
-        her.brain.connect(true);
-        McpTestClient.Tap tap = her.brain.openStream();
+        her.brain.connectLater("allow");
         Object scope = new Object();
         var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
         com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
-        com.google.gson.JsonObject[] asked = new com.google.gson.JsonObject[1];
-
-        helper.runAfterDelay(10, () -> {   // 流接上了
-            ticket[0] = desk.ask(scope, List.of(oakLog()));
-            helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
-                    + ticket[0].poll());
-        });
-        helper.runAfterDelay(25, () -> {
-            asked[0] = tap.messages.stream().filter(m -> m.has("method")
-                    && m.get("method").getAsString().equals("elicitation/create")).findFirst().orElse(null);
-            helper.assertTrue(asked[0] != null, "the human was not asked at the external brain's client: "
-                    + tap.messages);
-            String message = asked[0].getAsJsonObject("params").get("message").getAsString();
-            helper.assertTrue(message.contains("gt_remote_asks") && message.contains("oak_log"),
-                    "the question does not say who wants what: " + message);
-            try {
-                her.brain.answer(asked[0], accept("allow"));
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
+        her.brain.afterConnected(helper, 0, () -> {
+            // 外部大脑空闲时停在 get_events 的长等待里:端点借这次进行中的调用把问题弹给人
+            Thread waiting = new Thread(() -> {
+                com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
+                wait.addProperty("companion", "gt_remote_asks");
+                wait.addProperty("wait_seconds", 30);
+                her.brain.call("get_events", wait);
+            }, "gametest-external-waiting");
+            waiting.setDaemon(true);
+            waiting.start();
+            helper.runAfterDelay(20, () -> {   // 长等待已经在飞
+                ticket[0] = desk.ask(scope, List.of(oakLog()));
+                helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
+                        + ticket[0].poll());
+            });
         });
         succeedWhen(helper, () -> {
+            helper.assertTrue(!her.brain.asked.isEmpty(), "the human was not asked at the external brain's client");
+            String message = her.brain.asked.get(0).message();
+            helper.assertTrue(message.contains("gt_remote_asks") && message.contains("oak_log"),
+                    "the question does not say who wants what: " + message);
             helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
                     "his choice did not reach the desk: " + (ticket[0] == null ? null : ticket[0].poll()));
             helper.assertTrue(desk.pending() == null, "the request is still pending");
@@ -250,19 +240,21 @@ public class RemoteBrainGameTests {
     public static void a_client_that_cannot_elicit_leaves_the_consent_waiting_for_the_owner(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_mute", null);
-        her.brain.connect();
+        her.brain.connectLater();
         var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
         com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
 
-        helper.runAfterDelay(5, () -> ticket[0] = desk.ask(new Object(), List.of(oakLog())));
-        helper.runAfterDelay(15, () -> {
-            helper.assertTrue(ticket[0].poll() == null && desk.pending() != null,
-                    "not waiting for the owner: " + ticket[0].poll());
-            try {
-                her.brain.disconnect();
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
+        her.brain.afterConnected(helper, 5, () -> {
+            ticket[0] = desk.ask(new Object(), List.of(oakLog()));
+            helper.runAfterDelay(10, () -> {
+                helper.assertTrue(ticket[0].poll() == null && desk.pending() != null,
+                        "not waiting for the owner: " + ticket[0].poll());
+                try {
+                    her.brain.disconnect();
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            });
         });
         succeedWhen(helper, () -> {
             helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && !ticket[0].poll().allowed(),

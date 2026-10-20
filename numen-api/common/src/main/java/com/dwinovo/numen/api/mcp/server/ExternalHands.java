@@ -25,6 +25,12 @@ public interface ExternalHands {
     /** 这位主人的同伴看得到的工具,和内置大脑每轮请求里发出去的是同一份(含他自己接进来的 MCP 工具,减去他关掉的)。 */
     CompletableFuture<List<NumenTool>> tools();
 
+    /**
+     * 内置大脑读的系统提示:这只同伴的人设、身体怎么干活、技能表、API 索引(含她的模块)、本能名册、各种规矩——
+     * 同一处 {@code SystemPromptComposer.compose} 组出来的那一份。
+     */
+    CompletableFuture<String> guide(UUID companion);
+
     /** 主人名下此刻在世界里的同伴。 */
     CompletableFuture<List<Companion>> companions();
 
@@ -75,6 +81,9 @@ public interface ExternalHands {
      * 失败(未知工具、参数错、工具抛错)也以失败结果回来,不是异常的 future。
      *
      * @param argsJson 工具参数的 JSON 对象串;空视作 {@code {}}
+     * @param progress 调用期间她手上的活有进展时收到那一句话(身体报告里的描述,与 {@code <current_task>} 同一句),可在任意线程被调,
+     *                 不得阻塞;调用收场后不再被调
      */
-    CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson);
+    CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson,
+                                     java.util.function.Consumer<String> progress);
 }

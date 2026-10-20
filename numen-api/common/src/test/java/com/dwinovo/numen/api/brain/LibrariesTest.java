@@ -13,7 +13,7 @@ import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
-import com.dwinovo.numen.api.mcp.client.McpClientManager;
+import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.api.entity.MojangSkins;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;
@@ -169,12 +169,12 @@ class LibrariesTest {
             }
 
             @Override
-            public McpClientManager sharedMcp() {
+            public McpConnections sharedMcp() {
                 return null;
             }
 
             @Override
-            public McpClientManager ownerMcp(UUID owner) {
+            public McpConnections ownerMcp(UUID owner) {
                 return null;
             }
 
