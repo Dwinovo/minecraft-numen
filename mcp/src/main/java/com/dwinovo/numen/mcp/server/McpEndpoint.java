@@ -1,6 +1,6 @@
 package com.dwinovo.numen.mcp.server;
 
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.dwinovo.numen.mcp.McpJson;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -87,7 +87,7 @@ public final class McpEndpoint {
     private final McpStrangers strangers;
     private final McpPresence presence;
     private final McpHost host;
-    private final McpJsonMapper json = McpJsonDefaults.getMapper();
+    private final McpJsonMapper json = McpJson.MAPPER;
     /** 令牌编号 → 它的 SDK 服务器。 */
     private final Map<String, Hosted> hosted = new ConcurrentHashMap<>();
     private Tomcat tomcat;
@@ -276,6 +276,8 @@ public final class McpEndpoint {
             McpSchema.Implementation info = new McpSchema.Implementation(who.name(), who.title(), who.version(),
                     who.description(), List.of(icon(who.iconPng())), null);
             this.server = McpServer.sync(transport)
+                    .jsonMapper(json)
+                    .jsonSchemaValidator(McpJson.SCHEMA_VALIDATOR)
                     .serverInfo(info)
                     .instructions(host.instructions())
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())

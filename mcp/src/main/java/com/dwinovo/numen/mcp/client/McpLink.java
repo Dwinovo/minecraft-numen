@@ -7,7 +7,7 @@ import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTranspor
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientTransportAuthorizationErrorHandler;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.dwinovo.numen.mcp.McpJson;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -57,6 +57,7 @@ public final class McpLink implements McpCaller, AutoCloseable {
         // 要登录的服务器握手时会被 401 拦下,等人授权的时间也算在握手里
         Duration initialization = spec.isStdio() ? connect : connect.plusMillis(McpOAuth.AUTH_TIMEOUT_MS);
         McpSyncClient client = McpClient.sync(transport)
+                .jsonSchemaValidator(McpJson.SCHEMA_VALIDATOR)
                 .requestTimeout(Duration.ofSeconds(spec.callTimeoutSeconds()))
                 .initializationTimeout(initialization)
                 .clientInfo(new McpSchema.Implementation("numen", "Numen", clientVersion, null, null, null))
@@ -74,7 +75,7 @@ public final class McpLink implements McpCaller, AutoCloseable {
     private static McpClientTransport stdio(McpServerSpec spec) {
         List<String> command = stdioCommand(spec);
         return new StdioClientTransport(ServerParameters.builder(command.get(0))
-                .args(command.subList(1, command.size())).env(spec.env()).build(), McpJsonDefaults.getMapper());
+                .args(command.subList(1, command.size())).env(spec.env()).build(), McpJson.MAPPER);
     }
 
     private static McpClientTransport http(McpServerSpec spec, Supplier<String> serviceKey, McpOAuth oauth, Hooks hooks) {
@@ -82,6 +83,7 @@ public final class McpLink implements McpCaller, AutoCloseable {
         String endpoint = (url.getRawPath() == null || url.getRawPath().isEmpty() ? "/" : url.getRawPath())
                 + (url.getRawQuery() == null ? "" : "?" + url.getRawQuery());
         return HttpClientStreamableHttpTransport.builder(url.getScheme() + "://" + url.getRawAuthority())
+                .jsonMapper(McpJson.MAPPER)
                 .endpoint(endpoint)
                 .connectTimeout(Duration.ofSeconds(spec.connectTimeoutSeconds()))
                 .openConnectionOnStartup(true)
