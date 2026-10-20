@@ -18,9 +18,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * {@code /numen companion <她> profile|persona|voice|skin [<条目>]}:给她换一项绑定,面板编辑卡的另一种按法,给没装客户端的
- * 主人用(装了的也能用)。条目写 {@code 命名空间:名字},补全列他看得到的"内置 + 我的"里没被他关掉的;不写条目是不绑
- * (档案不能不绑)。办的是 {@link CompanionBinding},和面板同一个入口。
+ * {@code /numen companion <她> profile|persona|voice [<条目>]}:给她换一项绑定,面板编辑卡的另一种按法,给没装客户端的
+ * 主人用(装了的也能用)。条目写 {@code 命名空间:名字},补全列他看得到的"服务器提供 + 我的"里没被他关掉的;不写条目是不绑
+ * (档案不能不绑)。办的是 {@link CompanionBinding},和面板同一个入口。皮肤不是库条目,同一个同伴参数下另有 {@code skin} 一支({@link SkinCommand})。
  *
  * <p>召唤只要一个名字,档案、人设、声线、皮肤都是召唤之后用这条命令(或编辑卡)绑上的。没绑档案的她停在
  * {@code BLOCKED},主人跟她说话时她回"还没配模型档案"。
@@ -43,7 +43,7 @@ public final class BindingCommands {
                     .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(entries(ctx.getSource(), slot), builder))
                     .executes(ctx -> bind(ctx, slot, StringArgumentType.getString(ctx, ENTRY).strip()))));
         }
-        return Commands.literal(COMPANION).then(her);
+        return Commands.literal(COMPANION).then(her.then(SkinCommand.node(COMPANION)));
     }
 
     /** 他此刻能绑的:看得到、没被他关掉的条目的名字。 */

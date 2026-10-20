@@ -50,6 +50,7 @@ public final class Replies {
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);
         HostNotices.deliver(player);
+        SkinHandover.offer(player.server, player);
     }
 
     /** 这位主人落过盘的会话(成员表与名字),整份。"就他俩"不用推:客户端按名册自己有。 */

@@ -33,7 +33,7 @@ class ExportsTest {
     void anExportBiggerThanOneMessageArrivesWholeAndIdentical() {
         byte[] zip = bytes(Wire.MESSAGE_BYTES + 12345);   // 超过单条消息的上限
         Exports exports = new Exports();
-        Exports.Receiver client = new Exports.Receiver();
+        Segments.Assembler client = new Segments.Assembler();
         List<ExportChunkPayload> sent = new ArrayList<>();
         assertTrue(exports.start(PLAYER, HER, "小焰", zip));
 
@@ -41,7 +41,7 @@ class ExportsTest {
             exports.tick(id -> true, (id, chunk) -> {
                 assertEquals(PLAYER, id);
                 sent.add(chunk);
-                assertTrue(client.accept(chunk), "a segment arrived out of order");
+                assertTrue(client.accept(chunk.index(), chunk.total(), chunk.bytes()), "a segment arrived out of order");
             });
         }
 
@@ -92,11 +92,11 @@ class ExportsTest {
 
     @Test
     void theReceiverRefusesSegmentsOutOfOrder() {
-        Exports.Receiver client = new Exports.Receiver();
-        assertFalse(client.accept(new ExportChunkPayload(HER, "x", 1, 3, new byte[1])), "started in the middle");
-        assertTrue(client.accept(new ExportChunkPayload(HER, "x", 0, 3, new byte[1])));
-        assertFalse(client.accept(new ExportChunkPayload(HER, "x", 0, 3, new byte[1])), "a repeat");
-        assertFalse(client.accept(new ExportChunkPayload(HER, "x", 1, 4, new byte[1])), "the count changed");
+        Segments.Assembler client = new Segments.Assembler();
+        assertFalse(client.accept(1, 3, new byte[1]), "started in the middle");
+        assertTrue(client.accept(0, 3, new byte[1]));
+        assertFalse(client.accept(0, 3, new byte[1]), "a repeat");
+        assertFalse(client.accept(1, 4, new byte[1]), "the count changed");
         assertFalse(client.complete());
     }
 }

@@ -27,8 +27,9 @@ import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.SkinError;
-import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinSigning;
+import com.dwinovo.numen.api.skin.Wardrobe;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -59,10 +60,11 @@ import java.util.UUID;
  *   <li><b>钥匙串</b>({@link #KEY}):按服务商存 key。玩家看得到、改得了自己的;服主的只有管理员看得到、改得了,别人只知道有没有;</li>
  *   <li><b>型号目录</b>({@link #CATALOG})与<b>连通性检测</b>({@link #PROVIDER_CHECK}):档案表单问的,目录、草稿解析成的端点、检测的那次请求
  *       都在服务端算({@link ProviderForm}),界面只画答案;</li>
- *   <li><b>声线</b>({@link #VOICE})与<b>皮肤</b>({@link #SKIN})也是内容库。声线条目是服务商、音色、参数,不含 key(key 在主人
- *       本机的钥匙串里,合成在他的客户端上);皮肤条目是原图与 Mojang 签名的皮肤数据,<b>签名在服务端排队</b>({@link SkinSigning}):
- *       存一张皮肤({@link #PUT} 带图、网址或正版玩家名)只是排上队,排到第几、被限流在等、失败的原因都作为这张表里的几行
- *       (带 {@code pending})交给他,签好了才成为一条皮肤;{@link #CANCEL} 撤掉排着的或不再显示失败的;</li>
+ *   <li><b>声线</b>({@link #VOICE})也是内容库:条目是服务商、音色、参数,不含 key(key 在主人本机的钥匙串里,合成在他的客户端上);</li>
+ *   <li><b>皮肤</b>({@link #SKIN})<b>不是内容库</b>:皮肤是文件夹里的 png。这一种只是给同伴换皮肤的口:表里是他在签名队里的几行,
+ *       服务器文件夹里的图是另一张只读的表({@link #SKIN_FILES},房主没有,他的文件夹客户端自己列);{@link #PUT} 带图(他本机文件夹里的)、服务器文件夹里的文件名、网址或
+ *       正版玩家名,图签过的当场穿上,没签过的在服务端排队去签({@link SkinSigning},用时才签、签一次存永久),排到第几、被限流在等、
+ *       失败的原因都作为表里的几行({@code row: "pending"})交给他;{@link #DELETE} 脱掉;{@link #CANCEL} 撤掉排着的或不再显示失败的;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
  *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
@@ -91,6 +93,8 @@ public final class Libraries {
     public static final String KEY = "key";
     public static final String VOICE = "voice";
     public static final String SKIN = "skin";
+    /** 服务器皮肤文件夹里的图:只读,客户端要看时才问(带着每张图,不随排队的进度一起推)。 */
+    public static final String SKIN_FILES = "skin-files";
     public static final String PERMISSION = "permission";
 
     public static final String LIST = "list";
@@ -198,11 +202,11 @@ public final class Libraries {
 
         ServerConfig config();
 
-        /** 这台服务器上的皮肤签名队。 */
+        /** 这台服务器上的皮肤签名队(排队的状态、撤掉)。 */
         SkinSigning signer();
 
-        /** 服务器目录里的一条内容被管理员换了(采用新版、恢复默认):穿着它、读着它的要跟上。缺省什么也不用跟。 */
-        default void serverChanged(LibraryKind kind, EntryId id) {}
+        /** 给同伴换皮肤的流程,连同服务器上的皮肤文件夹。 */
+        Wardrobe wardrobe();
     }
 
     /** 这台服务器上的那一份。 */
@@ -297,14 +301,12 @@ public final class Libraries {
 
             @Override
             public SkinSigning signer() {
-                return SkinSignings.of(server);
+                return ServerSkins.of(server).signer();
             }
 
             @Override
-            public void serverChanged(LibraryKind kind, EntryId id) {
-                if (kind.equals(SkinProfile.KIND)) {
-                    CompanionBinding.skinChanged(server, null, true, id.toString());
-                }
+            public Wardrobe wardrobe() {
+                return ServerSkins.of(server).wardrobe();
             }
 
             @Override
@@ -360,14 +362,14 @@ public final class Libraries {
             case VOICE -> contentLibrary(owner, admin, VoiceProfile.KIND, op, body,
                     b -> VoiceProfile.fromJson(b).write(),
                     (from, to) -> CompanionLoops.rebind(owner, Slot.VOICE, from.toString(), to.toString()));
-            case SKIN -> skin(owner, admin, op, body);
+            case SKIN -> skin(owner, op, body);
             case KEY -> key(owner, admin, op, body);
             case PERMISSION -> permission(owner, op, body);
             case SERVER_CONFIG -> Done.of(serverConfig(admin, op, body), true);
             case MCP_CLIENT -> mcpClient(owner, admin, op, body);
             case MCP_SERVER -> Done.of(mcpServer(admin, op, body), true);
             case PREFS -> Done.of(prefs(owner, op, body), false);
-            case NOTES, CATALOG -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
+            case NOTES, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
         };
         JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
@@ -435,7 +437,8 @@ public final class Libraries {
                     row.addProperty("unreadable", true);
                 }
             });
-            case SKIN -> skinRows(owner, out);
+            case SKIN -> pendingRows(owner, out);
+            case SKIN_FILES -> fileRows(owner, out);
             case KEY -> keyRows(owner, admin, out);
             case SERVER_CONFIG -> {
                 if (admin) {
@@ -543,7 +546,6 @@ public final class Libraries {
                 }
                 if (ACCEPT.equals(op)) {
                     sources.manifest().accept(kind, id);
-                    sources.serverChanged(kind, id);
                 } else {
                     sources.manifest().dismiss(kind, id);
                 }
@@ -560,7 +562,6 @@ public final class Libraries {
                     return Done.problem("that entry has no default to go back to");
                 }
                 library.server().reload();   // 清单换了磁盘上的文件,内存里的表跟上
-                sources.serverChanged(kind, id);
                 return Done.of(null, true);
             case PUT:
             case DELETE:
@@ -612,129 +613,117 @@ public final class Libraries {
         return new Done(null, shelf == library.server(), created);
     }
 
-    // ---- 皮肤:签名在服务端排队 ----
+    // ---- 皮肤:文件夹里的 png,用时才签 ----
 
     /**
-     * 皮肤的行:签好的条目(带手臂模型、签没签过、原图的 base64),后面接这位玩家在队里的与刚失败的({@code pending},
-     * 带排到第几、在等限流、失败的原因码与原话)。
+     * 服务器皮肤文件夹里的图({@code row: "file"}:名字、原图 base64,图不能用的带原因码)。房主的"我的"文件夹就是服务器那一个,
+     * 客户端自己列,这里不再重复给他一节"服务器提供",是空表。
      */
-    private void skinRows(UUID owner, JsonArray out) {
-        rows(sources.library(SkinProfile.KIND, owner), out, (entry, row) -> {
-            try {
-                SkinProfile skin = SkinProfile.read(entry.text());
-                row.addProperty("variant", skin.variant());
-                row.addProperty("signed", skin.signed());
-                if (skin.png().length > 0) {
-                    row.addProperty("png", java.util.Base64.getEncoder().encodeToString(skin.png()));
-                }
-            } catch (RuntimeException unreadable) {
-                row.addProperty("unreadable", true);
-            }
-        });
-        for (SkinSigning.Pending pending : sources.signer().pendingOf(owner)) {
+    private void fileRows(UUID owner, JsonArray out) {
+        if (sources.host(owner)) {
+            return;
+        }
+        SkinFolder folder = sources.wardrobe().folder();
+        for (SkinFolder.Entry file : folder.list()) {
             JsonObject row = new JsonObject();
-            row.addProperty("id", "pending:" + pending.id());
-            row.addProperty("name", pending.name());
-            row.addProperty("group", GROUP_MINE);
-            row.addProperty("pending", true);
-            row.addProperty("job", pending.id());
-            row.addProperty("state", pending.failure() != null ? "FAILED" : pending.state().name());
-            row.addProperty("position", pending.position());
-            if (pending.failure() != null) {
-                JsonObject problem = new JsonObject();
-                problem.addProperty("code", pending.failure().code());
-                JsonArray args = new JsonArray();
-                pending.failure().args().forEach(args::add);
-                problem.add("args", args);
-                row.add("problem", problem);
+            row.addProperty("row", "file");
+            row.addProperty("name", file.name());
+            try {
+                row.addProperty("png", java.util.Base64.getEncoder().encodeToString(folder.read(file.name())));
+            } catch (SkinError unusable) {
+                row.add("problem", skinProblem(unusable));
             }
             out.add(row);
         }
     }
 
+    /** 这位玩家在签名队里的与刚失败的({@code row: "pending"},带排到第几、在等限流、失败的原因码与原话)。 */
+    private void pendingRows(UUID owner, JsonArray out) {
+        for (SkinSigning.Pending pending : sources.signer().pendingOf(owner)) {
+            JsonObject row = new JsonObject();
+            row.addProperty("row", "pending");
+            row.addProperty("name", pending.name());
+            row.addProperty("job", pending.id());
+            row.addProperty("state", pending.failure() != null ? "FAILED" : pending.state().name());
+            row.addProperty("position", pending.position());
+            if (pending.failure() != null) {
+                row.add("problem", skinProblem(pending.failure()));
+            }
+            out.add(row);
+        }
+    }
+
+    private static JsonObject skinProblem(SkinError error) {
+        JsonObject problem = new JsonObject();
+        problem.addProperty("code", error.code());
+        JsonArray args = new JsonArray();
+        error.args().forEach(args::add);
+        problem.add("args", args);
+        return problem;
+    }
+
     /**
-     * 皮肤的操作。存({@link #PUT})带 {@code png}(base64)、{@code url} 或 {@code player} 之一就是排一张新签名,没带就是改
-     * 已有的那条:只改名直接换名,换了手臂模型用存着的原图重签。签好之前这条不在库里——排队的状态在表里({@link #skinRows})。
-     * 撤({@link #CANCEL})只撤自己的。其余操作是内容库那一套。
+     * 皮肤的操作,都对他名下的一只同伴({@code companion})。存({@link #PUT})是给她换上这张皮肤,图是 {@code png}(base64,他本机文件夹里的)、
+     * {@code file}(服务器文件夹里的文件名)、{@code url} 或 {@code player} 之一,{@code variant} 是手臂模型(不写是看图判断):签过的当场穿上,
+     * 没签过的排上队,排到第几、被限流在等、失败的原因都在表里({@link #pendingRows})。删({@link #DELETE})是脱掉,回到默认皮肤。
+     * 撤({@link #CANCEL})撤掉自己排着的或不再显示失败的。皮肤不是库里的条目,没有"复制到我的"这类操作。
      */
-    private Done skin(UUID owner, boolean admin, String op, JsonObject body) {
-        if (CANCEL.equals(op)) {
-            JsonElement job = body.get("job");
-            return job != null && job.isJsonPrimitive() && sources.signer().cancel(owner, job.getAsLong())
-                    ? Done.ok() : Done.problem("no such pending skin");
+    private Done skin(UUID owner, String op, JsonObject body) {
+        switch (op) {
+            case LIST:
+                return Done.ok();
+            case CANCEL:
+                JsonElement job = body.get("job");
+                return job != null && job.isJsonPrimitive() && sources.signer().cancel(owner, job.getAsLong())
+                        ? Done.ok() : Done.problem("no such pending skin");
+            case PUT:
+            case DELETE:
+                break;
+            default:
+                return Done.problem("unknown operation");
         }
-        if (!PUT.equals(op)) {
-            return contentLibrary(owner, admin, SkinProfile.KIND, op, body, null, (from, to) ->
-                    CompanionLoops.rebind(owner, Slot.SKIN, from.toString(), to.toString()));
-        }
-        boolean onServer = GROUP_SERVER.equals(string(body, "group"));
-        if (onServer && !admin) {
-            return Done.problem("only a server admin may change the server's entries");
-        }
-        Library library = sources.library(SkinProfile.KIND, owner);
-        Shelf shelf = onServer ? library.server() : library.mine();
-        EntryId id = EntryId.parse(string(body, "id"));
-        EntryId old = id != null && shelf.get(id) != null ? id : null;
-        String name = string(body, "name");
-        if (name == null || name.isBlank()) {
-            return Done.problem("an entry needs a name");
-        }
-        SkinProfile previous = null;
-        if (old != null) {
-            try {
-                previous = SkinProfile.read(shelf.get(old).text());
-            } catch (RuntimeException unreadable) {
-                return Done.problem("unreadable skin");
-            }
-        }
-        String variant = string(body, "variant") != null ? string(body, "variant")
-                : previous != null ? previous.variant() : SkinProfile.VARIANT_CLASSIC;
-        SkinSigning.Source source;
-        if (string(body, "png") != null) {
-            try {
-                source = new SkinSigning.Source.Image(java.util.Base64.getDecoder().decode(string(body, "png")));
-            } catch (IllegalArgumentException notBase64) {
-                return Done.problem("unreadable image");
-            }
-        } else if (string(body, "url") != null) {
-            source = new SkinSigning.Source.Url(string(body, "url"));
-        } else if (string(body, "player") != null) {
-            source = new SkinSigning.Source.Player(string(body, "player"));
-        } else if (previous == null) {
-            return Done.problem("a new skin needs an image, a url or a player name");
-        } else if (previous.signed() && SkinProfile.VARIANT_SLIM.equals(variant) == SkinProfile.VARIANT_SLIM.equals(previous.variant())) {
-            return rename(shelf, old, name, owner, onServer);   // 只改名:签名数据原样
-        } else if (previous.png().length == 0) {
-            return Done.problem("that skin has no original image to sign again");
-        } else {
-            source = new SkinSigning.Source.Image(previous.png());
-        }
-        SkinSigning.Request request = new SkinSigning.Request(owner, name, variant, source, shelf,
-                onServer ? EntryId.SERVER : EntryId.MINE, old);
-        long ticket;
+        String companionText = string(body, "companion");
+        UUID companion;
         try {
-            ticket = sources.signer().submit(request, outcome -> { });
+            companion = companionText == null ? null : UUID.fromString(companionText);
+        } catch (IllegalArgumentException notAUuid) {
+            companion = null;
+        }
+        if (companion == null || !sources.companions(owner).contains(companion)) {
+            return Done.problem("not your companion");
+        }
+        if (DELETE.equals(op)) {
+            sources.wardrobe().takeOff(companion);
+            return Done.ok();
+        }
+        String variant = string(body, "variant");
+        String name = string(body, "name") != null ? string(body, "name") : "skin";
+        try {
+            long ticket;
+            if (string(body, "png") != null) {
+                byte[] png;
+                try {
+                    png = java.util.Base64.getDecoder().decode(string(body, "png"));
+                } catch (IllegalArgumentException notBase64) {
+                    return Done.problem("unreadable image");
+                }
+                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Image(png), variant,
+                        outcome -> { });
+            } else if (string(body, "file") != null) {
+                ticket = sources.wardrobe().wearFile(owner, companion, string(body, "file"), variant, outcome -> { });
+            } else if (string(body, "url") != null) {
+                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Url(string(body, "url")),
+                        variant, outcome -> { });
+            } else if (string(body, "player") != null) {
+                ticket = sources.wardrobe().wear(owner, companion, string(body, "player"),
+                        new SkinSigning.Source.Player(string(body, "player")), variant, outcome -> { });
+            } else {
+                return Done.problem("a skin needs an image, a file, a url or a player name");
+            }
+            return ticket < 0 ? Done.problem("too many skins are waiting to be signed") : Done.ok();
         } catch (SkinError refused) {
             return Done.problem(refused.getMessage());
         }
-        return ticket < 0 ? Done.problem("too many skins are waiting to be signed") : Done.of(null, false);
-    }
-
-    /** 皮肤只改了名:内容原样换个名字,绑着旧名字的同伴改指新的。 */
-    private Done rename(Shelf shelf, EntryId old, String name, UUID owner, boolean onServer) {
-        String clean = EntryId.clean(name, SkinProfile.KIND.dir());
-        if (old.name().equals(clean)) {
-            return Done.ok();
-        }
-        EntryId target = shelf.unique(old.namespace(), clean);
-        shelf.write(target, shelf.get(old).text());
-        shelf.delete(old);
-        if (onServer) {
-            CompanionLoops.rebindAll(Slot.SKIN, old.toString(), target.toString());
-        } else {
-            CompanionLoops.rebind(owner, Slot.SKIN, old.toString(), target.toString());
-        }
-        return Done.of(null, onServer);
     }
 
     // ---- 模型档案与钥匙串 ----
@@ -791,7 +780,7 @@ public final class Libraries {
         services.addAll(sources.ownerKeys(owner).services());
         if (admin) {
             services.addAll(sources.serverKeys().services());
-            services.add(MineSkinClient.KEY_SERVICE);   // 皮肤签名用的,管理员在皮肤页填
+            services.add(MineSkinClient.KEY_SERVICE);   // 皮肤签名用的,管理员在钥匙串页填
         }
         return services;
     }

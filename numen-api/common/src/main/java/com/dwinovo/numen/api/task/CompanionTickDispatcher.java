@@ -109,6 +109,7 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.api.program.ServerPrograms.tick();
         com.dwinovo.numen.api.brain.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理
         com.dwinovo.numen.api.brain.Exports.tick(server);       // 导出的记忆往主人客户端推下一段
+        com.dwinovo.numen.api.brain.SkinHandover.tick(server);  // 旧皮肤库里的原图往主人客户端推下一段
         com.dwinovo.numen.api.mcp.server.McpMode.instance().tick();   // 外脑失联、回归的播报
         com.dwinovo.numen.api.brain.Visits.tick(server);   // 渠道来访:做完这一轮的结束
         com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件

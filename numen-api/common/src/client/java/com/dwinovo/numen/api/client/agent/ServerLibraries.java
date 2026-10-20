@@ -10,7 +10,6 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.api.skin.SkinError;
-import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -166,6 +165,22 @@ public final class ServerLibraries {
     public static String serverKey(String service) {
         return keys().stream().filter(k -> k.service().equals(service)).map(KeyRow::server)
                 .filter(java.util.Objects::nonNull).findFirst().orElse("");
+    }
+
+    /**
+     * key 按服务商存进钥匙串(不进条目);和已存的不同才发。服主的({@code server})只有管理员能改,房主没有"服主的"之分。
+     */
+    public static void saveKey(String service, String key, boolean server) {
+        String typed = key == null ? "" : key.strip();
+        String stored = server ? serverKey(service) : mineKey(service);
+        if (service == null || service.isBlank() || typed.equals(stored)) {
+            return;
+        }
+        JsonObject body = new JsonObject();
+        body.addProperty("service", service);
+        body.addProperty("key", typed);
+        body.addProperty("scope", server ? "server" : "mine");
+        RemoteCompanions.library().request(Libraries.KEY, Libraries.PUT, body);
     }
 
     /** 答复里带的提醒({@link Libraries#NOTICE_OWNER_SEES_KEY});没有是 null。 */
@@ -360,17 +375,8 @@ public final class ServerLibraries {
 
     // ---- 皮肤 ----
 
-    /** {@code png} 是原图;借来的正版皮肤取不到图时是空数组。读不通的条目 {@code variant} 为 {@code null}。 */
-    public record Skin(Base base, String variant, boolean signed, byte[] png) {
-
-        public String id() {
-            return base.id();
-        }
-
-        public String name() {
-            return base.name();
-        }
-    }
+    /** 服务器皮肤文件夹里的一张图;图不能当皮肤用时 {@code png} 是空数组、{@code problem} 说为什么。 */
+    public record ServerSkin(String name, byte[] png, SkinError problem) {}
 
     /** 一张在服务端队里等签的,或刚失败的;失败的 {@code failure} 非空,排着的 {@code position} 是排第几。 */
     public record SkinJob(long job, String name, String state, int position, SkinError failure) {
@@ -380,22 +386,16 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后;不含排队中的({@link #skinJobs})。 */
-    public static List<Skin> skins() {
-        List<Skin> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.SKIN)) {
+    /** 服务器皮肤文件夹里的全部(服务端推来的最近一张表);房主没有这一节。 */
+    public static List<ServerSkin> serverSkins() {
+        List<ServerSkin> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SKIN_FILES)) {
             JsonObject o = e.getAsJsonObject();
-            if (!flag(o, "pending")) {
-                out.add(new Skin(base(o), flag(o, "unreadable") ? null : text(o, "variant"), flag(o, "signed"),
-                        o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0]));
-            }
+            out.add(new ServerSkin(text(o, "name"),
+                    o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0],
+                    o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
         }
         return out;
-    }
-
-    /** 选皮肤时能选的:叠起来之后算数的、没被玩家关掉的、签过名的。 */
-    public static List<Skin> skinsInUse() {
-        return skins().stream().filter(s -> effective(s.base()) && s.base().enabled() && s.signed()).toList();
     }
 
     /** 这位玩家在服务端队里的与刚失败的。 */
@@ -403,19 +403,16 @@ public final class ServerLibraries {
         List<SkinJob> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.SKIN)) {
             JsonObject o = e.getAsJsonObject();
-            if (flag(o, "pending")) {
-                SkinError failure = null;
-                if (o.has("problem")) {
-                    JsonObject p = o.getAsJsonObject("problem");
-                    List<String> args = new ArrayList<>();
-                    p.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
-                    failure = SkinError.of(text(p, "code"), args);
-                }
-                out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
-                        o.get("position").getAsInt(), failure));
-            }
+            out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
+                    o.get("position").getAsInt(), o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
         }
         return out;
+    }
+
+    private static SkinError skinError(JsonObject problem) {
+        List<String> args = new ArrayList<>();
+        problem.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
+        return SkinError.of(text(problem, "code"), args);
     }
 
     // ---- 偏好 ----

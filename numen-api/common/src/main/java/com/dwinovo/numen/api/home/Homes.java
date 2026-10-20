@@ -4,11 +4,16 @@ import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.NumenPaths;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.store.Lanes;
+import com.dwinovo.numen.api.store.StoreException;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * 按归属组装的落盘位置——这个问题的<b>唯一</b>答案(docs/input-pipeline.md §六"存储的三层"第三层)。每样东西只有一个归属,
@@ -74,6 +79,25 @@ public final class Homes {
     /** 玩家自己的库、钥匙串与偏好,在服务器上。 */
     public Home owner(UUID owner) {
         return home(config.resolve(PLAYERS).resolve(owner.toString()), "owner/" + owner);
+    }
+
+    /** 服务器上有玩家目录的那些玩家(房主没有的也算,只要目录在)。 */
+    public List<UUID> owners() {
+        Path players = config.resolve(PLAYERS);
+        if (!Files.isDirectory(players)) {
+            return List.of();
+        }
+        try (Stream<Path> dirs = Files.list(players)) {
+            return dirs.filter(Files::isDirectory).map(dir -> {
+                try {
+                    return UUID.fromString(dir.getFileName().toString());
+                } catch (IllegalArgumentException notAPlayer) {
+                    return null;
+                }
+            }).filter(java.util.Objects::nonNull).sorted().toList();
+        } catch (IOException e) {
+            throw new StoreException("读不了 " + players + ": " + e, e);
+        }
     }
 
     /** 服主管的东西。 */

@@ -19,11 +19,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 编辑卡——改一只<b>已创建</b>同伴:人设/模式/模型配置/声线/皮肤五个选择。版式照 Telegram 的"编辑联系人":
- * 标题下面是她的脸和名字,再往下一行一个选择,右下取消/保存。
- * 草稿制:选择行只改草稿,点保存才统一落地,且只发真正变过的项(换肤要原地重建身体,误触代价高);
- * 取消丢弃草稿。草稿基线在开卡时从她的绑定取一次({@link #reset()},服务端推来的状态);四项绑定
- * (档案、人设、声线、皮肤)改的都是她存档里的绑定。卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
+ * 编辑卡——改一只<b>已创建</b>同伴:人设/模式/模型配置/声线四个选择,外加一行皮肤(点开去选皮肤卡,见 {@link SkinPickerPanel})。
+ * 版式照 Telegram 的"编辑联系人":标题下面是她的脸和名字,再往下一行一个选择,右下取消/保存。
+ * 草稿制:选择行只改草稿,点保存才统一落地,且只发真正变过的项;取消丢弃草稿。草稿基线在开卡时从她的绑定取一次
+ * ({@link #reset()},服务端推来的状态);三项绑定(档案、人设、声线)改的都是她存档里的绑定。皮肤不是库条目,不在草稿里——
+ * 选皮肤卡里点"穿上"就是当场换。卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
  */
 public final class CompanionEditPanel extends ModalCard {
 
@@ -38,6 +38,9 @@ public final class CompanionEditPanel extends ModalCard {
         /** 与服务端 applyGameMode 的门同一判据:有 gamemode 权限或主人在创造。 */
         boolean canChooseMode();
 
+        /** 开选皮肤卡。 */
+        void openSkins();
+
         /** 名册推来的此刻模式。 */
         boolean currentCreative();
 
@@ -46,7 +49,6 @@ public final class CompanionEditPanel extends ModalCard {
 
     private static final String PERSONA_NONE = "__default__";
     private static final String VOICE_NONE = "__none__";
-    private static final String SKIN_DEFAULT = "__default__";
 
     /** 编辑草稿;开卡时从真源取基线,保存时与基线比对只落差异。 */
     private static final class Draft {
@@ -54,19 +56,17 @@ public final class CompanionEditPanel extends ModalCard {
         String providerId;    // null = 未绑定(只出现在老档,不许改回)
         String voiceId;       // null = 无声
         boolean creative;
-        String skinId = SKIN_DEFAULT;     // SKIN_DEFAULT = 默认皮肤
     }
 
     private final Host host;
 
     private Draft draft = new Draft();
-    private String origPersona, origProvider, origVoice, origSkin;
+    private String origPersona, origProvider, origVoice;
     private boolean origCreative;
 
     private List<String> personaIds = List.of();
     private List<String> providerIds = List.of();
     private List<String> voiceIds = List.of();
-    private List<String> skinIds = List.of();
     /** 没权限改模式时,模式那一行置灰(权限门在服务端也是同一道),悬停给解释。 */
     private boolean modeLocked;
     private Dropdown modePick;
@@ -89,15 +89,11 @@ public final class CompanionEditPanel extends ModalCard {
         origProvider = loop.providerEntryId();
         origVoice = loop.voiceId();
         origCreative = host.currentCreative();
-        // 皮肤当前选择从绑定读;没绑或条目已删 = 默认皮肤。
-        String sk = loop.skinId();
-        origSkin = sk != null && ServerLibraries.skinsInUse().stream().anyMatch(e -> e.id().equals(sk)) ? sk : SKIN_DEFAULT;
         draft = new Draft();
         draft.personaId = origPersona;
         draft.providerId = origProvider;
         draft.voiceId = origVoice;
         draft.creative = origCreative;
-        draft.skinId = origSkin;
     }
 
     /** 头部 + 五行选择。 */
@@ -181,19 +177,10 @@ public final class CompanionEditPanel extends ModalCard {
                 });
         ry += ROW_H;
 
-        // 皮肤:默认选中当前穿的(绑定里记的选择意图);保存时只有真换了才发包(换肤要原地重建身体)。
-        List<String> skinNames = new ArrayList<>();
-        List<String> sIds = new ArrayList<>();
-        sIds.add(SKIN_DEFAULT);
-        skinNames.add(t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT));
-        for (var e : ServerLibraries.skinsInUse()) {
-            sIds.add(e.id());
-            skinNames.add(e.name());
-        }
-        skinIds = sIds;
-        select(ry, t(ModLanguageData.Keys.SUMMON_SKIN), skinNames,
-                Math.max(0, skinIds.indexOf(draft.skinId)),
-                i -> draft.skinId = skinIds.get(i));
+        // 皮肤:点开去选(穿上就是当场换,换肤要原地重建身体,所以不进草稿)
+        String wornNow = RemoteCompanions.getOrCreate(host.uuid()).skinId() == null
+                ? t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT) : t(ModLanguageData.Keys.SKIN_CUSTOM);
+        choice(ry, t(ModLanguageData.Keys.SUMMON_SKIN), wornNow, host::openSkins);
 
         buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onClose,
                 t(ModLanguageData.Keys.GUI_SETTINGS_SAVE), this::save);
@@ -214,9 +201,6 @@ public final class CompanionEditPanel extends ModalCard {
         }
         if (!modeLocked && draft.creative != origCreative) {
             host.setCreative(draft.creative);
-        }
-        if (!draft.skinId.equals(origSkin)) {
-            her.bind(Slot.SKIN, SKIN_DEFAULT.equals(draft.skinId) ? null : draft.skinId);
         }
         host.onClose();
     }

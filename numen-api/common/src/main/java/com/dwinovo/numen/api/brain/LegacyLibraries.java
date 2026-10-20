@@ -277,7 +277,7 @@ public final class LegacyLibraries {
      *
      * @param legacySkills 旧的 {@code config/numen/skills}
      * @param legacyState  旧的 {@code config/numen/skills_state.json}
-     * @param hostMy       房主的 {@code skills/my/},在 {@code serverSkills} 下
+     * @param hostMy       房主的 {@code skills/my/}(房主的"我的"在服务器目录里,所以通常就在 {@code serverSkills} 下)
      * @param serverSkills 服务器目录里的 {@code skills/}
      */
     public static void skills(Path legacySkills, Path legacyState, Path hostMy, Path serverSkills, Switches hostSwitches) {
@@ -293,23 +293,26 @@ public final class LegacyLibraries {
         }
         Set<String> off = new HashSet<>();
         names.forEach(n -> off.add(n.getAsString()));
-        if (!Files.isDirectory(serverSkills)) {
-            return;
-        }
-        try (Stream<Path> spaces = Files.list(serverSkills)) {
-            for (Path space : spaces.filter(Files::isDirectory).toList()) {
-                try (Stream<Path> dirs = Files.list(space)) {
-                    for (Path dir : dirs.filter(Files::isDirectory).toList()) {
-                        SkillInfo info = SkillRegistry.read(dir);
-                        if (info != null && off.contains(info.name()) && EntryId.segment(dir.getFileName().toString())) {
-                            hostSwitches.set(SkillRegistry.KIND.dir(),
-                                    new EntryId(space.getFileName().toString(), dir.getFileName().toString()), false);
+        // 房主的"我的"就在服务器目录里时两个根是同一个
+        for (Path root : new java.util.LinkedHashSet<>(List.of(serverSkills, hostMy.getParent()))) {
+            if (!Files.isDirectory(root)) {
+                continue;
+            }
+            try (Stream<Path> spaces = Files.list(root)) {
+                for (Path space : spaces.filter(Files::isDirectory).toList()) {
+                    try (Stream<Path> dirs = Files.list(space)) {
+                        for (Path dir : dirs.filter(Files::isDirectory).toList()) {
+                            SkillInfo info = SkillRegistry.read(dir);
+                            if (info != null && off.contains(info.name()) && EntryId.segment(dir.getFileName().toString())) {
+                                hostSwitches.set(SkillRegistry.KIND.dir(),
+                                        new EntryId(space.getFileName().toString(), dir.getFileName().toString()), false);
+                            }
                         }
                     }
                 }
+            } catch (IOException e) {
+                throw new StoreException("读不了 " + root + ": " + e, e);
             }
-        } catch (IOException e) {
-            throw new StoreException("读不了 " + serverSkills + ": " + e, e);
         }
     }
 

@@ -2,10 +2,13 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.skin.SkinCache;
 import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.skin.SkinRef;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
+import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -27,9 +30,8 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code client/voice.json} 里的声线,进房主的"我的"({@code voice/my/});声线条目里不再有 key,旧条目里的 key 进这台电脑的
  *       钥匙串({@code client/keys/},按后端标识存;同一个后端几把不同的 key 留第一把,已经有的不动);</li>
- *   <li>{@code client/skin.json} 加原图 {@code client/skins/<id>.png},进房主的"我的"({@code skin/my/}):条目带手臂模型、
- *       Mojang 签名数据和原图,没签成的留着没签名的样子,在皮肤页编辑保存就用存着的原图重签;</li>
- *   <li>每只同伴用哪条声线哪张皮肤:{@code client/looks.json} 里按同伴 uuid 记着;更早的版本记在她旧家的
+ *   <li>{@code client/skin.json} 加原图 {@code client/skins/<id>.png},进皮肤文件夹与签名缓存({@link #skins});</li>
+ *   <li>每只同伴用哪条声线、穿哪张皮肤:{@code client/looks.json} 里按同伴 uuid 记着;更早的版本记在她旧家的
  *       {@code binding.json} 里。旧 id 换成新名字({@code my:名字}),写进世界里她的绑定。</li>
  * </ul>
  */
@@ -87,18 +89,20 @@ public final class LegacyLooks {
     }
 
     /**
-     * 旧的皮肤库 → 房主的"我的"皮肤。
+     * 旧的皮肤库 → 现在的样子({@link SkinMigration}):原图导出成皮肤文件夹里的 png,签好的放进签名缓存。搬完把旧的
+     * {@code skin.json} 改名成 {@code skin.json.migrated}(旧原图目录原样留着),只做一次——搬出来的 png 玩家可以随时删,
+     * 下次启动不能再从旧库里冒出来。
      *
      * @param legacySkins 旧的原图目录 {@code client/skins/}
-     * @param hostSkins   房主的 {@code skin/my/} 目录
-     * @return 旧皮肤的 id → 新名字
+     * @param skins       皮肤文件夹
+     * @return 旧皮肤的 id → 它在缓存里的引用的文字写法;没签成的不在表里
      */
-    public static Map<String, String> skins(Path legacyFile, Path legacySkins, Path hostSkins) {
+    public static Map<String, String> skins(Path legacyFile, Path legacySkins, Path skins, SkinCache cache) {
         if (!Files.isRegularFile(legacyFile)) {
             return Map.of();
         }
         Map<String, String> ids = new LinkedHashMap<>();
-        Map<String, String> files = new LinkedHashMap<>();
+        Map<String, String> named = new LinkedHashMap<>();   // 名字 → 旧 id,同名的加后缀
         if (read(legacyFile).get("entries") instanceof JsonArray entries) {
             for (JsonElement el : entries) {
                 if (!el.isJsonObject()) {
@@ -106,7 +110,8 @@ public final class LegacyLooks {
                 }
                 JsonObject entry = el.getAsJsonObject();
                 String oldId = string(entry, "id");
-                String name = unique(files, EntryId.clean(string(entry, "name"), "skin"));
+                String name = unique(named, EntryId.clean(string(entry, "name"), "skin"));
+                named.put(name, oldId);
                 byte[] png = null;
                 Path image = oldId == null ? null : legacySkins.resolve(oldId + ".png");
                 if (image != null && Files.isRegularFile(image)) {
@@ -116,15 +121,19 @@ public final class LegacyLooks {
                         Constants.LOG.warn("[numen-migrate] 读不了旧皮肤的原图 {}: {}", image, e.toString());
                     }
                 }
-                files.put(name, new SkinProfile(string(entry, "variant"), string(entry, "value"),
-                        string(entry, "signature"), png).write());
-                if (oldId != null) {
-                    ids.put(oldId, EntryId.MINE + ":" + name);
+                SkinRef ref = SkinMigration.carryOver(name, new SkinProfile(string(entry, "variant"),
+                        string(entry, "value"), string(entry, "signature"), png), skins, cache, true);
+                if (oldId != null && ref != null) {
+                    ids.put(oldId, ref.toString());
                 }
             }
         }
-        LegacyMigration.stage(hostSkins, staging -> files.forEach((name, text) ->
-                Atomic.write(staging.resolve(name + ".json"), text)));
+        try {
+            Files.move(legacyFile, legacyFile.resolveSibling(legacyFile.getFileName() + ".migrated"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new StoreException("改不了名 " + legacyFile + ": " + e, e);
+        }
         return ids;
     }
 
@@ -152,7 +161,7 @@ public final class LegacyLooks {
             }));
             JsonObject binding = doc.read().orElse(new JsonObject());
             boolean edited = adopt(binding, Slot.VOICE.wire(), string(old, "voice"), voiceIds);
-            edited |= adopt(binding, Slot.SKIN.wire(), string(old, "skin"), skinIds);
+            edited |= adopt(binding, "skin", string(old, "skin"), skinIds);
             if (edited) {
                 doc.write(binding);
                 changed++;

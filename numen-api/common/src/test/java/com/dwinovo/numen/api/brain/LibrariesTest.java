@@ -20,8 +20,14 @@ import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.MojangSkinLookup;
+import com.dwinovo.numen.api.skin.SkinCache;
+import com.dwinovo.numen.api.skin.SkinError;
+import com.dwinovo.numen.api.skin.SkinFixtures;
+import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.skin.SkinRef;
 import com.dwinovo.numen.api.skin.SkinSigning;
+import com.dwinovo.numen.api.skin.Wardrobe;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
@@ -66,9 +72,12 @@ class LibrariesTest {
     private boolean multiplayer;
     /** 这台服务器的房主(单人游戏的玩家);专用服务器没有。 */
     private UUID host;
-    /** 假的签名队:不联网,签出来的都是 value=v-手臂模型;签好一条(写进货架之后)闸门放行一次。 */
+    /** 假的签名队:不联网,签出来的都是 value=v-手臂模型;她穿上一张皮肤(记在 {@link #worn} 里)闸门放行一次。 */
     private SkinSigning signer;
+    private Wardrobe wardrobe;
     private java.util.concurrent.Semaphore signed;
+    private final List<String> worn = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.concurrent.atomic.AtomicInteger signCalls = new java.util.concurrent.atomic.AtomicInteger();
     private final Map<UUID, PermissionStore> permissionStores = new HashMap<>();
     private final Map<UUID, Map<UUID, String>> companionsOf = new HashMap<>();
 
@@ -89,27 +98,42 @@ class LibrariesTest {
                         "127.0.0.1:7890", null, 0, null, 0, null)));
         serverKeys.put("deepseek", "sk-secret");
         signed = new java.util.concurrent.Semaphore(0);
+        SkinCache skinCache = new SkinCache(new Home(dir.resolve("server"), io));
         signer = new SkinSigning(new SkinSigning.Backend() {
             @Override
             public MineSkinClient.Signed sign(byte[] png, String variant, String apiKey) {
+                signCalls.incrementAndGet();
                 return new MineSkinClient.Signed("v-" + variant, "s");
             }
 
             @Override
             public byte[] fetch(String url) {
-                return PNG_64;
+                return SkinFixtures.header(64, 64);
             }
 
             @Override
             public MojangSkinLookup.Result lookup(String playerName) {
-                return new MojangSkinLookup.Result(new MojangSkins.Skin("mojang-value", "mojang-sig"), null);
+                return new MojangSkinLookup.Result(new MojangSkins.Skin(BORROWED, "mojang-sig"), null);
             }
 
             @Override
             public byte[] texture(String url) {
-                return PNG_64;
+                return SkinFixtures.header(64, 64);
             }
-        }, () -> null, Runnable::run, owner -> { }, (request, outcome) -> signed.release(), ms -> { });
+        }, () -> null, Runnable::run, owner -> { }, skinCache, ms -> { });
+        wardrobe = new Wardrobe(signer, skinCache, new SkinFolder(dir.resolve("skins")), new Wardrobe.Dress() {
+            @Override
+            public boolean wear(UUID companion, SkinRef ref, SkinProfile skin) {
+                worn.add(companion + " " + ref + " " + skin.value());
+                signed.release();
+                return true;
+            }
+
+            @Override
+            public void takeOff(UUID companion) {
+                worn.add(companion + " off");
+            }
+        });
         return new Libraries(new Libraries.Sources() {
             @Override
             public Library library(LibraryKind kind, UUID owner) {
@@ -130,7 +154,7 @@ class LibrariesTest {
 
             @Override
             public List<UUID> companions(UUID owner) {
-                return List.of();
+                return List.copyOf(companionsOf.getOrDefault(owner, Map.of()).keySet());
             }
 
             @Override
@@ -203,6 +227,11 @@ class LibrariesTest {
             }
 
             @Override
+            public Wardrobe wardrobe() {
+                return wardrobe;
+            }
+
+            @Override
             public Libraries.ServerConfig config() {
                 return new Libraries.ServerConfig() {
                     @Override
@@ -223,25 +252,6 @@ class LibrariesTest {
                 };
             }
         }, catalog);
-    }
-
-    /** 一张 64×64 png 的头部(检查只看文件头与宽高)。 */
-    private static final byte[] PNG_64 = pngHeader(64, 64);
-
-    static byte[] pngHeader(int width, int height) {
-        byte[] png = new byte[33];
-        byte[] magic = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
-        System.arraycopy(magic, 0, png, 0, 8);
-        png[11] = 13;
-        png[12] = 'I';
-        png[13] = 'H';
-        png[14] = 'D';
-        png[15] = 'R';
-        for (int i = 0; i < 4; i++) {
-            png[16 + i] = (byte) (width >> (24 - 8 * i));
-            png[20 + i] = (byte) (height >> (24 - 8 * i));
-        }
-        return png;
     }
 
     private static JsonObject body(String... keyValues) {
@@ -917,67 +927,106 @@ class LibrariesTest {
         assertNotNull(row(renamed.entries(), "my:新", "mine"));
     }
 
-    @Test
-    void aSkinIsQueuedFirstAndOnlyBecomesAnEntryOnceSigned(@TempDir Path dir) throws Exception {
-        Libraries libraries = libraries(dir);
-        JsonObject put = body("name", "小红", "variant", "slim");
-        put.addProperty("png", java.util.Base64.getEncoder().encodeToString(PNG_64));
+    private static final UUID HER = UUID.randomUUID();
+    /** 借来的正版皮肤的签名数据:里面写着图床上的图。 */
+    private static final String BORROWED = java.util.Base64.getEncoder().encodeToString(
+            "{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/a\"}}}"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-        Libraries.Result queued = libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put);
-        assertNull(queued.problem());
-        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS), "签名队没有把它签完");
-
-        JsonObject entry = row(libraries.view(PLAYER, false, Libraries.SKIN), "my:小红", "mine");
-        assertEquals("slim", entry.get("variant").getAsString());
-        assertTrue(entry.get("signed").getAsBoolean());
-        assertEquals(java.util.Base64.getEncoder().encodeToString(PNG_64), entry.get("png").getAsString(), "条目存着原图");
-        assertEquals("v-slim", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("小红")).text()).value());
+    private JsonObject wear(String... keyValues) {
+        JsonObject o = body(keyValues);
+        o.addProperty("companion", HER.toString());
+        return o;
     }
 
     @Test
-    void aRefusedImageNeverGetsInTheQueue(@TempDir Path dir) {
+    void aSkinFromMyFolderIsSignedOnDemandAndWornAndTheSameOneIsNotSignedAgain(@TempDir Path dir) throws Exception {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
         Libraries libraries = libraries(dir);
-        JsonObject wrongSize = body("name", "大图");
-        wrongSize.addProperty("png", java.util.Base64.getEncoder().encodeToString(pngHeader(128, 128)));
+        byte[] png = SkinFixtures.real(false);
+        JsonObject put = wear("name", "红", "variant", "slim");
+        put.addProperty("png", java.util.Base64.getEncoder().encodeToString(png));
+
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put).problem());
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS), "签名队没有把它签完");
+        assertEquals(List.of(HER + " " + SkinRef.of(png, "slim") + " v-slim"), worn);
+
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put).problem());
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(2, worn.size());
+        assertEquals(1, signCalls.get(), "同图同粗细签过一次就够");
+        assertFalse(libraries.view(PLAYER, false, Libraries.SKIN).contains("pending"));
+    }
+
+    @Test
+    void aRefusedRequestNeverGetsInTheQueue(@TempDir Path dir) {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        Libraries libraries = libraries(dir);
+        JsonObject wrongSize = wear("name", "大图");
+        wrongSize.addProperty("png", java.util.Base64.getEncoder().encodeToString(SkinFixtures.header(128, 128)));
 
         assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wrongSize).problem());
         assertTrue(signer.pendingOf(PLAYER).isEmpty());
-        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, body("name", "空")).problem(),
-                "新皮肤要有图、网址或正版名");
-        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
-                body("name", "全服", "group", "server", "player", "Notch")).problem(), "玩家不能写服务器提供");
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wear("name", "空")).problem(),
+                "要有图、文件名、网址或正版名");
+        JsonObject others = body("name", "别人的", "player", "Notch");
+        others.addProperty("companion", UUID.randomUUID().toString());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, others).problem(), "不是他的同伴");
+        assertNotNull(libraries.handle(OTHER, false, Libraries.SKIN, Libraries.PUT,
+                wear("name", "借", "player", "Notch")).problem(), "别人的同伴他动不了");
+        assertTrue(worn.isEmpty());
     }
 
     @Test
-    void aBorrowedPlayerSkinGoesThroughTheSameQueue(@TempDir Path dir) throws Exception {
+    void theServersSkinFolderIsListedForEveryoneButTheHostWhoseFolderIsTheSameAsHisOwn(@TempDir Path dir) throws Exception {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        byte[] png = SkinFixtures.real(true);
+        Files.createDirectories(dir.resolve("skins"));
+        Files.write(dir.resolve("skins").resolve("Steve.png"), png);
+        Files.write(dir.resolve("skins").resolve("坏的.png"), SkinFixtures.header(128, 128));
+        Files.writeString(dir.resolve("skins").resolve("readme.txt"), "不是皮肤");
         Libraries libraries = libraries(dir);
-        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
-                body("name", "借来的", "player", "Notch")).problem());
-        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
-        SkinProfile borrowed = SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("借来的")).text());
-        assertEquals("mojang-value", borrowed.value(), "借来的本来就是 Mojang 签好的,不经 MineSkin");
+
+        JsonArray rows = array(libraries.view(PLAYER, false, Libraries.SKIN_FILES));
+        assertEquals(2, rows.size(), rows.toString());
+        JsonObject steve = rows.get(0).getAsJsonObject();
+        assertEquals("Steve", steve.get("name").getAsString());
+        assertEquals(java.util.Base64.getEncoder().encodeToString(png), steve.get("png").getAsString());
+        assertEquals(SkinError.BAD_IMAGE, rows.get(1).getAsJsonObject().getAsJsonObject("problem").get("code").getAsString());
+
+        host = ADMIN;
+        Libraries hosted = libraries(dir);
+        assertEquals("[]", hosted.view(ADMIN, true, Libraries.SKIN_FILES), "房主的文件夹客户端自己列,不再给他一节服务器提供");
     }
 
     @Test
-    void renamingASignedSkinKeepsItsSignatureAndChangingTheArmsSignsItAgain(@TempDir Path dir) throws Exception {
+    void aSkinFromTheServersFolderIsWornAndTheImageDecidesTheArms(@TempDir Path dir) throws Exception {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        byte[] png = SkinFixtures.real(true);
+        Files.createDirectories(dir.resolve("skins"));
+        Files.write(dir.resolve("skins").resolve("Steve.png"), png);
         Libraries libraries = libraries(dir);
-        JsonObject put = body("name", "原名");
-        put.addProperty("png", java.util.Base64.getEncoder().encodeToString(PNG_64));
-        libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, put);
-        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
 
-        Libraries.Result renamed = libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
-                body("id", "my:原名", "name", "新名"));
-        assertNull(renamed.problem());
-        assertNotNull(row(renamed.entries(), "my:新名", "mine"));
-        assertNull(row(renamed.entries(), "my:原名", "mine"));
-        assertEquals("v-classic", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("新名")).text())
-                .value(), "只改名不重签");
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wear("file", "Steve")).problem());
 
-        libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, body("id", "my:新名", "name", "新名", "variant", "slim"));
         assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
-        assertEquals("v-slim", SkinProfile.read(hub.library(SkinProfile.KIND, PLAYER).find(EntryId.mine("新名")).text())
-                .value(), "换了手臂模型,用存着的原图重签");
+        assertEquals(List.of(HER + " " + SkinRef.of(png, "slim") + " v-slim"), worn, "透明的区域说明是细手臂");
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wear("file", "../etc/passwd")).problem(),
+                "只认文件夹里列得出来的名字");
+    }
+
+    @Test
+    void aBorrowedPlayerSkinGoesThroughTheSameQueueAndTakingTheSkinOffGoesBackToDefault(@TempDir Path dir) throws Exception {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        Libraries libraries = libraries(dir);
+
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, wear("name", "借来的", "player", "Notch")).problem());
+
+        assertTrue(signed.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertTrue(worn.get(0).endsWith(" " + BORROWED), "借来的本来就是 Mojang 签好的,不经 MineSkin: " + worn);
+        assertEquals(0, signCalls.get());
+        assertNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.DELETE, wear()).problem());
+        assertEquals(HER + " off", worn.get(1));
     }
 
     @Test

@@ -15,10 +15,10 @@ class SkinImageTest {
 
     @Test
     void aSkinIs64By64OrTheLegacy64By32Png() {
-        SkinImage.check(SkinSigningTest.png(64, 64));
-        SkinImage.check(SkinSigningTest.png(64, 32));
-        assertEquals(SkinError.BAD_IMAGE, assertThrows(SkinError.class, () -> SkinImage.check(SkinSigningTest.png(128, 128))).code());
-        assertEquals(SkinError.BAD_IMAGE, assertThrows(SkinError.class, () -> SkinImage.check(SkinSigningTest.png(64, 48))).code());
+        SkinImage.check(SkinFixtures.header(64, 64));
+        SkinImage.check(SkinFixtures.header(64, 32));
+        assertEquals(SkinError.BAD_IMAGE, assertThrows(SkinError.class, () -> SkinImage.check(SkinFixtures.header(128, 128))).code());
+        assertEquals(SkinError.BAD_IMAGE, assertThrows(SkinError.class, () -> SkinImage.check(SkinFixtures.header(64, 48))).code());
     }
 
     @Test

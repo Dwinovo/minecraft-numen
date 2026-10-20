@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.brain.Exports;
+import com.dwinovo.numen.api.brain.Segments;
 import com.dwinovo.numen.api.client.chat.ChatLines;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ExportChunkPayload;
@@ -25,7 +26,7 @@ import java.util.UUID;
 public final class MemoryFiles {
 
     /** 选好了位置、正在收的一份。 */
-    private record Incoming(Path file, Exports.Receiver parts) {}
+    private record Incoming(Path file, Segments.Assembler parts) {}
 
     private static final Map<UUID, Incoming> INCOMING = new HashMap<>();
 
@@ -47,7 +48,7 @@ public final class MemoryFiles {
             String path = chosen;
             Minecraft.getInstance().execute(() -> {
                 if (path != null) {
-                    INCOMING.put(companion, new Incoming(Path.of(path), new Exports.Receiver()));
+                    INCOMING.put(companion, new Incoming(Path.of(path), new Segments.Assembler()));
                     RemoteCompanions.getOrCreate(companion).requestExport();
                 }
             });
@@ -60,7 +61,7 @@ public final class MemoryFiles {
         if (incoming == null) {
             return;   // 没人要的(对话框取消了、断线后晚到的)
         }
-        if (!incoming.parts().accept(chunk)) {
+        if (!incoming.parts().accept(chunk.index(), chunk.total(), chunk.bytes())) {
             INCOMING.remove(chunk.companion());
             failed(chunk.companionName());
             return;
