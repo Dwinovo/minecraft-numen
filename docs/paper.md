@@ -36,7 +36,7 @@ Paper 子项目编译 common 时整包排除 `mixin`,这条规矩由编译本身
 
 | 服务 | Paper 上 |
 |---|---|
-| `IPlatformHelper` | 平台名 `Paper`;配置根 `plugins/Numen/`(相当于模组的 `config/numen/`,下面的 `server/`、`players/`、`client/` 布局不变);`modIds`/`modResource` 列出带 Numen 内容的插件并从它们的 jar 里取 |
+| `IPlatformHelper` | 平台名 `Paper`;配置根 `plugins/Numen/`(相当于模组的 `config/numen/`,下面的 `server/`、`players/`、`client/` 布局不变);`modVersion`(插件版本,MCP 的 serverInfo 用);`modIds`/`modResource` 列出带 Numen 内容的插件并从它们的 jar 里取 |
 | `INumenConfig` | 服务端用到的那几项(代理、系统提示词)存在配置根下;语音识别那几项是客户端的,Paper 不提供 |
 | `IBlockCapabilityReader` | 只有原版容器(`Container`/`WorldlyContainer`),流体与能量为空 |
 | `INetworkChannel` | 见 §七 |
