@@ -153,8 +153,9 @@ public final class ScanApi {
             + "hp); a dropped item is an Item (also item, count and pickup_delay, ticks before anyone can pick it up); "
             + "a tamed one has owner: you, your owner, or the other player's name.")
     @Note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
-            + "with numen.use.entity(e) or numen.move.to(e.pos). The ids are runtime ids and do not survive a "
-            + "restart.")
+            + "with numen.use.entity(e) or numen.move.to(e.pos). An id is kind@code, like zombie@3f9a1c "
+            + "(a player's name for a player): the code is the start of the entity's UUID, so it is the same "
+            + "after a restart.")
     @SeeAlso({"numen.scan.map", "numen.fight.attack", "numen.use.entity"})
     public static List<Seen> entities(ServerCall call, Entities args) {
         NumenPlayer self = call.her();
@@ -327,7 +328,7 @@ public final class ScanApi {
      */
     @Fn("Whether you can see a cell or an entity from where you stand, and what is in the way when you cannot.")
     @Example("local s = numen.scan.sight({x = 120, y = 64, z = -35})\nprint(s.visible, s.blocked_by)")
-    @Example("numen.scan.sight(184)")
+    @Example("numen.scan.sight(\"zombie@3f9a1c\")")
     @Note("Instant and read-only. A cell is seen when a line from your eyes reaches one of its faces turned to you (an "
             + "empty cell: its middle) with nothing in between; an entity, when you see its eyes.")
     @SeeAlso({"numen.scan.block", "numen.scan.entities"})
@@ -342,8 +343,7 @@ public final class ScanApi {
         if (target.entity() != null) {
             Entity entity = target.entity().in(level);
             if (entity == null) {
-                throw new ApiError(ErrorKind.NOT_FOUND, "there is no entity " + target.entity() + " near you",
-                        Call.of("numen.scan.entities"));
+                throw new ApiError(ErrorKind.NOT_FOUND, target.entity() + " is not near you", Call.of("numen.scan.entities"));
             }
             to = entity.getEyePosition();
             visible = her.hasLineOfSight(entity);

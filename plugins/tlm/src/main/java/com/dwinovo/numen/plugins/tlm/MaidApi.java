@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.EntityInfo;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Flatten;
@@ -90,8 +91,8 @@ public final class MaidApi {
     @Fn("The maids you keep: the ones here, the ones in unloaded chunks, and tombstones.")
     @Example("tlm.maid.list()")
     @Example("for _, m in ipairs(tlm.maid.list().here) do print(m.id, m.task, m.distance) end")
-    @Note("Read-only. A wild maid is tamed with a cake: `numen.use.entity(812, {item = \"minecraft:cake\"})`, with her "
-            + "entity id from `numen.scan.entities`.")
+    @Note("Read-only. A wild maid is tamed with a cake: `numen.use.entity(\"maid@3f9a1c\", {item = \"minecraft:cake\"})`, with her "
+            + "id from `numen.scan.entities`.")
     @Note("Your power points and how many maids TLM counts as yours are in your body state every turn.")
     @SeeAlso({"tlm.maid.info", "numen.scan.entities"})
     public static Household list(ServerCall call) {
@@ -146,12 +147,12 @@ public final class MaidApi {
                          @Doc("Every work mode in her task list.") List<WorkMode> tasks) {}
 
     /** 哪一只。 */
-    public record Which(@Doc("The maid: her Maid or Entity, or her entity id as tlm.maid.list or numen.scan.entities "
+    public record Which(@Doc("The maid: her Maid or Entity, or her id as tlm.maid.list or numen.scan.entities "
             + "lists it.") EntityRef maid) {}
 
     @Fn("One maid in full: settings, gear, effects, what she is doing, and every work mode with what it needs.")
-    @Example("tlm.maid.info(812)")
-    @Example("for _, t in ipairs(tlm.maid.info(812).tasks) do print(t.task, t.can_switch) end")
+    @Example("tlm.maid.info(\"maid@3f9a1c\")")
+    @Example("for _, t in ipairs(tlm.maid.info(\"maid@3f9a1c\").tasks) do print(t.task, t.can_switch) end")
     @Note("Read-only, from any distance, any maid (someone else's too).")
     @Note("Every work mode: can_switch says whether TLM lets her switch to it now; to_enable lists what it waits for "
             + "(true = met); works_with lists what the work uses (e.g. has_bow, has_arrow for ranged_attack), true = "
@@ -169,10 +170,10 @@ public final class MaidApi {
 
     /** 切完读回的工作模式。 */
     @Doc("Her work mode, read back.")
-    public record Switched(@Doc("Her entity id.") int maid, String task) {}
+    public record Switched(@Doc("Her id.") String maid, String task) {}
 
     @Fn("Switch one of your maids to another work mode, like a click in her task list.")
-    @Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = 812})")
+    @Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = \"maid@3f9a1c\"})")
     @Example("tlm.maid.task(\"touhou_little_maid:idle\")")
     @Note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays open. Farther "
             + "away it fails with out_of_reach, and its hint is the numen.move.to call to copy.")
@@ -184,7 +185,7 @@ public final class MaidApi {
         ResourceLocation task = args.task();
         if (!Maids.taskExists(task)) {
             List<String> same = Maids.tasksNamed(task.getPath());
-            Optional<Integer> named = args.maid().map(EntityRef::id);
+            Optional<String> named = args.maid().map(EntityRef::label);
             throw new ApiError(ErrorKind.NOT_FOUND, "TLM has no work mode " + task
                     + (same.isEmpty() ? "" : " — did you mean " + String.join(" or ", same) + "?")
                     + (args.maid().isEmpty() ? "; tlm.maid.info lists a maid's work modes" : ""),
@@ -198,9 +199,9 @@ public final class MaidApi {
             String now = Maids.task(still);
             if (!now.equals(task.toString())) {
                 throw refused(her, still, task, Maids.label(still) + " still works as " + now
-                        + "; TLM did not switch her to " + task + ".", new Switched(still.getId(), now));
+                        + "; TLM did not switch her to " + task + ".", new Switched(EntityLabel.of(still), now));
             }
-            return new Switched(still.getId(), now);
+            return new Switched(EntityLabel.of(still), now);
         });
     }
 
@@ -240,13 +241,13 @@ public final class MaidApi {
 
     /** 改完读回的设置。 */
     @Doc("Her settings, read back.")
-    public record Configured(@Doc("Her entity id.") int maid, boolean home, boolean pickup, boolean ride,
+    public record Configured(@Doc("Her id.") String maid, boolean home, boolean pickup, boolean ride,
                              Schedule schedule, Preferences preferences) {}
 
     @Fn("Change one of your maids' settings: home mode, picking up, riding, schedule, and the maid config page.")
-    @Example("tlm.maid.config(812, {schedule = \"night\"})")
-    @Example("tlm.maid.config(812, {home = true, pickup = false})")
-    @Example("tlm.maid.config(812, {pickup_kind = \"xp\", open_door = false, sound_frequency = 0.3})")
+    @Example("tlm.maid.config(\"maid@3f9a1c\", {schedule = \"night\"})")
+    @Example("tlm.maid.config(\"maid@3f9a1c\", {home = true, pickup = false})")
+    @Example("tlm.maid.config(\"maid@3f9a1c\", {pickup_kind = \"xp\", open_door = false, sound_frequency = 0.3})")
     @Note("Give only what you change; the rest stays. The same reach, owner rule and asking as tlm.maid.task.")
     @Note("TLM keeps home mode off when her schedule points are in another dimension or more than 32 blocks from her; "
             + "turning it on with no points set makes where she stands her home.")
@@ -257,7 +258,7 @@ public final class MaidApi {
                 && !args.touchesPreferences()) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "nothing to change: give one or more settings; tlm.maid.info "
                     + "shows her settings now",
-                    args.maid().id() == null ? null : Call.of("tlm.maid.info", args.maid().id()));
+                    Call.of("tlm.maid.info", args.maid().label()));
         }
         args.soundFrequency().filter(v -> v < 0 || v > 1).ifPresent(v -> {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "sound_frequency is 0 to 1, not " + v, null);
@@ -278,7 +279,7 @@ public final class MaidApi {
             }
             Maids.Settings now = Maids.settings(still);
             Preferences nowPreferences = Maids.preferences(still);
-            Configured read = new Configured(still.getId(), now.home(), now.pickup(), now.ride(), now.schedule(),
+            Configured read = new Configured(EntityLabel.of(still), now.home(), now.pickup(), now.ride(), now.schedule(),
                     nowPreferences);
             List<String> refused = new ArrayList<>();
             args.home().filter(v -> v != now.home()).ifPresent(v -> refused.add("home = " + v));
@@ -320,12 +321,12 @@ public final class MaidApi {
 
     /** 她的攻击名单。 */
     @Doc("Her attack list.")
-    public record Aims(@Doc("Her entity id.") int maid,
+    public record Aims(@Doc("Her id.") String maid,
                        @Doc("Entity type id to stance; only the types she was given a stance for.")
                        Map<String, Stance> stances) {}
 
     @Fn("Whom one maid attacks: her attack list.")
-    @Example("tlm.maid.targets(812)")
+    @Example("tlm.maid.targets(\"maid@3f9a1c\")")
     @Note("Read-only, from any distance, any maid.")
     @Note("The list holds only the types given a stance; any other type is judged by TLM's default: monsters hostile, "
             + "tamed animals and villagers friendly, the rest neutral.")
@@ -335,15 +336,15 @@ public final class MaidApi {
     }
 
     @Fn("Change whom one maid attacks, like the attack mode's config page.")
-    @Example("tlm.maid.set_targets(812, {set = {[\"minecraft:creeper\"] = \"friendly\"}})")
-    @Example("tlm.maid.set_targets(812, {remove = {\"minecraft:creeper\"}})")
+    @Example("tlm.maid.set_targets(\"maid@3f9a1c\", {set = {[\"minecraft:creeper\"] = \"friendly\"}})")
+    @Example("tlm.maid.set_targets(\"maid@3f9a1c\", {remove = {\"minecraft:creeper\"}})")
     @Note("Give only what you change. The same reach, owner rule and asking as tlm.maid.task.")
     @Note("It reads the list back; when it did not take, it fails and says so.")
     @SeeAlso({"tlm.maid.targets", "tlm.maid.task"})
     public static Pending<Aims> setTargets(ServerCall call, SetTargets args) {
         if (args.set().isEmpty() && args.remove().isEmpty()) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "nothing to change: give set or remove; tlm.maid.targets shows "
-                    + "her list now", Call.of("tlm.maid.targets", args.maid().id()));
+                    + "her list now", Call.of("tlm.maid.targets", args.maid().label()));
         }
         Entity maid = maid(call, args.maid());
         Map<String, Stance> wanted = new java.util.TreeMap<>(Maids.aims(maid).stances());
@@ -367,12 +368,12 @@ public final class MaidApi {
 
     /** 改完读回的名字。 */
     @Doc("Her name, read back.")
-    public record Named(@Doc("Her entity id.") int maid, String name, boolean alwaysShow,
+    public record Named(@Doc("Her id.") String maid, String name, boolean alwaysShow,
                         @Doc("Whether TLM took the name tag from your hand.") boolean nameTagUsed) {}
 
     @Fn("Name one of your maids, like using a name tag on her.")
-    @Example("tlm.maid.name(812, \"Reimu\")")
-    @Example("tlm.maid.name(812, \"Reimu\", {always_show = true})")
+    @Example("tlm.maid.name(\"maid@3f9a1c\", \"Reimu\")")
+    @Example("tlm.maid.name(\"maid@3f9a1c\", \"Reimu\", {always_show = true})")
     @Note("TLM names a maid only while you hold a name tag in your main hand, and uses the tag up: "
             + "`numen.gear.hold(\"minecraft:name_tag\")` first. The tag's own text does not matter.")
     @Note("The same reach, owner rule and asking as tlm.maid.task. It reads her name back.")
@@ -387,7 +388,7 @@ public final class MaidApi {
             int tags = Maids.nameTags(her);
             Maids.name(her, still, args.name(), show);
             boolean tagged = tags > 0;
-            Named read = new Named(still.getId(), still.hasCustomName() ? still.getCustomName().getString() : "",
+            Named read = new Named(EntityLabel.of(still), still.hasCustomName() ? still.getCustomName().getString() : "",
                     still.isCustomNameVisible(), Maids.nameTags(her) < tags);
             if (!args.name().equals(read.name()) || show != read.alwaysShow()) {
                 String said = Maids.label(still) + " was not named.";
@@ -407,19 +408,19 @@ public final class MaidApi {
 
     /** 她穿的模型。 */
     @Doc("The model a maid wears.")
-    public record Wearing(@Doc("Her entity id.") int maid, String model) {}
+    public record Wearing(@Doc("Her id.") String maid, String model) {}
 
     @Fn("Which model one maid wears.")
-    @Example("tlm.maid.model(812)")
+    @Example("tlm.maid.model(\"maid@3f9a1c\")")
     @Note("Read-only, from any distance, any maid.")
     @SeeAlso({"tlm.maid.set_model", "tlm.skin.list"})
     public static Wearing model(ServerCall call, Which args) {
         Entity maid = maid(call, args.maid());
-        return new Wearing(maid.getId(), Maids.model(maid));
+        return new Wearing(EntityLabel.of(maid), Maids.model(maid));
     }
 
     @Fn("Change the model one maid wears, like picking a model in her model screen.")
-    @Example("tlm.maid.set_model(812, \"touhou_little_maid:hakurei_reimu\")")
+    @Example("tlm.maid.set_model(\"maid@3f9a1c\", \"touhou_little_maid:hakurei_reimu\")")
     @Note("The same reach, owner rule and asking as tlm.maid.task. The ids are the ones tlm.skin.list shows.")
     @Note("TLM's server setting may forbid changing a maid's model; it reads the model back and fails when it did "
             + "not change.")
@@ -433,7 +434,7 @@ public final class MaidApi {
         }
         return call.use(maid, GUI, still -> {
             Maids.model(call.her(), still, model);
-            Wearing read = new Wearing(still.getId(), Maids.model(still));
+            Wearing read = new Wearing(EntityLabel.of(still), Maids.model(still));
             if (!model.equals(read.model())) {
                 throw refused(call.her(), still, null, Maids.label(still) + " still wears " + read.model()
                         + "; TLM did not change it to " + model + " (its server setting may forbid changing a "
@@ -451,11 +452,11 @@ public final class MaidApi {
 
     /** 开了的界面。 */
     @Doc("The maid GUI now open.")
-    public record Opened(@Doc("Her entity id.") int maid, @Doc("The menu now open.") String menu) {}
+    public record Opened(@Doc("Her id.") String maid, @Doc("The menu now open.") String menu) {}
 
     @Fn("Open a page of one of your maids' GUI, then work it with numen.gui.view.")
-    @Example("tlm.maid.open(812)")
-    @Example("tlm.maid.open(812, {tab = \"bauble\"})")
+    @Example("tlm.maid.open(\"maid@3f9a1c\")")
+    @Example("tlm.maid.open(\"maid@3f9a1c\", {tab = \"bauble\"})")
     @Note("Then `numen.gui.view()` lists its slots, `numen.gui.move` and `numen.gui.quick` move items (armour, hand, "
             + "backpack or bauble slots), `numen.gui.close()` closes it. It stays open while you stay within reach.")
     @Note("The same reach, owner rule and asking as tlm.maid.task. A sleeping maid does not open.")
@@ -467,7 +468,7 @@ public final class MaidApi {
             Maids.open(her, still, tab);
             String menu = Maids.showing(her, still);
             if (menu != null) {
-                return new Opened(still.getId(), menu);
+                return new Opened(EntityLabel.of(still), menu);
             }
             String said = "TLM did not open the " + tab.name().toLowerCase(java.util.Locale.ROOT) + " page of "
                     + Maids.label(still) + ".";
@@ -522,7 +523,7 @@ public final class MaidApi {
             String owner = Maids.owner(maid);
             if (owner == null) {
                 return new ApiError(ErrorKind.DENIED, said + " She is wild: tame her first with a cake.",
-                        Call.of("numen.use.entity", maid.getId(), Map.of("item", "minecraft:cake")), read);
+                        Call.of("numen.use.entity", EntityLabel.of(maid), Map.of("item", "minecraft:cake")), read);
             }
             return new ApiError(ErrorKind.DENIED, said + " She is not yours: TLM lets only her owner (" + owner
                     + ") do this.", null, read);

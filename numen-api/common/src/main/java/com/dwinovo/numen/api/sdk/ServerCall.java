@@ -113,12 +113,14 @@ public final class ServerCall {
     /**
      * 点名的那只实体,此刻在这一层世界里。
      *
-     * @throws ApiError {@link ErrorKind#NOT_FOUND}:不在了(编号不跨重启)
+     * @throws ApiError {@link ErrorKind#NOT_FOUND}:不在附近(死了、走远了、换了维度、所在区块没加载);撞码是
+     *                  {@link ErrorKind#BAD_ARGUMENT},见 {@link EntityRef#in}
      */
     public Entity entity(EntityRef ref) {
         Entity e = ref.in(her.serverLevel());
         if (e == null || e == her) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "no entity " + ref + " is here — ids do not survive restarts",
+            throw new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
+                    + "chunk or another dimension",
                     Call.of("numen.scan.entities"));
         }
         return e;
@@ -144,7 +146,7 @@ public final class ServerCall {
      */
     public <R> Pending<R> use(Entity target, Reach reach, Function<Entity, R> deed) {
         reach(target, reach);
-        EntityRef same = EntityRef.id(target.getId());
+        EntityRef same = EntityRef.of(target);
         return authorize(Action.useEntity(target)).then(allowed -> {
             Entity still = entity(same);
             reach(still, reach);

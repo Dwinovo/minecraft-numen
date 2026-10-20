@@ -476,7 +476,7 @@ public class DigGameTests {
                     "the drop did not land by the dug cell: " + drop);
             helper.assertTrue(dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
                     "the reply does not say where the drop landed: " + dig.outcome());
-            helper.assertTrue(drop.id().isPresent() && level.getEntity(drop.id().get())
+            helper.assertTrue(drop.id().isPresent() && new com.dwinovo.numen.api.sdk.EntityRef(drop.id().get()).in(level)
                             instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
                     "the id given is not the hay lying there: " + drop);
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");

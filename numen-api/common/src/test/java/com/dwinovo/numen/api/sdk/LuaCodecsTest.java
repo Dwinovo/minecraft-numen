@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -90,14 +89,14 @@ class LuaCodecsTest {
     }
 
     @Test
-    void anEntityIsItsIdOrItsUuid() {
+    void anEntityIsItsIdOrAPlayersName() {
         Codec<EntityRef> entity = codec(EntityRef.class);
-        assertEquals(EntityRef.id(184), entity.decode(184L));
-        assertEquals(EntityRef.id(184), entity.decode(Map.of("id", 184L, "type", "minecraft:pig")));
-        UUID uuid = UUID.randomUUID();
-        assertEquals(new EntityRef(null, uuid), entity.decode(uuid.toString()));
-        assertEquals(uuid.toString(), entity.encode(new EntityRef(null, uuid)));
-        assertEquals(184L, entity.encode(EntityRef.id(184)));
+        assertEquals(new EntityRef("zombie@3f9a1c"), entity.decode("zombie@3f9a1c"));
+        assertEquals(new EntityRef("pig@0a1b2c"), entity.decode(Map.of("id", "pig@0a1b2c", "type", "minecraft:pig")));
+        assertEquals(new EntityRef("Steve"), entity.decode("Steve"));
+        assertEquals("zombie@3f9a1c", entity.encode(new EntityRef("zombie@3f9a1c")));
+        assertThrows(BadValue.class, () -> entity.decode(184L), "a runtime number no longer names anything");
+        assertThrows(BadValue.class, () -> entity.decode("zombie@3f9a"), "the code is six hex digits");
     }
 
     public sealed interface Shape permits Square, Circle {}

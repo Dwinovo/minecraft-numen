@@ -51,7 +51,7 @@ class InventoryBlockTest {
     private static BodySnapshot snapshot(int selected, ItemStack offhand,
                                                           ItemStack... items) {
         return new BodySnapshot(true, List.of(items), List.of(), 20, 5f,
-                selected, offhand, List.of(), "", -1, "", 1L);
+                selected, offhand, List.of(), "", "", 1L);
     }
 
     // ==================== 碰着水的 ====================
@@ -61,11 +61,11 @@ class InventoryBlockTest {
     void theWaterSegmentIsThereOnlyWhileSheTouchesWater() {
         assumeTrue(booted);
         java.util.UUID her = java.util.UUID.randomUUID();
-        BodySnapshot wet = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "", -1,
+        BodySnapshot wet = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(true, true, 240, 300, ""), 1L);
         assertTrue(new RuntimeState(her, () -> wet).xml()
                 .contains("<water>In water, head under water; air left 12s.</water>"));
-        BodySnapshot dry = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "", -1,
+        BodySnapshot dry = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(false, false, 300, 300, ""), 1L);
         assertFalse(new RuntimeState(her, () -> dry).xml().contains("water"));
     }
@@ -75,7 +75,7 @@ class InventoryBlockTest {
     private static BodySnapshot withEffects(long receivedAtMs,
             net.minecraft.world.effect.MobEffectInstance... effects) {
         return new BodySnapshot(true, List.of(), List.of(), 20, 5f,
-                0, ItemStack.EMPTY, List.of(effects), "", -1, "", receivedAtMs);
+                0, ItemStack.EMPTY, List.of(effects), "", "", receivedAtMs);
     }
 
     /** 原版 UI 的口径:内部 amplifier 0 显示为 I,所以一级不写数字、二级写 2。 */
@@ -261,9 +261,9 @@ class InventoryBlockTest {
         assumeTrue(booted);
         assertEquals(ItemStack.EMPTY,
                 new BodySnapshot(true, List.of(), List.of(), 20, 5f,
-                        3, ItemStack.EMPTY, List.of(), "", -1, "", 1L).mainHand());
+                        3, ItemStack.EMPTY, List.of(), "", "", 1L).mainHand());
         assertEquals(ItemStack.EMPTY,
                 new BodySnapshot(true, List.of(), List.of(), 20, 5f,
-                        -1, ItemStack.EMPTY, List.of(), "", -1, "", 1L).mainHand());
+                        -1, ItemStack.EMPTY, List.of(), "", "", 1L).mainHand());
     }
 }

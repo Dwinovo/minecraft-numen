@@ -48,7 +48,7 @@ public class BodyReportGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_milker", new BlockPos(8, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun milk = lua(companion, "numen.use.entity(" + cow.getId() + ", {item = \"minecraft:bucket\"})");
+        ToolRun milk = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:bucket\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(milk.done() && milk.succeeded(), "use entity did not finish: " + milk.outcome());
@@ -70,12 +70,12 @@ public class BodyReportGameTests {
         pig.equipSaddle(new ItemStack(Items.SADDLE), SoundSource.NEUTRAL);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(8, 2, 8), false);
-        ToolRun ride = lua(companion, "numen.use.entity(" + pig.getId() + ")");
+        ToolRun ride = lua(companion, "numen.use.entity(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(ride.done() && ride.succeeded(), "use entity did not finish: " + ride.outcome());
             helper.assertTrue(companion.getVehicle() == pig, "she is not riding the pig");
-            helper.assertTrue(ride.outcome().contains("now riding minecraft:pig"),
+            helper.assertTrue(ride.outcome().contains("now riding " + com.dwinovo.numen.api.sdk.EntityLabel.of(pig)),
                     "the reply does not say she is riding the pig: " + ride.outcome());
             sample("ride a saddled pig", ride);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -133,7 +133,7 @@ public class BodyReportGameTests {
         ItemStack sword = new ItemStack(Items.WOODEN_SWORD);
         sword.setDamageValue(sword.getMaxDamage() - 1);
         companion.getInventory().setItem(companion.getInventory().selected, sword);
-        ToolRun hit = lua(companion, "numen.use.hit(" + pig.getId() + ")");
+        ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done() && hit.succeeded(), "use hit did not finish: " + hit.outcome());

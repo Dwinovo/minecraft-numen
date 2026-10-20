@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Note;
@@ -48,7 +49,7 @@ public final class StatusApi {
 
     /** 她的身体。 */
     @Doc("Your body right now.")
-    public record Self(@Doc("Your own entity id.") int id,
+    public record Self(@Doc("Your own id: your name.") String id,
                        String name,
                        @Doc("survival, creative, adventure or spectator.") String gameMode,
                        double hp,
@@ -99,7 +100,7 @@ public final class StatusApi {
         }
         // 身体状态片段:<worn>(穿戴位置,原版与模组同一份)打头,其后是插件从身体上读的片段;与挂进 runtime_state 的是同一个汇总
         String bodyState = NumenPlugins.bodyStateFragments(self);
-        return new Self(self.getId(), self.getName().getString(), WorkProfile.mode(self).getName(), self.getHealth(),
+        return new Self(EntityLabel.of(self), self.getName().getString(), WorkProfile.mode(self).getName(), self.getHealth(),
                 self.getMaxHealth(), self.getFoodData().getFoodLevel(), self.getFoodData().getSaturationLevel(),
                 self.position(), self.level().dimension().location().toString(),
                 self.level().getBiome(self.blockPosition()).unwrapKey().map(k -> k.location().toString())
@@ -119,7 +120,7 @@ public final class StatusApi {
     /** 她的主人。 */
     @Doc("Your owner right now; when they are offline, only online (false) is there.")
     public record Owner(boolean online,
-                        @Doc("Their entity id.") Optional<Integer> id,
+                        @Doc("Their id: their name.") Optional<String> id,
                         Optional<String> name,
                         @Doc("Where they are (decimals), in their dimension's coordinates.") Optional<Vec3> pos,
                         @Doc("Blocks from you, in the same dimension.") Optional<Double> distance,
@@ -146,7 +147,7 @@ public final class StatusApi {
                     Optional.empty(), Optional.empty(), Optional.empty());
         }
         boolean sameDimension = self.level().dimension().equals(player.level().dimension());
-        return new Owner(true, Optional.of(player.getId()), Optional.of(player.getName().getString()),
+        return new Owner(true, Optional.of(EntityLabel.of(player)), Optional.of(player.getName().getString()),
                 Optional.of(player.position()),
                 sameDimension ? Optional.of(Math.round(self.distanceTo(player) * 10.0) / 10.0) : Optional.empty(),
                 Optional.of(sameDimension), Optional.of(player.level().dimension().location().toString()),

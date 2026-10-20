@@ -32,6 +32,6 @@
   "numen.activity.click_block_right": "Using the block at %s, %s, %s",
   "numen.activity.click_ahead_left": "Hitting what is ahead",
   "numen.activity.click_ahead_right": "Using the item ahead",
-  "numen.activity.click_entity_left": "Hitting entity #%s",
-  "numen.activity.click_entity_right": "Using entity #%s"
+  "numen.activity.click_entity_left": "Hitting %s",
+  "numen.activity.click_entity_right": "Using %s"
 }

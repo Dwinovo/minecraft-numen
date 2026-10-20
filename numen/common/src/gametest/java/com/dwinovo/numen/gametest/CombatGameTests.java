@@ -88,7 +88,7 @@ public class CombatGameTests {
                         companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
                 "this slime does not outreach her, the scene tests nothing");
         float startHealth = slime.getHealth();
-        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + slime.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(slime) + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
@@ -116,7 +116,7 @@ public class CombatGameTests {
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
-        ToolRun attack = lua(companion, "numen.fight.attack(" + zombie.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
@@ -146,7 +146,7 @@ public class CombatGameTests {
         // 每刻在它那一格里挪一点,不出格
         helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(level.getGameTime() * 0.7),
                 zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(level.getGameTime() * 0.7)));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + zombie.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
@@ -201,7 +201,7 @@ public class CombatGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(level.getEntity(zombie.getId()) == zombie,
                         "the zombie never showed up in the world; she is at " + companion.blockPosition()
                                 + " in chunk " + companion.chunkPosition()))
-                .thenExecute(() -> attack[0] = lua(companion, "numen.fight.attack(" + zombie.getId() + ")"))
+                .thenExecute(() -> attack[0] = lua(companion, "numen.fight.attack(" + ref(zombie) + ")"))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
                     helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
@@ -230,7 +230,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(pig) + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
@@ -240,11 +240,11 @@ public class CombatGameTests {
     }
 
     /**
-     * 点名攻击落盘重放的那一行写的是目标的 UUID:运行期编号重启后会发给别的东西,照旧号重放可能打到毫不相干的一只。
-     * 受理时找不到的编号不写进去(任务照旧记它丢失);一只都找不到就当场失败,不留一行会变成不点名清场的重放。
+     * 点名攻击落盘重放的那一行写的是目标的身份(种类@UUID 前六位):重启后认的还是同一只。
+     * 受理时找不到的身份不写进去;一只都找不到就当场失败,不留一行会变成不点名清场的重放。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
-    public static void attack_is_replayed_by_uuid_not_by_runtime_id(GameTestHelper helper) {
+    public static void attack_is_replayed_by_the_targets_id(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         var pig = EntityType.PIG.create(level);
@@ -257,18 +257,69 @@ public class CombatGameTests {
         NumenPlayer companion = com.dwinovo.numen.api.gametest.Bodies.summon(server, java.util.UUID.randomUUID(),
                 "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
                         spawn.getZ() + 0.5));
-        ToolRun nobody = lua(companion, "numen.fight.attack(999998)");
-        ToolRun attack = lua(companion, "numen.fight.attack(" + pig.getId() + ")");
+        ToolRun nobody = lua(companion, "numen.fight.attack(\"pig@999998\")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(pig) + ")");
         String recorded = com.dwinovo.numen.api.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskLua();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(recorded.equals("numen.fight.attack(\"" + pig.getUUID() + "\")"),
-                    "the replay recipe does not name exactly the pig by its UUID: " + recorded);
+            helper.assertTrue(recorded.equals("numen.fight.attack(" + ref(pig) + ")"),
+                    "the replay recipe does not name exactly the pig by its id: " + recorded);
             com.dwinovo.numen.api.entity.Companions.dismiss(server, companion);
             pig.discard();
+        });
+    }
+
+    /** 一只已经不在世界里的生物的身份交给 numen.fight.attack:当场拒绝,说它不在附近,不受理。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void a_gone_mobs_id_is_refused_on_the_spot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var pig = EntityType.PIG.create(level);
+        helper.assertTrue(pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        level.addFreshEntity(pig);
+        String id = ref(pig);
+        pig.discard();
+        NumenPlayer companion = spawnAt(helper, "gametest_gone_id", new BlockPos(3, 2, 3), false);
+        ToolRun attack = lua(companion, "numen.fight.attack(" + id + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(attack.done() && !attack.succeeded() && attack.task() == null
+                            && attack.outcome().contains(id.replace("\"", "") + " is not near you"),
+                    "a dead mob's id was not refused on the spot: " + attack.reply());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 两只同码的生物(UUID 前六位一样):点名它们的短码被拒绝,回执并列出是哪几只,不猜其中一只。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void two_mobs_with_the_same_code_are_refused_naming_both(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var first = EntityType.PIG.create(level);
+        var second = EntityType.COW.create(level);
+        helper.assertTrue(first != null && second != null, "the mobs did not spawn");
+        second.setUUID(new java.util.UUID(first.getUUID().getMostSignificantBits() ^ 1L,
+                first.getUUID().getLeastSignificantBits()));
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        first.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        second.moveTo(at.getX() - 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        level.addFreshEntity(first);
+        level.addFreshEntity(second);
+        NumenPlayer companion = spawnAt(helper, "gametest_same_code", new BlockPos(3, 2, 3), false);
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(first) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(attack.done() && !attack.succeeded() && attack.task() == null
+                            && attack.outcome().contains("names 2 entities")
+                            && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(first))
+                            && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(second)),
+                    "a shared code was not refused with both candidates: " + attack.reply());
+            first.discard();
+            second.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 

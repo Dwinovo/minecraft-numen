@@ -16,7 +16,7 @@ public record Fought(@Doc("Each entity it fought, the one you named first.") Lis
 
     /** 经手过的一只。 */
     @Doc("One entity an attack fought.")
-    public record Foe(@Doc("Its runtime id.") int id,
+    public record Foe(@Doc("Its id, as numen.scan.entities lists it.") String id,
                       @Doc("defeated, lost, unreachable, refused: <why>, or pending.") String status,
                       @Doc("Hits it took from you.") int strikes) {}
 }

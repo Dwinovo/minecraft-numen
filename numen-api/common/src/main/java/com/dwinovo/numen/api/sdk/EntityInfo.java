@@ -13,8 +13,9 @@ import java.util.Optional;
  */
 @Doc("An entity near you.")
 public record EntityInfo(
-        @Doc("Its runtime id, which numen.fight.attack, numen.use.entity and numen.move.follow take (or pass the "
-                + "whole Entity). It does not survive a restart.") int id,
+        @Doc("Its id, kind@code like zombie@3f9a1c (a player's name for a player), which numen.fight.attack, "
+                + "numen.use.entity and numen.move.follow take (or pass the whole Entity). The code is the start "
+                + "of its UUID, so it stays the same across restarts.") String id,
         @Doc("Its type id, minecraft:zombie.") String type,
         @Doc("Where it is (decimals).") Vec3 pos,
         @Doc("Its name, when it has one.") Optional<String> name,
@@ -28,7 +29,7 @@ public record EntityInfo(
     /** 一只实体的编号、种类、位置,有名字的带上名字;别的字段由用的一方补({@link #seen})。 */
     public static EntityInfo of(Entity entity) {
         boolean named = entity.hasCustomName() || entity instanceof Player;
-        return new EntityInfo(entity.getId(), BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(),
+        return new EntityInfo(EntityLabel.of(entity), BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(),
                 entity.position(), named ? Optional.of(entity.getName().getString()) : Optional.empty(),
                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }

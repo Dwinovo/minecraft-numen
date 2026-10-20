@@ -13,19 +13,19 @@ import java.util.List;
  * <p>{@code loaded=false} = the body is asleep / not ours (no contents). foodLevel 0-20.
  * {@code craft} is the 2×2 crafting menu: indices 0-3 = grid, index 4 = result (may be empty).
  * {@code selectedSlot} indexes {@code items} for the main hand.
- * {@code vehicleType} 空串 = 没骑任何东西({@code vehicleId} 相应为 -1)。
+ * {@code vehicle} 是座驾的身份({@code EntityLabel}),空串 = 没骑任何东西。
  * {@code bodyState} 是插件从身体上读的状态片段,服务端拼好的整段;空串 = 没有。
  */
 public record BodySnapshot(boolean loaded, List<ItemStack> items, List<ItemStack> craft,
                            int foodLevel, float saturation, int selectedSlot, ItemStack offhand,
                            List<MobEffectInstance> effects,
-                           String vehicleType, int vehicleId, String bodyState,
+                           String vehicle, String bodyState,
                            long receivedAtMs) {
 
     /** 收到的这一包,盖上收到的时刻。 */
     public static BodySnapshot of(NumenStatePayload p, long receivedAtMs) {
         return new BodySnapshot(p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
-                p.selectedSlot(), p.offhand(), p.effects(), p.vehicleType(), p.vehicleId(), p.bodyState(),
+                p.selectedSlot(), p.offhand(), p.effects(), p.vehicle(), p.bodyState(),
                 receivedAtMs);
     }
 

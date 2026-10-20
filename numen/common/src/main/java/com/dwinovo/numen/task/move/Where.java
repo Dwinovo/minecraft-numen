@@ -9,6 +9,7 @@ import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.permission.Listing;
 import com.dwinovo.numen.api.sdk.BadValue;
 import com.dwinovo.numen.api.sdk.Codec;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.LuaCodecs;
 import com.dwinovo.numen.api.sdk.Place;
@@ -45,7 +46,7 @@ public sealed interface Where {
     /** 一个高度 {@code {y}}。 */
     record Height(int y) implements Where {}
 
-    /** 一只实体(带 {@code id} 的表或编号):去处按编目标那一刻它所在的那一格。 */
+    /** 一只实体(带 {@code id} 的表或身份):去处按编目标那一刻它所在的那一格。 */
     record Mob(EntityRef ref) implements Where {}
 
     /** 一堆格子(扫描交回的一团、一串格),至少一格。 */
@@ -84,7 +85,7 @@ public sealed interface Where {
         };
     }
 
-    /** 一团、一串表是一堆格子;带 {@code id} 没有坐标的表或一个数是一只实体;别的是一处(一格、一列、一个高度)。写回去照原样。 */
+    /** 一团、一串表是一堆格子;带 {@code id} 没有坐标的表或一段实体身份的文字是一只实体;别的是一处(一格、一列、一个高度)。写回去照原样。 */
     @SuppressWarnings("unchecked")
     Codec<Where> CODEC = new Codec<>() {
         private final Codec<EntityRef> entity = (Codec<EntityRef>) LuaCodecs.of(EntityRef.class, "numen");
@@ -111,12 +112,13 @@ public sealed interface Where {
                 }
                 return new Cells(items);
             }
-            if (value instanceof Map<?, ?> t && t.containsKey("id") && !t.containsKey("x") || value instanceof Number) {
+            if (value instanceof Map<?, ?> t && t.containsKey("id") && !t.containsKey("x")
+                    || value instanceof String s && Positions.coordinates(s) == null && EntityLabel.valid(s)) {
                 return new Mob(entity.decode(value));
             }
             if (value instanceof String s && Positions.coordinates(s) == null) {
-                throw new BadValue("a place is a table — a Pos, a Block, an Entity, a Cluster or Cells, a column "
-                        + "{x = …, z = …} or a height {y = …}; got \"" + s + "\"");
+                throw new BadValue("a place is a table — a Pos, a Block, an Entity (or its id, \"zombie@3f9a1c\"), a "
+                        + "Cluster or Cells, a column {x = …, z = …} or a height {y = …}; got \"" + s + "\"");
             }
             Place p = place.decode(value);
             if (p.cell() != null) {
@@ -147,13 +149,13 @@ public sealed interface Where {
         }
     };
 
-    /** 给模型看的一截:{@code 120,64,-35}、{@code x=120 z=-35}、{@code y=64}、{@code entity 184}、{@code 12 cells}。 */
+    /** 给模型看的一截:{@code 120,64,-35}、{@code x=120 z=-35}、{@code y=64}、{@code zombie@3f9a1c}、{@code 12 cells}。 */
     default String words() {
         return switch (this) {
             case Cell c -> Listing.coords(c.pos());
             case Column c -> "x=" + c.x() + " z=" + c.z();
             case Height h -> "y=" + h.y();
-            case Mob m -> "entity " + m.ref();
+            case Mob m -> m.ref().label();
             case Cells c -> c.items().size() == 1 ? Listing.coords(c.items().get(0).pos()) : c.items().size() + " cells";
         };
     }

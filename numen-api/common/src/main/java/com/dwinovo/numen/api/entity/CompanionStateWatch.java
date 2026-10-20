@@ -127,7 +127,7 @@ public final class CompanionStateWatch {
                 companion.getName().getString(), kinds(payload), usedSlots(payload),
                 slotName(payload.selectedSlot(), payload.items()), name(payload.offhand()),
                 payload.effects().size(),
-                payload.vehicleId() >= 0 ? ", 骑 " + payload.vehicleType() : "",
+                !payload.vehicle().isEmpty() ? ", 骑 " + payload.vehicle() : "",
                 payload.bodyState().isEmpty() ? "" : ", 插件片段 " + payload.bodyState().length() + " 字符",
                 first ? " (首次)" : "");
     }

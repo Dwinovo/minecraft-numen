@@ -96,7 +96,7 @@ public final class MoveApi {
     }
 
     /** 跟谁、多近、多久。 */
-    public record Follow(@Doc("Who to follow: an Entity from numen.scan.entities, or its id.")
+    public record Follow(@Doc("Who to follow: an Entity from numen.scan.entities, or its id (zombie@3f9a1c, a player's name).")
                          @Omitted("follow your owner") @Positional Optional<EntityRef> entity,
                          @Doc("How close to stay, in blocks (" + MIN_DISTANCE + "-" + MAX_DISTANCE + ").")
                          @Omitted("stay within " + DEFAULT_DISTANCE) Optional<Integer> distance,
@@ -106,11 +106,11 @@ public final class MoveApi {
 
     /**
      * 跟着走:不点名就是跟主人,点名了就跟那一只——两者目标消失时的含义不同,见 {@code FollowTaskRecord#target}。点名的那只按 UUID 认:
-     * 记录里存它,重启后再跑的那一行也写它,运行期编号只在受理这一刻用来找到它。总有期限:不给秒数就跟一分钟。
+     * 记录里存它,受理这一刻先认到它,认不到当场失败。总有期限:不给秒数就跟一分钟。
      */
     @Fn("Tag along with your owner, or with an entity you name, for a while.")
     @Example("numen.move.follow()")
-    @Example("numen.move.follow(184, {distance = 5, seconds = 30})")
+    @Example("numen.move.follow(\"Steve\", {distance = 5, seconds = 30})")
     @Note("Background work with an end: it returns after seconds (default " + DEFAULT_FOLLOW_SECONDS + "), or when "
             + "your owner stops it, with the same account of the walk as `numen.move.to`. You go quiet while already "
             + "beside them.")
@@ -127,8 +127,6 @@ public final class MoveApi {
             return Job.of(new FollowTaskRecord(call, distance, null, null, ticks));
         }
         Entity target = call.entity(args.entity().get());
-        return Job.<Walked>of(
-                        new FollowTaskRecord(call, distance, target.getUUID(), target.getName().getString(), ticks))
-                .replayedAs(new Follow(Optional.of(EntityRef.of(target)), args.distance(), args.seconds()));
+        return Job.of(new FollowTaskRecord(call, distance, target.getUUID(), target.getName().getString(), ticks));
     }
 }

@@ -231,6 +231,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private Battlefield surveyField() {
         hostiles = Menace.hostilesAround(player, FIELD_RADIUS);
+        hostiles.forEach(this::noted);
         List<Entity> candidates = new ArrayList<>();
         for (var mob : hostiles) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
@@ -337,7 +338,19 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     private Entity liveEntity(int id) {
         Entity e = ((ServerLevel) player.level()).getEntity(id);
-        return e == null || e.isRemoved() || e == player ? null : e;
+        return e == null || e.isRemoved() || e == player ? null : noted(e);
+    }
+
+    /** 经手过的实体在模型眼里的身份,趁它还在时记下:倒下的收尾时已不在世界里,回执里仍得写清是谁。 */
+    private final java.util.Map<Integer, String> labels = new java.util.HashMap<>();
+
+    private Entity noted(Entity e) {
+        labels.computeIfAbsent(e.getId(), id -> com.dwinovo.numen.api.sdk.EntityLabel.of(e));
+        return e;
+    }
+
+    private String label(int id) {
+        return labels.getOrDefault(id, "an entity that was never in sight");
     }
 
     /** 把已经有结果的目标记进账本(死了 / 不见了)。 */
@@ -401,7 +414,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             fail("could not attack: " + refusedSummary(), FailureType.REFUSED);
             return TaskState.FAILED;
         }
-        fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
+        fail("none of the requested entities could be attacked", FailureType.TARGET_LOST);
         return TaskState.FAILED;
     }
 
@@ -412,9 +425,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return String.join("; ", parts);
     }
 
-    /** 不许打的一只怎么说:{@code entity 12 denied by rule …}。 */
-    private static String refusal(int id, String why) {
-        return "entity " + id + " " + why;
+    /** 不许打的一只怎么说:{@code zombie@3f9a1c denied by rule …}。 */
+    private String refusal(int id, String why) {
+        return label(id) + " " + why;
     }
 
     private void logMove(AttackPlan.Move move, Battlefield field) {
@@ -880,7 +893,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         touched.addAll(r.refused().keySet());
         List<Fought.Foe> fought = new java.util.ArrayList<>();
         for (int id : touched) {
-            fought.add(new Fought.Foe(id, r.status(id), r.strikes(id)));
+            fought.add(new Fought.Foe(label(id), r.status(id), r.strikes(id)));
         }
         return new Fought(fought, r.strikes());
     }

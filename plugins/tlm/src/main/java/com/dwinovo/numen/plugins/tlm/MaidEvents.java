@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.tlm;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -41,17 +42,17 @@ public final class MaidEvents {
         Map<String, String> attrs = attrs(maid);
         numen.emit(her, TAMED, attrs, "you tamed " + Maids.label(maid) + " at " + Maids.where(maid.blockPosition())
                 + "; she is yours now, and TLM counts " + Maids.counted(her) + " maid(s) as yours. `"
-                + "tlm.maid.info(" + maid.getId() + ")` shows her.", false);
+                + "tlm.maid.info(\"" + EntityLabel.of(maid) + "\")` shows her.", false);
     }
 
     static void died(NumenPlayer her, LivingEntity maid, Entity tombstone) {
         Map<String, String> attrs = attrs(maid);
-        attrs.put("tombstone", String.valueOf(tombstone.getId()));
+        attrs.put("tombstone", EntityLabel.of(tombstone));
         numen.emit(her, DIED, attrs, Maids.label(maid) + " died at " + Maids.where(maid.blockPosition()) + " in "
                 + maid.level().dimension().location() + ": " + maid.getCombatTracker().getDeathMessage().getString()
-                + ". Her things and her film are in tombstone " + tombstone.getId() + " at "
-                + Maids.where(tombstone.blockPosition()) + "; right-click it (`numen.use.entity(" + tombstone.getId()
-                + ")`) to take them.", true);
+                + ". Her things and her film are in tombstone " + EntityLabel.of(tombstone) + " at "
+                + Maids.where(tombstone.blockPosition()) + "; right-click it (`numen.use.entity(\"" + EntityLabel.of(tombstone)
+                + "\")`) to take them.", true);
     }
 
     /**
@@ -72,7 +73,7 @@ public final class MaidEvents {
 
     private static Map<String, String> attrs(Entity maid) {
         Map<String, String> attrs = new LinkedHashMap<>();
-        attrs.put("maid", String.valueOf(maid.getId()));
+        attrs.put("maid", EntityLabel.of(maid));
         return attrs;
     }
 }

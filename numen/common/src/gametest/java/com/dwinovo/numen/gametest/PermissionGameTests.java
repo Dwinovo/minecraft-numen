@@ -634,7 +634,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(pig) + ")").task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};
@@ -1364,7 +1364,7 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + villager.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(villager) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1388,7 +1388,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
-        ToolRun attack = lua(companion, "numen.fight.attack(" + villager.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(villager) + ")");
         java.util.Set<Long> requests = new java.util.HashSet<>();
         boolean[] hitBeforeYes = new boolean[1];
         helper.onEachTick(() -> {
@@ -1425,7 +1425,7 @@ public class PermissionGameTests {
         wolf.setNoAi(true);
         level.addFreshEntity(wolf);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + wolf.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1450,7 +1450,7 @@ public class PermissionGameTests {
         level.addFreshEntity(wolf);
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + wolf.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(wolf) + ")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 

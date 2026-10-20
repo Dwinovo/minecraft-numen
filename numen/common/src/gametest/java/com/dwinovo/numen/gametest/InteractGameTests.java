@@ -95,7 +95,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(sheep);
         NumenPlayer companion = spawnAt(helper, "gametest_shearer", new BlockPos(8, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.SHEARS));
-        ToolRun shear = lua(companion, "numen.use.entity(" + sheep.getId() + ", {item = \"minecraft:shears\"})");
+        ToolRun shear = lua(companion, "numen.use.entity(" + ref(sheep) + ", {item = \"minecraft:shears\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(shear.done(), "use entity has not finished");
@@ -113,7 +113,7 @@ public class InteractGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(8, 2, 11), false);
-        ToolRun hit = lua(companion, "numen.use.hit(" + pig.getId() + ")");
+        ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -171,7 +171,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_trader", new BlockPos(6, 2, 8), false);
         com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        ToolRun press = lua(companion, "numen.use.entity(" + villager.getId() + ")");
+        ToolRun press = lua(companion, "numen.use.entity(" + ref(villager) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(press.done(), "use entity has not finished");
@@ -240,7 +240,7 @@ public class InteractGameTests {
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(6, 2, 8), false);
-        ToolRun hit = lua(companion, "numen.use.hit(" + pig.getId() + ")");
+        ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -263,7 +263,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_milkmaid", new BlockPos(8, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun milk = lua(companion, "numen.use.entity(" + cow.getId() + ", {item = \"minecraft:bucket\"})");
+        ToolRun milk = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:bucket\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(milk.done(), "use entity has not finished");
@@ -285,7 +285,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_cowherd", new BlockPos(8, 2, 11), false);
         companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
-        ToolRun feed = lua(companion, "numen.use.entity(" + cow.getId() + ", {item = \"minecraft:wheat\"})");
+        ToolRun feed = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:wheat\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(feed.done(), "use entity has not finished");
@@ -359,7 +359,7 @@ public class InteractGameTests {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 14));
         NumenPlayer companion = spawnAt(helper, "gametest_wolfkeeper", new BlockPos(8, 2, 14), false);
         wolf.tame(companion);
-        ToolRun sit = lua(companion, "numen.use.entity(" + wolf.getId() + ")");
+        ToolRun sit = lua(companion, "numen.use.entity(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sit.done(), "use entity has not finished");
@@ -377,7 +377,7 @@ public class InteractGameTests {
         wolf.setTame(true, true);
         wolf.setOwnerUUID(java.util.UUID.randomUUID());
         NumenPlayer companion = spawnAt(helper, "gametest_wolfpetter", new BlockPos(8, 2, 2), false);
-        ToolRun pet = lua(companion, "numen.use.entity(" + wolf.getId() + ")");
+        ToolRun pet = lua(companion, "numen.use.entity(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pet.done(), "use entity has not finished");

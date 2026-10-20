@@ -47,7 +47,7 @@ class NumenStatePayloadTest {
     void thePluginBodyStateRidesAlongWithEveryOtherField() {
         assumeTrue(booted);
         NumenStatePayload sent = new NumenStatePayload(A, true, List.of(), List.of(), 17, 2.5f,
-                3, ItemStack.EMPTY, List.of(), "boat", 42, "<curios>ring: gold_ring</curios>");
+                3, ItemStack.EMPTY, List.of(), "boat@3f9a1c", "<curios>ring: gold_ring</curios>");
 
         NumenStatePayload back = roundTrip(sent);
 
@@ -57,8 +57,7 @@ class NumenStatePayloadTest {
         assertEquals(17, back.foodLevel());
         assertEquals(2.5f, back.saturation());
         assertEquals(3, back.selectedSlot());
-        assertEquals("boat", back.vehicleType(), "片段排在最后,前面的字段一个不错位");
-        assertEquals(42, back.vehicleId());
+        assertEquals("boat@3f9a1c", back.vehicle(), "片段排在最后,前面的字段一个不错位");
     }
 
     @Test

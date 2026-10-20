@@ -214,7 +214,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
                             + ")` clears it out of the way, or click it from another side";
         }
         if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
-            return eh.getEntity().getName().getString() + " (entity " + eh.getEntity().getId()
+            return eh.getEntity().getName().getString() + " (" + com.dwinovo.numen.api.sdk.EntityLabel.of(eh.getEntity())
                     + ") — the crosshair landed on it, not on " + aimLabel();
         }
         return null;

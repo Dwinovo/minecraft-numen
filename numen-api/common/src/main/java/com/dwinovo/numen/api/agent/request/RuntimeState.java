@@ -196,11 +196,11 @@ public final class RuntimeState {
      */
     private String ridingXml() {
         var snapshot = body.get();
-        if (snapshot == null || !snapshot.loaded() || snapshot.vehicleId() < 0) {
+        if (snapshot == null || !snapshot.loaded() || snapshot.vehicle().isEmpty()) {
             return "";
         }
-        return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). numen.move.to sails a boat over water; any other walk needs numen.use.dismount() to step off "
+        return "<riding>" + xml(snapshot.vehicle())
+                + ". numen.move.to sails a boat over water; any other walk needs numen.use.dismount() to step off "
                 + "first — no need to click the vehicle again.</riding>";
     }
 

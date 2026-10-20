@@ -149,7 +149,7 @@ public class PerceptionGameTests {
         });
     }
 
-    /** {@code numen.scan.entities} 的这一页有没有列出这只实体(按它的运行期编号)。 */
+    /** {@code numen.scan.entities} 的这一页有没有列出这只实体(按它的身份)。 */
     private static boolean listsEntity(ToolRun scan, net.minecraft.world.entity.Entity entity) {
         return rowOf(scan, entity) != null;
     }
@@ -157,7 +157,7 @@ public class PerceptionGameTests {
     /** {@code numen.scan.entities} 的这一页里这只实体的那一行;没列出为 null。 */
     private static com.google.gson.JsonObject rowOf(ToolRun scan, net.minecraft.world.entity.Entity entity) {
         for (var row : valueIn(scan.reply()).getAsJsonArray()) {
-            if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
+            if (row.getAsJsonObject().get("id").getAsString().equals(com.dwinovo.numen.api.sdk.EntityLabel.of(entity))) {
                 return row.getAsJsonObject();
             }
         }
@@ -400,7 +400,7 @@ public class PerceptionGameTests {
         level.addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_lookout", new BlockPos(3, 2, 7), false);
         ToolRun seen = lua(companion, "return {open = numen.scan.sight(" + xyz(open) + "), hidden = numen.scan.sight("
-                + xyz(hidden) + "), cow = numen.scan.sight(" + cow.getId() + ")}");
+                + xyz(hidden) + "), cow = numen.scan.sight(" + ref(cow) + ")}");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(seen.receipt() != null, "numen.scan.sight has not answered");

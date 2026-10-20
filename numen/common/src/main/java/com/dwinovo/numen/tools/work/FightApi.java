@@ -35,15 +35,12 @@ public final class FightApi {
     }
 
     /** 打哪一只。 */
-    public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id.") EntityRef entity) {}
+    public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity) {}
 
-    /**
-     * 点名的实体受理这一刻按运行期编号找到;找不到就当场失败。重启后再跑的那一行写成它的 UUID:运行期编号重启后会发给别的东西,照着旧号
-     * 再跑可能打到毫不相干的一只。
-     */
+    /** 点名的实体受理这一刻认到;认不到就当场失败。重启后再跑的那一行写的是它的身份,认的还是同一只。 */
     @Fn("Attack one entity until it is dead, lost or out of reach.")
-    @Example("numen.fight.attack(184)")
-    @Example("local r = numen.fight.attack(184)\nprint(r.strikes, #r.fought)")
+    @Example("numen.fight.attack(\"zombie@3f9a1c\")")
+    @Example("local r = numen.fight.attack(\"zombie@3f9a1c\")\nprint(r.strikes, #r.fought)")
     @Note("Several: `for _, foe in ipairs(numen.scan.entities(\"hostile\", {radius = 16})) do numen.fight.attack(foe) "
             + "end`; `numen.fight.clear()` (library) does that until none is left.")
     @Note("Background work: it keeps chasing, turning, swinging, shooting and dodging until that one is dead, gone or "
@@ -52,13 +49,13 @@ public final class FightApi {
             + "cannot, keeps its distance from things that explode, and picks the weapon you own that is strongest "
             + "against that target.")
     @Note("It does not pick up what the target drops: `numen.work.collect()` does. Things that split (slimes, magma "
-            + "cubes) come back as new ids: scan again, or `numen.fight.clear()`.")
+            + "cubes) come back as new entities with new ids: scan again, or `numen.fight.clear()`.")
     @Note("Asks your owner before hitting a pet, a named mob or a villager when their rules say so.")
     @SeeAlso({"numen.scan.entities", "numen.fight.clear", "numen.work.collect", "numen.task.stop"})
     public static Job<Fought> attack(ServerCall call, Attack args) {
         Entity target = call.entity(args.entity());
         AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(),
                 call.her().level().getGameTime() + TICKS, List.of(target.getId()), false);
-        return Job.<Fought>of(record).replayedAs(new Attack(EntityRef.of(target)));
+        return Job.of(record);
     }
 }
