@@ -69,4 +69,15 @@ class ServerLifecycleTest {
 
         assertTrue(ran.contains("after"), "前一项抛异常后,后面的开工没跑");
     }
+
+    @Test
+    void afterStartedRunsAfterEveryOnStartedWhateverTheRegistrationOrder() {
+        List<String> ran = new ArrayList<>();
+        ServerLifecycle.afterStarted(server -> ran.add("after"));
+        ServerLifecycle.onStarted(server -> ran.add("start"));
+
+        ServerLifecycle.fireStarted(null);
+
+        assertTrue(ran.indexOf("start") < ran.indexOf("after"), "afterStarted 跑在了 onStarted 前面: " + ran);
+    }
 }
