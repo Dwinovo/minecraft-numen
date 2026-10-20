@@ -1,11 +1,12 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
-import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -33,6 +34,7 @@ import java.util.function.LongSupplier;
  */
 public final class McpTokens {
 
+    private static final Logger LOG = LoggerFactory.getLogger("Numen");
     public static final String FILE = "mcp_tokens.json";
     /** 明文令牌的前缀:一眼认出是 Numen 的,泄露扫描也认得。 */
     public static final String PREFIX = "numen_";
@@ -50,8 +52,9 @@ public final class McpTokens {
     /** 令牌库读不了的文件与原因。 */
     public record Unreadable(Path file, String reason) {}
 
-    public McpTokens(Home home, LongSupplier clock) {
-        this.doc = new JsonDoc(home.file(FILE), JsonDoc.Format.of(1), home.io());
+    /** @param dir 令牌库所在的目录(服务器的家);{@code io} 是写它用的那条车道 */
+    public McpTokens(Path dir, Io io, LongSupplier clock) {
+        this.doc = new JsonDoc(dir.resolve(FILE), JsonDoc.Format.of(1), io);
         this.clock = clock;
         load();
     }
@@ -71,7 +74,7 @@ public final class McpTokens {
             // 服主修好或挪走文件,下次起服再读
             byHash.clear();
             unreadable = new Unreadable(doc.file(), e.toString());
-            Constants.LOG.warn("[numen-mcp] 令牌库 {} 读不了,原样留着不动,这一局拒绝所有令牌: {}", doc.file(), e.toString());
+            LOG.warn("[numen-mcp] 令牌库 {} 读不了,原样留着不动,这一局拒绝所有令牌: {}", doc.file(), e.toString());
         }
     }
 
@@ -176,7 +179,7 @@ public final class McpTokens {
                 o.get("created").getAsLong(), o.get("expires").getAsLong());
     }
 
-    static String hash(String secret) {
+    public static String hash(String secret) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(secret.getBytes(StandardCharsets.UTF_8)));

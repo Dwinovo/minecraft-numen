@@ -1,7 +1,12 @@
+import com.dwinovo.numen.build.Modules
+
 plugins {
     id 'numen-api-loader'
     id 'net.fabricmc.fabric-loom-remap'
 }
+
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
@@ -12,6 +17,8 @@ dependencies {
     // 聊天气泡的 Markdown 解析库(ui 模块用它)是内嵌的库,不是平铺进来的类:include 随发行 jar 带上,玩家不用另装。
     include "org.commonmark:commonmark:${commonmark_version}"
     include "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    // mcp 模块的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……)同理嵌套带上;清单从 mcp 的依赖解析出来。
+    Modules.nestedLibraries(project(':mcp')).each { include(it) { transitive = false } }
 }
 
 // 要读 Numen API 的测试夹具源码集,它得先配置好

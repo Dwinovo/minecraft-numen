@@ -14,7 +14,7 @@ import com.dwinovo.numen.api.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
-import com.dwinovo.numen.api.mcp.server.McpConfig;
+import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.RemoteLibrary;

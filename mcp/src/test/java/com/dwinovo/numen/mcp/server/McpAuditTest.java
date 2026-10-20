@@ -1,6 +1,5 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
-import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.store.Io;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -20,8 +19,7 @@ class McpAuditTest {
 
     @Test
     void theLogRotatesBySizeAndKeepsOnlyTheLatestFewOldOnes() throws Exception {
-        Home home = new Home(dir, Io.direct(e -> { throw e; }));
-        McpAudit audit = new McpAudit(home, 600, 2);
+        McpAudit audit = new McpAudit(dir, Io.direct(e -> { throw e; }), 600, 2);
         McpToken token = new McpToken("tok00001", "h".repeat(64), UUID.randomUUID(), McpToken.Role.BRAIN,
                 McpToken.Scope.ALL, "", 0, 0);
 

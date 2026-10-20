@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -17,10 +17,10 @@ import java.util.function.LongSupplier;
  *
  * <p>线程:任何线程,状态在 this 的锁里。
  */
-final class McpStrangers {
+public final class McpStrangers {
 
-    static final long WINDOW_MS = 60_000L;
-    static final int FAILURES_PER_WINDOW = 10;
+    public static final long WINDOW_MS = 60_000L;
+    public static final int FAILURES_PER_WINDOW = 10;
     static final int MAX_ADDRESSES = 4096;
     static final String OVERFLOW = "*";
 
@@ -41,19 +41,19 @@ final class McpStrangers {
     private final LongSupplier clock;
     private final Map<String, Burst> bursts = new HashMap<>();
 
-    McpStrangers(McpAudit audit, LongSupplier clock) {
+    public McpStrangers(McpAudit audit, LongSupplier clock) {
         this.audit = audit;
         this.clock = clock;
     }
 
     /** 这个地址此刻被限了吗(它这个窗里的失败已满)。 */
-    synchronized boolean blocked(String address) {
+    public synchronized boolean blocked(String address) {
         Burst burst = bursts.get(key(address));
         return burst != null && clock.getAsLong() - burst.first < WINDOW_MS && burst.count >= FAILURES_PER_WINDOW;
     }
 
     /** 这个地址又一次没通过认证。 */
-    synchronized void failed(String address, String why) {
+    public synchronized void failed(String address, String why) {
         long now = clock.getAsLong();
         flushClosed(now);
         Burst burst = bursts.computeIfAbsent(key(address), k -> new Burst(why, now));
@@ -62,12 +62,12 @@ final class McpStrangers {
     }
 
     /** 窗已收场的写进审计。宿主每刻调一次,新的失败来时也顺带调。 */
-    synchronized void flushClosed() {
+    public synchronized void flushClosed() {
         flushClosed(clock.getAsLong());
     }
 
     /** 停服:没收场的也写下去。 */
-    synchronized void flushAll() {
+    public synchronized void flushAll() {
         bursts.forEach(this::write);
         bursts.clear();
     }

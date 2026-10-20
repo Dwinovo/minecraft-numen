@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.mcp.server.McpToken;
+import com.dwinovo.numen.mcp.server.McpTokens;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.mojang.brigadier.arguments.IntegerArgumentType;

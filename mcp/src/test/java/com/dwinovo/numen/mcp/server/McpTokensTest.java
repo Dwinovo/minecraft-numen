@@ -1,6 +1,5 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
-import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.store.Io;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,7 +22,7 @@ class McpTokensTest {
     Path dir;
 
     private McpTokens open() {
-        return new McpTokens(new Home(dir, Io.direct(e -> { throw e; })), System::currentTimeMillis);
+        return new McpTokens(dir, Io.direct(e -> { throw e; }), System::currentTimeMillis);
     }
 
     @Test

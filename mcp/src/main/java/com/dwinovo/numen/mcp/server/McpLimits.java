@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -11,12 +11,12 @@ import java.util.function.LongSupplier;
  *
  * <p>线程:任何线程,状态在 this 的锁里。
  */
-final class McpLimits {
+public final class McpLimits {
 
     private static final long WINDOW_MS = 60_000L;
 
     /** 一次放行:用完要 {@link #close},归还并发额度。被拒的 {@link #refusal} 非空,{@link #close} 什么也不做。 */
-    final class Permit implements AutoCloseable {
+    public final class Permit implements AutoCloseable {
         private final String token;
         private final String refusal;
         private boolean open;
@@ -28,7 +28,7 @@ final class McpLimits {
         }
 
         /** 被拒的理由,给调用方的话;放行了是 null。 */
-        String refusal() {
+        public String refusal() {
             return refusal;
         }
 
@@ -48,16 +48,16 @@ final class McpLimits {
     private final ArrayDeque<Long> recentTotal = new ArrayDeque<>();
     private int inFlightTotal;
 
-    McpLimits(McpConfig.Limits limits, LongSupplier clock) {
+    public McpLimits(McpConfig.Limits limits, LongSupplier clock) {
         this.limits = limits;
         this.clock = clock;
     }
 
-    void configure(McpConfig.Limits limits) {
+    public void configure(McpConfig.Limits limits) {
         this.limits = limits;
     }
 
-    synchronized Permit acquire(String token) {
+    public synchronized Permit acquire(String token) {
         McpConfig.Limits cap = limits;
         long now = clock.getAsLong();
         ArrayDeque<Long> own = recent.computeIfAbsent(token, k -> new ArrayDeque<>());

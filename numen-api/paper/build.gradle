@@ -27,8 +27,22 @@ dependencies {
     Modules.SERVER.each { compileOnly project(it) }
 }
 
+// mcp 的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……):Paper 没有嵌套 jar,和纯 JVM 模块一样把类平铺进插件 jar。
+// 清单与加载器的嵌套库是同一份(Modules.nestedLibraries),Gson、slf4j 用 Paper 自带的。
+evaluationDependsOn(':mcp')
+def nestedLibraries = Modules.nestedLibraries(project(':mcp')) as Set
+def nestedJars = project(':mcp').configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+        .findAll { nestedLibraries.contains("${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}".toString()) }
+        .collect { it.file }
+
 tasks.named('jar', Jar) {
     Modules.SERVER.each { path -> from({ project(path).sourceSets.main.output }) }
+    from(nestedJars.collect { zipTree(it) }) {
+        // 各库自己的清单、签名、模块描述符与协议文本不平铺(同名的会互相盖掉);服务发现文件(META-INF/services)留着
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', '**/module-info.class',
+                'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
     // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
     from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
 }

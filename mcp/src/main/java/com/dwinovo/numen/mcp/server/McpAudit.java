@@ -1,6 +1,5 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
-import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.store.AppendLog;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.StoreException;
@@ -19,14 +18,14 @@ import java.util.UUID;
  * <p>日志按大小轮转:当前这份写到 {@link #MAX_BYTES} 就改名成 {@code .1}(原来的 {@code .1} 顺延成 {@code .2}……),
  * 只留最近 {@link #KEEP} 份旧的。轮转排在写盘的车道上、每条追加之前,和追加按提交顺序执行。
  */
-final class McpAudit {
+public final class McpAudit {
 
-    static final String FILE = "mcp_audit.jsonl";
+    public static final String FILE = "mcp_audit.jsonl";
 
     /** 当前这份写到多大就轮转。 */
-    static final long MAX_BYTES = 4L << 20;
+    public static final long MAX_BYTES = 4L << 20;
     /** 留几份旧的。 */
-    static final int KEEP = 4;
+    public static final int KEEP = 4;
 
     private final AppendLog log;
     private final Path file;
@@ -34,13 +33,13 @@ final class McpAudit {
     private final long maxBytes;
     private final int keep;
 
-    McpAudit(Home home) {
-        this(home, MAX_BYTES, KEEP);
+    public McpAudit(Path dir, Io io) {
+        this(dir, io, MAX_BYTES, KEEP);
     }
 
-    McpAudit(Home home, long maxBytes, int keep) {
-        this.file = home.file(FILE);
-        this.io = home.io();
+    public McpAudit(Path dir, Io io, long maxBytes, int keep) {
+        this.file = dir.resolve(FILE);
+        this.io = io;
         this.log = new AppendLog(file, AppendLog.Format.of(1), io);
         this.maxBytes = maxBytes;
         this.keep = keep;
@@ -73,7 +72,7 @@ final class McpAudit {
     }
 
     /** 一次接入({@code initialize}):对方自报的名字不是内容,是"谁接进来了"。 */
-    void connected(String session, McpToken token, String client) {
+    public void connected(String session, McpToken token, String client) {
         JsonObject body = new JsonObject();
         body.addProperty("session", session);
         body.addProperty("token", token.id());
@@ -83,7 +82,7 @@ final class McpAudit {
     }
 
     /** 认出了令牌却被拒(限流、会话开满)。 */
-    void refused(String why, String tokenId) {
+    public void refused(String why, String tokenId) {
         JsonObject body = new JsonObject();
         body.addProperty("why", why);
         body.addProperty("token", tokenId);
@@ -91,7 +90,7 @@ final class McpAudit {
     }
 
     /** 没认出令牌的一波请求:同一来源地址在一个时间窗内合并成一条,记次数与首末时刻(毫秒)。 */
-    void strangers(String address, String why, int count, long first, long last) {
+    public void strangers(String address, String why, int count, long first, long last) {
         JsonObject body = new JsonObject();
         body.addProperty("why", why);
         body.addProperty("address", address);
@@ -101,14 +100,14 @@ final class McpAudit {
         append("refused", body);
     }
 
-    /** 一次工具调用。{@code companion} 没有是 null。 */
-    void called(String session, McpToken token, String tool, UUID companion, boolean ok, int bytesIn, int bytesOut) {
+    /** 一次工具调用。{@code subject}(这次调用作用的那一个对象)没有是 null;日志里沿用 {@code companion} 这个键。 */
+    public void called(String session, McpToken token, String tool, UUID subject, boolean ok, int bytesIn, int bytesOut) {
         JsonObject body = new JsonObject();
         body.addProperty("session", session);
         body.addProperty("token", token.id());
         body.addProperty("tool", tool);
-        if (companion != null) {
-            body.addProperty("companion", companion.toString());
+        if (subject != null) {
+            body.addProperty("companion", subject.toString());
         }
         body.addProperty("ok", ok);
         body.addProperty("in", bytesIn);

@@ -7,6 +7,8 @@ plugins {
 
 // 要读 Numen API 的测试夹具源码集,它得先配置好
 evaluationDependsOn(':numen-api:common')
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
 
 /*
  * GameTest 与评测在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):把套件入口 GameTestSuites
@@ -26,6 +28,14 @@ dependencies {
     }
     jarJar("org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}") {
         version { strictly "[${commonmark_version},0.31)"; prefer commonmark_version }
+    }
+    // mcp 模块的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……)同理嵌套带上;清单从 mcp 的依赖解析出来。
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        def libVersion = coordinate.split(':')[2]
+        jarJar(coordinate) {
+            transitive = false
+            version { strictly "[${libVersion},)"; prefer libVersion }
+        }
     }
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }

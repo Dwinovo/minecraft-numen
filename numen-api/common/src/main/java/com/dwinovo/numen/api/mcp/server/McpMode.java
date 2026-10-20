@@ -1,5 +1,10 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.mcp.server.McpTokens;
+import com.dwinovo.numen.mcp.server.McpLimits;
+import com.dwinovo.numen.mcp.server.McpAudit;
+import com.dwinovo.numen.mcp.server.McpStrangers;
+import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -89,10 +94,10 @@ public final class McpMode {
         this.hands = hands;
         this.watch = watch;
         this.config = McpConfig.load(serverHome.file(CONFIG_FILE), serverHome.io());
-        this.tokens = new McpTokens(serverHome, System::currentTimeMillis);
+        this.tokens = new McpTokens(serverHome.dir(), serverHome.io(), System::currentTimeMillis);
         this.sessions = new McpSessions(System::currentTimeMillis);
         this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
-        this.audit = new McpAudit(serverHome);
+        this.audit = new McpAudit(serverHome.dir(), serverHome.io());
         this.strangers = new McpStrangers(audit, System::currentTimeMillis);
         this.channels = new McpChannels();
         this.connectedOwners = Set.of();

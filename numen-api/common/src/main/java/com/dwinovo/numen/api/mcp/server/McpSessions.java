@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.mcp.server.McpToken;
 import com.google.gson.JsonObject;
 
 import java.security.SecureRandom;

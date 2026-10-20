@@ -1,5 +1,11 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.mcp.server.McpToken;
+import com.dwinovo.numen.mcp.server.McpTokens;
+import com.dwinovo.numen.mcp.server.McpLimits;
+import com.dwinovo.numen.mcp.server.McpAudit;
+import com.dwinovo.numen.mcp.server.McpStrangers;
+import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
@@ -154,7 +160,7 @@ class McpServerTest {
     void start() throws Exception {
         home = new Home(dir, Io.direct(e -> { throw e; }));
         config = new McpConfig(true, McpConfig.LOOPBACK, 0, 30, List.of(), McpConfig.Limits.DEFAULT);
-        tokens = new McpTokens(home, now::get);
+        tokens = new McpTokens(home.dir(), home.io(), now::get);
         sessions = new McpSessions(now::get);
         launch(config);
     }
@@ -164,7 +170,7 @@ class McpServerTest {
             server.stop();
         }
         config = with;
-        audit = new McpAudit(home);
+        audit = new McpAudit(home.dir(), home.io());
         strangers = new McpStrangers(audit, now::get);
         server = new McpServer(with, tokens, new McpLimits(with.limits(), now::get), sessions, audit, strangers,
                 channels, owner -> hands);

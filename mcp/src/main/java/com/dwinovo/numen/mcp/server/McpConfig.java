@@ -1,11 +1,12 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
-import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ public record McpConfig(
         }
     }
 
+    private static final Logger LOG = LoggerFactory.getLogger("Numen");
     private static final List<String> DEFAULT_HIDDEN = List.of();
     /** 只绑回环。默认值,也是"没开局域网"时的地址。 */
     public static final String LOOPBACK = "127.0.0.1";
@@ -54,7 +56,7 @@ public record McpConfig(
     public static final String ANY_HOST = "0.0.0.0";
 
     /** 读配置;没有就播一份默认的。读不懂就当关着,不带着一份读坏的表起服。 */
-    public static McpConfig load(Path file, com.dwinovo.numen.api.store.Io io) {
+    public static McpConfig load(Path file, Io io) {
         try {
             JsonObject o = doc(file, io).read().orElse(null);
             if (o == null) {
@@ -76,7 +78,7 @@ public record McpConfig(
                             intOr(lim, "total_concurrent", d.totalConcurrent()),
                             intOr(lim, "total_per_minute", d.totalPerMinute())));
         } catch (RuntimeException ex) {
-            Constants.LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
+            LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
             return disabledDefault();
         }
     }
@@ -86,19 +88,19 @@ public record McpConfig(
     }
 
     /** 默认配置(关着)。 */
-    static McpConfig disabledDefault() {
+    public static McpConfig disabledDefault() {
         return new McpConfig(false, LOOPBACK, 8765, 300, DEFAULT_HIDDEN, Limits.DEFAULT);
     }
 
-    McpConfig withEnabled(boolean on) {
+    public McpConfig withEnabled(boolean on) {
         return new McpConfig(on, host, port, callTimeoutSeconds, hiddenTools, limits);
     }
 
-    McpConfig withEndpoint(String host, int port, int callTimeoutSeconds) {
+    public McpConfig withEndpoint(String host, int port, int callTimeoutSeconds) {
         return new McpConfig(enabled, host, port, callTimeoutSeconds, hiddenTools, limits);
     }
 
-    McpConfig withHiddenTools(List<String> hiddenTools) {
+    public McpConfig withHiddenTools(List<String> hiddenTools) {
         return new McpConfig(enabled, host, port, callTimeoutSeconds, List.copyOf(hiddenTools), limits);
     }
 
@@ -108,11 +110,11 @@ public record McpConfig(
     }
 
     /** 写回配置文件:游戏内拨的开关要跨会话记住。 */
-    void save(Path file, com.dwinovo.numen.api.store.Io io) {
+    public void save(Path file, Io io) {
         write(file, io, this);
     }
 
-    private static void write(Path file, com.dwinovo.numen.api.store.Io io, McpConfig cfg) {
+    private static void write(Path file, Io io, McpConfig cfg) {
         JsonObject o = new JsonObject();
         o.addProperty("enabled", cfg.enabled());
         o.addProperty("host", cfg.host());
@@ -130,7 +132,7 @@ public record McpConfig(
         doc(file, io).write(o);
     }
 
-    private static JsonDoc doc(Path file, com.dwinovo.numen.api.store.Io io) {
+    private static JsonDoc doc(Path file, Io io) {
         return new JsonDoc(file, JsonDoc.Format.of(1), io);
     }
 

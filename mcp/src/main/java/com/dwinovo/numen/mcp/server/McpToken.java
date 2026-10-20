@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mcp.server;
+package com.dwinovo.numen.mcp.server;
 
 import java.util.Set;
 import java.util.UUID;
