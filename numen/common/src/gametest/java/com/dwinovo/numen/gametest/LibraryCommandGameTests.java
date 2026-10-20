@@ -147,7 +147,7 @@ public class LibraryCommandGameTests {
         };
     }
 
-    /** 一张真能解码的 64×64 皮肤图;{@code slim} 时细手臂用不到的一块留成透明。 */
+    /** 一张真能解码的 64×64 皮肤图(每次造的都不一样);{@code slim} 时细手臂用不到的一块留成透明。 */
     private static byte[] skinPng(boolean slim) {
         java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < 64; y++) {
@@ -155,6 +155,7 @@ public class LibraryCommandGameTests {
                 image.setRGB(x, y, 0xFF3A7BD5);
             }
         }
+        image.setRGB(0, 0, 0xFF000000 | (int) System.nanoTime());   // 每次不同:签名缓存留在服务器目录里,跨次运行还在
         if (slim) {
             image.setRGB(50, 16, 0);
         }
