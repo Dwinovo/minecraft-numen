@@ -45,7 +45,7 @@ function M.collect(opts)
       end
       if #left > 0 then
         raise("no_path", "picked up " .. picked .. " item(s); no way to the " .. #left .. " left, the nearest "
-            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.to(%d)", left[1].id),
+            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.to(%q)", left[1].id),
             {picked = picked, left = left})
       end
       return picked

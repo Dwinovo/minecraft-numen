@@ -202,7 +202,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            lua(companion, "numen.use.entity(" + boat.getId() + ")");
+            lua(companion, "numen.use.entity(" + ref(boat) + ")");
         });
         helper.runAfterDelay(30, () -> {
             lua(companion, "numen.use.hit(" + xyz(stone) + ")");
@@ -238,7 +238,7 @@ public class MovementGameTests {
         var stand = standOnPillar(helper, Blocks.STONE);
         NumenPlayer companion = spawnAt(helper, "gametest_tail", new BlockPos(3, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
-        ToolRun follow = lua(companion, "numen.move.follow(" + stand.getId() + ", {distance = 3, seconds = 60})");
+        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3, seconds = 60})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.distanceTo(stand) <= 4.5, "she did not get up beside it: " + companion.distanceTo(stand));
@@ -253,7 +253,7 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper, Blocks.BEDROCK);
         NumenPlayer companion = spawnAt(helper, "gametest_tailless", new BlockPos(3, 2, 8), false);
-        ToolRun follow = lua(companion, "numen.move.follow(" + stand.getId() + ", {distance = 3})");
+        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(follow.done() && !follow.succeeded() && follow.task() == null,
@@ -285,7 +285,7 @@ public class MovementGameTests {
         var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, room.getX() + 0.5, room.getY(), room.getZ() + 0.5);
         level.addFreshEntity(stand);
         NumenPlayer companion = spawnAt(helper, "gametest_tailing", new BlockPos(3, 2, 8), false);
-        ToolRun follow = lua(companion, "numen.move.follow(" + stand.getId() + ", {distance = 3})");
+        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
 
         steps(helper)
                 .thenWaitUntil(() -> {
@@ -582,7 +582,7 @@ public class MovementGameTests {
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_swinefollower", new BlockPos(3, 2, 3), false);
-        ToolRun follow = lua(companion, "numen.move.follow(" + pig.getId() + ")");
+        ToolRun follow = lua(companion, "numen.move.follow(" + ref(pig) + ")");
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(pig) <= 4.5,
@@ -596,11 +596,11 @@ public class MovementGameTests {
     }
 
     /**
-     * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的那一行 Lua 写的是它的 UUID,不是只在这一次开服里有效的
-     * 运行期编号(重启后同一个号会发给别的东西)。重启用"休眠 + 把落盘的那条记录放回去 + 复活"来演。
+     * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的那一行 Lua 写的是它的身份(种类@UUID 前六位),重启后
+     * 认的还是同一只。重启用"休眠 + 把落盘的那条记录放回去 + 复活"来演。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
-    public static void a_restored_follow_finds_the_same_entity_by_uuid(GameTestHelper helper) {
+    public static void a_restored_follow_finds_the_same_entity_by_its_id(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         var pig = net.minecraft.world.entity.EntityType.PIG.create(level);
@@ -612,7 +612,7 @@ public class MovementGameTests {
         NumenPlayer first = com.dwinovo.numen.api.gametest.Bodies.summon(server, UUID.randomUUID(),
                 "gametest_uuid_follower", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
-        ToolRun follow = lua(first, "numen.move.follow(" + pig.getId() + ", {distance = 3})");
+        ToolRun follow = lua(first, "numen.move.follow(" + ref(pig) + ", {distance = 3})");
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
         NumenPlayer[] second = new NumenPlayer[1];
 
@@ -622,9 +622,9 @@ public class MovementGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
                     var recorded = registry.find(uuid);
-                    helper.assertTrue(recorded.taskLua().equals("numen.move.follow(\"" + pig.getUUID()
-                                    + "\", {distance = 3})"),
-                            "the replayed line does not name the pig by its UUID: " + recorded.taskLua());
+                    helper.assertTrue(recorded.taskLua().equals("numen.move.follow(" + ref(pig)
+                                    + ", {distance = 3})"),
+                            "the replayed line does not name the pig by its id: " + recorded.taskLua());
                     com.dwinovo.numen.api.entity.Companions.dormant(server, first);
                     registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
                     second[0] = com.dwinovo.numen.api.gametest.Bodies.respawn(server, uuid);
@@ -643,15 +643,15 @@ public class MovementGameTests {
                 .thenSucceed();
     }
 
-    /** 给了一个这里没有的实体编号:当场失败,叫她先扫一眼附近的实体。 */
+    /** 给了一个这里没有的实体身份:当场失败,叫她先扫一眼附近的实体。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
-        ToolRun follow = lua(companion, "numen.move.follow(999999)");
+        ToolRun follow = lua(companion, "numen.move.follow(\"pig@999999\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(follow.done(), "follow has not replied");
-            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("no entity 999999")
+            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("pig@999999 is not near you")
                             && "numen.scan.entities()".equals(follow.hint()),
                     "the failure does not name the missing id and the scan: " + follow.outcome() + " / " + follow.hint());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

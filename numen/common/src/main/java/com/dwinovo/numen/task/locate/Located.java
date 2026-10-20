@@ -1,6 +1,6 @@
 package com.dwinovo.numen.task.locate;
 
-import com.dwinovo.numen.task.CompassUtil;
+import com.dwinovo.numen.api.sdk.CompassUtil;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Place;
 import net.minecraft.core.BlockPos;

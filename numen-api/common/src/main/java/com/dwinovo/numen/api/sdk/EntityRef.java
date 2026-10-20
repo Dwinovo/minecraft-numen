@@ -1,81 +1,77 @@
 package com.dwinovo.numen.api.sdk;
 
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.script.ScriptType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 
 import java.util.Map;
-import java.util.UUID;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
- * 点名的一只实体:{@code numen.scan.entities} 列出的运行期编号,或那只实体的表(带 {@code id}),或它的 UUID。
+ * 点名的一只实体:{@link EntityLabel} 的身份({@code zombie@3f9a1c},玩家写名字),或那只实体的表(带 {@code id})。
+ * 身份跨重启不变,所以占身体的活重启后再跑的那一行写的就是它,认的还是同一只,认不到就是它不在了。
  *
- * <p>编号短,是她手里的写法;它只在这一次开服里有效,重启之后同一个号会发给别的东西。UUID 跨重启不变:占身体的活受理时把点名的实体
- * 换成 {@link #of 它的 UUID} 写进重启后再跑的那一行({@link Job#replayedAs}),重启后认的还是同一只,认不到就是它不在了。
- *
- * @param id   运行期编号;按 UUID 点名时为 null
- * @param uuid UUID;按编号点名时为 null
+ * @param label 通过 {@link EntityLabel#valid} 的身份
  */
-public record EntityRef(Integer id, UUID uuid) {
-
-    private static final Pattern UUID_TEXT = Pattern.compile(
-            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+public record EntityRef(String label) {
 
     public EntityRef {
-        if ((id == null) == (uuid == null)) {
-            throw new IllegalArgumentException("an entity is named by its id or by its UUID, exactly one of them");
+        if (!EntityLabel.valid(label)) {
+            throw new IllegalArgumentException("not an entity label: " + label);
         }
     }
 
-    /** 按运行期编号点名。 */
-    public static EntityRef id(int id) {
-        return new EntityRef(id, null);
-    }
-
-    /** 这只实体,按 UUID 点名:跨重启认的是同一只。 */
+    /** 这只实体。 */
     public static EntityRef of(Entity entity) {
-        return new EntityRef(null, entity.getUUID());
+        return new EntityRef(EntityLabel.of(entity));
     }
 
-    /** 它在这一层世界里的那只;不在、已被移除都是 null。 */
+    /**
+     * 它在这一层世界里的那只;不在是 null。
+     *
+     * @throws ApiError {@link ErrorKind#BAD_ARGUMENT}:撞码,同一个短码对着好几只,列出是哪几只
+     */
     public Entity in(ServerLevel level) {
-        Entity found = id != null ? level.getEntity(id) : level.getEntity(uuid);
-        return found == null || found.isRemoved() ? null : found;
+        return switch (EntityLabel.find(level, label)) {
+            case EntityLabel.Match.Found<Entity> found -> found.entity();
+            case EntityLabel.Match.None<Entity> none -> null;
+            case EntityLabel.Match.Ambiguous<Entity> clash -> throw new ApiError(ErrorKind.BAD_ARGUMENT,
+                    label + " names " + clash.candidates().size() + " entities at once (same short code): "
+                            + clash.candidates().stream()
+                                    .map(e -> EntityLabel.of(e) + " at " + Positions.literal(e.blockPosition()))
+                                    .collect(Collectors.joining("; "))
+                            + " — act on them by where they stand, or wait for one to move away",
+                    null);
+        };
     }
 
     @Override
     public String toString() {
-        return id != null ? id.toString() : uuid.toString();
+        return label;
     }
 
-    /** 编号、带 {@code id} 的表或 UUID 读成它;写回去是编号或 UUID。 */
+    /** 身份、带 {@code id} 的表(一只 Entity)读成它;写回去是身份。 */
     static final Codec<EntityRef> CODEC = new Codec<>() {
         @Override
         public ScriptType type() {
-            return ScriptType.union(ScriptType.INTEGER, new ScriptType.Named("Entity"));
+            return ScriptType.union(ScriptType.STRING, new ScriptType.Named("Entity"));
         }
 
         @Override
         public EntityRef decode(Object value) {
             Object id = value instanceof Map<?, ?> table ? table.get("id") : value;
-            if (id instanceof Number n && n.doubleValue() == Math.rint(n.doubleValue())
-                    && n.doubleValue() == (int) n.doubleValue()) {
-                return EntityRef.id((int) n.doubleValue());
+            if (id instanceof String s && EntityLabel.valid(s)) {
+                return new EntityRef(s);
             }
-            if (id instanceof String s && UUID_TEXT.matcher(s).matches()) {
-                return new EntityRef(null, UUID.fromString(s));
-            }
-            if (id instanceof String s && s.matches("\\d{1,9}")) {
-                throw new BadValue("an entity id is a number; got " + BadValue.given(value), Long.parseLong(s));
-            }
-            throw new BadValue("expected an entity: its id as numen.scan.entities lists it (184), or the Entity "
-                    + "itself; got " + BadValue.given(value));
+            throw new BadValue("expected an entity: its id as numen.scan.entities lists it (\"zombie@3f9a1c\", a "
+                    + "player's name), or the Entity itself; got " + BadValue.given(value));
         }
 
         @Override
         public Object encode(EntityRef value) {
-            return value.id != null ? (Object) (long) value.id : value.uuid.toString();
+            return value.label;
         }
     };
 }

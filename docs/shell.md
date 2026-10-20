@@ -77,7 +77,7 @@
 - `work.dig` 挖完回执说:挖了几格、还剩几格够不着(走不到的才有)。给的是扫描交回的
   Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
-  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack(27)` 只管"打这一只"
+  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack("zombie@3f9a1c")` 只管"打这一只"
   (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由程序决定(`fight.clear` 就是这样一段);安全兜底
   (打不过就跑的逃跑本能、岩浆自救)由反射打断程序。
 
@@ -590,17 +590,17 @@ public static Pending<Located> biome(ServerCall call, Biome args) {
 }
 ```
 
-**占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行写目标的 UUID,不写只在这一次开服有效的运行期编号):
+**占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行就是这次调用写成的那一行,点名的实体写的是它的身份——种类@UUID 前六位,重启后认的还是同一只):
 
 ```java
-public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id.") EntityRef entity) {}
+public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity) {}
 
 @Fn("Attack one entity until it is dead, lost or out of reach.")
-@Example("numen.fight.attack(184)")
+@Example("numen.fight.attack(\"zombie@3f9a1c\")")
 public static Job<Fought> attack(ServerCall call, Attack args) {
     Entity target = call.entity(args.entity());
     AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(), ..., List.of(target.getId()), false);
-    return Job.of(record).replayedAs(new Attack(EntityRef.of(target)));
+    return Job.of(record);
 }
 ```
 
@@ -610,7 +610,7 @@ public static Job<Fought> attack(ServerCall call, Attack args) {
 NumenPlugins.register("tlm", numen -> numen.api("maid", "Touhou Little Maid: the maids you keep.", MaidApi.class));
 
 @Fn("Switch one of your maids to another work mode, like a click in her task list.")
-@Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = 812})")
+@Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = \"maid@3f9a1c\"})")
 public static Pending<Switched> task(ServerCall call, Task args) {
     Entity maid = args.maid().isPresent() ? maid(call, args.maid().get()) : yoursWithinReach(call);
     return call.use(maid, GUI, still -> {
@@ -624,12 +624,12 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 }
 ```
 
-脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = 812, task = "touhou_little_maid:farm"}`;离得远是
+脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = "maid@3f9a1c", task = "touhou_little_maid:farm"}`;离得远是
 `out_of_reach`,`err.hint` 是 `numen.move.to({x = …}, 2)`。
 
 ### 重启后接着做、`/numen drive`
 
-- 受理一件活时,把这次调用写成一行 Lua 记下(`Call.of`,活换过参数的用 `Job.replayedAs` 那一份);重启后经 `ServerPrograms` 再跑这一行,
+- 受理一件活时,把这次调用写成一行 Lua 记下(`Call.of`);重启后经 `ServerPrograms` 再跑这一行,
   和她写的程序同一个入口。没受理(读不通、当场失败、准备没过)就是没接回来,她收到一条 task_finished 说为什么。**旧存档不兼容**:旧版本
   按一行命令记下的活读进来只为说清它没接回来(日志与 task_finished 都说这一版不再跑它),不做转接。
 - `/numen drive <同伴> <程序>`(OP)是一段 Lua 程序,经同一个入口跑,整张回执说给发令人。`/numen permission …`、`/numen consent …`

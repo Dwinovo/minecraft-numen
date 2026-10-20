@@ -202,8 +202,7 @@ public final class Dispatcher {
     }
 
     /**
-     * 受理一件占身体的活:准备过了才受理、才顶掉手上那件,回它的编号;准备不过当场失败。重启后再跑的是这次调用写成的那一行 Lua
-     * (活换过参数的,是换过的那一份)。
+     * 受理一件占身体的活:准备过了才受理、才顶掉手上那件,回它的编号;准备不过当场失败。重启后再跑的是这次调用写成的那一行 Lua。
      */
     private static void accept(ApiFunction fn, Job<?> job, NumenPlayer her, Record args, Consumer<String> reply) {
         TaskRecord<?> record = job.record();
@@ -212,7 +211,7 @@ public final class Dispatcher {
             return;
         }
         record.calledAs(fn);
-        String replay = Call.of(fn, job.replay() != null ? job.replay() : args);
+        String replay = Call.of(fn, args);
         TaskDispatch.setTask(her, record, replay, refused -> reply.accept(failure(refused).toString()),
                 () -> reply.accept(ApiReply.job(record.publicId()).toString()));
     }

@@ -87,6 +87,18 @@ public final class EventTypes {
      * 反击、退开、找掩体,都由她当场定。连击去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。
      */
     public static final String COMPANION_HURT = "companion_hurt";
+    /**
+     * 半径内有一只怪盯上了她(它的攻击目标变成她)。恒为急件:它还没动手,她不知道就是等着挨打——打还是躲、先下手还是拉开,她当场定。
+     * 它盯着期间不再发,放弃又盯上的抖动和她挨打共用一把去抖窗口,见 {@code Vigil}。
+     */
+    public static final String TARGETED = "targeted";
+    /**
+     * 她留意的一个对象(最近打她、盯上她的,以及她正在打、用、骑的)被移出世界了,附原版的移除原因:死了(能查到击杀者就带上)、
+     * 消失、换了维度、所在区块卸载。走出半径不算。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:它没了不会让她正在做的事变错,那是她下次开口时顺带知道的事。
+     */
+    public static final String GONE = "gone";
     /** 她自己定的表到点了。恒为急件:提醒而已,不代表那件事完成了。 */
     public static final String TIMER = "timer";
     /** 她从床上醒了。恒为急件:{@code sleep} 到躺下就返回,醒来这一刻只有这条事件说得出。 */
@@ -308,6 +320,8 @@ public final class EventTypes {
         register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(event(OWNER_HURT, false));
         register(event(COMPANION_HURT, true));
+        register(event(TARGETED, true));
+        register(new Type(GONE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(event(TIMER, true));
         register(event(WOKE, true));
         register(event(DIMENSION_CHANGE, false));

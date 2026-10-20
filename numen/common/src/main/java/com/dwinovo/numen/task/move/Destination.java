@@ -70,8 +70,8 @@ public record Destination(Arrival arrival, Goal goal, BlockPos toward) {
             case Where.Mob mob -> {
                 Entity entity = mob.ref().in(her.serverLevel());
                 if (entity == null || entity == her) {
-                    throw new Gone("no entity with id " + mob.ref() + " is here — it died, left, "
-                            + "or ids changed with a restart; numen.scan.entities() lists who is around");
+                    throw new Gone(mob.ref() + " is not near you — it died, left, or is in an unloaded chunk or another "
+                            + "dimension; numen.scan.entities() lists who is around");
                 }
                 if (arrival.how() == Arrival.How.BESIDE && entity instanceof ItemEntity item) {
                     yield new Destination(arrival, new ItemReach(item.getBoundingBox()), item.blockPosition());

@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * {@link EventQueue} 的落盘实现:一个 {@link AppendLog},一条输入一条记录({@code type} 就是输入的类型),
- * 每次存盘把整本现状换进去。本类只管输入条目的记录格式(类型、正文、时刻、急不急);头、版本、id、
+ * 每次存盘把整本现状换进去。本类只管输入条目的记录格式(类型、正文、时刻、游戏刻、急不急);头、版本、id、
  * 坏行与原子替换都是 {@link AppendLog} 的事。
  *
  * <p>作用只有一个——关游戏时没来得及消费的输入,下次登录还在,同伴不失忆
@@ -60,7 +60,8 @@ public final class JsonlJournal implements EventQueue.Journal {
                 continue;
             }
             out.add(new EventQueue.Entry(r.type(), text, r.ts(), r.json().has("urgent")
-                    && r.json().get("urgent").getAsBoolean(), null, r.id()));
+                    && r.json().get("urgent").getAsBoolean(), null, r.id(),
+                    r.json().has("tick") ? r.json().get("tick").getAsLong() : EventQueue.Entry.NO_TICK));
         }
         if (skipped > 0) {
             AiLog.LOG.warn("[numen-queue] 跳过 {} 条坏记录 {}", skipped, log.file().getFileName());
@@ -78,6 +79,9 @@ public final class JsonlJournal implements EventQueue.Journal {
                 o.addProperty("id", e.id());   // 编号是条目的,不是这次重写数出来的:重启前后同一条还是它
             }
             o.addProperty("ts", e.ts());
+            if (e.tick() != EventQueue.Entry.NO_TICK) {
+                o.addProperty("tick", e.tick());   // 事情发生时的游戏刻:重启后交给模型时据它算晚到多久
+            }
             o.addProperty("text", e.text());
             if (e.urgent()) {
                 o.addProperty("urgent", true);

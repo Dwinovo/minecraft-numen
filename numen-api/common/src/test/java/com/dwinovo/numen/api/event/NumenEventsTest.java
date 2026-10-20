@@ -30,13 +30,14 @@ class NumenEventsTest {
         attrs.put("id", "t1");
         attrs.put("status", "done");
 
-        EventQueue.Entry e = NumenEvents.entry(24000L * 3 + 6000L, EventTypes.TASK_FINISHED, attrs,
+        EventQueue.Entry e = NumenEvents.entry(new NumenEvents.Moment(7777L, 24000L * 3 + 6000L), EventTypes.TASK_FINISHED, attrs,
                 "挖完了", 42L, true);
 
         assertEquals(EventTypes.TASK_FINISHED, e.type());
         assertEquals("<event kind=\"task_finished\" day=\"3\" t=\"12:00\" id=\"t1\" status=\"done\">挖完了</event>",
                 e.text(), "kind 取自条目的类型,时间戳与属性按顺序盖上");
         assertEquals(42L, e.ts());
+        assertEquals(7777L, e.tick(), "条目记着事情发生时的游戏刻");
         assertTrue(e.urgent());
     }
 
@@ -47,12 +48,12 @@ class NumenEventsTest {
         attrs.put("id", "t3");
         attrs.put("task", "build set");
         attrs.put("status", "done");
-        EventQueue.Entry finished = NumenEvents.entry(0L, EventTypes.TASK_FINISHED, attrs,
+        EventQueue.Entry finished = NumenEvents.entry(new NumenEvents.Moment(0L, 0L), EventTypes.TASK_FINISHED, attrs,
                 "set 1 cell; the id=\"t9\" in this text is not the task", 1L, true);
         assertEquals(new com.dwinovo.numen.script.ScriptCall.Finish("t3", "done",
                 "set 1 cell; the id=\"t9\" in this text is not the task", null), NumenEvents.finishOf(finished));
 
-        EventQueue.Entry hungry = NumenEvents.entry(0L, EventTypes.HUNGRY, Map.of("id", "t3"), "hungry", 1L, true);
+        EventQueue.Entry hungry = NumenEvents.entry(new NumenEvents.Moment(0L, 0L), EventTypes.HUNGRY, Map.of("id", "t3"), "hungry", 1L, true);
         assertEquals(null, NumenEvents.finishOf(hungry), "别的种类不是收尾");
         assertEquals(null, NumenEvents.finishOf(new EventQueue.Entry(EventTypes.QUERY,
                 "<query>t3 做完了吗</query>", 1L, false)));
@@ -62,7 +63,7 @@ class NumenEventsTest {
     void aPluginKindGoesOutThroughTheSameConstructor() {
         EventTypes.register(EventTypes.event("accessory_changed", false));
 
-        EventQueue.Entry e = NumenEvents.entry(0L, "accessory_changed", Map.of("slot", "ring"),
+        EventQueue.Entry e = NumenEvents.entry(new NumenEvents.Moment(0L, 0L), "accessory_changed", Map.of("slot", "ring"),
                 "戴上了<金戒指>", 7L, false);
 
         assertEquals("accessory_changed", e.type());
@@ -73,17 +74,17 @@ class NumenEventsTest {
     @Test
     void anUnregisteredKindCannotBeSent() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> NumenEvents.entry(0L, "谁也没登记过", null, "x", 0L, false));
+                () -> NumenEvents.entry(new NumenEvents.Moment(0L, 0L), "谁也没登记过", null, "x", 0L, false));
         assertTrue(refused.getMessage().contains("谁也没登记过"), refused.getMessage());
         assertThrows(IllegalArgumentException.class,
-                () -> NumenEvents.entry(0L, "body_log", null, "x", 0L, false), "身体日志这个桶退役了");
+                () -> NumenEvents.entry(new NumenEvents.Moment(0L, 0L), "body_log", null, "x", 0L, false), "身体日志这个桶退役了");
     }
 
     @Test
     void theOwnersInputsAreNotWorldEvents() {
         for (String type : new String[] {EventTypes.QUERY, EventTypes.GOAL, EventTypes.COMPACT, EventTypes.CLEAR}) {
             assertThrows(IllegalArgumentException.class,
-                    () -> NumenEvents.entry(0L, type, null, "x", 0L, false), type + " 不能拼成 <event> 发出去");
+                    () -> NumenEvents.entry(new NumenEvents.Moment(0L, 0L), type, null, "x", 0L, false), type + " 不能拼成 <event> 发出去");
         }
     }
 
@@ -124,7 +125,7 @@ class NumenEventsTest {
     /** 被切断的程序交出的回执作为事件交给她:正文就是回执的文字,种类是登记过的世界的事,不叫醒她。 */
     @Test
     void aCutOffProgramsReceiptIsAnEventWhoseBodyIsTheReceiptItself() {
-        EventQueue.Entry e = NumenEvents.programStopped(0L, "call_7", "The script stopped at line 2: this turn was cut off",
+        EventQueue.Entry e = NumenEvents.programStopped(new NumenEvents.Moment(0L, 0L), "call_7", "The script stopped at line 2: this turn was cut off",
                 5L);
         assertEquals(EventTypes.PROGRAM_STOPPED, e.type());
         assertTrue(e.text().contains("program=\"call_7\""), e.text());

@@ -406,11 +406,11 @@ public final class GameTestKit {
             }
         }
 
-        /** 那一挖还在世界里的掉落物({@code drops} 里带 {@code id} 的),写成 Lua 的一张表:{@code {{id = 12}, {id = 15}}}。 */
+        /** 那一挖还在世界里的掉落物({@code drops} 里带 {@code id} 的),写成 Lua 的一张表:{@code {{id = "item@3f9a1c"}, {id = "item@a41b09"}}}。 */
         private static String dropIds(ToolRun dig) {
             List<String> ids = new ArrayList<>();
             for (var drop : dig.result(DigCompanionTask.Dug.class).drops()) {
-                drop.id().ifPresent(id -> ids.add("{id = " + id + "}"));
+                drop.id().ifPresent(id -> ids.add("{id = \"" + id + "\"}"));
             }
             return "{" + String.join(", ", ids) + "}";
         }
@@ -561,6 +561,11 @@ public final class GameTestKit {
     /** 一格的坐标写成脚本里的一格 Pos({@link Positions#literal})。 */
     static String xyz(BlockPos pos) {
         return Positions.literal(pos);
+    }
+
+    /** 一只实体写成脚本里的身份字面量:{@code "zombie@3f9a1c"}(玩家是名字)。 */
+    static String ref(net.minecraft.world.entity.Entity entity) {
+        return "\"" + com.dwinovo.numen.api.sdk.EntityLabel.of(entity) + "\"";
     }
 
 

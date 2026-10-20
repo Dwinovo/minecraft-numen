@@ -32,6 +32,6 @@
   "numen.activity.click_block_right": "用 %s, %s, %s 处的方块",
   "numen.activity.click_ahead_left": "朝前打",
   "numen.activity.click_ahead_right": "朝前使用",
-  "numen.activity.click_entity_left": "打实体 #%s",
-  "numen.activity.click_entity_right": "对实体 #%s 使用"
+  "numen.activity.click_entity_left": "打 %s",
+  "numen.activity.click_entity_right": "对 %s 使用"
 }

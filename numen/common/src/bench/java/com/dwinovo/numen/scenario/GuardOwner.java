@@ -94,7 +94,7 @@ public final class GuardOwner implements Scenario {
     @Override
     public String solution(Scene scene) {
         StringBuilder program = new StringBuilder();
-        zombies.forEach(z -> program.append("numen.fight.attack(").append(z.getId()).append(")\n"));
+        zombies.forEach(z -> program.append("numen.fight.attack(\"").append(com.dwinovo.numen.api.sdk.EntityLabel.of(z)).append("\")\n"));
         return program.toString();
     }
 }

@@ -4,8 +4,11 @@ import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -148,8 +151,10 @@ public final class CompanionTickDispatcher {
                 NumenPlayer.CompanionHurt selfHurt = ap.pollCompanionHurt(server.getTickCount());
                 if (selfHurt != null) {
                     com.dwinovo.numen.api.event.NumenEvents.companionHurt(ap, selfHurt.attacker(),
-                            selfHurt.amount(), selfHurt.hp(), selfHurt.maxHp(), selfHurt.distance());
+                            selfHurt.amount(), selfHurt.hp(), selfHurt.maxHp(), selfHurt.distance(), selfHurt.bearing());
                 }
+                // 有东西盯上了她、她留意的对象被移出世界了说一声——前一件是急的,后一件捎带。
+                ap.vigil().poll(ap, server.getTickCount());
                 // 等主人点头的那条征询:主人下线或到点就按拒绝收尾,发起的任务下一刻读到结论。
                 com.dwinovo.numen.api.permission.ConsentDesk.of(ap).tick();
                 // 等主人点头的指令这一刻就读结论:允许的接着执行,拒绝的回执。
@@ -193,6 +198,26 @@ public final class CompanionTickDispatcher {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
         com.dwinovo.numen.api.sdk.Consents.drop(player);
+    }
+
+    /**
+     * 她此刻正在打、在用的实体(手上的活与同步动作各自对着的那只)和骑着的座驾。附近栏列出它们,{@code Vigil} 盯着它们。
+     */
+    public static List<Entity> engagedBy(NumenPlayer player) {
+        List<Entity> out = new ArrayList<>();
+        CompanionBrain brain = BRAINS.get(player.getUUID());
+        if (brain != null) {
+            for (TaskRecord<?> record : new TaskRecord<?>[] {brain.current.record(), brain.sync.record()}) {
+                Entity target = record == null ? null : record.engaged(player.serverLevel());
+                if (target != null) {
+                    out.add(target);
+                }
+            }
+        }
+        if (player.getVehicle() != null) {
+            out.add(player.getVehicle());
+        }
+        return out;
     }
 
     /** 她现在在做的那件事,null = 槽空(她站着)。task status 用。 */

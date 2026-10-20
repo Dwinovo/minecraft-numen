@@ -85,7 +85,7 @@ public final class McpAccessPrompt {
                 - Besides list_companions, create_companion, delete_companion, get_events and say there \
                 is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore")`, \
                 `numen.move.to({x = 120, y = 12, z = -35})`, `numen.work.dig({x = 120, y = 12, z = -35})`, \
-                `numen.fight.attack(184)`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
+                `numen.fight.attack("zombie@3f9a1c")`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
                 `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
                 when a next step depends on what a call returned, write the steps as one program \
                 (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c) end`).

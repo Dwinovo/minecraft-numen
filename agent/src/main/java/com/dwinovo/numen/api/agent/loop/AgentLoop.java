@@ -123,7 +123,7 @@ public final class AgentLoop {
             if (e.text() == null || e.text().isBlank()) {
                 continue;
             }
-            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
+            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent(), null, e.tick());
             AiLog.LOG.info("[numen-entity#{}] queued {}{} ({} chars)", name, e.type(), asUrgent ? " URGENT" : "",
                     e.text().length());
             queued.add(new Queued(e, asUrgent));
@@ -350,7 +350,7 @@ public final class AgentLoop {
      * (排版规则在 {@link EventQueue#render})。
      */
     private void inject(List<EventQueue.Entry> batch) {
-        List<String> rendered = EventQueue.render(batch, host.now());
+        List<String> rendered = EventQueue.render(batch, host.gameTick());
         if (rendered.isEmpty()) {
             return;
         }

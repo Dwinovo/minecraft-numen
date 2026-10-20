@@ -29,7 +29,7 @@ public final class Clicks {
     @Doc("What a click did.")
     public record Clicked(Button button,
                           @Doc("The cell aimed at.") Optional<BlockPos> aim,
-                          @Doc("The entity the click landed on, by its id.") Optional<Integer> entityId,
+                          @Doc("The entity the click landed on, by its id.") Optional<String> entityId,
                           @Doc("The block the click used, when it opened or worked a station.") Optional<BlockAt> block,
                           @Doc("What changed: your inventory, health and riding, the block, new entities; empty means the click did nothing.")
                           List<String> changes) implements Pressed {}
@@ -38,7 +38,7 @@ public final class Clicks {
      * 一次点击交回的值:这一下打开了界面({@code opened})就是那个界面(点开它的是 {@code station} 那一格时连同那一格),
      * 否则是 {@link Clicked}。点格子、点空气、点实体的任务都从这里写回执。
      */
-    public static Pressed result(NumenPlayer player, boolean opened, Button button, BlockPos aim, Integer entityId,
+    public static Pressed result(NumenPlayer player, boolean opened, Button button, BlockPos aim, String entityId,
                                  Optional<BlockAt> station, List<String> changes) {
         if (opened) {
             GuiOps.Window window = GuiOps.window(player);

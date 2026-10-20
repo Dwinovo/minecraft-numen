@@ -64,7 +64,7 @@ public class TlmGameTests {
         NumenPlayer her = keeper(helper, "gametest_tlm_tamer", new BlockPos(3, 2, 3));
         her.getInventory().add(new ItemStack(Items.CAKE));
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 4));
-        ToolRun tame = lua(her, "numen.use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})");
+        ToolRun tame = lua(her, "numen.use.entity(" + ref(maid) + ", {item = \"minecraft:cake\"})");
         AtomicReference<ToolRun> listed = new AtomicReference<>();
 
         steps(helper)
@@ -74,8 +74,8 @@ public class TlmGameTests {
                 .thenWaitUntil(() -> {
                     String reply = listed.get().reply();
                     helper.assertTrue(reply != null && listed.get().succeeded()
-                            && hasRow(reply, maid.getId()), "tlm maids leaves her out: " + reply);
-                    helper.assertTrue(told(her, "maid_tamed", maid.getId()),
+                            && hasRow(reply, com.dwinovo.numen.api.sdk.EntityLabel.of(maid)), "tlm maids leaves her out: " + reply);
+                    helper.assertTrue(told(her, "maid_tamed", com.dwinovo.numen.api.sdk.EntityLabel.of(maid)),
                             "no maid_tamed event: " + GameTestKit.events(her));
                 })
                 .thenExecute(() -> leave(helper, her, maid))
@@ -92,9 +92,9 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun detail = lua(her, "tlm.maid.info(" + maid.getId() + ")");
-        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
-        ToolRun config = lua(her, "tlm.maid.config(" + maid.getId() + ", {schedule = \"night\"})");
+        ToolRun detail = lua(her, "tlm.maid.info(" + ref(maid) + ")");
+        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + ref(maid) + "})");
+        ToolRun config = lua(her, "tlm.maid.config(" + ref(maid) + ", {schedule = \"night\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(detail.succeeded() && detail.reply().contains("\"task\":\"" + FARM + "\""),
@@ -114,7 +114,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun config = lua(her, "tlm.maid.config(" + maid.getId() + ", {show_backpack = false, "
+        ToolRun config = lua(her, "tlm.maid.config(" + ref(maid) + ", {show_backpack = false, "
                 + "show_back_item = false, chat_bubble = false, sound_frequency = 0.3, pickup_kind = \"xp\", "
                 + "open_door = false, open_fence_gate = false, active_climbing = false})");
 
@@ -145,7 +145,7 @@ public class TlmGameTests {
         maid.setExperience(42);
         maid.setEntityInvulnerable(true);
 
-        ToolRun info = lua(her, "tlm.maid.info(" + maid.getId() + ")");
+        ToolRun info = lua(her, "tlm.maid.info(" + ref(maid) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(info.succeeded(), "tlm maid info failed: " + info.reply());
@@ -177,7 +177,7 @@ public class TlmGameTests {
         AtomicReference<ToolRun> read = new AtomicReference<>();
         AtomicReference<ToolRun> clear = new AtomicReference<>();
 
-        ToolRun set = lua(her, "tlm.maid.set_targets(" + maid.getId() + ", {set = {[\"minecraft:creeper\"] = \"friendly\"}})");
+        ToolRun set = lua(her, "tlm.maid.set_targets(" + ref(maid) + ", {set = {[\"minecraft:creeper\"] = \"friendly\"}})");
         steps(helper)
                 .thenWaitUntil(() -> {
                     helper.assertTrue(set.succeeded(), "tlm maid targets set failed: " + set.reply());
@@ -185,12 +185,12 @@ public class TlmGameTests {
                     helper.assertTrue(data != null && data.attackGroups().get(creeper) == MonsterType.FRIENDLY,
                             "the attack list on her has no friendly creeper: " + set.reply());
                 })
-                .thenExecute(() -> read.set(lua(her, "tlm.maid.targets(" + maid.getId() + ")")))
+                .thenExecute(() -> read.set(lua(her, "tlm.maid.targets(" + ref(maid) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(read.get().succeeded()
                                 && "friendly".equals(dataIn(read.get().reply()).getAsJsonObject("stances")
                                 .get("minecraft:creeper").getAsString()),
                         "targets does not read the list: " + read.get().reply()))
-                .thenExecute(() -> clear.set(lua(her, "tlm.maid.set_targets(" + maid.getId()
+                .thenExecute(() -> clear.set(lua(her, "tlm.maid.set_targets(" + ref(maid)
                         + ", {remove = {\"minecraft:creeper\"}})")))
                 .thenWaitUntil(() -> helper.assertTrue(clear.get().succeeded()
                                 && maid.getData(InitTaskData.ATTACK_LIST).attackGroups().isEmpty(),
@@ -207,7 +207,7 @@ public class TlmGameTests {
         maid.tame(her);
         her.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.NAME_TAG, 2));
 
-        ToolRun name = lua(her, "tlm.maid.name(" + maid.getId() + ", \"Reimu\", {always_show = true})");
+        ToolRun name = lua(her, "tlm.maid.name(" + ref(maid) + ", \"Reimu\", {always_show = true})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(name.succeeded(), "tlm maid name failed: " + name.reply());
@@ -229,13 +229,13 @@ public class TlmGameTests {
         String other = ServerCustomPackLoader.SERVER_MAID_MODELS.getModelIdSet().stream()
                 .filter(id -> !id.equals(maid.getModelId())).findFirst().orElseThrow();
 
-        ToolRun read = lua(her, "tlm.maid.model(" + maid.getId() + ")");
+        ToolRun read = lua(her, "tlm.maid.model(" + ref(maid) + ")");
         AtomicReference<ToolRun> change = new AtomicReference<>();
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(read.succeeded()
                                 && maid.getModelId().equals(dataIn(read.reply()).get("model").getAsString()),
                         "tlm maid model does not read her model: " + read.reply()))
-                .thenExecute(() -> change.set(lua(her, "tlm.maid.set_model(" + maid.getId() + ", \"" + other + "\")")))
+                .thenExecute(() -> change.set(lua(her, "tlm.maid.set_model(" + ref(maid) + ", \"" + other + "\")")))
                 .thenWaitUntil(() -> helper.assertTrue(change.get().succeeded() && other.equals(maid.getModelId()),
                         "her model did not change to " + other + ": " + change.get().reply()))
                 .thenExecute(() -> leave(helper, her, maid))
@@ -335,7 +335,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun open = lua(her, "tlm.maid.open(" + maid.getId() + ", {tab = \"backpack\"})");
+        ToolRun open = lua(her, "tlm.maid.open(" + ref(maid) + ", {tab = \"backpack\"})");
         AtomicReference<ToolRun> moved = new AtomicReference<>();
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(open.succeeded()
@@ -376,7 +376,7 @@ public class TlmGameTests {
         // 坐着:不跟过来,也不传送到她身边
         maid.setInSittingPose(true);
 
-        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
+        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + ref(maid) + "})");
 
         succeedWhen(helper, () -> {
             String hint = task.hint();
@@ -398,7 +398,7 @@ public class TlmGameTests {
         maid.setTame(true, false);
         maid.setOwnerUUID(her.getOwnerUuid());
 
-        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
+        ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + ref(maid) + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("not yours"),
@@ -414,7 +414,7 @@ public class TlmGameTests {
         NumenPlayer her = keeper(helper, "gametest_tlm_mourner", new BlockPos(3, 2, 3));
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
-        int id = maid.getId();
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(maid);
         maid.kill();
 
         succeedWhen(helper, () -> {
@@ -437,11 +437,11 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(4, 2, 3));
         maid.tame(her);
         maid.getMaidInv().setStackInSlot(0, new ItemStack(Items.COOKED_BEEF, 4));
-        ToolRun task = lua(her, "tlm.maid.task(\"touhou_little_maid:feed\", {maid = " + maid.getId() + "})");
+        ToolRun task = lua(her, "tlm.maid.task(\"touhou_little_maid:feed\", {maid = " + ref(maid) + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.succeeded(), "tlm task feed failed: " + task.reply());
-            helper.assertTrue(told(her, "maid_fed_you", -1),
+            helper.assertTrue(told(her, "maid_fed_you", null),
                     "no maid_fed_you event: " + GameTestKit.events(her));
             helper.assertTrue(her.getFoodData().getFoodLevel() > 6, "her food did not go up");
             leave(helper, her, maid);
@@ -466,16 +466,16 @@ public class TlmGameTests {
     }
 
     /** 她的收件箱里有这一种事件;{@code maid} 不小于 0 时还要点名这只女仆。 */
-    private static boolean told(NumenPlayer her, String type, int maid) {
+    private static boolean told(NumenPlayer her, String type, String maid) {
         return GameTestKit.events(her).stream()
-                .anyMatch(e -> e.type().equals(type) && (maid < 0 || e.text().contains("maid=\"" + maid + "\"")));
+                .anyMatch(e -> e.type().equals(type) && (maid == null || e.text().contains("maid=\"" + maid + "\"")));
     }
 
-    /** 清单这一页里有编号为 {@code id} 的那一行。 */
-    private static boolean hasRow(String reply, int id) {
+    /** 清单这一页里有身份为 {@code id} 的那一行。 */
+    private static boolean hasRow(String reply, String id) {
         for (JsonElement row : dataIn(reply).getAsJsonArray("here")) {
             var o = row.getAsJsonObject();
-            if (o.has("id") && o.get("id").getAsInt() == id) {
+            if (o.has("id") && o.get("id").getAsString().equals(id)) {
                 return true;
             }
         }

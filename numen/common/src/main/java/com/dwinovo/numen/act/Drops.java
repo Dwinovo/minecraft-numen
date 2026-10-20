@@ -1,6 +1,7 @@
 package com.dwinovo.numen.act;
 
 import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.LuaCodecs;
 
 import net.minecraft.core.BlockPos;
@@ -71,7 +72,7 @@ public final class Drops {
      * @param id    还在世界里的那一件的实体编号({@link Fate#LANDED}、{@link Fate#MOVING});其余为 null
      */
     public record Record(String item, int count, Fate fate, BlockPos pos, String by, String cause, boolean fire,
-                         Integer id) {}
+                         String id) {}
 
     // ---- 认领:平台挂点(都在服务端主线程) ----
     // 下面六个入口是平台挂点:平台把"这一挖的掉落物发生了什么"告诉这里,common 不知道是谁在调。
@@ -279,13 +280,13 @@ public final class Drops {
         t.seen = now;
         t.takenBy = null;
         if (t.ours > 0 && e.onGround() && e.getDeltaMovement().horizontalDistanceSqr() <= STILL) {
-            record(t, t.ours, Fate.LANDED, at, null, null, e.getId());
+            record(t, t.ours, Fate.LANDED, at, null, null, EntityLabel.of(e));
             return true;
         }
         return t.ours == 0;
     }
 
-    private void record(Track t, int count, Fate fate, BlockPos pos, String by, String cause, Integer id) {
+    private void record(Track t, int count, Fate fate, BlockPos pos, String by, String cause, String id) {
         if (count > 0) {
             records.add(new Record(t.item, count, fate, pos.immutable(), by, cause, false, id));
         }
@@ -308,7 +309,7 @@ public final class Drops {
         closed = true;
         tick();
         for (Track t : live) {
-            record(t, t.ours, Fate.MOVING, t.entity.blockPosition(), null, null, t.entity.getId());
+            record(t, t.ours, Fate.MOVING, t.entity.blockPosition(), null, null, EntityLabel.of(t.entity));
             TRACKED.remove(t.entity);
         }
         live.clear();
@@ -327,8 +328,8 @@ public final class Drops {
                                + "waiting.") BlockPos pos,
                        @Doc("Who picked it up: you, a player's name, or a creature's type id.") Optional<String> by,
                        @Doc("What destroyed it: the damage type id, minecraft:lava.") Optional<String> cause,
-                       @Doc("The entity id of the item still lying there (landed or moving), as numen.scan.entities "
-                               + "gives it.") Optional<Integer> id) {}
+                       @Doc("The id of the item still lying there (landed or moving), as numen.scan.entities "
+                               + "gives it.") Optional<String> id) {}
 
     /** 交给程序的那一份:一笔一项。 */
     public List<Drop> data() {

@@ -7,7 +7,7 @@ import com.dwinovo.numen.api.task.TaskRecord;
  * 准备({@code Task#prepare}),准备不过当场失败、不占槽。重启后接着做:受理时把这次调用写成一行 Lua 记下,重启后再跑一遍。
  *
  * <pre>{@code
- * return Job.of(new AttackTaskRecord(call, ...)).replayedAs(new Attack(EntityRef.of(target)));
+ * return Job.of(new AttackTaskRecord(call, ...));
  * }</pre>
  *
  * <p>活是 {@code TaskRecord<R>}(或交回 {@code R} 的一种的):它收尾时交回的值是 {@code R},派发按这个函数的返回类型把它写成脚本的值。
@@ -17,33 +17,23 @@ import com.dwinovo.numen.api.task.TaskRecord;
 public final class Job<R> {
 
     private final TaskRecord<? extends R> record;
-    private final Record replay;
     private final R done;
 
-    private Job(TaskRecord<? extends R> record, Record replay, R done) {
+    private Job(TaskRecord<? extends R> record, R done) {
         this.record = record;
-        this.replay = replay;
         this.done = done;
     }
 
     /** 这件活。 */
     public static <R> Job<R> of(TaskRecord<? extends R> record) {
-        return new Job<>(record, null, null);
+        return new Job<>(record, null);
     }
 
     /**
      * 没有活要干:要的样子此刻已经是了(要盖的都已立着)。这次调用当场交回 {@code value},不派活、不顶掉手上那件。
      */
     public static <R> Job<R> done(R value) {
-        return new Job<>(null, null, value);
-    }
-
-    /**
-     * 重启后再跑的那一次调用用这份参数写,不用这次的:只在这一次开服里有效的写法(实体的运行期编号)换成跨重启不变的
-     * ({@link EntityRef#of},按 UUID 认)。
-     */
-    public Job<R> replayedAs(Record args) {
-        return new Job<>(record, args, done);
+        return new Job<>(null, value);
     }
 
     /** 这件活;{@link #done} 的是 null。 */
@@ -54,10 +44,5 @@ public final class Job<R> {
     /** {@link #done} 当场交回的值。 */
     R done() {
         return done;
-    }
-
-    /** 重启后再跑时的参数;没换是 null(用这次调用的)。 */
-    Record replay() {
-        return replay;
     }
 }

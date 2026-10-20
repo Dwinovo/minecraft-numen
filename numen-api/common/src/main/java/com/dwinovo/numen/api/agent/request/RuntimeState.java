@@ -8,7 +8,7 @@ import java.util.function.Supplier;
 
 /**
  * 每一轮临时挂在请求里的 {@code <runtime_state>}:她此刻在做的活、背包、身上的效果、骑没骑着东西、
- * 身上穿戴的({@code <worn>})、插件从身体上读的片段。全部现算,一个字都不入会话历史——这些都会变,进了历史就是理直气壮的旧数。
+ * 身上穿戴的({@code <worn>})、插件从身体上读的片段、她四周此刻的样子({@code <nearby>})。全部现算,一个字都不入会话历史——这些都会变,进了历史就是理直气壮的旧数。
  *
  * <p>她在做的那件活是<b>服务端推来的镜像</b>({@link #onCurrentTask}),头顶气泡的副文本、停止键亮不亮、
  * 目标续跑要不要让位也都读它,所以镜像只在这里存一份。背包、效果、骑乘与身体片段读的是收到的最新一份
@@ -104,9 +104,12 @@ public final class RuntimeState {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     public String xml() {
-        // 插件身体上的片段(bodyStateXml)和背包、状态效果一样是"此刻的她",会变,所以不能进字节级稳定的系统提示
-        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml() + bodyStateXml();
-        String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
+        // 插件身体上的片段(bodyStateXml)和背包、状态效果一样是"此刻的她",会变,所以不能进字节级稳定的系统提示。
+        // 身体快照每次请求只取一份:各栏读的是同一刻的她,四周(nearby)也是这一刻现看的
+        BodySnapshot snapshot = body.get();
+        String content = currentTaskXml() + inventoryXml(snapshot) + effectsXml(snapshot) + ridingXml(snapshot)
+                + bodyStateXml(snapshot) + nearbyXml(snapshot);
+        String xml = content.isEmpty() ? "" : "<runtime_state>" + content + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
         // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。开一次 debug 就有答案。
         //
@@ -150,8 +153,7 @@ public final class RuntimeState {
      * <p>放进请求而不是让她调 {@code status_self},省的是<b>一整轮</b>(请求 + 工具结果 +
      * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code gui view}。
      */
-    private String inventoryXml() {
-        var snapshot = body.get();
+    private String inventoryXml(BodySnapshot snapshot) {
         if (snapshot == null || !snapshot.loaded()) {
             // 链路断在客户端这一节:服务端没推过,或者推的是别的同伴。请求里就没有背包这回事,
             // 她只能靠对话历史猜——这条日志的存在就是为了不用再靠猜去查它。只在进入这个
@@ -180,8 +182,7 @@ public final class RuntimeState {
      *
      * <p>没有效果就一个字都不发:空块也是要读的 token,而"没写"和"写了没有"对模型是一样的。
      */
-    private String effectsXml() {
-        var snapshot = body.get();
+    private String effectsXml(BodySnapshot snapshot) {
         if (snapshot == null || !snapshot.loaded() || snapshot.effects().isEmpty()) {
             return "";
         }
@@ -194,13 +195,12 @@ public final class RuntimeState {
      * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道坐在船上 {@code numen.move.to} 驾船、别的走路要先下来
      * ({@code numen.use.dismount()})。
      */
-    private String ridingXml() {
-        var snapshot = body.get();
-        if (snapshot == null || !snapshot.loaded() || snapshot.vehicleId() < 0) {
+    private String ridingXml(BodySnapshot snapshot) {
+        if (snapshot == null || !snapshot.loaded() || snapshot.vehicle().isEmpty()) {
             return "";
         }
-        return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). numen.move.to sails a boat over water; any other walk needs numen.use.dismount() to step off "
+        return "<riding>" + xml(snapshot.vehicle())
+                + ". numen.move.to sails a boat over water; any other walk needs numen.use.dismount() to step off "
                 + "first — no need to click the vehicle again.</riding>";
     }
 
@@ -208,12 +208,22 @@ public final class RuntimeState {
      * 身体状态片段(打头的 {@code <worn>} 与插件从身体上读的)——服务端在身体变化检查时拼好、随状态包推来的整段,这里原样挂上。
      * 和背包同一条路,所以她走远了、换了维度也在。
      */
-    private String bodyStateXml() {
-        var snapshot = body.get();
+    private String bodyStateXml(BodySnapshot snapshot) {
         if (snapshot == null || !snapshot.loaded()) {
             return "";
         }
         return snapshot.bodyState();
+    }
+
+    /**
+     * 她四周此刻的样子({@link Nearby})。与效果、骑乘同一纪律:<b>只能现挂,不能进历史</b>——谁在她身边每刻都在变,沉进历史就是
+     * 理直气壮的旧数;发生过的事走 {@code <events>}。半径里什么都没有就一个字都不发。
+     */
+    private String nearbyXml(BodySnapshot snapshot) {
+        if (snapshot == null || !snapshot.loaded()) {
+            return "";
+        }
+        return snapshot.nearby().xml();
     }
 
     static String renderEffects(BodySnapshot snapshot, long nowMs) {

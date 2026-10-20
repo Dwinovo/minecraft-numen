@@ -4,6 +4,7 @@ import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.area.Cells;
 import com.dwinovo.numen.api.sdk.Call;
+import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.sdk.Target;
 import com.dwinovo.numen.task.MouseButton;
@@ -110,8 +111,8 @@ public final class BlockActionOps {
     }
 
     /** {@code use entity}:参数同 {@link #interactAt},按的是那一只实体。 */
-    public static InteractEntityTaskRecord interactEntity(ServerCall source, MouseButton button, int entityId,
+    public static InteractEntityTaskRecord interactEntity(ServerCall source, MouseButton button, EntityRef entity,
                                                           int holdTicks, Item item, boolean sneak) {
-        return new InteractEntityTaskRecord(source, button, entityId, holdTicks, item, sneak);
+        return new InteractEntityTaskRecord(source, button, entity, holdTicks, item, sneak);
     }
 }

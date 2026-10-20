@@ -2,6 +2,7 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.task.MouseButton;
 
+import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -11,7 +12,7 @@ import net.minecraft.world.item.Item;
  * Typed descriptor for {@code use entity} — the entity-aimed half of the native
  * crosshair interaction (the ENTITY column of vanilla's {@code startAttack}/{@code startUseItem}).
  * Entities are the only MOVING interaction target, so this is the one that auto-paths AND
- * follows the live entity (by id from {@code scan entities}) before pressing a button:
+ * follows the live entity (by the id {@code scan entities} gives) before pressing a button:
  * <ul>
  *   <li>{@link Button#LEFT} (attack): hit it. Tap = one cooldown-gated hit; hold = keep
  *       hitting until the target dies, the hold ends, or the task times out.</li>
@@ -29,16 +30,16 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     private static final long TIMEOUT_TICKS = 60 * 20;
 
     public final MouseButton button;
-    public final int entityId;
+    public final EntityRef entity;
     public final int holdTicks;
     public final Item item;        // null → use whatever is in hand; else equip this first (food / shears / weapon)
     public final boolean sneak;
 
-    public InteractEntityTaskRecord(ServerCall source, MouseButton button, int entityId, int holdTicks, Item item,
+    public InteractEntityTaskRecord(ServerCall source, MouseButton button, EntityRef entity, int holdTicks, Item item,
                                     boolean sneak) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
-        this.entityId = entityId;
+        this.entity = entity;
         this.holdTicks = holdTicks;
         this.item = item;
         this.sneak = sneak;
@@ -48,13 +49,13 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     public String describe() {
         return getToolName() + " " + (button == MouseButton.LEFT ? "left" : "right")
                 + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
-                + " entity#" + entityId + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
+                + " " + entity + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
     }
 
     /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */
     @Override
     public Activity activity() {
         return Activity.of("numen.activity.click_entity_" + (button == MouseButton.LEFT ? "left" : "right"),
-                entityId);
+                entity.label());
     }
 }

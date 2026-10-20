@@ -129,7 +129,7 @@ class EventQueueTest {
 
         assertTrue(q.hasUrgent());
         assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "有急件即熟,无关有没有人被叫醒");
-        assertEquals(1, EventQueue.render(q.takeEntries(T0), T0).size());
+        assertEquals(1, EventQueue.render(q.takeEntries(T0), 0L).size());
     }
 
     // ---- 类型表(队列不认识类型) ----
@@ -237,7 +237,7 @@ class EventQueueTest {
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertEquals(List.of("<query>回来</query>"), EventQueue.render(q.takeEntries(T0), T0));
+        assertEquals(List.of("<query>回来</query>"), EventQueue.render(q.takeEntries(T0), 0L));
     }
 
     @Test
@@ -257,7 +257,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push("第三方模组的类型", "外面来的一条", T0, false);
 
-        assertEquals(List.of("<events>\n外面来的一条\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
+        assertEquals(List.of("<events>\n外面来的一条\n</events>"), EventQueue.render(q.takeEntries(T0), 0L));
     }
 
     @Test
@@ -269,7 +269,7 @@ class EventQueueTest {
 
         assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "这类不恒急,发送方标了急就是急件");
         assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview().stream().map(EventQueue.Preview::text).toList());
-        assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
+        assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), 0L));
     }
 
     // ---- 排空 ----
@@ -283,7 +283,7 @@ class EventQueueTest {
         q.push(EventTypes.TASK_FINISHED, "<event>后到的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>后到的</event>\n</events>",
-                "<query>先说的</query>"), EventQueue.render(q.takeEntries(T0), T0));
+                "<query>先说的</query>"), EventQueue.render(q.takeEntries(T0), 0L));
         assertTrue(q.isEmpty(), "倒完就空");
     }
 
@@ -296,27 +296,69 @@ class EventQueueTest {
         q.push(EventTypes.TASK_FINISHED, "<event>先发生的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>先发生的</event>\n"
-                + "<event>后发生的</event>\n</events>"), EventQueue.render(q.takeEntries(T0 + 5_000L), T0 + 5_000L));
+                + "<event>后发生的</event>\n</events>"), EventQueue.render(q.takeEntries(T0 + 5_000L), 0L));
+    }
+
+    /** 一条记着发生游戏刻的事件。 */
+    private static EventQueue.Entry happenedAt(long tick) {
+        return new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>挖完了</event>", T0, false, null, null, tick);
     }
 
     @Test
-    void staleInputIsLabelledWithItsAge() {
-        // 跨会话恢复的旧闻:模型该知道这是"主人不在时发生的",不能当成刚发生的去反应
-        EventQueue q = fresh();
-        q.push(EventTypes.QUERY, "<query>去挖铁矿</query>", T0, true);
+    void anEventThatReachesHerFiveSecondsLateSaysHowLate() {
+        // 事件说的是过去:交付那一刻离发生已过 5 秒(100 刻)的,在事件前标上晚了多久,模型不会当成刚发生的去反应
+        List<String> out = EventQueue.render(List.of(happenedAt(1_000)), 1_000 + 100);
 
-        List<String> out = EventQueue.render(q.takeEntries(T0 + 3 * 3600_000L), T0 + 3 * 3600_000L);
-
-        assertEquals(1, out.size());
-        assertTrue(out.get(0).startsWith("[发生于约3小时前] "), "实际:" + out.get(0));
-        assertTrue(out.get(0).endsWith("<query>去挖铁矿</query>"), "原文不许被改动");
+        assertEquals(List.of("<events>\n[晚到 5 秒] <event>挖完了</event>\n</events>"), out);
     }
 
     @Test
-    void freshInputIsNotLabelled() {
+    void anEventDeliveredWithinFiveSecondsIsNotLabelled() {
+        List<String> out = EventQueue.render(List.of(happenedAt(1_000)), 1_000 + 99);
+
+        assertEquals(List.of("<events>\n<event>挖完了</event>\n</events>"), out, "交付的延迟是常态,标了只是吵");
+    }
+
+    @Test
+    void lateByMinutesAndHoursIsShownInBiggerUnits() {
+        assertEquals("<events>\n[晚到 59 秒] <event>挖完了</event>\n</events>",
+                EventQueue.render(List.of(happenedAt(0)), 59 * 20).get(0));
+        assertEquals("<events>\n[晚到 2 分钟] <event>挖完了</event>\n</events>",
+                EventQueue.render(List.of(happenedAt(0)), 150 * 20).get(0), "满一分钟按分钟算,不足的零头舍去");
+        assertEquals("<events>\n[晚到 3 小时] <event>挖完了</event>\n</events>",
+                EventQueue.render(List.of(happenedAt(0)), 3 * 3600 * 20 + 59 * 60 * 20).get(0), "满一小时按小时算");
+    }
+
+    @Test
+    void anEntryWithoutAGameTickIsNeverLabelled() {
+        // 旧落盘的条目、不是世界上发生的事的条目没有游戏刻:不知道晚没晚,就不说
         EventQueue q = fresh();
-        q.push(EventTypes.QUERY, "<query>刚说的</query>", T0, true);
-        assertEquals(List.of("<query>刚说的</query>"), EventQueue.render(q.takeEntries(T0 + 60_000L), T0 + 60_000L), "十分钟内不标,免得吵");
+        q.push(EventTypes.TASK_FINISHED, "<event>旧闻</event>", T0, false);
+
+        assertEquals(List.of("<events>\n<event>旧闻</event>\n</events>"),
+                EventQueue.render(q.takeEntries(T0), 10_000_000L));
+    }
+
+    @Test
+    void theGameTickSurvivesTheQueueAndAReopen() {
+        // 重启后交给模型时仍据发生的游戏刻算晚到多久
+        List<EventQueue.Entry> disk = new ArrayList<>();
+        EventQueue.Journal journal = new EventQueue.Journal() {
+            @Override public List<EventQueue.Entry> load() {
+                return List.copyOf(disk);
+            }
+
+            @Override public void save(List<EventQueue.Entry> entries) {
+                disk.clear();
+                disk.addAll(entries);
+            }
+        };
+        new EventQueue(journal).push(EventTypes.TASK_FINISHED, "<event>挖完了</event>", T0, false, null, 500);
+
+        EventQueue reopened = new EventQueue(journal);
+
+        assertEquals(List.of("<events>\n[晚到 10 秒] <event>挖完了</event>\n</events>"),
+                EventQueue.render(reopened.takeEntries(T0), 500 + 200));
     }
 
     // ---- 上限 ----
@@ -330,7 +372,7 @@ class EventQueueTest {
             q.push(EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", T0, false);
         }
 
-        List<String> out = EventQueue.render(q.takeEntries(T0), T0);
+        List<String> out = EventQueue.render(q.takeEntries(T0), 0L);
 
         assertEquals(1, out.size(), "全是世界的事，包成一块");
         String block = out.get(0);
@@ -376,7 +418,7 @@ class EventQueueTest {
         q.push(EventTypes.TASK_FINISHED, "<event>二</event>", T0, false);
         assertEquals(1, q.droppedCount());
 
-        EventQueue.render(q.takeEntries(T0), T0);
+        EventQueue.render(q.takeEntries(T0), 0L);
         assertEquals(0, q.droppedCount(), "报过一次就清零,不该次次重复");
     }
 
@@ -423,7 +465,7 @@ class EventQueueTest {
         EventQueue q = new EventQueue(journal);
         q.push(EventTypes.QUERY, "<query>喂</query>", T0, true);
 
-        EventQueue.render(q.takeEntries(T0), T0);
+        EventQueue.render(q.takeEntries(T0), 0L);
 
         assertTrue(disk.isEmpty(), "消费过的输入不该留在账本里");
         assertTrue(new EventQueue(journal).isEmpty(), "重进游戏也不该再冒出来");
@@ -497,7 +539,7 @@ class EventQueueTest {
         q.push(EventTypes.QUERY, "<query>回来吃饭</query>", T0 + 1, false);
         assertTrue(q.ripeness(T0 + 1, 1).ripe(), "主人说话了,这一轮该开");
 
-        List<String> out = EventQueue.render(q.takeForCall(false, T0 + 1), T0 + 1);
+        List<String> out = EventQueue.render(q.takeForCall(false, T0 + 1), 0L);
         assertTrue(String.join("\n", out).contains("[阿岚] 我去东边"), "旁听到的话要跟着这一轮进去");
         assertTrue(q.isEmpty(), "循环取件时带走了它,不会躺在队里越攒越多");
     }

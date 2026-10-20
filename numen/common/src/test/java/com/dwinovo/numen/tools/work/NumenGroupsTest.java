@@ -116,14 +116,14 @@ class NumenGroupsTest {
      */
     @Test
     void theCallsSheWritesRead() {
-        for (String code : List.of("numen.fight.attack(27)", "numen.use.block({x = 120, y = 64, z = -35})",
+        for (String code : List.of("numen.fight.attack(\"zombie@3f9a1c\")", "numen.use.block({x = 120, y = 64, z = -35})",
                 "numen.use.block({x = 120, y = 64, z = -35}, {hold = 1.5})", "numen.use.hit({x = 120, y = 64, z = -35})",
-                "numen.use.entity(812, {sneak = true})", "numen.inv.drop(\"minecraft:cobblestone\")",
+                "numen.use.entity(\"villager@3f9a1c\", {sneak = true})", "numen.inv.drop(\"minecraft:cobblestone\")",
                 "numen.inv.drop(\"minecraft:cobblestone\", {count = 32})", "numen.work.dig({x = 120, y = 64, z = -35})",
                 "numen.work.dig({name = \"minecraft:iron_ore\", pos = {x = 120, y = 12, z = -35}}, "
                         + "{x = 121, y = 12, z = -35}, {count = 4})",
                 "numen.move.to({x = 1, y = 2, z = 3})", "numen.move.to({x = 1, y = 2, z = 3}, 4)",
-                "numen.move.away(184, 12)", "numen.move.follow(184)", "numen.use.dismount()",
+                "numen.move.away(\"zombie@3f9a1c\", 12)", "numen.move.follow(\"Steve\")", "numen.use.dismount()",
                 "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
                 "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})",
                 "numen.build.place({{name = \"stone\", pos = {x = 1, y = 2, z = 3}}})",
@@ -137,7 +137,7 @@ class NumenGroupsTest {
         }
         for (String wrong : List.of("numen.fight.attack({entity_ids = {27, 26}})", "numen.fight.attack(27, 26)",
                 "numen.use.block(\"right\", {x = 120, y = 64, z = -35})", "numen.inv.drop(\"cobblestone\", 32)",
-                "numen.move.to(\"home\")", "numen.move.to({x = 1, y = 2, z = 3}, {arrive = \"dig\"})")) {
+                "numen.move.to(\"the old house\")", "numen.move.to({x = 1, y = 2, z = 3}, {arrive = \"dig\"})")) {
             var reading = ScriptEngine.IN_USE.calls("t", wrong, ApiRegistry.catalog(Modules.factory()));
             assertThrows(ApiError.class, () -> Dispatcher.invocation(reading.calls().get(0)), "旧写法不再收: " + wrong);
         }

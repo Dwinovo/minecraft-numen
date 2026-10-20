@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  *
  * <pre>{@code
  * @Fn("Attack one entity until it is dead, lost or out of reach.")
- * @Example("numen.fight.attack(184)")
+ * @Example("numen.fight.attack(\"zombie@3f9a1c\")")
  * static Job<Fought> attack(ServerCall call, Attack args) { ... }
  * }</pre>
  *

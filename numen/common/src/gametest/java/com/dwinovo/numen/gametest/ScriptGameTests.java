@@ -112,7 +112,7 @@ public class ScriptGameTests {
                 local walked, why = pcall(numen.move.to, %s)
                 if not walked then error("could not get there: " .. why, 0) end
                 numen.build.place({{name = "air", pos = %s}})
-                """.formatted(999999, xyz(kept)));
+                """.formatted("\"pig@999999\"", xyz(kept)));
         Round round = round(helper, her, script);
 
         succeedWhen(helper, () -> {
@@ -497,7 +497,7 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             JsonObject receipt = receipt(round, script);
             helper.assertTrue(receipt.get("success").getAsBoolean()
-                            && round.data().get("returned").getAsInt() == cow.getId(),
+                            && round.data().get("returned").getAsString().equals(com.dwinovo.numen.api.sdk.EntityLabel.of(cow)),
                     "the walk to the cow failed: " + receipt);
             helper.assertTrue(her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
             cow.discard();
@@ -769,7 +769,7 @@ public class ScriptGameTests {
                             "the receipt does not say what was dug: " + receipt);
                     helper.assertTrue(level.getBlockState(cells.get(cells.size() - 1)).is(Blocks.STONE),
                             "the cut-off program kept digging");
-                    var entry = com.dwinovo.numen.api.event.NumenEvents.programStopped(0L, "p", receipt, 1L);
+                    var entry = com.dwinovo.numen.api.event.NumenEvents.programStopped(new com.dwinovo.numen.api.event.NumenEvents.Moment(0L, 0L), "p", receipt, 1L);
                     helper.assertTrue(entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.PROGRAM_STOPPED)
                             && entry.text().contains("this turn was cut off") && !entry.urgent(),
                             "the receipt does not become her event: " + entry);
@@ -845,7 +845,7 @@ public class ScriptGameTests {
     public static void a_failed_call_is_on_stderr_whether_or_not_the_program_caught_it(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_failing", new BlockPos(2, 2, 2), false);
         ToolRun caught = lua(her, """
-                local ok, err = pcall(numen.fight.attack, 999999)
+                local ok, err = pcall(numen.fight.attack, "pig@999999")
                 print(ok, err.kind)
                 """);
         String msg = JsonParser.parseString(caught.receipt()).getAsJsonObject().get("message").getAsString();
@@ -854,7 +854,7 @@ public class ScriptGameTests {
                 && msg.contains("\nstdout:\nfalse\tnot_found"), "the caught failure is not on stderr: " + msg);
         sample("a failure the program caught", caught);
 
-        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(999999)\n");
+        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(\"zombie@999999\")\n");
         String stopped = JsonParser.parseString(uncaught.receipt()).getAsJsonObject().get("message").getAsString();
         helper.assertTrue(!uncaught.ranToTheEnd() && stopped.startsWith("The script stopped at line 2 after 2 calls: "
                 + "numen.fight.attack: not_found — ") && stopped.contains("\nhint: ")

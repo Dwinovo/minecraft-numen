@@ -56,8 +56,7 @@ public final class PressReceipt {
         }
         for (Entity e : nearby(player)) {
             if (!entityIdsBefore.contains(e.getId())) {
-                facts.add("appeared: " + BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath()
-                        + " (id " + e.getId() + ")");
+                facts.add("appeared: " + com.dwinovo.numen.api.sdk.EntityLabel.of(e));
             }
         }
         return facts;

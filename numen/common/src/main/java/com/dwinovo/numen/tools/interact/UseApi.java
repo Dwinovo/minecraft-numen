@@ -102,7 +102,7 @@ public final class UseApi {
     }
 
     /** 右键一只实体。 */
-    public record OnEntity(@Doc("The entity to act on: an Entity from numen.scan.entities, or its id.") EntityRef entity,
+    public record OnEntity(@Doc("The entity to act on: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity,
                            @Doc("How long to hold the button, in seconds (up to 60).") @Omitted("press once")
                            Optional<Double> hold,
                            @Doc("An item from your inventory to take in hand first.") @Omitted("use what you hold")
@@ -111,15 +111,15 @@ public final class UseApi {
 
     @Fn("Right-click an entity within reach and in sight of where you stand. When it opens a window (a villager's trade) "
             + "it returns that Window.")
-    @Example("numen.use.entity(812, {item = \"minecraft:shears\"})")
-    @Example("numen.use.entity(812, {sneak = true})")
+    @Example("numen.use.entity(\"sheep@3f9a1c\", {item = \"minecraft:shears\"})")
+    @Example("numen.use.entity(\"villager@3f9a1c\", {sneak = true})")
     @Note("An entity farther than your reach, or behind a wall, is walked up to first, then clicked; the walk is told in "
             + "the result and a walk that can't get there fails with its reason.")
     @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.to` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
     @SeeAlso({"numen.use.block", "numen.use.hit"})
     public static Pending<Clicks.Pressed> entity(ServerCall call, OnEntity args) {
-        return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, idOf(call, args.entity()),
+        return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, present(call, args.entity()),
                 holdTicks(args.hold()), args.item().orElse(null), args.sneak().orElse(false)));
     }
 
@@ -129,7 +129,7 @@ public final class UseApi {
     /** 左键一下:一格是按一下就松开的那种点,一只实体同样。 */
     @Fn("Left-click a cell or an entity within reach once, with what you hold.")
     @Example("numen.use.hit({x = 120, y = 64, z = -35})")
-    @Example("numen.use.hit(812)")
+    @Example("numen.use.hit(\"pig@3f9a1c\")")
     @Note("One press, never held: a block that takes several hits to break is only hit once — `numen.work.dig` breaks "
             + "blocks (best tool, the way cleared); `numen.fight.attack` fights.")
     @Note("A target out of reach or out of sight is walked up to first, then hit; a walk that can't get there fails "
@@ -141,14 +141,13 @@ public final class UseApi {
         CellOrEntity target = args.target();
         return target.cell() != null
                 ? call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
-                : call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, idOf(call, target.entity()), 0, null,
+                : call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, present(call, target.entity()), 0, null,
                         false));
     }
 
-    /** 点名的那只按运行期编号认;按 UUID 写的(重启后再跑)换成它此刻的编号,不在了照编号交给活,由活如实说它不在。 */
-    private static int idOf(ServerCall call, EntityRef ref) {
-        Entity found = ref.in(call.her().serverLevel());
-        return ref.id() != null ? ref.id() : found != null ? found.getId() : -1;
+    /** 点名的那只此刻得在附近:不在当场失败,不先受理再失败。 */
+    private static EntityRef present(ServerCall call, EntityRef ref) {
+        return EntityRef.of(call.entity(ref));
     }
 
     /** 按住的秒数折成刻,至少一刻;不写是 0,按一下。 */

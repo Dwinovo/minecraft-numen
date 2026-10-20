@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos;
 import java.util.Map;
 
 /**
- * 一格或一只实体:看它、左键点它的函数两样都收。一个数或带 {@code id} 的表(一只 Entity)是实体,别的带位置的(Pos、Block)是一格。
+ * 一格或一只实体:看它、左键点它的函数两样都收。一段实体身份的文字或带 {@code id} 的表(一只 Entity)是实体,别的带位置的(Pos、Block)是一格。
  * 两样恰好一样。
  *
  * @param cell   一格;是实体时为 null
@@ -29,7 +29,8 @@ public record CellOrEntity(BlockPos cell, EntityRef entity) {
 
         @Override
         public CellOrEntity decode(Object value) {
-            boolean entity = value instanceof Number || value instanceof Map<?, ?> table && table.containsKey("id");
+            boolean entity = value instanceof String s && Positions.coordinates(s) == null
+                    || value instanceof Map<?, ?> table && table.containsKey("id");
             return entity ? new CellOrEntity(null, EntityRef.CODEC.decode(value))
                     : new CellOrEntity(Positions.cell(value), null);
         }

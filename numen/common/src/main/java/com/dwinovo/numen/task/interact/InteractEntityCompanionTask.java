@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Interaction;
-import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.task.base.InReachTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.task.move.Arrival;
@@ -46,10 +45,11 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         return List.of(
                 // Resolve + cache the target; fail fast if it despawned / moved out of range.
                 () -> {
-                    entity = ((ServerLevel) player.level()).getEntity(r.entityId);
+                    entity = r.entity.in((ServerLevel) player.level());
+                    r.engage(entity);
                     return (entity == null || !entity.isAlive())
-                            ? new Precondition.Failure("no entity with id " + r.entityId
-                                    + " nearby (it may have despawned or moved out of range)",
+                            ? new Precondition.Failure(r.entity
+                                    + " is not nearby (it may have despawned or moved out of range)",
                                     FailureType.TARGET_LOST)
                             : null;
                 },
@@ -62,7 +62,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
     /** 够不着时走到它旁边。 */
     @Override
     protected Arrival approach() {
-        return Arrival.to(new Where.Mob(EntityRef.id(entity.getId())), Arrival.BESIDE);
+        return Arrival.to(new Where.Mob(r.entity), Arrival.BESIDE);
     }
 
     /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
@@ -181,7 +181,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
     }
 
     private String targetName() {
-        return entity != null ? entity.getName().getString() : "entity#" + r.entityId;
+        return entity != null ? entity.getName().getString() : r.entity.label();
     }
 
     private String describeDone() {
@@ -213,7 +213,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         return com.dwinovo.numen.tools.Clicks.result(player, interaction != null && interaction.opened(),
                 r.button == MouseButton.LEFT ? com.dwinovo.numen.tools.Clicks.Button.LEFT
                         : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
-                null, r.entityId, java.util.Optional.empty(), changes);
+                null, r.entity.label(), java.util.Optional.empty(), changes);
     }
 
     @Override

@@ -4,6 +4,10 @@ import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.sdk.ApiFunction;
 import com.dwinovo.numen.api.sdk.ServerCall;
 
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -86,6 +90,8 @@ public abstract class TaskRecord<V> {
     private Consumer<TaskResult> reply;
     /** 派它的 API 函数:收尾时的值按它的返回类型写;不出自 API 函数的活(测试直接交的、本能)是 null。 */
     private ApiFunction function;
+    /** 这件活此刻对着哪只实体动手(打、用);没有是 null。 */
+    private UUID engaged;
 
     protected TaskRecord(String toolName, String toolCallId, long deadlineGameTime) {
         this.id = ID_SOURCE.incrementAndGet();
@@ -134,6 +140,20 @@ public abstract class TaskRecord<V> {
     /** 派它的 API 函数;不出自 API 函数的是 null。 */
     public final ApiFunction function() { return function; }
     public final boolean isAsync() { return async; }
+
+    /**
+     * 干活的任务说一声:这件活此刻对着这只实体动手(打它、用它);换了对象就再说一次,对象没了传 null。附近栏列出它,
+     * {@code gone} 事件盯着它——她手上的活对着谁,只在这一处问。
+     */
+    public final void engage(Entity entity) {
+        this.engaged = entity == null ? null : entity.getUUID();
+    }
+
+    /** {@link #engage} 说的那只实体,此刻还在这一层世界里的;没有或已不在是 null。 */
+    public final Entity engaged(ServerLevel level) {
+        Entity entity = engaged == null ? null : level.getEntity(engaged);
+        return entity == null || entity.isRemoved() ? null : entity;
+    }
 
     /** 首次开跑打点(重复调用不覆盖——抢占恢复不算重新开始)。 */
     public final void markStarted(long gameTime) {

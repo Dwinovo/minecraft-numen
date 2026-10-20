@@ -4,6 +4,7 @@ import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.EntityInfo;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTombstoneEvent;
@@ -333,7 +334,7 @@ final class Maids {
         if (list != null) {
             list.attackGroups().forEach((type, stance) -> stances.put(type.toString(), stance(stance)));
         }
-        return new MaidApi.Aims(entity.getId(), stances);
+        return new MaidApi.Aims(EntityLabel.of(entity), stances);
     }
 
     /** 写进名单的实体种类:得是注册过的(攻击名单界面添加时也这样查)。 */
@@ -494,9 +495,9 @@ final class Maids {
 
     // ---- 写法 ----
 
-    /** 一只女仆在回执与事件里的称呼:编号,起过名字的带上名字。 */
+    /** 一只女仆在回执与事件里的称呼:身份,起过名字的带上名字。 */
     static String label(Entity maid) {
-        return "maid " + maid.getId() + (maid.hasCustomName() ? " (" + maid.getCustomName().getString() + ")" : "");
+        return EntityLabel.of(maid) + (maid.hasCustomName() ? " (" + maid.getCustomName().getString() + ")" : "");
     }
 
     static String where(BlockPos pos) {

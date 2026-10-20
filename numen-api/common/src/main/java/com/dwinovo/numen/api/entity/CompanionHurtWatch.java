@@ -17,7 +17,8 @@ public final class CompanionHurtWatch {
     /** 一次"她挨打":攻击者标签、结算前的伤害量、她的血量。 */
     public record Report(String attacker, float amount, float hp, float maxHp) {}
 
-    private long quietUntil;
+    /** 整场连击算一个对象:不管谁打的,窗口只有一个。 */
+    private final QuietWindows<Boolean> quiet = new QuietWindows<>(QUIET_TICKS);
 
     /**
      * 每服务端 tick 喂一次。
@@ -29,10 +30,9 @@ public final class CompanionHurtWatch {
      * @param now      当前游戏刻
      */
     public Report poll(String attacker, float amount, float hp, float maxHp, long now) {
-        if (attacker == null || now < quietUntil) {
+        if (attacker == null || !quiet.admit(true, now)) {
             return null;
         }
-        quietUntil = now + QUIET_TICKS;
         return new Report(attacker, amount, hp, maxHp);
     }
 }

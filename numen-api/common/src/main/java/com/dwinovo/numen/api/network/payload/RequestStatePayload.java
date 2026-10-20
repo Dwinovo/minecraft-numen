@@ -54,7 +54,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     /** 身体不在(睡在未加载区块 / 不是你的):没有内容可给。 */
     public static NumenStatePayload absent(java.util.UUID uuid) {
         return new NumenStatePayload(uuid, false, List.of(), List.of(), 0, 0f,
-                0, ItemStack.EMPTY, List.of(), "", -1, "");
+                0, ItemStack.EMPTY, List.of(), "", "");
     }
 
     /**
@@ -78,15 +78,12 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
         for (var live : numen.getActiveEffects()) {
             effects.add(new net.minecraft.world.effect.MobEffectInstance(live));
         }
-        // 骑乘随身照:类型按注册路径报,id 给 use entity 直接可用的实体号
+        // 骑乘随身照:座驾的身份,use entity 直接可用
         net.minecraft.world.entity.Entity vehicle = numen.getVehicle();
-        String vehicleType = vehicle == null ? ""
-                : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
-                        .getKey(vehicle.getType()).getPath();
         return new NumenStatePayload(numen.getUUID(), true, items, craft,
                 numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel(),
                 inv.selected, numen.getOffhandItem().copy(), effects,
-                vehicleType, vehicle == null ? -1 : vehicle.getId(),
+                vehicle == null ? "" : com.dwinovo.numen.api.sdk.EntityLabel.of(vehicle),
                 com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(numen));
     }
 }

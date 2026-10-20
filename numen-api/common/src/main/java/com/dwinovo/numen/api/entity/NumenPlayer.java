@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.api.sdk.CompassUtil;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
@@ -266,21 +268,23 @@ public final class NumenPlayer extends ServerPlayer {
         if (verdict == OwnerHurtWatch.Verdict.NONE) {
             return null;
         }
-        String label = attackerLabel(attacker);
-        return new OwnerHurt(label, owner.getHealth(), owner.getMaxHealth(),
+        vigil.follow(attacker);
+        return new OwnerHurt(EntityLabel.of(attacker), owner.getHealth(), owner.getMaxHealth(),
                 verdict == OwnerHurtWatch.Verdict.DANGER);
     }
 
     /** 她自己挨打的看护(纯判定在 {@link CompanionHurtWatch})。 */
     private final CompanionHurtWatch selfHurtWatch = new CompanionHurtWatch();
 
-    /** 待上报的一次实体伤害:攻击者标签、结算前的伤害量、与她当时的距离。 */
+    /** 待上报的一次实体伤害:攻击者标签、结算前的伤害量、与她当时的距离和方位。 */
     private String hurtAttacker;
     private float hurtAmount;
     private double hurtDistance;
+    private String hurtBearing;
 
-    /** 一次"她自己挨打"报告:攻击者、伤害量、她的血量与攻击者离她多远。 */
-    public record CompanionHurt(String attacker, float amount, float hp, float maxHp, double distance) {}
+    /** 一次"她自己挨打"报告:攻击者、伤害量、她的血量与攻击者离她多远、在她的哪个方向。 */
+    public record CompanionHurt(String attacker, float amount, float hp, float maxHp, double distance,
+                                String bearing) {}
 
     /**
      * 她自己这一刻有没有挨打值得说。每服务端 tick 问一次(见 {@code CompanionTickDispatcher});
@@ -290,21 +294,23 @@ public final class NumenPlayer extends ServerPlayer {
         String attacker = hurtAttacker;
         float amount = hurtAmount;
         double distance = hurtDistance;
+        String bearing = hurtBearing;
         hurtAttacker = null;
         hurtAmount = 0.0f;
         hurtDistance = 0.0;
         CompanionHurtWatch.Report report =
                 selfHurtWatch.poll(attacker, amount, getHealth(), getMaxHealth(), now);
         return report == null ? null
-                : new CompanionHurt(report.attacker(), report.amount(), report.hp(), report.maxHp(), distance);
+                : new CompanionHurt(report.attacker(), report.amount(), report.hp(), report.maxHp(), distance,
+                        bearing);
     }
 
-    /** 攻击者的显示名:玩家用游戏名,其余用实体类型 id。事件正文与属性都用它。 */
-    private static String attackerLabel(net.minecraft.world.entity.Entity attacker) {
-        return attacker instanceof net.minecraft.world.entity.player.Player p
-                ? p.getGameProfile().getName()
-                : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
-                        .getKey(attacker.getType()).getPath();
+    /** 四周两件事的看护:有东西盯上她、她留意的对象没了(见 {@link Vigil})。 */
+    private final Vigil vigil = new Vigil();
+
+    /** 每服务端 tick 问一次({@code CompanionTickDispatcher}),该说的事经 {@code NumenEvents} 发出。 */
+    public Vigil vigil() {
+        return vigil;
     }
 
     public boolean pollWokeUp() {
@@ -466,9 +472,11 @@ public final class NumenPlayer extends ServerPlayer {
             // CompanionTickDispatcher 每 tick 的轮询里办,这里只留一条待说的事实。
             net.minecraft.world.entity.Entity attacker = source.getEntity();
             if (attacker != null) {
-                hurtAttacker = attackerLabel(attacker);
+                hurtAttacker = EntityLabel.of(attacker);
                 hurtAmount = amount;
                 hurtDistance = distanceTo(attacker);
+                hurtBearing = CompassUtil.compass(this, attacker);
+                vigil.follow(attacker);
             }
             CompanionEvents.fire(CompanionEvent.HURT,
                     new CompanionEvent.Hurt(this, source, amount));

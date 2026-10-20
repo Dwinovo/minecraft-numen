@@ -41,6 +41,8 @@ class EventTypesTest {
         // 旁听的话与离场通知:捎带
         assertRow(EventTypes.TALK, EventTypes.Delivery.AMBIENT, false, false, false, false);
         assertRow(EventTypes.LEFT, EventTypes.Delivery.AMBIENT, false, false, false, false);
+        // 她留意的对象没了:不叫醒她
+        assertRow(EventTypes.GONE, EventTypes.Delivery.AMBIENT, false, false, false, false);
         // 本能做了事:常态知会,险情由发送方标急件
         assertRow(EventTypes.REFLEX, EventTypes.Delivery.NOTICE, false, false, false, false);
     }
@@ -53,6 +55,7 @@ class EventTypesTest {
         assertRow(EventTypes.HUNGRY, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.OWNER_HURT, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.COMPANION_HURT, EventTypes.Delivery.STEER, true, false, false, false);
+        assertRow(EventTypes.TARGETED, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.TIMER, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.WOKE, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);
@@ -134,7 +137,7 @@ class EventTypesTest {
         assertTrue(q.chatPreview().isEmpty(), "插件的事件不进聊天流");
         assertEquals(List.of("<events>\n<event kind=\"accessory_changed\">戴上了戒指</event>\n"
                         + "<event kind=\"accessory_broke\">护符碎了</event>\n</events>"),
-                EventQueue.render(q.takeEntries(T0 + 2), T0 + 2), "和内置事件一样按时间排进 <events>");
+                EventQueue.render(q.takeEntries(T0 + 2), 0L), "和内置事件一样按时间排进 <events>");
     }
 
     @Test

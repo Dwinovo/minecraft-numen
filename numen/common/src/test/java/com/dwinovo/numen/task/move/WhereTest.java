@@ -58,6 +58,6 @@ class WhereTest {
     void aColumnAHeightAndAnEntityAreTheirOwnKinds() {
         assertInstanceOf(Where.Column.class, Where.CODEC.decode(Map.of("x", 5L, "z", 6L)));
         assertEquals(new Where.Height(12), Where.CODEC.decode(Map.of("y", 12L)));
-        assertInstanceOf(Where.Mob.class, Where.CODEC.decode(184L));
+        assertInstanceOf(Where.Mob.class, Where.CODEC.decode("zombie@3f9a1c"));
     }
 }

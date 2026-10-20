@@ -647,14 +647,14 @@ public class TaskControlGameTests {
                 .thenExecute(() -> follow.set(lua(companion, "numen.move.follow()")))
                 .thenWaitUntil(() -> helper.assertTrue(follow.get().accepted(),
                         "following was not accepted: " + follow.get().reply()))
-                .thenExecute(() -> blocked.set(lua(companion, "numen.move.to(999999)")))
+                .thenExecute(() -> blocked.set(lua(companion, "numen.move.to(\"pig@999999\")")))
                 .thenWaitUntil(() -> helper.assertTrue(blocked.get().done(), "the blocked walk has not replied"))
                 .thenExecute(() -> {
                     ToolRun refused = blocked.get();
                     helper.assertTrue(refused.refused(), "a walk to nothing was accepted: " + refused.reply());
                     String reply = refused.outcome();
                     Constants.LOG.info("[numen-task] numen.move.to refused -> {}", reply);
-                    helper.assertTrue(reply.contains("no entity with id 999999") && !reply.contains("task_id"),
+                    helper.assertTrue(reply.contains("pig@999999 is not near you") && !reply.contains("task_id"),
                             "the refusal does not say why, or carries a task id: " + reply);
                     TaskRecord<?> inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
                     helper.assertTrue(inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,
