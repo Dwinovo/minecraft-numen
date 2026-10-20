@@ -360,7 +360,11 @@ final class Attempt {
         if (her != null) {
             CompanionLoops.dismissed(server, her.getUUID());
             CompanionRegistry.get(server).remove(her.getUUID());
-            CompanionFactory.despawn(server, her);
+            // 她死过的话 her 是死掉的那具,世界里站着的是原版重生换上来的新身体
+            NumenPlayer now = NumenPlayer.findByUuid(server, her.getUUID());
+            if (now != null) {
+                CompanionFactory.despawn(server, now);
+            }
         }
         if (owner != null) {
             server.getPlayerList().remove(owner);
