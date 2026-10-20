@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.agent.loop.HaltReason;
 import com.dwinovo.numen.api.agent.request.BodySnapshot;
 import com.dwinovo.numen.api.agent.request.Nearby;
+import com.dwinovo.numen.api.agent.tool.ToolBook;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.home.Home;
@@ -68,7 +69,7 @@ public final class CompanionBrains {
         Conversations rooms = Conversations.of(server, owner);
         CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, home, server, mind,
                 new LocalPrograms(server),
-                new OwnerTools(owner, LibraryHub.of(server).library(McpClientConfig.KIND, owner)),
+                toolsOf(server, owner),
                 () -> NumenPlayer.findByUuid(server, companion),
                 () -> {
                     NumenPlayer body = NumenPlayer.findByUuid(server, companion);
@@ -85,6 +86,11 @@ public final class CompanionBrains {
                 () -> NumenEvents.Moment.of(server), rooms));
         CompanionLoops.install(owner, loop, link, rooms);
         return loop;
+    }
+
+    /** 这位主人的同伴看得到的工具:内置大脑与外接大脑(MCP 端点)问的是同一份。 */
+    public static ToolBook toolsOf(MinecraftServer server, UUID owner) {
+        return new OwnerTools(owner, LibraryHub.of(server).library(McpClientConfig.KIND, owner));
     }
 
     /**

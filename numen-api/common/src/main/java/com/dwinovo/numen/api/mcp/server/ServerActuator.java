@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
-import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.brain.CompanionLoops;
@@ -47,6 +47,13 @@ public final class ServerActuator implements ExternalHands {
     public ServerActuator(MinecraftServer server, UUID owner) {
         this.server = server;
         this.owner = owner;
+    }
+
+    @Override
+    public CompletableFuture<List<NumenTool>> tools() {
+        CompletableFuture<List<NumenTool>> f = new CompletableFuture<>();
+        server.execute(() -> f.complete(CompanionBrains.toolsOf(server, owner).all()));
+        return f;
     }
 
     @Override
@@ -99,6 +106,13 @@ public final class ServerActuator implements ExternalHands {
         CompletableFuture<String> f = new CompletableFuture<>();
         server.execute(() -> f.complete(CompanionLoops.get(companion)
                 .map(CompanionLoop::takeEventsForExternal).orElse(null)));
+        return f;
+    }
+
+    @Override
+    public CompletableFuture<String> runtimeState(UUID companion) {
+        CompletableFuture<String> f = new CompletableFuture<>();
+        server.execute(() -> f.complete(CompanionLoops.get(companion).map(CompanionLoop::runtimeState).orElse(null)));
         return f;
     }
 
@@ -159,7 +173,7 @@ public final class ServerActuator implements ExternalHands {
         }
         server.execute(() -> {
             try {
-                NumenTool tool = ToolRegistry.resolve(toolName);
+                NumenTool tool = CompanionBrains.toolsOf(server, owner).resolve(toolName);
                 if (tool == null) {
                     f.complete(ToolOutcome.failure("unknown tool: " + toolName));
                     return;

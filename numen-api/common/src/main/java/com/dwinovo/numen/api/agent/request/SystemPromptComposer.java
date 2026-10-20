@@ -27,16 +27,19 @@ public final class SystemPromptComposer {
         String base = (personaText != null && !personaText.isBlank())
                 ? personaText : Services.config().getSystemPrompt();
         if (base == null || base.isBlank()) base = NumenPrompts.DEFAULT_PERSONA;
-        String skillsXml = skills.formatXml();
+        return "<persona>\n" + base.strip() + "\n</persona>" + core(modules, skills.formatXml());
+    }
 
-        // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
-        // 会变化的札记索引随注入的 user 消息进历史(见 MemoryPreamble),
-        // 让这里成为字节级稳定的缓存前缀。
-        StringBuilder sb = new StringBuilder();
-        // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
-        // immutable operating core (NumenPrompts.ENTITY_PROMPT) that follows.
-        sb.append("<persona>\n").append(base.strip()).append("\n</persona>");
-        sb.append(NumenPrompts.ENTITY_PROMPT);
+    /**
+     * 不论谁来想都读同一份的那几层:操作核心、技能表(有才有)、API 索引(含模块)、本能名册、札记的规矩、场面的规矩、说话规则。
+     * 内置大脑的系统提示在人设后接上它;外接大脑的说明(MCP 端点)也引用它,所以身体怎么干活、规矩是什么只在这里与
+     * {@link NumenPrompts} 一处。会变的东西不在这里:背包、效果、当前任务挂在每一轮的 {@link RuntimeState} 里,她一写就变的札记索引随
+     * 注入的 user 消息进历史。
+     *
+     * @param skillsXml 技能表({@link SkillRegistry#formatXml});没有技能表是空串
+     */
+    public static String core(com.dwinovo.numen.api.script.Modules modules, String skillsXml) {
+        StringBuilder sb = new StringBuilder(NumenPrompts.ENTITY_PROMPT);
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }

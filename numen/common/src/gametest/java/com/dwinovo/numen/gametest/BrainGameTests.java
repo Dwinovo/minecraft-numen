@@ -556,6 +556,12 @@ public class BrainGameTests {
         return Integer.MAX_VALUE;
     }
 
+    /** 一个 tools/call 结果的第 {@code index} 段文本;负数从尾数起。 */
+    private static String textAt(JsonObject result, int index) {
+        com.google.gson.JsonArray content = result.getAsJsonArray("content");
+        return content.get(index < 0 ? content.size() + index : index).getAsJsonObject().get("text").getAsString();
+    }
+
     private static JsonObject mcpArgs(String companion, String key, String value) {
         JsonObject args = new JsonObject();
         args.addProperty("companion", companion);
@@ -584,6 +590,7 @@ public class BrainGameTests {
         McpTestClient client = new McpTestClient(port, mcp.tokens().issue(her.companion.getOwnerUuid(),
                 McpToken.Role.BRAIN, McpToken.Scope.ALL, "gametest", 0).secret());
         List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> states = new java.util.concurrent.CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         Thread brain = new Thread(() -> {
@@ -592,11 +599,15 @@ public class BrainGameTests {
                 heard.add(client.call("list_companions", new JsonObject()));
                 JsonObject wait = mcpArgs(name, null, null);
                 wait.addProperty("wait_seconds", 20);
-                heard.add(client.call("get_events", wait));
+                JsonObject events = client.callResult("get_events", wait);
+                heard.add(textAt(events, 0));
+                states.add(textAt(events, -1));
                 heard.add(client.call("say", mcpArgs(name, "text", "收到")));
                 JsonObject program = ScriptTool.args("return 1 + 1");
                 program.addProperty("companion", name);
-                heard.add(client.call(ScriptEngine.IN_USE.toolName(), program));
+                JsonObject receipt = client.callResult(ScriptEngine.IN_USE.toolName(), program);
+                heard.add(textAt(receipt, 0));
+                states.add(textAt(receipt, -1));
             } catch (Throwable t) {
                 failure.set(t);
             } finally {
@@ -615,6 +626,9 @@ public class BrainGameTests {
             helper.assertTrue(heard.get(1).contains("你好"), "get_events did not hand over the owner's words: " + heard.get(1));
             helper.assertTrue(heard.get(2).equals("said"), "say was not accepted: " + heard.get(2));
             helper.assertTrue(heard.get(3).contains("2"), "the program's receipt lacks its value: " + heard.get(3));
+            helper.assertTrue(states.size() == 2 && states.stream().allMatch(st -> st.startsWith("<runtime_state>")
+                            && st.contains("<inventory>")),
+                    "get_events and the program's receipt do not end with her runtime state and inventory: " + states);
             List<ConvoState.Msg> t = her.transcript();
             helper.assertTrue(t.get(0) instanceof ConvoState.Msg.User u && u.content().contains("你好"),
                     "the owner's words taken by the external brain are not in the log: " + t);

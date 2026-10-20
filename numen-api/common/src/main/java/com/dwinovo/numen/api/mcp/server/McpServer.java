@@ -1,11 +1,8 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
-import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
-import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -50,7 +47,7 @@ import java.util.function.Function;
  *
  * <h2>工具</h2>
  * 身份是大脑的令牌看到:{@code list_companions}/{@code create_companion}/{@code delete_companion}/{@code get_events}/
- * {@code say},加上 {@link ToolRegistry} 里的每个工具(各带一个 {@code companion} 参数),调用路由到
+ * {@code say},加上她的工具表({@link ExternalHands#tools},与内置大脑每轮请求里发的同一份)里的每个工具(各带一个 {@code companion} 参数),调用路由到
  * {@link ExternalHands#invoke}:程序在她自己的派发器里跑,做完回执。没有"接管"握手——会话连着,驾驶席就是它的
  * ({@link McpMode#driving})。
  *
@@ -64,72 +61,12 @@ public final class McpServer {
     /** 认得的协议版本;客户端要的在其中就照它答,否则答最新的。 */
     private static final Set<String> PROTOCOL_VERSIONS = Set.of("2025-06-18", "2025-03-26", "2024-11-05");
     private static final String SERVER_VERSION = "0.2.0";
-    /** Roster / create / delete are fast; only tool actions use the config timeout. */
-    private static final int CONTROL_TIMEOUT_SECONDS = 10;
+    private static final int CONTROL_TIMEOUT_SECONDS = ExternalBrain.CONTROL_TIMEOUT_SECONDS;
     /** 请求体上限:一段程序或一句话远用不到,挡住灌内存的。 */
     private static final int MAX_BODY_BYTES = 1 << 20;
     /** 服务端→客户端的流多久写一次保活;写不出去就是对方走了。 */
     private static final long KEEPALIVE_SECONDS = 15;
-    /** get_events 长等待：外脑每调一次工具就是一次完整的模型请求，所以没事就一直等，有事（会叫醒她的条目，
-     *  判据见 {@code ExternalWait}）立刻返回。最长 50 秒，给桥接层（mcp-remote 等）和客户端的请求超时留余量
-     *  （Codex 的工具超时默认 60 秒）；到点返回空，外脑再调一次接着等。 */
-    private static final int MAX_WAIT_SECONDS = 50;
-
-    /**
-     * 外接大脑读的那条身体规则:内脑读的同一句({@link NumenPrompts#ONE_BODY}),接上这一侧怎么把几件活排开——外接大脑的
-     * 调用没有"同一轮",每一条当场执行,要一件做完再派下一件就自己等身体空闲。说明与接入提示词({@link McpAccessPrompt})
-     * 都用这一句。
-     */
-    static final String ONE_BODY = NumenPrompts.ONE_BODY + " A program waits for each body task it starts, so jobs "
-            + "written one after another in one program run one after another.";
-
-    /**
-     * Sent to the connecting agent in the {@code initialize} handshake (MCP's
-     * {@code instructions} field) — what Numen is and how to drive it, so any
-     * client gets the essentials without a separately-installed skill.
-     */
-    private static final String INSTRUCTIONS = """
-            Numen companions are AI-controlled, player-like characters inside a live Minecraft game. \
-            Through this server you take control of a companion's body and play the game as it — perceive, \
-            move, mine, build, craft, fight. You ARE its brain while this session is connected: the built-in AI \
-            stands aside, and even the owner's in-game chat reaches you (via get_events) instead \
-            of it. Drive the body directly — there is no 'take control' handshake.
-
-            Loop: (1) list_companions to see who you can drive — create_companion by name to summon a new one, \
-            delete_companion to dismiss one for good; (2) everything else is one tool, %s: a program \
-            whose functions are the companion's API — perceive with numen.status.self(), numen.scan.blocks(...), \
-            numen.scan.entities(...); act with numen.move.to(...), numen.work.dig(...), numen.build.place(...), numen.fight.attack(...), \
-            numen.inv.craft(...), …; numen.api.help("numen.work") lists a group's functions and numen.api.help("numen.work.dig") gives one \
-            function's full help. A program returns one receipt when it ends: how it ended, then stderr \
-            (what the body did and what failed, one entry per call that had something to say), what it returned \
-            and stdout (what it printed). It waits for each body task it starts to finish, so a long \
-            job returns when it is done, with the task's account of what it changed in its stderr entry. Every call takes a 'companion' argument (name or id), so each call targets \
-            one companion; just drive it, there is no take-control step. The %s tool loads one of the \
-            companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
-            does not know answers with the list of the skills it can use. The %s tool writes down your plan for \
-            work of several phases (the whole plan each call, replacing the last one); the owner sees it as a \
-            checklist. The %s tool keeps the companion's own notes (remember, recall, forget); their index \
-            comes with every turn of its own brain.
-
-            Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
-            give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
-            drive several companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) \
-            work natively. Your programs go through the same permission layer as the companion's own: \
-            when it needs the owner's approval, the owner is asked (not you) and the answer arrives as the \
-            program's outcome.
-
-            You also carry the companion's conversation. To wait for the owner to speak or for something to happen, \
-            call get_events(companion): it returns as soon as there is news and otherwise waits up to %d seconds, \
-            then answers that nothing came, so call it again to keep waiting. While you run programs, events that \
-            arrive come back with the program's receipt, after the receipt text. The owner speaking to the companion \
-            (in-game chat or voice) arrives as a <query> and stops a running program between two calls; the task it \
-            was waiting for keeps running, and its end arrives as a task_finished <event> among the world \
-            happenings. Reply with say(companion, text): the words appear in-game as the companion's chat line, \
-            speech bubble, and voice. Keep your own conversation history — the game stores none for you; events \
-            queue up until you take them.""".formatted(
-            com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.api.agent.tool.SkillTool.NAME,
-            com.dwinovo.numen.api.agent.tool.TodoTool.NAME, com.dwinovo.numen.api.agent.tool.MemoryTool.NAME, ONE_BODY,
-            MAX_WAIT_SECONDS);
+    private static final int MAX_WAIT_SECONDS = ExternalBrain.MAX_WAIT_SECONDS;
 
     private final McpConfig config;
     private final McpTokens tokens;
@@ -369,7 +306,7 @@ public final class McpServer {
             info.addProperty("name", "numen-mcp");
             info.addProperty("version", SERVER_VERSION);
             result.add("serverInfo", info);
-            result.addProperty("instructions", INSTRUCTIONS);
+            result.addProperty("instructions", McpInstructions.build());
             ex.getResponseHeaders().add("Mcp-Session-Id", session.id);
             respondJson(ex, 200, okResponse(id, result));
         } finally {
@@ -483,7 +420,7 @@ public final class McpServer {
                 case "tools/call" -> okResponse(id, toolsCallResult(session, req, bytesIn));
                 default -> errorResponse(id, -32601, "method not found: " + method);
             };
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             return errorResponse(id, -32603, "internal error: " + ex.getMessage());
         }
     }
@@ -499,7 +436,7 @@ public final class McpServer {
 
     // ---- tools/list ----
 
-    private JsonObject toolsListResult(McpToken token) {
+    private JsonObject toolsListResult(McpToken token) throws Exception {
         JsonArray tools = new JsonArray();
         if (token.role() == McpToken.Role.CHANNEL) {
             channelTools(tools);
@@ -536,8 +473,8 @@ public final class McpServer {
                 saySchema()));
 
         // 全量给外脑,不做渐进披露:那是我们自己请求里的省法,外脑的上下文预算归它自己管,
-        // 而且 MCP 客户端(Claude Code 之类)本来就会把借来的工具再延迟一次。
-        for (NumenTool tool : ToolRegistry.all()) {
+        // 而且 MCP 客户端(Claude Code 之类)本来就会把借来的工具再延迟一次。工具表是内置大脑每轮请求里发的那一份。
+        for (NumenTool tool : handsOf.apply(token.owner()).tools().get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             if (config.isHidden(tool.name())) continue;
             tools.add(toolDef(tool.name(), tool.description(), withCompanion(tool.parameterSchema())));
         }
@@ -801,8 +738,7 @@ public final class McpServer {
                     : "could not dismiss " + companion + " — the owner has to be in the game", !ok);
         }
 
-        /** 长等待取件：停靠在收件箱上，会叫醒她的条目一到立即整批返回；到点清扫，
-         *  有什么给什么（捎带的也交），没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
+        /** 等她的消息,正文见 {@link ExternalBrain#events}。 */
         JsonObject getEvents(JsonObject args) throws Exception {
             UUID companion = resolve(args);
             if (companion == null) {
@@ -812,23 +748,7 @@ public final class McpServer {
             if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
                 wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
             }
-            if (wait > 0) {
-                ExternalWait.Parked parked = hands.awaitEvents(companion);
-                String batch = null;
-                try {
-                    batch = parked.batch().get(wait, TimeUnit.SECONDS);
-                } catch (TimeoutException deadline) {
-                    // 到点，转清扫——叫醒只是提前，正确性由清扫兜底
-                } finally {
-                    // 撤销与叫醒谁先谁得：到点那一刻叫醒恰好取走的批次由撤销交回，取走的一定交到外脑手里
-                    String late = parked.cancel().get();
-                    if (batch == null) batch = late;
-                }
-                if (batch != null) return content(batch, false);
-            }
-            String rest = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return content(rest != null ? rest
-                    : "(no new events — call get_events again to keep waiting; the owner's words and world happenings land here)", false);
+            return receipt(ExternalBrain.events(hands, companion, wait));
         }
 
         /** 渠道:把主人的话送给她。 */
@@ -901,9 +821,7 @@ public final class McpServer {
             toolArgs.remove("companion");
             String result = hands.invoke(companion, toolName, toolArgs.toString())
                     .get(config.callTimeoutSeconds(), TimeUnit.SECONDS);
-            // the external agent reads what the built-in brain reads: the result's message, never its structured data
-            String events = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return receipt(ToolOutcome.modelText(result), ToolOutcome.failed(result), events);
+            return receipt(ExternalBrain.afterProgram(hands, companion, result));
         }
 
         /** 把 {@code companion} 参数(名字或 UUID)解析成这张令牌管得着的、活着的同伴;没有是 null。 */
@@ -930,15 +848,10 @@ public final class McpServer {
         }
     }
 
-    /**
-     * 一次工具调用的回执：结果文本在前；这段时间到达的事件（{@link ExternalHands#takeEvents} 取走的那批，
-     * 取走即不再由 get_events 交）作为另一段文本跟在后面，外脑干活时不必另外轮询。
-     */
-    static JsonObject receipt(String text, boolean isError, String events) {
-        JsonObject out = content(text, isError);
-        if (events != null) {
-            out.getAsJsonArray("content").add(textItem(events));
-        }
+    /** 交给外接大脑的正文装成 tools/call 的结果:一段正文一个文本块。 */
+    static JsonObject receipt(ExternalBrain.Body body) {
+        JsonObject out = content(body.texts().get(0), body.failed());
+        body.texts().stream().skip(1).forEach(text -> out.getAsJsonArray("content").add(textItem(text)));
         return out;
     }
 
