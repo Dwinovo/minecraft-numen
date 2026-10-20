@@ -173,7 +173,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 
 ## 附:第 3 步 Paper 部分落地时的出入
 
-- **接纳是平台服务 `IBodyAdmission`**(`admit` 加入前问、`joined` 加入后做),召唤与恢复的整条链(`CompanionFactory.spawn`、`Companions.summon/respawn/summonFor`、死亡复活、登入恢复)只有带回调的一种写法,
+- **接纳是平台服务 `IBodyAdmission`**(`admit` 加入前问、`joined` 加入后做),召唤与恢复的整条链(`CompanionFactory.spawn`、`Companions.summon/respawn/summonFor`、登入恢复)只有带回调的一种写法,
   没有同步的同名重载:模组上答复当场回来、`then` 在同一个调用里跑完,行为不变;Paper 上登录事件在异步线程上发,答复回到主线程再加入。编排放在 common 的 `Arrivals`(不认识 Minecraft 玩家,依赖只有 `Admission` 一个函数接口),
   用一个可控的假接纳单测(`ArrivalsTest`:当场接/拒、挂起后再接/再拒、在路上去重、名字占位、完成时登记已撤)。GameTest 里让她进世界用 testFixtures 的 `Bodies`,走的是同一条带回调的路,当场没回来就让用例失败(GameTest 在模组上跑,平台当场接纳;
   Paper 上跑 GameTest 要等回调,是那一层适配的事)。
