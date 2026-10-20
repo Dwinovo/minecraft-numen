@@ -29,7 +29,7 @@ class InjectedMarkupIsStrippedTest {
     private static final long T0 = 1_700_000_000_000L;
 
     private static String render(EventQueue q) {
-        return String.join("\n", EventQueue.render(q.takeEntries(T0), T0));
+        return String.join("\n", EventQueue.render(q.takeEntries(T0), 0L));
     }
 
     @Test
@@ -109,6 +109,6 @@ class InjectedMarkupIsStrippedTest {
 
     @Test
     void anEmptyQueueRendersToNothing() {
-        assertEquals(List.of(), EventQueue.render(new EventQueue(EventQueue.Journal.NONE).takeEntries(T0), T0));
+        assertEquals(List.of(), EventQueue.render(new EventQueue(EventQueue.Journal.NONE).takeEntries(T0), 0L));
     }
 }

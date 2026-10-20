@@ -134,7 +134,7 @@ class EventTypesTest {
         assertTrue(q.chatPreview().isEmpty(), "插件的事件不进聊天流");
         assertEquals(List.of("<events>\n<event kind=\"accessory_changed\">戴上了戒指</event>\n"
                         + "<event kind=\"accessory_broke\">护符碎了</event>\n</events>"),
-                EventQueue.render(q.takeEntries(T0 + 2), T0 + 2), "和内置事件一样按时间排进 <events>");
+                EventQueue.render(q.takeEntries(T0 + 2), 0L), "和内置事件一样按时间排进 <events>");
     }
 
     @Test

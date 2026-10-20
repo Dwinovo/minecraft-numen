@@ -21,7 +21,7 @@ class ExternalWaitTest {
     }
 
     private static ExternalWait.Parked park(EventQueue q) {
-        return ExternalWait.park(q, () -> T0);
+        return ExternalWait.park(q, () -> T0, () -> 0L);
     }
 
     @Test
@@ -71,9 +71,9 @@ class ExternalWaitTest {
         q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
         parked.cancel().get();
 
-        String swept = q.takeRenderedText(T0);
+        String swept = q.takeRenderedText(T0, 0L);
         assertTrue(swept.contains("在吗"), "到点清扫有什么给什么");
-        assertNull(q.takeRenderedText(T0), "取走即不再交");
+        assertNull(q.takeRenderedText(T0, 0L), "取走即不再交");
     }
 
     @Test
@@ -97,7 +97,7 @@ class ExternalWaitTest {
         q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
 
         assertFalse(parked.batch().isDone());
-        assertEquals("<query>a</query>", q.takeRenderedText(T0), "货留在队里给下一个取件人");
+        assertEquals("<query>a</query>", q.takeRenderedText(T0, 0L), "货留在队里给下一个取件人");
     }
 
     @Test
@@ -122,7 +122,7 @@ class ExternalWaitTest {
         q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
 
         assertNull(parked.cancel().get(), "撤销之后叫醒不再取件");
-        assertEquals("<query>a</query>", q.takeRenderedText(T0));
+        assertEquals("<query>a</query>", q.takeRenderedText(T0, 0L));
     }
 
     @Test
@@ -136,7 +136,7 @@ class ExternalWaitTest {
         q.push(EventTypes.QUERY, "<query>a</query>", T0, false);
 
         assertFalse(parked.batch().isDone(), "撤销在先,登记就不再做");
-        assertEquals("<query>a</query>", q.takeRenderedText(T0), "货没被一个没人读的等待者拿走");
+        assertEquals("<query>a</query>", q.takeRenderedText(T0, 0L), "货没被一个没人读的等待者拿走");
     }
 
     @Test

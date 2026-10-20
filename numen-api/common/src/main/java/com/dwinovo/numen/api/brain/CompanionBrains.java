@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
@@ -79,7 +80,7 @@ public final class CompanionBrains {
                             : entry.removed() ? HaltReason.REMOVED : null;
                 },
                 ownerOnline, driving, initiative, persona,
-                () -> server.overworld().getDayTime(), rooms));
+                () -> NumenEvents.Moment.of(server), rooms));
         CompanionLoops.install(owner, loop, link, rooms);
         return loop;
     }

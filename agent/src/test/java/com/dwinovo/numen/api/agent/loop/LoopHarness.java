@@ -212,6 +212,7 @@ public abstract class LoopHarness {
 
     public static final class FakeHost implements HostPort {
         public long now = T0;
+        public long gameTick;
         public int level = 3;
         public boolean external;
         public boolean away;
@@ -221,6 +222,11 @@ public abstract class LoopHarness {
         @Override
         public long now() {
             return now;
+        }
+
+        @Override
+        public long gameTick() {
+            return gameTick;
         }
 
         @Override

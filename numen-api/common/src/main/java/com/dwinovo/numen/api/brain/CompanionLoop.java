@@ -53,7 +53,6 @@ import java.util.function.Consumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
-import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -98,12 +97,12 @@ public final class CompanionLoop {
      * @param initiative  主动性档位 1~10
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
      * @param tools       她看得到的工具
-     * @param dayTime     游戏内时刻,给事件盖时间戳
+     * @param moment      此刻的游戏刻与一天里的时刻,给事件盖时间戳
      */
     public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
                         Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
-                        Function<String, String> persona, LongSupplier dayTime, Rooms rooms) {}
+                        Function<String, String> persona, Supplier<NumenEvents.Moment> moment, Rooms rooms) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
@@ -367,7 +366,7 @@ public final class CompanionLoop {
 
     /** 渠道(桥接、弹幕)带来的一件世界上发生的事,和服务端自己的事件同一个构造口。 */
     public boolean submitEvent(String type, String text) {
-        return deliver(NumenEvents.entry(parts.dayTime().getAsLong(), type, null, text,
+        return deliver(NumenEvents.entry(parts.moment().get(), type, null, text,
                 System.currentTimeMillis(), false));
     }
 
@@ -426,12 +425,17 @@ public final class CompanionLoop {
      * @return 取走的事件拼段;没有返回 null
      */
     public String takeEventsForExternal() {
-        return took(queue.takeRenderedText(System.currentTimeMillis()));
+        return took(queue.takeRenderedText(System.currentTimeMillis(), gameTick()));
+    }
+
+    /** 此刻的游戏刻(总刻数):事件盖的是同一把尺,交给模型时据它算晚到了多久。 */
+    private long gameTick() {
+        return parts.moment().get().gameTime();
     }
 
     /** 长等待停靠:有会叫醒她的条目就整批交出,规则见 {@link ExternalWait}。 */
     public ExternalWait.Parked parkForExternal() {
-        ExternalWait.Parked parked = ExternalWait.park(queue, System::currentTimeMillis);
+        ExternalWait.Parked parked = ExternalWait.park(queue, System::currentTimeMillis, this::gameTick);
         return new ExternalWait.Parked(parked.batch().thenApply(this::took), parked.cancel());
     }
 
@@ -478,7 +482,7 @@ public final class CompanionLoop {
         Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", companion, cause);
         // 死亡是急件——她关于自己处境的认知几乎每一条都作废了:物品掉在死亡地点、位置从矿洞变成了主人身边、
         // 手上的任务没了、血量装备全变了。这不分"任务中死"还是"空闲死",所以这里没有任何判据。
-        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.DEATH, null,
+        loop.push(List.of(NumenEvents.entry(parts.moment().get(), EventTypes.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;现已在主人身边复活。先看看状况再决定下一步。",
                 System.currentTimeMillis(), true)));
         loop.respawned();
@@ -490,7 +494,7 @@ public final class CompanionLoop {
      */
     public void onRemoved(String reason) {
         loop.halt(HaltReason.REMOVED, reason);
-        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.REMOVED, null,
+        loop.push(List.of(NumenEvents.entry(parts.moment().get(), EventTypes.REMOVED, null,
                 "你的身体被服务器上的管理员或插件请出去了(" + reason.replace('<', '(').replace('>', ')')
                         + ")。这不是主人的决定,也不是你做错了什么;从那以后你不在世界里,主人再召唤你才能回来,背包和落点照旧。",
                 System.currentTimeMillis(), true)));
@@ -509,7 +513,7 @@ public final class CompanionLoop {
 
     /** 切断后程序交出的回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱。 */
     private void receiptAfterCut(String program, String receipt) {
-        loop.push(List.of(NumenEvents.programStopped(parts.dayTime().getAsLong(), program,
+        loop.push(List.of(NumenEvents.programStopped(parts.moment().get(), program,
                 Program.Outcome.messageOf(receipt), System.currentTimeMillis())));
     }
 
@@ -715,6 +719,11 @@ public final class CompanionLoop {
         @Override
         public long now() {
             return System.currentTimeMillis();
+        }
+
+        @Override
+        public long gameTick() {
+            return CompanionLoop.this.gameTick();
         }
 
         @Override

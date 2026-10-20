@@ -36,7 +36,7 @@ class JsonlJournalTest {
     void everyFieldSurvivesTheRoundTrip() {
         JsonlJournal journal = JsonlJournal.atFile(file());
         journal.save(List.of(
-                new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true, null, null, 12_345L),
                 new EventQueue.Entry(EventTypes.QUERY, "<query>在吗</query>", T0 + 5, false)));
 
         List<EventQueue.Entry> back = journal.load();
@@ -46,6 +46,8 @@ class JsonlJournalTest {
         assertEquals("<event>任务失败了</event>", back.get(0).text());
         assertEquals(T0, back.get(0).ts(), "事发时刻丢了,年龄标注就全错");
         assertTrue(back.get(0).urgent(), "急件丢了,重进游戏她就不会主动开口");
+        assertEquals(12_345L, back.get(0).tick(), "发生的游戏刻丢了,重进游戏后就算不出晚到多久");
+        assertEquals(EventQueue.Entry.NO_TICK, back.get(1).tick(), "没记游戏刻的条目读回来仍是没记");
         assertFalse(back.get(1).urgent());
         assertEquals(EventTypes.QUERY, back.get(1).type());
     }
@@ -129,10 +131,10 @@ class JsonlJournalTest {
 
     @Test
     void aQueueBackedByDiskReloadsWithEverythingIntact() {
-        // 端到端:队列 → 磁盘 → 新队列,急件与年龄都还在
+        // 端到端:队列 → 磁盘 → 新队列,急件与发生的游戏刻都还在
         JsonlJournal journal = JsonlJournal.atFile(file());
         EventQueue q = new EventQueue(journal);
-        q.push(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0, true);
+        q.push(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0, true, null, 1_000L);
         q.push(EventTypes.QUERY, "<query>辛苦了</query>", T0, true);
 
         EventQueue reopened = new EventQueue(journal);
@@ -140,12 +142,10 @@ class JsonlJournalTest {
         assertEquals(2, reopened.size());
         assertTrue(reopened.hasUrgent(), "重进游戏它还是急的");
         assertEquals(1, reopened.count(EventTypes.QUERY));
-        // 年龄标在每一条身上(世界的事包在 <events> 里,主人的话跟在后面),
-        // 所以看整段:时间戳过了磁盘一圈还得能算出年龄
-        long now = T0 + 3 * 3600_000L;
-        String out = String.join("\n", EventQueue.render(reopened.takeEntries(now), now));
-        assertTrue(out.contains("[发生于约3小时前] <event>矿挖完了</event>"), out);
-        assertTrue(out.contains("[发生于约3小时前] <query>辛苦了</query>"), out);
+        // 晚到标在世界的事身上(主人的话没有游戏刻,不标):发生的游戏刻过了磁盘一圈还得能算出晚到多久
+        String out = String.join("\n", EventQueue.render(reopened.takeEntries(T0), 1_000L + 3 * 3600 * 20));
+        assertTrue(out.contains("[晚到 3 小时] <event>矿挖完了</event>"), out);
+        assertTrue(out.contains("\n<query>辛苦了</query>"), out);
     }
 
     @Test
