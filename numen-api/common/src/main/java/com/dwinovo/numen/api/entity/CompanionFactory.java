@@ -101,7 +101,7 @@ public final class CompanionFactory {
         }
         server.getPlayerList().placeNewPlayer(connection, player,
                 CommonListenerCookie.createInitial(profile, false));
-        // 加入之后平台要做的事(Paper:退出玩家区块加载、权限委托给主人),在定位之前做:定位之后她周围的区块就不该再按玩家的方式去加载
+        // 加入之后平台要做的事(Paper:权限委托给主人)
         Services.admission().joined(player);
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise

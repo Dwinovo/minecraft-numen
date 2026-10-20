@@ -162,10 +162,6 @@ public class SurvivalGameTests {
         ServerLevel level = helper.getLevel();
         ServerLevel nether = level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);
         helper.assertTrue(nether != null, "this server has no nether to travel to");
-        // 落脚那片区块得真的在跑实体刻,否则她到了下界一刻都不 tick,冷却也就无从递减。
-        // 真实游戏里这是主人在线时她自己那块加载垫干的事(见 CompanionChunkLoader);
-        // GameTest 里没有在线的主人,所以这里直接把目的地钉住。
-        nether.setChunkForced(0, 0, true);
         NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
         companion.setPortalCooldown();
         int cooldown = companion.getPortalCooldown();
@@ -187,10 +183,55 @@ public class SurvivalGameTests {
                     helper.assertTrue(!companion.isInvulnerableTo(level.damageSources().generic()),
                             "she is still invulnerable after the dimension change");
                 })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /**
+     * 一维里只有她:没有真玩家、没有任何区块被钉住,她照样一直在 tick、自己的驱动照样能动身子。
+     * 区块加载照真玩家走(她经 placeNewPlayer 进玩家名单,原版给她的票据就是玩家的那一套,包括让整个维度保持活动的那一条);
+     * 她的 tickCount 只在她所在维度还在走刻时推进,所以它持续推进就是"这个维度没被停"的直接证据。落点在两万格外,
+     * 邻居场地与别的用例的区块都碰不到。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_survival")
+    public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
+        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        BlockPos floor = new BlockPos(20000, 100, 20000);
+        // 下界的地形在这一带是实心的:先掏出一间空房,再铺地板
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 0, -6), floor.offset(6, 0, 6))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        }
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
+        companion.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
+                nether, new Vec3(floor.getX() + 0.5, floor.getY() + 1, floor.getZ() + 0.5), Vec3.ZERO, 0.0f, 0.0f,
+                net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+        int[] ticksAtStart = new int[1];
+        Vec3[] start = new Vec3[1];
+        ToolRun[] walk = new ToolRun[1];
+        steps(helper)
+                // 落脚的区块是新生成的,要等它们起来她才开始走刻;起来之后的 300 刻不许再停
+                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she stands in is not entity-ticking yet"))
                 .thenExecute(() -> {
-                    CompanionFactory.despawn(level.getServer(), companion);
-                    nether.setChunkForced(0, 0, false);
+                    ticksAtStart[0] = companion.tickCount;
+                    start[0] = companion.position();
                 })
+                .thenIdle(300)
+                .thenExecute(() -> helper.assertTrue(companion.tickCount - ticksAtStart[0] >= 295,
+                        "alone in her dimension she stopped ticking: " + (companion.tickCount - ticksAtStart[0])
+                                + " ticks in 300"))
+                .thenExecute(() -> walk[0] = lua(companion, "return numen.move.to(" + xyz(
+                        new BlockPos(floor.getX() + 5, floor.getY() + 1, floor.getZ())) + ")"))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(walk[0].done() && walk[0].succeeded(), "her own walk did not finish: " + walk[0].outcome());
+                    helper.assertTrue(companion.position().distanceToSqr(start[0]) > 9.0,
+                            "she did not move: " + start[0] + " -> " + companion.position());
+                })
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
 }

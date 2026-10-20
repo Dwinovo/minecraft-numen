@@ -274,11 +274,6 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos low = helper.absolutePos(new BlockPos(16, 1, -12));
         BlockPos high = helper.absolutePos(new BlockPos(55, 40, 27));
-        for (int cx = low.getX() >> 4; cx <= high.getX() >> 4; cx++) {
-            for (int cz = low.getZ() >> 4; cz <= high.getZ() >> 4; cz++) {
-                level.setChunkForced(cx, cz, true);
-            }
-        }
         for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
             level.setBlock(cell, Blocks.STONE.defaultBlockState(), 2);
         }
@@ -310,11 +305,6 @@ public class MovementGameTests {
                     stand.discard();
                     for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
                         level.setBlock(cell, Blocks.AIR.defaultBlockState(), 2);
-                    }
-                    for (int cx = low.getX() >> 4; cx <= high.getX() >> 4; cx++) {
-                        for (int cz = low.getZ() >> 4; cz <= high.getZ() >> 4; cz++) {
-                            level.setChunkForced(cx, cz, false);
-                        }
                     }
                 })
                 .thenSucceed();

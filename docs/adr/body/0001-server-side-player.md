@@ -1,6 +1,6 @@
 # 0001 身体是服务端玩家
 
-- 状态:已接受
+- 状态:已接受;区块加载一节被 [0005](0005-chunk-loading-as-real-player.md) 修订
 - 日期:2026-06-13
 - 提交:`f4d64535c`、`7b8babfad`、`5d23e3984`、`f920a3c36`
 - 另见:网站《在 Minecraft 里它是什么?》(`numen.dwinovo.cn/zh/deep-dive/what-it-is`)
