@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mcp.client;
+package com.dwinovo.numen.mcp.client;
 
 import org.junit.jupiter.api.Test;
 

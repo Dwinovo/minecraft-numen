@@ -45,14 +45,21 @@ public final class MemoryTool implements NumenTool {
     @Override
     public String description() {
         // 照 Anthropic memory 工具的描述写:动词起头,说清三种命令各做什么
-        return "Keeps your own notes, which outlive this session; their index comes to you as <memory> every turn.\n"
+        return "Keeps your own notes, which outlive this session; <memory> is the index of them, one line per note.\n"
                 + "- command \"remember\" writes one note: description is the line you will see in <memory>, the fact "
                 + "itself (\"main base -340,68,120\"), not a label; name is its handle (writing a name again replaces "
                 + "that note); content is a longer body, only when there is more worth reading later.\n"
                 + "- command \"recall\" reads the body of one note by its name, as <memory> lists it; a long body comes "
-                + "a page at a time and its last line says which page to ask for next.\n"
+                + "a page at a time and its last line says which page to ask for next. With no name it returns the "
+                + "index itself, <memory>.\n"
                 + "- command \"forget\" drops one note for good, when it turned out wrong or after merging several "
                 + "into one. Nothing else ever removes a note.";
+    }
+
+    /** forget 会删笔记;remember 不点名时记成下一个空位,重复调用会多出笔记。 */
+    @Override
+    public ToolHints hints() {
+        return new ToolHints("Keep notes", false, true, false, false);
     }
 
     @Override
@@ -60,7 +67,7 @@ public final class MemoryTool implements NumenTool {
         Schema.Builder schema = Schema.object();
         schema.enumStr("command", "What to do: remember, recall or forget.", REMEMBER, RECALL, FORGET);
         schema.optionalString("name", "The note's handle, short kebab-case like main-base. remember: omit it to get "
-                + "the next free note-1, note-2, …; recall and forget: the name exactly as <memory> lists it.");
+                + "the next free note-1, note-2, …; recall and forget: the name exactly as <memory> lists it; recall: omit it to get the index.");
         schema.optionalString("description", "remember: the one line you will see in <memory>.");
         schema.optionalEnum("type", "remember: owner = the owner's habits and wishes, world = places and things you "
                 + "have seen, lesson = something you tried that did not work. Omit to file it as " + DEFAULT_TYPE
@@ -119,8 +126,12 @@ public final class MemoryTool implements NumenTool {
 
     /** 读一条的正文,按输出预算一页一页给。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。 */
     private static String recall(UUID companion, JsonObject args) {
-        String name = required(args, "name");
         NoteBook book = NoteBook.of(companion);
+        if (text(args, "name") == null) {
+            String index = book.formatXml();   // 不点名:交回索引——外部连进来的大脑没有每轮注入的那一份
+            return ToolOutcome.success(index.isEmpty() ? "(you have no notes)" : index);
+        }
+        String name = required(args, "name");
         NoteBook.Note note = book.read(name);
         if (note == null) {
             return missing(book, name);

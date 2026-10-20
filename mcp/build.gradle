@@ -55,7 +55,8 @@ dependencies {
     // 服务端的 HTTP:SDK 的 Streamable HTTP 传输是个 Servlet,挂在内嵌 Tomcat 上(SDK 自己的测试也这样用)。
     implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcat_version}"
     // OAuth 通用部分(PKCE、令牌端点、元数据、动态注册、JWT/issuer 校验)。
-    implementation("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j' }
+    // asm(json-smart 的传递依赖)也是游戏自带的,带进来会和加载器的 asm 在模块层里撞名。
+    implementation("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j'; exclude group: 'org.ow2.asm' }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

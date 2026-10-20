@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.mcp.client.McpServerSpec;
 import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.loop.Cause;
@@ -7,7 +8,7 @@ import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
-import com.dwinovo.numen.api.mcp.client.McpClientManager;
+import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.voice.VoiceProfile;
@@ -443,7 +444,7 @@ public final class ServerLibraries {
      * 工具数。{@code connect} 是条目主人的"连不连",{@code base.enabled} 是玩家自己的开关(只管他的同伴看不看得到它的工具)。
      */
     public record McpClientRow(Base base, boolean connect, boolean connected, int toolCount,
-                               McpClientConfig.ServerSpec spec, McpClientManager.Status status, List<String> tools,
+                               McpServerSpec spec, McpConnections.Status status, List<String> tools,
                                String error, String authUrl) {
 
         public String id() {
@@ -469,13 +470,13 @@ public final class ServerLibraries {
             }
             Base base = base(o);
             int count = o.has("toolCount") ? o.get("toolCount").getAsInt() : 0;
-            McpClientManager.Status status = McpClientManager.Status.valueOf(text(o, "status"));
+            McpConnections.Status status = McpConnections.Status.valueOf(text(o, "status"));
             List<String> tools = new ArrayList<>();
             if (o.has("tools")) {
                 o.getAsJsonArray("tools").forEach(t -> tools.add(t.getAsString()));
             }
             out.add(new McpClientRow(base, flag(o, "connect"), flag(o, "connected"), count,
-                    o.has("spec") ? McpClientConfig.parseServer(base.name(), o.getAsJsonObject("spec")) : null,
+                    o.has("spec") ? McpServerSpec.parse(base.name(), o.getAsJsonObject("spec")) : null,
                     status, tools, text(o, "error") == null ? "" : text(o, "error"), text(o, "authUrl")));
         }
         return out;

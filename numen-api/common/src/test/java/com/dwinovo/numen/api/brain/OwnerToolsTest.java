@@ -5,9 +5,9 @@ import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryHub;
-import com.dwinovo.numen.api.mcp.client.McpClient;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
-import com.dwinovo.numen.api.mcp.client.McpTransport;
+import com.dwinovo.numen.mcp.client.McpCaller;
+import io.modelcontextprotocol.spec.McpSchema;
 import com.dwinovo.numen.api.mcp.client.RemoteMcpTool;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.AfterEach;
@@ -50,23 +50,8 @@ class OwnerToolsTest {
     }
 
     private static RemoteMcpTool tool(String server, String entry, Library.Group group, String remoteName) {
-        McpTransport silent = new McpTransport() {
-            @Override
-            public CompletableFuture<JsonObject> request(JsonObject frame, long timeoutMs) {
-                return new CompletableFuture<>();
-            }
-
-            @Override
-            public void notify(JsonObject frame) {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
-        JsonObject def = new JsonObject();
-        def.addProperty("name", remoteName);
-        return new RemoteMcpTool(server, entry, group, new McpClient(server, silent), def, 1000, Runnable::run,
+        McpSchema.Tool def = McpSchema.Tool.builder(remoteName, java.util.Map.<String, Object>of("type", "object")).build();
+        return new RemoteMcpTool(server, entry, group, (name, args) -> new McpCaller.Reply("", false), def, Runnable::run,
                 new HashSet<>());
     }
 

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.mcp.client;
+package com.dwinovo.numen.mcp.client;
 
 import java.util.Set;
 
@@ -19,7 +19,7 @@ import java.util.Set;
  *       撞了就加序号。重名在注册表那边是抛异常的,不能指望它兜底。</li>
  * </ul>
  *
- * <p>原始的远端名字不受影响——真正调用 MCP 时用的是那个,见 {@link RemoteMcpTool}。
+ * <p>原始的远端名字不受影响——真正调用 MCP 时用的是那个,见 RemoteMcpTool(Numen API 里的那个 NumenTool)。
  *
  * <p>纯函数,不碰网络也不碰 Minecraft。
  */

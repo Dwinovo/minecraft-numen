@@ -27,7 +27,7 @@ public final class Modules {
     public static final List<String> PLUGIN_VISIBLE = List.of(":ai", ":script", ":agent", ":permission", ":ui");
 
     /** 游戏(Minecraft、Paper)自带的库:嵌套进发行 jar 会和它们撞,所以不带。 */
-    private static final Set<String> PROVIDED_GROUPS = Set.of("org.slf4j", "com.google.code.gson");
+    private static final Set<String> PROVIDED_GROUPS = Set.of("org.slf4j", "com.google.code.gson", "org.ow2.asm");
 
     private Modules() {}
 

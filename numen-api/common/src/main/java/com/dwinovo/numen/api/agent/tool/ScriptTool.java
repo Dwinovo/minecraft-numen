@@ -54,6 +54,12 @@ public final class ScriptTool implements NumenTool {
                 + "returned) under a name for later programs.";
     }
 
+    /** 一段程序能做 API 里的任何事(拆、杀、放、丢),什么都可能发生:按最保守的写。 */
+    @Override
+    public ToolHints hints() {
+        return new ToolHints("Run " + ScriptEngine.IN_USE.language() + " program", false, true, false, true);
+    }
+
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object().string(CODE, "The program.").build();

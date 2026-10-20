@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.mcp.client.McpServerSpec;
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ModelCatalog;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
@@ -16,8 +17,8 @@ import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.api.library.Shelf;
 import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
-import com.dwinovo.numen.api.mcp.client.McpClientManager;
-import com.dwinovo.numen.api.mcp.client.McpOAuth;
+import com.dwinovo.numen.mcp.client.McpConnections;
+import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.permission.PermissionConfig;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
@@ -178,10 +179,10 @@ public final class Libraries {
         PermissionLibrary.Ground permission(UUID owner);
 
         /** 服务器那一处 MCP 连接;没有就是 {@code null}。 */
-        McpClientManager sharedMcp();
+        McpConnections sharedMcp();
 
         /** 这位玩家自己那一处 MCP 连接;没有就是 {@code null}。 */
-        McpClientManager ownerMcp(UUID owner);
+        McpConnections ownerMcp(UUID owner);
 
         /** MCP 库变了:连接跟上。 */
         void reconcileMcp(UUID owner);
@@ -264,12 +265,12 @@ public final class Libraries {
             }
 
             @Override
-            public McpClientManager sharedMcp() {
+            public McpConnections sharedMcp() {
                 return McpClients.of(server).shared();
             }
 
             @Override
-            public McpClientManager ownerMcp(UUID owner) {
+            public McpConnections ownerMcp(UUID owner) {
                 return McpClients.of(server).owner(owner);
             }
 
@@ -966,23 +967,23 @@ public final class Libraries {
      */
     private void mcpRows(UUID owner, boolean admin, JsonArray out) {
         rows(sources.library(McpClientConfig.KIND, owner), out, (entry, row) -> {
-            McpClientConfig.ServerSpec spec;
+            McpServerSpec spec;
             try {
-                spec = McpClientConfig.read(entry.id().name(), entry.text());
+                spec = McpServerSpec.read(entry.id().name(), entry.text());
             } catch (RuntimeException unreadable) {
                 row.addProperty("unreadable", true);
                 return;
             }
-            McpClientManager manager = entry.group() == Library.Group.BUILTIN ? sources.sharedMcp() : sources.ownerMcp(owner);
-            McpClientManager.ServerHandle handle = manager == null ? null : manager.handle(entry.id().toString());
-            McpClientManager.Status status = handle == null ? McpClientManager.Status.DISABLED : handle.status();
+            McpConnections manager = entry.group() == Library.Group.BUILTIN ? sources.sharedMcp() : sources.ownerMcp(owner);
+            McpConnections.ServerHandle handle = manager == null ? null : manager.handle(entry.id().toString());
+            McpConnections.Status status = handle == null ? McpConnections.Status.DISABLED : handle.status();
             row.addProperty("type", spec.type());
             row.addProperty("connect", spec.enabled());
             row.addProperty("status", status.name());
-            row.addProperty("connected", status == McpClientManager.Status.CONNECTED);
+            row.addProperty("connected", status == McpConnections.Status.CONNECTED);
             row.addProperty("toolCount", handle == null ? 0 : handle.toolCount());
             if (admin || entry.group() == Library.Group.MINE) {
-                row.add("spec", McpClientConfig.serverToJson(spec));
+                row.add("spec", spec.toJson());
                 row.addProperty("error", handle == null ? "" : handle.error());
                 if (handle != null && handle.authUrl() != null) {
                     row.addProperty("authUrl", handle.authUrl());
@@ -1014,11 +1015,11 @@ public final class Libraries {
         } else {
             done = contentLibrary(owner, admin, McpClientConfig.KIND, op, body, b -> {
                 try {
-                    McpClientConfig.ServerSpec spec = McpClientConfig.parseServer(string(b, "name"), b);
+                    McpServerSpec spec = McpServerSpec.parse(string(b, "name"), b);
                     if (spec.isStdio() && !admin) {
                         throw new IllegalArgumentException("only a server admin may add a stdio MCP server");
                     }
-                    return McpClientConfig.write(spec);
+                    return spec.write();
                 } catch (IllegalArgumentException refused) {
                     throw refused;
                 } catch (RuntimeException unreadable) {
@@ -1038,7 +1039,7 @@ public final class Libraries {
             return false;
         }
         try {
-            return McpClientConfig.read(item.id().name(), item.text()).isStdio();
+            return McpServerSpec.read(item.id().name(), item.text()).isStdio();
         } catch (RuntimeException unreadable) {
             return false;
         }
@@ -1056,13 +1057,13 @@ public final class Libraries {
         if (item == null) {
             return Done.problem("no such entry");
         }
-        McpClientConfig.ServerSpec spec;
+        McpServerSpec spec;
         try {
-            spec = McpClientConfig.read(id.name(), item.text());
+            spec = McpServerSpec.read(id.name(), item.text());
         } catch (RuntimeException unreadable) {
             return Done.problem("unreadable MCP server");
         }
-        shelf.write(id, McpClientConfig.write(McpClientConfig.withEnabled(spec, on)));
+        shelf.write(id, spec.withEnabled(on).write());
         return Done.of(null, builtin);
     }
 
