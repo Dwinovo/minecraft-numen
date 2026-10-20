@@ -571,4 +571,128 @@ public class CombatGameTests {
         level.addFreshEntity(zombie);
         return zombie;
     }
+
+    /** 她收件箱里此刻某种类型的事件。 */
+    private static List<com.dwinovo.numen.api.agent.inbox.EventQueue.Entry> eventsOf(NumenPlayer companion, String type) {
+        return events(companion).stream().filter(e -> e.type().equals(type)).toList();
+    }
+
+    /**
+     * 一只怪的攻击目标变成她:发一次急件,带短码、种类、距离、方位;它一直盯着不再发,放弃又盯上的抖动在去抖窗口里也不再发。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_mob_that_targets_her_is_announced_once(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_targeted", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED)
+                        .isEmpty(), "announced before anything targeted her"))
+                .thenExecute(() -> zombie.setTarget(companion))
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    var told = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED);
+                    helper.assertTrue(told.size() == 1 && told.get(0).urgent()
+                                    && told.get(0).text().contains("mob=\"" + id + "\"")
+                                    && told.get(0).text().contains("kind=\"zombie\"")
+                                    && told.get(0).text().contains("distance=\"3\"")
+                                    && told.get(0).text().contains("bearing=\"east\"")
+                                    && told.get(0).text().contains(id + " is now targeting you"),
+                            "no urgent targeted event naming it: " + told);
+                    zombie.setTarget(null);
+                })
+                .thenIdle(5)
+                .thenExecute(() -> zombie.setTarget(companion))
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED).size() == 1,
+                            "it was announced again for the jitter: " + events(companion));
+                    zombie.discard();
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 打她的怪倒下:关注集里的对象被移出世界,发一次不急的 gone,附原因(死了)和打倒它的是谁;她自己打倒的写 you。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_mob_in_her_focus_that_dies_is_reported_gone_with_who_killed_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gone_killed", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        zombie.setTarget(companion);
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> zombie.hurt(companion.damageSources().playerAttack(companion), 100.0f))
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
+                    helper.assertTrue(gone.size() == 1 && !gone.get(0).urgent()
+                                    && gone.get(0).text().contains("mob=\"" + id + "\"")
+                                    && gone.get(0).text().contains("reason=\"killed\"")
+                                    && gone.get(0).text().contains("by=\"you\""),
+                            "no gone event with the cause and the killer: " + gone);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 走出半径不发 gone:关注集里的怪走远了(还在世界里)什么都不说;它之后被移出世界(消失)才发一次,原因写消失。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void leaving_the_radius_is_not_gone_but_vanishing_is(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gone_vanished", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        zombie.setTarget(companion);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    zombie.setNoGravity(true);
+                    zombie.teleportTo(companion.getX() + 20.0, zombie.getY(), companion.getZ());
+                })
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE).isEmpty(),
+                            "walking out of the radius was announced as gone: " + events(companion));
+                    zombie.discard();
+                })
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
+                    helper.assertTrue(gone.size() == 1 && gone.get(0).text().contains("reason=\"vanished\""),
+                            "no vanished event: " + gone);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 她挨打的事件里,攻击者是短码、带方位。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void being_hit_names_the_attacker_by_its_id_and_says_which_way(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_hurt_label", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(8, 2, 3));
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(70)   // 刚进世界的玩家有一小段出生保护
+                .thenExecute(() -> companion.hurt(zombie.damageSources().mobAttack(zombie), 3.0f))
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    var hurt = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.COMPANION_HURT);
+                    helper.assertTrue(hurt.size() == 1 && hurt.get(0).urgent()
+                                    && hurt.get(0).text().contains("by=\"" + id + "\"")
+                                    && hurt.get(0).text().contains("bearing=\"north\"")
+                                    && hurt.get(0).text().contains(id + " hit you for 3"),
+                            "the hurt event does not name the attacker and the way: " + hurt);
+                    zombie.discard();
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
 }

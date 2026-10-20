@@ -887,16 +887,25 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     @Override
     protected Fought value() {
+        List<Fought.Foe> fought = new java.util.ArrayList<>();
+        for (int id : touched()) {
+            fought.add(new Fought.Foe(label(id), r.status(id), r.strikes(id)));
+        }
+        return new Fought(fought, r.strikes());
+    }
+
+    private java.util.Set<Integer> touched() {
         java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(r.entityIds);
         touched.addAll(r.defeated());
         touched.addAll(r.lost());
         touched.addAll(r.unreachable());
         touched.addAll(r.refused().keySet());
-        List<Fought.Foe> fought = new java.util.ArrayList<>();
-        for (int id : touched) {
-            fought.add(new Fought.Foe(label(id), r.status(id), r.strikes(id)));
-        }
-        return new Fought(fought, r.strikes());
+        return touched;
+    }
+
+    /** 这场仗经手过的每一只的身份:本能收场的事件带上它们。 */
+    public List<String> foes() {
+        return touched().stream().map(this::label).toList();
     }
 
     private String tally() {

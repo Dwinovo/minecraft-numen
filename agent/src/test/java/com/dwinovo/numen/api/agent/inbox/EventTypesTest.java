@@ -41,6 +41,8 @@ class EventTypesTest {
         // 旁听的话与离场通知:捎带
         assertRow(EventTypes.TALK, EventTypes.Delivery.AMBIENT, false, false, false, false);
         assertRow(EventTypes.LEFT, EventTypes.Delivery.AMBIENT, false, false, false, false);
+        // 她留意的对象没了:不叫醒她
+        assertRow(EventTypes.GONE, EventTypes.Delivery.AMBIENT, false, false, false, false);
         // 本能做了事:常态知会,险情由发送方标急件
         assertRow(EventTypes.REFLEX, EventTypes.Delivery.NOTICE, false, false, false, false);
     }
@@ -53,6 +55,7 @@ class EventTypesTest {
         assertRow(EventTypes.HUNGRY, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.OWNER_HURT, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.COMPANION_HURT, EventTypes.Delivery.STEER, true, false, false, false);
+        assertRow(EventTypes.TARGETED, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.TIMER, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.WOKE, EventTypes.Delivery.STEER, true, false, false, false);
         assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);

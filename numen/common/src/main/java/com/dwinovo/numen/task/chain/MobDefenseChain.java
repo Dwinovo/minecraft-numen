@@ -138,6 +138,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     private void end(NumenPlayer companion, TaskState state) {
         String line = fight.result(state).message();
+        List<String> foes = fight.foes();
         fight = null;
         dangerLastSeenTick = NEVER;
         companion.controls().releaseAll();
@@ -145,7 +146,7 @@ public final class MobDefenseChain implements Task, Reflex {
         // <b>不急</b>:她的后台任务照跑,黄了自有 task_finished 报。这条只是让主人翻聊天流时
         // 看得懂她刚才为什么打了一架、或者挪了二十格。攒着搭下一轮的车就够。
         com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this,
-                "hit danger and handled it on instinct — " + line);
+                "hit danger and handled it on instinct — " + line, foes);
     }
 
     @Override

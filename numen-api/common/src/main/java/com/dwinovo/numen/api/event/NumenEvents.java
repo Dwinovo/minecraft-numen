@@ -6,8 +6,14 @@ import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.script.ScriptCall;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.brain.CompanionLoops;
+import com.dwinovo.numen.api.sdk.CompassUtil;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.task.TaskResult;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -112,19 +118,74 @@ public final class NumenEvents {
 
     /**
      * 她自己挨打了。<b>恒为急件</b>——远处的弓箭手她看不见,不叫醒她就会一直挨着;反击、退开、
-     * 找掩体都由她当场定。检测与去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。
+     * 找掩体都由她当场定。检测与去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。{@code bearing} 是攻击者在她的哪个方向。
      */
     public static void companionHurt(NumenPlayer companion, String attacker, float amount,
-                                     float hp, float maxHp, double distance) {
+                                     float hp, float maxHp, double distance, String bearing) {
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put("by", attacker);
         attrs.put("damage", number(amount));
         attrs.put("hp", Math.round(hp) + "/" + Math.round(maxHp));
         attrs.put("distance", String.valueOf(Math.round(distance)));
+        attrs.put("bearing", bearing);
         String text = attacker + " hit you for " + number(amount) + " — you are at " + Math.round(hp)
                 + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
-                + " blocks away; decide now whether to fight back, fall back, or break line of sight";
+                + " blocks away to the " + bearing + "; decide now whether to fight back, fall back, or break line of sight";
         emit(companion, EventTypes.COMPANION_HURT, attrs, text, true);
+    }
+
+    /**
+     * 半径内一只怪盯上了她。<b>恒为急件</b>——它还没动手,不叫醒她就是等着挨打。检测与去抖在 {@code Vigil}:盯着期间只发一次。
+     */
+    public static void targeted(NumenPlayer companion, Mob mob) {
+        String id = EntityLabel.of(mob);
+        long distance = Math.round(companion.distanceTo(mob));
+        String bearing = CompassUtil.compass(companion, mob);
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("mob", id);
+        attrs.put("kind", BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getPath());
+        attrs.put("distance", String.valueOf(distance));
+        attrs.put("bearing", bearing);
+        emit(companion, EventTypes.TARGETED, attrs, id + " is now targeting you, about " + distance
+                + " blocks away to the " + bearing + " — decide whether to fight it, fall back, or break line of sight",
+                true);
+    }
+
+    /**
+     * 她留意的一个对象被移出世界了,{@code reason} 取自原版的移除原因。<b>不急</b>——它没了不会让她正在做的事变错。
+     * 检测在 {@code Vigil}:走出半径不发,只发被移出世界。
+     *
+     * @param killer 打倒它的(原版的击杀归属);没有或不是被打倒的是 null
+     */
+    public static void gone(NumenPlayer companion, Entity entity, LivingEntity killer) {
+        String id = EntityLabel.of(entity);
+        Entity.RemovalReason removal = entity.getRemovalReason();
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("mob", id);
+        String text;
+        switch (removal) {
+            case KILLED -> {
+                attrs.put("reason", "killed");
+                String by = killer == null ? null : killer == companion ? "you" : EntityLabel.of(killer);
+                if (by != null) {
+                    attrs.put("by", by);
+                }
+                text = id + " died" + (by == null ? "" : ", killed by " + by);
+            }
+            case DISCARDED -> {
+                attrs.put("reason", "vanished");
+                text = id + " vanished (despawned, picked up or otherwise removed)";
+            }
+            case CHANGED_DIMENSION -> {
+                attrs.put("reason", "dimension");
+                text = id + " left through a portal to another dimension";
+            }
+            default -> {   // UNLOADED_TO_CHUNK、UNLOADED_WITH_PLAYER
+                attrs.put("reason", "unloaded");
+                text = id + " went away with its chunk unloading";
+            }
+        }
+        emit(companion, EventTypes.GONE, attrs, text, false);
     }
 
     /** 伤害量的写法:整数不带小数点,小数原样。 */
