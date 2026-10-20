@@ -25,9 +25,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 这台服务器上接进来的 MCP 服务器的连接:服务器的一处(内置组,管理员配的,工具人人可见)和每位玩家自己的一处(我的组,工具只有
- * 他的同伴看得到)。连什么由库里的文件定({@link McpClientConfig#KIND}),库变了就 {@link #reconcile} 让连接跟上;
- * 玩家对内置那几台的开关只管他的同伴看不看得到它们的工具({@link OwnerTools}),不动连接。关服时放手。
+ * 这台服务器上接进来的 MCP 服务器的连接:服务器的一处(服务器目录里的,管理员配的,工具人人可见;房主的也在这里)和每位玩家自己的一处(他自己目录里的,
+ * 工具只有他的同伴看得到)。连什么由库里的文件定({@link McpClientConfig#KIND}),库变了就 {@link #reconcile} 让连接跟上;
+ * 玩家对服务器目录那几台的开关只管他的同伴看不看得到它们的工具({@link OwnerTools}),不动连接。关服时放手。
  *
  * <p>线程:服务端主线程。
  */
@@ -56,7 +56,7 @@ public final class McpClients {
         this.server = server;
         this.hub = LibraryHub.of(server);
         this.models = ModelServices.of(server);
-        this.shared = connections(Library.Group.BUILTIN, () -> Replies.share(server, null, Libraries.MCP_CLIENT),
+        this.shared = connections(Library.Group.SERVER, () -> Replies.share(server, null, Libraries.MCP_CLIENT),
                 Homes.of(server).server().dir(), models.serverKeychain(), ToolRegistry::register, ToolRegistry::remove,
                 service -> models.serverKeychain().get(service));
     }
@@ -77,7 +77,7 @@ public final class McpClients {
                 Services.platform().modVersion(Constants.MOD_ID));
     }
 
-    /** 服务器起来时调一次:按内置组连上服务器的那几台。 */
+    /** 服务器起来时调一次:按服务器目录连上服务器的那几台。 */
     public static synchronized McpClients start(MinecraftServer server) {
         current = new McpClients(server);
         current.reconcileShared();
@@ -105,25 +105,31 @@ public final class McpClients {
                         var found = models.keys(id).find(service);
                         return found == null ? null : found.key();
                     });
-            manager.reconcile(specs(hub.library(McpClientConfig.KIND, id).mine()));
+            manager.reconcile(ownSpecs(id));
             return manager;
         });
     }
 
-    /** 库变了(这位玩家改了他的、或管理员改了内置的):两处的连接都跟上。 */
+    /** 库变了(这位玩家改了他的、或管理员改了服务器目录的):两处的连接都跟上。 */
     public void reconcile(UUID owner) {
         reconcileShared();
-        owner(owner).reconcile(specs(hub.library(McpClientConfig.KIND, owner).mine()));
+        owner(owner).reconcile(ownSpecs(owner));
     }
 
-    /** 内置组变了(或 {@code /reload}):服务器那一处跟上,已经开着的玩家那几处也跟上。 */
+    /** 服务器目录变了(或 {@code /reload}):服务器那一处跟上,已经开着的玩家那几处也跟上。 */
     public void reconcileAll() {
         reconcileShared();
-        owned.forEach((id, manager) -> manager.reconcile(specs(hub.library(McpClientConfig.KIND, id).mine())));
+        owned.forEach((id, manager) -> manager.reconcile(ownSpecs(id)));
     }
 
     private void reconcileShared() {
-        shared.reconcile(specs(hub.builtin(McpClientConfig.KIND)));
+        shared.reconcile(specs(hub.server(McpClientConfig.KIND)));
+    }
+
+    /** 这位玩家自己目录里的服务器;房主没有自己的目录(他的那几台就在服务器目录里,由服务器的那一处连)。 */
+    private Map<String, McpServerSpec> ownSpecs(UUID owner) {
+        Library library = hub.library(McpClientConfig.KIND, owner);
+        return library.merged() ? Map.of() : specs(library.mine());
     }
 
     /** 一个货架里的服务器:库里的名字 → 怎么连。读不通的一条记一笔并跳过。 */

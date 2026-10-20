@@ -36,26 +36,26 @@ public final class ServerLibraries {
         return o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsString() : null;
     }
 
-    // ---- 内容库(人设、模型档案、技能、接进来的 MCP 服务器)共有的几项 ----
+    // ---- 内容库(人设、模型档案、技能、声线、接进来的 MCP 服务器)共有的几项 ----
 
     /**
-     * 一行内容库条目共有的几项:内置还是我的、玩家有没有把它关掉、另一组有没有同名的、内置的和 jar 的关系
-     * (改过没有、有没有新版、来源卸载了没有)。
+     * 一行内容库条目共有的几项:服务器提供的还是我的、玩家有没有把它关掉、另一组有没有同名的、是不是 jar 自带的、它和 jar 的关系
+     * (改过没有、有没有新版、来源卸载了没有)。房主只有"我的"一组:他看到的行没有一行是 {@code server}。
      *
      * @param id 库里的名字({@code 命名空间:名字})
      */
-    public record Base(String id, String name, boolean builtin, boolean enabled, boolean paired, boolean modified,
-                       boolean update, boolean gone) {}
+    public record Base(String id, String name, boolean server, boolean enabled, boolean paired, boolean shipped,
+                       boolean modified, boolean update, boolean gone) {}
 
-    /** 叠起来之后算数的:内置的被我的同名盖着时,内置那一行不算。 */
+    /** 叠起来之后算数的:服务器提供的被我的同名盖着时,服务器提供的那一行不算。 */
     private static boolean effective(Base b) {
-        return !(b.builtin() && b.paired());
+        return !(b.server() && b.paired());
     }
 
     private static Base base(JsonObject o) {
-        return new Base(text(o, "id"), text(o, "name"), "builtin".equals(text(o, "group")),
-                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "modified"),
-                flag(o, "update"), flag(o, "gone"));
+        return new Base(text(o, "id"), text(o, "name"), "server".equals(text(o, "group")),
+                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "shipped"),
+                flag(o, "modified"), flag(o, "update"), flag(o, "gone"));
     }
 
     private static boolean flag(JsonObject o, String key) {
@@ -75,7 +75,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Persona> personas() {
         List<Persona> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.PERSONA)) {
@@ -102,8 +102,8 @@ public final class ServerLibraries {
     // ---- 模型档案 ----
 
     /**
-     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看内置的、人人看自己的;
-     * 别人看内置的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
+     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看服务器提供的、人人看自己的;
+     * 别人看服务器提供的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
      */
     public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, String keySource) {
 
@@ -126,7 +126,7 @@ public final class ServerLibraries {
         for (JsonElement e : entries(Libraries.PROVIDER)) {
             JsonObject o = e.getAsJsonObject();
             Base base = base(o);
-            boolean visible = admin || !base.builtin();
+            boolean visible = admin || !base.server();
             out.add(new Provider(base, text(o, "provider"), text(o, "model"),
                     visible && !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
                             ProviderLibrary.profileFromJson(o)) : null,
@@ -304,7 +304,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Skill> skills() {
         List<Skill> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.SKILL)) {
@@ -333,7 +333,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Voice> voices() {
         List<Voice> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.VOICE)) {
@@ -440,7 +440,7 @@ public final class ServerLibraries {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看内置的、人人看自己的,别人看内置的只有名字、连没连上、
+     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看服务器提供的、人人看自己的,别人看服务器提供的只有名字、连没连上、
      * 工具数。{@code connect} 是条目主人的"连不连",{@code base.enabled} 是玩家自己的开关(只管他的同伴看不看得到它的工具)。
      */
     public record McpClientRow(Base base, boolean connect, boolean connected, int toolCount,

@@ -23,6 +23,9 @@ import java.util.UUID;
  *   <li>{@link #clientDir}:这台电脑的东西(界面偏好、声线、皮肤、语音服务的 key),{@code config/numen/client/}。</li>
  * </ul>
  * 单人游戏里服务端与客户端共用一个 {@code config/numen/},所以三个归属各占一个子目录,根下不放散文件。
+ *
+ * <p><b>房主</b>({@link #isHost}:单人游戏的玩家、局域网开房的人)就是这台服务器:他的"我的各库"与钥匙串放在
+ * {@link #server} 里,不另用 {@link #owner}。专用服务器没有房主。
  * 每处一条自己的写车道(见 {@link Lanes}):她的所有文件共用她那一条,所以她的日志、收件箱、札记按提交顺序落盘。
  *
  * <p>线程:任何线程。
@@ -39,15 +42,23 @@ public final class Homes {
     private final Path world;
     private final Path config;
     private final Lanes lanes;
+    private final UUID host;
 
     /**
      * @param world  世界存档里 Numen 的目录
      * @param config 服务器上 Numen 的配置目录
+     * @param host   房主;专用服务器没有,是 {@code null}
      */
-    public Homes(Path world, Path config, Lanes lanes) {
+    public Homes(Path world, Path config, Lanes lanes, UUID host) {
         this.world = world;
         this.config = config;
         this.lanes = lanes;
+        this.host = host;
+    }
+
+    /** 这位玩家是不是这台服务器的房主:判"我的"是服务器目录那一份、还是他自己目录的,只问这一处。 */
+    public boolean isHost(UUID player) {
+        return host != null && host.equals(player);
     }
 
     /** 她的家。 */
@@ -98,11 +109,12 @@ public final class Homes {
         });
     }
 
-    /** 这台服务器的位置:世界目录取自服务器,服务器配置取自 {@link NumenPaths},车道是 {@link NumenIo#lanes()}。 */
+    /** 这台服务器的位置:世界目录与房主取自服务器,服务器配置取自 {@link NumenPaths},车道是 {@link NumenIo#lanes()}。 */
     public static synchronized Homes of(MinecraftServer server) {
         if (current == null || currentServer != server) {
+            var singleplayer = server.getSingleplayerProfile();
             current = new Homes(server.getWorldPath(LevelResource.ROOT).resolve(WORLD_DIR), NumenPaths.config(),
-                    NumenIo.lanes());
+                    NumenIo.lanes(), singleplayer == null ? null : singleplayer.getId());
             currentServer = server;
         }
         return current;

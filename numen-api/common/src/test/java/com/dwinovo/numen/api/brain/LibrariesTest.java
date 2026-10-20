@@ -48,8 +48,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 谁能读写哪种库、能看到什么:判据只在这一处,脱敏发生在服务端编码的地方。内容库(人设、模型档案、技能、MCP 工具)玩家看到内置与我的
- * 两组,同一套操作;内置的只有管理员能改,玩家只读、能开关、能复制到我的。
+ * 谁能读写哪种库、能看到什么:判据只在这一处,脱敏发生在服务端编码的地方。内容库(人设、模型档案、技能、MCP 工具)玩家看到服务器提供与我的
+ * 两组,同一套操作;服务器提供的只有管理员能改,玩家只读、能开关、能复制到我的。
  */
 class LibrariesTest {
 
@@ -64,6 +64,8 @@ class LibrariesTest {
     private Keychain serverKeys;
     private ModelCatalog catalog;
     private boolean multiplayer;
+    /** 这台服务器的房主(单人游戏的玩家);专用服务器没有。 */
+    private UUID host;
     /** 假的签名队:不联网,签出来的都是 value=v-手臂模型;签好一条(写进货架之后)闸门放行一次。 */
     private SkinSigning signer;
     private java.util.concurrent.Semaphore signed;
@@ -71,7 +73,7 @@ class LibrariesTest {
     private final Map<UUID, Map<UUID, String>> companionsOf = new HashMap<>();
 
     private Libraries libraries(Path dir) {
-        return libraries(dir, LibraryHub.headless(dir));
+        return libraries(dir, LibraryHub.headless(dir, com.dwinovo.numen.api.library.Shipped.bundles(), host));
     }
 
     private Libraries libraries(Path dir, LibraryHub opened) {
@@ -82,7 +84,7 @@ class LibrariesTest {
         catalog = new ModelCatalog(dir.resolve("server").resolve("cache").resolve("models-dev.json"), () -> "");
         serverKeys = new Keychain(new Home(dir.resolve("server"), io));
         // 服主放在服务器目录里的一份推荐档案,key 在服主的钥匙串里
-        hub.builtin(ProviderLibrary.KIND).write(new EntryId("server", "服主的 DeepSeek"), ProviderLibrary.write(
+        hub.server(ProviderLibrary.KIND).write(new EntryId("server", "服主的 DeepSeek"), ProviderLibrary.write(
                 new ConnectionProfile("deepseek", null, "deepseek-chat", null, "https://relay.example",
                         "127.0.0.1:7890", null, 0, null, 0, null)));
         serverKeys.put("deepseek", "sk-secret");
@@ -138,6 +140,9 @@ class LibrariesTest {
 
             @Override
             public Keychain ownerKeys(UUID owner) {
+                if (owner.equals(host)) {
+                    return serverKeys;   // 房主的钥匙串就是服主的那一本
+                }
                 return ownerKeys.computeIfAbsent(owner,
                         id -> new Keychain(new Home(dir.resolve("players").resolve(id.toString()), io)));
             }
@@ -180,6 +185,11 @@ class LibrariesTest {
 
             @Override
             public void reconcileMcp(UUID owner) {
+            }
+
+            @Override
+            public boolean host(UUID owner) {
+                return owner.equals(host);
             }
 
             @Override
@@ -270,7 +280,7 @@ class LibrariesTest {
 
         String seen = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.LIST, new JsonObject()).entries();
 
-        JsonObject profile = row(seen, "server:服主的 DeepSeek", "builtin");
+        JsonObject profile = row(seen, "server:服主的 DeepSeek", "server");
         assertEquals("服主的 DeepSeek", profile.get("name").getAsString());
         assertEquals("deepseek-chat", profile.get("model").getAsString());
         assertEquals("server", profile.get("keySource").getAsString(), "他会用服主的 key,但看不到它");
@@ -318,12 +328,12 @@ class LibrariesTest {
         Libraries libraries = libraries(dir);
 
         Libraries.Result put = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.PUT,
-                body("name", "偷偷改", "group", "builtin", "provider", "openai", "id", "server:服主的 DeepSeek"));
+                body("name", "偷偷改", "group", "server", "provider", "openai", "id", "server:服主的 DeepSeek"));
         Libraries.Result delete = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.DELETE,
-                body("id", "server:服主的 DeepSeek", "group", "builtin"));
+                body("id", "server:服主的 DeepSeek", "group", "server"));
         assertNotNull(put.problem());
         assertNotNull(delete.problem());
-        assertNotNull(row(libraries.view(ADMIN, true, Libraries.PROVIDER), "server:服主的 DeepSeek", "builtin"), "什么也没变");
+        assertNotNull(row(libraries.view(ADMIN, true, Libraries.PROVIDER), "server:服主的 DeepSeek", "server"), "什么也没变");
 
         Libraries.Result own = libraries.handle(PLAYER, false, Libraries.PROVIDER, Libraries.PUT,
                 body("name", "我的", "provider", "openai", "model", "gpt", "base_url", "http://mine.example"));
@@ -339,10 +349,10 @@ class LibrariesTest {
         Libraries libraries = libraries(dir);
 
         Libraries.Result added = libraries.handle(ADMIN, true, Libraries.PROVIDER, Libraries.PUT,
-                body("name", "第二个", "provider", "openai", "model", "gpt", "group", "builtin"));
+                body("name", "第二个", "provider", "openai", "model", "gpt", "group", "server"));
         assertNull(added.problem());
-        assertTrue(added.shared(), "内置的变了,在线的别人也要收到新表");
-        JsonObject second = row(added.entries(), "server:第二个", "builtin");
+        assertTrue(added.shared(), "服务器提供的变了,在线的别人也要收到新表");
+        JsonObject second = row(added.entries(), "server:第二个", "server");
         assertNotNull(second);
 
         second.addProperty("model", "gpt-5");
@@ -350,8 +360,8 @@ class LibrariesTest {
         assertTrue(libraries.view(ADMIN, true, Libraries.PROVIDER).contains("gpt-5"));
 
         assertNull(libraries.handle(ADMIN, true, Libraries.PROVIDER, Libraries.DELETE,
-                body("id", "server:第二个", "group", "builtin")).problem());
-        assertNull(row(libraries.view(ADMIN, true, Libraries.PROVIDER), "server:第二个", "builtin"));
+                body("id", "server:第二个", "group", "server")).problem());
+        assertNull(row(libraries.view(ADMIN, true, Libraries.PROVIDER), "server:第二个", "server"));
     }
 
     @Test
@@ -513,34 +523,34 @@ class LibrariesTest {
         assertNotNull(libraries(dir).handle(ADMIN, true, "elsewhere", Libraries.LIST, new JsonObject()).problem());
     }
 
-    // ---- 人设:内置与我的两组 ----
+    // ---- 人设:服务器提供与我的两组 ----
 
     @Test
     void aPersonaLibraryHasTheBuiltinGroupAndTheOwnersGroupSideBySide(@TempDir Path dir) throws IOException {
         Libraries libraries = libraries(dir);
         write(dir.resolve("server").resolve("persona").resolve("numen").resolve("小焰.md"), "傲娇\n");
-        hub.builtin(PersonaLibrary.KIND).reload();
+        hub.server(PersonaLibrary.KIND).reload();
 
         assertNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.PUT,
                 body("name", "我的人设", "text", "活泼")).problem());
 
         String seen = libraries.view(PLAYER, false, Libraries.PERSONA);
-        assertEquals("傲娇", row(seen, "numen:小焰", "builtin").get("text").getAsString());
+        assertEquals("傲娇", row(seen, "numen:小焰", "server").get("text").getAsString());
         assertEquals("活泼", row(seen, "my:我的人设", "mine").get("text").getAsString());
         assertNull(row(libraries.view(OTHER, false, Libraries.PERSONA), "my:我的人设", "mine"), "别人的库里没有我的");
-        assertNotNull(row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "builtin"), "内置的人人都有");
+        assertNotNull(row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "server"), "服务器提供的人人都有");
     }
 
     @Test
     void aBuiltinPersonaIsReadOnlyForPlayersWhoCopyItToMineAndEditTheCopy(@TempDir Path dir) throws IOException {
         Libraries libraries = libraries(dir);
         write(dir.resolve("server").resolve("persona").resolve("numen").resolve("小焰.md"), "傲娇\n");
-        hub.builtin(PersonaLibrary.KIND).reload();
+        hub.server(PersonaLibrary.KIND).reload();
 
         assertNotNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.PUT,
-                body("id", "numen:小焰", "name", "小焰", "text", "改", "group", "builtin")).problem());
+                body("id", "numen:小焰", "name", "小焰", "text", "改", "group", "server")).problem());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.DELETE,
-                body("id", "numen:小焰", "group", "builtin")).problem());
+                body("id", "numen:小焰", "group", "server")).problem());
 
         assertNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.COPY, body("id", "numen:小焰")).problem());
         assertNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.PUT,
@@ -548,28 +558,28 @@ class LibrariesTest {
 
         String seen = libraries.view(PLAYER, false, Libraries.PERSONA);
         assertEquals("我改的", row(seen, "numen:小焰", "mine").get("text").getAsString());
-        assertTrue(row(seen, "numen:小焰", "mine").get("paired").getAsBoolean(), "我的盖着内置的");
-        assertTrue(row(seen, "numen:小焰", "builtin").get("paired").getAsBoolean());
+        assertTrue(row(seen, "numen:小焰", "mine").get("paired").getAsBoolean(), "我的盖着服务器提供的");
+        assertTrue(row(seen, "numen:小焰", "server").get("paired").getAsBoolean());
         assertEquals("傲娇\n", Files.readString(dir.resolve("server").resolve("persona").resolve("numen").resolve("小焰.md")),
                 "服务器目录原样");
-        assertEquals("傲娇", row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "builtin")
-                .get("text").getAsString(), "别人看到的还是内置的");
+        assertEquals("傲娇", row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "server")
+                .get("text").getAsString(), "别人看到的还是服务器提供的");
     }
 
     @Test
     void theSwitchOnABuiltinEntryIsThePlayersOwn(@TempDir Path dir) throws IOException {
         Libraries libraries = libraries(dir);
         write(dir.resolve("server").resolve("persona").resolve("numen").resolve("小焰.md"), "傲娇\n");
-        hub.builtin(PersonaLibrary.KIND).reload();
+        hub.server(PersonaLibrary.KIND).reload();
 
         assertNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.DISABLE, body("id", "numen:小焰")).problem());
 
-        assertFalse(row(libraries.view(PLAYER, false, Libraries.PERSONA), "numen:小焰", "builtin")
+        assertFalse(row(libraries.view(PLAYER, false, Libraries.PERSONA), "numen:小焰", "server")
                 .get("enabled").getAsBoolean());
-        assertTrue(row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "builtin")
+        assertTrue(row(libraries.view(OTHER, false, Libraries.PERSONA), "numen:小焰", "server")
                 .get("enabled").getAsBoolean(), "别人的不受影响");
         assertNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.ENABLE, body("id", "numen:小焰")).problem());
-        assertTrue(row(libraries.view(PLAYER, false, Libraries.PERSONA), "numen:小焰", "builtin")
+        assertTrue(row(libraries.view(PLAYER, false, Libraries.PERSONA), "numen:小焰", "server")
                 .get("enabled").getAsBoolean());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.DISABLE, body("id", "numen:没有")).problem());
     }
@@ -604,7 +614,7 @@ class LibrariesTest {
         write(jar.resolve("persona").resolve("numen").resolve("小焰.md"), "v2\n");   // 模组升级了
         Libraries libraries = libraries(dir, LibraryHub.headless(dir, bundles));   // 服务器重启
 
-        JsonObject row = row(libraries.view(ADMIN, true, Libraries.PERSONA), "numen:小焰", "builtin");
+        JsonObject row = row(libraries.view(ADMIN, true, Libraries.PERSONA), "numen:小焰", "server");
         assertTrue(row.get("modified").getAsBoolean() && row.get("update").getAsBoolean(), row.toString());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.ACCEPT, body("id", "numen:小焰")).problem());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.PERSONA, Libraries.DISMISS, body("id", "numen:小焰")).problem());
@@ -612,19 +622,72 @@ class LibrariesTest {
         Libraries.Result accepted = libraries.handle(ADMIN, true, Libraries.PERSONA, Libraries.ACCEPT, body("id", "numen:小焰"));
         assertNull(accepted.problem());
         assertTrue(accepted.shared());
-        assertEquals("v2", row(accepted.entries(), "numen:小焰", "builtin").get("text").getAsString(), "界面读到的是换进去的新版");
-        assertFalse(row(accepted.entries(), "numen:小焰", "builtin").get("update").getAsBoolean());
-        assertFalse(row(accepted.entries(), "numen:小焰", "builtin").get("modified").getAsBoolean());
+        assertEquals("v2", row(accepted.entries(), "numen:小焰", "server").get("text").getAsString(), "界面读到的是换进去的新版");
+        assertFalse(row(accepted.entries(), "numen:小焰", "server").get("update").getAsBoolean());
+        assertFalse(row(accepted.entries(), "numen:小焰", "server").get("modified").getAsBoolean());
 
         write(file, "管理员又改的\n");
         write(jar.resolve("persona").resolve("numen").resolve("小焰.md"), "v3\n");
         Libraries restarted = libraries(dir, LibraryHub.headless(dir, bundles));
         assertNull(restarted.handle(ADMIN, true, Libraries.PERSONA, Libraries.DISMISS, body("id", "numen:小焰")).problem());
         Libraries again = libraries(dir, LibraryHub.headless(dir, bundles));
-        JsonObject kept = row(again.view(ADMIN, true, Libraries.PERSONA), "numen:小焰", "builtin");
+        JsonObject kept = row(again.view(ADMIN, true, Libraries.PERSONA), "numen:小焰", "server");
         assertEquals("管理员又改的", kept.get("text").getAsString());
         assertTrue(kept.get("modified").getAsBoolean());
         assertFalse(kept.get("update").getAsBoolean(), "不采用的这一版不再提示");
+    }
+
+    // ---- 房主:他的"我的"就是服务器目录 ----
+
+    @Test
+    void aHostHasOneGroupWhichIsTheServerDirectoryAndEveryoneElseSeesItAsProvidedByTheServer(@TempDir Path dir)
+            throws IOException {
+        Path jar = dir.resolve("jar");
+        write(jar.resolve("persona").resolve("numen").resolve("小焰.md"), "傲娇\n");
+        host = PLAYER;
+        Libraries libraries = libraries(dir, LibraryHub.headless(dir, List.of(new Shipped.Bundle("numen", jar)), host));
+
+        assertNull(libraries.handle(PLAYER, true, Libraries.PERSONA, Libraries.PUT,
+                body("name", "我的人设", "text", "活泼")).problem());
+
+        String seen = libraries.view(PLAYER, true, Libraries.PERSONA);
+        JsonObject shipped = row(seen, "numen:小焰", "mine");
+        assertNotNull(shipped, "房主的\"我的\"里有 jar 自带的:" + seen);
+        assertTrue(shipped.get("shipped").getAsBoolean(), "自带的带一个自带的标记");
+        assertFalse(row(seen, "my:我的人设", "mine").get("shipped").getAsBoolean(), "自己放进来的不是自带的");
+        assertFalse(seen.contains("\"group\":\"server\""), "房主看不到\"服务器提供\"这一组:" + seen);
+        assertFalse(shipped.get("paired").getAsBoolean());
+        assertEquals("活泼", Files.readString(dir.resolve("server").resolve("persona").resolve("my").resolve("我的人设.md")),
+                "写进了服务器目录");
+        assertFalse(Files.exists(dir.resolve("players").resolve(PLAYER.toString()).resolve("persona")), "没有另一份个人目录");
+
+        String guest = libraries.view(OTHER, false, Libraries.PERSONA);
+        assertNotNull(row(guest, "my:我的人设", "server"), "串门的玩家把房主放的看成服务器提供:" + guest);
+        assertTrue(row(guest, "numen:小焰", "server").get("shipped").getAsBoolean());
+        assertNotNull(libraries.handle(PLAYER, true, Libraries.PERSONA, Libraries.COPY, body("id", "numen:小焰")).problem(),
+                "房主没有另一处可复制");
+    }
+
+    @Test
+    void aHostsKeysAreTheServersAndOnlyTheOthersHaveAServerRow(@TempDir Path dir) {
+        host = PLAYER;
+        Libraries libraries = libraries(dir);
+
+        assertNull(libraries.handle(PLAYER, true, Libraries.KEY, Libraries.PUT, body("service", "openai", "key", "sk-mine")).problem());
+
+        assertEquals("sk-mine", serverKeys.get("openai"), "房主的钥匙就是服务器那一本");
+        JsonObject hostRow = null;
+        for (JsonElement e : array(libraries.view(PLAYER, true, Libraries.KEY))) {
+            if (e.getAsJsonObject().get("service").getAsString().equals("openai")) {
+                hostRow = e.getAsJsonObject();
+            }
+        }
+        assertNotNull(hostRow);
+        assertEquals("sk-mine", hostRow.get("mine").getAsString());
+        assertFalse(hostRow.has("serverSet") || hostRow.has("server"), "房主只有自己的一份:" + hostRow);
+        String guest = libraries.view(OTHER, false, Libraries.KEY);
+        assertTrue(guest.contains("\"serverSet\":true"), "别人只知道服主有没有:" + guest);
+        assertFalse(guest.contains("sk-mine"));
     }
 
     // ---- 技能 ----
@@ -639,13 +702,13 @@ class LibrariesTest {
 
         assertFalse(libraries.view(PLAYER, false, Libraries.SKILL).contains("lumber"), "没重扫之前看不到");
         assertNull(libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.RELOAD, new JsonObject()).problem());
-        JsonObject lumber = row(libraries.view(PLAYER, false, Libraries.SKILL), "gt:lumber", "builtin");
+        JsonObject lumber = row(libraries.view(PLAYER, false, Libraries.SKILL), "gt:lumber", "server");
         assertEquals("lumber", lumber.get("skill").getAsString());
         assertEquals("Fell a tree.", lumber.get("description").getAsString());
 
         assertNull(libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.DISABLE, body("id", "gt:lumber")).problem());
-        assertFalse(row(libraries.view(PLAYER, false, Libraries.SKILL), "gt:lumber", "builtin").get("enabled").getAsBoolean());
-        assertTrue(row(libraries.view(OTHER, false, Libraries.SKILL), "gt:lumber", "builtin").get("enabled").getAsBoolean());
+        assertFalse(row(libraries.view(PLAYER, false, Libraries.SKILL), "gt:lumber", "server").get("enabled").getAsBoolean());
+        assertTrue(row(libraries.view(OTHER, false, Libraries.SKILL), "gt:lumber", "server").get("enabled").getAsBoolean());
         assertNull(libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.ENABLE, body("id", "gt:lumber")).problem());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.ENABLE, body("id", "gt:nope")).problem(),
                 "没有这个技能才是没有");
@@ -680,7 +743,7 @@ class LibrariesTest {
         Libraries libraries = libraries(dir);
         write(dir.resolve("server").resolve("mcp").resolve("server").resolve("shell.json"), STDIO);
         write(dir.resolve("server").resolve("mcp").resolve("server").resolve("files.json"), HTTP);
-        hub.builtin(McpClientConfig.KIND).reload();
+        hub.server(McpClientConfig.KIND).reload();
         return libraries;
     }
 
@@ -690,7 +753,7 @@ class LibrariesTest {
 
         String seen = libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, Libraries.LIST, new JsonObject()).entries();
 
-        JsonObject shell = row(seen, "server:shell", "builtin");
+        JsonObject shell = row(seen, "server:shell", "server");
         assertEquals("shell", shell.get("name").getAsString());
         assertFalse(shell.get("connected").getAsBoolean());
         assertEquals(0, shell.get("toolCount").getAsInt());
@@ -707,7 +770,7 @@ class LibrariesTest {
 
         for (String op : new String[]{Libraries.PUT, Libraries.DELETE, Libraries.CONNECT, Libraries.DISCONNECT}) {
             assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, op,
-                    body("id", "server:shell", "group", "builtin", "name", "shell", "type", "http", "url", "x")).problem(), op);
+                    body("id", "server:shell", "group", "server", "name", "shell", "type", "http", "url", "x")).problem(), op);
         }
         assertEquals(2, array(libraries.view(ADMIN, true, Libraries.MCP_CLIENT)).size(), "什么也没变");
     }
@@ -720,7 +783,7 @@ class LibrariesTest {
                 body("name", "docs", "type", "http", "url", "http://127.0.0.1:1/mcp", "enabled", "false")).problem());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, Libraries.PUT,
                 body("name", "evil", "type", "stdio", "command", "rm")).problem());
-        // 也不能把内置的 stdio 那台复制到自己名下再让服务器去起它
+        // 也不能把服务器提供的 stdio 那台复制到自己名下再让服务器去起它
         assertNotNull(libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, Libraries.COPY, body("id", "server:shell")).problem());
 
         String seen = libraries.view(PLAYER, false, Libraries.MCP_CLIENT);
@@ -736,15 +799,15 @@ class LibrariesTest {
         Libraries libraries = withMcpServers(dir);
 
         assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.PUT,
-                body("name", "tools", "type", "stdio", "command", "npx", "group", "builtin", "enabled", "false")).problem());
-        assertNotNull(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:tools", "builtin"));
+                body("name", "tools", "type", "stdio", "command", "npx", "group", "server", "enabled", "false")).problem());
+        assertNotNull(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:tools", "server"));
 
         assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.CONNECT,
-                body("id", "server:files", "group", "builtin")).problem());
-        assertTrue(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:files", "builtin").get("connect").getAsBoolean());
+                body("id", "server:files", "group", "server")).problem());
+        assertTrue(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:files", "server").get("connect").getAsBoolean());
         assertNull(libraries.handle(ADMIN, true, Libraries.MCP_CLIENT, Libraries.DISCONNECT,
-                body("id", "server:files", "group", "builtin")).problem());
-        assertFalse(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:files", "builtin").get("connect").getAsBoolean());
+                body("id", "server:files", "group", "server")).problem());
+        assertFalse(row(libraries.view(ADMIN, true, Libraries.MCP_CLIENT), "server:files", "server").get("connect").getAsBoolean());
         assertTrue(Files.readString(dir.resolve("server").resolve("mcp").resolve("server").resolve("files.json"))
                 .contains("internal.example"), "连与不连只翻 enabled,别的原样");
     }
@@ -755,9 +818,9 @@ class LibrariesTest {
 
         assertNull(libraries.handle(PLAYER, false, Libraries.MCP_CLIENT, Libraries.DISABLE, body("id", "server:files")).problem());
 
-        assertFalse(row(libraries.view(PLAYER, false, Libraries.MCP_CLIENT), "server:files", "builtin")
+        assertFalse(row(libraries.view(PLAYER, false, Libraries.MCP_CLIENT), "server:files", "server")
                 .get("enabled").getAsBoolean());
-        assertTrue(row(libraries.view(OTHER, false, Libraries.MCP_CLIENT), "server:files", "builtin")
+        assertTrue(row(libraries.view(OTHER, false, Libraries.MCP_CLIENT), "server:files", "server")
                 .get("enabled").getAsBoolean());
     }
 
@@ -829,8 +892,8 @@ class LibrariesTest {
                 "api_key", "sk-never-stored");
         assertNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT, voice).problem());
         assertNotNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.PUT,
-                body("name", "全服的", "group", "builtin")).problem(), "玩家不能写内置");
-        voice.addProperty("group", "builtin");
+                body("name", "全服的", "group", "server")).problem(), "玩家不能写服务器提供");
+        voice.addProperty("group", "server");
         Libraries.Result added = libraries.handle(ADMIN, true, Libraries.VOICE, Libraries.PUT, voice);
         assertNull(added.problem());
         assertTrue(added.shared());
@@ -840,7 +903,7 @@ class LibrariesTest {
         assertEquals("minimax-cn", mine.get("service").getAsString());
         assertEquals("paimon", mine.get("voice").getAsString());
         assertFalse(libraries.view(PLAYER, false, Libraries.VOICE).contains("sk-never-stored"), "声线条目里没有 key");
-        assertNotNull(row(libraries.view(PLAYER, false, Libraries.VOICE), "server:派蒙", "builtin"), "玩家看得到内置");
+        assertNotNull(row(libraries.view(PLAYER, false, Libraries.VOICE), "server:派蒙", "server"), "玩家看得到服务器提供");
     }
 
     @Test
@@ -882,7 +945,7 @@ class LibrariesTest {
         assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT, body("name", "空")).problem(),
                 "新皮肤要有图、网址或正版名");
         assertNotNull(libraries.handle(PLAYER, false, Libraries.SKIN, Libraries.PUT,
-                body("name", "全服", "group", "builtin", "player", "Notch")).problem(), "玩家不能写内置");
+                body("name", "全服", "group", "server", "player", "Notch")).problem(), "玩家不能写服务器提供");
     }
 
     @Test
@@ -927,14 +990,14 @@ class LibrariesTest {
         LibraryHub.headless(dir, bundles);
         write(file, new VoiceProfile("", "openai", "", "", "m", "改过的音色", "", "", "", 1f).write());
         Libraries libraries = libraries(dir, LibraryHub.headless(dir, bundles));
-        assertTrue(row(libraries.view(ADMIN, true, Libraries.VOICE), "numen:默认", "builtin").get("modified").getAsBoolean());
+        assertTrue(row(libraries.view(ADMIN, true, Libraries.VOICE), "numen:默认", "server").get("modified").getAsBoolean());
 
         assertNotNull(libraries.handle(PLAYER, false, Libraries.VOICE, Libraries.RESTORE, body("id", "numen:默认")).problem());
         Libraries.Result restored = libraries.handle(ADMIN, true, Libraries.VOICE, Libraries.RESTORE, body("id", "numen:默认"));
 
         assertNull(restored.problem());
         assertTrue(restored.shared());
-        JsonObject row = row(restored.entries(), "numen:默认", "builtin");
+        JsonObject row = row(restored.entries(), "numen:默认", "server");
         assertEquals("alex", row.get("voice").getAsString());
         assertFalse(row.get("modified").getAsBoolean());
     }

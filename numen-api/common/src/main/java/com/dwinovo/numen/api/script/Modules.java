@@ -42,8 +42,11 @@ import java.util.function.Function;
  */
 public final class Modules implements ScriptCatalog.ModuleSource {
 
-    /** 模块这种库:一条一个文件。 */
-    public static final LibraryKind KIND = LibraryKind.files("modules", ScriptEngine.IN_USE.extension());
+    /**
+     * 模块这种库:一条一个文件。"我的"永远是主人目录里的:模块是她自己写的,房主的也不能进服务器目录——
+     * 那样串门的玩家会把它当成随模组发布的出厂模块。
+     */
+    public static final LibraryKind KIND = LibraryKind.files("modules", ScriptEngine.IN_USE.extension()).apart();
 
     /** 这一份和内置的是什么关系。 */
     public enum Origin {
@@ -170,13 +173,13 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             return null;
         }
         String code = entry.text();
-        Origin origin = entry.group() == Library.Group.BUILTIN ? Origin.FACTORY
+        Origin origin = entry.group() == Library.Group.SERVER ? Origin.FACTORY
                 : entry.paired() ? Origin.CHANGED : Origin.HERS;
         boolean newer = false;
         if (origin == Origin.CHANGED) {
             JsonObject recorded = entry(ledger(), name);
             newer = recorded.has(FACTORY)
-                    && !recorded.get(FACTORY).getAsString().equals(Fingerprint.of(library.builtin().get(id).text()));
+                    && !recorded.get(FACTORY).getAsString().equals(Fingerprint.of(library.server().get(id).text()));
         }
         return new Module(name, code, ScriptEngine.IN_USE.summary(code), origin, newer,
                 ScriptEngine.IN_USE.check(name, code));
@@ -191,7 +194,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         if (library == null) {
             return get(name);
         }
-        com.dwinovo.numen.api.library.Shelf.Item item = library.builtin().get(id);
+        com.dwinovo.numen.api.library.Shelf.Item item = library.server().get(id);
         return item == null ? null : new Module(name, item.text(), ScriptEngine.IN_USE.summary(item.text()),
                 Origin.FACTORY, false, ScriptEngine.IN_USE.check(name, item.text()));
     }
@@ -200,7 +203,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     public List<String> deletedFactory() {
         List<String> out = new ArrayList<>();
         if (library != null) {
-            library.builtin().items().forEach(item -> {
+            library.server().items().forEach(item -> {
                 if (!library.enabled(item.id()) && problem(nameOf(item.id())) == null) {
                     out.add(nameOf(item.id()));
                 }
@@ -260,7 +263,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         EntryId id = idOf(name);
         synchronized (LOCK) {
             boolean existed = library.mine().get(id) != null;
-            com.dwinovo.numen.api.library.Shelf.Item builtin = library.builtin().get(id);
+            com.dwinovo.numen.api.library.Shelf.Item builtin = library.server().get(id);
             library.mine().write(id, code);
             library.setEnabled(id, true);   // 她关掉的内置,自己存一份同名的就是又要它了
             JsonObject ledger = ledger();
@@ -292,7 +295,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                 return null;
             }
             library.mine().delete(id);
-            if (library.builtin().get(id) != null) {
+            if (library.server().get(id) != null) {
                 library.setEnabled(id, false);
             }
             JsonObject ledger = ledger();

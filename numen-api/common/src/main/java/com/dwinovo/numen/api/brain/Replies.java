@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.config.Authority;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -35,10 +36,11 @@ public final class Replies {
 
     private Replies() {}
 
-    /** 客户端报到:回答协议版本与是否管理员;版本对得上的,补给他名下各大脑此刻的样子和会话列表。 */
+    /** 客户端报到:回答协议版本、是否管理员、是否房主;版本对得上的,补给他名下各大脑此刻的样子和会话列表。 */
     public static void hello(ServerPlayer player, int protocol) {
         boolean usable = Presence.hello(player.getUUID(), protocol);
-        NumenNetwork.sendToPlayer(player, new HelloAckPayload(Presence.PROTOCOL, Authority.isAdmin(player)));
+        NumenNetwork.sendToPlayer(player, new HelloAckPayload(Presence.PROTOCOL, Authority.isAdmin(player),
+                Homes.of(player.server).isHost(player.getUUID())));
         if (!usable) {
             Constants.LOG.info("[numen-net] client of {} speaks protocol {}, this server {}: not served",
                     player.getUUID(), protocol, Presence.PROTOCOL);

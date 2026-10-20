@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一位主人的同伴看得到的工具:全局的加上他自己接进来的 MCP 工具;内置那几台服务器的工具,他关掉了、或在"我的"里放了同名的盖过了,
+ * 一位主人的同伴看得到的工具:全局的加上他自己接进来的 MCP 工具;服务器提供那几台服务器的工具,他关掉了、或在"我的"里放了同名的盖过了,
  * 她就看不到;别的玩家自己接的工具她看不到。
  */
 class OwnerToolsTest {
@@ -68,8 +68,8 @@ class OwnerToolsTest {
     @Test
     void aBuiltinServersToolsAreSeenByEveryoneUntilHeSwitchesTheServerOff() {
         Library library = mcp();
-        library.builtin().write(new EntryId("server", "kfc"), "{\"type\":\"http\",\"url\":\"http://x\"}");
-        NumenTool kfc = shared(tool("kfc", "server:kfc", Library.Group.BUILTIN, "menu"));
+        library.server().write(new EntryId("server", "kfc"), "{\"type\":\"http\",\"url\":\"http://x\"}");
+        NumenTool kfc = shared(tool("kfc", "server:kfc", Library.Group.SERVER, "menu"));
         OwnerTools tools = new OwnerTools(OWNER, library);
 
         assertTrue(tools.all().contains(kfc));
@@ -86,8 +86,8 @@ class OwnerToolsTest {
     @Test
     void aToolFromHisOwnServerIsHisAloneAndCoversABuiltinOneOfTheSameName() {
         Library library = mcp();
-        library.builtin().write(new EntryId("server", "kfc"), "{\"type\":\"http\",\"url\":\"http://x\"}");
-        NumenTool builtin = shared(tool("kfc", "server:kfc", Library.Group.BUILTIN, "menu"));
+        library.server().write(new EntryId("server", "kfc"), "{\"type\":\"http\",\"url\":\"http://x\"}");
+        NumenTool serverTool = shared(tool("kfc", "server:kfc", Library.Group.SERVER, "menu"));
         library.mine().write(new EntryId("server", "kfc"), "{\"type\":\"http\",\"url\":\"http://mine\"}");
         RemoteMcpTool mine = tool("kfc2", "server:kfc", Library.Group.MINE, "menu");
         ToolRegistry.register(OWNER, mine);
@@ -95,8 +95,8 @@ class OwnerToolsTest {
         OwnerTools tools = new OwnerTools(OWNER, library);
 
         assertTrue(tools.all().contains(mine));
-        assertTrue(!tools.all().contains(builtin), "我的同名的盖着内置的,内置那台的工具她看不到");
-        assertNull(tools.resolve(builtin.name()));
+        assertTrue(!tools.all().contains(serverTool), "我的同名的盖着服务器提供的,服务器提供那台的工具她看不到");
+        assertNull(tools.resolve(serverTool.name()));
         assertNotNull(tools.resolve(mine.name()));
         assertTrue(!new OwnerTools(OTHER, LibraryHub.headless(dir).library(McpClientConfig.KIND, OTHER)).all().contains(mine),
                 "别的玩家看不到他自己接的");
@@ -104,7 +104,7 @@ class OwnerToolsTest {
 
     @Test
     void anOwnedToolMayNotTakeTheNameOfAServerToolOrOfAnotherOfHisOwn() {
-        RemoteMcpTool one = tool("kfc", "server:kfc", Library.Group.BUILTIN, "menu");
+        RemoteMcpTool one = tool("kfc", "server:kfc", Library.Group.SERVER, "menu");
         shared(one);
         RemoteMcpTool clash = tool("kfc", "my:kfc", Library.Group.MINE, "menu");
 

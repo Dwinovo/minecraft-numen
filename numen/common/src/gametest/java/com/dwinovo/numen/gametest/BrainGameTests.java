@@ -499,7 +499,7 @@ public class BrainGameTests {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
         helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
         var builtin = com.dwinovo.numen.api.library.LibraryHub.of(helper.getLevel().getServer())
-                .builtin(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
+                .server(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
         int before = builtin.items().size();
         GameTestKit.received(player);
 
@@ -799,7 +799,7 @@ public class BrainGameTests {
         Brain a = new Brain(helper, "gametest_wearer_a", Files.createTempDirectory("numen-gametest-brain-"), ownerA);
         Brain b = new Brain(helper, "gametest_wearer_b", Files.createTempDirectory("numen-gametest-brain-"), ownerB);
         var shelf = com.dwinovo.numen.api.library.LibraryHub.of(server)
-                .builtin(com.dwinovo.numen.api.skin.SkinProfile.KIND);
+                .server(com.dwinovo.numen.api.skin.SkinProfile.KIND);
         var id = new com.dwinovo.numen.api.library.EntryId("server", "gametest_shared");
         shelf.write(id, new com.dwinovo.numen.api.skin.SkinProfile("classic", "shared-v1", "sig", null).write());
         var slot = com.dwinovo.numen.api.brain.Slot.SKIN;
@@ -961,7 +961,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
         String skill = com.dwinovo.numen.api.library.LibraryHub.of(server)
-                .builtin(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
+                .server(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
         String body = "{\"id\":\"" + skill + "\"}";
         GameTestKit.received(admin);
 

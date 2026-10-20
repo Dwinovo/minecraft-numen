@@ -258,11 +258,12 @@ public final class ModLanguageData {
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
         public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
 
-        // Libraries: the built-in / mine groups every content library shows, and what is said about a built-in entry.
-        public static final String LIBRARY_BUILTIN  = "numen.library.builtin";
+        // Libraries: the server-provided / mine groups every content library shows, and what is said about a bundled entry.
+        public static final String LIBRARY_SERVER   = "numen.library.server";
         public static final String LIBRARY_MINE     = "numen.library.mine";
-        public static final String LIBRARY_BUILTIN_ABOUT = "numen.library.builtin.about";
+        public static final String LIBRARY_SERVER_ABOUT  = "numen.library.server.about";
         public static final String LIBRARY_MINE_ABOUT    = "numen.library.mine.about";
+        public static final String LIBRARY_SHIPPED  = "numen.library.shipped";
         public static final String LIBRARY_MODIFIED = "numen.library.modified";
         public static final String LIBRARY_UPDATE   = "numen.library.update";
         public static final String LIBRARY_GONE     = "numen.library.gone";
@@ -430,7 +431,7 @@ public final class ModLanguageData {
         public static final String WIPE_TITLE               = "numen.wipe.title";
         public static final String WIPE_WARNING             = "numen.wipe.warning";
         public static final String WIPE_CONFIRM             = "numen.wipe.confirm";
-        public static final String LIBRARY_ADD_BUILTIN      = "numen.library.add_builtin";
+        public static final String LIBRARY_ADD_SERVER       = "numen.library.add_server";
         public static final String LIBRARY_RESTORE          = "numen.library.restore";
         public static final String LIBRARY_RELOAD           = "numen.library.reload";
         public static final String VOICE_FORM_SERVICE       = "numen.voice.form_service";
@@ -623,7 +624,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "Voice input failed: %s");
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
-        adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a built-in to change it.");
+        adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add("numen.persona.add", "New persona");
         adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
@@ -680,7 +681,7 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
-        adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a built-in to change it.");
+        adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a server-provided one to change it.");
         adder.add("numen.mcp.add", "Add a tool extension");
         adder.add("numen.mcp.form_service", "Key service (optional)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -698,7 +699,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · connecting…");
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
-        adder.add("numen.skill.empty", "No skills of your own yet. Copy a built-in to make your own version.");
+        adder.add("numen.skill.empty", "No skills of your own yet. Copy a server-provided one to make your own version.");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
@@ -712,7 +713,7 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
-        adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add(Keys.PROVIDER_ADD,            "New model config");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
@@ -837,15 +838,16 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_KEY,  "Model config \"%s\" has no API Key yet — add it in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_URL,  "Model config \"%s\" has no base URL — add it in Settings → Model Configs");
-        adder.add(Keys.LIBRARY_BUILTIN,  "Built-in");
+        adder.add(Keys.LIBRARY_SERVER,   "Provided by the server");
         adder.add(Keys.LIBRARY_MINE,     "Mine");
-        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "Shared by the server with everyone. Switch them on or off, or copy one to Mine to change it.");
-        adder.add(Keys.LIBRARY_MINE_ABOUT,    "Only yours. Nobody else sees these.");
+        adder.add(Keys.LIBRARY_SERVER_ABOUT,  "Shared by the server with everyone. Switch them on or off, or copy one to Mine to change it.");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "Yours to add, change and delete.");
+        adder.add(Keys.LIBRARY_SHIPPED,  "bundled");
         adder.add(Keys.LIBRARY_MODIFIED, "modified");
         adder.add(Keys.LIBRARY_UPDATE,   "new default available");
         adder.add(Keys.LIBRARY_GONE,     "source uninstalled");
         adder.add(Keys.LIBRARY_COVERED,  "covered by mine");
-        adder.add(Keys.LIBRARY_COVERS,   "overrides the built-in");
+        adder.add(Keys.LIBRARY_COVERS,   "overrides the server's");
         adder.add(Keys.LIBRARY_OFF,      "off");
         adder.add(Keys.LIBRARY_ACCEPT,   "Take the new default");
         adder.add(Keys.LIBRARY_DISMISS,  "Keep my version");
@@ -859,7 +861,7 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "Voice");
         adder.add(Keys.VOICE_ENABLED,        "Enabled");
-        adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add(Keys.VOICE_ADD,            "New voice");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "Delete voice \"%s\"? Companions bound to it fall silent.");
         adder.add(Keys.VOICE_FORM_NAME,      "Name (required)");
@@ -1136,7 +1138,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "Clear %s's memory?");
         adder.add(Keys.WIPE_WARNING,           "Her chat log, notes and long-term goal are deleted and she is told so. She stays on your roster and keeps her body. This cannot be undone");
         adder.add(Keys.WIPE_CONFIRM,           "Clear");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "New for everyone");
+        adder.add(Keys.LIBRARY_ADD_SERVER,     "New for everyone");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
         adder.add(Keys.LIBRARY_RELOAD,         "Rescan the server's folder");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
@@ -1330,7 +1332,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "语音输入失败：%s");
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");
-        adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把内置的复制过来改。");
+        adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把服务器提供的复制过来改。");
         adder.add("numen.persona.add", "新建人设");
         adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
@@ -1387,7 +1389,7 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
-        adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把内置的复制过来改。");
+        adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把服务器提供的复制过来改。");
         adder.add("numen.mcp.add", "添加工具扩展");
         adder.add("numen.mcp.form_service", "密钥用的服务名(可选)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -1405,7 +1407,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · 连接中…");
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
-        adder.add("numen.skill.empty", "还没有自己的技能。把内置的复制过来,就有了自己的版本。");
+        adder.add("numen.skill.empty", "还没有自己的技能。把服务器提供的复制过来,就有了自己的版本。");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
@@ -1419,7 +1421,7 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");
-        adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把服务器提供的复制过来改。");
         adder.add(Keys.PROVIDER_ADD,            "新建模型配置");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
@@ -1544,15 +1546,16 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
         adder.add(Keys.ENDPOINT_NO_KEY,  "模型配置「%s」还没填 API Key——到 设置 → 模型配置 补上");
         adder.add(Keys.ENDPOINT_NO_URL,  "模型配置「%s」没有接口地址——到 设置 → 模型配置 补上");
-        adder.add(Keys.LIBRARY_BUILTIN,  "内置");
+        adder.add(Keys.LIBRARY_SERVER,   "服务器提供");
         adder.add(Keys.LIBRARY_MINE,     "我的");
-        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "服主给所有人的。能开关,想改就复制到「我的」。");
-        adder.add(Keys.LIBRARY_MINE_ABOUT,    "只有你自己的。");
+        adder.add(Keys.LIBRARY_SERVER_ABOUT,  "服务器给所有人的。能开关,想改就复制到「我的」。");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "你自己的,随便增删改。");
+        adder.add(Keys.LIBRARY_SHIPPED,  "自带");
         adder.add(Keys.LIBRARY_MODIFIED, "已修改");
         adder.add(Keys.LIBRARY_UPDATE,   "默认内容有更新");
         adder.add(Keys.LIBRARY_GONE,     "来源已卸载");
         adder.add(Keys.LIBRARY_COVERED,  "被我的盖着");
-        adder.add(Keys.LIBRARY_COVERS,   "盖着内置的");
+        adder.add(Keys.LIBRARY_COVERS,   "盖着服务器提供的");
         adder.add(Keys.LIBRARY_OFF,      "已关");
         adder.add(Keys.LIBRARY_ACCEPT,   "采用新的默认内容");
         adder.add(Keys.LIBRARY_DISMISS,  "保留我的版本");
@@ -1566,7 +1569,7 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "语音");
         adder.add(Keys.VOICE_ENABLED,        "启用");
-        adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把服务器提供的复制过来改。");
         adder.add(Keys.VOICE_ADD,            "新建声线");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "删除声线「%s」?绑定它的同伴将静音。");
         adder.add(Keys.VOICE_FORM_NAME,      "名称(必填)");
@@ -1844,7 +1847,7 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "清空「%s」的记忆?");
         adder.add(Keys.WIPE_WARNING,           "她的对话记录、札记和长期目标会被删掉,并且告诉她。她还在你的名册里、身体不动。无法撤销");
         adder.add(Keys.WIPE_CONFIRM,           "清空");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "为所有人新建");
+        adder.add(Keys.LIBRARY_ADD_SERVER,     "为所有人新建");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
         adder.add(Keys.LIBRARY_RELOAD,         "重新扫描服务器上的目录");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");

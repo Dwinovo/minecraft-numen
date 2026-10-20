@@ -42,8 +42,8 @@ public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
      *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
-     *  {@code preset}=只读行(玩家对内置只读):点行复制到我的,菜单里没有编辑与删除。
-     *  {@code canClone}=菜单里有"复制到我的"(内置的行:管理员的可编辑,玩家的只读,都能复制)。
+     *  {@code preset}=只读行(玩家对服务器提供的只读):点行复制到我的,菜单里没有编辑与删除。
+     *  {@code canClone}=菜单里有"复制到我的"(服务器提供的行:管理员的可编辑,玩家的只读,都能复制)。
      *  {@code toggle}=该行有行尾开关(库配了行开关时;不是库条目的行没有)。 */
     public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone,
                       boolean toggle) {
@@ -118,7 +118,7 @@ public final class LibraryListPanel<T> {
     /** 条目属于哪一节({@link Section#id});每次重读时现取节的清单(管理员与否随时变)。 */
     private Function<T, String> groupOf;
     private Supplier<List<Section>> sections = List::of;
-    /** 某一行右键菜单里除了通用几项以外的(如管理员采用内置的新版)。 */
+    /** 某一行右键菜单里除了通用几项以外的(如管理员采用自带内容的新版)。 */
     private Function<T, List<PopupMenu.Item>> extraMenu;
     private final Function<T, String> deleteMessage;
     private final Consumer<T> onDeleteConfirmed;
@@ -183,25 +183,26 @@ public final class LibraryListPanel<T> {
     }
 
     /**
-     * 内容库的两节:"内置"(服主给所有人的;管理员多一行为所有人新建)与"我的"(只有自己的;总在)。
+     * 内容库的两节:"服务器提供"(服务器目录里的;管理员多一行为所有人新建;没有条目时不显示)与"我的"(总在)。房主就是这台
+     * 服务器,他的"我的"就是服务器目录那一份,服务端给他的行全是"我的",只有一节,也没有"为所有人新建"。
      * 各页只给自己的新建行文案、"我的"空状态的话和两个新建动作;{@code addKey} 为空 = 这库不能新建(技能)。
-     * 节的 id 就是 {@link #BUILTIN}/{@link #MINE},条目按它归节。
+     * 节的 id 就是 {@link #SERVER}/{@link #MINE},条目按它归节。
      */
     public static Supplier<List<Section>> shelves(String addKey, String emptyKey,
-                                                  Runnable onAdd, Runnable onAddBuiltin) {
+                                                  Runnable onAdd, Runnable onAddServer) {
         return () -> {
-            Add addBuiltin = onAddBuiltin != null && RemoteCompanions.admin()
-                    ? new Add(t(ModLanguageData.Keys.LIBRARY_ADD_BUILTIN), onAddBuiltin) : null;
+            Add addServer = onAddServer != null && RemoteCompanions.admin() && !RemoteCompanions.host()
+                    ? new Add(t(ModLanguageData.Keys.LIBRARY_ADD_SERVER), onAddServer) : null;
             Add addMine = addKey == null ? null : new Add(t(addKey), onAdd);
             return List.of(
-                    new Section(BUILTIN, t(ModLanguageData.Keys.LIBRARY_BUILTIN),
-                            t(ModLanguageData.Keys.LIBRARY_BUILTIN_ABOUT), null, addBuiltin, false),
+                    new Section(SERVER, t(ModLanguageData.Keys.LIBRARY_SERVER),
+                            t(ModLanguageData.Keys.LIBRARY_SERVER_ABOUT), null, addServer, false),
                     new Section(MINE, t(ModLanguageData.Keys.LIBRARY_MINE),
                             t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT), t(emptyKey), addMine, true));
         };
     }
 
-    public static final String BUILTIN = "builtin";
+    public static final String SERVER = "server";
     public static final String MINE = "mine";
 
     public LibraryListPanel<T> withToggle(String labelKey, Supplier<Boolean> get, Consumer<Boolean> set) {
