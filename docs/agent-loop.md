@@ -553,7 +553,7 @@ sealed interface LoopEvent {
 |---|---|---|
 | `CompanionLoop` | 构造内核并接端口;人设/模型绑定;外接模型取件与 `externalSay`;她的家(日志、收件箱、台账、目标、绑定) | 旧的客户端循环类的服务端版 |
 | `SystemPromptComposer` | 人设 + 操作核心 + 技能表 + 本能名册 | `composeSystemPrompt` |
-| `RuntimeState` | `<runtime_state>`:当前任务、背包、效果、骑乘、插件片段 | `runtimeStateXml` 等 |
+| `RuntimeState` | `<runtime_state>`:当前任务、背包、效果、骑乘、插件片段、附近(`Nearby`) | `runtimeStateXml` 等 |
 | `Compactor` | 压缩提示、切分、摘要提取、熔断 | 压缩相关方法 |
 | `GoalSteward` | 目标设定、评估、续跑、收工 | 目标相关方法 |
 | `TurnPresenter` | 订阅事件的全部表现层(客户端) | 循环里散落的 UI 调用 |
