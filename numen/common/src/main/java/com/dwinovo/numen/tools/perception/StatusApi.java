@@ -49,7 +49,7 @@ public final class StatusApi {
 
     /** 她的身体。 */
     @Doc("Your body right now.")
-    public record Self(@Doc("Your own id: your name.") String id,
+    public record Self(@Doc("Your own id, player@ plus a short code; name is how people call you.") String id,
                        String name,
                        @Doc("survival, creative, adventure or spectator.") String gameMode,
                        double hp,
@@ -120,7 +120,7 @@ public final class StatusApi {
     /** 她的主人。 */
     @Doc("Your owner right now; when they are offline, only online (false) is there.")
     public record Owner(boolean online,
-                        @Doc("Their id: their name.") Optional<String> id,
+                        @Doc("Their id, player@ plus a short code; functions that take an entity take it.") Optional<String> id,
                         Optional<String> name,
                         @Doc("Where they are (decimals), in their dimension's coordinates.") Optional<Vec3> pos,
                         @Doc("Blocks from you, in the same dimension.") Optional<Double> distance,
