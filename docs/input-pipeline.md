@@ -50,7 +50,7 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
   - 征询变成带可点按钮的聊天消息([允许] [总是允许] [拒绝],底层是现有的 `/numen consent`);她在干什么显示在动作栏;1.21.6 起可以用原版的服务端对话框;
   - 自己的 key:`/numen key <服务商> <key>`,回执只露前后几位、不广播给其他管理员;1.21.6 起用原版对话框的输入框填,连命令都不经过。
     原版与两个加载器不记录玩家执行的命令,Paper 默认记(说明里提醒服主);
-  - 皮肤:`/numen skin add <名字> player <正版名>` 或 `… url <图片网址>`。
+  - 皮肤:`/numen companion <她> skin player <正版名>`、`skin url <图片网址>`、`skin server <服务器皮肤文件夹里的文件名>`,不带参数是脱掉。
   - **召唤只要名字,不设任何前提**(10-18 用户定):人人能召唤,每人上限是服务器设置(默认不限)。档案、人设、皮肤、声线都是召唤后再改的绑定——
     面板编辑卡,或 `/numen companion <她> profile|persona|skin|voice <条目>`(补全列"服务器提供 + 我的")。召唤卡与命令走服务端同一个召唤入口。
     没绑档案时她停在 `BLOCKED`,主人跟她说话时照实回"还没配模型档案"。
@@ -212,7 +212,7 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 
 | 归属 | 根目录 | 谁能写 | 放什么 |
 |---|---|---|---|
-| 同伴 | 世界 `<存档>/numen/companions/<她的 uuid>/` | 跟着她;主人经界面改 | 对话日志(外部大脑驾驶的那段也记)、收件箱、札记、长期目标、token 台账、**绑定**(`binding.json`:用哪个人设、模型档案、声线、皮肤,四项都在这里);待办不落盘 |
+| 同伴 | 世界 `<存档>/numen/companions/<她的 uuid>/` | 跟着她;主人经界面改 | 对话日志(外部大脑驾驶的那段也记)、收件箱、札记、长期目标、token 台账、**绑定**(`binding.json`:用哪个人设、模型档案、声线,穿的是哪张皮肤,都在这里);待办不落盘 |
 | 玩家 × 世界 | 世界 `<存档>/numen/players/<玩家 uuid>/` | 本人 | 会话成员表;权限规则在存档的 `SavedData`,不动 |
 | 服务器 | `config/numen/server/` | 管理员 | `server.json`(总开关、各种上限、每人同伴数 `maxCompanions`、服主 key 的每人每天 token 限额 `dailyTokenLimit`、权限的两项 `hardRules` 与 `unknownAsOther`;代理是加载器配置里的那一处,与调模型共用;外部大脑端口在 `mcp_server.json`)、**服务器提供的各库**(`<库>/<命名空间>/<名字>`,jar 自带的同步进这里,管理员自己放的也在这里;房主的"我的"也是这一份)、服主的钥匙串 `keys/`(房主的钥匙就是这一本)、外部大脑令牌哈希、`cache/`(models.dev 目录) |
 | 玩家 | `config/numen/players/<玩家 uuid>/` | 本人 | **我的**(各库,同一布局)、他的钥匙串 `keys/`、`prefs.json`(主动性档位、各库条目的开关);跟着服务器走,换世界还能用。**房主没有各库与钥匙串这两样**:他的"我的"就是服务器目录那一份(下面"库"一节) |
@@ -257,7 +257,7 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
 
 ### 库:服务器提供与我的(10-18 用户定;归属规则 10-21 改)
 
-模型档案、人设、技能、模块、MCP 工具、声线、皮肤都是同一种东西:**一个库,一条条有名字的条目**。只有一套机制,每种库只声明条目长什么样。
+模型档案、人设、技能、模块、MCP 工具、声线都是同一种东西:**一个库,一条条有名字的条目**(皮肤不是,见下)。只有一套机制,每种库只声明条目长什么样。
 
 - **同一布局**:`<根>/<库>/<命名空间>/<名字>`,像数据包的 `命名空间:路径`。根有三个:各 jar 里的 `numen/`、服务器的 `config/numen/server/`、玩家的 `config/numen/players/<uuid>/`。
   Numen 自带的内容与插件自带的一样放在自己 jar 的 `numen/` 下(Numen 是插件之一,不特殊);现在三种布局(引擎里的 `assets/numen_api/persona/`、Numen 的 `skills/`、`modules/`、
@@ -279,9 +279,14 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
 - **钥匙串(key 不在条目里)**:档案、声线、MCP 条目只写"用哪个服务商",key 按服务商存在钥匙串里——服务器 `server/keys/`(服主出钱、玩家看不到)、
   玩家 `players/<uuid>/keys/`(只有本人看得到、改得了;房主的就是服务器那一本,只有"他自己的"一份)、本机 `client/keys/`(语音,§八)。用的时候先找主人的,再找服主的;服主的受 `server.json` 里每人每天的 token 限额
   (默认不限,服主查得到每人的用量),主人自己的不受限。所以服务器提供的条目能带"推荐的模型档案、MCP 服务器、声线",填上对应服务商的 key 就能用;jar 里永远没有 key。
-- **皮肤**:条目存原图与 Mojang 签名的皮肤数据(value 与 signature),签名在**服务端**做、一次存永久:正版玩家名向 Mojang 查,图片交给 MineSkin 签。
-  服务端排队一个一个发,被限流就等,告诉玩家排到第几;服主可在钥匙串里填 MineSkin 的 API key 提高额度;代理用服务器上调模型的同一处(国内服直连会超时)。
-  装了客户端的玩家在本机选图、预览,图片经我们的通道传上来;界面写明"图片会交给 MineSkin"。客户端里现在的签名代码(`MineSkinClient`、`MojangSkinLookup`)挪到两边共用的地方,只剩服务端一处调用。
+- **皮肤不是库**(10-21 改,[ADR runtime 0005](adr/runtime/0005-skins-are-pngs-in-a-folder-signed-on-use.md)):皮肤就是文件夹里的 png,文件名就是皮肤名,
+  每台机器一个 `config/numen/skins/`(`NumenPaths.skins()`,Paper 上是 Numen 数据根目录下的 `skins/`),玩家只往里放图。客户端列自己机器上的("我的"),服务端列服务器上的
+  ("服务器提供");房主两头是同一个文件夹,只列一节。两头共用 `SkinFolder` 的列举。选皮肤卡(`SkinPickerPanel`,编辑卡的皮肤行点开)按文件名列出、带小脸,
+  有"打开文件夹"(原版 `Util.OS.openFile`;手机上没有系统打开器就显示路径,请用手机自带的文件管理器放图)和"刷新";手臂粗细自动判断(`SkinVariants`,照 skinview-utils 的
+  `inferModelType`),玩家可改。
+  **签名只在服务端、用时才签**:选中"我的"一张,客户端把 png 与粗细交给服务端(库协议 `skin` 的 `put`,可分片),"服务器提供"的服务端自己读;服务端按"图片内容哈希 + 粗细"
+  (`SkinRef`)查签名缓存(`SkinCache`,服务器目录下 `skin-cache/`,按内容寻址,玩家不管理),命中当场穿上,没有就进签名队(`SkinSigning`,见下)签,签完连同原图存进缓存再穿上。
+  界面只显示"正在准备皮肤…"和失败的原因。同伴身上记的是对缓存的引用(`binding.json` 的 `skin`:`<哈希>-<粗细>`)。整条流程是 `Wardrobe`:拿到原图 → 查缓存 → 签 → 套上。
 
 **谁看得见她的话**:只给主人——面板里的会话回在面板,命令切进的会话回在带 `[会话名]` 的聊天行,`/msg` 回私信(§二);装了客户端的主人另有头顶气泡、聊天栏打字机与朗读,只给他(`SpeechBubbles`)。
 
@@ -309,29 +314,37 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
   旧的"删掉的出厂模块"与技能全局开关换成房主的开关,`mcp_clients.json` 进服务器目录,同伴绑定里的旧名字改写;和 `LegacyMigration` 一样复制不移动、先暂存再改名。
 
 **落地时的出入(第 3 步后半:声线与皮肤成为库、绑定、签名、召唤、命令、导出与清空)**
-- **声线与皮肤各是一种库**(`VoiceProfile.KIND`、`SkinProfile.KIND`,一条一个 `.json`),走"服务器提供 + 我的"的同一套库协议与设置页。声线条目是后端、音色、参数,
+- **声线是一种库**(`VoiceProfile.KIND`,一条一个 `.json`),走"服务器提供 + 我的"的同一套库协议与设置页。声线条目是后端、音色、参数,
   外加 `service`(用钥匙串里哪个服务的 key,缺省是后端的标识);**不含 key**。key 在本机钥匙串 `config/numen/client/keys/`(`ClientKeys`),按声线的服务名存;
   语音识别的 key 同在这里,按识别服务商存(`stt-<服务商>`),原先放在加载器配置文件里的 `sttApiKey` 删了(旧值不迁,填一次)。客户端朗读时读她绑定的那条声线
   (状态 `CompanionState.voiceId`,表来自库协议)加本机的 key 合成(`SpokenVoice`)。语音总开关是这台电脑的偏好(`ClientPrefs`),不跟着她走。
-- **皮肤签名只在服务端一处**:`SkinSigning` 一条队、一个工作线程一个一个发。图片三种来源——玩家上传的图(界面选图、分片上来)、服务端按网址取的图
-  (只收公网 http(s)、不跟重定向、至多 256 KiB、必须是 64×64 或 64×32 的 png)、借正版玩家的(向 Mojang 查,本来就是签好的,不经 MineSkin)。被 MineSkin 限流就按
-  `Retry-After`(没说就 30 秒)等了再发同一张,一张总共等不过 10 分钟;每人最多同时 5 张在排。条目签好才写进货架(原图 + 手臂模型 + value/signature),之后召唤和换肤不再联网。
-  队里的状态(排第几、在签、在等限流、失败的原因)作为皮肤表里 `pending` 的几行交给当事人;`cancel` 撤掉排着的或不再显示失败的。MineSkin 的 API key 是服务器钥匙串里的 `mineskin`,
-  管理员在皮肤表单里填;代理用的是调模型的同一处(`INumenConfig.getProxy()`,现状就是服务器一个代理),**没有另放一份在 `server.json`**,免得一件事两个真源。
-  `MineSkinClient`、`MojangSkinLookup` 挪到主源码集(`skin` 包),客户端不再有任何签名代码。
-- **绑定四项在她的存档**(`binding.json`:`provider`、`persona`、`voice`、`skin`,值是 `命名空间:名字`)。改绑只有一个入口 `CompanionBinding`:条目要在主人看得到、没关掉的库里;
-  皮肤另外穿到身上(`Companions.applySkin`,原地重建身体)。面板编辑卡发 `OwnerInput.Bind`,命令 `/numen companion <她> profile|persona|voice|skin [<条目>]` 同走它(不写条目是不绑,档案不能不绑);
-  库里的条目改了名,绑着它的同伴跟着改指(`CompanionLoops.rebind`);皮肤重签换了数据,穿着它的同伴穿上新的。
+- **皮肤签名只在服务端一处**:`SkinSigning` 一条队、一个工作线程一个一个发。图片三种来源——玩家上传的图(选皮肤卡里选的"我的"一张,分片上来)、服务端按网址取的图
+  (只收公网 http(s)、不跟重定向、至多 256 KiB、必须是 64×64 或 64×32 的 png)、借正版玩家的(向 Mojang 查,本来就是签好的,不经 MineSkin;缓存的键要原图的哈希,所以还要从签名数据里写的图床取到它的图)。
+  拿到原图先问缓存,签过的不再联网;被 MineSkin 限流就按 `Retry-After`(没说就 30 秒)等了再发同一张,一张总共等不过 10 分钟;每人最多同时 5 张在排。签好的存进缓存(原图 + 手臂模型 + value/signature),
+  之后召唤和换肤不再联网。队里的状态(排第几、在签、在等限流、失败的原因)作为皮肤表里 `pending` 的几行交给当事人;`cancel` 撤掉排着的或不再显示失败的。服务器皮肤文件夹里的图是另一张只读的表(`skin-files`,
+  客户端要看时才问,不随排队的进度一起推)。MineSkin 的 API key 是服务器钥匙串里的 `mineskin`,管理员在选皮肤卡里填;代理用的是调模型的同一处(`INumenConfig.getProxy()`,现状就是服务器一个代理),
+  **没有另放一份在 `server.json`**,免得一件事两个真源。`MineSkinClient`、`MojangSkinLookup` 在主源码集(`skin` 包),客户端不再有任何签名代码。
+- **绑定在她的存档**(`binding.json`:`provider`、`persona`、`voice` 三项是库条目,值是 `命名空间:名字`;`skin` 是对签名缓存的引用)。库条目改绑只有一个入口 `CompanionBinding`:条目要在主人看得到、没关掉的库里。
+  面板编辑卡发 `OwnerInput.Bind`,命令 `/numen companion <她> profile|persona|voice [<条目>]` 同走它(不写条目是不绑,档案不能不绑);库里的条目改了名,绑着它的同伴跟着改指(`CompanionLoops.rebind`)。
+  皮肤另走 `Wardrobe`:穿到身上(`Companions.applySkin`,原地重建身体)并记下穿的是缓存里的哪一张(`CompanionLoop.wearSkin`)。
 - **召唤只有一个入口** `Companions.summonFor`:召唤卡、`/numen player summon`、外部大脑的 `create_companion` 都走它。名字合 MC 规则、不撞在线的别人、每人上限(`server.json` 的 `maxCompanions`,0 = 不限)。
   召唤卡只剩名字和模式。没绑档案的她停在 `BLOCKED`,原因 `endpoint.unbound`(现有的),主人跟她说话时界面照实说"还没配模型档案"。
 - **`/numen key <服务商> <key>`** 存进他自己的钥匙串(面板钥匙串页同走 `Libraries.saveOwnKey`),回执只露前三位和末两位(短的一位不露),不广播,多人服第一次保存提醒一次。
-  **`/numen skin add <名字> player <正版名>` / `url <网址>`** 进他的皮肤库,排上队说排第几,被限流说一声,签好或没成回一句。
+  **`/numen companion <她> skin player <正版名> | url <网址> | server <文件名>`** 给她换皮肤,没签过的排上队说排第几,被限流说一声,穿上或没成回一句;不带参数是脱掉。
 - **面板导出与清空**:资料页"记忆"一节写明"她的记忆存在这个服务器上,服主看得到",有"导出"和"清空"。导出先在主人客户端弹系统保存对话框(取消就什么也不要),选定了才向服务端要:服务端在她的写车道上把 `chat.jsonl` 与 `memory/` 打成 zip,按 64 KiB 一段依次下行,每位玩家每个服务器刻至多一段(`Exports`,这就是下行预算),客户端按序收齐再写盘,总大小不设上限;玩家下线、段序不对就作废;
   清空要主人确认,删掉日志、札记、长期目标,名册与身体不动,往她的收件箱放一条如实说明的 `server_message`,面板收到 `Feed.Wiped` 作废她的记录。她正在想事情、死着、外接大脑驾驶着时不清。只有主人能做。
-- **旧数据**(单人游戏,`LegacyLooks`):`client/voice.json` → 房主的"我的"声线(key 进本机钥匙串,同一个服务几把留第一把);`client/skin.json` 加 `skins/*.png` → "我的"皮肤(没签成的留着,编辑保存即用存着的原图重签);
+- **旧数据**(单人游戏,`LegacyLooks`):`client/voice.json` → 房主的"我的"声线(key 进本机钥匙串,同一个服务几把留第一把);`client/skin.json` 加 `skins/*.png` → 皮肤文件夹里的 png 与签名缓存(搬完 `skin.json` 改名 `.migrated`);
   `client/looks.json`(更早是旧家的 `binding.json`)里每只同伴的选择改写成新名字写进她的绑定,只在她的家刚搬过来的那一次做。复制不移动、只做一次。多人服不迁、不上传。
-- **库协议**多了 `voice`、`skin` 两种,`restore` 与 `cancel` 两个操作;`LibraryRequest`/`Library` 两个包可分片(皮肤带原图);皮肤条目内容一变(签好、采用新版、恢复默认),所有绑着它的在场同伴(内置的不论谁名下)都按 `applySkin` 换上。库列表页在服务端推来"没办成"的原因时亮一条错误。
+- **库协议**多了 `voice`、`skin`、`skin-files` 三种,`restore` 与 `cancel` 两个操作;`LibraryRequest`/`Library` 两个包可分片(皮肤带原图)。`skin` 不是内容库,是给同伴换皮肤的口(`put` 穿上、`delete` 脱掉、`cancel` 撤队)。库列表页在服务端推来"没办成"的原因时亮一条错误。
 - `PROTOCOL` 加到 2:`OwnerInput` 的 `Bind`/`Export`/`Wipe` 替掉了 `SetProvider`/`SetPersona`,`CompanionState` 多了声线与皮肤,召唤请求只剩名字和模式,`ChangeSkinPayload` 删了。
+
+**落地时的出入(10-21:房主的库与皮肤文件夹)**
+- **归属规则**见"库:服务器提供与我的"与 [ADR runtime 0004](adr/runtime/0004-host-library-is-the-server-directory.md):`Homes.isHost`、`Library.merged()`、`HostMerge`(个人目录的库条目与钥匙并进服务器目录)。
+- **皮肤**见 [ADR runtime 0005](adr/runtime/0005-skins-are-pngs-in-a-folder-signed-on-use.md):`SkinFolder`(列举)、`SkinVariants`(粗细)、`SkinRef`/`SkinCache`(缓存)、`SkinSigning`(签)、`Wardrobe`(流程)、
+  `SkinPickerPanel`(界面)、`SkinMigration`/`SkinHandover`(旧数据;下行包 `SkinHandoverPayload`,分段同导出的记忆,共用 `Segments`)。
+- **旧皮肤库的迁移**:启动时 `ServerBrains.migrateSkins`——服务器的与房主的旧库导出成这台机器皮肤文件夹里的 png、签好的进缓存、同伴绑定里的旧条目名换成引用,搬完删掉旧库;
+  连专用服务器的玩家的旧库留着,他的客户端报到时按段下行,发完一张删一张。可重来。
+- `PROTOCOL` 加到 4:`HelloAck` 多一位 `host`,库行的组叫 `server`、多一个 `shipped`,皮肤那一种换了形状,多了 `SkinHandoverPayload`。
 
 ## 七、身体的输入层(已落地)
 
