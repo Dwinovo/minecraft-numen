@@ -8,3 +8,5 @@
 | [0001](0001-server-agent-two-brains.md) | 10-16 | 服务端 Agent:只有服务端大脑与外部大脑,配置与 key 归服主 | 已接受,在落地 |
 | [0002](0002-storage-files-three-layers.md) | 10-16 | 存储用文件,分三层;格式照 pi 的会话日志 | 已接受,在落地 |
 | [0003](0003-network-off-main-thread.md) | 10-16 | 我们的客户端只走 MC 的连接,网络包不拖慢刻 | 已接受,在落地 |
+| [0004](0004-host-library-is-the-server-directory.md) | 10-21 | 房主的"我的"就是服务器目录,"内置"改叫"服务器提供" | 已接受,已落地 |
+| [0005](0005-skins-are-pngs-in-a-folder-signed-on-use.md) | 10-21 | 皮肤是文件夹里的 png,用时才签,签名缓存按内容寻址 | 已接受,已落地 |

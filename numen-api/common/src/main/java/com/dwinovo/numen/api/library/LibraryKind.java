@@ -7,20 +7,29 @@ package com.dwinovo.numen.api.library;
  * <p>布局统一是 {@code <根>/<库>/<命名空间>/<名字>}:根是各 jar 里的 {@code numen/}、服务器的 {@code config/numen/server/}、
  * 玩家的 {@code config/numen/players/<uuid>/}。
  *
- * @param dir    库的目录名,如 {@code persona}
- * @param suffix 文件型的库:一条是 {@code <名字><suffix>} 一个文件;目录型的库为 {@code null}
- * @param marker 目录型的库:一条是 {@code <名字>/} 一个目录,里面必须有这个文件(如 {@code SKILL.md});文件型的库为 {@code null}
+ * <p>房主(单人游戏的玩家、局域网开房的人)的"我的"就是服务器目录那一份,不另有玩家目录({@link LibraryHub});
+ * {@link #ownerOnly} 的库例外——她自己写的东西不能变成串门玩家眼里的"服务器提供"。
+ *
+ * @param dir       库的目录名,如 {@code persona}
+ * @param suffix    文件型的库:一条是 {@code <名字><suffix>} 一个文件;目录型的库为 {@code null}
+ * @param marker    目录型的库:一条是 {@code <名字>/} 一个目录,里面必须有这个文件(如 {@code SKILL.md});文件型的库为 {@code null}
+ * @param ownerOnly "我的"永远是玩家目录里的那一份,房主也一样
  */
-public record LibraryKind(String dir, String suffix, String marker) {
+public record LibraryKind(String dir, String suffix, String marker, boolean ownerOnly) {
 
     /** 一条一个文件:{@code <库>/<命名空间>/<名字><suffix>}。 */
     public static LibraryKind files(String dir, String suffix) {
-        return new LibraryKind(dir, suffix, null);
+        return new LibraryKind(dir, suffix, null, false);
     }
 
     /** 一条一个目录:{@code <库>/<命名空间>/<名字>/<marker>} 加目录里的其余文件。 */
     public static LibraryKind directories(String dir, String marker) {
-        return new LibraryKind(dir, null, marker);
+        return new LibraryKind(dir, null, marker, false);
+    }
+
+    /** 同一种库,但"我的"永远是玩家目录里的那一份。 */
+    public LibraryKind apart() {
+        return new LibraryKind(dir, suffix, marker, true);
     }
 
     /** 一条是不是一个目录。 */

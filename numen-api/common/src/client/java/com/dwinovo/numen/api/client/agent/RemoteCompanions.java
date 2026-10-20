@@ -40,6 +40,8 @@ public final class RemoteCompanions {
     private static boolean served;
     /** 这位玩家能不能改服务器上的配置。 */
     private static boolean admin;
+    /** 这位玩家是不是这台服务器的房主。 */
+    private static boolean host;
     /** 服务端发来的落过盘的会话(成员表与名字),整份。 */
     private static List<Conversation> saved = List.of();
     private static long nextRequest;
@@ -100,6 +102,11 @@ public final class RemoteCompanions {
         return admin;
     }
 
+    /** 我是这台服务器的房主:我的"我的"就是服务器目录,没有"为所有人新建"这回事。 */
+    public static boolean host() {
+        return host;
+    }
+
     /** 服务器上的库(人设、模型档案、服务器配置)在这里读写。 */
     public static RemoteLibrary library() {
         return LIBRARY;
@@ -123,6 +130,7 @@ public final class RemoteCompanions {
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
         ClientPayloadSink.conversations = RemoteCompanions::onConversations;
         ClientPayloadSink.export = MemoryFiles::receive;
+        ClientPayloadSink.skinHandover = SkinHandovers::receive;
         ClientPayloadSink.library = p -> {
             LIBRARY.onPayload(p);
             if (Libraries.MCP_CLIENT.equals(p.kind())) {
@@ -176,6 +184,7 @@ public final class RemoteCompanions {
     static void onHelloAck(HelloAckPayload p) {
         served = p.protocol() == Presence.PROTOCOL;
         admin = served && p.admin();
+        host = served && p.host();
         if (!served) {
             Constants.LOG.warn("[numen-net] the server speaks protocol {}, this client {}: its companions are not shown",
                     p.protocol(), Presence.PROTOCOL);
@@ -219,11 +228,13 @@ public final class RemoteCompanions {
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
         MemoryFiles.reset();
+        SkinHandovers.reset();
         saved = List.of();
         LIBRARY.clear();
         McpAuthPrompt.clear();
         served = false;
         admin = false;
+        host = false;
         helloSent = false;
     }
 }

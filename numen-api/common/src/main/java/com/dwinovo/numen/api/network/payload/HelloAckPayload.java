@@ -9,10 +9,11 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * Server → Client: 对 {@link HelloPayload} 的回答——服务端说的协议版本,以及这位玩家能不能改服务器上的配置
- * (模型档案与 key、外部大脑……,见 {@code Authority})。版本对不上,客户端不订阅、不画服务端大脑的东西,并提示。
+ * Server → Client: 对 {@link HelloPayload} 的回答——服务端说的协议版本,这位玩家能不能改服务器上的配置
+ * (模型档案与 key、外部大脑……,见 {@code Authority}),以及他是不是这台服务器的房主(他的"我的"就是服务器目录那一份,
+ * 见 {@code Homes#isHost})。版本对不上,客户端不订阅、不画服务端大脑的东西,并提示。
  */
-public record HelloAckPayload(int protocol, boolean admin) implements CustomPacketPayload {
+public record HelloAckPayload(int protocol, boolean admin, boolean host) implements CustomPacketPayload {
 
     public static final Type<HelloAckPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "hello_ack"));
@@ -21,6 +22,7 @@ public record HelloAckPayload(int protocol, boolean admin) implements CustomPack
             StreamCodec.composite(
                     ByteBufCodecs.VAR_INT, HelloAckPayload::protocol,
                     ByteBufCodecs.BOOL, HelloAckPayload::admin,
+                    ByteBufCodecs.BOOL, HelloAckPayload::host,
                     HelloAckPayload::new);
 
     @Override

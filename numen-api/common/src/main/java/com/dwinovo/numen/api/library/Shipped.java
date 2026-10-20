@@ -157,7 +157,7 @@ public final class Shipped {
     }
 
     /**
-     * 同步清单,同时是内置条目"改过没有、有没有新版"的出处({@link Provenance.Source})。
+     * 同步清单,同时是服务器目录里的条目"是不是 jar 自带的、改过没有、有没有新版"的出处({@link Provenance.Source})。
      */
     public static final class Manifest implements Provenance.Source {
 
@@ -303,6 +303,7 @@ public final class Shipped {
         @Override
         public Provenance of(LibraryKind kind, Shelf.Item item) {
             String base = baseOf(kind, item.id());
+            boolean shipped = false;
             boolean modified = false;
             boolean update = false;
             boolean gone = false;
@@ -312,11 +313,12 @@ public final class Shipped {
                     continue;
                 }
                 Path target = serverRoot.resolve(path);
+                shipped = true;
                 modified |= Files.isRegularFile(target) && !fingerprint(target).equals(e.getValue().fingerprint);
                 update |= Files.isRegularFile(pending(target));
                 gone |= e.getValue().gone;
             }
-            return new Provenance(modified, update, gone);
+            return new Provenance(shipped, modified, update, gone);
         }
 
         /** 采用新版:{@code <文件>.new} 换掉现在的文件,清单跟上。目录型的条目里每个有新版的文件都换。 */

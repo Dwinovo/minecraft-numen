@@ -47,14 +47,13 @@ public final class Sprites {
     public static final ResourceLocation SUN = icon("icon_sun");
     /** 左栏顶上搜索框里的放大镜。 */
     public static final ResourceLocation SEARCH = icon("icon_search");
-    /** 设置首页每个分区的图标:模型、工具扩展、外接大脑、技能、人设、声线、皮肤、主题(语音输入用 MIC)。 */
+    /** 设置首页每个分区的图标:模型、工具扩展、外接大脑、技能、人设、声线、主题(语音输入用 MIC)。 */
     public static final ResourceLocation CPU = icon("icon_cpu");
     public static final ResourceLocation PLUG = icon("icon_plug");
     public static final ResourceLocation ROBOT = icon("icon_robot");
     public static final ResourceLocation BOOK = icon("icon_book");
     public static final ResourceLocation PERSONA = icon("icon_persona");
     public static final ResourceLocation VOLUME = icon("icon_volume");
-    public static final ResourceLocation SHIRT = icon("icon_shirt");
     public static final ResourceLocation BRUSH = icon("icon_brush");
     /** 资料页:在哪、背包那一行(简介用 PERSONA,她记得的事用 BOOK)。 */
     public static final ResourceLocation MAP_PIN = icon("icon_map_pin");

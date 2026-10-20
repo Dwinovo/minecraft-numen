@@ -1,16 +1,16 @@
 package com.dwinovo.numen.api.skin;
 
 import com.dwinovo.numen.api.entity.MojangSkins;
-import com.dwinovo.numen.api.library.EntryId;
-import com.dwinovo.numen.api.library.LibraryHub;
-import com.dwinovo.numen.api.library.Shelf;
-
+import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.store.Io;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -23,16 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 皮肤签名队:一个一个发、排位看得见、被限流就等再发同一张、失败留在队里等玩家撤掉、签好才写进货架。网络是假的。
+ * 皮肤签名队:一个一个发、排位看得见、被限流就等再发同一张、失败留在队里等玩家撤掉;拿到原图先问缓存,签过的不再联网,
+ * 签好的存进缓存。网络是假的。
  */
 class SkinSigningTest {
 
     private static final UUID ME = UUID.randomUUID();
     private static final UUID YOU = UUID.randomUUID();
-    private static final byte[] PNG = png(64, 64);
+    private static final byte[] PNG = SkinFixtures.header(64, 64);
 
     private SkinSigning signing;
 
@@ -43,27 +45,25 @@ class SkinSigningTest {
         }
     }
 
-    static byte[] png(int width, int height) {
-        byte[] png = new byte[33];
-        byte[] magic = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
-        System.arraycopy(magic, 0, png, 0, 8);
-        png[12] = 'I';
-        png[13] = 'H';
-        png[14] = 'D';
-        png[15] = 'R';
-        for (int i = 0; i < 4; i++) {
-            png[16 + i] = (byte) (width >> (24 - 8 * i));
-            png[20 + i] = (byte) (height >> (24 - 8 * i));
-        }
-        return png;
-    }
-
-    /** 签名函数由用例给;其余三件事用不到。 */
+    /** 签名函数由用例给;其余几件事有缺省。 */
     private interface Signer {
         MineSkinClient.Signed sign(byte[] png, String variant, String apiKey);
     }
 
-    private SkinSigning queue(Signer signer, List<Integer> slept) {
+    private SkinCache cache;
+
+    private SkinSigning queue(Path dir, Signer signer, List<Integer> slept) {
+        return queue(dir, signer, slept, new MojangSkinLookup.Result(new MojangSkins.Skin("mojang", "sig"), null),
+                url -> {
+                    throw SkinError.of(SkinError.NETWORK, "textures");
+                });
+    }
+
+    private SkinSigning queue(Path dir, Signer signer, List<Integer> slept, MojangSkinLookup.Result lookup,
+                              java.util.function.Function<String, byte[]> texture) {
+        cache = new SkinCache(new Home(dir, Io.direct(e -> {
+            throw e;
+        })));
         signing = new SkinSigning(new SkinSigning.Backend() {
             @Override
             public MineSkinClient.Signed sign(byte[] png, String variant, String apiKey) {
@@ -77,25 +77,19 @@ class SkinSigningTest {
 
             @Override
             public MojangSkinLookup.Result lookup(String playerName) {
-                return new MojangSkinLookup.Result(new MojangSkins.Skin("mojang", "sig"), null);
+                return lookup;
             }
 
             @Override
             public byte[] texture(String url) {
-                throw SkinError.of(SkinError.NETWORK, "textures");
+                return texture.apply(url);
             }
-        }, () -> "key", Runnable::run, owner -> { }, (request, outcome) -> { },
-                ms -> slept.add((int) (ms / 1000)));
+        }, () -> "key", Runnable::run, owner -> { }, cache, ms -> slept.add((int) (ms / 1000)));
         return signing;
     }
 
-    private static SkinSigning.Request request(UUID owner, String name, Shelf shelf, EntryId replaces) {
-        return new SkinSigning.Request(owner, name, SkinProfile.VARIANT_CLASSIC, new SkinSigning.Source.Image(PNG), shelf,
-                EntryId.MINE, replaces);
-    }
-
-    private static Shelf shelf(Path dir) {
-        return LibraryHub.headless(dir).library(SkinProfile.KIND, ME).mine();
+    private static SkinSigning.Request request(UUID owner, String name) {
+        return new SkinSigning.Request(owner, name, SkinProfile.VARIANT_CLASSIC, new SkinSigning.Source.Image(PNG));
     }
 
     private static final class Wait implements SkinSigning.Listener {
@@ -124,31 +118,73 @@ class SkinSigningTest {
     }
 
     @Test
-    void aSignedSkinIsStoredOnceWithItsImageAndTheKeyIsReadFreshEachTime(@TempDir Path dir) throws Exception {
+    void aSignedSkinGoesIntoTheCacheWithItsImageAndTheKeyIsReadFreshEachTime(@TempDir Path dir) throws Exception {
         List<String> keys = new CopyOnWriteArrayList<>();
-        queue((png, variant, key) -> {
+        queue(dir, (png, variant, key) -> {
             keys.add(key);
             return new MineSkinClient.Signed("v-" + variant, "s");
         }, new ArrayList<>());
-        Shelf shelf = shelf(dir);
         Wait wait = new Wait();
 
-        assertTrue(signing.submit(request(ME, "小红", shelf, null), wait) > 0);
+        assertTrue(signing.submit(request(ME, "小红"), wait) > 0);
         SkinSigning.Outcome outcome = wait.get();
 
         assertTrue(outcome.ok());
-        assertEquals(EntryId.mine("小红"), outcome.id());
-        SkinProfile stored = SkinProfile.read(shelf.get(outcome.id()).text());
+        assertEquals(SkinRef.of(PNG, SkinProfile.VARIANT_CLASSIC), outcome.ref());
+        assertEquals("v-classic", outcome.skin().value());
+        SkinProfile stored = cache.find(outcome.ref());
         assertEquals("v-classic", stored.value());
-        assertEquals(PNG.length, stored.png().length, "条目存着原图");
+        assertEquals(PNG.length, stored.png().length, "缓存存着原图,换手臂模型时用它重签");
         assertEquals(List.of("key"), keys);
+    }
+
+    @Test
+    void theSameImageAndArmModelIsSignedOnceAnotherArmModelOrAnotherImageIsSignedAgain(@TempDir Path dir) throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        queue(dir, (png, variant, key) -> {
+            calls.incrementAndGet();
+            return new MineSkinClient.Signed("v-" + variant, "s");
+        }, new ArrayList<>());
+
+        Wait first = new Wait();
+        signing.submit(request(ME, "甲"), first);
+        first.get();
+        Wait again = new Wait();
+        signing.submit(request(YOU, "乙"), again);
+        assertTrue(again.get().ok());
+        assertEquals(1, calls.get(), "同图同粗细命中缓存,不联网");
+
+        Wait slim = new Wait();
+        signing.submit(new SkinSigning.Request(ME, "甲", SkinProfile.VARIANT_SLIM, new SkinSigning.Source.Image(PNG)), slim);
+        assertEquals("v-slim", slim.get().skin().value());
+        assertEquals(2, calls.get(), "同图换粗细要重签");
+
+        byte[] edited = PNG.clone();
+        edited[30] = 7;
+        Wait changed = new Wait();
+        signing.submit(new SkinSigning.Request(ME, "甲", SkinProfile.VARIANT_CLASSIC, new SkinSigning.Source.Image(edited)),
+                changed);
+        assertTrue(changed.get().ok());
+        assertEquals(3, calls.get(), "改了图要重签");
+    }
+
+    @Test
+    void withoutAnArmModelTheImageDecidesIt(@TempDir Path dir) throws Exception {
+        queue(dir, (png, variant, key) -> new MineSkinClient.Signed("v-" + variant, "s"), new ArrayList<>());
+        Wait thin = new Wait();
+        signing.submit(new SkinSigning.Request(ME, "细", null, new SkinSigning.Source.Image(SkinFixtures.real(true))), thin);
+        Wait wide = new Wait();
+        signing.submit(new SkinSigning.Request(ME, "粗", null, new SkinSigning.Source.Image(SkinFixtures.real(false))), wide);
+
+        assertEquals("v-slim", thin.get().skin().value());
+        assertEquals("v-classic", wide.get().skin().value());
     }
 
     @Test
     void whoIsWaitingKnowsTheirPlaceInLine(@TempDir Path dir) throws Exception {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch started = new CountDownLatch(1);
-        queue((png, variant, key) -> {
+        queue(dir, (png, variant, key) -> {
             started.countDown();
             try {
                 release.await(5, TimeUnit.SECONDS);
@@ -157,13 +193,12 @@ class SkinSigningTest {
             }
             return new MineSkinClient.Signed("v", "s");
         }, new ArrayList<>());
-        Shelf shelf = shelf(dir);
         Wait first = new Wait();
         Wait second = new Wait();
 
-        signing.submit(request(ME, "一", shelf, null), first);
+        signing.submit(request(ME, "一"), first);
         assertTrue(started.await(5, TimeUnit.SECONDS));
-        signing.submit(request(YOU, "二", shelf, null), second);
+        signing.submit(new SkinSigning.Request(YOU, "二", SkinProfile.VARIANT_SLIM, new SkinSigning.Source.Image(PNG)), second);
 
         assertEquals(List.of(1), first.positions);
         assertEquals(List.of(2), second.positions, "前面还有一个在签");
@@ -181,7 +216,7 @@ class SkinSigningTest {
     void aRateLimitMakesItWaitAndSendTheSameImageAgain(@TempDir Path dir) throws Exception {
         AtomicInteger calls = new AtomicInteger();
         List<Integer> slept = new CopyOnWriteArrayList<>();
-        queue((png, variant, key) -> {
+        queue(dir, (png, variant, key) -> {
             if (calls.incrementAndGet() < 3) {
                 throw SkinError.rateLimited("MineSkin", calls.get() == 1 ? 7 : 0);
             }
@@ -189,7 +224,7 @@ class SkinSigningTest {
         }, slept);
         Wait wait = new Wait();
 
-        signing.submit(request(ME, "慢", shelf(dir), null), wait);
+        signing.submit(request(ME, "慢"), wait);
 
         assertTrue(wait.get().ok());
         assertEquals(3, calls.get());
@@ -199,12 +234,12 @@ class SkinSigningTest {
 
     @Test
     void aRateLimitThatNeverLiftsEndsAsAFailureThatStaysUntilItIsDismissed(@TempDir Path dir) throws Exception {
-        queue((png, variant, key) -> {
+        queue(dir, (png, variant, key) -> {
             throw SkinError.rateLimited("MineSkin", 120);
         }, new ArrayList<>());
         Wait wait = new Wait();
 
-        long ticket = signing.submit(request(ME, "没完", shelf(dir), null), wait);
+        long ticket = signing.submit(request(ME, "没完"), wait);
         SkinSigning.Outcome outcome = wait.get();
 
         assertFalse(outcome.ok());
@@ -220,7 +255,7 @@ class SkinSigningTest {
     @Test
     void aQueuedSkinCanBeCancelledAndOneOwnerCannotHoldTheWholeQueue(@TempDir Path dir) throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        queue((png, variant, key) -> {
+        queue(dir, (png, variant, key) -> {
             try {
                 release.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -228,17 +263,16 @@ class SkinSigningTest {
             }
             return new MineSkinClient.Signed("v", "s");
         }, new ArrayList<>());
-        Shelf shelf = shelf(dir);
         List<Long> tickets = new ArrayList<>();
         List<Wait> waits = new ArrayList<>();
         for (int i = 0; i < SkinSigning.MAX_PENDING_PER_OWNER; i++) {
             waits.add(new Wait());
-            tickets.add(signing.submit(request(ME, "n" + i, shelf, null), waits.get(i)));
+            tickets.add(signing.submit(request(ME, "n" + i), waits.get(i)));
         }
 
-        assertEquals(-1, signing.submit(request(ME, "多的", shelf, null), new Wait()), "占满了");
+        assertEquals(-1, signing.submit(request(ME, "多的"), new Wait()), "占满了");
         Wait yours = new Wait();
-        assertTrue(signing.submit(request(YOU, "别人的", shelf, null), yours) > 0, "别人照排");
+        assertTrue(signing.submit(request(YOU, "别人的"), yours) > 0, "别人照排");
         assertTrue(signing.cancel(ME, tickets.get(2)));
         assertEquals(SkinSigning.MAX_PENDING_PER_OWNER - 1, signing.pendingOf(ME).size());
         release.countDown();
@@ -252,56 +286,49 @@ class SkinSigningTest {
 
     @Test
     void anImageThatIsNotASkinIsRefusedOnTheSpot(@TempDir Path dir) {
-        queue((png, variant, key) -> new MineSkinClient.Signed("v", "s"), new ArrayList<>());
+        queue(dir, (png, variant, key) -> new MineSkinClient.Signed("v", "s"), new ArrayList<>());
         SkinSigning.Request big = new SkinSigning.Request(ME, "大", SkinProfile.VARIANT_CLASSIC,
-                new SkinSigning.Source.Image(png(128, 128)), shelf(dir), EntryId.MINE, null);
+                new SkinSigning.Source.Image(SkinFixtures.header(128, 128)));
 
-        SkinError refused = org.junit.jupiter.api.Assertions.assertThrows(SkinError.class,
-                () -> signing.submit(big, new Wait()));
+        SkinError refused = assertThrows(SkinError.class, () -> signing.submit(big, new Wait()));
         assertEquals(SkinError.BAD_IMAGE, refused.code());
         assertTrue(signing.pendingOf(ME).isEmpty());
     }
 
     @Test
-    void replacingKeepsTheNameOrMovesTheEntry(@TempDir Path dir) throws Exception {
-        queue((png, variant, key) -> new MineSkinClient.Signed("v-" + variant, "s"), new ArrayList<>());
-        Shelf shelf = shelf(dir);
-        Wait made = new Wait();
-        signing.submit(request(ME, "旧", shelf, null), made);
-        EntryId old = made.get().id();
-
-        Wait same = new Wait();
-        signing.submit(new SkinSigning.Request(ME, "旧", SkinProfile.VARIANT_SLIM, new SkinSigning.Source.Image(PNG), shelf,
-                EntryId.MINE, old), same);
-        assertEquals(old, same.get().id(), "同名原地换");
-        assertEquals("v-slim", SkinProfile.read(shelf.get(old).text()).value());
-
-        Wait renamed = new Wait();
-        signing.submit(request(ME, "新", shelf, old), renamed);
-        SkinSigning.Outcome moved = renamed.get();
-        assertEquals(EntryId.mine("新"), moved.id());
-        assertEquals(old, moved.replaced());
-        assertNull(shelf.get(old), "旧名字删了");
-    }
-
-    @Test
-    void aBorrowedPlayerSkinIsNotSentToMineSkinAndWithoutAPictureStillStores(@TempDir Path dir) throws Exception {
+    void aBorrowedPlayerSkinIsNotSentToMineSkinAndIsCachedUnderItsPicture(@TempDir Path dir) throws Exception {
         AtomicInteger sent = new AtomicInteger();
-        queue((png, variant, key) -> {
+        String textures = Base64.getEncoder().encodeToString(
+                "{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/a\",\"metadata\":{\"model\":\"slim\"}}}}"
+                        .getBytes(StandardCharsets.UTF_8));
+        queue(dir, (png, variant, key) -> {
             sent.incrementAndGet();
             return new MineSkinClient.Signed("v", "s");
-        }, new ArrayList<>());
-        Shelf shelf = shelf(dir);
+        }, new ArrayList<>(), new MojangSkinLookup.Result(new MojangSkins.Skin(textures, "sig"), null), url -> PNG);
         Wait wait = new Wait();
 
-        signing.submit(new SkinSigning.Request(ME, "借", SkinProfile.VARIANT_CLASSIC, new SkinSigning.Source.Player("Notch"),
-                shelf, EntryId.MINE, null), wait);
+        signing.submit(new SkinSigning.Request(ME, "借", null, new SkinSigning.Source.Player("Notch")), wait);
 
         SkinSigning.Outcome outcome = wait.get();
         assertTrue(outcome.ok());
         assertEquals(0, sent.get());
-        SkinProfile stored = SkinProfile.read(shelf.get(outcome.id()).text());
-        assertEquals("mojang", stored.value());
-        assertEquals(0, stored.png().length, "取不到图床的图,条目没有预览但照样能用");
+        assertEquals(SkinRef.of(PNG, SkinProfile.VARIANT_SLIM), outcome.ref(), "手臂模型以 Mojang 的签名数据为准");
+        assertEquals(textures, cache.find(outcome.ref()).value());
+    }
+
+    @Test
+    void aBorrowedSkinWhosePictureCannotBeFetchedIsAFailure(@TempDir Path dir) throws Exception {
+        String textures = Base64.getEncoder().encodeToString(
+                "{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/a\"}}}".getBytes(StandardCharsets.UTF_8));
+        queue(dir, (png, variant, key) -> new MineSkinClient.Signed("v", "s"), new ArrayList<>(),
+                new MojangSkinLookup.Result(new MojangSkins.Skin(textures, "sig"), null), url -> {
+                    throw SkinError.of(SkinError.NETWORK, "textures");
+                });
+        Wait wait = new Wait();
+
+        signing.submit(new SkinSigning.Request(ME, "借", null, new SkinSigning.Source.Player("Notch")), wait);
+
+        assertEquals(SkinError.NETWORK, wait.get().problem().code());
+        assertNull(cache.find(SkinRef.of(PNG, SkinProfile.VARIANT_CLASSIC)));
     }
 }

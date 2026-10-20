@@ -10,7 +10,6 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.api.skin.SkinError;
-import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -36,26 +35,26 @@ public final class ServerLibraries {
         return o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsString() : null;
     }
 
-    // ---- 内容库(人设、模型档案、技能、接进来的 MCP 服务器)共有的几项 ----
+    // ---- 内容库(人设、模型档案、技能、声线、接进来的 MCP 服务器)共有的几项 ----
 
     /**
-     * 一行内容库条目共有的几项:内置还是我的、玩家有没有把它关掉、另一组有没有同名的、内置的和 jar 的关系
-     * (改过没有、有没有新版、来源卸载了没有)。
+     * 一行内容库条目共有的几项:服务器提供的还是我的、玩家有没有把它关掉、另一组有没有同名的、是不是 jar 自带的、它和 jar 的关系
+     * (改过没有、有没有新版、来源卸载了没有)。房主只有"我的"一组:他看到的行没有一行是 {@code server}。
      *
      * @param id 库里的名字({@code 命名空间:名字})
      */
-    public record Base(String id, String name, boolean builtin, boolean enabled, boolean paired, boolean modified,
-                       boolean update, boolean gone) {}
+    public record Base(String id, String name, boolean server, boolean enabled, boolean paired, boolean shipped,
+                       boolean modified, boolean update, boolean gone) {}
 
-    /** 叠起来之后算数的:内置的被我的同名盖着时,内置那一行不算。 */
+    /** 叠起来之后算数的:服务器提供的被我的同名盖着时,服务器提供的那一行不算。 */
     private static boolean effective(Base b) {
-        return !(b.builtin() && b.paired());
+        return !(b.server() && b.paired());
     }
 
     private static Base base(JsonObject o) {
-        return new Base(text(o, "id"), text(o, "name"), "builtin".equals(text(o, "group")),
-                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "modified"),
-                flag(o, "update"), flag(o, "gone"));
+        return new Base(text(o, "id"), text(o, "name"), "server".equals(text(o, "group")),
+                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "shipped"),
+                flag(o, "modified"), flag(o, "update"), flag(o, "gone"));
     }
 
     private static boolean flag(JsonObject o, String key) {
@@ -75,7 +74,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Persona> personas() {
         List<Persona> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.PERSONA)) {
@@ -102,8 +101,8 @@ public final class ServerLibraries {
     // ---- 模型档案 ----
 
     /**
-     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看内置的、人人看自己的;
-     * 别人看内置的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
+     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看服务器提供的、人人看自己的;
+     * 别人看服务器提供的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
      */
     public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, String keySource) {
 
@@ -126,7 +125,7 @@ public final class ServerLibraries {
         for (JsonElement e : entries(Libraries.PROVIDER)) {
             JsonObject o = e.getAsJsonObject();
             Base base = base(o);
-            boolean visible = admin || !base.builtin();
+            boolean visible = admin || !base.server();
             out.add(new Provider(base, text(o, "provider"), text(o, "model"),
                     visible && !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
                             ProviderLibrary.profileFromJson(o)) : null,
@@ -166,6 +165,22 @@ public final class ServerLibraries {
     public static String serverKey(String service) {
         return keys().stream().filter(k -> k.service().equals(service)).map(KeyRow::server)
                 .filter(java.util.Objects::nonNull).findFirst().orElse("");
+    }
+
+    /**
+     * key 按服务商存进钥匙串(不进条目);和已存的不同才发。服主的({@code server})只有管理员能改,房主没有"服主的"之分。
+     */
+    public static void saveKey(String service, String key, boolean server) {
+        String typed = key == null ? "" : key.strip();
+        String stored = server ? serverKey(service) : mineKey(service);
+        if (service == null || service.isBlank() || typed.equals(stored)) {
+            return;
+        }
+        JsonObject body = new JsonObject();
+        body.addProperty("service", service);
+        body.addProperty("key", typed);
+        body.addProperty("scope", server ? "server" : "mine");
+        RemoteCompanions.library().request(Libraries.KEY, Libraries.PUT, body);
     }
 
     /** 答复里带的提醒({@link Libraries#NOTICE_OWNER_SEES_KEY});没有是 null。 */
@@ -304,7 +319,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Skill> skills() {
         List<Skill> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.SKILL)) {
@@ -333,7 +348,7 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后。 */
+    /** 服务器提供的在前,我的在后。 */
     public static List<Voice> voices() {
         List<Voice> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.VOICE)) {
@@ -360,17 +375,8 @@ public final class ServerLibraries {
 
     // ---- 皮肤 ----
 
-    /** {@code png} 是原图;借来的正版皮肤取不到图时是空数组。读不通的条目 {@code variant} 为 {@code null}。 */
-    public record Skin(Base base, String variant, boolean signed, byte[] png) {
-
-        public String id() {
-            return base.id();
-        }
-
-        public String name() {
-            return base.name();
-        }
-    }
+    /** 服务器皮肤文件夹里的一张图;图不能当皮肤用时 {@code png} 是空数组、{@code problem} 说为什么。 */
+    public record ServerSkin(String name, byte[] png, SkinError problem) {}
 
     /** 一张在服务端队里等签的,或刚失败的;失败的 {@code failure} 非空,排着的 {@code position} 是排第几。 */
     public record SkinJob(long job, String name, String state, int position, SkinError failure) {
@@ -380,22 +386,16 @@ public final class ServerLibraries {
         }
     }
 
-    /** 内置的在前,我的在后;不含排队中的({@link #skinJobs})。 */
-    public static List<Skin> skins() {
-        List<Skin> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.SKIN)) {
+    /** 服务器皮肤文件夹里的全部(服务端推来的最近一张表);房主没有这一节。 */
+    public static List<ServerSkin> serverSkins() {
+        List<ServerSkin> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SKIN_FILES)) {
             JsonObject o = e.getAsJsonObject();
-            if (!flag(o, "pending")) {
-                out.add(new Skin(base(o), flag(o, "unreadable") ? null : text(o, "variant"), flag(o, "signed"),
-                        o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0]));
-            }
+            out.add(new ServerSkin(text(o, "name"),
+                    o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0],
+                    o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
         }
         return out;
-    }
-
-    /** 选皮肤时能选的:叠起来之后算数的、没被玩家关掉的、签过名的。 */
-    public static List<Skin> skinsInUse() {
-        return skins().stream().filter(s -> effective(s.base()) && s.base().enabled() && s.signed()).toList();
     }
 
     /** 这位玩家在服务端队里的与刚失败的。 */
@@ -403,19 +403,16 @@ public final class ServerLibraries {
         List<SkinJob> out = new ArrayList<>();
         for (JsonElement e : entries(Libraries.SKIN)) {
             JsonObject o = e.getAsJsonObject();
-            if (flag(o, "pending")) {
-                SkinError failure = null;
-                if (o.has("problem")) {
-                    JsonObject p = o.getAsJsonObject("problem");
-                    List<String> args = new ArrayList<>();
-                    p.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
-                    failure = SkinError.of(text(p, "code"), args);
-                }
-                out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
-                        o.get("position").getAsInt(), failure));
-            }
+            out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
+                    o.get("position").getAsInt(), o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
         }
         return out;
+    }
+
+    private static SkinError skinError(JsonObject problem) {
+        List<String> args = new ArrayList<>();
+        problem.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
+        return SkinError.of(text(problem, "code"), args);
     }
 
     // ---- 偏好 ----
@@ -440,7 +437,7 @@ public final class ServerLibraries {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看内置的、人人看自己的,别人看内置的只有名字、连没连上、
+     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看服务器提供的、人人看自己的,别人看服务器提供的只有名字、连没连上、
      * 工具数。{@code connect} 是条目主人的"连不连",{@code base.enabled} 是玩家自己的开关(只管他的同伴看不看得到它的工具)。
      */
     public record McpClientRow(Base base, boolean connect, boolean connected, int toolCount,

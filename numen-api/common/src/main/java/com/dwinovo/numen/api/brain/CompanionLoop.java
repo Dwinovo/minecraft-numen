@@ -111,6 +111,8 @@ public final class CompanionLoop {
     private static final String STATS = "stats.json";
     private static final String GOAL = "goal.json";
     private static final String BINDING = "binding.json";
+    /** 绑定文件里穿的皮肤那一项。 */
+    private static final String SKIN = "skin";
 
     private final Parts parts;
     private final UUID companion;
@@ -143,8 +145,8 @@ public final class CompanionLoop {
     private String personaId;
     /** 绑定的声线 id;{@code null} = 不出声。声线定义在库里,朗读在主人的客户端。 */
     private String voiceId;
-    /** 绑定的皮肤 id;{@code null} = 默认皮肤。穿在身上的签名数据在名册里,这里记的是库里的哪一条。 */
-    private String skinId;
+    /** 穿着的皮肤:签名缓存里的键({@code SkinRef} 的文字写法);{@code null} = 默认皮肤。穿在身上的签名数据在名册里,这里记的是哪一张。 */
+    private String skin;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
     /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。主线程上读写。 */
@@ -188,6 +190,7 @@ public final class CompanionLoop {
             for (Slot slot : Slot.values()) {
                 set(slot, text(binding, slot.wire()));
             }
+            skin = text(binding, SKIN);
         }
         tokens.load();
         log.migrateIfNeeded();
@@ -232,7 +235,7 @@ public final class CompanionLoop {
     }
 
     private void persistBinding() {
-        if (providerId == null && personaId == null && voiceId == null && skinId == null) {
+        if (providerId == null && personaId == null && voiceId == null && skin == null) {
             bindingDoc.delete();
             return;
         }
@@ -241,6 +244,9 @@ public final class CompanionLoop {
             if (bound(slot) != null) {
                 o.addProperty(slot.wire(), bound(slot));
             }
+        }
+        if (skin != null) {
+            o.addProperty(SKIN, skin);
         }
         bindingDoc.write(o);
     }
@@ -271,7 +277,7 @@ public final class CompanionLoop {
                 status.activity(), status.compactProgress(), status.queuedPreview(), compactProblem(), clearProblem(),
                 goal == null ? null : goal.toJson(), tokens.total(), tokens.sum(), tokens.latest(),
                 tokens.waste().missedTokens(), tokens.waste().missCount(), contextPercent(), modelWindow(),
-                personaId, providerId, voiceId, skinId, conversation, tools.outstanding(), convo.snapshot().size());
+                personaId, providerId, voiceId, skin, conversation, tools.outstanding(), convo.snapshot().size());
     }
 
     /** 她的对话日志:面板按 id 往前翻它。 */
@@ -320,7 +326,6 @@ public final class CompanionLoop {
             case PROVIDER -> providerId;
             case PERSONA -> personaId;
             case VOICE -> voiceId;
-            case SKIN -> skinId;
         };
     }
 
@@ -661,7 +666,7 @@ public final class CompanionLoop {
      *   <li>模型档案:下一次请求生效;因端点不可用停着的会再试一次;</li>
      *   <li>人设:下一轮系统提示现取正文,不打断在飞的请求,再往聊天流插一条分隔记号。不给模型注入"从现在起你是…"的和解消息——
      *       新系统提示本身就是最强的指令;</li>
-     *   <li>声线、皮肤:界面读状态,客户端据此朗读。</li>
+     *   <li>声线:界面读状态,客户端据此朗读。</li>
      * </ul>
      */
     public void bind(Slot slot, String entryId) {
@@ -677,8 +682,18 @@ public final class CompanionLoop {
                     log.appendPersonaDivider();
                 }
             }
-            case VOICE, SKIN -> { }
+            case VOICE -> { }
         }
+    }
+
+    /**
+     * 记下她穿的是签名缓存里的哪一张({@code null} = 脱掉,回到默认皮肤),落盘在她的家里。皮肤穿到身上是 {@code Wardrobe} 的事,
+     * 这里只记"穿的是哪一张";界面读状态,拿本机文件夹里图片的哈希对一对,就知道她穿的是不是这一张。
+     */
+    public void wearSkin(String ref) {
+        skin = ref == null || ref.isBlank() ? null : ref;
+        persistBinding();
+        Constants.LOG.info("[numen-entity#{}] skin set to {}", companion, skin == null ? "(none)" : skin);
     }
 
     private void set(Slot slot, String id) {
@@ -686,7 +701,6 @@ public final class CompanionLoop {
             case PROVIDER -> providerId = id;
             case PERSONA -> personaId = id;
             case VOICE -> voiceId = id;
-            case SKIN -> skinId = id;
         }
     }
 

@@ -858,7 +858,7 @@ public final class GameTestKit {
     /** 往这次 GameTest 专用的服务器目录里放一个内置模块(夹具),和 jar 同步下来的内置模块在同一处。 */
     public static void builtinModule(String name, String code) {
         int dot = name.indexOf('.');
-        libraries().builtin(com.dwinovo.numen.api.script.Modules.KIND)
+        libraries().server(com.dwinovo.numen.api.script.Modules.KIND)
                 .write(new com.dwinovo.numen.api.library.EntryId(name.substring(0, dot), name.substring(dot + 1)), code);
     }
 

@@ -278,6 +278,8 @@ public final class NumenScreen extends Screen {
     private final com.dwinovo.numen.api.client.ui.widget.DialogBox cardBox =
             new com.dwinovo.numen.api.client.ui.widget.DialogBox();
     private CompanionEditPanel editPanel;
+    /** 选皮肤卡(NumenUI):从编辑卡的皮肤行点开,见 SkinPickerPanel。 */
+    private SkinPickerPanel skinPanel;
     private ConversationEditPanel convEditPanel;
     private InvitePanel invitePanel;
     /** 屏幕级浮层根:承载遣散/解散的确认卡;浮层在场时背景全屏蔽。 */
@@ -770,6 +772,13 @@ public final class NumenScreen extends Screen {
         return editPanel;
     }
 
+    private SkinPickerPanel skinPanel() {
+        if (skinPanel == null) {
+            skinPanel = new SkinPickerPanel(new SkinHost());
+        }
+        return skinPanel;
+    }
+
     private ConversationEditPanel convEditPanel() {
         if (convEditPanel == null) {
             convEditPanel = new ConversationEditPanel(new ConvEditHost());
@@ -862,6 +871,19 @@ public final class NumenScreen extends Screen {
     /** 编辑卡对着哪只:抬头菜单开的是就他俩那只,资料页开的是页上那只(群成员也一样)。 */
     private UUID editTarget;
 
+    /** 选皮肤卡的宿主面:对着编辑卡正在改的那只,关卡。 */
+    private final class SkinHost implements SkinPickerPanel.Host {
+        @Override public UUID uuid() { return editTarget; }
+
+        @Override public String name() {
+            return editTarget == null ? "?" : nameFor(editTarget);
+        }
+
+        @Override public void onClose() {
+            closeCard();
+        }
+    }
+
     private final class EditHost implements CompanionEditPanel.Host {
         @Override public UUID uuid() { return editTarget; }
 
@@ -877,6 +899,10 @@ public final class NumenScreen extends Screen {
             // 与服务端 applyGameMode 的门同一判据:有 gamemode 权限,或主人本人在创造。
             return minecraft != null && minecraft.player != null
                     && (minecraft.player.hasPermissions(2) || minecraft.player.isCreative());
+        }
+
+        @Override public void openSkins() {
+            openCard(skinPanel());
         }
 
         @Override public boolean currentCreative() {
@@ -1432,12 +1458,6 @@ public final class NumenScreen extends Screen {
                 && my >= top + 3 && my < top + HEADER_H - 2;
     }
     private int nameRight;
-
-    /** 皮肤 png 从系统拖进游戏窗口——皮肤表单打开时由 SettingsView 接住。 */
-    @Override
-    public void onFilesDrop(List<java.nio.file.Path> paths) {
-        if (tab == Tab.SETTINGS) settings.onFilesDrop(paths);
-    }
 
     /** BlockFrame workspace chrome, drawn procedurally from the CURRENT theme — border frame,
      *  rail column, header band + underline, panel ground with the 16px dot grid. Replaces the

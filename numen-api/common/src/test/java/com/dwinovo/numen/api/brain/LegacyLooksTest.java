@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.brain;
 
-import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.skin.SkinCache;
+import com.dwinovo.numen.api.skin.SkinRef;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.dwinovo.numen.api.voice.VoiceProfile;
@@ -20,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 旧的声线库、皮肤库、looks.json 搬进新布局:复制不移动、只做一次、key 进本机钥匙串、同伴的选择改写成新名字。 */
+/** 旧的声线库、皮肤库、looks.json 搬进新布局:复制不移动(旧皮肤的 skin.json 搬完改名)、只做一次、key 进本机钥匙串、同伴的选择改写成新名字。 */
 class LegacyLooksTest {
 
     private static final UUID HER = UUID.fromString("44444444-4444-4444-4444-444444444444");
@@ -78,7 +80,7 @@ class LegacyLooksTest {
     }
 
     @Test
-    void oldSkinsKeepTheirSignatureAndTheirImage(@TempDir Path dir) throws IOException {
+    void oldSkinsBecomePngsInTheFolderAndSignedOnesGoIntoTheCache(@TempDir Path dir) throws IOException {
         Path old = dir.resolve("client").resolve("skin.json");
         JsonObject signed = new JsonObject();
         signed.addProperty("id", "skin_1");
@@ -91,17 +93,24 @@ class LegacyLooksTest {
         unsigned.addProperty("name", "没签成");
         write(old, library(signed, unsigned));
         Files.createDirectories(dir.resolve("client").resolve("skins"));
-        Files.write(dir.resolve("client").resolve("skins").resolve("skin_1.png"), new byte[] {9, 8, 7});
-        Path mine = dir.resolve("players").resolve("host").resolve("skin").resolve("my");
+        byte[] png = {9, 8, 7};
+        Files.write(dir.resolve("client").resolve("skins").resolve("skin_1.png"), png);
+        Files.write(dir.resolve("client").resolve("skins").resolve("skin_2.png"), new byte[] {1});
+        Path folder = dir.resolve("skins");
+        SkinCache cache = new SkinCache(new Home(dir.resolve("server"), Io.direct(e -> {
+            throw e;
+        })));
 
-        Map<String, String> ids = LegacyLooks.skins(old, dir.resolve("client").resolve("skins"), mine);
+        Map<String, String> ids = LegacyLooks.skins(old, dir.resolve("client").resolve("skins"), folder, cache);
 
-        assertEquals(Map.of("skin_1", "my:小红", "skin_2", "my:没签成"), ids);
-        SkinProfile red = SkinProfile.read(Files.readString(mine.resolve("小红.json")));
-        assertEquals("slim", red.variant());
-        assertEquals("v", red.value());
-        assertEquals(3, red.png().length);
-        assertFalse(SkinProfile.read(Files.readString(mine.resolve("没签成.json"))).signed());
+        SkinRef ref = SkinRef.of(png, "slim");
+        assertEquals(Map.of("skin_1", ref.toString()), ids, "没签成的没有可穿的引用");
+        assertEquals("v", cache.find(ref).value());
+        assertEquals(3, Files.readAllBytes(folder.resolve("小红.png")).length);
+        assertEquals(1, Files.readAllBytes(folder.resolve("没签成.png")).length, "没签成的图也成了文件夹里的一张");
+        assertFalse(Files.exists(old), "搬完旧文件改了名,不再从它冒出东西");
+        assertTrue(Files.exists(dir.resolve("client").resolve("skin.json.migrated")));
+        assertEquals(Map.of(), LegacyLooks.skins(old, dir.resolve("client").resolve("skins"), folder, cache), "只做一次");
     }
 
     @Test
@@ -122,7 +131,7 @@ class LegacyLooksTest {
         write(binding, existing);
 
         int changed = LegacyLooks.bindings(looksFile, dir.resolve("companions"), Map.of(HER, binding),
-                Map.of("voice_1", "my:派蒙"), Map.of("skin_9", "my:小红"));
+                Map.of("voice_1", "my:派蒙"), Map.of("skin_9", SkinRef.of(new byte[] {1}, "classic").toString()));
 
         JsonObject after = new JsonDoc(binding, JsonDoc.Format.of(1), Io.direct(e -> {
             throw e;

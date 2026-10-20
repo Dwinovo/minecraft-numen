@@ -499,12 +499,12 @@ public class BrainGameTests {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
         helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
         var builtin = com.dwinovo.numen.api.library.LibraryHub.of(helper.getLevel().getServer())
-                .builtin(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
+                .server(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
         int before = builtin.items().size();
         GameTestKit.received(player);
 
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"偷偷加的\",\"group\":\"builtin\",\"provider\":\"openai\"}");
+                "{\"name\":\"偷偷加的\",\"group\":\"server\",\"provider\":\"openai\"}");
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
                 "{\"proxy\":\"evil:1\"}");
 
@@ -716,10 +716,10 @@ public class BrainGameTests {
 
     /**
      * 召唤只要名字,不设前提:她有服务端大脑,可是还没绑档案,主人跟她说话时她停在 BLOCKED、原因是"还没配模型档案";
-     * 档案、人设、声线、皮肤是召唤之后经同一个入口绑上的,四项都记进她的绑定、穿上的皮肤落在名册里。
+     * 档案、人设、声线是召唤之后经同一个入口绑上的,三项都记进她的绑定。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void summoning_takes_only_a_name_and_the_four_bindings_come_afterwards(GameTestHelper helper)
+    public static void summoning_takes_only_a_name_and_the_three_bindings_come_afterwards(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_summoner");
@@ -751,20 +751,15 @@ public class BrainGameTests {
             hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().write(voiceId,
                     new com.dwinovo.numen.api.voice.VoiceProfile("", "openai", "", "", "m", "alex", "", "", "", 1f)
                             .write());
-            var skinId = com.dwinovo.numen.api.library.EntryId.mine("gametest_skin");
-            hub.library(com.dwinovo.numen.api.skin.SkinProfile.KIND, owner.getUUID()).mine().write(skinId,
-                    new com.dwinovo.numen.api.skin.SkinProfile("classic", "gametest-value", "gametest-sig", null).write());
 
             var slots = com.dwinovo.numen.api.brain.Slot.values();
-            String[] entries = {profile.id(), persona.id(), voiceId.toString(), skinId.toString()};
+            String[] entries = {profile.id(), persona.id(), voiceId.toString()};
             for (int i = 0; i < slots.length; i++) {
                 var applied = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
                         new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(), slots[i], entries[i]));
                 helper.assertTrue(applied.problem() == null, slots[i] + " was refused: " + applied.problem());
                 helper.assertTrue(entries[i].equals(brain.get().bound(slots[i])), slots[i] + " not bound");
             }
-            helper.assertTrue("gametest-value".equals(CompanionRegistry.get(server).find(born.getUUID()).skinValue()),
-                    "the skin was not put on her");
             var refused = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
                     new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(),
                             com.dwinovo.numen.api.brain.Slot.VOICE, "my:nowhere"));
@@ -772,64 +767,15 @@ public class BrainGameTests {
             helper.assertTrue(voiceId.toString().equals(brain.get().bound(com.dwinovo.numen.api.brain.Slot.VOICE)),
                     "a refused bind changed her voice");
 
-            var unbound = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
-                    new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(),
-                            com.dwinovo.numen.api.brain.Slot.SKIN, null));
-            helper.assertTrue(unbound.problem() == null && brain.get().bound(com.dwinovo.numen.api.brain.Slot.SKIN) == null
-                    && CompanionRegistry.get(server).find(born.getUUID()).skinValue().isEmpty(), "unbinding the skin");
-
             com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
             profiles.remove(profile.id());
             com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
             hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().delete(voiceId);
-            hub.library(com.dwinovo.numen.api.skin.SkinProfile.KIND, owner.getUUID()).mine().delete(skinId);
             GameTestKit.leave(owner);
             helper.succeed();
         });
     }
 
-    /**
-     * 内置皮肤是所有人共用的:两位主人名下的同伴都穿着同一条,管理员改了它,两只身上都换成新的——绑定与身体只认库里这一条。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void changing_a_builtin_skin_re_dresses_everyone_wearing_it(GameTestHelper helper) throws Exception {
-        var server = helper.getLevel().getServer();
-        UUID ownerA = UUID.randomUUID();
-        UUID ownerB = UUID.randomUUID();
-        Brain a = new Brain(helper, "gametest_wearer_a", Files.createTempDirectory("numen-gametest-brain-"), ownerA);
-        Brain b = new Brain(helper, "gametest_wearer_b", Files.createTempDirectory("numen-gametest-brain-"), ownerB);
-        var shelf = com.dwinovo.numen.api.library.LibraryHub.of(server)
-                .builtin(com.dwinovo.numen.api.skin.SkinProfile.KIND);
-        var id = new com.dwinovo.numen.api.library.EntryId("server", "gametest_shared");
-        shelf.write(id, new com.dwinovo.numen.api.skin.SkinProfile("classic", "shared-v1", "sig", null).write());
-        var slot = com.dwinovo.numen.api.brain.Slot.SKIN;
-        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBinding.apply(server, ownerA, a.companion.getUUID(), slot,
-                id.toString()) == null, "the first wearer was refused");
-        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBinding.apply(server, ownerB, b.companion.getUUID(), slot,
-                id.toString()) == null, "the second wearer was refused");
-        var registry = CompanionRegistry.get(server);
-        helper.assertTrue("shared-v1".equals(registry.find(a.companion.getUUID()).skinValue())
-                && "shared-v1".equals(registry.find(b.companion.getUUID()).skinValue()), "they do not wear it yet");
-
-        shelf.write(id, new com.dwinovo.numen.api.skin.SkinProfile("classic", "shared-v2", "sig", null).write());
-        com.dwinovo.numen.api.brain.CompanionBinding.skinChanged(server, UUID.randomUUID(), true, id.toString());
-
-        helper.assertTrue("shared-v2".equals(registry.find(a.companion.getUUID()).skinValue()), "the first still wears the old one");
-        helper.assertTrue("shared-v2".equals(registry.find(b.companion.getUUID()).skinValue()),
-                "someone else's companion still wears the old one");
-        for (Brain her : List.of(a, b)) {
-            CompanionLoops.dismissed(server, her.companion.getUUID());
-            NumenPlayer live = NumenPlayer.findByUuid(server, her.companion.getUUID());
-            if (live != null) {
-                CompanionFactory.despawn(server, live);
-            }
-            registry.remove(her.companion.getUUID());
-        }
-        shelf.delete(id);
-        helper.succeed();
-    }
-
-    /** 每人最多几只是服主在 server.json 里设的;再召唤自己已有的同名同伴是叫醒她,不占名额。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void the_summon_limit_comes_from_the_server_settings(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
@@ -924,7 +870,7 @@ public class BrainGameTests {
         GameTestKit.received(other);
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"gametest_admin_profile\",\"group\":\"builtin\",\"provider\":\"openai\"}");
+                "{\"name\":\"gametest_admin_profile\",\"group\":\"server\",\"provider\":\"openai\"}");
 
         var told = GameTestKit.received(admin);
         var heard = GameTestKit.received(other);
@@ -948,7 +894,7 @@ public class BrainGameTests {
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.KEY, "put",
                 "{\"service\":\"openai\",\"key\":\"\",\"scope\":\"server\"}");
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "delete",
-                "{\"id\":\"server:gametest_admin_profile\",\"group\":\"builtin\"}");
+                "{\"id\":\"server:gametest_admin_profile\",\"group\":\"server\"}");
         server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(other);
         GameTestKit.leave(admin);
@@ -961,7 +907,7 @@ public class BrainGameTests {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
         String skill = com.dwinovo.numen.api.library.LibraryHub.of(server)
-                .builtin(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
+                .server(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
         String body = "{\"id\":\"" + skill + "\"}";
         GameTestKit.received(admin);
 
@@ -983,7 +929,7 @@ public class BrainGameTests {
                     && com.dwinovo.numen.api.brain.Libraries.SKILL.equals(table.kind())) {
                 for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
                     var o = row.getAsJsonObject();
-                    if (skill.equals(o.get("id").getAsString()) && "builtin".equals(o.get("group").getAsString())) {
+                    if (skill.equals(o.get("id").getAsString()) && "server".equals(o.get("group").getAsString())) {
                         return o.get("enabled").getAsBoolean();
                     }
                 }

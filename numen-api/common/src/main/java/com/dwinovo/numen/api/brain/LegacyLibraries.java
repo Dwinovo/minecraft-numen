@@ -39,9 +39,9 @@ import java.util.stream.Stream;
  * <b>只做一次</b>(目标在了就是迁过了),<b>可重来</b>(先放进暂存再整个改名)。
  *
  * <ul>
- *   <li>旧的模型档案是服主的,进内置组({@code server/provider/server/}),key 按厂家进服主的钥匙串;
+ *   <li>旧的模型档案是服主的,进服务器目录({@code server/provider/server/}),key 按厂家进服主的钥匙串;
  *       同一个厂家有几把不同的 key,留第一把;</li>
- *   <li>旧的人设与技能、改过的模块是房主自己的,进他的"我的"({@code my} 命名空间)。和随 Numen 发的内置一模一样的不搬
+ *   <li>旧的人设与技能是房主自己的,进他的"我的"({@code my} 命名空间,房主的"我的"在服务器目录里);改过的模块进他个人目录的模块库。和随 Numen 发的自带内容一模一样的不搬
  *       (旧版把示例人设与出厂模块都装成了文件);</li>
  *   <li>旧版"删掉的出厂模块不再装回",现在是房主对它的开关;旧版全局的技能开关,现在是房主的开关;</li>
  *   <li>同伴的绑定里记的档案、人设的 id 随之换成新的({@code 命名空间:名字}),返回的对照表给 {@link #bindings} 用。</li>
@@ -54,7 +54,7 @@ public final class LegacyLibraries {
     // ==================== 模型档案 ====================
 
     /**
-     * 旧的 {@code providers.json} → 内置组里一人一档案,key 进服主的钥匙串。
+     * 旧的 {@code providers.json} → 服务器目录里一人一档案,key 进服主的钥匙串。
      *
      * @param serverDir 服务器目录 {@code config/numen/server/}
      * @return 旧档案的 id → 新 id;没有旧文件是空表。目标已经在时也算得出同一张对照表(绑定还要用)
@@ -156,11 +156,11 @@ public final class LegacyLibraries {
     // ==================== 人设 ====================
 
     /**
-     * 平铺的人设目录({@code *.md})→ 房主的"我的"。和随 Numen 发的内置一模一样的不搬,绑定改指内置。
+     * 平铺的人设目录({@code *.md})→ 房主的"我的"(在服务器目录里)。和随 Numen 发的自带人设一模一样的不搬,绑定改指自带的。
      *
      * @param flat      旧的人设目录
-     * @param hostMy    房主的 {@code persona/my/}
-     * @param serverDir 服务器目录(内置在 {@code persona/<命名空间>/})
+     * @param hostMy    房主的 {@code persona/my/},在服务器目录下
+     * @param serverDir 服务器目录(自带的在 {@code persona/<命名空间>/})
      * @return 旧人设名 → 新 id
      */
     public static Map<String, String> personas(Path flat, Path hostMy, Path serverDir) {
@@ -192,7 +192,7 @@ public final class LegacyLibraries {
         return ids;
     }
 
-    /** 内置里同名且内容一模一样的那一份的命名空间;没有是 null。 */
+    /** 服务器目录里同名且内容一模一样的那一份的命名空间;没有是 null。 */
     private static String builtinWithSameText(Path libraryDir, String fileName, Path legacyFile) {
         if (!Files.isDirectory(libraryDir)) {
             return null;
@@ -214,10 +214,10 @@ public final class LegacyLibraries {
     // ==================== Lua 模块 ====================
 
     /**
-     * 旧的模块目录({@code <命名空间>/<组>.lua} 加账本)→ 房主的 {@code modules/}。旧版把出厂模块都装成了文件:和内置一模一样的
-     * 不搬(它们现在就是内置);改过的和她自己的搬;账本整份搬。出厂的她删过的(账本记着、文件没了),现在是房主对它的开关。
+     * 旧的模块目录({@code <命名空间>/<组>.lua} 加账本)→ 房主的 {@code modules/}。旧版把出厂模块都装成了文件:和自带的一模一样的
+     * 不搬(它们现在就是服务器目录里自带的);改过的和她自己的搬;账本整份搬。出厂的她删过的(账本记着、文件没了),现在是房主对它的开关。
      *
-     * @param serverDir 服务器目录(内置在 {@code modules/<命名空间>/})
+     * @param serverDir 服务器目录(自带的在 {@code modules/<命名空间>/})
      */
     public static void modules(Path legacy, Path hostModules, Path serverDir, Switches hostSwitches) {
         if (!Files.isDirectory(legacy)) {
@@ -272,13 +272,13 @@ public final class LegacyLibraries {
     // ==================== 技能 ====================
 
     /**
-     * 旧的技能目录({@code skills/<技能>/SKILL.md},玩家自己放的)→ 房主的 {@code skills/my/}。旧的全局开关(按技能名记的)
+     * 旧的技能目录({@code skills/<技能>/SKILL.md},玩家自己放的)→ 房主的 {@code skills/my/}(在服务器目录里)。旧的全局开关(按技能名记的)
      * 换成房主按库里名字记的开关。
      *
      * @param legacySkills 旧的 {@code config/numen/skills}
      * @param legacyState  旧的 {@code config/numen/skills_state.json}
-     * @param hostMy       房主的 {@code skills/my/}
-     * @param serverSkills 服务器目录里内置的 {@code skills/}
+     * @param hostMy       房主的 {@code skills/my/}(房主的"我的"在服务器目录里,所以通常就在 {@code serverSkills} 下)
+     * @param serverSkills 服务器目录里的 {@code skills/}
      */
     public static void skills(Path legacySkills, Path legacyState, Path hostMy, Path serverSkills, Switches hostSwitches) {
         LegacyMigration.tree(legacySkills, hostMy);
@@ -293,7 +293,8 @@ public final class LegacyLibraries {
         }
         Set<String> off = new HashSet<>();
         names.forEach(n -> off.add(n.getAsString()));
-        for (Path root : List.of(serverSkills, hostMy.getParent())) {
+        // 房主的"我的"就在服务器目录里时两个根是同一个
+        for (Path root : new java.util.LinkedHashSet<>(List.of(serverSkills, hostMy.getParent()))) {
             if (!Files.isDirectory(root)) {
                 continue;
             }
@@ -317,7 +318,7 @@ public final class LegacyLibraries {
 
     // ==================== 接进来的 MCP 服务器 ====================
 
-    /** 旧的 {@code mcp_clients.json}(一份配置、里面一串服务器)→ 内置组里一台一个文件;总开关关着的,每台都写成不连。 */
+    /** 旧的 {@code mcp_clients.json}(一份配置、里面一串服务器)→ 服务器目录里一台一个文件;总开关关着的,每台都写成不连。 */
     public static void mcp(Path legacyFile, Path serverMcp) {
         if (!Files.isRegularFile(legacyFile)) {
             return;

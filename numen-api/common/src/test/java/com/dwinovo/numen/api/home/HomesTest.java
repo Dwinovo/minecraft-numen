@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HomesTest {
 
@@ -17,7 +18,7 @@ class HomesTest {
     private static final UUID HIM = UUID.randomUUID();
 
     private final Homes homes = new Homes(Path.of("save", "numen"), Path.of("config", "numen"),
-            new Lanes(Runnable::run, e -> { }));
+            new Lanes(Runnable::run, e -> { }), HIM);
 
     @Test
     void herThingsLiveInTheWorldAndTheOwnersLibrariesLiveOnTheServer() {
@@ -33,6 +34,14 @@ class HomesTest {
         assertEquals(Path.of("config", "numen", "players", HIM.toString(), "keys"), homes.owner(HIM).file("keys"),
                 "玩家的钥匙串在他自己的根下");
         assertFalse(homes.server().dir().equals(homes.owner(HIM).dir().getParent()), "服务器的根不是玩家们的根");
+    }
+
+    @Test
+    void onlyTheHostIsTheServerAndADedicatedServerHasNoHost() {
+        assertTrue(homes.isHost(HIM));
+        assertFalse(homes.isHost(HER));
+        assertFalse(new Homes(Path.of("save", "numen"), Path.of("config", "numen"), new Lanes(Runnable::run, e -> { }), null)
+                .isHost(HIM), "专用服务器没有房主");
     }
 
     @Test

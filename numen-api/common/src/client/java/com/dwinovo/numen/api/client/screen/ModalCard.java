@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.Button;
+import com.dwinovo.numen.api.client.ui.widget.ChoiceRow;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.client.ui.widget.Label;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.function.IntConsumer;
 
 /**
- * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、改会话名
+ * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、选皮肤({@link SkinPickerPanel})、改会话名
  * ({@link ConversationEditPanel})、邀请({@link InvitePanel})、分组({@link FolderEditPanel})。屏幕只认这一个面,暗幕、居中、
  * 出没动效({@link DialogBox})、事件转发都只写一份。
  *
@@ -140,6 +141,13 @@ abstract class ModalCard {
         Dropdown d = ui.add(new Dropdown(items, selected, onSelect).row(label, DialogBox.PAD_X - 1));
         d.setBounds(x + 1, ry, w - 2, ROW_H);   // 贴着卡的描边里面,悬停浅底铺满整行
         return d;
+    }
+
+    /** 选择行,点了去别处选(开另一张卡):整卡宽,从 {@code ry} 起一行,右边写当前的值。 */
+    protected ChoiceRow choice(int ry, String label, String value, Runnable onClick) {
+        ChoiceRow row = ui.add(new ChoiceRow(label, value, DialogBox.PAD_X - 1, onClick));
+        row.setBounds(x + 1, ry, w - 2, ROW_H);
+        return row;
     }
 
     /** 右下一排纯字钮(摆法见 {@link DialogBox#placeButtons}):取消在左、主按钮在右。返回主按钮。 */

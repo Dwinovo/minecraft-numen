@@ -84,12 +84,12 @@ public final class ModelServices {
         return serverKeys;
     }
 
-    /** 这位玩家的钥匙串。 */
+    /** 这位玩家的钥匙串;房主的就是服主的那一本(他就是这台服务器,{@link Homes#isHost})。 */
     public Keychain ownerKeychain(UUID owner) {
-        return ownerKeys.computeIfAbsent(owner, id -> new Keychain(homes.owner(id)));
+        return homes.isHost(owner) ? serverKeys : ownerKeys.computeIfAbsent(owner, id -> new Keychain(homes.owner(id)));
     }
 
-    /** 这位玩家用 key 的顺序:先他自己的,再服主的。 */
+    /** 这位玩家用 key 的顺序:先他自己的,再服主的(房主两本是同一本)。 */
     public Keys keys(UUID owner) {
         return new Keys(ownerKeychain(owner), serverKeys);
     }

@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.keys.Keychain;
 import com.dwinovo.numen.api.keys.Keys;
 import com.dwinovo.numen.api.library.EntryId;
@@ -26,8 +27,9 @@ import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.SkinError;
-import com.dwinovo.numen.api.skin.SkinProfile;
+import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinSigning;
+import com.dwinovo.numen.api.skin.Wardrobe;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -46,20 +48,23 @@ import java.util.UUID;
  * 服务器上的库对主人客户端的读写口:列、存、删,每种库自己说谁能做什么——判据只在这一处,界面和工具里不再另写。
  *
  * <p><b>内容库</b>({@link #PERSONA}、{@link #PROVIDER}、{@link #SKILL},接进来的 MCP 工具见 {@link #MCP_CLIENT})都是
- * {@link Library}:玩家看到两组,<b>内置</b>(服务器目录里的,管理员能改)与<b>我的</b>(玩家目录里的,本人能改),同名时我的优先。
- * 同一套操作适用于它们:{@link #PUT}、{@link #DELETE}(带 {@code group: "builtin"} 的只有管理员能做)、{@link #COPY}(内置复制到我的)、
- * {@link #ENABLE}/{@link #DISABLE}(玩家只读内置,开关记在他自己的偏好里)、{@link #ACCEPT}/{@link #DISMISS}(管理员处理 jar 带来的新版)、{@link #RESTORE}(管理员把改过的内置丢掉改动、取回 jar 里的默认)、
- * {@link #RELOAD}(重扫目录)。每一行带 {@code group}、{@code enabled},内置的带"改过没有、有没有新版、来源卸载了没有"。
+ * {@link Library}:一位玩家的"我的"与"服务器提供"两组,同名时我的优先。归属只有一句话:<b>房主自己这台机器上的库,对房主是"我的",
+ * 对别人是"服务器提供"</b>——单人游戏与局域网开房的房主,他的"我的"就是服务器目录那一份,只有一节;专用服务器与来串门的玩家,
+ * "服务器提供"是服务器目录(管理员能改),"我的"是他自己的目录(本人能改)。判"是不是房主"只在 {@code Homes#isHost}。
+ * 同一套操作适用于它们:{@link #PUT}、{@link #DELETE}(带 {@code group: "server"} 的只有管理员能做)、{@link #COPY}(服务器提供的复制到我的)、
+ * {@link #ENABLE}/{@link #DISABLE}(玩家只读服务器提供的,开关记在他自己的偏好里)、{@link #ACCEPT}/{@link #DISMISS}(管理员处理 jar 带来的新版)、{@link #RESTORE}(管理员把改过的自带内容丢掉改动、取回 jar 里的默认)、
+ * {@link #RELOAD}(重扫目录)。每一行带 {@code group}、{@code enabled},服务器目录里的带"是不是 jar 自带的、改过没有、有没有新版、来源卸载了没有"。
  * <ul>
- *   <li><b>模型档案</b>:key 不在档案里。管理员看到内置档案的全貌;别人只看得到内置档案"叫什么、哪个厂家、哪个型号"——地址与代理在服务端
+ *   <li><b>模型档案</b>:key 不在档案里。管理员看到服务器提供的档案的全貌;别人只看得到服务器提供的档案"叫什么、哪个厂家、哪个型号"——地址与代理在服务端
  *       编码的这一处就没有;自己的档案是完整的;</li>
  *   <li><b>钥匙串</b>({@link #KEY}):按服务商存 key。玩家看得到、改得了自己的;服主的只有管理员看得到、改得了,别人只知道有没有;</li>
  *   <li><b>型号目录</b>({@link #CATALOG})与<b>连通性检测</b>({@link #PROVIDER_CHECK}):档案表单问的,目录、草稿解析成的端点、检测的那次请求
  *       都在服务端算({@link ProviderForm}),界面只画答案;</li>
- *   <li><b>声线</b>({@link #VOICE})与<b>皮肤</b>({@link #SKIN})也是内容库。声线条目是服务商、音色、参数,不含 key(key 在主人
- *       本机的钥匙串里,合成在他的客户端上);皮肤条目是原图与 Mojang 签名的皮肤数据,<b>签名在服务端排队</b>({@link SkinSigning}):
- *       存一张皮肤({@link #PUT} 带图、网址或正版玩家名)只是排上队,排到第几、被限流在等、失败的原因都作为这张表里的几行
- *       (带 {@code pending})交给他,签好了才成为一条皮肤;{@link #CANCEL} 撤掉排着的或不再显示失败的;</li>
+ *   <li><b>声线</b>({@link #VOICE})也是内容库:条目是服务商、音色、参数,不含 key(key 在主人本机的钥匙串里,合成在他的客户端上);</li>
+ *   <li><b>皮肤</b>({@link #SKIN})<b>不是内容库</b>:皮肤是文件夹里的 png。这一种只是给同伴换皮肤的口:表里是他在签名队里的几行,
+ *       服务器文件夹里的图是另一张只读的表({@link #SKIN_FILES},房主没有,他的文件夹客户端自己列);{@link #PUT} 带图(他本机文件夹里的)、服务器文件夹里的文件名、网址或
+ *       正版玩家名,图签过的当场穿上,没签过的在服务端排队去签({@link SkinSigning},用时才签、签一次存永久),排到第几、被限流在等、
+ *       失败的原因都作为表里的几行({@code row: "pending"})交给他;{@link #DELETE} 脱掉;{@link #CANCEL} 撤掉排着的或不再显示失败的;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
  *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
@@ -88,6 +93,8 @@ public final class Libraries {
     public static final String KEY = "key";
     public static final String VOICE = "voice";
     public static final String SKIN = "skin";
+    /** 服务器皮肤文件夹里的图:只读,客户端要看时才问(带着每张图,不随排队的进度一起推)。 */
+    public static final String SKIN_FILES = "skin-files";
     public static final String PERMISSION = "permission";
 
     public static final String LIST = "list";
@@ -95,18 +102,18 @@ public final class Libraries {
     public static final String DELETE = "delete";
     /** 内容库专有:重扫目录。 */
     public static final String RELOAD = "reload";
-    /** 内容库专有:把内置的一条原样复制到我的。 */
+    /** 内容库专有:把服务器提供的一条原样复制到我的。 */
     public static final String COPY = "copy";
     /** 内容库专有:玩家自己的开关(记在他的偏好里)。 */
     public static final String ENABLE = "enable";
     public static final String DISABLE = "disable";
-    /** MCP 服务器专有:条目主人的"连不连"(内置的只有管理员)。 */
+    /** MCP 服务器专有:条目主人的"连不连"(服务器提供的只有管理员)。 */
     public static final String CONNECT = "connect";
     public static final String DISCONNECT = "disconnect";
-    /** 内容库专有,管理员:jar 带来了新版而他改过内置时,采用新版(换掉他的)或不采用(这一版不再提示)。 */
+    /** 内容库专有,管理员:jar 带来了新版而他改过自带内容时,采用新版(换掉他的)或不采用(这一版不再提示)。 */
     public static final String ACCEPT = "accept";
     public static final String DISMISS = "dismiss";
-    /** 内容库专有,管理员:改过的内置条目丢掉改动,取回 jar 里的默认。 */
+    /** 内容库专有,管理员:改过的自带条目丢掉改动,取回 jar 里的默认。 */
     public static final String RESTORE = "restore";
     /** MCP 服务器专有:交回授权回调网址。 */
     public static final String AUTH = "auth";
@@ -121,8 +128,8 @@ public final class Libraries {
     /** 新建成功的答复里附的一行 {@code {"created": 新条目的 id}};改已有条目的答复不带。 */
     public static final String CREATED = "created";
 
-    /** 请求里选哪一组:缺省是我的;{@code "builtin"} 是内置(只有管理员)。 */
-    public static final String GROUP_BUILTIN = "builtin";
+    /** 请求里选哪一组:缺省是我的;{@code "server"} 是服务器提供(只有管理员)。 */
+    public static final String GROUP_SERVER = "server";
     public static final String GROUP_MINE = "mine";
 
     /** 多人服上玩家第一次存自己的 key 时,答复表里多一行 {@code {"notice": …}} 提醒他服主看得到这把 key。 */
@@ -144,7 +151,7 @@ public final class Libraries {
      * @param entries 这位玩家此刻看得到的整表(JSON 数组)
      * @param problem 办不成的原因(给界面和日志);办成是 {@code null}
      * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去(请求号随这一张,它才是答复);没有是 {@code null}
-     * @param shared  这次改动改了所有人共用的东西(内置、服主的设置):在线的其他玩家各收到他们看得到的新表
+     * @param shared  这次改动改了所有人共用的东西(服务器目录、服主的设置):在线的其他玩家各收到他们看得到的新表
      */
     public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later,
                          boolean shared) {
@@ -157,7 +164,7 @@ public final class Libraries {
     /** 这台服务器上各库的出处;测试给临时目录里的。 */
     public interface Sources {
 
-        /** 这位玩家的这种内容库(内置加我的)。 */
+        /** 这位玩家的这种内容库(服务器提供加我的;房主只有我的)。 */
         Library library(LibraryKind kind, UUID owner);
 
         /** 这位玩家的模型档案库。 */
@@ -187,16 +194,19 @@ public final class Libraries {
         /** MCP 库变了:连接跟上。 */
         void reconcileMcp(UUID owner);
 
+        /** 这位玩家是不是房主:他的"我的"各库与钥匙串就是服务器目录那一份。 */
+        boolean host(UUID owner);
+
         /** 是不是多人服(单人游戏里服主就是玩家自己,不必提醒他看得到自己的 key)。 */
         boolean multiplayer();
 
         ServerConfig config();
 
-        /** 这台服务器上的皮肤签名队。 */
+        /** 这台服务器上的皮肤签名队(排队的状态、撤掉)。 */
         SkinSigning signer();
 
-        /** 内置里的一条内容被管理员换了(采用新版、恢复默认):穿着它、读着它的要跟上。缺省什么也不用跟。 */
-        default void builtinChanged(LibraryKind kind, EntryId id) {}
+        /** 给同伴换皮肤的流程,连同服务器上的皮肤文件夹。 */
+        Wardrobe wardrobe();
     }
 
     /** 这台服务器上的那一份。 */
@@ -280,20 +290,23 @@ public final class Libraries {
             }
 
             @Override
+            public boolean host(UUID owner) {
+                return Homes.of(server).isHost(owner);
+            }
+
+            @Override
             public boolean multiplayer() {
                 return !server.isSingleplayer();
             }
 
             @Override
             public SkinSigning signer() {
-                return SkinSignings.of(server);
+                return ServerSkins.of(server).signer();
             }
 
             @Override
-            public void builtinChanged(LibraryKind kind, EntryId id) {
-                if (kind.equals(SkinProfile.KIND)) {
-                    CompanionBinding.skinChanged(server, null, true, id.toString());
-                }
+            public Wardrobe wardrobe() {
+                return ServerSkins.of(server).wardrobe();
             }
 
             @Override
@@ -349,14 +362,14 @@ public final class Libraries {
             case VOICE -> contentLibrary(owner, admin, VoiceProfile.KIND, op, body,
                     b -> VoiceProfile.fromJson(b).write(),
                     (from, to) -> CompanionLoops.rebind(owner, Slot.VOICE, from.toString(), to.toString()));
-            case SKIN -> skin(owner, admin, op, body);
+            case SKIN -> skin(owner, op, body);
             case KEY -> key(owner, admin, op, body);
             case PERMISSION -> permission(owner, op, body);
             case SERVER_CONFIG -> Done.of(serverConfig(admin, op, body), true);
             case MCP_CLIENT -> mcpClient(owner, admin, op, body);
             case MCP_SERVER -> Done.of(mcpServer(admin, op, body), true);
             case PREFS -> Done.of(prefs(owner, op, body), false);
-            case NOTES, CATALOG -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
+            case NOTES, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
         };
         JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
@@ -424,7 +437,8 @@ public final class Libraries {
                     row.addProperty("unreadable", true);
                 }
             });
-            case SKIN -> skinRows(owner, out);
+            case SKIN -> pendingRows(owner, out);
+            case SKIN_FILES -> fileRows(owner, out);
             case KEY -> keyRows(owner, admin, out);
             case SERVER_CONFIG -> {
                 if (admin) {
@@ -459,7 +473,7 @@ public final class Libraries {
 
     // ---- 内容库:同一套操作、同一种行 ----
 
-    /** 一条的内容库行共有的几项;{@code extra} 补各库自己的。内置的在前,我的在后。 */
+    /** 一条的内容库行共有的几项;{@code extra} 补各库自己的。服务器提供的在前,我的在后。 */
     private static void rows(Library library, JsonArray out,
                              java.util.function.BiConsumer<Library.Entry, JsonObject> extra) {
         for (Library.Group group : Library.Group.values()) {
@@ -468,7 +482,8 @@ public final class Libraries {
                 row.addProperty("id", entry.id().toString());
                 row.addProperty("name", entry.id().name());
                 row.addProperty("namespace", entry.id().namespace());
-                row.addProperty("group", group == Library.Group.BUILTIN ? GROUP_BUILTIN : GROUP_MINE);
+                row.addProperty("group", group == Library.Group.SERVER && !library.merged() ? GROUP_SERVER : GROUP_MINE);
+                row.addProperty("shipped", entry.provenance().shipped());
                 row.addProperty("enabled", entry.enabled());
                 row.addProperty("paired", entry.paired());
                 row.addProperty("modified", entry.provenance().modified());
@@ -494,7 +509,8 @@ public final class Libraries {
     }
 
     /**
-     * 内容库的操作。写和删带 {@code group: "builtin"} 的是改服务器目录里的内置,只有管理员;默认是改我的。内置的一条玩家只读,
+     * 内容库的操作。写和删带 {@code group: "server"} 的是改服务器目录里的,只有管理员;默认是改我的(房主的"我的"就是服务器目录)。
+     * 服务器提供的一条玩家只读,
      * 想改就 {@link #COPY} 到我的再改;开关记在他自己的偏好里。
      *
      * @param content 请求的正文变成文件的正文;这种库不能经协议存就是 {@code null}
@@ -503,7 +519,7 @@ public final class Libraries {
     private Done contentLibrary(UUID owner, boolean admin, LibraryKind kind, String op, JsonObject body, Content content,
                                 java.util.function.BiConsumer<EntryId, EntryId> renamed) {
         Library library = sources.library(kind, owner);
-        boolean builtin = GROUP_BUILTIN.equals(string(body, "group"));
+        boolean onServer = GROUP_SERVER.equals(string(body, "group"));
         EntryId id = EntryId.parse(string(body, "id"));
         switch (op) {
             case LIST:
@@ -512,7 +528,7 @@ public final class Libraries {
                 library.reload();   // 目录里的文件是真源,外部编辑器改过就重扫
                 return Done.ok();
             case COPY:
-                return library.copyToMine(id) == null ? Done.problem("no such built-in entry") : Done.ok();
+                return library.copyToMine(id) == null ? Done.problem("no such server entry") : Done.ok();
             case ENABLE:
             case DISABLE:
                 if (id == null || library.findAny(id) == null) {
@@ -523,31 +539,29 @@ public final class Libraries {
             case ACCEPT:
             case DISMISS:
                 if (!admin) {
-                    return Done.problem("only a server admin may take or dismiss a new built-in version");
+                    return Done.problem("only a server admin may take or dismiss a new default version");
                 }
-                if (id == null || library.builtin().get(id) == null) {
-                    return Done.problem("no such built-in entry");
+                if (id == null || library.server().get(id) == null) {
+                    return Done.problem("no such server entry");
                 }
                 if (ACCEPT.equals(op)) {
                     sources.manifest().accept(kind, id);
-                    sources.builtinChanged(kind, id);
                 } else {
                     sources.manifest().dismiss(kind, id);
                 }
-                library.builtin().reload();   // 清单换了磁盘上的文件,内存里的表跟上
+                library.server().reload();   // 清单换了磁盘上的文件,内存里的表跟上
                 return Done.of(null, true);
             case RESTORE:
                 if (!admin) {
-                    return Done.problem("only a server admin may restore a built-in entry to its default");
+                    return Done.problem("only a server admin may restore a shipped entry to its default");
                 }
-                if (id == null || library.builtin().get(id) == null) {
-                    return Done.problem("no such built-in entry");
+                if (id == null || library.server().get(id) == null) {
+                    return Done.problem("no such server entry");
                 }
                 if (!sources.manifest().restore(kind, id)) {
                     return Done.problem("that entry has no default to go back to");
                 }
-                library.builtin().reload();   // 清单换了磁盘上的文件,内存里的表跟上
-                sources.builtinChanged(kind, id);
+                library.server().reload();   // 清单换了磁盘上的文件,内存里的表跟上
                 return Done.of(null, true);
             case PUT:
             case DELETE:
@@ -555,16 +569,16 @@ public final class Libraries {
             default:
                 return Done.problem("unknown operation");
         }
-        if (builtin && !admin) {
-            return Done.problem("only a server admin may change built-in entries");
+        if (onServer && !admin) {
+            return Done.problem("only a server admin may change the server's entries");
         }
-        Shelf shelf = builtin ? library.builtin() : library.mine();
+        Shelf shelf = onServer ? library.server() : library.mine();
         if (DELETE.equals(op)) {
             if (id == null || shelf.get(id) == null) {
                 return Done.problem("no such entry");
             }
             shelf.delete(id);
-            return Done.of(null, builtin);
+            return Done.of(null, shelf == library.server());
         }
         if (content == null) {
             return Done.problem("unknown operation");
@@ -582,152 +596,140 @@ public final class Libraries {
         String clean = EntryId.clean(name, kind.dir());
         EntryId old = id != null && shelf.get(id) != null ? id : null;
         EntryId target = old != null && old.name().equals(clean) ? old
-                : shelf.unique(old != null ? old.namespace() : builtin ? EntryId.SERVER : EntryId.MINE, clean);
+                : shelf.unique(old != null ? old.namespace() : onServer ? EntryId.SERVER : EntryId.MINE, clean);
         shelf.write(target, text);
         if (old != null && !old.equals(target)) {
             shelf.delete(old);
-            if (!builtin) {
+            if (!onServer) {
                 renamed.accept(old, target);   // 我的某条改了名:id 就是名字,在用它的同伴得重新指过去
             }
         }
         if (old != null) {
-            return Done.of(null, builtin);
+            return Done.of(null, shelf == library.server());
         }
         // 新建的:id 由服务端按名字起,客户端要凭它把新条目绑给当前同伴,所以随答复明说
         JsonObject created = new JsonObject();
         created.addProperty(CREATED, target.toString());
-        return new Done(null, builtin, created);
+        return new Done(null, shelf == library.server(), created);
     }
 
-    // ---- 皮肤:签名在服务端排队 ----
+    // ---- 皮肤:文件夹里的 png,用时才签 ----
 
     /**
-     * 皮肤的行:签好的条目(带手臂模型、签没签过、原图的 base64),后面接这位玩家在队里的与刚失败的({@code pending},
-     * 带排到第几、在等限流、失败的原因码与原话)。
+     * 服务器皮肤文件夹里的图({@code row: "file"}:名字、原图 base64,图不能用的带原因码)。房主的"我的"文件夹就是服务器那一个,
+     * 客户端自己列,这里不再重复给他一节"服务器提供",是空表。
      */
-    private void skinRows(UUID owner, JsonArray out) {
-        rows(sources.library(SkinProfile.KIND, owner), out, (entry, row) -> {
-            try {
-                SkinProfile skin = SkinProfile.read(entry.text());
-                row.addProperty("variant", skin.variant());
-                row.addProperty("signed", skin.signed());
-                if (skin.png().length > 0) {
-                    row.addProperty("png", java.util.Base64.getEncoder().encodeToString(skin.png()));
-                }
-            } catch (RuntimeException unreadable) {
-                row.addProperty("unreadable", true);
-            }
-        });
-        for (SkinSigning.Pending pending : sources.signer().pendingOf(owner)) {
+    private void fileRows(UUID owner, JsonArray out) {
+        if (sources.host(owner)) {
+            return;
+        }
+        SkinFolder folder = sources.wardrobe().folder();
+        for (SkinFolder.Entry file : folder.list()) {
             JsonObject row = new JsonObject();
-            row.addProperty("id", "pending:" + pending.id());
-            row.addProperty("name", pending.name());
-            row.addProperty("group", GROUP_MINE);
-            row.addProperty("pending", true);
-            row.addProperty("job", pending.id());
-            row.addProperty("state", pending.failure() != null ? "FAILED" : pending.state().name());
-            row.addProperty("position", pending.position());
-            if (pending.failure() != null) {
-                JsonObject problem = new JsonObject();
-                problem.addProperty("code", pending.failure().code());
-                JsonArray args = new JsonArray();
-                pending.failure().args().forEach(args::add);
-                problem.add("args", args);
-                row.add("problem", problem);
+            row.addProperty("row", "file");
+            row.addProperty("name", file.name());
+            try {
+                row.addProperty("png", java.util.Base64.getEncoder().encodeToString(folder.read(file.name())));
+            } catch (SkinError unusable) {
+                row.add("problem", skinProblem(unusable));
             }
             out.add(row);
         }
     }
 
+    /** 这位玩家在签名队里的与刚失败的({@code row: "pending"},带排到第几、在等限流、失败的原因码与原话)。 */
+    private void pendingRows(UUID owner, JsonArray out) {
+        for (SkinSigning.Pending pending : sources.signer().pendingOf(owner)) {
+            JsonObject row = new JsonObject();
+            row.addProperty("row", "pending");
+            row.addProperty("name", pending.name());
+            row.addProperty("job", pending.id());
+            row.addProperty("state", pending.failure() != null ? "FAILED" : pending.state().name());
+            row.addProperty("position", pending.position());
+            if (pending.failure() != null) {
+                row.add("problem", skinProblem(pending.failure()));
+            }
+            out.add(row);
+        }
+    }
+
+    private static JsonObject skinProblem(SkinError error) {
+        JsonObject problem = new JsonObject();
+        problem.addProperty("code", error.code());
+        JsonArray args = new JsonArray();
+        error.args().forEach(args::add);
+        problem.add("args", args);
+        return problem;
+    }
+
     /**
-     * 皮肤的操作。存({@link #PUT})带 {@code png}(base64)、{@code url} 或 {@code player} 之一就是排一张新签名,没带就是改
-     * 已有的那条:只改名直接换名,换了手臂模型用存着的原图重签。签好之前这条不在库里——排队的状态在表里({@link #skinRows})。
-     * 撤({@link #CANCEL})只撤自己的。其余操作是内容库那一套。
+     * 皮肤的操作,都对他名下的一只同伴({@code companion})。存({@link #PUT})是给她换上这张皮肤,图是 {@code png}(base64,他本机文件夹里的)、
+     * {@code file}(服务器文件夹里的文件名)、{@code url} 或 {@code player} 之一,{@code variant} 是手臂模型(不写是看图判断):签过的当场穿上,
+     * 没签过的排上队,排到第几、被限流在等、失败的原因都在表里({@link #pendingRows})。删({@link #DELETE})是脱掉,回到默认皮肤。
+     * 撤({@link #CANCEL})撤掉自己排着的或不再显示失败的。皮肤不是库里的条目,没有"复制到我的"这类操作。
      */
-    private Done skin(UUID owner, boolean admin, String op, JsonObject body) {
-        if (CANCEL.equals(op)) {
-            JsonElement job = body.get("job");
-            return job != null && job.isJsonPrimitive() && sources.signer().cancel(owner, job.getAsLong())
-                    ? Done.ok() : Done.problem("no such pending skin");
+    private Done skin(UUID owner, String op, JsonObject body) {
+        switch (op) {
+            case LIST:
+                return Done.ok();
+            case CANCEL:
+                JsonElement job = body.get("job");
+                return job != null && job.isJsonPrimitive() && sources.signer().cancel(owner, job.getAsLong())
+                        ? Done.ok() : Done.problem("no such pending skin");
+            case PUT:
+            case DELETE:
+                break;
+            default:
+                return Done.problem("unknown operation");
         }
-        if (!PUT.equals(op)) {
-            return contentLibrary(owner, admin, SkinProfile.KIND, op, body, null, (from, to) ->
-                    CompanionLoops.rebind(owner, Slot.SKIN, from.toString(), to.toString()));
-        }
-        boolean builtin = GROUP_BUILTIN.equals(string(body, "group"));
-        if (builtin && !admin) {
-            return Done.problem("only a server admin may change built-in entries");
-        }
-        Library library = sources.library(SkinProfile.KIND, owner);
-        Shelf shelf = builtin ? library.builtin() : library.mine();
-        EntryId id = EntryId.parse(string(body, "id"));
-        EntryId old = id != null && shelf.get(id) != null ? id : null;
-        String name = string(body, "name");
-        if (name == null || name.isBlank()) {
-            return Done.problem("an entry needs a name");
-        }
-        SkinProfile previous = null;
-        if (old != null) {
-            try {
-                previous = SkinProfile.read(shelf.get(old).text());
-            } catch (RuntimeException unreadable) {
-                return Done.problem("unreadable skin");
-            }
-        }
-        String variant = string(body, "variant") != null ? string(body, "variant")
-                : previous != null ? previous.variant() : SkinProfile.VARIANT_CLASSIC;
-        SkinSigning.Source source;
-        if (string(body, "png") != null) {
-            try {
-                source = new SkinSigning.Source.Image(java.util.Base64.getDecoder().decode(string(body, "png")));
-            } catch (IllegalArgumentException notBase64) {
-                return Done.problem("unreadable image");
-            }
-        } else if (string(body, "url") != null) {
-            source = new SkinSigning.Source.Url(string(body, "url"));
-        } else if (string(body, "player") != null) {
-            source = new SkinSigning.Source.Player(string(body, "player"));
-        } else if (previous == null) {
-            return Done.problem("a new skin needs an image, a url or a player name");
-        } else if (previous.signed() && SkinProfile.VARIANT_SLIM.equals(variant) == SkinProfile.VARIANT_SLIM.equals(previous.variant())) {
-            return rename(shelf, old, name, owner, builtin);   // 只改名:签名数据原样
-        } else if (previous.png().length == 0) {
-            return Done.problem("that skin has no original image to sign again");
-        } else {
-            source = new SkinSigning.Source.Image(previous.png());
-        }
-        SkinSigning.Request request = new SkinSigning.Request(owner, name, variant, source, shelf,
-                builtin ? EntryId.SERVER : EntryId.MINE, old);
-        long ticket;
+        String companionText = string(body, "companion");
+        UUID companion;
         try {
-            ticket = sources.signer().submit(request, outcome -> { });
+            companion = companionText == null ? null : UUID.fromString(companionText);
+        } catch (IllegalArgumentException notAUuid) {
+            companion = null;
+        }
+        if (companion == null || !sources.companions(owner).contains(companion)) {
+            return Done.problem("not your companion");
+        }
+        if (DELETE.equals(op)) {
+            sources.wardrobe().takeOff(companion);
+            return Done.ok();
+        }
+        String variant = string(body, "variant");
+        String name = string(body, "name") != null ? string(body, "name") : "skin";
+        try {
+            long ticket;
+            if (string(body, "png") != null) {
+                byte[] png;
+                try {
+                    png = java.util.Base64.getDecoder().decode(string(body, "png"));
+                } catch (IllegalArgumentException notBase64) {
+                    return Done.problem("unreadable image");
+                }
+                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Image(png), variant,
+                        outcome -> { });
+            } else if (string(body, "file") != null) {
+                ticket = sources.wardrobe().wearFile(owner, companion, string(body, "file"), variant, outcome -> { });
+            } else if (string(body, "url") != null) {
+                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Url(string(body, "url")),
+                        variant, outcome -> { });
+            } else if (string(body, "player") != null) {
+                ticket = sources.wardrobe().wear(owner, companion, string(body, "player"),
+                        new SkinSigning.Source.Player(string(body, "player")), variant, outcome -> { });
+            } else {
+                return Done.problem("a skin needs an image, a file, a url or a player name");
+            }
+            return ticket < 0 ? Done.problem("too many skins are waiting to be signed") : Done.ok();
         } catch (SkinError refused) {
             return Done.problem(refused.getMessage());
         }
-        return ticket < 0 ? Done.problem("too many skins are waiting to be signed") : Done.of(null, false);
-    }
-
-    /** 皮肤只改了名:内容原样换个名字,绑着旧名字的同伴改指新的。 */
-    private Done rename(Shelf shelf, EntryId old, String name, UUID owner, boolean builtin) {
-        String clean = EntryId.clean(name, SkinProfile.KIND.dir());
-        if (old.name().equals(clean)) {
-            return Done.ok();
-        }
-        EntryId target = shelf.unique(old.namespace(), clean);
-        shelf.write(target, shelf.get(old).text());
-        shelf.delete(old);
-        if (builtin) {
-            CompanionLoops.rebindAll(Slot.SKIN, old.toString(), target.toString());
-        } else {
-            CompanionLoops.rebind(owner, Slot.SKIN, old.toString(), target.toString());
-        }
-        return Done.of(null, builtin);
     }
 
     // ---- 模型档案与钥匙串 ----
 
     /**
-     * 模型档案的行。管理员看到内置档案的全貌;别人只看得到内置档案叫什么、哪个厂家、哪个型号——地址与代理在这里就没有,客户端
+     * 模型档案的行。管理员看到服务器提供的档案的全貌;别人只看得到服务器提供的档案叫什么、哪个厂家、哪个型号——地址与代理在这里就没有,客户端
      * 拿不到也就谈不上泄露;自己的档案是完整的。每行说这位玩家有没有可用的 key、是他自己的还是服主的。
      */
     private void providerRows(UUID owner, boolean admin, JsonArray out) {
@@ -778,13 +780,17 @@ public final class Libraries {
         services.addAll(sources.ownerKeys(owner).services());
         if (admin) {
             services.addAll(sources.serverKeys().services());
-            services.add(MineSkinClient.KEY_SERVICE);   // 皮肤签名用的,管理员在皮肤页填
+            services.add(MineSkinClient.KEY_SERVICE);   // 皮肤签名用的,管理员在钥匙串页填
         }
         return services;
     }
 
-    /** 钥匙串:这位玩家用得到的那些服务商,各自有没有他自己的 key、服主有没有。服主的 key 本身只给管理员。 */
+    /**
+     * 钥匙串:这位玩家用得到的那些服务商,各自有没有他自己的 key、服主有没有。服主的 key 本身只给管理员。房主的钥匙就是服主的
+     * 那一本,只有"他自己的"一份,没有"服主的"可言。
+     */
     private void keyRows(UUID owner, boolean admin, JsonArray out) {
+        boolean host = sources.host(owner);
         for (String service : keyServices(owner, admin)) {
             JsonObject row = new JsonObject();
             row.addProperty("service", service);
@@ -792,10 +798,12 @@ public final class Libraries {
             if (mine != null) {
                 row.addProperty("mine", mine);
             }
-            String shared = sources.serverKeys().get(service);
-            row.addProperty("serverSet", shared != null);
-            if (admin && shared != null) {
-                row.addProperty("server", shared);
+            if (!host) {
+                String shared = sources.serverKeys().get(service);
+                row.addProperty("serverSet", shared != null);
+                if (admin && shared != null) {
+                    row.addProperty("server", shared);
+                }
             }
             out.add(row);
         }
@@ -961,7 +969,7 @@ public final class Libraries {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 接进来的 MCP 服务器的行:内容库共有的几项,加连接状态。管理员看到内置那几台的全貌(地址、命令行、请求头、授权网址);别人
+     * 接进来的 MCP 服务器的行:内容库共有的几项,加连接状态。管理员看到服务器提供的那几台的全貌(地址、命令行、请求头、授权网址);别人
      * 只有名字、连没连上、有几个工具;自己的那几台是完整的。{@code connect} 是条目主人的"连不连"(写在条目里),
      * 和 {@code enabled}(玩家自己的开关,只管他的同伴看不看得到这台的工具)是两回事。
      */
@@ -974,7 +982,7 @@ public final class Libraries {
                 row.addProperty("unreadable", true);
                 return;
             }
-            McpConnections manager = entry.group() == Library.Group.BUILTIN ? sources.sharedMcp() : sources.ownerMcp(owner);
+            McpConnections manager = entry.group() == Library.Group.SERVER ? sources.sharedMcp() : sources.ownerMcp(owner);
             McpConnections.ServerHandle handle = manager == null ? null : manager.handle(entry.id().toString());
             McpConnections.Status status = handle == null ? McpConnections.Status.DISABLED : handle.status();
             row.addProperty("type", spec.type());
@@ -998,7 +1006,7 @@ public final class Libraries {
     }
 
     /**
-     * 接进来的 MCP 服务器的操作:内容库那一套,外加条目主人的连上与断开({@link #CONNECT}、{@link #DISCONNECT},内置的只有管理员)
+     * 接进来的 MCP 服务器的操作:内容库那一套,外加条目主人的连上与断开({@link #CONNECT}、{@link #DISCONNECT},服务器提供的只有管理员)
      * 和交回授权回调网址({@link #AUTH})。stdio 类起的是服务器机器上的进程,只有管理员能加。库变了连接跟着变。
      */
     private Done mcpClient(UUID owner, boolean admin, String op, JsonObject body) {
@@ -1008,7 +1016,7 @@ public final class Libraries {
         Done done;
         if (CONNECT.equals(op) || DISCONNECT.equals(op)) {
             done = connect(owner, admin, CONNECT.equals(op), body);
-        } else if (COPY.equals(op) && !admin && isStdio(sources.library(McpClientConfig.KIND, owner).builtin()
+        } else if (COPY.equals(op) && !admin && isStdio(sources.library(McpClientConfig.KIND, owner).server()
                 .get(EntryId.parse(string(body, "id"))))) {
             // 复制过来就是他名下的一台 stdio,等于让服务器替他起进程
             done = Done.problem("only a server admin may add a stdio MCP server");
@@ -1046,12 +1054,12 @@ public final class Libraries {
     }
 
     private Done connect(UUID owner, boolean admin, boolean on, JsonObject body) {
-        boolean builtin = GROUP_BUILTIN.equals(string(body, "group"));
-        if (builtin && !admin) {
-            return Done.problem("only a server admin may connect or disconnect built-in servers");
+        boolean onServer = GROUP_SERVER.equals(string(body, "group"));
+        if (onServer && !admin) {
+            return Done.problem("only a server admin may connect or disconnect the server's servers");
         }
         Library library = sources.library(McpClientConfig.KIND, owner);
-        Shelf shelf = builtin ? library.builtin() : library.mine();
+        Shelf shelf = onServer ? library.server() : library.mine();
         EntryId id = EntryId.parse(string(body, "id"));
         Shelf.Item item = id == null ? null : shelf.get(id);
         if (item == null) {
@@ -1064,7 +1072,7 @@ public final class Libraries {
             return Done.problem("unreadable MCP server");
         }
         shelf.write(id, spec.withEnabled(on).write());
-        return Done.of(null, builtin);
+        return Done.of(null, shelf == library.server());
     }
 
     private static String string(JsonObject o, String key) {

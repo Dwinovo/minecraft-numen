@@ -229,25 +229,28 @@ public final class ModLanguageData {
         public static final String RAIL_NO_MATCH          = "numen.rail.no_match";
 
         // Skin library tab (upload png → MineSkin-signed textures).
-        public static final String SKIN_TITLE           = "numen.skin.title";
-        public static final String SKIN_ADD             = "numen.skin.add";
-        public static final String SKIN_EMPTY           = "numen.skin.empty";
-        public static final String SKIN_FORM_NAME       = "numen.skin.form_name";
-        public static final String SKIN_FORM_VARIANT    = "numen.skin.form_variant";
         public static final String SKIN_VARIANT_CLASSIC = "numen.skin.variant_classic";
         public static final String SKIN_VARIANT_SLIM    = "numen.skin.variant_slim";
-        public static final String SKIN_LOADED          = "numen.skin.loaded";
-        /** 皮肤导入的唯一入口:原生文件对话框(FCL 端翻译成安卓文件选择器)。 */
-        public static final String SKIN_PICK_FILE       = "numen.skin.pick_file";
-        public static final String SKIN_KEEP_OLD        = "numen.skin.keep_old";
-        public static final String SKIN_WARN_IMAGE      = "numen.skin.warn_image";
-        /** 原生选文件对话框的标题。 */
         public static final String SKIN_PICKER_TITLE    = "numen.skin.picker_title";
-        public static final String SKIN_WARN_SIZE       = "numen.skin.warn_size";
-        public static final String SKIN_WARN_READ       = "numen.skin.warn_read";
-        public static final String SKIN_SIGNED          = "numen.skin.signed";
-        public static final String SKIN_UNSIGNED        = "numen.skin.unsigned";
-        public static final String SKIN_DELETE_CONFIRM  = "numen.skin.delete_confirm";
+        public static final String SKIN_OPEN_FOLDER     = "numen.skin.open_folder";
+        public static final String SKIN_REFRESH         = "numen.skin.refresh";
+        public static final String SKIN_FOLDER_AT       = "numen.skin.folder_at";
+        public static final String SKIN_FOLDER_PHONE    = "numen.skin.folder_phone";
+        public static final String SKIN_FOLDER_EMPTY    = "numen.skin.folder_empty";
+        public static final String SKIN_ARM             = "numen.skin.arm";
+        public static final String SKIN_WEAR            = "numen.skin.wear";
+        public static final String SKIN_CUSTOM          = "numen.skin.custom";
+        public static final String SKIN_PREPARING       = "numen.skin.preparing";
+        public static final String SKIN_JOB_QUEUED      = "numen.skin.job_queued";
+        public static final String SKIN_JOB_WAITING     = "numen.skin.job_waiting";
+        public static final String SKIN_FAILED          = "numen.skin.failed";
+        public static final String SKIN_MINESKIN_KEY    = "numen.skin.mineskin_key";
+        public static final String SKIN_MINESKIN_KEY_HINT = "numen.skin.mineskin_key_hint";
+        public static final String SKIN_HANDOVER        = "numen.skin.handover";
+        public static final String COMMAND_SKIN_OFF     = "numen.command.skin.off";
+        public static final String COMMAND_SKIN_DONE    = "numen.command.skin.done";
+        /** 皮肤导入的唯一入口:原生文件对话框(FCL 端翻译成安卓文件选择器)。 */
+        /** 原生选文件对话框的标题。 */
         public static final String SUMMON_CREATE           = "numen.summon.create";
         public static final String SUMMON_WARN_NAME        = "numen.summon.warn_name";
 
@@ -257,11 +260,12 @@ public final class ModLanguageData {
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
         public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
 
-        // Libraries: the built-in / mine groups every content library shows, and what is said about a built-in entry.
-        public static final String LIBRARY_BUILTIN  = "numen.library.builtin";
+        // Libraries: the server-provided / mine groups every content library shows, and what is said about a bundled entry.
+        public static final String LIBRARY_SERVER   = "numen.library.server";
         public static final String LIBRARY_MINE     = "numen.library.mine";
-        public static final String LIBRARY_BUILTIN_ABOUT = "numen.library.builtin.about";
+        public static final String LIBRARY_SERVER_ABOUT  = "numen.library.server.about";
         public static final String LIBRARY_MINE_ABOUT    = "numen.library.mine.about";
+        public static final String LIBRARY_SHIPPED  = "numen.library.shipped";
         public static final String LIBRARY_MODIFIED = "numen.library.modified";
         public static final String LIBRARY_UPDATE   = "numen.library.update";
         public static final String LIBRARY_GONE     = "numen.library.gone";
@@ -420,6 +424,8 @@ public final class ModLanguageData {
         public static final String EXPORT_FAILED            = "numen.export.failed";
         public static final String EXPORT_NEEDS_CLIENT      = "numen.export.needs_client";
         public static final String EXPORT_BUSY              = "numen.export.busy";
+        public static final String MERGE_RENAMED            = "numen.merge.renamed";
+        public static final String MERGE_KEY_REPLACED       = "numen.merge.key_replaced";
         public static final String EXPORT_SAVED             = "numen.export.saved";
         public static final String EXPORT_PICKER_TITLE      = "numen.export.picker_title";
         public static final String PROFILE_MEMORY           = "numen.profile.memory";
@@ -429,19 +435,11 @@ public final class ModLanguageData {
         public static final String WIPE_TITLE               = "numen.wipe.title";
         public static final String WIPE_WARNING             = "numen.wipe.warning";
         public static final String WIPE_CONFIRM             = "numen.wipe.confirm";
-        public static final String LIBRARY_ADD_BUILTIN      = "numen.library.add_builtin";
+        public static final String LIBRARY_ADD_SERVER       = "numen.library.add_server";
         public static final String LIBRARY_RESTORE          = "numen.library.restore";
         public static final String LIBRARY_RELOAD           = "numen.library.reload";
         public static final String VOICE_FORM_SERVICE       = "numen.voice.form_service";
         public static final String VOICE_NO_KEY             = "numen.voice.no_key";
-        public static final String SKIN_NOTICE              = "numen.skin.notice";
-        public static final String SKIN_FORM_MINESKIN_KEY   = "numen.skin.form_mineskin_key";
-        public static final String SKIN_MINESKIN_KEY_HINT   = "numen.skin.mineskin_key_hint";
-        public static final String SKIN_JOB_QUEUED          = "numen.skin.job_queued";
-        public static final String SKIN_JOB_SIGNING         = "numen.skin.job_signing";
-        public static final String SKIN_JOB_WAITING         = "numen.skin.job_waiting";
-        public static final String SKIN_JOB_FAILED          = "numen.skin.job_failed";
-        public static final String SKIN_JOB_CANCEL_CONFIRM  = "numen.skin.job_cancel_confirm";
         public static final String NOTICE_NAME_INVALID    = "numen.notice.name_invalid";
         public static final String NOTICE_SUMMON_LIMIT    = "numen.notice.summon_limit";
         public static final String NOTICE_COMPANION_REMOVED = "numen.notice.companion_removed";
@@ -450,10 +448,8 @@ public final class ModLanguageData {
         public static final String COMMAND_BIND_FAILED    = "numen.command.bind_failed";
         public static final String COMMAND_KEY_USAGE      = "numen.command.key.usage";
         public static final String COMMAND_KEY_SAVED      = "numen.command.key.saved";
-        public static final String COMMAND_SKIN_BAD_NAME  = "numen.command.skin.bad_name";
         public static final String COMMAND_SKIN_QUEUED    = "numen.command.skin.queued";
         public static final String COMMAND_SKIN_WAITING   = "numen.command.skin.waiting";
-        public static final String COMMAND_SKIN_DONE      = "numen.command.skin.done";
         public static final String COMMAND_SKIN_FAILED    = "numen.command.skin.failed";
         public static final String COMMAND_SKIN_FULL      = "numen.command.skin.full";
         public static final String COMMAND_CHAT_ENTERED     = "numen.command.chat.entered";
@@ -622,7 +618,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "Voice input failed: %s");
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
-        adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a built-in to change it.");
+        adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add("numen.persona.add", "New persona");
         adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
@@ -679,7 +675,7 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
-        adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a built-in to change it.");
+        adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a server-provided one to change it.");
         adder.add("numen.mcp.add", "Add a tool extension");
         adder.add("numen.mcp.form_service", "Key service (optional)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -697,7 +693,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · connecting…");
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
-        adder.add("numen.skill.empty", "No skills of your own yet. Copy a built-in to make your own version.");
+        adder.add("numen.skill.empty", "No skills of your own yet. Copy a server-provided one to make your own version.");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
@@ -710,7 +706,7 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
-        adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add(Keys.PROVIDER_ADD,            "New model config");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
@@ -760,16 +756,26 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_SEARCH,            "Search");
         adder.add(Keys.RAIL_DRAFT,             "Draft");
         adder.add(Keys.RAIL_NO_MATCH,          "No matches");
-        adder.add(Keys.SKIN_TITLE,           "Skins");
-        adder.add(Keys.SKIN_ADD,             "New skin");
-        adder.add(Keys.SKIN_EMPTY,           "No skins of your own yet. Create one and pick a 64×64 skin png.");
-        adder.add(Keys.SKIN_FORM_NAME,       "Name (required)");
-        adder.add(Keys.SKIN_FORM_VARIANT,    "Arm model");
         adder.add(Keys.SKIN_VARIANT_CLASSIC, "Classic (wide arms)");
         adder.add(Keys.SKIN_VARIANT_SLIM,    "Slim (thin arms)");
-        adder.add(Keys.SKIN_LOADED,          "Loaded %s ✓ — Save sends it to be signed");
-        adder.add(Keys.SKIN_PICK_FILE,       "Choose file…");
-        adder.add(Keys.SKIN_KEEP_OLD,        "Keeping the current image");
+        adder.add(Keys.SKIN_PICKER_TITLE,    "%s's skin");
+        adder.add(Keys.SKIN_OPEN_FOLDER,     "Open folder");
+        adder.add(Keys.SKIN_REFRESH,         "Refresh");
+        adder.add(Keys.SKIN_FOLDER_AT,       "Folder: %s");
+        adder.add(Keys.SKIN_FOLDER_PHONE,    "This device cannot open it: put the images in with your phone's own file manager");
+        adder.add(Keys.SKIN_FOLDER_EMPTY,    "No png in the folder yet. Put a skin image in it, then tap Refresh.");
+        adder.add(Keys.SKIN_ARM,             "Arms");
+        adder.add(Keys.SKIN_WEAR,            "Wear");
+        adder.add(Keys.SKIN_CUSTOM,          "Custom");
+        adder.add(Keys.SKIN_PREPARING,       "Getting the skin ready…");
+        adder.add(Keys.SKIN_JOB_QUEUED,      "Getting the skin ready… number %s in line");
+        adder.add(Keys.SKIN_JOB_WAITING,     "Getting the skin ready… the service is busy, trying again shortly");
+        adder.add(Keys.SKIN_FAILED,          "The skin could not be used: %s");
+        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key (server's, optional)");
+        adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "Empty = anonymous, lower rate limit");
+        adder.add(Keys.SKIN_HANDOVER,        "Your skin '%s' that the server kept is now in your skins folder");
+        adder.add(Keys.COMMAND_SKIN_OFF,     "%s is back in the default skin");
+        adder.add(Keys.COMMAND_SKIN_DONE,    "%2$s now wears skin '%1$s'");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.thinking",   "✦ Thinking");
         adder.add("numen.bubble.asking",     "⌛ Waiting for your OK");
@@ -821,13 +827,6 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "▸ %s");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
         adder.add("numen.gui.list.cloned",   "Copied to mine");
-        adder.add(Keys.SKIN_WARN_IMAGE,      "Pick a skin png first");
-        adder.add(Keys.SKIN_PICKER_TITLE,    "Numen skin (64x64 PNG)");
-        adder.add(Keys.SKIN_WARN_SIZE,       "Skin must be 64x64 (or legacy 64x32), got %s");
-        adder.add(Keys.SKIN_WARN_READ,       "Couldn't read the file: %s");
-        adder.add(Keys.SKIN_SIGNED,          "signed");
-        adder.add(Keys.SKIN_UNSIGNED,        "not signed — edit & Save to retry");
-        adder.add(Keys.SKIN_DELETE_CONFIRM,  "Delete skin \"%s\"?");
         adder.add(Keys.SUMMON_CREATE,           "Create");
         adder.add(Keys.SUMMON_WARN_NAME,        "Name is required");
 
@@ -835,15 +834,16 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_KEY,  "Model config \"%s\" has no API Key yet — add it in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_URL,  "Model config \"%s\" has no base URL — add it in Settings → Model Configs");
-        adder.add(Keys.LIBRARY_BUILTIN,  "Built-in");
+        adder.add(Keys.LIBRARY_SERVER,   "Provided by the server");
         adder.add(Keys.LIBRARY_MINE,     "Mine");
-        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "Shared by the server with everyone. Switch them on or off, or copy one to Mine to change it.");
-        adder.add(Keys.LIBRARY_MINE_ABOUT,    "Only yours. Nobody else sees these.");
+        adder.add(Keys.LIBRARY_SERVER_ABOUT,  "Shared by the server with everyone. Switch them on or off, or copy one to Mine to change it.");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "Yours to add, change and delete.");
+        adder.add(Keys.LIBRARY_SHIPPED,  "bundled");
         adder.add(Keys.LIBRARY_MODIFIED, "modified");
         adder.add(Keys.LIBRARY_UPDATE,   "new default available");
         adder.add(Keys.LIBRARY_GONE,     "source uninstalled");
         adder.add(Keys.LIBRARY_COVERED,  "covered by mine");
-        adder.add(Keys.LIBRARY_COVERS,   "overrides the built-in");
+        adder.add(Keys.LIBRARY_COVERS,   "overrides the server's");
         adder.add(Keys.LIBRARY_OFF,      "off");
         adder.add(Keys.LIBRARY_ACCEPT,   "Take the new default");
         adder.add(Keys.LIBRARY_DISMISS,  "Keep my version");
@@ -857,7 +857,7 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "Voice");
         adder.add(Keys.VOICE_ENABLED,        "Enabled");
-        adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a built-in to change it.");
+        adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a server-provided one to change it.");
         adder.add(Keys.VOICE_ADD,            "New voice");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "Delete voice \"%s\"? Companions bound to it fall silent.");
         adder.add(Keys.VOICE_FORM_NAME,      "Name (required)");
@@ -1124,6 +1124,8 @@ public final class ModLanguageData {
         adder.add(Keys.EXPORT_FAILED,          "Could not read %s's memory to export it");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "Exporting hands the file to your client, and you are playing without it");
         adder.add(Keys.EXPORT_BUSY,            "Another export is still on its way to you");
+        adder.add(Keys.MERGE_RENAMED,          "Your %1$s \"%2$s\" had the same name as one the server provides, so it is now \"%3$s\" (your companions follow it)");
+        adder.add(Keys.MERGE_KEY_REPLACED,     "Your %s key now replaces the server's: they are one keychain");
         adder.add(Keys.EXPORT_SAVED,           "Saved %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "Save her memory");
         adder.add(Keys.PROFILE_MEMORY,         "Memory");
@@ -1133,19 +1135,11 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "Clear %s's memory?");
         adder.add(Keys.WIPE_WARNING,           "Her chat log, notes and long-term goal are deleted and she is told so. She stays on your roster and keeps her body. This cannot be undone");
         adder.add(Keys.WIPE_CONFIRM,           "Clear");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "New for everyone");
+        adder.add(Keys.LIBRARY_ADD_SERVER,     "New for everyone");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
         adder.add(Keys.LIBRARY_RELOAD,         "Rescan the server's folder");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
-        adder.add(Keys.SKIN_NOTICE,            "The image is handed to MineSkin to be signed");
-        adder.add(Keys.SKIN_FORM_MINESKIN_KEY, "MineSkin API key (server, optional)");
-        adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "Empty = anonymous, lower rate limit");
-        adder.add(Keys.SKIN_JOB_QUEUED,        "Waiting to be signed, number %s in line");
-        adder.add(Keys.SKIN_JOB_SIGNING,       "Being signed…");
-        adder.add(Keys.SKIN_JOB_WAITING,       "The signing service is rate-limiting, waiting to try again");
-        adder.add(Keys.SKIN_JOB_FAILED,        "Signing failed: %s");
-        adder.add(Keys.SKIN_JOB_CANCEL_CONFIRM, "Take \"%s\" off the signing queue?");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] This server lets you have %s companions; dismiss one to summon another");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s was removed from the server (%2$s). Summon her again to bring her back");
@@ -1154,10 +1148,8 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_BIND_FAILED,    "That did not work: %s");
         adder.add(Keys.COMMAND_KEY_USAGE,      "Usage: /numen key <service> <key>");
         adder.add(Keys.COMMAND_KEY_SAVED,      "Saved your %1$s key (%2$s)");
-        adder.add(Keys.COMMAND_SKIN_BAD_NAME,  "A skin's name cannot be empty or contain / \\ : * ? \" < > |");
         adder.add(Keys.COMMAND_SKIN_QUEUED,    "Skin '%1$s' is queued for signing, number %2$s in line");
         adder.add(Keys.COMMAND_SKIN_WAITING,   "Skin '%1$s': the signing service is rate-limiting, carrying on in %2$s s");
-        adder.add(Keys.COMMAND_SKIN_DONE,      "Skin '%1$s' is signed and saved as %2$s");
         adder.add(Keys.COMMAND_SKIN_FAILED,    "Skin '%1$s' could not be signed: %2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "You already have %s skins waiting to be signed; wait for one to finish");
         adder.add("numen.skin.error.bad_image", "The image cannot be used: %s");
@@ -1327,7 +1319,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_FAILED, "语音输入失败：%s");
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");
-        adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把内置的复制过来改。");
+        adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把服务器提供的复制过来改。");
         adder.add("numen.persona.add", "新建人设");
         adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
@@ -1384,7 +1376,7 @@ public final class ModLanguageData {
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
-        adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把内置的复制过来改。");
+        adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把服务器提供的复制过来改。");
         adder.add("numen.mcp.add", "添加工具扩展");
         adder.add("numen.mcp.form_service", "密钥用的服务名(可选)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -1402,7 +1394,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · 连接中…");
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
-        adder.add("numen.skill.empty", "还没有自己的技能。把内置的复制过来,就有了自己的版本。");
+        adder.add("numen.skill.empty", "还没有自己的技能。把服务器提供的复制过来,就有了自己的版本。");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
@@ -1415,7 +1407,7 @@ public final class ModLanguageData {
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");
-        adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把服务器提供的复制过来改。");
         adder.add(Keys.PROVIDER_ADD,            "新建模型配置");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
@@ -1465,16 +1457,26 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_SEARCH,            "搜索");
         adder.add(Keys.RAIL_DRAFT,             "草稿");
         adder.add(Keys.RAIL_NO_MATCH,          "没有对得上的会话");
-        adder.add(Keys.SKIN_TITLE,           "皮肤库");
-        adder.add(Keys.SKIN_ADD,             "新建皮肤");
-        adder.add(Keys.SKIN_EMPTY,           "还没有自己的皮肤。新建一张,选一张 64×64 的 png。");
-        adder.add(Keys.SKIN_FORM_NAME,       "名称(必填)");
-        adder.add(Keys.SKIN_FORM_VARIANT,    "手臂模型");
         adder.add(Keys.SKIN_VARIANT_CLASSIC, "经典(粗手臂)");
         adder.add(Keys.SKIN_VARIANT_SLIM,    "纤细(瘦手臂)");
-        adder.add(Keys.SKIN_LOADED,          "已加载 %s ✓——点保存交去签名");
-        adder.add(Keys.SKIN_PICK_FILE,       "选择文件…");
-        adder.add(Keys.SKIN_KEEP_OLD,        "沿用当前图片");
+        adder.add(Keys.SKIN_PICKER_TITLE,    "%s 的皮肤");
+        adder.add(Keys.SKIN_OPEN_FOLDER,     "打开文件夹");
+        adder.add(Keys.SKIN_REFRESH,         "刷新");
+        adder.add(Keys.SKIN_FOLDER_AT,       "文件夹:%s");
+        adder.add(Keys.SKIN_FOLDER_PHONE,    "这台设备打不开:请用手机自带的文件管理器把图放进去");
+        adder.add(Keys.SKIN_FOLDER_EMPTY,    "文件夹里还没有 png。把皮肤图放进去,再点「刷新」。");
+        adder.add(Keys.SKIN_ARM,             "手臂");
+        adder.add(Keys.SKIN_WEAR,            "穿上");
+        adder.add(Keys.SKIN_CUSTOM,          "自定义");
+        adder.add(Keys.SKIN_PREPARING,       "正在准备皮肤…");
+        adder.add(Keys.SKIN_JOB_QUEUED,      "正在准备皮肤…排第 %s 位");
+        adder.add(Keys.SKIN_JOB_WAITING,     "正在准备皮肤…服务繁忙,稍后再试");
+        adder.add(Keys.SKIN_FAILED,          "这张皮肤没能用上:%s");
+        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key(服务器的,可不填)");
+        adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "留空 = 匿名档,限流更紧");
+        adder.add(Keys.SKIN_HANDOVER,        "服务器上替你存着的皮肤「%s」已放进你本机的皮肤文件夹");
+        adder.add(Keys.COMMAND_SKIN_OFF,     "%s 回到默认皮肤了");
+        adder.add(Keys.COMMAND_SKIN_DONE,    "%2$s 穿上皮肤「%1$s」了");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.thinking",   "✦ 正在思考");
         adder.add("numen.bubble.asking",     "⌛ 等你点头");
@@ -1526,13 +1528,6 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "▸ 正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
         adder.add("numen.gui.list.cloned",   "已复制到我的");
-        adder.add(Keys.SKIN_WARN_IMAGE,      "先选一张皮肤 png");
-        adder.add(Keys.SKIN_PICKER_TITLE,    "Numen 皮肤(64x64 PNG)");
-        adder.add(Keys.SKIN_WARN_SIZE,       "皮肤需为 64x64(或旧版 64x32),拖入的是 %s");
-        adder.add(Keys.SKIN_WARN_READ,       "文件读取失败: %s");
-        adder.add(Keys.SKIN_SIGNED,          "已签名");
-        adder.add(Keys.SKIN_UNSIGNED,        "未签名——编辑后保存可重试");
-        adder.add(Keys.SKIN_DELETE_CONFIRM,  "删除皮肤「%s」?");
         adder.add(Keys.SUMMON_CREATE,           "创建");
         adder.add(Keys.SUMMON_WARN_NAME,        "请填名字");
 
@@ -1540,15 +1535,16 @@ public final class ModLanguageData {
         adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
         adder.add(Keys.ENDPOINT_NO_KEY,  "模型配置「%s」还没填 API Key——到 设置 → 模型配置 补上");
         adder.add(Keys.ENDPOINT_NO_URL,  "模型配置「%s」没有接口地址——到 设置 → 模型配置 补上");
-        adder.add(Keys.LIBRARY_BUILTIN,  "内置");
+        adder.add(Keys.LIBRARY_SERVER,   "服务器提供");
         adder.add(Keys.LIBRARY_MINE,     "我的");
-        adder.add(Keys.LIBRARY_BUILTIN_ABOUT, "服主给所有人的。能开关,想改就复制到「我的」。");
-        adder.add(Keys.LIBRARY_MINE_ABOUT,    "只有你自己的。");
+        adder.add(Keys.LIBRARY_SERVER_ABOUT,  "服务器给所有人的。能开关,想改就复制到「我的」。");
+        adder.add(Keys.LIBRARY_MINE_ABOUT,    "你自己的,随便增删改。");
+        adder.add(Keys.LIBRARY_SHIPPED,  "自带");
         adder.add(Keys.LIBRARY_MODIFIED, "已修改");
         adder.add(Keys.LIBRARY_UPDATE,   "默认内容有更新");
         adder.add(Keys.LIBRARY_GONE,     "来源已卸载");
         adder.add(Keys.LIBRARY_COVERED,  "被我的盖着");
-        adder.add(Keys.LIBRARY_COVERS,   "盖着内置的");
+        adder.add(Keys.LIBRARY_COVERS,   "盖着服务器提供的");
         adder.add(Keys.LIBRARY_OFF,      "已关");
         adder.add(Keys.LIBRARY_ACCEPT,   "采用新的默认内容");
         adder.add(Keys.LIBRARY_DISMISS,  "保留我的版本");
@@ -1562,7 +1558,7 @@ public final class ModLanguageData {
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "语音");
         adder.add(Keys.VOICE_ENABLED,        "启用");
-        adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把内置的复制过来改。");
+        adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把服务器提供的复制过来改。");
         adder.add(Keys.VOICE_ADD,            "新建声线");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "删除声线「%s」?绑定它的同伴将静音。");
         adder.add(Keys.VOICE_FORM_NAME,      "名称(必填)");
@@ -1830,6 +1826,8 @@ public final class ModLanguageData {
         adder.add(Keys.EXPORT_FAILED,          "读不出「%s」的记忆,导不了");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "导出是把文件交到你的客户端上,你现在没装客户端");
         adder.add(Keys.EXPORT_BUSY,            "上一份导出还在路上");
+        adder.add(Keys.MERGE_RENAMED,          "你的%1$s「%2$s」和服务器提供的重名,现在叫「%3$s」(用着它的同伴已跟着改)");
+        adder.add(Keys.MERGE_KEY_REPLACED,     "你的 %s 钥匙换掉了服务器原有的:现在是同一串钥匙");
         adder.add(Keys.EXPORT_SAVED,           "已存到 %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "保存她的记忆");
         adder.add(Keys.PROFILE_MEMORY,         "记忆");
@@ -1839,19 +1837,11 @@ public final class ModLanguageData {
         adder.add(Keys.WIPE_TITLE,             "清空「%s」的记忆?");
         adder.add(Keys.WIPE_WARNING,           "她的对话记录、札记和长期目标会被删掉,并且告诉她。她还在你的名册里、身体不动。无法撤销");
         adder.add(Keys.WIPE_CONFIRM,           "清空");
-        adder.add(Keys.LIBRARY_ADD_BUILTIN,    "为所有人新建");
+        adder.add(Keys.LIBRARY_ADD_SERVER,     "为所有人新建");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
         adder.add(Keys.LIBRARY_RELOAD,         "重新扫描服务器上的目录");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
-        adder.add(Keys.SKIN_NOTICE,            "图片会交给 MineSkin 签名");
-        adder.add(Keys.SKIN_FORM_MINESKIN_KEY, "MineSkin API key(服务器的,可不填)");
-        adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "留空 = 匿名档,限流更紧");
-        adder.add(Keys.SKIN_JOB_QUEUED,        "等着签名,排第 %s 位");
-        adder.add(Keys.SKIN_JOB_SIGNING,       "正在签名…");
-        adder.add(Keys.SKIN_JOB_WAITING,       "签名服务限流了,等一会儿再试");
-        adder.add(Keys.SKIN_JOB_FAILED,        "签名失败:%s");
-        adder.add(Keys.SKIN_JOB_CANCEL_CONFIRM, "把「%s」从签名队里撤掉?");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] 这个服务器每人最多 %s 只同伴,先遣散一只再召唤吧");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s 被请出了服务器(%2$s)。再召唤她一次就能回来");
@@ -1860,10 +1850,8 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_BIND_FAILED,    "没办成:%s");
         adder.add(Keys.COMMAND_KEY_USAGE,      "用法:/numen key <服务商> <key>");
         adder.add(Keys.COMMAND_KEY_SAVED,      "存好了你的 %1$s key(%2$s)");
-        adder.add(Keys.COMMAND_SKIN_BAD_NAME,  "皮肤的名字不能为空,也不能含 / \\ : * ? \" < > |");
         adder.add(Keys.COMMAND_SKIN_QUEUED,    "皮肤「%1$s」排上签名队了,排第 %2$s 位");
         adder.add(Keys.COMMAND_SKIN_WAITING,   "皮肤「%1$s」:签名服务限流了,%2$s 秒后接着签");
-        adder.add(Keys.COMMAND_SKIN_DONE,      "皮肤「%1$s」签好了,存成 %2$s");
         adder.add(Keys.COMMAND_SKIN_FAILED,    "皮肤「%1$s」没签成:%2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "你已经有 %s 张皮肤在等签名,等一张签完再加");
         adder.add("numen.skin.error.bad_image", "这张图用不了:%s");

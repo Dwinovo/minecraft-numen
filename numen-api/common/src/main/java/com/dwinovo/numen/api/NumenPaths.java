@@ -26,4 +26,12 @@ public final class NumenPaths {
     public static Path config() {
         return Services.platform().getConfigDir().resolve(Constants.CONFIG_ROOT);
     }
+
+    /**
+     * {@code config/numen/skins/} ——玩家往里放皮肤 png 的文件夹(文件名就是皮肤名)。每台机器只有这一个:客户端列它自己机器上的,
+     * 服务端列服务器上的;单人游戏与局域网房主两头是同一台机器,也就是同一个文件夹。<b>不保证已存在</b>。
+     */
+    public static Path skins() {
+        return config().resolve("skins");
+    }
 }

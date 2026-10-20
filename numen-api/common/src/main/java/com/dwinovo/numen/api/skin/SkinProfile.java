@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.skin;
 
-import com.dwinovo.numen.api.library.LibraryKind;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -8,17 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * 皮肤这种库({@link #KIND}):一条一个 {@code skin/<命名空间>/<名字>.json},里面是手臂模型、Mojang 签名的皮肤数据
- * ({@code value} 与 {@code signature},签一次存永久,召唤和换肤时直接取用)和原图(png 的 base64,给界面画预览;
- * 借来的正版皮肤取不到图时没有)。玩家看到"内置"与"我的"两组,存储、开关、同步都是 {@link com.dwinovo.numen.api.library.Library}
- * 这一套;签名由服务端排队去做({@link SkinSigning}),这里只管条目长什么样。
+ * 一张签好的皮肤:手臂模型、Mojang 签名的皮肤数据({@code value} 与 {@code signature},签一次存永久,召唤和换肤时直接取用)和原图
+ * (png 的字节,换手臂模型时用它重签;借来的正版皮肤取到的是图床上的图)。存在签名缓存里({@link SkinCache},键是 {@link SkinRef});
+ * 旧版本的皮肤库条目也是这个形状,{@code SkinMigration} 读它。
  *
- * <p>{@code png} 是原图的字节;空数组 = 没有。
+ * <p>{@code png} 是原图的字节;空数组 = 没有(只有旧版本借来的正版皮肤取不到图时才会没有)。
  */
 public record SkinProfile(String variant, String value, String signature, byte[] png) {
-
-    /** 皮肤这种库:一条一个 {@code .json}。 */
-    public static final LibraryKind KIND = LibraryKind.files("skin", ".json");
 
     /** 手臂模型:经典粗手。 */
     public static final String VARIANT_CLASSIC = "classic";
@@ -37,14 +32,14 @@ public record SkinProfile(String variant, String value, String signature, byte[]
         return !value.isBlank();
     }
 
-    /** 读一个条目文件的正文;写法不对抛 {@link RuntimeException}。 */
+    /** 读一份存下来的正文;写法不对抛 {@link RuntimeException}。 */
     public static SkinProfile read(String json) {
         JsonObject o = JsonParser.parseString(json).getAsJsonObject();
         return new SkinProfile(string(o, "variant"), string(o, "value"), string(o, "signature"),
                 string(o, "png").isEmpty() ? null : Base64.getDecoder().decode(string(o, "png")));
     }
 
-    /** 条目文件的正文。 */
+    /** 存下来的正文。 */
     public String write() {
         JsonObject o = new JsonObject();
         o.addProperty("variant", variant);

@@ -57,7 +57,7 @@ Numen as a whole can act as an **MCP server** and be driven directly by an exter
 The settings page of the panel also provides the following.
 
 - **Persona**: a few simple personas are built in, and you can write any persona you like.
-- **Skin**: set the skin of a summoned agent. Uploaded skins take effect after being signed through [MineSkin](https://mineskin.org).
+- **Skin**: put a skin png in the `config/numen/skins/` folder and pick it on the agent's edit card. It is signed through [MineSkin](https://mineskin.org) the first time it is used, and never signed twice.
 - **Voice**: configure voice input and voice output, so the agent can listen and speak.
 - **Group chat**: drag the avatars of different agents together to start a group chat. In a group chat you can @ a member to have it reply, or @ no one to broadcast to everyone.
 

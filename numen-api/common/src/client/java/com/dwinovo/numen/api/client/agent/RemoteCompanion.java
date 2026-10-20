@@ -185,7 +185,7 @@ public final class RemoteCompanion {
         return state.voiceId();
     }
 
-    /** 她绑定的皮肤 id;没绑是 {@code null}。 */
+    /** 她穿着的皮肤(签名缓存里的引用,{@code SkinRef} 的文字写法);默认皮肤是 {@code null}。 */
     public String skinId() {
         return state.skinId();
     }
@@ -261,7 +261,7 @@ public final class RemoteCompanion {
         send.accept(new OwnerInput.ClearGoal(uuid));
     }
 
-    /** 换她的一项绑定(档案、人设、声线、皮肤);{@code null} = 不绑。条目在不在库里由服务端判。 */
+    /** 换她的一项绑定(档案、人设、声线);{@code null} = 不绑。条目在不在库里由服务端判。 */
     public void bind(Slot slot, String entryId) {
         send.accept(new OwnerInput.Bind(uuid, slot, entryId));
     }

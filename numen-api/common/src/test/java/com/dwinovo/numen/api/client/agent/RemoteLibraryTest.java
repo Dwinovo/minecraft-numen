@@ -145,17 +145,17 @@ class RemoteLibraryTest {
     @Test
     void aBuiltinAndAMineRowOfTheSameNameAreTwoRowsAndDeletingOneKeepsTheOther() {
         library.onPayload(new LibraryPayload("persona",
-                "[{\"id\":\"numen:小焰\",\"group\":\"builtin\"},{\"id\":\"numen:小焰\",\"group\":\"mine\"}]", ""));
+                "[{\"id\":\"numen:小焰\",\"group\":\"server\"},{\"id\":\"numen:小焰\",\"group\":\"mine\"}]", ""));
 
         library.delete("persona", "numen:小焰", false);
 
         assertEquals(1, library.entries("persona").size());
-        assertEquals("builtin", library.entries("persona").get(0).getAsJsonObject().get("group").getAsString());
+        assertEquals("server", library.entries("persona").get(0).getAsJsonObject().get("group").getAsString());
         assertEquals(new LibraryRequestPayload("persona", "delete", "{\"id\":\"numen:小焰\"}"), sent.get(0));
 
         library.delete("persona", "numen:小焰", true);
         assertEquals(0, library.entries("persona").size());
-        assertEquals("{\"id\":\"numen:小焰\",\"group\":\"builtin\"}", sent.get(1).json(), "删内置的带上组");
+        assertEquals("{\"id\":\"numen:小焰\",\"group\":\"server\"}", sent.get(1).json(), "删服务器提供的带上组");
     }
 
     @Test

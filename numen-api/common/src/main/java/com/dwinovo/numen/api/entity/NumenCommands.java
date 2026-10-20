@@ -63,9 +63,9 @@ import java.util.function.Predicate;
  *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
  *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
  *   /numen token create|list|revoke                       the remote endpoint's tokens (see {@code TokenCommands})
- *   /numen companion &lt;her&gt; profile|persona|voice|skin [&lt;entry&gt;]  bind one of her four library entries (see BindingCommands)
+ *   /numen companion &lt;her&gt; profile|persona|voice [&lt;entry&gt;]  bind one of her library entries (see BindingCommands)
+ *   /numen companion &lt;her&gt; skin [player &lt;name&gt;|url &lt;address&gt;|server &lt;file&gt;]  give her a skin, signed in the server's queue when needed (see SkinCommand)
  *   /numen key &lt;service&gt; &lt;key&gt;                            store a key in the caller's own keychain (see KeyCommand)
- *   /numen skin add &lt;name&gt; player|url &lt;…&gt;                  add a skin to the caller's library, signed in the server's queue (see SkinCommand)
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -132,7 +132,6 @@ public final class NumenCommands {
         graft(dispatcher, com.dwinovo.numen.api.mcp.server.TokenCommands.node());
         graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());
         graft(dispatcher, com.dwinovo.numen.api.brain.KeyCommand.node());
-        graft(dispatcher, com.dwinovo.numen.api.brain.SkinCommand.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(source))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

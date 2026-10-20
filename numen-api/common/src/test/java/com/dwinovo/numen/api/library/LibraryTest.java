@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一套库机制:同一布局 {@code <根>/<库>/<命名空间>/<名字>},玩家看到"内置"(服务器目录)与"我的"(玩家目录)两组,同名时我的优先,
- * 玩家对内置只读、能开关、能复制到我的。每种库只声明条目长什么样(一个文件,或一个目录)。
+ * 一套库机制:同一布局 {@code <根>/<库>/<命名空间>/<名字>},玩家看到"服务器提供"(服务器目录)与"我的"(玩家目录)两组,同名时我的优先,
+ * 玩家对服务器提供只读、能开关、能复制到我的。每种库只声明条目长什么样(一个文件,或一个目录)。
  */
 class LibraryTest {
 
@@ -38,6 +38,11 @@ class LibraryTest {
     private Library library(LibraryKind kind, Switches switches) {
         return new Library(kind, new Shelf(kind, home("server")), new Shelf(kind, home("mine")), switches,
                 Provenance.Source.NONE);
+    }
+
+    private Library mergedLibrary(LibraryKind kind) {
+        Shelf server = new Shelf(kind, home("server"));
+        return new Library(kind, server, server, Switches.inMemory(), Provenance.Source.NONE);
     }
 
     private void put(String path, String text) throws IOException {
@@ -126,13 +131,13 @@ class LibraryTest {
 
     @Test
     void thePlayerSeesTwoGroupsAndMineWinsOnTheSameName() throws IOException {
-        put("server/persona/numen/小焰.md", "内置的小焰");
-        put("server/persona/numen/团子.md", "内置的团子");
+        put("server/persona/numen/小焰.md", "服务器提供的小焰");
+        put("server/persona/numen/团子.md", "服务器提供的团子");
         put("mine/persona/my/阿光.md", "我的阿光");
         Library library = library(PERSONA, Switches.inMemory());
         library.mine().write(new EntryId("numen", "小焰"), "我改的小焰");
 
-        assertEquals(2, library.group(Library.Group.BUILTIN).size());
+        assertEquals(2, library.group(Library.Group.SERVER).size());
         assertEquals(2, library.group(Library.Group.MINE).size());
         List<Library.Entry> effective = library.effective();
         assertEquals(3, effective.size(), "同名只留我的");
@@ -140,21 +145,21 @@ class LibraryTest {
         assertEquals(Library.Group.MINE, xiaoyan.group());
         assertEquals("我改的小焰", xiaoyan.text());
         assertTrue(xiaoyan.paired());
-        assertTrue(library.group(Library.Group.BUILTIN).stream()
-                .filter(e -> e.id().name().equals("小焰")).findFirst().orElseThrow().paired(), "内置那条被盖着");
+        assertTrue(library.group(Library.Group.SERVER).stream()
+                .filter(e -> e.id().name().equals("小焰")).findFirst().orElseThrow().paired(), "服务器提供那条被盖着");
         assertFalse(library.find(new EntryId("numen", "团子")).paired());
     }
 
     @Test
     void copyingABuiltinEntryToMineKeepsTheNameSoMineCoversIt() throws IOException {
-        put("server/persona/numen/小焰.md", "内置的");
+        put("server/persona/numen/小焰.md", "服务器提供的");
         Library library = library(PERSONA, Switches.inMemory());
 
         Library.Entry copy = library.copyToMine(new EntryId("numen", "小焰"));
 
         assertEquals(Library.Group.MINE, copy.group());
-        assertEquals("内置的", Files.readString(dir.resolve("mine/persona/numen/小焰.md")));
-        assertEquals("内置的", Files.readString(dir.resolve("server/persona/numen/小焰.md")), "内置的原样");
+        assertEquals("服务器提供的", Files.readString(dir.resolve("mine/persona/numen/小焰.md")));
+        assertEquals("服务器提供的", Files.readString(dir.resolve("server/persona/numen/小焰.md")), "服务器提供的原样");
         assertNull(library.copyToMine(new EntryId("numen", "没有")));
     }
 
@@ -167,16 +172,16 @@ class LibraryTest {
         library.copyToMine(new EntryId("numen", "mining"));
         assertEquals("ores", Files.readString(dir.resolve("mine/skills/numen/mining/references/ores.md")));
 
-        // 再复制一次:换成内置现在的样子,不夹带她删掉的旧文件
+        // 再复制一次:换成服务器提供现在的样子,不夹带她删掉的旧文件
         Files.delete(dir.resolve("server/skills/numen/mining/references/ores.md"));
-        library.builtin().reload();
+        library.server().reload();
         library.copyToMine(new EntryId("numen", "mining"));
         assertFalse(Files.exists(dir.resolve("mine/skills/numen/mining/references/ores.md")));
     }
 
     @Test
     void theSwitchesAreThePlayersOwnAndAFlippedOffEntryIsStillThereButNotInUse() throws IOException {
-        put("server/persona/numen/小焰.md", "内置的");
+        put("server/persona/numen/小焰.md", "服务器提供的");
         Switches mine = Switches.inMemory();
         Switches other = Switches.inMemory();
         Library library = library(PERSONA, mine);
@@ -195,7 +200,7 @@ class LibraryTest {
 
     @Test
     void theLibraryVersionMovesOnlyWhenFilesDo() throws IOException {
-        put("server/persona/numen/小焰.md", "内置的");
+        put("server/persona/numen/小焰.md", "服务器提供的");
         Library library = library(PERSONA, Switches.inMemory());
         long start = library.version();
 
@@ -213,5 +218,23 @@ class LibraryTest {
         assertEquals(Fingerprint.of("abc"), Fingerprint.of("abc".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         assertNotEquals(Fingerprint.of("abc"), Fingerprint.of("abd"));
         assertEquals(12, Fingerprint.of("abc").length());
+    }
+
+    @Test
+    void aMergedLibraryIsOneGroupWithNoSameNameAndNothingToCopy() throws IOException {
+        put("server/persona/numen/小焰.md", "自带的");
+        Library library = mergedLibrary(PERSONA);
+
+        assertTrue(library.merged());
+        assertTrue(library.group(Library.Group.MINE).isEmpty(), "没有另一处");
+        assertEquals(1, library.group(Library.Group.SERVER).size());
+        assertFalse(library.effective().get(0).paired());
+        assertNull(library.copyToMine(new EntryId("numen", "小焰")));
+
+        library.mine().write(EntryId.mine("甲"), "我的");
+        assertEquals("我的", Files.readString(dir.resolve("server/persona/my/甲.md")), "我的就写在服务器目录里");
+        assertEquals(Library.Group.SERVER, library.findAny(EntryId.mine("甲")).group());
+        assertEquals(2, library.active().size());
+        assertEquals(library.server().version(), library.version(), "同一个货架只算一次");
     }
 }

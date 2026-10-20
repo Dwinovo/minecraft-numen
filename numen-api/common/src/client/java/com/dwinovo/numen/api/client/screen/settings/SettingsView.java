@@ -6,9 +6,6 @@ import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.ClientKeys;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
-import com.dwinovo.numen.api.client.skin.SkinTextures;
-import com.dwinovo.numen.api.skin.MineSkinClient;
-import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
@@ -34,7 +31,7 @@ import java.util.UUID;
 /**
  * The Settings tab of {@link com.dwinovo.numen.api.client.screen.NumenScreen}, extracted whole: a
  * config hub with a left sub-nav picking one of nine sections (model configs / proxy / MCP /
- * skills / persona / voice / skin / STT / theme), each with its list + form + delete-confirm
+ * skills / persona / voice / STT / theme), each with its list + form + delete-confirm
  * states. All section state, widget building, rendering, hit-testing and wheel handling live
  * here; the screen supplies geometry, widget registration and shared transient signals through
  * {@link Host}. Behaviour is a 1:1 move from the screen (offsets, ordering, colours unchanged).
@@ -70,7 +67,7 @@ public final class SettingsView {
      * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
      * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
      */
-    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME, PERMISSION }
+    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, STT, THEME, PERMISSION }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -91,11 +88,11 @@ public final class SettingsView {
     private long lastPushMs;
 
     /**
-     * 设置首页的分组(Telegram 设置那一列一组一组的):她本身(模型、人设、声线、语音输入、皮肤)、
+     * 设置首页的分组(Telegram 设置那一列一组一组的):她本身(模型、人设、声线、语音输入)、
      * 她能用的(技能、工具扩展、外接大脑)、界面(主题)。
      */
     private static final Section[][] GROUPS = {
-            {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT, Section.SKIN},
+            {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT},
             {Section.SKILLS, Section.MCP, Section.BRAIN, Section.PERMISSION},
             {Section.THEME}};
     private static final int ITEM_H = 20;
@@ -103,34 +100,35 @@ public final class SettingsView {
 
     // ---- 内容库(模型档案、人设、技能、MCP 工具)共有的几样:分组、说明里的标记、给管理员的新版处理 ----
 
-    /** 条目在列表里属于哪一节:内置的归"内置",其余归"我的"。 */
+    /** 条目在列表里属于哪一节:服务器提供的归"服务器提供",其余归"我的"。 */
     private static String groupOf(ServerLibraries.Base b) {
-        return b.builtin() ? LibraryListPanel.BUILTIN : LibraryListPanel.MINE;
+        return b.server() ? LibraryListPanel.SERVER : LibraryListPanel.MINE;
     }
 
-    /** 说明行:关着、改过、有新版、来源卸载了、盖着/被盖着,这些标记在前,各库自己的说明在后。 */
+    /** 说明行:关着、自带、改过、有新版、来源卸载了、盖着/被盖着,这些标记在前,各库自己的说明在后。 */
     private static String meta(ServerLibraries.Base b, String detail) {
         List<String> tags = new ArrayList<>();
         if (!b.enabled()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_OFF));
+        if (b.shipped()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_SHIPPED));
         if (b.modified()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_MODIFIED));
         if (b.update()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_UPDATE));
         if (b.gone()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_GONE));
-        if (b.paired()) tags.add(I18n.get(b.builtin() ? ModLanguageData.Keys.LIBRARY_COVERED
+        if (b.paired()) tags.add(I18n.get(b.server() ? ModLanguageData.Keys.LIBRARY_COVERED
                 : ModLanguageData.Keys.LIBRARY_COVERS));
         return tags.isEmpty() ? detail : String.join(" · ", tags) + " · " + detail;
     }
 
-    /** 这一条当前这位玩家能不能改、删:自己的人人能,内置的只有管理员(玩家对内置只读,想改先复制到我的)。 */
+    /** 这一条当前这位玩家能不能改、删:自己的人人能,服务器提供的只有管理员(玩家对服务器提供的只读,想改先复制到我的)。 */
     private static boolean editable(ServerLibraries.Base b) {
-        return !b.builtin() || RemoteCompanions.admin();
+        return !b.server() || RemoteCompanions.admin();
     }
 
     /** 请求体:库里的名字,和它在哪一组。 */
     private static JsonObject target(ServerLibraries.Base b) {
         JsonObject body = new JsonObject();
         body.addProperty("id", b.id());
-        if (b.builtin()) {
-            body.addProperty("group", "builtin");
+        if (b.server()) {
+            body.addProperty("group", "server");
         }
         return body;
     }
@@ -139,18 +137,18 @@ public final class SettingsView {
         RemoteCompanions.library().request(kind, op, target(b));
     }
 
-    /** 玩家自己的开关:关掉的内置条目他的同伴看不到(开关记在他自己的偏好里)。 */
+    /** 玩家自己的开关:关掉的条目他的同伴看不到(开关记在他自己的偏好里)。 */
     private static void flip(String kind, ServerLibraries.Base b) {
         request(kind, b.enabled() ? Libraries.DISABLE : Libraries.ENABLE, b);
     }
 
     /**
-     * 管理员对内置条目的右键菜单:jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
+     * 管理员对 jar 自带条目的右键菜单(房主的"我的"里自带的也是):jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
      * 自己的改动、取回 jar 里的这一版。
      */
     private static List<PopupMenu.Item> updateMenu(String kind, ServerLibraries.Base b) {
-        if (!b.builtin() || !RemoteCompanions.admin()) {
-            return List.of();
+        if (!RemoteCompanions.admin()) {
+            return List.of();   // 有新版、改过这两样只有服务器目录里 jar 自带的条目才会有,房主的"我的"里也一样
         }
         List<PopupMenu.Item> items = new ArrayList<>();
         if (b.update()) {
@@ -184,8 +182,8 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Provider> profileList;
 
     /**
-     * 模型档案:内置的(服务器目录里,管理员能改)和我的两组。玩家对内置只读,想改先复制到我的;每一条可以由玩家自己关掉。
-     * key 不在档案里:表单上输入的 key 按厂家存进钥匙串(见 {@link #saveKey})。
+     * 模型档案:服务器提供的(服务器目录里,管理员能改)和我的两组。玩家对服务器提供的只读,想改先复制到我的;每一条可以由玩家自己关掉。
+     * key 不在档案里:表单上输入的 key 按厂家存进钥匙串(见 {@link ServerLibraries#saveKey})。
      */
     private LibraryListPanel<ServerLibraries.Provider> profileList() {
         if (profileList == null) {
@@ -199,11 +197,11 @@ public final class SettingsView {
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 RemoteCompanions.getOrCreate(host.uuid()).providerEntryId());
                         return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta(e.base(), detail),
-                                !e.hasKey(), marked, !editable(e.base()), e.base().builtin());
+                                !e.hasKey(), marked, !editable(e.base()), e.base().server());
                     },
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id(), e.base().builtin()),
+                    e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id(), e.base().server()),
                     this::beginEditProvider)
                     .withSections(e -> groupOf(e.base()),
                             LibraryListPanel.shelves(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
@@ -222,11 +220,11 @@ public final class SettingsView {
         return profileList;
     }
 
-    // ---- 声线列表:同一底盘,内置/我的两组,加标题行全局开关与绑定 ----
+    // ---- 声线列表:同一底盘,服务器提供/我的两组,加标题行全局开关与绑定 ----
     private LibraryListPanel<ServerLibraries.Voice> voiceListPanel;
 
     /**
-     * 声线:服务端的一种库(内置的管理员配,我的本人配),她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
+     * 声线:服务端的一种库(服务器提供的管理员配,我的本人配),她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
      * 没填的那行标红提醒。全局开关是这台电脑自己的设置。
      */
     private LibraryListPanel<ServerLibraries.Voice> voiceListPanel() {
@@ -252,11 +250,11 @@ public final class SettingsView {
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 RemoteCompanions.getOrCreate(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked,
-                                !editable(e.base()), e.base().builtin());
+                                !editable(e.base()), e.base().server());
                     },
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> RemoteCompanions.library().delete(Libraries.VOICE, e.id(), e.base().builtin()),
+                    e -> RemoteCompanions.library().delete(Libraries.VOICE, e.id(), e.base().server()),
                     this::beginEditVoice)
                     .withSections(e -> groupOf(e.base()),
                             LibraryListPanel.shelves(ModLanguageData.Keys.VOICE_ADD, ModLanguageData.Keys.VOICE_EMPTY,
@@ -289,65 +287,43 @@ public final class SettingsView {
         if (providerEditId != null) {
             body.addProperty("id", providerEditId);
         }
-        if (providerEditBuiltin) {
-            body.addProperty("group", "builtin");
+        if (providerEditServer) {
+            body.addProperty("group", "server");
         }
         RemoteCompanions.library().put(Libraries.PROVIDER, body);
-        saveKey(d.provider, d.apiKey, providerEditBuiltin);
+        ServerLibraries.saveKey(d.provider, d.apiKey, providerEditServer);
         addingProvider = false;
         providerEditId = null;
         host.rebuild();
     }
 
 
-    /** 表单里这个厂家已存的 key:改内置档案是服主的,别的是玩家自己的;没存过是空串。 */
+    /** 表单里这个厂家已存的 key:改服务器提供的档案是服主的,别的是玩家自己的;没存过是空串。 */
     private String storedKey(String service) {
-        return providerEditBuiltin ? ServerLibraries.serverKey(service) : ServerLibraries.mineKey(service);
-    }
-
-    /** key 按厂家存进钥匙串(不进档案);表单上的值和已存的不同才发。服主的 key 只有管理员能改。 */
-    private static void saveKey(String service, String key, boolean server) {
-        String typed = key == null ? "" : key.strip();
-        String stored = server ? ServerLibraries.serverKey(service) : ServerLibraries.mineKey(service);
-        if (service == null || service.isBlank() || typed.equals(stored)) {
-            return;
-        }
-        JsonObject body = new JsonObject();
-        body.addProperty("service", service);
-        body.addProperty("key", typed);
-        body.addProperty("scope", server ? "server" : "mine");
-        RemoteCompanions.library().request(Libraries.KEY, Libraries.PUT, body);
+        return providerEditServer ? ServerLibraries.serverKey(service) : ServerLibraries.mineKey(service);
     }
 
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
     private String providerEditId;
-    /** 正在编辑的是内置组里的那一条(只有管理员),不是我的。 */
-    private boolean providerEditBuiltin;
+    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
+    private boolean providerEditServer;
 
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
     private String voiceEditId;
-    /** 正在编辑的是内置组里的那一条(只有管理员),不是我的。 */
-    private boolean voiceEditBuiltin;
+    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
+    private boolean voiceEditServer;
     // ---- 声线表单:NumenUI VoiceFormPanel(后端切行/滚动/试听/胶囊) ----
     private VoiceFormPanel voiceForm;
     private VoiceFormPanel.Draft voiceDraft = VoiceFormPanel.freshDraft();
-
-    // 皮肤库(列表+表单,照声线库制式)。签名在服务端排队,排队的几行和签好的条目一起在列表里。
-    private boolean addingSkin;
-    private String skinEditId;
-    private boolean skinEditBuiltin;
-    // ---- 皮肤表单:NumenUI SkinFormPanel(名称/手臂模型/文件导入) ----
-    private SkinFormPanel skinForm;
-    private SkinFormPanel.Draft skinDraft = new SkinFormPanel.Draft();
 
     // ---- proxy section state (IP + port) ----
 
     // Persona library form state (mirrors the MCP add/edit/delete flow).
     private boolean addingPersona;
     private String personaEditId;          // non-null = editing this persona; null = creating
-    private boolean personaEditBuiltin;    // the one being edited is a built-in persona (admin only)
+    private boolean personaEditServer;    // the one being edited is a built-in persona (admin only)
     // ---- 人格表单:NumenUI PersonaFormPanel(名称 + 多行正文编辑器) ----
     private PersonaFormPanel personaForm;
     private PersonaFormPanel.Draft personaDraft = new PersonaFormPanel.Draft();
@@ -356,7 +332,7 @@ public final class SettingsView {
     private boolean addingMcp;
     /** 正在编辑的那台 MCP 服务器在库里的名字和它在哪一组;新建是 null。 */
     private String mcpEditId;
-    private boolean mcpEditBuiltin;
+    private boolean mcpEditServer;
     private McpFormPanel mcpForm;
     /** 把授权完成后的回调网址贴回来的那张小卡。 */
     private boolean pastingAuth;
@@ -377,7 +353,6 @@ public final class SettingsView {
                 I18n.get("numen.settings.nav.skills"),
                 I18n.get("numen.settings.nav.persona"),
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
-                I18n.get(ModLanguageData.Keys.SKIN_TITLE),
                 I18n.get(ModLanguageData.Keys.STT_NAV),
                 I18n.get("numen.settings.nav.theme"),
                 I18n.get("numen.settings.nav.permission"));
@@ -459,14 +434,13 @@ public final class SettingsView {
 
     /** 任一新建/编辑表单在场(表单模态)——屏幕据此屏蔽背景交互。 */
     public boolean formActive() {
-        return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp || pastingAuth || addingRule;
+        return addingProvider || addingVoice || addingPersona || addingMcp || pastingAuth || addingRule;
     }
 
     /** 在场的那张表单里有下拉或选择框开着。人设、MCP 表单没有弹层。 */
     private boolean formOverlayOpen() {
         return addingProvider && providerForm().hasOverlay()
-                || addingVoice && voiceForm().hasOverlay()
-                || addingSkin && skinForm().hasOverlay();
+                || addingVoice && voiceForm().hasOverlay();
     }
 
     /** Esc while a form modal is up: close it back to the list (same as the card's 取消). */
@@ -477,7 +451,6 @@ public final class SettingsView {
         addingProvider = false; providerEditId = null;
         addingVoice = false; voiceEditId = null;
         if (voiceForm != null) voiceForm.cancelPendingTest();
-        addingSkin = false;
         addingPersona = false; personaEditId = null;
         addingMcp = false;
         pastingAuth = false;
@@ -650,7 +623,6 @@ public final class SettingsView {
         addingVoice = false;
         voiceEditId = null;
         if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
-        addingSkin = false;
     }
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
@@ -686,12 +658,6 @@ public final class SettingsView {
                 voiceListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingVoice) buildVoiceForm();
-            }
-            case SKIN -> {
-                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                skinListPanel().build(secX(), secY0(), secW(), secH(),
-                        left(), top(), panelW(), panelH());
-                if (addingSkin) buildSkinForm();
             }
             case BRAIN -> brainPanel().build(secX(), secY0(), secW(), secH());
             case STT -> sttPanel().build(secX(), secY0(), secW(), secH(), pageWindow());
@@ -754,8 +720,8 @@ public final class SettingsView {
         if (voiceEditId != null) {
             body.addProperty("id", voiceEditId);
         }
-        if (voiceEditBuiltin) {
-            body.addProperty("group", "builtin");
+        if (voiceEditServer) {
+            body.addProperty("group", "server");
         }
         if (voiceEditId == null && host.uuid() != null) {
             // 从某个同伴的设置页新建声线 = 给这只配音:新条目的 id 随答复回来,直接绑给发请求时的那只同伴
@@ -785,10 +751,10 @@ public final class SettingsView {
         if (addingVoice) formCard(Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
     }
 
-    private void beginNewVoice(boolean builtin) {
+    private void beginNewVoice(boolean server) {
         addingVoice = true;
         voiceEditId = null;
-        voiceEditBuiltin = builtin;
+        voiceEditServer = server;
         voiceDraft = VoiceFormPanel.freshDraft();
         host.rebuild();
     }
@@ -800,7 +766,7 @@ public final class SettingsView {
         var voice = e.profile();
         addingVoice = true;
         voiceEditId = e.id();
-        voiceEditBuiltin = e.base().builtin();
+        voiceEditServer = e.base().server();
         var d = new VoiceFormPanel.Draft();
         d.backend = voice.backend();
         d.name = nv(e.name());
@@ -821,7 +787,7 @@ public final class SettingsView {
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
-    // ---- 人格列表:通用 LibraryListPanel + 内置/我的两组 + 复制到我的 + 标题行 ↻ 重扫 ----
+    // ---- 人格列表:通用 LibraryListPanel + 服务器提供/我的两组 + 复制到我的 + 标题行 ↻ 重扫 ----
     private LibraryListPanel<ServerLibraries.Persona> personaListPanel;
 
     private LibraryListPanel<ServerLibraries.Persona> personaListPanel() {
@@ -835,10 +801,10 @@ public final class SettingsView {
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
                                 RemoteCompanions.getOrCreate(host.uuid()).personaId());
                         return new LibraryListPanel.Row(p.name(), meta(p.base(), detail), false, marked,
-                                !editable(p.base()), p.base().builtin());
+                                !editable(p.base()), p.base().server());
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
-                    p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id(), p.base().builtin()),
+                    p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id(), p.base().server()),
                     this::beginEditPersona)
                     .withSections(p -> groupOf(p.base()),
                             LibraryListPanel.shelves("numen.persona.add", "numen.persona.empty",
@@ -866,22 +832,22 @@ public final class SettingsView {
         return personaListPanel;
     }
 
-    private void beginNewPersona(boolean builtin) {
+    private void beginNewPersona(boolean server) {
         addingPersona = true;
         personaEditId = null;
-        personaEditBuiltin = builtin;
+        personaEditServer = server;
         personaDraft = new PersonaFormPanel.Draft();
         host.rebuild();
     }
 
     /** 存一条人设:{@code id} 为 null 是新建。服务端存,改名时它把在用的同伴一起改指。 */
-    private static void savePersona(String id, String name, String text, boolean builtin) {
+    private static void savePersona(String id, String name, String text, boolean server) {
         JsonObject body = new JsonObject();
         if (id != null) {
             body.addProperty("id", id);
         }
-        if (builtin) {
-            body.addProperty("group", "builtin");
+        if (server) {
+            body.addProperty("group", "server");
         }
         body.addProperty("name", name);
         body.addProperty("text", text);
@@ -907,7 +873,7 @@ public final class SettingsView {
     }
 
     private void onPersonaSave(PersonaFormPanel.Draft d) {
-        savePersona(personaEditId, d.name.trim(), d.text.trim(), personaEditBuiltin);
+        savePersona(personaEditId, d.name.trim(), d.text.trim(), personaEditServer);
         addingPersona = false;
         personaEditId = null;
         personaDraft = new PersonaFormPanel.Draft();
@@ -963,21 +929,21 @@ public final class SettingsView {
 
     private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel;
 
-    private void beginNewMcp(boolean builtin) {
+    private void beginNewMcp(boolean server) {
         addingMcp = true;
         mcpEditId = null;
-        mcpEditBuiltin = builtin;
+        mcpEditServer = server;
         mcpDraft = new McpFormPanel.Draft();
         host.rebuild();
     }
 
-    /** 这一台的配置(地址、令牌、命令行)当前这位玩家能不能看、改:自己的人人能,内置的只有管理员。 */
+    /** 这一台的配置(地址、令牌、命令行)当前这位玩家能不能看、改:自己的人人能,服务器提供的只有管理员。 */
     private static boolean mcpOwned(ServerLibraries.McpClientRow h) {
         return editable(h.base());
     }
 
     /**
-     * 接进来的 MCP 服务器:内置的(管理员配的)和我的两组。自己能改的那几台,行尾开关是"连不连";别人的(内置的、对玩家)是自己的开关,
+     * 接进来的 MCP 服务器:服务器提供的(管理员配的)和我的两组。自己能改的那几台,行尾开关是"连不连";别人的(服务器提供的、对玩家)是自己的开关,
      * 只管他的同伴看不看得到它的工具。玩家只能加 http 类的,stdio 起的是服务器机器上的进程,只有管理员能加。
      */
     private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel() {
@@ -986,9 +952,9 @@ public final class SettingsView {
                     ServerLibraries::mcpClients,
                     h -> new LibraryListPanel.Row(h.name(), meta(h.base(), mcpMeta(h)),
                             h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED, null,
-                            !mcpOwned(h), h.base().builtin()),
+                            !mcpOwned(h), h.base().server()),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
-                    h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().builtin()),
+                    h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().server()),
                     this::beginEditMcp)
                     .withSections(h -> groupOf(h.base()),
                             LibraryListPanel.shelves("numen.mcp.add", "numen.mcp.empty",
@@ -1073,7 +1039,7 @@ public final class SettingsView {
         String clientId = "";
         if (mcpEditId != null) {
             var original = ServerLibraries.mcpClients().stream()
-                    .filter(h -> h.id().equals(mcpEditId) && h.base().builtin() == mcpEditBuiltin && h.full())
+                    .filter(h -> h.id().equals(mcpEditId) && h.base().server() == mcpEditServer && h.full())
                     .findFirst();
             connect = original.map(ServerLibraries.McpClientRow::connect).orElse(true);
             clientId = original.map(h -> h.spec().clientId()).orElse("");
@@ -1095,8 +1061,8 @@ public final class SettingsView {
         if (mcpEditId != null) {
             body.addProperty("id", mcpEditId);
         }
-        if (mcpEditBuiltin) {
-            body.addProperty("group", "builtin");
+        if (mcpEditServer) {
+            body.addProperty("group", "server");
         }
         RemoteCompanions.library().put(Libraries.MCP_CLIENT, body);
         McpAuthPrompt.expect(name);
@@ -1134,7 +1100,7 @@ public final class SettingsView {
     private LibraryListPanel<ServerLibraries.Skill> skillsListPanel;
 
     /**
-     * 技能:内置的(Numen 与各插件随包带来的,同步在服务器目录里)和我的两组。人人能开关(记在自己的偏好里)、能复制到我的、
+     * 技能:服务器提供的(Numen 与各插件随包带来的,同步在服务器目录里)和我的两组。人人能开关(记在自己的偏好里)、能复制到我的、
      * 能让服务器重扫;技能是目录,改它拿编辑器改文件。
      */
     private LibraryListPanel<ServerLibraries.Skill> skillsListPanel() {
@@ -1145,7 +1111,7 @@ public final class SettingsView {
                         String desc = sk.description() == null || sk.description().isBlank()
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), meta(sk.base(), desc), false, null, false,
-                                sk.base().builtin());
+                                sk.base().server());
                     },
                     null, null, null)
                     .withSections(sk -> groupOf(sk.base()),
@@ -1173,228 +1139,6 @@ public final class SettingsView {
     }
 
     /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
-
-    // ---- Skin section: the named skin library (upload png → MineSkin-signed textures, signed in the server's queue) ----
-
-    /** 皮肤页的一行:签好的条目,或服务端队里排着的、刚失败的一张。 */
-    private record SkinLine(ServerLibraries.Skin skin, ServerLibraries.SkinJob job) {
-
-        String name() {
-            return skin != null ? skin.name() : job.name();
-        }
-    }
-
-    // ---- 皮肤列表:通用 LibraryListPanel + 行首脸预览(经 McDrawSurface 取原生画布) ----
-    private LibraryListPanel<SkinLine> skinListPanel;
-
-    private static List<SkinLine> skinLines() {
-        List<SkinLine> out = new ArrayList<>();
-        ServerLibraries.skins().forEach(s -> out.add(new SkinLine(s, null)));
-        ServerLibraries.skinJobs().forEach(j -> out.add(new SkinLine(null, j)));
-        return out;
-    }
-
-    /** 排队中的一行说明:正在签、被限流在等、排第几,或失败的原因。 */
-    private static String jobMeta(ServerLibraries.SkinJob job) {
-        if (job.failed()) {
-            return I18n.get(ModLanguageData.Keys.SKIN_JOB_FAILED, job.failure().message().getString());
-        }
-        return switch (job.state()) {
-            case "SIGNING" -> I18n.get(ModLanguageData.Keys.SKIN_JOB_SIGNING);
-            case "WAITING" -> I18n.get(ModLanguageData.Keys.SKIN_JOB_WAITING);
-            default -> I18n.get(ModLanguageData.Keys.SKIN_JOB_QUEUED, job.position());
-        };
-    }
-
-    private LibraryListPanel<SkinLine> skinListPanel() {
-        if (skinListPanel == null) {
-            skinListPanel = new LibraryListPanel<SkinLine>(
-                    SettingsView::skinLines,
-                    line -> {
-                        if (line.job() != null) {
-                            return new LibraryListPanel.Row(line.name(), jobMeta(line.job()), line.job().failed(), null).withoutToggle();
-                        }
-                        var e = line.skin();
-                        boolean unreadable = e.variant() == null;
-                        String detail = unreadable ? "?" : I18n.get(SkinProfile.VARIANT_SLIM.equals(e.variant())
-                                ? ModLanguageData.Keys.SKIN_VARIANT_SLIM : ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)
-                                + " · " + I18n.get(e.signed() ? ModLanguageData.Keys.SKIN_SIGNED
-                                        : ModLanguageData.Keys.SKIN_UNSIGNED);
-                        Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                RemoteCompanions.getOrCreate(host.uuid()).skinId());
-                        return new LibraryListPanel.Row(e.name(), meta(e.base(), detail), unreadable || !e.signed(),
-                                marked, !editable(e.base()), e.base().builtin());
-                    },
-                    line -> line.job() != null
-                            ? Component.translatable(ModLanguageData.Keys.SKIN_JOB_CANCEL_CONFIRM, line.name()).getString()
-                            : Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM,
-                                    line.name() == null ? "" : line.name()).getString(),
-                    line -> {
-                        if (line.job() != null) {
-                            JsonObject body = new JsonObject();
-                            body.addProperty("job", line.job().job());
-                            RemoteCompanions.library().request(Libraries.SKIN, Libraries.CANCEL, body);
-                        } else {
-                            RemoteCompanions.library().delete(Libraries.SKIN, line.skin().id(), line.skin().base().builtin());
-                        }
-                    },
-                    this::beginEditSkin)
-                    .withSections(line -> line.skin() == null ? LibraryListPanel.MINE : groupOf(line.skin().base()),
-                            LibraryListPanel.shelves(ModLanguageData.Keys.SKIN_ADD, ModLanguageData.Keys.SKIN_EMPTY,
-                                    () -> beginNewSkin(false), () -> beginNewSkin(true)))
-                    .withMenu(line -> line.skin() == null ? List.of() : updateMenu(Libraries.SKIN, line.skin().base()))
-                    .withClone(line -> {
-                        if (line.skin() != null) {
-                            request(Libraries.SKIN, Libraries.COPY, line.skin().base());
-                        }
-                    })
-                    .withRowToggle(line -> line.skin() == null || line.skin().base().enabled(), line -> {
-                        if (line.skin() != null) {
-                            flip(Libraries.SKIN, line.skin().base());
-                        }
-                    })
-                    // 换绑/解绑走她的绑定:穿上这张皮肤(原地重建身体);解绑回默认皮肤
-                    .withBind(
-                            line -> {
-                                if (host.uuid() != null && line.skin() != null && line.skin().signed()) {
-                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.SKIN, line.skin().id());
-                                }
-                            },
-                            line -> {
-                                if (host.uuid() != null) {
-                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.SKIN, null);
-                                }
-                            })
-                    .withRowIcon(16, (s, line, ix, iy, size) -> {
-                        if (line.skin() == null || !(s instanceof com.dwinovo.numen.api.client.ui.mc.McDrawSurface mc)) return;
-                        var face = SkinTextures.faceOf(line.skin().id() + (line.skin().base().builtin() ? "#b" : "#m"),
-                                line.skin().png());
-                        if (face != null) {
-                            net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
-                                    mc.graphics(), face, ix, iy, size);
-                        }
-                    })
-                    .following(Libraries.SKIN);
-        }
-        return skinListPanel;
-    }
-
-    private void beginNewSkin(boolean builtin) {
-        addingSkin = true;
-        skinEditId = null;
-        skinEditBuiltin = builtin;
-        skinDraft = newSkinDraft();
-        host.rebuild();
-    }
-
-    /** 新建一张皮肤的草稿;管理员的草稿带着服务器钥匙串里现有的 MineSkin key。 */
-    private SkinFormPanel.Draft newSkinDraft() {
-        var d = new SkinFormPanel.Draft();
-        if (RemoteCompanions.admin()) {
-            d.mineSkinKey = ServerLibraries.serverKey(MineSkinClient.KEY_SERVICE);
-        }
-        return d;
-    }
-
-    /** 表单卡里的 NumenUI 皮肤表单(名称/手臂模型/文件导入);卡壳照旧 formModal。 */
-    private void buildSkinForm() {
-        skinForm().open(skinDraft);
-        skinForm().build(fx(), fy0(), fw(), fBottom() - fy0(), formWindow());
-    }
-
-    private SkinFormPanel skinForm() {
-        if (skinForm == null) {
-            skinForm = new SkinFormPanel(this::onSkinSave,
-                    () -> {   // 取消
-                        addingSkin = false;
-                        host.rebuild();
-                    },
-                    this::openNativeSkinPicker,
-                    RemoteCompanions::admin);
-        }
-        return skinForm;
-    }
-
-    /**
-     * 存一张皮肤:名字、手臂模型和(新选的)图交给服务端,它把这一张排进签名队;签到哪一步了在列表里看。
-     * 管理员改了 MineSkin 的 key 一并存进服务器钥匙串。
-     */
-    private void onSkinSave(SkinFormPanel.Draft d) {
-        JsonObject body = new JsonObject();
-        body.addProperty("name", d.name.trim());
-        body.addProperty("variant", d.variant);
-        if (d.dropped != null) {
-            body.addProperty("png", java.util.Base64.getEncoder().encodeToString(d.dropped));
-        }
-        if (skinEditId != null) {
-            body.addProperty("id", skinEditId);
-        }
-        if (skinEditBuiltin) {
-            body.addProperty("group", "builtin");
-        }
-        RemoteCompanions.library().put(Libraries.SKIN, body);
-        if (RemoteCompanions.admin()) {
-            saveKey(MineSkinClient.KEY_SERVICE, d.mineSkinKey, true);
-        }
-        addingSkin = false;
-        skinEditId = null;
-        skinDraft = new SkinFormPanel.Draft();
-        host.rebuild();
-    }
-
-    private void beginEditSkin(SkinLine line) {
-        if (line.skin() == null || line.skin().variant() == null) {
-            return;   // 排队中的与读不通的没有可改的
-        }
-        addingSkin = true;
-        skinEditId = line.skin().id();
-        skinEditBuiltin = line.skin().base().builtin();
-        var d = newSkinDraft();
-        d.editId = line.skin().id();
-        d.name = line.skin().name();
-        d.variant = line.skin().variant();
-        // 不换图时服务端用存着的原图(改手臂模型重签也从它来),dropped 留空。
-        skinDraft = d;
-        host.rebuild();
-    }
-
-    private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
-        skinListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
-        if (addingSkin) formCard(Component.translatable(ModLanguageData.Keys.SKIN_TITLE), skinForm()::render);
-    }
-
-    /** 皮肤 png 从系统拖进游戏窗口(皮肤表单打开时)。64×64 或旧版 64×32。 */
-    public void onFilesDrop(List<java.nio.file.Path> paths) {
-        if (!(section == Section.SKIN && addingSkin)) return;
-        for (java.nio.file.Path p : paths) {
-            if (!p.toString().toLowerCase(java.util.Locale.ROOT).endsWith(".png")) continue;
-            skinForm().importFile(p);
-            return;
-        }
-    }
-
-    /** 原生文件对话框(LWJGL tinyfd,MC 自带;FCL 端会翻译成安卓文件选择器):
-     *  独立线程弹窗防冻主循环,选中后回主线程导入。 */
-    private void openNativeSkinPicker() {
-        new Thread(() -> {
-            String chosen = null;
-            try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
-                var filters = stack.mallocPointer(1);
-                filters.put(stack.UTF8("*.png")).flip();
-                chosen = org.lwjgl.util.tinyfd.TinyFileDialogs.tinyfd_openFileDialog(
-                        I18n.get(ModLanguageData.Keys.SKIN_PICKER_TITLE), null, filters, "PNG", false);
-            } catch (Throwable t) {
-                com.dwinovo.numen.api.Constants.LOG.warn("[numen-skin] native file dialog unavailable", t);
-            }
-            String path = chosen;
-            net.minecraft.client.Minecraft.getInstance().execute(() -> {
-                if (path != null && section == Section.SKIN && addingSkin) {
-                    skinForm().importFile(java.nio.file.Path.of(path));
-                }
-            });
-        }, "numen-skin-picker").start();
-    }
 
     // ---- render (nav + active section) ----
 
@@ -1483,7 +1227,6 @@ public final class SettingsView {
             case SKILLS -> com.dwinovo.numen.api.client.ui.mc.Sprites.BOOK;
             case PERSONA -> com.dwinovo.numen.api.client.ui.mc.Sprites.PERSONA;
             case VOICE -> com.dwinovo.numen.api.client.ui.mc.Sprites.VOLUME;
-            case SKIN -> com.dwinovo.numen.api.client.ui.mc.Sprites.SHIRT;
             case STT -> com.dwinovo.numen.api.client.ui.mc.Sprites.MIC;
             case THEME -> com.dwinovo.numen.api.client.ui.mc.Sprites.BRUSH;
             case PERMISSION -> com.dwinovo.numen.api.client.ui.mc.Sprites.FLAG;
@@ -1507,7 +1250,6 @@ public final class SettingsView {
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
-            case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case BRAIN -> {
                 brainPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
                         HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
@@ -1536,10 +1278,10 @@ public final class SettingsView {
     }
 
     /** 新建模型配置:打开空白表单卡。召唤卡上"没有——去设置里新建"也走这里(设置页先由屏幕切到模型配置)。新建的在我的。 */
-    private void beginNewProvider(boolean builtin) {
+    private void beginNewProvider(boolean server) {
         addingProvider = true;
         providerEditId = null;
-        providerEditBuiltin = builtin;
+        providerEditServer = server;
         providerDraft = new ProfileFormPanel.Draft();
         host.rebuild();
     }
@@ -1547,7 +1289,7 @@ public final class SettingsView {
     private void beginEditProvider(ServerLibraries.Provider e) {
         addingProvider = true;
         providerEditId = e.id();
-        providerEditBuiltin = e.base().builtin();
+        providerEditServer = e.base().server();
         providerDraft = ProfileFormPanel.Draft.of(e.name(), e.full().profile());
         providerDraft.apiKey = storedKey(providerDraft.provider);
         host.rebuild();
@@ -1626,7 +1368,7 @@ public final class SettingsView {
     private void beginEditPersona(ServerLibraries.Persona p) {
         addingPersona = true;
         personaEditId = p.id();
-        personaEditBuiltin = p.base().builtin();
+        personaEditServer = p.base().server();
         var d = new PersonaFormPanel.Draft();
         d.name = p.name();
         d.text = p.text();
@@ -1685,14 +1427,6 @@ public final class SettingsView {
             return true;
         }
         // 皮肤表单/列表(NumenUI)。
-        if (section == Section.SKIN && addingSkin
-                && skinForm().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
-        if (section == Section.SKIN && !addingSkin
-                && skinListPanel().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
         // MCP 表单/列表(NumenUI)。
         if (section == Section.MCP && addingMcp
                 && mcpForm().mouseClicked(mouseX, mouseY, 0)) {
@@ -1738,7 +1472,6 @@ public final class SettingsView {
             case PROVIDER -> profileList();
             case VOICE -> voiceListPanel();
             case PERSONA -> personaListPanel();
-            case SKIN -> skinListPanel();
             case MCP -> mcpListPanel();
             case SKILLS -> skillsListPanel();
             case PERMISSION -> permissionPanel().list();
@@ -1751,7 +1484,7 @@ public final class SettingsView {
         var spec = row.spec();
         addingMcp = true;
         mcpEditId = row.id();
-        mcpEditBuiltin = row.base().builtin();
+        mcpEditServer = row.base().server();
         var d = new McpFormPanel.Draft();
         d.stdio = spec.isStdio();
         d.name = spec.name();
@@ -1805,14 +1538,6 @@ public final class SettingsView {
         }
         if (section == Section.PERSONA && !addingPersona
                 && personaListPanel().mouseScrolled(mx, my, sy)) {
-            return true;
-        }
-        if (section == Section.SKIN && addingSkin
-                && skinForm().mouseScrolled(mx, my, sy)) {
-            return true;
-        }
-        if (section == Section.SKIN && !addingSkin
-                && skinListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
         if (section == Section.BRAIN && brainPanel().mouseScrolled(mx, my, sy)) {
@@ -1871,10 +1596,6 @@ public final class SettingsView {
             if (addingPersona) return personaForm().keyPressed(keyCode, modifiers);
             return personaListPanel().keyPressed(keyCode, modifiers);
         }
-        if (section == Section.SKIN) {
-            if (addingSkin) return skinForm().keyPressed(keyCode, modifiers);
-            return skinListPanel().keyPressed(keyCode, modifiers);
-        }
         if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
         if (section == Section.BRAIN) return brainPanel().keyPressed(keyCode, modifiers);
         if (section == Section.PERMISSION) {
@@ -1893,7 +1614,6 @@ public final class SettingsView {
         if (section == Section.PROVIDER && addingProvider) return providerForm().charTyped(ch);
         if (section == Section.VOICE && addingVoice) return voiceForm().charTyped(ch);
         if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
-        if (section == Section.SKIN && addingSkin) return skinForm().charTyped(ch);
         if (section == Section.STT) return sttPanel().charTyped(ch);
         if (section == Section.BRAIN) return brainPanel().charTyped(ch);
         if (section == Section.PERMISSION && addingRule) return ruleForm().charTyped(ch);

@@ -42,7 +42,7 @@ class ModulesTest {
     /** 服务器目录里的一份内置(同步进去的那种)。 */
     private void builtin(String name, String code) {
         int dot = name.indexOf('.');
-        hub.builtin(Modules.KIND).write(new EntryId(name.substring(0, dot), name.substring(dot + 1)), code);
+        hub.server(Modules.KIND).write(new EntryId(name.substring(0, dot), name.substring(dot + 1)), code);
     }
 
     private Path server(String name) {
