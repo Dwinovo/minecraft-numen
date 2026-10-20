@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.task;
 
-import com.dwinovo.numen.api.entity.CompanionChunkLoader;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.server.MinecraftServer;
@@ -115,25 +114,13 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.api.permission.PermissionFeed.tick(server);   // 规则表变了,合并推给主人的面板
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
-                // 她没有客户端,服务端等的那几个回执由假客户端代答。和下面的加载垫同一个理由
-                // 挂在这儿:实体 tick 只在她所在区块已经进入实体刻时才跑,而换维度刚落地的
+                // 她没有客户端,服务端等的那几个回执由假客户端代答。挂在这儿而不是
+                // NumenPlayer.tick():实体 tick 只在她所在区块已经进入实体刻时才跑,而换维度刚落地的
                 // 那片区块还没进,回执与区块会互相等。真客户端答话不看服务端在不在 tick 她。
                 ap.fakeClient().answer();
-                // Re-stamp the companion's loading pad from the SERVER tick (this runs every tick over
-                // the player list, unconditionally) — NOT from NumenPlayer.tick(), which the entity
-                // system only calls while the companion's chunk is already entity-ticking. Doing it here
-                // breaks the chicken-and-egg: a companion whose chunk fell out of ticking range still gets
-                // its pad refreshed, which pulls its chunk back into range so it resumes ticking. Gated on
-                // the owner being online — an owner-less companion (owner logged off on a server) shouldn't
-                // hold chunks loaded; its pad lapses and it idles until the owner returns. In single-player
-                // the owner is always online while the world runs, so this never gates there. See
-                // CompanionChunkLoader.
                 UUID owner = ap.getOwnerUuid();
                 net.minecraft.server.level.ServerPlayer ownerPlayer =
                         owner == null ? null : server.getPlayerList().getPlayer(owner);
-                if (ownerPlayer != null) {
-                    CompanionChunkLoader.refresh(ap);
-                }
                 // 背包变了就推给主人一份。变化由原版的 ContainerListener 报,这里每 tick
                 // 只有一次引用比较(菜单换没换),见 CompanionStateWatch。
                 com.dwinovo.numen.api.entity.CompanionStateWatch.tick(ap, server.getTickCount());
