@@ -27,7 +27,7 @@ import java.util.List;
  * @param clearProblem    现在不能清空的理由;{@code null} = 能
  * @param messages        她此刻的上下文里有几条消息
  * @param voiceId         她绑定的声线(库条目的名字);没绑是 {@code null},客户端据此朗读
- * @param skinId          她绑定的皮肤;没绑是 {@code null}
+ * @param skinId          她穿着的皮肤(签名缓存里的引用);默认皮肤是 {@code null}
  */
 public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean bodyTaskRunning,
                              LoopStatus.Doing activity, double compactProgress, List<EventQueue.Preview> queued,

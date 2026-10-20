@@ -504,7 +504,7 @@ public class BrainGameTests {
         GameTestKit.received(player);
 
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"偷偷加的\",\"group\":\"builtin\",\"provider\":\"openai\"}");
+                "{\"name\":\"偷偷加的\",\"group\":\"server\",\"provider\":\"openai\"}");
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
                 "{\"proxy\":\"evil:1\"}");
 
@@ -870,7 +870,7 @@ public class BrainGameTests {
         GameTestKit.received(other);
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"gametest_admin_profile\",\"group\":\"builtin\",\"provider\":\"openai\"}");
+                "{\"name\":\"gametest_admin_profile\",\"group\":\"server\",\"provider\":\"openai\"}");
 
         var told = GameTestKit.received(admin);
         var heard = GameTestKit.received(other);
@@ -894,7 +894,7 @@ public class BrainGameTests {
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.KEY, "put",
                 "{\"service\":\"openai\",\"key\":\"\",\"scope\":\"server\"}");
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "delete",
-                "{\"id\":\"server:gametest_admin_profile\",\"group\":\"builtin\"}");
+                "{\"id\":\"server:gametest_admin_profile\",\"group\":\"server\"}");
         server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(other);
         GameTestKit.leave(admin);
@@ -929,7 +929,7 @@ public class BrainGameTests {
                     && com.dwinovo.numen.api.brain.Libraries.SKILL.equals(table.kind())) {
                 for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
                     var o = row.getAsJsonObject();
-                    if (skill.equals(o.get("id").getAsString()) && "builtin".equals(o.get("group").getAsString())) {
+                    if (skill.equals(o.get("id").getAsString()) && "server".equals(o.get("group").getAsString())) {
                         return o.get("enabled").getAsBoolean();
                     }
                 }

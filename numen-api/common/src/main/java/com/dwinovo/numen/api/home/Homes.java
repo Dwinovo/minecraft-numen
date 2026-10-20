@@ -25,7 +25,7 @@ import java.util.stream.Stream;
  *   <li>{@link #server}:服主管的东西(内置的各库、服主的钥匙串、服务器配置、型号目录缓存),{@code config/numen/server/};</li>
  *   <li>{@link #owner}:玩家自己的东西(我的各库、他的钥匙串、偏好),{@code config/numen/players/<uuid>/},
  *       跟着服务器走、换世界还能用;</li>
- *   <li>{@link #clientDir}:这台电脑的东西(界面偏好、声线、皮肤、语音服务的 key),{@code config/numen/client/}。</li>
+ *   <li>{@link #clientDir}:这台电脑的东西(界面偏好、语音服务的 key),{@code config/numen/client/}。</li>
  * </ul>
  * 单人游戏里服务端与客户端共用一个 {@code config/numen/},所以三个归属各占一个子目录,根下不放散文件。
  *

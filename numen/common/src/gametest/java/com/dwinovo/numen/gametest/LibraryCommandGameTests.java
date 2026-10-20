@@ -197,13 +197,14 @@ public class LibraryCommandGameTests {
                                     && "v-slim".equals(live.getGameProfile().getProperties().get("textures")
                                     .iterator().next().value()),
                             "the rebuilt body does not carry the cached signature");
-                    helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_DONE)), "not told: " + heard);
+                    helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
+                            "the owner was not told it was worn");
                     helper.assertTrue(CompanionLoops.get(id).orElseThrow().state().skinId() != null,
                             "her binding does not say which skin she wears");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
-                    helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_DONE)),
-                            "a skin signed before was not worn at once: " + heard);
+                    helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
+                            "a skin signed before was not worn at once");
                     helper.assertTrue(signed.get() == 1, "the same image was signed again: " + signed.get());
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin player Notch", heard);

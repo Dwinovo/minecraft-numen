@@ -28,7 +28,7 @@ public sealed interface OwnerInput {
 
     record ClearGoal(UUID companion) implements OwnerInput {}
 
-    /** 给她换一项绑定(档案、人设、声线、皮肤);{@code entry} 是库条目的名字,{@code null} = 不绑。 */
+    /** 给她换一项绑定(档案、人设、声线);{@code entry} 是库条目的名字,{@code null} = 不绑。 */
     record Bind(UUID companion, Slot slot, String entry) implements OwnerInput {}
 
     /**
