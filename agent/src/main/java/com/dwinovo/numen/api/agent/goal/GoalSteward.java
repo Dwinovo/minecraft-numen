@@ -236,7 +236,7 @@ public final class GoalSteward {
         persist.accept(goal);
         // goal 在类型表里恒为急件、投递方式是接续,发送方不另标。
         loop.push(List.of(new EventQueue.Entry(EventTypes.GOAL,
-                GoalPrompts.progress(verdict.reason(), goal, now), now, false)));
+                GoalPrompts.progress(verdict.reason(), goal, now, loop.dayTime()), now, false)));
     }
 
     /**

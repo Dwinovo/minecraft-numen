@@ -595,7 +595,6 @@ public class CombatGameTests {
                     var told = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED);
                     helper.assertTrue(told.size() == 1 && told.get(0).urgent()
                                     && told.get(0).text().contains("mob=\"" + id + "\"")
-                                    && told.get(0).text().contains("kind=\"zombie\"")
                                     && told.get(0).text().contains("distance=\"3\"")
                                     && told.get(0).text().contains("bearing=\"east\"")
                                     && told.get(0).text().contains(id + " is now targeting you"),

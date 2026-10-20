@@ -297,7 +297,7 @@ public final class Drops {
         if (taker == her) {
             return "you";
         }
-        return taker instanceof Player player ? player.getName().getString()
+        return taker instanceof Player player ? EntityLabel.shown(player)
                 : BuiltInRegistries.ENTITY_TYPE.getKey(taker.getType()).toString();
     }
 
@@ -326,7 +326,7 @@ public final class Drops {
                        Fate fate,
                        @Doc("The cell it landed in, was destroyed or picked up in, or was in when the dig stopped "
                                + "waiting.") BlockPos pos,
-                       @Doc("Who picked it up: you, a player's name, or a creature's type id.") Optional<String> by,
+                       @Doc("Who picked it up: you, a player's id and name, or a creature's type id.") Optional<String> by,
                        @Doc("What destroyed it: the damage type id, minecraft:lava.") Optional<String> cause,
                        @Doc("The id of the item still lying there (landed or moving), as numen.scan.entities "
                                + "gives it.") Optional<String> id) {}

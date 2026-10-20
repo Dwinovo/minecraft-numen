@@ -13,7 +13,7 @@ import java.util.Optional;
  */
 @Doc("An entity near you.")
 public record EntityInfo(
-        @Doc("Its id, kind@code like zombie@3f9a1c (a player's name for a player), which numen.fight.attack, "
+        @Doc("Its id, kind@code like zombie@3f9a1c (player@ab12cd for a player, whose name is in name), which numen.fight.attack, "
                 + "numen.use.entity and numen.move.follow take (or pass the whole Entity). The code is the start "
                 + "of its UUID, so it stays the same across restarts.") String id,
         @Doc("Its type id, minecraft:zombie.") String type,

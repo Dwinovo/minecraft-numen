@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 点名的一只实体:{@link EntityLabel} 的身份({@code zombie@3f9a1c},玩家写名字),或那只实体的表(带 {@code id})。
+ * 点名的一只实体:{@link EntityLabel} 的身份({@code zombie@3f9a1c},玩家是 {@code player@ab12cd}),或那只实体的表(带 {@code id})。
  * 身份跨重启不变,所以占身体的活重启后再跑的那一行写的就是它,认的还是同一只,认不到就是它不在了。
  *
  * @param label 通过 {@link EntityLabel#valid} 的身份
@@ -65,8 +65,8 @@ public record EntityRef(String label) {
             if (id instanceof String s && EntityLabel.valid(s)) {
                 return new EntityRef(s);
             }
-            throw new BadValue("expected an entity: its id as numen.scan.entities lists it (\"zombie@3f9a1c\", a "
-                    + "player's name), or the Entity itself; got " + BadValue.given(value));
+            throw new BadValue("expected an entity: its id as numen.scan.entities lists it (\"zombie@3f9a1c\", a player is "
+                    + "\"player@ab12cd\": kind@ and 6 hex digits), or the Entity itself; got " + BadValue.given(value));
         }
 
         @Override

@@ -79,7 +79,7 @@ public record Nearby(List<Line> lines, List<Count> counts) {
             String health = e instanceof LivingEntity living
                     ? Math.round(living.getHealth()) + "/" + Math.round(living.getMaxHealth())
                     : "";
-            candidates.add(new Candidate(EntityLabel.of(e), BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath(),
+            candidates.add(new Candidate(EntityLabel.shown(e), BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath(),
                     health, her.distanceTo(e), CompassUtil.compass(her, e), rank, targetsHer));
         }
         return compose(candidates);

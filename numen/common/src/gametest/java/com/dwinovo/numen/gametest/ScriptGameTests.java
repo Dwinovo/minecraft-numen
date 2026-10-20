@@ -769,7 +769,7 @@ public class ScriptGameTests {
                             "the receipt does not say what was dug: " + receipt);
                     helper.assertTrue(level.getBlockState(cells.get(cells.size() - 1)).is(Blocks.STONE),
                             "the cut-off program kept digging");
-                    var entry = com.dwinovo.numen.api.event.NumenEvents.programStopped(new com.dwinovo.numen.api.event.NumenEvents.Moment(0L, 0L), "p", receipt, 1L);
+                    var entry = com.dwinovo.numen.api.event.NumenEvents.programStopped(0L, "p", receipt, 1L);
                     helper.assertTrue(entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.PROGRAM_STOPPED)
                             && entry.text().contains("this turn was cut off") && !entry.urgent(),
                             "the receipt does not become her event: " + entry);

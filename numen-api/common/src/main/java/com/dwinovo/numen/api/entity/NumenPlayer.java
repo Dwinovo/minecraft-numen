@@ -269,7 +269,7 @@ public final class NumenPlayer extends ServerPlayer {
             return null;
         }
         vigil.follow(attacker);
-        return new OwnerHurt(EntityLabel.of(attacker), owner.getHealth(), owner.getMaxHealth(),
+        return new OwnerHurt(EntityLabel.shown(attacker), owner.getHealth(), owner.getMaxHealth(),
                 verdict == OwnerHurtWatch.Verdict.DANGER);
     }
 
@@ -472,7 +472,7 @@ public final class NumenPlayer extends ServerPlayer {
             // CompanionTickDispatcher 每 tick 的轮询里办,这里只留一条待说的事实。
             net.minecraft.world.entity.Entity attacker = source.getEntity();
             if (attacker != null) {
-                hurtAttacker = EntityLabel.of(attacker);
+                hurtAttacker = EntityLabel.shown(attacker);
                 hurtAmount = amount;
                 hurtDistance = distanceTo(attacker);
                 hurtBearing = CompassUtil.compass(this, attacker);

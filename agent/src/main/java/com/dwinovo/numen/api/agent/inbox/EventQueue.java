@@ -59,26 +59,16 @@ public final class EventQueue {
      *               {@code data}),随条目一起到,给等这件活的程序;不进她读的文字、不落盘。别的条目是 null
      * @param id     稳定的编号:入队时由队列盖上(发送方不用给),落盘、重启后不变,面板据此认出"这条还排着"。
      *               还没入队的条目是 null
-     * @param tick   事情发生时的游戏刻(总刻数,不是一天里的时刻);交给模型时据它算晚到了多久({@link #render})。
-     *               世界的事由发出口盖上,别的条目与没有这个字段的旧落盘条目是 {@link #NO_TICK}
      */
     public record Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result,
-                        String id, long tick) {
-
-        /** 没记游戏刻。 */
-        public static final long NO_TICK = -1L;
+                        String id) {
 
         public Entry(String type, String text, long ts, boolean urgent) {
-            this(type, text, ts, urgent, null, null, NO_TICK);
+            this(type, text, ts, urgent, null, null);
         }
 
         public Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
-            this(type, text, ts, urgent, result, null, NO_TICK);
-        }
-
-        public Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result,
-                     String id) {
-            this(type, text, ts, urgent, result, id, NO_TICK);
+            this(type, text, ts, urgent, result, null);
         }
     }
 
@@ -116,7 +106,7 @@ public final class EventQueue {
         // 读回来的条目同样过急件规则:盘上的标记是写下它的那一版定的,生效与否以现在的类型表为准
         for (Entry e : this.journal.load()) {
             entries.add(new Entry(e.type(), e.text(), e.ts(), urgent(EventTypes.get(e.type()), e.urgent()), null,
-                    e.id() != null ? e.id() : freshId(), e.tick()));
+                    e.id() != null ? e.id() : freshId()));
         }
     }
 
@@ -143,17 +133,11 @@ public final class EventQueue {
 
     /** 同上,条目带着一件身体活的结果({@link Entry#result})入队;结果只在内存里,落盘的不带它。 */
     public boolean push(String type, String text, long now, boolean urgent, com.google.gson.JsonObject result) {
-        return push(type, text, now, urgent, result, Entry.NO_TICK);
-    }
-
-    /** 同上,条目记着事情发生时的游戏刻({@link Entry#tick})。 */
-    public boolean push(String type, String text, long now, boolean urgent, com.google.gson.JsonObject result,
-                        long tick) {
         if (text == null || text.isBlank()) {
             return false;
         }
         boolean effective = urgent(EventTypes.get(type), urgent);
-        entries.add(new Entry(type, text, now, effective, result, freshId(), tick));
+        entries.add(new Entry(type, text, now, effective, result, freshId()));
         while (entries.size() > cap) {
             entries.remove(evictee());
             dropped++;
@@ -228,17 +212,18 @@ public final class EventQueue {
      *
      * <p>因为满了丢掉的条数在这里变成一条普通事件——丢弃可以,无声消失不行。
      */
-    public List<Entry> takeEntries(long now) {
+    public List<Entry> takeEntries(long now, long dayTime) {
         List<Entry> out = new ArrayList<>(entries);
         // 按发生时间排：入队顺序不等于发生顺序（旧版迁进来的离线事件、
         // 死亡期间锁着攒下的那批，都是后来才进队的）。稳定排序，同时刻保持入队先后。
         out.sort(java.util.Comparator.comparingLong(Entry::ts));
-        flushDropped(out, now);
+        flushDropped(out, now, dayTime);
         entries.clear();
         journal.save(entries);
         return out;
     }
 
+    /** 全部取走并清空,按到达序渲染成给模型的字符串。躺超十分钟的标上年龄。 */
     /**
      * 倒出来拼给模型:<b>世界的事在前,主人的话在后</b>。
      *
@@ -247,9 +232,6 @@ public final class EventQueue {
      * 什么"本来就是两种东西,读的顺序该是先看清发生了什么,再看主人要什么。
      *
      * <p>谁算哪一种由类型表说了算({@link EventTypes.Type#fromOwner}),这里不认 id。
-     *
-     * <p>晚到的标出来:交给模型这一刻({@code gameTick})离事情发生已过 {@value #LATE_TICKS} 刻(5 秒)的条目,在事件前标
-     * {@code [晚到 N 秒]}(久了按分钟、小时)。它和事件一起写进历史,之后永远成立——事件说的是过去,晚到了多久是交付那一刻的事实。
      */
     /**
      * 把已经取出来的条目拼成给模型看的几段。
@@ -258,10 +240,8 @@ public final class EventQueue {
      * 对取多少无关——两边共用这一份,不会说不到一块儿去。
      *
      * <p>{@code toModel} 回 null/空的条目在这里消失:那是类型表说"这条不是给模型看的文本"。
-     *
-     * @param gameTick 交付这一刻的游戏刻(总刻数)
      */
-    public static List<String> render(List<Entry> taken, long gameTick) {
+    public static List<String> render(List<Entry> taken) {
         List<Entry> ordered = new ArrayList<>(taken);
         ordered.sort(java.util.Comparator.comparingLong(Entry::ts));
         List<String> events = new ArrayList<>();
@@ -272,7 +252,7 @@ public final class EventQueue {
             if (rendered == null || rendered.isBlank()) {
                 continue;
             }
-            (t.fromOwner() ? owner : events).add(annotateLate(rendered, e.tick(), gameTick));
+            (t.fromOwner() ? owner : events).add(rendered);
         }
         List<String> out = new ArrayList<>();
         if (!events.isEmpty()) {
@@ -283,16 +263,16 @@ public final class EventQueue {
     }
 
     /**
-     * 主人的话交给模型的样子:包进 {@code <query>}。模型靠这个标记分清哪句是主人亲口说的、哪些是一同注入的事件与状态;
+     * 主人的话交给模型的样子:包进 {@code <query>},带说这句话那一刻的游戏日期与钟点({@link EventClock})。模型靠这个标记分清哪句是主人亲口说的、哪些是一同注入的事件与状态;
      * 面板与日志认它只在 {@code ConvoLog.queries} 一处。
      */
-    public static String query(String words) {
-        return "<query>" + words + "</query>";
+    public static String query(String words, long dayTime) {
+        return "<query" + EventClock.stamp(dayTime) + ">" + words + "</query>";
     }
 
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */
-    public static String droppedNote(int n) {
-        return "<event kind=\"" + EventTypes.DROPPED + "\">期间还发生了约 " + n + " 件事,没能记下来</event>";
+    public static String droppedNote(int n, long dayTime) {
+        return "<event kind=\"" + EventTypes.DROPPED + "\"" + EventClock.stamp(dayTime) + ">期间还发生了约 " + n + " 件事,没能记下来</event>";
     }
 
     // ---- 一次模型调用带走什么:只按投递档的声明取 ----
@@ -387,7 +367,7 @@ public final class EventQueue {
      * @param answerDue 已经有待模型回应的东西(工具结果、失败重试的那次输入):这次调用无论如何都会发生
      * @return 取走的条目,按入队顺序;{@code answerDue} 为假时非空当且仅当 {@link #wantsAnswer}
      */
-    public List<Entry> takeForCall(boolean answerDue, long now) {
+    public List<Entry> takeForCall(boolean answerDue, long now, long dayTime) {
         List<Entry> wakers = wakers();
         if (!answerDue && wakers.isEmpty()) {
             return List.of();
@@ -409,7 +389,7 @@ public final class EventQueue {
         if (taken.isEmpty()) {
             return List.of();
         }
-        flushDropped(taken, now);
+        flushDropped(taken, now, dayTime);
         journal.save(entries);
         return taken;
     }
@@ -473,7 +453,7 @@ public final class EventQueue {
      *
      * @return 取走的条目,按入队顺序;一条都没有则空列表
      */
-    public List<Entry> takeText(long now) {
+    public List<Entry> takeText(long now, long dayTime) {
         List<Entry> taken = new ArrayList<>();
         for (java.util.Iterator<Entry> it = entries.iterator(); it.hasNext(); ) {
             Entry e = it.next();
@@ -485,7 +465,7 @@ public final class EventQueue {
         if (taken.isEmpty()) {
             return List.of();
         }
-        flushDropped(taken, now);
+        flushDropped(taken, now, dayTime);
         journal.save(entries);
         return taken;
     }
@@ -493,16 +473,14 @@ public final class EventQueue {
     /**
      * 外接大脑一次取走的文本,渲染成给模型的样子({@link #render},与内脑看到的一字不差)。
      *
-     * @param now      墙上时钟
-     * @param gameTick 交付这一刻的游戏刻
      * @return 拼好的事件段;没有可交的文本是 {@code null}
      */
-    public String takeRenderedText(long now, long gameTick) {
-        List<Entry> taken = takeText(now);
+    public String takeRenderedText(long now, long dayTime) {
+        List<Entry> taken = takeText(now, dayTime);
         if (taken.isEmpty()) {
             return null;
         }
-        List<String> parts = render(taken, gameTick);
+        List<String> parts = render(taken);
         return parts.isEmpty() ? null : String.join("\n\n", parts);
     }
 
@@ -512,10 +490,10 @@ public final class EventQueue {
         return e.urgent() ? d.whenUrgent() : d;
     }
 
-    /** 因为满了丢掉、还没报告过的条数变成一条普通事件——丢弃可以,无声消失不行。 */
-    private void flushDropped(List<Entry> out, long now) {
+    /** 因为满了丢掉、还没报告过的条数变成一条普通事件——丢弃可以,无声消失不行。说明那一行盖 {@code dayTime}(取件那一刻的游戏时刻)。 */
+    private void flushDropped(List<Entry> out, long now, long dayTime) {
         if (dropped > 0) {
-            out.add(new Entry(EventTypes.DROPPED, droppedNote(dropped), now, false));
+            out.add(new Entry(EventTypes.DROPPED, droppedNote(dropped, dayTime), now, false));
             dropped = 0;
         }
     }
@@ -618,20 +596,5 @@ public final class EventQueue {
     public static long maxWaitMsOf(int level) {
         int lv = clampLevel(level);
         return (60_000L * lv * lv) / 3L;
-    }
-
-    /** 晚到到这么多游戏刻(5 秒)才标:再近的交付延迟是常态,标了只是吵。 */
-    public static final long LATE_TICKS = 100;
-
-    /** 晚到的标注,按游戏时间算;没记游戏刻的条目(旧落盘、非世界的事)不标。 */
-    private static String annotateLate(String text, long happenedTick, long deliveredTick) {
-        if (happenedTick == Entry.NO_TICK || deliveredTick - happenedTick < LATE_TICKS) {
-            return text;
-        }
-        long seconds = (deliveredTick - happenedTick) / 20;
-        String late = seconds < 60 ? seconds + " 秒"
-                : seconds < 3600 ? seconds / 60 + " 分钟"
-                : seconds / 3600 + " 小时";
-        return "[晚到 " + late + "] " + text;
     }
 }

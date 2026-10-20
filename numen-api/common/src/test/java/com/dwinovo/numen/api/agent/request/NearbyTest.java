@@ -24,13 +24,13 @@ class NearbyTest {
     @Test
     void relatedThenHostileThenPlayersEachByDistance() {
         Nearby nearby = Nearby.compose(List.of(
-                new Candidate("Steve", "player", "20/20", 2, "east", Rank.PLAYER, false),
+                new Candidate("player@ab12cd (Steve)", "player", "20/20", 2, "east", Rank.PLAYER, false),
                 mob("zombie", 1, "20/20", 3, Rank.HOSTILE, false),
                 mob("wolf", 2, "8/8", 9, Rank.RELATED, false),
                 mob("skeleton", 3, "20/20", 8, Rank.HOSTILE, false),
                 mob("zombie", 4, "20/20", 12, Rank.RELATED, true)));
 
-        assertEquals(List.of("wolf@000002", "zombie@000004", "zombie@000001", "skeleton@000003", "Steve"),
+        assertEquals(List.of("wolf@000002", "zombie@000004", "zombie@000001", "skeleton@000003", "player@ab12cd (Steve)"),
                 nearby.lines().stream().map(Nearby.Line::id).toList());
     }
 
@@ -75,11 +75,11 @@ class NearbyTest {
     void aLineSaysWhoHowHurtHowFarWhichWayAndWhoIsAfterHer() {
         Nearby nearby = Nearby.compose(List.of(
                 mob("zombie", 0x3f9a1c, "20/20", 4.6, Rank.RELATED, true),
-                new Candidate("Steve", "player", "", 0, "here", Rank.PLAYER, false)));
+                new Candidate("player@ab12cd (Steve)", "player", "", 0, "here", Rank.PLAYER, false)));
 
         assertEquals("<nearby radius=\"16\">\n"
                 + "zombie@3f9a1c 20/20 HP, 5 blocks north, targeting you\n"
-                + "Steve, on you\n"
+                + "player@ab12cd (Steve), on you\n"
                 + "</nearby>", nearby.xml());
     }
 

@@ -88,7 +88,7 @@ public final class BodyDelta {
     }
 
     private static String describe(Entity entity) {
-        return com.dwinovo.numen.api.sdk.EntityLabel.of(entity);
+        return com.dwinovo.numen.api.sdk.EntityLabel.shown(entity);
     }
 
     /** 血量按原版的点数写,整数不带小数点。 */

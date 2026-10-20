@@ -454,7 +454,7 @@ public final class ConvoLog {
         return new Line(record.id(), record.ts(), record.string("conv"), shown);
     }
 
-    private static final Pattern QUERY = Pattern.compile("(?s)<query>(.*?)</query>");
+    private static final Pattern QUERY = Pattern.compile("(?s)<query(?: [^>]*)?>(.*?)</query>");
 
     /**
      * 一条 user 消息里主人的原话——{@code <query>} 标记里的那些,按出现顺序;没有标记则空。
@@ -692,7 +692,7 @@ public final class ConvoLog {
      */
     private static String withoutLegacyCurrentTask(String content) {
         int open = content.indexOf(LEGACY_TASK_OPEN);
-        int query = content.indexOf("<query>");
+        int query = content.indexOf("<query");
         if (open < 0 || (query >= 0 && open > query)) return content;
         int close = content.indexOf(LEGACY_TASK_CLOSE, open + LEGACY_TASK_OPEN.length());
         if (close < 0) return content;

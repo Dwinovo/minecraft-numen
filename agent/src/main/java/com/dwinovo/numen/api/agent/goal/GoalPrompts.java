@@ -53,13 +53,14 @@ public final class GoalPrompts {
     }
 
     /** 判定没过的时候塞回去的一句。这是续跑期间<b>唯一</b>重复出现的东西。 */
-    public static String progress(String reason, GoalState goal, long nowMs) {
+    public static String progress(String reason, GoalState goal, long nowMs, long dayTime) {
         return """
-                <goal-progress turn="%d" elapsed="%s">
+                <goal-progress turn="%d" elapsed="%s"%s>
                 Not met yet: %s
                 Keep working toward the goal.
                 </goal-progress>"""
-                .formatted(goal.turnsExecuted(), elapsed(goal.elapsedMs(nowMs)), reason);
+                .formatted(goal.turnsExecuted(), elapsed(goal.elapsedMs(nowMs)),
+                        com.dwinovo.numen.api.agent.inbox.EventClock.stamp(dayTime), reason);
     }
 
     // ---- 评估器 ----

@@ -25,7 +25,7 @@ class TranscriptTest {
 
     private static ConvoLog.Line owner(long ts, String conv, int turn, String said, String audience) {
         return new ConvoLog.Line(null, ts, conv, new ConvoState.Msg.User(
-                EventQueue.query(said) + "\n" + Audience.line(turn, audience)));
+                EventQueue.query(said, 0L) + "\n" + Audience.line(turn, audience)));
     }
 
     private static ConvoLog.Line reply(long ts, String conv, String said) {

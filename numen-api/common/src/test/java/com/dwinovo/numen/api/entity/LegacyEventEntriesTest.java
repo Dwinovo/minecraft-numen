@@ -79,7 +79,7 @@ class LegacyEventEntriesTest {
         assertEquals(List.of("<events>\n"
                         + "<event kind=\"task_finished\" day=\"3\" t=\"12:00\" id=\"t1\">矿挖完了</event>\n"
                         + "<event kind=\"body_log\" day=\"3\" t=\"12:01\">nearly drowned</event>\n</events>"),
-                EventQueue.render(taken, 0L), "和从前一样按时间排进 <events>,文本一字不改");
+                EventQueue.render(taken), "和从前一样按时间排进 <events>,文本一字不改");
     }
 
     @Test
@@ -104,6 +104,6 @@ class LegacyEventEntriesTest {
         }
         assertEquals(List.of("<events>\n<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>\n"
                         + "<event kind=\"body_log\">吃了个面包</event>\n</events>"),
-                EventQueue.render(q.takeEntries(T0 + 3), 0L));
+                EventQueue.render(q.takeEntries(T0 + 3, 0L)));
     }
 }
