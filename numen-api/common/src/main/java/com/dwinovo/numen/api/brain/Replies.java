@@ -49,6 +49,7 @@ public final class Replies {
         CompanionLoops.sendSnapshots(player.getUUID(), link(player.server, player.getUUID()));
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);
+        HostNotices.deliver(player);
     }
 
     /** 这位主人落过盘的会话(成员表与名字),整份。"就他俩"不用推:客户端按名册自己有。 */

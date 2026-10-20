@@ -422,6 +422,8 @@ public final class ModLanguageData {
         public static final String EXPORT_FAILED            = "numen.export.failed";
         public static final String EXPORT_NEEDS_CLIENT      = "numen.export.needs_client";
         public static final String EXPORT_BUSY              = "numen.export.busy";
+        public static final String MERGE_RENAMED            = "numen.merge.renamed";
+        public static final String MERGE_KEY_REPLACED       = "numen.merge.key_replaced";
         public static final String EXPORT_SAVED             = "numen.export.saved";
         public static final String EXPORT_PICKER_TITLE      = "numen.export.picker_title";
         public static final String PROFILE_MEMORY           = "numen.profile.memory";
@@ -1129,6 +1131,8 @@ public final class ModLanguageData {
         adder.add(Keys.EXPORT_FAILED,          "Could not read %s's memory to export it");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "Exporting hands the file to your client, and you are playing without it");
         adder.add(Keys.EXPORT_BUSY,            "Another export is still on its way to you");
+        adder.add(Keys.MERGE_RENAMED,          "Your %1$s \"%2$s\" had the same name as one the server provides, so it is now \"%3$s\" (your companions follow it)");
+        adder.add(Keys.MERGE_KEY_REPLACED,     "Your %s key now replaces the server's: they are one keychain");
         adder.add(Keys.EXPORT_SAVED,           "Saved %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "Save her memory");
         adder.add(Keys.PROFILE_MEMORY,         "Memory");
@@ -1838,6 +1842,8 @@ public final class ModLanguageData {
         adder.add(Keys.EXPORT_FAILED,          "读不出「%s」的记忆,导不了");
         adder.add(Keys.EXPORT_NEEDS_CLIENT,    "导出是把文件交到你的客户端上,你现在没装客户端");
         adder.add(Keys.EXPORT_BUSY,            "上一份导出还在路上");
+        adder.add(Keys.MERGE_RENAMED,          "你的%1$s「%2$s」和服务器提供的重名,现在叫「%3$s」(用着它的同伴已跟着改)");
+        adder.add(Keys.MERGE_KEY_REPLACED,     "你的 %s 钥匙换掉了服务器原有的:现在是同一串钥匙");
         adder.add(Keys.EXPORT_SAVED,           "已存到 %s");
         adder.add(Keys.EXPORT_PICKER_TITLE,    "保存她的记忆");
         adder.add(Keys.PROFILE_MEMORY,         "记忆");

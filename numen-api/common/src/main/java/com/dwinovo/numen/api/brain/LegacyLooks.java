@@ -46,7 +46,7 @@ public final class LegacyLooks {
     /**
      * 旧的声线库 → 房主的"我的"声线,key 进本机钥匙串。
      *
-     * @param hostVoices 房主的 {@code voice/my/} 目录
+     * @param hostVoices 房主的 {@code voice/my/} 目录(在服务器目录里)
      * @param keysDir    这台电脑的钥匙串目录 {@code client/keys/}
      * @return 旧声线的 id → 新名字({@code my:名字});没有旧文件是空表。目标已经在时也算得出同一张对照表(绑定还要用)
      */

@@ -9,6 +9,11 @@ import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.LibraryHub;
+import com.dwinovo.numen.api.library.LibraryKind;
+import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.mcp.client.McpClientConfig;
+import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.mcp.server.ServerMcp;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
@@ -101,7 +106,8 @@ public final class ServerBrains {
      * 会话成员表、主动性档位、每只同伴的家(以及它们绑定里的档案与人设的新名字),和这台电脑上旧的声线库、皮肤库、
      * 每只同伴的声线皮肤选择({@link LegacyLooks})。只做一次,复制不移动
      * ({@link LegacyMigration}、{@link LegacyLibraries});多人服务器上旧客户端的数据没法这样读到,不迁也不上传。
-     * 要在库开张、大脑建起来之前做完,它们读的是搬好的。
+     * 房主的"我的"各库就是服务器目录那一份,所以旧的人设、声线、技能直接进服务器目录;最后把他个人目录里已有的库条目与钥匙并进来
+     * ({@link HostMerge})。要在库开张、大脑建起来之前做完,它们读的是搬好的。
      */
     private static void migrateHost(MinecraftServer server, Homes homes, CompanionRegistry registry) {
         var profile = server.getSingleplayerProfile();
@@ -124,12 +130,12 @@ public final class ServerBrains {
         // 人设与模块旧版放在房主的目录里平铺;更早的版本放在根下(模块按账号分)
         Path flatPersona = Files.isDirectory(hostDir.resolve("persona")) ? hostDir.resolve("persona")
                 : legacy.resolve("persona");
-        var personaIds = LegacyLibraries.personas(flatPersona, hostDir.resolve("persona").resolve(EntryId.MINE), serverDir);
+        var personaIds = LegacyLibraries.personas(flatPersona, serverDir.resolve("persona").resolve(EntryId.MINE), serverDir);
         Path flatModules = Files.isDirectory(hostDir.resolve("lua")) ? hostDir.resolve("lua")
                 : legacy.resolve("lua").resolve(host.toString());
         LegacyLibraries.modules(flatModules, hostDir.resolve("modules"), serverDir, prefs);
         LegacyLibraries.skills(legacy.resolve("skills"), legacy.resolve("skills_state.json"),
-                hostDir.resolve("skills").resolve(EntryId.MINE), serverDir.resolve("skills"), prefs);
+                serverDir.resolve("skills").resolve(EntryId.MINE), serverDir.resolve("skills"), prefs);
         LegacyLibraries.mcp(legacy.resolve("mcp_clients.json"), serverDir.resolve("mcp"));
 
         List<Path> bindings = new ArrayList<>();
@@ -146,10 +152,22 @@ public final class ServerBrains {
 
         // 声线库、皮肤库和每只同伴的声线皮肤选择在这台电脑的 client/ 里(客户端先把更旧的位置接了过去)
         Path clientDir = legacy.resolve("client");
-        var voiceIds = LegacyLooks.voices(clientDir.resolve("voice.json"), hostDir.resolve("voice").resolve(EntryId.MINE),
+        var voiceIds = LegacyLooks.voices(clientDir.resolve("voice.json"), serverDir.resolve("voice").resolve(EntryId.MINE),
                 clientDir.resolve("keys"));
         var skinIds = LegacyLooks.skins(clientDir.resolve("skin.json"), clientDir.resolve("skins"),
                 hostDir.resolve("skin").resolve(EntryId.MINE));
         LegacyLooks.bindings(clientDir.resolve("looks.json"), legacy.resolve("companions"), justMoved, voiceIds, skinIds);
+
+        // 他个人目录里已有的库条目与钥匙并进服务器目录;同名的改了名,他名下同伴的绑定跟着改指
+        List<HostMerge.Renamed> renamed = HostMerge.libraries(hostDir, serverDir, MERGED_KINDS);
+        List<String> replaced = HostMerge.keys(hostDir.resolve("keys"), serverDir.resolve("keys"));
+        List<Path> hers = registry.all().stream().filter(c -> host.equals(registry.find(c).owner()))
+                .map(c -> homes.companion(c).file("binding.json")).toList();
+        HostMerge.rebind(hers, renamed);
+        HostNotices.merged(host, renamed, replaced);
     }
+
+    /** 房主的"我的"并进服务器目录的那几种库。 */
+    private static final List<LibraryKind> MERGED_KINDS = List.of(PersonaLibrary.KIND, ProviderLibrary.KIND,
+            VoiceProfile.KIND, SkillRegistry.KIND, McpClientConfig.KIND);
 }
