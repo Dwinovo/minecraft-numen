@@ -78,7 +78,8 @@ end
 ---Dig out one cluster: numen.work.dig walks up to what is out of reach and digs it (standing where the hand reaches the
 ---most of what is left), then pick up what that dug dropped and still lies around (numen.work.collect with its drops),
 ---and again until none of it is left. A round that digs nothing raises failed with what is left; any other failing step (a
----dig that can't get there or is refused, a pick-up with no way) raises its error as it is.
+---dig that can't get there or is refused, a pick-up with no way) raises its error as it is. It takes the cluster and no
+---options; to dig a limited number of cells, use numen.work.dig with count.
 ---@param cluster Cluster|Cells What to dig: a cluster numen.scan.blocks found, as it is (or Cells, or a list of Blocks).
 ---@return integer dug How many cells it dug.
 function M.mine(cluster)

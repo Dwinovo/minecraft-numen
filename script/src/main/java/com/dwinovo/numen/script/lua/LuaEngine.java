@@ -79,8 +79,11 @@ public final class LuaEngine implements ScriptEngine {
                 null, null));
     }
 
-    /** 模块来源接到沙箱上。 */
-    private static LuaSandbox.ModuleSource source(ScriptCatalog.ModuleSource modules) {
+    /**
+     * 模块来源接到沙箱上,连同模块里声明的形参:模块函数({@link #functions})与目录里声明了的类的方法({@link #methods},类的方法写在
+     * {@link ScriptType.Class#home} 那个模块里)。形参表与帮助里的签名是同一份解析。
+     */
+    private LuaSandbox.ModuleSource source(ScriptCatalog.ModuleSource modules, ScriptCatalog catalog) {
         return new LuaSandbox.ModuleSource() {
             @Override
             public String code(String name) {
@@ -91,7 +94,38 @@ public final class LuaEngine implements ScriptEngine {
             public List<String> names() {
                 return modules.names();
             }
+
+            @Override
+            public List<LuaSandbox.Signature> signatures(String module) {
+                String code = modules.code(module);
+                List<LuaSandbox.Signature> out = new ArrayList<>();
+                for (Defined fn : functions(module, code)) {
+                    out.add(new LuaSandbox.Signature(null, fn.name().substring(module.length() + 1), fn.params()));
+                }
+                for (ScriptType.Class type : catalog.classes().values()) {
+                    if (module.equals(type.home())) {
+                        String simple = type.name().substring(type.name().lastIndexOf('.') + 1);
+                        for (Defined fn : methods(simple, code)) {
+                            out.add(new LuaSandbox.Signature(simple, fn.name(), fn.params()));
+                        }
+                    }
+                }
+                return out;
+            }
         };
+    }
+
+    /**
+     * 模块函数多给了实参:说它收哪几个(帮助里那份签名)、给了几个。Lua 自己会悄悄丢掉多出来的,所以在模块装上时统一数,不让多写的选项
+     * 或参数无声地没起作用。
+     */
+    static LuaSandbox.ScriptError excess(String module, LuaSandbox.Signature fn, int given) {
+        String name = module + "." + (fn.type() == null ? "" : fn.type() + ":") + fn.name();
+        int taken = fn.params().size();
+        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.BAD_ARGUMENT.wire(),
+                "takes " + (taken == 0 ? "no arguments" : taken + " argument(s)") + ", got " + given + "\nusage: " + name
+                        + "(" + String.join(", ", fn.params()) + ")",
+                "print(numen.api.help(\"" + (fn.type() == null ? name : module) + "\"))", name, null));
     }
 
     /**
@@ -665,7 +699,7 @@ public final class LuaEngine implements ScriptEngine {
         }
         // 和运行时同一套装法装它一次:返回的是不是一张表、给第 ① 层的名字赋没赋值,都由沙箱那一处说
         LuaSandbox.Builder sandbox = reader(catalog, new ArrayList<>(), LuaEngine::redefined)
-                .modules(source(new ScriptCatalog.ModuleSource() {
+                .excess(LuaEngine::excess).modules(source(new ScriptCatalog.ModuleSource() {
                     @Override
                     public String code(String module) {
                         return module.equals(name) ? code : null;
@@ -675,7 +709,7 @@ public final class LuaEngine implements ScriptEngine {
                     public List<String> names() {
                         return List.of(name);
                     }
-                }))
+                }, catalog))
                 .preload(name);
         LuaSandbox.Outcome outcome = read(sandbox, "check", "");
         return outcome.finished() ? null : outcome.message();
@@ -693,7 +727,7 @@ public final class LuaEngine implements ScriptEngine {
                     return catalog.mark(declared.sample(), declared.returns(), LuaEngine::instance);
                 })));
         // 只读不跑时模块不放上路径(它们的函数只记下调用),带方法的值从各自的模块另装一份取元表
-        return sandbox.classes(source(catalog.modules()));
+        return sandbox.classes(source(catalog.modules(), catalog));
     }
 
     private static LuaSandbox.Outcome read(LuaSandbox.Builder sandbox, String name, String code) {
@@ -769,7 +803,7 @@ public final class LuaEngine implements ScriptEngine {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
                     .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
                     .show(LuaDisplay::of).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
-                    .modules(source(catalog.modules()));
+                    .excess(LuaEngine::excess).modules(source(catalog.modules(), catalog));
             catalog.groups().forEach((group, functions) -> functions.keySet().forEach(name ->
                     sandbox.function(pathName(group), functionName(name), in -> ask(group, name, in))));
             running = sandbox.build().start(name, code, List.of(), outcome -> events.add(new Ended(outcome)));

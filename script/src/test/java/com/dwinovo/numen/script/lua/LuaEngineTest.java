@@ -351,6 +351,60 @@ class LuaEngineTest {
         assertTrue(declared.contains("\n---@field twice fun(self: Pos): number Twice its x."), declared);
     }
 
+    /**
+     * 模块函数与类的方法比声明的形参多给实参,当场 bad_argument(Lua 自己会悄悄丢掉):显式给的 nil 也算一个;恰好个数与少给照常;
+     * 有 {@code ...} 的不限;方法的 self 不算在形参里,点调用补上 self 与冒号调用同样数。
+     */
+    @Test
+    void moreArgumentsThanDeclaredIsBadArgument() {
+        com.dwinovo.numen.script.ScriptType.Class pos = new com.dwinovo.numen.script.ScriptType.Class("Pos", "A position.",
+                null, List.of(), null, "my.args");
+        String module = """
+                local M = {}
+                M.Pos = {}
+                M.Pos.__index = M.Pos
+                function M.one(a) return a end
+                function M.two(a, b) return b end
+                function M.none() return 0 end
+                function M.rest(a, ...) return select('#', ...) end
+                function M.Pos:add(k) return k end
+                function M.new() return setmetatable({}, M.Pos) end
+                return M
+                """;
+        ScriptCatalog catalog = new ScriptCatalog(Map.of(), new ScriptCatalog.ModuleSource() {
+            @Override
+            public String code(String name) {
+                return name.equals("my.args") ? module : null;
+            }
+
+            @Override
+            public List<String> names() {
+                return List.of("my.args");
+            }
+        }, Map.of("Pos", pos));
+        java.util.function.Function<String, ScriptRun.Done> go = code -> assertInstanceOf(ScriptRun.Done.class,
+                LUA.start("t", code, catalog, printed::add).start());
+
+        assertTrue(go.apply("return my.args.one(1) + my.args.two(1, 2) + my.args.none()").ok(), "恰好个数照常");
+        assertTrue(go.apply("return my.args.two(1)").ok(), "少给照常");
+        assertEquals(5L, go.apply("return my.args.rest(1, 2, 3, 4, 5, 6)").value(), "有 ... 的不限");
+
+        ScriptRun.Done extra = go.apply("my.args.one(1, {count = 20})");
+        assertFalse(extra.ok());
+        assertEquals("bad_argument", extra.failure().get("kind"));
+        assertEquals("my.args.one", extra.failure().get("fn"));
+        assertEquals("takes 1 argument(s), got 2\nusage: my.args.one(a)", extra.failure().get("message"));
+        assertEquals("print(numen.api.help(\"my.args.one\"))", extra.failure().get("hint"));
+        assertEquals("takes no arguments, got 1\nusage: my.args.none()",
+                go.apply("my.args.none(1)").failure().get("message"));
+        assertFalse(go.apply("my.args.two(1, 2, nil)").ok(), "显式给的 nil 也算一个");
+
+        assertEquals(7L, go.apply("local p = my.args.new() return p:add(7)").value(), "冒号调用:self 不算");
+        assertEquals(7L, go.apply("local p = my.args.new() return p.add(p, 7)").value(), "点调用补上 self,同样数");
+        ScriptRun.Done method = go.apply("local p = my.args.new() p:add(7, 8)");
+        assertEquals("takes 1 argument(s), got 2\nusage: my.args.Pos:add(k)", method.failure().get("message"));
+    }
+
     @Test
     void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""

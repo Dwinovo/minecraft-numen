@@ -276,6 +276,38 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 模块函数多给实参当场 bad_argument:{@code numen.work.mine} 只声明了 cluster,Lua 本会悄悄丢掉后面的选项表,变成全挖。错误写明
+     * 它收哪几个参数,一格都没挖。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    public static void a_module_function_refuses_more_arguments_than_it_declares(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_excess", new BlockPos(1, 2, 1), true);
+        BlockPos ore = helper.absolutePos(new BlockPos(3, 2, 1));
+        level.setBlockAndUpdate(ore, Blocks.IRON_ORE.defaultBlockState());
+        her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        LlmToolCall script = programCall("""
+                local cluster = numen.scan.blocks("minecraft:iron_ore", {radius = 8})[1]
+                local _, err = pcall(numen.work.mine, cluster, {count = 20})
+                return {err.kind, err.message}
+                """);
+        Round round = round(helper, her, script);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            JsonObject receipt = receipt(round, script);
+            helper.assertTrue(receipt.get("success").getAsBoolean(), "the script did not catch the error: " + receipt);
+            var err = round.data().getAsJsonArray("returned");
+            helper.assertTrue("bad_argument".equals(err.get(0).getAsString())
+                            && err.get(1).getAsString().contains("takes 1 argument(s), got 2")
+                            && err.get(1).getAsString().contains("numen.work.mine(cluster)"),
+                    "the extra argument is not refused with the signature: " + err);
+            helper.assertTrue(level.getBlockState(ore).is(Blocks.IRON_ORE), "a refused call dug the ore");
+            CompanionFactory.despawn(level.getServer(), her);
+        });
+    }
+
     /** 出厂的一个夹具模块:改它、删它、还原它,不碰别的 GameTest 在用的出厂模块。 */
     private static final String COPIED = "gt.copied";
 

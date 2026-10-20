@@ -249,6 +249,7 @@ public final class LuaSandbox {
     private final Missing missing;
     /** 脚本给宿主登记的名字赋值时报的那句话。 */
     private final Redefined redefined;
+    private final Excess excess;
     /** 错误值的表写成文字:错误元表的 {@code __tostring},没接住时结局的那句话。 */
     private final java.util.function.Function<Map<String, Object>, String> errors;
     /** {@code print} 一张没有 {@code __tostring} 的表时怎么写它(换成 Java 值之后)。 */
@@ -275,6 +276,46 @@ public final class LuaSandbox {
 
         /** 有哪些模块,按名字排(写错名字时列给脚本看)。 */
         List<String> names();
+
+        /**
+         * 模块里声明了形参的函数与类的方法:模块一装上,它们就换成多给实参当场报错({@link Builder#excess})的那一种。没声明的
+         * 不查。
+         */
+        default List<Signature> signatures(String module) {
+            return List.of();
+        }
+    }
+
+    /**
+     * 模块里一个函数声明的形参。
+     *
+     * @param type   它是哪个类的方法(模块里那张同名的表,{@code Pos}),方法的第一个实参是 self、不在 {@code params} 里;模块自己的函数是 null
+     * @param name   函数名
+     * @param params 形参名,按声明的顺序;有 {@code ...} 的收下余下全部,不查个数
+     */
+    public record Signature(String type, String name, List<String> params) {
+
+        public Signature {
+            params = List.copyOf(params);
+        }
+
+        /** 最多收几个实参(算上 self);收下余下全部的没有上限。 */
+        int max() {
+            return params.contains("...") ? Integer.MAX_VALUE : params.size() + (type == null ? 0 : 1);
+        }
+    }
+
+    /** 模块函数收到比声明的形参多的实参:报什么错。 */
+    @FunctionalInterface
+    public interface Excess {
+
+        /**
+         * @param module 函数所在的模块
+         * @param fn     声明的形参
+         * @param given  给了几个实参(不算方法的 self,显式给的 nil 也算)
+         * @return 停在调用那一行的错误:一句话,或一张错误值的表
+         */
+        ScriptError error(String module, Signature fn, int given);
     }
 
     /** 脚本读一个既不是全局、也不是模块的名字:报什么错。 */
@@ -311,6 +352,7 @@ public final class LuaSandbox {
         this.unknown = b.unknown;
         this.missing = b.missing;
         this.redefined = b.redefined;
+        this.excess = b.excess;
         this.errors = b.errors;
         this.show = b.show;
         Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
@@ -335,6 +377,8 @@ public final class LuaSandbox {
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
         private Redefined redefined = (table, key) -> new ScriptError((table == null ? "" : table + ".") + key
                 + " is a host function and cannot be replaced");
+        private Excess excess = (module, fn, given) -> new ScriptError(module + "." + fn.name() + " takes "
+                + fn.params().size() + " argument(s), got " + given);
         private java.util.function.Function<Map<String, Object>, String> errors = String::valueOf;
         private java.util.function.Function<Object, String> show = String::valueOf;
 
@@ -357,6 +401,12 @@ public final class LuaSandbox {
         /** 脚本给宿主登记的名字赋值时报的错:按它给的那句话停在那一行。 */
         public Builder redefined(Redefined redefined) {
             this.redefined = redefined;
+            return this;
+        }
+
+        /** 模块函数收到多余的实参时报的错:按它给的那句话停在调用那一行。 */
+        public Builder excess(Excess excess) {
+            this.excess = excess;
             return this;
         }
 
@@ -776,6 +826,9 @@ public final class LuaSandbox {
                     throw new LuaError("module " + module + " returned " + returned.typename() + ", not a table of its "
                             + "functions; end it with: return M");
                 }
+                for (Signature fn : modules.signatures(module)) {
+                    limit(module, fn, fn.type() == null ? returned : returned.rawget(fn.type()));
+                }
                 FixedKeysTable standing = nodes.get(module);
                 if (standing != null) {
                     for (Varargs kv = returned.next(LuaValue.NIL); !kv.arg1().isnil(); kv = returned.next(kv.arg1())) {
@@ -790,6 +843,28 @@ public final class LuaSandbox {
             } finally {
                 loading.remove(module);
             }
+        }
+
+        /**
+         * 表 {@code owner} 里叫 {@code fn.name()} 的函数换成先数实参的那一个:多于声明的形参就是 {@link Builder#excess} 那个错,
+         * 恰好或少给照常。数的是实参个数(显式给的 nil 也算),Lua 自己会悄悄丢掉多出来的。
+         */
+        private void limit(String module, Signature fn, LuaValue owner) {
+            LuaValue target = owner.istable() ? owner.rawget(fn.name()) : LuaValue.NIL;
+            int max = fn.max();
+            if (!target.isfunction() || max == Integer.MAX_VALUE) {
+                return;
+            }
+            int self = fn.type() == null ? 0 : 1;
+            owner.rawset(fn.name(), new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    if (in.narg() > max) {
+                        throw luaError(excess.error(module, fn, in.narg() - self));
+                    }
+                    return target.invoke(in);
+                }
+            });
         }
 
         /** 宿主给的错误换成脚本里的 Lua 错误:一句话照原样,一张表带上错误元表。 */
