@@ -16,10 +16,11 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.network.Connection;
 import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.PacketSendListener;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.protocol.game.GameProtocols;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
@@ -49,6 +50,7 @@ final class TestBody extends ServerPlayer implements Body {
     private final Hotbar hotbar = new Hotbar(this);
     /** 受到过的伤害合计(含出生无敌期间被挡掉的):用例据此看一路上有没有掉血,不必等无敌过去。 */
     private float incoming;
+    private Wire wire;
 
     private TestBody(MinecraftServer server, ServerLevel level, GameProfile profile) {
         super(server, level, profile, ClientInformation.createDefault());
@@ -62,7 +64,11 @@ final class TestBody extends ServerPlayer implements Body {
         MinecraftServer server = level.getServer();
         GameProfile profile = new GameProfile(UUID.randomUUID(), name);
         TestBody body = new TestBody(server, level, profile);
-        new ServerGamePacketListenerImpl(server, new Wire(), body, CommonListenerCookie.createInitial(profile, false));
+        body.wire = new Wire();
+        ServerGamePacketListenerImpl listener = new ServerGamePacketListenerImpl(server, body.wire, body, CommonListenerCookie.createInitial(profile, false));
+        // 连接认得这个监听器(原版放玩家进来时也这么设):断开时才会通知它,挂在连接上的东西才跟着收场
+        body.wire.setupInboundProtocol(
+                GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(server.registryAccess())), listener);
         body.moveTo(x, y, z, 0, 0);
         server.getPlayerList().broadcastAll(
                 new ClientboundPlayerInfoUpdatePacket(EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER), List.of(body)));
@@ -72,10 +78,26 @@ final class TestBody extends ServerPlayer implements Body {
         return body;
     }
 
-    /** 离开世界。 */
+    /**
+     * 离开世界。走连接的收场:先关掉通道,再让连接做它的断开处理({@code handleDisconnection},里面调监听器的 {@code onDisconnect},
+     * 再走 {@link net.minecraft.server.players.PlayerList#remove}),好让挂在连接上的东西各自收场——Fabric 的网络模块按连接登记了
+     * 一份收发状态,只有这一步才撤;原版给触发器监听也只在 {@code remove} 里撤。
+     *
+     * <p>还有两张按 UUID 登记的表:建身体时玩家列表给它记了一份进度账({@code PlayerAdvancements},逐条进度的状态,每具上千条)
+     * 和一份统计。身体没有"登录"过,{@code remove} 认的是登录表里的那一条,对这两张表不动手;矩阵一批要拉起上千具身体,
+     * 不清就整个留在堆里,几 G 的堆也撑爆。玩家列表没有公开的撤法,这里按字段名清掉(夹具只在开发环境里跑,字段是原版名)。
+     */
     void leave() {
-        serverLevel().removePlayerImmediately(this, RemovalReason.DISCARDED);
-        server.getPlayerList().broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
+        wire.hangUp();
+        for (String table : List.of("advancements", "stats")) {
+            try {
+                java.lang.reflect.Field field = net.minecraft.server.players.PlayerList.class.getDeclaredField(table);
+                field.setAccessible(true);
+                ((java.util.Map<?, ?>) field.get(server.getPlayerList())).remove(getUUID());
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("玩家列表里没有 " + table + " 这张表,夹具要跟着改", e);
+            }
+        }
     }
 
     @Override
@@ -158,6 +180,12 @@ final class TestBody extends ServerPlayer implements Body {
 
         @Override
         public void handleDisconnection() {}
+
+        /** 真的断开一次:平时的断开都是空操作(没有对端可通知),离开世界时才走原版的断开与收场。 */
+        void hangUp() {
+            super.disconnect(new DisconnectionDetails(Component.empty()));
+            super.handleDisconnection();
+        }
 
         @Override
         public void flushChannel() {}
