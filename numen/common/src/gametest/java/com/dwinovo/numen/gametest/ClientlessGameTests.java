@@ -111,7 +111,7 @@ public class ClientlessGameTests {
     }
 
     /** 主人私聊她:话进她的单聊会话,她回的话以私信的样子回到他手里。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void the_owners_whisper_reaches_her_and_she_whispers_back(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_whisperer", "en_us");
@@ -138,7 +138,7 @@ public class ClientlessGameTests {
     }
 
     /** 别的玩家私聊她:按旁听档进收件箱、标着是谁说的,不叫醒她。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void a_strangers_whisper_is_overheard_and_does_not_wake_her(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_host", "en_us");
@@ -233,7 +233,7 @@ public class ClientlessGameTests {
     /**
      * 没装客户端的主人在动作栏上看到她在干什么(他客户端的语言);装了客户端的主人不收动作栏——他的头顶气泡与档案页读同一份状态。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void an_owner_without_our_client_sees_what_she_is_doing_on_the_action_bar(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();

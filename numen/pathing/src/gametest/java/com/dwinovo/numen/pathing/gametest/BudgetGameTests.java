@@ -38,7 +38,7 @@ public class BudgetGameTests {
      * 一道基岩墙挡在身前,口在二十格外:这一趟总共只许展开两百个节点,搜不到口就用完了——结局是"预算用完",不说成无路;
      * 同一处按出厂预算规划,搜得出绕过去的路。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 288)
     public static void running_out_of_budget_is_not_no_route(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 10, 3, 33, Blocks.BEDROCK);
@@ -143,7 +143,7 @@ public class BudgetGameTests {
     }
 
     /** 按高度的目标:在平地上垫五十格高的柱子上去;一路对外都是"在推进",不被当成停滞。 */
-    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 3000)
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1539)
     public static void pillars_fifty_blocks_up_to_a_level(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(8, 1, 8);
@@ -167,7 +167,7 @@ public class BudgetGameTests {
      * 只搜不走:去处在两百格外,一次搜索的快照装不下那么远——走得到的都搜过了,路却伸出了快照、那边是什么不知道:结局是
      * "未加载",不说成无路或预算用完;身体一动不动。
      */
-    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 200)
     public static void a_route_into_unloaded_chunks_is_unloaded(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(2, 1, 12);

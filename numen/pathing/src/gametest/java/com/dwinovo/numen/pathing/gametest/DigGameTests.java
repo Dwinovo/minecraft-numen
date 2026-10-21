@@ -97,7 +97,7 @@ public class DigGameTests {
      * 三格高的泥土墙横贯场地,手上木锹,许挖许放:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
      * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown})。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
     public static void waits_out_the_vanilla_cooldown_between_two_digs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -128,7 +128,7 @@ public class DigGameTests {
      * 墙顶一段压着沙子、一段压着沙砾:挖哪一格的时候它正上方都不是沙子沙砾(要么先把上面的挖掉,要么挖顶上是泥土的那一段),
      * 沙子沙砾一粒没自己掉下来。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 420)
     public static void does_not_dig_under_sand_or_gravel(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -150,7 +150,7 @@ public class DigGameTests {
      * 三格厚的泥土墙,墙心一段埋着一溜水、一段埋着一溜岩浆:挖哪一格的时候它上面与四周都没有液体,一滴没漏出来(实际账
      * 对得上世界)。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1200)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 567)
     public static void does_not_dig_where_it_would_leak(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(7, 1, 0, 9, 3, 39, Blocks.DIRT);
@@ -172,7 +172,7 @@ public class DigGameTests {
     }
 
     /** 墙的一段是冰(挖了会化成水),一段是泥土:去挖泥土那一段。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 639)
     public static void does_not_dig_ice(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -182,7 +182,7 @@ public class DigGameTests {
     }
 
     /** 墙下层是石头、上层是泥土,手上拿着剑,快捷栏里有木镐、木锹:石头用镐挖,泥土用锹挖。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 402)
     public static void picks_the_right_tool(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -208,7 +208,7 @@ public class DigGameTests {
     // ==================== 挖掘补充 ====================
 
     /** 原木墙,手上空着:每一块从开挖到碎的刻数与原版空手挖原木一样,规划的定价也一样。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 675)
     public static void digs_a_log_bare_handed_in_vanilla_time(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.OAK_LOG);
@@ -225,7 +225,7 @@ public class DigGameTests {
      * 浮在两格深的池子里,上岸那一面的岸边压着两格泥土(别的三面是石墙),手上一把铁锹:浮在水里把岸边挖开再上去。规划时给
      * 每一格定下的"眼睛在不在水里、脚着不着地"与挖的那一刻一样,耗时与原版、与定价一致。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1200)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 477)
     public static void digs_from_the_water_as_priced(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 7, 4, 8, Blocks.STONE);
@@ -269,7 +269,7 @@ public class DigGameTests {
      * 石墙只在远处留了个口,铁镐在背包深处:空手挖石头比绕远路贵,拿着铁镐挖比绕路便宜——规划把铁镐算进了价钱,于是挖墙;
      * 执行时中键把铁镐换到手上用,记进身体动作。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
     public static void prices_and_uses_a_better_tool_deep_in_the_inventory(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 0, 8, 3, 30, Blocks.STONE);
@@ -291,7 +291,7 @@ public class DigGameTests {
      * 选中的快捷栏格空着,背包里有一把铁镐:泥土墙空手挖不比镐子慢,就空手挖,手里一直空着——从一个空格换到另一个空格
      * 手上拿的没变,不是身体动作,结局里一个身体动作也没有。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 399)
     public static void digging_bare_handed_from_an_empty_slot_is_no_body_action(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -308,7 +308,7 @@ public class DigGameTests {
     }
 
     /** 红石矿墙,手上铁镐:红石矿被敲一下会亮起来(方块状态变了),挖掘照样一次挖完,不重开。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 399)
     public static void does_not_restart_on_redstone_ore(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.REDSTONE_ORE);
@@ -372,7 +372,7 @@ public class DigGameTests {
      * 挖穿一堵石墙时,正挖着,一只鸡挡到了眼睛与正在挖的那一格之间:准星落在鸡身上,手停下,不打它;鸡走开之后接着挖完,
      * 走到墙那边。她贴着墙挖,眼睛离墙面只有半格,鸡放在视线上离眼睛四分之一格处,身子不碰墙(碰了会闷伤,就分不清是谁伤的)。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1200)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 564)
     public static void pauses_while_a_mob_blocks_the_crosshair(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 10, 6, 39, Blocks.STONE);
@@ -411,7 +411,7 @@ public class DigGameTests {
      * 创造模式,石墙,快捷栏塞满调试棒(空不出手来):原版服务端不让调试棒破坏方块({@code Item.canAttackBlock}),规划不知道这条,
      * 走到墙前才被退回。挖掘的包被退回、方块不变,以"拒绝"收场,点出那一格与拒绝的理由,不空挥到超时。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 225)
     public static void refuses_when_the_server_bounces_the_dig(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.STONE);
@@ -446,7 +446,7 @@ public class DigGameTests {
     }
 
     /** 创造模式交互距离五格(原版在玩家的刻里把创造模式的加成挂到属性上):去够一块方块,停在四格半之外、五格之内就够着、看见了。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 237)
     public static void reaches_five_blocks_in_creative(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(10, 1, 5, Blocks.STONE);
@@ -465,7 +465,7 @@ public class DigGameTests {
      * 要挖的铁矿嵌在三格厚的石墙里、离墙面一格,墙上从南边凿了一道缝通到它的南面。正对着它的墙前最近,可隔着一格石头;
      * 往南挪一格就能从缝里看见它:同样够得着,停在不挡的那一处。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 216)
     public static void stands_where_fewer_blocks_hide_the_target(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 0, 10, 3, 12, Blocks.STONE);
@@ -515,7 +515,7 @@ public class DigGameTests {
      * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许挖许放。挖一格的价钱是估价里落一格的十几倍,
      * 估价加上埋深(绕不开的挖掘)之后,出厂预算的一次规划就搜到头,路线从脚下直直往下挖;照着这条路走,挖到够得着它。
      */
-    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1600)
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1188)
     public static void plans_straight_down_to_an_ore_buried_deep(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 15, 40, 15, Blocks.STONE);
@@ -542,7 +542,7 @@ public class DigGameTests {
      * 一座横贯场地的石山(二十格高,身上没有垫路料,翻不过去),铁矿藏在离山面六格深处,手上一把铁镐:出厂预算的一次规划就
      * 搜到头,只从正面挖进去几格、够得着就停;照着走,够着它。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 525)
     public static void plans_into_a_hill_to_an_ore_inside(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 39, 20, 39, Blocks.STONE);

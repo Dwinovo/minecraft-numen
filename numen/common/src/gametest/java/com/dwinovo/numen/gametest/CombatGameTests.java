@@ -132,7 +132,7 @@ public class CombatGameTests {
      * 要打的那只一刻不停地在原地晃(真的怪围着主人打时就是这样):走位的目标跟着它每刻都变,从她脚下派出去的那次搜索得搜完,
      * 不能每变一次就作废重派——那样一次也搜不完,她站在远处一步不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
     public static void attack_closes_in_on_a_target_that_never_stands_still(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 8));
@@ -163,7 +163,7 @@ public class CombatGameTests {
      * 第一下之后受击无敌帧永远不退,她一直等着出第二刀,它也打不死。GameTest 的场地区块是钉住的,这里搬到两千格外、高处
      * 一块没人钉的地方现搭一条石台,让她作为玩家带起来的区块成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1000, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 480, batch = "numen_combat")
     public static void attack_finishes_a_target_across_a_chunk_border_far_from_players(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 她站在区块 cx 的东边沿上,僵尸站在隔壁区块 cx + 1 的西边沿上
@@ -352,7 +352,7 @@ public class CombatGameTests {
      * 三十二格内没有能站的落点。逃跑本能先接过身体,找不到落点就让出来,留下一条说"没有退路"的本能事件;自卫接着打,僵尸挨了她的剑。
      * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;她周围的区块由她这个玩家自己带起来,等她脚下进了实体刻再开始。本能事件进她的收件箱,读得到。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1001, batch = "numen_combat")
+    @GameTest(template = "floor16", timeoutTicks = 396, batch = "numen_combat")
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(BlockPos.ZERO);

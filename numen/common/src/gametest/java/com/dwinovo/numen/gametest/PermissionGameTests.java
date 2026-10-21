@@ -728,7 +728,7 @@ public class PermissionGameTests {
     }
 
     /** 没人答复:到点按拒绝,理由是"主人不在场,无法征得同意";东西还在身上。 */
-    @GameTest(template = "floor16", timeoutTicks = 7209, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 7206, batch = "numen_permission")
     public static void unanswered_consent_times_out_as_denied(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
@@ -1582,7 +1582,7 @@ public class PermissionGameTests {
      * 主人不许挖他放的:谷仓里主人摆的南瓜离她近,野地里长的远,一次扫描两个都找到。要一个南瓜,{@code arrive = "dig"} 只去挖得成
      * 的那个,她挖野地里那个,谷仓里的一动不动;对同样的方块再要一个,只剩谷仓里的,当场拒绝、理由是那一行规则。不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 237, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 231, batch = "numen_permission")
     public static void work_dig_leaves_the_denied_placed_blocks_standing(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos insideRel = new BlockPos(5, 2, 5);
@@ -1759,7 +1759,7 @@ public class PermissionGameTests {
      * 别的玩家放的方块,规则与模式都解不开:主人写了 {@code allow *(*)},模式切到 bypass,她用 numen.use.hit 打下去仍然被拒、
      * 理由是硬规则、不弹卡,方块还在。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void other_players_blocks_are_out_of_reach_in_every_mode(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos rel = new BlockPos(6, 2, 5);
@@ -1789,7 +1789,7 @@ public class PermissionGameTests {
      * 装模组之前就有的木屋(场景里直接写方块、不经放置记录)挖之前问,说不清是谁的;同一片地形里的石头直接挖。
      * 主人不让动木屋,木板一块不少;石头照常挖掉,不弹卡。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_cabin_from_before_the_mod_asks_but_terrain_stone_does_not(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos plankRel = new BlockPos(6, 2, 4);
@@ -1835,7 +1835,7 @@ public class PermissionGameTests {
      * 野树砍,木屋原木问,玩家放的树叶不算野树的叶:野树(原木贴着不持久的树叶)直接砍;光秃秃的一根原木是说不清的,问;
      * 主人放下的树叶带持久标记,是主人的,问;自然长的树叶直接掰。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void wild_trees_are_chopped_but_cabin_logs_and_placed_leaves_ask(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos wildRel = new BlockPos(5, 2, 3);
@@ -1954,7 +1954,7 @@ public class PermissionGameTests {
      * 规则列表:主人层每行带序号、谁写的、命中几次,出厂层与硬规则也各有账。真动手的才记:主人写了不许挖泥土,她挖泥土被那一行拒了,
      * 又挖了一块石头(出厂放行那一行),列表里这两行的次数跟存档里的账一致,没用到的行写"从没命中过"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void the_rule_list_shows_how_often_each_row_fired(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos dirtRel = new BlockPos(6, 2, 4);
@@ -2008,7 +2008,7 @@ public class PermissionGameTests {
      * 规则点名一只同伴({@code @名字}):主人写 {@code deny break(nature) @gametest_aria},主人名下的另一只同伴 Bea 照常挖
      * 同样的石头,被点名的 Aria 被拒、理由就是那一行;写不出名字的 @ 回教学式的错误。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_rule_for_one_companion_leaves_the_others_alone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos ariaStone = new BlockPos(6, 2, 4);

@@ -45,7 +45,7 @@ public class RecheckGameTests {
      * 重搜,别处没有路。没路是因为规格不许挖——诊断点出许了挖就有路,要挖的正是那块石头("缺什么"比"受阻"更说明问题)。世界除了那块
      * 石头一格不变。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 261)
     public static void stops_where_the_world_changed_after_planning(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         corridor(t);
@@ -73,7 +73,7 @@ public class RecheckGameTests {
      * 过去,这一步记为不通,重搜没有别的路,收场。结局是"受阻",点出船所在的那一格(她碰上船时把它往前顶了一点,
      * 以船最后停的那一格为准)、平走、"卡住"。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 489)
     public static void gives_up_after_a_few_tries_when_the_body_cannot_do_the_step(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         corridor(t);

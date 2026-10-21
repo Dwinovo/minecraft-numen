@@ -419,7 +419,7 @@ public class CommandGameTests {
      * 没有任何一行规则说到 setblock:动手前问主人,卡上是整行指令;挂着的这些刻世界不变;主人允许后才放下石头,
      * 交回服务器的回显,主人允许了什么写进程序的回执。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_command")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_setblock_without_a_rule_asks_the_owner_first(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
@@ -719,7 +719,7 @@ public class CommandGameTests {
      * 经 drive 执行、要主人点头的原生指令:主人答复之前发令人什么都没听到;允许后才执行,回执回到 drive 的发令人那里,
      * 恰好一条,写着主人允许了什么。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_command")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_drive_hears_a_native_line_the_owner_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);

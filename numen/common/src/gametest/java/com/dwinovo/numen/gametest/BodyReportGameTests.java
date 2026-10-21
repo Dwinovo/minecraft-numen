@@ -101,7 +101,7 @@ public class BodyReportGameTests {
     }
 
     /** 挖的时候手里的镐碎了:这一挖的结果写明"用坏了"。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_body_report")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
     public static void a_pickaxe_breaking_in_a_dig_is_reported(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());

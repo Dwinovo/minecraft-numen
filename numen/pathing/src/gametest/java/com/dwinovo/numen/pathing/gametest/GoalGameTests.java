@@ -71,7 +71,7 @@ public class GoalGameTests {
     /**
      * 路过一格:走进那一格就算到了,身体不停稳——到达的那一刻还带着走路的速度;同样的路停在那一格时,到达的那一刻身体已经停住。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 318)
     public static void passing_through_a_cell_does_not_stop_in_it(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody passing = t.body(2, 1, 5);
@@ -92,7 +92,7 @@ public class GoalGameTests {
     }
 
     /** 用:走到看得见它某一面、点得到它的地方。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 258)
     public static void uses_a_block(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(14, 1, 5, Blocks.CRAFTING_TABLE);
@@ -118,7 +118,7 @@ public class GoalGameTests {
      * 狭窄矿道(一格宽两格高)里,熔炉嵌在南边那条矿道的北壁上,只有朝矿道的南面敞开;身体在北边那条平行矿道里,隔着一层石头,
      * 几何上够得着它却看不见。用它:绕到南边矿道、站到正对开口的一侧,看得见,打得开。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 315)
     public static void uses_a_furnace_in_a_narrow_tunnel_from_its_open_side(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 0, 18, 3, 7, Blocks.STONE);
@@ -148,7 +148,7 @@ public class GoalGameTests {
     }
 
     /** 箱子三面与顶上罩着(顶上是玻璃),只有西面敞开;身体在东面:绕到西面去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 267)
     public static void uses_a_chest_from_its_only_open_side(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(12, 1, 5, Blocks.CHEST);
@@ -168,7 +168,7 @@ public class GoalGameTests {
      * 工作台在三格高的悬崖上、离崖边三格;身体在崖脚,几何上够得着它,中间却隔着崖壁的石头。旁边有一道台阶能上去:不停在崖底,
      * 上到崖顶看得见它的地方。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 327)
     public static void uses_a_table_on_a_cliff_from_the_top(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 20, 3, 10, Blocks.STONE);
@@ -188,7 +188,7 @@ public class GoalGameTests {
     }
 
     /** 箱子只有西面敞开,面前立着一株高草:高草是软遮挡,照样走到西面;视线上隔着它,用之前清掉就行。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 237)
     public static void uses_a_chest_behind_tall_grass(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(12, 1, 5, Blocks.CHEST);
@@ -213,7 +213,7 @@ public class GoalGameTests {
     }
 
     /** 站上:给那一块上面脚所在的那一格,站到它上面,托着脚的就是它。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 291)
     public static void stands_on_a_block(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(12, 1, 5, Blocks.OAK_PLANKS);
@@ -223,7 +223,7 @@ public class GoalGameTests {
     }
 
     /** 靠近:停在离那一点三格以内,不必走到跟前。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 327)
     public static void comes_near(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);
@@ -237,7 +237,7 @@ public class GoalGameTests {
     }
 
     /** 环形站位:停在离那一列水平三到五格之间,不走进内圈。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
     public static void stands_in_a_ring(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(20, 1, 20);
@@ -253,7 +253,7 @@ public class GoalGameTests {
     }
 
     /** 到某一高度:顺着一道台阶上到第六层。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
     public static void climbs_to_a_level(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int i = 0; i < 5; i++) {
@@ -268,7 +268,7 @@ public class GoalGameTests {
     }
 
     /** 远离两只怪:身体在它们的危险半径里,走到离每一只都够远的地方。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 273)
     public static void gets_away_from_threats(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(20, 1, 20);
@@ -286,7 +286,7 @@ public class GoalGameTests {
     }
 
     /** 多个目标取其一:两处去处一近一远,去近的那处。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 255)
     public static void picks_the_nearer_of_several_goals(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(10, 1, 10);
@@ -301,7 +301,7 @@ public class GoalGameTests {
      * <p>"很久"不靠搜索慢:派搜索之前先让搜索的线程池每个线程都等着放行,推的那一刻派出的搜索排在它们后面;她停住了才放行。
      * 放行最多等十秒,用例失败也不会一直占着线程池。
      */
-    @GameTest(template = ARENA, batch = HELD_BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = HELD_BATCH, timeoutTicks = 228)
     public static void arrives_when_a_failing_search_returns_after_it_slid_in(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 3, 14, 1, 7, Blocks.STONE_PRESSURE_PLATE);
@@ -338,7 +338,7 @@ public class GoalGameTests {
     }
 
     /** 去处在头顶三格高的半空,身上有圆石:垫柱上去,停稳在那一格上才报到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 261)
     public static void arrives_only_once_settled_on_its_own_pillar(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(5, 1, 5);
@@ -348,7 +348,7 @@ public class GoalGameTests {
     }
 
     /** 去处在一道沟上方的半空(与两岸台面齐平),身上有圆石:搭桥过去,停稳在最后垫的那一块上才报到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 345)
     public static void arrives_only_once_settled_on_its_own_bridge(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 9, 4, 39, Blocks.BEDROCK);
@@ -373,7 +373,7 @@ public class GoalGameTests {
      * 工作台摆在一块石头上,只有西面敞开;列好站位之后、开走之前,正对西面的那一格(半空,不是站位)被放上一块玻璃:
      * 走到了搜索挑的站位,在活世界上复核时看不见它,不报到达,结局是"看不见"。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
     public static void sight_blocked_after_planning_is_not_arrival(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(10, 1, 5, Blocks.STONE);
@@ -392,7 +392,7 @@ public class GoalGameTests {
     }
 
     /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
     public static void does_not_pillar_up_beside_the_target(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 5, 10, 2, 5, Blocks.STONE);
@@ -409,7 +409,7 @@ public class GoalGameTests {
      * 身体关在一间基岩屋子里,去处那一格站得住,却封在屋墙里的一个基岩小格中:走不到,结局是"搜完无路",世界一格不变。
      * 屋子是基岩的,诊断放宽到许改地形、有料也出不去,很快就搜完。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void reports_a_standable_goal_it_cannot_reach(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 0, 2, 17, 4, 8, Blocks.BEDROCK);
@@ -421,7 +421,7 @@ public class GoalGameTests {
     }
 
     /** 某一格可以是梯子上的一格:爬到半截停住,脚就在那一格,挂在梯子上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
     public static void arrives_at_a_cell_on_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(9, 1, 3, 12, 6, 7, Blocks.STONE);
@@ -438,7 +438,7 @@ public class GoalGameTests {
     }
 
     /** 某一格可以是水里的一格:池子三格深,去处是水面那一层,浮在那儿。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 303)
     public static void arrives_at_a_cell_in_water(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         UpDownGameTests.pool(t, 8, 3, 13, 8, 3);

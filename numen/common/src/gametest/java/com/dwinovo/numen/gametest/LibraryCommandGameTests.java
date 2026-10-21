@@ -35,7 +35,7 @@ import static com.dwinovo.numen.gametest.ClientlessGameTests.run;
 public class LibraryCommandGameTests {
 
     /** 三项绑定经命令换上、换下,和面板编辑卡走同一个入口;库里没有的条目说清楚、不动她的绑定。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void companion_commands_bind_and_unbind_her_three_items(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_binder", "en_us");
@@ -75,7 +75,7 @@ public class LibraryCommandGameTests {
     }
 
     /** 自己的 key 存进他自己的钥匙串;回执只露前后几位、不带全文;多人服第一次存提醒一次。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void key_command_stores_the_key_and_only_shows_its_ends(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_keeper", "en_us");
@@ -172,7 +172,7 @@ public class LibraryCommandGameTests {
      * 她的皮肤经命令换:服务器皮肤文件夹里的一张按图判断手臂、签一次(签名用不联网的假签名器),穿上后重建的身体挂着缓存里的签名数据;
      * 同一张再要当场穿上、不再签;借一个正版玩家的皮肤不经 MineSkin;不写参数是脱掉。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void skin_commands_dress_her_from_the_servers_folder_or_a_player_and_undress_her(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();

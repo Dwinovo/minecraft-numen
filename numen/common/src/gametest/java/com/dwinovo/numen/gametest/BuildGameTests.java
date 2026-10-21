@@ -127,7 +127,7 @@ public class BuildGameTests {
     }
 
     /** 形状:{@code numen.shape.cylinder} 画的空心圆柱(半径 3、高 4 的塔筒),圆心在 rel 10,2,10;判据按同一个圆的定义算出的格。 */
-    @GameTest(template = "floor20", timeoutTicks = 3129, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 3126, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
         List<BlockPos> rel = new ArrayList<>();
@@ -348,7 +348,7 @@ public class BuildGameTests {
      * <p>液体则相反:那是真的不做,所以错误信息必须说是边界,不能回一句"未知方块"
      * ——名字明明是对的,模型只会以为自己拼错了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_block_ids_and_material_counts(GameTestHelper helper) {
         for (String id : new String[]{"air", "minecraft:air", "dirt_path", "farmland", "tall_grass"}) {
             com.dwinovo.numen.build.BuildStates.resolve(id);
@@ -656,7 +656,7 @@ public class BuildGameTests {
      *
      * <p>所以判据落在加载期:次半从来不是我们放的,不该占一格待办,也不该占分母。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void blueprint_secondary_halves_are_not_targets(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
@@ -837,7 +837,7 @@ public class BuildGameTests {
      * <p>牌子上的字照搬:那是纯文本,玩家自己写也是白写的,搬过来不产出任何东西。
      * 三者的差别不在"是不是装饰",而在<b>还原它等不等于凭空产出</b>。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void blueprint_handiwork_is_not_free(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var registries = level.registryAccess();
@@ -917,7 +917,7 @@ public class BuildGameTests {
      * 那个方块的 {@code asItem()} 恰好是什么。这条测试的意义不是"证明我们对",是把这几行
      * 分歧写在明处——哪天有人照通行做法"修正"回去,得先来改这里的字。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void material_accounting_divergences_are_deliberate(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos probe = helper.absolutePos(new BlockPos(1, 2, 1));
@@ -1006,7 +1006,7 @@ public class BuildGameTests {
      * 活着的方块实体,里面不可能有外来键;我们读的是文件,手改一张图纸就能往一块牌子上塞
      * 一个 Items。牌子自己会忽略它,但"哪些方块实体读哪些键"是开放集合,不该赌。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void safe_block_entity_data_is_a_datapack_tag(GameTestHelper helper) {
         var tag = com.dwinovo.numen.init.InitTag.SAFE_BLOCK_ENTITY_DATA;
 
@@ -1091,7 +1091,7 @@ public class BuildGameTests {
      * 一边、落位照放原始那一份,就等于文件里塞一个装满钻石的潜影盒 → 按空盒收料 → 放进
      * 框里是满的。收什么放什么。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void only_four_item_components_ride_along(GameTestHelper helper) {
         var registries = helper.getLevel().registryAccess();
 
@@ -1537,7 +1537,7 @@ public class BuildGameTests {
      *       所以遍历有独立于格数的体积上限。</li>
      * </ul>
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_blueprint")
     public static void corrupt_blueprints_fail_cleanly(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         var dir = com.dwinovo.numen.blueprint.BlueprintStore.dir(level.getServer());
@@ -1647,7 +1647,7 @@ public class BuildGameTests {
      * 方块/物品注册表里查得到,要么是我们自己的词汇(op 名、参数名、方块状态键、
      * 形制名)。两边都不是就是错字。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void skill_docs_name_real_blocks(GameTestHelper helper) {
         // 我们自己的词汇:形状的参数名、状态键、技能名、形制名。它们和方块名共用反引号,
         // 但不该去注册表里找。命令写得对不对归命令树判,这里只管方块名。
@@ -1749,7 +1749,7 @@ public class BuildGameTests {
      * 就报成两扇门的料——玩家按清单备齐了,建到一半照样停下。两处判据同源
      * ({@code Target.costsMaterial}),这条用例就是那份同源的证据。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_blueprint")
     public static void blueprint_read_matches_what_gets_spent(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -1838,7 +1838,7 @@ public class BuildGameTests {
      * <p>这条用例是 {@code numen.shape} 的整活钉桩:网格带图例、网格按层重复、方块状态跟在方块名里({@code oak_stairs[facing=south]})、
      * 合起来时后写覆盖先写(门洞挖开墙),四件事缺一条都盖不出这栋屋子。
      */
-    @GameTest(template = "floor20", timeoutTicks = 3864, batch = "numen_build_cottage")
+    @GameTest(template = "floor20", timeoutTicks = 3837, batch = "numen_build_cottage")
     public static void build_medieval_cottage(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 这条量的是形状能不能盖出一栋屋子,不是生存备料:免耗材档
@@ -1968,7 +1968,7 @@ public class BuildGameTests {
      * 再交给库里的 {@code numen.build.raise} 一轮轮走着盖。覆盖 .nbt 读取、精确状态落位(门/床双格、
      * 火把贴附)、骨架先行贴附后置的阶段序,以及创造档不耗材料。
      */
-    @GameTest(template = "floor20", timeoutTicks = 2274, batch = "numen_blueprint")
+    @GameTest(template = "floor20", timeoutTicks = 2169, batch = "numen_blueprint")
     public static void blueprint_igloo(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -2013,7 +2013,7 @@ public class BuildGameTests {
     }
 
     /** 实心 5x5x5(125 格):逐层实心浇筑,高处的格要垫块上去够。 */
-    @GameTest(template = "floor20", timeoutTicks = 4614, batch = "numen_build_heavy")
+    @GameTest(template = "floor20", timeoutTicks = 4587, batch = "numen_build_heavy")
     public static void build_solid_cube(GameTestHelper helper) {
         raiseCase(helper, "gametest_mason", new BlockPos(7, 2, 7), cobbleBox(5, 5, 5),
                 boxCells(new BlockPos(7, 2, 7), 5, 5, 5, false), 4);
@@ -2034,7 +2034,7 @@ public class BuildGameTests {
     }
 
     /** 9x9 平台(81 格):纯水平铺面,不触发分层,考横向站位与边铺边退。 */
-    @GameTest(template = "floor20", timeoutTicks = 4938, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 4893, batch = "numen_build")
     public static void build_platform(GameTestHelper helper) {
         raiseCase(helper, "gametest_paver", new BlockPos(5, 2, 5), cobbleBox(9, 1, 9),
                 boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false), 3);
@@ -2085,7 +2085,7 @@ public class BuildGameTests {
     // ---- 当场的一次放:小活不演、站着清与换、缺格清单 ----
 
     /** 一格的 {@code numen.build.place} 是一个动作:几刻之内放完收工,她站在原地不绕圈,没有二十五秒的演出。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void placing_one_cell_is_done_at_once_without_walking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_one_cell", new BlockPos(6, 2, 6), true);
@@ -2116,7 +2116,7 @@ public class BuildGameTests {
      * 生存模式下要放的格里立着别的方块:{@code numen.build.place} 只放不挖,一行三格的空气当场拒,说这三格要先挖开、
      * 给出挖的那一行;照着用 {@code numen.work.dig} 挖掉——真挖(徒手挖一块泥土要十五刻),{@code numen.work.collect} 把掉下来的泥土捡回包里。
      */
-    @GameTest(template = "floor16", timeoutTicks = 336, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 276, batch = "numen_build")
     public static void survival_build_digs_out_what_must_go(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> dirt = List.of(helper.absolutePos(new BlockPos(8, 2, 8)), helper.absolutePos(new BlockPos(9, 2, 8)),
@@ -2160,7 +2160,7 @@ public class BuildGameTests {
      * 创造模式直接替换:原版创造一下就碎。一行三块泥土上放一行石头,另一行三块泥土上放一行空气({@code numen.shape.line})——
      * 她站在两行中间,几刻之内一行成了石头、一行成了空气,地上没有掉落物;回执说换了三格、清了三格。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void creative_build_replaces_what_stands_there_at_once(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> toStone = new ArrayList<>();
@@ -2252,7 +2252,7 @@ public class BuildGameTests {
      * 格子最终也得补上。
      */
     // 时限给得远远宽于实际用时。考的是"能不能盖完",不是"多快盖完"。
-    @GameTest(template = "floor52", timeoutTicks = 49443, batch = "numen_cottage_jp")
+    @GameTest(template = "floor52", timeoutTicks = 49062, batch = "numen_cottage_jp")
     public static void build_japanese_cottage(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -2342,7 +2342,7 @@ public class BuildGameTests {
      * 这一遍放下了石头,净完成数一格没涨,也是做成了——{@code numen.build.place} 不能当"一格都没放成"收场,
      * 否则 {@code numen.build.raise} 在这一格上就此放弃,而花簇再放一次又是一格进展。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void a_pass_that_places_a_cell_is_not_failed_for_the_neighbour_it_knocks_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(4, 2, 6), false);
@@ -2543,7 +2543,7 @@ public class BuildGameTests {
     /**
      * 生存模式料不够:一串格开工前整份一次预检,缺料就一格都不放,回执如实说缺什么、多少;她手上的圆石一块没少。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void cells_short_of_materials_place_nothing_and_say_what(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_skint", new BlockPos(2, 2, 2), false);

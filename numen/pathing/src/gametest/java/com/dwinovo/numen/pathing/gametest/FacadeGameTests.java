@@ -43,7 +43,7 @@ public class FacadeGameTests {
      * 两块基岩台子之间一道四格宽的沟,身上有圆石:探出台边潜行着搭桥,桥搭到第二块时叫停——潜行键当场松开(身体下一刻的物理
      * 步进里站起来),叫停交出的实际账里正是已经放下的那几块,与世界一致。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
     public static void stopping_releases_sneak_and_hands_over_the_ledger(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 9, 4, 39, Blocks.BEDROCK);
@@ -74,7 +74,7 @@ public class FacadeGameTests {
      * 一道基岩墙上两个口,近的在 z = 8,远的在 z = 22:先规划一条去远处那个口的路线交给导航当第一段——身体就从远处那个口
      * 穿过去、再往去处走,一格不改。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 471)
     public static void drives_the_route_it_was_handed(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 10, 3, 39, Blocks.BEDROCK);
@@ -109,7 +109,7 @@ public class FacadeGameTests {
      * 一道泥土墙横贯场地,许挖许放,手上拿着剑、背包里有锹:只搜不走——规划出挖墙的候选,这期间身体一动不动,手上还是
      * 那把剑,世界一格不变。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void planning_moves_nothing(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 10, 3, 39, Blocks.DIRT);

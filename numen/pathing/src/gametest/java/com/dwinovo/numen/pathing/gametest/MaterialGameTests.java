@@ -65,7 +65,7 @@ public class MaterialGameTests {
     }
 
     /** 身上一块料也没有:结局是"没有料",世界一格不变。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void reports_no_materials(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -74,7 +74,7 @@ public class MaterialGameTests {
     }
 
     /** 不许改地形时,身上有料没料,结局都是"许改地形才有路",不提料。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void may_not_alter_says_nothing_about_materials(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody carrying = t.body(6, 5, 5);
@@ -87,7 +87,7 @@ public class MaterialGameTests {
     }
 
     /** 创造模式、背包空着:照料清单的第一种凭空取一叠搭桥,身体动作里记下取料。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void conjures_materials_in_creative_by_the_list(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -104,7 +104,7 @@ public class MaterialGameTests {
     }
 
     /** 快捷栏里有圆石、背包深处有泥土,料清单泥土在前:按清单拿泥土垫。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void takes_materials_in_list_order(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -115,7 +115,7 @@ public class MaterialGameTests {
     }
 
     /** 料只在副手,主手拿着剑:主副手一换就垫,垫完剑还在身上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void falls_back_to_the_offhand(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -129,7 +129,7 @@ public class MaterialGameTests {
     }
 
     /** 主手拿着一叠木板(不在料清单上),圆石只在副手:主副手一换,桥全用圆石搭,一块木板也不放。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void bridges_with_the_listed_material_not_what_is_in_hand(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -140,7 +140,7 @@ public class MaterialGameTests {
     }
 
     /** 快捷栏第 1 格与第 4 格都是圆石:用的是靠前的第 1 格,第 4 格一块没少。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void takes_the_material_from_the_earlier_slot(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -158,7 +158,7 @@ public class MaterialGameTests {
     }
 
     /** 手上拿着剑,圆石在背包深处:中键把圆石换进快捷栏搭桥,剑换回背包,一直在身上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void keeps_the_weapon_after_bridging(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
@@ -188,7 +188,7 @@ public class MaterialGameTests {
     }
 
     /** 圆石只在背包深处,宿主的料端口只认快捷栏(不许动背包):结局是"没有料"。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void deep_inventory_only_is_no_materials_when_the_host_says_so(GameTestHelper helper) {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);

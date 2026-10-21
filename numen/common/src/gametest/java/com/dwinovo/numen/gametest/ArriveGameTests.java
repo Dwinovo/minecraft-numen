@@ -107,7 +107,7 @@ public class ArriveGameTests {
      * 工作台在三格高的悬崖上、离崖边三格;她在崖脚,几何上够得着它,隔着崖壁的石头看不见。旁边一道台阶能上去:use.block
      * 不停在崖底,上到崖顶,打开它。
      */
-    @GameTest(template = "floor16", timeoutTicks = 216, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 213, batch = BATCH)
     public static void use_climbs_to_a_table_on_a_cliff_instead_of_stopping_below(GameTestHelper helper) {
         fill(helper, 7, 2, 0, 15, 4, 15, Blocks.STONE.defaultBlockState());
         set(helper, 4, 2, 12, Blocks.STONE);

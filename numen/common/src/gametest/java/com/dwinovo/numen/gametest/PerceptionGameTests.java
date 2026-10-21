@@ -292,7 +292,7 @@ public class PerceptionGameTests {
      * 同源:找方块从 scan_blocks 与 numen.scan.blocks 读到同一份团。标签照原版写法({@code #minecraft:logs})认,一个 id 一个标签
      * 同一次找;只是看,不存、没有编号,两份回执一字不差。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_perception")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void scan_blocks_reads_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos gold = helper.absolutePos(new BlockPos(6, 2, 3));
@@ -457,7 +457,7 @@ public class PerceptionGameTests {
      *
      * <p>单独一个批次:这条用例每刻都把共享的时间上限耗尽,和别的用例同批会拖慢它们的搜索。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_scan_budget")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scan_budget")
     public static void a_block_search_returns_even_when_every_tick_is_already_spent(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos sponge = helper.absolutePos(new BlockPos(12, 2, 12));

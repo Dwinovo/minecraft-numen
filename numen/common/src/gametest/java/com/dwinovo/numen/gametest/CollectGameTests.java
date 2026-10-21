@@ -161,7 +161,7 @@ public class CollectGameTests {
      * 刚掉下来的东西有一小段拾取冷却(原版方块掉落是 10 刻):三块铁锭就落在她脚边,冷却还没过。它还在冷却,她就再走上去一次,
      * 直到捡起来——不能因为"走到了却没进背包"就当它捡不了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_collect")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_waits_out_a_fresh_drops_pickup_delay(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(5, 2, 5), false);
         Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(6, 2, 5)));

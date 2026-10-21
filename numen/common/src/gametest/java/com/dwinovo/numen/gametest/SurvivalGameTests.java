@@ -64,7 +64,7 @@ public class SurvivalGameTests {
     /**
      * 闲着不是卡住:四面贴着墙站着、手上没活,脱困反射只读在走的那一趟"在不在推进",没在走就不醒——她一步不挪。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 360, batch = "numen_survival")
     public static void an_idle_body_boxed_in_is_not_stuck(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (BlockPos side : List.of(new BlockPos(5, 2, 4), new BlockPos(3, 2, 4), new BlockPos(4, 2, 5),
@@ -157,7 +157,7 @@ public class SurvivalGameTests {
      * 冷却卡在 10,她再也进不去第二次),{@code ServerPlayer.isInvulnerableTo} 在标记为真时
      * 恒真(她从此无敌)。回执由 {@code FakeClient} 代答。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_survival")
     public static void a_dimension_change_is_acknowledged(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerLevel nether = level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);

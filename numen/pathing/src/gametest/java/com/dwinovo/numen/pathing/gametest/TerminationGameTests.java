@@ -46,7 +46,7 @@ public class TerminationGameTests {
      * 一条一格宽的走廊,中间被一只潜影贝堵死:身体走到它跟前顶着不动,看护判卡住,这一步记为不通;走廊里没有别的路,搜完了说受阻,
      * 在哪一步、哪一格,没有无限地顶下去。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 447)
     public static void a_corridor_blocked_by_what_planning_cannot_see_ends_blocked(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 4, 20, 3, 4, Blocks.STONE);

@@ -108,7 +108,7 @@ public class RemoteBrainGameTests {
     }
 
     /** 主人不在游戏里:她待命;他的外部大脑连上,驾驶席换人、她不再待命;它断开,和登出一样收拾一次回到待命。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_1")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_1")
     public static void an_external_brain_connecting_wakes_her_and_leaving_puts_her_away_again(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_away", null);
@@ -134,7 +134,7 @@ public class RemoteBrainGameTests {
     }
 
     /** 主人在游戏里:外部大脑断开不收拾,驾驶席交还内脑,她不待命。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_2")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_2")
     public static void the_brain_leaving_while_the_owner_is_here_hands_the_seat_back_without_collecting(
             GameTestHelper helper) throws Exception {
         ServerPlayer owner = GameTestKit.presentPlayer(helper, null, "gametest_remote_owner");
@@ -160,7 +160,7 @@ public class RemoteBrainGameTests {
     }
 
     /** 人先下线、外部大脑还连着:他还在,不收拾;外部大脑再断开,才收拾。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_3")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_3")
     public static void the_player_leaving_is_not_leaving_while_his_external_brain_is_connected(GameTestHelper helper)
             throws Exception {
         ServerPlayer owner = GameTestKit.presentPlayer(helper, null, "gametest_remote_leaver");
@@ -199,7 +199,7 @@ public class RemoteBrainGameTests {
      * 主人不在游戏里、外部大脑驾驶着她:要问主人的事不当场按"主人不在"拒绝,而是经外部大脑的客户端用 elicitation
      * 问坐在电脑前的人;他的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_4")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_4")
     public static void a_consent_goes_to_the_human_at_the_external_brains_client(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gt_remote_asks", null);
@@ -236,7 +236,7 @@ public class RemoteBrainGameTests {
     }
 
     /** 外部大脑的客户端不会答 elicitation:征询不当场拒绝,挂着等主人进游戏答;连外部大脑也走了,才按"主人不在"拒绝。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_5")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_5")
     public static void a_client_that_cannot_elicit_leaves_the_consent_waiting_for_the_owner(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_mute", null);
@@ -267,7 +267,7 @@ public class RemoteBrainGameTests {
      * 渠道来的话:主人不在游戏里,话由服务端大脑去想,回话回那个渠道;这一轮做完他还不在,她回到收拾好的样子
      * (待命,收拾一次),不因来过一句话一直醒着。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_remote_6")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_6")
     public static void a_channels_words_are_thought_about_and_answered_then_she_goes_back_to_standing_by(
             GameTestHelper helper) throws Exception {
         BrainGameTests.Scripted mind = new BrainGameTests.Scripted();
@@ -308,7 +308,7 @@ public class RemoteBrainGameTests {
     }
 
     /** 渠道来访期间她要问主人的事:不当场按"主人不在"拒绝,以通用形式交给渠道;主人在渠道上的答复走征询台。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_remote_7")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_7")
     public static void a_consent_during_a_channel_visit_is_handed_to_the_channel(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_visited", null, new BrainGameTests.Scripted(),

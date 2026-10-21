@@ -54,7 +54,7 @@ public class FluidGameTests {
     }
 
     /** 一池一格深的浅水挡在路上:踩着池底蹚过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 432)
     public static void wades_through_shallow_water(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 6, 0, 10, 39, 1);
@@ -63,7 +63,7 @@ public class FluidGameTests {
     }
 
     /** 一片三格深的水挡在路上:游过去,上岸。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 507)
     public static void swims_across_deep_water(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 6, 0, 13, 39, 3);
@@ -75,7 +75,7 @@ public class FluidGameTests {
      * 三格深的水接着一溜一格深的浅水:游过深水,到了浅水里脚下是水底。规划认为浅水格是踩在水底上(站着),原版水里不按键每刻只沉
      * 0.005 格,身子浮在水底之上老远,落不到水底上——游的控制器要到了列中心就按住潜行沉下去,段状态机才认得站在了落点上。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 813)
     public static void swims_from_deep_water_onto_a_shallow_bed(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, -4, 0, 23, -1, 39, Blocks.STONE);
@@ -91,7 +91,7 @@ public class FluidGameTests {
     }
 
     /** 一道流水横在路上(一头是源头,顺着两格高的水渠流开),水渠尽头之外能绕:绕过去,脚从不踩进流水。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 444)
     public static void keeps_out_of_flowing_water(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(7, 1, 0, 7, 2, 12, Blocks.STONE);
@@ -110,7 +110,7 @@ public class FluidGameTests {
     /**
      * 一片横贯场地的岩浆:不许改地形时走不过去,身体一点不碰;诊断说得出"许改地形(在岩浆上搭桥)才有路"。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void refuses_to_cross_lava(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(7, -1, 0, 11, -1, 39, Blocks.STONE);
@@ -121,7 +121,7 @@ public class FluidGameTests {
     }
 
     /** 直路贴着一溜岩浆走,旁边两格远有一条稍长的路:走离岩浆远的那条,一次也不贴着它。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 324)
     public static void keeps_away_from_lava_at_a_small_detour(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(4, -1, 3, 14, -1, 5, Blocks.STONE);
@@ -134,7 +134,7 @@ public class FluidGameTests {
     }
 
     /** 路上一片细雪、一片蜘蛛网,旁边能绕:都绕开。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 360)
     public static void avoids_powder_snow_and_cobwebs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 0, 3, 7, 0, 7, Blocks.POWDER_SNOW);
@@ -151,7 +151,7 @@ public class FluidGameTests {
     // ==================== 流体(普查补充) ====================
 
     /** 一口四格深、一格宽的水井,身体在井底:游上来,上岸。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 318)
     public static void swims_up_from_the_bottom_of_a_deep_well(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, -4, 4, 7, -1, 6, Blocks.STONE);
@@ -161,7 +161,7 @@ public class FluidGameTests {
     }
 
     /** 泡在三格深的池子里,身上有圆石、许改地形,去处在岸上:游上岸再说,不在水里垫柱。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 447)
     public static void does_not_pillar_while_in_water(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 4, 3, 9, 8, 3);
@@ -181,7 +181,7 @@ public class FluidGameTests {
     }
 
     /** 路上一个一格的水坑,走过去短暂落进水里又出来:照常走过去,不在水坑边反复停下重搜,一路在推进。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 312)
     public static void a_brief_dip_in_water_does_not_stall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 8, 5, 8, 5, 1);
@@ -199,7 +199,7 @@ public class FluidGameTests {
      * 一道横贯场地的水渠,规格不许下水、也不许往水里放方块,许改地形、身上有圆石:先垫高一格,在水面上方那一层搭桥过去,
      * 水渠里的水一格没动。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 414)
     public static void bridges_over_water_without_placing_into_it(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 7, 0, 9, 39, 1);
@@ -222,7 +222,7 @@ public class FluidGameTests {
     }
 
     /** 潜到三格深的池底某一格站着。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 342)
     public static void dives_to_a_cell_on_the_bottom(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 5, 3, 10, 8, 3);
@@ -231,7 +231,7 @@ public class FluidGameTests {
     }
 
     /** 穿着冰霜行者的靴子:三格深的一片静水挡在路上,踩着冻住的水面走过去,一次也没下水。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 315)
     public static void walks_over_water_in_frost_walker_boots(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         pool(t, 6, 0, 11, 39, 3);
@@ -254,7 +254,7 @@ public class FluidGameTests {
     // ==================== 危险 ====================
 
     /** 一条两旁摆着仙人掌、火、甜浆果丛、脚下夹着岩浆块的路:不碰它们,一点血不掉。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 339)
     public static void passes_cactus_fire_berries_and_magma_unhurt(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 3, 14, 1, 3, Blocks.SAND);
@@ -274,7 +274,7 @@ public class FluidGameTests {
     }
 
     /** 走道正中一块压力板,旁边能绕:出厂规格绕开,压力板一直没被踩下。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 303)
     public static void steps_around_a_pressure_plate_by_default(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(8, 1, 5, Blocks.STONE_PRESSURE_PLATE);
@@ -290,7 +290,7 @@ public class FluidGameTests {
     }
 
     /** 走道上一道绊线,旁边能绕:与压力板一样,出厂规格绕开;规格放开机关时直接跨过去也不绕。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 336)
     public static void treats_tripwire_like_pressure_plates(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 3, 8, 1, 7, Blocks.TRIPWIRE);
@@ -311,7 +311,7 @@ public class FluidGameTests {
     }
 
     /** 两只怪一左一右,中间的缝正对着去处:不从它们中间直穿,绕开它们的危险半径。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 438)
     public static void does_not_walk_between_two_monsters(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         BlockPos a = t.at(10, 1, 17);

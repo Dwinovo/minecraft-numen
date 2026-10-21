@@ -77,7 +77,7 @@ public class BreathGameTests {
      * 两口竖井之间 28 格长的封顶水道,一口气要游约 290 刻,原版满氧气安全地只憋得住 240 刻:不下水,结局是憋不住气,点出从哪一口
      * 竖井下去、到哪一口上来;一点血不掉、身体没进过水。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void will_not_dive_a_sealed_channel_longer_than_a_breath(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         channel(t, 5, 33, true);
@@ -102,7 +102,7 @@ public class BreathGameTests {
     }
 
     /** 同样的封顶水道只有 8 格长(一口气约 110 刻):游过去,一口气到头,账上一段水下,没掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 621)
     public static void swims_a_sealed_channel_short_enough_to_hold(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         channel(t, 10, 18, true);
@@ -112,7 +112,7 @@ public class BreathGameTests {
     }
 
     /** 28 格长、上面敞开的水道:浮在水面上换着气游过去,没掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1134)
     public static void swims_a_long_channel_open_above(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         channel(t, 5, 33, false);

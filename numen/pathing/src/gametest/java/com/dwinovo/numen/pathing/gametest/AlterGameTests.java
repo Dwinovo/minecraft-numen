@@ -74,7 +74,7 @@ public class AlterGameTests {
     // ==================== 不许改地形 ====================
 
     /** 一道挖得动的泥土墙,远处留着口:不许改地形,走口里绕过去,一格不动。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 561)
     public static void detours_a_wall_it_may_not_dig(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, 20);
@@ -83,7 +83,7 @@ public class AlterGameTests {
     }
 
     /** 泥土墙横贯场地,没有口:不许挖不许放时报"许挖许放就有路、要改两格",世界一格不变。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void needs_alter_when_it_cannot_get_around(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, -1);
@@ -99,7 +99,7 @@ public class AlterGameTests {
     // ==================== 改地形 ====================
 
     /** 泥土墙横贯场地:许挖许放,挖开身体高的两格穿过去,挖掉的正是墙上那两格。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 399)
     public static void digs_through_a_dirt_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, -1);
@@ -114,7 +114,7 @@ public class AlterGameTests {
     }
 
     /** 四格高的石崖,身上有圆石:垫块上去(上四格要垫三块,最后一下跳上崖),不去空手刨石头。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 390)
     public static void pillars_up_a_cliff(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 39, 4, 39, Blocks.STONE);
@@ -129,7 +129,7 @@ public class AlterGameTests {
     }
 
     /** 两块基岩台子之间一道四格宽的沟:身上有圆石,在台面那一层搭四格桥过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void bridges_a_ditch(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ditch(t, 10, 13);
@@ -149,7 +149,7 @@ public class AlterGameTests {
      * 要潜行探出边沿才看得见)和东边一块打开的活板门的板面(被起步那一列东边的石头挡住,看不见)。站定点不中,探出去点得中:
      * 规划认出这一步要潜行,执行潜行探出去放,桥搭得成;规划若只看有没有能点的面,会认作站着就能放,执行点不中,反复走不下去。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 213)
     public static void bridges_leaning_out_when_only_the_back_face_is_in_sight(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 5, 5, 4, 5, Blocks.BEDROCK);
@@ -169,7 +169,7 @@ public class AlterGameTests {
     }
 
     /** 站在四格厚的泥土上,去处在正下方的地面:向下挖下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 639)
     public static void digs_down_to_a_lower_goal(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
@@ -185,7 +185,7 @@ public class AlterGameTests {
      * 站着的那一格里长着一株草(没有碰撞、有轮廓):准星从眼睛往下看先碰上它,要挖的脚下那一格点不中。向下挖之前先把这株草打掉,
      * 再挖下面的泥土,一路落到底。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 642)
     public static void digs_down_through_the_grass_underfoot(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
@@ -206,7 +206,7 @@ public class AlterGameTests {
      * 两座高台隔着一道深坑(深到跳不下去),身上只有圆石,快捷栏塞满、主手拿着圆石:先在坑上垫一块走过去,紧接着在对面往下挖三格,
      * 落进藏在泥土里的空腔。没有空手可换,就握着圆石挖泥土;往下挖的头一格不为此卡住。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 669)
     public static void digs_down_right_after_bridging_a_gap(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 3, 4, 7, 7, Blocks.STONE);
@@ -233,7 +233,7 @@ public class AlterGameTests {
      * 泥土墙横贯场地,正对着的那一段是玩家砌的(许可拒绝),墙里还嵌着一只箱子(许可拒绝):绕到许可放行的那一段去挖,
      * 拒绝的格一格不碰。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 534)
     public static void never_digs_denied_cells(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, -1);
@@ -253,7 +253,7 @@ public class AlterGameTests {
     }
 
     /** 关在泥土小屋里,整间屋子许可都拒绝:结局是"许可拒绝",点出屋墙上的一格与许可给的理由,世界一格不变。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void reports_the_denied_cell(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         hut(t);
@@ -271,7 +271,7 @@ public class AlterGameTests {
      * 关在泥土小屋里,屋子许可答"要问":把要问的格算能走时挖出去,路线里列出挖的每一格与许可给的凭据;
      * 要问的格当墙时,结局是"把要问的格算能走才有路"。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 390)
     public static void lists_cells_that_need_consent(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         hut(t);
@@ -297,7 +297,7 @@ public class AlterGameTests {
      * (要料)。要问的格当墙时,结局是"把要问的格算能走才有路"——许的改动不够先报,不说成没料。旁边一模一样的围栏里,带着圆石的
      * 身体垫柱翻出去,墙一格不挖:这个场景里料确实是另一条出路。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 354)
     public static void asks_for_consent_before_materials(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 8, 3, 8, Blocks.DIRT);
@@ -324,7 +324,7 @@ public class AlterGameTests {
     // ==================== 改地形补充 ====================
 
     /** 两格高的泥土墙,口在六格多的绕路之外:许改地形也不挖,绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 339)
     public static void detours_rather_than_dig_a_short_way(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 2, Blocks.DIRT, 10);
@@ -336,7 +336,7 @@ public class AlterGameTests {
      * 一道一格宽的沟,沟里是一层薄雪、雪下是岩浆块(站不得):搭桥时那块放进薄雪那一格,把雪顶掉;许可问的、账上记的、
      * 要同意的都是那一格。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 288)
     public static void places_into_the_snow_layer_it_bridges_over(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int z = 0; z <= 39; z++) {
@@ -397,7 +397,7 @@ public class AlterGameTests {
     }
 
     /** 关在泥土小屋里,改动预算只有一格:结局是"改动预算不够",最便宜那条要改两格,世界一格不变。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void reports_how_many_alterations_the_cheapest_way_needs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         hut(t);
@@ -426,7 +426,7 @@ public class AlterGameTests {
     }
 
     /** 要去用的工作台嵌在一道石墙里:许改地形,走到够得着、看得见它的地方就停,工作台一直在。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
     public static void does_not_dig_the_table_it_goes_to_use(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.STONE, -1);
@@ -466,7 +466,7 @@ public class AlterGameTests {
      * 世界边界从沟边那一排格子中间穿过:身体站得进那一排(身子在界内),那一排的格子却不在界内,原版不许在那儿挖、放。
      * 去处就在那一排上:桥搭在界内的下一排,一块也不往边界上那一排放。
      */
-    @GameTest(template = ARENA, batch = BORDER, timeoutTicks = 900)
+    @GameTest(template = ARENA, batch = BORDER, timeoutTicks = 441)
     public static void does_not_place_on_the_world_border(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ditch(t, 10, 13);

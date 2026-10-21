@@ -147,7 +147,7 @@ public class TaskControlGameTests {
     }
 
     /** 不带编号叫停:走到一半的 goto 停下,收尾以 status=stopped 的 task_finished 送到。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_stop_without_an_id_stops_the_background_task(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_halted", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
@@ -187,7 +187,7 @@ public class TaskControlGameTests {
     }
 
     /** 一秒的表:到点发一条 timer 事件,带着定表时写的理由。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void set_timer_fires_its_reason_back(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_alarmed", new BlockPos(2, 2, 2), false);
         ToolRun timer = lua(companion, "numen.task.timer(\"the bread should be baked\", {after = 1})");
@@ -308,7 +308,7 @@ public class TaskControlGameTests {
      * 换驱动者:站着的长活被一件短活顶掉(任务自己的 stop 什么也不松),大脑统一把旧驱动者按着的键全松、鼠标的挖掘进度清零,
      * 新驱动者拿到的是一具干净的身体。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_new_driver_starts_from_a_clean_body(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
@@ -336,7 +336,7 @@ public class TaskControlGameTests {
     }
 
     /** 换驱动者不只是被顶掉:槽里的长活被新活换掉,旧驱动者按着的键与鼠标同样由大脑松开。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_replaced_driver_leaves_a_clean_body(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
@@ -365,7 +365,7 @@ public class TaskControlGameTests {
      * 重启后接回函数派下的长活:再跑记下的那一行 Lua,接回来的活照样叫那个函数名,收尾的 task_finished 也是这个名字。
      * 重启用"休眠 + 把重启前落盘的那条记录放回去 + 复活"来演。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_restored_long_command_keeps_its_name(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -486,7 +486,7 @@ public class TaskControlGameTests {
     // ---- 一轮里的几条调用:一件做完才派下一件;下一轮派的替换正在做的 ----
 
     /** 一轮里写了两条放空气的 {@code numen.build.place}:第一件做完才派第二件,两格都拆掉,第二件没有顶掉第一件。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void two_build_sets_in_one_round_both_get_done(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_two_sets", new BlockPos(2, 2, 2), true);
@@ -513,7 +513,7 @@ public class TaskControlGameTests {
     }
 
     /** 一轮里 goto 之后接一个只读的 numen.status.self:它等她走到了才执行,读到的是到达之后的她。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_query_after_a_goto_in_one_round_runs_on_arrival(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_arriver", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
@@ -535,7 +535,7 @@ public class TaskControlGameTests {
     /**
      * 跟随总有收尾:{@code seconds} 到了以成功收场,同一轮后面的调用接着执行;跟着的这段时间里它是她手上的活,收场后手上空了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_follow_ends_on_time_and_the_round_goes_on(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_tagalong", new BlockPos(2, 2, 2), false);
         LlmToolCall follow = programCall("numen.move.follow({seconds = 2})");

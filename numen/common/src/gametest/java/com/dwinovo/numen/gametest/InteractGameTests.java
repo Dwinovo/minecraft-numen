@@ -29,7 +29,7 @@ public class InteractGameTests {
      * 靠的是"方块没吃掉点击就落到物品自用"那步兜底。守住它:没有兜底时
      * 对水右键永远空手,工具却报成功。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_bucket_scoops_aimed_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 沉进地板的一格水:四邻就是地板块,天然围住;地表水盆的沿会挡住
@@ -55,7 +55,7 @@ public class InteractGameTests {
      * 生成位与身体重叠还会被原版 noCollision 静默拒绝——所以她站在岸上、
      * 瞄几格外的池心。守的是同一步兜底 + "放出去的船真的存在"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_boat_places_on_aimed_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 3x3 水池,外圈一格石堤
@@ -297,7 +297,7 @@ public class InteractGameTests {
     }
 
     /** 右键一扇关着的木门:门开了;再右键一次:门又关上。两次回执都说出了门的变化。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_opens_then_closes_a_door(GameTestHelper helper) {
         BlockPos lower = helper.absolutePos(new BlockPos(6, 2, 4));
         var door = Blocks.OAK_DOOR.defaultBlockState()
@@ -393,7 +393,7 @@ public class InteractGameTests {
      * 拿着圆石右键一只箱子:站着点,箱子开了;按住潜行点,箱子不开,圆石贴着箱子放下了——手里有东西时潜行右键越过方块自己的反应,
      * 只有潜行才有。点完潜行松开,回执说是潜行点的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_block_sneaking_puts_a_block_on_a_chest_instead_of_opening_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chest = helper.absolutePos(new BlockPos(6, 2, 14));
@@ -436,7 +436,7 @@ public class InteractGameTests {
      * 正午右键一张床:原版在动作栏里告诉她只能在夜里睡,这句话作为一条 {@code server_message} 事件交给了模型
      * (进了她的收件箱)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void a_bed_at_noon_tells_her_why_as_an_event(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos foot = helper.absolutePos(new BlockPos(6, 2, 2));
@@ -469,7 +469,7 @@ public class InteractGameTests {
      * 左键是一次纯按键:创造模式的她手里拿着一根木棍,包里有一把铁锹,{@code numen.use.hit} 对着一块泥土——她用木棍点掉它
      * (创造里点一下就碎),不去换锹;锹原样躺在包里那一格,手里还是木棍,回执里没有换工具这一句。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_block_left_hits_with_whatever_is_in_hand(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 8));
@@ -498,7 +498,7 @@ public class InteractGameTests {
      * 准星落在谁就按谁:创造模式的她和石头之间隔着一块泥土,{@code numen.use.hit} 对着石头按下去,落在泥土上——点掉的是泥土,
      * 石头原样;回执照实说准星落在了泥土上,不是瞄的那一格。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_block_left_presses_what_the_crosshair_lands_on(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stone = helper.absolutePos(new BlockPos(6, 2, 12));

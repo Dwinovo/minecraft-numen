@@ -69,7 +69,7 @@ public class MovementGameTests {
      * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与停止键
      * 同一个入口),收尾的消息以"the owner pressed Stop"开头——模型不用猜是谁、为什么停的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_smoke")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_smoke")
     public static void an_owner_stop_says_the_owner_stopped_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -183,7 +183,7 @@ public class MovementGameTests {
      * 证据链用第三个动作闭合——守卫失效时按压永远等不到准星确认,后续的
      * 同步破块也就永远轮不上;石头碎了 = 槽是活的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_vehicle")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_vehicle")
     public static void interact_own_vehicle_ends_immediately(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 6; x <= 9; x++) {
@@ -269,7 +269,7 @@ public class MovementGameTests {
      * 没搜完——这只是没搜完,不能证明到不了。受理,开始走;不当场回一句"跟不上"。石头铺得比场地大,伸进邻居的场地里,所以自成一批,
      * 收场时还成空气。
      */
-    @GameTest(template = "floor16", timeoutTicks = 408, batch = "numen_follow_budget")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_follow_budget")
     public static void follow_is_accepted_when_the_probe_search_runs_out_of_budget(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos low = helper.absolutePos(new BlockPos(16, 1, -12));
@@ -314,7 +314,7 @@ public class MovementGameTests {
      * 重启后接不回来的活不许让调度 tick 抛出去:记下的那一行 Lua 再跑时已经不成立(dig 点名的那块铁矿已经不在了,
      * 函数当场失败),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void a_restored_task_whose_args_no_longer_hold_is_reported(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -467,7 +467,7 @@ public class MovementGameTests {
     /**
      * 目标是石头里的一格:一个 Pos 站得进去就站进去——一块 3×3×3 的实心石头,正中那一格是目标,她挖进去,站在里面。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2013, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 2007, batch = "numen_terrain")
     public static void goto_a_position_inside_rock_digs_into_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (BlockPos rel : BlockPos.betweenClosed(new BlockPos(10, 2, 6), new BlockPos(12, 4, 8))) {
@@ -599,7 +599,7 @@ public class MovementGameTests {
      * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的那一行 Lua 写的是它的身份(种类@UUID 前六位),重启后
      * 认的还是同一只。重启用"休眠 + 把落盘的那条记录放回去 + 复活"来演。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void a_restored_follow_finds_the_same_entity_by_its_id(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();

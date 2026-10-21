@@ -42,7 +42,7 @@ public class DynamicGameTests {
     }
 
     /** 走到一半,前方横着砌起一道墙,只在远处留口:重新规划,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 621)
     public static void replans_when_a_wall_goes_up_ahead(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);
@@ -62,7 +62,7 @@ public class DynamicGameTests {
     }
 
     /** 唯一的出口是一扇开着的门,走到一半门被关上:走到门前自己打开,实际账里记下这一开。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 375)
     public static void reopens_a_door_closed_on_the_way(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(12, 1, 0, 12, 3, 39, Blocks.STONE);
@@ -88,7 +88,7 @@ public class DynamicGameTests {
     }
 
     /** 走在一条直路上,半路被横着推开两格:回到原来那条路上(十格之内回到那一排),接着走到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 504)
     public static void returns_to_the_route_after_a_push(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);
@@ -111,7 +111,7 @@ public class DynamicGameTests {
     /**
      * 两条一样长、两格宽的走廊,走进其中一条之后,前方同一排被放了一块石头:在这条走廊里侧身绕过去,不退出来换另一条。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 504)
     public static void keeps_its_lane_when_replanning(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int z : new int[] {3, 6, 7, 10}) {
@@ -136,7 +136,7 @@ public class DynamicGameTests {
     /**
      * 一头猪沿直线慢慢往前挪,宿主看它挪出两格就把目标换成"它附近两格半以内":跟着走,途中换了几次目标,最后停在它身边。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 576)
     public static void follows_a_moving_target(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         Pig pig = EntityType.PIG.create(t.level);
@@ -172,7 +172,7 @@ public class DynamicGameTests {
     }
 
     /** 走在路上被打飞(横着带往上的一下):落地之后回到路上,接着走到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 567)
     public static void recovers_after_being_knocked_flying(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);

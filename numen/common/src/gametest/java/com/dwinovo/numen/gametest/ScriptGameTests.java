@@ -70,7 +70,7 @@ public class ScriptGameTests {
     }
 
     /** 两行 {@code numen.build.place}:一行做完(那件活收尾)才派下一行,两格都拆掉;回执按行各一句,点出那件活的收尾。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_program_runs_its_calls_in_order(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_order", new BlockPos(2, 2, 2), true);
@@ -200,7 +200,7 @@ public class ScriptGameTests {
      * 一次扫描的每一团:{@code numen.scan.blocks} 直接给出团的列表(近的在前),脚本逐个走过去挖;两团矿都挖掉,打印的是两团最近那一格,
      * 近的在前。
      */
-    @GameTest(template = "floor16", timeoutTicks = 321, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
     public static void a_program_goes_through_the_clusters_of_a_scan(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(new BlockPos(4, 2, 4));
@@ -237,7 +237,7 @@ public class ScriptGameTests {
      * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,一段程序扫到它们,把那一团交给 {@code numen.work.mine} 挖空——走到够得着、挖、
      * 捡,直到交给它的一格不剩;铁都进了包,返回挖了几格。它里面没有一处接住错误往下走:哪一步失败,整段就停在那一步。
      */
-    @GameTest(template = "floor20", timeoutTicks = 378, batch = "numen_scripts")
+    @GameTest(template = "floor20", timeoutTicks = 366, batch = "numen_scripts")
     public static void work_mine_digs_out_ore_buried_in_stone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 6; x <= 12; x++) {
@@ -280,7 +280,7 @@ public class ScriptGameTests {
      * 模块函数多给实参当场 bad_argument:{@code numen.work.mine} 只声明了 cluster,Lua 本会悄悄丢掉后面的选项表,变成全挖。错误写明
      * 它收哪几个参数,一格都没挖。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_module_function_refuses_more_arguments_than_it_declares(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_excess", new BlockPos(1, 2, 1), true);
@@ -372,7 +372,7 @@ public class ScriptGameTests {
      * my 下又不是内置名字的不收、说为什么;主人拿编辑器改了文件,下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的
      * 删得掉。模块目录是这次 GameTest 专用的,不是主人的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void she_saves_uses_and_deletes_a_module_of_her_own(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_saver", new BlockPos(2, 2, 2), true);
@@ -541,7 +541,7 @@ public class ScriptGameTests {
      * 失败是一个值:{@code pcall} 接住的错误有种类与能照抄的下一行,拼进字符串是"函数: 种类 — 原因"。旧写法(三个数的列表、一串字)是
      * {@code bad_argument},下一行是改写好的那一次调用。哪一次都没挖。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_failed_call_is_a_value_with_its_kind_and_next_line(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_catcher", new BlockPos(1, 2, 1), true);
@@ -651,7 +651,7 @@ public class ScriptGameTests {
     }
 
     /** 一个客户端函数交回的结果超过一个上行的包:答复经分片送回服务端,程序拿到的是完整的文字。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_client_function_result_over_one_packet_comes_back_to_the_program_in_fragments(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_result", new BlockPos(2, 2, 2), true);
@@ -671,7 +671,7 @@ public class ScriptGameTests {
      * {@code NumenNetwork.sendToPlayer} 把它切成片经主人的连接({@code OwnerLine})发出;这里扮主人的客户端,收件箱拼回、
      * 交给客户端执行体,答复经上行回到服务端,程序跑到最后。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_request_over_one_downward_packet_reaches_the_owners_client_in_fragments(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_request", new BlockPos(2, 2, 2), false);
@@ -746,7 +746,7 @@ public class ScriptGameTests {
      * 停止键切断一段已经挖了几格的程序:这一批作废,模型当场读不到它的回执;服务端上的程序当场停下、照常交出回执,晚到的回执作为一条
      * {@code program_stopped} 事件进她的收件箱(客户端的工具口做的),正文就是服务端写的那份回执——写明切断了、已经挖了什么、后面的没挖。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_program_cut_off_by_the_stop_button_leaves_its_receipt_in_her_inbox(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_cut", new BlockPos(2, 2, 2), true);
@@ -841,7 +841,7 @@ public class ScriptGameTests {
     /**
      * 一段挖矿的程序:挖的那一次往 stderr 写挖了什么、手里的镐用坏了;紧跟着只返回值的查询什么也不写;她 print 的在 stdout。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_mining_program_says_what_it_dug_and_what_wore_out_on_stderr(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));

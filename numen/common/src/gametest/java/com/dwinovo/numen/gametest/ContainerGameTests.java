@@ -31,7 +31,7 @@ public class ContainerGameTests {
      * 模型取箱子里的东西就是这四步:右键打开箱子,看一眼格子,把第 0 格整叠拿进背包,合上。每一步都照模型的
      * 样子从工具入口调;五颗钻石到了她身上,箱子空了,界面合上。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_container")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void take_from_a_chest_open_look_move_close(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 4), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_looter", new BlockPos(3, 2, 4), false);
@@ -94,7 +94,7 @@ public class ContainerGameTests {
      * 往塞满圆石的箱子里存钻石:打开箱子,把背包里那叠钻石往箱子那一段送。箱子一格都放不下,这一步的回执说没搬动、
      * 那边满了;钻石还在她身上,箱子原样。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_container")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void transfer_into_a_full_chest_says_nothing_moved(GameTestHelper helper) {
         BlockPos chest = helper.absolutePos(new BlockPos(5, 2, 4));
         helper.getLevel().setBlockAndUpdate(chest, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState());
@@ -125,7 +125,7 @@ public class ContainerGameTests {
     }
 
     /** 从箱子里按数量拿:五颗钻石里拿两颗放进她背包的一个空格,正好两颗过来,箱子里剩三颗。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_container")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void transfer_an_exact_count_into_a_slot(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 4), 5);
         ChestBlockEntity box = (ChestBlockEntity) helper.getLevel().getBlockEntity(chest);

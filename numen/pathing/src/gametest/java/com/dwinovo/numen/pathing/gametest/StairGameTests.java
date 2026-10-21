@@ -44,7 +44,7 @@ public class StairGameTests {
     }
 
     /** 从正面走上楼梯:一路不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
     public static void walks_up_stairs_from_the_front(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         int top = staircase(t, 6, 4, 6, 4);
@@ -53,7 +53,7 @@ public class StairGameTests {
     }
 
     /** 从平台上顺着楼梯走下来:一路不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 309)
     public static void walks_down_stairs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         int top = staircase(t, 6, 4, 6, 4);
@@ -62,7 +62,7 @@ public class StairGameTests {
     }
 
     /** 一级朝东的楼梯,从它背后(东边)来:跳上去,或绕到正面走上去,站在它高的那半上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 249)
     public static void gets_onto_a_stair_from_its_back(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(8, 1, 5, stair(Direction.EAST));
@@ -71,7 +71,7 @@ public class StairGameTests {
     }
 
     /** 一级朝东的楼梯,从它侧面(南边)来。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 258)
     public static void gets_onto_a_stair_from_its_side(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(8, 1, 5, stair(Direction.EAST));
@@ -80,7 +80,7 @@ public class StairGameTests {
     }
 
     /** 转角楼梯:两段楼梯在拐角处由原版拼成内角、外角的形状,沿着拐上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
     public static void climbs_corner_stairs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         // 朝北的一段:z 从 9 往 6 升;拐角处朝东接上平台
@@ -96,7 +96,7 @@ public class StairGameTests {
     }
 
     /** 一排倒扣的(上半)楼梯当地面走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 264)
     public static void walks_on_upside_down_stairs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(4, 1, 5, Blocks.STONE);
@@ -107,7 +107,7 @@ public class StairGameTests {
     }
 
     /** 绕着一根柱子的螺旋楼梯连上十二级(悬空的楼梯,一圈八级):一路走上去,不停在原地来回认步,四百刻内到顶。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 429)
     public static void climbs_a_spiral_staircase(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         int cx = 12;
@@ -130,7 +130,7 @@ public class StairGameTests {
     }
 
     /** 楼梯走到顶,顶上那一格是一扇关着的木门:开门出去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 303)
     public static void opens_a_door_at_the_top_of_stairs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         int top = staircase(t, 6, 5, 5, 3);
@@ -145,7 +145,7 @@ public class StairGameTests {
     // ==================== 半砖与矮方块 ====================
 
     /** 下半砖与整块交替,半格半格走上去,一路不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
     public static void walks_up_half_steps_of_slabs(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 1, 4, 6, 1, 6, slab(SlabType.BOTTOM));
@@ -158,7 +158,7 @@ public class StairGameTests {
     }
 
     /** 上半砖、双层半砖垒成的台子与整块一样:要跳上去,站在顶上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 291)
     public static void treats_top_and_double_slabs_as_full_blocks(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(7, 1, 4, 9, 1, 6, slab(SlabType.TOP));
@@ -168,7 +168,7 @@ public class StairGameTests {
     }
 
     /** 半砖接半砖:下半、上半、下半、上半,一级半格,一路走上去不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
     public static void walks_slab_after_slab(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 1, 4, 6, 1, 6, slab(SlabType.BOTTOM));
@@ -183,7 +183,7 @@ public class StairGameTests {
     }
 
     /** 灵魂沙、耕地、土径上走过去,再从土径上跳上一格。规格放开耕地(走上去不踩坏,只是从高处落上去才坏)。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 369)
     public static void walks_and_jumps_on_soul_sand_farmland_and_paths(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 0, 4, 7, 0, 6, Blocks.SOUL_SAND);
@@ -196,7 +196,7 @@ public class StairGameTests {
     }
 
     /** 一层到八层的雪一格一格排着:一路走上去,再走回地面。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 351)
     public static void walks_over_snow_layers_one_to_eight(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int layers = 1; layers <= 8; layers++) {
@@ -208,7 +208,7 @@ public class StairGameTests {
     }
 
     /** 一排地毯上走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
     public static void walks_over_carpets(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 4, 12, 1, 6, Blocks.WHITE_CARPET);
@@ -217,7 +217,7 @@ public class StairGameTests {
     }
 
     /** 箱子、附魔台这类不满一格的方块排成一道:走上去、走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 324)
     public static void walks_over_chests_and_enchanting_tables(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 3, 7, 1, 7, Blocks.CHEST);
@@ -227,7 +227,7 @@ public class StairGameTests {
     }
 
     /** 站到床、附魔台、炼药锅、灯笼、栅栏顶、四到七层的雪上:六具身体各去一处。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 282)
     public static void stands_on_beds_tables_cauldrons_lanterns_fences_and_snow(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(4, 1, 4, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT)

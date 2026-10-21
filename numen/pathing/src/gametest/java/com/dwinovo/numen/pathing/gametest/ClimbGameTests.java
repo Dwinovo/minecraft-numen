@@ -42,7 +42,7 @@ public class ClimbGameTests {
     }
 
     /** 顺着梯子爬上五格高的墙,从梯子顶端跨到墙顶上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 369)
     public static void climbs_up_a_ladder_and_steps_off_the_top(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ladderWall(t, 5);
@@ -51,7 +51,7 @@ public class ClimbGameTests {
     }
 
     /** 从墙顶顺着梯子下来。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 369)
     public static void climbs_down_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ladderWall(t, 5);
@@ -60,7 +60,7 @@ public class ClimbGameTests {
     }
 
     /** 藤蔓与梯子是同一种攀爬:顺着贴墙的藤蔓爬上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 366)
     public static void climbs_vines_like_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(9, 1, 3, 12, 5, 7, Blocks.STONE);
@@ -83,7 +83,7 @@ public class ClimbGameTests {
     }
 
     /** 屋顶楼梯压得不低,身体在洞口站得直:爬梯子进阁楼。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 375)
     public static void climbs_into_an_attic_under_a_roof_stair(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         attic(t, 8);
@@ -95,7 +95,7 @@ public class ClimbGameTests {
      * 屋顶楼梯正压在洞口上方一格(倒扣的楼梯,只剩半格):身子从梯子顶上直不起来,也挪不进阁楼——不许改地形,就报要改地形,
      * 不在洞口来回卡着。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void a_roof_stair_right_over_the_hatch_needs_altering(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         attic(t, 7);
@@ -104,7 +104,7 @@ public class ClimbGameTests {
     }
 
     /** 阁楼口是一扇关着的活板门:爬到顶,推开活板门,进阁楼。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 378)
     public static void opens_a_trapdoor_over_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         attic(t, 9);
@@ -119,7 +119,7 @@ public class ClimbGameTests {
     }
 
     /** 顺着一列脚手架爬上去,跨到旁边的台子上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 402)
     public static void climbs_scaffolding(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(9, 1, 3, 12, 5, 7, Blocks.STONE);
@@ -134,7 +134,7 @@ public class ClimbGameTests {
      * 在一列脚手架最上面一格里,顺着它下到底再走出去。脚手架每格顶上的板托得住人,潜行才让开:往下爬每一格都要按住潜行
      * (梯子相反,潜行是抓住不滑)。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 291)
     public static void climbs_down_scaffolding_to_the_bottom(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(9, 1, 3, 12, 5, 7, Blocks.STONE);
@@ -160,7 +160,7 @@ public class ClimbGameTests {
     }
 
     /** 在一列脚手架里往上爬到中间那一格停下:到点松开跳,落回这一格顶上的板上,不冲过头。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 246)
     public static void stops_halfway_up_a_scaffolding_column(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         scaffoldingColumn(t);
@@ -169,7 +169,7 @@ public class ClimbGameTests {
     }
 
     /** 在一列脚手架里往下爬到中间那一格停下:到点松开潜行,让这一格底下那一格顶上的板托住,不穿到底。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 228)
     public static void stops_halfway_down_a_scaffolding_column(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         scaffoldingColumn(t);
@@ -178,7 +178,7 @@ public class ClimbGameTests {
     }
 
     /** 连续爬九格的梯子:一路上对外一直是"在推进",脱困反射不会来打断。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 471)
     public static void keeps_progressing_up_a_long_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ladderWall(t, 9);
@@ -193,7 +193,7 @@ public class ClimbGameTests {
     }
 
     /** 梯子顶端的出口被一块泥土堵着:许挖许放,挂在梯子上把它挖开再出去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void digs_while_hanging_on_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         ladderWall(t, 4);

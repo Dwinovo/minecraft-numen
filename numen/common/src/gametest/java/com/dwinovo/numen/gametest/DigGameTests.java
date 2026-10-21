@@ -30,7 +30,7 @@ public class DigGameTests {
      * 挖掘也走门:黑曜石屋(铁镐非正确工具,成本模型按不可破对待——拆墙不是廉价选项)关住她,矿在屋外,唯一通路是关着的橡木门。
      * 走去挖的寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 324, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 312, batch = "numen_dig")
     public static void dig_through_closed_door(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 1; x <= 5; x++) {
@@ -221,7 +221,7 @@ public class DigGameTests {
      * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
      * 往下挖进去,采得 2 颗钻石。盯的是埋矿的站位:脚不能高于矿,得一路挖着往下走,再就地挖矿。
      */
-    @GameTest(template = "floor20", timeoutTicks = 396, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 390, batch = "numen_dig")
     public static void dig_buried_diamonds(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 5; x <= 13; x++) {
@@ -327,7 +327,7 @@ public class DigGameTests {
     }
 
     /** 手里的镐挖不下这种矿(木镐对钻石矿):当场失败,说清楚是工具不够,矿原样留着。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_dig")
     public static void dig_without_a_harvesting_tool_says_the_tool_is_short(GameTestHelper helper) {
         BlockPos ore = helper.absolutePos(new BlockPos(6, 2, 4));
         helper.getLevel().setBlockAndUpdate(ore, Blocks.DIAMOND_ORE.defaultBlockState());
@@ -525,7 +525,7 @@ public class DigGameTests {
      * 黑曜石要它自己走一百多刻才破。她不能在服务端还挂着它时报"被退回":等服务端自己挖掉,报挖掉了,掉落物对得上。
      * (判据读服务端的记账,不数刻;固定等几刻的写法在这里 20 刻就判退回。)
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 561, batch = "numen_dig")
     public static void the_mouse_waits_for_the_delayed_destroy_the_server_still_holds(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos obsidian = helper.absolutePos(new BlockPos(8, 2, 8));
@@ -568,7 +568,7 @@ public class DigGameTests {
      * 做法:她带着急迫效果挖黑曜石,这一头的进度累得快;累到九成时去掉效果,于是送 STOP 那一刻服务端按没有效果的速度算,进度不够,
      * 挂成延迟破坏。服务端随后在自己的刻里挖掉它——那一刻方块不再"要挖",任务不能把它当"不用挖了"丢掉而报"一格没挖"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 800, batch = "numen_dig")
+    @GameTest(template = "floor16", timeoutTicks = 621, batch = "numen_dig")
     public static void dig_counts_a_block_the_server_breaks_as_a_delayed_destroy(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos obsidian = helper.absolutePos(new BlockPos(8, 2, 8));

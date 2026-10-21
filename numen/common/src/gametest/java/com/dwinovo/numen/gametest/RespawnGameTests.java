@@ -90,7 +90,7 @@ public class RespawnGameTests {
      * 睡过床:落在床边,重生事件说是重生点,并说主人在哪个方向、多远;她没有被传送到主人身边。
      * 重生后照常干活:走到几格外的一处。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_respawn")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_respawn")
     public static void a_companion_who_slept_in_a_bed_respawns_beside_it_and_walks_on(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();

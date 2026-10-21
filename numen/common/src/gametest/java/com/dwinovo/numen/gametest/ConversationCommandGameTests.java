@@ -49,7 +49,7 @@ public class ConversationCommandGameTests {
     }
 
     /** 命令把成员表拉人、移人、改名、解散,和面板上的操作落在同一张表上;会话照名字或 id 指到。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void group_commands_arrange_the_members_table_like_the_panel(GameTestHelper helper)
             throws Exception {
         Pair pair = Pair.of(helper, "gametest_organizer", "gametest_ga", "gametest_gb");
@@ -89,7 +89,7 @@ public class ConversationCommandGameTests {
      * 聊天栏切进会话:打的字进会话、公屏上别人看不到;@ 谁谁醒、别的旁听;她回的话回在带会话名的聊天行;补全词是成员的名字、
      * 成员变了跟着换;切回公屏以后打的字照常广播。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void a_chat_bar_routed_into_a_conversation_speaks_there_and_not_in_public(GameTestHelper helper)
             throws Exception {
         Pair pair = Pair.of(helper, "gametest_chatter", "gametest_ca", "gametest_cb");
@@ -140,7 +140,7 @@ public class ConversationCommandGameTests {
     }
 
     /** {@code /numen chat <会话> <话>} 只对会话说这一句,聊天栏不切进去。 */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_clientless")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void one_line_to_a_conversation_does_not_route_the_chat_bar(GameTestHelper helper) throws Exception {
         Pair pair = Pair.of(helper, "gametest_sayer", "gametest_sa", "gametest_sb");
         Conversations rooms = Conversations.of(helper.getLevel().getServer(), pair.owner().getUUID());

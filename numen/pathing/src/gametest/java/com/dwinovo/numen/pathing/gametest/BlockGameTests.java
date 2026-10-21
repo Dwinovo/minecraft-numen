@@ -52,7 +52,7 @@ public class BlockGameTests {
     }
 
     /** 栅栏挡着(一格半高,跳不过去),从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
     public static void goes_around_a_fence(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 16, Blocks.OAK_FENCE);
@@ -61,7 +61,7 @@ public class BlockGameTests {
     }
 
     /** 墙挡着,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 471)
     public static void goes_around_a_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 16, Blocks.COBBLESTONE_WALL);
@@ -70,7 +70,7 @@ public class BlockGameTests {
     }
 
     /** 栅栏上一扇开着的栅栏门:直接穿过去,不动它。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
     public static void passes_an_open_fence_gate(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 5, Blocks.OAK_FENCE);
@@ -87,7 +87,7 @@ public class BlockGameTests {
     /**
      * 栅栏上一扇关着的栅栏门,别处没有口:栅栏门身体能用手开,照原版打开它穿过去(开门不算改地形),实际账里记下这一开。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 288)
     public static void opens_a_closed_fence_gate(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 5, Blocks.OAK_FENCE);
@@ -104,7 +104,7 @@ public class BlockGameTests {
     /**
      * 两格高的玻璃板挡着:板子薄,身体也挤不过去,当墙,从口里绕过去。(一格高的玻璃板照原版站得上去,能踩着翻过去。)
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
     public static void treats_glass_panes_as_a_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 16, Blocks.GLASS_PANE, 2);
@@ -113,7 +113,7 @@ public class BlockGameTests {
     }
 
     /** 两格高的铁栏杆挡着,当墙,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
     public static void treats_iron_bars_as_a_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         barrier(t, 8, 16, Blocks.IRON_BARS, 2);
@@ -124,7 +124,7 @@ public class BlockGameTests {
     // ==================== 净空 ====================
 
     /** 两格高的通道照常走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 339)
     public static void walks_a_two_high_tunnel(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 4, 14, 3, 6, Blocks.STONE);
@@ -134,7 +134,7 @@ public class BlockGameTests {
     }
 
     /** 一格半高的缝(顶上是上半砖)钻不过去:绕远路,从不进那道缝。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
     public static void does_not_squeeze_through_a_one_and_a_half_gap(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 1, 8, 3, 20, Blocks.STONE);
@@ -156,7 +156,7 @@ public class BlockGameTests {
      * 头顶按真实形状判:通道顶上是关着的上半活板门(占格顶上 3/16,底下还剩 1.81 格)能过;另一条通道顶上是倒扣的楼梯
      * (只剩一格半)不能过。身体从活板门那条过去,从不进楼梯那条。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 348)
     public static void judges_the_ceiling_by_its_real_shape(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 1, 10, 3, 20, Blocks.STONE);
@@ -182,7 +182,7 @@ public class BlockGameTests {
     }
 
     /** 起跳上一格,起步那一列头顶三格处有方块:跳起来会碰头但照样上得去,不卡住。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 255)
     public static void jumps_up_under_a_low_ceiling(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 3, 12, 1, 7, Blocks.STONE);
@@ -192,7 +192,7 @@ public class BlockGameTests {
     }
 
     /** 两道墙夹着的走廊里横着一扇开着的活板门(贴着格子东边的一块一格高的薄板),两边地面一样高:撞上去起跳,翻过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 270)
     public static void jumps_a_thin_plate_between_level_floors(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(3, 1, 4, 10, 3, 4, Blocks.STONE);
@@ -210,7 +210,7 @@ public class BlockGameTests {
      * 一扇开着的活板门(贴着格子东边的一块一格高的薄板)后面是一块下半砖:跳过薄板、落在板顶或半砖上,脚已经不比落点低了
      * 就不再起跳,走下去站在半砖上。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 249)
     public static void stops_jumping_once_over_a_thin_plate_onto_a_lower_slab(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(3, 1, 4, 10, 3, 4, Blocks.STONE);
@@ -235,7 +235,7 @@ public class BlockGameTests {
      * 开着的活板门的薄板贴着落点那一格靠起步一侧的边(板宽 3/16),起步的下半砖顶面比地面高半格,板顶又比半砖高半格:迈下去时脚先踩上
      * 板顶,要走到落点中心(身子的另一侧离开板的内沿只剩 1/80 格)才踩得到地。到了落点这一格却还踩在板上,不是走完了这一步。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
     public static void steps_down_off_an_open_trapdoor_edge_onto_the_floor(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(4, 1, 5, slab(SlabType.BOTTOM));

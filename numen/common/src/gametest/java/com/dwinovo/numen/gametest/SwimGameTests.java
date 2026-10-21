@@ -58,7 +58,7 @@ public class SwimGameTests {
      * 8 格长的封顶水道(一口气约 110 刻):{@code numen.move.to} 到对岸,她游过去,一口气到头——换气本能没有在计划内的水下把她拽上去;
      * 回执说潜过一段水、憋了多久、氧气最低到多少;一点血不掉。
      */
-    @GameTest(template = "floor52", timeoutTicks = 456, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 453, batch = BATCH)
     public static void goto_swims_a_short_sealed_channel_and_says_so(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 18);
@@ -90,7 +90,7 @@ public class SwimGameTests {
      *   <li>唯一的路被挡死,{@code numen.move.to} 没走到,回执说潜过一段水、憋了多久。</li>
      * </ul>
      */
-    @GameTest(template = "floor52", timeoutTicks = 1134, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 1104, batch = BATCH)
     public static void a_planned_dive_held_up_under_water_lets_go_before_the_air_runs_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 27);

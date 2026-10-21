@@ -93,7 +93,7 @@ public class InventoryGameTests {
      * textures,而 UUID 与背包(经 .dat)原样回来——换的是皮,不是人。
      * 绑定皮肤时 {@code Companions.applySkin} 对活体执行的正是这一串。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void reskin_recycle_keeps_identity_and_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -732,7 +732,7 @@ public class InventoryGameTests {
     }
 
     /** 等一会儿:numen.time.wait(1) 站着等够一秒(至少 20 刻)才回,回的是等了几秒。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void time_wait_stands_for_the_time_given(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(3, 2, 3), false);
         long start = helper.getLevel().getGameTime();

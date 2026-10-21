@@ -121,7 +121,7 @@ public class CellRouteGameTests {
      * 不点名任何禁区,她也挖开别的墙绕出去,东墙一块不少——日式小屋卡在底层来回挖自己刚放下的格,
      * 就是路线把房子的格当成了能挖的地形。
      */
-    @GameTest(template = "floor16", timeoutTicks = 531, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 528, batch = BATCH)
     public static void a_walk_never_digs_a_building_she_built(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         plankRoomAround(helper, 7, 7);

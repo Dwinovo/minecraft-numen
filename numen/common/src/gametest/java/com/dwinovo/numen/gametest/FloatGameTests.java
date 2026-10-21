@@ -154,7 +154,7 @@ public class FloatGameTests {
      * 事件只报一条、说顶掉了这件活;换满气才松手,回来接着挖完,三块都挖掉、活的结论是成功。头一露出水面就松手的话,她带着没回几点的气
      * 回去接着挖,又触发,永远挖不完。
      */
-    @GameTest(template = "floor20", timeoutTicks = 3000, batch = BATCH)
+    @GameTest(template = "floor20", timeoutTicks = 1284, batch = BATCH)
     public static void digging_under_water_surfaces_once_for_air_and_finishes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         tank(helper, 3, Blocks.CLAY);
@@ -187,7 +187,7 @@ public class FloatGameTests {
      * 冰面封顶、箱里一格空气都没有:游不到任何能呼吸的地方,本能接管时只发一条,而且是急件(她得当场决定挖气孔还是想别的办法);
      * 之后接着被封着也不再刷。
      */
-    @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
+    @GameTest(template = "floor20", timeoutTicks = 534, batch = BATCH)
     public static void sealed_under_ice_raises_one_urgent_alarm(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         tank(helper, 4, Blocks.PACKED_ICE);

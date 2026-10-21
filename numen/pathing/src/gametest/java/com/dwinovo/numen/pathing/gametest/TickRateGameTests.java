@@ -98,7 +98,7 @@ public class TickRateGameTests {
     }
 
     /** 三格厚、三格高的泥土墙横贯场地,手上铁锹,许挖许放:挖的正是规划要挖的那几格(破块冷却不改结果)。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 2000)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 453)
     public static void digs_the_planned_cells(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 0, 12, 3, 39, Blocks.DIRT);
@@ -108,7 +108,7 @@ public class TickRateGameTests {
     }
 
     /** 两块基岩台子之间一道四格宽的沟,身上有圆石:搭桥过去,放的正是规划要放的那几格(放置时转头瞄面不改结果)。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 2000)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 429)
     public static void bridges_the_planned_cells(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 9, 4, 39, Blocks.BEDROCK);
@@ -120,7 +120,7 @@ public class TickRateGameTests {
     }
 
     /** 中间一堵墙,绕过去;一格不改。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 2000)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 360)
     public static void walks_around_the_same_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 2, 8, 2, 10, Blocks.STONE);

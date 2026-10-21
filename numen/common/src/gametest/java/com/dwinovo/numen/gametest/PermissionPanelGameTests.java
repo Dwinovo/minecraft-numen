@@ -99,7 +99,7 @@ public class PermissionPanelGameTests {
      * 主人在面板上加一行 deny:服务端答复带着新表,她去挖那块石头被那一行拒了;删掉那一行(同样经协议),她就挖得动。
      * 写错的规则被拒、带着教学式错误的码、没进表。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_permission_panel")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission_panel")
     public static void a_rule_added_in_the_panel_holds_in_the_world_until_it_is_deleted(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stoneRel = new BlockPos(6, 2, 5);
@@ -197,7 +197,7 @@ public class PermissionPanelGameTests {
     }
 
     /** 她加了一行 deny:不等主人来要,在线的主人面板收到带新行的表,来源标成她、带着她说的理由。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_permission_panel")
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission_panel")
     public static void a_row_she_adds_is_pushed_to_the_owners_panel(GameTestHelper helper) {
         NumenPlayer companion = spawnBare(helper, "gametest_scribbler", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_push_owner");

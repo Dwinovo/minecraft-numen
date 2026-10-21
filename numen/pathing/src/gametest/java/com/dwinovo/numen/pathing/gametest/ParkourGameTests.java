@@ -60,7 +60,7 @@ public class ParkourGameTests {
     }
 
     /** 一格宽的沟:跳过去,一格不改。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 273)
     public static void jumps_a_one_block_gap(GameTestHelper helper) {
         Trial t = gap(helper, 10, 10);
         TestBody body = t.body(6, 5, 5);
@@ -69,7 +69,7 @@ public class ParkourGameTests {
     }
 
     /** 两格宽的沟:跳过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 273)
     public static void jumps_a_two_block_gap(GameTestHelper helper) {
         Trial t = gap(helper, 10, 11);
         TestBody body = t.body(6, 5, 5);
@@ -78,7 +78,7 @@ public class ParkourGameTests {
     }
 
     /** 三格宽的沟:疾跑助跑,腾空时在疾跑,跳过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 303)
     public static void sprints_across_a_three_block_gap(GameTestHelper helper) {
         Trial t = gap(helper, 10, 12);
         TestBody body = t.body(5, 5, 5);
@@ -98,7 +98,7 @@ public class ParkourGameTests {
     }
 
     /** 两格宽的沟,对岸高一级:疾跑着跳上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 279)
     public static void jumps_up_to_a_higher_landing(GameTestHelper helper) {
         Trial t = gap(helper, 10, 11);
         t.fill(12, 5, 0, 39, 5, 39, Blocks.BEDROCK);
@@ -108,7 +108,7 @@ public class ParkourGameTests {
     }
 
     /** 沟边上一块下半砖、一级楼梯,各从上面起跳过两格的沟;另一道上对岸落点是一块下半砖:都跳得过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 306)
     public static void takes_off_from_slabs_and_stairs_and_lands_on_a_slab(GameTestHelper helper) {
         Trial t = gap(helper, 10, 11);
         t.fill(0, 5, 10, 39, 6, 10, Blocks.BEDROCK);
