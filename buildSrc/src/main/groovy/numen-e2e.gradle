@@ -78,6 +78,7 @@ tasks.register('e2eTest', Test) {
     testClassesDirs = scenes.output.classesDirs
     classpath = scenes.runtimeClasspath
     useJUnitPlatform()
+    systemProperty 'e2e.platform', project.name
     dependsOn 'e2eServerStart'
     finalizedBy 'e2eServerStop'
     // 一次起服只跑一遍,不借 Gradle 的最新检查跳过

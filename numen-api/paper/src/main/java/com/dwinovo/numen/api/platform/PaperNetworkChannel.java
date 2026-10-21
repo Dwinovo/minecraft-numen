@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.platform;
 
+import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.platform.services.INetworkChannel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -87,6 +88,9 @@ public final class PaperNetworkChannel implements INetworkChannel {
 
     @Override
     public boolean canSend(ServerPlayer player, CustomPacketPayload.Type<?> type) {
-        return player.getBukkitEntity().getListeningPluginChannels().contains(type.id().toString());
+        var channels = player.getBukkitEntity().getListeningPluginChannels();
+        // 0.1.4 发布客户端登记了同名名册频道,但每行没有 removedFor,收到新版会因多余字节断线。
+        // 名册负责触发 Hello,不能等 Presence 才发;先认它是否支持服务端大脑的握手频道。
+        return channels.contains(HelloAckPayload.TYPE.id().toString()) && channels.contains(type.id().toString());
     }
 }

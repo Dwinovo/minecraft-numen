@@ -15,6 +15,7 @@ import org.geysermc.mcprotocollib.protocol.packet.common.clientbound.Clientbound
 import org.geysermc.mcprotocollib.protocol.packet.common.clientbound.ClientboundDisconnectPacket;
 import org.geysermc.mcprotocollib.protocol.packet.common.clientbound.ClientboundPingPacket;
 import org.geysermc.mcprotocollib.protocol.packet.common.serverbound.ServerboundClientInformationPacket;
+import org.geysermc.mcprotocollib.protocol.packet.common.serverbound.ServerboundCustomPayloadPacket;
 import org.geysermc.mcprotocollib.protocol.packet.common.serverbound.ServerboundPongPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundCommandSuggestionsPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundCustomChatCompletionsPacket;
@@ -86,6 +87,7 @@ final class Bot implements AutoCloseable {
     private boolean informed;
     private final List<String> packetErrors = new CopyOnWriteArrayList<>();
     private final List<String> payloadChannels = new CopyOnWriteArrayList<>();
+    private final List<ClientboundCustomPayloadPacket> payloads = new CopyOnWriteArrayList<>();
 
     private Bot(String name, String locale, Spec server) {
         this.name = name;
@@ -141,6 +143,7 @@ final class Bot implements AutoCloseable {
     private void received(Packet packet, String locale) {
         if (packet instanceof ClientboundCustomPayloadPacket payload) {
             payloadChannels.add(payload.getChannel().asString());
+            payloads.add(payload);
         }
         if (packet instanceof ClientboundCustomPayloadPacket && !informed) {
             // 配置阶段的第一个包(服务端品牌)到了:原版客户端在这个阶段把自己的语言报上去
@@ -316,6 +319,16 @@ final class Bot implements AutoCloseable {
     /** 服务端发来的自定义载荷频道——原版客户端自己用不上的东西(我们的包)不该出现在这里。 */
     List<String> payloadChannels() {
         return List.copyOf(payloadChannels);
+    }
+
+    /** 模拟可选模组登记频道与发包;场景自己检查对应版本的载荷。 */
+    void payload(String channel, byte[] data) {
+        session.send(new ServerboundCustomPayloadPacket(net.kyori.adventure.key.Key.key(channel), data));
+    }
+
+    List<byte[]> payloads(String channel) {
+        return payloads.stream().filter(p -> p.getChannel().asString().equals(channel))
+                .map(ClientboundCustomPayloadPacket::getData).toList();
     }
 
     boolean connected() {
