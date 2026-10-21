@@ -392,7 +392,7 @@ public class Mouse {
 
     /** 这一个动作经服务端收包的入口送进去。 */
     private void send(ServerboundPlayerActionPacket.Action action, BlockPos pos, Direction face) {
-        body.connection.handlePlayerAction(new ServerboundPlayerActionPacket(action, pos, face, ++sequence));
+        packets.playerAction(action, pos, face, ++sequence);
     }
 
     /** 左键打一下准星落着的实体的结果。 */

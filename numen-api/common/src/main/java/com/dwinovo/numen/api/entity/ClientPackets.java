@@ -6,13 +6,19 @@ import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerButtonClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerSlotStateChangedPacket;
 import net.minecraft.network.protocol.game.ServerboundEditBookPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundRenameItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSelectTradePacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSetBeaconPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -25,7 +31,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 她的客户端会发给服务端的那些包,由这里代发(同伴的是 {@link NumenPlayer#packets})。真玩家在界面里按一个钮、写一块牌子、选一笔交易、
+ * 她的客户端会发给服务端的那些包,由这里代发(同伴的是 {@link NumenPlayer#packets})。<b>这是仓库里替她把客户端的包喂给服务端的唯一出口</b>:
+ * 别处不直接调她连接上的 {@code handleXxx},每种包在这里一个方法。真玩家在界面里按一个钮、写一块牌子、选一笔交易、
  * 按 E,客户端发的是一个包,校验和落地全是原版服务端收包时做的;她没有客户端,这里把同一个包交给她连接上原版的
  * {@code ServerGamePacketListenerImpl.handleXxx},和 {@link Mouse}、{@link Hotbar} 送挖掘、切格是同一个入口。校验一条也不另写:
  * 附魔的等级与青金石、交易的材料与次数、告示牌要是 {@code playerWhoMayEdit} 且没涂蜡、书的页数、界面要 {@code stillValid},
@@ -45,6 +52,32 @@ public final class ClientPackets {
 
     public ClientPackets(ServerPlayer body) {
         this.body = body;
+    }
+
+    /** 点"重生"(她死了以后):原版的 {@code PlayerList.respawn} 把她放回世界。 */
+    public void respawn() {
+        body.connection.handleClientCommand(
+                new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+    }
+
+    /** 答传送编号:服务端每次传送她都等客户端报这个数。 */
+    public void acceptTeleport(int id) {
+        body.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id));
+    }
+
+    /** 玩家动作:挖掘的开始、中止、完成,松开右键,丢东西,主副手交换。{@code sequence} 是挖掘方块动作的序号,别的动作为 0。 */
+    public void playerAction(ServerboundPlayerActionPacket.Action action, BlockPos pos, Direction face, int sequence) {
+        body.connection.handlePlayerAction(new ServerboundPlayerActionPacket(action, pos, face, sequence));
+    }
+
+    /** 中键把背包里第 {@code slot} 格的东西换进快捷栏。 */
+    public void pickItem(int slot) {
+        body.connection.handlePickItem(new ServerboundPickItemPacket(slot));
+    }
+
+    /** 数字键、滚轮:选中快捷栏第 {@code slot} 格。 */
+    public void setCarriedItem(int slot) {
+        body.connection.handleSetCarriedItem(new ServerboundSetCarriedItemPacket(slot));
     }
 
     /** 写告示牌:{@code lines} 至多四行,不足的补空行(原版一次换掉整面的四行)。 */

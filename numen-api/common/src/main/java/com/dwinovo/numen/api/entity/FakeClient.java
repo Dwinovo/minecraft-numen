@@ -9,8 +9,6 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
-import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.phys.Vec3;
 
@@ -125,8 +123,7 @@ public final class FakeClient {
      */
     NumenPlayer respawn() {
         ServerGamePacketListenerImpl connection = player.connection;
-        connection.handleClientCommand(
-                new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+        player.packets().respawn();
         return (NumenPlayer) connection.getPlayer();
     }
 
@@ -199,7 +196,7 @@ public final class FakeClient {
         }
         int id = awaitingTeleport;
         awaitingTeleport = -1;
-        player.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id));
+        player.packets().acceptTeleport(id);
         // 真客户端落地后紧接着报一个移动包,原版收到它时把玩家的区块位置挪到新地方(票据、加载、刷怪都随之过去)。
         // 她被传到别处(召唤、指令、换维度)时没人替她走这一步,区块还留在原地,新地方的实体不走刻。
         player.serverLevel().getChunkSource().move(player);

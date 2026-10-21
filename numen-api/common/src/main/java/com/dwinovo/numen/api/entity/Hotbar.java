@@ -4,9 +4,7 @@ import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
@@ -26,9 +24,11 @@ public final class Hotbar {
     public static final int OFFHAND = Inventory.SLOT_OFFHAND;
 
     private final ServerPlayer body;
+    private final ClientPackets packets;
 
     public Hotbar(ServerPlayer body) {
         this.body = body;
+        this.packets = new ClientPackets(body);
     }
 
     /**
@@ -40,8 +40,8 @@ public final class Hotbar {
         Inventory inventory = body.getInventory();
         if (slot == OFFHAND) {
             Item item = body.getOffhandItem().getItem();
-            body.connection.handlePlayerAction(new ServerboundPlayerActionPacket(
-                    ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO, Direction.DOWN));
+            packets.playerAction(ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO,
+                    Direction.DOWN, 0);
             return Optional.of(new BodyAction.Held(item, OFFHAND, inventory.selected));
         }
         if (slot < 0) {
@@ -60,7 +60,7 @@ public final class Hotbar {
         if (Inventory.isHotbarSlot(slot)) {
             return Optional.of(select(slot, item));
         }
-        body.connection.handlePickItem(new ServerboundPickItemPacket(slot));
+        packets.pickItem(slot);
         return Optional.of(new BodyAction.Held(item, slot, inventory.selected));
     }
 
@@ -135,7 +135,7 @@ public final class Hotbar {
     }
 
     private BodyAction select(int slot, Item item) {
-        body.connection.handleSetCarriedItem(new ServerboundSetCarriedItemPacket(slot));
+        packets.setCarriedItem(slot);
         return new BodyAction.Held(item, slot, slot);
     }
 }
