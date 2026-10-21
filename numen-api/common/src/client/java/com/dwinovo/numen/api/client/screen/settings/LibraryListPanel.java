@@ -198,7 +198,8 @@ public final class LibraryListPanel<T> {
                     new Section(SERVER, t(ModLanguageData.Keys.LIBRARY_SERVER),
                             t(ModLanguageData.Keys.LIBRARY_SERVER_ABOUT), null, addServer, false),
                     new Section(MINE, t(ModLanguageData.Keys.LIBRARY_MINE),
-                            t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT), t(emptyKey), addMine, true));
+                            t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT),
+                            t(RemoteCompanions.host() ? emptyKey + ".host" : emptyKey), addMine, true));
         };
     }
 

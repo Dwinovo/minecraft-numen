@@ -170,6 +170,7 @@ public final class ModLanguageData {
         // Model-config (provider library) section: nav label, list, form.
         public static final String PROVIDER_TITLE          = "numen.provider.title";
         public static final String PROVIDER_EMPTY          = "numen.provider.empty";
+        public static final String PROVIDER_EMPTY_HOST = "numen.provider.empty.host";
         public static final String PROVIDER_ADD            = "numen.provider.add";
         public static final String PROVIDER_DELETE_CONFIRM = "numen.provider.delete_confirm";
         public static final String PROVIDER_NO_KEY         = "numen.provider.no_key";
@@ -284,6 +285,7 @@ public final class ModLanguageData {
         public static final String VOICE_TITLE          = "numen.voice.title";
         public static final String VOICE_ENABLED        = "numen.voice.enabled";
         public static final String VOICE_EMPTY          = "numen.voice.empty";
+        public static final String VOICE_EMPTY_HOST = "numen.voice.empty.host";
         public static final String VOICE_ADD            = "numen.voice.add";
         public static final String VOICE_DELETE_CONFIRM = "numen.voice.delete_confirm";
         public static final String VOICE_FORM_NAME      = "numen.voice.form_name";
@@ -619,6 +621,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
         adder.add("numen.persona.empty", "No personas of your own yet. Create one, or copy a server-provided one to change it.");
+        adder.add("numen.persona.empty.host", "No personas yet. Create one.");
         adder.add("numen.persona.add", "New persona");
         adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
@@ -676,6 +679,7 @@ public final class ModLanguageData {
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "No tool extensions of your own yet. Add one, or copy a server-provided one to change it.");
+        adder.add("numen.mcp.empty.host", "No tool extensions yet. Add one.");
         adder.add("numen.mcp.add", "Add a tool extension");
         adder.add("numen.mcp.form_service", "Key service (optional)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -694,6 +698,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
         adder.add("numen.skill.empty", "No skills of your own yet. Copy a server-provided one to make your own version.");
+        adder.add("numen.skill.empty.host", "No skills yet.");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
@@ -707,6 +712,7 @@ public final class ModLanguageData {
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
         adder.add(Keys.PROVIDER_EMPTY,          "No model configs of your own yet. Create one, or copy a server-provided one to change it.");
+        adder.add(Keys.PROVIDER_EMPTY_HOST, "No model configs yet. Create one.");
         adder.add(Keys.PROVIDER_ADD,            "New model config");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
@@ -858,6 +864,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_TITLE,          "Voice");
         adder.add(Keys.VOICE_ENABLED,        "Enabled");
         adder.add(Keys.VOICE_EMPTY,          "No voices of your own yet. Create one, or copy a server-provided one to change it.");
+        adder.add(Keys.VOICE_EMPTY_HOST, "No voices yet. Create one.");
         adder.add(Keys.VOICE_ADD,            "New voice");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "Delete voice \"%s\"? Companions bound to it fall silent.");
         adder.add(Keys.VOICE_FORM_NAME,      "Name (required)");
@@ -1320,6 +1327,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");
         adder.add("numen.persona.empty", "还没有自己的人设。新建一条,或把服务器提供的复制过来改。");
+        adder.add("numen.persona.empty.host", "还没有人设。新建一条。");
         adder.add("numen.persona.add", "新建人设");
         adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
@@ -1377,6 +1385,7 @@ public final class ModLanguageData {
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "还没有自己的工具扩展。添加一个,或把服务器提供的复制过来改。");
+        adder.add("numen.mcp.empty.host", "还没有工具扩展。添加一个。");
         adder.add("numen.mcp.add", "添加工具扩展");
         adder.add("numen.mcp.form_service", "密钥用的服务名(可选)");
         adder.add("numen.mcp.type_http", "HTTP");
@@ -1395,6 +1404,7 @@ public final class ModLanguageData {
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
         adder.add("numen.skill.empty", "还没有自己的技能。把服务器提供的复制过来,就有了自己的版本。");
+        adder.add("numen.skill.empty.host", "还没有技能。");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
@@ -1408,6 +1418,7 @@ public final class ModLanguageData {
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");
         adder.add(Keys.PROVIDER_EMPTY,          "还没有自己的模型配置。新建一条,或把服务器提供的复制过来改。");
+        adder.add(Keys.PROVIDER_EMPTY_HOST, "还没有模型配置。新建一条。");
         adder.add(Keys.PROVIDER_ADD,            "新建模型配置");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
@@ -1559,6 +1570,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_TITLE,          "语音");
         adder.add(Keys.VOICE_ENABLED,        "启用");
         adder.add(Keys.VOICE_EMPTY,          "还没有自己的声线。新建一条,或把服务器提供的复制过来改。");
+        adder.add(Keys.VOICE_EMPTY_HOST, "还没有声线。新建一条。");
         adder.add(Keys.VOICE_ADD,            "新建声线");
         adder.add(Keys.VOICE_DELETE_CONFIRM, "删除声线「%s」?绑定它的同伴将静音。");
         adder.add(Keys.VOICE_FORM_NAME,      "名称(必填)");
