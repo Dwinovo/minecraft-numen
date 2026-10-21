@@ -37,6 +37,11 @@ final class LecternKind implements MenuKind.Pages<LecternMenu>, MenuKind.Takes<L
     }
 
     @Override
+    public boolean changesBlock() {
+        return true;
+    }
+
+    @Override
     public Action gate(LecternMenu menu, NumenPlayer her) {
         return MenuKinds.useOpenedBlock(her);
     }

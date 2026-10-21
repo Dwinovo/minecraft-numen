@@ -38,6 +38,11 @@ final class CrafterKind implements MenuKind.Toggles<CrafterMenu> {
     }
 
     @Override
+    public boolean changesBlock() {
+        return true;
+    }
+
+    @Override
     public Action gate(CrafterMenu menu, NumenPlayer her) {
         return MenuKinds.useOpenedBlock(her);
     }

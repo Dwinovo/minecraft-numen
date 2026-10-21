@@ -2177,4 +2177,56 @@ public class PermissionGameTests {
             leave(owner);
         });
     }
+
+    /**
+     * 来历不明的界面:不经 use.block、由代码给她强行打开一个信标界面,不知道它是哪一格——choose 不放行,问主人。答"允许"就定下效果,
+     * 答"拒绝"就如实报拒绝(理由是主人原话),效果没动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void a_window_of_unknown_origin_asks_the_owner_before_it_changes_a_block(GameTestHelper helper) {
+        unknownWindow(helper, "gametest_unknown_allow", com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE,
+                true);
+    }
+
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void a_window_of_unknown_origin_refused_by_the_owner_changes_nothing(GameTestHelper helper) {
+        unknownWindow(helper, "gametest_unknown_deny", com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, false);
+    }
+
+    private static void unknownWindow(GameTestHelper helper, String name,
+                                      com.dwinovo.numen.api.permission.ConsentAnswer.Decision answer, boolean allowed) {
+        ServerLevel level = helper.getLevel();
+        BlockPos beacon = place(helper, new BlockPos(5, 2, 4), Blocks.BEACON);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, name + "_owner");
+        NumenPlayer companion = adopted(spawnAt(helper, name, new BlockPos(3, 2, 4), false), owner);
+        companion.openMenu((net.minecraft.world.MenuProvider) level.getBlockEntity(beacon));
+        var menu = (net.minecraft.world.inventory.BeaconMenu) companion.containerMenu;
+        menu.setData(0, 1);
+        menu.getSlot(0).set(new ItemStack(Items.IRON_INGOT));
+        ToolRun choose = lua(companion, "numen.gui.choose(\"haste\")");
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> {
+            var pending = desk(companion).pending();
+            if (pending != null) {
+                asked[0] = true;
+                desk(companion).answer(pending.id(), answer, allowed ? "" : "not this beacon");
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(choose.done(), "gui choose has not finished");
+            helper.assertTrue(asked[0], "the owner was not asked about a window of unknown origin");
+            if (allowed) {
+                helper.assertTrue(choose.succeeded() && menu.getPrimaryEffect() != null
+                                && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.DIG_SPEED),
+                        "the beacon was not set after the owner said yes: " + choose.outcome());
+            } else {
+                helper.assertTrue(!choose.succeeded() && choose.outcome().contains("not this beacon")
+                                && menu.getPrimaryEffect() == null,
+                        "the refusal does not quote the owner, or the beacon changed: " + choose.outcome());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
 }

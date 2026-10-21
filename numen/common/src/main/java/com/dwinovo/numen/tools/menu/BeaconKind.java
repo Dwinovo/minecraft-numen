@@ -41,6 +41,11 @@ final class BeaconKind implements MenuKind.Chooses<BeaconMenu> {
     }
 
     @Override
+    public boolean changesBlock() {
+        return true;
+    }
+
+    @Override
     public Action gate(BeaconMenu menu, NumenPlayer her) {
         return MenuKinds.useOpenedBlock(her);
     }

@@ -68,6 +68,18 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
     }
 
     /**
+     * 她要对一个来历不明的界面做事(不是右键一格方块打开的,不知道它是哪一格):没有格子可交权限层裁决,拿不准就问主人。卡上写
+     * 是什么界面;不能"允许并记住"(没有哪一格可记)。
+     *
+     * @param what 这个界面叫什么,如 {@code a beacon}
+     */
+    public static ConsentItem unknownWindow(String what) {
+        return new ConsentItem(Verb.USE_BLOCK, null, NO_ENTITY, what, null, Component.literal(what), "",
+                "no one can say whose block this window belongs to",
+                Component.translatable(ModLanguageData.Keys.PERMISSION_UNCOVERED), false, null);
+    }
+
+    /**
      * 清单里的一堆:同一个动词、同一种东西、同一个理由。给模型的说法({@link #text})与给主人看的那一版
      * (动词、{@code head} 的图标或名字、数量、{@code head} 的 {@code shownCause})都从这一堆出。
      *

@@ -33,6 +33,14 @@ public interface MenuKind<M extends AbstractContainerMenu> {
         return null;
     }
 
+    /**
+     * 在这种界面里做事会改动右键打开它的那一格方块(讲台翻页、信标定效果、合成器开关)。为真时 {@link #gate} 给不出那一格(界面来历
+     * 不明)就问主人,不放行。
+     */
+    default boolean changesBlock() {
+        return false;
+    }
+
     /** 选一项:附魔台、切石机、织布机、交易、信标。 */
     interface Chooses<M extends AbstractContainerMenu> extends MenuKind<M> {
 

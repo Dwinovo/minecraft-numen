@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools.menu;
 import com.dwinovo.numen.act.MenuOrigin;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.ServerCall;
@@ -162,7 +163,8 @@ public final class MenuKinds {
         private Pending<GuiOps.Window> act(ServerCall call, Supplier<String> deed) {
             NumenPlayer her = call.her();
             Action gate = kind.gate(menu, her);
-            Pending<Void> allowed = gate == null ? Pending.of(null) : call.authorize(gate);
+            Pending<Void> allowed = gate != null ? call.authorize(gate)
+                    : kind.changesBlock() ? call.consent(ConsentItem.unknownWindow(kind.name())) : Pending.of(null);
             return allowed.thenWait(ok -> {
                 // 等主人答复的时候界面可能已经合上了:不对着别的界面把这件事做下去
                 if (her.containerMenu != menu) {
@@ -182,7 +184,7 @@ public final class MenuKinds {
 
     /**
      * 开着的界面是右键哪一格打开的、会动到它(讲台翻页、信标定效果、合成器开关):权限层要裁决的"用这一格"。界面不是右键方块打开的
-     * (来历不明)就没有格子可问,是 null。
+     * (来历不明)就没有格子可裁决,是 null,由 {@link MenuKind#changesBlock} 为真的界面改问主人({@link Bound#act} 里,只此一处)。
      */
     static Action useOpenedBlock(NumenPlayer her) {
         BlockPos block = MenuOrigin.block(her);
