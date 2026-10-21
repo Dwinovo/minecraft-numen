@@ -6,6 +6,7 @@ import com.dwinovo.numen.task.inventory.TransferTaskRecord;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.task.TaskRecord;
+import com.dwinovo.numen.tools.menu.MenuKinds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -112,7 +113,10 @@ public final class ContainerOps {
             }
             return "slot " + from + " is empty — nothing to move.";
         }
-        menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
+        // 有的界面里东西不是 Shift 点出来的(讲台的书靠一个钮取下),先问界面自己的拿法
+        if (!MenuKinds.takeOut(entity, from)) {
+            menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
+        }
         ItemStack after = menu.slots.get(from).getItem();
         int moved = before.getCount() - (sameItem(before, after) ? after.getCount() : 0);
         if (moved <= 0) {

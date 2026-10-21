@@ -361,7 +361,7 @@ public final class NavText {
     }
 
     /** 身体动作的正文,同样的动作归成一条,例如 {@code stepped off the boat and took cobblestone into my hand (3 times)}。 */
-    static String actions(List<BodyAction> actions) {
+    public static String actions(List<BodyAction> actions) {
         Map<String, Integer> counted = new LinkedHashMap<>();
         for (BodyAction action : actions) {
             counted.merge(action(action), 1, Integer::sum);

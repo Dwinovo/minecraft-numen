@@ -117,6 +117,21 @@ public final class GameTestKit {
         steps(helper).thenWaitUntil(check).thenSucceed();
     }
 
+    /** 一步 Lua:发出去,等它成功回来;没成功就停在这一步,报这一步的回执。 */
+    static Steps call(GameTestHelper helper, Steps steps, NumenPlayer companion, String code) {
+        AtomicReference<ToolRun> run = new AtomicReference<>();
+        return steps.thenExecute(() -> run.set(lua(companion, code)))
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
+                        code + " did not succeed: " + run.get().outcome()));
+    }
+
+    /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
+    static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
+        BlockPos at = helper.absolutePos(rel);
+        helper.getLevel().setBlockAndUpdate(at, block.defaultBlockState());
+        return at;
+    }
+
     /** 把她提到 rel 那一格上空放手。 */
     static void drop(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
         BlockPos at = helper.absolutePos(rel);

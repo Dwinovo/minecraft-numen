@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.task.inventory.GuiItemsTaskRecord;
 import com.dwinovo.numen.tools.ContainerOps;
 import com.dwinovo.numen.tools.GuiOps;
+import com.dwinovo.numen.tools.menu.MenuKinds;
+import com.dwinovo.numen.tools.menu.Pick;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -33,17 +35,22 @@ public final class GuiApi {
     private GuiApi() {}
 
     public static void install(NumenApi numen) {
+        numen.codec(Pick.class, Pick.CODEC);
         numen.api("gui", "The window you have open (numen.use.block on a chest or a machine opens one): read it, put "
-                + "items in and take them out, move a stack, close it.", GuiApi.class);
+                + "items in and take them out, move a stack, choose an option, close it.", GuiApi.class);
     }
 
     @Fn("Look at the window you have open, or at your own inventory menu when none is.")
     @Example("for _, s in ipairs(numen.gui.view().slots) do print(s.index, s.item, s.count) end")
     @Note("Instant and read-only. Lists every container and crafting-grid slot (index, side, item and count, output "
             + "mark), your own filled ones, the cursor and the menu's numbers (progress, fuel, energy).")
+    @Note("A window with options says them in plain terms in `screen`, options numbered from 1: an enchanting table's three "
+            + "options (levels asked, the hint it shows), a stonecutter's recipes, a loom's patterns, a villager's "
+            + "trades (what they ask for and give, uses and limit, locked), a beacon's pyramid and effects, an anvil's "
+            + "cost, a lectern's page and text, a crafter's open slots.")
     @Note("With nothing open it shows YOUR inventory menu, whose 2x2 grid crafts small recipes without a table. In a "
             + "crafting grid a recipe smaller than the grid goes in the top-left; the result slot is side result.")
-    @SeeAlso({"numen.gui.put", "numen.gui.take", "numen.gui.move", "numen.gui.quick", "numen.gui.close"})
+    @SeeAlso({"numen.gui.put", "numen.gui.take", "numen.gui.move", "numen.gui.quick", "numen.gui.choose", "numen.gui.close"})
     public static GuiOps.Window view(ServerCall call) {
         return GuiOps.window(call.her());
     }
@@ -119,5 +126,73 @@ public final class GuiApi {
     @SeeAlso("numen.gui.view")
     public static boolean close(ServerCall call) {
         return GuiOps.close(call.her());
+    }
+
+    /** 选哪一项。 */
+    public record Choose(@Doc("The option's number from numen.gui.view().screen, counted from 1; for a beacon the "
+            + "primary effect by name, \"haste\".") Pick option,
+                         @Doc("A beacon's secondary effect by name: regeneration (4 levels), or the same as the primary.")
+                         @Omitted("no secondary effect") @Positional Optional<Pick> second) {}
+
+    @Fn("Choose an option in the window you have open: an enchanting option, a stonecutter recipe, a loom pattern, a "
+            + "trade, a beacon's effects.")
+    @Example("numen.gui.choose(2)")
+    @Example("numen.gui.choose(\"haste\", \"regeneration\")")
+    @Note("Numbers are the ones numen.gui.view().screen lists (from 1). It only chooses: a trade fills its payment from "
+            + "your inventory and shows the result in window slot 2, an enchant changes the item in the table, a "
+            + "stonecutter or loom fills its result slot. Taking the result is numen.gui.take or numen.gui.quick.")
+    @Note("Minecraft decides whether it works (levels and lapis for an enchant, materials and uses for a trade, a payment "
+            + "item for a beacon) and does nothing when not; the call then fails saying what it needs and what you have.")
+    @Note("Setting someone's beacon or trading with their villager may ask your owner first; the call waits for the answer. "
+            + "Returns the window as it is now; what changed is told in the reply.")
+    @SeeAlso({"numen.gui.view", "numen.gui.take", "numen.gui.quick"})
+    public static Pending<GuiOps.Window> choose(ServerCall call, Choose args) {
+        return MenuKinds.choose(call, args.option(), args.second().orElse(null));
+    }
+
+    /** 起什么名。 */
+    public record Rename(@Doc("The new name, up to 50 characters.") String name) {}
+
+    @Fn("Give the item in the anvil you have open a new name.")
+    @Example("numen.gui.rename(\"Excalibur\")")
+    @Note("Put the item in the anvil's first slot first. The result slot shows it renamed; taking it (numen.gui.quick on "
+            + "that slot) costs the levels numen.gui.view().screen.cost says.")
+    @SeeAlso({"numen.gui.view", "numen.gui.quick"})
+    public static Pending<GuiOps.Window> rename(ServerCall call, Rename args) {
+        return MenuKinds.rename(call, args.name());
+    }
+
+    /** 翻到哪一页。 */
+    public record Page(@Doc("The page to turn to, counted from 1.") int page) {}
+
+    @Fn("Turn the lectern you have open to a page of its book.")
+    @Example("numen.gui.page(3)")
+    @Note("The book's pages and the one it is open at are in numen.gui.view().screen. Taking the book off is "
+            + "numen.gui.take(\"minecraft:written_book\"). Turning the page of someone's lectern may ask your owner first.")
+    @SeeAlso({"numen.gui.view", "numen.gui.take"})
+    public static Pending<GuiOps.Window> page(ServerCall call, Page args) {
+        return MenuKinds.page(call, args.page());
+    }
+
+    /** 开关哪一格。 */
+    public record Toggle(@Doc("The crafter's grid slot, 0 to 8 as numen.gui.view lists it.") int slot) {}
+
+    @Fn("Switch a slot of the crafter you have open on or off: a switched-off slot takes nothing.")
+    @Example("numen.gui.toggle(4)")
+    @Note("Which slots are open is in numen.gui.view().screen.slots. Switching a slot of someone's crafter may ask your "
+            + "owner first.")
+    @SeeAlso({"numen.gui.view"})
+    public static Pending<GuiOps.Window> toggle(ServerCall call, Toggle args) {
+        return MenuKinds.toggle(call, args.slot());
+    }
+
+    @Fn("Press E: open the inventory of the horse, donkey, mule or llama you ride, or else go back to your own inventory "
+            + "window.")
+    @Example("local w = numen.gui.open()")
+    @Note("Instant. Riding a tame mount that has an inventory opens that (saddle, armor, chest); otherwise any open window "
+            + "is closed and your own inventory menu is returned. An untamed mount does not open and the call fails.")
+    @SeeAlso({"numen.gui.view", "numen.gui.close"})
+    public static GuiOps.Window open(ServerCall call) {
+        return GuiOps.open(call.her());
     }
 }

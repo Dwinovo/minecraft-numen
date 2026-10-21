@@ -63,6 +63,34 @@ function M.Window:quick(slot)
   return numen.gui.quick(slot)
 end
 
+---Choose an option in this window (an enchanting option, a stonecutter recipe, a loom pattern, a trade, a beacon's effects).
+---@param option integer|string
+---@param second? string
+function M.Window:choose(option, second)
+  if second then
+    return numen.gui.choose(option, second)
+  end
+  return numen.gui.choose(option)
+end
+
+---Give the item in this anvil a new name.
+---@param name string
+function M.Window:rename(name)
+  return numen.gui.rename(name)
+end
+
+---Turn this lectern to a page, counted from 1.
+---@param page integer
+function M.Window:page(page)
+  return numen.gui.page(page)
+end
+
+---Switch a slot of this crafter on or off.
+---@param slot integer
+function M.Window:toggle(slot)
+  return numen.gui.toggle(slot)
+end
+
 ---Close this window.
 function M.Window:close()
   return numen.gui.close()

@@ -39,6 +39,10 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
     protected TaskState onTick() {
         AbstractContainerMenu menu = player.containerMenu;
         if (menu == player.inventoryMenu) {
+            // 取下来的东西让界面自己合上了(讲台的书取下,原版就关掉讲台):已经搬的算数
+            if (moved > 0) {
+                return finish();
+            }
             fail("no window is open: open a chest, a furnace or a machine first (numen.use.block on it)",
                     FailureType.UNSUPPORTED);
             return TaskState.FAILED;

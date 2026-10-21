@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Methods;
+import com.dwinovo.numen.tools.menu.MenuKinds;
+import com.dwinovo.numen.tools.menu.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CraftingContainer;
@@ -43,12 +45,16 @@ public final class GuiOps {
                          @Doc("What the cursor holds.") Optional<String> cursor,
                          @Doc("The menu's numbers: progress, fuel, energy (meaning is GUI-specific; a furnace's are lit "
                                  + "time, lit duration, cook progress, cook total).") List<Integer> data,
-                         @Doc("The block whose window it is, when a click on it opened it.") Optional<BlockAt> block)
+                         @Doc("The block whose window it is, when a click on it opened it.") Optional<BlockAt> block,
+                         @Doc("What this kind of window says in plain terms, options numbered from 1 (what "
+                                 + "numen.gui.choose, page and toggle take): an enchanting table, stonecutter, loom, trade "
+                                 + "window, beacon, anvil, lectern or crafter. Other windows have none.")
+                         Optional<Screen> screen)
             implements Clicks.Pressed {
 
         /** 同一个界面,点开它的是那一格。 */
         public Window openedAt(BlockAt at) {
-            return new Window(menu, slots, cursor, data, Optional.of(at));
+            return new Window(menu, slots, cursor, data, Optional.of(at), screen);
         }
     }
 
@@ -81,7 +87,7 @@ public final class GuiOps {
         List<Integer> numbers = data.stream().map(DataSlot::get).toList();
         return new Window(ownInventory ? "InventoryMenu" : menu.getClass().getSimpleName(), slots,
                 menu.getCarried().isEmpty() ? Optional.empty() : Optional.of(describe(menu.getCarried())), numbers,
-                Optional.empty());
+                Optional.empty(), MenuKinds.read(self));
     }
 
     private static WindowSlot slot(int index, Side side, ItemStack it, boolean output) {
@@ -103,5 +109,26 @@ public final class GuiOps {
         }
         self.closeContainer();
         return true;
+    }
+
+    /**
+     * 按 E:骑着能开物品栏的坐骑(马、驴、骡、羊驼)就让原版开它的物品栏({@code PlayerCommand OPEN_INVENTORY},驯没驯服由原版判),
+     * 否则合上开着的界面、回到她自己的背包界面。
+     *
+     * @throws ApiError 坐骑没开它的物品栏
+     */
+    public static Window open(NumenPlayer self) {
+        if (self.getVehicle() instanceof net.minecraft.world.entity.HasCustomInventoryScreen) {
+            AbstractContainerMenu before = self.containerMenu;
+            self.packets().command(net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action.OPEN_INVENTORY);
+            if (self.containerMenu == before) {
+                throw new com.dwinovo.numen.script.ApiError(com.dwinovo.numen.script.ErrorKind.FAILED,
+                        self.getVehicle().getName().getString() + " did not open its inventory (a horse must be tamed)",
+                        com.dwinovo.numen.api.sdk.Call.of("numen.use.dismount"));
+            }
+        } else {
+            close(self);
+        }
+        return window(self);
     }
 }
