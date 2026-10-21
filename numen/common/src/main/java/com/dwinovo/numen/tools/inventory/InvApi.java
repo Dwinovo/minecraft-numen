@@ -6,6 +6,7 @@ import com.dwinovo.numen.task.inventory.DropCompanionTask;
 import com.dwinovo.numen.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.task.inventory.EatCompanionTask;
 import com.dwinovo.numen.task.inventory.EatItemTaskRecord;
+import com.dwinovo.numen.tools.Books;
 import com.dwinovo.numen.tools.CraftOps;
 import com.dwinovo.numen.tools.Recipe;
 import com.dwinovo.numen.tools.RecipeBook;
@@ -16,6 +17,7 @@ import com.dwinovo.numen.api.sdk.Job;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
+import com.dwinovo.numen.api.sdk.Rest;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -92,7 +94,8 @@ public final class InvApi {
     @Note("To make it — crafting: numen.inv.make(<item>, N) picks the recipe and the grid (a crafting table for a "
             + "3x3 one) and crafts; numen.inv.craft(<id>) crafts once in the grid you have open. Smelting, blasting, "
             + "smoking: numen.inv.smelt(<furnace>, <input>, N) loads the furnace, waits and takes the output. "
-            + "Stonecutter: numen.use.block it, numen.gui.put the input (the menu routes it in), take the output. "
+            + "Stonecutter: numen.use.block it, numen.gui.put the input (the menu routes it in), numen.gui.view to see "
+            + "the recipes, numen.gui.choose one, take the output. "
             + "Smithing: numen.use.block it, numen.gui.view, then numen.gui.move template + base + addition each into "
             + "its own slot.")
     @SeeAlso({"numen.inv.craft", "numen.inv.craftable"})
@@ -164,5 +167,34 @@ public final class InvApi {
         int n = args.count().orElse(Math.max(1, carried));
         return call.sync(new DropItemsTaskRecord(call, item, Math.clamp(n, 1, DROP_MAX_COUNT),
                 BuiltInRegistries.ITEM.getKey(item).getPath()));
+    }
+
+    /** 读哪一种书。 */
+    public record Read(@Doc("A book and quill (minecraft:writable_book) or a written book (minecraft:written_book).") Item item) {}
+
+    @Fn("Read the books of one kind you carry: title, author and the text of every page.")
+    @Example("for _, b in ipairs(numen.inv.read(\"minecraft:written_book\")) do print(b.title, b.author, b.pages[1]) end")
+    @Note("Instant and read-only; one entry per book in your inventory (the off hand too), empty when you carry none. A "
+            + "book on a lectern is read with numen.gui.view().screen.")
+    @SeeAlso({"numen.inv.write", "numen.inv.items"})
+    public static List<Books.Book> read(ServerCall call, Read args) {
+        return Books.carried(call.her(), args.item());
+    }
+
+    /** 写什么。 */
+    public record Write(@Doc("The pages, at most 100 of at most 1024 characters.") @Rest List<String> pages,
+                        @Doc("Sign the book with this title (up to 32 characters): it becomes a written book and can no "
+                                + "longer be edited.") @Omitted("keep it a book and quill") Optional<String> title) {}
+
+    @Fn("Write pages into a book and quill you carry, and optionally sign it.")
+    @Example("numen.inv.write({\"Day 1: I found iron.\", \"Day 2: I built a house.\"})")
+    @Example("numen.inv.write({\"My story\"}, {title = \"Diary\"})")
+    @Note("Replaces what the book held. A book and quill in your backpack is taken into your hand first, like numen.gear.hold, "
+            + "and the reply says so. Signing makes a written book under your name; the book is then read with numen.inv.read.")
+    @Note("Fails when you carry no book and quill (`numen.inv.make(\"minecraft:writable_book\")` crafts one) or when Minecraft "
+            + "did not take the text.")
+    @SeeAlso({"numen.inv.read", "numen.gear.hold"})
+    public static Pending<Books.Book> write(ServerCall call, Write args) {
+        return Books.write(call.her(), args.pages(), args.title().orElse(null));
     }
 }

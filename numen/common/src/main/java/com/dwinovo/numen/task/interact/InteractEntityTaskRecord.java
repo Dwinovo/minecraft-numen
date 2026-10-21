@@ -34,15 +34,18 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     public final int holdTicks;
     public final Item item;        // null → use whatever is in hand; else equip this first (food / shears / weapon)
     public final boolean sneak;
+    /** 点在实体身上的哪一点(相对它的位置),先发 INTERACT_AT;不指定为 null。 */
+    public final net.minecraft.world.phys.Vec3 at;
 
     public InteractEntityTaskRecord(ServerCall source, MouseButton button, EntityRef entity, int holdTicks, Item item,
-                                    boolean sneak) {
+                                    boolean sneak, net.minecraft.world.phys.Vec3 at) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.entity = entity;
         this.holdTicks = holdTicks;
         this.item = item;
         this.sneak = sneak;
+        this.at = at;
     }
 
     @Override

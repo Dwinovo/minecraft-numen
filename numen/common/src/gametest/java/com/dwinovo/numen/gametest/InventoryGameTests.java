@@ -834,6 +834,29 @@ public class InventoryGameTests {
     }
 
     /** 她的事件都在她的收件箱里:其中 inventory_full 的原文。 */
+    /** 写书:往书与笔里写两页并署名,再读它——成书署着她的名字、标题和两页字都在。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_inventory")
+    public static void write_signs_a_book_and_read_reads_it_back(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_author", new BlockPos(5, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.WRITABLE_BOOK));
+        java.util.concurrent.atomic.AtomicReference<ToolRun> read = new java.util.concurrent.atomic.AtomicReference<>();
+
+        // Paper(CraftBukkit)不收加入后一秒内的编辑书("Book edited too quickly"),等过了再写
+        Steps steps = steps(helper).thenIdle(25);
+        steps = call(helper, steps, companion,
+                "numen.inv.write({\"Day 1: iron.\", \"Day 2: a house.\"}, {title = \"Diary\"})");
+        steps = steps.thenExecute(() -> read.set(lua(companion, "numen.inv.read(\"minecraft:written_book\")")))
+                .thenWaitUntil(() -> helper.assertTrue(read.get().succeeded() && read.get().reply().contains("\"title\":\"Diary\"")
+                                && read.get().reply().contains("Day 2: a house.")
+                                && read.get().reply().contains("\"author\":\"gametest_author\""),
+                        "inv read does not show the signed book: " + read.get().reply()));
+        steps.thenWaitUntil(() -> {
+            helper.assertTrue(companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1
+                            && companion.getInventory().countItem(Items.WRITABLE_BOOK) == 0,
+                    "the book and quill did not become a written book");
+        }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
+
     private static java.util.List<String> fullEvents(NumenPlayer companion) {
         return GameTestKit.events(companion)
                 .stream()

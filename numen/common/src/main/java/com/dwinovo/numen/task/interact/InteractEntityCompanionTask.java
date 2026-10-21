@@ -143,8 +143,8 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             boolean fallthroughOk =
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
-            receipt = com.dwinovo.numen.act.PressReceipt.before(player, null);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak);
+            receipt = com.dwinovo.numen.act.PressReceipt.before(player, null, entity);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak).pointing(r.at);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
             }

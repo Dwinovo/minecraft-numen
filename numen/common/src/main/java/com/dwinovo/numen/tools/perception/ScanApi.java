@@ -236,13 +236,14 @@ public final class ScanApi {
                             boolean currentHandCorrectTool,
                             Optional<Integer> estimatedMiningTicks,
                             double distance,
-                            boolean inReach) {}
+                            boolean inReach,
+                            @Doc("A sign's text, front and back.") Optional<com.dwinovo.numen.tools.Signs.Text> sign) {}
 
     @Fn("One block: its id and state, hardness, whether your held tool is right, dig time, whether it is in reach.")
     @Example("numen.scan.block({x = 120, y = 64, z = -35})")
     @Note("Instant and read-only, from any distance: the block id and its state properties (an end_portal_frame's "
             + "has_eye), hardness, whether the tool in hand is right, an estimated dig time, and whether it is within "
-            + "your reach.")
+            + "your reach. A sign also carries its text, both sides.")
     @SeeAlso({"numen.scan.container", "numen.scan.blocks", "numen.scan.sight"})
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() 带的是 Mojang 的"别覆写"标记,不是要淘汰
     public static BlockInfo block(ServerCall call, Cell args) {
@@ -275,7 +276,9 @@ public final class ScanApi {
         double distance = Math.sqrt(self.distanceToSqr(Vec3.atCenterOf(pos)));
         return new BlockInfo(BlockAt.of(pos, state), properties, state.isAir(), state.isSolid(),
                 !state.getFluidState().isEmpty(), hardness, hardness < 0, needsTool, handIsRightTool, ticks,
-                Math.round(distance * 10.0) / 10.0, self.canInteractWithBlock(pos, 0.0));
+                Math.round(distance * 10.0) / 10.0, self.canInteractWithBlock(pos, 0.0),
+                self.level().getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign
+                        ? Optional.of(com.dwinovo.numen.tools.Signs.read(sign)) : Optional.empty());
     }
 
     /** 一个方块状态属性写成的值("true"、"north")。 */

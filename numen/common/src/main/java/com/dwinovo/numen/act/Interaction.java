@@ -99,6 +99,8 @@ public final class Interaction {
     private boolean itemFallthrough;
     /** 按住潜行再点({@code --sneak}),见 {@link #crouched}。 */
     private boolean sneak;
+    /** 右键实体时点在它身上的哪一点(相对实体位置),见 {@link #pointing};没指定为 null。 */
+    private Vec3 at;
     /** 上一刻服务端就已经看到她按着潜行({@code isShiftKeyDown}),这一刻姿态也跟上了。 */
     private boolean crouchSettled;
     private int fires;
@@ -215,6 +217,15 @@ public final class Interaction {
                 return useInAir(p, t);
             }
         }
+    }
+
+    /**
+     * 右键实体时点在它身上的这一点(相对实体位置):按下去先发 {@code INTERACT_AT},和真客户端点盔甲架的哪一截一样,见
+     * {@link Mouse#use(boolean, Vec3)}。只对右键实体起作用。
+     */
+    public Interaction pointing(Vec3 at) {
+        this.at = at;
+        return this;
     }
 
     public String failReason() {
@@ -371,7 +382,7 @@ public final class Interaction {
         }
         player.controls().stop();
         player.look().at(lookAt);
-        return switch (player.mouse().use(itemFallthrough)) {
+        return switch (player.mouse().use(itemFallthrough, at)) {
             case Mouse.Use.Waiting waiting -> false;
             case Mouse.Use.Refused refused -> {
                 Verdict verdict = refused.reason().verdict();

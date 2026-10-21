@@ -8,6 +8,7 @@ import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.tools.BlockActionOps;
 import com.dwinovo.numen.tools.Clicks;
 import com.dwinovo.numen.tools.SleepOps;
+import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.EntityRef;
@@ -21,9 +22,24 @@ import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.phys.Vec3;
 
+import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.sdk.Rest;
+import com.dwinovo.numen.tools.Signs;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ElytraItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -107,20 +123,37 @@ public final class UseApi {
                            Optional<Double> hold,
                            @Doc("An item from your inventory to take in hand first.") @Omitted("use what you hold")
                            Optional<Item> item,
-                           @Doc("Hold sneak while pressing.") @Omitted("press standing") Optional<Boolean> sneak) {}
+                           @Doc("Hold sneak while pressing.") @Omitted("press standing") Optional<Boolean> sneak,
+                           @Doc("Which part of an armor stand to click: head, chest, legs, feet, hand or offhand. With "
+                                   + "an item in hand it goes to the slot the item belongs in; with an empty hand it takes "
+                                   + "off what is on that part.")
+                           @Omitted("click the entity itself") Optional<StandPart> at) {}
 
     @Fn("Right-click an entity within reach and in sight of where you stand. When it opens a window (a villager's trade) "
             + "it returns that Window.")
     @Example("numen.use.entity(\"sheep@3f9a1c\", {item = \"minecraft:shears\"})")
     @Example("numen.use.entity(\"villager@3f9a1c\", {sneak = true})")
+    @Example("numen.use.entity(\"armor_stand@3f9a1c\", {item = \"minecraft:iron_helmet\", at = \"head\"})")
     @Note("An entity farther than your reach, or behind a wall, is walked up to first, then clicked; the walk is told in "
             + "the result and a walk that can't get there fails with its reason.")
     @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.to` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
+    @Note("An armor stand takes its gear by where you click (`at`), like a real client's click on that spot: the click on the "
+            + "spot goes first, a plain click after it. Minecraft decides what fits where; the result lists what changed on the "
+            + "stand and in your hands.")
     @SeeAlso({"numen.use.block", "numen.use.hit"})
     public static Pending<Clicks.Pressed> entity(ServerCall call, OnEntity args) {
-        return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, present(call, args.entity()),
-                holdTicks(args.hold()), args.item().orElse(null), args.sneak().orElse(false)));
+        EntityRef target = present(call, args.entity());
+        Vec3 at = null;
+        if (args.at().isPresent()) {
+            if (!(call.entity(target) instanceof ArmorStand stand)) {
+                throw new ApiError(ErrorKind.BAD_ARGUMENT, "at names a part of an armor stand, and " + target + " is not one",
+                        Call.of("numen.use.entity", target));
+            }
+            at = args.at().get().pointOn(stand);
+        }
+        return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, target,
+                holdTicks(args.hold()), args.item().orElse(null), args.sneak().orElse(false), at));
     }
 
     /** 左键点什么。 */
@@ -142,7 +175,7 @@ public final class UseApi {
         return target.cell() != null
                 ? call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))
                 : call.sync(BlockActionOps.interactEntity(call, MouseButton.LEFT, present(call, target.entity()), 0, null,
-                        false));
+                        false, null));
     }
 
     /** 点名的那只此刻得在附近:不在当场失败,不先受理再失败。 */
@@ -194,5 +227,136 @@ public final class UseApi {
         String what = BuiltInRegistries.ENTITY_TYPE.getKey(vehicle.getType()).toString();
         her.stopRiding();
         return new Dismounted(what, her.position());
+    }
+
+    /** {@code numen.use.wake} 交回的值。 */
+    @Doc("Where you woke.")
+    public record Woke(@Doc("Where you stand now.") Vec3 pos) {}
+
+    /** 起床:发的是客户端点"离开床"发的那个包,原版自己把她放回床边;读回来看她还睡不睡。 */
+    @Fn("Get out of the bed you sleep in.")
+    @Example("numen.use.wake()")
+    @Note("Instant; the pair of numen.use.sleep. Not being asleep fails with kind failed.")
+    @SeeAlso("numen.use.sleep")
+    public static Woke wake(ServerCall call) {
+        NumenPlayer her = call.her();
+        if (!her.isSleeping()) {
+            throw new ApiError(ErrorKind.FAILED, "I am not asleep", null);
+        }
+        her.packets().command(ServerboundPlayerCommandPacket.Action.STOP_SLEEPING);
+        if (her.isSleeping()) {
+            throw new ApiError(ErrorKind.FAILED, "the server kept me in bed", null);
+        }
+        return new Woke(her.position());
+    }
+
+    /** {@code numen.use.glide} 交回的值。 */
+    @Doc("Where you took off.")
+    public record Glided(@Doc("Where you are.") Vec3 pos) {}
+
+    /** 鞘翅起飞:发的是空中按跳跃键发的那个包,条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
+    @Fn("Start gliding with the elytra you wear.")
+    @Example("numen.use.glide()")
+    @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
+            + "(`numen.gear.wear(\"minecraft:elytra\")`); otherwise it fails and says which is missing.")
+    @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you forward in the air.")
+    @SeeAlso({"numen.gear.wear", "numen.use.item"})
+    public static Glided glide(ServerCall call) {
+        NumenPlayer her = call.her();
+        her.packets().command(ServerboundPlayerCommandPacket.Action.START_FALL_FLYING);
+        if (!her.isFallFlying()) {
+            java.util.List<String> why = new java.util.ArrayList<>();
+            ItemStack chest = her.getItemBySlot(EquipmentSlot.CHEST);
+            if (her.onGround()) {
+                why.add("you are on the ground (gliding starts in the air)");
+            }
+            if (her.isInWater()) {
+                why.add("you are in water");
+            }
+            if (her.hasEffect(MobEffects.LEVITATION)) {
+                why.add("you have levitation");
+            }
+            if (!chest.is(Items.ELYTRA)) {
+                why.add("you wear no elytra");
+            } else if (!ElytraItem.isFlyEnabled(chest)) {
+                why.add("your elytra is broken");
+            }
+            throw new ApiError(ErrorKind.FAILED, "did not start gliding: " + (why.isEmpty() ? "the server refused"
+                    : String.join("; ", why)), Call.of("numen.gear.wear", "minecraft:elytra"));
+        }
+        return new Glided(her.position());
+    }
+
+    /** 写哪块牌子、写什么。 */
+    public record Sign(@Doc("The sign's cell.") BlockPos cell,
+                       @Doc("The lines, top to bottom, at most four; missing ones are left empty.") @Rest List<String> lines,
+                       @Doc("Write the back of the sign.") @Omitted("write the front") Optional<Boolean> back) {}
+
+    /** {@code numen.use.sign} 交回的值。 */
+    @Doc("A sign written.")
+    public record Signed(@Doc("The sign's cell.") BlockPos cell,
+                         @Doc("front or back.") String side,
+                         @Doc("The four lines now on that side.") List<String> lines) {}
+
+    /**
+     * 写告示牌:发的是客户端编辑完牌子发的那个包。刚放下的牌子服务端已认她是能编辑的人,直接发;别的没涂蜡的牌子先像玩家那样右键它
+     * (走到够得着、过权限层),服务端才认她。能不能写(涂没涂蜡、是不是她在编辑)原版判,发完等原版写完读回来牌子上的字。
+     */
+    @Fn("Write or change the text of a sign.")
+    @Example("numen.use.sign({x = 120, y = 64, z = -35}, {\"Home\", \"sweet home\"})")
+    @Example("numen.use.sign({x = 120, y = 64, z = -35}, {\"Back side\"}, {back = true})")
+    @Note("Replaces the whole side. A sign you just placed (`numen.use.block(cell, {item = \"minecraft:oak_sign\"})`) is "
+            + "yours to write at once; any other sign that is not waxed is right-clicked first, walking up to it, so a "
+            + "dye, ink sac or honeycomb in hand will colour or wax it instead.")
+    @Note("Minecraft decides: a waxed sign (numen.use.block with an axe scrapes the wax) or one someone else is writing "
+            + "cannot be written and the call fails saying so. Writing on someone's sign may ask your owner first.")
+    @Note("The text on a sign is read with `numen.scan.block`.")
+    @SeeAlso({"numen.scan.block", "numen.use.block"})
+    public static Pending<Signed> sign(ServerCall call, Sign args) {
+        NumenPlayer her = call.her();
+        BlockPos pos = args.cell();
+        SignBlockEntity sign = Signs.at(her, pos);
+        if (args.lines().size() > 4) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "a sign has four lines, not " + args.lines().size(), null);
+        }
+        boolean front = !args.back().orElse(false);
+        if (her.getUUID().equals(sign.getPlayerWhoMayEdit())) {
+            return call.authorize(Action.useBlock(pos, her.level().getBlockState(pos)))
+                    .thenWait(ok -> write(her, pos, front, args.lines()));
+        }
+        return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, pos, 0, null, false))
+                .thenWait(pressed -> write(her, pos, front, args.lines()));
+    }
+
+    /** 牌子认她是编辑的人了就发包写,发完等原版写完读回来;不认就说为什么。 */
+    private static Pending<Signed> write(NumenPlayer her, BlockPos pos, boolean front, List<String> lines) {
+        SignBlockEntity sign = Signs.at(her, pos);
+        if (!her.getUUID().equals(sign.getPlayerWhoMayEdit())) {
+            throw new ApiError(ErrorKind.FAILED, sign.isWaxed() ? "the sign is waxed, its text cannot be changed"
+                    : "the sign did not open for editing: someone else is writing it, or you may not build here",
+                    sign.isWaxed() ? Call.of("numen.use.block", pos, Map.of("item", "minecraft:iron_axe")) : null);
+        }
+        List<String> wanted = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            wanted.add(ChatFormatting.stripFormatting(i < lines.size() ? lines.get(i) : ""));
+        }
+        Pending<Signed> out = Pending.create();
+        her.packets().signUpdate(pos, front, lines);
+        her.packets().afterHandled(() -> {
+            if (!(her.level().getBlockEntity(pos) instanceof SignBlockEntity now)) {
+                out.fail(new ApiError(ErrorKind.NOT_FOUND, "the sign is gone", null));
+                return;
+            }
+            List<String> shown = Signs.lines(now.getText(front));
+            if (!shown.equals(wanted)) {
+                out.fail(new ApiError(ErrorKind.FAILED, "the sign was not changed: it reads " + shown,
+                        Call.of("numen.scan.block", pos)));
+                return;
+            }
+            out.report("wrote the " + (front ? "front" : "back") + " of the sign at " + pos.getX() + "," + pos.getY() + ","
+                    + pos.getZ() + ".");
+            out.complete(new Signed(pos, front ? "front" : "back", shown));
+        });
+        return out;
     }
 }

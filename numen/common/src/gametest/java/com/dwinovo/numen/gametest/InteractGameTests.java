@@ -537,4 +537,96 @@ public class InteractGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /**
+     * 写告示牌:放下一块牌子(服务端认她是能编辑的人),直接写正面;再写背面——这时牌子不再等她,她先像玩家那样右键它,才回包。
+     * 两面的字都落在牌子上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    public static void use_sign_writes_both_sides_of_a_sign(GameTestHelper helper) {
+        BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 4));
+        BlockPos sign = floor.above();
+        NumenPlayer companion = spawnAt(helper, "gametest_writer", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_SIGN, 2));
+
+        Steps steps = steps(helper);
+        steps = call(helper, steps, companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:oak_sign\"})");
+        steps = call(helper, steps, companion,
+                "numen.use.sign(" + xyz(sign) + ", {\"Hello\", \"World\"})");
+        steps = steps.thenWaitUntil(() -> {
+            var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
+            helper.assertTrue(text != null && com.dwinovo.numen.tools.Signs.lines(text.getFrontText())
+                            .equals(java.util.List.of("Hello", "World", "", "")), "the front of the sign is not written");
+        });
+        steps = call(helper, steps, companion,
+                "numen.use.sign(" + xyz(sign) + ", {\"Behind\"}, {back = true})");
+        steps.thenWaitUntil(() -> {
+            var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
+            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(text.getBackText())
+                            .equals(java.util.List.of("Behind", "", "", "")), "the back of the sign is not written");
+            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(text.getFrontText()).get(0).equals("Hello"),
+                    "writing the back changed the front");
+        }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
+
+    /** 涂过蜡的牌子原版不让改:回执如实说牌子涂了蜡,牌子上的字没动。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_interact")
+    public static void use_sign_on_a_waxed_sign_says_it_is_waxed(GameTestHelper helper) {
+        BlockPos sign = helper.absolutePos(new BlockPos(5, 2, 4));
+        helper.getLevel().setBlockAndUpdate(sign, Blocks.OAK_SIGN.defaultBlockState());
+        var entity = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
+        entity.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal("Keep")), true);
+        entity.setWaxed(true);
+        NumenPlayer companion = spawnAt(helper, "gametest_vandal", new BlockPos(3, 2, 4), false);
+        ToolRun write = lua(companion, "numen.use.sign(" + xyz(sign) + ", {\"Vandalised\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(write.done() && !write.succeeded() && write.outcome().contains("waxed"),
+                    "the refusal does not say the sign is waxed: " + write.outcome());
+            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(entity.getFrontText()).get(0).equals("Keep"),
+                    "the waxed sign's text changed");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 盔甲架:点头部放上头盔,点腿部放上护腿,空手点腿部取下护腿——头盔还在架子上,护腿回到她手里。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    public static void use_entity_at_a_part_dresses_and_undresses_an_armor_stand(GameTestHelper helper) {
+        var stand = net.minecraft.world.entity.EntityType.ARMOR_STAND.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 4));
+        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        helper.getLevel().addFreshEntity(stand);
+        NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(6, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_HELMET));
+        companion.getInventory().add(new ItemStack(Items.IRON_LEGGINGS));
+
+        Steps steps = steps(helper);
+        steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {item = \"minecraft:iron_helmet\", at = \"head\"})");
+        steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {item = \"minecraft:iron_leggings\", at = \"legs\"})");
+        steps = steps.thenWaitUntil(() -> helper.assertTrue(
+                stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).is(Items.IRON_HELMET)
+                        && stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).is(Items.IRON_LEGGINGS),
+                "the stand is not wearing the helmet and the leggings"));
+        steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {at = \"legs\"})");
+        steps.thenWaitUntil(() -> {
+            helper.assertTrue(stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).isEmpty()
+                            && stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).is(Items.IRON_HELMET),
+                    "the leggings are still on the stand, or the helmet came off too");
+            helper.assertTrue(companion.getMainHandItem().is(Items.IRON_LEGGINGS), "the leggings are not in her hand");
+        }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
+
+    /** 穿着鞘翅在空中起飞:原版确认她进入滑翔。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_interact")
+    public static void use_glide_starts_gliding_in_the_air(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_glider", new BlockPos(8, 2, 8), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
+        drop(helper, companion, new BlockPos(8, 60, 8));
+
+        Steps steps = steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(!companion.onGround(), "she has not left the ground"));
+        steps = call(helper, steps, companion, "numen.use.glide()");
+        steps.thenWaitUntil(() -> helper.assertTrue(companion.isFallFlying(), "she is not gliding"))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
 }

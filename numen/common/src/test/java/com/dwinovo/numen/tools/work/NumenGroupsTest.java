@@ -104,7 +104,8 @@ class NumenGroupsTest {
                 "库函数与函数都列在组里,寻路给模型的只有三个: " + moveHelp);
         assertTrue(help("numen.move.to").contains("\n---@class Walked\n"), "走路的回执只有一个类型");
         assertTrue(help("numen.move.follow").contains("Walked") && help("numen.move.away").contains("Walked"));
-        assertEquals(List.of("block", "dismount", "entity", "hit", "item", "sleep"), functions(help("numen.use"), "use"));
+        assertEquals(List.of("block", "dismount", "entity", "glide", "hit", "item", "sign", "sleep", "wake"),
+                functions(help("numen.use"), "use"));
         String workHelp = help("numen.work");
         assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(cluster: "
                 + "Cluster|Cells): integer Dig out one cluster: numen.work.dig walks up to"), "挖完一团是内置模块 work 里的 Lua 函数: " + workHelp);

@@ -47,12 +47,15 @@
 | `move.away` | 离某物至少几格,走法同 `move.to` | — |
 | `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾;走法同 `move.to` | 不打、不捡 |
 | `use.dismount` | 从坐着的东西上下来 | — |
+| `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
+| `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
 | `work.dig` | 挖点名的格:手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖;挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不捡 |
 | `build.place` | 把给的格(Cells 或蓝图句柄)放一遍:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放 | 不挖、不重来 |
 | `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 只读,不走 |
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
 | `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方 | 不挖(挖是 `work.dig`) |
-| `gui.*` | 开着的界面(Window):看、按种类放进拿出、挪一格、整叠挪、关 | 不开界面(开是 `use.block`) |
+| `gui.*` | 开着的界面(Window):看(有名堂的界面 `screen` 按种类说话,选项编号从 1 起)、按种类放进拿出、挪一格、整叠挪、选一项(`choose`:附魔台、切石机、织布机、交易、信标)、改名(铁砧)、翻页(讲台)、开关一格(合成器)、按 E(`open`)、关 | 不开界面(开是 `use.block`) |
+| `inv.read` / `inv.write` | 读背包里书的标题作者各页;往书与笔里写页并可署名(发 `EditBook`,读回) | 不合成书 |
 | `inv.craft` | 在开着的合成格里照一条配方合一次 | 不挑配方、不找工作台 |
 | `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
 | `time.wait` | 站着等几秒,主人一喊停就停 | — |
@@ -406,7 +409,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 - **Cells**(`numen.shape.*` 画出来的):`rotate(quarters, origin)`、`shift(dx, dy, dz)`、`union(other)`、`minus(other)`。
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
-  `move(from, to, opts?)`、`quick(slot)`、`close()`,就是 `numen.gui` 的函数。
+  `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
 - **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
 - **蓝图句柄** `numen.build.blueprint(name, origin, {rotation})`:数据里有尺寸、格子、材料与缺什么;`numen.build.diff`、
   `numen.build.place` 与模块都收句柄或一串格。
@@ -428,7 +431,14 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 | `fight.attack` 里的逃跑(DISENGAGE) | 逃跑本能 `FleeChain`(反射层):打不过且有东西在追就跑,跑不掉让出身体接着打 |
 | 森罗 `kaleidoscope.pot.cook` 一口气做完 | 锅上的一步一个函数(`oil/base/fill/lid/stir/plate`),`kaleidoscope.pot.cook` 是模块;翻炒那段时间窗留在 Java |
 
-新增的原子:`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`。
+新增的原子:`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`、
+`gui.choose/rename/page/toggle/open`、`use.sign/wake/glide`、`inv.read/write`,以及 `use.entity` 的 `at` 选项(盔甲架的哪一截)。
+
+### 替她发客户端的包
+
+界面里的钮、写字、选交易、起床起飞这些,真客户端发的是一个包,校验和落地都是原版服务端收包时做的。她没有客户端,`NumenPlayer#packets()`(`ClientPackets`)把同一个包交给她连接上原版的 `handleXxx`,一处入口,各函数组合着用,不各写一套。原版拒绝时什么也不说,所以每个函数发完都**读回来**界面、物品、方块真的变了没有,再如实报成或没成;校验不另写一套(附魔的等级与青金石、交易的材料与次数、告示牌要是 `playerWhoMayEdit` 且没涂蜡、书的页数、界面要 `stillValid`)。写告示牌和写书原版先过文字过滤再排进服务端任务队列,读回来的活排在它后面(`afterHandled`)。动到别人东西的(告示牌、讲台翻页、信标、合成器开关)落在 `use_block`,交易落在 `use_entity`,取成品/取书照旧是 `take`,都由权限层在动手那一刻裁决。
+
+界面按种类读与做,每种一个小接口(`tools/menu/MenuKind`:`Chooses`/`Renames`/`Pages`/`Toggles`/`Takes`),列在 `MenuKinds`,加一种界面不改别处。信标按层数能选哪些效果与真客户端的按钮是同一张表(原版服务端收 `SetBeacon` 时不查层数)。
 
 ### 保护只有"玩家放的"
 

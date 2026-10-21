@@ -536,4 +536,23 @@ public class PerceptionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /** scan.block 读告示牌:正反两面的字和有没有涂蜡都在回执里。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void scan_block_reads_both_sides_of_a_sign(GameTestHelper helper) {
+        BlockPos at = helper.absolutePos(new BlockPos(5, 2, 4));
+        helper.getLevel().setBlockAndUpdate(at, Blocks.OAK_SIGN.defaultBlockState());
+        var sign = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(at);
+        sign.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal("front words")), true);
+        sign.updateText(t -> t.setMessage(1, net.minecraft.network.chat.Component.literal("back words")), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_reader_of_signs", new BlockPos(3, 2, 4), false);
+        ToolRun look = lua(companion, "numen.scan.block(" + xyz(at) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(look.done() && look.succeeded() && look.reply().contains("front words")
+                            && look.reply().contains("back words") && look.reply().contains("\"waxed\":false"),
+                    "scan block does not read the sign: " + look.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

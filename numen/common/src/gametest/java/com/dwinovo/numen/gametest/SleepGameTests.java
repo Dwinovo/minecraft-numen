@@ -170,4 +170,18 @@ public class SleepGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 躺下之后 use.wake 起床:服务端确认她不再睡着。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_sleep_night")
+    public static void wake_gets_her_out_of_bed(GameTestHelper helper) {
+        placeBed(helper, new BlockPos(5, 2, 5));
+        NumenPlayer companion = spawnAt(helper, "gametest_riser", new BlockPos(4, 2, 5), false);
+
+        Steps steps = steps(helper);
+        steps = call(helper, steps, companion, "numen.use.sleep()");
+        steps = steps.thenWaitUntil(() -> helper.assertTrue(companion.isSleeping(), "she is not asleep"));
+        steps = call(helper, steps, companion, "numen.use.wake()");
+        steps.thenWaitUntil(() -> helper.assertTrue(!companion.isSleeping(), "she is still asleep"))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
 }
