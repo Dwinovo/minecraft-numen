@@ -157,6 +157,7 @@ public class Mouse {
     private static final int RIGHT_CLICK_DELAY = 4;
 
     private final ServerPlayer body;
+    private final ClientPackets packets;
     private int sequence;
     private long destroyReadyAt;
     private long useReadyAt;
@@ -171,6 +172,7 @@ public class Mouse {
 
     public Mouse(ServerPlayer body) {
         this.body = body;
+        this.packets = new ClientPackets(body);
     }
 
     private long now() {
@@ -442,6 +444,16 @@ public class Mouse {
      *                        落着时,手里的东西本来就是这一下的全部,不受它管
      */
     public Use use(boolean itemFallthrough) {
+        return use(itemFallthrough, null);
+    }
+
+    /**
+     * 右键一下准星落着的东西,落在实体上时带一个点:真客户端右键实体先发 {@code INTERACT_AT}(实体上被点中的那一点,相对实体的位置;
+     * 盔甲架摆装备取装备读的是它),没被吃掉才发 {@code INTERACT}。{@code at} 为 null 就不发前一个,和 {@link #use(boolean)} 一样。
+     *
+     * @param at 相对实体位置的点;准星落着的不是实体时不起作用
+     */
+    public Use use(boolean itemFallthrough, Vec3 at) {
         if (now() < useReadyAt || digging()) {
             return Use.WAITING;
         }
@@ -452,7 +464,7 @@ public class Mouse {
                 return new Use.Refused(action.pos() != null ? action.pos() : BlockPos.containing(hit.getLocation()), refusal);
             }
         }
-        return press(hit, itemFallthrough);
+        return press(hit, itemFallthrough, at);
     }
 
     /**
@@ -462,7 +474,7 @@ public class Mouse {
         if (now() < useReadyAt || digging()) {
             return Use.WAITING;
         }
-        return press(BlockHitResult.miss(body.getEyePosition(), Direction.UP, body.blockPosition()), true);
+        return press(BlockHitResult.miss(body.getEyePosition(), Direction.UP, body.blockPosition()), true, null);
     }
 
     /** 松开右键:还在用的东西(拉着的弓)放开。没在用时什么也不做。 */
@@ -478,7 +490,7 @@ public class Mouse {
         stopUse();
     }
 
-    private Use press(HitResult hit, boolean itemFallthrough) {
+    private Use press(HitResult hit, boolean itemFallthrough, Vec3 at) {
         useReadyAt = now() + RIGHT_CLICK_DELAY;
         ServerLevel level = body.serverLevel();
         AbstractContainerMenu menuBefore = body.containerMenu;
@@ -495,7 +507,7 @@ public class Mouse {
                 if (onBlock.consumesAction() || onBlock == InteractionResult.FAIL) {
                     break;
                 }
-            } else if (entity != null && useOnEntity(entity, hand)) {
+            } else if (entity != null && useOnEntity(entity, hand, at)) {
                 break;
             }
             if ((itemFallthrough || (block == null && entity == null)) && !stack.isEmpty() && useItem(level, stack, hand)) {
@@ -538,8 +550,14 @@ public class Mouse {
         return result;
     }
 
-    /** 右键一只实体(动物、村民、物品展示框、拴绳):它吃掉了这一下为 true。 */
-    private boolean useOnEntity(Entity entity, InteractionHand hand) {
+    /**
+     * 右键一只实体(动物、村民、物品展示框、拴绳):它吃掉了这一下为 true。带了点({@code at})就先发 {@code INTERACT_AT}
+     * ({@link ClientPackets#interactAt}),起了作用就是它吃掉了,不再按下面的。
+     */
+    private boolean useOnEntity(Entity entity, InteractionHand hand, Vec3 at) {
+        if (at != null && packets.interactAt(entity, hand, at)) {
+            return true;
+        }
         return entity.interact(body, hand).consumesAction()           // 动物、村民
                 || body.interactOn(entity, hand).consumesAction();    // 物品展示框、拴绳
     }

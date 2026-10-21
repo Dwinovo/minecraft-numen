@@ -166,6 +166,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/Mouse*.class'         // 鼠标(准星、左键挖、右键用,动手之前过权限层)、
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),
+    include 'com/dwinovo/numen/api/entity/ClientPackets*.class' // 客户端会发的那些包(界面里的钮、写字、交易、起床),
     include 'com/dwinovo/numen/api/entity/BodyAction*.class'    // 以及换手留下的记录——自己写寻路的插件按它们让她走
     include 'com/dwinovo/numen/api/entity/DigTime*.class'       // 原版的挖掘时间与缓手,
     include 'com/dwinovo/numen/api/entity/Reach*.class'         // 够得着、

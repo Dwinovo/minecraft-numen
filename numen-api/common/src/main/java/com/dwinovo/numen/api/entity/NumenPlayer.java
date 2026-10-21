@@ -39,7 +39,7 @@ import java.util.UUID;
  * dimensions).
  *
  * <h2>身体</h2>
- * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})和一个快捷栏({@link Hotbar}),导航、本能与各件活用的都是它们;每刻在自己的实体刻里跑一次物理步进
+ * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})、一个快捷栏({@link Hotbar})和客户端的那些包({@link ClientPackets}),导航、本能与各件活用的都是它们;每刻在自己的实体刻里跑一次物理步进
  * ({@link Physics#step}),按着的键在那里落成输入。
  */
 public final class NumenPlayer extends ServerPlayer {
@@ -60,6 +60,8 @@ public final class NumenPlayer extends ServerPlayer {
     private final Mouse mouse = new Mouse(this);
     /** 她的快捷栏:把东西拿到手上。 */
     private final Hotbar hotbar = new Hotbar(this);
+    /** 她的客户端会发的那些包(界面里的钮、写字、交易、玩家指令……):由这里交给原版收包。 */
+    private final ClientPackets packets = new ClientPackets(this);
 
     /**
      * 死因,在 {@link #die} 里趁早抄下来。
@@ -542,6 +544,11 @@ public final class NumenPlayer extends ServerPlayer {
     /** 她的快捷栏:切格、换手、把要用的东西拿到手上。 */
     public Hotbar hotbar() {
         return hotbar;
+    }
+
+    /** 代她发客户端会发的包:界面里的钮、写字、交易、起床与起飞,校验全是原版收包时做的。 */
+    public ClientPackets packets() {
+        return packets;
     }
 
     @Override
