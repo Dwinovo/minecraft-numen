@@ -43,7 +43,7 @@ public final class Vanilla {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         try (MultiPackResourceManager data = new MultiPackResourceManager(PackType.SERVER_DATA,
-                List.of(ServerPacksSource.createVanillaPackSource()))) {
+                List.of(ServerPacksSource.createVanillaPackSource().fullResources()))) {
             bindTags(BuiltInRegistries.BLOCK, data);
             bindTags(BuiltInRegistries.FLUID, data);
         }
@@ -66,10 +66,10 @@ public final class Vanilla {
     /**
      * 26.1 起物品的 DataComponentMap 不再存在 Item 上,由数据包加载期的 DataComponentInitializers 绑定;只做 Bootstrap
      * 的引导里没有这一步,构造 ItemStack 会抛 "Components not bound yet"。用原版自己的管线(与服务器加载数据包同源)在静态
-     * 注册表上补绑一遍;上下文取 {@link VanillaRegistries#createLookup()}——静态加全部数据包注册表的引导内容,标签一律空集。
+     * 注册表上补绑一遍;上下文取 {@link VanillaRegistries#createWorldLookup()}——静态加全部数据包注册表的引导内容,标签一律空集。
      */
     private static void bindComponents() {
-        var provider = VanillaRegistries.createLookup();
+        var provider = VanillaRegistries.createWorldLookup();
         for (DataComponentInitializers.PendingComponents<?> pending
                 : BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(provider)) {
             pending.apply();

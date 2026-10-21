@@ -34,7 +34,7 @@ public final class McTestComponents {
         if (bound) {
             return;
         }
-        var provider = VanillaRegistries.createLookup();
+        var provider = VanillaRegistries.createWorldLookup();
         for (DataComponentInitializers.PendingComponents<?> pending
                 : BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(provider)) {
             pending.apply();
