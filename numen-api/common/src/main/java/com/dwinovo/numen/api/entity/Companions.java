@@ -153,8 +153,9 @@ public final class Companions {
     }
 
     /**
-     * 给一只同伴换上这副皮肤(Mojang 签名的 textures);{@code null} = 回到默认皮肤。皮肤只在构造身体时注入 GameProfile,所以
-     * 活体要原地重建(存盘离场再按名册重建,背包位置在做的活全走既有持久化通道回来);休眠和死着的只改名册,下次重建自然生效。
+     * 给一只同伴换上这副皮肤(Mojang 签名的 textures);{@code null} = 回到默认皮肤。名册记下新皮肤(下次建身体时用);活体<b>原地换</b>,
+     * 不重建身体、不发入服离服的消息、她手上的活与背包都不动——照 SkinsRestorer、FabricTailor 的做法:改她 GameProfile 的 textures,
+     * 给所有在线玩家发玩家信息的移除与重新加入,再让追踪她的客户端重新生成她的实体,别人看到的皮肤就刷新了。
      * 穿的本来就是这一副就什么也不做。
      */
     public static void applySkin(MinecraftServer server, UUID companion, MojangSkins.Skin skin) {
@@ -164,12 +165,30 @@ public final class Companions {
         if (entry == null || entry.skinValue().equals(value)) {
             return;
         }
-        reg.put(companion, entry.withSkin(value, skin == null ? "" : skin.signature()));
+        String signature = skin == null ? "" : skin.signature();
+        reg.put(companion, entry.withSkin(value, signature));
         NumenPlayer body = NumenPlayer.findByUuid(server, companion);
         if (body != null) {
-            dormant(server, body);
-            bringBack(server, companion);
+            refreshSkin(server, body, value, signature);
         }
+    }
+
+    /** 改活体档案里的 textures,并让所有人的客户端重新认她:玩家信息先移除再加入,追踪她的客户端重新生成她的实体。 */
+    private static void refreshSkin(MinecraftServer server, NumenPlayer body, String value, String signature) {
+        var properties = body.getGameProfile().getProperties();
+        properties.removeAll("textures");
+        if (!value.isEmpty()) {
+            properties.put("textures", new com.mojang.authlib.properties.Property("textures", value,
+                    signature.isEmpty() ? null : signature));
+        }
+        var players = server.getPlayerList();
+        players.broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket(
+                java.util.List.of(body.getUUID())));
+        players.broadcastAll(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+                .createPlayerInitializing(java.util.List.of(body)));
+        var chunks = body.serverLevel().getChunkSource();
+        chunks.removeEntity(body);
+        chunks.addEntity(body);
     }
 
     /** 主人名下叫这个名字的同伴,没有则 null。判断规则在 {@link CompanionRoster#findByName}

@@ -89,12 +89,11 @@ public class InventoryGameTests {
     }
 
     /**
-     * 换肤走的是"改注册表 + 原地回收":休眠存盘、按注册表重建之后,GameProfile 挂上
-     * textures,而 UUID 与背包(经 .dat)原样回来——换的是皮,不是人。
-     * 绑定皮肤时 {@code Companions.applySkin} 对活体执行的正是这一串。
+     * 换肤是原地换:她仍是同一个实体对象,GameProfile 挂上新的 textures,背包与手上的任务原样;旁观的玩家不会收到"加入了游戏"
+     * (没有重建身体、没有重新入服),只收到玩家信息的移除与重新加入,他的客户端据此刷新她的皮肤。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void reskin_recycle_keeps_identity_and_items(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    public static void reskin_in_place_keeps_the_body_the_task_and_the_silence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
@@ -103,18 +102,25 @@ public class InventoryGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         first.getInventory().add(new ItemStack(Items.DIAMOND));
+        var watcher = GameTestKit.presentVanillaPlayer(helper, null, "gametest_reskin_watcher", "en_us");
+        ToolRun wait = lua(first, "return numen.time.wait(30)");
+        GameTestKit.said(watcher);
+
         com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid,
                 new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""));
 
-        succeedWhen(helper, () -> {
-            NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
-            helper.assertTrue(live != null, "the body did not come back");
-            helper.assertTrue(live.getGameProfile().getProperties().containsKey("textures"),
-                    "the new skin is not on the rebuilt profile");
-            helper.assertTrue(live.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)),
-                    "her inventory did not survive the recycle");
-            com.dwinovo.numen.api.entity.Companions.dismiss(server, live);
-        });
+        helper.assertTrue(NumenPlayer.findByUuid(server, uuid) == first, "she was rebuilt instead of changed in place");
+        helper.assertTrue(first.getGameProfile().getProperties().containsKey("textures"),
+                "the new skin is not on her profile");
+        helper.assertTrue(first.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)), "her inventory changed");
+        helper.assertTrue(!wait.done(), "the task in her hands was cut off by the skin change");
+        helper.assertTrue(GameTestKit.said(watcher).stream().noneMatch(s -> s.text().getString().contains("joined")),
+                "changing the skin was announced as a join");
+        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid, null);
+        helper.assertTrue(!first.getGameProfile().getProperties().containsKey("textures"), "the skin did not come off");
+        GameTestKit.leave(watcher);
+        com.dwinovo.numen.api.entity.Companions.dismiss(server, first);
+        helper.succeed();
     }
 
     // ---- craft ----
