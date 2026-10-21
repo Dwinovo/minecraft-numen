@@ -12,9 +12,9 @@ name: Build
 # 一条推送不该去跑另外十二条的构建。
 on:
   push:
-    branches: ["26.2"]
+    branches: ["26.3"]
   pull_request:
-    branches: ["26.2"]
+    branches: ["26.3"]
   workflow_dispatch:
 
 # 连着推几次时只留最后一次,前面的直接取消。
@@ -64,6 +64,19 @@ jobs:
       # core(寻路/战斗/任务)三家的用例一个都不会跑——那是一多半的测试。
       - name: Run JVM tests
         run: ./gradlew test --no-daemon -x javadoc
+
+      # 26.3 分支:把成品 jar 也收出来并上传,这样 Actions 跑完就能直接下载安装——
+      # 本地构建要连 maven.neoforged.net,不是每个环境都通。releaseJars 依赖上面 datagenAll
+      # 生成的资源,顺序不能颠倒(任务内自己会检查,没生成过会当场失败)。
+      - name: Collect release jars
+        run: ./gradlew releaseJars --no-daemon -x javadoc
+
+      - name: Upload release jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: numen-26.3-jars
+          path: build/release/**/*.jar
+          retention-days: 14
 
       - name: Upload test report on failure
         if: failure()

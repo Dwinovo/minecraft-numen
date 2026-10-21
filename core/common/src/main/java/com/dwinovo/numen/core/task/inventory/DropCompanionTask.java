@@ -70,7 +70,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
             if (s.isEmpty() || !s.is(r.item)) continue;
             ItemStack out = inv.removeItem(i, Math.min(s.getCount(), remaining));
             remaining -= out.getCount();
-            player.drop(out, false);
+            player.drop(out, false, net.minecraft.util.Prediction.SERVER_ONLY);
         }
         inv.setChanged();
         doneMessage = "dropped " + dropped + "x " + r.label

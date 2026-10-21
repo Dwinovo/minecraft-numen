@@ -130,7 +130,7 @@ public final class CraftOps {
         }
         int have0 = PlayerInv.count(self.getInventory(), target);
         menu.clicked(grid.result(), 0, ContainerInput.QUICK_MOVE, self);   // vanilla mass-craft + onTake
-        self.swing(InteractionHand.MAIN_HAND);
+        self.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         sweepGrid(menu, self, grid);
         int crafted = PlayerInv.count(self.getInventory(), target) - have0;
         if (crafted <= 0) {

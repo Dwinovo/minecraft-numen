@@ -218,8 +218,9 @@ public final class NumenPlayer extends ServerPlayer implements Body {
      * 干活的人事后用 {@link BodyDelta} 说给她听;这里只记流水,不替谁下结论。
      */
     @Override
-    public void onEquippedItemBroken(Item item, EquipmentSlot slot) {
-        super.onEquippedItemBroken(item, slot);
+    public void onEquippedItemBroken(net.minecraft.world.item.ItemStack stack, EquipmentSlot slot) {
+        super.onEquippedItemBroken(stack, slot);
+        Item item = stack.getItem();
         if (brokenGear.size() == BROKEN_KEPT) {
             brokenGear.remove(0);
         }

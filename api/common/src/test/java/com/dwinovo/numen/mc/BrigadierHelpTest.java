@@ -174,8 +174,8 @@ class BrigadierHelpTest {
 
     private static CommandSourceStack her(int level) {
         return new CommandSourceStack(CommandSource.NULL, Vec3.ZERO, Vec2.ZERO, null,
-                net.minecraft.server.permissions.LevelBasedPermissionSet.forLevel(net.minecraft.server.permissions.PermissionLevel.byId(level)), "her",
-                Component.literal("her"), null, null);
+                net.minecraft.server.permissions.LevelBasedPermissionSet.forLevel(net.minecraft.server.permissions.PermissionLevel.byId(level)),
+                (net.minecraft.server.MinecraftServer) null, (net.minecraft.world.entity.Entity) null);
     }
 
     /** 像物品参数那样认一张 id 表:不认的报错(位置在这个 id 开头),补全列出整张表。 */

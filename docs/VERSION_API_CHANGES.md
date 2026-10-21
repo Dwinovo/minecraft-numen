@@ -1218,3 +1218,99 @@ api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、ga
 - **联动**:YSM 联动没有这个版本,不建;Curios `16.0.0+26.2`;FTB Quests 没做(同上节)。
 - **和平难度拒刷怪**:`EntityTypes.X.create(level, reason)` 带生成检查;本档的战斗用例批次定的是非和平难度,实测通过,没有另加 `EntitySpawnRequest`。
 - **MixinExtras**:GameTest 日志 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.3 内嵌 `mixinextras-fabric-0.5.4.jar`。够用,不内嵌。
+
+## 26.2 → 26.3
+
+来源：26.2 分支 + 发行 jar 的字节码体检（`numen-neoforge-26.2-0.1.4.1.jar` 的 15,489 处
+MC/NeoForge 成员引用，对 26.3 全量核对后只剩 30 处破坏），逐条改完由 javac 对 26.3.0.94
+的 patched client 编译验证通过。
+
+### 构建旋钮 📦
+| 键 | 26.3 的值 |
+|---|---|
+| `minecraft_version` | `26.3` |
+| `minecraft_version_range` | `[26.3, 26.4)` |
+| `neo_form_version` | `26.3-1`（从 NeoForge POM 的 `<artifactId>neoform</artifactId>` 读） |
+| `neoforge_version` | `26.3.0.94` |
+| `fabric_version` | `0.164.0+26.3` |
+| `curios_version` | `17.0.0-beta.3+26.3` |
+
+`build.yml` 的 `on.branches` 要跟着换成本条分支名。
+
+### 配置 ❗
+`ModConfig.Type` 枚举重做，旧值全没了：
+```java
+ModConfig.Type.COMMON  → ModConfig.Type.LOCAL
+ModConfig.Type.SERVER  → ModConfig.Type.SYNCED   // 顺带:枚举现在是 LOCAL/CLIENT/SYNCED/STARTUP
+```
+
+### 输入 / 渲染 ❗
+- **GLFW 整个包被移除**，26.3 改用 SDL3。`org.lwjgl.glfw.GLFW` 编译期即找不到：
+  ```java
+  GLFW.GLFW_KEY_N                     → InputConstants.KEY_N
+  InputConstants.Type.KEYSYM          → InputConstants.Type.KEYBOARD   // 枚举只剩 KEYBOARD/MOUSE
+  InputConstants.isKeyDown(window, k) → InputConstants.isKeyDown(k)    // 不再要 Window
+  GLFW.glfwGetMouseButton(handle, b)  → Minecraft.mouseHandler.isLeftPressed()/isRightPressed()/isMiddlePressed()
+  ```
+- `PoseStack.mulPose(Quaternionfc)` 移除，只剩 `Matrix4fc` / `Transformation`：
+  `poseStack.mulPose(new Matrix4f().rotation(quat))`
+- 渲染管线换了包名：`com.mojang.blaze3d.pipeline.RenderPipeline`
+  → `com.mojang.renderpearl.api.pipeline.RenderPipeline`
+- 26.3 起图形后端可选（`--graphicsBackend vulkan|opengl`，新后端抽象 `RenderPearl` 的
+  `VulkanDevice`/`GlDevice`）。只认 OpenGL 的模组（Iris、Sodium 一类）在 vulkan 后端下会在
+  `RenderSystem.initRenderer` 抛 `ClassCastException`——不是本模组的问题，但排查时要知道。
+
+### 交互 / 玩家 ❗
+```java
+LivingEntity.swing(InteractionHand)                    → swing(InteractionHand, SwingAnimation, boolean)
+                                                          // SwingAnimation.DEFAULT
+InteractionResult.SwingSource.CLIENT/SERVER            → PREDICTED / SERVER_ONLY
+Player.drop(ItemStack, boolean)                        → drop(ItemStack, boolean, Prediction)
+                                                          // Prediction.PREDICTED / SERVER_ONLY
+ServerPlayer.onEquippedItemBroken(Item, EquipmentSlot) → onEquippedItemBroken(ItemStack, EquipmentSlot)
+ServerPlayer.startSleepInBed(BlockPos)                 → startSleepInBed(AbstractBedBlock, BlockState, BedRule, BlockPos)
+ServerboundAcceptTeleportationPacket(int)              → (int id, double x, double y, double z, float yRot, float xRot)
+Entity.hurtMarked 字段                                  → 移除；要"标记受伤"用 markHurt()（protected）
+```
+
+### 方块 / 世界 ❗
+```java
+RedStoneWireBlock                 → RedstoneWireBlock        // 大小写改了
+DirtPathBlock                     → PathBlock
+BlockState.blocksMotion()         → 移除；用 isSolid()
+RandomState.sampler()             → createClimateSampler(SamplerContext)
+BiomeSource.getNoiseBiome(x,y,z,Climate$Sampler)
+                                  → biomeSource.createResolver(sampler).getNoiseBiome(x, y, z)
+ServerLevel.getStructureManager() → ServerLevel.structureManager()
+MinecraftServer.getStructureManager() → MinecraftServer.getStructureTemplateManager()
+Level.getCapability(cap, pos, side)
+                                  → cap.getCapability(Level, BlockPos, BlockState, BlockEntity, C)  // 反过来调
+```
+
+### 网络 ❗
+`RegistryFriendlyByteBuf.writeCollection(...)` / `readList(...)` 移除（编码体系换成
+`StreamCodec`）。最小的机械改法是自己写长度 + 循环，或改用 StreamCodec。
+
+### 数据生成 ❗
+```java
+GatherDataEvent$Client.getLookupProvider() → getWorldLookupProvider() / getReloadableLookupProvider()
+DataGenerator.addProvider(boolean, T)      → addProvider(boolean, DataProvider$Factory<T>)  // 传工厂
+```
+
+### Fabric API ❗
+- `forceAddTag(TagKey<T>)`：26.3 起 Fabric 把 appender 的扩展方法改成 mixin 注入原版类，
+  编译期原版类型上看不见它，必须显式转型到接口：
+  ```java
+  t -> ((FabricTagAppender<Block>) b).forceAddTag(t)
+  ```
+- `fabric_version` 取 `0.164.0+26.3`；注意 fabric-api 是嵌套 jar 包，手工编译时要把
+  `META-INF/jars/*.jar` 一并放进 classpath。
+
+### 杂项 ❗
+- `Util.getPlatform().openUri(URI)` 移除：客户端用 `java.awt.Desktop`（`open`/`browse`）。
+- `org.lwjgl.util.tinyfd`（原生文件对话框）移除：用 AWT `FileDialog`，或 `org.lwjgl.sdl.SDLDialog`。
+- `DisplayInfo.getTitle()` → `title()`（该类已是 record）。
+- Curios 17：`CuriosApi.MODID` 移除（用字面量 `"curios"`）；
+  `CuriosApi.getSlots(level)` → `CuriosSlotTypes.getSlotTypes()`；
+  `CuriosApi.getItemStackSlots(stack, level)` → `CuriosSlotTypes.getItemSlotTypes(stack, entity)`。
+- 备注：`ResourceLocation` → `Identifier` 是 26.x 早先那一档的事，26.2 基线已经改完，本档不涉及。

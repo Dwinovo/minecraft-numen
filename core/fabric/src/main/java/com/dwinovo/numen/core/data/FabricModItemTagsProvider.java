@@ -26,7 +26,8 @@ public final class FabricModItemTagsProvider extends FabricTagsProvider.ItemTags
             return ModItemTagData.appender(
                     v -> b.add(net.minecraft.core.registries.BuiltInRegistries.ITEM
                             .getResourceKey(v).orElseThrow()),
-                    t -> b.forceAddTag(t));
+                    // 26.3: 同方块那侧,appender 方法由 mixin 注入,编译期要显式转型。
+                    t -> ((net.fabricmc.fabric.api.datagen.v1.provider.FabricTagAppender<net.minecraft.world.item.Item>) b).forceAddTag(t));
         });
     }
 }

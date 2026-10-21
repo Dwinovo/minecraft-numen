@@ -14,7 +14,6 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Shared key mappings: defined once here, registered by each loader's client
@@ -39,25 +38,25 @@ public final class NumenKeys {
      */
     public static final KeyMapping OPEN_ROSTER = new KeyMapping(
             com.dwinovo.numen.data.ModLanguageData.Keys.KEY_OPEN_ROSTER,
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N,
+            InputConstants.Type.KEYBOARD, InputConstants.KEY_N,
             CATEGORY);
 
     /** R(按住)— 同伴轮盘:滚轮/指向选中当前交互对象,松开确认。 */
     public static final KeyMapping COMPANION_WHEEL = new KeyMapping(
             com.dwinovo.numen.data.ModLanguageData.Keys.KEY_COMPANION_WHEEL,
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R,
+            InputConstants.Type.KEYBOARD, InputConstants.KEY_R,
             CATEGORY);
 
     /** Y — 快捷对话:对当前交互对象弹极简输入框(准星指着谁则优先谁)。 */
     public static final KeyMapping TALK_COMPANION = new KeyMapping(
             com.dwinovo.numen.data.ModLanguageData.Keys.KEY_TALK_COMPANION,
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Y,
+            InputConstants.Type.KEYBOARD, InputConstants.KEY_Y,
             CATEGORY);
 
     /** V(按住)— 快捷语音:对讲机式,松开把转写发给当前交互对象。 */
     public static final KeyMapping QUICK_VOICE = new KeyMapping(
             com.dwinovo.numen.data.ModLanguageData.Keys.KEY_QUICK_VOICE,
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V,
+            InputConstants.Type.KEYBOARD, InputConstants.KEY_V,
             CATEGORY);
 
     private static boolean voiceWasDown;

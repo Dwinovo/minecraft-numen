@@ -53,7 +53,12 @@ public final class SleepOps {
             throw noBed(self, given);
         }
 
-        Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
+        net.minecraft.world.level.block.state.BlockState bedState = self.level().getBlockState(bedHead);
+        if (!(bedState.getBlock() instanceof net.minecraft.world.level.block.AbstractBedBlock bedBlock)) {
+            throw noBed(self, given);
+        }
+        Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedBlock, bedState,
+                net.minecraft.world.attribute.BedRule.CAN_SLEEP_WHEN_DARK, bedHead);
         Player.BedSleepingProblem rejection = result.left().orElse(null);
 
         // 这三条的顺序就是判据本身:先看原版拒没拒,再看她是不是真躺下了。

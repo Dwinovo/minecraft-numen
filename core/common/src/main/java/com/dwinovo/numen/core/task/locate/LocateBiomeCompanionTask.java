@@ -63,6 +63,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
 
     private Predicate<Holder<Biome>> match;
     private BiomeSource biomeSource;
+    private net.minecraft.world.level.biome.BiomeResolver biomeResolver;
     private Climate.Sampler sampler;
     private int[] yBlocks;          // probe heights, ordered outward from entity Y
     private int centerX, centerZ;   // block coords of the search origin
@@ -93,7 +94,9 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             return;
         }
         biomeSource = sl.getChunkSource().getGenerator().getBiomeSource();
-        sampler = sl.getChunkSource().randomState().sampler();
+        biomeResolver = biomeSource.createResolver(sampler);
+        sampler = sl.getChunkSource().randomState()
+                .createClimateSampler(net.minecraft.world.level.levelgen.densityfunction.SamplerContext.EMPTY_UNCACHED);
         yBlocks = Mth.outFromOrigin(player.getBlockY(),
                 sl.getMinY() + 1, sl.getMaxY(), Y_STEP_BLOCKS).toArray();
         centerX = player.getBlockX();
@@ -192,7 +195,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
         int qx = QuartPos.fromBlock(x);
         int qz = QuartPos.fromBlock(z);
         for (int y : yBlocks) {
-            Holder<Biome> biome = biomeSource.getNoiseBiome(qx, QuartPos.fromBlock(y), qz, sampler);
+            Holder<Biome> biome = biomeResolver.getNoiseBiome(qx, QuartPos.fromBlock(y), qz);
             if (match.test(biome)) {
                 return new BlockPos(x, y, z);
             }

@@ -61,7 +61,7 @@ public final class CreativeApi {
             int n = Math.min(remaining, item.getDefaultMaxStackSize());
             ItemStack stack = new ItemStack(item, n);
             if (!companion.getInventory().add(stack) && !stack.isEmpty()) {
-                companion.drop(stack, false);
+                companion.drop(stack, false, net.minecraft.util.Prediction.SERVER_ONLY);
             }
             remaining -= n;
         }

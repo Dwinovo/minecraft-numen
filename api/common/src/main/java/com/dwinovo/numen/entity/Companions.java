@@ -18,6 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.minecraft.util.Prediction;
 
 /**
  * Coordinates companion lifecycle on top of {@link CompanionFactory} (body
@@ -446,7 +447,7 @@ public final class Companions {
     private static void dropEverything(NumenPlayer body) {
         for (GearSlot slot : NumenPlugins.gearSlots(body)) {
             ItemStack worn = slot.swap(ItemStack.EMPTY);
-            if (!worn.isEmpty()) body.drop(worn, true, false);
+            if (!worn.isEmpty()) body.drop(worn, true, Prediction.SERVER_ONLY);
         }
         body.getInventory().dropAll();
     }

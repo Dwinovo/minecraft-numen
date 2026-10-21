@@ -567,7 +567,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 疾跑会让原版取消暴击判定(Player.attack 里 flag1 带 !isSprinting)。
         player.setSprinting(false);
         player.attack(victim);
-        player.swing(InteractionHand.MAIN_HAND);
+        player.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         r.strike(victim.getId());
     }
 

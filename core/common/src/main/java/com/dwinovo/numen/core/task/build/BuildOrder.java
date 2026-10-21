@@ -76,7 +76,7 @@ public final class BuildOrder {
                 || b instanceof net.minecraft.world.level.block.BasePressurePlateBlock
                 || b instanceof net.minecraft.world.level.block.BaseRailBlock
                 || b instanceof net.minecraft.world.level.block.DiodeBlock
-                || b instanceof net.minecraft.world.level.block.RedStoneWireBlock
+                || b instanceof net.minecraft.world.level.block.RedstoneWireBlock
                 || b instanceof net.minecraft.world.level.block.CarpetBlock
                 || b instanceof net.minecraft.world.level.block.BushBlock
                 || b instanceof net.minecraft.world.level.block.FlowerPotBlock

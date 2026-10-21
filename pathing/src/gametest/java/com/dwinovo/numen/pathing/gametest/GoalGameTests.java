@@ -334,7 +334,7 @@ public class GoalGameTests {
                     if (!pushed[0]) {
                         pushed[0] = true;
                         r.body.setDeltaMovement(0.9, 0, 0);
-                        r.body.hurtMarked = true;
+                        r.body.markHurtForTest();
                     } else if (r.body.onGround() && r.body.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6) {
                         release.countDown();
                         // 放行之后搜索回来的那一刻与她报到的那一刻之间不靠墙钟:等它回来

@@ -70,7 +70,7 @@ final class BuildShowmanship {
         // ——每批都触发就是每秒十下,手臂永远画不完一个来回,看起来是抽搐不是干活。
         boolean swung = --swingCooldown <= 0;
         if (swung) {
-            player.swing(InteractionHand.MAIN_HAND);
+            player.swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
             swingCooldown = SWING_PERIOD_TICKS;
         }
         if (sample != null) {
