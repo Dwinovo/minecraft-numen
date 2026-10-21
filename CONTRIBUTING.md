@@ -20,16 +20,22 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 ./gradlew :numen:fabric:build :numen:neoforge:build
 ./gradlew :ai:test :script:test :agent:test :numen-api:common:test :numen:common:test
 ./gradlew :numen:neoforge:runGameTestServer
-# 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟,不进 CI)
-# End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min, not in CI)
+./gradlew :numen:fabric:runGameTestServer
+./gradlew :plugins:tlm:runGameTestServer      # 车万女仆联动的那一批,单开一次跑批 / the Touhou Little Maid integration cases, a run of their own
+# 以上三条 GameTest(要先跑过 datagenAll)每次推送在 GitHub Actions 里并行跑。测试服务器每刻开头等寻路与程序的后台线程停下再往下走,
+# 结果不看机器快慢。/ The three GameTest runs above (run datagenAll first) run in parallel on every push in GitHub Actions. The test server waits at the start of every tick for the pathing and program background threads to settle, so results do not depend on machine speed.
+# 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟)
+# End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min)
 ./gradlew :numen:neoforge:e2eTest
-# Paper 端(第一次要下载 Paper 服务端;都不进 CI)
-# Paper side (the first run downloads the Paper server; neither is in CI)
+# Paper 端(第一次要下载 Paper 服务端)
+# Paper side (the first run downloads the Paper server)
 ./gradlew :numen:paper:e2eTest                # 同一批端到端场景对着 Paper 服,约 4 分钟 / the same scenarios against a Paper server, ~4 min
 ./gradlew :numen:paper:runGameTestServer      # 同一批 GameTest 在 Paper 上跑,按 20 刻每秒、用每条用例自己写的时限,至少半小时 / the same GameTests on Paper, real time at 20 TPS with each case's own time limit, 30+ min
-# 排查用的两个开关,加在上一条命令后面 / two switches for investigating, appended to the command above:
-#   -PgametestOnly='<用例名的正则>'   只跑名字匹配的用例 / run only the cases whose name matches
-#   -PgametestMaxTicks=2400          把每条用例的时限收短到这么多刻,看哪些没做成 / cap each case's time limit to find what is stuck
+# 端到端与 Paper 的 GameTest 时间长,不跟着推送跑;在 GitHub 的 Actions 页手动触发 "Slow tests"。
+# The end-to-end runs and the Paper GameTest are long and do not run on push; trigger "Slow tests" by hand on the Actions page.
+# 排查用的两个开关,加在 runGameTestServer 命令后面(Paper)/ two switches for investigating, appended to the Paper runGameTestServer command:
+#   -PgametestOnly='<完整用例名的正则>'   只跑名字匹配的用例;正则要匹配完整名 numen.<类名小写>.<用例名>,如 'numen\.braingametests\..*',写 'braingametests.*' 一条也选不中 / run only the cases whose full name matches; the regex must match the whole name numen.<lowercase class>.<case>, e.g. 'numen\.braingametests\..*', while 'braingametests.*' selects nothing
+#   -PgametestMaxTicks=2400              把每条用例的时限收短到这么多刻,看哪些没做成 / cap each case's time limit to find what is stuck
 ```
 
 ## 授权 / License

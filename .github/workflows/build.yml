@@ -1,6 +1,6 @@
 name: Build
 
-# 只回答一个问题:git 里的东西能不能编译。
+# 只回答一个问题:git 里的东西能不能编译、测试过不过(单测与各加载器的 GameTest)。
 #
 # 发版(publish.yml)认的就是这里对被发那个提交的结论,自己不再跑一遍。
 #
@@ -54,7 +54,7 @@ jobs:
       - name: Assemble all loaders
         run: ./gradlew assemble --no-daemon -x javadoc
 
-      # 纯 JVM 测试,不起游戏,几十秒。GameTest 要拉整个客户端,不进 CI。
+      # 纯 JVM 测试,不起游戏,几十秒。GameTest 起的是无头测试服务器,在下面的 gametest 任务里并行跑。
       # 数据生成:语言文件、方块标签都是生成出来的,不跑就发现不了"provider 改了但
       # 生成任务炸了"这类问题——发版流水线曾经因此在 Forge 分支上整步失败,而这里
       # 一路绿灯。datagenAll 由构建自己按分支挑 loader,CI 不做探测。
@@ -89,4 +89,57 @@ jobs:
         with:
           name: test-report
           path: "**/build/reports/tests/test/"
+          retention-days: 7
+
+  # GameTest:无头的测试服务器,每次推送都跑,各平台并行。NeoForge 那一路带上车万女仆的那一批(它要单开一次跑批,见
+  # plugins/tlm/build.gradle)。测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。
+  # 端到端和 Paper 的 GameTest 时间长,不在这里,见 slow-tests.yml。
+  gametest:
+    name: GameTest (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: neoforge
+            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer"
+          - name: fabric
+            tasks: ":numen:fabric:runGameTestServer"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Read target JDK from gradle.properties
+        id: props
+        shell: bash
+        run: |
+          echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java ${{ steps.props.outputs.java_version }}
+        uses: actions/setup-java@v6
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # 语言文件、方块标签是生成出来的,不进版本库,测试服务器要读它们
+      - name: Run data generation
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      # 一路挂了不拦着另一路跑完,两路的结果都要看
+      - name: Run GameTest
+        run: ./gradlew ${{ matrix.tasks }} --no-daemon --continue
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest-${{ matrix.name }}
+          path: |
+            **/runs/gametestserver/logs/
+            **/runs/gametestserver/crash-reports/
+            **/build/reports/
           retention-days: 7

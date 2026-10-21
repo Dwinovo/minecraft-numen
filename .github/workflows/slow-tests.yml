@@ -1,0 +1,67 @@
+name: Slow tests
+
+# 端到端(起一台真的专用服,用原版客户端协议走一遍玩家能做的事)与 Paper 的 GameTest:时间长,不跟着每次推送跑,
+# 要跑时手动触发。每次推送都跑的在 build.yml(编译、单测、各模组加载器的 GameTest)。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  slow:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: e2e (neoforge)
+            task: ":numen:neoforge:e2eTest"
+            minutes: 30
+          # 第一次要下载 Paper 服务端
+          - name: e2e (paper)
+            task: ":numen:paper:e2eTest"
+            minutes: 30
+          # 按 20 刻每秒、用每条用例自己写的时限跑(挖掘进度按墙钟,不能加速),见 docs/paper.md
+          - name: GameTest (paper)
+            task: ":numen:paper:runGameTestServer"
+            minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Read target JDK from gradle.properties
+        id: props
+        shell: bash
+        run: |
+          echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java ${{ steps.props.outputs.java_version }}
+        uses: actions/setup-java@v6
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Run data generation
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      - name: Run ${{ matrix.name }}
+        run: ./gradlew ${{ matrix.task }} --no-daemon
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: slow-${{ strategy.job-index }}
+          path: |
+            **/runs/e2e/logs/
+            **/runs/e2e/*.log
+            **/runs/gametest/*.log
+            **/runs/gametest/gametest-result.json
+            **/build/reports/
+          retention-days: 7
