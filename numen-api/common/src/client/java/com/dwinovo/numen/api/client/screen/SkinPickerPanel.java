@@ -62,8 +62,9 @@ public final class SkinPickerPanel extends ModalCard {
 
     private static final int ROW_H = 20;
     private static final int HEADING_H = 13;
-    private static final int NOTE_H = 14;
+    private static final int NOTE_LINE = 10;
     private static final int FACE = 16;
+    /** 列表想要的高;卡被屏幕压矮时列表让出来(见 {@link #layout}),至少留两行。 */
     private static final int LIST_H = 120;
     private static final int LINE_H = 11;
     private static final List<String> ARMS = List.of(SkinProfile.VARIANT_CLASSIC, SkinProfile.VARIANT_SLIM);
@@ -82,7 +83,7 @@ public final class SkinPickerPanel extends ModalCard {
 
     private Button wear;
     private Dropdown armPick;
-    private int listX, listY, listW;
+    private int listX, listY, listW, listH = LIST_H;
     private int statusY;
 
     public SkinPickerPanel(Host host) {
@@ -187,7 +188,12 @@ public final class SkinPickerPanel extends ModalCard {
 
     @Override
     int height() {
-        return heightFor(headH() + LIST_H + 4 + ROW_H + (admin() ? FIELD_H + 2 : 0) + LINE_H + 2);
+        return heightFor(headH() + LIST_H + belowList());
+    }
+
+    /** 列表下面的几样:手臂行、管理员的 key 行、状态行。 */
+    private int belowList() {
+        return 4 + ROW_H + (admin() ? FIELD_H + 2 : 0) + LINE_H + 2;
     }
 
     @Override
@@ -218,7 +224,10 @@ public final class SkinPickerPanel extends ModalCard {
         listX = px;
         listY = ry;
         listW = pw;
-        ry += LIST_H + 4;
+        // 卡的高由屏幕封顶(面板不够高时比 height() 矮):列表是唯一能伸缩的,让出来的高度各行才都在框里
+        int fixed = DialogBox.TITLE_H + headH() + belowList() + BODY_BOTTOM + DialogBox.FOOTER_H;
+        listH = Math.clamp(h - fixed, ROW_H * 2, LIST_H);
+        ry += listH + 4;
         armPick = select(ry, t(ModLanguageData.Keys.SKIN_ARM), List.of(t(ModLanguageData.Keys.SKIN_VARIANT_CLASSIC),
                 t(ModLanguageData.Keys.SKIN_VARIANT_SLIM)), Math.max(0, ARMS.indexOf(arm)),
                 i -> arm = ARMS.get(Math.clamp(i, 0, ARMS.size() - 1)));
@@ -327,7 +336,13 @@ public final class SkinPickerPanel extends ModalCard {
     // ---- 画与点 ----
 
     private int rowH(Row row) {
-        return row instanceof Row.Heading ? HEADING_H : row instanceof Row.Note ? NOTE_H : ROW_H;
+        return row instanceof Row.Heading ? HEADING_H : row instanceof Row.Note note ? noteLines(note).size() * NOTE_LINE + 4 : ROW_H;
+    }
+
+    /** 说明按列表宽折行:完整显示,不截断。 */
+    private List<String> noteLines(Row.Note note) {
+        return com.dwinovo.numen.api.client.ui.TextWrap.wrap(note.text(), listW - 8,
+                net.minecraft.client.Minecraft.getInstance().font::width, 0);
     }
 
     private int contentH() {
@@ -336,7 +351,7 @@ public final class SkinPickerPanel extends ModalCard {
 
     /** 鼠标下是第几行;不在列表上是 -1。 */
     private int rowAt(double mx, double my) {
-        if (mx < listX || mx >= listX + listW || my < listY || my >= listY + LIST_H) {
+        if (mx < listX || mx >= listX + listW || my < listY || my >= listY + listH) {
             return -1;
         }
         int at = listY - scrollPx;
@@ -360,23 +375,23 @@ public final class SkinPickerPanel extends ModalCard {
         }
         wear.setEnabled(selected >= 0 && !waiting());
         armPick.setEnabled(selected >= 0 && rows.get(selected) instanceof Row.Item && !waiting());
-        int max = Math.max(0, contentH() - LIST_H);
+        int max = Math.max(0, contentH() - listH);
         scrollPx = Math.clamp(scrollPx, 0, max);
-        s.pushScissor(listX, listY, listW, LIST_H);
+        s.pushScissor(listX, listY, listW, listH);
         int hot = rowAt(mouseX, mouseY);
         int at = listY - scrollPx;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
             int h = rowH(row);
-            if (at + h > listY && at < listY + LIST_H) {
+            if (at + h > listY && at < listY + listH) {
                 paintRow(s, c, row, i, at, h, i == hot, worn);
             }
             at += h;
         }
         s.popScissor();
         if (max > 0) {   // 一条细滚动条
-            int barH = Math.max(12, LIST_H * LIST_H / contentH());
-            int barY = listY + (LIST_H - barH) * scrollPx / max;
+            int barH = Math.max(12, listH * listH / contentH());
+            int barY = listY + (listH - barH) * scrollPx / max;
             s.fillRect(listX + listW - 2, barY, 2, barH, c.textMuted());
         }
         int[] color = {c.textSecondary()};
@@ -390,7 +405,12 @@ public final class SkinPickerPanel extends ModalCard {
         int tx = listX + 4;
         switch (row) {
             case Row.Heading heading -> s.drawText(heading.text(), tx, at + 3, c.accent(), false);
-            case Row.Note note -> s.drawText(TextClip.fit(s, note.text(), listW - 8), tx, at + 3, c.textSecondary(), false);
+            case Row.Note note -> {
+                List<String> lines = noteLines(note);
+                for (int i = 0; i < lines.size(); i++) {
+                    s.drawText(lines.get(i), tx, at + 3 + i * NOTE_LINE, c.textSecondary(), false);
+                }
+            }
             case Row.Default ignored -> {
                 paintBase(s, c, index, at, h, hot);
                 PlayerFaceRenderer.draw(s.graphics(), DefaultPlayerSkin.get(host.uuid()), tx, at + (h - FACE) / 2, FACE);
