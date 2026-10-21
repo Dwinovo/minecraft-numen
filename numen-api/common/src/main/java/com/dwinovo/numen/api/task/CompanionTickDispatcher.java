@@ -97,7 +97,17 @@ public final class CompanionTickDispatcher {
     /** 一次性心跳日志:证明排程机器的 tick 钩子真的接上了(排查"闲时链不触发"时先看它)。 */
     private static boolean heartbeatLogged;
 
+    /** 每个服务器刻开头、什么都没做之前先调的钩子,按登记先后。 */
+    private static final List<java.util.function.Consumer<MinecraftServer>> BEFORE_TICK =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** 登记一个每刻开头的钩子:开发期的 GameTest 在这里等后台工作告一段落,产品里没有人登记。 */
+    public static void beforeTick(java.util.function.Consumer<MinecraftServer> hook) {
+        BEFORE_TICK.add(hook);
+    }
+
     public static void tick(MinecraftServer server) {
+        BEFORE_TICK.forEach(hook -> hook.accept(server));
         if (!heartbeatLogged) {
             heartbeatLogged = true;
             com.dwinovo.numen.api.Constants.LOG.info("[numen-task] scheduler heartbeat online (first server tick)");

@@ -31,4 +31,9 @@ public final class PathingGameTestSuite implements GameTestSuite {
                 UpDownGameTests.class
         );
     }
+
+    @Override
+    public List<java.util.function.Supplier<String>> background() {
+        return List.of(com.dwinovo.numen.pathing.search.Searches::busy);
+    }
 }

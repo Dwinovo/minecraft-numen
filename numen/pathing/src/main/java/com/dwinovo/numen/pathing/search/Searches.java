@@ -29,6 +29,13 @@ public final class Searches {
         return POOL_SIZE;
     }
 
+    /** 池里此刻有没有搜索在算或排着队:有就是一句说明,没有是 {@code null}。只读,不改任何状态。 */
+    public static String busy() {
+        int running = POOL.getActiveCount();
+        int queued = POOL.getQueue().size();
+        return running == 0 && queued == 0 ? null : running + " pathing search(es) running, " + queued + " queued";
+    }
+
     private static ThreadPoolExecutor pool() {
         ThreadPoolExecutor pool = new ThreadPoolExecutor(POOL_SIZE, POOL_SIZE, 60, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(), task -> {

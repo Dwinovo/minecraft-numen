@@ -12,4 +12,12 @@ public interface GameTestSuite {
 
     /** 这个模块的用例类:类里的 {@code @GameTest}、{@code @BeforeBatch}、{@code @AfterBatch}、{@code @GameTestGenerator} 方法都是静态的。 */
     List<Class<?>> classes();
+
+    /**
+     * 这个模块的用例会用到的、跑在服务器主线程之外的后台工作(Numen API 自己的程序已经算在内):每一项答"此刻还没停下的是什么",
+     * 停下了答 {@code null}。每个服务器刻开头都要等它们全停下才往下走,结果到得早晚就和机器快慢无关({@link BackgroundSettle})。
+     */
+    default List<java.util.function.Supplier<String>> background() {
+        return List.of();
+    }
 }

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
@@ -306,6 +307,8 @@ public class GoalGameTests {
         t.fill(10, 1, 3, 14, 1, 7, Blocks.STONE_PRESSURE_PLATE);
         TestBody body = t.body(8, 1, 5);
         CountDownLatch release = new CountDownLatch(1);
+        // 线程池是故意占满的,每刻开头不等它空下来;放行的那一刻起照常等
+        BackgroundSettle.hold(10);
         for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
             Searches.submit(cancelled -> {
                 try {
@@ -326,6 +329,7 @@ public class GoalGameTests {
                         r.body.hurtMarked = true;
                     } else if (r.body.onGround() && r.body.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6) {
                         release.countDown();
+                        BackgroundSettle.release();
                         // 放行之后搜索回来的那一刻与她报到的那一刻之间不靠墙钟:等它回来
                         r.awaitSearch();
                     }

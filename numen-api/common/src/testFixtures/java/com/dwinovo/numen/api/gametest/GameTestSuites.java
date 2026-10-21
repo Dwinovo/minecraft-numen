@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.gametest;
 
+import com.dwinovo.numen.api.program.ServerPrograms;
 import com.mojang.logging.LogUtils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,6 +14,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -72,16 +74,20 @@ public final class GameTestSuites {
             StructureUtils.testStructuresDir = structures;
         }
         List<TestFunction> out = new ArrayList<>();
+        List<Supplier<String>> background = new ArrayList<>();
+        background.add(ServerPrograms::busy);
         for (String name : selection()) {
             GameTestSuite suite = find(name);
             if (suite == null) {
                 LOG.warn("[numen-gametest] 选了套件 {},类路径上找不到 {}{}", name, REGISTRY, name);
                 continue;
             }
+            background.addAll(suite.background());
             for (Class<?> type : suite.classes()) {
                 collect(name, type, out);
             }
         }
+        BackgroundSettle.install(background);
         return out;
     }
 

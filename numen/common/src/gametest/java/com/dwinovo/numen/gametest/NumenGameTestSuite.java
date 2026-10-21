@@ -44,4 +44,9 @@ public final class NumenGameTestSuite implements GameTestSuite {
                 TaskControlGameTests.class
         );
     }
+
+    @Override
+    public List<java.util.function.Supplier<String>> background() {
+        return List.of(com.dwinovo.numen.pathing.search.Searches::busy);
+    }
 }

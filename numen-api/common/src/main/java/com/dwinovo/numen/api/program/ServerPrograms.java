@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.script.Modules;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -226,6 +227,19 @@ public final class ServerPrograms {
             running = RUNNING.get(companion);
         }
         return running == null || running.program == null || running.program.idle();
+    }
+
+    /**
+     * 有没有程序此刻还在自己的线程上算(执行体上有活在做或排着):有就是一句说明,点出是哪几具身体,都停在等服务端的事上是
+     * {@code null}。只读。
+     */
+    public static String busy() {
+        List<UUID> computing;
+        synchronized (RUNNING) {
+            computing = RUNNING.values().stream().filter(r -> r.program != null && !r.program.idle())
+                    .map(r -> r.companion).toList();
+        }
+        return computing.isEmpty() ? null : "programs still computing on " + computing;
     }
 
     /** 这具身体上此刻有没有程序在跑。 */
