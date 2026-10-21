@@ -65,6 +65,7 @@ public final class GameTestSuites {
 
     @GameTestGenerator
     public static Collection<TestFunction> all() {
+        TestLibraries.install();
         // 模板在登记之后才加载,目录赶在这之前指好
         String structures = System.getProperty(STRUCTURES);
         if (structures != null) {

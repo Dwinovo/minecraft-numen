@@ -314,7 +314,7 @@ public class ScriptGameTests {
     static {
         if (GameTestKit.numenTestsEnabled()) {
             // 放进这次 GameTest 专用的服务器目录里,和 jar 同步下来的内置模块在同一处
-            GameTestKit.builtinModule(COPIED, """
+            com.dwinovo.numen.api.gametest.TestLibraries.builtinModule(COPIED, """
                     -- Test fixture: a built-in module to change, delete and reset.
                     local M = {}
                     ---Say which version this is.

@@ -839,46 +839,6 @@ public final class GameTestKit {
 
     private static final List<Live> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-    /** 这一次 GameTest 运行专用的库(内置从 jar 同步下来,她的模块与技能落在这里):只用内置原版,不读主人目录里的。 */
-    private static com.dwinovo.numen.api.library.LibraryHub libraries;
-    private static final java.util.UUID LIBRARY_OWNER = java.util.UUID.randomUUID();
-
-    /** 夹具模块(名字到正文),建库时放进内置组。用例类的静态块登记它们,那时库不能建:内置内容要等各模组都登记过才同步得到。 */
-    private static final java.util.Map<String, String> FIXTURE_MODULES = new java.util.LinkedHashMap<>();
-
-    private static synchronized com.dwinovo.numen.api.library.LibraryHub libraries() {
-        if (libraries == null) {
-            try {
-                libraries = com.dwinovo.numen.api.library.LibraryHub.headless(
-                        java.nio.file.Files.createTempDirectory("numen-gametest-lib-"));
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-            FIXTURE_MODULES.forEach((name, code) -> {
-                int dot = name.indexOf('.');
-                libraries.server(com.dwinovo.numen.api.script.Modules.KIND)
-                        .write(new com.dwinovo.numen.api.library.EntryId(name.substring(0, dot), name.substring(dot + 1)), code);
-            });
-        }
-        return libraries;
-    }
-
-    /** 登记一个内置模块(夹具),建库时和 jar 同步下来的内置模块放在同一处。 */
-    public static synchronized void builtinModule(String name, String code) {
-        FIXTURE_MODULES.put(name, code);
-    }
-
-    static {
-        // 服务器起好时产品把模块与技能的落点指到了主人的目录(名册上有的同伴才有主人),这里的同伴没有登记:落点拿回来。
-        // 排在所有开工之后(见 ServerLifecycle#afterStarted),这时各模组也都登记过内置内容了
-        com.dwinovo.numen.api.platform.ServerLifecycle.afterStarted(server -> {
-            com.dwinovo.numen.api.script.Modules.init(
-                    uuid -> libraries().library(com.dwinovo.numen.api.script.Modules.KIND, LIBRARY_OWNER));
-            com.dwinovo.numen.api.agent.skill.SkillRegistry.init(
-                    uuid -> libraries().library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, LIBRARY_OWNER));
-        });
-    }
-
     /**
      * 每刻调一次(用例的步骤每刻都经 {@link Steps}):在跑的程序让还没回的调用看一眼它派下的活——调度器认得出的活这一刻记下,
      * 收尾后记录就送走了,晚一刻再看就看不到。程序跑完的摘掉。
