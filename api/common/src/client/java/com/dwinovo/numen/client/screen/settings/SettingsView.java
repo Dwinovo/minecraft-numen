@@ -884,7 +884,7 @@ public final class SettingsView {
             java.nio.file.Path dir = Minecraft.getInstance().gameDirectory.toPath()
                     .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT).resolve("skills");
             java.nio.file.Files.createDirectories(dir);
-            net.minecraft.util.Util.getPlatform().openUri(dir.toUri());
+            java.awt.Desktop.getDesktop().open(dir.toFile());
         } catch (Exception ex) {
             com.dwinovo.numen.Constants.LOG.warn("[numen] open skills folder failed: {}", ex.toString());
         }
@@ -996,11 +996,17 @@ public final class SettingsView {
     private void openNativeSkinPicker() {
         new Thread(() -> {
             String chosen = null;
-            try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
-                var filters = stack.mallocPointer(1);
-                filters.put(stack.UTF8("*.png")).flip();
-                chosen = org.lwjgl.util.tinyfd.TinyFileDialogs.tinyfd_openFileDialog(
-                        "Numen skin (64x64 png)", null, filters, "PNG", false);
+            try {
+                // 26.3 移除了 LWJGL 的 tinyfd，改用 AWT 原生文件对话框。
+                java.awt.FileDialog dialog =
+                        new java.awt.FileDialog((java.awt.Frame) null, "Numen skin (64x64 png)",
+                                java.awt.FileDialog.LOAD);
+                dialog.setFilenameFilter((dir, name) -> name.toLowerCase(java.util.Locale.ROOT).endsWith(".png"));
+                dialog.setVisible(true);
+                String name = dialog.getFile();
+                if (name != null) {
+                    chosen = new java.io.File(dialog.getDirectory(), name).getAbsolutePath();
+                }
             } catch (Throwable t) {
                 com.dwinovo.numen.Constants.LOG.warn("[numen-skin] native file dialog unavailable", t);
             }

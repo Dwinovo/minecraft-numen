@@ -74,7 +74,7 @@ public final class DigRules {
     @SuppressWarnings("deprecation")
     private static boolean melts(WorldView view, BlockPos pos) {
         BlockState below = view.getBlockState(pos.below());
-        return below.blocksMotion() || below.liquid();
+        return below.isSolid() || below.liquid();
     }
 
     /** 水平邻格的液体会不会流进挖空的格。 */

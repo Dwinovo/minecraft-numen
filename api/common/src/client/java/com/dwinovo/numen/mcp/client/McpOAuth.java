@@ -117,7 +117,7 @@ final class McpOAuth {
             String scope = joinStrings(prm, "scopes_supported");
             if (scope != null) url.append("&scope=").append(enc(scope));
             Constants.LOG.info("[numen-mcp-oauth] opening browser to authorize '{}'", spec.name());
-            net.minecraft.util.Util.getPlatform().openUri(URI.create(url.toString()));
+            java.awt.Desktop.getDesktop().browse(URI.create(url.toString()));
 
             // 6. Wait for the loopback redirect.
             String[] result = cb.future.get(AUTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);   // [code, state]

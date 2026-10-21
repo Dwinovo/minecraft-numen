@@ -29,7 +29,9 @@ public final class FabricModBlockTagsProvider extends FabricTagsProvider.BlockTa
             return ModItemTagData.appender(
                     v -> b.add(net.minecraft.core.registries.BuiltInRegistries.BLOCK
                             .getResourceKey(v).orElseThrow()),
-                    t -> b.forceAddTag(t));
+                    // 26.3: Fabric 的 appender 方法改成 mixin 注入到原版类上,编译期原版
+                    // 类型看不见它们,必须显式转型到接口(运行时实现由 mixin 补上)。
+                    t -> ((net.fabricmc.fabric.api.datagen.v1.provider.FabricTagAppender<net.minecraft.world.level.block.Block>) b).forceAddTag(t));
         });
     }
 }

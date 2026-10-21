@@ -122,6 +122,6 @@ public final class FakeClient {
         }
         int id = awaitingTeleport;
         awaitingTeleport = -1;
-        player.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id));
+        player.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id, player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()));
     }
 }

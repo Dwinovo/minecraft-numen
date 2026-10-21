@@ -1984,7 +1984,7 @@ public class BuildGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         try {
-            var template = server.getStructureManager()
+            var template = server.getStructureTemplateManager()
                     .get(net.minecraft.resources.Identifier.parse("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
@@ -2989,8 +2989,8 @@ public class BuildGameTests {
                     helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
                     var wire = level.getBlockState(o.offset(2, 0, 0));
                     helper.assertTrue(wire.is(Blocks.REDSTONE_WIRE), "the wire is not there: " + wire);
-                    var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
-                    var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
+                    var east = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.EAST);
+                    var west = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.WEST);
                     helper.assertTrue(
                             east == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE
                                     && west == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE,

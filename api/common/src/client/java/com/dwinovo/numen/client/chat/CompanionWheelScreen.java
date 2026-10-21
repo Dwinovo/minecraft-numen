@@ -28,7 +28,6 @@ import com.dwinovo.numen.client.skin.ConversationFaces;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
@@ -103,9 +102,15 @@ public class CompanionWheelScreen extends Screen {
         }
         InputConstants.Key key = InputConstants.getKey(k.saveString());
         if (key.getType() == InputConstants.Type.MOUSE) {
-            return GLFW.glfwGetMouseButton(window.handle(), key.getValue()) == GLFW.GLFW_PRESS;
+            // 26.3: GLFW 换成 SDL3，鼠标按键状态走原版 MouseHandler。
+            return switch (key.getValue()) {
+                case 0 -> net.minecraft.client.Minecraft.getInstance().mouseHandler.isLeftPressed();
+                case 1 -> net.minecraft.client.Minecraft.getInstance().mouseHandler.isRightPressed();
+                case 2 -> net.minecraft.client.Minecraft.getInstance().mouseHandler.isMiddlePressed();
+                default -> false;
+            };
         }
-        return InputConstants.isKeyDown(window, key.getValue());
+        return InputConstants.isKeyDown(key.getValue());
     }
 
     /**

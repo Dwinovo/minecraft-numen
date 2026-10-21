@@ -30,6 +30,12 @@ import net.minecraft.world.level.GameType;
  */
 final class TestBody extends ServerPlayer implements Body {
 
+    /** 26.3 删了 Entity.hurtMarked 字段，测试要复现"被打了一下"就走这里。 */
+    void markHurtForTest() {
+        markHurt();
+    }
+
+
     private final Controls controls = new Controls();
 
     private TestBody(MinecraftServer server, ServerLevel level, GameProfile profile) {

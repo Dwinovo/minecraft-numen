@@ -112,7 +112,10 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.cause());
             buf.writeBoolean(line.irreversible());
         }
-        buf.writeCollection(p.remember, (b, row) -> Wire.TO_CLIENT.text().encode(b, row));
+        buf.writeVarInt(p.remember.size());
+        for (String row : p.remember) {
+            Wire.TO_CLIENT.text().encode(buf, row);
+        }
         buf.writeVarInt(p.blocks.size());
         for (long b : p.blocks) {
             buf.writeLong(b);
@@ -141,7 +144,11 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
             lines.add(new Line(kind, icon, name, count, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf),
                     buf.readBoolean()));
         }
-        List<String> remember = buf.readList(b -> Wire.TO_CLIENT.text().decode(b));
+        int rememberCount = buf.readVarInt();
+        List<String> remember = new ArrayList<>(rememberCount);
+        for (int i = 0; i < rememberCount; i++) {
+            remember.add(Wire.TO_CLIENT.text().decode(buf));
+        }
         n = buf.readVarInt();
         List<Long> blocks = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {

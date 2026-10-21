@@ -24,7 +24,7 @@ public class NumenMod {
         // hot-reload from this point on. SPEC is built lazily in the
         // NeoForgeNumenConfig static initialiser so referencing it here is
         // safe (no I/O happens until the world loads).
-        container.registerConfig(ModConfig.Type.COMMON, NeoForgeNumenConfig.SPEC);
+        container.registerConfig(ModConfig.Type.LOCAL, NeoForgeNumenConfig.SPEC);
 
         // Queue payload registrations into NeoForgeNetworkChannel; the queue
         // flushes when RegisterPayloadHandlersEvent fires (see below).
