@@ -1,9 +1,11 @@
 package com.dwinovo.numen.api.platform;
 
 import com.dwinovo.numen.api.brain.OwnerPresence;
+import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.network.payload.CompanionListPayload;
+import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Set;
@@ -18,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PlayerSessions {
 
-    /** 已经推过名册的玩家。 */
+    /** 已经开过场(发过 {@link ServerHelloPayload})的玩家。 */
     private static final Set<UUID> ANNOUNCED = ConcurrentHashMap.newKeySet();
 
     static {
@@ -27,7 +29,7 @@ public final class PlayerSessions {
 
     private PlayerSessions() {}
 
-    /** 一位玩家登入了:他名下沉睡的同伴排队等着回来,同伴名册发给他。 */
+    /** 一位玩家登入了:他名下沉睡的同伴排队等着回来,对他的客户端开场。 */
     public static void joined(ServerPlayer player) {
         if (player instanceof NumenPlayer) {
             return;
@@ -35,22 +37,24 @@ public final class PlayerSessions {
         // 只排队,不在这儿恢复:登入事件跑在原版 placeNewPlayer 内部,在这里出的任何异常都会打断主人的入场,
         // 客户端只看到"无效的玩家数据"。
         Companions.scheduleRestoreFor(player.getUUID());
-        // 模组上登入时他的连接已经能收我们的包,名册就在这里推出去;Paper 上 Fabric 客户端要进游戏之后才登记频道,
-        // 这一刻推不出去,由频道登记的事件再调一次 channelReady
+        // 模组上登入时他的连接已经能收我们的包,开场就在这里发;Paper 上 Fabric 客户端要进游戏之后才登记频道,
+        // 这一刻发不出去,由频道登记的事件再调一次 channelReady
         channelReady(player);
     }
 
     /**
-     * 这位玩家在世界里、他的连接也能收我们的包了:把同伴名册推给他。客户端收到名册才向服务端报到(Hello),
-     * 所以这一步不做,他永远不会报到。两个条件谁后成立,谁来调——登入和频道登记各调一次;一次会话里只推一次(重复调用无害)。
+     * 这位玩家在世界里、他的连接也登记了开场的频道:发 {@link ServerHelloPayload},告诉他的客户端服务端说哪一版协议。
+     * 由服务端先开口,是因为客户端自己不知道这两个条件什么时候齐——Fabric 客户端触发进服事件在它登记频道之前。
+     * 客户端版本对得上就报到(Hello),名册和别的东西等报到之后才发(见 {@code Replies#hello})。两个条件谁后成立,谁来调——
+     * 登入和频道登记各调一次;一次会话里只开一次场(重复调用无害)。
      */
     public static void channelReady(ServerPlayer player) {
         if (player instanceof NumenPlayer || !player.server.getPlayerList().getPlayers().contains(player)
-                || !Services.network().canSend(player, CompanionListPayload.TYPE)
+                || !Services.network().canSend(player, ServerHelloPayload.TYPE)
                 || !ANNOUNCED.add(player.getUUID())) {
             return;
         }
-        Companions.syncRosterToOwner(player.server, player);
+        NumenNetwork.sendToPlayer(player, new ServerHelloPayload(Presence.PROTOCOL));
     }
 
     /** 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。 */

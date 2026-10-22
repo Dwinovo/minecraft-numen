@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.config.Authority;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
@@ -36,16 +37,19 @@ public final class Replies {
 
     private Replies() {}
 
-    /** 客户端报到:回答协议版本、是否管理员、是否房主;版本对得上的,补给他名下各大脑此刻的样子和会话列表。 */
+    /**
+     * 客户端报到。版本对不上就什么也不回:开场那包已经告诉过它服务端的版本,再发的它都读不懂。对得上的,回答是否管理员、
+     * 是否房主,推名册,补给他名下各大脑此刻的样子和会话列表。
+     */
     public static void hello(ServerPlayer player, int protocol) {
-        boolean usable = Presence.hello(player.getUUID(), protocol);
-        NumenNetwork.sendToPlayer(player, new HelloAckPayload(Presence.PROTOCOL, Authority.isAdmin(player),
-                Homes.of(player.server).isHost(player.getUUID())));
-        if (!usable) {
+        if (!Presence.hello(player.getUUID(), protocol)) {
             Constants.LOG.info("[numen-net] client of {} speaks protocol {}, this server {}: not served",
                     player.getUUID(), protocol, Presence.PROTOCOL);
             return;
         }
+        NumenNetwork.sendToPlayer(player, new HelloAckPayload(Authority.isAdmin(player),
+                Homes.of(player.server).isHost(player.getUUID())));
+        Companions.syncRosterToOwner(player.server, player);
         CompanionLoops.sendSnapshots(player.getUUID(), link(player.server, player.getUUID()));
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);

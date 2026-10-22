@@ -28,6 +28,7 @@ public final class ClientPayloadSink {
     public static volatile Consumer<NumenStatePayload> state = p -> {};
     public static volatile Consumer<NumenLocationsPayload> locations = p -> {};
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};
+    public static volatile Consumer<com.dwinovo.numen.api.network.payload.ServerHelloPayload> serverHello = p -> {};
     public static volatile Consumer<HelloAckPayload> helloAck = p -> {};
     public static volatile Consumer<FeedPayload> feed = p -> {};
     public static volatile Consumer<HistoryPagePayload> historyPage = p -> {};

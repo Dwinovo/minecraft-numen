@@ -10,8 +10,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * Client → Server: 装了我们的客户端的玩家进服后报到,带着它说的协议版本。服务端回 {@link HelloAckPayload},版本对得上的
- * 随后把这位玩家名下各大脑此刻的样子和会话列表补给他。没报到的玩家(没装客户端)不推任何东西。
+ * Client → Server: 对 {@link ServerHelloPayload} 的回答,客户端说的协议版本。版本对得上,服务端回 {@link HelloAckPayload},
+ * 随后把名册、这位玩家名下各大脑此刻的样子和会话列表补给他;对不上就什么也不发。没报到的玩家(没装客户端、或装的版本不同)
+ * 收不到任何 Numen 包。
+ *
+ * <p><b>格式永远只是一个协议号</b>,理由见 {@link ServerHelloPayload}。
  */
 public record HelloPayload(int protocol) implements CustomPacketPayload {
 

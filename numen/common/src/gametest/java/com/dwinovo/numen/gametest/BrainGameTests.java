@@ -449,20 +449,34 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 装了客户端的主人报到:得到回答(协议版本、是不是管理员),并补上名下大脑此刻的样子与会话列表,整条路经真的发包。 */
+    /**
+     * 装了客户端的主人进服:报到之前服务端只发开场那一包(协议号),名册也等着;报到之后得到回答(是不是管理员)、名册,
+     * 并补上名下大脑此刻的样子与会话列表,整条路经真的发包。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_client_that_says_hello_is_answered_and_caught_up(GameTestHelper helper) throws Exception {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_greeter");
         Brain her = new Brain(helper, "gametest_greeted", Files.createTempDirectory("numen-gametest-brain-"),
                 owner.getUUID());
-        GameTestKit.received(owner);
+        // 开场在平台的登入或频道登记那一刻发;再调一次不重发
+        com.dwinovo.numen.api.platform.PlayerSessions.channelReady(owner);
+        com.dwinovo.numen.api.entity.Companions.syncRosterToOwner(owner.server, owner);
+
+        var before = GameTestKit.received(owner).stream()
+                .filter(p -> p.type().id().getNamespace().equals(com.dwinovo.numen.api.Constants.MOD_ID)).toList();
+        helper.assertTrue(before.size() == 1
+                        && before.get(0) instanceof com.dwinovo.numen.api.network.payload.ServerHelloPayload opener
+                        && opener.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL,
+                "before the hello the server sent more than its opener: " + before);
 
         com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
 
         var sent = GameTestKit.received(owner);
         helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload a
-                        && a.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL && !a.admin()),
+                        && !a.admin()),
                 "no hello answer for an ordinary player: " + sent);
+        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.CompanionListPayload),
+                "the roster was not sent after the hello: " + sent);
         helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.FeedPayload f
                         && f.companion().equals(her.companion.getUUID())
                         && f.events().stream().anyMatch(e -> e instanceof Feed.Status)),
@@ -474,19 +488,19 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 协议版本对不上的客户端不被服务:回答照给,但不推任何她的东西。 */
+    /** 协议版本对不上的客户端不被服务:开场那包已经告诉过它服务端的版本,之后什么也不发——回答、名册、她的东西都不发。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void a_client_of_another_protocol_is_answered_but_not_served(GameTestHelper helper) throws Exception {
+    public static void a_client_of_another_protocol_is_sent_nothing_more(GameTestHelper helper) throws Exception {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_mismatch");
         Brain her = new Brain(helper, "gametest_unserved", Files.createTempDirectory("numen-gametest-brain-"),
                 owner.getUUID());
         GameTestKit.received(owner);
 
         com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL + 1);
+        com.dwinovo.numen.api.entity.Companions.syncRosterToOwner(owner.server, owner);
 
         var sent = GameTestKit.received(owner);
-        helper.assertTrue(sent.size() == 1 && sent.get(0) instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload,
-                "an unserved client got more than the answer: " + sent);
+        helper.assertTrue(sent.isEmpty(), "an unserved client was sent something: " + sent);
         her.close();
         GameTestKit.leave(owner);
         helper.succeed();
@@ -497,6 +511,7 @@ public class BrainGameTests {
     public static void an_ordinary_player_cannot_change_the_servers_model_profiles(GameTestHelper helper)
             throws Exception {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
+        com.dwinovo.numen.api.brain.Replies.hello(player, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
         var builtin = com.dwinovo.numen.api.library.LibraryHub.of(helper.getLevel().getServer())
                 .server(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
@@ -526,6 +541,7 @@ public class BrainGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_connection_test_is_answered_by_its_outcome_under_the_request_number(GameTestHelper helper) {
         var player = GameTestKit.presentPlayer(helper, null, "gametest_checker");
+        com.dwinovo.numen.api.brain.Replies.hello(player, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         GameTestKit.received(player);
 
         com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK, "run",
@@ -865,6 +881,7 @@ public class BrainGameTests {
                 4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_hand");
         helper.assertTrue(com.dwinovo.numen.api.config.Authority.isAdmin(admin), "the test admin is not an admin");
+        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         com.dwinovo.numen.api.brain.Replies.hello(other, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         GameTestKit.received(admin);
         GameTestKit.received(other);
@@ -906,6 +923,7 @@ public class BrainGameTests {
     public static void a_player_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
+        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         String skill = com.dwinovo.numen.api.library.LibraryHub.of(server)
                 .server(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
         String body = "{\"id\":\"" + skill + "\"}";
@@ -950,6 +968,8 @@ public class BrainGameTests {
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
                 4, false));
         var other = GameTestKit.presentPlayer(helper, null, "gametest_form_hand");
+        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        com.dwinovo.numen.api.brain.Replies.hello(other, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         GameTestKit.received(admin);
         GameTestKit.received(other);
 

@@ -164,9 +164,9 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   联想到的另一种做法(在 `world/datapacks` 里写数据包文件、要重启或 `/reload`)主流插件里常见,但要写服主的世界目录,这里没采用。
 - **链接检查默认对着编译用的开发包里的服务端**(`-PlinkCheckPaperServer=` 可换成实际运行的 `versions/<mc>/paper-<mc>.jar`);Paper 的 Paperclip 里是二进制补丁不是 jar,所以不解包。
   它读三样东西:成品、原版服务端 jar(取 common 编译用的那份,是"本来是覆写"的依据)、Paper 服务端 jar。对原版 jar 当目标时它会报出 `PlayerList.remove` 那类差异。
-- **名册要等"在世界里 + 能收我们的包"都成立才推**:客户端收到名册才向服务端报到。模组上登入时两者同时成立;Paper 上 Fabric 客户端进游戏之后才登记频道,
-  登入那一刻 `canSend` 为假。`PlayerSessions.channelReady` 是推名册的唯一入口(一次会话只推一次,重复调用无害),登入里调一次,Paper 再在 `PlayerRegisterChannelEvent` 里调。
-  `canSend` 本身仍直接查 `getListeningPluginChannels()`。
+- **开场要等"在世界里 + 登记了开场频道"都成立才发**:服务端先发 `ServerHello(协议号)`,客户端对得上才报到,名册等报到之后才推。模组上登入时两者同时成立;
+  Paper 上 Fabric 客户端进游戏之后才登记频道,登入那一刻 `canSend` 为假。`PlayerSessions.channelReady` 是开场的唯一入口(一次会话只开一次,重复调用无害),
+  登入里调一次,Paper 再在 `PlayerRegisterChannelEvent` 里调。`canSend` 本身仍直接查 `getListeningPluginChannels()`,只管传输;发不发看报到(`Presence`)。
 - **`INumenConfig` 只留服务端的项**(代理、系统提示词,及管理员经客户端面板改它们的写入口,Paper 同样写回 `plugins/numen/config.json`);语音识别设置拆成客户端源码集里的服务
   `ISttSettings`(`ClientServices.STT`),NeoForge 与 Fabric 各实现,Paper 不需要。
 - **纯 JVM 模块清单只在 buildSrc 的 `Modules` 里有一份**;`releaseJars` 把 Paper 的两个 jar 收进 `paper/`,并核对 datagen 产出的每个文件都在 jar 里。

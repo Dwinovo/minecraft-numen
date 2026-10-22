@@ -72,10 +72,12 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 
 **落地时的出入(第 6 步;`/numen key`、`/numen skin`、召唤与绑定命令随第 3 步后半落地,见 §六末尾;1.21.6 的对话框不在这一步)**:
 
-- **"装没装客户端"有两个问法,各管一件事。** 发包之前问"这位玩家的连接上有没有这种包的频道"(`INetworkChannel.canSend`,NeoForge 查协商出来的频道表,
-  Fabric 查对端登记的接收器),没有就不发——频道可选以后这不是错,而 NeoForge 对发往没有该频道的连接的包会在发送处抛异常。
-  **界面怎么走**(推 `Feed` 还是发聊天文字、征询画答复框还是发按钮、`/numen settings` 这类作用在客户端上的指令能不能用)只问 `Presence.hasClient` 一处:报到过 `Hello`、协议版本对得上。
-  不把两者并成一个,是因为客户端在名册包到达后才报到(`RemoteCompanions.hello`),报到之前服务端仍得把名册推给它,"能不能收包"不能等 `Hello`。
+- **"装没装客户端"只问 `Presence.hasClient` 一处**:报到过 `Hello`、协议版本对得上。发不发 Numen 包(`NumenNetwork.sendToPlayer` 统一卡住)、
+  界面怎么走(推 `Feed` 还是发聊天文字、征询画答复框还是发按钮、`/numen settings` 这类作用在客户端上的指令能不能用)都问它。频道同名不算数:不同版本的客户端
+  登记着同名的频道,格式却不一样(0.1.4 发布的客户端就有同名的名册与状态频道),发过去它解不开就断线。
+  握手由服务端先开口:玩家在世界里、连接登记了开场频道,`PlayerSessions.channelReady` 发 `ServerHello(协议号)`;客户端版本对得上才回 `Hello(协议号)`,
+  服务端收下后回 `HelloAck(是否管理员, 是否房主)`、推名册与各大脑此刻的样子。这两包握手的格式永远只是一个协议号,对不上版本的两端也读得懂。
+  平台的 `INetworkChannel.canSend`(连接上有没有这个频道)只留在传输层,发之前再问一次——NeoForge 对发往没有该频道的连接的包会在发送处抛异常。
 - **原版客户端进得来**:NeoForge 上我们登记的频道全是 `optional()`(Numen API 的,与 Numen 自己的寻路调试包);Fabric 本来不拒。证据:`NeoForgeHandshakeTests` 对着本进程登记的全部频道原样跑
   NeoForge 对非 NeoForge 客户端的配置阶段协商(`NetworkRegistry.initializeOtherConnection`)——它第一次跑是红的,就是被寻路调试包一条非可选的登记拦下。
   没有证到的:真的原版客户端进服(不启动客户端)、Velocity 与 BungeeCord 的转发。Numen 没有注册物品、方块、实体,也没有 `SERVER` 类配置,这条协商是仅有的关口。

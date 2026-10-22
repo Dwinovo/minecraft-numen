@@ -7,15 +7,16 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 哪些在线的玩家装着我们的客户端:客户端进服后报到({@code HelloPayload}),带着它说的协议版本。装了的才推 {@link Feed};
- * 没装的,服务端大脑的回话改成只发给主人的系统消息。版本对不上的客户端不算数——它看不懂我们推的东西。
+ * 哪些在线的玩家装着我们的客户端:服务端开场({@code ServerHelloPayload})之后,客户端报到({@code HelloPayload}),带着它说的协议版本。
+ * 这是"发不发 Numen 包"的唯一判据({@code NumenNetwork#sendToPlayer}):报到过的才推 {@link Feed} 等一切;
+ * 没有的,服务端大脑的回话改成只发给主人的系统消息。版本对不上的客户端不算数——它看不懂我们推的东西。
  *
  * <p>线程:任何线程。
  */
 public final class Presence {
 
     /** 服务端与客户端之间推送与请求的协议版本。改了线上的样子就加一。 */
-    public static final int PROTOCOL = 4;
+    public static final int PROTOCOL = 5;
 
     private static final Map<UUID, Boolean> CLIENTS = new ConcurrentHashMap<>();
 

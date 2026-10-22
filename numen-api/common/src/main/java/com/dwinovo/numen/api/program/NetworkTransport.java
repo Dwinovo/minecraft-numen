@@ -2,12 +2,12 @@ package com.dwinovo.numen.api.program;
 
 import com.dwinovo.numen.script.ApiReply;
 import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.ClientCallPayload;
 import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
-import com.dwinovo.numen.api.platform.Services;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
@@ -32,8 +32,8 @@ public final class NetworkTransport implements ClientTransport {
             done.accept(failure(request.function(), "its owner is not connected"));
             return;
         }
-        if (!Services.network().canSend(owner, ClientCallPayload.TYPE)) {
-            done.accept(failure(request.function(), "its owner has not installed the Numen client"));
+        if (!Presence.hasClient(owner.getUUID())) {
+            done.accept(failure(request.function(), "its owner has no Numen client of this version connected"));
             return;
         }
         int size = request.size();

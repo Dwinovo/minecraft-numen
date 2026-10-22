@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.api.network.payload.LocateNumenPayload;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
+import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.platform.services.INetworkChannel.Execution;
 import io.netty.buffer.ByteBuf;
@@ -76,11 +77,16 @@ public final class NumenNetwork {
 
     /**
      * 发给一位玩家的客户端:量过、装得下一个包的才交给加载器,超过的可分片的包分成片(见 {@link Fragments#packets})。
-     * 我们的频道是可选的(原版客户端不装我们也进得来),他的连接上没有这个频道(没装我们的客户端)就什么也不发——
-     * 可选频道下这不是错,而是这位玩家没有东西可收。谁装着<b>可用</b>的客户端(报到过、协议对得上)由
-     * {@link com.dwinovo.numen.api.brain.Presence} 说了算;这里问的只是"这个包他的连接装不装得下"。
+     * 我们的频道是可选的(原版客户端不装我们也进得来),收不收得到只看一件事:他的客户端报到过、协议对得上
+     * ({@link com.dwinovo.numen.api.brain.Presence})。频道同名不说明读得懂——不同版本的客户端登记着同名的频道,格式却不一样,
+     * 发过去它解不开就断线。唯一的例外是开场的 {@link ServerHelloPayload}:它的格式永远不变,正是用来对版本的。
+     * 连接上没有这个频道(平台的 {@code canSend})只是传输层的事,照样不发。
      */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+        if (payload.type() != ServerHelloPayload.TYPE
+                && !com.dwinovo.numen.api.brain.Presence.hasClient(player.getUUID())) {
+            return;
+        }
         if (!Services.network().canSend(player, payload.type())) {
             return;
         }
@@ -218,7 +224,10 @@ public final class NumenNetwork {
                 Execution.NETWORK);
         toClient(FragmentPayload.TO_CLIENT, FragmentPayload.TO_CLIENT_CODEC, NumenNetwork::fragmentFromServer);
 
-        // 服务端大脑与主人的客户端之间:报到、主人做的事、一刻的事件、历史分页、会话列表(见 brain 包)。
+        // 服务端大脑与主人的客户端之间:握手、主人做的事、一刻的事件、历史分页、会话列表(见 brain 包)。
+        toClient(com.dwinovo.numen.api.network.payload.ServerHelloPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.ServerHelloPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.ServerHelloPayload::handle);
         toServer(com.dwinovo.numen.api.network.payload.HelloPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.HelloPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.HelloPayload::handle);

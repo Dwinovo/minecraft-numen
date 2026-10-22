@@ -17,6 +17,7 @@ import com.dwinovo.numen.api.network.payload.HelloPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.HistoryRequestPayload;
 import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
+import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
 
 import java.util.HashMap;
 import java.util.List;
@@ -36,7 +37,7 @@ public final class RemoteCompanions {
 
     private static final Map<UUID, Entry> COMPANIONS = new HashMap<>();
     private static final RemoteTranscripts TRANSCRIPTS = new RemoteTranscripts();
-    /** 服务端回答过报到、版本对得上:它推的东西我们读得懂。 */
+    /** 服务端收下了我们的报到(版本对得上):它推的东西我们读得懂。 */
     private static boolean served;
     /** 这位玩家能不能改服务器上的配置。 */
     private static boolean admin;
@@ -46,8 +47,6 @@ public final class RemoteCompanions {
     private static List<Conversation> saved = List.of();
     private static long nextRequest;
     private static final RemoteLibrary LIBRARY = new RemoteLibrary(NumenNetwork::sendToServer);
-    /** 这个连接上报过到了。 */
-    private static boolean helloSent;
 
     private RemoteCompanions() {}
 
@@ -125,6 +124,7 @@ public final class RemoteCompanions {
 
     /** 服务端推来的包挂进主源码集的挂点(客户端入口启动时调一次)。 */
     public static void install() {
+        ClientPayloadSink.serverHello = RemoteCompanions::onServerHello;
         ClientPayloadSink.helloAck = RemoteCompanions::onHelloAck;
         ClientPayloadSink.feed = RemoteCompanions::onFeed;
         ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
@@ -143,17 +143,6 @@ public final class RemoteCompanions {
                                 com.dwinovo.numen.api.data.ModLanguageData.Keys.KEY_OWNER_SEES));
             }
         };
-    }
-
-    /**
-     * 进服后报到:告诉服务端我们装着客户端、说哪一版协议。每个连接一次——服务端在名册推来时就知道这个连接已经就绪,
-     * 所以接在名册到达上。
-     */
-    public static void hello() {
-        if (!helloSent) {
-            helloSent = true;
-            NumenNetwork.sendToServer(new HelloPayload(Presence.PROTOCOL));
-        }
     }
 
     // ---- 会话记录 ----
@@ -181,15 +170,20 @@ public final class RemoteCompanions {
 
     // ---- 服务端推来的 ----
 
-    static void onHelloAck(HelloAckPayload p) {
-        served = p.protocol() == Presence.PROTOCOL;
-        admin = served && p.admin();
-        host = served && p.host();
-        if (!served) {
+    /** 服务端开场,说它的协议版本:对得上就报到,对不上它不会再发别的,我们也不发。 */
+    static void onServerHello(ServerHelloPayload p) {
+        if (p.protocol() != Presence.PROTOCOL) {
             Constants.LOG.warn("[numen-net] the server speaks protocol {}, this client {}: its companions are not shown",
                     p.protocol(), Presence.PROTOCOL);
             return;
         }
+        NumenNetwork.sendToServer(new HelloPayload(Presence.PROTOCOL));
+    }
+
+    static void onHelloAck(HelloAckPayload p) {
+        served = true;
+        admin = p.admin();
+        host = p.host();
         // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
         for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL, Libraries.NOTES,
                 Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
@@ -235,6 +229,5 @@ public final class RemoteCompanions {
         served = false;
         admin = false;
         host = false;
-        helloSent = false;
     }
 }

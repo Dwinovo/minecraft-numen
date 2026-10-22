@@ -619,6 +619,7 @@ public class ScriptGameTests {
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_wire", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_wire_owner");
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         AtomicReference<Program.Outcome> result = new AtomicReference<>();
         ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("wire-" + UUID.randomUUID(),
                 """
@@ -676,6 +677,7 @@ public class ScriptGameTests {
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_request", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_big_request_owner");
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         String text = "z".repeat(Wire.TO_CLIENT.bytes() + Wire.TO_CLIENT.bytes() / 2);
         Fragments.Inbox inbox = new Fragments.Inbox(Wire.TO_CLIENT);
         AtomicReference<Program.Outcome> result = new AtomicReference<>();
