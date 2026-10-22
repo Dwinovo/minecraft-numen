@@ -27,18 +27,21 @@ public final class NumenYsm {
     public static void install(YsmHost host, Path content) {
         Ysm ysm = new Ysm(host.storage());
         OwnerSync sync = new OwnerSync(ysm);
+        Emotes emotes = new Emotes(ysm);
 
         NumenPlugins.register(YsmApi.NAMESPACE, numen -> {
-            YsmApi.install(numen, ysm);
+            YsmApi.install(numen, ysm, emotes);
             // ysm.model.switch 派下来的换装由谁来跑
-            TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, record));
+            TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, emotes, record));
 
             if (content != null) numen.bundleContent(content);
 
             // 同伴刚进世界:把主人的授权镜像过去
             numen.on(CompanionEvent.SPAWN, sync::onSpawn);
+            numen.on(CompanionEvent.SPAWN, emotes::onSpawn);
         });
 
         host.onServerTick(sync::tick);
+        host.onServerTick(emotes::tick);
     }
 }

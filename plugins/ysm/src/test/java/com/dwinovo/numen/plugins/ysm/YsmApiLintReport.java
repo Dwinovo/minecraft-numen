@@ -21,7 +21,7 @@ class YsmApiLintReport {
     void writeTheReport() throws IOException, URISyntaxException {
         NumenApiFixture.install();
         Ysm ysm = new Ysm(Ysm.Storage.NEOFORGE);
-        NumenPlugins.register(YsmApi.NAMESPACE, numen -> YsmApi.install(numen, ysm));
+        NumenPlugins.register(YsmApi.NAMESPACE, numen -> YsmApi.install(numen, ysm, new Emotes(ysm)));
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint().stream()
                 .filter(l -> l.where().startsWith("ysm.")).toList());
         lint.addAll(ApiTester.lint(ApiLintReport.documents("plugins/ysm/numen/skills")));

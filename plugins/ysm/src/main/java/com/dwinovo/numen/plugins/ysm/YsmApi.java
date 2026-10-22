@@ -34,11 +34,14 @@ public final class YsmApi {
 
     /** 读 NBT、跑命令的那一份;联动装上时给。 */
     private static Ysm ysm;
+    /** 她有没有动作在放、动了就停;联动装上时给。 */
+    private static Emotes emotes;
 
     private YsmApi() {}
 
-    static void install(NumenApi numen, Ysm ysm) {
+    static void install(NumenApi numen, Ysm ysm, Emotes emotes) {
         YsmApi.ysm = ysm;
+        YsmApi.emotes = emotes;
         numen.api("model", "Yes Steve Model looks: what you wear and can switch to, switching, emotes.",
                 YsmApi.class);
     }
@@ -90,6 +93,7 @@ public final class YsmApi {
             + "same model.")
     @Note("Short, not background work: it comes back once your body shows the new look, or with what YSM said. It "
             + "does not ask your owner.")
+    @Note("An emote that is playing stops with the switch, and the result says so.")
     @SeeAlso("ysm.model.options")
     public static Pending<Void> switch_(ServerCall call, Switch args) {
         String model = args.model();
@@ -122,22 +126,30 @@ public final class YsmApi {
      * YSM 的 play 命令是静默的,动作名不存在时它既不报错也不回执;服务端又拿不到这身模型的动作清单(见 {@link Ysm})。所以这里核对不了她
      * 做没做成,不交回"做了";说明里照实写核对不了。
      *
+     * <h2>什么时候停</h2>
+     * 动作一直放到她动、换模型、换个动作或 stop。收尾的规则见 {@link Emotes};换动作不用先停,YSM 自己会盖掉旧的。
+     *
      * <p><b>音效不用我们管。</b> 模型作者可以把音效接在动画上(动画 JSON 里的 {@code sound_effects}),YSM 播动画时一并放。真机验过:
      * 同伴是服务端假玩家,但 YSM 照样给它放声音——播放路径没有区分真假玩家。所以这里只管发 play 命令。
      */
-    @Fn("Play one of this model's emotes, or stop the one playing.")
+    @Fn("Play one of this model's emotes, or stop the one playing. It keeps playing until you move, switch model, "
+            + "play another or stop it; a looping one never ends by itself.")
     @Example("ysm.model.emote(\"extra1\")")
     @Example("ysm.model.emote(\"" + STOP + "\")")
     @Note("It only sends the command and returns nothing: YSM does not tell the server which animations a model has, "
             + "so whether this one exists cannot be checked, and a missing one does nothing.")
+    @Note("Moving ends it, the way a player moving ends their own emote: forward, back, left, right, jump or sneak "
+            + "stops it, and so does ysm.model.switch. That stop is the rule, not an event; nothing more is reported.")
+    @Note("A one-shot emote you leave standing still after it finishes still counts as playing: whoever walks away "
+            + "and comes back sees it once more, until you move or send \"" + STOP + "\".")
     @SeeAlso("ysm.model.options")
     public static void emote(ServerCall call, Emote args) {
         String animation = args.animation();
         OnHer her = call.onHer();
         if (STOP.equalsIgnoreCase(animation)) {
-            ysm.stopAnimation(her);
+            emotes.stop(call.her(), her);
         } else {
-            ysm.playAnimation(her, animation);
+            emotes.play(call.her(), her, animation);
         }
     }
 }

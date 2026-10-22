@@ -21,12 +21,14 @@ import java.util.List;
 final class SwitchTask implements Task {
 
     private final Ysm ysm;
+    private final Emotes emotes;
     private final SwitchRecord r;
     /** 走到终态时说给模型听的那句话。 */
     private String outcome = "";
 
-    SwitchTask(Ysm ysm, SwitchRecord record) {
+    SwitchTask(Ysm ysm, Emotes emotes, SwitchRecord record) {
         this.ysm = ysm;
+        this.emotes = emotes;
         this.r = record;
     }
 
@@ -36,7 +38,9 @@ final class SwitchTask implements Task {
         List<String> said = ysm.setModel(r.her, r.look);
         Ysm.Look now = ysm.readLook(her);
         if (now != null && model.equals(now.model())) {
-            outcome = "换好了:" + model;
+            // 换了模型,旧动作会在新模型上重放;真人换模型时 YSM 也是顺手停掉
+            boolean stopped = emotes.isPlaying(her.getUUID()) && emotes.stop(her, r.her);
+            outcome = "换好了:" + model + (stopped ? ";原来的动作停了" : "");
             return TaskState.SUCCESS;
         }
         outcome = "没换成 '" + model + "'。" + (said.isEmpty() ? "YSM 没有说原因" : "YSM 说:" + String.join(" ", said))
