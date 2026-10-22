@@ -1,0 +1,61 @@
+name: GameTest
+
+# 无头的测试服务器跑 GameTest,各平台并行:NeoForge 那一路带上车万女仆与 YSM 的两批(各要单开一次跑批,见 plugins/tlm/build.gradle
+# 与 plugins/ysm/gametest/build.gradle)。不跟着每次推送跑(推送只跑 build.yml 的编译与单测),要跑时在 Actions 页手动触发。
+# 测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。端到端和 Paper 的 GameTest 见 slow-tests.yml。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gametest:
+    name: GameTest (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: neoforge
+            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer :plugins:ysm:gametest:runGameTestServer"
+          - name: fabric
+            tasks: ":numen:fabric:runGameTestServer"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Read target JDK from gradle.properties
+        id: props
+        shell: bash
+        run: |
+          echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java ${{ steps.props.outputs.java_version }}
+        uses: actions/setup-java@v6
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # 语言文件、方块标签是生成出来的,不进版本库,测试服务器要读它们
+      - name: Run data generation
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      # 一路挂了不拦着另一路跑完,两路的结果都要看
+      - name: Run GameTest
+        run: ./gradlew ${{ matrix.tasks }} --no-daemon --continue
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest-${{ matrix.name }}
+          path: |
+            **/runs/gametestserver/logs/
+            **/runs/gametestserver/crash-reports/
+            **/build/reports/
+          retention-days: 7
