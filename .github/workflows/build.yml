@@ -91,8 +91,8 @@ jobs:
           path: "**/build/reports/tests/test/"
           retention-days: 7
 
-  # GameTest:无头的测试服务器,每次推送都跑,各平台并行。NeoForge 那一路带上车万女仆的那一批(它要单开一次跑批,见
-  # plugins/tlm/build.gradle)。测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。
+  # GameTest:无头的测试服务器,每次推送都跑,各平台并行。NeoForge 那一路带上车万女仆与 YSM 的两批(各要单开一次跑批,见
+  # plugins/tlm/build.gradle 与 plugins/ysm/gametest/build.gradle)。测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。
   # 端到端和 Paper 的 GameTest 时间长,不在这里,见 slow-tests.yml。
   gametest:
     name: GameTest (${{ matrix.name }})
@@ -103,7 +103,7 @@ jobs:
       matrix:
         include:
           - name: neoforge
-            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer"
+            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer :plugins:ysm:gametest:runGameTestServer"
           - name: fabric
             tasks: ":numen:fabric:runGameTestServer"
     steps:

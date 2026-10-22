@@ -1,0 +1,81 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+/*
+ * YSM 联动的 GameTest:用例在本模块,`./gradlew :plugins:ysm:gametest:runGameTestServer` 单开一次跑批。
+ *
+ * 为什么是单独一个模块:YSM 联动本身(:plugins:ysm)对着原版编译、三个加载器通用,类路径上没有加载器的类,
+ * 用例要的 NeoForge 环境放不进去;这里对着 NeoForge,把联动的输出放进运行配置。照成品拼:本体、联动(成品 jar 里它平铺在
+ * 本体里)、用例同在 numen 这一个模组里。
+ *
+ * 为什么不挂真的 YSM:YSM 是闭源混淆的模组,2.6.5 在无头测试服务器上加载时它的原生库起不来("Unsatisfied runtime
+ * environment"),`ysm` 命令根本没注册,挂上也只是让用例对着一个不工作的模组。联动对 YSM 的全部依赖是命令与 NBT 键名
+ * (见 Ysm),所以用例里由 YsmStub 在同样的两处(命令、NBT 里的 model_id)放一个会记录的替身,联动经 NumenYsm.install
+ * 装上,从 Lua 入口调用。
+ *
+ * 用例和 Numen 的 GameTest 共用件(GameTestKit)同包,所以用例编译对着 Numen 的测试夹具;套件是 numen_ysm(见 YsmGameTestSuite)。
+ */
+group = 'com.dwinovo.numen'
+java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
+
+evaluationDependsOn(':numen:common')
+evaluationDependsOn(':numen-api:neoforge')
+evaluationDependsOn(':plugins:ysm')
+
+neoForge { version = neoforge_version }
+
+def numenNeoForge = project(':numen:neoforge')
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+def ysmSuite = rootProject.ext.numenSuites[project.path].gametest
+
+neoForge {
+    addModdingDependenciesTo(sourceSets.main)
+    mods {
+        numen {
+            sourceSet numenNeoForge.sourceSets.main
+            sourceSet project(':numen:common').sourceSets.testFixtures
+            // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
+            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':plugins:ysm').sourceSets.main
+            sourceSet sourceSets.main
+        }
+        // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
+        numen_api_gametest {
+            sourceSet project(':numen-api:neoforge').sourceSets.gametest
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
+        }
+    }
+    runs {
+        gameTestServer {
+            type = 'gameTestServer'
+            ideName = "NeoForge GameTestServer (${project.path})"
+            sourceSet = sourceSets.main
+            gameDirectory = project.mkdir(project.file('runs/gametestserver'))
+            systemProperties.put('numen.gametest.suites', providers.gradleProperty('gametest').orElse(ysmSuite))
+            systemProperty('neoforge.enabledGameTestNamespaces', 'numen_ysm')
+            systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
+        }
+    }
+}
+
+dependencies {
+    compileOnly files({ numenNeoForge.sourceSets.main.output })
+    compileOnly project(':numen:common').sourceSets.testFixtures.output
+    // 套件接口:本联动的用例经它报到(numen_ysm)
+    compileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    // 用例装联动用它的入口(NumenYsm.install)
+    compileOnly project(':plugins:ysm').sourceSets.main.output
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
+    implementation project(':numen-api:neoforge')
+}
+
+tasks.named('compileJava') {
+    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses', ':plugins:ysm:classes'
+}
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
+            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses', ':plugins:ysm:classes'
+}
