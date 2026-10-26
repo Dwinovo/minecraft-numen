@@ -16,6 +16,7 @@ import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -67,7 +68,7 @@ public final class SettingsView {
      * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
      * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
      */
-    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, STT, THEME, PERMISSION }
+    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, STT, THEME, PERMISSION, PLUGINS }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -93,7 +94,7 @@ public final class SettingsView {
      */
     private static final Section[][] GROUPS = {
             {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT},
-            {Section.SKILLS, Section.MCP, Section.BRAIN, Section.PERMISSION},
+            {Section.SKILLS, Section.MCP, Section.BRAIN, Section.PERMISSION, Section.PLUGINS},
             {Section.THEME}};
     private static final int ITEM_H = 20;
     private static final int GROUP_GAP = 7;
@@ -355,7 +356,8 @@ public final class SettingsView {
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
                 I18n.get(ModLanguageData.Keys.STT_NAV),
                 I18n.get("numen.settings.nav.theme"),
-                I18n.get("numen.settings.nav.permission"));
+                I18n.get("numen.settings.nav.permission"),
+                I18n.get(ModLanguageData.Keys.PLUGIN_NAV));
     }
 
     // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
@@ -564,6 +566,7 @@ public final class SettingsView {
         personaListPanel = null;
         mcpListPanel = null;
         skillsListPanel = null;
+        pluginsListPanel = null;
         permissionPanel = null;
         switch (s) {
             case PROVIDER -> {
@@ -579,6 +582,7 @@ public final class SettingsView {
             case SKILLS -> RemoteCompanions.library().ask(Libraries.SKILL);
             case BRAIN -> RemoteCompanions.library().ask(Libraries.MCP_SERVER);
             case PERMISSION -> RemoteCompanions.library().ask(Libraries.PERMISSION);
+            case PLUGINS -> RemoteCompanions.library().ask(Libraries.PLUGIN);
             default -> { }
         }
         resetSectionState();
@@ -633,6 +637,8 @@ public final class SettingsView {
         if (section == null) return;   // 首页是手画的一列,没有控件
         switch (section) {
             case SKILLS -> skillsListPanel().build(secX(), secY0(), secW(), secH(),
+                    left(), top(), panelW(), panelH());
+            case PLUGINS -> pluginsListPanel().build(secX(), secY0(), secW(), secH(),
                     left(), top(), panelW(), panelH());
             case MCP -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
@@ -1138,6 +1144,83 @@ public final class SettingsView {
         }
     }
 
+    // ---- 插件列表:LibraryListPanel 的纯开关形态。开关改的是服务器下次启动的设定,不是这一次的运行 ----
+    private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel;
+
+    /**
+     * 插件:随 Numen 内嵌的与单独安装的两节,人人看得到;开关只有管理员与房主有(服务端按每行的 {@code toggle} 说了算)。
+     * 开关翻的是下次启动的设定,翻过之后那一行写明"重启后生效",状态仍是这一次运行的样子。
+     */
+    private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel() {
+        if (pluginsListPanel == null) {
+            pluginsListPanel = new LibraryListPanel<ServerLibraries.Plugin>(
+                    ServerLibraries::plugins,
+                    p -> new LibraryListPanel.Row(p.name(), pluginMeta(p),
+                            p.status() == PluginRoster.Status.FAILED, null, false, false, p.toggle()),
+                    null, null, null)
+                    .withSections(p -> p.source().name(), () -> List.of(
+                            new LibraryListPanel.Section(PluginRoster.Source.BUNDLED.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_BUNDLED),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false),
+                            new LibraryListPanel.Section(PluginRoster.Source.JAR.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_JAR),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false)))
+                    .withRowToggle(p -> !p.disabledNext(), p -> {
+                        JsonObject body = new JsonObject();
+                        body.addProperty("id", p.id());
+                        RemoteCompanions.library().request(Libraries.PLUGIN,
+                                p.disabledNext() ? Libraries.ENABLE : Libraries.DISABLE, body);
+                    })
+                    .following(Libraries.PLUGIN);
+        }
+        return pluginsListPanel;
+    }
+
+    /** 说明行:版本、这一次运行的状态、下次启动的设定和这一次不同时的"重启后生效"。 */
+    private static String pluginMeta(ServerLibraries.Plugin p) {
+        List<String> parts = new ArrayList<>();
+        if (nb(p.version())) parts.add(p.version());
+        parts.add(pluginStatus(p));
+        if (p.pending()) parts.add(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART));
+        return String.join(" · ", parts);
+    }
+
+    private static String pluginStatus(ServerLibraries.Plugin p) {
+        return switch (p.status()) {
+            case LOADED -> I18n.get(ModLanguageData.Keys.PLUGIN_LOADED);
+            case TARGET_MISSING -> I18n.get(ModLanguageData.Keys.PLUGIN_TARGET_MISSING, p.target());
+            case DISABLED -> I18n.get(ModLanguageData.Keys.PLUGIN_DISABLED);
+            case FAILED -> I18n.get(ModLanguageData.Keys.PLUGIN_FAILED);
+        };
+    }
+
+    /** 悬停一行说全:谁做的、联动谁、这一次的状态与原因、它加了什么。 */
+    private List<Component> pluginTooltip(ServerLibraries.Plugin p) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(p.name()));
+        if (nb(p.version())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_VERSION, p.version()), TXT_MUTED));
+        if (!p.authors().isEmpty()) {
+            lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_AUTHORS, String.join(", ", p.authors())), TXT_MUTED));
+        }
+        if (nb(p.target())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
+        lines.add(Nb.colored(pluginStatus(p), p.status() == PluginRoster.Status.FAILED ? FAIL : TXT_MUTED));
+        if (nb(p.reason())) lines.add(Nb.colored(p.reason(), FAIL));
+        if (p.pending()) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART), TXT_MUTED));
+        List<String> adds = new ArrayList<>();
+        p.adds().forEach((kind, n) -> adds.add(I18n.get(ModLanguageData.Keys.pluginAdds(kind), n)));
+        if (!adds.isEmpty()) lines.add(Nb.colored(String.join(" · ", adds), TXT_MUTED));
+        return lines;
+    }
+
+    private void renderPluginsSection(GuiGraphics g, int mouseX, int mouseY) {
+        pluginsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+        ServerLibraries.Plugin p = pluginsListPanel().entryAtBody(mouseX, mouseY);
+        if (p != null) {
+            host.tip(pluginTooltip(p), mouseX, mouseY);
+        }
+    }
+
     /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
 
     // ---- render (nav + active section) ----
@@ -1230,6 +1313,7 @@ public final class SettingsView {
             case STT -> com.dwinovo.numen.api.client.ui.mc.Sprites.MIC;
             case THEME -> com.dwinovo.numen.api.client.ui.mc.Sprites.BRUSH;
             case PERMISSION -> com.dwinovo.numen.api.client.ui.mc.Sprites.FLAG;
+            case PLUGINS -> com.dwinovo.numen.api.client.ui.mc.Sprites.PLUG;
         };
     }
 
@@ -1247,6 +1331,7 @@ public final class SettingsView {
             case SKILLS -> {
                 renderSkillsSection(g, mouseX, mouseY);
             }
+            case PLUGINS -> renderPluginsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
@@ -1444,6 +1529,9 @@ public final class SettingsView {
         if (section == Section.SKILLS && skillsListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
+        if (section == Section.PLUGINS && pluginsListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         // 大脑/主题分区(NumenUI)。
         if (section == Section.BRAIN && brainPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
@@ -1474,6 +1562,7 @@ public final class SettingsView {
             case PERSONA -> personaListPanel();
             case MCP -> mcpListPanel();
             case SKILLS -> skillsListPanel();
+            case PLUGINS -> pluginsListPanel();
             case PERMISSION -> permissionPanel().list();
             case BRAIN, STT, THEME -> null;
         };
@@ -1551,6 +1640,9 @@ public final class SettingsView {
             return true;
         }
         if (section == Section.SKILLS && skillsListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PLUGINS && pluginsListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
         if (section == Section.THEME && themePanel().mouseScrolled(mx, my, sy)) {

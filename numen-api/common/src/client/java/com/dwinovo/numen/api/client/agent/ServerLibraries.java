@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.voice.VoiceProfile;
@@ -332,6 +333,36 @@ public final class ServerLibraries {
     /** 叠起来之后算数的技能,含被玩家关掉的(开关面板要列出来让他再打开)。 */
     public static List<Skill> skillsEffective() {
         return skills().stream().filter(s -> effective(s.base())).toList();
+    }
+
+    // ---- 插件 ----
+
+    /**
+     * 花名册里的一行(服务端编码的这一份:{@code Libraries#pluginRows})。{@code status} 是这一次运行的样子,{@code disabledNext}
+     * 是下次启动的设定,{@code pending} 说两者不一样;{@code toggle} 是这位玩家改不改得了它的开关。
+     */
+    public record Plugin(String id, String name, String version, List<String> authors, String target,
+                         PluginRoster.Source source, PluginRoster.Status status, String reason, boolean disabledNext,
+                         boolean pending, boolean toggle, java.util.Map<PluginRoster.Kind, Integer> adds) {}
+
+    /** 登记顺序。 */
+    public static List<Plugin> plugins() {
+        List<Plugin> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.PLUGIN)) {
+            JsonObject o = e.getAsJsonObject();
+            List<String> authors = new ArrayList<>();
+            o.getAsJsonArray("authors").forEach(a -> authors.add(a.getAsString()));
+            java.util.Map<PluginRoster.Kind, Integer> adds = new java.util.EnumMap<>(PluginRoster.Kind.class);
+            o.getAsJsonObject("adds").entrySet().forEach(add ->
+                    adds.put(PluginRoster.Kind.valueOf(add.getKey().toUpperCase(java.util.Locale.ROOT)),
+                            add.getValue().getAsInt()));
+            out.add(new Plugin(text(o, "id"), text(o, "name"), text(o, "version"), List.copyOf(authors),
+                    text(o, "target"), PluginRoster.Source.valueOf(text(o, "source").toUpperCase(java.util.Locale.ROOT)),
+                    PluginRoster.Status.valueOf(text(o, "status").toUpperCase(java.util.Locale.ROOT)),
+                    text(o, "reason"), flag(o, "disabledNext"), flag(o, "pending"), flag(o, "toggle"),
+                    java.util.Collections.unmodifiableMap(adds)));
+        }
+        return out;
     }
 
     // ---- 声线 ----

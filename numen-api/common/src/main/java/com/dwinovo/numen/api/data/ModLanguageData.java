@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.data;
 
+import com.dwinovo.numen.api.plugin.PluginRoster;
+
 /**
  * Single source of truth for every translation key the mod emits. Both
  * loader-side data generators ({@code FabricModLanguageProvider},
@@ -440,6 +442,23 @@ public final class ModLanguageData {
         public static final String LIBRARY_ADD_SERVER       = "numen.library.add_server";
         public static final String LIBRARY_RESTORE          = "numen.library.restore";
         public static final String LIBRARY_RELOAD           = "numen.library.reload";
+        public static final String PLUGIN_NAV               = "numen.settings.nav.plugins";
+        public static final String PLUGIN_BUNDLED           = "numen.plugin.bundled";
+        public static final String PLUGIN_JAR               = "numen.plugin.jar";
+        public static final String PLUGIN_ABOUT             = "numen.plugin.about";
+        public static final String PLUGIN_RESTART           = "numen.plugin.restart";
+        public static final String PLUGIN_LOADED            = "numen.plugin.loaded";
+        public static final String PLUGIN_TARGET_MISSING    = "numen.plugin.target_missing";
+        public static final String PLUGIN_DISABLED          = "numen.plugin.disabled";
+        public static final String PLUGIN_FAILED            = "numen.plugin.failed";
+        public static final String PLUGIN_VERSION           = "numen.plugin.version";
+        public static final String PLUGIN_AUTHORS           = "numen.plugin.authors";
+        public static final String PLUGIN_TARGET            = "numen.plugin.target";
+
+        /** 插件加了几件某种东西("%s 个技能"一类),每种东西一个键。 */
+        public static String pluginAdds(com.dwinovo.numen.api.plugin.PluginRoster.Kind kind) {
+            return "numen.plugin.adds." + kind.name().toLowerCase(java.util.Locale.ROOT);
+        }
         public static final String VOICE_FORM_SERVICE       = "numen.voice.form_service";
         public static final String VOICE_NO_KEY             = "numen.voice.no_key";
         public static final String NOTICE_NAME_INVALID    = "numen.notice.name_invalid";
@@ -1145,6 +1164,26 @@ public final class ModLanguageData {
         adder.add(Keys.LIBRARY_ADD_SERVER,     "New for everyone");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
         adder.add(Keys.LIBRARY_RELOAD,         "Rescan the server's folder");
+        adder.add(Keys.PLUGIN_NAV,             "Plugins");
+        adder.add(Keys.PLUGIN_BUNDLED,         "Bundled with Numen");
+        adder.add(Keys.PLUGIN_JAR,             "Installed separately");
+        adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect when the server restarts. Only a server admin or the host can switch them.");
+        adder.add(Keys.PLUGIN_RESTART,         "takes effect after restart");
+        adder.add(Keys.PLUGIN_LOADED,          "loaded");
+        adder.add(Keys.PLUGIN_TARGET_MISSING,  "%s is not installed");
+        adder.add(Keys.PLUGIN_DISABLED,        "off");
+        adder.add(Keys.PLUGIN_FAILED,          "failed to load");
+        adder.add(Keys.PLUGIN_VERSION,         "Version %s");
+        adder.add(Keys.PLUGIN_AUTHORS,         "By %s");
+        adder.add(Keys.PLUGIN_TARGET,          "Works with %s");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.API_GROUP),      "%s API group(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.MODULE),         "%s Lua module(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.SKILL),          "%s skill(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.COMMAND),        "%s command(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_LISTENER), "%s event listener(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_TYPE),     "%s event type(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s gear source(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s body-state fragment(s)");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
@@ -1852,6 +1891,26 @@ public final class ModLanguageData {
         adder.add(Keys.LIBRARY_ADD_SERVER,     "为所有人新建");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
         adder.add(Keys.LIBRARY_RELOAD,         "重新扫描服务器上的目录");
+        adder.add(Keys.PLUGIN_NAV,             "插件");
+        adder.add(Keys.PLUGIN_BUNDLED,         "随 Numen 内嵌");
+        adder.add(Keys.PLUGIN_JAR,             "单独安装");
+        adder.add(Keys.PLUGIN_ABOUT,           "开关在服务器重启后生效,只有管理员和房主能改。");
+        adder.add(Keys.PLUGIN_RESTART,         "重启后生效");
+        adder.add(Keys.PLUGIN_LOADED,          "已加载");
+        adder.add(Keys.PLUGIN_TARGET_MISSING,  "未安装 %s");
+        adder.add(Keys.PLUGIN_DISABLED,        "已关闭");
+        adder.add(Keys.PLUGIN_FAILED,          "加载失败");
+        adder.add(Keys.PLUGIN_VERSION,         "版本 %s");
+        adder.add(Keys.PLUGIN_AUTHORS,         "作者 %s");
+        adder.add(Keys.PLUGIN_TARGET,          "联动 %s");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.API_GROUP),      "%s 组 API");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.MODULE),         "%s 个 Lua 模块");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.SKILL),          "%s 个技能");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.COMMAND),        "%s 条指令");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_LISTENER), "%s 个事件监听");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_TYPE),     "%s 种事件");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s 处穿戴来源");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s 段身体状态");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");
