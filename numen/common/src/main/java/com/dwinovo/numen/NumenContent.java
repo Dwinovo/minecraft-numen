@@ -68,6 +68,12 @@ public final class NumenContent {
     public static void init() {
         if (initialised) return;
         initialised = true;
+        // Numen 是插件之一:服主在停用名单里关了它,这次启动它的内容一样不装,引擎照常起来
+        if (!com.dwinovo.numen.api.NumenPlugins.admit(com.dwinovo.numen.api.plugin.PluginRoster.Source.BUNDLED,
+                com.dwinovo.numen.api.NumenPlugins.NUMEN, "")) {
+            Constants.LOG.info("[numen-content] switched off in the plugin list; not installed");
+            return;
+        }
         registerTools();
         registerTaskRunners();
         // 原版四件甲是第一处穿戴来源,和模组的饰品栏走同一扇门;内嵌联动在这之后才开闸,所以原版排在最前

@@ -167,4 +167,18 @@ public class PluginGameTests {
                 "the plugin off the list is not shown as loaded with what it added: " + rows);
         helper.succeed();
     }
+
+    /** 联动的目标模组没装:闸门不装它,它也不算这台服务器上的插件,花名册里没有这一行。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_plugin")
+    public static void a_link_whose_target_is_not_installed_is_not_a_plugin(GameTestHelper helper) {
+        boolean[] installed = {false};
+        new com.dwinovo.numen.plugins.Gate(mod -> false, path -> null)
+                .open("gametest_absent_mod", "gt_absent", () -> () -> installed[0] = true);
+
+        helper.assertTrue(!installed[0], "the link was installed without its target");
+        helper.assertTrue(com.dwinovo.numen.api.NumenPlugins.roster().plugins().stream()
+                        .noneMatch(p -> p.id().equals("gt_absent")),
+                "a link without its target is on the plugin list");
+        helper.succeed();
+    }
 }

@@ -1001,7 +1001,7 @@ public final class Libraries {
             row.addProperty("reason", plugin.reason());
             row.addProperty("disabledNext", plugin.disabledNext());
             row.addProperty("pending", plugin.pending());
-            row.addProperty("toggle", mayToggle && plugin.toggleable());
+            row.addProperty("toggle", mayToggle);
             JsonObject adds = new JsonObject();
             plugin.adds().forEach((kind, n) -> adds.addProperty(kind.name().toLowerCase(java.util.Locale.ROOT), n));
             row.add("adds", adds);

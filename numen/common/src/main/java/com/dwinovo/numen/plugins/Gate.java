@@ -71,11 +71,11 @@ public final class Gate {
     }
 
     /**
-     * 先在花名册里报到——目标模组不在也留一行"目标模组未安装"——再答能不能装:目标在场,并且服主没在停用名单里关掉它。
-     * 不装的两种原因都由花名册判,这里只照它的答案走。
+     * 能不能装:目标模组在场,并且服主没在停用名单里关掉它。目标不在场的联动不算这台服务器上的插件,不进花名册;
+     * 在场的先在花名册里报到,名单上的判断由花名册给。
      */
     private boolean admit(String plugin, String modId) {
-        return NumenPlugins.admit(PluginRoster.Source.BUNDLED, plugin, modId, modLoaded.test(modId));
+        return modLoaded.test(modId) && NumenPlugins.admit(PluginRoster.Source.BUNDLED, plugin, modId);
     }
 
     private void install(String plugin, Runnable run) {

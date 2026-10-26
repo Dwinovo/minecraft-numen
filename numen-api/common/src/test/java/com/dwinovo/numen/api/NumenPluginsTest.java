@@ -118,4 +118,34 @@ class NumenPluginsTest {
         assertEquals("<gametest_broken>ok</gametest_broken><gametest_fine>ok</gametest_fine>",
                 NumenPlugins.joinFragments(fragments, self), "恢复以后那段回来");
     }
+
+    /**
+     * 停用名单上关了 Numen:它的内容不装,引擎(宿主)自己的登记照常,花名册里也没有引擎的一行。
+     * 单测的类路径上本来就只有引擎,没有 Numen 的内容,引擎在那里一直能起来。
+     */
+    @Test
+    void theEngineStaysUpWhenNumenIsOnTheStopList(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        var switches = new com.dwinovo.numen.api.plugin.PluginSwitches(new com.dwinovo.numen.api.store.JsonDoc(
+                dir.resolve("plugins.json"), com.dwinovo.numen.api.store.JsonDoc.Format.of(1),
+                com.dwinovo.numen.api.store.Io.direct(e -> {
+                    throw e;
+                })));
+        switches.write(java.util.Set.of(NumenPlugins.NUMEN));
+        var before = NumenPlugins.roster();
+        var roster = new com.dwinovo.numen.api.plugin.PluginRoster(() -> switches,
+                id -> com.dwinovo.numen.api.plugin.PluginRoster.Meta.NONE);
+        NumenPlugins.useRoster(roster);
+        try {
+            NumenPlugins.registerHost(numen -> numen.registerEventType("gametest_engine_up", false));
+            NumenPlugins.register(NumenPlugins.NUMEN, numen -> numen.registerEventType("gametest_numen_up", false));
+
+            assertTrue(EventTypes.isRegistered("gametest_engine_up"));
+            assertFalse(EventTypes.isRegistered("gametest_numen_up"));
+            assertEquals(List.of(NumenPlugins.NUMEN), roster.plugins().stream().map(p -> p.id()).toList(),
+                    "名单上的 Numen 留着一行(已关闭),引擎没有行");
+            assertEquals(com.dwinovo.numen.api.plugin.PluginRoster.Status.DISABLED, roster.plugins().get(0).status());
+        } finally {
+            NumenPlugins.useRoster(before);
+        }
+    }
 }

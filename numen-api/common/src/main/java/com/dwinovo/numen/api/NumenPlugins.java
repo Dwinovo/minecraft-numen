@@ -70,13 +70,22 @@ public final class NumenPlugins {
     }
 
     /**
-     * 联动型插件在装之前报到,让花名册里有它的一行——目标模组没装也在:{@code id} 是它之后 {@link #register} 用的名字空间,
-     * {@code targetMod} 是它联动的模组。返回能不能接着装:目标没装,或服主在停用名单里关了它,就是 false,别再装。
+     * 引擎自己的登记(帮助、原版指令、手上的活、模块那几组):引擎是宿主不是插件,不进花名册、停用名单也管不着。
+     * <b>Numen API 内部调用</b>。
+     */
+    public static void registerHost(NumenPlugin plugin) {
+        plugin.setup(new Impl(NUMEN));
+    }
+
+    /**
+     * 联动型插件在装之前报到,让花名册里有它的一行:{@code id} 是它之后 {@link #register} 用的名字空间,{@code targetMod}
+     * 是它联动的模组。<b>目标模组在场才报到</b>——不在场的联动不算这台服务器上的插件,不进花名册。返回能不能接着装:
+     * 服主在停用名单里关了它,就是 false,别再装。
      *
      * <p>Numen 内嵌的联动由 Numen 的闸门报到({@link Source#BUNDLED});单独发布的联动插件报 {@link Source#JAR}。
      */
-    public static boolean admit(Source source, String id, String targetMod, boolean targetInstalled) {
-        return ROSTER.admit(source, id, targetMod, targetInstalled);
+    public static boolean admit(Source source, String id, String targetMod) {
+        return ROSTER.admit(source, id, targetMod);
     }
 
     /** 插件装到一半出了事(不是它的 setup 里抛的,比如装之前的准备):记进花名册,界面上显示原因。 */
