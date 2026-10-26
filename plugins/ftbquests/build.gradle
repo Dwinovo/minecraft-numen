@@ -10,30 +10,114 @@ minecraft {
 }
 
 repositories {
-    // FTB 全家与 Architectury 各自只从自己的仓库取,两个仓库也截不走别的坐标
-    exclusiveContent {
-        forRepository { maven { name = 'FTB'; url = 'https://maven.ftb.dev/releases' } }
-        filter { includeGroup 'dev.ftb.mods' }
+    // FTB 全家与 Architectury 各自只从自己的仓库取,按组限定。
+    // 不用 exclusiveContent:ForgeGradle 的 fg.deobf 从项目的仓库列表里找原件,认不得那一层包装
+    maven {
+        name = 'FTB'
+        url = 'https://maven.ftb.dev/releases'
+        content { includeGroup 'dev.ftb.mods' }
     }
-    exclusiveContent {
-        forRepository { maven { name = 'Architectury'; url = 'https://maven.architectury.dev/' } }
-        filter { includeGroup 'dev.architectury' }
+    maven {
+        name = 'Architectury'
+        url = 'https://maven.architectury.dev/'
+        content { includeGroup 'dev.architectury' }
     }
 }
+
+// FTB 全家是 All Rights Reserved:只在编译期引用,运行时由玩家自己装的那份提供,
+// 本模块不携带、不复制它们一个字节。Architectury 是 FTB 的事件总线所在。
+def ftb = ["dev.ftb.mods:ftb-quests-forge:${ftb_quests_version}",
+           "dev.ftb.mods:ftb-teams-forge:${ftb_teams_version}",
+           "dev.ftb.mods:ftb-library-forge:${ftb_library_version}",
+           "dev.architectury:architectury-forge:${architectury_version}"]
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // 瘦 api jar 取 Forge 那份:本联动本来就只跑在 Forge 上
     compileOnly files(project(':api:forge').tasks.named('apiJar'))
-    // FTB 全家是 All Rights Reserved:只在编译期引用,运行时由玩家自己装的那份提供,
-    // 本模块不携带、不复制它们一个字节。Architectury 是 FTB 的事件总线所在。
-    def ftb = ["dev.ftb.mods:ftb-quests-forge:${ftb_quests_version}",
-               "dev.ftb.mods:ftb-teams-forge:${ftb_teams_version}",
-               "dev.ftb.mods:ftb-library-forge:${ftb_library_version}",
-               "dev.architectury:architectury-forge:${architectury_version}"]
     // 不取它们的传递依赖(JEI、Patchouli 之类):只对着本联动用到的那几个类编译
     ftb.each { compileOnly(it) { transitive = false } }
-    // 防漂移测试登记 ftbquests 组时,动作的处理函数(读任务书的 ClientBook 等)要连上 FTB 的类:只加载、不运行,
-    // 同样不进任何产物
-    ftb.each { testRuntimeOnly(it) { transitive = false } }
 }
+
+/*
+ * FTB Quests 在场时的 GameTest:用例在 src/gametest,单开一次跑批 `./gradlew :plugins:ftbquests:GameTestServer`。
+ *
+ * 跑的是专用服务器:FTB 把只在客户端有的方法(标题、图标)标了 OnlyIn,Forge 在专用服务器上把它们删掉,
+ * 联动在服务端调到它们就是 NoSuchMethodError——开发环境客户端与服务端同进程、方法还在,别的测试碰不到。
+ * 只有挂着真 FTB 的专用服务器跑批能暴露这一类。
+ *
+ * 不挂进 core 那一次(:core:forge:GameTestServer):FTB 带着 mixin 与自己的队伍系统,挂上去全部用例的环境都跟着变。
+ * 这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里)、联动的用例同在 numen 这一个模组里,FTB 全家由运行时类路径
+ * 带进来,和玩家装它们一样被当成模组加载(开发环境里要先翻成官方名,所以走 fg.deobf)。
+ *
+ * Forge 49 的 dev 运行只把"自带 mods.toml 的类路径条目"当模组,mods 块合并多个源码集不再生效(见 api/forge 的 devJar):
+ * 本体、联动、联动的用例、寻路模块的用例(场地围栏的 mixin)打成一个 jar 上运行类路径,它们才同处 numen 这一个模组。
+ * 用例和 core 的 GameTest 共用件(GameTestKit)同包,所以用例编译对着 core 的输出。用例的批次名是 numen_ftbquests,
+ * 这一次只跑这个批次(core 的用例类同在这个模组里,会被登记,但被筛掉)。结构模板用 core 同步好的那一份目录。
+ */
+sourceSets {
+    gametest {}
+}
+
+def coreForge = project(':core:forge')
+
+configurations {
+    gametestCompileOnly.extendsFrom compileOnly
+    gametestImplementation.extendsFrom implementation
+}
+
+def gametestModJar = tasks.register('gametestModJar', Zip) {
+    from coreForge.sourceSets.main.output
+    from sourceSets.main.output
+    from sourceSets.gametest.output
+    from project(':pathing').sourceSets.gametest.output
+    archiveClassifier = 'gametest'
+    archiveExtension = 'jar'
+    destinationDirectory = layout.buildDirectory.dir('devjars')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    gametestCompileOnly files({ coreForge.sourceSets.main.output })
+    // 用例直接读联动里包内的类(任务书的样子),不绕客户端
+    gametestCompileOnly sourceSets.main.output
+    // 整个引擎(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 core 的用例一样
+    gametestCompileOnly project(':api:forge')
+    // 运行时类路径(跑批的服务器用它,防漂移测试也用它:登记 ftbquests 组时,动作的处理函数要连上 FTB 的类,只加载、不运行)。
+    // 同样不进任何产物
+    ftb.each { runtimeOnly(fg.deobf(it)) { transitive = false } }
+}
+
+minecraft {
+    runs {
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.plugins.${project.name}.main"
+            taskName 'GameTestServer'
+            property 'mixin.env.disableRefMap', 'true'
+            property 'forge.enabledGameTestNamespaces', 'numen_ftbquests'
+            property 'numen.gametest.structures', coreForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath
+            // 模板喂进存档 generated 目录的开闸口令(见 core 的 CompanionGameTests 静态块)
+            property 'numen.gametest.generated', 'world/generated/numen/structures'
+            // 本体与引擎的 mixin 配置没人替它们声明(不是带 MANIFEST 的发行 jar):开发运行在这里显式挂。
+            args '--mixin.config', 'numen.mixins.json'
+            args '--mixin.config', 'numen_api.mixins.json'
+            args '--mixin.config', 'numen_api.forge.mixins.json'
+            args '--mixin.config', 'numen_gametest.mixins.json'
+        }
+    }
+}
+
+// 开发运行里的 api 模组与上面的 numen 模组都是 jar 形态,只加给跑批这一个任务:防漂移测试按目录读联动自己的资源,类路径上多一个带同样资源的 jar 它就读不了
+tasks.matching { it.name == 'GameTestServer' }.configureEach {
+    dependsOn gametestModJar, ':api:forge:devJar', ':core:forge:syncGameTestStructures'
+    classpath += files({ project(':api:forge').tasks.named('devJar') }, gametestModJar)
+}
+// 任务书存在运行目录的 config/ftbquests 里、不跟着世界走:上一次跑批存下的章节会留到这一次,用例要从空书开始
+tasks.matching { it.name == 'GameTestServer' }.configureEach {
+    doFirst {
+        delete fileTree(dir: file('runs/gametestserver/config/ftbquests'))
+    }
+}
+// 跑批世界与 core 那一次同一份配置:超平坦、从头生成
+apply from: rootProject.file('gradle/gametest-flat-world.gradle')
