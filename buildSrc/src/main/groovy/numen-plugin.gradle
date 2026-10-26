@@ -57,7 +57,9 @@ dependencies {
 def coreTests = { project(':core:common').sourceSets.test }
 sourceSets.test {
     compileClasspath += files({ coreTests().output }) + files({ coreTests().compileClasspath })
-    runtimeClasspath += files({ coreTests().output }) + files({ coreTests().runtimeClasspath })
+    // 原版的类放在最前:Forge 47.3 起打过补丁的 Bootstrap 会初始化网络钩子,要 Forge 的事件总线在场,这个原版环境里没有;
+    // 联动自己的类路径上(ForgeGradle 的 minecraft 依赖)那份带补丁的 MC 排在原版后面,只供编译期引用的联动类型用。
+    runtimeClasspath = files({ coreTests().output }) + files({ coreTests().runtimeClasspath }) + runtimeClasspath
 }
 
 dependencies {
