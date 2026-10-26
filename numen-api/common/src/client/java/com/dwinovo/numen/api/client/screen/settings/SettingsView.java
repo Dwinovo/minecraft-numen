@@ -1176,12 +1176,12 @@ public final class SettingsView {
         return pluginsListPanel;
     }
 
-    /** 说明行:版本、这一次运行的状态、下次启动的设定和这一次不同时的"重启后生效"。 */
+    /** 说明行:下次启动的设定和这一次不同时先说"重启后生效"(行窄会被截,要紧的放前面),再是这一次运行的状态与版本。 */
     private static String pluginMeta(ServerLibraries.Plugin p) {
         List<String> parts = new ArrayList<>();
-        if (nb(p.version())) parts.add(p.version());
-        parts.add(pluginStatus(p));
         if (p.pending()) parts.add(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART));
+        parts.add(pluginStatus(p));
+        if (nb(p.version())) parts.add(p.version());
         return String.join(" · ", parts);
     }
 
@@ -1202,7 +1202,7 @@ public final class SettingsView {
         if (!p.authors().isEmpty()) {
             lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_AUTHORS, String.join(", ", p.authors())), TXT_MUTED));
         }
-        if (nb(p.target())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
+        if (nb(p.target()) && p.status() != PluginRoster.Status.TARGET_MISSING) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
         lines.add(Nb.colored(pluginStatus(p), p.status() == PluginRoster.Status.FAILED ? FAIL : TXT_MUTED));
         if (nb(p.reason())) lines.add(Nb.colored(p.reason(), FAIL));
         if (p.pending()) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART), TXT_MUTED));
