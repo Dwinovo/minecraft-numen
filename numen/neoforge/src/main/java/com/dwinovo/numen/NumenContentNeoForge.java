@@ -22,13 +22,17 @@ import java.nio.file.Path;
 public class NumenContentNeoForge {
 
     public NumenContentNeoForge(IEventBus eventBus, ModContainer container) {
-        NumenContent.init();
-        NumenContent.registerNetwork();
+        boolean installed = NumenContent.init();
+        if (installed) {
+            NumenContent.registerNetwork();
+        }
 
         // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
         com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
 
-        NeoForge.EVENT_BUS.addListener(NumenContentNeoForge::onServerTickPost);
+        if (installed) {
+            NeoForge.EVENT_BUS.addListener(NumenContentNeoForge::onServerTickPost);
+        }
         // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,
         // 服务器起来时同步进 config/numen/server/。Numen 是插件之一,没有特殊待遇。
         declareBundledContent();
