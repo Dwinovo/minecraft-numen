@@ -24,12 +24,13 @@ public final class NumenContentPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        NumenContent.init();
-        NumenContent.registerNetwork();
-
-        getServer().getPluginManager().registerEvents(this, this);
-        getServer().getPluginManager().registerEvents(new PaperDropHooks(), this);
-        getServer().getPluginManager().registerEvents(blockChanges, this);
+        // Numen 被停用名单关掉时,它的事件钩子一个都不挂
+        if (NumenContent.init()) {
+            NumenContent.registerNetwork();
+            getServer().getPluginManager().registerEvents(this, this);
+            getServer().getPluginManager().registerEvents(new PaperDropHooks(), this);
+            getServer().getPluginManager().registerEvents(blockChanges, this);
+        }
 
         // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,
         // 服务器起来时同步进 plugins/numen/server/。Numen 是插件之一,没有特殊待遇。

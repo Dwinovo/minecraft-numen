@@ -16,8 +16,10 @@ public class NumenContentFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        NumenContent.init();
-        NumenContent.registerNetwork();
+        boolean installed = NumenContent.init();
+        if (installed) {
+            NumenContent.registerNetwork();
+        }
 
         // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
         com.dwinovo.numen.plugins.Builtin.registerAll();
@@ -32,9 +34,11 @@ public class NumenContentFabric implements ModInitializer {
 
         // 排程机器的心跳随机器归了 Numen API;Numen 只 tick 自己的工具配套。
         // Advance budget-sliced block searches each tick (and sweep their shared index).
-        ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);
-        // 寻路调试:把在走的同伴的路发给开了调试的玩家
-        ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
+        if (installed) {
+            ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);
+            // 寻路调试:把在走的同伴的路发给开了调试的玩家
+            ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
+        }
 
         Constants.LOG.info("Numen content initialised on Fabric.");
     }
