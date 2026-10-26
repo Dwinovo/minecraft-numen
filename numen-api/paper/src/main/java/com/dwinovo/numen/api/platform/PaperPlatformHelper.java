@@ -54,6 +54,18 @@ public final class PaperPlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public String modName(String modId) {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin(modId);
+        return plugin == null ? null : plugin.getPluginMeta().getName();
+    }
+
+    @Override
+    public List<String> modAuthors(String modId) {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin(modId);
+        return plugin == null ? List.of() : plugin.getPluginMeta().getAuthors();
+    }
+
+    @Override
     public Path modResource(String modId, String path) {
         return carriers().stream().filter(p -> p.getName().equals(modId)).findFirst()
                 .map(plugin -> PluginJars.find(plugin, path)).orElse(null);

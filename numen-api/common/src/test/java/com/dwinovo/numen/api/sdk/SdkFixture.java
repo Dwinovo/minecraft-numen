@@ -18,6 +18,7 @@ public final class SdkFixture {
     static final String NAMESPACE = "gt";
 
     static {
+        com.dwinovo.numen.api.plugin.PluginRosterFixture.install();
         if (ApiRegistry.group("numen.api") == null) {
             CommonClass.registerApi();
         }

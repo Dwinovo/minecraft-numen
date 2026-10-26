@@ -14,6 +14,21 @@ public final class NumenApiFixture {
         if (installed) {
             return;
         }
+        // 单测里没有加载器给的配置目录:花名册的停用名单放进这次测试专用的空目录
+        try {
+            java.nio.file.Path plugins = java.nio.file.Files.createTempDirectory("numen-test-plugins-");
+            plugins.toFile().deleteOnExit();
+            com.dwinovo.numen.api.NumenPlugins.useRoster(new com.dwinovo.numen.api.plugin.PluginRoster(
+                    () -> new com.dwinovo.numen.api.plugin.PluginSwitches(new com.dwinovo.numen.api.store.JsonDoc(
+                            plugins.resolve(com.dwinovo.numen.api.plugin.PluginSwitches.FILE),
+                            com.dwinovo.numen.api.store.JsonDoc.Format.of(1),
+                            com.dwinovo.numen.api.store.Io.direct(e -> {
+                                throw e;
+                            }))),
+                    id -> com.dwinovo.numen.api.plugin.PluginRoster.Meta.NONE));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         NumenContent.init();

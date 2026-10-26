@@ -20,6 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class NumenPluginsTest {
 
+    static {
+        com.dwinovo.numen.api.plugin.PluginRosterFixture.install();
+    }
+
     private static NumenApi door() {
         AtomicReference<NumenApi> api = new AtomicReference<>();
         NumenPlugins.register("gt", api::set);
