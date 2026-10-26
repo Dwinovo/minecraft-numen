@@ -17,6 +17,10 @@ public class NumenMod implements ModInitializer {
 
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register(
                 (handler, sender, server) -> PlayerSessions.joined(handler.getPlayer()));
+        // Fabric 客户端进游戏之后才登记频道:JOIN 那一刻还发不出开场包,等它的频道登记到了再试一次。
+        // 同一个玩家只开一次场;每个频道都会来一次,谁是我们自己的由 channelReady 里的 canSend 判。
+        net.fabricmc.fabric.api.networking.v1.S2CPlayChannelEvents.REGISTER.register(
+                (handler, sender, server, channels) -> PlayerSessions.channelReady(handler.getPlayer()));
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
                 (handler, server) -> PlayerSessions.left(handler.getPlayer()));
 
