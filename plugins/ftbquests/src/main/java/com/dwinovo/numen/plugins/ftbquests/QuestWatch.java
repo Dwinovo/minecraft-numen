@@ -66,7 +66,7 @@ final class QuestWatch {
         }
         QuestObject object = event.getObject();
         Completion completion = new Completion(object instanceof Chapter ? "chapter" : "quest",
-                object.getCodeString(), object.getTitle().getString(), data.getName(),
+                object.getCodeString(), QuestNames.of(object), data.getName(),
                 ServerQuestFile.INSTANCE.getCurrentPlayer());
         for (ServerPlayer member : event.getOnlineMembers()) {
             if (member instanceof NumenPlayer her) {
@@ -137,7 +137,7 @@ final class QuestWatch {
                 if (claimed.isEmpty() || !ledger.isNew(claimed.get().getTime(), reward.id)) {
                     continue;
                 }
-                String line = reward.getTitle().getString() + " (quest \"" + quest.getTitle().getString() + "\")";
+                String line = QuestNames.of(reward) + " (quest \"" + QuestNames.of(quest) + "\")";
                 (reward.isTeamReward() ? team : mine).add(line);
                 if (claimed.get().getTime() == now) {
                     toldNow.add(reward.id);
