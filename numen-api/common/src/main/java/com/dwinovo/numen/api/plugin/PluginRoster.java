@@ -25,7 +25,8 @@ import java.util.function.Supplier;
  * {@link Status#DISABLED}。服主之后改名单({@link #setDisabled})写进的是<b>下次启动的设定</b>,这一次的运行不变——插件接口只有
  * setup、没有卸下,有的插件还带 Mixin,运行中卸不掉。两者不同的,{@link Plugin#pending} 为真。
  *
- * <p>Numen API 自己的名字空间({@link NumenPlugins#NUMEN})是其余一切的底座,不在名单管辖之内。
+ * <p>花名册里只有插件。引擎(Numen API)是宿主,它自己的登记走 {@link NumenPlugins#registerHost},不在这里、名单也管不着;
+ * Numen 的内容(工具、任务、技能……)是插件之一,和别的插件一视同仁。
  *
  * <p>线程:任何线程;状态读写都在这个对象的锁里,插件的 setup 本身不在锁里跑。
  */
@@ -42,8 +43,6 @@ public final class PluginRoster {
     /** 插件此刻的状态。 */
     public enum Status {
         LOADED,
-        /** 联动的目标模组没装,没有装它。 */
-        TARGET_MISSING,
         /** 在这次启动的停用名单里,没有装它。 */
         DISABLED,
         /** setup 抛了;原因在 {@link Plugin#reason}。 */
@@ -71,10 +70,9 @@ public final class PluginRoster {
      * @param reason     {@link Status#FAILED} 时的原因,其余是空串
      * @param pending    下次启动的设定和这一次不一样(界面标"重启后生效")
      * @param disabledNext 下次启动时它是关着的
-     * @param toggleable 名单管得着它
      */
     public record Plugin(String id, String name, String version, List<String> authors, String target, Source source,
-                         Status status, String reason, boolean disabledNext, boolean pending, boolean toggleable,
+                         Status status, String reason, boolean disabledNext, boolean pending,
                          Map<Kind, Integer> adds) {}
 
     private static final class Entry {
@@ -116,17 +114,13 @@ public final class PluginRoster {
     // ---- 装载 ----
 
     /**
-     * 联动型插件在装之前报到:它联动哪个模组、那个模组在不在。返回能不能接着装——目标没装(状态 {@link Status#TARGET_MISSING})
-     * 或在这次启动的停用名单里(状态 {@link Status#DISABLED}),都是不装;两者都占时说前一个。
+     * 联动型插件在装之前报到(目标模组在场才报到,不在场的联动不算这台服务器上的插件):它联动哪个模组。返回能不能接着装——
+     * 在这次启动的停用名单里(状态 {@link Status#DISABLED})就不装。
      */
-    public synchronized boolean admit(Source source, String id, String target, boolean targetInstalled) {
+    public synchronized boolean admit(Source source, String id, String target) {
         Entry entry = entry(id, source);
         entry.source = source;
         entry.target = target;
-        if (!targetInstalled) {
-            entry.status = Status.TARGET_MISSING;
-            return false;
-        }
         return begin(id);
     }
 
@@ -168,8 +162,7 @@ public final class PluginRoster {
     }
 
     private Entry entry(String id, Source source) {
-        return entries.computeIfAbsent(id, key -> new Entry(source != null ? source
-                : NumenPlugins.NUMEN.equals(key) ? Source.BUNDLED : Source.JAR));
+        return entries.computeIfAbsent(id, key -> new Entry(source != null ? source : Source.JAR));
     }
 
     // ---- 停用名单 ----
@@ -183,11 +176,7 @@ public final class PluginRoster {
 
     private boolean disabledAtStart(String id) {
         load();
-        return toggleable(id) && atStart.contains(id);
-    }
-
-    private static boolean toggleable(String id) {
-        return !NumenPlugins.NUMEN.equals(id);
+        return atStart.contains(id);
     }
 
     /**
@@ -199,9 +188,6 @@ public final class PluginRoster {
         load();
         if (!entries.containsKey(id)) {
             return "no such plugin";
-        }
-        if (!toggleable(id)) {
-            return "the Numen API itself cannot be switched off";
         }
         if (disabled ? next.add(id) : next.remove(id)) {
             switches.get().write(next);
@@ -222,9 +208,9 @@ public final class PluginRoster {
     private Plugin plugin(String id, Entry e) {
         Meta carrier = metaOf.apply(e.source == Source.BUNDLED ? NumenPlugins.NUMEN : id);
         Meta named = e.source == Source.BUNDLED && !e.target.isEmpty() ? metaOf.apply(e.target) : carrier;
-        boolean off = toggleable(id) && next.contains(id);
+        boolean off = next.contains(id);
         return new Plugin(id, named.name().isEmpty() ? id : named.name(), carrier.version(), carrier.authors(),
-                e.target, e.source, e.status, e.reason, off, off != disabledAtStart(id), toggleable(id),
+                e.target, e.source, e.status, e.reason, off, off != disabledAtStart(id),
                 Collections.unmodifiableMap(new EnumMap<>(e.adds)));
     }
 }

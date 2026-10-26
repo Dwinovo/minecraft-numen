@@ -54,17 +54,27 @@ class PluginRosterTest {
     }
 
     @Test
-    void aLinkWhoseTargetIsAbsentStaysOnTheListAndIsNotInstalled(@TempDir Path dir) {
+    void aLinkIsListedWithItsTargetAndSource(@TempDir Path dir) {
         PluginRoster roster = roster(dir);
 
-        assertFalse(roster.admit(Source.BUNDLED, "tlm", "touhou_little_maid", false));
-        assertTrue(roster.admit(Source.BUNDLED, "ysm", "yes_steve_model", true));
+        assertTrue(roster.admit(Source.BUNDLED, "ysm", "yes_steve_model"));
 
-        PluginRoster.Plugin missing = row(roster, "tlm");
-        assertEquals(Status.TARGET_MISSING, missing.status());
-        assertEquals("touhou_little_maid", missing.target());
-        assertEquals(Source.BUNDLED, missing.source());
-        assertEquals(Status.LOADED, row(roster, "ysm").status());
+        PluginRoster.Plugin link = row(roster, "ysm");
+        assertEquals("yes_steve_model", link.target());
+        assertEquals(Source.BUNDLED, link.source());
+        assertEquals(Status.LOADED, link.status());
+    }
+
+    /** 名单上写着一个这台服务器没装目标的联动:那一行留在文件里不动,装回目标模组后照样生效。 */
+    @Test
+    void anEntryForALinkWhoseTargetIsAbsentStaysInTheFile(@TempDir Path dir) {
+        switches(dir).write(java.util.Set.of("tlm"));
+        PluginRoster roster = roster(dir);
+        roster.run("other", numen -> { }, DOOR);
+        assertNull(roster.setDisabled("other", true));
+
+        assertTrue(roster.plugins().stream().noneMatch(p -> p.id().equals("tlm")));
+        assertEquals(java.util.Set.of("tlm", "other"), switches(dir).disabled());
     }
 
     @Test
@@ -96,7 +106,7 @@ class PluginRosterTest {
     @Test
     void theNextStartReadsWhatWasWritten(@TempDir Path dir) {
         PluginRoster first = roster(dir);
-        first.admit(Source.JAR, "probe", "", true);
+        first.admit(Source.JAR, "probe", "");
         assertNull(first.setDisabled("probe", true));
 
         PluginRoster second = roster(dir);
@@ -107,18 +117,17 @@ class PluginRosterTest {
         assertEquals(Status.DISABLED, row(second, "probe").status());
     }
 
+    /** Numen 的内容也是插件之一:在启动名单上就不装,和别的插件一样改下次启动的设定。 */
     @Test
-    void theNumenApiItselfCannotBeSwitchedOff(@TempDir Path dir) {
+    void numenIsAPluginLikeAnyOtherAndCanBeSwitchedOff(@TempDir Path dir) {
         switches(dir).write(java.util.Set.of(NumenPlugins.NUMEN));
         PluginRoster roster = roster(dir);
-        AtomicInteger ran = new AtomicInteger();
 
-        roster.run(NumenPlugins.NUMEN, numen -> ran.incrementAndGet(), DOOR);
+        assertFalse(roster.admit(Source.BUNDLED, NumenPlugins.NUMEN, ""));
 
-        assertEquals(1, ran.get());
-        assertNotNull(roster.setDisabled(NumenPlugins.NUMEN, true));
-        assertFalse(row(roster, NumenPlugins.NUMEN).toggleable());
-        assertEquals(Source.BUNDLED, row(roster, NumenPlugins.NUMEN).source());
+        assertEquals(Status.DISABLED, row(roster, NumenPlugins.NUMEN).status());
+        assertNull(roster.setDisabled(NumenPlugins.NUMEN, false));
+        assertTrue(row(roster, NumenPlugins.NUMEN).pending());
         assertNotNull(roster.setDisabled("nobody", true), "没登记过的插件没有开关");
     }
 
@@ -181,7 +190,7 @@ class PluginRosterTest {
                 "standalone", new Meta("Stand Alone", "0.5", List.of("someone")));
         PluginRoster roster = new PluginRoster(() -> switches(dir), id -> mods.getOrDefault(id, Meta.NONE));
 
-        roster.admit(Source.BUNDLED, "tlm", "touhou_little_maid", true);
+        roster.admit(Source.BUNDLED, "tlm", "touhou_little_maid");
         roster.run("standalone", numen -> { }, DOOR);
         roster.run("anonymous", numen -> { }, DOOR);
 

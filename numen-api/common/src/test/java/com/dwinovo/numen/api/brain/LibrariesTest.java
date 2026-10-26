@@ -102,7 +102,7 @@ class LibrariesTest {
         serverKeys.put("deepseek", "sk-secret");
         plugins = new PluginRoster(() -> new PluginSwitches(new JsonDoc(dir.resolve("server").resolve("plugins.json"),
                 JsonDoc.Format.of(1), io)), id -> PluginRoster.Meta.NONE);
-        plugins.admit(PluginRoster.Source.JAR, "probe", "", true);
+        plugins.admit(PluginRoster.Source.JAR, "probe", "");
         signed = new java.util.concurrent.Semaphore(0);
         SkinCache skinCache = new SkinCache(new Home(dir.resolve("server"), io));
         signer = new SkinSigning(new SkinSigning.Backend() {

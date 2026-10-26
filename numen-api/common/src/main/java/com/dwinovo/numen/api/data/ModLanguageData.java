@@ -448,7 +448,6 @@ public final class ModLanguageData {
         public static final String PLUGIN_ABOUT             = "numen.plugin.about";
         public static final String PLUGIN_RESTART           = "numen.plugin.restart";
         public static final String PLUGIN_LOADED            = "numen.plugin.loaded";
-        public static final String PLUGIN_TARGET_MISSING    = "numen.plugin.target_missing";
         public static final String PLUGIN_DISABLED          = "numen.plugin.disabled";
         public static final String PLUGIN_FAILED            = "numen.plugin.failed";
         public static final String PLUGIN_VERSION           = "numen.plugin.version";
@@ -1170,7 +1169,6 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect when the server restarts. Only a server admin or the host can switch them.");
         adder.add(Keys.PLUGIN_RESTART,         "takes effect after restart");
         adder.add(Keys.PLUGIN_LOADED,          "loaded");
-        adder.add(Keys.PLUGIN_TARGET_MISSING,  "%s is not installed");
         adder.add(Keys.PLUGIN_DISABLED,        "off");
         adder.add(Keys.PLUGIN_FAILED,          "failed to load");
         adder.add(Keys.PLUGIN_VERSION,         "Version %s");
@@ -1897,7 +1895,6 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_ABOUT,           "开关在服务器重启后生效,只有管理员和房主能改。");
         adder.add(Keys.PLUGIN_RESTART,         "重启后生效");
         adder.add(Keys.PLUGIN_LOADED,          "已加载");
-        adder.add(Keys.PLUGIN_TARGET_MISSING,  "未安装 %s");
         adder.add(Keys.PLUGIN_DISABLED,        "已关闭");
         adder.add(Keys.PLUGIN_FAILED,          "加载失败");
         adder.add(Keys.PLUGIN_VERSION,         "版本 %s");

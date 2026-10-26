@@ -1188,7 +1188,6 @@ public final class SettingsView {
     private static String pluginStatus(ServerLibraries.Plugin p) {
         return switch (p.status()) {
             case LOADED -> I18n.get(ModLanguageData.Keys.PLUGIN_LOADED);
-            case TARGET_MISSING -> I18n.get(ModLanguageData.Keys.PLUGIN_TARGET_MISSING, p.target());
             case DISABLED -> I18n.get(ModLanguageData.Keys.PLUGIN_DISABLED);
             case FAILED -> I18n.get(ModLanguageData.Keys.PLUGIN_FAILED);
         };
@@ -1202,7 +1201,7 @@ public final class SettingsView {
         if (!p.authors().isEmpty()) {
             lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_AUTHORS, String.join(", ", p.authors())), TXT_MUTED));
         }
-        if (nb(p.target()) && p.status() != PluginRoster.Status.TARGET_MISSING) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
+        if (nb(p.target())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
         lines.add(Nb.colored(pluginStatus(p), p.status() == PluginRoster.Status.FAILED ? FAIL : TXT_MUTED));
         if (nb(p.reason())) lines.add(Nb.colored(p.reason(), FAIL));
         if (p.pending()) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART), TXT_MUTED));

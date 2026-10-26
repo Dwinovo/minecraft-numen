@@ -64,11 +64,11 @@ public class CommonClass {
     }
 
     /**
-     * Numen API 自己的几组 API 函数,和 Numen 与插件走同一扇门({@code NumenPlugins.register}):{@code api}(帮助)、{@code mc}(原版与模组的
+     * Numen API 自己的几组 API 函数,走宿主自己的登记({@code NumenPlugins.registerHost}),和 Numen 与插件登记进同一张表:{@code api}(帮助)、{@code mc}(原版与模组的
      * 指令)、{@code task}(手上的活与表)、{@code module}(Lua 模块)。它们属于 Numen API:谁登记了函数,谁都指望帮助与这几样在。
      */
     public static void registerApi() {
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> {
+        com.dwinovo.numen.api.NumenPlugins.registerHost(numen -> {
             numen.api("api", "The API itself: the typed signatures of a group's or a module's functions, or one "
                     + "function in full.", com.dwinovo.numen.api.sdk.HelpApi.class);
             numen.api("mc", "Minecraft and mod commands, as a player types them in chat, with your owner's permission "
