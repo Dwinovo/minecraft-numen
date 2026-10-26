@@ -1,6 +1,8 @@
 package com.dwinovo.numen.plugins;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 
 import java.nio.file.Path;
 import java.util.function.Function;
@@ -48,32 +50,42 @@ public final class Gate {
      * 带内容(技能、Lua 模块)的联动。
      *
      * @param modId   目标模组;不在就整块跳过
-     * @param plugin  联动的模块名({@code plugins/} 下的目录名),用来定位它自带的内容
+     * @param plugin  联动的模块名({@code plugins/} 下的目录名,也是它登记时的名字空间),用来在花名册里认它、定位它自带的内容
      * @param body    延迟到判据为真之后才求值——理由见类注释
      */
     public void open(String modId, String plugin, Function<Path, Runnable> body) {
-        if (!modLoaded.test(modId)) return;
-        install(modId, () -> body.apply(contentRoot(plugin)).run());
+        if (!admit(plugin, modId)) return;
+        install(plugin, () -> body.apply(contentRoot(plugin)).run());
     }
 
     /**
      * 不带内容的联动(它补的是已有的能力,用法由那个能力自己的描述讲清,比如穿戴来源):不去找内容目录,
      * 也就不会为"没有内容"报警。
      *
-     * @param body 延迟到判据为真之后才求值——理由见类注释
+     * @param plugin 联动登记时的名字空间,用来在花名册里认它
+     * @param body   延迟到判据为真之后才求值——理由见类注释
      */
-    public void open(String modId, Supplier<Runnable> body) {
-        if (!modLoaded.test(modId)) return;
-        install(modId, () -> body.get().run());
+    public void open(String modId, String plugin, Supplier<Runnable> body) {
+        if (!admit(plugin, modId)) return;
+        install(plugin, () -> body.get().run());
     }
 
-    private void install(String modId, Runnable run) {
+    /**
+     * 先在花名册里报到——目标模组不在也留一行"目标模组未安装"——再答能不能装:目标在场,并且服主没在停用名单里关掉它。
+     * 不装的两种原因都由花名册判,这里只照它的答案走。
+     */
+    private boolean admit(String plugin, String modId) {
+        return NumenPlugins.admit(PluginRoster.Source.BUNDLED, plugin, modId, modLoaded.test(modId));
+    }
+
+    private void install(String plugin, Runnable run) {
         try {
             run.run();
-            Constants.LOG.info("[numen] 联动已接上:{}", modId);
+            Constants.LOG.info("[numen] 联动已接上:{}", plugin);
         } catch (Throwable t) {
-            // 一个联动接不上不能带倒整个模组,也不能带倒别的联动
-            Constants.LOG.warn("[numen] 联动 {} 没接上,其余照常:{}", modId, t.toString());
+            // 一个联动接不上不能带倒整个模组,也不能带倒别的联动;原因记进花名册,界面上看得到
+            NumenPlugins.failed(plugin, t);
+            Constants.LOG.warn("[numen] 联动 {} 没接上,其余照常:{}", plugin, t.toString());
         }
     }
 

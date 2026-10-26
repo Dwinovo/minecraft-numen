@@ -105,6 +105,14 @@ public final class Homes {
         return home(config.resolve(SERVER), "server");
     }
 
+    /**
+     * 服主管的东西,不经 {@link Homes} 实例:服务器还没起来(模组构造期)就要读的设置在这里,位置与 {@link #server} 是同一处,
+     * 车道也是同一条。
+     */
+    public static Home serverHome() {
+        return new Home(NumenPaths.config().resolve(SERVER), NumenIo.lanes().io(SERVER));
+    }
+
     /** 这台电脑自己的东西:客户端进程读写它,不经车道。 */
     public static Path clientDir() {
         return NumenPaths.config().resolve(CLIENT);

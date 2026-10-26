@@ -7,6 +7,9 @@ import com.dwinovo.numen.api.entity.CompanionEvents;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.WaterState;
 import com.dwinovo.numen.api.event.NumenEvents;
+import com.dwinovo.numen.api.plugin.PluginRoster;
+import com.dwinovo.numen.api.plugin.PluginRoster.Source;
+import com.dwinovo.numen.api.plugin.PluginSwitches;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 
@@ -63,7 +66,34 @@ public final class NumenPlugins {
     public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
         com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
-        plugin.setup(new Impl(namespace));
+        ROSTER.run(namespace, plugin, new Impl(namespace));
+    }
+
+    /**
+     * 联动型插件在装之前报到,让花名册里有它的一行——目标模组没装也在:{@code id} 是它之后 {@link #register} 用的名字空间,
+     * {@code targetMod} 是它联动的模组。返回能不能接着装:目标没装,或服主在停用名单里关了它,就是 false,别再装。
+     *
+     * <p>Numen 内嵌的联动由 Numen 的闸门报到({@link Source#BUNDLED});单独发布的联动插件报 {@link Source#JAR}。
+     */
+    public static boolean admit(Source source, String id, String targetMod, boolean targetInstalled) {
+        return ROSTER.admit(source, id, targetMod, targetInstalled);
+    }
+
+    /** 插件装到一半出了事(不是它的 setup 里抛的,比如装之前的准备):记进花名册,界面上显示原因。 */
+    public static void failed(String id, Throwable cause) {
+        ROSTER.failed(id, cause);
+    }
+
+    /** 这台服务器上的插件花名册:界面、停用名单都读写它。<b>Numen API 内部调用</b>。 */
+    public static PluginRoster roster() {
+        return ROSTER;
+    }
+
+    private static volatile PluginRoster ROSTER = new PluginRoster(PluginSwitches::onDisk, PluginRoster::platformMeta);
+
+    /** 单测用:单测里没有加载器给的配置目录,换一份名单不在服务器配置目录里的花名册。必须在第一次登记之前。 */
+    public static void useRoster(PluginRoster roster) {
+        ROSTER = roster;
     }
 
     /** 主人客户端那一侧的输入口,形状与 {@link NumenApi#emit(UUID, String, String)} 相同。 */

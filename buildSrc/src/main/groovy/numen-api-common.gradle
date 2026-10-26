@@ -149,6 +149,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/NumenGateway*.class'
     include 'com/dwinovo/numen/api/NumenPlugin*.class'  // NumenPlugin 与 NumenPlugins
     include 'com/dwinovo/numen/api/gear/**'
+    include 'com/dwinovo/numen/api/plugin/PluginRoster*.class'  // NumenPlugins.admit 的参数类型 Source;联动型插件(含 Numen 的闸门)用它报到
     include 'com/dwinovo/numen/api/PluginTags*.class'  // Paper 端:插件在引导阶段把自带的标签文件装进服务端(只有 Paper 的成品里有它)
     include 'com/dwinovo/numen/api/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
     include 'com/dwinovo/numen/api/agent/tool/api/**'  // per-call tool context

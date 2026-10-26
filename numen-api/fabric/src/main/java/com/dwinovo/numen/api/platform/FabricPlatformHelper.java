@@ -39,6 +39,19 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public String modName(String modId) {
+        return FabricLoader.getInstance().getModContainer(modId).map(mod -> mod.getMetadata().getName()).orElse(null);
+    }
+
+    @Override
+    public java.util.List<String> modAuthors(String modId) {
+        return FabricLoader.getInstance().getModContainer(modId)
+                .map(mod -> mod.getMetadata().getAuthors().stream()
+                        .map(net.fabricmc.loader.api.metadata.Person::getName).toList())
+                .orElse(java.util.List.of());
+    }
+
+    @Override
     public java.nio.file.Path modResource(String modId, String path) {
         return FabricLoader.getInstance().getModContainer(modId).flatMap(mod -> mod.findPath(path)).orElse(null);
     }

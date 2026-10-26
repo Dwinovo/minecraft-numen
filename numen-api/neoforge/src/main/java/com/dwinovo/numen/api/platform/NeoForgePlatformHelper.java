@@ -41,6 +41,20 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public String modName(String modId) {
+        return ModList.get().getModContainerById(modId).map(mod -> mod.getModInfo().getDisplayName()).orElse(null);
+    }
+
+    /** neoforge.mods.toml 里 {@code authors} 是一段自由文本("A, B"),按逗号拆开。 */
+    @Override
+    public java.util.List<String> modAuthors(String modId) {
+        return ModList.get().getModContainerById(modId)
+                .flatMap(mod -> mod.getModInfo().getConfig().<String>getConfigElement("authors"))
+                .map(text -> java.util.Arrays.stream(text.split(",")).map(String::strip).filter(a -> !a.isEmpty()).toList())
+                .orElse(java.util.List.of());
+    }
+
+    @Override
     public java.nio.file.Path modResource(String modId, String path) {
         var file = ModList.get().getModFileById(modId);
         if (file == null) {
