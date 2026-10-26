@@ -10,7 +10,6 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.reward.Reward;
 import dev.ftb.mods.ftbquests.quest.reward.RewardAutoClaim;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import dev.ftb.mods.ftbquests.util.TextUtils;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.network.chat.Component;
 
@@ -88,10 +87,10 @@ final class QuestBook {
             List<String> which = new ArrayList<>();
             List<Map<String, Object>> candidates = new ArrayList<>();
             for (Quest quest : found) {
-                which.add(quest.getCodeString() + " (chapter " + text(quest.getChapter().getTitle()) + ")");
+                which.add(quest.getCodeString() + " (chapter " + QuestNames.of(quest.getChapter()) + ")");
                 Map<String, Object> o = new LinkedHashMap<>();
                 o.put("id", quest.getCodeString());
-                o.put("chapter", text(quest.getChapter().getTitle()));
+                o.put("chapter", QuestNames.of(quest.getChapter()));
                 candidates.add(o);
             }
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "Several quests are titled \"" + wanted + "\": "
@@ -109,13 +108,13 @@ final class QuestBook {
         String title = wanted.toLowerCase(Locale.ROOT);
         return quests().stream()
                 .filter(quest -> quest.isSearchable(team)
-                        && text(quest.getTitle()).toLowerCase(Locale.ROOT).equals(title))
+                        && QuestNames.of(quest).toLowerCase(Locale.ROOT).equals(title))
                 .toList();
     }
 
     /** 一个任务摊开:书把详情藏到能开始的,只给到前置任务为止。 */
     private FtbqApi.Quest detail(Quest quest) {
-        String subtitle = parsed(quest, quest.getRawSubtitle());
+        String subtitle = QuestNames.parse(quest, quest.getRawSubtitle());
         boolean canStart = team.canStartTasks(quest);
         FtbqApi.Status status = team.isCompleted(quest) ? FtbqApi.Status.COMPLETED
                 : canStart ? FtbqApi.Status.WORKABLE : FtbqApi.Status.CANNOT_START;
@@ -124,7 +123,7 @@ final class QuestBook {
         List<FtbqApi.Dependency> dependencies = new ArrayList<>();
         if (quest.hasDependencies()) {
             quest.streamDependencies().forEach(dep -> dependencies.add(new FtbqApi.Dependency(dep.getCodeString(),
-                    text(dep.getTitle()), team.isCompleted(dep))));
+                    QuestNames.of(dep), team.isCompleted(dep))));
         }
         boolean hidden = !canStart && quest.hideDetailsUntilStartable();
         List<FtbqApi.QuestTask> tasks = new ArrayList<>();
@@ -137,7 +136,7 @@ final class QuestBook {
                 rewards.add(reward(reward));
             }
         }
-        return new FtbqApi.Quest(quest.getCodeString(), text(quest.getTitle()), text(quest.getChapter().getTitle()),
+        return new FtbqApi.Quest(quest.getCodeString(), QuestNames.of(quest), QuestNames.of(quest.getChapter()),
                 team.getName(), herInTeam, subtitle.isBlank() ? Optional.empty() : Optional.of(subtitle), status,
                 cannotStart, dependencies, hidden ? Optional.empty() : description(quest),
                 hidden ? Optional.empty() : Optional.of(tasks),
@@ -153,13 +152,13 @@ final class QuestBook {
                 left.add(task(task));
             }
         }
-        return new FtbqApi.Workable(quest.getCodeString(), text(quest.getTitle()), text(quest.getChapter().getTitle()),
+        return new FtbqApi.Workable(quest.getCodeString(), QuestNames.of(quest), QuestNames.of(quest.getChapter()),
                 pinned.contains(quest.id), left);
     }
 
     /** 一个条件:标题、做完没有、进度(只有"做没做"两态的没有)、谁来完成。 */
     private FtbqApi.QuestTask task(Task task) {
-        return new FtbqApi.QuestTask(text(task.getTitle()), team.isCompleted(task),
+        return new FtbqApi.QuestTask(QuestNames.of(task), team.isCompleted(task),
                 task.hideProgressNumbers() ? Optional.empty() : Optional.of(progress(task)), TaskRole.of(task));
     }
 
@@ -199,7 +198,7 @@ final class QuestBook {
         }
         List<String> kept = new ArrayList<>();
         for (String raw : quest.getRawDescription()) {
-            String line = raw.equals(Quest.PAGEBREAK_CODE) ? "" : parsed(quest, raw).strip();
+            String line = raw.equals(Quest.PAGEBREAK_CODE) ? "" : QuestNames.parse(quest, raw).strip();
             if (!line.isEmpty()) {
                 kept.add(line);
             }
@@ -211,10 +210,10 @@ final class QuestBook {
     private FtbqApi.Reward reward(Reward reward) {
         boolean auto = reward.getAutoClaimType() != RewardAutoClaim.DISABLED;
         if (reward.isTeamReward()) {
-            return new FtbqApi.Reward(text(reward.getTitle()), true, auto,
+            return new FtbqApi.Reward(QuestNames.of(reward), true, auto,
                     Optional.of(team.isRewardClaimed(owner, reward)), Optional.empty(), Optional.empty());
         }
-        return new FtbqApi.Reward(text(reward.getTitle()), false, auto, Optional.empty(),
+        return new FtbqApi.Reward(QuestNames.of(reward), false, auto, Optional.empty(),
                 Optional.of(team.isRewardClaimed(her, reward)), Optional.of(team.isRewardClaimed(owner, reward)));
     }
 
@@ -224,7 +223,7 @@ final class QuestBook {
         pinned.forEach((long id) -> {
             Quest quest = file.getQuest(id);
             if (quest != null) {
-                out.add(new FtbqApi.QuestRef(quest.getCodeString(), text(quest.getTitle())));
+                out.add(new FtbqApi.QuestRef(quest.getCodeString(), QuestNames.of(quest)));
             }
         });
         return out;
@@ -244,14 +243,5 @@ final class QuestBook {
 
     private static String text(Component component) {
         return component.getString();
-    }
-
-    /**
-     * 副标题、正文的一行原文按书的语言解析成文字。FTB 自己的 {@code getSubtitle}/{@code getDescription} 只在
-     * 客户端存在(标了 OnlyIn,服务端的类里没有这两个方法),解析用的是它们背后的同一个 {@link TextUtils#parseRawText}
-     * ——标题的 {@code getTitle} 两侧用的也是它。原文取自这本书的语言,所以主人客户端上读到的是主人的语言。
-     */
-    private static String parsed(Quest quest, String raw) {
-        return TextUtils.parseRawText(raw, quest.holderLookup()).getString();
     }
 }

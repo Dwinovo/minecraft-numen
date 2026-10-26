@@ -46,7 +46,7 @@ final class QuestSubmit {
                     null);
         }
         TeamData team = maybe.get();
-        String named = "\"" + quest.getTitle().getString() + "\" (" + quest.getCodeString() + ")";
+        String named = "\"" + QuestNames.of(quest) + "\" (" + quest.getCodeString() + ")";
         String forTeam = "your team \"" + team.getName() + "\"";
         String show = Call.of("ftbquests.quest.show", quest.getCodeString());
         if (team.isLocked()) {
@@ -71,7 +71,7 @@ final class QuestSubmit {
             if (role == TaskRole.SUBMIT) {
                 toHandIn.add(task);
             } else {
-                skipped.add(new FtbqApi.QuestTask(task.getTitle().getString(), false, Optional.empty(), role));
+                skipped.add(new FtbqApi.QuestTask(QuestNames.of(task), false, Optional.empty(), role));
             }
         }
         if (toHandIn.isEmpty()) {
@@ -87,7 +87,7 @@ final class QuestSubmit {
             file.withPlayerContext(her, () -> task.submitTask(team, her));
             long now = team.getProgress(task);
             moved |= now != was;
-            handed.add(new FtbqApi.Handed(task.getTitle().getString(), task.formatProgress(team, was),
+            handed.add(new FtbqApi.Handed(QuestNames.of(task), task.formatProgress(team, was),
                     task.formatProgress(team, now) + "/" + task.formatMaxProgress(), team.isCompleted(task)));
         }
         FtbqApi.Submitted done = new FtbqApi.Submitted(quest.getCodeString(), handed, skipped, before.changeTo(her),
