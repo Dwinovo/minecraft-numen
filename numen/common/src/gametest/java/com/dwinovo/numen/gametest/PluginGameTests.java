@@ -107,7 +107,8 @@ public class PluginGameTests {
                 .thenExecute(() -> {
                     server.getPlayerList().deop(admin.getGameProfile());
                     GameTestKit.leave(admin);
-                });
+                })
+                .thenSucceed();
     }
 
     /** 不是管理员的玩家读得到插件表、行上没有开关;他要关插件被拒,说明原因,名单不动。 */
