@@ -18,6 +18,8 @@ import com.dwinovo.numen.api.entity.MojangSkins;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.dwinovo.numen.api.plugin.PluginRoster;
+import com.dwinovo.numen.api.plugin.PluginSwitches;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.MojangSkinLookup;
 import com.dwinovo.numen.api.skin.SkinCache;
@@ -80,6 +82,7 @@ class LibrariesTest {
     private final java.util.concurrent.atomic.AtomicInteger signCalls = new java.util.concurrent.atomic.AtomicInteger();
     private final Map<UUID, PermissionStore> permissionStores = new HashMap<>();
     private final Map<UUID, Map<UUID, String>> companionsOf = new HashMap<>();
+    private PluginRoster plugins;
 
     private Libraries libraries(Path dir) {
         return libraries(dir, LibraryHub.headless(dir, com.dwinovo.numen.api.library.Shipped.bundles(), host));
@@ -97,6 +100,9 @@ class LibrariesTest {
                 new ConnectionProfile("deepseek", null, "deepseek-chat", null, "https://relay.example",
                         "127.0.0.1:7890", null, 0, null, 0, null)));
         serverKeys.put("deepseek", "sk-secret");
+        plugins = new PluginRoster(() -> new PluginSwitches(new JsonDoc(dir.resolve("server").resolve("plugins.json"),
+                JsonDoc.Format.of(1), io)), id -> PluginRoster.Meta.NONE);
+        plugins.admit(PluginRoster.Source.JAR, "probe", "", true);
         signed = new java.util.concurrent.Semaphore(0);
         SkinCache skinCache = new SkinCache(new Home(dir.resolve("server"), io));
         signer = new SkinSigning(new SkinSigning.Backend() {
@@ -229,6 +235,11 @@ class LibrariesTest {
             @Override
             public Wardrobe wardrobe() {
                 return wardrobe;
+            }
+
+            @Override
+            public PluginRoster plugins() {
+                return plugins;
             }
 
             @Override
@@ -1056,6 +1067,41 @@ class LibrariesTest {
         Libraries libraries = libraries(dir);
         assertTrue(libraries.keyServices(ADMIN, true).contains(MineSkinClient.KEY_SERVICE));
         assertFalse(libraries.keyServices(PLAYER, false).contains(MineSkinClient.KEY_SERVICE));
+    }
+
+    private static JsonObject plugin(String table, String id) {
+        for (JsonElement e : JsonParser.parseString(table).getAsJsonArray()) {
+            if (id.equals(e.getAsJsonObject().get("id").getAsString())) {
+                return e.getAsJsonObject();
+            }
+        }
+        throw new AssertionError("no plugin " + id + " in " + table);
+    }
+
+    /** 人人读得到花名册;开关只给管理员与房主,别人的请求被拒、名单不动。 */
+    @Test
+    void everyoneReadsThePluginsButOnlyAnAdminOrTheHostSwitchesThem(@TempDir Path dir) {
+        host = OTHER;
+        Libraries libraries = libraries(dir);
+        assertFalse(plugin(libraries.view(PLAYER, false, Libraries.PLUGIN), "probe").get("toggle").getAsBoolean());
+        assertTrue(plugin(libraries.view(ADMIN, true, Libraries.PLUGIN), "probe").get("toggle").getAsBoolean());
+        assertTrue(plugin(libraries.view(OTHER, false, Libraries.PLUGIN), "probe").get("toggle").getAsBoolean(), "房主");
+
+        Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.PLUGIN, Libraries.DISABLE, body("id", "probe"));
+        assertNotNull(refused.problem());
+        assertFalse(plugin(refused.entries(), "probe").get("disabledNext").getAsBoolean());
+
+        Libraries.Result done = libraries.handle(ADMIN, true, Libraries.PLUGIN, Libraries.DISABLE, body("id", "probe"));
+        assertNull(done.problem());
+        assertTrue(done.shared(), "别的在线玩家的表也要跟着变");
+        JsonObject row = plugin(done.entries(), "probe");
+        assertTrue(row.get("disabledNext").getAsBoolean());
+        assertTrue(row.get("pending").getAsBoolean(), "这一次的运行没变,下次启动才关");
+        assertEquals("loaded", row.get("status").getAsString());
+
+        assertNull(libraries.handle(OTHER, false, Libraries.PLUGIN, Libraries.ENABLE, body("id", "probe")).problem());
+        assertFalse(plugin(libraries.view(PLAYER, false, Libraries.PLUGIN), "probe").get("disabledNext").getAsBoolean());
+        assertNotNull(libraries.handle(ADMIN, true, Libraries.PLUGIN, Libraries.DISABLE, body("id", "nobody")).problem());
     }
 
     private static JsonObject bodyInt(String key, int value) {

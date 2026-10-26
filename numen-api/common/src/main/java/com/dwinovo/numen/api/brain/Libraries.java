@@ -21,10 +21,12 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.dwinovo.numen.api.mcp.server.McpMode;
+import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.permission.PermissionConfig;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
@@ -96,6 +98,8 @@ public final class Libraries {
     /** 服务器皮肤文件夹里的图:只读,客户端要看时才问(带着每张图,不随排队的进度一起推)。 */
     public static final String SKIN_FILES = "skin-files";
     public static final String PERMISSION = "permission";
+    /** 插件花名册:人人读;开关(记在服务器的停用名单里,下次启动生效)只有管理员与房主能改,用 {@link #ENABLE}/{@link #DISABLE}。 */
+    public static final String PLUGIN = "plugin";
 
     public static final String LIST = "list";
     public static final String PUT = "put";
@@ -207,6 +211,9 @@ public final class Libraries {
 
         /** 给同伴换皮肤的流程,连同服务器上的皮肤文件夹。 */
         Wardrobe wardrobe();
+
+        /** 这台服务器上的插件花名册。 */
+        PluginRoster plugins();
     }
 
     /** 这台服务器上的那一份。 */
@@ -310,6 +317,11 @@ public final class Libraries {
             }
 
             @Override
+            public PluginRoster plugins() {
+                return NumenPlugins.roster();
+            }
+
+            @Override
             public ServerConfig config() {
                 return new ServerConfig() {
                     @Override
@@ -368,6 +380,7 @@ public final class Libraries {
             case SERVER_CONFIG -> Done.of(serverConfig(admin, op, body), true);
             case MCP_CLIENT -> mcpClient(owner, admin, op, body);
             case MCP_SERVER -> Done.of(mcpServer(admin, op, body), true);
+            case PLUGIN -> Done.of(plugin(admin || sources.host(owner), op, body), true);
             case PREFS -> Done.of(prefs(owner, op, body), false);
             case NOTES, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
@@ -449,6 +462,7 @@ public final class Libraries {
                 }
             }
             case MCP_CLIENT -> mcpRows(owner, admin, out);
+            case PLUGIN -> pluginRows(admin || sources.host(owner), out);
             case MCP_SERVER -> {
                 if (admin) {
                     out.add(mcpServerView());
@@ -964,6 +978,49 @@ public final class Libraries {
             return mode.lastError();
         }
         return null;
+    }
+
+    // ---- 插件 ----
+
+    /**
+     * 插件花名册的行,人人看得到同样的内容:谁、哪个版本、联动谁、此刻的状态、加了什么,以及下次启动它开还是关
+     * ({@code disabledNext})、和这一次运行不一样没有({@code pending})。{@code toggle} 是这位玩家能不能改它的开关。
+     */
+    private void pluginRows(boolean mayToggle, JsonArray out) {
+        for (PluginRoster.Plugin plugin : sources.plugins().plugins()) {
+            JsonObject row = new JsonObject();
+            row.addProperty("id", plugin.id());
+            row.addProperty("name", plugin.name());
+            row.addProperty("version", plugin.version());
+            JsonArray authors = new JsonArray();
+            plugin.authors().forEach(authors::add);
+            row.add("authors", authors);
+            row.addProperty("target", plugin.target());
+            row.addProperty("source", plugin.source().name().toLowerCase(java.util.Locale.ROOT));
+            row.addProperty("status", plugin.status().name().toLowerCase(java.util.Locale.ROOT));
+            row.addProperty("reason", plugin.reason());
+            row.addProperty("disabledNext", plugin.disabledNext());
+            row.addProperty("pending", plugin.pending());
+            row.addProperty("toggle", mayToggle && plugin.toggleable());
+            JsonObject adds = new JsonObject();
+            plugin.adds().forEach((kind, n) -> adds.addProperty(kind.name().toLowerCase(java.util.Locale.ROOT), n));
+            row.add("adds", adds);
+            out.add(row);
+        }
+    }
+
+    /** 插件的开关:改的是下次启动的停用名单,管理员与房主才能改,别人只读。 */
+    private String plugin(boolean mayToggle, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return null;
+        }
+        if (!ENABLE.equals(op) && !DISABLE.equals(op)) {
+            return "unknown operation";
+        }
+        if (!mayToggle) {
+            return "only a server admin or the host may switch plugins";
+        }
+        return sources.plugins().setDisabled(string(body, "id"), DISABLE.equals(op));
     }
 
     // ---- 接进来的 MCP 服务器 ----
