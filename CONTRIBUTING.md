@@ -23,6 +23,7 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 ./gradlew :numen:fabric:runGameTestServer
 ./gradlew :plugins:tlm:runGameTestServer      # 车万女仆联动的那一批,单开一次跑批 / the Touhou Little Maid integration cases, a run of their own
 ./gradlew :plugins:ysm:gametest:runGameTestServer  # YSM 联动的那一批,同样单开一次跑批 / the Yes Steve Model integration cases, also a run of their own
+./gradlew :plugins:ftbquests:runGameTestServer  # FTB Quests 联动的那一批,同样单开一次跑批 / the FTB Quests integration cases, also a run of their own
 # 以上几条 GameTest(要先跑过 datagenAll)不跟着推送跑,在 GitHub 的 Actions 页手动触发 "GameTest",各平台并行。测试服务器每刻开头等寻路与程序的后台线程停下再往下走,
 # 结果不看机器快慢。/ The GameTest runs above (run datagenAll first) do not run on push; trigger "GameTest" by hand on the Actions page, platforms in parallel. The test server waits at the start of every tick for the pathing and program background threads to settle, so results do not depend on machine speed.
 # 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟)

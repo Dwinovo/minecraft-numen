@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - name: neoforge
-            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer :plugins:ysm:gametest:runGameTestServer"
+            tasks: ":numen:neoforge:runGameTestServer :plugins:tlm:runGameTestServer :plugins:ysm:gametest:runGameTestServer :plugins:ftbquests:runGameTestServer"
           - name: fabric
             tasks: ":numen:fabric:runGameTestServer"
     steps:
