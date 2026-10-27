@@ -140,7 +140,6 @@ class BuildTaskRecordTest {
                 Blocks.STONE.asItem(), BlockPos.ZERO, "stone");
 
         assertTrue(target.matches(Blocks.COBBLESTONE.defaultBlockState()));
-        assertFalse(target.acceptsPlacedState(Blocks.COBBLESTONE.defaultBlockState()));
     }
 
     @Test

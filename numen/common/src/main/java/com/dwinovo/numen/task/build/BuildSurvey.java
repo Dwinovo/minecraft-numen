@@ -4,6 +4,7 @@ import com.dwinovo.numen.WorkProfile;
 import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.task.dig.DigTaskRecord;
 import com.dwinovo.numen.task.move.Destination;
+import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
@@ -105,9 +106,12 @@ public final class BuildSurvey {
         return false;
     }
 
-    /** 站在这里够不够得着往这一格里放。 */
+    /**
+     * 站在这里够不够得着往这一格里放:就是走去放时的到达目标({@link Destination#reach})认不认这个站位——身体站得进、手够得着,
+     * 而且手点得着({@link Faces#handReachable},手放挑点击也问它)。走位挑停点与这里数格是同一句话。
+     */
     boolean reaches(BlockPos pos) {
-        return feet != null && feet.in(Destination.reach(player, pos));
+        return feet != null && feet.reaches(Destination.reach(player, pos), player.serverLevel());
     }
 
     /**
@@ -118,7 +122,7 @@ public final class BuildSurvey {
         if (cost <= 0) {
             return true;
         }
-        return inv.hasItems(target.item(), cost, true);
+        return inv.hasItems(target.item(), cost);
     }
 
     /** 数一遍整份:每种情形几格,以及要挖的格(离她近的在前)与够不着的格(低的在前、同一层里近的在前)。 */

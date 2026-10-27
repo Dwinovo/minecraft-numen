@@ -1943,4 +1943,39 @@ public class BuildGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * "够得着"只有一个判据:手点得着。她站在 rel 8,2,8,一格在 11,2,9(面的最近点离眼睛三米多)、一格在 12,2,10(整块包围盒量够得着,
+     * 可它朝下的那一面最近的点离眼睛 4.14 格,超出 4.5 减去站位余量,手点不着)。{@code numen.build.diff} 只数前一格够得着、后一格不算;
+     * {@code numen.build.place} 走一步到手点得着的地方,两格都手放,没有一格是直接写进去的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void build_reach_means_a_hand_can_click(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_clicker", new BlockPos(8, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.STONE, 2));
+        BlockPos near = helper.absolutePos(new BlockPos(11, 2, 9));
+        BlockPos edge = helper.absolutePos(new BlockPos(12, 2, 10));
+        String cells = "{{name = \"stone\", pos = " + xyz(near) + "}, {name = \"stone\", pos = " + xyz(edge) + "}}";
+        ToolRun[] runs = {null, null};
+        steps(helper)
+                .thenExecute(() -> runs[0] = lua(companion, "return numen.build.diff(" + cells + ")"))
+                .thenWaitUntil(() -> helper.assertTrue(runs[0].receipt() != null, "numen.build.diff has not finished"))
+                .thenExecute(() -> {
+                    var got = runs[0].data().getAsJsonObject("returned");
+                    helper.assertTrue(got.get("reach").getAsInt() == 1 && got.get("far").getAsInt() == 1,
+                            "diff does not count only the cell a hand can click as within reach: " + got);
+                    runs[1] = lua(companion, "numen.build.place(" + cells + ")");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "numen.build.place has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[1].succeeded(), "numen.build.place failed: " + runs[1].outcome());
+                    var result = runs[1].result(BuildCompanionTask.Placed.class);
+                    helper.assertTrue(level.getBlockState(near).is(Blocks.STONE) && level.getBlockState(edge).is(Blocks.STONE)
+                                    && result.setDirectly() == 0,
+                            "both cells should go in by hand, none written straight in: " + runs[1].outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
 }

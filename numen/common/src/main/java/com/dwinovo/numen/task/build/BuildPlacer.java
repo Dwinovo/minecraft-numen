@@ -2,27 +2,21 @@ package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Replaceable;
-import com.dwinovo.numen.api.entity.Sight;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.platform.NumenServices;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -55,18 +49,6 @@ final class BuildPlacer {
 
     /** 一格是怎么落进世界的。 */
     enum Way { BY_HAND, SET_DIRECTLY }
-
-    /** 面上除中心之外再试的几处点:在这一面的两个方向上各取四分之一与四分之三。 */
-    private static final double[] QUARTERS = {0.25, 0.75};
-
-    /** 一次点击:点 {@code clicked} 这一格的 {@code side} 面,准星对着面上的 {@code onFace}。 */
-    private record Click(BlockPos clicked, Direction side, Vec3 onFace) {
-
-        /** 看向它:瞄点往面里收一点,射线从面朝外的一侧才穿得进这一面。 */
-        Vec3 aim() {
-            return Sight.inset(onFace, side);
-        }
-    }
 
     private final NumenPlayer player;
     private final BuildInventory inv;
@@ -116,8 +98,8 @@ final class BuildPlacer {
      * 一个点击都对不上是 {@link Hand#NONE}。
      */
     private Hand byHand(BuildTaskRecord.Target target, BlockItem item) {
-        for (Click click : workable(target, item)) {
-            BlockHitResult hit = lookAt(click);
+        for (Faces.Face face : workable(target, item)) {
+            BlockHitResult hit = lookAt(face);
             BlockState state = hit == null ? null : simulate(target, item, hit);
             if (state == null || !target.matches(state)) {
                 continue;
@@ -125,7 +107,7 @@ final class BuildPlacer {
             BlockState before = player.level().getBlockState(target.pos());
             ItemStack restore = null;
             if (consumeMaterials) {
-                int slot = inv.findSlot(target.item(), true);
+                int slot = inv.findSlot(target.item());
                 if (slot < 0) {
                     return Hand.REFUSED;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
                 }
@@ -154,21 +136,18 @@ final class BuildPlacer {
 
     /**
      * 放得出目标的点击,与目标状态一字不差的在前,其次是 {@link BuildTaskRecord.Target#matches} 认可的;一个都没有为空表。
-     * 挑的过程里她每转向一个候选点,身体的朝向就跟着变,所以这只是个先后,真点之前还要再问一次。
+     * 候选是 {@link Faces#inSightAll}(从眼睛此刻的位置看得见、够得着的面与面上的点,与站位选择、数格同一个判据)。挑的过程里她每转向
+     * 一个候选点,身体的朝向就跟着变,所以这只是个先后,真点之前还要再问一次。
      */
-    private List<Click> workable(BuildTaskRecord.Target target, BlockItem item) {
-        Vec3 eye = player.getEyePosition();
-        double range = player.blockInteractionRange();
-        List<Click> exact = new ArrayList<>();
-        List<Click> accepted = new ArrayList<>();
-        for (Click click : clicks(player.level(), target.pos(), item.getBlock(), eye)) {
-            if (!Sight.facing(eye, click.onFace(), click.side()) || click.onFace().distanceTo(eye) >= range) {
-                continue;
-            }
-            BlockHitResult hit = lookAt(click);
+    private List<Faces.Face> workable(BuildTaskRecord.Target target, BlockItem item) {
+        List<Faces.Face> exact = new ArrayList<>();
+        List<Faces.Face> accepted = new ArrayList<>();
+        for (Faces.Face face : Faces.inSightAll(player.level(), player.getEyePosition(), player.blockInteractionRange(),
+                target.pos(), null)) {
+            BlockHitResult hit = lookAt(face);
             BlockState state = hit == null ? null : simulate(target, item, hit);
             if (state != null && target.matches(state)) {
-                (state.equals(target.desiredState()) ? exact : accepted).add(click);
+                (state.equals(target.desiredState()) ? exact : accepted).add(face);
             }
         }
         exact.addAll(accepted);
@@ -195,61 +174,10 @@ final class BuildPlacer {
      * 转向这一次点击的瞄点,交出准星落着的那一下;没落在要点的方块的那一面上(被挡着、被实体挡着、够不着)为 null。
      * 转头取整到鼠标像素,所以命中点是转完之后的朝向真打到的,不是理想的那一条线。
      */
-    private BlockHitResult lookAt(Click click) {
-        player.look().at(click.aim());
+    private BlockHitResult lookAt(Faces.Face face) {
+        player.look().at(face.point());
         return player.mouse().pick() instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK
-                && hit.getBlockPos().equals(click.clicked()) && hit.getDirection() == click.side() ? hit : null;
-    }
-
-    /**
-     * 往这一格里放时她点得中的面:相邻方块朝向这一格的那一面({@link Faces#against},先试下面那一格的顶面),格内本身是可顶替的
-     * 方块时再加上这一格自己的六个面(原地点,与原版一样)。每个面除了{@link Faces#point 轮廓里最大那块的中心}外再取四个象限点。
-     */
-    private static List<Click> clicks(Level level, BlockPos pos, Block block, Vec3 eye) {
-        List<Click> out = new ArrayList<>();
-        List<Direction> around = new ArrayList<>(Faces.against(level, pos, block));
-        around.sort(Comparator.comparing((Direction d) -> d != Direction.DOWN));
-        for (Direction dir : around) {
-            addFace(out, level, pos.relative(dir), dir.getOpposite(), eye);
-        }
-        if (Sight.clickable(level, pos) && Replaceable.replaceableBy(level.getBlockState(pos), block)) {
-            for (Direction side : Direction.values()) {
-                addFace(out, level, pos, side, eye);
-            }
-        }
-        return out;
-    }
-
-    private static void addFace(List<Click> out, Level level, BlockPos clicked, Direction side, Vec3 eye) {
-        Vec3 centre = Faces.point(level, clicked, side);
-        out.add(new Click(clicked, side, centre));
-        // 面上离眼睛最近的一点(离棱留一点边):够得着一格是量眼睛到这一格最近的一点,面中心可能已经远出一截
-        out.add(new Click(clicked, side, across(centre, clicked, side.getAxis(),
-                nearestOnBlock(eye, clicked, side.getAxis(), true), nearestOnBlock(eye, clicked, side.getAxis(), false))));
-        for (double u : QUARTERS) {
-            for (double v : QUARTERS) {
-                out.add(new Click(clicked, side, across(centre, clicked, side.getAxis(), u, v)));
-            }
-        }
-    }
-
-    /** 眼睛在面内两个方向上的投影夹进这一格(离棱 0.05);{@code first} 取面内的第一个方向,否则取第二个。 */
-    private static double nearestOnBlock(Vec3 eye, BlockPos block, Direction.Axis plane, boolean first) {
-        double along = switch (plane) {
-            case X -> first ? eye.y - block.getY() : eye.z - block.getZ();
-            case Y -> first ? eye.x - block.getX() : eye.z - block.getZ();
-            case Z -> first ? eye.x - block.getX() : eye.y - block.getY();
-        };
-        return Math.max(0.05, Math.min(0.95, along));
-    }
-
-    /** 面所在的平面不变,面内两个方向上落在这一格的 {@code u}、{@code v} 处。 */
-    private static Vec3 across(Vec3 onFace, BlockPos block, Direction.Axis plane, double u, double v) {
-        return switch (plane) {
-            case X -> new Vec3(onFace.x, block.getY() + u, block.getZ() + v);
-            case Y -> new Vec3(block.getX() + u, onFace.y, block.getZ() + v);
-            case Z -> new Vec3(block.getX() + u, block.getY() + v, onFace.z);
-        };
+                && hit.getBlockPos().equals(face.clicked()) && hit.getDirection() == face.side() ? hit : null;
     }
 
     // ------------------------------------------------------------------
@@ -265,7 +193,7 @@ final class BuildPlacer {
      * 结果以世界为准,留不留得住由调用方比对。
      *
      * <p>复核之前给方块一次"我被放下了"的回调({@code setPlacedBy}):命名牌、告示牌、部分方块实体靠它初始化,门/床/高草的回调写
-     * 另一半(所以次半根本不进目标集,见 {@code BuildStates#isSecondaryHalf})。回调拿到的是"她手里那件东西":有料单的格给单子上
+     * 另一半(所以次半根本不进目标集)。回调拿到的是"她手里那件东西":有料单的格给单子上
      * 第一叠真货(带花纹的旗帜),不是一件同名的白货。
      */
     private boolean setDirectly(BuildTaskRecord.Target target, int cost) {

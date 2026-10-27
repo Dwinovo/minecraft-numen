@@ -70,7 +70,7 @@ public final class BuildValidity {
 
     private BuildValidity() {}
 
-    public static boolean valid(BlockState current, BlockState desired, boolean itemVerify) {
+    public static boolean valid(BlockState current, BlockState desired) {
         if (desired == null) {
             return true;
         }
@@ -87,10 +87,10 @@ public final class BuildValidity {
         if (desired.getBlock() instanceof AirBlock && settings.buildIgnoreBlocks().contains(current.getBlock())) {
             return true;
         }
-        if (!(current.getBlock() instanceof AirBlock) && settings.buildIgnoreExisting && !itemVerify) {
+        if (!(current.getBlock() instanceof AirBlock) && settings.buildIgnoreExisting) {
             return true;
         }
-        if (!itemVerify && settings.buildValidSubstitutes()
+        if (settings.buildValidSubstitutes()
                 .getOrDefault(desired.getBlock(), List.of()).contains(current.getBlock())) {
             return true;
         }

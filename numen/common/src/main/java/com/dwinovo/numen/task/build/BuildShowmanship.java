@@ -1,7 +1,6 @@
 package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.entity.Controls;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -14,12 +13,12 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * 施工的演出:蹲起,以及手放不会自己产生的那些——直接写的格上的转头、挥手、手到落点的粒子、落位声。手放的格不在这里演:
+ * 施工的演出:手放不会自己产生的那些——直接写的格上的转头、挥手、手到落点的粒子、落位声。手放的格不在这里演:
  * 转向、挥手、落位声、邻居反应是原版放置流程自己的({@link BuildPlacer})。只管"看起来像有人在干活",不碰任何施工判定与账目——
  * 删掉整个类,房子照样盖得出来,只是直接写的格看着像作弊。
  *
  * <h2>表演不改变世界</h2>
- * 它手里只有身体的输入(转头、挥手、蹲)和一份只读的视图:没有挖掘器,没有导航,没有放置的入口,也不挪身体——她站在原地放
+ * 它手里只有身体的输入(转头、挥手)和一份只读的视图:没有挖掘器,没有导航,没有放置的入口,也不挪身体——她站在原地放
  * 够得着的格,走到哪儿是脚本的事。
  */
 final class BuildShowmanship {
@@ -35,8 +34,6 @@ final class BuildShowmanship {
     private final BuildInventory inv;
 
     private int swingCooldown;
-    /** 落位批次的高度要她蹲下(跨 tick 保持)。 */
-    private boolean crouching;
 
     BuildShowmanship(NumenPlayer player, BuildInventory inv) {
         this.player = player;
@@ -44,27 +41,21 @@ final class BuildShowmanship {
     }
 
     /**
-     * 站住不走。站着时蹲不蹲由落位批次的高度定,而且每刻都照这个定:落位只在批次刻发生,若别的刻复位成站立,
-     * 她会一蹲一起地抖。
+     * 站住不走,站直:眼睛的高度是手放挑点击与数"够得着"的前提,蹲下会让两边量到的不是同一个眼睛。手放时点击的那一刻才按潜行
+     * ({@link BuildPlacer}),不改站姿。
      */
     void stand() {
         player.controls().stop();
-        player.controls().set(Controls.Key.SNEAK, crouching);
     }
 
     /**
-     * 演出一批:低处蹲下、高处站直(手放与直接写的格都算,玩家都熟的贴边放方块的姿势);其中直接写的格({@code written})
-     * 再朝它们的中心转头、举起对应方块、挥手,冒方块碎屑,放落位声。粒子按批限量——整栋房子逐格发粒子会把客户端打垮。
+     * 演出一批直接写的格({@code written}):朝它们的中心转头、举起对应方块、挥手,冒方块碎屑,放落位声。粒子按批限量——整栋房子
+     * 逐格发粒子会把客户端打垮。
      *
-     * @param touched 这一批动过的格(手放的、直接写的)
-     * @param written 其中直接写的格;全是手放时为空
+     * @param written 这一批直接写进去的格(手放的格自己有转头、挥手与落位声)
      * @param sample  直接写的那种方块
      */
-    void performWork(List<BlockPos> touched, List<BlockPos> written, BlockState sample) {
-        crouching = center(touched).y < player.getY() + 0.6;
-        if (written.isEmpty()) {
-            return;
-        }
+    void performWork(List<BlockPos> written, BlockState sample) {
         Vec3 centre = center(written);
         player.look().at(centre);   // 视角按鼠标像素取整转向目标点,和寻路同一套转头
         // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位可以每刻好几格
@@ -75,7 +66,7 @@ final class BuildShowmanship {
             swingCooldown = SWING_PERIOD_TICKS;
         }
         if (sample != null) {
-            int slot = inv.findSlot(sample.getBlock().asItem(), true);
+            int slot = inv.findSlot(sample.getBlock().asItem());
             if (slot >= 0) {
                 player.hotbar().hold(slot);
             }

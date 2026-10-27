@@ -40,4 +40,12 @@ public record Feet(BlockPos node, Stance stance) {
     public boolean in(Goal goal) {
         return goal.contains(node.getX(), node.getY(), node.getZ(), stance);
     }
+
+    /**
+     * 站在这里算不算到了 {@code goal},而且按目标自己的说法这里办得成({@link Goal#arrival} 有限):走位挑停点、到了复核、
+     * 数一格够不够得着,问的是同一句,量的是同一个眼睛(节点中心站直的眼睛)。
+     */
+    public boolean reaches(Goal goal, net.minecraft.server.level.ServerLevel level) {
+        return in(goal) && Double.isFinite(goal.arrival(new LiveWorld(level), node.getX(), node.getY(), node.getZ(), stance));
+    }
 }

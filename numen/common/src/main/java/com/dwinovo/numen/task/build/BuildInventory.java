@@ -9,9 +9,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * 施工的背包口径,只此一处:存量只算 36 格主背包
- * ({@link PlayerInv#BUILDABLE_SLOTS}),预检、逐格闸门与实扣同源。
- * 此前预检用 41 格(含盔甲与副手)、闸门用 36 格:一整叠木板放在副手时,
- * 预检数得到、开工放行,而每一格都判缺料——口径分叉就是这类账目事故。
+ * ({@link PlayerInv#BUILDABLE_SLOTS}),预检、逐格闸门与实扣同源;副手与盔甲格不算。
  */
 final class BuildInventory {
 
@@ -41,31 +39,13 @@ final class BuildInventory {
         }
     }
 
-    boolean hasItem(Item item, boolean wholeInventory) {
-        return hasItems(item, 1, wholeInventory);
-    }
-
     /** 够不够 {@code count} 件——双层砖那种一格吃两件的格子要问这个。 */
-    boolean hasItems(Item item, int count, boolean wholeInventory) {
-        if (wholeInventory) {
-            return mainInventoryCount(item) >= count;
-        }
-        return hotbarCount(item) >= count;
+    boolean hasItems(Item item, int count) {
+        return mainInventoryCount(item) >= count;
     }
 
-    private int hotbarCount(Item item) {
-        Inventory inventory = player.getInventory();
-        int n = 0;
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                n += stack.getCount();
-            }
-        }
-        return n;
-    }
-
-    int findSlot(Item item, boolean wholeInventory) {
+    /** 主背包里第一格装着该物品的:快捷栏在前;没有为 -1。 */
+    int findSlot(Item item) {
         Inventory inventory = player.getInventory();
         for (int i = 0; i < 9; i++) {
             ItemStack stack = inventory.getItem(i);
@@ -73,10 +53,7 @@ final class BuildInventory {
                 return i;
             }
         }
-        if (wholeInventory) {
-            return findMainInventorySlot(item);
-        }
-        return -1;
+        return findMainInventorySlot(item);
     }
 
     int mainInventoryCount(Item item) {

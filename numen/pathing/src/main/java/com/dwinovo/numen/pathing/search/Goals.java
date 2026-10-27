@@ -203,8 +203,10 @@ public final class Goals {
     // ==================== 放 ====================
 
     /**
-     * 往 {@code target} 这一格里放方块:站在这里手够得着它(第 0 层 {@link Reach},与挖同一个"够得着"),而且身体不占着它——
-     * 自己占着的格放不进去。那一格是不是空的、看不看得见都不问:放的一方照图写进去。路上不往这一格里垫东西。
+     * 往 {@code target} 这一格里放方块:站在这里手够得着它(第 0 层 {@link Reach}),身体不占着它——自己占着的格放不进去——
+     * 而且手点得着:眼睛位置上有能点的面({@link com.dwinovo.numen.api.entity.Faces#handReachable},全仓"放得着"的唯一判据,
+     * 施工数格与手放问的是同一个;一个能点的面也没有的悬空格由放的一方直接写,不为它挑站位)。那一格是不是空的不问。
+     * 路上不往这一格里垫东西。
      */
     public static Goal place(BlockPos target, BodyStats body) {
         return new Place(new Dig(target.immutable(), body, Clearing.ANY));
@@ -727,11 +729,18 @@ public final class Goals {
         }
     }
 
-    /** 放一格:到没到、估价、终点格与挖那一格同一套几何({@link Dig}),只是不为看得见它加价,也不禁止挖它。 */
+    /** 放一格:到没到、估价、终点格与挖那一格同一套几何({@link Dig}),不禁止挖它;停在这里还要手点得着,点不着是办不成。 */
     private record Place(Dig reach) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             return reach.contains(x, y, z, stance);
+        }
+
+        @Override
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
+            Vec3 eye = reach.body().eye(x, stance.feetY(), z);
+            return com.dwinovo.numen.api.entity.Faces.handReachable(level, eye, reach.body().blockReach(), reach.target())
+                    ? 0 : Double.POSITIVE_INFINITY;
         }
 
         @Override

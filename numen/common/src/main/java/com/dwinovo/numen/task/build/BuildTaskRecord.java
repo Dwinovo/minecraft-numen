@@ -32,10 +32,6 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     private int broken;
     private int completed;
 
-    // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
-    // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
-    // 的旋钮——比缺一个功能更糟,故一并撤除。
-
     /** 一次调用派的活:名字与调用 id 取自那次调用。 */
     public BuildTaskRecord(ServerCall call, long deadlineGameTime, List<Target> targets, boolean consumeMaterials) {
         this(call.fn(), call.callId(), deadlineGameTime, targets, consumeMaterials);
@@ -78,11 +74,6 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
             out.add(plain ? t.asItemPlace() : t);
         }
         return List.copyOf(out);
-    }
-
-    /** 这些目标里有没有哪一格的档位会顶掉挡路的东西——建造寻路问的是这一句(拆一块钻出去许不许)。 */
-    public boolean mayReplace() {
-        return targets.stream().anyMatch(t -> t.mode().mayReplace());
     }
 
     public int placed() {
@@ -156,11 +147,6 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
 
         public Target(Block block, Item item, BlockPos pos, String label) {
             this(block.defaultBlockState(), item, pos, label, false, null);
-        }
-
-        /** 这一格自己的让路档位。 */
-        public Target withMask(ReplaceMode mask) {
-            return new Target(desiredState, item, pos, label, itemPlace, mask);
         }
 
         /** 让路档位:自己写了的那一档,没写是"连空也清"——原语不写 {@code --mask} 就是 {@code carve}。 */
@@ -291,15 +277,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
                         || state.getBlock().getDescriptionId()
                                 .equals(desiredState.getBlock().getDescriptionId()));
             }
-            return BuildValidity.valid(state, desiredState, false);
-        }
-
-        public boolean acceptsPlacedState(BlockState state) {
-            return BuildValidity.valid(state, desiredState, true);
-        }
-
-        public String shortPos() {
-            return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+            return BuildValidity.valid(state, desiredState);
         }
     }
 

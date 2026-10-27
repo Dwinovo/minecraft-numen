@@ -78,17 +78,17 @@ class PlacementTest {
     @Test
     void theAimPointIsOnTheOutlineFacingTheTarget() {
         FakeWorld stone = new FakeWorld().set(TARGET.below(), Blocks.STONE.defaultBlockState());
-        assertEquals(new Vec3(0.5, 64, 0.5), Faces.hitPoint(stone, TARGET, Direction.DOWN));
+        assertEquals(new Vec3(0.5, 64, 0.5), Faces.point(stone, TARGET.below(), Direction.UP));
         FakeWorld slab = new FakeWorld().set(TARGET.below(),
                 Blocks.OAK_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.BOTTOM));
-        assertEquals(new Vec3(0.5, 63.5, 0.5), Faces.hitPoint(slab, TARGET, Direction.DOWN), "下半砖的顶面在半格高");
+        assertEquals(new Vec3(0.5, 63.5, 0.5), Faces.point(slab, TARGET.below(), Direction.UP), "下半砖的顶面在半格高");
         FakeWorld side = new FakeWorld().set(TARGET.north(), Blocks.STONE.defaultBlockState());
-        assertEquals(new Vec3(0.5, 64.5, 0), Faces.hitPoint(side, TARGET, Direction.NORTH));
+        assertEquals(new Vec3(0.5, 64.5, 0), Faces.point(side, TARGET.north(), Direction.SOUTH));
     }
 
     @Test
     void aimingAtAirIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> Faces.hitPoint(new FakeWorld(), TARGET, Direction.DOWN));
+        assertThrows(IllegalArgumentException.class, () -> Faces.point(new FakeWorld(), TARGET.below(), Direction.UP));
     }
 
     // ==================== 真实落点 ====================
@@ -140,24 +140,35 @@ class PlacementTest {
     // ==================== 点得中 ====================
 
     /**
-     * 能贴的面不等于点得中:目标格只有西边一根栅栏可贴,栅栏连着北边一块圆石。站在目标格北边那一列,准星要落的那一点在栅栏
-     * 朝东那一面靠北的地方,视线先撞上栅栏北边那块圆石——点不中。拿掉那块圆石就点得中。日式小屋里上一级垫台阶的那一步
-     * 就停在这里:规划只问了能贴的面,执行瞄不中。
+     * 能贴的面不等于点得中:目标格只有西边一根栅栏可贴。眼睛在目标格北边隔着两格高的圆石,不管瞄栅栏朝东那一面的哪一点,视线都先撞上
+     * 那堵圆石——点不中;拿掉圆石就点得中。日式小屋里上一级垫台阶的那一步就停在这里:规划只问了能贴的面,执行瞄不中。
      */
     @Test
     void aFaceTheEyeCannotReachIsNotInSight() {
-        net.minecraft.world.level.block.state.BlockState fence = Blocks.SPRUCE_FENCE.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.FenceBlock.NORTH, true)
-                .setValue(net.minecraft.world.level.block.FenceBlock.WEST, true);
-        Vec3 eye = new Vec3(0.5, TARGET.getY() + 1.62, -0.5);
+        net.minecraft.world.level.block.state.BlockState fence = Blocks.SPRUCE_FENCE.defaultBlockState();
+        Vec3 eye = new Vec3(0.5, TARGET.getY() + 1.62, -1.5);
         FakeWorld hidden = new FakeWorld().set(TARGET.west(), fence)
-                .set(TARGET.west().north(), Blocks.COBBLESTONE.defaultBlockState())
-                .set(TARGET.west().west(), Blocks.COBBLESTONE.defaultBlockState());
-        assertEquals(Set.of(Direction.WEST), Faces.against(hidden, TARGET, COBBLE), "栅栏能贴");
-        assertNull(Faces.inSight(hidden, eye, 4.5, TARGET, COBBLE), "瞄的那一点被北边的圆石挡着");
-        FakeWorld open = new FakeWorld().set(TARGET.west(), fence.setValue(net.minecraft.world.level.block.FenceBlock.NORTH,
-                false)).set(TARGET.west().west(), Blocks.COBBLESTONE.defaultBlockState());
+                .set(TARGET.north(), Blocks.COBBLESTONE.defaultBlockState())
+                .set(TARGET.north().above(), Blocks.COBBLESTONE.defaultBlockState());
+        assertEquals(Set.of(Direction.WEST, Direction.NORTH), Faces.against(hidden, TARGET, COBBLE), "栅栏与圆石都能贴");
+        assertNull(Faces.inSight(hidden, eye, 4.5, TARGET, COBBLE), "没有一点瞄得到:圆石挡着");
+        assertTrue(Faces.inSightAll(hidden, eye, 4.5, TARGET, COBBLE).isEmpty());
+        FakeWorld open = new FakeWorld().set(TARGET.west(), fence);
         Faces.Face face = Faces.inSight(open, eye, 4.5, TARGET, COBBLE);
         assertEquals(TARGET.west(), face == null ? null : face.clicked(), "没有挡着的就点得中栅栏");
+    }
+
+    /** 站位的"够得着"就是手点得着:没有任何能点的面的悬空格(放的一方直接写)算够得着,有面却点不着的不算。 */
+    @Test
+    void handReachableMeansAClickExistsOrNothingCanBeClicked() {
+        Vec3 eye = new Vec3(0.5, TARGET.getY() + 1.62, -1.5);
+        assertTrue(Faces.handReachable(new FakeWorld(), eye, 4.5, TARGET), "悬空:没有面可点,直接写,站哪儿一样");
+        FakeWorld floor = new FakeWorld().set(TARGET.below(), Blocks.STONE.defaultBlockState());
+        assertTrue(Faces.handReachable(floor, eye, 4.5, TARGET), "脚下那块的顶面点得着");
+        assertFalse(Faces.handReachable(floor, new Vec3(0.5, TARGET.getY() + 1.62, -6.5), 4.5, TARGET), "太远,点不着");
+        FakeWorld walled = new FakeWorld().set(TARGET.below(), Blocks.STONE.defaultBlockState())
+                .set(TARGET.north(), Blocks.COBBLESTONE.defaultBlockState())
+                .set(TARGET.north().above(), Blocks.COBBLESTONE.defaultBlockState());
+        assertFalse(Faces.handReachable(walled, eye, 4.5, TARGET), "有面可点,可都被圆石挡着:点不着");
     }
 }

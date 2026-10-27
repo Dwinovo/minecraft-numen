@@ -71,11 +71,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildPlacer placer;
     private final BuildShowmanship show;
 
-    private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
     /** 这一次调用里已经轮到过的格:每格只试一次,轮过就不回头。 */
     private final LongOpenHashSet tried = new LongOpenHashSet();
     /** 轮到了却没放好的格(位置 → 原因与细节);没轮到的格的原因收场时按此刻的情形现判。 */
     private final Map<Long, Miss> missed = new LinkedHashMap<>();
+    /** 为它们走过却走不到的格:不再为它们走。 */
+    private final LongOpenHashSet unwalkable = new LongOpenHashSet();
     /** 上一次出发去走的时候已经轮到过几格:走到之后一格新的也没轮到,就是走了也到不了,不再走。 */
     private int triedWhenWalking = -1;
     /** 走去放时没走成的缘由(没有路、被拒、超时);没出过事是 null。 */
@@ -132,9 +133,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         this.inv = new BuildInventory(player);
         this.fixtures = new BuildFixtures(player, record);
         this.ledger = new BuildLedger(record, rules, inv);
-        for (BuildTaskRecord.Target target : record.targets) {
-            targetByPos.put(target.pos().asLong(), target);
-        }
         BlockPos[] box = siteBox(player, record.targets);
         this.siteMin = box[0];
         this.siteMax = box[1];
@@ -322,11 +320,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (walked == null) {
             return TaskState.RUNNING;
         }
+        List<BlockPos> failedFor = walkingTo;
         walkingTo = null;
         if (!walked.success()) {
-            // 走不到不是失败:放下的照实交代,够不着的进回执
+            // 走不到不是失败:放下的照实交代,够不着的进回执;为这一格走不通,别的格还接着走
             walkFailure = walked.message();
-            return conclude(null);
+            unwalkable.addAll(failedFor.stream().map(BlockPos::asLong).toList());
+            triedWhenWalking = -1;
+            return endPass();
         }
         beginPass();
         return TaskState.RUNNING;
@@ -353,18 +354,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格;这一层轮完了接着翻下一层,预算用完或者这一遍到头为止。
-     * 顺序低层优先(上面的东西得有底下的东西撑着),层内由近及远。
+     * 落一批:在<b>当前最低的未完成层</b>里,挑离她最远的几格;这一层轮完了接着翻下一层,预算用完或者这一遍到头为止。
+     * 顺序低层优先(上面的东西得有底下的东西撑着),层内由远及近(见 {@link #farthestPendingInLayer})。
      */
     private TaskState runBatch(int budget) {
-        List<BlockPos> touched = new ArrayList<>();
         List<BlockPos> written = new ArrayList<>();
         BlockState sample = null;
         boolean passOver = false;
         while (budget > 0) {
-            BuildTaskRecord.Target target = nearestPendingInLayer();
+            BuildTaskRecord.Target target = farthestPendingInLayer();
             if (target == null) {
-                if (!advanceLayer()) {
+                // 这一层还有没轮到的格(站在里面的、够不着的):先收站、走去放了再往上走,不然她在坑里,墙一层层盖过头顶
+                if (layerHasUntried() || !advanceLayer()) {
                     passOver = true;
                     break;
                 }
@@ -374,12 +375,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (placed != null) {
                 budget--;
                 placeCredit -= 1.0;
-                touched.add(target.pos());
                 sample = placed;
             }
         }
-        if (!touched.isEmpty()) {
-            show.performWork(touched, written, sample);
+        if (!written.isEmpty()) {
+            show.performWork(written, sample);
         }
         if (passOver) {
             return endPass();
@@ -388,15 +388,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 当前层里离她最近、这一层还没轮到过的一格待建;这一层都轮到过了是 null。
+     * 当前层里离她最远、这一层还没轮到过的一格待建;这一层都轮到过了是 null。
      *
-     * <p>{@code placedThisLayer} 只保证"这一层每格都轮到过一次",不决定顺序;
-     * 真正的顺序由距离决定。
+     * <p>{@code placedThisLayer} 只保证"这一层每格都轮到过一次",不决定顺序;真正的顺序由距离决定,先放远的:手放要点
+     * 邻格的面,先放近处的格会把站在这边看远处面的视线挡住,人砌一整片也是从远处往自己这边退着砌。
      */
-    private BuildTaskRecord.Target nearestPendingInLayer() {
+    private BuildTaskRecord.Target farthestPendingInLayer() {
         BuildTaskRecord.Target best = null;
         int bestStage = Integer.MAX_VALUE;
-        double bestDist = Double.MAX_VALUE;
+        double bestDist = -1;
         Vec3 me = player.position();
         for (int i = layerStart; i < layerEnd; i++) {
             BuildTaskRecord.Target t = order.get(i);
@@ -412,7 +412,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             double dx = t.pos().getX() + 0.5 - me.x;
             double dz = t.pos().getZ() + 0.5 - me.z;
             double d = dx * dx + dz * dz;
-            if (stage < bestStage || d < bestDist) {
+            if (stage < bestStage || d > bestDist) {
                 bestStage = stage;
                 bestDist = d;
                 best = t;
@@ -423,6 +423,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             tried.add(best.pos().asLong());
         }
         return best;
+    }
+
+    /** 当前层所在的那一层高度上,有没有还没轮到过、也没对上、也不是主动不去动的格。 */
+    private boolean layerHasUntried() {
+        if (layerStart >= order.size()) {
+            return false;
+        }
+        int y = order.get(layerStart).pos().getY();
+        for (BuildTaskRecord.Target t : r.targets) {
+            if (t.pos().getY() == y && !tried.contains(t.pos().asLong()) && !unwalkable.contains(t.pos().asLong())
+                    && !t.matches(rules.peek(t.pos())) && !rules.refused(t) && !rules.hopeless(t)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 这一层轮完了,翻到下一层;本遍的层都翻完了返回 false。 */
@@ -485,7 +500,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
         int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
-        if (cost > 0 && !inv.hasItems(target.item(), cost, true)) {
+        if (cost > 0 && !inv.hasItems(target.item(), cost)) {
             return missed(pos, BuildOutstanding.Cause.SHORT_OF_MATERIAL, null);
         }
 
@@ -591,7 +606,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着其中最低一层的地方,在那里再放一站(轮过的格不再轮);没有就收场,
+     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着最低一层里最远那一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
      * 没放好的照实进回执。
      */
     private TaskState endPass() {
@@ -600,13 +615,33 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (r.completed() + skippedCells >= r.targets.size()) {
             return conclude(null);
         }
-        List<BlockPos> far = survey().tally().far();
+        BuildSurvey survey = survey();
+        List<BuildTaskRecord.Target> pendingNow = pendingHere();
+        // 付不起的格走过去也放不了,不为它们走路(回执按缺料说)
+        List<BlockPos> far = survey.tally().far().stream()
+                .filter(p -> survey.affordable(r.targetAt(p)) && !unwalkable.contains(p.asLong())).toList();
+        int lowestHere = pendingNow.stream().mapToInt(t -> t.pos().getY()).min().orElse(Integer.MAX_VALUE);
+        boolean lowerFar = !far.isEmpty() && far.get(0).getY() < lowestHere;
+        // 这一站放下的方块让原来点不着的格有了能点的面:在原地再放一站,只放没轮到过的——但更低一层还有够不着的格就先去放那些
+        if (!pendingNow.isEmpty() && !lowerFar) {
+            beginPass();
+            return TaskState.RUNNING;
+        }
         // 上一趟走过去之后一格新的也没轮到:再走也是原地,剩下的算够不着
         if (far.isEmpty() || tried.size() == triedWhenWalking) {
+            if (!pendingNow.isEmpty()) {
+                beginPass();
+                return TaskState.RUNNING;
+            }
             return conclude(null);
         }
+        // 最低一层里离她最远的那一格:站到够得着它的地方,在那里先放远处够得着的,再退回来——近处的格留到最后放,
+        // 站在这边点远处邻格的视线才不被先放下的近格挡住
         int lowest = far.get(0).getY();
-        walkingTo = far.stream().filter(p -> p.getY() == lowest).toList();
+        Vec3 here = player.position();
+        BlockPos farthest = far.stream().filter(p -> p.getY() == lowest)
+                .max(java.util.Comparator.comparingDouble(p -> p.distToCenterSqr(here.x, here.y, here.z))).orElseThrow();
+        walkingTo = List.of(farthest);
         triedWhenWalking = tried.size();
         phase = Phase.WALK;
         return TaskState.RUNNING;
@@ -685,6 +720,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p><b>贴附件整体推到第二趟</b>,排在所有层之后(见 {@link BuildOrder})。
      */
     private void rebuildOrder() {
+        order = pendingHere();
+        resetLayerWindow();
+    }
+
+    /** 此刻站的地方没轮到过、够得着的格,按施工顺序排好。 */
+    private List<BuildTaskRecord.Target> pendingHere() {
         BuildSurvey survey = survey();
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
         LongOpenHashSet reach = new LongOpenHashSet();
@@ -710,8 +751,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         pending.sort(BuildOrder.BUILD_ORDER);
-        order = pending;
-        resetLayerWindow();
+        return pending;
     }
 
     /** 把层窗口对准 order 里最低的那一层。 */
@@ -939,6 +979,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             } else if (state == BuildSurvey.State.DIG) {
                 cause = BuildOutstanding.Cause.DIG_FIRST;
             } else if (state == BuildSurvey.State.SHORT) {
+                cause = BuildOutstanding.Cause.SHORT_OF_MATERIAL;
+            } else if (!survey.affordable(target)) {
                 cause = BuildOutstanding.Cause.SHORT_OF_MATERIAL;
             } else if (state == BuildSurvey.State.UNHELD) {
                 cause = BuildOutstanding.Cause.NOTHING_HOLDS_IT;

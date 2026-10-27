@@ -308,4 +308,39 @@ public class WalkGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 垫高上去再回到原处:够不着的高处靠一根垫柱上去(垫的料经 useItemOn 放下,放置记号照记),走到之后要回出发的地方。
+     * 记号让路线不挖自己垫的柱子——回程是不是还有路,看这条用例。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 900, batch = BATCH)
+    public static void a_walk_can_come_back_down_from_a_pillar_she_built(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos perch = helper.absolutePos(new BlockPos(8, 5, 8));
+        level.setBlockAndUpdate(perch.below(), Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnBare(helper, "gametest_climber", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE, 32));
+        BlockPos home = companion.blockPosition();
+        ToolRun[] runs = {null, null};
+        int[] marked = {0};
+        steps(helper)
+                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.to(" + xyz(perch) + ")"))
+                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
+                            "she did not get up: " + runs[0].outcome());
+                    marked[0] = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).size();
+                    helper.assertTrue(marked[0] > 0, "the pillar blocks she placed carry no placement marks");
+                    runs[1] = lua(companion, "return numen.move.to(" + xyz(home) + ")");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished (the cell at home carries a mark: "
+                        + marked[0] + ")"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
+                            "she did not get back down (pillar blocks marked: " + marked[0] + "): " + runs[1].outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
 }
