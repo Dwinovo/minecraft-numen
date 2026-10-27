@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.litematica;
 
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Call;
+import com.dwinovo.numen.api.sdk.LuaCodecs;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import fi.dy.masa.litematica.data.DataManager;
@@ -129,7 +130,7 @@ final class Projections {
                 total[0]++;
             }
         });
-        if (total[0] > Layers.MAX_CELLS) {
+        if (total[0] > LuaCodecs.MAX_CELLS) {
             throw tooMany(asked, askedTo, lowest, perLayer, total[0], named);
         }
         List<BlockAt> cells = new ArrayList<>(total[0]);
@@ -143,19 +144,19 @@ final class Projections {
 
     /** @param lowest {@code perLayer} 的第一层,即要的范围里投影够得到的最低一层 */
     private static ApiError tooMany(int asked, int askedTo, int lowest, int[] perLayer, int total, String named) {
-        int fits = Layers.fitting(perLayer, Layers.MAX_CELLS);
-        String message = "Layers " + asked + " to " + askedTo + " hold " + total + " cells, over the " + Layers.MAX_CELLS
+        int fits = Layers.fitting(perLayer, LuaCodecs.MAX_CELLS);
+        String message = "Layers " + asked + " to " + askedTo + " hold " + total + " cells, over the " + LuaCodecs.MAX_CELLS
                 + " one call returns.";
         if (fits == 0) {
             return new ApiError(ErrorKind.BAD_ARGUMENT, message + " Layer " + lowest + " alone holds " + perLayer[0]
-                    + ", more than one call can return.", null, Map.of("cells", (long) total, "limit", (long) Layers.MAX_CELLS));
+                    + ", more than one call can return.", null, Map.of("cells", (long) total, "limit", (long) LuaCodecs.MAX_CELLS));
         }
         int last = lowest + fits - 1;
         // 点名了投影才写进提示:没点名时那一行读的就是选中的那份,和这次一样
         Object[] args = named == null ? new Object[]{lowest, last} : new Object[]{lowest, last, Map.of("placement", named)};
         return new ApiError(ErrorKind.BAD_ARGUMENT, message + " Layers " + lowest + " to " + last + " fit.",
                 Call.of("litematica.placement.cells", args),
-                Map.of("cells", (long) total, "limit", (long) Layers.MAX_CELLS, "fits_to", (long) last));
+                Map.of("cells", (long) total, "limit", (long) LuaCodecs.MAX_CELLS, "fits_to", (long) last));
     }
 
     /** 点名的那份,没点名就是主人选中的。 */

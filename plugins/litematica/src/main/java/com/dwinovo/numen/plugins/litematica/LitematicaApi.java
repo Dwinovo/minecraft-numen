@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
+import com.dwinovo.numen.api.sdk.LuaCodecs;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Positional;
@@ -96,7 +97,7 @@ public final class LitematicaApi {
             + "Litematica's own placement is applied: origin, sub-regions, rotation and mirror.")
     @Note("Air is not returned. A layer the projection does not reach returns an empty list. Sub-regions switched off in "
             + "Litematica are left out.")
-    @Note("At most " + Layers.MAX_CELLS + " cells come back in one call; asking for more fails with bad_argument and a hint "
+    @Note("At most " + LuaCodecs.MAX_CELLS + " cells come back in one call; asking for more fails with bad_argument and a hint "
             + "that reads the layers that fit. litematica.placement.list says how many cells each projection has.")
     @Note("Reads your owner's Litematica on their client and changes nothing. A name that matches no projection fails with "
             + "not_found.")

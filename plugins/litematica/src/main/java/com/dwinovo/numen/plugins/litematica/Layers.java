@@ -1,15 +1,9 @@
 package com.dwinovo.numen.plugins.litematica;
 
 /**
- * 一次交回的格数上限,以及超了的时候"取哪几层装得下"。不碰 Litematica 与 Minecraft,纯算术。
+ * 一次交回的格数超了上限({@code LuaCodecs.MAX_CELLS})时的"取哪几层装得下"。不碰 Litematica 与 Minecraft,纯算术。
  */
 final class Layers {
-
-    /**
-     * 一次交回的格数上限,与 {@code numen.build.place} 等收一串格的函数一次收的上限一致(Numen 的 {@code Canvas.MAX_CELLS}):
-     * 交回的值要能原样传给它们,多一格就传不进去。那个常量在 Numen 里,联动够不着,两处各写一个数。
-     */
-    static final int MAX_CELLS = 16384;
 
     private Layers() {}
 

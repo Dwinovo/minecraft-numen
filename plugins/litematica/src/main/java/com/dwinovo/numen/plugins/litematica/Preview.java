@@ -117,7 +117,11 @@ final class Preview {
         }
     }
 
-    /** 一格要放的方块,照 {@code /setblock} 的写法读;读不通的原版解析器的话原样转述。 */
+    /**
+     * 一格要放的方块,照 {@code /setblock} 的写法读;读不通的原版解析器的话原样转述。Numen API 没有"文本读成方块状态"的东西,
+     * 原版的 {@link BlockStateParser} 就是这件事的唯一真源:参数与 Numen 建造读同一种写法时一样(按方块注册表查、不带方块实体数据、
+     * 先去掉首尾空白),所以建造收得下的写法这里都读得通,交回的也一样。
+     */
     private static BlockState parse(String written, int index) {
         try {
             return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), written.trim(), false).blockState();

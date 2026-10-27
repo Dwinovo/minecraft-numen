@@ -68,6 +68,13 @@ public final class LuaCodecs {
                     ScriptType.optional("data", new ScriptType.Simple("table"), "What the call knew when it failed (the "
                             + "nearest cell out of reach …).")));
 
+    /**
+     * 一串格至多几格——{@link #CELLS} 这个值本身的性质:收一串格的函数(建造)一次最多收这么多,交回一串格的函数一次最多交回这么多,
+     * 交回的值才能原样传给收它的函数。一栋正常房子五千到八千格;建造的盘料只盘交来的这一串,拆成几串交就是墙砌好了才发现屋顶的料不够,
+     * 所以一栋房子要装得下。
+     */
+    public static final int MAX_CELLS = 16384;
+
     /** 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。 */
     public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
             "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
