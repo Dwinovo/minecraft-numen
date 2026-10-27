@@ -39,6 +39,14 @@ public final class Builtin {
         gate.open("curios", "curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
         gate.open("ftbquests", "ftbquests",
                 content -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(content));
+        gate.open("litematica", "litematica", content -> () -> LitematicaOnNeoForge.install(content));
+    }
+
+    /** Litematica(NeoForge 上是 Forgematica)联动不需要加载器替它做什么事:函数都在主人的客户端上跑。 */
+    private static final class LitematicaOnNeoForge {
+        static void install(Path content) {
+            com.dwinovo.numen.plugins.litematica.NumenLitematica.install(content);
+        }
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */

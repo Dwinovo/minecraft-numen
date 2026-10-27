@@ -20,6 +20,9 @@ dependencies {
     compileOnly project(':plugins:kaleidoscope')
     compileOnly project(':plugins:curios')
     compileOnly project(':plugins:ftbquests')
+    // Litematica 联动用 Loom 编译(Mojang 名),NeoForge 运行时也是 Mojang 名,同一份类原样可用;Loom 项目的默认变体是重映射成
+    // intermediary 的 jar,要的是 Mojang 名的那份。目标模组在 NeoForge 上是 Forgematica(它登记的模组 id 也叫 litematica)。
+    compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
     // Bundle it into Numen's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':numen-api:neoforge'))
 }
@@ -138,11 +141,12 @@ tasks.named('jar', Jar) {
     from({ project(':plugins:kaleidoscope').sourceSets.main.output })
     from({ project(':plugins:curios').sourceSets.main.output })
     from({ project(':plugins:ftbquests').sourceSets.main.output })
+    from({ project(':plugins:litematica').sourceSets.main.output })
 }
 
 // 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
 tasks.named('check') {
-    dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test')
+    dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test', ':plugins:litematica:test')
 }
 
 // 真模型评测:Numen 的考题在 numen/common 的 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
