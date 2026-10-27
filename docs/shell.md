@@ -71,7 +71,7 @@
 | `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
-| `shape.*` | 画格子:`box`、`line`、`cylinder`、`sphere`、`layer`,交回 Cells |
+| `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;交回 Cells |
 
 - **"挖"的到达**(`Arrival.dig`,`work.dig` 够不着时走过去用)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
   最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`Arrival.place`,`build.place` 用)= 手够得着往那一格里放方块,
@@ -405,20 +405,24 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 - **Pos**(`numen.shape.pos(x, y, z)`):`p:offset(dx, dy, dz)`、`p:dist(q)`、`p + q`、`p - q`、`p == q`。
 - **Block、Entity、Item**:带 `pos` 的数据;身体动作永远是 `numen.*` 的函数,收这些对象(`numen.work.dig(b)`、
   `numen.fight.attack(e)`)。
-- **Cells**(`numen.shape.*` 画出来的):`rotate(quarters, origin)`、`shift(dx, dy, dz)`、`union(other)`、`minus(other)`。
+- **Cells**(`numen.shape.*` 画出来的):`shift(dx, dy, dz)`、`union(other)`、`minus(other)`,和 WorldEdit 的剪贴板一样带原点(画在哪、粘贴落在哪):
+  `rotate(y, x, z)`(度数)、`flip(dir)`、`stack(count, dir, opts)`、`move(count, dir, leave)`、`paste(at)`、`revolve(count)`;当一块任意形状的选区时还有
+  `set`、`walls`、`faces`、`center`(图案 pattern 的写法见 `numen.shape.pattern`)。
+- **Region**(`numen.shape.cuboid`、`cyl`…不给图案时交回的选区,记着自己的形状参数):`cells()`、`set`、`walls`、`faces`、`center`,
+  `expand`、`contract`、`shift`、`outset`、`inset`(照形状改,返回改过的选区)。
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
   `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
 - **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
-- 方法写在类所在的模块里(`Pos`、`Cells` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
+- 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
 
 ### 原子与组合各归其位
 
 | 删掉或改原子的 | 组合去了哪 |
 |---|---|
-| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`;放格子是 `numen.build.place(cells)` 一遍 |
+| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`(`cyl`、`sphere`、`line`、`layer`…);放格子是 `numen.build.place(cells)` 一遍 |
 | `build.at` 放到放完 | `build.place` 整份走一遍、每格试一次,没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |

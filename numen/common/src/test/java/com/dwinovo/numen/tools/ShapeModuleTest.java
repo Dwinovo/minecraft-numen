@@ -12,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 内置模块 {@code numen.shape} 与 {@code numen.scan} 里的值与方法,从她的入口跑:Pos 会加减、量距离、比较;形状画成 Cells,Cells 会挪、
- * 会转(方块的朝向跟着转)、会合、会减;一团会筛、会去掉几格。
+ * 内置模块 {@code numen.shape} 与 {@code numen.scan} 里的值与方法,从她的入口跑:Pos 会加减、量距离、比较;选区画成 Cells,Cells 会挪、
+ * 会转(方块的朝向跟着转)、会合、会减;一团会筛、会去掉几格。形状函数的格集合、选区的编辑、Cells 的变换与图案分别在
+ * {@code ShapeGeometryTest}、{@code ShapeRegionTest}、{@code ShapeCellsTest}。
  */
 class ShapeModuleTest {
 
@@ -44,10 +45,10 @@ class ShapeModuleTest {
     void shapesAreTheCellsTheyCover() {
         String out = printed("""
                 local o, c = {x = 0, y = 0, z = 0}, {x = 2, y = 2, z = 2}
-                print(#numen.shape.box(o, c, "stone"), #numen.shape.box(o, c, "stone", true),
-                    #numen.shape.line(o, {x = 3, y = 3, z = 3}), #numen.shape.cylinder(o, 1, 2, "stone"),
-                    #numen.shape.sphere(o, 1, "glass"), numen.shape.box(o, o, "stone")[1].name,
-                    numen.shape.box(o, o)[1].name == nil)
+                print(#numen.shape.cuboid(o, c):set("stone"), #numen.shape.cuboid(o, c):faces("stone"),
+                    #numen.shape.line({o, {x = 3, y = 3, z = 3}}):cells(), #numen.shape.cyl(o, "stone", 1, 2),
+                    #numen.shape.sphere(o, "glass", 1), numen.shape.cuboid(o, o):set("stone")[1].name,
+                    numen.shape.cuboid(o, o):cells()[1].name == nil)
                 """);
         assertTrue(out.startsWith("27\t26\t4\t18\t19\tstone\ttrue"), out);
     }
@@ -56,7 +57,7 @@ class ShapeModuleTest {
     void cellsTurnWithTheirBlocksAndMove() {
         String out = printed("""
                 local c = numen.shape.cells({{name = "oak_stairs[facing=north,half=top]", pos = {x = 1, y = 0, z = 0}},
-                    {name = "oak_log[axis=x]", pos = {x = 0, y = 0, z = 2}}}):rotate(1)
+                    {name = "oak_log[axis=x]", pos = {x = 0, y = 0, z = 2}}}):rotate(90)
                 print(c[1].name, c[1].pos.x, c[1].pos.z, c[2].name, c[2].pos.x, c[2].pos.z)
                 local s = c:shift(10, 1, 0)
                 print(s[1].pos.x, s[1].pos.y, s:shift(numen.shape.pos(1, 1, 1))[2].pos.z)
@@ -67,7 +68,7 @@ class ShapeModuleTest {
     @Test
     void cellsUniteAndSubtractByPlace() {
         String out = printed("""
-                local row = numen.shape.box({x = 0, y = 0, z = 0}, {x = 2, y = 0, z = 0}, "stone")
+                local row = numen.shape.cuboid({x = 0, y = 0, z = 0}, {x = 2, y = 0, z = 0}):set("stone")
                 local u = row:union({{name = "dirt", pos = {x = 0, y = 0, z = 0}}})
                 local m = row:minus({x = 1, y = 0, z = 0})
                 print(#u, u[#u].name, #m, m[2].pos.x)

@@ -47,6 +47,13 @@ public class BuildGameTests {
     private static void placeCase(GameTestHelper helper, String name, BlockPos anchorRel,
                                   java.util.function.Function<BlockPos, String> cells, List<BlockPos> relCells,
                                   int cobbleStacks) {
+        placeCase(helper, name, anchorRel, cells, relCells, List.of(), cobbleStacks);
+    }
+
+    /** 同上;{@code leftAlone} 是形状占地里不该有方块的格(空心的里面):建完它们还是原样。 */
+    private static void placeCase(GameTestHelper helper, String name, BlockPos anchorRel,
+                                  java.util.function.Function<BlockPos, String> cells, List<BlockPos> relCells,
+                                  List<BlockPos> leftAlone, int cobbleStacks) {
         ServerLevel level = helper.getLevel();
         Raised build = placeCells(helper, name, new BlockPos(2, 2, 2), anchorRel, cells, relCells, cobbleStacks);
         succeedWhen(helper, () -> {
@@ -55,6 +62,10 @@ public class BuildGameTests {
             for (BlockPos cell : build.cells()) {
                 helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + cell.toShortString());
+            }
+            for (BlockPos cell : leftAlone) {
+                helper.assertTrue(!level.getBlockState(helper.absolutePos(cell)).is(Blocks.COBBLESTONE),
+                        "the inside of the hollow shape was built at " + cell.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), build.companion());
         });
@@ -77,26 +88,39 @@ public class BuildGameTests {
 
     /** 一个圆石的长方体:{@code sx} 列、{@code sy} 层、{@code sz} 行,最低西北角在落点。 */
     private static java.util.function.Function<BlockPos, String> cobbleBox(int sx, int sy, int sz) {
-        return o -> "numen.shape.box(" + xyz(o) + ", " + xyz(o.offset(sx - 1, sy - 1, sz - 1)) + ", \"cobblestone\")";
+        return o -> "numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(sx - 1, sy - 1, sz - 1)) + "):set(\"cobblestone\")";
     }
 
-    /** 形状:{@code numen.shape.cylinder} 画的空心圆柱(半径 3、高 4 的塔筒),圆心在 rel 10,2,10;判据按同一个圆的定义算出的格。 */
+    /**
+     * 形状:{@code numen.shape.hcyl} 画的空心圆柱(半径 3、高 4 的塔筒),圆心在 rel 10,2,10。WorldEdit 的空心圆:半径加 0.5 之后,
+     * 圆里的格向外(+x、+z)一步还在圆里的就挖掉,留下的是最薄的连续一圈;圈里的格建完还是空的。
+     */
     @GameTest(template = "floor20", timeoutTicks = 3126, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
+        double inverse = 1 / 3.5;
         List<BlockPos> rel = new ArrayList<>();
+        List<BlockPos> inside = new ArrayList<>();
         for (int y = 0; y < 4; y++) {
-            for (int dx = -3; dx <= 3; dx++) {
-                for (int dz = -3; dz <= 3; dz++) {
-                    double d = dx * dx + dz * dz;
-                    if (d <= 3.5 * 3.5 && d >= 2.5 * 2.5) {
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dz = -4; dz <= 4; dz++) {
+                    double x = Math.abs(dx) * inverse;
+                    double z = Math.abs(dz) * inverse;
+                    if (x * x + z * z > 1) {
+                        continue;
+                    }
+                    double nextX = (Math.abs(dx) + 1) * inverse;
+                    double nextZ = (Math.abs(dz) + 1) * inverse;
+                    if (nextX * nextX + z * z <= 1 && x * x + nextZ * nextZ <= 1) {
+                        inside.add(center.offset(dx, y, dz));
+                    } else {
                         rel.add(center.offset(dx, y, dz));
                     }
                 }
             }
         }
         placeCase(helper, "gametest_mason2", center,
-                c -> "numen.shape.cylinder(" + xyz(c) + ", 3, 4, \"cobblestone\", true)", rel, 2);
+                c -> "numen.shape.hcyl(" + xyz(c) + ", \"cobblestone\", 3, 4)", rel, inside, 2);
     }
 
     /**
@@ -706,9 +730,9 @@ public class BuildGameTests {
                 c = c:union(S.layer(at(0, 6, 0), %s, stairs))
                 c = c:union(S.layer(at(0, 7, 0), %s, {["="] = "oak_slab"}))
                 for _, xz in ipairs({{0, 0}, {11, 0}, {0, 9}, {11, 9}}) do
-                  c = c:union(S.line(at(xz[1], 1, xz[2]), at(xz[1], 3, xz[2]), "oak_log[axis=y]"))
+                  c = c:union(S.line({at(xz[1], 1, xz[2]), at(xz[1], 3, xz[2])}, "oak_log[axis=y]"))
                 end
-                c = c:union(S.box(at(5, 1, 0), at(6, 2, 0), "air"))
+                c = c:union(S.cuboid(at(5, 1, 0), at(6, 2, 0)):set("air"))
                 c = c:union({{name = "glass_pane", pos = at(2, 2, 0)}, {name = "glass_pane", pos = at(9, 2, 0)},
                   {name = "torch", pos = at(5, 1, 4)}})
                 numen.build.place(c)
@@ -895,8 +919,8 @@ public class BuildGameTests {
         long[] sentAt = {0};
         ToolRun[] runs = {null, null};
         steps(helper)
-                .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line(" + xyz(dirt.get(0)) + ", "
-                        + xyz(dirt.get(2)) + ", \"air\"))"))
+                .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(dirt.get(0)) + ", "
+                        + xyz(dirt.get(2)) + "}, \"air\"))"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the build has not replied"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].refused() && runs[0].outcome().contains("3 cell(s) hold another block that "
@@ -945,11 +969,11 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_creator", new BlockPos(9, 2, 8), true);
         ToolRun[] runs = {null, null};
         steps(helper)
-                .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line(" + xyz(toStone.get(0)) + ", "
-                        + xyz(toStone.get(2)) + ", \"stone\"))"))
+                .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(toStone.get(0)) + ", "
+                        + xyz(toStone.get(2)) + "}, \"stone\"))"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the stone line has not finished"))
-                .thenExecute(() -> runs[1] = lua(companion, "numen.build.place(numen.shape.line(" + xyz(toAir.get(0)) + ", "
-                        + xyz(toAir.get(2)) + ", \"air\"))"))
+                .thenExecute(() -> runs[1] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(toAir.get(0)) + ", "
+                        + xyz(toAir.get(2)) + "}, \"air\"))"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the air line has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].succeeded() && runs[0].outcome().contains("3 replacing what stood there"),
@@ -981,8 +1005,8 @@ public class BuildGameTests {
         BlockPos o = helper.absolutePos(new BlockPos(8, 2, 8));
         BlockPos first = o.offset(0, 1, 0);
         BlockPos second = o.offset(2, 1, 0);
-        String place = "numen.build.place(numen.shape.line(" + xyz(o) + ", " + xyz(o.offset(2, 0, 0))
-                + ", \"stone\"):union({{name = \"poppy\", pos = " + xyz(first) + "}, {name = \"poppy\", pos = "
+        String place = "numen.build.place(numen.shape.line({" + xyz(o) + ", " + xyz(o.offset(2, 0, 0))
+                + "}, \"stone\"):union({{name = \"poppy\", pos = " + xyz(first) + "}, {name = \"poppy\", pos = "
                 + xyz(second) + "}}))";
         ToolRun build = lua(companion, place);
 
@@ -1132,7 +1156,7 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_far_builder", new BlockPos(1, 2, 1), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 9));
         BlockPos o = helper.absolutePos(new BlockPos(11, 2, 11));
-        String cells = "numen.shape.box(" + xyz(o) + ", " + xyz(o.offset(2, 0, 2)) + ", \"cobblestone\")";
+        String cells = "numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(2, 0, 2)) + "):set(\"cobblestone\")";
         ToolRun left = lua(companion, "return numen.build.diff(" + cells + ")");
         AtomicReference<ToolRun> at = new AtomicReference<>();
         BlockPos[] stood = new BlockPos[1];
@@ -1173,9 +1197,9 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_raiser", new BlockPos(1, 2, 1), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         BlockPos min = helper.absolutePos(new BlockPos(7, 2, 7));
-        ToolRun raise = lua(companion, "numen.build.place(numen.shape.box(" + xyz(min) + ", " + xyz(min.offset(4, 1, 4))
-                + ", \"cobblestone\"):minus(numen.shape.box(" + xyz(min.offset(1, 0, 1)) + ", " + xyz(min.offset(3, 1, 3))
-                + ")))");
+        ToolRun raise = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(min) + ", " + xyz(min.offset(4, 1, 4))
+                + "):set(\"cobblestone\"):minus(numen.shape.cuboid(" + xyz(min.offset(1, 0, 1)) + ", " + xyz(min.offset(3, 1, 3))
+                + "):cells()))");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(raise.receipt() != null, "numen.build.place has not finished");
@@ -1256,8 +1280,8 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_skint", new BlockPos(2, 2, 2), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        ToolRun build = lua(companion, "numen.build.place(numen.shape.box(" + xyz(o) + ", " + xyz(o.offset(2, 0, 2))
-                + ", \"cobblestone\"))");
+        ToolRun build = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(2, 0, 2))
+                + "):set(\"cobblestone\"))");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "a partly paid build is not a failure: " + build.outcome());
@@ -1515,8 +1539,8 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         BlockPos min = helper.absolutePos(new BlockPos(6, 2, 6));
         BlockPos max = helper.absolutePos(new BlockPos(10, 2, 10));
-        ToolRun build = lua(companion, "numen.build.place(numen.shape.box(" + xyz(min) + ", " + xyz(max)
-                + ", \"cobblestone\"))");
+        ToolRun build = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(min) + ", " + xyz(max)
+                + "):set(\"cobblestone\"))");
         java.util.function.IntSupplier placed = () -> (int) BlockPos.betweenClosedStream(min, max)
                 .filter(p -> level.getBlockState(p).is(Blocks.COBBLESTONE)).count();
         int[] atStop = new int[1];
@@ -1590,7 +1614,7 @@ public class BuildGameTests {
         BlockPos at = helper.absolutePos(new BlockPos(9, 2, 5));
         ToolRun build = lua(companion, "numen.build.place(numen.shape.cells({{name = \"stone_bricks\", pos = "
                 + xyz(at) + "}, {name = \"stone_brick_stairs[facing=east]\", pos = " + xyz(at.offset(1, 0, 0))
-                + "}}):rotate(2, " + xyz(at) + "))");
+                + "}}, " + xyz(at) + "):rotate(180))");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());

@@ -115,7 +115,7 @@ public final class BuildWall implements Scenario {
         BlockPos to = scene.pos(RIGHT - 1, HEIGHT, Z);
         return """
                 numen.move.to(%s)
-                numen.build.place(numen.shape.box(%s, %s, "cobblestone"))""".formatted(
+                numen.build.place(numen.shape.cuboid(%s, %s):set("cobblestone"))""".formatted(
                 Positions.literal(stand), Positions.literal(from), Positions.literal(to));
     }
 }

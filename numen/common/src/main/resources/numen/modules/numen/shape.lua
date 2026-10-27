@@ -1,4 +1,4 @@
--- Positions and shapes: Pos values that add and measure, shapes drawn as Cells, and Cells you can turn, move and combine.
+-- Positions, selections and shapes, modelled on WorldEdit: Regions (cuboid, cyl, sphere, poly, convex) edited by their shape, shapes drawn as Cells, Cells you can turn, stack, move and paste.
 local M = {}
 
 ---@class Pos
@@ -9,6 +9,12 @@ M.Pos.__index = M.Pos
 M.Cells = {}
 M.Cells.__index = M.Cells
 
+---@class Region
+M.Region = {}
+M.Region.__index = M.Region
+
+local floor, ceil, abs = math.floor, math.ceil, math.abs
+
 -- the position of a cell: a Block's pos, or the Pos itself
 local function where(c)
   return c.pos or c
@@ -16,6 +22,16 @@ end
 
 local function key(p)
   return p.x .. "," .. p.y .. "," .. p.z
+end
+
+-- the cell a position falls in: whole coordinates as they are, decimals (a body's position) rounded down
+local function cell_at(p)
+  local q = where(p)
+  return {x = floor(q.x), y = floor(q.y), z = floor(q.z)}
+end
+
+local function bad(message, hint, data)
+  raise("bad_argument", message, hint, data)
 end
 
 ---A Pos at x, y, z.
@@ -72,86 +88,149 @@ local function moved(c, p)
   return cell(p, c.pos and c.name or nil)
 end
 
+-- ---- how many cells one Cells holds ----
+
+local limit
+
+-- the most cells one Cells holds (the host says; asked once per run)
+local function max_cells()
+  limit = limit or numen.shape.max_cells()
+  return limit
+end
+
+local function check_size(n)
+  if n > max_cells() then
+    bad("that comes to more than " .. limit .. " cells, the most one Cells holds; draw it in pieces (a smaller "
+        .. "radius or fewer copies, parts joined with Cells:union) and numen.build.place each piece", nil,
+        {limit = limit})
+  end
+end
+
+-- ---- directions and offsets ----
+
+local DIRECTIONS = {
+  north = {x = 0, y = 0, z = -1}, south = {x = 0, y = 0, z = 1},
+  east = {x = 1, y = 0, z = 0}, west = {x = -1, y = 0, z = 0},
+  up = {x = 0, y = 1, z = 0}, down = {x = 0, y = -1, z = 0},
+}
+local SHORT = {n = "north", s = "south", e = "east", w = "west", u = "up", d = "down"}
+
+-- a direction written as a name (north, up, n, u …) or a vector {x, y, z}, as a vector
+local function direction(d)
+  if type(d) == "table" and d.x then
+    return {x = d.x, y = d.y, z = d.z}
+  end
+  local named = type(d) == "string" and DIRECTIONS[SHORT[d] or d]
+  if not named then
+    bad("a direction is north, south, east, west, up or down (or a vector {x = 1, y = 0, z = 0}); got "
+        .. tostring(d), "region:expand(2, \"north\")")
+  end
+  return {x = named.x, y = named.y, z = named.z}
+end
+
+-- one direction or a list of them (a name, a vector, or {"north", "south"}), as vectors
+local function directions(d)
+  if type(d) == "table" and not d.x then
+    local out = {}
+    for i, one in ipairs(d) do
+      out[i] = direction(one)
+    end
+    return out
+  end
+  return {direction(d)}
+end
+
+local function scaled(v, n)
+  return {x = v.x * n, y = v.y * n, z = v.z * n}
+end
+
+-- an offset written dx, dy, dz, as a Pos or vector, or as an amount and a direction (5, "up")
+local function offset_of(a, b, c)
+  if type(a) == "table" then
+    return {x = a.x, y = a.y, z = a.z}
+  end
+  if type(b) == "string" or type(b) == "table" then
+    return scaled(direction(b), a)
+  end
+  return {x = a, y = b or 0, z = c or 0}
+end
+
+-- ---- Cells ----
+
+-- the smallest and the largest corner of a list of cells; nothing for an empty list
+local function bounds_of(list)
+  local lo, hi
+  for _, c in ipairs(list) do
+    local p = where(c)
+    if not lo then
+      lo = {x = p.x, y = p.y, z = p.z}
+      hi = {x = p.x, y = p.y, z = p.z}
+    else
+      if p.x < lo.x then lo.x = p.x elseif p.x > hi.x then hi.x = p.x end
+      if p.y < lo.y then lo.y = p.y elseif p.y > hi.y then hi.y = p.y end
+      if p.z < lo.z then lo.z = p.z elseif p.z > hi.z then hi.z = p.z end
+    end
+  end
+  return lo, hi
+end
+
+-- the origin a Cells was given (a shape drawn at a point, a paste, a rotation); the cells' own metatable carries it, so
+-- the cells stay a plain list for everything that reads them
+local function given_origin(list)
+  local meta = getmetatable(list)
+  return meta and meta.__origin
+end
+
+local function cells_of(list, origin)
+  check_size(#list)
+  return setmetatable(list, origin and {__index = M.Cells, __origin = origin} or M.Cells)
+end
+
+-- the origin of cells: the one they were given, else the smallest corner of their box
+local function origin_of(list)
+  local given = given_origin(list)
+  if given then
+    return given
+  end
+  local lo = bounds_of(list)
+  return lo and M.pos(lo.x, lo.y, lo.z)
+end
+
 ---Cells from a list of Blocks (a block to put in each cell) or Pos (just the cells): a scan's blocks, numen.build.diff's
----result, your own list.
+---result, your own list. origin is the point turns and pastes are about (default: the smallest corner of the cells).
 ---@param list (Block|Pos)[]
+---@param origin? Pos
 ---@return Cells
-function M.cells(list)
+function M.cells(list, origin)
   local out = {}
   for i, c in ipairs(list) do
     out[i] = c
   end
-  return setmetatable(out, M.Cells)
+  local o = origin and cell_at(origin)
+  return cells_of(out, o and M.pos(o.x, o.y, o.z))
 end
 
----These cells moved by dx, dy, dz (or by a Pos).
+---The point these cells turn, flip and paste about: where they were drawn (or given), else their smallest corner.
+---Nothing for no cells.
+---@return Pos?
+function M.Cells:origin()
+  return origin_of(self)
+end
+
+---These cells moved by dx, dy, dz, a Pos, or an amount and a direction (5, "up"). Their origin moves with them.
 ---@param dx number|Pos
----@param dy? number
+---@param dy? number|string|table
 ---@param dz? number
 ---@return Cells
 function M.Cells:shift(dx, dy, dz)
-  if type(dx) == "table" then
-    dx, dy, dz = dx.x, dx.y, dx.z
-  end
+  local o = offset_of(dx, dy, dz)
   local out = {}
   for i, c in ipairs(self) do
     local p = where(c)
-    out[i] = moved(c, {x = p.x + dx, y = p.y + (dy or 0), z = p.z + (dz or 0)})
+    out[i] = moved(c, {x = p.x + o.x, y = p.y + o.y, z = p.z + o.z})
   end
-  return M.cells(out)
-end
-
-local TURN = {north = "east", east = "south", south = "west", west = "north"}
-
--- a block state turned clockwise by quarters: facing, axis, rotation (signs, banners, heads) and the north/east/south/west
--- properties (fences, walls, glass panes) turn with it
-local function turned(name, quarters)
-  local base, props = name:match("^([^%[]+)%[(.*)%]$")
-  if not base or quarters == 0 then
-    return name
-  end
-  local out = {}
-  for prop in props:gmatch("[^,]+") do
-    local k, v = prop:match("^%s*([%w_]+)%s*=%s*([%w_]+)%s*$")
-    if k then
-      if k == "facing" and TURN[v] then
-        for _ = 1, quarters do
-          v = TURN[v]
-        end
-      elseif k == "axis" and quarters % 2 == 1 then
-        v = v == "x" and "z" or v == "z" and "x" or v
-      elseif k == "rotation" and tonumber(v) then
-        v = tostring((tonumber(v) + 4 * quarters) % 16)
-      elseif TURN[k] then
-        for _ = 1, quarters do
-          k = TURN[k]
-        end
-      end
-      out[#out + 1] = k .. "=" .. v
-    end
-  end
-  return base .. "[" .. table.concat(out, ",") .. "]"
-end
-
----These cells turned clockwise seen from above, about origin (default {x = 0, y = 0, z = 0}): quarters is 1 for 90
----degrees, 2 for 180, 3 for 270. Facing, axis and the like of each block turn with it.
----@param quarters integer
----@param origin? Pos
----@return Cells
-function M.Cells:rotate(quarters, origin)
-  local q = quarters % 4
-  local o = origin and where(origin) or {x = 0, y = 0, z = 0}
-  local out = {}
-  for i, c in ipairs(self) do
-    local p = where(c)
-    local dx, dz = p.x - o.x, p.z - o.z
-    for _ = 1, q do
-      dx, dz = -dz, dx
-    end
-    local at = {x = o.x + dx, y = p.y, z = o.z + dz}
-    out[i] = c.pos and cell(at, c.name and turned(c.name, q)) or cell(at)
-  end
-  return M.cells(out)
+  local given = given_origin(self)
+  return cells_of(out, given and M.pos(given.x + o.x, given.y + o.y, given.z + o.z))
 end
 
 -- the cells of other by position: Cells, a list, or one Pos or Block
@@ -181,7 +260,7 @@ function M.Cells:union(other)
   for _, c in ipairs(other) do
     out[#out + 1] = c
   end
-  return M.cells(out)
+  return cells_of(out, given_origin(self))
 end
 
 ---These cells without the ones other has (Cells, a list, or one Pos or Block).
@@ -195,102 +274,1721 @@ function M.Cells:minus(other)
       out[#out + 1] = c
     end
   end
-  return M.cells(out)
+  return cells_of(out, given_origin(self))
 end
 
----Every cell of the box between two corners, or only its faces when hollow. With block each cell is that Block (written
----as /setblock takes it), without it a Pos.
----@param from Pos
----@param to Pos
----@param block? string
----@param hollow? boolean
----@return Cells
-function M.box(from, to, block, hollow)
-  local a, b = where(from), where(to)
-  local x1, x2 = math.min(a.x, b.x), math.max(a.x, b.x)
-  local y1, y2 = math.min(a.y, b.y), math.max(a.y, b.y)
-  local z1, z2 = math.min(a.z, b.z), math.max(a.z, b.z)
+-- cells in this order, the last one at a position wins
+local function last_wins(list)
+  local last = {}
+  for i, c in ipairs(list) do
+    last[key(where(c))] = i
+  end
   local out = {}
-  for y = y1, y2 do
-    for z = z1, z2 do
-      for x = x1, x2 do
-        if not hollow or x == x1 or x == x2 or y == y1 or y == y2 or z == z1 or z == z2 then
-          out[#out + 1] = cell({x = x, y = y, z = z}, block)
+  for i, c in ipairs(list) do
+    if last[key(where(c))] == i then
+      out[#out + 1] = c
+    end
+  end
+  return out
+end
+
+local AIR = {air = true, cave_air = true, void_air = true}
+
+local function is_air(c)
+  local base = c.name and c.name:match("^%s*([^%[{%s]+)")
+  return base ~= nil and AIR[(base:gsub("^minecraft:", ""))] == true
+end
+
+-- ---- patterns ----
+
+local parsed = {}
+
+-- the block of a weighted pattern for a cell, rolled for that cell alone
+local function chooser(choices)
+  local total = 0
+  for _, part in ipairs(choices) do
+    total = total + part.weight
+  end
+  if #choices == 1 and #choices[1].blocks == 1 then
+    local only = choices[1].blocks[1]
+    return function()
+      return only
+    end
+  end
+  return function()
+    local roll = math.random() * total
+    local upto = 0
+    local pick = choices[#choices]
+    for _, part in ipairs(choices) do
+      upto = upto + part.weight
+      if roll <= upto then
+        pick = part
+        break
+      end
+    end
+    local blocks = pick.blocks
+    return blocks[#blocks == 1 and 1 or math.random(#blocks)]
+  end
+end
+
+-- Cells as a pattern: the box of the cells repeats through the world, the block at a cell being the cells' block at
+-- the same place in the box (nothing where the cells have none)
+local function tiler(cells)
+  local lo, hi = bounds_of(cells)
+  local sx, sy, sz = hi.x - lo.x + 1, hi.y - lo.y + 1, hi.z - lo.z + 1
+  local at = {}
+  for _, c in ipairs(cells) do
+    if not c.name then
+      bad("Cells used as a pattern need a block in each cell; this one has a cell with only a position",
+          "numen.shape.cuboid(a, b):set(\"stone\")")
+    end
+    local p = where(c)
+    at[(p.x - lo.x) .. "," .. (p.y - lo.y) .. "," .. (p.z - lo.z)] = c.name
+  end
+  return function(x, y, z)
+    return at[(x % sx) .. "," .. (y % sy) .. "," .. (z % sz)]
+  end
+end
+
+-- a pattern as fn(x, y, z) → the block for that cell (nil: none): text, what numen.shape.pattern read, or Cells
+local function block_source(pattern)
+  if type(pattern) == "string" then
+    parsed[pattern] = parsed[pattern] or numen.shape.pattern(pattern)
+    return chooser(parsed[pattern])
+  end
+  if type(pattern) == "table" and pattern[1] ~= nil then
+    return pattern[1].blocks and chooser(pattern) or tiler(pattern)
+  end
+  bad("a pattern is text such as \"stone\" or \"50%stone,50%cobblestone\", what numen.shape.pattern returned, or Cells "
+      .. "to repeat; got " .. type(pattern), "numen.shape.cuboid(a, b):set(\"50%stone,50%cobblestone\")")
+end
+
+-- ---- kinds of region ----
+-- each: bounds(r) → lo, hi; each(r, fn) calls fn(x, y, z) for every cell; estimate(r) the rough number of cells;
+-- expand(r, changes), contract(r, changes), shift(r, v) the changed region; center(r) → x, y, z.
+
+local KINDS = {}
+
+local function region(fields)
+  return setmetatable(fields, M.Region)
+end
+
+local function changed(r, fields)
+  local out = {}
+  for k, v in pairs(r) do
+    out[k] = v
+  end
+  for k, v in pairs(fields) do
+    out[k] = v
+  end
+  return setmetatable(out, M.Region)
+end
+
+local function cannot(what, change)
+  bad("a " .. what .. " cannot be " .. change, "numen.shape.cuboid(a, b):expand(2, \"up\")")
+end
+
+-- the points a distance can reach from a centre along one axis, as WorldEdit's own spheres and cylinders measure it:
+-- a radius r covers every cell whose distance in radius + 0.5 units is at most 1
+local function inverse(r)
+  return 1 / (r + 0.5)
+end
+
+-- cuboid
+
+local function cuboid_corner(r, axis, v, toward_max)
+  local a, b = r.p1, r.p2
+  local first_is_max = a[axis] >= b[axis]
+  local move_first = (toward_max == first_is_max) or a[axis] == b[axis]
+  local p1 = {x = a.x, y = a.y, z = a.z}
+  local p2 = {x = b.x, y = b.y, z = b.z}
+  local target = move_first and p1 or p2
+  target[axis] = target[axis] + v
+  return changed(r, {p1 = p1, p2 = p2})
+end
+
+KINDS.cuboid = {
+  bounds = function(r)
+    return {x = math.min(r.p1.x, r.p2.x), y = math.min(r.p1.y, r.p2.y), z = math.min(r.p1.z, r.p2.z)},
+        {x = math.max(r.p1.x, r.p2.x), y = math.max(r.p1.y, r.p2.y), z = math.max(r.p1.z, r.p2.z)}
+  end,
+  each = function(r, fn)
+    local lo, hi = KINDS.cuboid.bounds(r)
+    for y = lo.y, hi.y do
+      for z = lo.z, hi.z do
+        for x = lo.x, hi.x do
+          fn(x, y, z)
+        end
+      end
+    end
+  end,
+  estimate = function(r)
+    local lo, hi = KINDS.cuboid.bounds(r)
+    return (hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1)
+  end,
+  expand = function(r, changes)
+    for _, c in ipairs(changes) do
+      for _, axis in ipairs({"x", "y", "z"}) do
+        r = cuboid_corner(r, axis, c[axis], c[axis] > 0)
+      end
+    end
+    return r
+  end,
+  contract = function(r, changes)
+    for _, c in ipairs(changes) do
+      for _, axis in ipairs({"x", "y", "z"}) do
+        r = cuboid_corner(r, axis, c[axis], c[axis] < 0)
+      end
+    end
+    return r
+  end,
+  shift = function(r, v)
+    return changed(r, {p1 = {x = r.p1.x + v.x, y = r.p1.y + v.y, z = r.p1.z + v.z},
+                       p2 = {x = r.p2.x + v.x, y = r.p2.y + v.y, z = r.p2.z + v.z}})
+  end,
+  center = function(r)
+    local lo, hi = KINDS.cuboid.bounds(r)
+    return (lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2
+  end,
+}
+
+-- cyl: centre column cx, cz, radii rx, rz and the layers min_y to max_y
+
+local function cyl_inside(rx, rz)
+  local ix, iz = inverse(rx), inverse(rz)
+  return function(x, z)
+    local xn, zn = x * ix, z * iz
+    return xn * xn + zn * zn <= 1
+  end
+end
+
+-- the cells of one quarter of a cylinder's floor plan, flat as x, z, x, z …; hollow keeps only the rim: a cell goes
+-- when the cell one step further out along x and the one along z are both inside
+local function cyl_quarter(rx, rz, hollow)
+  local inside = cyl_inside(rx, rz)
+  local quarter = {}
+  for x = 0, ceil(rx + 0.5) do
+    if not inside(x, 0) then
+      break
+    end
+    for z = 0, ceil(rz + 0.5) do
+      if not inside(x, z) then
+        break
+      end
+      if not (hollow and inside(x + 1, z) and inside(x, z + 1)) then
+        quarter[#quarter + 1] = x
+        quarter[#quarter + 1] = z
+      end
+    end
+  end
+  return quarter
+end
+
+local function cyl_cells(cx, cz, min_y, max_y, quarter, fn)
+  for y = min_y, max_y do
+    for i = 1, #quarter, 2 do
+      local x, z = quarter[i], quarter[i + 1]
+      fn(cx + x, y, cz + z)
+      if x ~= 0 then
+        fn(cx - x, y, cz + z)
+      end
+      if z ~= 0 then
+        fn(cx + x, y, cz - z)
+        if x ~= 0 then
+          fn(cx - x, y, cz - z)
         end
       end
     end
   end
-  return M.cells(out)
 end
 
----A line of cells from one point to another, diagonals included: beams, posts, ridges.
----@param from Pos
----@param to Pos
----@param block? string
----@return Cells
-function M.line(from, to, block)
-  local a, b = where(from), where(to)
-  local steps = math.max(1, math.abs(b.x - a.x), math.abs(b.y - a.y), math.abs(b.z - a.z))
-  local seen, out = {}, {}
-  for i = 0, steps do
-    local p = {
-      x = math.floor(a.x + (b.x - a.x) * i / steps + 0.5),
-      y = math.floor(a.y + (b.y - a.y) * i / steps + 0.5),
-      z = math.floor(a.z + (b.z - a.z) * i / steps + 0.5),
-    }
-    if not seen[key(p)] then
-      seen[key(p)] = true
-      out[#out + 1] = cell(p, block)
-    end
+-- how far a shape reaches from its centre along one axis: the farthest whole step still inside
+local function reach(inside, ...)
+  local n = 0
+  while inside(n + 1, ...) do
+    n = n + 1
   end
-  return M.cells(out)
+  return n
 end
 
----A cylinder standing on its bottom centre: towers, wells, round rooms; only its wall when hollow.
----@param base Pos
----@param radius integer
----@param height integer
----@param block? string
----@param hollow? boolean
----@return Cells
-function M.cylinder(base, radius, height, block, hollow)
-  local c = where(base)
-  local outer, inner = (radius + 0.5) ^ 2, (radius - 0.5) ^ 2
-  local out = {}
-  for y = c.y, c.y + math.max(1, height) - 1 do
-    for dz = -radius, radius do
-      for dx = -radius, radius do
-        local d = dx * dx + dz * dz
-        if d <= outer and not (hollow and d < inner) then
-          out[#out + 1] = cell({x = c.x + dx, y = y, z = c.z + dz}, block)
+local function even_sideways(what, r, changes, with_y)
+  local dx, dz, dy = 0, 0, 0
+  for _, c in ipairs(changes) do
+    dx, dz, dy = dx + c.x, dz + c.z, dy + c.y
+  end
+  if dx % 2 ~= 0 or dz % 2 ~= 0 or (with_y and dy % 2 ~= 0) then
+    bad("a " .. what .. " changes by steps that add up to an even number along each axis it scales (its centre stays on "
+        .. "a block); these add up to " .. dx .. ", " .. dy .. ", " .. dz, "region:expand(2, \"north\")")
+  end
+  return dx, dy, dz
+end
+
+local function absolute_sum(changes, axis)
+  local total = 0
+  for _, c in ipairs(changes) do
+    total = total + abs(c[axis])
+  end
+  return floor(total / 2)
+end
+
+KINDS.cyl = {
+  bounds = function(r)
+    local inside = cyl_inside(r.rx, r.rz)
+    local wx = reach(function(n) return inside(n, 0) end)
+    local wz = reach(function(n) return inside(0, n) end)
+    return {x = r.cx - wx, y = r.min_y, z = r.cz - wz}, {x = r.cx + wx, y = r.max_y, z = r.cz + wz}
+  end,
+  each = function(r, fn)
+    cyl_cells(r.cx, r.cz, r.min_y, r.max_y, cyl_quarter(r.rx, r.rz, false), fn)
+  end,
+  estimate = function(r)
+    return math.pi * (r.rx + 0.5) * (r.rz + 0.5) * math.max(0, r.max_y - r.min_y + 1)
+  end,
+  expand = function(r, changes)
+    local dx, _, dz = even_sideways("cyl", r, changes, false)
+    local min_y, max_y = r.min_y, r.max_y
+    for _, c in ipairs(changes) do
+      if c.y > 0 then max_y = max_y + c.y else min_y = min_y + c.y end
+    end
+    return changed(r, {cx = r.cx + dx / 2, cz = r.cz + dz / 2, rx = r.rx + absolute_sum(changes, "x"),
+                       rz = r.rz + absolute_sum(changes, "z"), min_y = min_y, max_y = max_y})
+  end,
+  contract = function(r, changes)
+    local dx, _, dz = even_sideways("cyl", r, changes, false)
+    local min_y, max_y = r.min_y, r.max_y
+    for _, c in ipairs(changes) do
+      local height = max_y - min_y
+      if c.y > 0 then min_y = min_y + math.min(height, c.y) else max_y = max_y + math.max(-height, c.y) end
+    end
+    return changed(r, {cx = r.cx - dx / 2, cz = r.cz - dz / 2, rx = math.max(1, r.rx - absolute_sum(changes, "x")),
+                       rz = math.max(1, r.rz - absolute_sum(changes, "z")), min_y = min_y, max_y = max_y})
+  end,
+  shift = function(r, v)
+    return changed(r, {cx = r.cx + v.x, cz = r.cz + v.z, min_y = r.min_y + v.y, max_y = r.max_y + v.y})
+  end,
+  center = function(r)
+    return r.cx, (r.min_y + r.max_y) / 2, r.cz
+  end,
+}
+
+-- ellipsoid: centre cx, cy, cz and radii rx, ry, rz
+
+local function ellipsoid_inside(rx, ry, rz)
+  local ix, iy, iz = inverse(rx), inverse(ry), inverse(rz)
+  return function(x, y, z)
+    local xn, yn, zn = x * ix, y * iy, z * iz
+    return xn * xn + yn * yn + zn * zn <= 1
+  end
+end
+
+-- the cells of one eighth of an ellipsoid, flat as x, y, z, x, y, z …; hollow keeps the shell: a cell goes when the
+-- cells one step further out along x, along y and along z are all inside
+local function ellipsoid_octant(rx, ry, rz, hollow)
+  local inside = ellipsoid_inside(rx, ry, rz)
+  local octant = {}
+  for x = 0, ceil(rx + 0.5) do
+    if not inside(x, 0, 0) then
+      break
+    end
+    for y = 0, ceil(ry + 0.5) do
+      if not inside(x, y, 0) then
+        break
+      end
+      for z = 0, ceil(rz + 0.5) do
+        if not inside(x, y, z) then
+          break
+        end
+        if not (hollow and inside(x + 1, y, z) and inside(x, y + 1, z) and inside(x, y, z + 1)) then
+          octant[#octant + 1] = x
+          octant[#octant + 1] = y
+          octant[#octant + 1] = z
         end
       end
     end
   end
-  return M.cells(out)
+  return octant
 end
 
----A sphere around its centre: domes, globes; only its shell when hollow.
+local function ellipsoid_cells(cx, cy, cz, octant, fn)
+  for i = 1, #octant, 3 do
+    local x, y, z = octant[i], octant[i + 1], octant[i + 2]
+    for sy = 1, y ~= 0 and 2 or 1 do
+      local yy = sy == 1 and y or -y
+      for sz = 1, z ~= 0 and 2 or 1 do
+        local zz = sz == 1 and z or -z
+        fn(cx + x, cy + yy, cz + zz)
+        if x ~= 0 then
+          fn(cx - x, cy + yy, cz + zz)
+        end
+      end
+    end
+  end
+end
+
+KINDS.ellipsoid = {
+  bounds = function(r)
+    local inside = ellipsoid_inside(r.rx, r.ry, r.rz)
+    local wx = reach(function(n) return inside(n, 0, 0) end)
+    local wy = reach(function(n) return inside(0, n, 0) end)
+    local wz = reach(function(n) return inside(0, 0, n) end)
+    return {x = r.cx - wx, y = r.cy - wy, z = r.cz - wz}, {x = r.cx + wx, y = r.cy + wy, z = r.cz + wz}
+  end,
+  each = function(r, fn)
+    ellipsoid_cells(r.cx, r.cy, r.cz, ellipsoid_octant(r.rx, r.ry, r.rz, false), fn)
+  end,
+  estimate = function(r)
+    return 4 / 3 * math.pi * (r.rx + 0.5) * (r.ry + 0.5) * (r.rz + 0.5)
+  end,
+  expand = function(r, changes)
+    local dx, dy, dz = even_sideways("sphere", r, changes, true)
+    return changed(r, {cx = r.cx + dx / 2, cy = r.cy + dy / 2, cz = r.cz + dz / 2,
+                       rx = r.rx + absolute_sum(changes, "x"), ry = r.ry + absolute_sum(changes, "y"),
+                       rz = r.rz + absolute_sum(changes, "z")})
+  end,
+  contract = function(r, changes)
+    local dx, dy, dz = even_sideways("sphere", r, changes, true)
+    return changed(r, {cx = r.cx - dx / 2, cy = r.cy - dy / 2, cz = r.cz - dz / 2,
+                       rx = math.max(1, r.rx - absolute_sum(changes, "x")),
+                       ry = math.max(1, r.ry - absolute_sum(changes, "y")),
+                       rz = math.max(1, r.rz - absolute_sum(changes, "z"))})
+  end,
+  shift = function(r, v)
+    return changed(r, {cx = r.cx + v.x, cy = r.cy + v.y, cz = r.cz + v.z})
+  end,
+  center = function(r)
+    return r.cx, r.cy, r.cz
+  end,
+}
+
+-- poly: the corner points pts ({x, z}) and the layers min_y to max_y
+
+-- whether the cell column x, z is inside a polygon, its edges and corners included
+local function poly_contains(pts, x, z)
+  local inside = false
+  local prev = pts[#pts]
+  for _, p in ipairs(pts) do
+    local dx, dz = p.x - prev.x, p.z - prev.z
+    -- on the edge: on its line and between its ends
+    if dx * (z - prev.z) == dz * (x - prev.x) and x >= math.min(p.x, prev.x) and x <= math.max(p.x, prev.x)
+        and z >= math.min(p.z, prev.z) and z <= math.max(p.z, prev.z) then
+      return true
+    end
+    -- a ray towards +x crosses the edge when the edge spans this z (one end counted, the other not)
+    if (prev.z > z) ~= (p.z > z) and x < prev.x + (z - prev.z) * dx / dz then
+      inside = not inside
+    end
+    prev = p
+  end
+  return inside
+end
+
+-- the box of points (a poly's corners have no y: 0)
+local function points_box(points)
+  local lo, hi
+  for _, p in ipairs(points) do
+    local y = p.y or 0
+    if not lo then
+      lo = {x = p.x, y = y, z = p.z}
+      hi = {x = p.x, y = y, z = p.z}
+    else
+      lo = {x = math.min(lo.x, p.x), y = math.min(lo.y, y), z = math.min(lo.z, p.z)}
+      hi = {x = math.max(hi.x, p.x), y = math.max(hi.y, y), z = math.max(hi.z, p.z)}
+    end
+  end
+  return lo, hi
+end
+
+local function ordered_y(r, min_y, max_y)
+  return changed(r, {min_y = math.min(min_y, max_y), max_y = math.max(min_y, max_y)})
+end
+
+KINDS.poly = {
+  bounds = function(r)
+    local lo, hi = points_box(r.pts)
+    return {x = lo.x, y = r.min_y, z = lo.z}, {x = hi.x, y = r.max_y, z = hi.z}
+  end,
+  each = function(r, fn)
+    local lo, hi = points_box(r.pts)
+    for z = lo.z, hi.z do
+      for x = lo.x, hi.x do
+        if poly_contains(r.pts, x, z) then
+          for y = r.min_y, r.max_y do
+            fn(x, y, z)
+          end
+        end
+      end
+    end
+  end,
+  estimate = function()
+    return 0
+  end,
+  expand = function(r, changes)
+    local min_y, max_y = r.min_y, r.max_y
+    for _, c in ipairs(changes) do
+      if c.x ~= 0 or c.z ~= 0 then
+        cannot("poly", "grown sideways: it only changes up and down")
+      end
+      if c.y > 0 then max_y = max_y + c.y else min_y = min_y + c.y end
+    end
+    return ordered_y(r, min_y, max_y)
+  end,
+  contract = function(r, changes)
+    local min_y, max_y = r.min_y, r.max_y
+    for _, c in ipairs(changes) do
+      if c.x ~= 0 or c.z ~= 0 then
+        cannot("poly", "shrunk sideways: it only changes up and down")
+      end
+      if c.y > 0 then min_y = min_y + c.y else max_y = max_y + c.y end
+    end
+    return ordered_y(r, min_y, max_y)
+  end,
+  shift = function(r, v)
+    local pts = {}
+    for i, p in ipairs(r.pts) do
+      pts[i] = {x = p.x + v.x, z = p.z + v.z}
+    end
+    return changed(r, {pts = pts, min_y = r.min_y + v.y, max_y = r.max_y + v.y})
+  end,
+  center = function(r)
+    local lo, hi = KINDS.poly.bounds(r)
+    return (lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2
+  end,
+}
+
+-- convex: the points pts and the planes of the hull, each {nx, ny, nz, d} meaning nx*x + ny*y + nz*z <= d
+
+local function gcd(a, b)
+  while b ~= 0 do
+    a, b = b, a % b
+  end
+  return a
+end
+
+-- the planes that have every point on one side (or on them): the faces of the hull of the points
+local function hull_planes(pts)
+  local planes, seen = {}, {}
+  local o = pts[1]
+  local rel = {}
+  for i, p in ipairs(pts) do
+    rel[i] = {x = p.x - o.x, y = p.y - o.y, z = p.z - o.z}
+  end
+  for i = 1, #rel - 2 do
+    for j = i + 1, #rel - 1 do
+      for k = j + 1, #rel do
+        local a, b, c = rel[i], rel[j], rel[k]
+        local ux, uy, uz, vx, vy, vz = b.x - a.x, b.y - a.y, b.z - a.z, c.x - a.x, c.y - a.y, c.z - a.z
+        local nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+        if nx ~= 0 or ny ~= 0 or nz ~= 0 then
+          local d = nx * a.x + ny * a.y + nz * a.z
+          local above, below = false, false
+          for _, p in ipairs(rel) do
+            local side = nx * p.x + ny * p.y + nz * p.z - d
+            if side > 0 then above = true elseif side < 0 then below = true end
+            if above and below then
+              break
+            end
+          end
+          if above ~= below then
+            if above then
+              nx, ny, nz, d = -nx, -ny, -nz, -d
+            end
+            local g = gcd(gcd(abs(nx), abs(ny)), abs(nz))
+            nx, ny, nz, d = nx / g, ny / g, nz / g, d / g
+            local id = nx .. "," .. ny .. "," .. nz .. "," .. d
+            if not seen[id] then
+              seen[id] = true
+              -- back to the world's coordinates: n.(p - o) <= d  becomes  n.p <= d + n.o
+              planes[#planes + 1] = {nx, ny, nz, d + nx * o.x + ny * o.y + nz * o.z}
+            end
+          end
+        end
+      end
+    end
+  end
+  return planes
+end
+
+KINDS.convex = {
+  bounds = function(r)
+    return points_box(r.pts)
+  end,
+  each = function(r, fn)
+    local lo, hi = points_box(r.pts)
+    for y = lo.y, hi.y do
+      for z = lo.z, hi.z do
+        local from, to = lo.x, hi.x
+        for _, plane in ipairs(r.planes) do
+          local nx, rest = plane[1], plane[4] - plane[2] * y - plane[3] * z
+          if nx == 0 then
+            if rest < 0 then
+              to = from - 1
+            end
+          elseif nx > 0 then
+            to = math.min(to, floor(rest / nx))
+          else
+            from = math.max(from, ceil(rest / nx))
+          end
+        end
+        for x = from, to do
+          fn(x, y, z)
+        end
+      end
+    end
+  end,
+  estimate = function()
+    return 0
+  end,
+  expand = function()
+    cannot("convex", "expanded")
+  end,
+  contract = function()
+    cannot("convex", "contracted")
+  end,
+  shift = function(r, v)
+    local pts = {}
+    for i, p in ipairs(r.pts) do
+      pts[i] = {x = p.x + v.x, y = p.y + v.y, z = p.z + v.z}
+    end
+    return changed(r, {pts = pts, planes = hull_planes(pts)})
+  end,
+  center = function(r)
+    local x, y, z = 0, 0, 0
+    for _, p in ipairs(r.pts) do
+      x, y, z = x + p.x, y + p.y, z + p.z
+    end
+    return x / #r.pts, y / #r.pts, z / #r.pts
+  end,
+}
+
+-- cells: any shape, as the list of its cells
+
+KINDS.cells = {
+  bounds = function(r)
+    return bounds_of(r.list)
+  end,
+  each = function(r, fn)
+    for _, p in ipairs(r.list) do
+      fn(p.x, p.y, p.z)
+    end
+  end,
+  estimate = function(r)
+    return #r.list
+  end,
+  expand = function()
+    cannot("selection of arbitrary cells", "expanded")
+  end,
+  contract = function()
+    cannot("selection of arbitrary cells", "contracted")
+  end,
+  shift = function(r, v)
+    local list = {}
+    for i, p in ipairs(r.list) do
+      list[i] = {x = p.x + v.x, y = p.y + v.y, z = p.z + v.z}
+    end
+    return changed(r, {list = list})
+  end,
+  center = function(r)
+    local lo, hi = bounds_of(r.list)
+    return (lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2
+  end,
+}
+
+-- a region of any kind as it is; Cells (or a list of cells) as the region of arbitrary shape that has exactly those cells
+local function as_region(x)
+  if getmetatable(x) == M.Region then
+    return x
+  end
+  local list = {}
+  for i, c in ipairs(x) do
+    local p = where(c)
+    list[i] = {x = p.x, y = p.y, z = p.z}
+  end
+  return region({kind = "cells", list = list, origin = given_origin(x)})
+end
+
+-- a region of arbitrary shape from a list of cells drawn at origin
+local function region_of_cells(list, origin)
+  return region({kind = "cells", list = list, origin = origin})
+end
+
+-- visits every cell of the region; a region that is plainly more cells than one Cells holds fails before the loop
+local function visit(r, fn)
+  local kind = KINDS[r.kind]
+  local estimate = kind.estimate(r)
+  if estimate > max_cells() * 1.25 then
+    check_size(floor(estimate))
+  end
+  kind.each(r, fn)
+end
+
+-- ---- selections ----
+
+---A selection of the box between two corners (cuboid, WorldEdit's default). Draw it with :set, :walls or :faces, change
+---it with :expand, :contract, :shift, :outset and :inset, take its cells with :cells.
+---@param a Pos
+---@param b Pos
+---@return Region
+function M.cuboid(a, b)
+  return region({kind = "cuboid", p1 = cell_at(a), p2 = cell_at(b)})
+end
+
+---A selection of a polygon seen from above, between layers min_y and max_y. points are at least three Pos (their x and
+---z count); the edges and corners are inside.
+---@param points Pos[]
+---@param min_y integer
+---@param max_y integer
+---@return Region
+function M.poly(points, min_y, max_y)
+  if #points < 3 then
+    bad("poly needs at least three points; got " .. #points,
+        "numen.shape.poly({{x = 0, y = 64, z = 0}, {x = 6, y = 64, z = 0}, {x = 0, y = 64, z = 6}}, 64, 70)")
+  end
+  local pts = {}
+  for i, p in ipairs(points) do
+    local q = cell_at(p)
+    pts[i] = {x = q.x, z = q.z}
+  end
+  return ordered_y(region({kind = "poly", pts = pts}), floor(min_y), floor(max_y))
+end
+
+local function radii_of(radii, count, lowest, hint)
+  local out = {}
+  if type(radii) == "number" then
+    for i = 1, count do
+      out[i] = math.max(lowest, radii)
+    end
+    return out
+  end
+  if type(radii) == "table" and (#radii == count or #radii == 1) then
+    for i = 1, count do
+      out[i] = math.max(lowest, radii[#radii == 1 and 1 or i])
+    end
+    return out
+  end
+  bad("radii is one number" .. (count == 2 and " (x and z the same) or {x, z}" or " (all three the same) or {x, y, z}")
+      .. "; got " .. (type(radii) == "table" and #radii .. " values" or type(radii)), hint)
+end
+
+---A selection of the ellipsoid around center with radii (one number for a sphere, or {x, y, z}; decimals work, the
+---surface is half a block beyond the radius as in WorldEdit).
 ---@param center Pos
----@param radius integer
----@param block? string
----@param hollow? boolean
+---@param radii number|number[]
+---@return Region
+function M.ellipsoid(center, radii)
+  local c = cell_at(center)
+  local r = radii_of(radii, 3, 0, "numen.shape.ellipsoid(pos, {4, 6, 4})")
+  return region({kind = "ellipsoid", cx = c.x, cy = c.y, cz = c.z, rx = r[1], ry = r[2], rz = r[3],
+                 origin = M.pos(c.x, c.y, c.z)})
+end
+
+---A selection of the convex hull of at least four points that do not lie in one plane (a flat shape is a poly).
+---@param points Pos[]
+---@return Region
+function M.convex(points)
+  local pts, seen = {}, {}
+  for _, p in ipairs(points) do
+    local q = cell_at(p)
+    if not seen[key(q)] then
+      seen[key(q)] = true
+      pts[#pts + 1] = q
+    end
+  end
+  local planes = hull_planes(pts)
+  if #planes == 0 then
+    bad("convex needs at least four different points that do not lie in one plane; got " .. #pts .. " different "
+        .. "point(s)", "numen.shape.convex({{x = 0, y = 64, z = 0}, {x = 4, y = 64, z = 0}, {x = 0, y = 64, z = 4}, "
+        .. "{x = 0, y = 68, z = 0}})")
+  end
+  return region({kind = "convex", pts = pts, planes = planes})
+end
+
+-- the Cells of a region drawn at its origin
+local function located(r, out)
+  return cells_of(out, r.origin)
+end
+
+---The cells of this selection, each a Pos.
 ---@return Cells
-function M.sphere(center, radius, block, hollow)
-  local c = where(center)
-  local outer, inner = (radius + 0.5) ^ 2, (radius - 0.5) ^ 2
+function M.Region:cells()
   local out = {}
-  for dy = -radius, radius do
-    for dz = -radius, radius do
-      for dx = -radius, radius do
-        local d = dx * dx + dy * dy + dz * dz
-        if d <= outer and not (hollow and d < inner) then
-          out[#out + 1] = cell({x = c.x + dx, y = c.y + dy, z = c.z + dz}, block)
+  visit(self, function(x, y, z)
+    out[#out + 1] = M.pos(x, y, z)
+  end)
+  return located(self, out)
+end
+
+---Every cell of this selection with a block from pattern (WorldEdit's //set). A pattern is text: "stone",
+---"oak_stairs[facing=north]", "50%stone,50%cobblestone" (relative weights, a part without % weighs 1), "##logs" (any
+---block of that tag), "##*logs" (any state of any of them), "*oak_log" (any value of the properties left out); or Cells
+---to repeat through the world. Each cell rolls its own block once, so numen.build.diff and numen.build.place see the same.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:set(pattern)
+  local source = block_source(pattern)
+  local out = {}
+  visit(self, function(x, y, z)
+    local name = source(x, y, z)
+    if name then
+      out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+    end
+  end)
+  return located(self, out)
+end
+
+-- the cells of a selection that touch the outside: a cell is kept when one of its neighbours is not in the selection; with
+-- walls the layers above the top and below the bottom count as inside, leaving the top and the bottom open
+local function shell(r, walls, fn)
+  local lo, hi = KINDS[r.kind].bounds(r)
+  local depth, width = hi.y - lo.y + 3, hi.z - lo.z + 3
+  local solid, at = {}, {}
+  local n = 0
+  visit(r, function(x, y, z)
+    local i = ((x - lo.x + 1) * depth + (y - lo.y + 1)) * width + (z - lo.z + 1)
+    n = n + 1
+    at[n] = i
+    solid[i] = true
+  end)
+  local sx = depth * width
+  for k = 1, n do
+    local i = at[k]
+    local open = not solid[i + sx] or not solid[i - sx] or not solid[i + 1] or not solid[i - 1]
+    local z = i % width - 1 + lo.z
+    local y = floor(i / width) % depth - 1 + lo.y
+    if not open then
+      open = (not solid[i + width] and (not walls or y < hi.y)) or (not solid[i - width] and (not walls or y > lo.y))
+    end
+    if open then
+      fn(floor(i / sx) - 1 + lo.x, y, z)
+    end
+  end
+end
+
+-- the cells of a cuboid's sides: every layer for the walls, with the top and the bottom for the faces
+local function cuboid_sides(r, faces, fn)
+  local lo, hi = KINDS.cuboid.bounds(r)
+  for y = lo.y, hi.y do
+    for z = lo.z, hi.z do
+      local across = z == lo.z or z == hi.z or (faces and (y == lo.y or y == hi.y))
+      for x = lo.x, hi.x do
+        if across or x == lo.x or x == hi.x then
+          fn(x, y, z)
+        elseif x < hi.x then
+          fn(hi.x, y, z)
+          break
         end
       end
     end
   end
-  return M.cells(out)
+end
+
+local function sides(r, pattern, faces)
+  local source = block_source(pattern)
+  local out = {}
+  local function put(x, y, z)
+    local name = source(x, y, z)
+    if name then
+      out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+    end
+  end
+  if r.kind == "cuboid" then
+    cuboid_sides(r, faces, put)
+  else
+    shell(r, not faces, put)
+  end
+  return located(r, out)
+end
+
+---The four sides of this selection with a block from pattern (see Region:set), the top and bottom open (WorldEdit's
+---//walls). A cuboid's four faces; any other shape's shell, its top and bottom layers left open.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:walls(pattern)
+  return sides(self, pattern, false)
+end
+
+---The whole surface of this selection with a block from pattern (see Region:set; WorldEdit's //faces): a cuboid's
+---six faces, any other shape's cells that touch the outside.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:faces(pattern)
+  return sides(self, pattern, true)
+end
+
+---WorldEdit's second name for faces.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:outline(pattern)
+  return self:faces(pattern)
+end
+
+---The middle of this selection with a block from pattern (see Region:set; WorldEdit's //center): one cell, or two,
+---four or eight where the middle falls between cells (a side with an even number of cells).
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:center(pattern)
+  local x, y, z = KINDS[self.kind].center(self)
+  local function span(c)
+    local round = (c < 0 and -1 or 1) * floor(abs(c) + 0.5)
+    return c < 0 and ceil(c) or floor(c), round
+  end
+  local x1, x2 = span(x)
+  local y1, y2 = span(y)
+  local z1, z2 = span(z)
+  local out = {}
+  local source = block_source(pattern)
+  for yy = math.min(y1, y2), math.max(y1, y2) do
+    for zz = math.min(z1, z2), math.max(z1, z2) do
+      for xx = math.min(x1, x2), math.max(x1, x2) do
+        local name = source(xx, yy, zz)
+        if name then
+          out[#out + 1] = {name = name, pos = M.pos(xx, yy, zz)}
+        end
+      end
+    end
+  end
+  return located(self, out)
+end
+
+-- ---- changing a selection ----
+
+-- changes of one direction, or each of a list: an amount, and the amount the other way (WorldEdit's reverse amount)
+local function steps(amount, dir, reverse)
+  local out = {}
+  for i, d in ipairs(directions(dir)) do
+    out[i] = {scaled(d, amount)}
+    if reverse and reverse ~= 0 then
+      out[i][2] = scaled(d, -reverse)
+    end
+  end
+  return out
+end
+
+---This selection grown by amount towards a direction ("north", "south", "east", "west", "up", "down", a vector or a
+---list of them), and by reverse the other way (WorldEdit's //expand). A cuboid grows by a side, a cyl and a sphere
+---by their radius (an even amount, about their centre), a poly only up and down; a convex or arbitrary cells cannot.
+---The selection itself stays as it was; the grown one is returned.
+---@param amount integer
+---@param dir string|table
+---@param reverse? integer
+---@return Region
+function M.Region:expand(amount, dir, reverse)
+  local r = self
+  for _, changes in ipairs(steps(amount, dir, reverse)) do
+    r = KINDS[r.kind].expand(r, changes)
+  end
+  return r
+end
+
+---This selection shrunk by amount towards a direction, and by reverse the other way (WorldEdit's //contract; see
+---Region:expand for the directions and what each shape allows). A cyl and a sphere keep a radius of at least 1.
+---@param amount integer
+---@param dir string|table
+---@param reverse? integer
+---@return Region
+function M.Region:contract(amount, dir, reverse)
+  local r = self
+  for _, changes in ipairs(steps(amount, dir, reverse)) do
+    r = KINDS[r.kind].contract(r, changes)
+  end
+  return r
+end
+
+---This selection grown to the whole height of the world, from numen.shape.y_range().min to .max (//expand vert).
+---@return Region
+function M.Region:expand_vert()
+  local range = numen.shape.y_range()
+  local height = range.max - range.min
+  local r = KINDS[self.kind].expand(self, {{x = 0, y = height, z = 0}, {x = 0, y = -height, z = 0}})
+  if r.kind == "cuboid" then
+    return changed(r, {p1 = {x = r.p1.x, y = math.max(range.min, math.min(range.max, r.p1.y)), z = r.p1.z},
+                       p2 = {x = r.p2.x, y = math.max(range.min, math.min(range.max, r.p2.y)), z = r.p2.z}})
+  elseif r.kind == "poly" then
+    return ordered_y(r, math.max(range.min, r.min_y), math.min(range.max, r.max_y))
+  end
+  return r
+end
+
+---This selection moved by dx, dy, dz, a Pos, or an amount and a direction (5, "up"); WorldEdit's //shift.
+---@param dx number|Pos
+---@param dy? number|string|table
+---@param dz? number
+---@return Region
+function M.Region:shift(dx, dy, dz)
+  local v = offset_of(dx, dy, dz)
+  local r = KINDS[self.kind].shift(self, v)
+  local o = self.origin
+  return o and changed(r, {origin = M.pos(o.x + v.x, o.y + v.y, o.z + v.z)}) or r
+end
+
+-- the changes outset and inset make: the six directions, fewer with horizontal or vertical
+local function all_around(amount, opts)
+  opts = opts or {}
+  local out = {}
+  if not opts.horizontal then
+    out[#out + 1] = {x = 0, y = amount, z = 0}
+    out[#out + 1] = {x = 0, y = -amount, z = 0}
+  end
+  if not opts.vertical then
+    out[#out + 1] = {x = amount, y = 0, z = 0}
+    out[#out + 1] = {x = -amount, y = 0, z = 0}
+    out[#out + 1] = {x = 0, y = 0, z = amount}
+    out[#out + 1] = {x = 0, y = 0, z = -amount}
+  end
+  return out
+end
+
+---This selection grown by amount in every direction (WorldEdit's //outset). opts.horizontal grows only sideways,
+---opts.vertical only up and down. See Region:expand for what each shape allows.
+---@param amount integer
+---@param opts? {horizontal?: boolean, vertical?: boolean}
+---@return Region
+function M.Region:outset(amount, opts)
+  return KINDS[self.kind].expand(self, all_around(amount, opts))
+end
+
+---This selection shrunk by amount in every direction (WorldEdit's //inset). opts.horizontal shrinks only sideways,
+---opts.vertical only up and down. See Region:expand for what each shape allows.
+---@param amount integer
+---@param opts? {horizontal?: boolean, vertical?: boolean}
+---@return Region
+function M.Region:inset(amount, opts)
+  return KINDS[self.kind].contract(self, all_around(amount, opts))
+end
+
+-- ---- Cells as a selection of arbitrary shape ----
+
+---Every one of these cells with a block from pattern (Region:set on exactly these cells).
+---@param pattern string|Cells|table
+---@return Cells
+function M.Cells:set(pattern)
+  return as_region(self):set(pattern)
+end
+
+---The sides of these cells with a block from pattern (Region:walls on exactly these cells).
+---@param pattern string|Cells|table
+---@return Cells
+function M.Cells:walls(pattern)
+  return as_region(self):walls(pattern)
+end
+
+---The surface of these cells with a block from pattern (Region:faces on exactly these cells).
+---@param pattern string|Cells|table
+---@return Cells
+function M.Cells:faces(pattern)
+  return as_region(self):faces(pattern)
+end
+
+---WorldEdit's second name for faces.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Cells:outline(pattern)
+  return self:faces(pattern)
+end
+
+---The middle of these cells with a block from pattern (Region:center on exactly these cells).
+---@param pattern string|Cells|table
+---@return Cells
+function M.Cells:center(pattern)
+  return as_region(self):center(pattern)
+end
+
+-- ---- turning, stacking, moving, pasting ----
+
+-- cos and sin of an angle in degrees, exact at the multiples of 90 (so a quarter turn moves cells exactly)
+local function dcos(degrees)
+  if degrees % 90 == 0 then
+    return ({[0] = 1, [90] = 0, [180] = -1, [270] = 0})[degrees % 360]
+  end
+  return math.cos(math.rad(degrees))
+end
+
+local function dsin(degrees)
+  if degrees % 90 == 0 then
+    return ({[0] = 0, [90] = 1, [180] = 0, [270] = -1})[degrees % 360]
+  end
+  return math.sin(math.rad(degrees))
+end
+
+local function multiply(a, b)
+  local out = {{}, {}, {}}
+  for i = 1, 3 do
+    for j = 1, 3 do
+      out[i][j] = a[i][1] * b[1][j] + a[i][2] * b[2][j] + a[i][3] * b[3][j]
+    end
+  end
+  return out
+end
+
+-- the turn of Cells:rotate as WorldEdit builds it: about y, then x, then z, each by minus the angle given (a positive
+-- angle is clockwise seen from above); the z turn is applied first
+local function rotation_matrix(y, x, z)
+  local function about_y(t)
+    local c, s = dcos(t), dsin(t)
+    return {{c, 0, s}, {0, 1, 0}, {-s, 0, c}}
+  end
+  local function about_x(t)
+    local c, s = dcos(t), dsin(t)
+    return {{1, 0, 0}, {0, c, -s}, {0, s, c}}
+  end
+  local function about_z(t)
+    local c, s = dcos(t), dsin(t)
+    return {{c, -s, 0}, {s, c, 0}, {0, 0, 1}}
+  end
+  return multiply(multiply(about_y(-y), about_x(-x)), about_z(-z))
+end
+
+-- the cells moved about their origin by the linear part m (and t added before rounding down, as WorldEdit's revolve
+-- does), blocks turned by the same m; cells whose block is air can be left out
+local function turned(self, m, t, without_air)
+  local o = origin_of(self)
+  if not o then
+    return cells_of({}, nil)
+  end
+  local names, slot = {}, {}
+  for _, c in ipairs(self) do
+    if c.name and not slot[c.name] then
+      names[#names + 1] = c.name
+      slot[c.name] = #names
+    end
+  end
+  local blocks = #names > 0 and numen.shape.transform_blocks(names, m) or names
+  local out = {}
+  for _, c in ipairs(self) do
+    if not (without_air and is_air(c)) then
+      local p = where(c)
+      local dx, dy, dz = p.x - o.x, p.y - o.y, p.z - o.z
+      out[#out + 1] = cell({x = o.x + floor(dx * m[1][1] + dy * m[1][2] + dz * m[1][3] + t),
+                            y = o.y + floor(dx * m[2][1] + dy * m[2][2] + dz * m[2][3] + t),
+                            z = o.z + floor(dx * m[3][1] + dy * m[3][2] + dz * m[3][3] + t)},
+          c.pos and c.name and blocks[slot[c.name]] or nil)
+    end
+  end
+  return cells_of(out, o)
+end
+
+---Turned about the origin by y degrees (clockwise seen from above), x and z about those axes: WorldEdit's //rotate.
+---The blocks turn along: facing, axis, shape and rotation follow (vanilla's own rotate for quarter turns about the
+---vertical axis, WorldEdit's rules for the rest). Angles that are not multiples of 90 move each cell to the cell
+---its centre turns into, which leaves gaps.
+---@param y number
+---@param x? number
+---@param z? number
+---@return Cells
+function M.Cells:rotate(y, x, z)
+  return turned(self, rotation_matrix(y or 0, x or 0, z or 0), 0, false)
+end
+
+---Mirrored across the origin along a direction ("east" swaps east and west, "up" turns upside down; a name or a
+---vector): WorldEdit's //flip. The blocks turn along (vanilla's mirror for sideways flips, WorldEdit's rules for upside
+---down: half and slab type swap, rails and facing follow).
+---@param dir string|table
+---@return Cells
+function M.Cells:flip(dir)
+  local d = direction(dir)
+  local m = {{1 - 2 * abs(d.x), 0, 0}, {0, 1 - 2 * abs(d.y), 0}, {0, 0, 1 - 2 * abs(d.z)}}
+  return turned(self, m, 0, false)
+end
+
+---These cells and count copies, each one box further along dir (a name or a vector): WorldEdit's //stack. A box is
+---the size of the box of the cells; opts.cells steps by dir in cells instead. opts.skip_air leaves air cells out of the
+---copies. The copies may not overlap the original.
+---@param count? integer
+---@param dir string|table
+---@param opts? {cells?: boolean, skip_air?: boolean}
+---@return Cells
+function M.Cells:stack(count, dir, opts)
+  opts = opts or {}
+  count = count or 1
+  if count < 1 then
+    bad("count is how many copies to add, at least 1; got " .. count, "cells:stack(3, \"up\")")
+  end
+  local lo, hi = bounds_of(self)
+  if not lo then
+    return self
+  end
+  local size = {x = hi.x - lo.x + 1, y = hi.y - lo.y + 1, z = hi.z - lo.z + 1}
+  local d = direction(dir)
+  local step = opts.cells and d or {x = d.x * size.x, y = d.y * size.y, z = d.z * size.z}
+  if abs(step.x) < size.x and abs(step.y) < size.y and abs(step.z) < size.z then
+    bad("the copies would overlap the original: they are " .. abs(step.x) .. ", " .. abs(step.y) .. ", " .. abs(step.z)
+        .. " cells apart and the cells are " .. size.x .. " x " .. size.y .. " x " .. size.z,
+        "cells:stack(3, \"up\")")
+  end
+  if not opts.skip_air then
+    check_size(#self * (count + 1))
+  end
+  local out = {}
+  for i, c in ipairs(self) do
+    out[i] = c
+  end
+  for k = 1, count do
+    for _, c in ipairs(self) do
+      if not (opts.skip_air and is_air(c)) then
+        local p = where(c)
+        out[#out + 1] = moved(c, {x = p.x + k * step.x, y = p.y + k * step.y, z = p.z + k * step.z})
+      end
+    end
+    check_size(#out)
+  end
+  return cells_of(out, given_origin(self))
+end
+
+---Moved count cells along dir (a name or a vector), the cells left behind filled from pattern leave (default air):
+---WorldEdit's //move. The result is what to write to make the move; the origin moves with the cells.
+---@param count? integer
+---@param dir string|table
+---@param leave? string|Cells|table
+---@return Cells
+function M.Cells:move(count, dir, leave)
+  count = count or 1
+  if count < 1 then
+    bad("count is how many times to move by dir, at least 1; got " .. count, "cells:move(1, \"north\")")
+  end
+  local v = scaled(direction(dir), count)
+  local there = self:shift(v.x, v.y, v.z)
+  local source = leave ~= nil and block_source(leave) or function()
+    return "air"
+  end
+  local out = {}
+  for _, c in ipairs(self:minus(there)) do
+    local p = where(c)
+    local name = source(p.x, p.y, p.z)
+    if name then
+      out[#out + 1] = {name = name, pos = M.pos(p.x, p.y, p.z)}
+    end
+  end
+  for _, c in ipairs(there) do
+    out[#out + 1] = c
+  end
+  -- the cells they leave would change the smallest corner, so the moved origin is given outright
+  local o = origin_of(self)
+  return cells_of(out, o and M.pos(o.x + v.x, o.y + v.y, o.z + v.z))
+end
+
+---Moved so that the origin lands on at (WorldEdit's //paste); the origin is at afterwards.
+---@param at Pos
+---@return Cells
+function M.Cells:paste(at)
+  local o = origin_of(self)
+  local to = cell_at(at)
+  if not o then
+    return self
+  end
+  local out = self:shift(to.x - o.x, to.y - o.y, to.z - o.z)
+  return cells_of(out, M.pos(to.x, to.y, to.z))
+end
+
+---These cells and count - 1 copies turned evenly round a full turn about the vertical axis through the origin:
+---WorldEdit's //revolve (count at least 2). opts.reverse turns counter-clockwise. Air cells are not copied.
+---@param count integer
+---@param opts? {reverse?: boolean}
+---@return Cells
+function M.Cells:revolve(count, opts)
+  if count < 2 then
+    bad("count is the number of copies round the full turn, including the original: at least 2; got " .. count,
+        "cells:revolve(4)")
+  end
+  local reverse = opts and opts.reverse
+  local o = origin_of(self)
+  if not o then
+    return self
+  end
+  local all = {}
+  for i, c in ipairs(self) do
+    all[i] = c
+  end
+  for i = 1, count - 1 do
+    local theta = (reverse and 1 or -1) * (360 * i) / count
+    local c, s = dcos(theta), dsin(theta)
+    local part = turned(self, {{c, 0, s}, {0, 1, 0}, {-s, 0, c}}, 0.5, true)
+    for _, copy in ipairs(part) do
+      all[#all + 1] = copy
+    end
+    check_size(#all)
+  end
+  return cells_of(last_wins(all), given_origin(self))
+end
+
+-- ---- generating shapes ----
+
+-- the result of a shape function: the selection of the shape, or its cells with the blocks of pattern when one is given
+local function finish(r, pattern)
+  if pattern == nil then
+    return r
+  end
+  return r:set(pattern)
+end
+
+local function put_cell(list)
+  return function(x, y, z)
+    list[#list + 1] = {x = x, y = y, z = z}
+  end
+end
+
+---A cylinder standing on at, which is the middle of its bottom layer, height layers up (a negative height goes down);
+---radii is one number, or {x, z}, at least 1; the edge is half a block beyond the radius as in WorldEdit's //cyl. With a
+---pattern (see Region:set) it is the Cells; without, the selection.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param height? integer
+---@return Cells|Region
+function M.cyl(at, pattern, radii, height)
+  local c = cell_at(at)
+  local r = radii_of(radii, 2, 1, "numen.shape.cyl(pos, \"stone\", {4, 6}, 5)")
+  height = floor(height or 1)
+  local min_y = height < 0 and c.y + height or c.y
+  local max_y = height < 0 and c.y - 1 or c.y + height - 1
+  return finish(region({kind = "cyl", cx = c.x, cz = c.z, rx = r[1], rz = r[2], min_y = min_y, max_y = max_y,
+                        origin = M.pos(c.x, c.y, c.z)}), pattern)
+end
+
+---Only the wall of a cylinder (see numen.shape.cyl): the cells with an open cell one step outward, no top and no bottom.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param height? integer
+---@return Cells|Region
+function M.hcyl(at, pattern, radii, height)
+  local c = cell_at(at)
+  local r = radii_of(radii, 2, 1, "numen.shape.hcyl(pos, \"stone\", {4, 6}, 5)")
+  height = floor(height or 1)
+  local min_y = height < 0 and c.y + height or c.y
+  local max_y = height < 0 and c.y - 1 or c.y + height - 1
+  local list = {}
+  cyl_cells(c.x, c.z, min_y, max_y, cyl_quarter(r[1], r[2], true), put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+---A sphere (or ellipsoid) around at; radii is one number, or {x, y, z}; the surface is half a block beyond the radius as
+---in WorldEdit's //sphere. raised moves it up by its vertical radius so it rests on at. With a pattern (see
+---Region:set) it is the Cells; without, the selection.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param raised? boolean
+---@return Cells|Region
+function M.sphere(at, pattern, radii, raised)
+  local c = cell_at(at)
+  local r = radii_of(radii, 3, 0, "numen.shape.sphere(pos, \"stone\", {4, 6, 4})")
+  local up = raised and floor(r[2]) or 0
+  return finish(region({kind = "ellipsoid", cx = c.x, cy = c.y + up, cz = c.z, rx = r[1], ry = r[2], rz = r[3],
+                        origin = M.pos(c.x, c.y, c.z)}), pattern)
+end
+
+---Only the shell of a sphere (see numen.shape.sphere): the thinnest closed layer.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param raised? boolean
+---@return Cells|Region
+function M.hsphere(at, pattern, radii, raised)
+  local c = cell_at(at)
+  local r = radii_of(radii, 3, 0, "numen.shape.hsphere(pos, \"glass\", 5)")
+  local list = {}
+  ellipsoid_cells(c.x, c.y + (raised and floor(r[2]) or 0), c.z, ellipsoid_octant(r[1], r[2], r[3], true),
+      put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+-- the cells of a cone: fn(x, y, z) for each; hollow keeps a wall of the given thickness
+local function cone_cells(c, r, height, hollow, thickness, fn)
+  local rx, rz = r[1], r[2]
+  local layers = abs(height)
+  local rx2, rz2, h2 = rx * rx, rz * rz, height * height
+  for y = 0, layers - 1 do
+    local drop = (y - layers) * (y - layers) / h2
+    local yy = c.y + (height < 0 and -y or y)
+    for x = 0, ceil(rx) do
+      local xs = x * x / rx2
+      if xs - drop > 1 then
+        break
+      end
+      for z = 0, ceil(rz) do
+        local zs = z * z / rz2
+        local d = xs + zs - drop
+        if d > 1 then
+          break
+        end
+        local skip = false
+        if hollow then
+          local x_next = (x + thickness) * (x + thickness) / rx2 + zs - drop
+          local y_next = xs + zs - (y + thickness - layers) * (y + thickness - layers) / h2
+          local z_next = xs + (z + thickness) * (z + thickness) / rz2 - drop
+          skip = x_next <= 0 and z_next <= 0 and y_next <= 0 and y + thickness ~= layers
+        end
+        if d <= 0 and not skip then
+          fn(c.x + x, yy, c.z + z)
+          if x ~= 0 then
+            fn(c.x - x, yy, c.z + z)
+          end
+          if z ~= 0 then
+            fn(c.x + x, yy, c.z - z)
+            if x ~= 0 then
+              fn(c.x - x, yy, c.z - z)
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+---A cone standing on at, which is the middle of its base, height layers up (a negative height goes down) to a point;
+---radii is the base's one number, or {x, z}, at least 1. With a pattern (see Region:set) it is the Cells; without,
+---the selection of its cells.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param height? integer
+---@return Cells|Region
+function M.cone(at, pattern, radii, height)
+  local c = cell_at(at)
+  local list = {}
+  cone_cells(c, radii_of(radii, 2, 1, "numen.shape.cone(pos, \"stone\", {4, 6}, 5)"), floor(height or 1), false, 1,
+      put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+---Only the wall of a cone (see numen.shape.cone), thickness cells thick (default 1).
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radii number|number[]
+---@param height? integer
+---@param thickness? number
+---@return Cells|Region
+function M.hcone(at, pattern, radii, height, thickness)
+  local c = cell_at(at)
+  local list = {}
+  cone_cells(c, radii_of(radii, 2, 1, "numen.shape.hcone(pos, \"stone\", {4, 6}, 5)"), floor(height or 1), true,
+      thickness or 1, put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+-- the cells of a pyramid of size layers standing on c; hollow keeps only each layer's ring and no floor
+local function pyramid_cells(c, size, hollow, fn)
+  local s = size
+  for y = 0, size do
+    s = s - 1
+    for x = 0, s do
+      for z = 0, s do
+        if not hollow or z == s or x == s then
+          for dx = 1, x ~= 0 and 2 or 1 do
+            for dz = 1, z ~= 0 and 2 or 1 do
+              fn(c.x + (dx == 1 and x or -x), c.y + y, c.z + (dz == 1 and z or -z))
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+---A stepped pyramid standing on at, which is the middle of its base: size layers, the base 2 * size - 1 cells across.
+---With a pattern (see Region:set) it is the Cells; without, the selection of its cells.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param size integer
+---@return Cells|Region
+function M.pyramid(at, pattern, size)
+  local c = cell_at(at)
+  local list = {}
+  pyramid_cells(c, floor(size), false, put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+---Only the outside of a pyramid (see numen.shape.pyramid): each layer's ring, open at the bottom.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param size integer
+---@return Cells|Region
+function M.hpyramid(at, pattern, size)
+  local c = cell_at(at)
+  local list = {}
+  pyramid_cells(c, floor(size), true, put_cell(list))
+  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+end
+
+-- cells (a set keyed by position) → every cell whose six neighbours are not all in the set
+local function hollowed(set)
+  local out = {}
+  for _, p in pairs(set) do
+    if not (set[key({x = p.x + 1, y = p.y, z = p.z})] and set[key({x = p.x - 1, y = p.y, z = p.z})]
+        and set[key({x = p.x, y = p.y + 1, z = p.z})] and set[key({x = p.x, y = p.y - 1, z = p.z})]
+        and set[key({x = p.x, y = p.y, z = p.z + 1})] and set[key({x = p.x, y = p.y, z = p.z - 1})]) then
+      out[#out + 1] = p
+    end
+  end
+  return out
+end
+
+-- every cell within thickness of a cell of the set (a ball round each), as a set
+local function ballooned(set, thickness)
+  local reach_out = ceil(thickness)
+  local ball = {}
+  for dy = -reach_out, reach_out do
+    for dz = -reach_out, reach_out do
+      for dx = -reach_out, reach_out do
+        if dx * dx + dy * dy + dz * dz <= thickness * thickness then
+          ball[#ball + 1] = {dx, dy, dz}
+        end
+      end
+    end
+  end
+  local out = {}
+  for _, p in pairs(set) do
+    for _, d in ipairs(ball) do
+      local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+      out[key(q)] = q
+    end
+  end
+  return out
+end
+
+-- the cells of a thick path whose centre line is the set of cells given
+local function thick(centre, thickness, hollow, origin, pattern)
+  local set = ballooned(centre, thickness)
+  local list = {}
+  for _, p in pairs(hollow and hollowed(set) or set) do
+    list[#list + 1] = p
+  end
+  return finish(region_of_cells(list, origin), pattern)
+end
+
+-- what a line or a curve needs: two or more points, a thickness of 0 or more
+local function check_path(points, thickness)
+  if #points < 2 then
+    bad("a path needs at least two points; got " .. #points, "numen.shape.line({a, b}, \"stone\")")
+  end
+  if thickness < 0 then
+    bad("thickness is at least 0; got " .. thickness, "numen.shape.line({a, b}, \"stone\", 1)")
+  end
+end
+
+local function sign(n)
+  return n > 0 and 1 or -1
+end
+
+local function round(n)
+  return floor(n + 0.5)
+end
+
+-- the cells of the straight lines between consecutive points, as WorldEdit's //line draws them: the longest axis
+-- steps one cell at a time, the others follow, rounded
+local function centre_line(points)
+  local set = {}
+  for i = 1, #points - 1 do
+    local a, b = cell_at(points[i]), cell_at(points[i + 1])
+    local dx, dy, dz = abs(b.x - a.x), abs(b.y - a.y), abs(b.z - a.z)
+    local top = math.max(dx, dy, dz)
+    if top == 0 then
+      set[key(a)] = a
+    else
+      for step = 0, top do
+        local p
+        if top == dx then
+          p = {x = a.x + step * sign(b.x - a.x), y = round(a.y + step * dy / dx * sign(b.y - a.y)),
+               z = round(a.z + step * dz / dx * sign(b.z - a.z))}
+        elseif top == dy then
+          p = {y = a.y + step * sign(b.y - a.y), x = round(a.x + step * dx / dy * sign(b.x - a.x)),
+               z = round(a.z + step * dz / dy * sign(b.z - a.z))}
+        else
+          p = {z = a.z + step * sign(b.z - a.z), y = round(a.y + step * dy / dz * sign(b.y - a.y)),
+               x = round(a.x + step * dx / dz * sign(b.x - a.x))}
+        end
+        set[key(p)] = p
+      end
+    end
+  end
+  return set
+end
+
+---A line through points (two or more Pos; diagonals included), thickness the radius of the ball drawn round each cell
+---of it (default 0: one cell wide), as WorldEdit's //line. With a pattern (see Region:set) it is the Cells; without,
+---the selection of its cells.
+---@param points Pos[]
+---@param pattern? string|Cells|table
+---@param thickness? number
+---@return Cells|Region
+function M.line(points, pattern, thickness)
+  thickness = thickness or 0
+  check_path(points, thickness)
+  local first = cell_at(points[1])
+  return thick(centre_line(points), thickness, false, M.pos(first.x, first.y, first.z), pattern)
+end
+
+---Only the outside of a thick line (see numen.shape.line): the cells with an open neighbour.
+---@param points Pos[]
+---@param pattern? string|Cells|table
+---@param thickness? number
+---@return Cells|Region
+function M.hline(points, pattern, thickness)
+  thickness = thickness or 0
+  check_path(points, thickness)
+  local first = cell_at(points[1])
+  return thick(centre_line(points), thickness, true, M.pos(first.x, first.y, first.z), pattern)
+end
+
+-- the length of the Catmull-Rom spline through nodes, summed over its segments; eight steps each
+local function spline_length(coeff)
+  local total = 0
+  local function speed(a, b, c, t)
+    local x, y, z = (a[1] * t + b[1]) * t + c[1], (a[2] * t + b[2]) * t + c[2], (a[3] * t + b[3]) * t + c[3]
+    return math.sqrt(x * x + y * y + z * z)
+  end
+  for i = 1, #coeff - 1 do
+    local a, b, c = coeff[i].a, coeff[i].b, coeff[i].c
+    local a3 = {a[1] * 3, a[2] * 3, a[3] * 3}
+    local b2 = {b[1] * 2, b[2] * 2, b[3] * 2}
+    local sum = speed(a3, b2, c, 0) / 2
+    for k = 1, 6 do
+      sum = sum + speed(a3, b2, c, k / 8)
+    end
+    sum = sum + speed(a3, b2, c, 1) / 2
+    total = total + sum / 8
+  end
+  return total
+end
+
+-- the cells a smooth curve through the points passes: the spline is sampled ten times a cell of its length
+local function curve_line(points)
+  local nodes = {}
+  for i, p in ipairs(points) do
+    local c = cell_at(p)
+    nodes[i] = {c.x + 0.5, c.y + 0.5, c.z + 0.5}
+  end
+  local function node(i)
+    return nodes[math.max(1, math.min(#nodes, i))]
+  end
+  local coeff = {}
+  for i = 1, #nodes do
+    local p0, p1, p2, p3 = node(i - 1), node(i), node(i + 1), node(i + 2)
+    local a, b, c = {}, {}, {}
+    for k = 1, 3 do
+      a[k] = -0.5 * p0[k] + 1.5 * p1[k] - 1.5 * p2[k] + 0.5 * p3[k]
+      b[k] = p0[k] - 2.5 * p1[k] + 2 * p2[k] - 0.5 * p3[k]
+      c[k] = -0.5 * p0[k] + 0.5 * p2[k]
+    end
+    coeff[i] = {a = a, b = b, c = c, d = p1}
+  end
+  local scaling = #nodes - 1
+  local set = {}
+  local step = 1 / spline_length(coeff) / 10
+  local at = 0
+  while at <= 1 do
+    local position = at * scaling
+    local index = floor(position)
+    local rest = position - index
+    local seg = coeff[index + 1]
+    local p = {}
+    for k = 1, 3 do
+      p[k] = floor(((seg.a[k] * rest + seg.b[k]) * rest + seg.c[k]) * rest + seg.d[k])
+    end
+    local cellp = {x = p[1], y = p[2], z = p[3]}
+    set[key(cellp)] = cellp
+    at = at + step
+  end
+  return set
+end
+
+---A smooth curve through points (Kochanek-Bartels with tension, bias and continuity 0: it passes through every point), thickness
+---the radius of the ball drawn round each cell of it (default 0), as WorldEdit's //curve. With a pattern (see
+---Region:set) it is the Cells; without, the selection of its cells.
+---@param points Pos[]
+---@param pattern? string|Cells|table
+---@param thickness? number
+---@return Cells|Region
+function M.curve(points, pattern, thickness)
+  thickness = thickness or 0
+  check_path(points, thickness)
+  local first = cell_at(points[1])
+  return thick(curve_line(points), thickness, false, M.pos(first.x, first.y, first.z), pattern)
+end
+
+---Only the outside of a thick curve (see numen.shape.curve).
+---@param points Pos[]
+---@param pattern? string|Cells|table
+---@param thickness? number
+---@return Cells|Region
+function M.hcurve(points, pattern, thickness)
+  thickness = thickness or 0
+  check_path(points, thickness)
+  local first = cell_at(points[1])
+  return thick(curve_line(points), thickness, true, M.pos(first.x, first.y, first.z), pattern)
+end
+
+-- the cells of region where fn(x, y, z) says true, as WorldEdit's //generate: fn gets each cell's coordinates in the
+-- space mode names; hollow keeps the cells that have a neighbour where fn says false (asked for the neighbours too)
+local function generated(r, fn, mode, hollow)
+  local lo, hi = KINDS[r.kind].bounds(r)
+  local zero, unit
+  if mode == nil or mode == "unit" then
+    zero = {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}
+    unit = {x = hi.x - zero.x, y = hi.y - zero.y, z = hi.z - zero.z}
+    for _, axis in ipairs({"x", "y", "z"}) do
+      if unit[axis] == 0 then
+        unit[axis] = 1
+      end
+    end
+  elseif mode == "world" then
+    zero, unit = {x = 0, y = 0, z = 0}, {x = 1, y = 1, z = 1}
+  elseif mode == "center" then
+    zero, unit = {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}, {x = 1, y = 1, z = 1}
+  elseif type(mode) == "table" and mode.x then
+    zero, unit = {x = mode.x, y = mode.y, z = mode.z}, {x = 1, y = 1, z = 1}
+  else
+    bad("mode is \"unit\" (-1 to 1 across the selection), \"world\" (the cell's own coordinates), \"center\" (distance "
+        .. "from the middle of the selection) or a Pos (distance from that cell); got " .. tostring(mode),
+        "numen.shape.generate(region, \"stone\", function(x, y, z) return x * x + y * y + z * z <= 1 end, \"unit\")")
+  end
+  local depth, width = hi.y - lo.y + 3, hi.z - lo.z + 3
+  local known = {}
+  local function inside(x, y, z)
+    local i = ((x - lo.x + 1) * depth + (y - lo.y + 1)) * width + (z - lo.z + 1)
+    local v = known[i]
+    if v == nil then
+      v = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
+      if type(v) ~= "boolean" then
+        bad("the function returns true for a cell that is part of the shape and false for one that is not; it gave "
+            .. type(v), "function(x, y, z) return x * x + y * y + z * z <= 1 end")
+      end
+      known[i] = v
+    end
+    return v
+  end
+  local list = {}
+  visit(r, function(x, y, z)
+    if inside(x, y, z) and not (hollow and inside(x + 1, y, z) and inside(x - 1, y, z) and inside(x, y + 1, z)
+        and inside(x, y - 1, z) and inside(x, y, z + 1) and inside(x, y, z - 1)) then
+      list[#list + 1] = {x = x, y = y, z = z}
+    end
+  end)
+  return list
+end
+
+---The cells of region (a selection, or Cells) where fn(x, y, z) returns true, as WorldEdit's //generate with a function
+---instead of an expression. mode says what x, y, z are: "unit" (default; -1 to 1 across the selection, 0 in the middle),
+---"world" (the cell's own coordinates), "center" (blocks from the middle of the selection) or a Pos (blocks from
+---that cell). With a pattern (see Region:set) it is the Cells; without, the selection of the cells.
+---@param region Region|Cells
+---@param pattern? string|Cells|table
+---@param fn fun(x: number, y: number, z: number): boolean
+---@param mode? string|Pos
+---@return Cells|Region
+function M.generate(region, pattern, fn, mode)
+  local r = as_region(region)
+  return finish(region_of_cells(generated(r, fn, mode, false), r.origin), pattern)
+end
+
+---Only the outside of the shape numen.shape.generate makes: the cells with a neighbour where fn says false.
+---@param region Region|Cells
+---@param pattern? string|Cells|table
+---@param fn fun(x: number, y: number, z: number): boolean
+---@param mode? string|Pos
+---@return Cells|Region
+function M.hgenerate(region, pattern, fn, mode)
+  local r = as_region(region)
+  return finish(region_of_cells(generated(r, fn, mode, true), r.origin), pattern)
 end
 
 ---One level drawn as a character grid: a floor, a wall ring, a roof course, a window pattern. Rows run +x from at, the
@@ -309,14 +2007,14 @@ function M.layer(at, rows, legend)
       if ch ~= " " and ch ~= "." then
         local block = legend[ch]
         if not block then
-          raise("bad_argument", "layer: row " .. r .. " has '" .. ch .. "', which the legend does not name",
+          bad("layer: row " .. r .. " has '" .. ch .. "', which the legend does not name",
               "add [\"" .. ch .. "\"] = \"<block>\" to the legend")
         end
         out[#out + 1] = cell({x = o.x + col - 1, y = o.y, z = o.z + r - 1}, block)
       end
     end
   end
-  return M.cells(out)
+  return cells_of(out, nil)
 end
 
 return M

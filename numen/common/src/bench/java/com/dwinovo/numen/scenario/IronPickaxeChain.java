@@ -109,7 +109,7 @@ public final class IronPickaxeChain implements Scenario {
                 numen.inv.make("crafting_table")
                 numen.inv.make("stick", 6)
                 numen.inv.make("wooden_pickaxe")
-                numen.work.mine(S.box(%1$s, %2$s))
+                numen.work.mine(S.cuboid(%1$s, %2$s):cells())
                 numen.inv.make("stone_pickaxe")
                 numen.work.mine(numen.scan.blocks("coal_ore", {radius = 16})[1])
                 numen.work.mine(numen.scan.blocks("iron_ore", {radius = 16})[1])
