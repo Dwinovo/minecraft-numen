@@ -85,15 +85,50 @@
 
 ### 调原版生成器的(读世界 → 格)
 
-`forest` `flora` `forestgen` `pumpkins` `feature` `structure` `regen`:让原版的地物或区块生成器跑在一个"记录用的世界"上,读真实世界、把它要写的方块记下来,交回格。这样产出就是原版生成器真正会放的东西,模组的地物也一样,不自己仿写。
+| Numen | WorldEdit | 说明 |
+|---|---|---|
+| `feature(at, id)` | `//feature` | 一个配置地物(`minecraft:oak`、矿脉、湖、花丛……)种在 at |
+| `structure(at, id)` | `//structure` | 一个结构(`minecraft:swamp_hut`、村庄……)在 at 所在区块生成;高度由区块生成器定,同 WE |
+| `r:forest(tree, density)` | `//forest` | 选区每列按密度(百分数,缺省 5)在最高的非空气方块上头种一棵树,每列最多试 10 次 |
+| `forestgen(at, size, tree, density)` | `forestgen` | `cuboid(at ± size)` 的 forest,size 缺省 10 |
+| `r:flora(density)` | `//flora` | 草地长草与小花(300:5:5),沙子长枯灌木与仙人掌(30:20:300 的空气),密度缺省 5 |
+| `pumpkins(at, radius)` | `pumpkins` | 草地上零星的南瓜田,密度 2%,半径缺省 10,高度 -5 到 +10 |
+
+- **id 走注册表,不写名单**:地物是 `CONFIGURED_FEATURE`、结构是 `STRUCTURE`、树是"底下的地物是树(或珊瑚树)的 `PLACED_FEATURE`"(`minecraft:oak_checked` 一类),模组注册的都自动可用。树另有 WE 自己的 `worldedit:pine`(WE 那棵简陋的松树)与 `worldedit:random`(从树里随机挑)。
+- **`forest` 的缺省树是 `minecraft:oak_checked`**:WE 的缺省值写的是 `tree`,而它的树注册表里没有这个名字,是它自己的遗漏;这里取它本意,橡树。
+- **记录用的世界**(`RecordedLevel`,只此一份):原版生成器要一个 `WorldGenLevel`,这里给它一个代理,覆盖层叠在真实世界上。
+  - 读:方块照实读真实世界,经 `LoadedBlocks`(全仓读世界的唯一一处),只读已加载的区块,读到没加载的整个调用失败并说出是哪一片;同一次生成里先写的后面读得到(读的是覆盖层叠上去的样子)。高度图、群系、随机数也在代理里答,不用真实世界的缓存与随机数发生器。
+  - 写:只记进覆盖层,往没加载的区块写同样算读失败。真实世界从头到尾不动:不触发方块更新、不生成实体、不改光照和高度图缓存、磁盘上不留东西;所有返回 void 的方法(计划刻、方块更新、音效、游戏事件)一律吞掉。
+  - 一次尝试失败(树长不出来)退回到尝试之前的覆盖层。
+  - 生成器加的实体、带数据的方块实体(箱子的战利品、刷怪笼的怪、告示牌的字)不进 Cells(Cells 只有方块状态,`place` 也不收 NBT),返回值里 `lost` 如实列出是什么、在哪;方块本身在 `cells` 里。
+  - 返回 `{cells, lost}`(`feature`、`structure`、`forest`)。`flora`、`pumpkins` 是 WE 自己的算法,没有生成器可跑,只返回 Cells。
+  - 液体照实留在 Cells 里(水、岩浆、含水状态):`place` 现在不放液体,那是 `place` 的边界,这里不替模型删格。
+  - 地物没长出来(它自己的放置规则说不行)、结构没有合法的布局:调用失败并说明,不返回空。
+  - 局限:生成器若经 `level.getLevel()` 拿到真实的 `ServerLevel` 再去读写,走的就不是记录世界(原版的地物与结构不这样做);强转 `ServerLevel` 的会失败,调用报"跑不起来"。
+- **`regen` 不做**:它要起一个临时的 `ServerLevel`(WE 是新建一个带临时存档目录的世界,同步生成区块、等主线程排空,再删目录)。代价是主线程阻塞好几秒、内存里多一个世界与区块生成线程、磁盘上建删临时目录、各平台会对新世界发"世界加载"事件(别的模组会响应),构造器还随版本变。和"不在磁盘留任何东西、不改真实世界"冲突,没有干净做法。可选的方案和代价见汇报。
 
 ### 以世界为准的维护命令(读世界 → 格)
 
-`drain` `fixwater` `fixlava` `snow` `thaw` `green` `removeabove` `removebelow` `removenear` `replacenear` `fill` `fillr`,以及笔刷才有的 `gravity` `splatter` `heightmap`:都按 WE 的判据读世界、算出要放(或挖成空气)的格。与 WE 的差别:
+`drain` `fixwater` `fixlava` `snow` `thaw` `green` `removeabove` `removebelow` `removenear` `replacenear` `fill` `fillr` `extinguish` `snowsmooth`,以及笔刷才有的 `gravity` `splatter` `heightmap` `morph` `erode` `dilate` `raise` `lower`:都按 WE 的判据读世界、算出要放(或挖成空气)的格。与 WE 的差别:
 - `removeabove` `removebelow` `splatter` 不读世界:前两个是一个长方体设成空气(缺省高度读 `y_range`),`splatter` 是球上随机。
 - `removenear` 的缺省半径 50 是个装不进一份 Cells 的立方体,要给够用的半径。
 - `heightmap` 收一张 0 到 1 的 Lua 网格(每行一串数,第一行是南边),最近邻取样,不读图片文件。
 - `fill`、`fillr` 的泛洪、半径判据、深度照 WE(`fill` 四个水平方向加向下,`fillr` 六个方向)。
+
+- `extinguish(at, radius)` 是 `removenear(at, "fire", radius)`,半径缺省 40(命令的那个正方体);笔刷的球形版就是 `sphere(at, nil, r):replace("fire", "air")`,不另开。
+- `snowsmooth`(`r:snowsmooth(iterations, layers, mask)`)和 `smooth` 共用同一份高斯核与卷积(`TerrainReads`),只是高度带小数、一层雪是 1/8 格。
+- `morph(at, radius, opts)`:先侵蚀后膨胀,每一遍读上一遍的结果;`erode`、`dilate` 是它的两个预设(`(2,1,5,1)` 与 `(5,1,2,1)`)。
+- `raise(at, radius, shape)`、`lower(...)`:WE 里是"每格取下面(上面)一格"的 deform 笔刷,就是 `Region:deform`;形状是 `"sphere"`(缺省)、`"cuboid"`、`"cyl"`。
+
+### 选区信息(读世界或几何,不出格)
+
+| Numen | WorldEdit | 返回 |
+|---|---|---|
+| `r:size()` | `//size` | `{kind, min, max, size, distance, blocks}`:外包盒、两角距离、格数;不读世界 |
+| `r:count(mask)` | `//count` | 过蒙版的格数 |
+| `r:distr(opts)` | `//distr` | `{name, count}` 的列表,多的在前;`opts.mask` 只数过蒙版的,`opts.separate` 按方块状态分 |
+
+扫描工具里没有同样的统计(`numen.scan` 数的是成团的方块),所以是新的一处;读世界走 `LoadedBlocks`,蒙版走 `ShapeMasks`。`-c`(剪贴板)与分页不做:Cells 是值,没有会话剪贴板;列表是完整的。
 
 ### 不做的,及原因
 
@@ -101,7 +136,7 @@
 - **生物群系命令**(`//setbiome` 等):改的是群系不是方块,`place` 放不了。
 - **历史**(`//undo` `//redo`):她不做隐形撤销,每次放下都如实回执。要恢复,就在动手前 `copy` 一份,之后再放回去。
 - **schematic 文件**(`//schem`):蓝图文件归 Litematica 插件。
-- **选区魔杖、笔刷绑定**:都是"把操作绑到物品上、对准哪就在哪做"的玩家界面。她直接在某个位置调操作,笔刷能做的操作都已在上面。
+- **选区魔杖、笔刷绑定**:都是"把操作绑到物品上、对准哪就在哪做"的玩家界面。她直接在某个位置调操作。笔刷里"出方块"的操作单独做成了"在某处、某半径内"的函数(上面的 morph、erode、dilate、raise、lower、extinguish、snowsmooth、gravity、splatter、heightmap、smooth、feature、forest);笔刷里只是换个形状(sphere、cylinder、set……)的不另做,就是选区加 `:set`。
 
 ### Numen 自己有、WE 没有的,保留
 
@@ -149,6 +184,6 @@
 
 1. **第一期(纯几何)**:Region 及选区编辑、生成函数、选区操作、pattern、旋转和翻转改走原版、改名。
 2. **第二期(读世界,已完成)**:copy / cut / replace / overlay / hollow / naturalize / smooth / trim、维护命令、mask、deform。
-3. **第三期(生成器)**:记录用的世界,以及 forest / flora / feature / structure / regen 这些。
+3. **第三期(生成器,已完成,regen 除外)**:记录用的世界,以及 forest / forestgen / flora / pumpkins / feature / structure;另补 snowsmooth、extinguish、morph、erode、dilate、raise、lower、size、count、distr。regen 不做,理由见"调原版生成器的"。
 
 每一期做完都跑全套测试,全绿才算完;不留旧名字、不留第二份实现。

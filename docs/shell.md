@@ -71,7 +71,7 @@
 | `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
-| `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity` 等读世界的操作(只读已加载区块,不写,交回 Cells);交回 Cells |
+| `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
 
 - **"挖"的到达**(`Arrival.dig`,`work.dig` 够不着时走过去用)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
   最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`Arrival.place`,`build.place` 用)= 手够得着往那一格里放方块,
@@ -410,7 +410,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   `set`、`walls`、`faces`、`center`(图案 pattern 的写法见 `numen.shape.pattern`)。
 - **Region**(`numen.shape.cuboid`、`cyl`…不给图案时交回的选区,记着自己的形状参数):`cells()`、`set`、`walls`、`faces`、`center`,
   `expand`、`contract`、`shift`、`outset`、`inset`(照形状改,返回改过的选区);读世界的(只读已加载区块,交回 Cells):`replace(mask, pattern)`、
-  `overlay`、`hollow`、`naturalize`、`smooth`、`deform(fn)`,`trim(mask)` 交回选区。Cells 也收这些方法(当任意形状的选区)。
+  `overlay`、`hollow`、`naturalize`、`smooth`、`snowsmooth`、`deform(fn)`、`forest(tree, density)`、`flora(density)`,`trim(mask)` 交回选区;选区信息 `size()`、`count(mask)`、`distr(opts)`。Cells 也收这些方法(当任意形状的选区)。
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
   `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
