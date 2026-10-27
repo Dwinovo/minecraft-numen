@@ -2375,5 +2375,143 @@ function M.splatter(at, pattern, radius, decay)
   return cells_of(out, M.pos(c.x, c.y, c.z))
 end
 
+---Snow layers laid over the ground of this selection's box, smoothed (WorldEdit's //snowsmooth): the same height blur as
+---Region:smooth, with each snow layer an eighth of a block, laid as snow with layers snow blocks under it (default 1).
+---mask says which blocks are ground (default: blocks that stop movement). Reads loaded chunks only.
+---@param iterations? integer
+---@param layers? integer
+---@param mask? string
+---@return Cells
+function M.Region:snowsmooth(iterations, layers, mask)
+  local lo, hi = KINDS[self.kind].bounds(self)
+  return numen.shape.snowsmoothed(lo, hi, {iterations = iterations, layers = layers, mask = mask})
+end
+
+---How many cells of this selection hold a block that passes mask (WorldEdit's //count; see Region:replace for the mask).
+---Reads loaded chunks only.
+---@param mask string
+---@return integer
+function M.Region:count(mask)
+  return numen.shape.count(self:cells(), mask)
+end
+
+---How many cells of this selection hold each kind of block, the most common first (WorldEdit's //distr): a list of
+---{name, count}. opts.mask counts only the blocks that pass it, opts.separate counts every block state on its own.
+---Reads loaded chunks only.
+---@param opts? {mask: string, separate: boolean}
+---@return {name: string, count: integer}[]
+function M.Region:distr(opts)
+  opts = opts or {}
+  return numen.shape.distr(self:cells(), {mask = opts.mask, separate = opts.separate})
+end
+
+---The size of this selection (WorldEdit's //size): kind, min and max (the corners of its box), size (the box's width,
+---height and length), distance (between those corners) and blocks (how many cells it holds). Reads nothing.
+---@return {kind: string, min: Pos, max: Pos, size: Pos, distance: number, blocks: integer}
+function M.Region:size()
+  local lo, hi = KINDS[self.kind].bounds(self)
+  local blocks = 0
+  KINDS[self.kind].rows(self, function(_, _, from, to)
+    blocks = blocks + to - from + 1
+  end)
+  local dx, dy, dz = hi.x - lo.x, hi.y - lo.y, hi.z - lo.z
+  return {kind = self.kind, min = M.pos(lo.x, lo.y, lo.z), max = M.pos(hi.x, hi.y, hi.z),
+          size = M.pos(dx + 1, dy + 1, dz + 1), distance = math.sqrt(dx * dx + dy * dy + dz * dz), blocks = blocks}
+end
+
+---A forest over this selection (WorldEdit's //forest): each column, in the share density says (percent, default 5), gets
+---a tree on its highest non-air block. tree is the id of a placed feature of the game that grows a tree (default
+---"minecraft:oak_checked"; mods' trees work too), "worldedit:pine" or "worldedit:random". Returns {cells, lost}: lost is
+---what the game's generator wanted that Cells cannot hold (see numen.shape.feature). Reads loaded chunks only.
+---@param tree? string
+---@param density? number
+---@return {cells: Cells, lost: table[]}
+function M.Region:forest(tree, density)
+  local columns, min_y, max_y = columns_of(self)
+  return numen.shape.forest(columns, min_y, max_y, {tree = tree, density = density})
+end
+
+---Flora over this selection (WorldEdit's //flora): grass and small flowers on grass blocks, dead bushes and cacti on sand,
+---in the share density says (percent, default 5). Reads loaded chunks only.
+---@param density? number
+---@return Cells
+function M.Region:flora(density)
+  local columns, min_y, max_y = columns_of(self)
+  return numen.shape.flora(columns, min_y, max_y, {density = density})
+end
+
+---A forest in the square of size cells (default 10) round at, from size layers below to size above (WorldEdit's
+---forestgen): the same as numen.shape.cuboid(at - size, at + size):forest(tree, density).
+---@param at Pos
+---@param size? integer
+---@param tree? string
+---@param density? number
+---@return {cells: Cells, lost: table[]}
+function M.forestgen(at, size, tree, density)
+  local c, n = cell_at(at), floor(size or 10)
+  return M.cuboid({x = c.x - n, y = c.y - n, z = c.z - n}, {x = c.x + n, y = c.y + n, z = c.z + n}):forest(tree, density)
+end
+
+---Put out the fire near at (WorldEdit's //extinguish): air where fire burns, in the cube of radius - 1 cells either side
+---of at (default 40). Reads loaded chunks only.
+---@param at Pos
+---@param radius? integer
+---@return Cells
+function M.extinguish(at, radius)
+  return M.removenear(at, "fire", radius or 40)
+end
+
+-- the region WorldEdit's brushes work in: a ball by default, or "cuboid", or "cyl" (as tall as it is wide)
+local function brush_region(at, radius, shape)
+  local c, r = cell_at(at), radius or 5
+  if shape == nil or shape == "sphere" then
+    return M.sphere(c, nil, r)
+  elseif shape == "cuboid" then
+    return M.cuboid({x = c.x - floor(r), y = c.y - floor(r), z = c.z - floor(r)},
+                    {x = c.x + floor(r), y = c.y + floor(r), z = c.z + floor(r)})
+  elseif shape == "cyl" then
+    return M.cyl(c, nil, r, floor(r) * 2 + 1)
+  end
+  bad("shape is \"sphere\", \"cuboid\" or \"cyl\"; got " .. tostring(shape), "numen.shape.raise(pos, 5, \"cuboid\")")
+end
+
+---Raise the ground in a ball (or cuboid, or cyl) round at by one block (WorldEdit's raise brush): every cell takes the
+---block of the cell under it. Reads loaded chunks only.
+---@param at Pos
+---@param radius? number
+---@param shape? string
+---@return Cells
+function M.raise(at, radius, shape)
+  return brush_region(at, radius, shape):deform(function(x, y, z) return x, y - 1, z end, "world")
+end
+
+---Lower the ground in a ball (or cuboid, or cyl) round at by one block (WorldEdit's lower brush): every cell takes the
+---block of the cell above it. Reads loaded chunks only.
+---@param at Pos
+---@param radius? number
+---@param shape? string
+---@return Cells
+function M.lower(at, radius, shape)
+  return brush_region(at, radius, shape):deform(function(x, y, z) return x, y + 1, z end, "world")
+end
+
+---Erode the ground in a ball round at (WorldEdit's erode brush, a preset of numen.shape.morph): solid blocks with two or
+---more open faces wear down, then empty cells with five or more solid faces fill. Reads loaded chunks only.
+---@param at Pos
+---@param radius? number
+---@return Cells
+function M.erode(at, radius)
+  return numen.shape.morph(at, radius or 5, {erode_faces = 2, erode_passes = 1, dilate_faces = 5, dilate_passes = 1})
+end
+
+---Dilate the ground in a ball round at (WorldEdit's dilate brush, a preset of numen.shape.morph): solid blocks with five
+---or more open faces wear down, then empty cells with two or more solid faces fill. Reads loaded chunks only.
+---@param at Pos
+---@param radius? number
+---@return Cells
+function M.dilate(at, radius)
+  return numen.shape.morph(at, radius or 5, {erode_faces = 5, erode_passes = 1, dilate_faces = 2, dilate_passes = 1})
+end
+
 
 return M
