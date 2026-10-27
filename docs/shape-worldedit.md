@@ -48,15 +48,21 @@
 
 | Numen | WorldEdit | 读什么 |
 |---|---|---|
-| `copy(region, mask)` | `//copy` | 选区里的方块;原点 = 她当时站的格 |
-| `c:cut(leave)` | `//cut` | 同 copy,另出原处填 leave 的格 |
+| `copy(region, mask)` | `//copy` | 选区里每格此刻的方块(空气也在,不带方块实体数据);原点 = 她站的格。没过蒙版的格读成空气 |
+| `cut(region, leave, mask)` | `//cut` | 返回一张表 `{clipboard, cleared}`:`clipboard` 就是 copy 的结果,`cleared` 是原处填 leave(缺省空气)的格。一次调用一份结果、字段有名字,不用位置返回值 |
 | `r:replace(mask, pattern)` | `//replace` | 选区每格当前方块;mask 缺省 `#existing` |
 | `r:overlay(pattern)` | `//overlay` | 每列顶上第一个非空气格;可能到 maxY+1;顶上已有方块的列跳过 |
-| `r:hollow(thickness, pattern)` | `//hollow` | 每格挡不挡移动;从边界泛洪找外部,曼哈顿距离 ≥ thickness 的换成 pattern(缺省 air)。边界全是实心时会整片挖空,这是 WE 的行为,照搬并在说明里写清 |
-| `r:naturalize()` | `//naturalize` | 每列的草、泥土、石头 |
-| `r:smooth(iterations)` | `//smooth` | 高度图,高斯(5, 1.0) |
+| `r:hollow(thickness, pattern)` | `//hollow` | 每格挡不挡移动;从边界泛洪找外部,曼哈顿距离 ≥ thickness 的换成 pattern(缺省 air)。边界全是实心时会整片挖空,这是 WE 的行为,照搬 |
+| `r:naturalize()` | `//naturalize` | 每列的草、泥土、石头:顶上草,下面三层泥土,再下石头 |
+| `r:smooth(iterations, mask)` | `//smooth` | 高度图,高斯(5, 1.0),浮点核、`floor`,列升降照 WE |
+| `r:trim(mask)` | `//trim` | 过蒙版的格的外包盒,交回长方体选区;一格都不过就报错 |
+| `r:deform(fn)` | `//deform` | WE 的表达式换成 Lua 函数:`fn(x, y, z)` 返回源格的 x, y, z;源格一次读完。不做 `-l`(剪贴板作源) |
 
-读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片。
+读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片(附 `numen.move.to` 的提示)。
+
+世界里一格是什么、挡不挡移动、一列多高,各只有一个读法:Java 的 `LoadedBlocks`(只经 `BlockScanner.loadedChunk` 读已加载区块)。WE 的材质判据对到原版:`#solid` 与"挡移动"是 `blocksMotion()`,`#fullcube` 是整格碰撞形状,空气是 `isAir()`,液体是 `LiquidBlock`;不手写方块名单。
+
+读世界的 Java 原语在 `numen.shape` 组里,名字与 Lua 里 WE 叫法的包装不同,免得合并进同一张 `numen.shape` 表时冲突:`read`、`matching`、`interior`(hollow)、`tops`(overlay)、`naturalized`、`smoothed`、`restated`(`^`)、`holes`(fill、fillr);`drain` `fixwater` `fixlava` `snow` `thaw` `green` `gravity` `heightmap` 没有对应的 Lua 包装,直接叫 WE 的名字。它们都返回 Cells。结果里与世界已经一样的格不写(省格数)。
 
 ### 模式(pattern)与蒙版(mask)
 
@@ -69,12 +75,13 @@
   - `stone,dirt`、`!air`、`#existing`、`#solid`、`#surface`;
   - `>m`、`<m`、`~m`、`%n`;
   - 空格表示"且"。
-  - 蒙版测的是世界里的方块,所以只出现在读世界的操作上。
+  - 蒙版测的是世界里的方块,所以只出现在读世界的操作上。解析与求值在 Java 一处(`ShapeMasks`),`stone,dirt` 里没写的属性匹配任意值;还有 `#air`、`#fullcube`、`#exposed`、`##tag`、`^[状态]`。`=表达式` 蒙版不做(报错并说明)。
+  - `^` 改状态的 pattern 单独成一条文本(如 `^[waterlogged=true]`),不能放进加权列表;`^type` 部分必须是一种方块。
 - 随机照 WE:每格单独掷、不带种子。`Cells` 是一个值,算一次存进变量,`diff` 和 `place` 收的是同一份,所以不需要另加种子。
 
 ### 选区编辑(照 WE 按形状)
 
-`r:expand` / `r:contract`、`r:expand_vert()`(`//expand vert`,读 `numen.shape.y_range()`)、`r:shift`、`r:outset` / `r:inset`(`opts.horizontal` 即 `-h`、`opts.vertical` 即 `-v`),各形状的语义照 `SelectionCommands.java:392/429/458/478`、`ExpandCommands.java:124`:长方体按边,圆柱与球按半径(改变量加起来要是偶数、绕中心),多边形只上下,凸体与任意形状不能改。选区本身不变,每次返回改过的新选区。方向写 `"north"`…`"down"`(或 `n s e w u d`)、向量、或一串方向。`r:trim(mask)` 读世界,留给第二期。
+`r:expand` / `r:contract`、`r:expand_vert()`(`//expand vert`,读 `numen.shape.y_range()`)、`r:shift`、`r:outset` / `r:inset`(`opts.horizontal` 即 `-h`、`opts.vertical` 即 `-v`),各形状的语义照 `SelectionCommands.java:392/429/458/478`、`ExpandCommands.java:124`:长方体按边,圆柱与球按半径(改变量加起来要是偶数、绕中心),多边形只上下,凸体与任意形状不能改。选区本身不变,每次返回改过的新选区。方向写 `"north"`…`"down"`(或 `n s e w u d`)、向量、或一串方向。`r:trim(mask)` 读世界,在上面读世界的表里。
 
 ### 调原版生成器的(读世界 → 格)
 
@@ -82,7 +89,11 @@
 
 ### 以世界为准的维护命令(读世界 → 格)
 
-`drain` `fixwater` `fixlava` `snow` `thaw` `green` `removeabove` `removebelow` `removenear` `replacenear` `fill` `fillr`,以及笔刷才有的 `gravity` `splatter` `heightmap`:都按 WE 的判据读世界、算出要放(或挖成空气)的格。`deform` 和 `^` 改状态 pattern 一样做。
+`drain` `fixwater` `fixlava` `snow` `thaw` `green` `removeabove` `removebelow` `removenear` `replacenear` `fill` `fillr`,以及笔刷才有的 `gravity` `splatter` `heightmap`:都按 WE 的判据读世界、算出要放(或挖成空气)的格。与 WE 的差别:
+- `removeabove` `removebelow` `splatter` 不读世界:前两个是一个长方体设成空气(缺省高度读 `y_range`),`splatter` 是球上随机。
+- `removenear` 的缺省半径 50 是个装不进一份 Cells 的立方体,要给够用的半径。
+- `heightmap` 收一张 0 到 1 的 Lua 网格(每行一串数,第一行是南边),最近邻取样,不读图片文件。
+- `fill`、`fillr` 的泛洪、半径判据、深度照 WE(`fill` 四个水平方向加向下,`fillr` 六个方向)。
 
 ### 不做的,及原因
 
@@ -122,7 +133,7 @@
   - `transform_blocks(blocks, matrix)`:方块状态的旋转和翻转(原版 `rotate`、`mirror`,不覆盖的照 WE);
   - `pattern(text)`:pattern 解析(标签、随机状态、`/setblock` 写法校验,原版 `BlockStateParser` 经 `BuildStates.parse`),交回带权重的几组方块,每格怎么掷骰子在 Lua 里;
   - `max_cells()`、`y_range()`:一串格的上限、维度的最低最高一格;
-  - 读世界(一片格的当前方块、每格是否挡移动、每列高度):第二期。
+  - 读世界(见第二节):`LoadedBlocks` 一处读,`ShapeMasks` 一处解析蒙版,`TerrainReads` 放各算法;整块在一次宿主调用里读完(一次运行最多 200 次宿主调用)。
   每件只有一个实现,Lua 不再自己猜方块状态。
 - 上限仍是 `LuaCodecs.MAX_CELLS` = 16384,超了报错并说明怎么拆(Lua 向 `max_cells()` 问一次,不再抄一份数字)。一次运行两次宿主调用之间的指令预算是 100 万条:几千格的操作没事,一万五千格上下的转、翻、空心大球会撞上它,拆成几块各放一次即可。
 - 图案里 Cells 平铺(`#clipboard` 的位置):外包盒在世界里重复,格在盒里同一位置的方块;盒里没有格的地方这一格没有方块(那一格不在结果里)。
@@ -137,7 +148,7 @@
 ## 六、分期
 
 1. **第一期(纯几何)**:Region 及选区编辑、生成函数、选区操作、pattern、旋转和翻转改走原版、改名。
-2. **第二期(读世界)**:copy / cut / replace / overlay / hollow / naturalize / smooth / trim、维护命令、mask、deform。
+2. **第二期(读世界,已完成)**:copy / cut / replace / overlay / hollow / naturalize / smooth / trim、维护命令、mask、deform。
 3. **第三期(生成器)**:记录用的世界,以及 forest / flora / feature / structure / regen 这些。
 
 每一期做完都跑全套测试,全绿才算完;不留旧名字、不留第二份实现。
