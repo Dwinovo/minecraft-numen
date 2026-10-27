@@ -101,7 +101,9 @@ public final class ShapeApi {
     @Fn("The most cells one Cells holds: what a shape function can return and numen.build.place can take at once.")
     @Example("print(numen.shape.max_cells())")
     @Note("Instant. A shape bigger than that fails with bad_argument; draw it in pieces (a smaller radius, or parts you "
-            + "put together with Cells:union) and place each piece.")
+            + "put together with Cells:union) and place each piece. Shapes of many thousands of cells also take most of "
+            + "what a program may compute between two calls, so two or three pieces, each placed on its own, run lighter "
+            + "than one big one.")
     public static int maxCells(ServerCall call) {
         return LuaCodecs.MAX_CELLS;
     }

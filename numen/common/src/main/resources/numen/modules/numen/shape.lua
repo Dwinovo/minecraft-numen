@@ -364,8 +364,9 @@ local function block_source(pattern)
 end
 
 -- ---- kinds of region ----
--- each: bounds(r) → lo, hi; each(r, fn) calls fn(x, y, z) for every cell; estimate(r) the rough number of cells;
--- expand(r, changes), contract(r, changes), shift(r, v) the changed region; center(r) → x, y, z.
+-- each: bounds(r) → lo, hi, the box of its cells; rows(r, emit) calls emit(y, z, from, to) for every maximal run of cells
+-- along x; estimate(r) the rough number of cells; expand(r, changes), contract(r, changes), shift(r, v) the changed
+-- region; center(r) → x, y, z.
 
 local KINDS = {}
 
@@ -412,13 +413,11 @@ KINDS.cuboid = {
     return {x = math.min(r.p1.x, r.p2.x), y = math.min(r.p1.y, r.p2.y), z = math.min(r.p1.z, r.p2.z)},
         {x = math.max(r.p1.x, r.p2.x), y = math.max(r.p1.y, r.p2.y), z = math.max(r.p1.z, r.p2.z)}
   end,
-  each = function(r, fn)
+  rows = function(r, emit)
     local lo, hi = KINDS.cuboid.bounds(r)
     for y = lo.y, hi.y do
       for z = lo.z, hi.z do
-        for x = lo.x, hi.x do
-          fn(x, y, z)
-        end
+        emit(y, z, lo.x, hi.x)
       end
     end
   end,
@@ -452,66 +451,23 @@ KINDS.cuboid = {
   end,
 }
 
--- cyl: centre column cx, cz, radii rx, rz and the layers min_y to max_y
-
-local function cyl_inside(rx, rz)
-  local ix, iz = inverse(rx), inverse(rz)
-  return function(x, z)
-    local xn, zn = x * ix, z * iz
-    return xn * xn + zn * zn <= 1
+-- the farthest whole step along x at which a shape still holds on one row (-1 when even the step 0 is outside):
+-- inside(x) is true up to some x and false after, guess a first estimate that is corrected against inside itself
+local function row_reach(inside, guess)
+  if not inside(0) then
+    return -1
   end
+  local x = math.max(0, guess)
+  while not inside(x) do
+    x = x - 1
+  end
+  while inside(x + 1) do
+    x = x + 1
+  end
+  return x
 end
 
--- the cells of one quarter of a cylinder's floor plan, flat as x, z, x, z …; hollow keeps only the rim: a cell goes
--- when the cell one step further out along x and the one along z are both inside
-local function cyl_quarter(rx, rz, hollow)
-  local inside = cyl_inside(rx, rz)
-  local quarter = {}
-  for x = 0, ceil(rx + 0.5) do
-    if not inside(x, 0) then
-      break
-    end
-    for z = 0, ceil(rz + 0.5) do
-      if not inside(x, z) then
-        break
-      end
-      if not (hollow and inside(x + 1, z) and inside(x, z + 1)) then
-        quarter[#quarter + 1] = x
-        quarter[#quarter + 1] = z
-      end
-    end
-  end
-  return quarter
-end
-
-local function cyl_cells(cx, cz, min_y, max_y, quarter, fn)
-  for y = min_y, max_y do
-    for i = 1, #quarter, 2 do
-      local x, z = quarter[i], quarter[i + 1]
-      fn(cx + x, y, cz + z)
-      if x ~= 0 then
-        fn(cx - x, y, cz + z)
-      end
-      if z ~= 0 then
-        fn(cx + x, y, cz - z)
-        if x ~= 0 then
-          fn(cx - x, y, cz - z)
-        end
-      end
-    end
-  end
-end
-
--- how far a shape reaches from its centre along one axis: the farthest whole step still inside
-local function reach(inside, ...)
-  local n = 0
-  while inside(n + 1, ...) do
-    n = n + 1
-  end
-  return n
-end
-
-local function even_sideways(what, r, changes, with_y)
+local function even_sideways(what, changes, with_y)
   local dx, dz, dy = 0, 0, 0
   for _, c in ipairs(changes) do
     dx, dz, dy = dx + c.x, dz + c.z, dy + c.y
@@ -531,21 +487,52 @@ local function absolute_sum(changes, axis)
   return floor(total / 2)
 end
 
+-- cyl: centre column cx, cz, radii rx, rz and the layers min_y to max_y
+
+local function cyl_inside(rx, rz)
+  local ix, iz = inverse(rx), inverse(rz)
+  return function(x, z)
+    local xn, zn = x * ix, z * iz
+    return xn * xn + zn * zn <= 1
+  end
+end
+
+-- how far a cylinder's floor plan reaches along x on the row z steps from the centre: widths[z] for z from 0 to last
+local function cyl_widths(rx, rz)
+  local inside = cyl_inside(rx, rz)
+  local ix, iz = inverse(rx), inverse(rz)
+  local widths = {}
+  local last = -1
+  for z = 0, ceil(rz + 0.5) do
+    if not inside(0, z) then
+      break
+    end
+    local zn = z * iz
+    widths[z] = row_reach(function(x) return inside(x, z) end, floor(math.sqrt(math.max(0, 1 - zn * zn)) / ix))
+    last = z
+  end
+  return widths, last
+end
+
 KINDS.cyl = {
   bounds = function(r)
-    local inside = cyl_inside(r.rx, r.rz)
-    local wx = reach(function(n) return inside(n, 0) end)
-    local wz = reach(function(n) return inside(0, n) end)
-    return {x = r.cx - wx, y = r.min_y, z = r.cz - wz}, {x = r.cx + wx, y = r.max_y, z = r.cz + wz}
+    local widths, last = cyl_widths(r.rx, r.rz)
+    return {x = r.cx - widths[0], y = r.min_y, z = r.cz - last}, {x = r.cx + widths[0], y = r.max_y, z = r.cz + last}
   end,
-  each = function(r, fn)
-    cyl_cells(r.cx, r.cz, r.min_y, r.max_y, cyl_quarter(r.rx, r.rz, false), fn)
+  rows = function(r, emit)
+    local widths, last = cyl_widths(r.rx, r.rz)
+    for y = r.min_y, r.max_y do
+      for dz = -last, last do
+        local w = widths[abs(dz)]
+        emit(y, r.cz + dz, r.cx - w, r.cx + w)
+      end
+    end
   end,
   estimate = function(r)
     return math.pi * (r.rx + 0.5) * (r.rz + 0.5) * math.max(0, r.max_y - r.min_y + 1)
   end,
   expand = function(r, changes)
-    local dx, _, dz = even_sideways("cyl", r, changes, false)
+    local dx, _, dz = even_sideways("cyl", changes, false)
     local min_y, max_y = r.min_y, r.max_y
     for _, c in ipairs(changes) do
       if c.y > 0 then max_y = max_y + c.y else min_y = min_y + c.y end
@@ -554,7 +541,7 @@ KINDS.cyl = {
                        rz = r.rz + absolute_sum(changes, "z"), min_y = min_y, max_y = max_y})
   end,
   contract = function(r, changes)
-    local dx, _, dz = even_sideways("cyl", r, changes, false)
+    local dx, _, dz = even_sideways("cyl", changes, false)
     local min_y, max_y = r.min_y, r.max_y
     for _, c in ipairs(changes) do
       local height = max_y - min_y
@@ -581,72 +568,60 @@ local function ellipsoid_inside(rx, ry, rz)
   end
 end
 
--- the cells of one eighth of an ellipsoid, flat as x, y, z, x, y, z …; hollow keeps the shell: a cell goes when the
--- cells one step further out along x, along y and along z are all inside
-local function ellipsoid_octant(rx, ry, rz, hollow)
+-- how far an ellipsoid reaches along x on the row y, z steps from the centre: widths[y][z], for y from 0 to last_y and
+-- z from 0 to last_z[y]
+local function ellipsoid_widths(rx, ry, rz)
   local inside = ellipsoid_inside(rx, ry, rz)
-  local octant = {}
-  for x = 0, ceil(rx + 0.5) do
-    if not inside(x, 0, 0) then
+  local ix, iy, iz = inverse(rx), inverse(ry), inverse(rz)
+  local widths, last_z = {}, {}
+  local last_y = -1
+  for y = 0, ceil(ry + 0.5) do
+    if not inside(0, y, 0) then
       break
     end
-    for y = 0, ceil(ry + 0.5) do
-      if not inside(x, y, 0) then
+    local yn = y * iy
+    widths[y] = {}
+    for z = 0, ceil(rz + 0.5) do
+      if not inside(0, y, z) then
         break
       end
-      for z = 0, ceil(rz + 0.5) do
-        if not inside(x, y, z) then
-          break
-        end
-        if not (hollow and inside(x + 1, y, z) and inside(x, y + 1, z) and inside(x, y, z + 1)) then
-          octant[#octant + 1] = x
-          octant[#octant + 1] = y
-          octant[#octant + 1] = z
-        end
-      end
+      local zn = z * iz
+      widths[y][z] = row_reach(function(x) return inside(x, y, z) end,
+          floor(math.sqrt(math.max(0, 1 - yn * yn - zn * zn)) / ix))
+      last_z[y] = z
     end
+    last_y = y
   end
-  return octant
-end
-
-local function ellipsoid_cells(cx, cy, cz, octant, fn)
-  for i = 1, #octant, 3 do
-    local x, y, z = octant[i], octant[i + 1], octant[i + 2]
-    for sy = 1, y ~= 0 and 2 or 1 do
-      local yy = sy == 1 and y or -y
-      for sz = 1, z ~= 0 and 2 or 1 do
-        local zz = sz == 1 and z or -z
-        fn(cx + x, cy + yy, cz + zz)
-        if x ~= 0 then
-          fn(cx - x, cy + yy, cz + zz)
-        end
-      end
-    end
-  end
+  return widths, last_y, last_z
 end
 
 KINDS.ellipsoid = {
   bounds = function(r)
-    local inside = ellipsoid_inside(r.rx, r.ry, r.rz)
-    local wx = reach(function(n) return inside(n, 0, 0) end)
-    local wy = reach(function(n) return inside(0, n, 0) end)
-    local wz = reach(function(n) return inside(0, 0, n) end)
-    return {x = r.cx - wx, y = r.cy - wy, z = r.cz - wz}, {x = r.cx + wx, y = r.cy + wy, z = r.cz + wz}
+    local widths, last_y, last_z = ellipsoid_widths(r.rx, r.ry, r.rz)
+    local wx, wz = widths[0][0], last_z[0]
+    return {x = r.cx - wx, y = r.cy - last_y, z = r.cz - wz}, {x = r.cx + wx, y = r.cy + last_y, z = r.cz + wz}
   end,
-  each = function(r, fn)
-    ellipsoid_cells(r.cx, r.cy, r.cz, ellipsoid_octant(r.rx, r.ry, r.rz, false), fn)
+  rows = function(r, emit)
+    local widths, last_y, last_z = ellipsoid_widths(r.rx, r.ry, r.rz)
+    for dy = -last_y, last_y do
+      local ay = abs(dy)
+      for dz = -last_z[ay], last_z[ay] do
+        local w = widths[ay][abs(dz)]
+        emit(r.cy + dy, r.cz + dz, r.cx - w, r.cx + w)
+      end
+    end
   end,
   estimate = function(r)
     return 4 / 3 * math.pi * (r.rx + 0.5) * (r.ry + 0.5) * (r.rz + 0.5)
   end,
   expand = function(r, changes)
-    local dx, dy, dz = even_sideways("sphere", r, changes, true)
+    local dx, dy, dz = even_sideways("sphere", changes, true)
     return changed(r, {cx = r.cx + dx / 2, cy = r.cy + dy / 2, cz = r.cz + dz / 2,
                        rx = r.rx + absolute_sum(changes, "x"), ry = r.ry + absolute_sum(changes, "y"),
                        rz = r.rz + absolute_sum(changes, "z")})
   end,
   contract = function(r, changes)
-    local dx, dy, dz = even_sideways("sphere", r, changes, true)
+    local dx, dy, dz = even_sideways("sphere", changes, true)
     return changed(r, {cx = r.cx - dx / 2, cy = r.cy - dy / 2, cz = r.cz - dz / 2,
                        rx = math.max(1, r.rx - absolute_sum(changes, "x")),
                        ry = math.max(1, r.ry - absolute_sum(changes, "y")),
@@ -707,14 +682,22 @@ KINDS.poly = {
     local lo, hi = points_box(r.pts)
     return {x = lo.x, y = r.min_y, z = lo.z}, {x = hi.x, y = r.max_y, z = hi.z}
   end,
-  each = function(r, fn)
+  rows = function(r, emit)
     local lo, hi = points_box(r.pts)
     for z = lo.z, hi.z do
-      for x = lo.x, hi.x do
-        if poly_contains(r.pts, x, z) then
-          for y = r.min_y, r.max_y do
-            fn(x, y, z)
-          end
+      local runs, from = {}, nil
+      for x = lo.x, hi.x + 1 do
+        local inside = x <= hi.x and poly_contains(r.pts, x, z)
+        if inside and not from then
+          from = x
+        elseif not inside and from then
+          runs[#runs + 1] = {from, x - 1}
+          from = nil
+        end
+      end
+      for y = r.min_y, r.max_y do
+        for _, run in ipairs(runs) do
+          emit(y, z, run[1], run[2])
         end
       end
     end
@@ -812,7 +795,7 @@ KINDS.convex = {
   bounds = function(r)
     return points_box(r.pts)
   end,
-  each = function(r, fn)
+  rows = function(r, emit)
     local lo, hi = points_box(r.pts)
     for y = lo.y, hi.y do
       for z = lo.z, hi.z do
@@ -829,8 +812,8 @@ KINDS.convex = {
             from = math.max(from, ceil(rest / nx))
           end
         end
-        for x = from, to do
-          fn(x, y, z)
+        if from <= to then
+          emit(y, z, from, to)
         end
       end
     end
@@ -866,9 +849,37 @@ KINDS.cells = {
   bounds = function(r)
     return bounds_of(r.list)
   end,
-  each = function(r, fn)
+  rows = function(r, emit)
+    local lo, hi = bounds_of(r.list)
+    if not lo then
+      return
+    end
+    local span = hi.z - lo.z + 1
+    local row_of, rows = {}, {}
     for _, p in ipairs(r.list) do
-      fn(p.x, p.y, p.z)
+      local k = (p.y - lo.y) * span + (p.z - lo.z)
+      local row = row_of[k]
+      if not row then
+        row = {y = p.y, z = p.z}
+        row_of[k] = row
+        rows[#rows + 1] = row
+      end
+      row[#row + 1] = p.x
+    end
+    for _, row in ipairs(rows) do
+      table.sort(row)
+      local from, to
+      for _, x in ipairs(row) do
+        if from and x <= to + 1 then
+          to = math.max(to, x)
+        else
+          if from then
+            emit(row.y, row.z, from, to)
+          end
+          from, to = x, x
+        end
+      end
+      emit(row.y, row.z, from, to)
     end
   end,
   estimate = function(r)
@@ -918,7 +929,11 @@ local function visit(r, fn)
   if estimate > max_cells() * 1.25 then
     check_size(floor(estimate))
   end
-  kind.each(r, fn)
+  kind.rows(r, function(y, z, from, to)
+    for x = from, to do
+      fn(x, y, z)
+    end
+  end)
 end
 
 -- ---- selections ----
@@ -1035,47 +1050,91 @@ function M.Region:set(pattern)
   return located(self, out)
 end
 
--- the cells of a selection that touch the outside: a cell is kept when one of its neighbours is not in the selection; with
--- walls the layers above the top and below the bottom count as inside, leaving the top and the bottom open
-local function shell(r, walls, fn)
-  local lo, hi = KINDS[r.kind].bounds(r)
-  local depth, width = hi.y - lo.y + 3, hi.z - lo.z + 3
-  local solid, at = {}, {}
-  local n = 0
-  visit(r, function(x, y, z)
-    local i = ((x - lo.x + 1) * depth + (y - lo.y + 1)) * width + (z - lo.z + 1)
-    n = n + 1
-    at[n] = i
-    solid[i] = true
-  end)
-  local sx = depth * width
-  for k = 1, n do
-    local i = at[k]
-    local open = not solid[i + sx] or not solid[i - sx] or not solid[i + 1] or not solid[i - 1]
-    local z = i % width - 1 + lo.z
-    local y = floor(i / width) % depth - 1 + lo.y
-    if not open then
-      open = (not solid[i + width] and (not walls or y < hi.y)) or (not solid[i - width] and (not walls or y > lo.y))
+-- the common part of two sorted lists of runs ({from, to, from, to …})
+local function intersect(p, q)
+  local out, i, j = {}, 1, 1
+  while i <= #p and j <= #q do
+    local from, to = math.max(p[i], q[j]), math.min(p[i + 1], q[j + 1])
+    if from <= to then
+      out[#out + 1] = from
+      out[#out + 1] = to
     end
-    if open then
-      fn(floor(i / sx) - 1 + lo.x, y, z)
+    if p[i + 1] < q[j + 1] then
+      i = i + 2
+    else
+      j = j + 2
     end
   end
+  return out
 end
 
--- the cells of a cuboid's sides: every layer for the walls, with the top and the bottom for the faces
-local function cuboid_sides(r, faces, fn)
-  local lo, hi = KINDS.cuboid.bounds(r)
-  for y = lo.y, hi.y do
-    for z = lo.z, hi.z do
-      local across = z == lo.z or z == hi.z or (faces and (y == lo.y or y == hi.y))
-      for x = lo.x, hi.x do
-        if across or x == lo.x or x == hi.x then
+local NONE = {}
+
+-- runs cut down to what row covers; a single run against a single run (the usual) is cut in place
+local function narrow(runs, row)
+  if #runs == 0 or #row == 0 then
+    return NONE
+  end
+  if #runs == 2 and #row == 2 then
+    local from, to = math.max(runs[1], row[1]), math.min(runs[2], row[2])
+    if from > to then
+      return NONE
+    end
+    runs[1], runs[2] = from, to
+    return runs
+  end
+  return intersect(runs, row)
+end
+
+-- the cells of a selection that touch the outside: a cell is kept when one of its six neighbours is not in the
+-- selection; with walls the layers above the top and below the bottom count as inside, leaving the top and the bottom
+-- open. A row at a time: what a row keeps is the ends of its runs and the cells the rows beside it do not cover.
+local function shell(r, walls, fn)
+  local lo, hi = KINDS[r.kind].bounds(r)
+  if lo.y > hi.y then
+    return
+  end
+  local rows = (hi.y - lo.y + 1) * (hi.z - lo.z + 1)
+  if rows > max_cells() then
+    check_size(rows)
+  end
+  local span = hi.z - lo.z + 3
+  local grid, keys = {}, {}
+  KINDS[r.kind].rows(r, function(y, z, from, to)
+    local k = (y - lo.y + 1) * span + (z - lo.z + 1)
+    local runs = grid[k]
+    if not runs then
+      runs = {y = y, z = z}
+      grid[k] = runs
+      keys[#keys + 1] = k
+    end
+    runs[#runs + 1] = from
+    runs[#runs + 1] = to
+  end)
+  for _, k in ipairs(keys) do
+    local runs = grid[k]
+    local y, z = runs.y, runs.z
+    local north, south = grid[k - 1] or NONE, grid[k + 1] or NONE
+    local up = (not walls or y < hi.y) and (grid[k + span] or NONE) or nil
+    local down = (not walls or y > lo.y) and (grid[k - span] or NONE) or nil
+    for i = 1, #runs, 2 do
+      local from, to = runs[i], runs[i + 1]
+      local inner = narrow(narrow(from < to - 1 and {from + 1, to - 1} or NONE, north), south)
+      if up then
+        inner = narrow(inner, up)
+      end
+      if down then
+        inner = narrow(inner, down)
+      end
+      local cursor = from
+      for j = 1, #inner, 2 do
+        for x = cursor, inner[j] - 1 do
           fn(x, y, z)
-        elseif x < hi.x then
-          fn(hi.x, y, z)
-          break
         end
+        cursor = inner[j + 1] + 1
+      end
+      for x = cursor, to do
+        fn(x, y, z)
       end
     end
   end
@@ -1084,17 +1143,12 @@ end
 local function sides(r, pattern, faces)
   local source = block_source(pattern)
   local out = {}
-  local function put(x, y, z)
+  shell(r, not faces, function(x, y, z)
     local name = source(x, y, z)
     if name then
       out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
     end
-  end
-  if r.kind == "cuboid" then
-    cuboid_sides(r, faces, put)
-  else
-    shell(r, not faces, put)
-  end
+  end)
   return located(r, out)
 end
 
@@ -1352,15 +1406,19 @@ local function turned(self, m, t, without_air)
     end
   end
   local blocks = #names > 0 and numen.shape.transform_blocks(names, m) or names
+  local m11, m12, m13, m21, m22, m23, m31, m32, m33 = m[1][1], m[1][2], m[1][3], m[2][1], m[2][2], m[2][3], m[3][1],
+      m[3][2], m[3][3]
+  local ox, oy, oz = o.x, o.y, o.z
   local out = {}
   for _, c in ipairs(self) do
     if not (without_air and is_air(c)) then
-      local p = where(c)
-      local dx, dy, dz = p.x - o.x, p.y - o.y, p.z - o.z
-      out[#out + 1] = cell({x = o.x + floor(dx * m[1][1] + dy * m[1][2] + dz * m[1][3] + t),
-                            y = o.y + floor(dx * m[2][1] + dy * m[2][2] + dz * m[2][3] + t),
-                            z = o.z + floor(dx * m[3][1] + dy * m[3][2] + dz * m[3][3] + t)},
-          c.pos and c.name and blocks[slot[c.name]] or nil)
+      local p = c.pos or c
+      local dx, dy, dz = p.x - ox, p.y - oy, p.z - oz
+      local at = setmetatable({x = ox + floor(dx * m11 + dy * m12 + dz * m13 + t),
+                               y = oy + floor(dx * m21 + dy * m22 + dz * m23 + t),
+                               z = oz + floor(dx * m31 + dy * m32 + dz * m33 + t)}, M.Pos)
+      local name = c.pos and c.name
+      out[#out + 1] = name and {name = blocks[slot[name]], pos = at} or at
     end
   end
   return cells_of(out, o)
@@ -1525,6 +1583,17 @@ local function put_cell(list)
   end
 end
 
+-- the shell of a region (its faces; its walls with walls true): the cells with a block from pattern, or without one the
+-- selection of exactly those cells
+local function hollow(r, walls, pattern)
+  if pattern ~= nil then
+    return sides(r, pattern, not walls)
+  end
+  local list = {}
+  shell(r, walls, put_cell(list))
+  return region_of_cells(list, r.origin)
+end
+
 ---A cylinder standing on at, which is the middle of its bottom layer, height layers up (a negative height goes down);
 ---radii is one number, or {x, z}, at least 1; the edge is half a block beyond the radius as in WorldEdit's //cyl. With a
 ---pattern (see Region:set) it is the Cells; without, the selection.
@@ -1543,21 +1612,14 @@ function M.cyl(at, pattern, radii, height)
                         origin = M.pos(c.x, c.y, c.z)}), pattern)
 end
 
----Only the wall of a cylinder (see numen.shape.cyl): the cells with an open cell one step outward, no top and no bottom.
+---Only the wall of a cylinder (see numen.shape.cyl): the cells with an open cell beside them, no top and no bottom.
 ---@param at Pos
 ---@param pattern? string|Cells|table
 ---@param radii number|number[]
 ---@param height? integer
 ---@return Cells|Region
 function M.hcyl(at, pattern, radii, height)
-  local c = cell_at(at)
-  local r = radii_of(radii, 2, 1, "numen.shape.hcyl(pos, \"stone\", {4, 6}, 5)")
-  height = floor(height or 1)
-  local min_y = height < 0 and c.y + height or c.y
-  local max_y = height < 0 and c.y - 1 or c.y + height - 1
-  local list = {}
-  cyl_cells(c.x, c.z, min_y, max_y, cyl_quarter(r[1], r[2], true), put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return hollow(M.cyl(at, nil, radii, height), true, pattern)
 end
 
 ---A sphere (or ellipsoid) around at; radii is one number, or {x, y, z}; the surface is half a block beyond the radius as
@@ -1576,19 +1638,15 @@ function M.sphere(at, pattern, radii, raised)
                         origin = M.pos(c.x, c.y, c.z)}), pattern)
 end
 
----Only the shell of a sphere (see numen.shape.sphere): the thinnest closed layer.
+---Only the shell of a sphere (see numen.shape.sphere): the cells with an open cell beside them, the thinnest closed
+---layer.
 ---@param at Pos
 ---@param pattern? string|Cells|table
 ---@param radii number|number[]
 ---@param raised? boolean
 ---@return Cells|Region
 function M.hsphere(at, pattern, radii, raised)
-  local c = cell_at(at)
-  local r = radii_of(radii, 3, 0, "numen.shape.hsphere(pos, \"glass\", 5)")
-  local list = {}
-  ellipsoid_cells(c.x, c.y + (raised and floor(r[2]) or 0), c.z, ellipsoid_octant(r[1], r[2], r[3], true),
-      put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return hollow(M.sphere(at, nil, radii, raised), false, pattern)
 end
 
 -- the cells of a cone: fn(x, y, z) for each; hollow keeps a wall of the given thickness
@@ -1941,24 +1999,37 @@ local function generated(r, fn, mode, hollow)
         .. "from the middle of the selection) or a Pos (distance from that cell); got " .. tostring(mode),
         "numen.shape.generate(region, \"stone\", function(x, y, z) return x * x + y * y + z * z <= 1 end, \"unit\")")
   end
+  local function ask(x, y, z)
+    local v = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
+    if type(v) ~= "boolean" then
+      bad("the function returns true for a cell that is part of the shape and false for one that is not; it gave "
+          .. type(v), "function(x, y, z) return x * x + y * y + z * z <= 1 end")
+    end
+    return v
+  end
+  local list = {}
+  if not hollow then
+    visit(r, function(x, y, z)
+      if ask(x, y, z) then
+        list[#list + 1] = {x = x, y = y, z = z}
+      end
+    end)
+    return list
+  end
+  -- the neighbours are asked too, so each cell is asked once
   local depth, width = hi.y - lo.y + 3, hi.z - lo.z + 3
   local known = {}
   local function inside(x, y, z)
     local i = ((x - lo.x + 1) * depth + (y - lo.y + 1)) * width + (z - lo.z + 1)
     local v = known[i]
     if v == nil then
-      v = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
-      if type(v) ~= "boolean" then
-        bad("the function returns true for a cell that is part of the shape and false for one that is not; it gave "
-            .. type(v), "function(x, y, z) return x * x + y * y + z * z <= 1 end")
-      end
+      v = ask(x, y, z)
       known[i] = v
     end
     return v
   end
-  local list = {}
   visit(r, function(x, y, z)
-    if inside(x, y, z) and not (hollow and inside(x + 1, y, z) and inside(x - 1, y, z) and inside(x, y + 1, z)
+    if inside(x, y, z) and not (inside(x + 1, y, z) and inside(x - 1, y, z) and inside(x, y + 1, z)
         and inside(x, y - 1, z) and inside(x, y, z + 1) and inside(x, y, z - 1)) then
       list[#list + 1] = {x = x, y = y, z = z}
     end
