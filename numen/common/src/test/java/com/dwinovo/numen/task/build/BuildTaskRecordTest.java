@@ -172,7 +172,7 @@ class BuildTaskRecordTest {
 
     @Test
     void itemPlaceMatchesByBlockIdentityNotState() {
-        // 原生格没提朝向,朝向就不是工程量:游戏按玩家规则给什么朝向都算建好
+        // 素面格没提朝向,朝向就不是工程量:游戏按玩家规则给什么朝向都算建好
         BuildTaskRecord.Target chest = new BuildTaskRecord.Target(Blocks.CHEST,
                 Blocks.CHEST.asItem(), BlockPos.ZERO, "chest").asItemPlace();
         assertTrue(chest.matches(Blocks.CHEST.defaultBlockState()

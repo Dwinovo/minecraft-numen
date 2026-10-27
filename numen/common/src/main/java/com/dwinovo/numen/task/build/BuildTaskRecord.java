@@ -27,6 +27,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     private Map<Long, Target> byCell;
 
     private int placed;
+    private int setDirectly;
     private int replaced;
     private int broken;
     private int completed;
@@ -61,12 +62,9 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     }
 
     /**
-     * 素面格升格走原生放置:方块没有任何 blockstate 属性时,
-     * "照图直写"与"玩家动作"的产物语义完全等价,唯一区别是后者跑物品放置钩子——
-     * 领地可拦、Visual Workbench 一类原地换方块的模组照常接管。升格改的是 Target 的
-     * itemPlace 字段:车道选择、宽容对账(按自述名)、按手扣料三处读的都是它,单一真源。
-     * 有属性的方块不升格(哪怕目标恰是默认态,如朝北的熔炉):原生放置按视线推导
-     * 状态,给不出图纸点名的精确值。
+     * 素面格升格:方块没有任何 blockstate 属性时,物品放下去就是要的,没有哪个状态位要点名。升格改的是 Target 的
+     * itemPlace 字段,对账由此宽容(按方块的自述名):手放时物品放置钩子能把原版设施原地换成自家实现(Visual Workbench
+     * 一类),注册名变了、名字没变。有属性的方块不升格(哪怕目标恰是默认态,如朝北的熔炉):对账照状态位来。
      */
     private static List<Target> promotePlainCells(List<Target> targets) {
         List<Target> out = new java.util.ArrayList<>(targets.size());
@@ -74,26 +72,12 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
             boolean plain = !t.itemPlace()
                     && !t.desiredState().isAir()
                     && t.desiredState().getProperties().isEmpty()
-                    // 物品放出来的必须就是要的方块:盆栽(potted_*)无属性但 item 是花盆,原生放置只给空盆
+                    // 物品放出来的必须就是要的方块:盆栽(potted_*)无属性但 item 是花盆,物品只给空盆
                     && t.item() instanceof net.minecraft.world.item.BlockItem bi
                     && bi.getBlock() == t.desiredState().getBlock();
             out.add(plain ? t.asItemPlace() : t);
         }
         return List.copyOf(out);
-    }
-
-    /**
-     * 建完让世界落定之后,与图纸不同的格数——站不住掉了的,和形状按真实邻居重算了的。
-     * 允许不同,但不许无声不同:这个数进回执。
-     */
-    private int settledAway;
-
-    public int settledAway() {
-        return settledAway;
-    }
-
-    public void settledAway(int count) {
-        this.settledAway = count;
     }
 
     /** 这些目标里有没有哪一格的档位会顶掉挡路的东西——建造寻路问的是这一句(拆一块钻出去许不许)。 */
@@ -105,9 +89,17 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         return placed;
     }
 
-    /** 放下一格;{@code replacing} 是先拆掉了挡着的东西再放。 */
-    public void placedOne(boolean replacing) {
+    /** 放下的格里,手放不出那个样子、直接写进去的有几格。 */
+    public int setDirectly() {
+        return setDirectly;
+    }
+
+    /** 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code directly} 是手放不出那个样子、直接写进去的。 */
+    public void placedOne(boolean replacing, boolean directly) {
         placed++;
+        if (directly) {
+            setDirectly++;
+        }
         if (replacing) {
             replaced++;
         }
@@ -151,9 +143,8 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     }
 
     /**
-     * @param itemPlace 原生车道:这一格由<b>物品自己</b>像真右键那样落位,而不是照图直写。
-     *                  只给 {@code build place}——那是"放一个工作台"这类玩家动作,
-     *                  朝向随她的视线,模组钩在物品放置上的转换照常发生。
+     * @param itemPlace 素面格:物品放下去就是要的,对账按方块的自述名宽容(见 {@link #matches})。
+     *                  放法不看它:每一格都由 {@link BuildPlacer} 手放或直接写。
      * @param mask      这一格自己的让路档位;没写是 null,按 {@link ReplaceMode#REPLACE_EMPTY}(见 {@link #mode})
      */
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
@@ -183,8 +174,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         }
 
         /**
-         * 进原生车道。放不出来的东西——清空格、液体、没有物品形态的方块——进不了,
-         * 原样返回:车道的前提是"手里有一件能放的东西"。
+         * 升格成素面格。清空格、液体、没有物品形态的方块没有"物品放下去就是它",原样返回。
          */
         public Target asItemPlace() {
             if (desiredState.isAir()
@@ -225,7 +215,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
          * 后果和门那件事一模一样,只是方向相反:玩家按清单备齐了,照样建到一半停下。
          */
         public int materialCount() {
-            if (desiredState == null || desiredState.isAir()) {
+            if (desiredState == null || desiredState.isAir() || noItem()) {
                 return 0;
             }
             if (desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
@@ -279,6 +269,14 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
             return 1;
         }
 
+        /**
+         * 没有哪件物品能直接放出这个方块(盆栽、海带的茎……):它进目标集,轮到时不放,回执归在 {@code no_item} 下
+         * ({@link com.dwinovo.numen.build.BuildStates#noItemReason})。判据只此一处,{@code BuildCellRules} 与 {@link #materialCount} 都问它。
+         */
+        public boolean noItem() {
+            return item == net.minecraft.world.item.Items.AIR && !desiredState.isAir();
+        }
+
         /** 要不要花料——{@link #materialCount()} 的派生问法,不另立判据。 */
         public boolean costsMaterial() {
             return materialCount() > 0;
@@ -286,10 +284,9 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
 
         public boolean matches(BlockState state) {
             if (itemPlace) {
-                // 原生格的对账不看状态位:没提朝向的格子,朝向就不是工程量——游戏按
-                // 玩家规则给什么就是什么。方块种类按"自述名"对,不只按注册名:有模组
-                // 在放置时把原版设施原地换成自家实现(注册名变了,名字没变),按注册名
-                // 对账会判不符,拆了重放,和模组拉锯到天荒地老。
+                // 素面格的对账不看状态位:没提朝向的格子,朝向就不是工程量。方块种类按"自述名"对,
+                // 不只按注册名:有模组在放置时把原版设施原地换成自家实现(注册名变了,名字没变),
+                // 按注册名对账会判不符,拆了重放,和模组拉锯到天荒地老。
                 return !state.isAir() && (state.getBlock() == desiredState.getBlock()
                         || state.getBlock().getDescriptionId()
                                 .equals(desiredState.getBlock().getDescriptionId()));

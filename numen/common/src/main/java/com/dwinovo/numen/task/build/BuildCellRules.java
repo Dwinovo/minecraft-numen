@@ -76,6 +76,9 @@ final class BuildCellRules {
     }
 
     private boolean blocked(BuildTaskRecord.Target target, boolean askIsOpen) {
+        if (target.noItem()) {
+            return true;   // 没有物品能放出它:不去动,回执单列一组(权限层不必替一件放不出来的事裁决)
+        }
         BlockState current = peek(target.pos());
         if (!target.mode().allows(current, target.desiredState())) {
             return true;

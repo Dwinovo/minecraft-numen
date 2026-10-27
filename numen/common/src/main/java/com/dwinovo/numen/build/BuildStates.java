@@ -44,10 +44,9 @@ public final class BuildStates {
         if (no != null) {
             throw new IllegalArgumentException(trimmed + " — " + no);
         }
+        // 没有自己物品的方块(盆栽、海带的茎、洞穴藤蔓的茎……)照常读成一格:整份设计不因为其中一格放不出来就一格不放。
+        // 记账物品是空气,这一格轮到时不放,回执里归在 no_item 下({@link Target#noItem})
         net.minecraft.world.item.Item item = materialItem(state.getBlock());
-        if (item == net.minecraft.world.item.Items.AIR && !state.isAir()) {
-            throw new IllegalArgumentException(trimmed + " is not a placeable block");
-        }
         String name = trimmed.contains("[") ? trimmed.substring(0, trimmed.indexOf('[')).trim() : trimmed;
         return new Resolved(state, item, name.contains(":") ? name.split(":", 2)[1] : name);
     }
@@ -139,6 +138,20 @@ public final class BuildStates {
             return net.minecraft.world.item.Items.DIRT;
         }
         return null;
+    }
+
+    /**
+     * 没有哪件物品能直接放出这个方块,说清它是什么变来的:盆栽是先放花盆再把花种进去,其余是别的方块长出来、或原版自己生成的。
+     * 只说得出来的才说,说不出的不猜。
+     */
+    public static String noItemReason(net.minecraft.world.level.block.Block block) {
+        String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block).getPath();
+        if (block instanceof net.minecraft.world.level.block.FlowerPotBlock pot) {
+            String plant = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(pot.getPotted()).getPath();
+            return id + " has no item of its own: it is a flower_pot with " + plant + " planted in it, so place the "
+                    + "flower_pot first and put the " + plant + " in by hand";
+        }
+        return id + " has no item of its own: no item places it directly, it forms from another block or by growing";
     }
 
     /**

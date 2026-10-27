@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mixin;
 
+import com.dwinovo.numen.mixin.inject.BlockItemAccessor;
 import com.dwinovo.numen.mixin.inject.CraftingMenuAccessor;
 import com.dwinovo.numen.mixin.inject.FishingHookAccessor;
 import com.dwinovo.numen.mixin.inject.ItemEntityAccessor;
@@ -13,9 +14,12 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.ResultContainer;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
 
@@ -45,5 +49,10 @@ public final class VanillaAccessImpl implements IVanillaAccess {
                                         CraftingContainer grid, ResultContainer result,
                                         RecipeHolder<CraftingRecipe> hint) {
         CraftingMenuAccessor.numen$recompute(menu, level, player, grid, result, hint);
+    }
+
+    @Override
+    public BlockState placementState(BlockItem item, BlockPlaceContext context) {
+        return ((BlockItemAccessor) item).numen$placementState(context);
     }
 }

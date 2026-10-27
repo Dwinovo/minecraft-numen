@@ -59,17 +59,6 @@ final class BuildLedger {
         return shortfall;
     }
 
-    /** 还差什么才能收工——按此刻的剩余需求算,不是本遍的过程量。 */
-    String missingReason(Map<Item, Integer> passMissing) {
-        Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
-        if (shortfall.isEmpty()) {
-            shortfall = passMissing;   // 期间被人补过料的边缘情形,退回本遍统计
-        }
-        return "still needs " + summarizeShortfall(shortfall)
-                + ". Everything already standing stays; restock and send the SAME call again to carry "
-                + "on from exactly here — finished cells are skipped automatically.";
-    }
-
     /**
      * 缺料清单:按缺口从大到小点名前几种,其余只报种类数与总件数。
      *

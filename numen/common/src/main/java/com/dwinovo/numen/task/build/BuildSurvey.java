@@ -38,10 +38,10 @@ public final class BuildSurvey {
         /** 生存模式下立着别的方块,身上却没有要放的料。 */
         SHORT,
         /**
-         * 走原生车道(像右键那样放,{@link BuildTaskRecord.Target#itemPlace})的格此刻放下去立不住(原版 {@code canSurvive}——物品
-         * 落位时问的就是它),而它相邻的设计格还有没盖好的:托着它的(下面那块、背后那面墙、上面挂着它的)还没有,等那一格好了它才是
-         * {@link #REACH} 或 {@link #FAR}。够不够得着都一样:走过去也放不下。照图直写的格不问这一句,立不立得住由建完之后的落定说;
-         * 相邻的都盖好了还立不住的也不在这里——图纸要的在那儿本来立不住,照常交给 {@code numen.build.place},它放不下就照实说。
+         * 素面格({@link BuildTaskRecord.Target#itemPlace})此刻放下去立不住(原版 {@code canSurvive}——物品落位时问的就是它),
+         * 而它相邻的设计格还有没盖好的:托着它的(下面那块、背后那面墙、上面挂着它的)还没有,等那一格好了它才是
+         * {@link #REACH} 或 {@link #FAR}。够不够得着都一样:走过去也放不下。带状态位的格不问这一句,立不立得住由放下之后原版说(回执的 {@code did_not_stay});
+         * 相邻的都盖好了还立不住的也不在这里——图纸要的在那儿本来立不住,照常交给 {@code numen.build.place},它直接写进去并如实计数。
          */
         UNHELD,
         /** 站在这里够得着,放得进去。 */

@@ -11,13 +11,11 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.task.TaskState;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -38,39 +36,27 @@ import java.util.Optional;
  * <p><b>不挖</b>——生存模式下图纸要的格里立着别的方块,那一格由 {@code numen.work.dig} 挖开(挖的判据、工具、掉落、权限都是它的),
  * 这里不碰,回执里算进"要先挖开的";创造模式照原版一下就碎:图纸直接写上去顶掉原来的。
  *
- * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、低层先放(支撑还没长出来的先放着,
- * 留给下一次调用)、整份对上之后让世界落定一次。
+ * <p><b>走一遍,每格只试一次</b>——一次调用把整份设计走一遍:低层先、贴附件后(托着它们的先立起来)、够不着的走过去放。每一格轮到
+ * 一次,轮过就不回头;没放好的不是失败,走完一遍照常交回回执,按原因分组({@link BuildOutstanding})说清是什么挡住了、下一步做什么。
+ * 再来一轮是脚本的事({@code numen.build.diff} 再调 {@code numen.build.place})。
  *
- * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;转头、挥手、粒子归演出组件 {@link BuildShowmanship},
+ * <p><b>放下就更新,世界说了算</b>——两种放法都带着原版的方块更新:邻居当场按原版规则反应(红石线连好、玻璃板与栅栏连上、楼梯
+ * 算好形状),原版弹掉的(火把没有依附)就是没放住,如实进回执。
+ *
+ * <p>保留下来的是施工自己的事:生存模式逐格扣料、低层先放、生成摆设。
+ *
+ * <p><b>像人一样放</b>——每一格由 {@link BuildPlacer} 落进世界:她站在原地从点得中的面手放,生存模式一秒四格;手放做不出那个样子的
+ * 格(悬空没有面可点、点得中的任何位置原版都放不成那个状态)直接写进去,回执的 {@code set_directly} 如实数着这些格。
+ *
+ * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;直接写的格上的转头、挥手、粒子归演出组件 {@link BuildShowmanship},
  * 它手里没有放置入口,改不了世界。
  *
  * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与轮扫对账;每一格的情形在 {@link BuildSurvey},
- * 单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},材料账本在 {@link BuildLedger},善后在
- * {@link BuildFixtures},演出在 {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder},收不了尾时的缺格清单在
- * {@link BuildOutstanding}。
+ * 单格判据在 {@link BuildCellRules},一格怎么落进世界在 {@link BuildPlacer},背包口径在 {@link BuildInventory},材料账本在
+ * {@link BuildLedger},摆设与善后在 {@link BuildFixtures},演出在 {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder},
+ * 收不了尾时的缺格清单在 {@link BuildOutstanding}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord, BuildCompanionTask.Placed> {
-
-    /**
-     * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
-     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。这笔账不欠着:
-     * 收尾 {@link #settleWithWorld()} 让世界统一落定一次。
-     *
-     * <p>这是整个施工能不能照图落地的分水岭。默认的 {@code 3} 会通知邻块并触发
-     * 形状重算,于是原版立刻拿它自己的规则复核我们刚写下的每一格:靠在非泥土
-     * 方块上的粉红花瓣被判无效弹掉、楼梯与栅栏的连接态被按邻居重写、悬空的贴附
-     * 方块整批消失。图纸里本来就有原版放不出来的格(社区图纸尤其常见——保存时
-     * 的世界和落位时的世界不是一回事),按 {@code 3} 写就是逐格送去被否决。
-     *
-     * <p>所以这里不走通知链路:<b>图纸怎么画就怎么落</b>,不让世界中途改我们的
-     * 稿。光照仍由区块自己维护,不会盖出一栋黑房子。
-     *
-     * <p>压着不通知只管施工期——那一刻世界是半成品,火把写下去时它靠的墙可能还没砌。
-     * 建完就该放手,见 {@link #settleWithWorld()}。
-     */
-    private static final int PLACE_FLAGS =
-            net.minecraft.world.level.block.Block.UPDATE_CLIENTS
-                    | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
     /** CONSENT:开工前整批问主人;WALK:走到够得着剩下的格的地方;WORK:施工。 */
     private enum Phase { CONSENT, WALK, WORK }
@@ -82,11 +68,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildInventory inv;
     private final BuildFixtures fixtures;
     private final BuildLedger ledger;
+    private final BuildPlacer placer;
     private final BuildShowmanship show;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
-    /** 本遍缺料统计(遍末报告用)。 */
-    private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
+    /** 这一次调用里已经轮到过的格:每格只试一次,轮过就不回头。 */
+    private final LongOpenHashSet tried = new LongOpenHashSet();
+    /** 轮到了却没放好的格(位置 → 原因与细节);没轮到的格的原因收场时按此刻的情形现判。 */
+    private final Map<Long, Miss> missed = new LinkedHashMap<>();
+    /** 上一次出发去走的时候已经轮到过几格:走到之后一格新的也没轮到,就是走了也到不了,不再走。 */
+    private int triedWhenWalking = -1;
+    /** 走去放时没走成的缘由(没有路、被拒、超时);没出过事是 null。 */
+    private String walkFailure;
+
+    /** 一格轮到了却没放好。 */
+    private record Miss(BuildOutstanding.Cause cause, String detail) {}
 
     private LongOpenHashSet observedCompleted;
     private Phase phase = Phase.WORK;
@@ -121,24 +117,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private LongOpenHashSet skippedPos = new LongOpenHashSet();
     /** {@code skippedPos.size()} 的缓存——判完工在热路径上,不必每次问集合。 */
     private int skippedCells;
-    private int passStartCompleted;
-    /** 本遍开工时已经放下与拆掉的格数合计。 */
-    private int passStartActions;
-    /**
-     * 本遍已经证明<b>付不起剩下任何一格</b>——缺料这件事在这一刻就成立了,不必走完这遍。
-     *
-     * <p>"一遍走完没有进展"是个<b>过程量</b>,时间分辨率就是一遍;"她付不起剩下任何一格"
-     * 是个<b>状态量</b>,在她第一次付不起的那一刻就已经成立。用过程量推断状态量必然慢一拍,
-     * 那一拍里的每一刻都在为一个早就成立的结论排队——玩家看到的是她绕着工地转一圈才说没料。
-     */
-    private boolean passStarved;
 
     private String note = "done";
 
     /** 正在走去放的那些格(够不着的最低一层);没在走是 null。 */
     private List<BlockPos> walkingTo;
-    /** 这一遍是走完一趟之后开的:一遍下来什么也没放成,就不再走了。 */
-    private boolean passFollowedWalk;
 
     /** 开工前要问主人的清单(这一次够得着的格里裁决为要问的)。 */
     private List<com.dwinovo.numen.api.permission.ConsentItem> consentItems = List.of();
@@ -155,6 +138,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         BlockPos[] box = siteBox(player, record.targets);
         this.siteMin = box[0];
         this.siteMax = box[1];
+        this.placer = new BuildPlacer(player, inv, record.consumeMaterials);
         this.show = new BuildShowmanship(player, inv);
     }
 
@@ -170,7 +154,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /**
      * 还有没了结的格,却既够不着也走不到(都得先挖开、缺料、立不住):当场拒绝,说清还剩什么、先做什么。够得着的与够不着的(走过去再放)
-     * 都受理。全都对上了不拒:这一趟照常收尾(落定、挂件),回执说什么都没变。
+     * 都受理。全都对上了不拒:这一趟照常收尾(挂件),回执说什么都没变。
      */
     private Precondition.Failure checkReach() {
         BuildSurvey.Tally tally = survey().tally();
@@ -229,28 +213,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 开工盘料:料不齐也开工,有料的格放、缺的留给回执报;只有手上一格要用的料都没有时才拦——那才是真的开不了工。
-     * 要花多少、缺多少,{@code numen.build.diff} 事先说得清,要不要补了料再来由模型自己定。
+     * 开工盘料:一格都付不起才当场拒绝(什么也开始不了);付得起的就放,付不起的格进回执的缺料分组。
      */
     private Precondition.Failure checkMaterials() {
-        if (!r.consumeMaterials) {
+        if (!r.consumeMaterials || canPayForAnyPendingCell()) {
             return null;
         }
-        Map<Item, Integer> need = ledger.remainingNeed();
-        Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(need);
-        if (shortfall.isEmpty()) {
-            return null;
-        }
-        for (Item item : need.keySet()) {
-            if (inv.hasItem(item, true)) {
-                return null;
-            }
-        }
+        Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(ledger.remainingNeed());
         return new Precondition.Failure(
-                "not enough materials yet — " + BuildLedger.summarizeShortfall(shortfall)
+                "not enough materials to place any of it — " + BuildLedger.summarizeShortfall(shortfall)
                         + ". Nothing was placed. Survival mode consumes 1 item per cell; gather these, "
-                        + "then send the SAME call again — anything already standing is skipped, so a "
-                        + "restocked repeat picks up exactly where this left off.",
+                        + "then call it again — anything already standing is skipped.",
                 FailureType.NO_MATERIAL);
     }
 
@@ -269,10 +242,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private void beginPass() {
         rescanAll();
         rebuildOrder();
-        passStartCompleted = r.completed();
-        passStartActions = r.placed() + r.broken();
-        passMissing.clear();
-        // 每一遍有自己的一份期限:一次调用本来只放一遍,现在一次调用走几遍(走路的时间不算,子活跑时这件活的期限冻着)
+        // 每一站有自己的一份期限:一次调用走几站(走路的时间不算,子活跑时这件活的期限冻着)
         r.extendDeadlineTo(player.level().getGameTime()
                 + BuildOrder.deadlineTicks(r.targets.size(), r.consumeMaterials));
         collectConsent();
@@ -354,10 +324,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         walkingTo = null;
         if (!walked.success()) {
-            return conclude(new Ending(walked.message() + "; built " + r.completed() + "/" + r.targets.size(),
-                    lastFailure()));
+            // 走不到不是失败:放下的照实交代,够不着的进回执
+            walkFailure = walked.message();
+            return conclude(null);
         }
-        passFollowedWalk = true;
         beginPass();
         return TaskState.RUNNING;
     }
@@ -388,9 +358,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState runBatch(int budget) {
         List<BlockPos> touched = new ArrayList<>();
+        List<BlockPos> written = new ArrayList<>();
         BlockState sample = null;
         boolean passOver = false;
-        while (budget > 0 && !passStarved) {
+        while (budget > 0) {
             BuildTaskRecord.Target target = nearestPendingInLayer();
             if (target == null) {
                 if (!advanceLayer()) {
@@ -399,7 +370,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 }
                 continue;
             }
-            BlockState placed = processCell(target);
+            BlockState placed = processCell(target, written);
             if (placed != null) {
                 budget--;
                 placeCredit -= 1.0;
@@ -408,10 +379,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         if (!touched.isEmpty()) {
-            show.performWork(touched, sample);
+            show.performWork(touched, written, sample);
         }
-        // 付不起剩下任何一格:当场收遍。结论在第一次付不起的那一刻就已经成立,走完剩下的层不会改变它。
-        if (passStarved || passOver) {
+        if (passOver) {
             return endPass();
         }
         return TaskState.RUNNING;
@@ -450,6 +420,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         if (best != null) {
             placedThisLayer.add(best.pos().asLong());
+            tried.add(best.pos().asLong());
         }
         return best;
     }
@@ -473,10 +444,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 处理一格。
      *
+     * @param written 手没有放、由本方法直接写进世界的格往这里记(直接写的落位与创造模式清掉的格),交给演出
      * @return 落位后的期望状态(有产出);null = 本遍先放下(已达标/缺料/她自己
      *         正站在这格里)
      */
-    private BlockState processCell(BuildTaskRecord.Target target) {
+    private BlockState processCell(BuildTaskRecord.Target target, List<BlockPos> written) {
         BlockPos pos = target.pos();
         BlockState desired = target.desiredState();
         if (desired != null && desired.getBlock() instanceof LiquidBlock) {
@@ -485,7 +457,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 加载判定要在读取<b>之前</b>:反过来的话第一句 getBlockState 就已经把区块
         // 同步生成出来了,后面这句永远为真,等于没判。
         if (!player.level().isLoaded(pos)) {
-            return null;   // 区块这一刻没加载:临时状况,留给下一次调用(不算注定动不了)
+            return missed(pos, BuildOutstanding.Cause.NOT_LOADED, null);   // 区块这一刻没加载
         }
         BlockState current = player.level().getBlockState(pos);
         if (target.matches(current)) {
@@ -500,9 +472,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 草坪挖出一条沟,然后一格墙都没砌。她自己站在那格里时更糟:脚下先被挖空。
         // 破坏是不可撤销的,所以它必须是这一格的最后一道动作,不是第一道。
         if (rules.blockedByEntity(pos, desired)) {
-            // 谁都不豁免——包括她自己:身体占着的格子这一次先放下,下一次调用时她多半已经挪开了。
-            // 防的是把方块塞进活物身体里这类真事故。
-            return null;
+            // 谁都不豁免——包括她自己:身体占着的格子不放。防的是把方块塞进活物身体里这类真事故。
+            return missed(pos, BuildOutstanding.Cause.BLOCKED_BY_ENTITY, whoStands(pos));
         }
         // 让路档位与方块实体保护要在<b>动手前复查</b>,不能只在遍首排队时查过一次。
         // 一遍可能跑好几分钟:玩家在这期间往目标格放了个箱子,而队列是几分钟前排的,
@@ -515,23 +486,23 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
         int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
         if (cost > 0 && !inv.hasItems(target.item(), cost, true)) {
-            noteShortage(target.item(), cost);
-            return null;
+            return missed(pos, BuildOutstanding.Cause.SHORT_OF_MATERIAL, null);
         }
 
         if (occupied) {
             if (!WorkProfile.of(player).instaBreak()) {
-                // 生存:立着的方块由 numen.work.dig 挖开,这里不挖;轮到时还立着就放下,回执算进"要先挖开的"
-                return null;
+                // 生存:立着的方块由 numen.work.dig 挖开,这里不挖,回执算进"要先挖开的"
+                return missed(pos, BuildOutstanding.Cause.DIG_FIRST, null);
             }
             // 创造:原版一下就碎——写成空气,邻居照原版反应(贴着它的火把掉下来),所以这一次通知邻居;要放方块的接着落位
             if (!player.level().setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
                     net.minecraft.world.level.block.Block.UPDATE_ALL)) {
-                return null;
+                return missed(pos, BuildOutstanding.Cause.REFUSED, null);
             }
             r.brokeOne();
             if (BuildCellRules.isAirTarget(target)) {
                 markObserved(target, true);
+                written.add(pos);
                 return desired;
             }
         }
@@ -540,189 +511,105 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return null;
         }
 
-        if (target.itemPlace()) {
-            placeWithItem(target, pos);
-            // 落没落成看世界,不看返回值:物品的 place 可以吃掉点击却什么都没放。
-            // 拒收(保护、事件被取消、立不住)就本遍放下——零进展遍机制照常裁决。
-            BlockState now = player.level().getBlockState(pos);
-            if (!target.matches(now)) {
-                return null;
-            }
-            r.placedOne(occupied);
-            markObserved(target, true);
-            return now;
+        // 落没落成由 BuildPlacer 看世界判:手放被拒(保护、事件被取消)与直接写不进去(超出建造高度)都是世界没变,不记账。
+        BuildPlacer.Way way = placer.place(target, cost);
+        if (way == null) {
+            return missed(pos, BuildOutstanding.Cause.REFUSED, null);
         }
-
-        // 写不进去就什么都不算:setBlock 在超出建造高度时直接返回假、世界毫无变化。
-        // 照样扣料 + 记一笔 placed 的后果是,那一格永远对不上、每遍重来,三遍下来
-        // 材料凭空消失三倍,而进度报的比实际多三倍。hopeless 已经把这类格从分母里
-        // 摘掉了,这里是第二道:世界说没写成,就是没写成。
-        if (!player.level().setBlock(pos, desired, PLACE_FLAGS)) {
-            return null;
+        BlockState now = player.level().getBlockState(pos);
+        if (way == BuildPlacer.Way.SET_DIRECTLY) {
+            written.add(pos);
         }
-        // 放完给方块一次"我被放下了"的回调:命名牌、告示牌、部分方块实体靠它初始化。
-        //
-        // <p>这一句和上面 PLACE_FLAGS 那段是有张力的:那段刻意不走通知链路,而这条
-        // 回调会把一部分邻居更新引回来——门/床/高草的 setPlacedBy 自己用带更新的方式
-        // 写另一半,活塞的会去判断该不该伸出。这是<b>知情的取舍</b>:双格方块的另一半
-        // 本来就该由这条回调来造,所以次半根本不进目标集(见
-        // {@code BuildStates#isSecondaryHalf})。别改成两半都进集、次半记 0 件靠
-        // "轮到它时比对已成立直接短路"兜着——那条推理对门成立(另一半恒在正上方,
-        // 按 y 排序主半必先落位),对床不成立:床的两半同 y,朝北时床头的 z 更小会先
-        // 落位,而床的回调写的是"朝向再往外一格",那一格在目标集之外。活塞伸出是原版
-        // 该有的行为(我们只禁止把活塞头当建材单独摆)。写在这里是为了让下一个排查
-        // "为什么某些格被改写"的人不必先怀疑 PLACE_FLAGS 失效。
-        //
-        // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
-        // 个别方块会在里面自己炸掉,而那不该让整栋楼停工。
-        try {
-            // 回调拿到的是"她手里那件东西"
-            desired.getBlock().setPlacedBy(player.level(), pos, desired, player, new ItemStack(target.item()));
-        } catch (RuntimeException ignored) {
-            // 放置本身已经成功,回调失败只影响那一格的附加数据
+        r.placedOne(occupied, way == BuildPlacer.Way.SET_DIRECTLY);
+        if (!target.matches(now)) {
+            // 放下去了,原版随即弹掉或改了样子:以世界为准,不算完成、不记账,这一次也不重放。动过手,算这一刻的预算
+            missed.put(pos.asLong(), new Miss(BuildOutstanding.Cause.DID_NOT_STAY, whyNotStay(target, now)));
+            return desired;
         }
-        for (int k = 0; k < cost; k++) {
-            inv.consumeOne(target.item());
-        }
-        // 照图直写不经 BlockItem.place,放置记录在这里记:这一格(连回调补出的另一半)是她放的。物品车道由那里的 mixin 记
-        PlacedBlocks.placedBy(player.serverLevel(), pos, player);
-        r.placedOne(occupied);
         markObserved(target, true);
-        return desired;
+        return now;
     }
 
-    /**
-     * 记一笔缺料,并在<b>本遍第一次</b>缺料时判断这一遍是不是已经死了。
-     *
-     * <p>{@code passMissing.isEmpty()} 恰好是那一次边沿,不必另记状态去重。
-     * (【事件挂点】要把"她没料了"推给她时也在这里 emit,前提是先在 GameEvents.Kind
-     * 里登记一个词——那是 Numen API 的改动。)
-     *
-     * <p>判据是<b>状态量</b>:剩下的待建格里,还有没有哪怕一格是她此刻付得起的。有——
-     * 这一遍还能推进,照常走;一格都没有——这一遍已经证明是死的,不必再把剩下的层空翻
-     * 一遍,更不必等三个零进展遍。
-     */
-    private void noteShortage(Item item, int count) {
-        boolean firstShortageThisPass = passMissing.isEmpty();
-        passMissing.merge(item, count, Integer::sum);
-        if (firstShortageThisPass && !passStarved && !canStillAffordAnyPendingCell()) {
-            passStarved = true;
+    /** 这一格轮到了却没放好:记下原因,本次调用不再回头;没产出。 */
+    private BlockState missed(BlockPos pos, BuildOutstanding.Cause cause, String detail) {
+        missed.put(pos.asLong(), new Miss(cause, detail));
+        return null;
+    }
+
+    /** 站在这一格里的是谁:她自己、或身份格式的某只实体;认不出是空。 */
+    private String whoStands(BlockPos pos) {
+        for (net.minecraft.world.entity.Entity e : player.level().getEntities((net.minecraft.world.entity.Entity) null,
+                new net.minecraft.world.phys.AABB(pos), e -> !e.isSpectator())) {
+            return e == player ? "you are standing in it" : com.dwinovo.numen.api.sdk.EntityLabel.of(e) + " is in it";
         }
+        return null;
     }
 
     /**
-     * 剩下的待建格里,还有没有哪怕一格是她此刻付得起的。
-     *
-     * <p>逐格问而不是拿"总需求 vs 背包"的聚合缺口来推:聚合缺口回答的是"全部建完还差
-     * 多少",而这里要回答的是"还能不能再放下一格"。两者不等价——她可能凑不齐整栋楼,
-     * 却还能砌十堵墙,那时候停下来是错的。
+     * 放下去的 {@code target} 此刻在世界里是 {@code now},为什么没留住——只说服务端此刻知道的:原版的存活判断(canSurvive)过不过、
+     * 周围六格是什么;样子被改了就说改成了什么。
      */
-    private boolean canStillAffordAnyPendingCell() {
+    private String whyNotStay(BuildTaskRecord.Target target, BlockState now) {
+        BlockState wanted = target.desiredState();
+        BlockPos pos = target.pos();
+        String id = BuildOutstanding.name(wanted.getBlock());
+        String at = com.dwinovo.numen.api.permission.Listing.coords(pos);
+        if (now.getBlock() == wanted.getBlock()) {
+            return id + " at " + at + " was reshaped by the world into " + now;
+        }
+        if (!wanted.canSurvive(player.level(), pos)) {
+            List<String> around = new ArrayList<>();
+            for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+                BlockPos next = pos.relative(side);
+                around.add(side.getName() + " " + com.dwinovo.numen.api.permission.Listing.coords(next) + " is "
+                        + BuildOutstanding.name(player.level().getBlockState(next).getBlock()));
+            }
+            return id + " at " + at + " cannot stay there — vanilla dropped it because nothing holds it (" + String.join(", ", around)
+                    + ")";
+        }
+        return id + " at " + at + " was turned into " + BuildOutstanding.name(now.getBlock()) + " by the world";
+    }
+
+    /**
+     * 没有待建的格(都对上了、都不去动)算付得起——那不是缺料,别的判据会说;有待建的格,其中有一格她此刻付得起也算。
+     *
+     * <p>逐格问而不是拿"总需求 vs 背包"的聚合缺口来推:聚合缺口回答的是"全部建完还差多少",而这里要回答的是"能不能开始放"。
+     * 她可能凑不齐整栋楼,却还能砌十堵墙。
+     */
+    private boolean canPayForAnyPendingCell() {
         BuildSurvey survey = survey();
+        boolean pending = false;
         for (BuildTaskRecord.Target target : r.targets) {
             if (target.matches(rules.peek(target.pos()))) continue;
             if (rules.blockedByMode(target) || rules.hopeless(target)) continue;
+            pending = true;
             if (survey.affordable(target)) {
                 return true;
             }
         }
-        return false;
+        return !pending;
     }
 
     /**
-     * 原生车道:把这件物品拿在手里,对目标格来一次真右键({@code gameMode.useItemOn})。
-     *
-     * <p>图纸格照图直写是对的——精确落位是它的语义;而没提任何摆放要求的单格 set
-     * 要的是"放一个工作台",那是玩家动作:朝向随她的视线,模组钩在物品放置流程上的
-     * 转换(换方块、造方块实体)照常发生,放置事件可被领地类模组取消——她放不了的
-     * 地方,主人亲手也放不了。扣料也交给原版从手上的那叠扣:原版创造模式下不扣,
-     * 与 {@code BuildInventory.consumeOne} 按 {@code WorkProfile.freeMaterials} 不扣是同一个模式。
-     *
-     * <p>只按主手,不走 {@code Interaction} 的双手按键:那是准星语义(主手没吃掉就轮
-     * 副手),在这里副手若拿着别的方块,会把错的东西放进格子。
-     *
-     * <p>命中点合成在格子中心:格内是可替换方块时 {@code BlockPlaceContext} 原地落位,
-     * 不需要邻面,悬空格也放得出——能不能立住由原版 {@code canSurvive} 说了算。
-     */
-    private void placeWithItem(BuildTaskRecord.Target target, BlockPos pos) {
-        ItemStack restore = null;
-        if (r.consumeMaterials) {
-            int slot = inv.findSlot(target.item(), true);
-            if (slot < 0) {
-                return;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
-            }
-            player.hotbar().hold(slot);
-        } else {
-            // 免耗材:凭空一叠拿在手里,放完把原来的东西还回去,不动她的真背包
-            restore = player.getMainHandItem();
-            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
-                    new ItemStack(target.item()));
-        }
-        player.look().at(Vec3.atCenterOf(pos));
-        try {
-            var result = player.gameMode.useItemOn(player, player.level(),
-                    player.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND,
-                    new net.minecraft.world.phys.BlockHitResult(
-                            Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, pos, false));
-            if (result.consumesAction()) {
-                player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-            }
-        } finally {
-            if (restore != null) {
-                player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, restore);
-            }
-        }
-    }
-
-    /**
-     * 一遍走完就收场:够得着的每一格都轮到过一次。断了料,以缺料收场;一格都没放成,以放不下的缘由收场;放成了就是成功,回执说
-     * 还剩什么。再来一遍——剩下的等撑着它们的立起来、等站着的人走开、等补了料——是程序的事:{@code numen.build.raise} 再问一次
-     * {@code numen.build.diff},接着放。
+     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着其中最低一层的地方,在那里再放一站(轮过的格不再轮);没有就收场,
+     * 没放好的照实进回执。
      */
     private TaskState endPass() {
-        // 收遍要判完工,这一次必须精确——每刻那次只轮扫一片
+        // 收站要判完工,这一次必须精确——每刻那次只轮扫一片
         rescanAll();
         if (r.completed() + skippedCells >= r.targets.size()) {
             return conclude(null);
         }
-        // 动了手就是有进展:放下一格会让原版按邻居重算,把旁边一格本就立不住的(图纸点名要的、原版托不住的)带掉,净完成数
-        // 可以一格不涨;这一遍的活仍然做了,下一遍接着放。净完成数涨了而一格没动(别人替她盖了)也算。
-        boolean progressed = r.placed() + r.broken() > passStartActions || r.completed() > passStartCompleted;
-        com.dwinovo.numen.Constants.LOG.debug(
-                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 断料{}",
-                r.completed(), r.targets.size(), r.completed() - passStartCompleted,
-                passMissing.size(), passStarved);
-        // 断料:这一遍砌了二十格然后断料,和一格没砌就断料,对玩家是同一件事——她现在动不了了。先报干了多少,再报还差什么:
-        // 玩家要的是"还要凑多少",不是一句材料不足。已经砌好的部分留在世界里,不回滚。
-        if (passStarved || (!progressed && !passMissing.isEmpty())) {
-            return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
-                    + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
+        List<BlockPos> far = survey().tally().far();
+        // 上一趟走过去之后一格新的也没轮到:再走也是原地,剩下的算够不着
+        if (far.isEmpty() || tried.size() == triedWhenWalking) {
+            return conclude(null);
         }
-        // 手边的放完了(或一格也够不着)而还有够不着的:走到够得着最低一层剩下的格的地方再放一遍。走完一趟之后一遍下来什么也没放成,
-        // 再走也是原地,不走了
-        BuildSurvey.Tally tally = survey().tally();
-        boolean stalled = passFollowedWalk && !progressed;
-        passFollowedWalk = false;
-        // 这一遍放下了东西,撑着别的格的那一块立起来了(原来立不住的格现在够得着了):就地再来一遍
-        if (progressed && tally.count(BuildSurvey.State.REACH) > 0) {
-            beginPass();
-            return TaskState.RUNNING;
-        }
-        if (!tally.far().isEmpty() && !stalled) {
-            int lowest = tally.far().get(0).getY();
-            walkingTo = tally.far().stream().filter(p -> p.getY() == lowest).toList();
-            phase = Phase.WALK;
-            return TaskState.RUNNING;
-        }
-        if (!progressed) {
-            // 够得着却一格都放不下:走一遍这些格,留案再交代,失败的类型跟主导病因走。放不下就是放不下,不粉饰成成功。
-            BuildOutstanding outstanding = BuildOutstanding.survey(order, rules, skippedPos, player.level(),
-                    damagedCells);
-            outstanding.log(r.completed(), r.targets.size(), player.blockPosition());
-            return conclude(new Ending(outstanding.describe() + "; built " + r.completed() + "/"
-                    + r.targets.size(), outstanding.failure()));
-        }
-        return conclude(null);
+        int lowest = far.get(0).getY();
+        walkingTo = far.stream().filter(p -> p.getY() == lowest).toList();
+        triedWhenWalking = tried.size();
+        phase = Phase.WALK;
+        return TaskState.RUNNING;
     }
 
     // ------------------------------------------------------------------
@@ -740,66 +627,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 建完之后让世界落定一次:逐格告诉六邻"我在这儿",再通知一圈邻居。
-     *
-     * <h2>为什么施工期不能做、收尾可以</h2>
-     * 施工期世界是<b>半成品</b>——火把写下去时它靠的那面墙可能还没砌,这时候通知邻居
-     * 等于拿半成品复核每一格,贴附方块整批弹掉。建完复核的是成品:掉下来的只有在
-     * <b>完整世界里也确实站不住</b>的格,而它们本来也只是暂时活着(旁边任何一次方块
-     * 更新都会让它们掉)。
-     *
-     * <h2>两句话各管一件事</h2>
-     * {@code updateNeighbourShapes} 让邻居各自重算<b>自己的形状</b>(栅栏伸手、墙连上、
-     * 红石线不再是孤点);{@code updateNeighborsAt} 让世界<b>反应</b>(红石通电、站不住的
-     * 掉落)。两句都是原版自己的话,所以不必维护"哪些方块要补形状"的清单——列清单一定会漏。
-     *
-     * @return 落定之后与图纸不同的格数(掉了的 + 形状被重算的);如实进回执,不无声改动
-     */
-    private int settleWithWorld() {
-        var level = player.level();
-        List<BlockPos> built = new ArrayList<>();
-        for (BuildTaskRecord.Target t : r.targets) {
-            if (BuildCellRules.isAirTarget(t)) continue;
-            if (level.getBlockState(t.pos()).is(t.desiredState().getBlock())) {
-                built.add(t.pos());
-            }
-        }
-        for (BlockPos pos : built) {
-            BlockState current = level.getBlockState(pos);
-            if (current.isAir()) continue;
-            current.updateNeighbourShapes(level, pos, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
-            level.updateNeighborsAt(pos, current.getBlock());
-        }
-        // 落定之后还对不对得上图纸:掉了的、形状被邻居改写的,都算"不同"。
-        int settled = 0;
-        for (BuildTaskRecord.Target t : r.targets) {
-            if (BuildCellRules.isAirTarget(t)) continue;
-            if (!built.contains(t.pos())) continue;
-            if (!t.matches(level.getBlockState(t.pos()))) {
-                settled++;
-            }
-        }
-        r.settledAway(settled);
-        if (settled > 0) {
-            // 落定改了东西就记一笔:排查"我图纸里明明画了"时,第一眼要看的就是它
-            com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-task] build 落定后 {}/{} 格与图纸不同(站不住的掉了、形状按邻居重算了)",
-                    settled, built.size());
-        }
-        return settled;
-    }
-
-    /**
-     * 够得着的放完了。整份都对上了才收尾:让世界落定一次、外围补水,放一把庆祝的粒子——半成品上落定会让还没有墙
-     * 可靠的贴附件掉下来,所以还剩格时只交代还剩什么、下一步去哪儿。
+     * 走完一遍。整份都对上了才收尾:生成摆设、外围补水,放一把庆祝的粒子;还剩格时只交代没放好的格与原因,摆设留给放全那一次。
      */
     private TaskState finish() {
         player.controls().stop();
         if (r.completed() + skippedCells < r.targets.size()) {
-            note = remaining(survey().tally());
+            note = BuildOutstanding.sentence(outstanding());
             return TaskState.SUCCESS;
         }
-        int popped = settleWithWorld();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
         {
@@ -809,10 +644,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (skippedCells > 0) {
                 notes.add("left " + skippedCells + " cell(s) alone: what is there may not be moved, or the spot "
                         + "cannot be built on");
-            }
-            if (popped > 0) {
-                notes.add(popped + " cell(s) ended up different once the world settled — vanilla would not"
-                        + " hold them there, or their shape is decided by their neighbours");
             }
             note = notes.isEmpty() ? "all requested cells match" : String.join("; ", notes);
         }
@@ -856,9 +687,26 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private void rebuildOrder() {
         BuildSurvey survey = survey();
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
+        LongOpenHashSet reach = new LongOpenHashSet();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (survey.of(target) == BuildSurvey.State.REACH && !rules.blockedByMode(target)) {
+            if (survey.of(target) == BuildSurvey.State.REACH && !rules.blockedByMode(target)
+                    && !tried.contains(target.pos().asLong())) {
                 pending.add(target);
+                reach.add(target.pos().asLong());
+            }
+        }
+        // 托着它的还没立起来、放下去立不住的格:托着它的那一格也在这一站里放,才收进来(低层先、贴附件后,轮到它时托着它的已经
+        // 立起来了);托着它的在够不着的地方,等走过去之后的那一站
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (survey.of(target) != BuildSurvey.State.UNHELD || tried.contains(target.pos().asLong())
+                    || rules.blockedByMode(target) || !survey.reaches(target.pos())) {
+                continue;
+            }
+            for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+                if (reach.contains(target.pos().relative(side).asLong())) {
+                    pending.add(target);
+                    break;
+                }
             }
         }
         pending.sort(BuildOrder.BUILD_ORDER);
@@ -995,6 +843,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     // 收件箱对"有后台任务在跑"的事件是立刻开轮的,正合这一类:
                     // 墙正在被拆,不该等她下次想起来问进度才知道。
                     damagedCells++;
+                    missed.put(key, new Miss(BuildOutstanding.Cause.DID_NOT_STAY,
+                            BuildOutstanding.name(target.desiredState().getBlock()) + " at "
+                                    + com.dwinovo.numen.api.permission.Listing.coords(pos)
+                                    + " was in place and something removed it"));
                 }
             }
         }
@@ -1027,12 +879,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         Map<Item, Integer> shortfall = r.consumeMaterials
                 ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
         return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
-                r.replaced(), r.broken(),
+                r.setDirectly(), outstanding(), r.replaced(), r.broken(),
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
-                // 整份放完、世界落定一次之后与图纸不同的格:原版的裁决,再放一遍还是这样
-                r.settledAway() > 0 ? Optional.of(r.settledAway()) : Optional.empty(),
                 shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)));
     }
 
@@ -1042,25 +892,76 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Cells still to do.") int left,
                          @com.dwinovo.numen.api.sdk.Doc("Cells that now match.") int completed,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks placed.") int placed,
+                         @com.dwinovo.numen.api.sdk.Doc("Of those placed, the ones written straight into the world "
+                                 + "because a hand could not put them in that shape from where you stand (nothing to "
+                                 + "click against, or no click gives that state).") int setDirectly,
+                         @com.dwinovo.numen.api.sdk.Doc("The cells that were not placed, grouped by what stopped them, "
+                                 + "each with a sentence on what it was and a next step; empty when everything went in. "
+                                 + "Each cell got one turn in this call.") List<BuildOutstanding.Unplaced> unplaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks that stood there and were swapped for the right one.")
                          int replaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
-                         @com.dwinovo.numen.api.sdk.Doc("When the last cell went in: cells that changed once the world "
-                                 + "settled (vanilla would not hold them as drawn, or their neighbours reshape them).")
-                         Optional<Integer> settledAway,
                          @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
 
         /** 要的样子已经立着,什么都没放。 */
-        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty());
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, Optional.empty(), Optional.empty(),
+                Optional.empty());
+    }
+
+    /**
+     * 此刻没放好的格,按原因分组:轮到过的用当时记下的原因,没轮到的按此刻的情形现判({@link BuildSurvey.State})。
+     * 被摘出分母的(让路档位不许、权限不许)是 {@code left_alone}。
+     */
+    private List<BuildOutstanding.Unplaced> outstanding() {
+        BuildSurvey survey = survey();
+        List<BuildOutstanding.Cell> cells = new ArrayList<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            BlockPos pos = target.pos();
+            BlockState actual = rules.peek(pos);
+            BuildSurvey.State state = survey.of(target);
+            if (state == BuildSurvey.State.DONE) {
+                continue;
+            }
+            Miss miss = missed.get(pos.asLong());
+            BuildOutstanding.Cause cause;
+            String detail = null;
+            if (miss != null) {
+                cause = miss.cause();
+                detail = miss.detail();
+            } else if (target.noItem()) {
+                cause = BuildOutstanding.Cause.NO_ITEM;
+                detail = com.dwinovo.numen.build.BuildStates.noItemReason(target.block());
+            } else if (state == BuildSurvey.State.SKIPPED) {
+                cause = BuildOutstanding.Cause.LEFT_ALONE;
+            } else if (state == BuildSurvey.State.DIG) {
+                cause = BuildOutstanding.Cause.DIG_FIRST;
+            } else if (state == BuildSurvey.State.SHORT) {
+                cause = BuildOutstanding.Cause.SHORT_OF_MATERIAL;
+            } else if (state == BuildSurvey.State.UNHELD) {
+                cause = BuildOutstanding.Cause.NOTHING_HOLDS_IT;
+            } else if (state == BuildSurvey.State.FAR) {
+                cause = BuildOutstanding.Cause.OUT_OF_REACH;
+                detail = walkFailure == null ? null : "the walk there failed: " + walkFailure;
+            } else {
+                cause = BuildOutstanding.Cause.UNFINISHED;
+            }
+            cells.add(new BuildOutstanding.Cell(cause, target, actual, detail));
+        }
+        Map<Item, Integer> shortfall = r.consumeMaterials
+                ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
+        return BuildOutstanding.report(cells, shortfall.isEmpty() ? "" : BuildLedger.summarizeShortfall(shortfall));
     }
 
     /** 放了、换了、拆了多少格,这一句收工与收不了工都用。 */
     private String tally() {
         StringBuilder sb = new StringBuilder("placed ").append(r.placed());
+        if (r.setDirectly() > 0) {
+            sb.append(" (").append(r.setDirectly()).append(" written straight in: a hand could not put them in that "
+                    + "shape from where you stand)");
+        }
         if (r.replaced() > 0) {
             sb.append(" (").append(r.replaced()).append(" replacing what stood there)");
         }

@@ -1,7 +1,5 @@
 package com.dwinovo.numen.task.build;
 
-import com.dwinovo.numen.FailureType;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -17,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 收不了尾时的缺格清单:失败类型跟主导病因走,回执按病因 → 方块 → 坐标归堆。
+ * 没放好的格:回执按原因分组、按原因的固定先后排,每组数出格数、列出前几格的位置,说明点出方块与位置与细节,说不清楚的不写。
  * 需要 MC 注册表,无头引导失败时跳过而不失败。
  */
 @Tag("mc")
@@ -36,57 +34,50 @@ class BuildOutstandingTest {
         }
     }
 
-    private static BuildOutstanding.Cell poppy(BlockPos pos, BuildOutstanding.Cause cause) {
+    private static BuildOutstanding.Cell poppy(BlockPos pos, BuildOutstanding.Cause cause, String detail) {
         return new BuildOutstanding.Cell(cause, new BuildTaskRecord.Target(Blocks.POPPY, Items.POPPY, pos, "poppy"),
-                Blocks.AIR.defaultBlockState());
+                Blocks.AIR.defaultBlockState(), detail);
     }
 
-    private static BuildOutstanding.Cell stone(BlockPos pos, BuildOutstanding.Cause cause) {
+    private static BuildOutstanding.Cell stone(BlockPos pos, BuildOutstanding.Cause cause, String detail) {
         return new BuildOutstanding.Cell(cause, new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, pos, "stone"),
-                Blocks.AIR.defaultBlockState());
+                Blocks.AIR.defaultBlockState(), detail);
     }
 
     @Test
-    void failureFollowsTheDominantCause() {
-        assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
-        BlockPos a = new BlockPos(0, 64, 0);
-        BlockPos b = new BlockPos(1, 64, 0);
-        BlockPos c = new BlockPos(2, 64, 0);
-
-        assertEquals(FailureType.NO_SUPPORT, new BuildOutstanding(List.of(
-                poppy(a, BuildOutstanding.Cause.UNSUPPORTED), poppy(b, BuildOutstanding.Cause.UNSUPPORTED),
-                stone(c, BuildOutstanding.Cause.OCCUPIED)), 0).failure(),
-                "两格立不住、一格有人站着:立不住的多,按立不住报,不是没有路");
-        assertEquals(FailureType.ENTITY_BLOCKED, new BuildOutstanding(List.of(
-                poppy(a, BuildOutstanding.Cause.UNSUPPORTED), stone(b, BuildOutstanding.Cause.OCCUPIED)), 0).failure(),
-                "一样多时按病因的先后:有人站着排在前面");
-        assertEquals(FailureType.NOT_KEPT, new BuildOutstanding(List.of(
-                stone(a, BuildOutstanding.Cause.NOT_KEPT)), 0).failure());
-    }
-
-    @Test
-    void receiptGroupsByCauseThenBlock() {
+    void groupsComeInTheFixedOrderWithTheirCellsAndPositions() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
         BlockPos first = new BlockPos(100, 65, -20);
         BlockPos second = new BlockPos(100, 65, -18);
         BlockPos wall = new BlockPos(103, 64, -19);
-        BuildOutstanding outstanding = new BuildOutstanding(List.of(
-                poppy(first, BuildOutstanding.Cause.UNSUPPORTED),
-                stone(wall, BuildOutstanding.Cause.OCCUPIED),
-                poppy(second, BuildOutstanding.Cause.UNSUPPORTED)), 0);
+        var report = BuildOutstanding.report(List.of(
+                poppy(first, BuildOutstanding.Cause.DID_NOT_STAY, "poppy at 100,65,-20 cannot stay"),
+                stone(wall, BuildOutstanding.Cause.BLOCKED_BY_ENTITY, "you are standing in it"),
+                poppy(second, BuildOutstanding.Cause.DID_NOT_STAY, "poppy at 100,65,-18 cannot stay")), "");
 
-        String receipt = outstanding.describe();
-        assertTrue(receipt.startsWith("3 cell(s) unbuilt"), receipt);
-        String occupied = "1 blocked by someone standing there — ask them to step aside: 1 stone ("
-                + xyz(wall) + ")";
-        String unheld = "2 that vanilla physics will not hold at that spot (the design asks for something"
-                + " impossible there): 2 poppy (" + xyz(first) + "; " + xyz(second) + ")";
-        assertTrue(receipt.contains(occupied), receipt);
-        assertTrue(receipt.contains(unheld), receipt);
-        assertTrue(receipt.indexOf(occupied) < receipt.indexOf(unheld), "病因按固定的先后排:" + receipt);
+        assertEquals(2, report.size());
+        assertEquals("blocked_by_entity", report.get(0).kind(), "原因按固定的先后排:有人站着在前");
+        assertEquals("did_not_stay", report.get(1).kind());
+        assertEquals(2, report.get(1).cells());
+        assertEquals(List.of(first, second), report.get(1).first());
+        assertTrue(report.get(0).says().contains("1 stone (103,64,-19)") && report.get(0).says().contains("you are standing in it"),
+                report.get(0).says());
+        assertTrue(report.get(1).says().contains("poppy at 100,65,-20 cannot stay")
+                && report.get(1).says().contains("poppy at 100,65,-18 cannot stay"), report.get(1).says());
     }
 
-    private static String xyz(BlockPos p) {
-        return p.getX() + "," + p.getY() + "," + p.getZ();
+    @Test
+    void theFirstFewPositionsAreListedNotAllOfThem() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
+        List<BuildOutstanding.Cell> cells = new java.util.ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            cells.add(stone(new BlockPos(i, 64, 0), BuildOutstanding.Cause.SHORT_OF_MATERIAL, null));
+        }
+        var report = BuildOutstanding.report(cells, "40 stone");
+        assertEquals(1, report.size());
+        assertEquals(40, report.get(0).cells());
+        assertEquals(5, report.get(0).first().size());
+        assertTrue(report.get(0).says().contains("you still need 40 stone"), report.get(0).says());
+        assertTrue(report.get(0).hint().isPresent());
     }
 }

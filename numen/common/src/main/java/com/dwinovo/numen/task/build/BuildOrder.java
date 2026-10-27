@@ -17,14 +17,10 @@ public final class BuildOrder {
     private BuildOrder() {}
 
     /**
-     * 施工节奏:由<b>目标总时长</b>反推速率,再夹在上下限之间。
-     *
-     * <p>固定速率两头不讨好:定成"每秒两格"的手感,小屋四分钟正好,五千多格的
-     * 大屋要盖四十九分钟;定快了小屋一眨眼就没了。改成先给一个总时长目标,速率
-     * 由格数除出来——不管盖多大,时长都可预期,而且都有戏看。
+     * 施工节奏。生存模式是人手放方块的固定速度,不随工程大小压缩:一件活多大就花多久,手放的每一格都是一次真的点击。
+     * 创造模式快,但不瞬移:按目标时长反推速率,夹在上限之下。
      */
-    static final double SURVIVAL_MIN_RATE = 2.0 / 20.0;    // 每秒 2 格,慢的那一头
-    static final double SURVIVAL_TARGET_TICKS = 12 * 60 * 20;   // 再大也不超过 12 分钟
+    static final double SURVIVAL_RATE = 4.0 / 20.0;        // 每秒 4 格
     static final double FREE_MAX_RATE = 100.0 / 20.0;      // 创造快,但不瞬移
     static final double FREE_TARGET_TICKS = 25 * 20;       // 一段施工至少演 25 秒
 
@@ -32,7 +28,7 @@ public final class BuildOrder {
     public static final int MAX_CELLS_PER_TICK = 8;
 
     /**
-     * 这件活是一个动作,不是一段施工:整件活装得进一刻的落位上限({@link #MAX_CELLS_PER_TICK}),就一刻放完、放完收工,
+     * 创造模式下这件活是一个动作,不是一段施工:整件活装得进一刻的落位上限({@link #MAX_CELLS_PER_TICK}),就一刻放完、放完收工,
      * 不绕着工地走,也没有最短时长。
      *
      * <p>判据取这条上限而不是另定一个"几格",因为速率模型里只有它回答"多少格可以同时出现":上限之内的格在同一刻落下
@@ -99,27 +95,21 @@ public final class BuildOrder {
     /**
      * 这一趟的落位速率(开工时算一次,全程恒定)。
      *
-     * <p>目标时长封顶、速率由格数除出来:小工程走下限速率,自然比封顶短;大工程
-     * 一开始就更快,总时长收敛到封顶值。不是"越盖越快",也没有到点强制收工。
-     * 一个动作({@link #instant})不走这条:整件活在第一刻落下。
+     * <p>生存是 {@link #SURVIVAL_RATE}。创造的目标时长封顶、速率由格数除出来:小工程自然比封顶短,大工程一开始就更快。
+     * 创造下的一个动作({@link #instant})不走这条:整件活在第一刻落下。
      */
     public static double paceFor(int cellCount, boolean consumeMaterials) {
         int cells = Math.max(1, cellCount);
-        if (instant(cells)) {
-            return cells;
+        if (consumeMaterials) {
+            return SURVIVAL_RATE;
         }
-        return consumeMaterials
-                ? Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS)
-                : Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
+        return instant(cells) ? cells : Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
     }
 
     /**
      * 施工预计要多少刻——派发方据此定时限。
      *
-     * <p>必须和 {@link #paceFor} 用同一个公式算,不能各拍各的:此前时限按"每格
-     * 固定几刻"估,而我把"每秒两格"错记成了"每刻两格",于是最慢档的真实开销
-     * (每格十刻)被低估了二十倍,五百格的生存建筑会在盖到一半时被判超时——而
-     * 一千四百格以下走的都是这个下限速率,也就是大多数房子。
+     * <p>必须和 {@link #paceFor} 用同一个公式算,不能各拍各的:时限若另估一套,真实开销被低估时,大一点的生存建筑会在盖到一半时被判超时。
      */
     public static long estimatedTicks(int cellCount, boolean consumeMaterials) {
         return (long) Math.ceil(Math.max(1, cellCount) / paceFor(cellCount, consumeMaterials));
@@ -131,8 +121,7 @@ public final class BuildOrder {
     private static final double DEADLINE_SLACK = 1.6;
 
     /**
-     * 施工时限:走到工地外圈的行程 + 施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}——时限若另估一套,
-     * 生存最慢档每格十刻的真实开销会被低估,五百格的房子盖到一半就被判超时。
+     * 施工时限:走到工地外圈的行程 + 施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}。
      */
     public static long deadlineTicks(int cellCount, boolean consumeMaterials) {
         return Math.max(MIN_DEADLINE_TICKS,

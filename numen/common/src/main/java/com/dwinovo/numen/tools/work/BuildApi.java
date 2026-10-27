@@ -44,6 +44,17 @@ public final class BuildApi {
             + "`numen.move.to`, digging and building when going around costs more, and is told in the result. "
             + "`numen.build.diff` says what is still to do and where without moving; whether to go over what is left "
             + "again is yours to decide.")
+    @Note("Each cell is placed by hand, the way a player does: standing where you are, it looks at a face of a block next to "
+            + "the cell (or at the cell itself where grass or snow stands) and clicks it with the block in hand; survival "
+            + "goes at four blocks a second. Where no click from here can give the shape the design asks for (nothing to "
+            + "click against, a facing or half no click makes), or a cell takes more than one item, the block is written "
+            + "straight into the world instead, and `set_directly` in the result counts those cells. Both ways update the "
+            + "neighbours the way vanilla does (redstone connects, panes and fences join, stairs take their shape), and "
+            + "the world has the last word: a block vanilla drops (a torch with nothing to hold it) is not done.")
+    @Note("What was not placed is not a failure: the result's `unplaced` groups those cells by reason (`dig_first`, "
+            + "`short_of_material`, `out_of_reach`, `nothing_holds_it`, `blocked_by_entity`, `refused`, `did_not_stay`, "
+            + "`left_alone`), each with a sentence saying what stopped them and a hint for the next step. Fix that and "
+            + "call it again: what already stands is skipped.")
     @Note("Background work: fails at once with kind out_of_reach when nothing of it can be placed or walked up to yet "
             + "(the cells hold other blocks to dig out first, or nothing holds them), with what is left and a hint; "
             + "nothing starts. When everything already looks like it, it returns at once with nothing placed.")

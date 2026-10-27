@@ -8,9 +8,12 @@ import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.ResultContainer;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -19,13 +22,14 @@ import java.util.List;
 
 /**
  * Paper 上的 {@link IVanillaAccess}:Paper 的服务端是 Mojang 名。{@code pickupDelay} 与 {@code dataSlots} 在 Paper 上是公开成员,
- * 直接用;{@code nibble} 与 {@code slotChangedCraftingGrid} 仍是私有 / 受保护的,按名字找,句柄一次查好缓存。
+ * 直接用;{@code nibble}、{@code slotChangedCraftingGrid} 与 {@code getPlacementState} 仍是私有 / 受保护的,按名字找,句柄一次查好缓存。
  * 找不到(换了版本改了名)是类加载时就抛的错,不是等到有人用才发现。
  */
 public final class PaperVanillaAccess implements IVanillaAccess {
 
     private static final MethodHandle NIBBLE;
     private static final MethodHandle RECOMPUTE;
+    private static final MethodHandle PLACEMENT_STATE;
 
     static {
         try {
@@ -35,6 +39,9 @@ public final class PaperVanillaAccess implements IVanillaAccess {
                     .findStatic(CraftingMenu.class, "slotChangedCraftingGrid", MethodType.methodType(void.class,
                             AbstractContainerMenu.class, Level.class, Player.class, CraftingContainer.class,
                             ResultContainer.class, RecipeHolder.class));
+            PLACEMENT_STATE = MethodHandles.privateLookupIn(BlockItem.class, MethodHandles.lookup())
+                    .findVirtual(BlockItem.class, "getPlacementState",
+                            MethodType.methodType(BlockState.class, BlockPlaceContext.class));
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -67,6 +74,15 @@ public final class PaperVanillaAccess implements IVanillaAccess {
             RECOMPUTE.invokeExact(menu, level, player, grid, result, (RecipeHolder) hint);
         } catch (Throwable t) {
             throw new IllegalStateException("CraftingMenu.slotChangedCraftingGrid 抛了异常", t);
+        }
+    }
+
+    @Override
+    public BlockState placementState(BlockItem item, BlockPlaceContext context) {
+        try {
+            return (BlockState) PLACEMENT_STATE.invokeExact(item, context);
+        } catch (Throwable t) {
+            throw new IllegalStateException("BlockItem.getPlacementState 抛了异常", t);
         }
     }
 }
