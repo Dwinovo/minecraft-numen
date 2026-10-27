@@ -59,7 +59,7 @@ final class TerrainReads {
     }
 
     /** 这些格各自水平向外 margin 格盖到的区块都已加载:两块相隔很远的格只要那两处,不要中间那一大片。 */
-    private static void requireAround(LoadedBlocks w, List<BlockPos> cells, int margin) {
+    static void requireAround(LoadedBlocks w, List<BlockPos> cells, int margin) {
         Set<Long> chunks = new HashSet<>();
         for (BlockPos p : cells) {
             for (int cx = (p.getX() - margin) >> 4; cx <= (p.getX() + margin) >> 4; cx++) {
@@ -318,12 +318,22 @@ final class TerrainReads {
 
     /** 核盖不到的(出了数据边)按这一格自己算;结果加 offset 再取整。 */
     private static int[] convolve(int[] in, int width, int height, float[] kernel, int radius, float offset) {
-        int diameter = radius * 2 + 1;
         float[] data = new float[in.length];
         for (int i = 0; i < in.length; i++) {
             data[i] = in[i];
         }
+        float[] sums = convolve(data, width, height, kernel, radius);
         int[] out = new int[in.length];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = (int) Math.floor(sums[i] + offset);
+        }
+        return out;
+    }
+
+    /** 核卷过一遍高度图,不取整(雪层的高度图是小数)。 */
+    private static float[] convolve(float[] data, int width, int height, float[] kernel, int radius) {
+        int diameter = radius * 2 + 1;
+        float[] out = new float[data.length];
         int index = 0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -345,8 +355,209 @@ final class TerrainReads {
                         sum += f * data[oy * width + ox];
                     }
                 }
-                out[index++] = (int) Math.floor(sum + offset);
+                out[index++] = sum;
             }
+        }
+        return out;
+    }
+
+    /**
+     * {@code //snowsmooth}:和 smooth 同一份高度图与高斯核,只是高度带小数(雪层一层是 1/8 格):每列的高度是地面上雪的高度,
+     * 卷积后加半层,按新高度铺雪(下面 layerBlocks 格是雪块,再往下抄原来的)。
+     */
+    static List<BlockAt> snowSmooth(LoadedBlocks w, BlockPos lo, BlockPos hi, int iterations, Mask mask, int layerBlocks, int reach) {
+        w.require(lo.getX() - reach, lo.getZ() - reach, hi.getX() + reach, hi.getZ() + reach);
+        int width = hi.getX() - lo.getX() + 1;
+        int length = hi.getZ() - lo.getZ() + 1;
+        int originY = lo.getY();
+        int maxY = hi.getY();
+        float[] data = new float[width * length];
+        for (int z = 0; z < length; z++) {
+            for (int x = 0; x < width; x++) {
+                int xr = lo.getX() + x;
+                int zr = lo.getZ() + z;
+                int top = highest(w, xr, zr, originY, maxY, mask);
+                BlockState upper = w.at(xr, top + 1, zr);
+                data[z * width + x] = upper.is(Blocks.SNOW)
+                        ? top + 1 + ((float) upper.getValue(SnowLayerBlock.LAYERS) - 1) / 8
+                        : w.at(xr, top, zr).isAir() ? top : top + 1;
+            }
+        }
+        float[] filtered = data.clone();
+        float[] kernel = gaussian(5, 1.0);
+        for (int i = 0; i < iterations; i++) {
+            filtered = convolve(filtered, width, length, kernel, 5);
+        }
+        for (int i = 0; i < filtered.length; i++) {
+            filtered[i] += 0.0625F;
+        }
+        List<BlockAt> out = new ArrayList<>();
+        BlockState snowBlock = Blocks.SNOW_BLOCK.defaultBlockState();
+        for (int z = 0; z < length; z++) {
+            for (int x = 0; x < width; x++) {
+                int index = z * width + x;
+                float current = data[index];
+                if (current == originY) {
+                    continue;
+                }
+                float target = Math.min(maxY, filtered[index]);
+                int xr = lo.getX() + x;
+                int zr = lo.getZ() + z;
+                double scale = (double) (current - originY) / (double) (target - originY);
+                if (target >= current) {
+                    if (liquid(w.at(xr, (int) Math.floor(current), zr))) {
+                        continue;
+                    }
+                    putSnowLayer(w, out, xr, zr, target);
+                    for (int y = (int) Math.floor(target - 1 - originY); y >= 0; y--) {
+                        put(w, out, xr, originY + y, zr, y >= Math.floor(target - 1 - originY - layerBlocks) ? snowBlock
+                                : w.at(xr, originY + (int) Math.floor(y * scale), zr));
+                    }
+                } else {
+                    for (int y = 0; y < (int) Math.floor(target - originY); y++) {
+                        put(w, out, xr, originY + y, zr, y >= (int) Math.floor(target - originY - layerBlocks) ? snowBlock
+                                : w.at(xr, originY + (int) Math.floor(y * scale), zr));
+                    }
+                    putSnowLayer(w, out, xr, zr, target);
+                    for (int y = (int) Math.floor(target + 1); y <= Math.floor(current); y++) {
+                        put(w, out, xr, y, zr, Blocks.AIR.defaultBlockState());
+                    }
+                }
+            }
+        }
+        return capped(out);
+    }
+
+    private static void putSnowLayer(LoadedBlocks w, List<BlockAt> out, int x, int z, float height) {
+        int y = (int) Math.floor(height);
+        int layers = (int) ((height - y) * 8) + 1;
+        put(w, out, x, y, z, Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, layers));
+    }
+
+    /**
+     * {@code //morph} 笔刷(erode 与 dilate 是它的两个预设):在 center 为心、半径 size 的球里,先侵蚀 erodeIterations 遍(实心方块露在外面的面
+     * 不少于 minErodeFaces 个,就变成露出的那些面里最多的空气或液体),再膨胀 dilateIterations 遍(空气或液体贴着的实心面不少于 minDilateFaces 个,
+     * 就变成贴着的面里最多的那种方块)。每一遍都读上一遍的结果。
+     */
+    static List<BlockAt> morph(LoadedBlocks w, BlockPos center, double size, int minErodeFaces, int erodeIterations,
+                               int minDilateFaces, int dilateIterations) {
+        int ceil = (int) Math.ceil(size);
+        int buffer = ceil * 2 + 3;
+        w.require(center.getX() - ceil - 1, center.getZ() - ceil - 1, center.getX() + ceil + 1, center.getZ() + ceil + 1);
+        BlockState[][][] current = new BlockState[buffer][buffer][buffer];
+        BlockState[][][] next = new BlockState[buffer][buffer][buffer];
+        for (int x = 0; x < buffer; x++) {
+            for (int y = 0; y < buffer; y++) {
+                for (int z = 0; z < buffer; z++) {
+                    BlockState state = w.at(center.getX() + x - ceil - 1, center.getY() + y - ceil - 1, center.getZ() + z - ceil - 1);
+                    current[x][y][z] = state;
+                    next[x][y][z] = state;
+                }
+            }
+        }
+        double sizeSq = size * size;
+        for (int i = 0; i < erodeIterations; i++) {
+            morphPass(current, next, ceil, sizeSq, true, minErodeFaces);
+            BlockState[][][] swap = current;
+            current = next;
+            next = swap;
+        }
+        for (int i = 0; i < dilateIterations; i++) {
+            morphPass(current, next, ceil, sizeSq, false, minDilateFaces);
+            BlockState[][][] swap = current;
+            current = next;
+            next = swap;
+        }
+        List<BlockAt> out = new ArrayList<>();
+        for (int x = 0; x < buffer; x++) {
+            for (int y = 0; y < buffer; y++) {
+                for (int z = 0; z < buffer; z++) {
+                    put(w, out, center.getX() + x - ceil - 1, center.getY() + y - ceil - 1, center.getZ() + z - ceil - 1, current[x][y][z]);
+                }
+            }
+        }
+        return capped(out);
+    }
+
+    private static boolean emptyOrLiquid(BlockState s) {
+        return s.isAir() || liquid(s);
+    }
+
+    /** 侵蚀(erode)看露出的面、改实心方块;膨胀看贴着的实心面、改空的格。 */
+    private static void morphPass(BlockState[][][] from, BlockState[][][] to, int ceil, double sizeSq, boolean erode, int minFaces) {
+        int span = ceil * 2;
+        for (int x = 0; x <= span; x++) {
+            for (int y = 0; y <= span; y++) {
+                for (int z = 0; z <= span; z++) {
+                    int rx = x - ceil;
+                    int ry = y - ceil;
+                    int rz = z - ceil;
+                    if (rx * rx + ry * ry + rz * rz > sizeSq) {
+                        continue;
+                    }
+                    BlockState state = from[x + 1][y + 1][z + 1];
+                    to[x + 1][y + 1][z + 1] = state;
+                    if (erode == emptyOrLiquid(state)) {
+                        continue;
+                    }
+                    Map<BlockState, Integer> frequency = new LinkedHashMap<>();
+                    int faces = 0;
+                    int best = 0;
+                    BlockState winner = state;
+                    for (Direction d : SIX) {
+                        BlockState adjacent = from[x + 1 + d.getStepX()][y + 1 + d.getStepY()][z + 1 + d.getStepZ()];
+                        if (erode != emptyOrLiquid(adjacent)) {
+                            continue;
+                        }
+                        faces++;
+                        int n = frequency.merge(adjacent, 1, Integer::sum);
+                        if (n > best) {
+                            best = n;
+                            winner = adjacent;
+                        }
+                    }
+                    if (faces >= minFaces) {
+                        to[x + 1][y + 1][z + 1] = winner;
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- 统计:count、distr ----
+
+    /** {@code //count}:这些格里世界方块过蒙版的有几个。 */
+    static int count(LoadedBlocks w, List<BlockPos> cells, Mask mask, int reach) {
+        requireAround(w, cells, reach);
+        int n = 0;
+        for (BlockPos p : cells) {
+            if (mask.test(w, p.getX(), p.getY(), p.getZ())) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** 一种方块和它有几个。 */
+    record Counted(String name, int count) {}
+
+    /** {@code //distr}:这些格里各种方块的数量(过蒙版的才算),多的在前;separate 时按方块状态分,否则按方块。 */
+    static List<Counted> distribution(LoadedBlocks w, List<BlockPos> cells, Mask mask, int reach, boolean separate) {
+        requireAround(w, cells, reach);
+        Map<BlockState, int[]> counts = new LinkedHashMap<>();
+        for (BlockPos p : cells) {
+            if (mask != null && !mask.test(w, p.getX(), p.getY(), p.getZ())) {
+                continue;
+            }
+            BlockState state = w.at(p);
+            counts.computeIfAbsent(separate ? state : state.getBlock().defaultBlockState(), k -> new int[1])[0]++;
+        }
+        List<Map.Entry<BlockState, int[]>> sorted = new ArrayList<>(counts.entrySet());
+        sorted.sort(java.util.Comparator.comparingInt(e -> e.getValue()[0]));
+        java.util.Collections.reverse(sorted);
+        List<Counted> out = new ArrayList<>();
+        for (Map.Entry<BlockState, int[]> e : sorted) {
+            out.add(new Counted(BuildStates.written(e.getKey()), e.getValue()[0]));
         }
         return out;
     }

@@ -369,4 +369,47 @@ class TerrainReadsTest {
         assertTrue(assertThrows(IllegalArgumentException.class, () -> TerrainReads.restate(world, cells, "^[half=sideways]"))
                 .getMessage().contains("sideways"));
     }
+
+    // ---- snowsmooth、morph、count、distr ----
+
+    @Test
+    void snowsmoothLaysOneSnowLayerOnFlatGroundAndALayerPerEighthOnASlope() {
+        FakeBlocks flat = FakeBlocks.flat(-1);
+        Map<String, String> laid = named(TerrainReads.snowSmooth(flat, at(0, -1, 0), at(2, 3, 2), 1, null, 1, 0));
+        assertEquals(18, laid.size(), "a snow layer on each of the 3 x 3 columns, and a snow block where the ground's top was");
+        assertEquals(9, laid.entrySet().stream().filter(e -> e.getKey().split(",")[1].equals("0") && e.getValue().equals("minecraft:snow")).count());
+        assertEquals(9, laid.entrySet().stream().filter(e -> e.getKey().split(",")[1].equals("-1") && e.getValue().equals("minecraft:snow_block")).count());
+        // a step: the column beside a raised one is blurred up by a few eighths, the raised one down
+        FakeBlocks step = FakeBlocks.flat(-1).fill(0, 0, 0, 0, 0, 2, "stone");
+        Map<String, String> smoothed = named(TerrainReads.snowSmooth(step, at(0, -1, 0), at(2, 3, 2), 1, null, 1, 0));
+        assertTrue(smoothed.get("1,0,1").startsWith("minecraft:snow[layers="), "the neighbour of the step gets more than the flat layer: " + smoothed);
+    }
+
+    @Test
+    void erodeWearsALoneBlockAwayAndDilateFillsAHoleSolidOnFiveSides() {
+        // erode preset (2, 1, 5, 1): a stone with air on five sides becomes air
+        FakeBlocks lone = FakeBlocks.flat(-1).put(0, 0, 0, "stone");
+        assertEquals(Map.of("0,0,0", "minecraft:air"), named(TerrainReads.morph(lone, at(0, 0, 0), 2, 2, 1, 5, 1)));
+        // dilate preset (5, 1, 2, 1): an empty cell with five solid faces fills with what is round it
+        FakeBlocks hole = FakeBlocks.flat(-1).put(0, -1, 0, "air");
+        assertEquals(Map.of("0,-1,0", "minecraft:stone"), named(TerrainReads.morph(hole, at(0, -1, 0), 2, 5, 1, 2, 1)));
+        // nothing outside the ball changes
+        assertTrue(TerrainReads.morph(FakeBlocks.flat(-1).put(6, 0, 0, "stone"), at(0, 0, 0), 2, 2, 1, 5, 1).isEmpty());
+    }
+
+    @Test
+    void countAndDistributionOnlyCountWhatPassesTheMaskAndListTheMostCommonFirst() {
+        FakeBlocks world = FakeBlocks.flat(-1).put(0, 0, 0, "dirt").put(1, 0, 0, "dirt").put(2, 0, 0, "oak_stairs[facing=east]")
+                .put(3, 0, 0, "oak_stairs[facing=north]");
+        List<BlockPos> cells = List.of(at(0, 0, 0), at(1, 0, 0), at(2, 0, 0), at(3, 0, 0), at(4, 0, 0));
+        assertEquals(2, TerrainReads.count(world, cells, ShapeMasks.parse("dirt"), 0));
+        assertEquals(4, TerrainReads.count(world, cells, ShapeMasks.parse("#existing"), 0));
+        List<TerrainReads.Counted> byBlock = TerrainReads.distribution(world, cells, null, 0, false);
+        assertEquals(List.of(new TerrainReads.Counted("minecraft:dirt", 2), new TerrainReads.Counted("minecraft:oak_stairs", 2),
+                new TerrainReads.Counted("minecraft:air", 1)).size(), byBlock.size());
+        assertEquals(2, byBlock.get(0).count());
+        assertEquals(1, byBlock.get(byBlock.size() - 1).count());
+        assertEquals(4, TerrainReads.distribution(world, cells, null, 0, true).size(), "by state, the two stairs are two kinds");
+        assertEquals(2, TerrainReads.distribution(world, cells, ShapeMasks.parse("dirt"), 0, false).get(0).count());
+    }
 }

@@ -38,6 +38,9 @@ final class FakeBlocks extends LoadedBlocks {
     }
 
     @Override
+    void requireLoaded(BlockPos pos) {}
+
+    @Override
     void requireChunks(java.util.Set<Long> chunks) {}
 
     @Override

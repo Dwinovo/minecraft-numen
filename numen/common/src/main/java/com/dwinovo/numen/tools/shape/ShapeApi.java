@@ -417,4 +417,183 @@ public final class ShapeApi {
                 args.intensity().orElse(5.0), args.erase().orElse(false), args.flatten().orElse(false),
                 args.randomize().orElse(false)));
     }
+
+    // ---- 雪层平滑、笔刷形状、统计 ----
+
+    /** 雪层平滑的范围。 */
+    public record SnowSmoothed(@Doc("One corner of the box to smooth.") BlockPos from, @Doc("The opposite corner.") BlockPos to,
+                               @Doc("How many passes of the smoothing.") @Omitted("1") Optional<Integer> iterations,
+                               @Doc("How many snow blocks to put under the snow layers.") @Omitted("1") Optional<Integer> layers,
+                               @Doc(MASKS + " The blocks that count as ground.") @Omitted("blocks that stop movement")
+                               Optional<String> mask) {}
+
+    @Fn("The blocks WorldEdit's //snowsmooth would write in a box: the ground's height, snow layers counted (an eighth of "
+            + "a block each), blurred like numen.shape.smoothed and laid as snow.")
+    @Example("numen.shape.snowsmoothed({x = 100, y = 60, z = -20}, {x = 110, y = 80, z = -10})")
+    @Note("Instant and read-only; Cells of Blocks (snow layers, snow blocks under them, air where the ground comes down). "
+            + "Region:snowsmooth does it for a selection. Only the cells that change come back. " + READS)
+    @SeeAlso({"numen.shape.smoothed"})
+    public static Design snowsmoothed(ServerCall call, SnowSmoothed args) {
+        BlockPos lo = new BlockPos(Math.min(args.from().getX(), args.to().getX()), Math.min(args.from().getY(), args.to().getY()),
+                Math.min(args.from().getZ(), args.to().getZ()));
+        BlockPos hi = new BlockPos(Math.max(args.from().getX(), args.to().getX()), Math.max(args.from().getY(), args.to().getY()),
+                Math.max(args.from().getZ(), args.to().getZ()));
+        String text = args.mask().orElse(null);
+        return blocks(TerrainReads.snowSmooth(world(call), lo, hi, args.iterations().orElse(1), text == null ? null : mask(text),
+                args.layers().orElse(1), text == null ? 0 : ShapeMasks.reach(text)));
+    }
+
+    /** 形变笔刷的范围与力度。 */
+    public record Morph(@Doc("The centre.") BlockPos at,
+                        @Doc("The radius of the ball it works in.") @Omitted("5") @Positional Optional<Double> radius,
+                        @Doc("A solid block with at least this many faces open to air or liquid is eroded.") @Omitted("3")
+                        Optional<Integer> erode_faces,
+                        @Doc("How many erode passes.") @Omitted("1") Optional<Integer> erode_passes,
+                        @Doc("An empty cell with at least this many solid faces beside it is filled.") @Omitted("3")
+                        Optional<Integer> dilate_faces,
+                        @Doc("How many dilate passes.") @Omitted("1") Optional<Integer> dilate_passes) {}
+
+    @Fn("The blocks WorldEdit's morph brush would write in a ball: erode (open-air faces wear solid blocks away), then dilate "
+            + "(solid faces fill the empty cells beside them).")
+    @Example("numen.shape.morph({x = 100, y = 64, z = -20}, 5)")
+    @Example("numen.shape.morph({x = 100, y = 64, z = -20}, 5, {erode_faces = 2, dilate_faces = 5})")
+    @Note("Instant and read-only; Cells of Blocks, only the cells that change. Each pass reads the one before. "
+            + "numen.shape.erode and numen.shape.dilate are the two presets. " + READS)
+    @SeeAlso({"numen.shape.erode", "numen.shape.dilate"})
+    public static Design morph(ServerCall call, Morph args) {
+        return blocks(TerrainReads.morph(world(call), args.at(), Math.max(0, args.radius().orElse(5.0)),
+                args.erode_faces().orElse(3), args.erode_passes().orElse(1), args.dilate_faces().orElse(3),
+                args.dilate_passes().orElse(1)));
+    }
+
+    /** 数格子。 */
+    public record Count(@Doc("The cells to count in: Cells or any list of Pos.") List<BlockPos> cells,
+                        @Doc(MASKS) String mask) {}
+
+    @Fn("How many of some cells hold a block that passes a mask (WorldEdit's //count).")
+    @Example("numen.shape.count({{x = 100, y = 64, z = -20}, {x = 101, y = 64, z = -20}}, \"stone,dirt\")")
+    @Note("Instant and read-only; a number. Region:count does it for a selection. " + READS)
+    @SeeAlso({"numen.shape.distr", "numen.shape.matching"})
+    public static int count(ServerCall call, Count args) {
+        return TerrainReads.count(world(call), args.cells(), mask(args.mask()), ShapeMasks.reach(args.mask()));
+    }
+
+    /** 方块分布的范围与选项。 */
+    public record Distr(@Doc("The cells to count in: Cells or any list of Pos.") List<BlockPos> cells,
+                        @Doc(MASKS + " Only blocks that pass are counted.") @Omitted("every block") Optional<String> mask,
+                        @Doc("Count each block state on its own (oak_stairs[facing=north] and oak_stairs[facing=east] apart).")
+                        Optional<Boolean> separate) {}
+
+    /** 一种方块与数量。 */
+    public record Counted(@Doc("The block, written as /setblock takes it.") String name, @Doc("How many cells hold it.") int count) {}
+
+    @Fn("How many cells of each kind of block some cells hold, the most common first (WorldEdit's //distr).")
+    @Example("numen.shape.distr({{x = 100, y = 64, z = -20}, {x = 101, y = 64, z = -20}})")
+    @Example("numen.shape.distr({{x = 100, y = 64, z = -20}}, {separate = true})")
+    @Note("Instant and read-only; a list of {name, count}. Air is counted like any block (pass the mask !air to leave it out). "
+            + "Region:distr does it for a selection. " + READS)
+    @SeeAlso({"numen.shape.count"})
+    public static List<Counted> distr(ServerCall call, Distr args) {
+        String text = args.mask().orElse(null);
+        return TerrainReads.distribution(world(call), args.cells(), text == null ? null : mask(text),
+                text == null ? 0 : ShapeMasks.reach(text), args.separate().orElse(false)).stream()
+                .map(c -> new Counted(c.name(), c.count())).toList();
+    }
+
+    // ---- 原版的生成器:跑在记录用的世界上,交回要写什么 ----
+
+    /** 生成器想要、Cells 装不下的东西。 */
+    public record Lost(@Doc("\"entity\" (the generator added a creature or an item frame), or \"block_entity\" (the block "
+            + "holds data: a chest's loot, a spawner's mob, a sign's text).") String kind,
+                       @Doc("The entity's id, or the block written as /setblock takes it.") String name,
+                       @Doc("Where.") BlockPos pos) {}
+
+    /** 生成的结果。 */
+    public record Grown(@Doc("What it writes, as Cells of Blocks; numen.build.place puts them in the world.") Design cells,
+                        @Doc("What the generator wanted that Cells cannot hold and is left out: entities it added, data of the "
+                                + "blocks it made. The blocks themselves are in cells.") List<Lost> lost) {}
+
+    private static Grown grown(Generators.Grown made) {
+        return new Grown(blocks(made.blocks()), made.lost().stream().map(l -> new Lost(l.kind(), l.name(), l.pos())).toList());
+    }
+
+    /** 地物或结构的位置与名字。 */
+    public record Generated(@Doc("Where it grows: a tree's trunk cell, a structure's chunk.") BlockPos at,
+                            @Doc("Its id in the game's registry, minecraft:oak (a mod's own ones work too).") String id) {}
+
+    @Fn("What one of the game's own configured features (a tree, an ore vein, a lake, a patch of flowers…) would write if it "
+            + "generated at a position (WorldEdit's //feature).")
+    @Example("numen.shape.feature({x = 100, y = 64, z = -20}, \"minecraft:oak\")")
+    @Note("Instant and read-only: the game's generator runs on a recorded level that reads the loaded world and writes "
+            + "nothing to it. Returns {cells, lost}: cells is the blocks it would write (liquids are in them as the game "
+            + "wrote them), lost is the entities it added and the data of block entities, which Cells cannot hold. It "
+            + "fails if the feature's own placement rules find no place at that position. Every feature the game or a "
+            + "mod registers works. " + READS)
+    @SeeAlso({"numen.shape.structure", "numen.build.place"})
+    public static Grown feature(ServerCall call, Generated args) {
+        return grown(Generators.feature(world(call), args.at(), args.id()));
+    }
+
+    @Fn("What one of the game's own structures (a village, a desert pyramid, a shipwreck…) would write if it generated in "
+            + "the chunk of a position (WorldEdit's //structure).")
+    @Example("numen.shape.structure({x = 100, y = 64, z = -20}, \"minecraft:desert_pyramid\")")
+    @Note("Instant and read-only: the game's generator runs on a recorded level that reads the loaded world and writes "
+            + "nothing to it. Returns {cells, lost} like numen.shape.feature. The structure's height follows the game's "
+            + "terrain generator, as in WorldEdit, and it can reach into the chunks around: all of them must be loaded. "
+            + "Every structure the game or a mod registers works. " + READS)
+    @SeeAlso({"numen.shape.feature", "numen.build.place"})
+    public static Grown structure(ServerCall call, Generated args) {
+        return grown(Generators.structure(world(call), args.at(), args.id()));
+    }
+
+    /** 树林或花草的范围与密度。 */
+    public record Planted(@Doc("The columns to plant in: Cells or any list of Pos (only x and z count).") List<BlockPos> columns,
+                          @Doc("The lowest y to look for ground at.") int minY, @Doc("The highest y to look for ground from.") int maxY,
+                          @Doc("The tree: a placed feature of the game that grows a tree (minecraft:oak_checked, "
+                                  + "minecraft:birch_checked, …, mods' too), worldedit:pine, or worldedit:random.")
+                          @Omitted("minecraft:oak_checked") Optional<String> tree,
+                          @Doc("The share of columns that get one, in percent from 0 to 100.") @Omitted("5") Optional<Double> density) {}
+
+    private static double percent(Optional<Double> density, String function) {
+        double value = density.orElse(5.0);
+        if (value < 0 || value > 100) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "density is from 0 to 100; got " + value,
+                    Call.of(function, List.of(new BlockPos(0, 64, 0)), 60, 80, 5));
+        }
+        return value / 100;
+    }
+
+    @Fn("What a forest would write over some columns: each column, at the share density says, gets a tree on its highest "
+            + "non-air block (WorldEdit's //forest).")
+    @Example("numen.shape.forest({{x = 100, y = 0, z = -20}, {x = 101, y = 0, z = -20}}, 60, 80, {tree = \"minecraft:birch_checked\", density = 50})")
+    @Note("Instant and read-only; returns {cells, lost} like numen.shape.feature. A tree is tried up to 10 times in a column "
+            + "(the game's trees often do not fit) and the column is left alone if none grows. Region:forest does it for "
+            + "a selection, numen.shape.forestgen for a square round a position. " + READS)
+    @SeeAlso({"numen.shape.feature", "numen.shape.flora"})
+    public static Grown forest(ServerCall call, Planted args) {
+        return grown(Generators.forest(world(call), args.columns(), args.minY(), args.maxY(),
+                args.tree().orElse(Generators.DEFAULT_TREE), percent(args.density(), "numen.shape.forest")));
+    }
+
+    @Fn("What flora would write over some columns: grass and small flowers on grass blocks, dead bushes and cacti on sand, one "
+            + "cell above the ground, at the share density says (WorldEdit's //flora).")
+    @Example("numen.shape.flora({{x = 100, y = 0, z = -20}, {x = 101, y = 0, z = -20}}, 60, 80, {density = 50})")
+    @Note("Instant and read-only; Cells of Blocks (only the cells that change). Region:flora does it for a selection. " + READS)
+    @SeeAlso({"numen.shape.forest"})
+    public static Design flora(ServerCall call, Planted args) {
+        return blocks(Generators.flora(world(call), args.columns(), args.minY(), args.maxY(),
+                percent(args.density(), "numen.shape.flora")));
+    }
+
+    /** 南瓜田的位置与大小。 */
+    public record Pumpkins(@Doc("The centre.") BlockPos at,
+                           @Doc("How far round it, in blocks.") @Omitted("10") @Positional Optional<Integer> radius) {}
+
+    @Fn("What pumpkin patches would write round a position: here and there on grass, a ring of leaves with oak logs and "
+            + "pumpkins (WorldEdit's //pumpkins).")
+    @Example("numen.shape.pumpkins({x = 100, y = 64, z = -20}, 10)")
+    @Note("Instant and read-only; Cells of Blocks. Ground is looked for from 10 layers above the centre down to 5 below. " + READS)
+    public static Design pumpkins(ServerCall call, Pumpkins args) {
+        return blocks(Generators.pumpkins(world(call), args.at(), Math.max(0, args.radius().orElse(10))));
+    }
 }

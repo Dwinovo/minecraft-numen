@@ -54,8 +54,15 @@ class LoadedBlocks {
         if (y < minY() || y > maxY()) {
             return Blocks.VOID_AIR.defaultBlockState();
         }
-        int cx = x >> 4;
-        int cz = z >> 4;
+        return chunkAt(x, z).getBlockState(cursor.set(x, y, z));
+    }
+
+    private ChunkAccess chunkAt(int x, int z) {
+        return chunk(x >> 4, z >> 4);
+    }
+
+    /** 已加载的这个区块;没加载就整个调用失败。 */
+    ChunkAccess chunk(int cx, int cz) {
         if (chunk == null || cx != chunkX || cz != chunkZ) {
             ChunkAccess loaded = BlockScanner.loadedChunk(level, cx, cz);
             if (loaded == null) {
@@ -65,7 +72,17 @@ class LoadedBlocks {
             chunkX = cx;
             chunkZ = cz;
         }
-        return chunk.getBlockState(cursor.set(x, y, z));
+        return chunk;
+    }
+
+    /** 这一格所在的区块已加载(写之前问:往没加载的区块写,等于要读它)。 */
+    void requireLoaded(BlockPos pos) {
+        chunkAt(pos.getX(), pos.getZ());
+    }
+
+    /** 这一格的群系,读已加载的区块。 */
+    net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biome(BlockPos pos) {
+        return chunkAt(pos.getX(), pos.getZ()).getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2, pos.getZ() >> 2);
     }
 
     BlockState at(BlockPos pos) {
