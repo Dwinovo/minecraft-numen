@@ -476,6 +476,37 @@ public class ScriptGameTests {
     }
 
     /**
+     * 形状里要游戏在场才答得出的两件:图案的标签({@code ##logs} 是标签里每个方块的默认状态,{@code ##*oak_logs} 是它们的每一种状态)读自这个世界
+     * 加载好的数据包,{@code expand_vert} 把选区拉到这个维度的最低到最高一格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void shape_reads_the_worlds_tags_and_height(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_shape_reader", new BlockPos(2, 2, 2), false);
+        ToolRun run = lua(her, """
+                local logs = numen.shape.pattern("##logs")[1].blocks
+                local oak = false
+                for _, b in ipairs(logs) do
+                  oak = oak or b == "minecraft:oak_log[axis=y]"
+                end
+                local tall = numen.shape.cuboid({x = 0, y = 64, z = 0}, {x = 1, y = 65, z = 1}):expand_vert():cells()
+                return {logs = #logs, oak = oak, oak_states = #numen.shape.pattern("##*oak_logs")[1].blocks,
+                        count = #tall, lowest = tall[1].y, highest = tall[#tall].y}
+                """);
+        helper.assertTrue(run.ranToTheEnd(), "the shape program failed: " + run.receipt());
+        var got = run.data().getAsJsonObject("returned");
+        helper.assertTrue(got.get("logs").getAsInt() >= 20 && got.get("oak").getAsBoolean(),
+                "##logs is every log of the tag, in its default state: " + got);
+        helper.assertTrue(got.get("oak_states").getAsInt() == 12, "##*oak_logs is 4 blocks of 3 axes: " + got);
+        int height = level.getMaxBuildHeight() - level.getMinBuildHeight();
+        helper.assertTrue(got.get("count").getAsInt() == 4 * height && got.get("lowest").getAsInt() == level.getMinBuildHeight()
+                        && got.get("highest").getAsInt() == level.getMaxBuildHeight() - 1,
+                "expand_vert reaches from the lowest to the highest block: " + got);
+        CompanionFactory.despawn(level.getServer(), her);
+        helper.succeed();
+    }
+
+    /**
      * 查到的东西原样交给动作:{@code numen.scan.blocks} 一团的最近一格、{@code numen.scan.block} 读到的一块,都直接进 {@code numen.work.dig};两格都挖掉,
      * 程序拿到的是两份数据({@code dug} 各一格),不是话。
      */
