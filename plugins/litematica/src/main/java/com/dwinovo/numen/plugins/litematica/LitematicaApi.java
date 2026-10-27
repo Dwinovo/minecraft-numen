@@ -86,7 +86,7 @@ public final class LitematicaApi {
                        @Omitted("the selected one") Optional<String> placement) {}
 
     @Fn("The cells of one projection on a layer or a few layers, in world coordinates, as Cells that numen.build.place, "
-            + "numen.build.diff and numen.build.raise take as they are.")
+            + "numen.build.diff take as they are.")
     @Example("litematica.placement.cells(64)")
     @Example("litematica.placement.cells(64, 66)")
     @Example("numen.build.place(litematica.placement.cells(64))")
@@ -100,7 +100,7 @@ public final class LitematicaApi {
             + "that reads the layers that fit. litematica.placement.list says how many cells each projection has.")
     @Note("Reads your owner's Litematica on their client and changes nothing. A name that matches no projection fails with "
             + "not_found.")
-    @SeeAlso({"litematica.placement.list", "numen.build.place", "numen.build.diff", "numen.build.raise"})
+    @SeeAlso({"litematica.placement.list", "numen.build.place", "numen.build.diff"})
     public static List<BlockAt> cells(ClientCall call, Read args) {
         return Projections.cells(args.from(), args.to().orElse(args.from()), args.placement().orElse(null));
     }

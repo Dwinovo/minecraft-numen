@@ -1,6 +1,6 @@
 ---
 name: litematica_projection
-description: Litematica 的投影(placement)与分层显示是什么、litematica.placement 的函数交回什么(投影列表、某几层的格、把设计做成投影给主人看)、这些格怎样直接交给 numen.build.place、numen.build.diff、numen.build.raise。
+description: Litematica 的投影(placement)与分层显示是什么、litematica.placement 的函数交回什么(投影列表、某几层的格、把设计做成投影给主人看)、这些格怎样直接交给 numen.build.place、numen.build.diff。
 ---
 
 # Litematica 投影
@@ -41,7 +41,7 @@ print(numen.build.diff(cells))
 numen.build.place(cells)
 ```
 
-`numen.build.diff` 报还差什么、缺多少料——Litematica 自己的材料清单是按主人的背包算的,不是你的。
+`numen.build.diff` 报还差什么,以及剩下的格要用哪些材料(`materials`)、你身上缺哪些(`short_of`)——Litematica 自己的材料清单是按主人的背包算的,不是你的。
 
 ## 把设计给主人看
 
