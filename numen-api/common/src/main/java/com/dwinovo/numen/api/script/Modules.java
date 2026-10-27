@@ -96,9 +96,12 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     private static Function<UUID, Library> libraries;
 
     private final Library library;
+    /** 这是谁的模块:她(服务端的 {@link #of});只读文字、评测给的库没有(null)。 */
+    private final UUID companion;
 
-    private Modules(Library library) {
+    private Modules(Library library, UUID companion) {
         this.library = library;
+        this.companion = companion;
     }
 
     /** 模块库在哪:服务器给主人的那一份(内置加我的);评测与 GameTest 给这一次运行专用的。 */
@@ -111,17 +114,22 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         if (libraries == null) {
             throw new IllegalStateException("Modules.init(...) 还没被调用——服务端该在启动时注入模块库");
         }
-        return at(libraries.apply(companion));
+        return new Modules(libraries.apply(companion), companion);
     }
 
     /** 直接给一个模块库。 */
     public static Modules at(Library library) {
-        return new Modules(library);
+        return new Modules(library, null);
     }
 
     /** 只有随模组发布的那一套:读它们的文字(技能、提示里的例子、写法检查)时用,不看谁的库。 */
     public static Modules factory() {
-        return new Modules(null);
+        return new Modules(null, null);
+    }
+
+    /** 这是谁的模块;没有是 null。系统提示、帮助里哪些名字空间看得到,按她的主人的客户端提供什么算({@code ClientMods})。 */
+    public UUID companion() {
+        return companion;
     }
 
     /** 主人的"我的"目录(回执里告诉她文件在哪);只有随模组发布的那一套时是 null。 */
@@ -231,7 +239,9 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         if (library == null) {
             return List.copyOf(BuiltinModules.all().keySet());
         }
-        return library.active().stream().map(e -> nameOf(e.id())).filter(n -> problem(n) == null).sorted().toList();
+        // 目标模组只在客户端的联动带的模块:主人的客户端没报它就不是她能用的(见 ClientMods)
+        return library.active().stream().filter(e -> com.dwinovo.numen.api.plugin.ClientMods.offered(companion, e.id().namespace()))
+                .map(e -> nameOf(e.id())).filter(n -> problem(n) == null).sorted().toList();
     }
 
     /** 全部的,按名字排;只有随模组发布的那一套时是发布的。 */

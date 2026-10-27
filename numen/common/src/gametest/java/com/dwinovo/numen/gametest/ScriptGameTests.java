@@ -609,6 +609,25 @@ public class ScriptGameTests {
         }
     }
 
+    /** 夹具组 {@code gtcm.pad}:目标模组只在客户端的联动的函数,主人的客户端报了它才有。 */
+    public static final class PadFns {
+
+        private PadFns() {}
+
+        @Fn("Read the pad of the client-only mod.")
+        @Example("gtcm.pad.read()")
+        public static String read(ClientCall call) {
+            return "the pad";
+        }
+    }
+
+    static {
+        if (GameTestKit.numenTestsEnabled()) {
+            NumenPlugins.registerForClientMod("gtcm", "gametest_pad_mod", numen -> numen.api("pad",
+                    "Test fixture: a client-only mod's functions.", PadFns.class));
+        }
+    }
+
     /**
      * 程序里的客户端函数向主人的连接发 {@code ClientCallPayload}:主人的连接是 {@code OwnerLine}(没有客户端),这里扮他的客户端答
      * ({@code ClientEndpoint}),答复经上行的处理函数回到服务端。服务端从包进到包出的路——认主人、量大小、反向请求、答复——
@@ -645,6 +664,64 @@ public class ScriptGameTests {
                             "the program did not run with its client function answered over the wire: " + receipt);
                     helper.assertTrue(result.get().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
+                    leave(owner);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 目标模组只在客户端的联动:主人的客户端报到时没报它,她调它当场以 {@code no_function} 失败、说明缺哪个模组,什么也没发给主人的客户端;
+     * 她的系统提示里也没有它。报了它之后,同一个调用走到主人的客户端,提示里也有了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void a_client_only_mods_functions_exist_for_her_only_when_the_owners_client_reports_it(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_padded", new BlockPos(2, 2, 2), false);
+        ServerPlayer owner = presentOwner(helper, her, "gametest_pad_owner");
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        received(owner);
+        AtomicReference<Program.Outcome> refused = new AtomicReference<>();
+        AtomicReference<Program.Outcome> answered = new AtomicReference<>();
+        boolean[] sent = {false};
+
+        steps(helper)
+                .thenExecute(() -> {
+                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                            "the index lists a client-only mod the owner's client did not report");
+                    ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
+                            "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
+                            NetworkTransport.INSTANCE, CallObserver.NONE, refused::set);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(refused.get() != null, "the refusal has not come back"))
+                .thenExecute(() -> {
+                    String receipt = refused.get().receipt();
+                    helper.assertTrue(receipt.contains("no_function") && receipt.contains("needs the gametest_pad_mod mod"),
+                            "the missing mod was not named: " + receipt);
+                    helper.assertTrue(received(owner).stream().noneMatch(p -> p instanceof ClientCallPayload),
+                            "a call for a mod the client lacks was sent to it");
+                    // 主人的客户端报了它(版本在先,能力在后,到齐才算报到)
+                    com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL,
+                            java.util.Set.of("gtcm"));
+                    received(owner);
+                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                            "the index does not list a client-only mod the owner's client reported");
+                    ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
+                            "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
+                            NetworkTransport.INSTANCE, CallObserver.NONE, answered::set);
+                })
+                .thenWaitUntil(() -> {
+                    for (CustomPacketPayload payload : received(owner)) {
+                        if (payload instanceof ClientCallPayload call) {
+                            sent[0] = true;
+                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
+                        }
+                    }
+                    helper.assertTrue(answered.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    helper.assertTrue(sent[0] && answered.get().receipt().contains("returned: the pad"),
+                            "the call did not reach the owner's client: " + answered.get().receipt());
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })

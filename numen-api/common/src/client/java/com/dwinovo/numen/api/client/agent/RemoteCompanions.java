@@ -12,12 +12,14 @@ import com.dwinovo.numen.api.network.ClientPayloadSink;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
 import com.dwinovo.numen.api.network.payload.FeedPayload;
+import com.dwinovo.numen.api.network.payload.ClientCapsPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HelloPayload;
 import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.HistoryRequestPayload;
 import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
+import com.dwinovo.numen.api.plugin.ClientMods;
 
 import java.util.HashMap;
 import java.util.List;
@@ -178,6 +180,8 @@ public final class RemoteCompanions {
             return;
         }
         NumenNetwork.sendToServer(new HelloPayload(Presence.PROTOCOL));
+        // 紧跟着报这台电脑提供哪些目标模组只在客户端的联动:两包一起到,服务端收齐才算报到
+        NumenNetwork.sendToServer(new ClientCapsPayload(List.copyOf(ClientMods.provided())));
     }
 
     static void onHelloAck(HelloAckPayload p) {

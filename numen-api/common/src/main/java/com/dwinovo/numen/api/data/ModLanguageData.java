@@ -449,6 +449,7 @@ public final class ModLanguageData {
         public static final String PLUGIN_RESTART           = "numen.plugin.restart";
         public static final String PLUGIN_LOADED            = "numen.plugin.loaded";
         public static final String PLUGIN_DISABLED          = "numen.plugin.disabled";
+        public static final String PLUGIN_CLIENT_ABSENT     = "numen.plugin.client_absent";
         public static final String PLUGIN_FAILED            = "numen.plugin.failed";
         public static final String PLUGIN_VERSION           = "numen.plugin.version";
         public static final String PLUGIN_AUTHORS           = "numen.plugin.authors";
@@ -1170,6 +1171,7 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_RESTART,         "takes effect after restart");
         adder.add(Keys.PLUGIN_LOADED,          "loaded");
         adder.add(Keys.PLUGIN_DISABLED,        "off");
+        adder.add(Keys.PLUGIN_CLIENT_ABSENT,   "%1$s is not installed on this computer");
         adder.add(Keys.PLUGIN_FAILED,          "failed to load");
         adder.add(Keys.PLUGIN_VERSION,         "Version %s");
         adder.add(Keys.PLUGIN_AUTHORS,         "By %s");
@@ -1896,6 +1898,7 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_RESTART,         "重启后生效");
         adder.add(Keys.PLUGIN_LOADED,          "已加载");
         adder.add(Keys.PLUGIN_DISABLED,        "已关闭");
+        adder.add(Keys.PLUGIN_CLIENT_ABSENT,   "这台电脑上没装 %1$s");
         adder.add(Keys.PLUGIN_FAILED,          "加载失败");
         adder.add(Keys.PLUGIN_VERSION,         "版本 %s");
         adder.add(Keys.PLUGIN_AUTHORS,         "作者 %s");

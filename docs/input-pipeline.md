@@ -72,11 +72,14 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 
 **落地时的出入(第 6 步;`/numen key`、`/numen skin`、召唤与绑定命令随第 3 步后半落地,见 §六末尾;1.21.6 的对话框不在这一步)**:
 
-- **"装没装客户端"只问 `Presence.hasClient` 一处**:报到过 `Hello`、协议版本对得上。发不发 Numen 包(`NumenNetwork.sendToPlayer` 统一卡住)、
+- **"装没装客户端"只问 `Presence.hasClient` 一处**:报到齐了——`Hello` 报的协议版本对得上、`ClientCaps` 报了它提供哪些目标模组只在客户端的联动。发不发 Numen 包(`NumenNetwork.sendToPlayer` 统一卡住)、
   界面怎么走(推 `Feed` 还是发聊天文字、征询画答复框还是发按钮、`/numen settings` 这类作用在客户端上的指令能不能用)都问它。频道同名不算数:不同版本的客户端
   登记着同名的频道,格式却不一样(0.1.4 发布的客户端就有同名的名册与状态频道),发过去它解不开就断线。
   握手由服务端先开口:玩家在世界里、连接登记了开场频道,`PlayerSessions.channelReady` 发 `ServerHello(协议号)`;客户端版本对得上才回 `Hello(协议号)`,
-  服务端收下后回 `HelloAck(是否管理员, 是否房主)`、推名册与各大脑此刻的样子。这两包握手的格式永远只是一个协议号,对不上版本的两端也读得懂。
+  紧跟着再发 `ClientCaps(提供的联动名字空间)`;服务端两样收齐才回 `HelloAck(是否管理员, 是否房主)`、推名册与各大脑此刻的样子。开场与 `Hello` 的格式永远只是一个协议号,
+  对不上版本的两端也读得懂。"有客户端"与"客户端提供什么"在同一刻成立,所以提示词里列着哪些客户端联动、调用它们放不放行,任何时刻都一致。
+  目标模组只在客户端的联动(Litematica):登记两侧无条件(`NumenPlugins.registerForClientMod`),"有没有"只由主人的客户端问平台答、报进 `Presence`;
+  API 清单、帮助、技能表(`ClientMods.offered`)与调用的放行(`NetworkTransport`)都读那一份。
   平台的 `INetworkChannel.canSend`(连接上有没有这个频道)只留在传输层,发之前再问一次——NeoForge 对发往没有该频道的连接的包会在发送处抛异常。
 - **原版客户端进得来**:NeoForge 上我们登记的频道全是 `optional()`(Numen API 的,与 Numen 自己的寻路调试包);Fabric 本来不拒。证据:`NeoForgeHandshakeTests` 对着本进程登记的全部频道原样跑
   NeoForge 对非 NeoForge 客户端的配置阶段协商(`NetworkRegistry.initializeOtherConnection`)——它第一次跑是红的,就是被寻路调试包一条非可选的登记拦下。
@@ -347,6 +350,7 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
 - **旧皮肤库的迁移**:启动时 `ServerBrains.migrateSkins`——服务器的与房主的旧库导出成这台机器皮肤文件夹里的 png、签好的进缓存、同伴绑定里的旧条目名换成引用,搬完删掉旧库;
   连专用服务器的玩家的旧库留着,他的客户端报到时按段下行,发完一张删一张。可重来。
 - `PROTOCOL` 加到 4:`HelloAck` 多一位 `host`,库行的组叫 `server`、多一个 `shipped`,皮肤那一种换了形状,多了 `SkinHandoverPayload`。
+- `PROTOCOL` 加到 6:多了上行的 `ClientCapsPayload`,报到要 `Hello` 与它都到齐才算(插件分页的行多一项 `clientMod`)。
 
 ## 七、身体的输入层(已落地)
 

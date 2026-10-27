@@ -70,6 +70,28 @@ public final class NumenPlugins {
     }
 
     /**
+     * 登记一个<b>目标模组只在客户端</b>的联动(Litematica 这一类纯客户端模组):函数全是客户端函数({@code ClientCall}),真正碰目标模组的代码
+     * 只在主人的客户端上跑。和 {@link #register} 一样登记,区别在"有没有"的判据:
+     * <ul>
+     *   <li><b>登记在两侧无条件</b>。服务端装不装目标模组都登记,所以你的登记({@code NumenPlugin#setup})与函数签名里<b>不许出现目标模组的类</b>——
+     *       服务端读签名、生成文档时会加载它们;碰目标模组的代码只放在函数体里被调用到的类里。</li>
+     *   <li><b>判据只有一处:主人的客户端。</b>客户端起来时问平台"{@code targetMod} 装了没有",装了就在报到时把 {@code namespace} 报给服务端
+     *       ({@link com.dwinovo.numen.api.plugin.ClientMods#provided}、{@code ClientCapsPayload})。服务端只读这份报告:主人的客户端没报,
+     *       模型的 API 清单、帮助与技能表里就没有这个名字空间,调用它当场以 {@code no_function} 失败、说明缺的是哪个模组。</li>
+     *   <li>主人换了客户端或中途装了目标模组,重新进服才刷新。</li>
+     * </ul>
+     * 目标模组<b>两侧都装</b>的联动(它的函数有服务端的、客户端只是读界面)用 {@link #register} 加你自己的"目标在不在"的闸门,不用这个。
+     *
+     * @param namespace 你的名字空间,规矩同 {@link #register}
+     * @param targetMod 目标模组的 id,问平台({@code Services.platform().modName})用
+     */
+    public static void registerForClientMod(String namespace, String targetMod, NumenPlugin plugin) {
+        com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
+        com.dwinovo.numen.api.plugin.ClientMods.declare(namespace, targetMod);
+        register(namespace, plugin);
+    }
+
+    /**
      * 引擎自己的登记(帮助、原版指令、手上的活、模块那几组):引擎是宿主不是插件,不进花名册、停用名单也管不着。
      * <b>Numen API 内部调用</b>。
      */

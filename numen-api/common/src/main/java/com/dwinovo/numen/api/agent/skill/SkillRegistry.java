@@ -66,14 +66,17 @@ public final class SkillRegistry {
     private static Function<UUID, Library> libraries;
 
     private final Library library;
+    /** 这是谁的技能:她(服务端的 {@link #of});直接给的库没有(null)。 */
+    private final UUID companion;
     private long parsedAt = -1;
     private Map<String, Parsed> skills = Map.of();
 
     /** 一个技能连同它在库里的名字(开关按库里的名字记)。 */
     private record Parsed(SkillInfo info, EntryId id) {}
 
-    private SkillRegistry(Library library) {
+    private SkillRegistry(Library library, UUID companion) {
         this.library = library;
+        this.companion = companion;
     }
 
     /** 技能库在哪:服务器给主人的那一份(内置加我的);评测与 GameTest 给这一次运行专用的。 */
@@ -86,12 +89,12 @@ public final class SkillRegistry {
         if (libraries == null) {
             throw new IllegalStateException("SkillRegistry.init(...) 还没被调用——服务端该在启动时注入技能库");
         }
-        return at(libraries.apply(companion));
+        return new SkillRegistry(libraries.apply(companion), companion);
     }
 
     /** 直接给一个技能库。 */
     public static SkillRegistry at(Library library) {
-        return new SkillRegistry(library);
+        return new SkillRegistry(library, null);
     }
 
     /** 库变了就重新解析;解析不了的一条记一笔并跳过。 */
@@ -119,7 +122,14 @@ public final class SkillRegistry {
 
     /** 开着的技能:对 skill 工具与技能命令,关掉的技能不可见。"能不能用"问这里。 */
     public Optional<SkillInfo> get(String name) {
-        return find(name).filter(skill -> !isDisabled(name));
+        Parsed parsed = skills().get(name);
+        return parsed != null && usable(parsed) ? Optional.of(parsed.info()) : Optional.empty();
+    }
+
+    /** 玩家没关掉,而且(目标模组只在客户端的联动带的技能)主人的客户端提供它。 */
+    private boolean usable(Parsed parsed) {
+        return library.enabled(parsed.id())
+                && com.dwinovo.numen.api.plugin.ClientMods.offered(companion, parsed.id().namespace());
     }
 
     /** 所有已知的技能,含关掉的。 */
@@ -128,13 +138,13 @@ public final class SkillRegistry {
     }
 
     /**
-     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),玩家没关掉的。系统提示的
+     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),玩家没关掉的、(目标模组只在客户端的联动带的)主人的客户端提供的。系统提示的
      * {@code <available_skills>} 索引与点错名字时列出的"有哪些"都是这一份。
      */
     public List<SkillInfo> available() {
         return skills().values().stream()
                 .filter(p -> p.info().description() != null && !p.info().description().isBlank())
-                .filter(p -> library.enabled(p.id()))
+                .filter(this::usable)
                 .map(Parsed::info)
                 .toList();
     }

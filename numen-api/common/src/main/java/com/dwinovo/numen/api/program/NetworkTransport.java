@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.ClientCallPayload;
 import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
+import com.dwinovo.numen.api.plugin.ClientMods;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
@@ -34,6 +35,12 @@ public final class NetworkTransport implements ClientTransport {
         }
         if (!Presence.hasClient(owner.getUUID())) {
             done.accept(failure(request.function(), "its owner has no Numen client of this version connected"));
+            return;
+        }
+        String namespace = request.function().substring(0, request.function().indexOf('.'));
+        if (!ClientMods.offeredToOwner(owner.getUUID(), namespace)) {
+            done.accept(ApiReply.error(ErrorKind.NO_FUNCTION, request.function() + " needs the " + ClientMods.target(namespace)
+                    + " mod on your owner's client, and it is not installed there", null, null).toString());
             return;
         }
         int size = request.size();

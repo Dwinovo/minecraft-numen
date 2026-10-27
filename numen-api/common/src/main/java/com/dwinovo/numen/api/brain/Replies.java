@@ -38,13 +38,36 @@ public final class Replies {
     private Replies() {}
 
     /**
-     * 客户端报到。版本对不上就什么也不回:开场那包已经告诉过它服务端的版本,再发的它都读不懂。对得上的,回答是否管理员、
-     * 是否房主,推名册,补给他名下各大脑此刻的样子和会话列表。
+     * 客户端报到的完整一步:版本与它提供的联动一起(单测、不经网络的场景替客户端走完报到)。网络上这是先后两包,各由
+     * {@link #reported}、{@link #ready} 答一半。
      */
+    public static void hello(ServerPlayer player, int protocol, java.util.Set<String> provided) {
+        reported(player, protocol);
+        ready(player, provided);
+    }
+
+    /** 同 {@link #hello(ServerPlayer, int, java.util.Set)},客户端不提供任何目标模组只在客户端的联动。 */
     public static void hello(ServerPlayer player, int protocol) {
-        if (!Presence.hello(player.getUUID(), protocol)) {
+        hello(player, protocol, java.util.Set.of());
+    }
+
+    /**
+     * 客户端报了协议版本({@code HelloPayload})。版本对不上就什么也不回:开场那包已经告诉过它服务端的版本,再发的它都读不懂。对得上的
+     * 接着等它报能力({@link #ready}),到齐才回答。
+     */
+    public static void reported(ServerPlayer player, int protocol) {
+        if (!Presence.reported(player.getUUID(), protocol)) {
             Constants.LOG.info("[numen-net] client of {} speaks protocol {}, this server {}: not served",
                     player.getUUID(), protocol, Presence.PROTOCOL);
+        }
+    }
+
+    /**
+     * 客户端报了它提供哪些联动({@code ClientCapsPayload}),报到齐了:回答是否管理员、是否房主,推名册,补给他名下各大脑此刻的样子和会话列表。
+     * 没有先报过对得上的版本就什么也不做。
+     */
+    public static void ready(ServerPlayer player, java.util.Set<String> provided) {
+        if (!Presence.ready(player.getUUID(), provided)) {
             return;
         }
         NumenNetwork.sendToPlayer(player, new HelloAckPayload(Authority.isAdmin(player),

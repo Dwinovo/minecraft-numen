@@ -20,6 +20,7 @@ class HandshakeTest extends Scenario {
 
     private static final String OPENER = "numen_api:server_hello";
     private static final String HELLO = "numen_api:hello";
+    private static final String CAPS = "numen_api:client_caps";
     private static final String ACK = "numen_api:hello_ack";
     private static final String ROSTER = "numen_api:companion_list";
     private static final String LIBRARY = "numen_api:library";
@@ -78,7 +79,13 @@ class HandshakeTest extends Scenario {
         assertTrue(owner.payloads(ACK).isEmpty() && owner.payloads(ROSTER).isEmpty(),
                 "a hello of another protocol was answered");
 
+        // 报到要版本与能力两样都到齐:只报了版本还不算客户端,不回答
         owner.payload(HELLO, varInt(protocol));
+        barrier(owner);
+        assertTrue(owner.payloads(ACK).isEmpty() && owner.payloads(ROSTER).isEmpty(),
+                "the answer came before the client said what it provides");
+
+        owner.payload(CAPS, varInt(0));   // 不提供任何目标模组只在客户端的联动
         waitFor(() -> owner.payloads(ACK).size() == 1 && owner.payloads(ROSTER).size() == 1, "the answer and the roster");
 
         MODEL.whenHeard("ping", say("OK"));

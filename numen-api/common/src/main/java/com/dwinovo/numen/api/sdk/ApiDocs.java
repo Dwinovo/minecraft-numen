@@ -48,7 +48,7 @@ public final class ApiDocs {
      * @param modules 她能用的模块(主人那一份)
      */
     public static String index(Modules modules) {
-        List<ApiRegistry.Group> groups = ApiRegistry.groups();
+        List<ApiRegistry.Group> groups = offered(modules);
         if (groups.isEmpty()) {
             return "";
         }
@@ -90,6 +90,15 @@ public final class ApiDocs {
         return "<api>\n" + String.join("\n", lines) + "\n</api>";
     }
 
+    /**
+     * 这位主人的客户端提供的组:目标模组只在客户端的联动({@code ClientMods}),主人的客户端没报它就不列、不给帮助;别的组都在。
+     * 判据在 {@code ClientMods#offered},这里只是按它筛。
+     */
+    private static List<ApiRegistry.Group> offered(Modules modules) {
+        return ApiRegistry.groups().stream()
+                .filter(g -> com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace())).toList();
+    }
+
     /** 索引里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
     private static String groupLine(ApiRegistry.Group group, Map<String, Library> library) {
         List<String> names = new ArrayList<>();
@@ -106,7 +115,8 @@ public final class ApiDocs {
      */
     public static String help(String name, Modules modules) {
         Map<String, Library> library = library(modules);
-        List<ApiRegistry.Group> inNamespace = ApiRegistry.groupsIn(name);
+        List<ApiRegistry.Group> offered = offered(modules);
+        List<ApiRegistry.Group> inNamespace = offered.stream().filter(g -> g.namespace().equals(name)).toList();
         if (!inNamespace.isEmpty()) {
             List<String> lines = new ArrayList<>();
             lines.add(name + ": " + inNamespace.size() + " group" + (inNamespace.size() == 1 ? "" : "s") + ". `"
@@ -115,11 +125,11 @@ public final class ApiDocs {
             return String.join("\n", lines);
         }
         ApiRegistry.Group group = ApiRegistry.group(name);
-        if (group != null) {
+        if (group != null && offered.contains(group)) {
             return group(group, library, modules);
         }
         ApiFunction fn = ApiRegistry.function(name);
-        if (fn != null) {
+        if (fn != null && offered.stream().anyMatch(g -> g.namespace().equals(fn.namespace()))) {
             return function(fn, modules);
         }
         Modules.Module module = modules.get(name);
@@ -314,7 +324,7 @@ public final class ApiDocs {
         for (String shared : LuaCodecs.SHARED) {
             sb.append("\n\n").append(classText(LuaCodecs.classNamed(shared), modules));
         }
-        for (ApiRegistry.Group group : ApiRegistry.groups()) {
+        for (ApiRegistry.Group group : offered(modules)) {
             sb.append("\n\n").append(group(group, library, modules));
             for (ApiFunction fn : group.functions()) {
                 sb.append("\n\n").append(engine.functionText(doc(fn)));

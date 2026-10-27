@@ -996,6 +996,8 @@ public final class Libraries {
             plugin.authors().forEach(authors::add);
             row.add("authors", authors);
             row.addProperty("target", plugin.target());
+            // 目标模组只在客户端的联动:这一行装没装,看看的人自己的客户端(见 ClientMods)
+            row.addProperty("clientMod", com.dwinovo.numen.api.plugin.ClientMods.isClientMod(plugin.id()));
             row.addProperty("source", plugin.source().name().toLowerCase(java.util.Locale.ROOT));
             row.addProperty("status", plugin.status().name().toLowerCase(java.util.Locale.ROOT));
             row.addProperty("reason", plugin.reason());

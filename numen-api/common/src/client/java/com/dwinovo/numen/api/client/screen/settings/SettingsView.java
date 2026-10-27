@@ -1187,7 +1187,10 @@ public final class SettingsView {
 
     private static String pluginStatus(ServerLibraries.Plugin p) {
         return switch (p.status()) {
-            case LOADED -> I18n.get(ModLanguageData.Keys.PLUGIN_LOADED);
+            // 目标模组只在客户端的联动:服务端把它装好了,这台电脑上有没有目标模组由这台客户端自己答
+            case LOADED -> p.clientMod() && !com.dwinovo.numen.api.plugin.ClientMods.provided().contains(p.id())
+                    ? I18n.get(ModLanguageData.Keys.PLUGIN_CLIENT_ABSENT, p.target())
+                    : I18n.get(ModLanguageData.Keys.PLUGIN_LOADED);
             case DISABLED -> I18n.get(ModLanguageData.Keys.PLUGIN_DISABLED);
             case FAILED -> I18n.get(ModLanguageData.Keys.PLUGIN_FAILED);
         };
