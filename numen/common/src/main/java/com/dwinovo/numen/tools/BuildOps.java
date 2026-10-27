@@ -62,6 +62,9 @@ public final class BuildOps {
                        @Doc("Cells that would not stay put yet: what holds them (the block below, the wall behind) is "
                                + "not built.") int unheld,
                        @Doc("Cells that differ and that you leave alone.") int skipped,
+                       @Doc("Cells involving liquid, which numen.build.place does not place or drain: water or lava in the "
+                               + "design, liquid where the design wants air, and blocks whose water is left out "
+                               + "(waterlogged). Not counted in left or in materials.") int liquid,
                        @Doc("Items for the cells still to do, all of them, most first.") Map<String, Integer> materials,
                        @Doc("Of those, what you are still short of, in survival; empty means you carry enough. "
                                + "Absent when building costs nothing.") Optional<Map<String, Integer>> shortOf) {}
@@ -74,7 +77,7 @@ public final class BuildOps {
     public static Diff diff(NumenPlayer her, Design design) {
         List<BuildTaskRecord.Target> targets = plan(her, design);
         if (Changes.between(targets, seen(her.serverLevel())).none()) {
-            return new Diff(0, 0, List.of(), 0, Optional.empty(), 0, 0, 0, Map.of(), shortOf(her, Map.of()));
+            return new Diff(0, 0, List.of(), 0, Optional.empty(), 0, 0, 0, 0, Map.of(), shortOf(her, Map.of()));
         }
         BuildTaskRecord record = new BuildTaskRecord("numen.build.diff", "", 0, targets,
                 !WorkProfile.of(her).freeMaterials());
@@ -84,7 +87,8 @@ public final class BuildOps {
                 List.copyOf(tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size()))), tally.far().size(),
                 tally.far().isEmpty() ? Optional.empty() : Optional.of(tally.far().get(0)),
                 tally.count(BuildSurvey.State.SHORT), tally.count(BuildSurvey.State.UNHELD),
-                tally.count(BuildSurvey.State.SKIPPED), BuildBill.items(cost), shortOf(her, cost));
+                tally.count(BuildSurvey.State.SKIPPED), tally.count(BuildSurvey.State.LIQUID) + tally.heldWater(),
+                BuildBill.items(cost), shortOf(her, cost));
     }
 
     /** {@code numen.build.diff} 列出几格要先挖开的:一次 {@code numen.work.dig} 交得完的量。 */

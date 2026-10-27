@@ -276,8 +276,7 @@ public class BuildGameTests {
      * {@code if (item == AIR)} 的分支成了永远到不了的死代码,而工具描述里白纸黑字
      * 写着 air 能清空。模型照文档写、被拒、换个写法再被拒,一次建造烧掉四轮往返。
      *
-     * <p>液体则相反:那是真的不做,所以错误信息必须说是边界,不能回一句"未知方块"
-     * ——名字明明是对的,模型只会以为自己拼错了。
+     * <p>液体读得通(名字是对的),只是她不放:读成方块,回执在 {@code liquid} 一类里说(见 {@code liquid_cells_*} 两条)。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_block_ids_and_material_counts(GameTestHelper helper) {
@@ -285,14 +284,9 @@ public class BuildGameTests {
             com.dwinovo.numen.build.BuildStates.resolve(id);
         }
         for (String liquid : new String[]{"water", "minecraft:water", "lava"}) {
-            String msg = "";
-            try {
-                com.dwinovo.numen.build.BuildStates.resolve(liquid);
-            } catch (IllegalArgumentException e) {
-                msg = String.valueOf(e.getMessage());
-            }
-            helper.assertTrue(msg.contains("liquid"),
-                    liquid + " must be refused as a capability boundary, not as a bad name; got \"" + msg + "\"");
+            var resolved = com.dwinovo.numen.build.BuildStates.resolve(liquid);
+            helper.assertTrue(resolved.state().getBlock() instanceof net.minecraft.world.level.block.LiquidBlock,
+                    liquid + " reads as the liquid block; got " + resolved.state());
         }
         // 方块状态跟在方块名后面,和 /setblock 同一套语法
         var stairs = com.dwinovo.numen.build.BuildStates.resolve("spruce_stairs[facing=south,half=top]").state();
@@ -1015,6 +1009,71 @@ public class BuildGameTests {
                             && says.contains("down ") && says.contains("is stone"),
                     "the sentence does not name both flowers, where they are, and the stone under them: " + says);
             helper.assertTrue(level.getBlockState(o).is(Blocks.STONE), "the stone under them was not built");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 一份格里有石头也有水:石头放好,水格不放,{@code place} 不整份拒掉;回执 {@code liquid} 一类把三种情形各数出来(要放的水两格、
+     * 含水的楼梯一格去掉了水),世界里没有多出水。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void liquid_cells_are_reported_and_the_rest_of_the_design_goes_in(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_liquid", new BlockPos(9, 2, 6), true);
+        BlockPos o = helper.absolutePos(new BlockPos(8, 2, 8));
+        String place = "numen.build.place({{name = \"stone\", pos = " + xyz(o) + "}, {name = \"stone\", pos = " + xyz(o.east())
+                + "}, {name = \"water\", pos = " + xyz(o.south()) + "}, {name = \"water\", pos = " + xyz(o.south().east())
+                + "}, {name = \"oak_stairs[waterlogged=true]\", pos = " + xyz(o.east(2)) + "}})";
+        ToolRun build = lua(companion, place);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(build.done(), "the build has not finished");
+            helper.assertTrue(build.succeeded(), "liquid cells must not fail the whole design: " + build.outcome());
+            var groups = build.result(BuildCompanionTask.Placed.class).unplaced();
+            helper.assertTrue(groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
+                    "the two water cells and the dry stairs are one liquid group: " + groups);
+            String says = groups.get(0).says();
+            helper.assertTrue(says.contains("2 cell(s): the design wants water or lava there")
+                            && says.contains("1 cell(s): the block was placed without the water it holds"),
+                    "the sentence counts each kind: " + says);
+            helper.assertTrue(groups.get(0).hint().orElse("").contains("numen.use.block"), "the hint names the bucket");
+            helper.assertTrue(level.getBlockState(o).is(Blocks.STONE) && level.getBlockState(o.east()).is(Blocks.STONE)
+                            && level.getBlockState(o.east(2)).is(Blocks.OAK_STAIRS), "the rest of the design stands");
+            helper.assertTrue(level.getBlockState(o.south()).isAir() && level.getBlockState(o.south().east()).isAir()
+                            && level.getFluidState(o.east(2)).isEmpty(), "no water appeared");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * drain 交回的格(水换成空气)交给 {@code place}:她手挖不掉水,三格水都归 {@code liquid},不整份失败,水还在;{@code diff} 把它们单列,
+     * 不算在还剩的格与材料里。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void liquid_cells_from_drain_are_left_for_the_player(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_drained", new BlockPos(9, 2, 6), true);
+        BlockPos o = helper.absolutePos(new BlockPos(8, 2, 8));
+        for (int i = 0; i < 3; i++) {
+            level.setBlock(o.east(i), Blocks.WATER.defaultBlockState(), 2);
+        }
+        String drained = "numen.shape.drain(" + xyz(o.east()) + ", 2)";
+        ToolRun diff = lua(companion, "return numen.build.diff(" + drained + ")");
+        helper.assertTrue(diff.ranToTheEnd(), "diff failed: " + diff.receipt());
+        var got = diff.data().getAsJsonObject("returned");
+        helper.assertTrue(got.get("liquid").getAsInt() == 3 && got.get("left").getAsInt() == 0 && got.get("skipped").getAsInt() == 0
+                        && (got.get("materials").toString().equals("[]") || got.get("materials").toString().equals("{}")),
+                "diff lists the water on its own: " + got);
+        ToolRun build = lua(companion, "numen.build.place(" + drained + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(build.done() && build.succeeded(), "draining must not fail the call: " + build.outcome());
+            var groups = build.result(BuildCompanionTask.Placed.class).unplaced();
+            helper.assertTrue(groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
+                    "the three water cells are one liquid group: " + groups);
+            helper.assertTrue(level.getBlockState(o).is(Blocks.WATER) && level.getBlockState(o.east(2)).is(Blocks.WATER),
+                    "she does not drain by hand: the water is still there");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

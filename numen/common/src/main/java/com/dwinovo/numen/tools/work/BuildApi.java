@@ -53,7 +53,7 @@ public final class BuildApi {
             + "the world has the last word: a block vanilla drops (a torch with nothing to hold it) is not done.")
     @Note("What was not placed is not a failure: the result's `unplaced` groups those cells by reason (`dig_first`, "
             + "`short_of_material`, `out_of_reach`, `nothing_holds_it`, `blocked_by_entity`, `refused`, `did_not_stay`, "
-            + "`left_alone`), each with a sentence saying what stopped them and a hint for the next step. Fix that and "
+            + "`no_item`, `liquid`, `left_alone`), each with a sentence saying what stopped them and a hint for the next step. Fix that and "
             + "call it again: what already stands is skipped.")
     @Note("Background work: fails at once with kind out_of_reach when nothing of it can be placed or walked up to yet "
             + "(the cells hold other blocks to dig out first, or nothing holds them), with what is left and a hint; "
@@ -64,7 +64,11 @@ public final class BuildApi {
             + "numen.work.dig (numen.build.diff lists those cells). Creative replaces it at once.")
     @Note("Blocks that hang on others (torches, ladders, signs, carpets, flowers, rails, buttons, hanging lanterns) go "
             + "in after the blocks around them. A door or a tall plant is written as its lower half and a bed as its "
-            + "foot; the other half comes with it. Liquids (water, lava) are never placed.")
+            + "foot; the other half comes with it.")
+    @Note("Water and lava are not part of what it does: cells of liquid in the design, liquid standing where the design wants "
+            + "air, and the water a waterlogged block holds are left out, the other cells go in as usual, and the `liquid` "
+            + "group of `unplaced` counts them. Liquid flows, so what stands afterwards would not match the list. Pour it "
+            + "from a bucket with numen.use.block; to get rid of it, fill the cell with a block or scoop the source up.")
     @Note("Asks your owner first when their rules say so, for the cells it would change; a refusal stops it with their "
             + "words.")
     @SeeAlso({"numen.build.diff", "numen.task.stop"})
@@ -84,7 +88,9 @@ public final class BuildApi {
     @Note("materials lists every item the cells still to do take, most first, counted the way placing takes them; "
             + "short_of is what of that you do not carry, in survival (absent when building costs nothing). It prices "
             + "the cells you pass, whether you drew them or got them from elsewhere.")
-    @Note("A cell is within reach exactly when numen.build.place would place it from here, without walking.")
+    @Note("A cell is within reach exactly when numen.build.place would place it from here, without walking. `liquid` counts "
+            + "the cells of water or lava (and the waterlogged blocks whose water is left out) that numen.build.place "
+            + "does not do; they are not in `left` or `materials`.")
     @SeeAlso({"numen.build.place"})
     public static BuildOps.Diff diff(ServerCall call, Place args) {
         return BuildOps.diff(call.her(), args.design());

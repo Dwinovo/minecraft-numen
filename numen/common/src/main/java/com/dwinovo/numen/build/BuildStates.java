@@ -2,7 +2,6 @@ package com.dwinovo.numen.build;
 
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Property;
@@ -28,7 +27,8 @@ public final class BuildStates {
      * "文本 → 方块状态"全仓只有这一处。<b>按方块注册表查,不按物品</b>:{@code air} 是"把这一格挖空",按物品查会被当成未知物品拒掉。
      * 能不能建的判据是 {@link #unbuildableReason}:拿它当拒绝理由。
      *
-     * @throws IllegalArgumentException 读不通(原版解析器的原话照转)、或这种方块盖不了(液体这类,说清是能力边界)
+     * @throws IllegalArgumentException 读不通(原版解析器的原话照转)、或这种方块盖不了(施工工具方块这类)。液体读得通:它不放,
+     *                                  回执在 {@code liquid} 一类里说({@link com.dwinovo.numen.task.build.BuildOutstanding})
      */
     public static Resolved resolve(String written) {
         String trimmed = written.trim();
@@ -123,7 +123,7 @@ public final class BuildStates {
             state = state.setValue(BlockStateProperties.BERRIES, false);
         }
         // 含水是从周围的水推出来的,不是作者定的——照抄等于凭空造水,而我们连
-        // 主动放水都不做
+        // 主动放水都不做。去掉的水不悄悄丢:{@code Target.heldWater} 记着,回执的 liquid 一类说有几格
         if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
             state = state.setValue(BlockStateProperties.WATERLOGGED, false);
         }
@@ -199,12 +199,6 @@ public final class BuildStates {
         if (state.getBlock() instanceof net.minecraft.world.level.block.piston.PistonHeadBlock
                 || state.getBlock() instanceof net.minecraft.world.level.block.piston.MovingPistonBlock) {
             return "a piston head belongs to an extended piston, not to a build";
-        }
-        if (state.getBlock() instanceof LiquidBlock) {
-            // 能力边界,得说是边界:回一句"未知方块"的话,名字明明是对的,模型只会
-            // 以为自己拼错了,换个写法再试一遍
-            return "she does not place or drain liquids; leave water and lava out of it"
-                    + " and dig the basin instead, or let the player pour it";
         }
         return null;
     }

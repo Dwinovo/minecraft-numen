@@ -137,16 +137,17 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
      * @param itemPlace 素面格:物品放下去就是要的,对账按方块的自述名宽容(见 {@link #matches})。
      *                  放法不看它:每一格都由 {@link BuildPlacer} 手放或直接写。
      * @param mask      这一格自己的让路档位;没写是 null,按 {@link ReplaceMode#REPLACE_EMPTY}(见 {@link #mode})
+     * @param heldWater 要的方块本来含着水(waterlogged),归一时被去掉了;方块照放,回执的 {@code liquid} 一类如实说去掉了几格的水
      */
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
-                         boolean itemPlace, ReplaceMode mask) {
+                         boolean itemPlace, ReplaceMode mask, boolean heldWater) {
 
         public Target(BlockState desiredState, Item item, BlockPos pos, String label) {
-            this(desiredState, item, pos, label, false, null);
+            this(desiredState, item, pos, label, false, null, false);
         }
 
         public Target(Block block, Item item, BlockPos pos, String label) {
-            this(block.defaultBlockState(), item, pos, label, false, null);
+            this(block.defaultBlockState(), item, pos, label, false, null, false);
         }
 
         /** 让路档位:自己写了的那一档,没写是"连空也清"——原语不写 {@code --mask} 就是 {@code carve}。 */
@@ -156,7 +157,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
 
         /** 同一格摆到别处:位置与方块换成摆好之后的,别的(记账物品、车道、档位)照旧。 */
         public Target placed(BlockPos at, BlockState state) {
-            return new Target(state, item, at, label, itemPlace, mask);
+            return new Target(state, item, at, label, itemPlace, mask, heldWater);
         }
 
         /**
@@ -164,15 +165,17 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
          */
         public Target asItemPlace() {
             if (desiredState.isAir()
-                    || desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock
+                    || liquid()
                     || !(item instanceof net.minecraft.world.item.BlockItem)) {
                 return this;
             }
-            return new Target(desiredState, item, pos, label, true, mask);
+            return new Target(desiredState, item, pos, label, true, mask, heldWater);
         }
 
         public Target {
             desiredState = Objects.requireNonNull(desiredState, "desiredState");
+            heldWater |= desiredState.hasProperty(BlockStateProperties.WATERLOGGED)
+                    && desiredState.getValue(BlockStateProperties.WATERLOGGED);
             // 归一在这一处做完:每一个目标格无论从原语还是从图纸来,都必须过这道口,
             // 所以运行态(作物生长阶段、含水、活塞伸出、堆肥进度、锅里装的东西)
             // 在这里一次清干净,而不是让每条入口各清各的。
@@ -201,10 +204,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
          * 后果和门那件事一模一样,只是方向相反:玩家按清单备齐了,照样建到一半停下。
          */
         public int materialCount() {
-            if (desiredState == null || desiredState.isAir() || noItem()) {
-                return 0;
-            }
-            if (desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+            if (desiredState == null || desiredState.isAir() || noItem() || liquid()) {
                 return 0;
             }
             if (desiredState.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
@@ -260,7 +260,12 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
          * ({@link com.dwinovo.numen.build.BuildStates#noItemReason})。判据只此一处,{@code BuildCellRules} 与 {@link #materialCount} 都问它。
          */
         public boolean noItem() {
-            return item == net.minecraft.world.item.Items.AIR && !desiredState.isAir();
+            return item == net.minecraft.world.item.Items.AIR && !desiredState.isAir() && !liquid();
+        }
+
+        /** 要的是液体(水、岩浆):她不放,单列 {@code liquid} 一类;和"没有物品"不是一回事。 */
+        public boolean liquid() {
+            return desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock;
         }
 
         /** 要不要花料——{@link #materialCount()} 的派生问法,不另立判据。 */

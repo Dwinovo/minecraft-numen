@@ -43,6 +43,8 @@ public final class BuildOutstanding {
         DID_NOT_STAY("did_not_stay"),
         /** 没有哪件物品能直接放出这个方块(盆栽、海带的茎……)。 */
         NO_ITEM("no_item"),
+        /** 涉及液体:要放水或岩浆、要把液体换成空气、或方块含的水没放。 */
+        LIQUID("liquid"),
         /** 主动不去动:让路档位不许、权限不许、砸不动、出了边界。 */
         LEFT_ALONE("left_alone"),
         /** 所在区块没加载。 */
@@ -65,11 +67,16 @@ public final class BuildOutstanding {
     /** 回执里的一组:同一个原因的几格,一句说明,一行下一步。 */
     @Doc("Cells that were not placed, grouped by what stopped them.")
     public record Unplaced(@Doc("The reason: dig_first, short_of_material, out_of_reach, nothing_holds_it, "
-            + "blocked_by_entity, refused, did_not_stay, no_item, left_alone, not_loaded or unfinished.") String kind,
+            + "blocked_by_entity, refused, did_not_stay, no_item, liquid, left_alone, not_loaded or unfinished.") String kind,
                            @Doc("What stopped them, said in full.") String says,
                            @Doc("What to do next.") Optional<String> hint,
                            @Doc("How many cells.") int cells,
                            @Doc("The first few of them.") List<BlockPos> first) {}
+
+    /** {@code liquid} 一类里一格的三种情形(细节句):要放液体、要把液体换成空气、方块含的水没放。 */
+    static final String LIQUID_PLACE = "the design wants water or lava there, which is not placed";
+    static final String LIQUID_DRAIN = "water or lava stands where the design wants air, which cannot be dug out by hand";
+    static final String LIQUID_HELD = "the block was placed without the water it holds (waterlogged)";
 
     /** 一组里列出几格的位置。 */
     private static final int FIRST = 5;
@@ -125,11 +132,24 @@ public final class BuildOutstanding {
             case DID_NOT_STAY -> n + " cell(s) were placed and the world did not let them stay" + detail(group, " — ");
             case NO_ITEM -> n + " cell(s) have no item that places them" + detail(group, " — ") + ": "
                     + heaps(group, false);
+            case LIQUID -> liquidSays(group);
             case LEFT_ALONE -> n + " cell(s) were left alone: what is there may not be moved, or the spot cannot be "
                     + "built on: " + heaps(group, false);
             case NOT_LOADED -> n + " cell(s) are in chunks that are not loaded: " + heaps(group, false);
             case UNFINISHED -> n + " cell(s) had not had their turn when the call ended: " + heaps(group, false);
         };
+    }
+
+    /** liquid 一类的一句:三种情形各几格、各是什么,不合并成一个总数。 */
+    private static String liquidSays(List<Cell> group) {
+        List<String> parts = new ArrayList<>();
+        for (String detail : List.of(LIQUID_PLACE, LIQUID_DRAIN, LIQUID_HELD)) {
+            List<Cell> some = group.stream().filter(c -> detail.equals(c.detail())).toList();
+            if (!some.isEmpty()) {
+                parts.add(some.size() + " cell(s): " + detail + " (" + heaps(some, detail.equals(LIQUID_DRAIN)) + ")");
+            }
+        }
+        return String.join("; ", parts);
     }
 
     /** 下一步:能照抄的一行 Lua 最好,没有就一句话。 */
@@ -147,6 +167,8 @@ public final class BuildOutstanding {
             case UNFINISHED -> Optional.of("call numen.build.place again with the same design");
             case NO_ITEM -> Optional.of("place what it comes from instead (the empty flower_pot for a potted plant), "
                     + "and leave it out of the design here");
+            case LIQUID -> Optional.of("to have water or lava there, pour it from a bucket with numen.use.block; to get rid of it, "
+                    + "fill the cell with a block, or scoop a water source up with a bucket");
             case LEFT_ALONE -> Optional.empty();
         };
     }

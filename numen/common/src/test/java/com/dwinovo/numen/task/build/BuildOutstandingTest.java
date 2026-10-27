@@ -67,6 +67,28 @@ class BuildOutstandingTest {
     }
 
     @Test
+    void liquidCellsAreOneGroupThatCountsEachKindAndSaysWhatToDoNext() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
+        var water = new BuildOutstanding.Cell(BuildOutstanding.Cause.LIQUID,
+                new BuildTaskRecord.Target(Blocks.WATER, Items.AIR, new BlockPos(0, 64, 0), "water"),
+                Blocks.AIR.defaultBlockState(), BuildOutstanding.LIQUID_PLACE);
+        var drain = new BuildOutstanding.Cell(BuildOutstanding.Cause.LIQUID,
+                new BuildTaskRecord.Target(Blocks.AIR, Items.AIR, new BlockPos(1, 64, 0), "air"),
+                Blocks.WATER.defaultBlockState(), BuildOutstanding.LIQUID_DRAIN);
+        var wet = new BuildOutstanding.Cell(BuildOutstanding.Cause.LIQUID,
+                new BuildTaskRecord.Target(Blocks.OAK_STAIRS, Items.OAK_STAIRS, new BlockPos(2, 64, 0), "stairs"),
+                Blocks.OAK_STAIRS.defaultBlockState(), BuildOutstanding.LIQUID_HELD);
+        var report = BuildOutstanding.report(List.of(water, drain, wet, drain), "");
+        assertEquals(1, report.size());
+        assertEquals("liquid", report.get(0).kind());
+        assertEquals(4, report.get(0).cells());
+        String says = report.get(0).says();
+        assertTrue(says.contains("1 cell(s): " + BuildOutstanding.LIQUID_PLACE) && says.contains("2 cell(s): " + BuildOutstanding.LIQUID_DRAIN)
+                && says.contains("1 cell(s): " + BuildOutstanding.LIQUID_HELD) && says.contains("1 water (0,64,0)"), says);
+        assertTrue(report.get(0).hint().orElse("").contains("numen.use.block"), report.get(0).hint().toString());
+    }
+
+    @Test
     void theFirstFewPositionsAreListedNotAllOfThem() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
         List<BuildOutstanding.Cell> cells = new java.util.ArrayList<>();

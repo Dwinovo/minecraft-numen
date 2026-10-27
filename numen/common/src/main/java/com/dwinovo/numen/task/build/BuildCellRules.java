@@ -46,6 +46,14 @@ final class BuildCellRules {
         return target.block() == net.minecraft.world.level.block.Blocks.AIR;
     }
 
+    /**
+     * 这一格涉及液体:要的是水或岩浆,或要的是空气而现在立着的是液体(排水)。她不放液体,手也挖不掉水,所以不去动,回执单列 {@code liquid}。
+     * 判据只此一处:挑格({@link BuildSurvey})、施工、回执都问它。
+     */
+    static boolean leavesLiquid(BuildTaskRecord.Target target, BlockState current) {
+        return target.liquid() || (isAirTarget(target) && current.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock);
+    }
+
     /** 计费判据在 {@link BuildTaskRecord.Target#costsMaterial()}——盘点工具与这里共用。 */
     boolean costsMaterial(BuildTaskRecord.Target target) {
         return !isAirTarget(target) && target.costsMaterial();
@@ -80,6 +88,9 @@ final class BuildCellRules {
             return true;   // 没有物品能放出它:不去动,回执单列一组(权限层不必替一件放不出来的事裁决)
         }
         BlockState current = peek(target.pos());
+        if (leavesLiquid(target, current)) {
+            return true;   // 不放液体、也排不掉:不去动,回执单列 liquid
+        }
         if (!target.mode().allows(current, target.desiredState())) {
             return true;
         }

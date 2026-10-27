@@ -9,7 +9,6 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -30,8 +29,10 @@ public final class BuildSurvey {
 
     /** 一格的情形。 */
     public enum State {
-        /** 已经是图纸要的样子(流体目标与排水不做,也算了结)。 */
+        /** 已经是图纸要的样子。 */
         DONE,
+        /** 涉及液体:要放水或岩浆、或要把现有的液体换成空气。她不放也排不掉,不去动,回执单列 {@code liquid}({@link BuildCellRules#leavesLiquid})。 */
+        LIQUID,
         /** 不去动:规则不许、玩家的东西、砸不动、出了边界。要问主人的不在这里,问了才知道。 */
         SKIPPED,
         /** 生存模式下立着别的方块,得先挖开。 */
@@ -79,9 +80,11 @@ public final class BuildSurvey {
     public State of(BuildTaskRecord.Target target) {
         BlockPos pos = target.pos();
         BlockState now = rules.peek(pos);
-        if (target.matches(now) || target.desiredState().getBlock() instanceof LiquidBlock
-                || (BuildCellRules.isAirTarget(target) && now.getBlock() instanceof LiquidBlock)) {
+        if (target.matches(now)) {
             return State.DONE;
+        }
+        if (BuildCellRules.leavesLiquid(target, now)) {
+            return State.LIQUID;
         }
         if (rules.refused(target) || rules.hopeless(target)) {
             return State.SKIPPED;
@@ -131,11 +134,15 @@ public final class BuildSurvey {
         List<BlockPos> dig = new ArrayList<>();
         List<BlockPos> far = new ArrayList<>();
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
+        int heldWater = 0;
         for (BuildTaskRecord.Target target : r.targets) {
             State state = of(target);
             counts.merge(state, 1, Integer::sum);
-            if (state != State.DONE && state != State.SKIPPED) {
+            if (state != State.DONE && state != State.SKIPPED && state != State.LIQUID) {
                 pending.add(target);
+            }
+            if (target.heldWater()) {
+                heldWater++;
             }
             if (state == State.DIG) {
                 dig.add(target.pos());
@@ -146,7 +153,7 @@ public final class BuildSurvey {
         BlockPos here = player.blockPosition();
         dig.sort(Comparator.comparingDouble(p -> p.distSqr(here)));
         far.sort(Comparator.<BlockPos>comparingInt(BlockPos::getY).thenComparingDouble(p -> p.distSqr(here)));
-        return new Tally(counts, dig, far, pending);
+        return new Tally(counts, dig, far, pending, heldWater);
     }
 
     /**
@@ -155,9 +162,10 @@ public final class BuildSurvey {
      * @param dig 要先挖开的格,离她近的在前
      * @param far 够不着的格,低的在前、同一层里离她近的在前:下面的先盖,上面的才有地方站
      * @param pending 还没了结的格({@link #left()} 数的就是它们),按施工图里的先后
+     * @param heldWater 要的方块本来含着水、水被去掉了的格({@link BuildTaskRecord.Target#heldWater})
      */
     public record Tally(Map<State, Integer> counts, List<BlockPos> dig, List<BlockPos> far,
-                        List<BuildTaskRecord.Target> pending) {
+                        List<BuildTaskRecord.Target> pending, int heldWater) {
 
         public int count(State state) {
             return counts.getOrDefault(state, 0);

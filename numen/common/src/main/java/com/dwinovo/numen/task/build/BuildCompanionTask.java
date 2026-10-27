@@ -466,9 +466,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private BlockState processCell(BuildTaskRecord.Target target, List<BlockPos> written) {
         BlockPos pos = target.pos();
         BlockState desired = target.desiredState();
-        if (desired != null && desired.getBlock() instanceof LiquidBlock) {
-            return null;   // 流体不承接:布水与排水都不做
-        }
         // 加载判定要在读取<b>之前</b>:反过来的话第一句 getBlockState 就已经把区块
         // 同步生成出来了,后面这句永远为真,等于没判。
         if (!player.level().isLoaded(pos)) {
@@ -478,6 +475,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (target.matches(current)) {
             markObserved(target, true);
             return null;
+        }
+        if (BuildCellRules.leavesLiquid(target, current)) {
+            return null;   // 不放液体、也排不掉:不去动,回执单列 liquid
         }
 
         boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
@@ -522,7 +522,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         if (BuildCellRules.isAirTarget(target)) {
-            markObserved(target, current.isAir() || current.getBlock() instanceof LiquidBlock);
+            markObserved(target, current.isAir());
             return null;
         }
 
@@ -851,11 +851,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 continue;
             }
             BlockState observed = view.state(pos);
-            if (target.matches(observed)
-                    || target.desiredState().getBlock() instanceof LiquidBlock
-                    || (BuildCellRules.isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
-                // 液体口径:不放液体目标、清空型目标也不排水——这两类跳过豁免;
-                // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
+            if (target.matches(observed)) {
+                // 要放液体、要排水的格不在这里:它们是"不去动"({@code rules.refused}),从分母里摘出、回执单列 liquid;
+                // 固体目标被液体淹着照放,方块直接顶掉水(原版语义)
                 observedCompleted.add(key);
                 skippedPos.remove(key);
             } else if (rules.refused(target) || rules.hopeless(target)) {
@@ -963,6 +961,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockState actual = rules.peek(pos);
             BuildSurvey.State state = survey.of(target);
             if (state == BuildSurvey.State.DONE) {
+                if (target.heldWater()) {
+                    cells.add(new BuildOutstanding.Cell(BuildOutstanding.Cause.LIQUID, target, actual, BuildOutstanding.LIQUID_HELD));
+                }
                 continue;
             }
             Miss miss = missed.get(pos.asLong());
@@ -974,6 +975,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             } else if (target.noItem()) {
                 cause = BuildOutstanding.Cause.NO_ITEM;
                 detail = com.dwinovo.numen.build.BuildStates.noItemReason(target.block());
+            } else if (state == BuildSurvey.State.LIQUID) {
+                cause = BuildOutstanding.Cause.LIQUID;
+                detail = target.liquid() ? BuildOutstanding.LIQUID_PLACE : BuildOutstanding.LIQUID_DRAIN;
             } else if (state == BuildSurvey.State.SKIPPED) {
                 cause = BuildOutstanding.Cause.LEFT_ALONE;
             } else if (state == BuildSurvey.State.DIG) {
