@@ -350,8 +350,19 @@ local function tiler(cells)
   end
 end
 
--- a pattern as fn(x, y, z) → the block for that cell (nil: none): text, what numen.shape.pattern read, or Cells
-local function block_source(pattern)
+-- a pattern as fn(x, y, z) → the block for that cell (nil: none): text, what numen.shape.pattern read, or Cells.
+-- positions() gives the list of cells it will be asked about; only a ^ pattern, which changes what is in the world there,
+-- needs it (the world is asked once, for all of them)
+local function block_source(pattern, positions)
+  if type(pattern) == "string" and pattern:sub(1, 1) == "^" then
+    local at = {}
+    for _, b in ipairs(numen.shape.restated(positions(), pattern)) do
+      at[key(b.pos)] = b.name
+    end
+    return function(x, y, z)
+      return at[x .. "," .. y .. "," .. z]
+    end
+  end
   if type(pattern) == "string" then
     parsed[pattern] = parsed[pattern] or numen.shape.pattern(pattern)
     return chooser(parsed[pattern])
@@ -936,6 +947,15 @@ local function visit(r, fn)
   end)
 end
 
+-- the cells of the region as a list of {x, y, z}
+local function cell_list(r)
+  local out = {}
+  visit(r, function(x, y, z)
+    out[#out + 1] = {x = x, y = y, z = z}
+  end)
+  return out
+end
+
 -- ---- selections ----
 
 ---A selection of the box between two corners (cuboid, WorldEdit's default). Draw it with :set, :walls or :faces, change
@@ -1022,6 +1042,24 @@ local function located(r, out)
   return cells_of(out, r.origin)
 end
 
+local function air_block()
+  return "air"
+end
+
+-- the cells of a list (Pos or Blocks) with a block from pattern each, nothing meaning air
+local function painted(list, pattern, origin)
+  local source = pattern == nil and air_block or block_source(pattern, function() return list end)
+  local out = {}
+  for _, c in ipairs(list) do
+    local p = c.pos or c
+    local name = source(p.x, p.y, p.z)
+    if name then
+      out[#out + 1] = {name = name, pos = M.pos(p.x, p.y, p.z)}
+    end
+  end
+  return cells_of(out, origin)
+end
+
 ---The cells of this selection, each a Pos.
 ---@return Cells
 function M.Region:cells()
@@ -1035,11 +1073,13 @@ end
 ---Every cell of this selection with a block from pattern (WorldEdit's //set). A pattern is text: "stone",
 ---"oak_stairs[facing=north]", "50%stone,50%cobblestone" (relative weights, a part without % weighs 1), "##logs" (any
 ---block of that tag), "##*logs" (any state of any of them), "*oak_log" (any value of the properties left out); or Cells
----to repeat through the world. Each cell rolls its own block once, so numen.build.diff and numen.build.place see the same.
+---to repeat through the world. "^[waterlogged=true]" (a pattern of its own, not one part of a list) keeps each cell's
+---current block and changes only those properties; it reads loaded chunks. Each cell rolls its own block once, so
+---numen.build.diff and numen.build.place see the same.
 ---@param pattern string|Cells|table
 ---@return Cells
 function M.Region:set(pattern)
-  local source = block_source(pattern)
+  local source = block_source(pattern, function() return cell_list(self) end)
   local out = {}
   visit(self, function(x, y, z)
     local name = source(x, y, z)
@@ -1141,7 +1181,13 @@ local function shell(r, walls, fn)
 end
 
 local function sides(r, pattern, faces)
-  local source = block_source(pattern)
+  local source = block_source(pattern, function()
+    local list = {}
+    shell(r, not faces, function(x, y, z)
+      list[#list + 1] = {x = x, y = y, z = z}
+    end)
+    return list
+  end)
   local out = {}
   shell(r, not faces, function(x, y, z)
     local name = source(x, y, z)
@@ -1188,19 +1234,15 @@ function M.Region:center(pattern)
   local x1, x2 = span(x)
   local y1, y2 = span(y)
   local z1, z2 = span(z)
-  local out = {}
-  local source = block_source(pattern)
+  local list = {}
   for yy = math.min(y1, y2), math.max(y1, y2) do
     for zz = math.min(z1, z2), math.max(z1, z2) do
       for xx = math.min(x1, x2), math.max(x1, x2) do
-        local name = source(xx, yy, zz)
-        if name then
-          out[#out + 1] = {name = name, pos = M.pos(xx, yy, zz)}
-        end
+        list[#list + 1] = {x = xx, y = yy, z = zz}
       end
     end
   end
-  return located(self, out)
+  return painted(list, pattern, self.origin)
 end
 
 -- ---- changing a selection ----
@@ -1480,16 +1522,9 @@ function M.Cells:move(count, dir, leave)
   end
   local v = scaled(direction(dir), count)
   local there = self:shift(v.x, v.y, v.z)
-  local source = leave ~= nil and block_source(leave) or function()
-    return "air"
-  end
   local out = {}
-  for _, c in ipairs(self:minus(there)) do
-    local p = where(c)
-    local name = source(p.x, p.y, p.z)
-    if name then
-      out[#out + 1] = {name = name, pos = M.pos(p.x, p.y, p.z)}
-    end
+  for _, c in ipairs(painted(self:minus(there), leave)) do
+    out[#out + 1] = c
   end
   for _, c in ipairs(there) do
     out[#out + 1] = c
@@ -1951,30 +1986,35 @@ function M.hcurve(points, pattern, thickness)
   return thick(curve_line(points), thickness, true, M.pos(first.x, first.y, first.z), pattern)
 end
 
--- the cells of region where fn(x, y, z) says true, as WorldEdit's //generate: fn gets each cell's coordinates in the
--- space mode names; hollow keeps the cells that have a neighbour where fn says false (asked for the neighbours too)
-local function generated(r, fn, mode, hollow)
-  local lo, hi = KINDS[r.kind].bounds(r)
-  local zero, unit
+-- the space a function sees a selection in, as WorldEdit's //generate and //deform give it: the cell it is for is
+-- (cell - zero) / unit; "unit" is -1 to 1 across the selection's box
+local function space_of(lo, hi, mode)
   if mode == nil or mode == "unit" then
-    zero = {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}
-    unit = {x = hi.x - zero.x, y = hi.y - zero.y, z = hi.z - zero.z}
+    local zero = {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}
+    local unit = {x = hi.x - zero.x, y = hi.y - zero.y, z = hi.z - zero.z}
     for _, axis in ipairs({"x", "y", "z"}) do
       if unit[axis] == 0 then
         unit[axis] = 1
       end
     end
+    return zero, unit
   elseif mode == "world" then
-    zero, unit = {x = 0, y = 0, z = 0}, {x = 1, y = 1, z = 1}
+    return {x = 0, y = 0, z = 0}, {x = 1, y = 1, z = 1}
   elseif mode == "center" then
-    zero, unit = {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}, {x = 1, y = 1, z = 1}
+    return {x = (lo.x + hi.x) / 2, y = (lo.y + hi.y) / 2, z = (lo.z + hi.z) / 2}, {x = 1, y = 1, z = 1}
   elseif type(mode) == "table" and mode.x then
-    zero, unit = {x = mode.x, y = mode.y, z = mode.z}, {x = 1, y = 1, z = 1}
-  else
-    bad("mode is \"unit\" (-1 to 1 across the selection), \"world\" (the cell's own coordinates), \"center\" (distance "
-        .. "from the middle of the selection) or a Pos (distance from that cell); got " .. tostring(mode),
-        "numen.shape.generate(region, \"stone\", function(x, y, z) return x * x + y * y + z * z <= 1 end, \"unit\")")
+    return {x = mode.x, y = mode.y, z = mode.z}, {x = 1, y = 1, z = 1}
   end
+  bad("mode is \"unit\" (-1 to 1 across the selection), \"world\" (the cell's own coordinates), \"center\" (distance "
+      .. "from the middle of the selection) or a Pos (distance from that cell); got " .. tostring(mode),
+      "numen.shape.generate(region, \"stone\", function(x, y, z) return x * x + y * y + z * z <= 1 end, \"unit\")")
+end
+
+-- the cells of region where fn(x, y, z) says true, as WorldEdit's //generate: fn gets each cell's coordinates in the
+-- space mode names; hollow keeps the cells that have a neighbour where fn says false (asked for the neighbours too)
+local function generated(r, fn, mode, hollow)
+  local lo, hi = KINDS[r.kind].bounds(r)
+  local zero, unit = space_of(lo, hi, mode)
   local function ask(x, y, z)
     local v = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
     if type(v) ~= "boolean" then
@@ -2063,5 +2103,277 @@ function M.layer(at, rows, legend)
   end
   return cells_of(out, nil)
 end
+
+-- ---- reading the world ----
+-- What these ask of the world is answered by the Java side, a whole selection per call (numen.shape.read, matching,
+-- interior, tops …); nothing here writes, the cells they give are for numen.build.place.
+
+-- the floor plan WorldEdit works down: a flat selection's (cyl, poly) own columns, any other's box; and the lowest and
+-- highest y of the selection
+local function columns_of(r)
+  local lo, hi = KINDS[r.kind].bounds(r)
+  local out = {}
+  if r.kind == "cyl" or r.kind == "poly" then
+    KINDS[r.kind].rows(r, function(y, z, from, to)
+      if y == lo.y then
+        for x = from, to do
+          out[#out + 1] = {x = x, y = 0, z = z}
+        end
+      end
+    end)
+  else
+    for z = lo.z, hi.z do
+      for x = lo.x, hi.x do
+        out[#out + 1] = {x = x, y = 0, z = z}
+      end
+    end
+  end
+  check_size(#out)
+  return out, lo.y, hi.y
+end
+
+---The cells of this selection whose block in the world passes mask, each with a block from pattern (WorldEdit's
+---//replace). A mask is text: "stone,dirt" (one of them; a property left out matches any value), "##logs" (a block of
+---that tag), "^[facing=north]" (blocks with those property values), "#existing" (not air, the default), "#air", "#solid",
+---"#fullcube", "#surface", "!m" (not m), ">m" (m under it), "<m" (m over it), "~m" (m beside it), "%25" (a quarter of the
+---cells, by chance); words separated by spaces must all hold. Reads loaded chunks only; the whole call fails, saying
+---where, if the selection reaches an unloaded one.
+---@param mask? string
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:replace(mask, pattern)
+  if pattern == nil then
+    bad("replace needs the pattern to put where the mask matches", "region:replace(\"dirt\", \"stone\")")
+  end
+  return painted(numen.shape.matching(self:cells(), mask or "#existing"), pattern, self.origin)
+end
+
+---On top of the highest block in each column of this selection, a block from pattern (WorldEdit's //overlay): the
+---cell above the highest block that is not air, between the selection's lowest and highest y (one cell above its top
+---at most). A column with something already over it is left alone. Reads loaded chunks only.
+---@param pattern string|Cells|table
+---@return Cells
+function M.Region:overlay(pattern)
+  local columns, min_y, max_y = columns_of(self)
+  return painted(numen.shape.tops(columns, min_y, max_y), pattern, self.origin)
+end
+
+---The inside of this selection emptied (WorldEdit's //hollow): the cells no open air reaches, found by flowing in from
+---the selection's box through every block that does not stop movement. thickness is how much shell to leave, as a
+---walker steps (default 0, the one layer touching the outside); pattern fills what is emptied (default air). A selection
+---solid all round has no open air and is emptied whole. Reads loaded chunks only.
+---@param thickness? integer
+---@param pattern? string|Cells|table
+---@return Cells
+function M.Region:hollow(thickness, pattern)
+  return painted(numen.shape.interior(self:cells(), thickness), pattern, self.origin)
+end
+
+---The blocks that make this selection's ground natural (WorldEdit's //naturalize): in each column the grass, dirt and
+---stone from the highest of them down become grass on top, three layers of dirt, stone below. Reads loaded chunks only.
+---@return Cells
+function M.Region:naturalize()
+  local columns, min_y, max_y = columns_of(self)
+  return numen.shape.naturalized(columns, min_y, max_y)
+end
+
+---The blocks that smooth the ground in this selection's box (WorldEdit's //smooth): each column's height blurred with a
+---Gaussian kernel, iterations times (default 1), the columns raised or lowered to it. mask says which blocks are
+---ground (default: blocks that stop movement). Reads loaded chunks only.
+---@param iterations? integer
+---@param mask? string
+---@return Cells
+function M.Region:smooth(iterations, mask)
+  local lo, hi = KINDS[self.kind].bounds(self)
+  return numen.shape.smoothed(lo, hi, {iterations = iterations, mask = mask})
+end
+
+---The smallest box round the cells of this selection whose block passes mask (WorldEdit's //trim), as a cuboid selection.
+---mask defaults to "#existing" (not air); with no cell passing, it fails. Reads loaded chunks only.
+---@param mask? string
+---@return Region
+function M.Region:trim(mask)
+  local hits = numen.shape.matching(self:cells(), mask or "#existing")
+  local lo, hi = bounds_of(hits)
+  if not lo then
+    bad("no cell of this selection has a block that passes the mask " .. (mask or "#existing"),
+        "region:trim(\"#existing\")")
+  end
+  return M.cuboid(lo, hi)
+end
+
+---This selection with each cell taking the block from another place (WorldEdit's //deform): fn(x, y, z) gets the cell's
+---coordinates and returns the coordinates of the cell to take the block from, in the space mode names (see
+---numen.shape.generate: "unit" by default, "world", "center" or a Pos). Reads loaded chunks only.
+---@param fn fun(x: number, y: number, z: number): number, number, number
+---@param mode? string|Pos
+---@return Cells
+function M.Region:deform(fn, mode)
+  local lo, hi = KINDS[self.kind].bounds(self)
+  local zero, unit = space_of(lo, hi, mode)
+  local targets, sources = {}, {}
+  visit(self, function(x, y, z)
+    local ox, oy, oz = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
+    if type(ox) ~= "number" or type(oy) ~= "number" or type(oz) ~= "number" then
+      bad("the function returns the three coordinates to take the block from, x, y, z; it gave " .. type(ox) .. ", "
+          .. type(oy) .. ", " .. type(oz), "function(x, y, z) return x, y + 1, z end")
+    end
+    targets[#targets + 1] = {x = x, y = y, z = z}
+    sources[#sources + 1] = {x = floor(ox * unit.x + zero.x + 0.5), y = floor(oy * unit.y + zero.y + 0.5),
+                             z = floor(oz * unit.z + zero.z + 0.5)}
+  end)
+  local blocks = numen.shape.read(sources)
+  local out = {}
+  for i, b in ipairs(blocks) do
+    local t = targets[i]
+    out[i] = {name = b.name, pos = M.pos(t.x, t.y, t.z)}
+  end
+  return cells_of(out, self.origin)
+end
+
+---A copy of the blocks in a selection, as Cells to paste elsewhere (WorldEdit's //copy): every cell with the block the
+---world has there now, air included; the origin is the cell you stand in, so numen.shape.copy(r):paste(at) puts
+---it down with that cell on at. mask (see Region:replace) makes the cells that fail it read as air. A block's items and
+---other data are not copied, only its state. Reads loaded chunks only.
+---@param region Region|Cells
+---@param mask? string
+---@return Cells
+function M.copy(region, mask)
+  local cells = as_region(region):cells()
+  return M.cells(numen.shape.read(cells, mask), cell_at(numen.status.self().pos))
+end
+
+---Copy a selection and clear it (WorldEdit's //cut): a table with clipboard, the same Cells numen.shape.copy gives, and
+---cleared, the selection's cells (those passing mask, when given) with a block from the pattern leave (default air).
+---Writing cleared removes the original; writing clipboard:paste(at) puts it down elsewhere.
+---@param region Region|Cells
+---@param leave? string|Cells|table
+---@param mask? string
+---@return {clipboard: Cells, cleared: Cells}
+function M.cut(region, leave, mask)
+  local r = as_region(region)
+  local cells = r:cells()
+  return {clipboard = M.copy(r, mask), cleared = painted(mask and numen.shape.matching(cells, mask) or cells, leave, r.origin)}
+end
+
+-- fill and fillr: the air the cell reaches, with the pattern
+local function filled(at, pattern, radius, depth, everywhere)
+  if pattern == nil then
+    bad("fill needs the pattern to fill with", "numen.shape.fill(pos, \"water\", 5)")
+  end
+  local c = cell_at(at)
+  return painted(numen.shape.holes(c, radius, depth, {everywhere = everywhere}), pattern, M.pos(c.x, c.y, c.z))
+end
+
+---Fill a hole with a pattern (WorldEdit's //fill): the air in a ball of radius round at, at at's height or lower, no
+---deeper than depth (default 1), that at reaches going sideways at its own level and then down. Reads loaded chunks only.
+---@param at Pos
+---@param pattern string|Cells|table
+---@param radius number
+---@param depth? integer
+---@return Cells
+function M.fill(at, pattern, radius, depth)
+  return filled(at, pattern, radius, depth, false)
+end
+
+---Fill a hole recursively (WorldEdit's //fillr): like numen.shape.fill, but the air spreads in all six directions and
+---depth has no limit unless given.
+---@param at Pos
+---@param pattern string|Cells|table
+---@param radius number
+---@param depth? integer
+---@return Cells
+function M.fillr(at, pattern, radius, depth)
+  return filled(at, pattern, radius, depth, true)
+end
+
+-- the box of cells size - 1 each way from the cell at, from at's layer up (or down) height layers, defaulting to the
+-- world's own limit
+local function column_box(at, size, height, up)
+  local c = cell_at(at)
+  local reach = math.max(1, floor(size or 1)) - 1
+  local limit
+  if height then
+    limit = up and c.y + height - 1 or c.y - height + 1
+  else
+    local range = numen.shape.y_range()
+    limit = up and range.max or range.min
+  end
+  return M.cuboid({x = c.x - reach, y = c.y, z = c.z - reach}, {x = c.x + reach, y = limit, z = c.z + reach})
+end
+
+---Air from the cell at upward (WorldEdit's removeabove): the square of columns size - 1 cells either side of it, height
+---layers tall (default to the top of the world).
+---@param at Pos
+---@param size? integer
+---@param height? integer
+---@return Cells
+function M.removeabove(at, size, height)
+  return column_box(at, size, height, true):set("air")
+end
+
+---Air from the cell at downward (WorldEdit's removebelow): the square of columns size - 1 cells either side of it,
+---height layers deep (default to the bottom of the world).
+---@param at Pos
+---@param size? integer
+---@param height? integer
+---@return Cells
+function M.removebelow(at, size, height)
+  return column_box(at, size, height, false):set("air")
+end
+
+---Air where blocks passing mask stand (WorldEdit's removenear), in the cube of radius - 1 cells either side of at.
+---radius defaults to 50, a cube too big for one Cells: give the radius you need. Reads loaded chunks only.
+---@param at Pos
+---@param mask string
+---@param radius? integer
+---@return Cells
+function M.removenear(at, mask, radius)
+  local c, reach = cell_at(at), math.max(1, floor(radius or 50)) - 1
+  return M.cuboid({x = c.x - reach, y = c.y - reach, z = c.z - reach}, {x = c.x + reach, y = c.y + reach, z = c.z + reach})
+      :replace(mask, "air")
+end
+
+---A pattern where blocks passing mask (default "#existing") stand (WorldEdit's replacenear), in the cube of radius cells
+---either side of at. Reads loaded chunks only.
+---@param at Pos
+---@param radius integer
+---@param mask? string
+---@param pattern string|Cells|table
+---@return Cells
+function M.replacenear(at, radius, mask, pattern)
+  local c, reach = cell_at(at), math.max(1, floor(radius))
+  return M.cuboid({x = c.x - reach, y = c.y - reach, z = c.z - reach}, {x = c.x + reach, y = c.y + reach, z = c.z + reach})
+      :replace(mask, pattern)
+end
+
+---Scatter a pattern round a point (WorldEdit's splatter brush): the cells of a ball of radius round at get it, each by
+---chance, fewer towards the edge as decay (0 to 10, default 1) is bigger. pattern defaults to cobblestone.
+---@param at Pos
+---@param pattern? string|Cells|table
+---@param radius? number
+---@param decay? integer
+---@return Cells
+function M.splatter(at, pattern, radius, decay)
+  radius, decay = radius or 2, decay or 1
+  if decay < 0 or decay > 10 then
+    bad("decay is from 0 to 10; got " .. decay, "numen.shape.splatter(pos, \"gravel\", 3, 2)")
+  end
+  local c = cell_at(at)
+  local ball = M.sphere(c, nil, radius)
+  local source = block_source(pattern or "cobblestone", function() return cell_list(ball) end)
+  local size2, out = radius * radius, {}
+  visit(ball, function(x, y, z)
+    local d2 = (x - c.x) ^ 2 + (y - c.y) ^ 2 + (z - c.z) ^ 2
+    if math.random() > d2 / size2 * (decay / 10) * 2 then
+      local name = source(x, y, z)
+      if name then
+        out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+      end
+    end
+  end)
+  return cells_of(out, M.pos(c.x, c.y, c.z))
+end
+
 
 return M
