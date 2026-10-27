@@ -297,23 +297,24 @@ final class TerrainReads {
         return minY;
     }
 
+    /** 二维高斯核:每格的权重是 exp(-(dx² + dy²) / 2σ²),再除以全部权重的和,使总和为 1(圆周率那一项在归一时约掉,不用算)。边长 2r + 1。 */
     private static float[] gaussian(int radius, double sigma) {
-        int diameter = radius * 2 + 1;
-        float[] data = new float[diameter * diameter];
-        double sigma22 = 2 * sigma * sigma;
-        double constant = Math.PI * sigma22;
-        float sum = 0;
-        for (int y = -radius; y <= radius; y++) {
-            for (int x = -radius; x <= radius; x++) {
-                float value = (float) (Math.exp(-(x * x + y * y) / sigma22) / constant);
-                data[(y + radius) * diameter + x + radius] = value;
-                sum += value;
+        int side = 2 * radius + 1;
+        double[] weights = new double[side * side];
+        double total = 0;
+        for (int row = 0; row < side; row++) {
+            for (int col = 0; col < side; col++) {
+                int dy = row - radius;
+                int dx = col - radius;
+                weights[row * side + col] = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+                total += weights[row * side + col];
             }
         }
-        for (int i = 0; i < data.length; i++) {
-            data[i] = data[i] / sum;
+        float[] kernel = new float[weights.length];
+        for (int i = 0; i < kernel.length; i++) {
+            kernel[i] = (float) (weights[i] / total);
         }
-        return data;
+        return kernel;
     }
 
     /** 核盖不到的(出了数据边)按这一格自己算;结果加 offset 再取整。 */
