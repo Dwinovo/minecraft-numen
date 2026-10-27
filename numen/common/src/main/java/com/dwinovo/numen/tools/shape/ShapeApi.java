@@ -167,7 +167,7 @@ public final class ShapeApi {
 
     @Fn("The block each of some cells holds in the world now, written as /setblock takes it; with a mask, the cells that "
             + "do not pass it read as air.")
-    @Example("numen.shape.read(numen.shape.cuboid({x = 100, y = 64, z = -20}, {x = 102, y = 66, z = -18}):cells())")
+    @Example("numen.shape.read({{x = 100, y = 64, z = -20}, {x = 101, y = 64, z = -20}})")
     @Example("numen.shape.read({{x = 100, y = 64, z = -20}}, \"!air\")")
     @Note("Instant and read-only. Every cell comes back, air included, as a Block (name and pos), ready for "
             + "numen.build.place elsewhere (numen.shape.copy does this for a selection). A block's items and other data "
