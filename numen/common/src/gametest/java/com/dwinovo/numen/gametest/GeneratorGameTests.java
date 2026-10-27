@@ -3,6 +3,7 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.build.BuildStates;
+import com.dwinovo.numen.build.BuildValidity;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -27,7 +28,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * (方块、方块实体、高度图、光照、实体都和调用前逐格一样);再 {@code numen.build.place} 放下去,世界里的样子和交回的格一致。
  *
  * <p>放下去的那几条挑的是不含液体的地物与结构:{@code place} 现在不放液体,那是 {@code place} 的边界,生成器照实交回、不替模型删格。
- * 一致的比法:方块一样,状态逐项一样,除了世界自己按周围算的那几位({@link #DERIVED}:栅栏连不连、楼梯转角、树叶离树干几格)。
+ * 一致的比法:{@code place} 自己对账用的 {@link BuildValidity#valid},不另立名单。
  * 树与树林用 floor52:floor16 的顶太低,树长不下;结构用 open64:别的模板顶上有一层盖,结构会落在盖上。
  */
 public class GeneratorGameTests {
@@ -79,30 +80,22 @@ public class GeneratorGameTests {
         return out.append("}").toString();
     }
 
+    /** 放下之后和交回的格不一致的第一格;一致的判据就是 {@code place} 自己对账用的 {@link BuildValidity#valid}。 */
     private static String problem(ServerLevel level, JsonArray cells) {
         for (JsonElement e : cells) {
             JsonObject cell = e.getAsJsonObject();
             BlockPos p = pos(cell);
-            BlockState expected = BuildStates.parse(cell.get("name").getAsString(), false).blockState();
+            BlockState expected = BuildStates.normalize(BuildStates.parse(cell.get("name").getAsString(), false).blockState());
+            if (!expected.isAir() && BuildStates.materialItem(expected.getBlock()) == net.minecraft.world.item.Items.AIR) {
+                continue;   // 没有物品放得出它的方块(盆栽)她不放,回执的 no_item 一类里说
+            }
             BlockState actual = level.getBlockState(p);
-            if (expected.getBlock().asItem() == net.minecraft.world.item.Items.AIR && !expected.isAir()) {
-                continue;   // 没有物品的方块(盆栽)她不放,回执的 no_item 一类里说
-            }
-            if (actual.getBlock() != expected.getBlock()) {
+            if (!BuildValidity.valid(actual, expected)) {
                 return p.toShortString() + " is " + actual + ", the cell says " + expected;
-            }
-            for (net.minecraft.world.level.block.state.properties.Property<?> property : expected.getProperties()) {
-                if (!DERIVED.contains(property.getName()) && !actual.getValue(property).equals(expected.getValue(property))) {
-                    return p.toShortString() + " is " + actual + ", the cell says " + expected;
-                }
             }
         }
         return null;
     }
-
-    /** 世界自己按周围算的、或 place 归一过的状态位:栅栏与墙与玻璃板连不连、楼梯的转角形状、树叶离树干几格、含不含水、树叶是不是手放的。 */
-    private static final java.util.Set<String> DERIVED = java.util.Set.of("north", "east", "south", "west", "up", "down", "shape",
-            "distance", "waterlogged", "bottom", "persistent");
 
     private static boolean noLiquid(JsonArray cells) {
         for (JsonElement e : cells) {
