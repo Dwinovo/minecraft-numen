@@ -85,6 +85,9 @@ public class GeneratorGameTests {
             BlockPos p = pos(cell);
             BlockState expected = BuildStates.parse(cell.get("name").getAsString(), false).blockState();
             BlockState actual = level.getBlockState(p);
+            if (expected.getBlock().asItem() == net.minecraft.world.item.Items.AIR && !expected.isAir()) {
+                continue;   // 没有物品的方块(盆栽)她不放,回执的 no_item 一类里说
+            }
             if (actual.getBlock() != expected.getBlock()) {
                 return p.toShortString() + " is " + actual + ", the cell says " + expected;
             }
@@ -97,9 +100,9 @@ public class GeneratorGameTests {
         return null;
     }
 
-    /** 世界自己按周围算的状态位:栅栏与墙与玻璃板连不连、楼梯的转角形状、树叶离树干几格、含不含水。 */
+    /** 世界自己按周围算的、或 place 归一过的状态位:栅栏与墙与玻璃板连不连、楼梯的转角形状、树叶离树干几格、含不含水、树叶是不是手放的。 */
     private static final java.util.Set<String> DERIVED = java.util.Set.of("north", "east", "south", "west", "up", "down", "shape",
-            "distance", "waterlogged", "bottom");
+            "distance", "waterlogged", "bottom", "persistent");
 
     private static boolean noLiquid(JsonArray cells) {
         for (JsonElement e : cells) {
