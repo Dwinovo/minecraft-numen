@@ -679,6 +679,10 @@ public class ScriptGameTests {
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_padded", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_pad_owner");
+        // 她的主人以名册为准(和模块库、技能库一样):按真实流程把她记进名册
+        com.dwinovo.numen.api.entity.CompanionRegistry.get(helper.getLevel().getServer()).put(her.getUUID(),
+                new com.dwinovo.numen.api.entity.CompanionRegistry.Entry("gametest_padded", owner.getUUID(),
+                        net.minecraft.world.level.Level.OVERWORLD, her.blockPosition()));
         com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
         received(owner);
         AtomicReference<Program.Outcome> refused = new AtomicReference<>();
@@ -723,6 +727,7 @@ public class ScriptGameTests {
                     helper.assertTrue(sent[0] && answered.get().receipt().contains("returned: the pad"),
                             "the call did not reach the owner's client: " + answered.get().receipt());
                     leave(owner);
+                    com.dwinovo.numen.api.entity.CompanionRegistry.get(helper.getLevel().getServer()).remove(her.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
                 .thenSucceed();

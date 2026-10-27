@@ -63,14 +63,7 @@ public final class ServerBrains {
         Modules.init(companion -> hub.library(Modules.KIND, ownerOf(registry, companion)));
         SkillRegistry.init(companion -> hub.library(SkillRegistry.KIND, ownerOf(registry, companion)));
         // 目标模组只在客户端的联动,按主人的客户端提供什么显示给她的名字空间:同伴到主人的对应在这里接上
-        com.dwinovo.numen.api.plugin.ClientMods.bindOwners(companion -> {
-            CompanionRegistry.Entry entry = registry.find(companion);
-            if (entry != null) {
-                return entry.owner();
-            }
-            return server.getPlayerList().getPlayer(companion) instanceof com.dwinovo.numen.api.entity.NumenPlayer body
-                    ? body.getOwnerUuid() : null;
-        });
+        com.dwinovo.numen.api.plugin.ClientMods.bindOwners(companion -> ownerOrNull(registry, companion));
         ModelServices.start(server);
         migrateSkins(server, homes, registry, skins);   // 要在她们的大脑读绑定之前:绑定里的皮肤从旧条目名换成缓存的引用
         ServerSkins.start(server, skins);
@@ -101,13 +94,19 @@ public final class ServerBrains {
         Constants.LOG.info("[numen] 库与钥匙串已从磁盘重新读");
     }
 
+    /** 这只同伴的主人,以名册为准;名册上没有她是 null。 */
+    private static UUID ownerOrNull(CompanionRegistry registry, UUID companion) {
+        CompanionRegistry.Entry entry = registry.find(companion);
+        return entry == null ? null : entry.owner();
+    }
+
     /** 这只同伴的主人;名册上没有她是编程错误。 */
     private static UUID ownerOf(CompanionRegistry registry, UUID companion) {
-        CompanionRegistry.Entry entry = registry.find(companion);
-        if (entry == null) {
+        UUID owner = ownerOrNull(registry, companion);
+        if (owner == null) {
             throw new IllegalStateException("没有这只同伴: " + companion);
         }
-        return entry.owner();
+        return owner;
     }
 
     private static void stop() {
