@@ -9,6 +9,9 @@
         "numen_api_gametest.mixins.json"
     ],
     "entrypoints": {
+        "main": [
+            "com.dwinovo.numen.api.gametest.FabricMockConnection"
+        ],
         "fabric-gametest": [
             "com.dwinovo.numen.api.gametest.GameTestSuites"
         ]

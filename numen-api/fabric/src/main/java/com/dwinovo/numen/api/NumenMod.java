@@ -17,6 +17,13 @@ public class NumenMod implements ModInitializer {
 
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register(
                 (handler, sender, server) -> PlayerSessions.joined(handler.getPlayer()));
+        // JOIN 发在原版把玩家登记进玩家表之前,channelReady 要的"在世界里"那一刻还没到;玩家实体进世界(登记之后)再调一次。
+        // 同一次会话里只开一次场,重复调用无害(换维度时实体再次进世界也是这样)。
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof net.minecraft.server.level.ServerPlayer player) {
+                PlayerSessions.channelReady(player);
+            }
+        });
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
                 (handler, server) -> PlayerSessions.left(handler.getPlayer()));
 

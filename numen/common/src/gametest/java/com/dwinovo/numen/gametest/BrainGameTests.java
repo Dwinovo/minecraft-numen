@@ -450,6 +450,22 @@ public class BrainGameTests {
     }
 
     /**
+     * 装着客户端的玩家进服,什么也不用调:平台的登入响应自己把开场那包(协议号)发出去,客户端才有得报到。登入响应赶不上"玩家已在玩家表里"那一刻时
+     * (Fabric 的登入事件发在原版登记玩家之前),开场就发不出去,她的程序里的客户端函数、她的大脑都找不到这位主人的客户端。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void a_player_joining_with_our_client_is_opened_to_by_the_platform(GameTestHelper helper) {
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_opened");
+        var sent = GameTestKit.received(owner).stream()
+                .filter(p -> p instanceof com.dwinovo.numen.api.network.payload.ServerHelloPayload opener
+                        && opener.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL)
+                .toList();
+        helper.assertTrue(sent.size() == 1, "the opener was not sent once when the player joined: " + sent);
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /**
      * 装了客户端的主人进服:报到之前服务端只发开场那一包(协议号),名册也等着;报到之后得到回答(是不是管理员)、名册,
      * 并补上名下大脑此刻的样子与会话列表,整条路经真的发包。
      */
