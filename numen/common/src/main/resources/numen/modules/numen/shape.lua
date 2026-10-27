@@ -1311,40 +1311,16 @@ end
 
 -- ---- Cells as a selection of arbitrary shape ----
 
----Every one of these cells with a block from pattern (Region:set on exactly these cells).
----@param pattern string|Cells|table
----@return Cells
-function M.Cells:set(pattern)
-  return as_region(self):set(pattern)
-end
-
----The sides of these cells with a block from pattern (Region:walls on exactly these cells).
----@param pattern string|Cells|table
----@return Cells
-function M.Cells:walls(pattern)
-  return as_region(self):walls(pattern)
-end
-
----The surface of these cells with a block from pattern (Region:faces on exactly these cells).
----@param pattern string|Cells|table
----@return Cells
-function M.Cells:faces(pattern)
-  return as_region(self):faces(pattern)
-end
-
----WorldEdit's second name for faces.
----@param pattern string|Cells|table
----@return Cells
-function M.Cells:outline(pattern)
-  return self:faces(pattern)
-end
-
----The middle of these cells with a block from pattern (Region:center on exactly these cells).
----@param pattern string|Cells|table
----@return Cells
-function M.Cells:center(pattern)
-  return as_region(self):center(pattern)
-end
+-- Cells take every Region method (set, walls, faces, center, expand …) on the selection of arbitrary shape that has
+-- exactly their cells: what such a selection cannot do (expand, contract) it says itself
+setmetatable(M.Cells, {__index = function(_, name)
+  local method = M.Region[name]
+  if method then
+    return function(self, ...)
+      return method(as_region(self), ...)
+    end
+  end
+end})
 
 -- ---- turning, stacking, moving, pasting ----
 

@@ -157,6 +157,80 @@ class ShapeGeometryTest {
         }
     }
 
+    private static Set<String> ball(int cx, int cy, int cz, int radiusSquared, int reach) {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (int x = -reach; x <= reach; x++) {
+            for (int y = -reach; y <= reach; y++) {
+                for (int z = -reach; z <= reach; z++) {
+                    if (x * x + y * y + z * z <= radiusSquared) {
+                        out.add(ShapeLua.at(cx + x, cy + y, cz + z));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    @Test
+    void generateKeepsTheCellsWhereTheFunctionSaysTrueInTheSpaceTheModeNames() {
+        String sphere = "function(x, y, z) return x * x + y * y + z * z <= 4 end";
+        // "center": blocks from the middle of the selection
+        assertEquals(ball(0, 0, 0, 4, 3), ShapeLua.positions("numen.shape.generate(numen.shape.cuboid(" + at(-3, -3, -3) + ", " + at(3, 3, 3)
+                + "), \"stone\", " + sphere + ", \"center\")"));
+        // a Pos: blocks from that cell
+        assertEquals(ball(10, 0, 0, 4, 3), ShapeLua.positions("numen.shape.generate(numen.shape.cuboid(" + at(7, -3, -3) + ", " + at(13, 3, 3)
+                + "), \"stone\", " + sphere + ", " + at(10, 0, 0) + ")"));
+        // "world": the cells' own coordinates
+        Set<String> checker = new java.util.LinkedHashSet<>();
+        for (int x = 0; x <= 5; x++) {
+            for (int z = 0; z <= 5; z++) {
+                if ((x + z) % 2 == 0) {
+                    checker.add(ShapeLua.at(x, 64, z));
+                }
+            }
+        }
+        assertEquals(checker, ShapeLua.positions("numen.shape.generate(numen.shape.cuboid(" + at(0, 60, 0) + ", " + at(5, 66, 5)
+                + "), \"stone\", function(x, y, z) return y == 64 and (x + z) % 2 == 0 end, \"world\")"));
+        // "unit" (the default): -1 to 1 across the selection, the function sees (x - middle) / half the size
+        Set<String> unit = new java.util.LinkedHashSet<>();
+        for (int x = -6; x <= 6; x++) {
+            for (int y = -6; y <= 6; y++) {
+                for (int z = -6; z <= 6; z++) {
+                    double ux = x / 6.0;
+                    double uy = y / 6.0;
+                    double uz = z / 6.0;
+                    if (ux * ux + uy * uy + uz * uz <= 1) {
+                        unit.add(ShapeLua.at(x, y, z));
+                    }
+                }
+            }
+        }
+        assertEquals(unit, ShapeLua.positions("numen.shape.generate(numen.shape.cuboid(" + at(-6, -6, -6) + ", " + at(6, 6, 6)
+                + "), \"stone\", function(x, y, z) return x * x + y * y + z * z <= 1 end)"));
+    }
+
+    @Test
+    void aHollowGenerateKeepsTheCellsNextToOnesTheFunctionRefuses() {
+        String region = "numen.shape.cuboid(" + at(-3, -3, -3) + ", " + at(3, 3, 3) + ")";
+        assertEquals(ShapeReference.surface(ball(0, 0, 0, 4, 3)), ShapeLua.positions("numen.shape.hgenerate(" + region
+                + ", \"stone\", function(x, y, z) return x * x + y * y + z * z <= 4 end, \"center\")"));
+        // the function decides what is outside, the region only limits which cells are asked: where it says true all
+        // round, even past the edge of the region, no cell has an outside next to it
+        assertEquals(Set.of(), ShapeLua.positions("numen.shape.hgenerate(" + region + ", \"stone\", function() return true end)"));
+    }
+
+    @Test
+    void aGenerateFunctionAnswersTrueOrFalse() {
+        ApiTester.Run run = ShapeLua.run("numen.shape.generate(numen.shape.cuboid(" + at(0, 0, 0) + ", " + at(1, 1, 1)
+                + "), \"stone\", function() return 1 end)");
+        assertFalse(run.ok());
+        assertTrue(run.message().contains("returns true for a cell that is part of the shape"), run.message());
+        ApiTester.Run mode = ShapeLua.run("numen.shape.generate(numen.shape.cuboid(" + at(0, 0, 0) + ", " + at(1, 1, 1)
+                + "), \"stone\", function() return true end, \"nearby\")");
+        assertFalse(mode.ok());
+        assertTrue(mode.message().contains("mode is \"unit\""), mode.message());
+    }
+
     @Test
     void aShapeWithoutAPatternIsTheSelectionAndWithOneTheCells() {
         String cyl = "numen.shape.cyl(" + at(0, 0, 0) + ", %s, 3, 4)";

@@ -249,6 +249,11 @@ class ShapeCellsTest {
                 ShapeLua.positions(box + ":walls(\"dirt\")"));
         assertEquals(Set.of("2,1,1", "2,1,2"), ShapeLua.positions(box + ":center(\"dirt\")"));
         assertEquals(Set.of("dirt"), new LinkedHashSet<>(named(box + ":set(\"dirt\")").values()));
+        assertEquals(ShapeLua.positions(box + ":faces(\"dirt\")"), ShapeLua.positions(box + ":outline(\"dirt\")"));
+        // what that shape cannot do, it says
+        ApiTester.Run grow = ShapeLua.run(box + ":expand(1, \"up\")");
+        assertFalse(grow.ok());
+        assertTrue(grow.message().contains("selection of arbitrary cells cannot be expanded"), grow.message());
     }
 
     // ---- patterns ----

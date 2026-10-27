@@ -77,11 +77,14 @@ public final class LuaCodecs {
 
     /**
      * 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。它可以带一个原点(形状函数
-     * 画在哪、粘贴落在哪;转向、翻转、粘贴围着它),原点不在这串格的数据里,在值自己带的元表上。
+     * 画在哪、粘贴落在哪;转向、翻转、粘贴围着它),原点不在这串格的数据里,在值自己带的元表上。它也收 Region 的每个方法,当作正好有这些格的
+     * 任意形状的选区。
      */
     public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
             "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
-                    + "cell). numen.shape draws them; numen.shape.cells(list) makes Cells of any such list.",
+                    + "cell). numen.shape draws them; numen.shape.cells(list) makes Cells of any such list. Every Region "
+                    + "method works on Cells too (cells:set(\"stone\"), cells:faces(\"glass\")), taking them as the "
+                    + "selection of exactly these cells.",
             ScriptType.union(new ScriptType.Named("Block"), new ScriptType.Named("Pos"))).methodsIn("numen.shape");
 
     /** 一块带形状的选区:记着自己的形状参数,所以能照形状放大缩小;方法写在内置模块 {@code numen.shape} 里。 */
