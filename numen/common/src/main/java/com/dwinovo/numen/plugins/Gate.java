@@ -71,6 +71,20 @@ public final class Gate {
     }
 
     /**
+     * <b>目标模组只在客户端</b>的联动(Litematica 这一类):不看这台加载器里目标模组在不在——服务器上它永远不在,而联动要在服务器上登记,
+     * 模型才有得调。"有没有"由主人的客户端决定(见 {@link com.dwinovo.numen.api.plugin.ClientMods}):联动自己经
+     * {@code NumenPlugins.registerForClientMod} 登记,客户端按平台问目标模组、报给服务端。服主的停用名单照旧管它。
+     *
+     * @param modId  目标模组的 id,只用来在花名册里写它联动谁
+     * @param plugin 联动的模块名(也是它登记时的名字空间)
+     * @param body   登记时才求值,理由同 {@link #open(String, String, Function)}
+     */
+    public void openClientMod(String modId, String plugin, Function<Path, Runnable> body) {
+        if (!NumenPlugins.admit(PluginRoster.Source.BUNDLED, plugin, modId)) return;
+        install(plugin, () -> body.apply(contentRoot(plugin)).run());
+    }
+
+    /**
      * 能不能装:目标模组在场,并且服主没在停用名单里关掉它。目标不在场的联动不算这台服务器上的插件,不进花名册;
      * 在场的先在花名册里报到,名单上的判断由花名册给。
      */

@@ -39,7 +39,7 @@ public final class Builtin {
         gate.open("curios", "curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
         gate.open("ftbquests", "ftbquests",
                 content -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(content));
-        gate.open("litematica", "litematica", content -> () -> LitematicaOnNeoForge.install(content));
+        gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnNeoForge.install(content));
     }
 
     /** Litematica(NeoForge 上是 Forgematica)联动不需要加载器替它做什么事:函数都在主人的客户端上跑。 */
