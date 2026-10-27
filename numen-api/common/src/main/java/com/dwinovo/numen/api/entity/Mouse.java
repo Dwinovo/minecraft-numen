@@ -8,6 +8,7 @@ import java.util.Map;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
+import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.permission.Verdict;
@@ -465,6 +466,19 @@ public class Mouse {
             }
         }
         return press(hit, itemFallthrough, at);
+    }
+
+    /**
+     * 同 {@link #use()},但这一下放下的方块是走路顺手垫的路(搭桥、垫柱、垫脚):放置记号记成 {@link PlacedBlocks.Way#PATH}。
+     * 由驱动者的动作定,不由方块或物品猜;走路路线不挖建造的格,垫路的格不在此列。
+     */
+    public Use usePath() {
+        PlacedBlocks.Way before = PlacedBlocks.laying(PlacedBlocks.Way.PATH);
+        try {
+            return use();
+        } finally {
+            PlacedBlocks.laying(before);
+        }
     }
 
     /**

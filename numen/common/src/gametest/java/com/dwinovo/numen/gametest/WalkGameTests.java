@@ -343,4 +343,46 @@ public class WalkGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 垫柱把自己的出口填满:她在一根三格高的基岩烟囱里(墙挖不动),只能垫柱子升上去、翻出去;出来之后要回烟囱底。垫的柱子是走路
+     * 顺手垫的路(放置记号是垫路),走路规则不禁挖它,回程拆自己的柱子下去,照常经权限层(她自己放的,放行)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 900, batch = BATCH)
+    public static void a_walk_back_into_the_chimney_she_pillared_out_of(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 4; y++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)),
+                                Blocks.BEDROCK.defaultBlockState());
+                    }
+                }
+            }
+        }
+        NumenPlayer companion = spawnBare(helper, "gametest_chimney", new BlockPos(8, 2, 8), false);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE, 32));
+        BlockPos home = companion.blockPosition();
+        BlockPos outside = helper.absolutePos(new BlockPos(13, 2, 8));
+        ToolRun[] runs = {null, null};
+        steps(helper)
+                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.to(" + xyz(outside) + ")"))
+                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb out has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(outside) <= 2,
+                            "she did not get out: " + runs[0].outcome());
+                    var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+                    helper.assertTrue(placed.isPlaced(home, level.getBlockState(home)) && !placed.isBuilt(home.asLong()),
+                            "the pillar block she laid at home is not marked as laid path");
+                    runs[1] = lua(companion, "return numen.move.to(" + xyz(home) + ")");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
+                            "she did not get back in: " + runs[1].outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
 }

@@ -71,11 +71,11 @@ final class Rig {
         }
     }
 
-    /** 右键这一下;用了多久记进这一刻的账。 */
+    /** 右键这一下(走路的右键:放下的方块记成垫路);用了多久记进这一刻的账。 */
     Mouse.Use use() {
         long t0 = System.nanoTime();
         try {
-            return mouse.use();
+            return mouse.usePath();
         } finally {
             tally.acted(System.nanoTime() - t0);
         }

@@ -48,11 +48,16 @@ public final class PlacedBlocks extends SavedData {
     /**
      * 放下这一格的玩家:{@code id} 认人,{@code name} 是放的那一刻的名字(主人看的"xxx 放的";查不到名字为空串),
      * {@code owner} 是放的人是同伴时她的主人(真玩家为 null)。
-     * 记下放的人之前的存档里的格子不知道是谁放的,是 {@link #UNKNOWN}。
+     * 记下放的人之前的存档里的格子不知道是谁放的,是 {@link #UNKNOWN}。{@code way} 是怎么放的:建造,还是走路顺手垫的路。
      */
-    public record Placer(UUID id, String name, UUID owner) {
+    public record Placer(UUID id, String name, UUID owner, Way way) {
 
         public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "", null);
+
+        /** 同伴放的建造方块:有主人。 */
+        public Placer(UUID id, String name, UUID owner) {
+            this(id, name, owner, Way.BUILT);
+        }
 
         /** 一位真玩家。 */
         public Placer(UUID id, String name) {
@@ -65,12 +70,33 @@ public final class PlacedBlocks extends SavedData {
         }
     }
 
-    /** 同一个人放的格子存成一组。 */
-    private record PlacerCells(UUID id, String name, Optional<UUID> owner, List<Long> cells) {
+    /**
+     * 怎么放下的这一格。由放的那个动作定,不由方块或物品猜:{@link #laying} 在走路垫路的右键里设成 {@link #PATH},
+     * 其余(建造、玩家手放、命令之外一切经物品落位的)是 {@link #BUILT}。走路路线不挖建造的格({@code Walking}):房子是要留下来的东西;
+     * 垫路的料是走路自己为过去垫的,回程要拆照常经权限层裁决。
+     */
+    public enum Way { BUILT, PATH }
+
+    /** 此刻落位算怎么放的:{@link #placedBy} 取它。只在服务端主线程上改,与 {@code Drops.breakStarts} 同一种成对嵌套的做法。 */
+    private static Way laying = Way.BUILT;
+
+    /**
+     * 把此刻落位的算法设成 {@code way},交回原来的,由调用方在落位之后用它还原(成对,无论放成没成)。
+     * 走路垫路的那一个右键({@code Mouse#usePath})是仓库里唯一设成 {@link Way#PATH} 的地方。
+     */
+    public static Way laying(Way way) {
+        Way before = laying;
+        laying = way;
+        return before;
+    }
+
+    /** 同一个人用同一种方式放的格子存成一组;{@code path} 缺省(旧存档)是建造。 */
+    private record PlacerCells(UUID id, String name, Optional<UUID> owner, boolean path, List<Long> cells) {
         static final Codec<PlacerCells> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(PlacerCells::id),
                 Codec.STRING.fieldOf("name").forGetter(PlacerCells::name),
                 UUIDUtil.CODEC.optionalFieldOf("owner").forGetter(PlacerCells::owner),
+                Codec.BOOL.optionalFieldOf("path", false).forGetter(PlacerCells::path),
                 Codec.LONG.listOf().fieldOf("cells").forGetter(PlacerCells::cells)
         ).apply(i, PlacerCells::new));
     }
@@ -97,7 +123,8 @@ public final class PlacedBlocks extends SavedData {
             put(cell, Placer.UNKNOWN);
         }
         for (PlacerCells group : groups) {
-            Placer placer = new Placer(group.id(), group.name(), group.owner().orElse(null));
+            Placer placer = new Placer(group.id(), group.name(), group.owner().orElse(null),
+                    group.path() ? Way.PATH : Way.BUILT);
             for (long cell : group.cells()) {
                 put(cell, placer);
             }
@@ -130,7 +157,7 @@ public final class PlacedBlocks extends SavedData {
     public static void placedBy(ServerLevel level, BlockPos pos, ServerPlayer by) {
         PlacedBlocks placed = of(level);
         Placer placer = new Placer(by.getUUID(), by.getGameProfile().getName(),
-                by instanceof NumenPlayer companion ? companion.getOwnerUuid() : null);
+                by instanceof NumenPlayer companion ? companion.getOwnerUuid() : null, laying);
         placed.record(pos, placer);
         BlockPos other = otherHalfOf(pos, level.getBlockState(pos));
         if (other != null && !level.getBlockState(other).isAir()) {
@@ -190,12 +217,13 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
-     * 这一格带着放置记号吗:只读,不看世界里此刻是什么、也不清记号,所以任何线程(寻路工作线程逐格问它)都可以调。
-     * 要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
+     * 这一格带着建造的放置记号吗({@link Way#BUILT}):只读,不看世界里此刻是什么、也不清记号,所以任何线程(寻路工作线程逐格问它)
+     * 都可以调。垫路的记号({@link Way#PATH})不算。要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
      */
-    public boolean isMarked(long cell) {
+    public boolean isBuilt(long cell) {
         Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
-        return cells != null && cells.containsKey(cell);
+        Placer placer = cells == null ? null : cells.get(cell);
+        return placer != null && placer.way() == Way.BUILT;
     }
 
     /**
@@ -281,7 +309,8 @@ public final class PlacedBlocks extends SavedData {
         }
         List<PlacerCells> out = new ArrayList<>();
         groups.forEach((placer, cells) -> out.add(
-                new PlacerCells(placer.id(), placer.name(), Optional.ofNullable(placer.owner()), cells)));
+                new PlacerCells(placer.id(), placer.name(), Optional.ofNullable(placer.owner()),
+                        placer.way() == Way.PATH, cells)));
         return out;
     }
 

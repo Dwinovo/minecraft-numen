@@ -123,6 +123,40 @@ class PlacedBlocksTest {
     }
 
     @Test
+    void theWayACellWasLaidSurvivesASaveLoadCycleAndOldRecordsAreBuilt() {
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos wall = new BlockPos(2, 64, 2);
+        BlockPos step = new BlockPos(3, 64, 2);
+        placed.record(wall, STEVE);
+        placed.record(step, new PlacedBlocks.Placer(STEVE.id(), STEVE.name(), null, PlacedBlocks.Way.PATH));
+        assertTrue(placed.isBuilt(wall.asLong()), "建造的格带建造记号");
+        assertFalse(placed.isBuilt(step.asLong()), "垫路的格不算建造的");
+        assertTrue(placed.isPlaced(step, Blocks.STONE.defaultBlockState()), "垫路的格照样是玩家放的:权限层照常认");
+
+        PlacedBlocks back = PlacedBlocks.load(placed.save(new CompoundTag(), null), null);
+        assertTrue(back.isBuilt(wall.asLong()));
+        assertFalse(back.isBuilt(step.asLong()), "怎么放的跟着存档来回");
+
+        CompoundTag old = new CompoundTag();
+        CompoundTag group = new CompoundTag();
+        group.putUUID("id", STEVE.id());
+        group.putString("name", STEVE.name());
+        net.minecraft.nbt.ListTag cells = new net.minecraft.nbt.ListTag();
+        cells.add(net.minecraft.nbt.LongTag.valueOf(wall.asLong()));
+        group.put("cells", cells);
+        net.minecraft.nbt.ListTag groups = new net.minecraft.nbt.ListTag();
+        groups.add(group);
+        old.put("placers", groups);
+        assertTrue(PlacedBlocks.load(old, null).isBuilt(wall.asLong()), "没写怎么放的旧存档一律当建造");
+    }
+
+    @Test
+    void layingScopesTheWayAndPutsItBack() {
+        assertEquals(PlacedBlocks.Way.BUILT, PlacedBlocks.laying(PlacedBlocks.Way.PATH));
+        assertEquals(PlacedBlocks.Way.PATH, PlacedBlocks.laying(PlacedBlocks.Way.BUILT));
+    }
+
+    @Test
     void cellsFromBeforePlacersWereKeptAreStillPlacedBySomeoneUnknown() {
         BlockPos a = new BlockPos(1, 70, 1);
         CompoundTag old = new CompoundTag();
