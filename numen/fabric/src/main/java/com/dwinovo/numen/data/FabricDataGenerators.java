@@ -17,6 +17,5 @@ public final class FabricDataGenerators implements DataGeneratorEntrypoint {
     public void onInitializeDataGenerator(FabricDataGenerator generator) {
         FabricDataGenerator.Pack pack = generator.createPack();
         pack.addProvider(FabricModItemTagsProvider::new);
-        pack.addProvider(FabricModBlockTagsProvider::new);
     }
 }

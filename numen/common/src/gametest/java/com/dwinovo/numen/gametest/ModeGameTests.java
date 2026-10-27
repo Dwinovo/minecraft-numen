@@ -87,7 +87,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, false, false));
+                ctx.deadline(3600L), targets, false));
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -111,7 +111,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
         // 盘料是受理之前的准备:料不齐,这次调用当场回错误,活不进槽、没有任务编号
-        BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
+        BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true);
         java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.api.task.TaskResult> refused =
                 new java.util.concurrent.atomic.AtomicReference<>();
         boolean[] accepted = new boolean[1];
@@ -161,109 +161,6 @@ public class ModeGameTests {
                             + level.getBlockState(helper.absolutePos(new BlockPos(7, 2, 7))));
             CompanionFactory.despawn(level.getServer(), companion);
         });
-    }
-
-    /**
-     * 社区图纸格式解码:代码现场构造最小 .litematic(跨 long 位流、YZX 序、
-     * 稀疏丢空气)与 .schem v2(varint 数据、带属性的调色板键),写进蓝图目录
-     * 经 BlueprintStore 统一管线加载,逐格断言。不提交二进制夹具。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
-    public static void blueprint_community_formats(GameTestHelper helper) throws Exception {
-        ServerLevel level = helper.getLevel();
-        java.nio.file.Path dir = com.dwinovo.numen.blueprint.BlueprintStore.dir(level.getServer());
-
-        // ---- .litematic:2×1×2,调色板 [air, cobblestone],条目 [1,1,0,1] bits=2 ----
-        var region = new net.minecraft.nbt.CompoundTag();
-        var pos = new net.minecraft.nbt.CompoundTag();
-        pos.putInt("x", 0); pos.putInt("y", 0); pos.putInt("z", 0);
-        region.put("Position", pos);
-        var size = new net.minecraft.nbt.CompoundTag();
-        size.putInt("x", 2); size.putInt("y", 1); size.putInt("z", 2);
-        region.put("Size", size);
-        var pal = new net.minecraft.nbt.ListTag();
-        var air = new net.minecraft.nbt.CompoundTag(); air.putString("Name", "minecraft:air");
-        var cob = new net.minecraft.nbt.CompoundTag(); cob.putString("Name", "minecraft:cobblestone");
-        pal.add(air); pal.add(cob);
-        region.put("BlockStatePalette", pal);
-        region.putLongArray("BlockStates", new long[]{0b01000101L});   // [1,1,0,1]
-        var regions = new net.minecraft.nbt.CompoundTag();
-        regions.put("main", region);
-        var liteRoot = new net.minecraft.nbt.CompoundTag();
-        liteRoot.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic"));
-
-        BlockPos anchor = helper.absolutePos(new BlockPos(4, 4, 4));
-        var lite = com.dwinovo.numen.blueprint.BlueprintStore.load(level, "fixture_lite", anchor, 0);
-        helper.assertTrue(lite.targets().size() == 3, "litematic: expect 3 non-air cells, got "
-                + lite.targets().size());
-        var litePos = lite.targets().stream().map(BuildTaskRecord.Target::pos).toList();
-        helper.assertTrue(litePos.contains(anchor)
-                        && litePos.contains(anchor.offset(1, 0, 0))
-                        && litePos.contains(anchor.offset(1, 0, 1)),
-                "litematic: wrong cell positions " + litePos);
-        helper.assertTrue(lite.targets().stream().allMatch(
-                        t -> t.desiredState().is(Blocks.COBBLESTONE)),
-                "litematic: all cells should be cobblestone");
-
-        // ---- .schem v2:2×1×2,调色板含带属性键,BlockData=[1,1,0,1] ----
-        var schemRoot = new net.minecraft.nbt.CompoundTag();
-        schemRoot.putInt("Version", 2);
-        schemRoot.putShort("Width", (short) 2);
-        schemRoot.putShort("Height", (short) 1);
-        schemRoot.putShort("Length", (short) 2);
-        var spal = new net.minecraft.nbt.CompoundTag();
-        spal.putInt("minecraft:air", 0);
-        spal.putInt("minecraft:oak_stairs[facing=north]", 1);
-        schemRoot.put("Palette", spal);
-        schemRoot.putByteArray("BlockData", new byte[]{1, 1, 0, 1});
-        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem"));
-
-        var schem = com.dwinovo.numen.blueprint.BlueprintStore.load(level, "fixture_schem", anchor, 0);
-        helper.assertTrue(schem.targets().size() == 3, "schem: expect 3 non-air cells, got "
-                + schem.targets().size());
-        helper.assertTrue(schem.targets().stream().allMatch(t ->
-                        t.desiredState().is(Blocks.OAK_STAIRS)
-                                && t.desiredState().getValue(net.minecraft.world.level.block.state
-                                        .properties.BlockStateProperties.HORIZONTAL_FACING)
-                                == net.minecraft.core.Direction.NORTH),
-                "schem: cells should be north-facing oak stairs");
-        helper.assertTrue(com.dwinovo.numen.blueprint.BlueprintStore.list(level.getServer())
-                        .containsAll(List.of("fixture_lite", "fixture_schem")),
-                "blueprint list should include community formats");
-        helper.succeed();
-    }
-
-    /**
-     * 真实社区图纸解码:日式小屋(40×23×45,负 z 尺寸区域、379 项调色板
-     * 9bit 跨 long 位流)。{@code .litematic} 元数据 TotalBlocks=5859 当金标准。
-     *
-     * <p>目标格是 5857 而不是 5859:这栋图纸里有<b>两张床</b>,床头不进目标集,
-     * 由床脚的落位回调自己造出来。两张床都朝北,而朝北时床头的 z 更小——照原来两半
-     * 都排进去的做法,床头会先落位,而床的落位回调会往"朝向再往外一格"再写一块床头,
-     * 那一格在目标集之外:一件料换三块床方块,还可能覆写掉已砌好的内墙。所以这个
-     * 差额不是解码丢了格,恰恰是它没丢:{@code 5857 + 2 == TotalBlocks}。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
-    public static void blueprint_japanese_cottage_decode(GameTestHelper helper) throws Exception {
-        ServerLevel level = helper.getLevel();
-        copyCottageFixture(level);
-        var loaded = com.dwinovo.numen.blueprint.BlueprintStore.load(
-                level, "japanese_cottage", helper.absolutePos(new BlockPos(0, 2, 0)), 0);
-        helper.assertTrue(loaded.size().getX() == 40 && loaded.size().getY() == 23
-                        && loaded.size().getZ() == 45,
-                "cottage size mismatch: " + loaded.size());
-        // 5857 个目标格 + 2 个由床脚代建的床头 = TotalBlocks 5859
-        helper.assertTrue(loaded.targets().size() == 5857,
-                "cottage decode: expect 5857 target cells (TotalBlocks 5859 minus the two bed"
-                        + " heads their feet build), got " + loaded.targets().size());
-        helper.assertTrue(loaded.dropped() == 0,
-                "nothing in this cottage should be dropped outright, got " + loaded.dropped());
-        // 床头是被代建的,不是缺了一块设计——目标集里一个都不该有
-        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.build
-                        .BuildStates.isSecondaryHalf(t.desiredState())),
-                "a bed head must never be its own target cell");
-        helper.succeed();
     }
 
     /**
@@ -355,7 +252,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, false));
+                ctx.deadline(3600L), targets, true));
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),

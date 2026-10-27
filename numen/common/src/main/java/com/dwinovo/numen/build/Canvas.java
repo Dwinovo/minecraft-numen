@@ -38,7 +38,7 @@ public final class Canvas {
     }
 
     /** 画完的每一格,按最后一次画它的先后,摆在它们自己的世界坐标上。 */
-    public Layout layout() {
-        return Layout.of(List.copyOf(cells.values()), 0);
+    public List<BuildTaskRecord.Target> targets() {
+        return List.copyOf(cells.values());
     }
 }

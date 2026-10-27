@@ -5,15 +5,14 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Block;
 
 /**
  * Catalogue of the datapack tags the Numen tool pack declares. The
  * pathfinder and the loader-side data generators both reference the constants
  * here so the key's identifier exists in one place only — rename or repath in
  * this file and every consumer follows. These are Numen's tags (namespace
- * {@code numen}), not Numen API's: pathfinding scaffolding and blueprint safety
- * are tool-pack concerns. Which blocks the body may break is not a tag — that is
+ * {@code numen}), not Numen API's: pathfinding scaffolding is a
+ * tool-pack concern. Which blocks the body may break is not a tag — that is
  * the permission layer's rule table ({@code com.dwinovo.numen.api.permission}).
  *
  * <h2>Why not derive at runtime</h2>
@@ -39,24 +38,6 @@ public final class InitTag {
      * {@code data/numen/tags/item/throwaway.json}.
      */
     public static final TagKey<Item> THROWAWAY = item("throwaway");
-
-    /**
-     * Blocks whose block-entity data a blueprint may carry into the world — sign
-     * text, banner patterns, and whatever a pack chooses to add.
-     *
-     * <p>The tag <b>is</b> the authorisation. A blueprint is a file: editable,
-     * downloadable. Copying a chest's contents out of one would print items from
-     * nothing, so nothing is copied unless it is named here. Being a datapack tag
-     * rather than a list in code means a pack that adds decorative block entities
-     * can declare them safe without touching the mod — but it also means adding a
-     * container here lets blueprints print its contents. That is the pack author's
-     * call to make, deliberately, and it should be made knowing that.
-     *
-     * <p>Named vanilla tags are preferred over listing members: {@code
-     * #minecraft:banners} keeps meaning "banners" across versions. See
-     * {@code data/numen/tags/block/safe_block_entity_data.json}.
-     */
-    public static final TagKey<Block> SAFE_BLOCK_ENTITY_DATA = block("safe_block_entity_data");
 
     private InitTag() {}
 
@@ -84,8 +65,4 @@ public final class InitTag {
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name));
     }
 
-    private static TagKey<Block> block(String name) {
-        return TagKey.create(Registries.BLOCK,
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name));
-    }
 }

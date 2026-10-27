@@ -6,8 +6,6 @@ import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.task.move.Arrival;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.WorkProfile;
-import com.dwinovo.numen.build.Built;
-import com.dwinovo.numen.build.Placement;
 import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
@@ -41,13 +39,13 @@ import java.util.Optional;
  * 这里不碰,回执里算进"要先挖开的";创造模式照原版一下就碎:图纸直接写上去顶掉原来的。
  *
  * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、低层先放(支撑还没长出来的先放着,
- * 留给下一次调用)、整份对上之后让世界落定一次、生成摆设。
+ * 留给下一次调用)、整份对上之后让世界落定一次。
  *
  * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;转头、挥手、粒子归演出组件 {@link BuildShowmanship},
  * 它手里没有放置入口,改不了世界。
  *
  * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与轮扫对账;每一格的情形在 {@link BuildSurvey},
- * 单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},材料账本在 {@link BuildLedger},摆设与善后在
+ * 单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},材料账本在 {@link BuildLedger},善后在
  * {@link BuildFixtures},演出在 {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder},收不了尾时的缺格清单在
  * {@link BuildOutstanding}。
  */
@@ -149,8 +147,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         super(player, record);
         this.rules = new BuildCellRules(player, record);
         this.inv = new BuildInventory(player);
-        this.fixtures = new BuildFixtures(player, record, inv);
-        this.ledger = new BuildLedger(player, record, rules, inv, fixtures);
+        this.fixtures = new BuildFixtures(player, record);
+        this.ledger = new BuildLedger(record, rules, inv);
         for (BuildTaskRecord.Target target : record.targets) {
             targetByPos.put(target.pos().asLong(), target);
         }
@@ -162,7 +160,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 按她此刻站的地方数这件活的每一格。 */
     private BuildSurvey survey() {
-        return new BuildSurvey(player, r, rules, inv, ledger);
+        return new BuildSurvey(player, r, rules, inv);
     }
 
     @Override
@@ -231,14 +229,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 开工盘料:料不齐<b>整批拒绝,一格不动</b>。
-     *
-     * <p>试过放行"能盖多少盖多少",撤了。盖一半停下来的后果比拒绝严重得多:
-     * 半栋房子杵在原地,而续建要靠模型重发一模一样的指令——它多半发不一样,
-     * 于是新旧两版叠在同一片地基上。<b>拒绝是原子的,半成品不是。</b>
-     *
-     * <p>真正该改的不在这里:她把一栋房子拆成五次调用,盘料只盘到当前这一批,
-     * 于是墙砌完了才发现屋顶的料不够。整栋一次规划,这道门就只会响一次。
+     * 开工盘料:料不齐也开工,有料的格放、缺的留给回执报;只有手上一格要用的料都没有时才拦——那才是真的开不了工。
+     * 要花多少、缺多少,{@code numen.build.diff} 事先说得清,要不要补了料再来由模型自己定。
      */
     private Precondition.Failure checkMaterials() {
         if (!r.consumeMaterials) {
@@ -246,21 +238,16 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         Map<Item, Integer> need = ledger.remainingNeed();
         Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(need);
-        List<BuildTaskRecord.CellNeed> exactShort = ledger.needShortfall(ledger.remainingCellNeeds());
-        if (shortfall.isEmpty() && exactShort.isEmpty()) {
+        if (shortfall.isEmpty()) {
             return null;
         }
-        if (r.allowPartial) {
-            // 整幢图纸一趟本来就运不完:能开工就开工,补给跑几趟是常态而不是错误。
-            // 只有一格都买不起时才拦——那才是真的开不了工。
-            for (Item item : need.keySet()) {
-                if (inv.hasItem(item, true)) {
-                    return null;
-                }
+        for (Item item : need.keySet()) {
+            if (inv.hasItem(item, true)) {
+                return null;
             }
         }
         return new Precondition.Failure(
-                "not enough materials yet — " + BuildLedger.summarizeShortfall(shortfall, exactShort)
+                "not enough materials yet — " + BuildLedger.summarizeShortfall(shortfall)
                         + ". Nothing was placed. Survival mode consumes 1 item per cell; gather these, "
                         + "then send the SAME call again — anything already standing is skipped, so a "
                         + "restocked repeat picks up exactly where this left off.",
@@ -527,16 +514,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
         int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
-        // 有料单的格走另一道闸门:花盆要盆和花两件都在,旗帜要那面绣好的才算数
-        List<BuildTaskRecord.CellNeed> needs = ledger.needsFor(target);
-        if (cost > 0 && !needs.isEmpty()) {
-            for (BuildTaskRecord.CellNeed need : needs) {
-                if (inv.countMatching(need) < 1) {
-                    noteShortage(need.stack().getItem(), 1);
-                    return null;
-                }
-            }
-        } else if (cost > 0 && !inv.hasItems(target.item(), cost, true)) {
+        if (cost > 0 && !inv.hasItems(target.item(), cost, true)) {
             noteShortage(target.item(), cost);
             return null;
         }
@@ -551,8 +529,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     net.minecraft.world.level.block.Block.UPDATE_ALL)) {
                 return null;
             }
-            r.brokeOne(target.removes() != null);
-            recordCleared(pos);
+            r.brokeOne();
             if (BuildCellRules.isAirTarget(target)) {
                 markObserved(target, true);
                 return desired;
@@ -572,7 +549,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 return null;
             }
             r.placedOne(occupied);
-            recordPlaced(pos, now);
             markObserved(target, true);
             return now;
         }
@@ -584,7 +560,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!player.level().setBlock(pos, desired, PLACE_FLAGS)) {
             return null;
         }
-        applyBlockEntityData(pos, desired);
         // 放完给方块一次"我被放下了"的回调:命名牌、告示牌、部分方块实体靠它初始化。
         //
         // <p>这一句和上面 PLACE_FLAGS 那段是有张力的:那段刻意不走通知链路,而这条
@@ -601,28 +576,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
         // 个别方块会在里面自己炸掉,而那不该让整栋楼停工。
         try {
-            // 回调拿到的是"她手里那件东西"。有料单的格给单子上第一叠真货(带花纹的
-            // 旗帜),不是一件同名的白货——回调会从里面读组件。
-            desired.getBlock().setPlacedBy(player.level(), pos, desired, player,
-                    needs.isEmpty() ? new ItemStack(target.item()) : needs.get(0).stack().copy());
+            // 回调拿到的是"她手里那件东西"
+            desired.getBlock().setPlacedBy(player.level(), pos, desired, player, new ItemStack(target.item()));
         } catch (RuntimeException ignored) {
             // 放置本身已经成功,回调失败只影响那一格的附加数据
         }
-        if (!needs.isEmpty()) {
-            if (cost > 0) {
-                for (BuildTaskRecord.CellNeed need : needs) {
-                    inv.consumeMatching(need);
-                }
-            }
-        } else {
-            for (int k = 0; k < cost; k++) {
-                inv.consumeOne(target.item());
-            }
+        for (int k = 0; k < cost; k++) {
+            inv.consumeOne(target.item());
         }
         // 照图直写不经 BlockItem.place,放置记录在这里记:这一格(连回调补出的另一半)是她放的。物品车道由那里的 mixin 记
         PlacedBlocks.placedBy(player.serverLevel(), pos, player);
         r.placedOne(occupied);
-        recordPlaced(pos, desired);
         markObserved(target, true);
         return desired;
     }
@@ -710,21 +674,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    /** 放下了一格:这件活盖的是一栋房子的话,记进那一栋——那一栋由哪些格子组成,只有这一处记着。 */
-    private void recordPlaced(BlockPos pos, BlockState state) {
-        if (r.site != null) {
-            Built.of(player.getServer()).placed(r.site, player.getGameProfile().getName(),
-                    player.getServer().overworld().getGameTime(), pos, state.getBlock());
-        }
-    }
-
-    /** 拆掉了一格:这件活盖的是一栋房子的话,从那一栋的记录里划掉。 */
-    private void recordCleared(BlockPos pos) {
-        if (r.site != null) {
-            Built.of(player.getServer()).cleared(r.site, player.getServer().overworld().getGameTime(), pos);
-        }
-    }
-
     /**
      * 一遍走完就收场:够得着的每一格都轮到过一次。断了料,以缺料收场;一格都没放成,以放不下的缘由收场;放成了就是成功,回执说
      * 还剩什么。再来一遍——剩下的等撑着它们的立起来、等站着的人走开、等补了料——是程序的事:{@code numen.build.raise} 再问一次
@@ -769,16 +718,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             // 够得着却一格都放不下:走一遍这些格,留案再交代,失败的类型跟主导病因走。放不下就是放不下,不粉饰成成功。
             BuildOutstanding outstanding = BuildOutstanding.survey(order, rules, skippedPos, player.level(),
                     damagedCells);
-            outstanding.log(r.completed(), r.targets.size(), player.blockPosition(), designFrame());
-            return conclude(new Ending(outstanding.describe(designFrame()) + "; built " + r.completed() + "/"
+            outstanding.log(r.completed(), r.targets.size(), player.blockPosition());
+            return conclude(new Ending(outstanding.describe() + "; built " + r.completed() + "/"
                     + r.targets.size(), outstanding.failure()));
         }
         return conclude(null);
-    }
-
-    /** 这件活照的施工图摆在哪儿、朝哪儿;当场执行的原语没有施工图,是 null。 */
-    private Placement designFrame() {
-        return r.site == null ? null : new Placement(r.site.anchor(), r.site.quarters());
     }
 
     // ------------------------------------------------------------------
@@ -846,7 +790,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 够得着的放完了。整份都对上了才收尾:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子——半成品上落定会让还没有墙
+     * 够得着的放完了。整份都对上了才收尾:让世界落定一次、外围补水,放一把庆祝的粒子——半成品上落定会让还没有墙
      * 可靠的贴附件掉下来,所以还剩格时只交代还剩什么、下一步去哪儿。
      */
     private TaskState finish() {
@@ -856,7 +800,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return TaskState.SUCCESS;
         }
         int popped = settleWithWorld();
-        fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
         {
@@ -870,19 +813,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (popped > 0) {
                 notes.add(popped + " cell(s) ended up different once the world settled — vanilla would not"
                         + " hold them there, or their shape is decided by their neighbours");
-            }
-            if (r.droppedAtLoad > 0) {
-                notes.add(r.droppedAtLoad + " cell(s) of the plan could not be taken along"
-                        + " (liquids, or blocks with no item to pay with)");
-            }
-            if (fixtures.skippedFixtures() > 0) {
-                notes.add("short " + fixtures.skippedFixtures() + " fixture(s) (item frames / armour stands"
-                        + " / paintings)");
-            }
-            if (fixtures.skippedPayloads() > 0) {
-                notes.add(fixtures.skippedPayloads() + " item(s) the blueprint had in its frames / on its"
-                        + " armour stands were left out — those need the exact same item"
-                        + " (enchantments and all), so they went up empty");
             }
             note = notes.isEmpty() ? "all requested cells match" : String.join("; ", notes);
         }
@@ -1072,46 +1002,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         r.completed(observedCompleted.size());
     }
 
-    /**
-     * 把图纸带来的方块实体数据装进刚放好的那一格:箱子里的东西、告示牌的字、
-     * 旗帜的花纹、书架上的书。
-     *
-     * <p>不装的话,社区图纸建出来是一屋子空箱子和白板告示牌——外形对了,内容全丢,
-     * 而这是玩家一眼就能看出来的那种丢。
-     *
-     * <p>坐标要覆写成落位点:图纸里存的是导出时的世界坐标,原样加载会让方块实体
-     * 认为自己在别处。
-     */
-    private void applyBlockEntityData(BlockPos pos, BlockState placed) {
-        if (r.blockEntityData.isEmpty() || !placed.hasBlockEntity()) {
-            return;
-        }
-        var data = r.blockEntityData.get(pos.asLong());
-        if (data == null) {
-            return;
-        }
-        var be = player.level().getBlockEntity(pos);
-        if (be == null) {
-            return;
-        }
-        try {
-            var copy = data.copy();
-            copy.putInt("x", pos.getX());
-            copy.putInt("y", pos.getY());
-            copy.putInt("z", pos.getZ());
-            be.loadWithComponents(copy, player.level().registryAccess());
-            be.setChanged();
-            // setChanged 只把区块标脏,不发同步包;而 PLACE_FLAGS 那一包在装数据
-            // <b>之前</b>就已经发出去了,里面还没有方块实体的载荷。不补这一下,
-            // 告示牌的字、旗帜的花纹在客户端是空白的,要等区块重载才出现——正是
-            // 这段代码本来要解决的那个症状。
-            player.level().sendBlockUpdated(pos, placed, placed,
-                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
-        } catch (RuntimeException ignored) {
-            // 数据坏了只影响这一格的内容,方块本身已经放好了,不该让整栋楼停工
-        }
-    }
-
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
         super.stop(companion, why);
@@ -1137,7 +1027,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         Map<Item, Integer> shortfall = r.consumeMaterials
                 ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
         return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
-                r.replaced(), r.broken(), r.removed(), Optional.ofNullable(building()),
+                r.replaced(), r.broken(),
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
@@ -1155,10 +1045,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Blocks that stood there and were swapped for the right one.")
                          int replaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
-                         @com.dwinovo.numen.api.sdk.Doc("Blocks you placed there before that the file no longer has, "
-                                 + "taken away.") int removed,
-                         @com.dwinovo.numen.api.sdk.Doc("The building's name, house#1, for a blueprint.")
-                         Optional<String> building,
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
@@ -1168,19 +1054,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
 
         /** 要的样子已经立着,什么都没放。 */
-        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, 0, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty());
-    }
-
-    /**
-     * 这件活盖的那一栋叫什么({@code house#1});当场执行的原语不是一栋房子,一格都还没放下的新房子也还没有名字,是 null。
-     */
-    private String building() {
-        if (r.site == null) {
-            return null;
-        }
-        Built.Building b = Built.of(player.getServer()).at(r.site);
-        return b == null ? null : b.name();
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, 0, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty());
     }
 
     /** 放了、换了、拆了多少格,这一句收工与收不了工都用。 */
@@ -1190,16 +1065,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             sb.append(" (").append(r.replaced()).append(" replacing what stood there)");
         }
         sb.append(", cleared ").append(r.broken());
-        if (r.removed() > 0) {
-            sb.append(" (").append(r.removed()).append(" of them blocks you had put there before)");
-        }
         return sb.toString();
     }
 
     @Override
     protected String successMessage() {
-        String building = building();
-        return (building == null ? "" : building + ": ") + "built " + r.completed() + "/" + r.targets.size()
+        return "built " + r.completed() + "/" + r.targets.size()
                 + " block(s); " + tally()
                 + (damagedCells > 0
                         ? "; " + damagedCells + " finished cell(s) were destroyed mid-build by "

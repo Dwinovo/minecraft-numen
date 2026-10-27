@@ -14,8 +14,7 @@ import net.neoforged.neoforge.data.event.GatherDataEvent;
  * the main resource source set by the subproject's {@code build.gradle}.
  */
 // 1.21.1 has separate buses; GatherDataEvent is a mod-bus event, and FML puts each listener on the bus
-// its event type belongs to, so no bus is named here. It predates the 1.21.4 Client/Server split, and
-// NeoForge tag providers still want an ExistingFileHelper.
+// its event type belongs to, so no bus is named here. It predates the 1.21.4 Client/Server split.
 @EventBusSubscriber(modid = Constants.MOD_ID)
 public final class DataGenerators {
 
@@ -25,7 +24,5 @@ public final class DataGenerators {
     public static void gatherData(GatherDataEvent event) {
         PackOutput output = event.getGenerator().getPackOutput();
         event.getGenerator().addProvider(true, new ModItemTagsProvider(output, event.getLookupProvider()));
-        event.getGenerator().addProvider(true,
-                new ModBlockTagsProvider(output, event.getLookupProvider(), event.getExistingFileHelper()));
     }
 }

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.FailureType;
-import com.dwinovo.numen.build.Placement;
 import com.dwinovo.numen.api.permission.Listing;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -17,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Function;
 
 /**
  * 收不了尾时还缺的格:走一遍够得着却放不下的格,每一格归到一个病因下,得到一份清单。留案的日志、交给模型的回执、失败的类型都从这一份出,
@@ -34,7 +32,7 @@ final class BuildOutstanding {
         OCCUPIED(FailureType.ENTITY_BLOCKED, "blocked by someone standing there — ask them to step aside"),
         /** 原版在这个位置立不住它(花下面不是土、火把旁边没墙)。 */
         UNSUPPORTED(FailureType.NO_SUPPORT, "that vanilla physics will not hold at that spot"
-                + " (the blueprint asks for something impossible there)"),
+                + " (the design asks for something impossible there)"),
         /** 放了却没留住,或者世界不收。 */
         NOT_KEPT(FailureType.NOT_KEPT, "that would not stay put");
 
@@ -103,21 +101,15 @@ final class BuildOutstanding {
     }
 
     /**
-     * 交给模型的那一句:一共几格,再按病因 → 方块 → 坐标归堆。坐标是世界坐标,这件活照一份施工图盖时每格后面跟着它在
-     * 施工图里的坐标;每堆点名多少格、其余怎么计数照 {@link Listing}。
-     *
-     * @param frame 施工图摆在哪儿、朝哪儿;当场执行的原语没有施工图,是 null
+     * 交给模型的那一句:一共几格,再按病因 → 方块 → 坐标归堆。坐标是世界坐标;每堆点名多少格、其余怎么计数照 {@link Listing}。
      */
-    String describe(Placement frame) {
-        Function<BlockPos, String> naming = frame == null
-                ? Listing::coords
-                : pos -> Listing.coords(pos) + " = design " + Listing.coords(frame.relative(pos));
+    String describe() {
         List<String> parts = new ArrayList<>();
         grouped().forEach((cause, byBlock) -> {
             int n = byBlock.values().stream().mapToInt(List::size).sum();
             List<String> heaps = new ArrayList<>();
             byBlock.forEach((block, positions) -> heaps.add(Listing.part(name(block), positions.size(), positions,
-                    naming)));
+                    Listing::coords)));
             String says = cause == Cause.NOT_KEPT && damagedCells > 0
                     ? cause.says + " — something kept breaking the finished work"
                     : cause.says;
@@ -132,13 +124,13 @@ final class BuildOutstanding {
     /**
      * 留案:缺格按层分布,加上与回执同一份的归堆清单;再逐格写开头几格的明细(期望的与世界里现在的),排查从这里开始。
      */
-    void log(int completed, int total, BlockPos feet, Placement frame) {
+    void log(int completed, int total, BlockPos feet) {
         Map<Integer, Integer> byLayer = new TreeMap<>();
         for (Cell cell : cells) {
             byLayer.merge(cell.target().pos().getY(), 1, Integer::sum);
         }
         com.dwinovo.numen.Constants.LOG.info("[numen-build] 收不了尾 {}/{} feet={} 缺格分层={} {}",
-                completed, total, feet.toShortString(), byLayer, describe(frame));
+                completed, total, feet.toShortString(), byLayer, describe());
         for (Cell cell : cells.subList(0, Math.min(LOGGED_EXAMPLES, cells.size()))) {
             com.dwinovo.numen.Constants.LOG.info("[numen-build] 缺 {} {} 期望={} 实际={}",
                     cell.cause(), cell.target().pos().toShortString(), cell.target().desiredState(), cell.actual());

@@ -14,19 +14,14 @@ import java.util.Map;
 
 /**
  * 要盖成的样子({@code numen.build.place}、{@code numen.build.diff} 收的那一个参数):一串格(Cells,每一格是那一格要放的方块,照
- * {@code /setblock} 的写法),或一份蓝图文件摆在哪儿({@code numen.build.blueprint} 交回的那张表:文件名、原点、转了多少度)。两样恰好
- * 一样。蓝图只记在哪、怎么摆,格子留在文件里,用到时才读。
+ * {@code /setblock} 的写法)。这里是它的值转换的落点:Lua 里的写法(一团、一串 Block 或 Pos、或一格)都读成同一串。
  *
- * @param cells     一串格;是蓝图时为 null
- * @param blueprint 一份蓝图;是一串格时为 null
+ * @param cells 一串格,至少一格
  */
-public record Design(List<Cell> cells, Blueprint blueprint) {
+public record Design(List<Cell> cells) {
 
     public Design {
-        if ((cells == null) == (blueprint == null)) {
-            throw new IllegalArgumentException("cells or a blueprint, exactly one of them");
-        }
-        cells = cells == null ? null : List.copyOf(cells);
+        cells = List.copyOf(cells);
     }
 
     /**
@@ -41,45 +36,15 @@ public record Design(List<Cell> cells, Blueprint blueprint) {
         }
     }
 
-    /**
-     * 一份蓝图文件摆在哪儿。
-     *
-     * @param name     文件名(不带扩展名)
-     * @param origin   文件里的原点(它的最低西北角)落在哪一格
-     * @param rotation 俯视顺时针转了多少度:0、90、180 或 270
-     */
-    public record Blueprint(String name, BlockPos origin, int rotation) {
-
-        public Blueprint {
-            origin = origin.immutable();
-        }
-    }
-
-    /**
-     * 带 {@code blueprint} 名字的表是一份蓝图(其余字段不看);别的是一串格:一团、一串 Block 或 Pos、或一格。写回去照原样。
-     */
+    /** 一团、一串 Block 或 Pos、或一格,读成一串格;写回去照原样。 */
     public static final Codec<Design> CODEC = new Codec<>() {
         @Override
         public ScriptType type() {
-            return ScriptType.union(LuaCodecs.CELLS.type(), new ScriptType.Named("Blueprint"));
+            return LuaCodecs.CELLS.type();
         }
 
         @Override
         public Design decode(Object value) {
-            if (value instanceof Map<?, ?> t && t.get("blueprint") instanceof String name) {
-                Object turned = t.get("rotation");
-                if (turned != null && !(turned instanceof Long)) {
-                    throw new BadValue("expected a Blueprint's rotation to be 0, 90, 180 or 270; got "
-                            + BadValue.given(turned));
-                }
-                BlockPos origin;
-                try {
-                    origin = Positions.cell(t.get("origin"));
-                } catch (BadValue bad) {
-                    throw bad.in("the Blueprint's origin");
-                }
-                return new Design(null, new Blueprint(name, origin, turned == null ? 0 : ((Long) turned).intValue()));
-            }
             List<Cell> cells = new ArrayList<>();
             List<Object> items = Positions.items(value);
             for (int i = 0; i < items.size(); i++) {
@@ -92,21 +57,14 @@ public record Design(List<Cell> cells, Blueprint blueprint) {
                 }
             }
             if (cells.isEmpty()) {
-                throw new BadValue("expected Cells (Blocks: the block for each cell, written as /setblock takes it) "
-                        + "or a Blueprint from numen.build.blueprint; got " + BadValue.given(value));
+                throw new BadValue("expected Cells (Blocks: the block for each cell, written as /setblock takes it); "
+                        + "got " + BadValue.given(value));
             }
-            return new Design(cells, null);
+            return new Design(cells);
         }
 
         @Override
         public Object encode(Design value) {
-            if (value.blueprint != null) {
-                Map<String, Object> out = new LinkedHashMap<>();
-                out.put("blueprint", value.blueprint.name());
-                out.put("origin", Positions.value(value.blueprint.origin()));
-                out.put("rotation", (long) value.blueprint.rotation());
-                return out;
-            }
             List<Object> out = new ArrayList<>();
             for (Cell cell : value.cells) {
                 if (cell.block() == null) {

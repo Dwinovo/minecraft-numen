@@ -1,7 +1,6 @@
 package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.FailureType;
-import com.dwinovo.numen.build.Placement;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
@@ -18,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 收不了尾时的缺格清单:失败类型跟主导病因走,回执按病因 → 方块 → 坐标归堆,照施工图盖的格子带着它在图里的坐标。
+ * 收不了尾时的缺格清单:失败类型跟主导病因走,回执按病因 → 方块 → 坐标归堆。
  * 需要 MC 注册表,无头引导失败时跳过而不失败。
  */
 @Tag("mc")
@@ -66,40 +65,25 @@ class BuildOutstandingTest {
     }
 
     @Test
-    void receiptGroupsByCauseThenBlockWithDesignCoordinates() {
+    void receiptGroupsByCauseThenBlock() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
-        Placement frame = new Placement(new BlockPos(100, 64, -20), 1);
-        BlockPos first = frame.cell(new BlockPos(0, 1, 0));
-        BlockPos second = frame.cell(new BlockPos(2, 1, 0));
-        BlockPos wall = frame.cell(new BlockPos(1, 0, 3));
+        BlockPos first = new BlockPos(100, 65, -20);
+        BlockPos second = new BlockPos(100, 65, -18);
+        BlockPos wall = new BlockPos(103, 64, -19);
         BuildOutstanding outstanding = new BuildOutstanding(List.of(
                 poppy(first, BuildOutstanding.Cause.UNSUPPORTED),
                 stone(wall, BuildOutstanding.Cause.OCCUPIED),
                 poppy(second, BuildOutstanding.Cause.UNSUPPORTED)), 0);
 
-        String receipt = outstanding.describe(frame);
+        String receipt = outstanding.describe();
         assertTrue(receipt.startsWith("3 cell(s) unbuilt"), receipt);
         String occupied = "1 blocked by someone standing there — ask them to step aside: 1 stone ("
-                + xyz(wall) + " = design 1,0,3)";
-        String unheld = "2 that vanilla physics will not hold at that spot (the blueprint asks for something"
-                + " impossible there): 2 poppy (" + xyz(first) + " = design 0,1,0; " + xyz(second)
-                + " = design 2,1,0)";
+                + xyz(wall) + ")";
+        String unheld = "2 that vanilla physics will not hold at that spot (the design asks for something"
+                + " impossible there): 2 poppy (" + xyz(first) + "; " + xyz(second) + ")";
         assertTrue(receipt.contains(occupied), receipt);
         assertTrue(receipt.contains(unheld), receipt);
         assertTrue(receipt.indexOf(occupied) < receipt.indexOf(unheld), "病因按固定的先后排:" + receipt);
-
-        assertTrue(outstanding.describe(null).contains("2 poppy (" + xyz(first) + "; " + xyz(second) + ")"),
-                "当场执行的原语没有施工图,只写世界坐标");
-    }
-
-    @Test
-    void designCoordinatesAreTheInverseOfLayingTheDesignDown() {
-        assumeTrue(booted, "Minecraft 引导不可用,跳过缺格清单钉桩");
-        for (int quarters = 0; quarters < 4; quarters++) {
-            Placement frame = new Placement(new BlockPos(7, 70, -3), quarters);
-            BlockPos rel = new BlockPos(3, 2, -5);
-            assertEquals(rel, frame.relative(frame.cell(rel)), "转 " + quarters * 90 + " 度");
-        }
     }
 
     private static String xyz(BlockPos p) {

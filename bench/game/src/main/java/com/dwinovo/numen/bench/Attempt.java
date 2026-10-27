@@ -102,11 +102,6 @@ final class Attempt {
 
     /** 搭好场景之后等几刻再开口:让搭场景时发生的事先落进她的收件箱,她的那一轮先跑完。 */
     private static final int WARMUP_TICKS = 20;
-    /**
-     * 服务器目录下的图纸库(设计也存在里面):全服共用、跨次保留,她上一次画的设计会原样出现在下一次里、还占着名字。评测的
-     * 游戏目录只给评测用,每次运行开场整个清掉。
-     */
-    private static final String LIBRARY = "schematics";
     /** 她闲下来保持这么久算收工。 */
     static final int SETTLE_TICKS = 60;
     /** 评测里她绑的人设的 id;正文是内置默认人设,与档案、服主的配置无关。 */
@@ -167,10 +162,6 @@ final class Attempt {
         transcript = new Transcript(Results.get().transcript(suite, scenario.id(), variant.id(), number));
         meter = new Meter(transcript);
         settleWorld(level);
-        Path library = server.getServerDirectory().resolve(LIBRARY);
-        if (Files.exists(library)) {
-            deleteTree(library);
-        }
         scenario.arena().build(level, origin);
         GameProfile ownerProfile = new GameProfile(UUID.randomUUID(), OWNER_NAME);
         owner = new ServerPlayer(server, level, ownerProfile, ClientInformation.createDefault());

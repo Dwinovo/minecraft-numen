@@ -14,22 +14,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一份施工图要花的料:按物品数件数,报价与实扣用同一个件数函数({@link BuildTaskRecord.Target#materialCount})——清单与实扣
- * 一旦不同源,玩家按清单备齐了照样建到一半停下(双层砖一格两件就是这么漏掉的)。{@code numen.build.blueprint} 给蓝图文件报价
- * 经这里。
+ * 一串格要花的料:按物品数件数,报价与实扣用同一个件数函数({@link BuildTaskRecord.Target#materialCount})——清单与实扣
+ * 一旦不同源,玩家按清单备齐了照样建到一半停下(双层砖一格两件就是这么漏掉的)。{@code numen.build.diff} 给还剩的格报价
+ * 经这里:她自己设计的一串格和别处交来的一串格,报的是同一个价。
  *
- * <p>报价不动世界一格。这件事曾经只能作为<b>失败的副产品</b>出现:得先选好位置、发起施工、被拒绝,才知道要多少料。而生存
- * 模式的价值恰恰在那条链上:她设计 → 报料 → 一起去采 → 施工。报料是第二环,不该靠撞墙触发。
+ * <p>报价不动世界一格,也不靠撞墙触发:她设计 → 报料 → 一起去采 → 施工,报料是第二环。
  */
 final class BuildBill {
 
     private BuildBill() {}
 
-    /** 这些格要花的料,每种几件。{@code skip} 里的格另有料单,不进普通清单,否则同一面旗帜会被索要两次。 */
-    static Map<Item, Integer> cost(Collection<BuildTaskRecord.Target> targets, java.util.Set<Long> skip) {
+    /** 这些格要花的料,每种几件。 */
+    static Map<Item, Integer> cost(Collection<BuildTaskRecord.Target> targets) {
         Map<Item, Integer> cost = new LinkedHashMap<>();
         for (BuildTaskRecord.Target t : targets) {
-            if (!t.costsMaterial() || skip.contains(t.pos().asLong())) {
+            if (!t.costsMaterial()) {
                 continue;
             }
             cost.merge(t.item(), t.materialCount(), Integer::sum);

@@ -109,13 +109,13 @@ public final class BuildWall implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // numen.build.place 只放手够得着的格:站在墙南面正中,十二格都在手边;numen.build.raise 缺什么补什么
+        // numen.build.place 一遍放手够得着的格:站在墙南面正中,十二格都在手边
         BlockPos stand = scene.pos((LEFT + RIGHT) / 2, 1, Z - 2);
         BlockPos from = scene.pos(LEFT + 1, 1, Z);
         BlockPos to = scene.pos(RIGHT - 1, HEIGHT, Z);
         return """
                 numen.move.to(%s)
-                numen.build.raise(numen.shape.box(%s, %s, "cobblestone"))""".formatted(
+                numen.build.place(numen.shape.box(%s, %s, "cobblestone"))""".formatted(
                 Positions.literal(stand), Positions.literal(from), Positions.literal(to));
     }
 }

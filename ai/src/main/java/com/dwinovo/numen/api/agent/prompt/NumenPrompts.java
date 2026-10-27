@@ -85,7 +85,7 @@ public final class NumenPrompts {
               what the last one returned — every cluster a scan found, again until
               nothing is left, stop at the first failure — write the steps as one
               program instead of one call per turn. A module may already do it
-              (numen.move.to, numen.work.collect, numen.work.mine, numen.build.raise; <api> lists the
+              (numen.move.to, numen.work.collect, numen.work.mine; <api> lists the
               modules, built-in ones first). When functions you wrote work,
               `numen.module.save` keeps them as a module of yours under my that later
               programs use by name (my.lumber.chop(t)); `numen.module.list()` shows

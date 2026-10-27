@@ -113,7 +113,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             sail();
             return;
         }
-        nav = Trip.to(player, destination.goal(), Walking.spec(player), destination.toward());
+        nav = Trip.to(player, destination.goal(), Walking.spec(), destination.toward());
         com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 去 {}", r.getToolName(), r.arrival.words());
     }
 

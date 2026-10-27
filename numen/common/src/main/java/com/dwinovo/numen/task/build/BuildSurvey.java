@@ -54,17 +54,15 @@ public final class BuildSurvey {
     private final BuildTaskRecord r;
     private final BuildCellRules rules;
     private final BuildInventory inv;
-    private final BuildLedger ledger;
     private final boolean instaBreak;
     /** 她此刻站的节点;悬在半空时为 null,什么都算够不着。 */
     private final Feet feet;
 
-    BuildSurvey(NumenPlayer player, BuildTaskRecord r, BuildCellRules rules, BuildInventory inv, BuildLedger ledger) {
+    BuildSurvey(NumenPlayer player, BuildTaskRecord r, BuildCellRules rules, BuildInventory inv) {
         this.player = player;
         this.r = r;
         this.rules = rules;
         this.inv = inv;
-        this.ledger = ledger;
         this.instaBreak = WorkProfile.of(player).instaBreak();
         this.feet = Feet.of(player);
     }
@@ -73,8 +71,7 @@ public final class BuildSurvey {
     public static BuildSurvey of(NumenPlayer player, BuildTaskRecord r) {
         BuildCellRules rules = new BuildCellRules(player, r);
         BuildInventory inv = new BuildInventory(player);
-        BuildLedger ledger = new BuildLedger(player, r, rules, inv, new BuildFixtures(player, r, inv));
-        return new BuildSurvey(player, r, rules, inv, ledger);
+        return new BuildSurvey(player, r, rules, inv);
     }
 
     /** 这一格此刻的情形。 */
@@ -114,23 +111,14 @@ public final class BuildSurvey {
     }
 
     /**
-     * 她此刻付不付得起这一格:不花料的格永远付得起;有料单的格单子上每样都在,否则身上够件数。施工逐格扣料前问的也是它。
+     * 她此刻付不付得起这一格:不花料的格永远付得起,否则身上够件数。施工逐格扣料前问的也是它。
      */
     boolean affordable(BuildTaskRecord.Target target) {
         int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
         if (cost <= 0) {
             return true;
         }
-        var needs = ledger.needsFor(target);
-        if (needs.isEmpty()) {
-            return inv.hasItems(target.item(), cost, true);
-        }
-        for (BuildTaskRecord.CellNeed need : needs) {
-            if (inv.countMatching(need) < 1) {
-                return false;
-            }
-        }
-        return true;
+        return inv.hasItems(target.item(), cost, true);
     }
 
     /** 数一遍整份:每种情形几格,以及要挖的格(离她近的在前)与够不着的格(低的在前、同一层里近的在前)。 */
@@ -138,9 +126,13 @@ public final class BuildSurvey {
         Map<State, Integer> counts = new EnumMap<>(State.class);
         List<BlockPos> dig = new ArrayList<>();
         List<BlockPos> far = new ArrayList<>();
+        List<BuildTaskRecord.Target> pending = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
             State state = of(target);
             counts.merge(state, 1, Integer::sum);
+            if (state != State.DONE && state != State.SKIPPED) {
+                pending.add(target);
+            }
             if (state == State.DIG) {
                 dig.add(target.pos());
             } else if (state == State.FAR) {
@@ -150,7 +142,7 @@ public final class BuildSurvey {
         BlockPos here = player.blockPosition();
         dig.sort(Comparator.comparingDouble(p -> p.distSqr(here)));
         far.sort(Comparator.<BlockPos>comparingInt(BlockPos::getY).thenComparingDouble(p -> p.distSqr(here)));
-        return new Tally(counts, dig, far);
+        return new Tally(counts, dig, far, pending);
     }
 
     /**
@@ -158,8 +150,10 @@ public final class BuildSurvey {
      *
      * @param dig 要先挖开的格,离她近的在前
      * @param far 够不着的格,低的在前、同一层里离她近的在前:下面的先盖,上面的才有地方站
+     * @param pending 还没了结的格({@link #left()} 数的就是它们),按施工图里的先后
      */
-    public record Tally(Map<State, Integer> counts, List<BlockPos> dig, List<BlockPos> far) {
+    public record Tally(Map<State, Integer> counts, List<BlockPos> dig, List<BlockPos> far,
+                        List<BuildTaskRecord.Target> pending) {
 
         public int count(State state) {
             return counts.getOrDefault(state, 0);

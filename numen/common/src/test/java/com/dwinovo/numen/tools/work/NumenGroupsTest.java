@@ -65,16 +65,14 @@ class NumenGroupsTest {
     }
 
     /**
-     * build 组是 blueprint/place/diff 与库里的 raise;没有一组函数管垫路料。
+     * build 组只有 place 与 diff;没有一组函数管垫路料。
      */
     @Test
-    void buildIsThreeFunctionsAndTheLibrarysRaise() {
+    void buildIsTwoFunctions() {
         String build = help("numen.build");
-        assertEquals(List.of("blueprint", "diff", "place", "raise"), functions(build, "build"), build);
-        assertTrue(build.contains("\n---@field raise fun(building: Cells|Blueprint): integer "),
-                "库里的 numen.build.raise 照它的类型注解列在组里: " + build);
-        assertTrue(build.contains("\n---@class Placed\n") && build.contains("\n---@class Blueprint\n")
-                && build.contains("\n---@class Diff\n"), "组里返回值用到的类跟在后面: " + build);
+        assertEquals(List.of("diff", "place"), functions(build, "build"), build);
+        assertTrue(build.contains("\n---@class Placed\n") && build.contains("\n---@class Diff\n"),
+                "组里返回值用到的类跟在后面: " + build);
         ApiTester.Run gone = run("numen.build.scaffold_add(\"minecraft:dirt\")");
         assertFalse(gone.ok(), "build 组里没有垫路料的函数: " + gone.message());
         assertTrue(gone.message().contains("there is no API function numen.build.scaffold_add"), gone.message());
@@ -129,8 +127,7 @@ class NumenGroupsTest {
                 "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})",
                 "numen.build.place({{name = \"stone\", pos = {x = 1, y = 2, z = 3}}})",
                 "numen.build.place({name = \"oak_planks\", pos = {x = 0, y = 1, z = 0}})",
-                "numen.build.blueprint(\"house\", {x = 100, y = 64, z = -20}, {rotation = 90})",
-                "numen.build.diff({blueprint = \"house\", origin = {x = 100, y = 64, z = -20}, rotation = 0})")) {
+                "numen.build.diff({{name = \"oak_planks\", pos = {x = 100, y = 64, z = -20}}})")) {
             var reading = ScriptEngine.IN_USE.calls("t", code, ApiRegistry.catalog(Modules.factory()));
             assertNull(reading.error(), code + ": " + reading.error());
             assertEquals(1, reading.calls().size(), code);

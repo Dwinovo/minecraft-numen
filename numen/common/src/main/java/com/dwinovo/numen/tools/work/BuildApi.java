@@ -2,7 +2,6 @@ package com.dwinovo.numen.tools.work;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.build.Design;
-import com.dwinovo.numen.build.Placement;
 import com.dwinovo.numen.task.build.BuildCompanionTask;
 import com.dwinovo.numen.tools.BuildOps;
 import com.dwinovo.numen.api.sdk.Doc;
@@ -10,18 +9,13 @@ import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Job;
 import com.dwinovo.numen.api.sdk.Note;
-import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
-import net.minecraft.core.BlockPos;
-
-import java.util.Optional;
 
 /**
  * {@code numen.build}:把一处手够得着的格变成要盖的样子。要盖的样子({@link Design})是一串格(Cells,{@code numen.shape} 画的,或任何
- * 一串 Block),或一份蓝图文件摆在哪儿({@code numen.build.blueprint} 交回的那张表,格子留在文件里)。{@code place} 把够得着的格放一遍、
- * 每格轮到一次,够不着的走到够得着最低一层剩下的格的地方再放,到放完或真到不了;{@code diff} 只读,数还差什么;挖开挡着的、一轮轮放到底,
- * 是库里的 {@code numen.build.raise}。
+ * 一串 Block)。{@code place} 整份走一遍、每格只试一次:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放;没放好的在回执里
+ * 报给模型,要不要再来一轮由模型自己定。{@code diff} 只读,数还差什么、要花什么。
  */
 public final class BuildApi {
 
@@ -29,75 +23,58 @@ public final class BuildApi {
 
     public static void install(NumenApi numen) {
         numen.codec(Design.class, Design.CODEC);
-        numen.api("build", "Building: make the cells of Cells (numen.shape draws them) or a blueprint file look "
-                + "like the design, walking up to the cells out of reach. numen.build.raise (library) also digs out "
-                + "what is in the way and builds all of it.", BuildApi.class);
-    }
-
-    /** 哪个文件、摆在哪、转多少。 */
-    public record Blueprint(@Doc("The blueprint file: a .litematic, .schem, .nbt or .snbt in the server's schematics "
-            + "folder, without its extension.") String name,
-                            @Doc("The world cell the file's lowest north-west corner goes to: what the file has at its "
-                                    + "0 0 0 is built there. Given the ground's own y, its lowest level replaces the top "
-                                    + "ground block; given one more it sits on top of the ground.") BlockPos origin,
-                            @Doc("Turn it clockwise seen from above, about its origin, which stays where it is: 0, 90, "
-                                    + "180 or 270; at 90 the file's +x runs south and what faced north faces east.")
-                            @Omitted("keep it as drawn") Optional<Integer> rotation) {}
-
-    @Fn("A blueprint file placed at a spot: its size, cells and materials, for numen.build.place and numen.build.diff.")
-    @Example("local house = numen.build.blueprint(\"japanese_cottage\", {x = 100, y = 64, z = -20})")
-    @Example("numen.build.blueprint(\"tower\", {x = 100, y = 64, z = -20}, {rotation = 90})")
-    @Note("Instant and read-only: it reads the file once and returns where and how it goes with what it costs; nothing "
-            + "is built. A name that is not a file fails with not_found and names the files there are.")
-    @SeeAlso({"numen.build.place", "numen.build.diff", "numen.build.raise"})
-    public static BuildOps.Blueprint blueprint(ServerCall call, Blueprint args) {
-        return BuildOps.blueprint(call.her(), args.name(), args.origin(),
-                Placement.quarters(args.rotation().orElse(null)));
+        numen.api("build", "Building: make the cells of Cells (numen.shape draws them) look like the design, "
+                + "walking up to the cells out of reach. numen.build.diff counts what is left and what it costs. "
+                + "numen.build.place goes through all of them once and reports what did not go in.", BuildApi.class);
     }
 
     /** 要盖成的样子。 */
     public record Place(@Doc("What it should look like: Cells (each a Block, the block for that cell written as "
-            + "/setblock takes it), or a Blueprint from numen.build.blueprint.") Design design) {}
+            + "/setblock takes it).") Design design) {}
 
-    @Fn("Make the cells of a design look like it: each cell within reach gets its turn once, then it walks up to the "
-            + "cells out of reach and goes on.")
+    @Fn("Make the cells of a design look like it: one pass over all of them, each cell tried once, walking up to the "
+            + "cells out of reach; what did not go in is reported.")
     @Example("numen.build.place({{name = \"cobblestone\", pos = {x = 100, y = 64, z = -20}}, "
             + "{name = \"oak_stairs[facing=east]\", pos = {x = 101, y = 64, z = -20}}})")
     @Example("numen.build.place({{name = \"crafting_table\", pos = {x = 101, y = 64, z = -20}}})")
-    @Example("numen.build.place(numen.build.blueprint(\"tower\", {x = 100, y = 64, z = -20}))")
     @Note("It never digs. It places the cells within reach of where you stand, each once; the cells out of reach it walks "
             + "to, standing where the hand reaches the lowest layer left, and places the cells within reach there, and "
-            + "so on until all went in or it can't get any further. Then it returns how many it placed and how many "
-            + "are left. The walk goes its own way like `numen.move.to`, digging and building when going around costs "
-            + "more, and is told in the result. `numen.build.diff` says what is still to do and where without moving; "
-            + "`numen.build.raise` (library) also digs out what is in the way and calls this until the whole building "
-            + "stands.")
+            + "so on until every cell has had its turn or it can't get any further. Then it returns what it placed and "
+            + "what is left, with the reason for each cell that did not go in. The walk goes its own way like "
+            + "`numen.move.to`, digging and building when going around costs more, and is told in the result. "
+            + "`numen.build.diff` says what is still to do and where without moving; whether to go over what is left "
+            + "again is yours to decide.")
     @Note("Background work: fails at once with kind out_of_reach when nothing of it can be placed or walked up to yet "
             + "(the cells hold other blocks to dig out first, or nothing holds them), with what is left and a hint; "
             + "nothing starts. When everything already looks like it, it returns at once with nothing placed.")
-    @Note("A blueprint at the same dimension, spot and rotation is the same building: placing it again adds what is "
-            + "missing, replaces what differs, and removes only blocks you placed there before that the file no longer "
-            + "has and that nobody has changed since. Cells are only those cells.")
-    @Note("Survival: Cells are priced as a whole before the first block and refused, placing nothing, when anything is "
-            + "short; a blueprint builds as far as your stock goes. Where another block stands it places nothing: dig "
-            + "it out first with numen.work.dig (numen.build.diff lists those cells). Creative replaces it at once.")
+    @Note("Survival: each cell takes its items as it goes. It places what your stock pays for and reports what you are "
+            + "short of (numen.build.diff tells beforehand what the cells cost and what you lack); with none of the items "
+            + "at all it places nothing. Where another block stands it places nothing: dig it out first with "
+            + "numen.work.dig (numen.build.diff lists those cells). Creative replaces it at once.")
     @Note("Blocks that hang on others (torches, ladders, signs, carpets, flowers, rails, buttons, hanging lanterns) go "
             + "in after the blocks around them. A door or a tall plant is written as its lower half and a bed as its "
             + "foot; the other half comes with it. Liquids (water, lava) are never placed.")
     @Note("Asks your owner first when their rules say so, for the cells it would change; a refusal stops it with their "
             + "words.")
-    @SeeAlso({"numen.build.diff", "numen.build.raise", "numen.task.stop"})
+    @SeeAlso({"numen.build.diff", "numen.task.stop"})
     public static Job<BuildCompanionTask.Placed> place(ServerCall call, Place args) {
         return BuildOps.place(call, args.design());
     }
 
     @Fn("What a spot still lacks to look like a design, seen from where you stand: how many cells are within reach to "
-            + "place, which must be dug out first, how many are out of reach and the lowest nearest of those.")
-    @Example("local d = numen.build.diff(numen.build.blueprint(\"tower\", {x = 100, y = 64, z = -20}))\n"
+            + "place, which must be dug out first, how many are out of reach and the lowest nearest of those, and "
+            + "what the cells still to do cost.")
+    @Example("local d = numen.build.diff({{name = \"cobblestone\", pos = {x = 100, y = 64, z = -20}}, "
+            + "{name = \"oak_stairs[facing=east]\", pos = {x = 101, y = 64, z = -20}}})\n"
             + "print(d.left, d.reach, d.far)")
+    @Example("local d = numen.build.diff({{name = \"oak_planks\", pos = {x = 100, y = 64, z = -20}}})\n"
+            + "print(d.materials.oak_planks, d.short_of)")
     @Note("Instant and read-only.")
+    @Note("materials lists every item the cells still to do take, most first, counted the way placing takes them; "
+            + "short_of is what of that you do not carry, in survival (absent when building costs nothing). It prices "
+            + "the cells you pass, whether you drew them or got them from elsewhere.")
     @Note("A cell is within reach exactly when numen.build.place would place it from here, without walking.")
-    @SeeAlso({"numen.build.place", "numen.build.raise"})
+    @SeeAlso({"numen.build.place"})
     public static BuildOps.Diff diff(ServerCall call, Place args) {
         return BuildOps.diff(call.her(), args.design());
     }
