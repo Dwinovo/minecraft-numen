@@ -281,26 +281,35 @@ public final class GameTestKit {
 
     /** 一间 5×5、三格高、无顶的木板屋,她在屋里。生存、空手:垫不高,只能拆墙或不出去。 */
     static void plankRoomAround(GameTestHelper helper, int cx, int cz) {
+        roomAround(helper, cx, cz, Blocks.OAK_PLANKS);
+    }
+
+    /** 同样一间屋子,墙用 {@code wall}。 */
+    static void roomAround(GameTestHelper helper, int cx, int cz, net.minecraft.world.level.block.Block wall) {
         ServerLevel level = helper.getLevel();
         for (int x = cx - 2; x <= cx + 2; x++) {
             for (int z = cz - 2; z <= cz + 2; z++) {
                 boolean perimeter = x == cx - 2 || x == cx + 2 || z == cz - 2 || z == cz + 2;
                 if (!perimeter) continue;
                 for (int y = 2; y <= 4; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            Blocks.OAK_PLANKS.defaultBlockState());
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), wall.defaultBlockState());
                 }
             }
         }
     }
 
     static int plankCount(GameTestHelper helper, int cx, int cz) {
+        return roomCount(helper, cx, cz, Blocks.OAK_PLANKS);
+    }
+
+    /** {@link #roomAround} 的墙还剩几块。 */
+    static int roomCount(GameTestHelper helper, int cx, int cz, net.minecraft.world.level.block.Block wall) {
         ServerLevel level = helper.getLevel();
         int n = 0;
         for (int x = cx - 2; x <= cx + 2; x++) {
             for (int z = cz - 2; z <= cz + 2; z++) {
                 for (int y = 2; y <= 4; y++) {
-                    if (level.getBlockState(helper.absolutePos(new BlockPos(x, y, z))).is(Blocks.OAK_PLANKS)) {
+                    if (level.getBlockState(helper.absolutePos(new BlockPos(x, y, z))).is(wall)) {
                         n++;
                     }
                 }

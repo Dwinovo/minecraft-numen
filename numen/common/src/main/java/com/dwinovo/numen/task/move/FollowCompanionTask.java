@@ -114,7 +114,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             return Preparation.READY;
         }
         BlockPos anchor = anchor(target);
-        RouteSpec spec = Walking.spec();
+        RouteSpec spec = Walking.spec(player.serverLevel());
         Survey survey = Survey.of(player, List.of(new Survey.Leg(goal(anchor), spec)), ThrowawayBlocks.factory());
         return new Preparation() {
             @Override
@@ -179,7 +179,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         if (nav == null) {
             heading = anchor;
             // 受理之前规划好的那条只用在第一趟
-            nav = Trip.prepared(player, goal(anchor), Walking.spec(), seed, anchor);
+            nav = Trip.prepared(player, goal(anchor), Walking.spec(player.serverLevel()), seed, anchor);
             seed = null;
         } else if (anchor.distSqr(heading) > RETARGET_DISTANCE * RETARGET_DISTANCE) {
             heading = anchor;

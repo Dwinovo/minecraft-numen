@@ -861,7 +861,7 @@ public class DigGameTests {
         }
         BlockPos debris = helper.absolutePos(new BlockPos(30, 3, 30));
         level.setBlockAndUpdate(debris, Blocks.ANCIENT_DEBRIS.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_debris", new BlockPos(3, 2, 3), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_debris", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(debris) + ")");
         ToolRun[] fetch = new ToolRun[1];

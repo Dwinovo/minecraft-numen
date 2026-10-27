@@ -236,7 +236,7 @@ public class MovementGameTests {
     public static void follow_builds_up_to_keep_up(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper, Blocks.STONE);
-        NumenPlayer companion = spawnAt(helper, "gametest_tail", new BlockPos(3, 2, 8), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_tail", new BlockPos(3, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3, seconds = 60})");
 
@@ -284,7 +284,7 @@ public class MovementGameTests {
         level.setBlock(room, Blocks.AIR.defaultBlockState(), 2);
         var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, room.getX() + 0.5, room.getY(), room.getZ() + 0.5);
         level.addFreshEntity(stand);
-        NumenPlayer companion = spawnAt(helper, "gametest_tailing", new BlockPos(3, 2, 8), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_tailing", new BlockPos(3, 2, 8), false);
         ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
 
         steps(helper)
@@ -474,7 +474,7 @@ public class MovementGameTests {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STONE.defaultBlockState());
         }
         BlockPos target = helper.absolutePos(new BlockPos(11, 3, 7));
-        NumenPlayer companion = spawnAt(helper, "gametest_borer", new BlockPos(3, 2, 7), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_borer", new BlockPos(3, 2, 7), false);
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {

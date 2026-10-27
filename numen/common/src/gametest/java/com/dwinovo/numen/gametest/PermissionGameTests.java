@@ -113,7 +113,7 @@ public class PermissionGameTests {
     private static final BlockPos WEST_INSIDE = new BlockPos(6, 2, 7);
 
     /**
-     * 越过边界才问:穿主人墙的那条路照常规划、照常开走——不在开走前问。她走过屋里那两格,走到墙前要挖它时才停下挂一条征询,
+     * 越过边界才问:穿一堵说不清是谁放的墙(没有放置记号;玩家放下的墙路线根本不挖)的那条路照常规划、照常开走——不在开走前问。她走过屋里那两格,走到墙前要挖它时才停下挂一条征询,
      * 这时墙一块不少;征询列出这一声答应放行的每一格(同一种木板、同一行规则),之后不再问;主人允许,她拆墙出去到达,
      * 回执说主人允许过,路程回执的裁定列表里就是那几格。
      */
@@ -121,9 +121,9 @@ public class PermissionGameTests {
     public static void a_walk_asks_at_the_owners_wall_and_goes_on_when_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_host");
-        ownersRoom(helper, 7, 7, owner.getUUID());
+        plankRoomAround(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = adopted(spawnAt(helper, "gametest_tenant", WEST_INSIDE, false), owner);
+        NumenPlayer companion = adopted(spawnBare(helper, "gametest_tenant", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
@@ -172,16 +172,16 @@ public class PermissionGameTests {
     }
 
     /**
-     * 同一条路主人说不:走到墙前问,主人不答应,那几格这一趟里当墙、重新规划;屋子四面都是主人的墙,绕不开,她以 denied 收场,
+     * 同一条路主人说不:走到墙前问,主人不答应,那几格这一趟里当墙、重新规划;屋子四面都是说不清是谁放的墙,绕不开,她以 denied 收场,
      * 回执里有主人的原话,同一种东西不再问第二遍;墙一块不少,她没出屋。
      */
     @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_permission")
     public static void a_walk_refused_at_the_owners_wall_stops_there(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_strict");
-        ownersRoom(helper, 7, 7, owner.getUUID());
+        plankRoomAround(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = adopted(spawnAt(helper, "gametest_squatter", WEST_INSIDE, false), owner);
+        NumenPlayer companion = adopted(spawnBare(helper, "gametest_squatter", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");

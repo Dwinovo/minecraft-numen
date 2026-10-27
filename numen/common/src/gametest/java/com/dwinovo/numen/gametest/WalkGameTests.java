@@ -45,9 +45,9 @@ public class WalkGameTests {
     @GameTest(template = "floor16", timeoutTicks = 486, batch = BATCH)
     public static void a_walk_out_of_a_closed_room_digs_its_way_and_says_so(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        plankRoomAround(helper, 7, 7);
-        int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
+        roomAround(helper, 7, 7, Blocks.STONE);
+        int wallBefore = roomCount(helper, 7, 7, Blocks.STONE);
+        NumenPlayer companion = spawnBare(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(OUTSIDE);
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
 
@@ -55,13 +55,13 @@ public class WalkGameTests {
             helper.assertTrue(walk.done(), "move to has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not walk out: " + walk.outcome());
-            helper.assertTrue(walk.outcome().contains("En route") && walk.outcome().contains("oak_planks"),
+            helper.assertTrue(walk.outcome().contains("En route") && walk.outcome().contains("stone"),
                     "the reply does not say what was broken: " + walk.outcome());
-            int broken = planksBefore - plankCount(helper, 7, 7);
-            helper.assertTrue(broken > 0, "no plank was broken");
+            int broken = wallBefore - roomCount(helper, 7, 7, Blocks.STONE);
+            helper.assertTrue(broken > 0, "no block of the wall was broken");
             JsonObject account = returned(walk);
             helper.assertTrue(account.get("dug").getAsInt() == broken && account.get("distance_left").getAsDouble() < 2,
-                    "the account does not match the world (" + broken + " planks gone): " + account);
+                    "the account does not match the world (" + broken + " blocks gone): " + account);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -85,7 +85,7 @@ public class WalkGameTests {
         for (int y = 2; y <= 3; y++) {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 7)), Blocks.DIRT.defaultBlockState());
         }
-        NumenPlayer companion = spawnAt(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
         BlockPos goal = helper.absolutePos(new BlockPos(12, 2, 7));
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(goal) + ")");
@@ -288,7 +288,7 @@ public class WalkGameTests {
         longFloor(helper);
         wallAcross(helper, 30, Blocks.DIRT);
         wallAcross(helper, 150, Blocks.STONE);
-        NumenPlayer companion = spawnAt(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
+        NumenPlayer companion = spawnBare(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
         BlockPos goal = helper.absolutePos(new BlockPos(210, 1, 12));
         ToolRun walk = lua(companion, "return numen.move.to(" + xyz(goal) + ")");
 

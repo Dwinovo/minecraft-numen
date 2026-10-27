@@ -190,6 +190,15 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
+     * 这一格带着放置记号吗:只读,不看世界里此刻是什么、也不清记号,所以任何线程(寻路工作线程逐格问它)都可以调。
+     * 要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
+     */
+    public boolean isMarked(long cell) {
+        Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
+        return cells != null && cells.containsKey(cell);
+    }
+
+    /**
      * 放这一格的人;不是玩家放的是 null(已是空气同 {@link #isPlaced},顺手清掉)。不知道是谁放的是
      * {@link Placer#UNKNOWN}。任何线程可调。
      */
