@@ -75,16 +75,30 @@ public final class LuaCodecs {
      */
     public static final int MAX_CELLS = 16384;
 
-    /** 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。 */
+    /**
+     * 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。它可以带一个原点(形状函数
+     * 画在哪、粘贴落在哪;转向、翻转、粘贴围着它),原点不在这串格的数据里,在值自己带的元表上。
+     */
     public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
             "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
                     + "cell). numen.shape draws them; numen.shape.cells(list) makes Cells of any such list.",
             ScriptType.union(new ScriptType.Named("Block"), new ScriptType.Named("Pos"))).methodsIn("numen.shape");
 
+    /** 一块带形状的选区:记着自己的形状参数,所以能照形状放大缩小;方法写在内置模块 {@code numen.shape} 里。 */
+    public static final ScriptType.Class REGION = new ScriptType.Class("Region",
+            "A selection that knows its shape (WorldEdit's regions): numen.shape.cuboid, cyl, sphere, ellipsoid, poly and "
+                    + "convex make one, and so do the shape functions called without a pattern. :set, :walls, :faces and "
+                    + ":center draw it as Cells, :expand, :contract, :shift, :outset and :inset change it by its shape "
+                    + "(each returns the changed Region), :cells lists its cells.",
+            null, List.of(ScriptType.field("kind", ScriptType.choice(List.of("cuboid", "cyl", "ellipsoid", "poly",
+                    "convex", "cells")), "What shape it is; cells is any shape given by its cells only, which cannot be "
+                    + "expanded or contracted."))).methodsIn("numen.shape");
+
     static {
         declare(POS, LuaCodecs.class);
         declare(ERROR, LuaCodecs.class);
         declare(CELLS, LuaCodecs.class);
+        declare(REGION, LuaCodecs.class);
         BY_CLASS.put(String.class, Builtin.STRING);
         BY_CLASS.put(Integer.class, Builtin.INTEGER);
         BY_CLASS.put(int.class, Builtin.INTEGER);
@@ -111,7 +125,7 @@ public final class LuaCodecs {
     }
 
     /** 帮助与系统提示里列出的共用类,按这个顺序:索引里有它们,一组的帮助不再重复。 */
-    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Cells", "Error");
+    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Cells", "Region", "Error");
 
     /**
      * 登记一种类型的值转换(插件经 {@code NumenApi.codec} 来)。它声明的类一并登记。

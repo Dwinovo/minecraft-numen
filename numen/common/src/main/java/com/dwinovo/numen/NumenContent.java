@@ -145,6 +145,7 @@ public final class NumenContent {
             com.dwinovo.numen.tools.work.MoveApi.install(numen);
             com.dwinovo.numen.tools.work.WorkApi.install(numen);
             com.dwinovo.numen.tools.work.BuildApi.install(numen);
+            com.dwinovo.numen.tools.shape.ShapeApi.install(numen);
             com.dwinovo.numen.tools.work.FightApi.install(numen);
             com.dwinovo.numen.tools.interact.UseApi.install(numen);
             com.dwinovo.numen.tools.interact.GuiApi.install(numen);

@@ -32,14 +32,7 @@ public final class BuildStates {
      */
     public static Resolved resolve(String written) {
         String trimmed = written.trim();
-        BlockState state;
-        try {
-            state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(
-                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(), trimmed, false).blockState();
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException bad) {
-            // 原版解析器的话已经足够具体("Unknown block type"、"does not have property"),原样转述,不再翻译一遍
-            throw new IllegalArgumentException(trimmed + " — " + bad.getMessage());
-        }
+        BlockState state = parse(trimmed, false).blockState();
         String no = unbuildableReason(state);
         if (no != null) {
             throw new IllegalArgumentException(trimmed + " — " + no);
@@ -49,6 +42,23 @@ public final class BuildStates {
         net.minecraft.world.item.Item item = materialItem(state.getBlock());
         String name = trimmed.contains("[") ? trimmed.substring(0, trimmed.indexOf('[')).trim() : trimmed;
         return new Resolved(state, item, name.contains(":") ? name.split(":", 2)[1] : name);
+    }
+
+    /**
+     * {@code /setblock} 写法读成方块(状态、写明了的属性、NBT):全仓调原版解析器的唯一一处。{@link #resolve} 在它上面加"能不能建",
+     * 形状({@code numen.shape})的图案与转向只要读懂、不问能不能建,所以带 NBT 的写法由它们自己要。
+     *
+     * @throws IllegalArgumentException 读不通(原版解析器的话照转)
+     */
+    public static net.minecraft.commands.arguments.blocks.BlockStateParser.BlockResult parse(String written,
+                                                                                            boolean allowNbt) {
+        try {
+            return net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(), written.trim(), allowNbt);
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException bad) {
+            // 原版解析器的话已经足够具体("Unknown block type"、"does not have property"),原样转述,不再翻译一遍
+            throw new IllegalArgumentException(written.trim() + " — " + bad.getMessage());
+        }
     }
 
     /**
