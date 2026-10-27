@@ -50,8 +50,8 @@
 | `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
 | `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
 | `work.dig` | 挖点名的格:手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖;挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不捡 |
-| `build.place` | 把给的格(Cells 或蓝图句柄)放一遍:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放 | 不挖、不重来 |
-| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 只读,不走 |
+| `build.place` | 把给的格(Cells)放一遍:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放 | 不挖、不重来 |
+| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格,剩下的格要花的全部料(`materials`)与生存模式下还缺多少(`short_of`) | 只读,不走 |
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
 | `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方 | 不挖(挖是 `work.dig`) |
 | `gui.*` | 开着的界面(Window):看(有名堂的界面 `screen` 按种类说话,选项编号从 1 起)、按种类放进拿出、挪一格、整叠挪、选一项(`choose`:附魔台、切石机、织布机、交易、信标)、改名(铁砧)、翻页(讲台)、开关一格(合成器)、按 E(`open`)、关 | 不开界面(开是 `use.block`) |
@@ -68,7 +68,6 @@
 | `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.to` 走上去(原版玩家走过去就捡起) |
 | `work.mine(cluster)` | `work.dig(cluster)` 自己走到够得着、挖 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `build.raise(building)` | `build.diff` 问还差什么 → `work.dig` 挖开挡路的 / `build.place` 放(够不着的它自己走到够得着) |
 | `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
@@ -342,7 +341,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
+| ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
 | ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人的"我的":`players/<uuid>/modules/<名字空间>/<组>.lua` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
@@ -411,8 +410,6 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
   `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
 - **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
-- **蓝图句柄** `numen.build.blueprint(name, origin, {rotation})`:数据里有尺寸、格子、材料与缺什么;`numen.build.diff`、
-  `numen.build.place` 与模块都收句柄或一串格。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
 - 方法写在类所在的模块里(`Pos`、`Cells` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
@@ -422,7 +419,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 | 删掉或改原子的 | 组合去了哪 |
 |---|---|
 | `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`;放格子是 `numen.build.place(cells)` 一遍 |
-| `build.at` 放到放完 | `build.place` 一遍即止,反复是 `numen.build.raise` |
+| `build.at` 放到放完 | `build.place` 整份走一遍、每格试一次,没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |
 | `inv.craft` 找配方、找台、走开合关 | `inv.craft` 在开着的格里合一次,`numen.inv.make` 挑配方与工作台 |
@@ -491,7 +488,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
   burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
   `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
-- `numen.work.collect` 等模块里的走路一律是 `numen.move.to`;`numen.inv.*` 开箱子、`numen.build.raise` 放方块的走路由 `use.block`、
+- `numen.work.collect` 等模块里的走路一律是 `numen.move.to`;`numen.inv.*` 开箱子、`numen.build.place` 放方块的走路由 `use.block`、
   `build.place` 自己做;垫路料只有标签 `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
