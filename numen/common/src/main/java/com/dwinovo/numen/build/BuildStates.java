@@ -62,6 +62,24 @@ public final class BuildStates {
     }
 
     /**
+     * 一个方块状态写成 {@code /setblock} 的写法,只写和默认状态不一样的属性({@code minecraft:oak_stairs[facing=east]}):{@link #parse}
+     * 的逆,读回来是同一个状态。读世界得到的方块经这里写成名字。
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static String written(BlockState state) {
+        BlockState base = state.getBlock().defaultBlockState();
+        StringBuilder out = new StringBuilder(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
+        String sep = "[";
+        for (Property<?> p : state.getProperties()) {
+            if (!state.getValue(p).equals(base.getValue(p))) {
+                out.append(sep).append(p.getName()).append('=').append(((Property) p).getName(state.getValue(p)));
+                sep = ",";
+            }
+        }
+        return sep.equals(",") ? out.append(']').toString() : out.toString();
+    }
+
+    /**
      * 落位前的归一。
      *
      * @return 清掉运行态之后的状态(原状态不变)

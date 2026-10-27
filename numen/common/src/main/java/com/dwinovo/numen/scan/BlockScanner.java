@@ -22,7 +22,7 @@ public final class BlockScanner {
      * generation, and a scan is a perception query — it reports what is loaded and says so, it does not
      * make the world bigger to answer.
      */
-    static ChunkAccess loadedChunk(Level level, int cx, int cz) {
+    public static ChunkAccess loadedChunk(Level level, int cx, int cz) {
         return level instanceof ServerLevel serverLevel
                 ? serverLevel.getChunkSource().getChunkNow(cx, cz)
                 : null;

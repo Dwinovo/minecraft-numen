@@ -58,7 +58,7 @@ final class BlockPatterns {
     }
 
     /** 按逗号切开,方括号与花括号里的逗号(状态列表、NBT)不切。 */
-    private static List<String> split(String text) {
+    static List<String> split(String text) {
         List<String> parts = new ArrayList<>();
         int depth = 0;
         int from = 0;
@@ -91,7 +91,22 @@ final class BlockPatterns {
 
     private static List<String> tagged(String written) {
         boolean everyState = written.startsWith("*");
-        String id = (everyState ? written.substring(1) : written).toLowerCase(Locale.ROOT);
+        HolderSet.Named<Block> tag = tag(everyState ? written.substring(1) : written);
+        List<String> out = new ArrayList<>();
+        tag.forEach(holder -> {
+            Block block = holder.value();
+            if (everyState) {
+                block.getStateDefinition().getPossibleStates().forEach(s -> out.add(BlockStateParser.serialize(s)));
+            } else {
+                out.add(BlockStateParser.serialize(block.defaultBlockState()));
+            }
+        });
+        return out;
+    }
+
+    /** 方块标签(写法里 {@code ##} 之后的 id):图案与蒙版查标签只有这一处。 */
+    static HolderSet.Named<Block> tag(String written) {
+        String id = written.toLowerCase(Locale.ROOT);
         ResourceLocation location = ResourceLocation.tryParse(id);
         Optional<HolderSet.Named<Block>> tag = location == null ? Optional.empty()
                 : BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, location));
@@ -101,16 +116,7 @@ final class BlockPatterns {
         if (tag.get().size() == 0) {
             throw new IllegalArgumentException("the block tag '" + id + "' has no blocks");
         }
-        List<String> out = new ArrayList<>();
-        tag.get().forEach(holder -> {
-            Block block = holder.value();
-            if (everyState) {
-                block.getStateDefinition().getPossibleStates().forEach(s -> out.add(BlockStateParser.serialize(s)));
-            } else {
-                out.add(BlockStateParser.serialize(block.defaultBlockState()));
-            }
-        });
-        return out;
+        return tag.get();
     }
 
     private static List<String> anyState(String written) {
