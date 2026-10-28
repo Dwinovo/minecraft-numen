@@ -569,17 +569,10 @@ public class BuildGameTests {
      * 靠手改必然漏。
      *
      * <p>判据是注册表本身,不另立一份清单:反引号里凡是带下划线的小写词,要么在
-     * 方块/物品注册表里查得到,要么是我们自己的词汇(op 名、参数名、方块状态键、
-     * 形制名)。两边都不是就是错字。
+     * 方块/物品注册表里查得到,要么是风格文件名。两边都不是就是错字。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void skill_docs_name_real_blocks(GameTestHelper helper) {
-        // 我们自己的词汇:形状的参数名、状态键、技能名、形制名。它们和方块名共用反引号,
-        // 但不该去注册表里找。命令写得对不对归命令树判,这里只管方块名。
-        java.util.Set<String> ours = java.util.Set.of(
-                "legend", "rows", "rotation", "hollow", "building_design",
-                "short_grass", "dirt_path", "coarse_dirt", "flower_pot", "decorated_pot",
-                "x1", "y1", "z1", "x2", "y2", "z2");
         java.util.List<String> bad = new java.util.ArrayList<>();
         int checked = 0;
         try {
@@ -643,7 +636,7 @@ public class BuildGameTests {
                     }
                 }
                 for (String word : words) {
-                    if (word.indexOf('_') < 0 || ours.contains(word) || docNames.contains(word)) {
+                    if (word.indexOf('_') < 0 || docNames.contains(word)) {
                         continue;
                     }
                     checked++;
