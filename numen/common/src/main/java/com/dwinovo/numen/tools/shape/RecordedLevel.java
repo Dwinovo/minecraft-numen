@@ -157,9 +157,109 @@ final class RecordedLevel implements InvocationHandler {
                 entity.blockPosition()));
     }
 
+    /**
+     * 替身上的每一次调用:读写方块、方块实体、实体、随机数、区块、群系、高度图在这里答(按方法名和参数形状认,形状不符的照下面的默认走);
+     * 其余返回 void 的吞掉,接口自带默认实现的走默认实现,剩下的转给真实世界。
+     */
     @Override
+    @SuppressWarnings("unchecked")
     public Object invoke(Object proxy, Method method, Object[] given) throws Throwable {
-        throw new UnsupportedOperationException("净室重写中");
+        Object[] args = given == null ? new Object[0] : given;
+        if (method.getDeclaringClass() == Object.class) {
+            return switch (method.getName()) {
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> "recorded level";
+            };
+        }
+        int n = args.length;
+        boolean onePos = n == 1 && args[0] instanceof BlockPos;
+        switch (method.getName()) {
+            case "getBlockState" -> {
+                if (onePos) {
+                    return at((BlockPos) args[0]);
+                }
+            }
+            case "getFluidState" -> {
+                if (onePos) {
+                    return at((BlockPos) args[0]).getFluidState();
+                }
+            }
+            case "isStateAtPosition" -> {
+                if (n == 2 && args[0] instanceof BlockPos pos && args[1] instanceof Predicate<?> test) {
+                    return ((Predicate<BlockState>) test).test(at(pos));
+                }
+            }
+            case "getBlockEntity" -> {
+                if (onePos) {
+                    return blockEntities.get((BlockPos) args[0]);
+                }
+            }
+            case "setBlock" -> {
+                if (n >= 2 && args[0] instanceof BlockPos pos && args[1] instanceof BlockState state) {
+                    return set(pos, state);
+                }
+            }
+            case "removeBlock", "destroyBlock" -> {
+                if (n >= 2 && args[0] instanceof BlockPos pos) {
+                    // 拿走一格留下它此刻的流体(含水的方块留下水),没有流体就是空气
+                    return set(pos, at(pos).getFluidState().createLegacyBlock());
+                }
+            }
+            case "addFreshEntity" -> {
+                if (n == 1 && args[0] instanceof Entity entity) {
+                    drop(entity);
+                    return true;
+                }
+            }
+            case "addFreshEntityWithPassengers" -> {
+                if (n == 1 && args[0] instanceof Entity entity) {
+                    entity.getSelfAndPassengers().forEach(this::drop);
+                    return true;
+                }
+            }
+            case "getRandom" -> {
+                return random;
+            }
+            case "getChunk" -> {
+                if (n >= 2 && args[0] instanceof Integer cx && args[1] instanceof Integer cz) {
+                    return real.chunk(cx, cz);
+                }
+                if (onePos) {
+                    BlockPos pos = (BlockPos) args[0];
+                    return real.chunk(pos.getX() >> 4, pos.getZ() >> 4);
+                }
+            }
+            case "getBiome" -> {
+                if (onePos) {
+                    return real.biome((BlockPos) args[0]);
+                }
+            }
+            case "getNoiseBiome" -> {
+                if (n == 3 && args[0] instanceof Integer x && args[1] instanceof Integer y && args[2] instanceof Integer z) {
+                    return real.biome(new BlockPos(x * 4, y * 4, z * 4));
+                }
+            }
+            case "getHeight" -> {
+                if (n == 3 && args[0] instanceof Heightmap.Types type && args[1] instanceof Integer x
+                        && args[2] instanceof Integer z) {
+                    return height(type, x, z);
+                }
+            }
+            default -> {
+            }
+        }
+        if (method.getReturnType() == void.class) {
+            return null;
+        }
+        if (method.isDefault()) {
+            return InvocationHandler.invokeDefault(proxy, method, args);
+        }
+        try {
+            return method.invoke(real.level(), args);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
     }
 
     /** 高度图的高度:这一列最高的"挡"住的方块往上一格(一个也没有是世界最低),按覆盖层叠起来的样子算。 */
