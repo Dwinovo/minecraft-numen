@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.gametest;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -61,8 +62,8 @@ public class TerminationGameTests {
                     }
                 })
                 .then(r -> {
-                    if (r.report.journal().stuck() < 1) {
-                        throw new GameTestAssertException("没有被看护判成卡住:" + r.report.journal().stuck());
+                    if (r.report.journal().replans(Journal.Replan.TIMEOUT) < 1) {
+                        throw new GameTestAssertException("没有被看护判成卡住:" + r.report.journal().replans());
                     }
                     if (r.report.journal().blockages() < 1) {
                         throw new GameTestAssertException("卡住的这一步没有记为不通:" + r.report.journal().blockages());
@@ -93,7 +94,7 @@ public class TerminationGameTests {
                     }
                 })
                 .then(r -> {
-                    int stuck = r.report.journal().stuck();
+                    int stuck = r.report.journal().replans(Journal.Replan.TIMEOUT);
                     if (stuck < 1 || stuck > 12 + 2) {
                         throw new GameTestAssertException("卡住的次数 " + stuck + ",墙上只有十二格");
                     }

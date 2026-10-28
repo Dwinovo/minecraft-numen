@@ -206,6 +206,13 @@ public final class PathLog {
                 + (b.reason() != null ? "前提=" + b.reason() : "执行=" + b.hitch());
     }
 
+    /** 一趟里按原因分的重规划次数,如 "往前核不成立 2 一步超时 1";一次也没有为 "-"。 */
+    public static String replans(Journal journal) {
+        StringBuilder out = new StringBuilder();
+        journal.replans().forEach((why, n) -> out.append(out.isEmpty() ? "" : " ").append(why.label).append(' ').append(n));
+        return out.isEmpty() ? "-" : out.toString();
+    }
+
     /** 身体此刻的状态:精确位置、在地上还是空中、泡没泡水、眼睛在不在水里、氧气、血量。 */
     public static String body(ServerPlayer body) {
         return "身体 " + at(body.position()) + (body.onGround() ? " 地上" : " 空中") + (body.isInWater() ? " 水里" : "")

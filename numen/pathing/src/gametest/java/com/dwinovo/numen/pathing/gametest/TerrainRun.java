@@ -59,6 +59,13 @@ final class TerrainRun {
     private long movedNanos;
     private net.minecraft.world.phys.Vec3 startedAt;
     private float lowestHealth = Float.MAX_VALUE;
+    /**
+     * 主线程每刻推一次导航用了多久:累计、最长、刻数。只量每刻那一次 {@code navigation.tick()};等搜索回来时补推的几次是测试服务器
+     * 不让刻等墙钟的做法,真服务器上没有,不算。
+     */
+    private long tickNanos;
+    private long tickMaxNanos;
+    private int tickCount;
     /** 开跑前挖空的格子原来的样子。 */
     private final Map<BlockPos, BlockState> carved = new LinkedHashMap<>();
 
@@ -218,7 +225,12 @@ final class TerrainRun {
     }
 
     private void walk() {
+        long t0 = System.nanoTime();
         NavStatus status = navigation.tick();
+        long spent = System.nanoTime() - t0;
+        tickNanos += spent;
+        tickMaxNanos = Math.max(tickMaxNanos, spent);
+        tickCount++;
         while (navigation.waiting()) {
             nap();
             status = navigation.tick();
@@ -287,10 +299,15 @@ final class TerrainRun {
         journal.expansions().forEach(expansions::add);
         o.add("expansions", expansions);
         o.addProperty("expanded", journal.expansions().stream().mapToInt(Integer::intValue).sum());
-        o.addProperty("replans", journal.replans());
+        JsonObject replans = new JsonObject();
+        journal.replans().forEach((why, n) -> replans.addProperty(why.name(), n));
+        o.add("replans", replans);
         o.addProperty("blocked", journal.blockages());
-        o.addProperty("stuck", journal.stuck());
         o.addProperty("rechecks", journal.rechecks());
+        o.addProperty("recheckUs", journal.rechecks() == 0 ? 0 : Math.round(journal.recheckNanos() / 1e2 / journal.rechecks()) / 10.0);
+        o.addProperty("tickUs", tickCount == 0 ? 0 : Math.round(tickNanos / 1e2 / tickCount) / 10.0);
+        o.addProperty("recheckUsPerTick", tickCount == 0 ? 0 : Math.round(journal.recheckNanos() / 1e2 / tickCount) / 10.0);
+        o.addProperty("tickMaxMs", Math.round(tickMaxNanos / 1e5) / 10.0);
         o.addProperty("steps", report.ledger().steps());
         o.addProperty("walked", report.ledger().walked().toString());
         JsonObject timings = new JsonObject();
@@ -317,17 +334,35 @@ final class TerrainRun {
             if (DONE.size() < TerrainRoutes.ALL.size()) {
                 return;
             }
-            LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6s %5s %5s %6s %6s %6s %7s %7s %7s %6s %5s %5s", "route", "arrived",
-                    "dist", "rise", "limit", "ticks", "search", "learned", "expand", "replan", "blocked", "stuck", "steps", "hp"));
+            LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6s %5s %5s %6s %6s %6s %7s %5s %5s %5s %5s %5s %5s %6s %6s %5s %5s", "route",
+                    "arrived", "dist", "rise", "limit", "ticks", "search", "learned", "expand", "ahead", "fail", "tmout", "cont", "other",
+                    "steps", "tickUs", "chkUs", "chk/t", "hp"));
+            Map<Journal.Replan, Integer> total = new java.util.EnumMap<>(Journal.Replan.class);
             for (JsonObject o : DONE) {
-                LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6.1f %5d %5d %6d %6d %6d %7d %7d %7d %6d %5d %5.1f",
+                JsonObject replans = o.getAsJsonObject("replans");
+                for (Journal.Replan why : Journal.Replan.values()) {
+                    total.merge(why, count(replans, why), Integer::sum);
+                }
+                int other = count(replans, Journal.Replan.OFF_ROUTE) + count(replans, Journal.Replan.ARRIVAL)
+                        + count(replans, Journal.Replan.DEAD_END);
+                LOG.info("[terrain-table] {}", String.format("%-14s %-8s %6.1f %5d %5d %6d %6d %6d %7d %5d %5d %5d %5d %5d %5d %6.1f %6.1f %5.1f %5.1f",
                         o.get("route").getAsString(), o.get("state").getAsString(), o.get("distance").getAsDouble(),
                         o.get("rise").getAsInt(), o.get("limit").getAsInt(), o.get("ticks").getAsInt(),
-                        o.get("searches").getAsInt(), o.get("learned").getAsInt(), o.get("expanded").getAsInt(), o.get("replans").getAsInt(), o.get("blocked").getAsInt(),
-                        o.get("stuck").getAsInt(), o.get("steps").getAsInt(), o.get("lowestHealth").getAsFloat()));
+                        o.get("searches").getAsInt(), o.get("learned").getAsInt(), o.get("expanded").getAsInt(),
+                        count(replans, Journal.Replan.AHEAD), count(replans, Journal.Replan.FAILED), count(replans, Journal.Replan.TIMEOUT),
+                        count(replans, Journal.Replan.CONTINUE), other, o.get("steps").getAsInt(), o.get("tickUs").getAsDouble(),
+                        o.get("recheckUs").getAsDouble(), o.get("recheckUsPerTick").getAsDouble(), o.get("lowestHealth").getAsFloat()));
             }
+            StringBuilder sum = new StringBuilder();
+            total.forEach((why, n) -> sum.append(' ').append(why.label).append(' ').append(n));
+            LOG.info("[terrain-table] 执行中重规划合计:{}", sum);
             DONE.clear();
         }
+    }
+
+    /** 一条路线按 {@code why} 重规划的次数。 */
+    private static int count(JsonObject replans, Journal.Replan why) {
+        return replans.has(why.name()) ? replans.get(why.name()).getAsInt() : 0;
     }
 
     private static void nap() {

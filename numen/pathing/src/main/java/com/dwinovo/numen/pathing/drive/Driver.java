@@ -38,8 +38,14 @@ import net.minecraft.world.phys.Vec3;
  * <ul>
  *   <li>搜索没搜到这一段的终点:展开过的格子的估价抬高、记进记忆,身体前进到边界上总价最小的节点(截到回得了头的地方),从那里接着搜
  *       (LSS-LRTA* [Koenig &amp; Sun 2009]);</li>
- *   <li>执行里一步走不下去或卡住:这一步记为不通,只扔掉在走的路、从身体此刻的位置重搜这一段(旧路打折,不无谓换道)。</li>
+ *   <li>执行里一步走不通:这一步记为不通,只扔掉在走的路、从身体此刻的位置重搜这一段(旧路打折,不无谓换道)。</li>
  * </ul>
+ *
+ * <h2>重规划</h2>
+ * 什么情况下扔掉在走的路、或从路线终点接着搜,原因只有 {@link Journal.Replan} 这几种,全在 {@link #replan} 与 {@link #next}
+ * 记账与记日志:每一步开始前往前核接下来几步({@link Lookahead}),有一步在活世界上不成立;一步走着走不下去({@link Blockage});
+ * 一步超时({@link Watchdog});半程路线快走完({@link Continuation});另有走着离开了路线、到了终点不算到、接续段证明终点是死路。
+ * 世界变化靠往前核每一步开始时读一遍活世界发现,不订阅事件。
  * 收场只有一个判据:这一趟的总预算(按展开的节点数,{@link Allowance})用完还没到;另外是搜索证明了到不了(能走到的都搜过了),
  * 或根本动不了。身体不传送,不做模型不知道的事:重搜与原因都进日志与行程报告({@link Journal})。
  *
@@ -343,18 +349,27 @@ public final class Driver {
                 watchdog.waiting(body.position());
                 return;
             }
-            Maneuver planned = course.current();
-            List<Maneuver> diving = new ArrayList<>();
-            for (int i = course.cur() + 1; planned.submerged() && i < course.size() && course.at(i).submerged(); i++) {
-                diving.add(course.at(i));
+            switch (Lookahead.verify(rig, goal, spec, course)) {
+                case Lookahead.Broken broken -> {
+                    fail(Journal.Replan.AHEAD, broken.step(), broken.blockage());
+                    return;
+                }
+                case Lookahead.Clear clear -> {
+                    Maneuver planned = course.current();
+                    List<Maneuver> diving = new ArrayList<>();
+                    for (int i = course.cur() + 1; planned.submerged() && i < course.size() && course.at(i).submerged(); i++) {
+                        diving.add(course.at(i));
+                    }
+                    step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, clear.fresh(), clear.model(),
+                            course.ahead(Continuation.TAIL - 1), diving, watchdog);
+                }
             }
-            step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, planned, course.ahead(Continuation.TAIL - 1), diving,
-                    goal, spec, watchdog);
         }
         Beat beat = step.tick();
         switch (beat) {
-            case Beat.Going going -> lookahead();
-            case Beat.Blocked blocked -> fail(blocked.blockage());
+            case Beat.Going going -> continueAhead();
+            case Beat.Blocked blocked -> fail(blocked.blockage().hitch() == Blockage.Hitch.STUCK ? Journal.Replan.TIMEOUT
+                    : Journal.Replan.FAILED, course.current(), blocked.blockage());
             case Beat.Denied denied -> {
                 rig.mouse.release();
                 halt(new Halt.Denied(denied.cell(), denied.reason()));
@@ -436,21 +451,21 @@ public final class Driver {
                 // 落回了前面一步的起点:正在走的这一步没走成,和走不下去一样记一次、从这里重搜。悄悄退回去重走的话,同一处一圈圈地退,
                 // 每一步的期限都从头算,永远等不到"卡住"
                 Maneuver current = course.current();
-                fail(current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(), null,
-                        Blockage.Hitch.FELL_BACK));
+                fail(Journal.Replan.FAILED, current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(),
+                        null, Blockage.Hitch.FELL_BACK));
                 return true;
             }
             case Tracker.Fix.Lost lost -> {
                 if (step == null) {
                     // 还没开始走这一步(上一步的冲劲把身子带出了路线):不怪它,从这里重新搜
-                    replan("离开路线,落在 " + PathLog.pos(node) + ",该在 " + PathLog.step(course.current()));
+                    replan(Journal.Replan.OFF_ROUTE, "落在 " + PathLog.pos(node) + ",该在 " + PathLog.step(course.current()));
                     return true;
                 }
                 // 走着这一步,身体落在了路线之外:这一步没把身体带到它的落点,和走不下去一样记一次。只重搜不记的话,规划看不见的墙前面
                 // 斜走一步滑到旁边一行,重搜又斜走回来,每一次都是一条新路线的第一步,期限从头算,永远等不到"卡住",永远走不出去
                 Maneuver current = course.current();
-                fail(current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(), null,
-                        Blockage.Hitch.LOST));
+                fail(Journal.Replan.FAILED, current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(),
+                        null, Blockage.Hitch.LOST));
                 return true;
             }
             case Tracker.Fix.Here here -> {
@@ -497,7 +512,7 @@ public final class Driver {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
                 Maneuver last = course.lastLeg().maneuver();
                 PathLog.info("{} 没停在终点 {},落在 {}", rig.who, PathLog.pos(end), PathLog.pos(node));
-                fail(last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
             }
             return;
         }
@@ -511,11 +526,11 @@ public final class Driver {
                     // 回不去:最后一步没把身体带到它的落点,记为不通再重搜(同一处终点一圈圈冲过头、重搜、再冲过头,永远收不了场)
                     Maneuver last = course.lastLeg().maneuver();
                     PathLog.info("{} {}", rig.who, replan.why());
-                    fail(last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                    fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
                     return;
                 }
                 unsettled = 0;
-                replan(replan.why());
+                replan(Journal.Replan.ARRIVAL, replan.why());
             }
             case Arrival.Verdict.Blind blind -> {
                 rig.keys.releaseAll();
@@ -578,6 +593,7 @@ public final class Driver {
             return;
         }
         Route.Leg last = course.lastLeg();
+        rig.journal.replanned(Journal.Replan.CONTINUE);
         dispatch(Purpose.NEXT, last.maneuver().to(), last);
     }
 
@@ -618,7 +634,7 @@ public final class Driver {
             if (result.stop() == SearchResult.Stop.EXHAUSTED) {
                 // 从路线的终点往外走得到的地方都搜过了,没有这一段的终点:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
                 // 从此刻的位置重搜这一段,绕开它——走进去就出不来了(往下挖的竖井、封死的坑)
-                replan("接续段证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
+                replan(Journal.Replan.DEAD_END, "接续段证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
                 return;
             }
             if (continuation.splice(course, result.route(), result.arrived())) {
@@ -708,16 +724,16 @@ public final class Driver {
     }
 
     /** 路线快走完、又没到目标:从终点提前搜下一段。 */
-    private void lookahead() {
+    private void continueAhead() {
         if (pending == null && continuation.due(course)) {
             next();
         }
     }
 
-    /** 扔掉当前路线,从身体脚下重新搜,旧路打折;{@code why} 记进日志。 */
-    private void replan(String why) {
-        rig.journal.replanned();
-        PathLog.info("{} 重搜:{} 身体 {}", rig.who, why, PathLog.at(rig.entity.position()));
+    /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
+    private void replan(Journal.Replan why, String detail) {
+        rig.journal.replanned(why);
+        PathLog.info("{} 重搜({}):{} 身体 {}", rig.who, why.label, detail, PathLog.body(rig.entity));
         reset();
     }
 
@@ -736,21 +752,13 @@ public final class Driver {
     }
 
     /**
-     * 一步走不下去:这一步(走法、起点、落点)在这一趟里记为不通,以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。
-     * 同一步不会走第二次,重搜多少次由这一趟的总预算管。
+     * 第 {@code m} 步走不通({@code why} 是 {@link Journal.Replan#blocks} 的一种):这一步(走法、起点、落点)在这一趟里记为不通,
+     * 以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。同一步不会走第二次,重搜多少次由这一趟的总预算管。
      */
-    private void fail(Blockage blockage) {
-        fail(course.current(), blockage);
-    }
-
-    /** 同 {@link #fail(Blockage)},没走成的是 {@code m} 这一步(路线走完之后停不到终点,是最后一步没走成)。 */
-    private void fail(Maneuver m, Blockage blockage) {
+    private void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
         memory.block(m.kind(), m.from(), m.to());
         lastBlockage = blockage;
-        rig.journal.blocked();
-        PathLog.info("{} 走不下去 {} 这一步 {} -> 记为不通,从脚下重搜这一段 {}", rig.who, PathLog.blockage(blockage),
-                PathLog.step(m), PathLog.body(rig.entity));
-        reset();
+        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
     }
 
     private void hold() {

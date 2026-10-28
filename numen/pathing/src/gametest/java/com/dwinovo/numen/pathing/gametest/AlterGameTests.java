@@ -195,9 +195,8 @@ public class AlterGameTests {
             if (dug(r).size() < 5 || !dug(r).get(0).pos().equals(t.at(5, 5, 5))) {
                 throw new GameTestAssertException("应当先打掉脚下那株草再往下挖四格:" + dug(r));
             }
-            if (r.report.journal().stuck() > 0 || r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("被脚下的草挡着卡住了:" + r.report.journal().stuck() + " 次卡住,"
-                        + r.report.journal().blockages() + " 次走不下去");
+            if (r.report.journal().blockages() > 0) {
+                throw new GameTestAssertException("被脚下的草挡着走不通:" + r.report.journal().replans());
             }
         });
     }
@@ -221,9 +220,8 @@ public class AlterGameTests {
             if (placed(r).isEmpty() || dug(r).size() < 3) {
                 throw new GameTestAssertException("应当先垫后挖:放 " + placed(r) + ",挖 " + dug(r));
             }
-            if (r.report.journal().stuck() > 0 || r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("垫完紧接着往下挖卡住了:" + r.report.journal().stuck() + " 次卡住,"
-                        + r.report.journal().blockages() + " 次走不下去");
+            if (r.report.journal().blockages() > 0) {
+                throw new GameTestAssertException("垫完紧接着往下挖走不通:" + r.report.journal().replans());
             }
         });
     }

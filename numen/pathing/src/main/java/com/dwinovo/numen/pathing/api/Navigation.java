@@ -89,7 +89,7 @@ public final class Navigation {
     }
 
     /**
-     * 记一行收场:结局、走了几步、实际改了几格、身体动作几个、用了几刻与几秒墙钟、此刻的刻速、身体在哪。刻数与墙钟对不上
+     * 记一行收场:结局、走了几步、实际改了几格、身体动作几个、按原因分的重规划次数、用了几刻与几秒墙钟、此刻的刻速、身体在哪。刻数与墙钟对不上
      * (刻速调高了、服务器跟不上)一眼看得出。
      */
     private void log(String event, String extra) {
@@ -104,9 +104,9 @@ public final class Navigation {
                 case EditLedger.Toggled t -> toggled++;
             }
         }
-        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
+        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 重规划 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
                 status.running() ? driver : describe(status.outcome()), ledger.steps(), dug, placed, toggled,
-                driver.actions().size(), ticks(),
+                driver.actions().size(), PathLog.replans(driver.journal()), ticks(),
                 PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
                 extra, PathLog.body(entity));
     }

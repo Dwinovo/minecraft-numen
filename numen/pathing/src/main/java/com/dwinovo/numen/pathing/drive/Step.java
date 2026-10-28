@@ -9,19 +9,13 @@ import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Moves;
-import com.dwinovo.numen.pathing.plan.Premise;
 import com.dwinovo.numen.pathing.plan.Reason;
-import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.plan.Threats;
-import com.dwinovo.numen.pathing.search.Goal;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 
 /**
- * 执行路线上的一步。开始之前在活世界上复核它的前提——与规划时是同一个 {@code Moves.of(kind).premise},同一个方向,
- * 成本模型按此刻的身体与端口现组一份(目标格保护照样并进去);成立就照这一次复核交出的 {@link Maneuver} 去做(世界若已
- * 替它挖开了一格,那一格就不必再挖),不成立就停下,报出是哪一格、什么方块、哪一条前提。执行中由 {@link Watchdog} 看它有没有超期。
+ * 执行路线上的一步。开始之前已由往前核({@link Lookahead})在活世界上复核过它的前提,照那一次复核交出的 {@link Maneuver}
+ * 与成本模型去做(世界若已替它挖开了一格,那一格就不必再挖)。执行中由 {@link Watchdog} 看它有没有超期。
  *
  * <h2>憋气</h2>
  * 这一步憋着气时,开始前与执行中的每一刻都按身体此刻的真实氧气把这一段水下剩下的部分重算一遍({@link #breathless}),判据与
@@ -34,13 +28,14 @@ final class Step {
     private final Rig rig;
     /** 路线上紧接在这一步前面的一步;路线的头一步没有。步态要看身体是不是沿着一条直线走进来的。 */
     private final Maneuver previous;
+    /** 这一步:往前核在活世界上复核交出的样子。 */
     private final Maneuver planned;
+    /** 往前核为这一步组的成本模型。 */
+    private final CostModel model;
     /** 路线上这一步后面的几步:步态要看得到连着的冲劲接不接得住。 */
     private final List<Maneuver> ahead;
     /** 这一步之后同一段水下接着的几步(都憋着气),按先后;这一步不在水下或后面换得了气为空。 */
     private final List<Maneuver> diving;
-    private final Goal goal;
-    private final RouteSpec spec;
     private final Watchdog watchdog;
     private Control control;
     /** 这一步与同一段水下接着的几步,按先后;这一步开始时定下,不憋气为空。 */
@@ -52,15 +47,14 @@ final class Step {
     /** 计划内的坠落预计掉几点血。 */
     private int expectedDamage;
 
-    Step(Rig rig, Maneuver previous, Maneuver planned, List<Maneuver> ahead, List<Maneuver> diving, Goal goal, RouteSpec spec,
+    Step(Rig rig, Maneuver previous, Maneuver planned, CostModel model, List<Maneuver> ahead, List<Maneuver> diving,
          Watchdog watchdog) {
         this.rig = rig;
         this.previous = previous;
         this.planned = planned;
+        this.model = model;
         this.ahead = List.copyOf(ahead);
         this.diving = List.copyOf(diving);
-        this.goal = goal;
-        this.spec = spec;
         this.watchdog = watchdog;
     }
 
@@ -86,32 +80,18 @@ final class Step {
 
     Beat tick() {
         if (control == null) {
-            long t0 = System.nanoTime();
-            CostModel model = Goal.guarded(goal,
-                    CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, Threats.NONE));
-            Premise premise = recheck(model);
-            rig.tally.rechecked(System.nanoTime() - t0);
-            rig.journal.rechecked();
-            if (premise instanceof Premise.Fails fails) {
-                return new Beat.Blocked(new Blockage(fails.cell(), rig.world().getBlockState(fails.cell()),
-                        planned.kind(), fails.reason(), null));
-            }
-            Maneuver fresh = ((Premise.Holds) premise).maneuver();
-            if (!fresh.to().equals(planned.to())) {
-                return new Beat.Blocked(blocked(planned.to(), Hitch.DIVERTED));
-            }
-            dive(model, fresh);
+            dive(model, planned);
             Maneuver drowns = breathless(model.body().breath(), 0);
             if (drowns != null) {
                 return outOfBreath(drowns, 0);
             }
             List<Maneuver> window = new ArrayList<>(ahead.size() + 1);
-            window.add(fresh);
+            window.add(planned);
             window.addAll(ahead);
-            control = Control.of(rig, fresh, Gait.stride(rig.world(), model, previous, window));
-            double expected = Moves.of(fresh.kind()).ticks(model, fresh);
+            control = Control.of(rig, planned, Gait.stride(rig.world(), model, previous, window));
+            double expected = Moves.of(planned.kind()).ticks(model, planned);
             watchdog.begin(expected, rig.entity.position());
-            begun(fresh, expected);
+            begun(planned, expected);
         } else {
             Maneuver drowns = breathless(rig.snapshot().breath(), watchdog.stepTicks());
             if (drowns != null) {
@@ -121,7 +101,6 @@ final class Step {
         Beat beat = control.tick();
         watchdog.observe(rig.entity.position(), beat instanceof Beat.Going going && going.worked());
         if (beat instanceof Beat.Going && watchdog.overran()) {
-            rig.journal.gotStuck();
             PathLog.info("{} 卡住 {} 做了 {} 刻,超过期限 {} 刻;落点 {} 是 {} {}", rig.who, PathLog.step(planned),
                     watchdog.stepTicks(), PathLog.num(watchdog.allowance()), PathLog.pos(planned.to()),
                     PathLog.block(rig.world().getBlockState(planned.to())), PathLog.body(rig.entity));
@@ -204,17 +183,6 @@ final class Step {
                 elapsed, PathLog.pos(drowns.to()), PathLog.body(rig.entity));
         return new Beat.Blocked(new Blockage(drowns.to(), rig.world().getBlockState(drowns.to()), planned.kind(),
                 Reason.OUT_OF_BREATH, null));
-    }
-
-    /** 同一个前提函数在活世界上再判一次。 */
-    private Premise recheck(CostModel model) {
-        LiveWorld world = rig.world();
-        BlockPos from = planned.from();
-        Stance stance = Stance.at(world, model.body().stats(), from);
-        if (stance == null) {
-            return Premise.fail(from, Reason.NOT_STANDING);
-        }
-        return Moves.of(planned.kind()).premise(model, world, from, stance, planned.heading());
     }
 
     private Blockage blocked(BlockPos cell, Hitch hitch) {

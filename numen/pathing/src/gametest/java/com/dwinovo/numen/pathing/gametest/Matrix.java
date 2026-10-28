@@ -38,13 +38,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * "规划说能走 ⇒ 执行走得通"的矩阵:一批场景({@link MatrixScene})铺在场地里的若干格(每格 9×9)上并行跑,每一格自成一台小状态机——
- * 搭场景、等水流稳定、对每种走法每个问法问规划这一步成不成立({@link Move#premise},与执行复核用的是同一个函数),成立的就让一具新的身体
- * 在真实世界里只做这一步(把这一步当作路线交给导航,目标就是它的落点),逐个断言:
+ * "精确判过的步 ⇒ 执行走得通"的矩阵:一批场景({@link MatrixScene})铺在场地里的若干格(每格 9×9)上并行跑,每一格自成一台小状态机——
+ * 搭场景、等水流稳定、对每种走法每个问法用精确的前提判这一步成不成立({@link Move#premise},搜索与执行往前核用的是同一个函数),
+ * 成立的就让一具新的身体在真实世界里只做这一步(把这一步当作路线交给导航,目标就是它的落点),逐个断言:
  * <ul>
  *   <li>在预计刻数的合理倍数内到了落点,导航以到达收场;</li>
  *   <li>一路上不掉血;</li>
- *   <li>没有一步走不下去、没被看护判成卡住、没有扔掉路线重搜(重搜意味着照这一步走不通)。</li>
+ *   <li>没有重规划:往前核成立、没有走不下去、没被看护判成卡住、没有离开路线(重规划意味着照这一步走不通)。</li>
  * </ul>
  * 规划判不成立的(保守是允许的)只记进覆盖统计,不算失败。收场时统计表打进日志,有失败的一并列出。
  */
@@ -442,8 +442,8 @@ final class Matrix {
             }
             double limit = expected * LIMIT_FACTOR + LIMIT_TICKS;
             Journal journal = navigation.report().journal();
-            // 第一次走不通(走不下去、卡住、扔掉路线重搜)就记下收场:往后的重搜是另一回事,不是这一步的事
-            boolean faulty = journal.stuck() > 0 || journal.blockages() > 0 || journal.replans() > 0;
+            // 第一次重规划(往前核不成立、走不下去、卡住、离开路线……)就记下收场:往后的重搜是另一回事,不是这一步的事
+            boolean faulty = !journal.replans().isEmpty();
             if (status.running() && ticks <= limit && !faulty) {
                 return false;
             }
@@ -462,14 +462,8 @@ final class Matrix {
             if (body.incoming() > 0) {
                 return "掉血 " + body.incoming();
             }
-            if (journal.stuck() > 0) {
-                return "被判卡住";
-            }
-            if (journal.blockages() > 0) {
-                return "走不下去";
-            }
-            if (journal.replans() > 0) {
-                return "离开路线重搜";
+            if (!journal.replans().isEmpty()) {
+                return "重规划(" + com.dwinovo.numen.pathing.drive.PathLog.replans(journal) + ")";
             }
             if (status.running()) {
                 return "没走完(" + ticks + " 刻,预计 " + fmt(expected) + ")";

@@ -373,12 +373,12 @@ public class DetourGameTests {
                     }
                 }
                 cost += report.journal().routeCost();
-                replans += report.journal().replans();
+                replans += report.journal().replans().values().stream().mapToInt(Integer::intValue).sum();
                 blockages += report.journal().blockages();
             }
             JsonElement returned = run.data().get("returned");
             Constants.LOG.info(String.format(Locale.ROOT,
-                    "[detour-probe] %s 收场 共 %d 段搜索 游戏刻 %d(其中干等搜索 %d) 墙钟 %.1fs 挖 %d 放 %d 走完的步按规划算 %.1f 刻(直线估价 %.1f,%.2f 倍) 重搜 %d 走不下去 %d 身体 %s 结局 %s 回执 %s 回值 %s",
+                    "[detour-probe] %s 收场 共 %d 段搜索 游戏刻 %d(其中干等搜索 %d) 墙钟 %.1fs 挖 %d 放 %d 走完的步按规划算 %.1f 刻(直线估价 %.1f,%.2f 倍) 重规划 %d 走不下去 %d 身体 %s 结局 %s 回执 %s 回值 %s",
                     label, searches, her.level().getGameTime() - startTick, waiting, (System.nanoTime() - startNanos) / 1e9,
                     dug, placed, cost, first, cost / first, replans, blockages, rel(her.blockPosition()),
                     run.succeeded() ? "到达" : "失败", run.outcome(), returned));

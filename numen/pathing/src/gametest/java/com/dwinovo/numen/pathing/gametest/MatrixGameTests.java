@@ -20,8 +20,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 规划与执行对得上的矩阵({@link Matrix}):每个家族的方块,摆在地面、挡在身体要过的空间里、当落脚点,对每种走法每个方向问规划成不成立,
- * 成立的让新身体只做这一步。规划成立而执行走不通的,每一处都是一条前提不够保守的缺陷。
+ * 精确判过的步在执行里走得通的矩阵({@link Matrix}):每个家族的方块,摆在地面、挡在身体要过的空间里、当落脚点,对每种走法每个方向用精确的前提
+ * 判成不成立,成立的让新身体只做这一步。精确判断成立而执行走不通的,每一处都是一条前提不够保守的缺陷。
  */
 public class MatrixGameTests {
 
