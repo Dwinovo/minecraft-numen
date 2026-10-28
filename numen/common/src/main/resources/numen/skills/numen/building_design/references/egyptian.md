@@ -9,8 +9,8 @@ stone, black shadow, and almost no shade in between.
 ## Materials
 - **body**: sandstone, cut_sandstone, smooth_sandstone, chiseled_sandstone —
   mix so the mass looks quarried, not poured
-- **columns**: sandstone_pillar equivalents, chiseled_sandstone — thick, closely
-  spaced, papyrus-headed
+- **columns**: cut_sandstone, chiseled_sandstone — thick, closely spaced,
+  papyrus-headed
 - **carved bands**: chiseled_sandstone, sandstone_stairs at a regular height
 - **accent**: gold_block and lapis (blue_concrete / blue_terracotta) for royal
   work only

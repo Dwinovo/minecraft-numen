@@ -10,8 +10,8 @@ here, it is the structural logic showing through.
 - **stone**: stone_bricks, chiseled_stone_bricks, polished_diorite, calcite,
   smooth_stone — light, cool, and mixed so the mass reads as coursed masonry
 - **tracery and ribs**: stone_brick_wall, iron_bars, stone_brick_stairs
-- **glass**: stained_glass and stained_glass_pane — deep blues and reds, used in
-  tall narrow strips
+- **glass**: blue_stained_glass_pane, red_stained_glass_pane, purple_stained_glass_pane
+  — deep colours, in tall narrow strips
 - **roof**: deepslate_tiles, gray_concrete, dark_prismarine; very steep
 - **light**: lantern, soul_lantern, and let the glass carry the colour
 - **accent**: copper for spire caps as it weathers green
