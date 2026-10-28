@@ -101,39 +101,57 @@ final class Ascend implements Move {
 
     /**
      * 平地上站着的节点,要踏上去的那一格是整块、它上面身体要占的格与起步那一列头顶都是空的,就是起跳上去;上面有整块挡着,
-     * 起跳也过不去(要挖,不许挖的走法过不去);要踏的那一格是空的,要垫一块台阶(要放,没料或不许放就过不去)。
+     * 要挖掉每一块再跳(不许挖、挖不动的过不去);要踏的那一格是空的,要垫一块台阶(没料或不许放就过不去)。要挖要放的,与标志字
+     * 说不清的格,答"可能":代价按最快的步速,只挖不垫时台阶还在、照样起跳,加上起跳的工夫与罚分,再加要挖要放的那几格的最低价。
      */
     @Override
     public int quick(Quick q, Heading heading) {
-        if (!q.plain()) {
-            return Quick.EXACT;
-        }
         int dx = heading.dx();
         int dz = heading.dz();
+        if (!q.plain()) {
+            return q.likely(dx, 1, dz, q.fastest());
+        }
         int step = q.cell(dx, 0, dz);
         if (!Quick.simple(step)) {
-            return Quick.EXACT;
+            return q.likely(dx, 1, dz, q.fastest());
         }
         boolean blocked = false;
         for (int dy = 1; dy <= q.top() + 1; dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return Quick.EXACT;
+                return q.likely(dx, 1, dz, q.fastest());
             }
             blocked |= Quick.whole(flags);
         }
         int head = q.cell(0, q.top() + 1, 0);
         if (!Quick.simple(head)) {
-            return Quick.EXACT;
+            return q.likely(dx, 1, dz, q.fastest());
         }
+        double edits = 0;
         if (Quick.pass(step)) {
-            return q.mayPlace() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayPlace()) {
+                return Quick.REJECT;
+            }
+            edits += q.placeFloor();
         }
         if (blocked || Quick.whole(head)) {
-            return q.mayDig() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayDig()) {
+                return Quick.REJECT;
+            }
+            edits += q.digFloor(dx, 1, q.top() + 1, dz) + q.digFloor(0, q.top() + 1, q.top() + 1, 0);
+            if (Double.isInfinite(edits)) {
+                return Quick.REJECT;
+            }
+        }
+        if (Quick.pass(step)) {
+            return q.likely(dx, 1, dz, q.working() + edits);
+        }
+        double jump = movement(q.working(), true, q.stepJump(), true, 0) + q.jumpPenalty();
+        if (blocked || Quick.whole(head)) {
+            return q.likely(dx, 1, dz, jump + edits);
         }
         if (!q.calm()) {
-            return Quick.EXACT;
+            return q.likely(dx, 1, dz, movement(q.pace(), true, q.stepJump(), true, 0) + q.jumpPenalty());
         }
         q.entering();
         for (int dy = 0; dy <= q.top() + 1; dy++) {

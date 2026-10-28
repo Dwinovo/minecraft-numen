@@ -67,10 +67,14 @@ final class Climb implements Move {
                 support, Strides.reversible(draft, body, from, stance, to, landing)));
     }
 
-    /** 脚所在的格不可能是可攀爬的,攀爬不成立。 */
+    /** 脚所在的格不可能是可攀爬的,攀爬不成立;其余答"可能",代价至少是顺着爬一格。 */
     @Override
     public int quick(Quick q, Heading heading) {
-        return (q.own() & CellFlags.CLIMBISH) == 0 ? Quick.REJECT : Quick.EXACT;
+        if ((q.own() & CellFlags.CLIMBISH) == 0) {
+            return Quick.REJECT;
+        }
+        BodyStats body = q.model().body().stats();
+        return q.likely(0, heading.dy(), 0, heading.dy() > 0 ? Kinematics.climbUpTicksPerBlock(body) : Kinematics.climbDownTicksPerBlock());
     }
 
     @Override

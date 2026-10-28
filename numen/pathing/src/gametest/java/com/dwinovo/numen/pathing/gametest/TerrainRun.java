@@ -299,6 +299,19 @@ final class TerrainRun {
         JsonObject replans = new JsonObject();
         journal.replans().forEach((why, n) -> replans.addProperty(why.name(), n));
         o.add("replans", replans);
+        // 取出候选时精确判断的账,按走法:[判了几次, 不成立, 真价更贵]
+        JsonObject checks = new JsonObject();
+        for (com.dwinovo.numen.pathing.plan.MoveKind kind : com.dwinovo.numen.pathing.plan.MoveKind.values()) {
+            int k = kind.ordinal();
+            if (journal.checks().checked()[k] > 0) {
+                JsonArray one = new JsonArray();
+                one.add(journal.checks().checked()[k]);
+                one.add(journal.checks().refused()[k]);
+                one.add(journal.checks().dearer()[k]);
+                checks.add(kind.name(), one);
+            }
+        }
+        o.add("checks", checks);
         o.addProperty("blocked", journal.blockages());
         o.addProperty("rechecks", journal.rechecks());
         o.addProperty("recheckUs", journal.rechecks() == 0 ? 0 : Math.round(journal.recheckNanos() / 1e2 / journal.rechecks()) / 10.0);

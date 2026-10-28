@@ -38,10 +38,12 @@ import net.minecraft.world.level.material.FluidState;
  * <ul>
  *   <li><b>节点不建对象</b>({@link Nodes}):每个节点是一个下标,位置、代价、父节点、走法放在平行数组里,堆里存下标
  *       ({@link OpenSet});</li>
- *   <li><b>先快后精</b>:每种走法先问快判断({@link Move#quick}),只读节点四周的标志字({@link com.dwinovo.numen.pathing.world.CellFlags}),
- *       前提必然不成立的当场丢掉,必然成立的直接得到落点与代价,什么也不建;四周有半砖、水、梯子这类标志字说不清的格,
- *       或要挖要放的步子,才走精确的 {@link Move#premise}。快判断得出的节点不带 {@link Maneuver}:只有交出的路线,才把路线上
- *       每一步按精确的前提补出来({@link #maneuver});</li>
+ *   <li><b>惰性评估</b>(Lazy Weighted A*,Cohen、Phillips、Likhachev 2014):每种走法只问快判断({@link Move#quick}),只读节点四周的
+ *       标志字({@link com.dwinovo.numen.pathing.world.CellFlags}),不建草稿、不发射线、不问许可。必然不成立的当场丢掉;必然成立的
+ *       直接得到落点与代价;其余(要挖要放、四周有半砖、水、梯子……)按乐观的代价放进开放集当未核的候选,取出来时才在父节点面对的
+ *       世界上精确判({@link Move#premise}):不成立就丢,真价更贵就按真价排回去,成立且不贵才落成节点。一次搜索精确判断的次数是
+ *       取出的候选数,不是生成的步数;交出的路线上每一步都是判过的。快判断答"成立"的节点不带 {@link Maneuver},交路线时才补出来
+ *       ({@link #maneuver});许可在这次搜索里按格缓存({@link CostModel#searching});</li>
  *   <li><b>身体面对的世界</b>:展开一个节点时,前提读的是快照加上走到这个节点的最近 {@value #HISTORY} 步做过的改动——刚挖开的格是空的,
  *       刚垫下的块托着脚,斜着一级一级往山上凿台阶时,下一级脚下的格正是前几步自己挖开的。更早的步子已经离得远了,不叠;</li>
  *   <li><b>终止</b>只有几种:到了目标;这次的时限到了({@link Search#deadline},表是宿主给的 {@link SearchClock});展开节点的上限
@@ -52,7 +54,7 @@ import net.minecraft.world.level.material.FluidState;
  *       (边界上总价最小的节点,截到回得了头的地方);另记离目标最近的节点上朝目标的步子为什么被拒({@link SearchResult.Blocking}),收场时说缺什么;</li>
  *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、时间到、上限用完、搜完无路、有路伸进快照外没加载的区块。
  *       一步的前提读到了没加载的列,它成不成立就不知道,这一步不走、结论记成"未加载";前提没读到那些列就定了的(规格没开这种
- *       走法、紧挨着的一列就挡住了),与那边是什么无关,不算;快判断只在节点四周读全了才开口,读不全的交给精确判断去断;</li>
+ *       走法、紧挨着的一列就挡住了),与那边是什么无关,不算;快判断只在节点四周读全了才断定成立或不成立,读不全的答"可能",取出时由精确判断去断;</li>
  *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
  *       展开起点时叠上那一步的改动——快照里还没有它垫下的块;</li>
  *   <li><b>这一趟里走不通的步</b>({@link TripMemory}):展开时跳过,当它不存在;</li>
@@ -107,6 +109,8 @@ public final class AStar {
     private int topBand;
     /** 离目标最近的展开过的节点。 */
     private int closest = -1;
+    /** 取出候选时精确判断的账。 */
+    private final SearchResult.Checks checks = SearchResult.Checks.none();
     // 边:从展开过的节点出去的每一步成立的走法,抬高估价时用
     private int[] edgeFrom = new int[256];
     private int[] edgeTo = new int[256];
@@ -117,7 +121,7 @@ public final class AStar {
         this.search = search;
         RouteSpec spec = search.model().spec();
         this.goal = search.goal();
-        this.model = Goal.guarded(goal, search.model());
+        this.model = Goal.guarded(goal, search.model()).searching();
         this.body = model.body().stats();
         this.budgeted = spec.budgeted();
         this.alterBudget = spec.alterBudget();
@@ -136,26 +140,27 @@ public final class AStar {
         Maneuver arrival = search.arrival();
         Stance startStance = arrival != null ? arrival.landing() : Stance.at(view, body, startPos);
         if (startStance == null) {
-            return new SearchResult(SearchResult.Stop.STRANDED, null, 0, false, Double.NaN, null, null);
+            return new SearchResult(SearchResult.Stop.STRANDED, null, 0, false, Double.NaN, null, null, checks);
         }
         estimate = Estimate.of(view, model, goal, startPos, search.budget(), memory, search.favoring().floor());
         double startEstimate = estimate.at(startPos);
         if (!Double.isFinite(startEstimate)) {
             // 这一趟的记忆说从这里到不了(展开过的都是死路)
-            return new SearchResult(SearchResult.Stop.EXHAUSTED, null, 0, false, startEstimate, null, null);
+            return new SearchResult(SearchResult.Stop.EXHAUSTED, null, 0, false, startEstimate, null, null, checks);
         }
         probe = new Probe(view, new Recall(body));
         quick = new Quick(model, view);
         // 表在真开跑时才开始走:排队的时间不算这次搜索想了多久
         int terminal = search(startStance, search.deadline().start(), cancelled);
         if (terminal >= 0) {
-            return new SearchResult(SearchResult.Stop.ARRIVED, route(terminal), expanded, breathless, startEstimate, null, null);
+            return new SearchResult(SearchResult.Stop.ARRIVED, route(terminal), expanded, breathless, startEstimate, null, null,
+                    checks);
         }
         if (stop == SearchResult.Stop.CANCELLED) {
-            return new SearchResult(stop, null, expanded, breathless, startEstimate, null, null);
+            return new SearchResult(stop, null, expanded, breathless, startEstimate, null, null, checks);
         }
         SearchResult.Stop why = stop != null ? stop : skippedUnloaded ? SearchResult.Stop.UNLOADED : SearchResult.Stop.EXHAUSTED;
-        return new SearchResult(why, advance(), expanded, breathless, startEstimate, learned(), blocking());
+        return new SearchResult(why, advance(), expanded, breathless, startEstimate, learned(), blocking(), checks);
     }
 
     /** 开放集的排序键:走到的代价加估价的 {@link #WEIGHT} 倍。 */
@@ -182,6 +187,10 @@ public final class AStar {
                 return -1;
             }
             int current = open.pop();
+            if (nodes.pending[current]) {
+                verify(current);
+                continue;
+            }
             if (dominated(current)) {
                 // 同一格有憋气更宽裕、总价又不高的节点:它走得到的这一个都走得到,不展开;记作展开过,不当边界
                 nodes.expanded[current] = true;
@@ -227,63 +236,30 @@ public final class AStar {
         return -1;
     }
 
-    /** 展开一个节点:每种走法每个方向判一次,成立的松弛它的落点。 */
+    /**
+     * 展开一个节点:每种走法每个方向问一次快判断。答"成立"的当场松弛落点;答"可能"的按乐观的代价放进开放集当未核的候选
+     * ({@link Nodes#candidate}),取出来时才精确判({@link #verify})。落点那一格已经有不比这条候选贵的节点(憋气最宽裕的那一档,
+     * 已改格数不多于它)就不放:精确的代价只会更贵,它到不了更好的地方;落点是猜的({@link Quick#guessed})不在此列。
+     */
     private void expand(int current, int cx, int cy, int cz, Stance stance, WorldView here, List<Edit> done) {
         SearchView view = search.view();
         long at = nodes.pos[current];
         quick.begin(cx, cy, cz, stance, here, done);
         List<Move> moves = Moves.ALL;
-        BlockPos from = null;
         for (int mi = 0; mi < moves.size(); mi++) {
             Move move = moves.get(mi);
             List<Heading> headings = move.headings();
             for (int hi = 0; hi < headings.size(); hi++) {
-                Heading heading = headings.get(hi);
-                Maneuver m = null;
-                int tx;
-                int ty;
-                int tz;
-                int alterations;
-                boolean submerged;
-                double cost;
-                double ticks = Double.NaN;
-                Stance landing;
-                int verdict = move.quick(quick, heading);
+                int verdict = move.quick(quick, headings.get(hi));
                 if (verdict == Quick.REJECT) {
                     continue;
                 }
+                int tx = quick.toX();
+                int ty = quick.toY();
+                int tz = quick.toZ();
                 if (verdict == Quick.HOLDS) {
-                    tx = quick.toX();
-                    ty = quick.toY();
-                    tz = quick.toZ();
-                    alterations = 0;
-                    submerged = false;
-                    cost = quick.cost();
-                    ticks = quick.ticks();
-                    landing = quick.ground(ty);
-                } else {
-                    if (from == null) {
-                        from = new BlockPos(cx, cy, cz);
-                    }
-                    probe.recall.clearUnloaded();
-                    Premise premise = move.premise(model, here, from, stance, heading);
-                    if (probe.recall.unloaded()) {
-                        skippedUnloaded = true;
-                        nodes.holed[current] = true;
-                        continue;
-                    }
-                    if (!(premise instanceof Premise.Holds holds)) {
-                        continue;
-                    }
-                    m = holds.maneuver();
-                    BlockPos to = m.to();
-                    tx = to.getX();
-                    ty = to.getY();
-                    tz = to.getZ();
-                    alterations = m.alterations();
-                    submerged = m.submerged();
-                    cost = Double.NaN;
-                    landing = m.landing();
+                    relax(current, mi, hi, tx, ty, tz, 0, false, quick.cost(), quick.ticks(), quick.ground(ty), null);
+                    continue;
                 }
                 if (!Bounds.holdsBody(view.border(), body, tx, tz)) {
                     continue;
@@ -292,48 +268,116 @@ public final class AStar {
                 if (memory.blocks(move.kind(), at, to)) {
                     continue;
                 }
-                int used = nodes.used[current] + alterations;
-                if (budgeted && used > alterBudget) {
+                int used = budgeted ? nodes.used[current] : 0;
+                double g = nodes.g[current] + quick.cost() * search.favoring().factor(to);
+                boolean guessed = quick.guessed();
+                if (!guessed && settled(to, used, g)) {
                     continue;
                 }
-                if (m != null) {
-                    cost = move.cost(model, m);
-                }
-                if (!(cost > 0) || Double.isInfinite(cost)) {
-                    throw new IllegalStateException(move.kind() + " 从 " + new BlockPos(cx, cy, cz) + " 算出了非法的代价 " + cost);
-                }
-                Breath.Air air = nodes.air[current];
-                if (submerged || !breath.rested(air)) {
-                    air = breath.after(air, submerged, m != null ? move.ticks(model, m) : ticks);
-                    if (!breath.lasts(air)) {
-                        breathless = true;
-                        continue;
-                    }
-                }
-                int band = breath.band(air);
-                double step = cost * search.favoring().factor(to);
-                double g = nodes.g[current] + step;
-                int next = nodes.find(to, budgeted ? used : 0, band);
-                if (next < 0) {
-                    next = nodes.add(to, budgeted ? used : 0, band, estimate.at(tx, ty, tz));
-                    topBand = Math.max(topBand, band);
-                }
-                edge(current, next, step);
-                if (nodes.g[next] - g <= MIN_IMPROVEMENT) {
-                    continue;
-                }
-                nodes.g[next] = g;
-                nodes.f[next] = key(g, nodes.h[next]);
-                nodes.parent[next] = current;
-                nodes.via[next] = m;
-                nodes.viaCost[next] = cost;
-                nodes.stance[next] = landing;
-                nodes.air[next] = air;
-                nodes.move[next] = (byte) mi;
-                nodes.heading[next] = (byte) hi;
-                open.pushOrUpdate(next);
+                int candidate = nodes.candidate(to, guessed, used, estimate.at(tx, ty, tz), current, mi, hi, g);
+                nodes.f[candidate] = key(g, nodes.h[candidate]);
+                open.push(candidate);
             }
         }
+    }
+
+    /** 格 {@code to}(已改 {@code used} 格)上憋气最宽裕的那一档已经有走到那儿不比 {@code g} 贵的节点。 */
+    private boolean settled(long to, int used, double g) {
+        int real = nodes.find(to, used, 0);
+        return real >= 0 && nodes.g[real] - g <= MIN_IMPROVEMENT;
+    }
+
+    /**
+     * 取出一条未核的候选:在父节点此刻面对的世界上精确判它那一步(Lazy Weighted A*)。不成立就丢掉;读到没加载的列,父节点记成往外
+     * 没看全;成立就按真价松弛它真正的落点——真价不比估价贵,落点的排序键就是这条候选的,下一个出堆的就是它;贵了就按真价排回去。
+     * 取出时落点那一格已经有不比它贵的节点,不判。
+     */
+    private void verify(int candidate) {
+        if (!nodes.guessed[candidate] && settled(nodes.pos[candidate], nodes.used[candidate], nodes.g[candidate])) {
+            return;
+        }
+        int parent = nodes.parent[candidate];
+        int mi = nodes.move[candidate];
+        int hi = nodes.heading[candidate];
+        Move move = Moves.ALL.get(mi);
+        int kind = move.kind().ordinal();
+        List<Edit> done = recentEdits(parent);
+        WorldView here = done.isEmpty() ? probe : EditedView.after(probe, done);
+        probe.recall.clearUnloaded();
+        Premise premise = move.premise(model, here, BlockPos.of(nodes.pos[parent]), nodes.stance[parent],
+                move.headings().get(hi));
+        if (probe.recall.unloaded()) {
+            skippedUnloaded = true;
+            nodes.holed[parent] = true;
+            return;
+        }
+        checks.checked()[kind]++;
+        if (!(premise instanceof Premise.Holds holds)) {
+            checks.refused()[kind]++;
+            return;
+        }
+        Maneuver m = holds.maneuver();
+        BlockPos to = m.to();
+        double cost = move.cost(model, m);
+        if (nodes.g[parent] + cost * search.favoring().factor(to.asLong()) > nodes.g[candidate] + MIN_IMPROVEMENT) {
+            checks.dearer()[kind]++;
+        }
+        relax(parent, mi, hi, to.getX(), to.getY(), to.getZ(), m.alterations(), m.submerged(), cost, move.ticks(model, m),
+                m.landing(), m);
+    }
+
+    /**
+     * 从节点 {@code from} 按第 {@code mi} 种走法第 {@code hi} 个方向走到 {@code (tx, ty, tz)} 的一步已经判定成立:世界边界、这一趟走不通
+     * 的步、改动预算、憋气都过了,就按它的代价(乘上旧路折扣)松弛落点。快判断答"成立"的没有 {@link Maneuver}({@code m} 为 null),
+     * 交路线时才补出来({@link #maneuver})。
+     */
+    private void relax(int from, int mi, int hi, int tx, int ty, int tz, int alterations, boolean submerged, double cost,
+                       double ticks, Stance landing, Maneuver m) {
+        Move move = Moves.ALL.get(mi);
+        if (!Bounds.holdsBody(search.view().border(), body, tx, tz)) {
+            return;
+        }
+        long to = BlockPos.asLong(tx, ty, tz);
+        if (memory.blocks(move.kind(), nodes.pos[from], to)) {
+            return;
+        }
+        int used = nodes.used[from] + alterations;
+        if (budgeted && used > alterBudget) {
+            return;
+        }
+        if (!(cost > 0) || Double.isInfinite(cost)) {
+            throw new IllegalStateException(move.kind() + " 从 " + BlockPos.of(nodes.pos[from]) + " 算出了非法的代价 " + cost);
+        }
+        Breath.Air air = nodes.air[from];
+        if (submerged || !breath.rested(air)) {
+            air = breath.after(air, submerged, ticks);
+            if (!breath.lasts(air)) {
+                breathless = true;
+                return;
+            }
+        }
+        int band = breath.band(air);
+        double step = cost * search.favoring().factor(to);
+        double g = nodes.g[from] + step;
+        int next = nodes.find(to, budgeted ? used : 0, band);
+        if (next < 0) {
+            next = nodes.add(to, budgeted ? used : 0, band, estimate.at(tx, ty, tz));
+            topBand = Math.max(topBand, band);
+        }
+        edge(from, next, step);
+        if (nodes.g[next] - g <= MIN_IMPROVEMENT) {
+            return;
+        }
+        nodes.g[next] = g;
+        nodes.f[next] = key(g, nodes.h[next]);
+        nodes.parent[next] = from;
+        nodes.via[next] = m;
+        nodes.viaCost[next] = cost;
+        nodes.stance[next] = landing;
+        nodes.air[next] = air;
+        nodes.move[next] = (byte) mi;
+        nodes.heading[next] = (byte) hi;
+        open.pushOrUpdate(next);
     }
 
     /**
@@ -375,9 +419,9 @@ public final class AStar {
 
     // ==================== 没到目标:往边界推进、抬高估价、说缺什么 ====================
 
-    /** 边界:没展开过的节点,和展开时有一步没看全(读到没加载的列)的节点。 */
+    /** 边界:没展开过的节点,和展开时有一步没看全(读到没加载的列)的节点;未核的候选不是节点,不算。 */
     private boolean boundary(int n) {
-        return !nodes.expanded[n] || nodes.holed[n];
+        return !nodes.pending[n] && (!nodes.expanded[n] || nodes.holed[n]);
     }
 
     /** 交出的半程路线:边界节点交给 {@link HandOver#choose} 挑去处、截到回得了头的地方;没有可交的为 null。 */
@@ -409,6 +453,9 @@ public final class AStar {
         double[] raised = Learning.raise(settled, h, size, edgeFrom, edgeTo, edgeCost, edges);
         Long2DoubleOpenHashMap by = new Long2DoubleOpenHashMap();
         for (int n = 0; n < size; n++) {
+            if (nodes.pending[n]) {
+                continue;
+            }
             long cell = nodes.pos[n];
             double more = settled[n] ? raised[n] - h[n] : 0;
             if (!by.containsKey(cell) || more < by.get(cell)) {

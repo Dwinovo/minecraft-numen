@@ -721,7 +721,7 @@ public final class Driver {
      */
     private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
         Route route = result.route();
-        rig.journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty());
+        rig.journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.checks());
         String why = result.blocking() == null || result.arrived() ? ""
                 : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
         String what = route == null ? "没交出路线"

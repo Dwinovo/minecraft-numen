@@ -44,12 +44,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 走法的快判断({@link Move#quick})与精确的前提({@link Move#premise})在一批随机地形上逐节点逐走法逐方向核对:
  * 快判断答"不成立"的,精确判断一定不成立;答"成立"的,精确判断一定成立,而且落点、站姿、代价、刻数一模一样(代价按位比);
- * 两种都不能读到没加载的列(搜索据此把读到没加载的列的步子记成"未加载",快判断开口的步子不能少记)。答"断定不了"的不比,
- * 只数一数,免得三种答复里有一种从来没出现过、核对成了空话。
+ * 这两种都不能读到没加载的列(搜索据此把读到没加载的列的步子记成"未加载",快判断断定的步子不能少记)。答"可能"的,精确判断成立时
+ * 代价不比快判断给的低(惰性评估的乐观估价),落点不是猜的就一模一样。三种答复都数一数,免得有一种从来没出现过、核对成了空话。
  *
  * <p>地形是平地上有凸起、凹坑、墙和各色各样的方块(半砖、楼梯、水、岩浆、梯子、门、蜘蛛网、蜂蜜……),规格与身体也换着来:
  * 不改地形的、许挖的、带着圆石许挖许放的、许跑酷的、有按位置禁令与加价的、排除会塌的方块的、禁止站上某种方块的、有生物危险的;
- * 生存、创造、血量低的身体。叠了改动的节点只能答"不成立"或"断定不了"。
+ * 生存、创造、血量低的身体。叠了改动的节点只能答"不成立"或"可能"。
  */
 class QuickTest {
 
@@ -233,6 +233,8 @@ class QuickTest {
     private static final class Tally {
         final Map<MoveKind, int[]> counts = new EnumMap<>(MoveKind.class);
         int compared;
+        /** 答"可能"、精确判断成立的:乐观代价核对过的步数。 */
+        int likelyHeld;
         /** 快判断答成立、精确判断说要起跳的斜走:侧面有一格高的坎。 */
         int jumpingDiagonals;
 
@@ -253,7 +255,19 @@ class QuickTest {
                 String at = where + " " + move.kind() + " 从 " + from + " 朝 " + heading + (edits.isEmpty() ? "" : " (叠了改动 " + edits + ")");
                 int verdict = move.quick(quick, heading);
                 tally.add(move.kind(), verdict);
-                if (verdict == Quick.EXACT) {
+                if (verdict == Quick.LIKELY) {
+                    BlockPos predicted = new BlockPos(quick.toX(), quick.toY(), quick.toZ());
+                    double optimistic = quick.cost();
+                    boolean guessed = quick.guessed();
+                    if (move.premise(model, here, from, stance, heading) instanceof Premise.Holds holds) {
+                        Maneuver m = holds.maneuver();
+                        double exact = move.cost(model, m);
+                        assertTrue(optimistic <= exact + 1e-9, "答可能的代价比精确的高 " + at + ":快 " + optimistic + " 精确 " + exact);
+                        if (!guessed) {
+                            assertEquals(m.to(), predicted, "答可能的落点 " + at);
+                        }
+                        tally.likelyHeld++;
+                    }
                     continue;
                 }
                 recording.touched = false;
@@ -320,12 +334,13 @@ class QuickTest {
         for (MoveKind kind : List.of(MoveKind.WALK, MoveKind.DIAGONAL, MoveKind.ASCEND, MoveKind.DESCEND, MoveKind.FALL)) {
             assertTrue(tally.count(kind, Quick.HOLDS) > 200, kind + " 答成立的太少:" + tally.count(kind, Quick.HOLDS));
             assertTrue(tally.count(kind, Quick.REJECT) > 200, kind + " 答不成立的太少:" + tally.count(kind, Quick.REJECT));
-            assertTrue(tally.count(kind, Quick.EXACT) > 20, kind + " 断定不了的太少:" + tally.count(kind, Quick.EXACT));
+            assertTrue(tally.count(kind, Quick.LIKELY) > 20, kind + " 答可能的太少:" + tally.count(kind, Quick.LIKELY));
         }
         for (MoveKind kind : List.of(MoveKind.PILLAR, MoveKind.DOWNWARD, MoveKind.CLIMB, MoveKind.SWIM, MoveKind.PARKOUR)) {
             assertTrue(tally.count(kind, Quick.REJECT) > 200, kind + " 答不成立的太少:" + tally.count(kind, Quick.REJECT));
         }
         assertTrue(tally.compared > 100_000, "比对了 " + tally.compared + " 步");
+        assertTrue(tally.likelyHeld > 10_000, "答可能又成立的只有 " + tally.likelyHeld + " 步");
         assertTrue(tally.jumpingDiagonals > 50, "起跳的斜走只有 " + tally.jumpingDiagonals + " 步");
     }
 
@@ -384,11 +399,12 @@ class QuickTest {
             assertTrue(tally.count(kind, Quick.REJECT) > 50, kind + " 在叠了改动的节点上答不成立的太少:" + tally.count(kind, Quick.REJECT));
         }
         assertTrue(tally.compared > 10_000, "比对了 " + tally.compared + " 步");
+        assertTrue(tally.likelyHeld > 1_000, "答可能又成立的只有 " + tally.likelyHeld + " 步");
     }
 
     @Test
     void anOddBodyStaysWithTheExactPremise() {
-        // 不是原版玩家的身体:矮一点、窄一点、跳得高一点的,快判断要么照样与精确判断一致,要么不开口
+        // 不是原版玩家的身体:矮一点、窄一点、跳得高一点的,快判断要么照样与精确判断一致,要么答"可能"且不高估
         Random random = new Random(7L);
         EntityDimensions slim = EntityDimensions.scalable(0.4F, 1.5F).withEyeHeight(1.3F);
         BodyStats[] bodies = {

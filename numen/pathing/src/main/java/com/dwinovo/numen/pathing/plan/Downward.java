@@ -63,14 +63,21 @@ final class Downward implements Move {
 
     /**
      * 向下挖要站着、脚踩的正是下面那一格,还要许挖。不许挖的,精确判断在拒绝之前要先瞄(射线读四周的格),所以只在四周读全了
-     * 的节点上断定;能挖的,挖不挖得了、落下去摔不摔得起,精确判断。
+     * 的节点上断定;其余答"可能",代价至少是落下去的工夫加挖掉脚下那一格的最低价(挖不动的那一格,四周读全了时当场不成立)。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.stance().grounded() || q.stance().supportY() != q.y() - 1) {
             return Quick.REJECT;
         }
-        return !q.mayDig() && q.plain() ? Quick.REJECT : Quick.EXACT;
+        if (!q.mayDig() && q.plain()) {
+            return Quick.REJECT;
+        }
+        double dig = q.model().digFloor(q.state(0, -1, 0));
+        if (Double.isInfinite(dig)) {
+            return q.plain() ? Quick.REJECT : q.likely(0, -1, 0, q.descendFloor() - q.walkOff());
+        }
+        return q.likely(0, -1, 0, q.descendFloor() - q.walkOff() + dig);
     }
 
     @Override

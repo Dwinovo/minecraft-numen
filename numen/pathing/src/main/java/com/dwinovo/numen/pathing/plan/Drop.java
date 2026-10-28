@@ -151,39 +151,49 @@ final class Drop implements Move {
     /**
      * 平地上站着的节点,落点那一列在起步脚高上身体占的格全是空的、脚下那一格也是空的,顺着那一列往下找第一块整块:它上面那一格
      * 就是落点。下一级只收低一个节点处,下落只收低两个节点以上;落点脚下是实的,走出去脚还踩在原来的高度上,那是平走,
-     * 不是往下落。落点摔不起,身上有水桶才有倒水接住的可能(要放,交给精确判断)。
+     * 不是往下落。起步脚高上身体占的格里有整块,要挖掉每一块(不许挖、挖不动的过不去);落点摔不起,身上有水桶才有倒水接住的可能。
+     * 要挖、要接的,与标志字说不清的格,答"可能":落点按标志字找(说不清时取最浅的那个),代价按同一个公式在最省的情形下算。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.stance().grounded()) {
             return Quick.REJECT;
         }
-        if (!q.plain()) {
-            return Quick.EXACT;
-        }
         int dx = heading.dx();
         int dz = heading.dz();
+        int shallowest = kind == MoveKind.DESCEND ? 1 : 2;
+        double floor = kind == MoveKind.DESCEND ? q.descendFloor() : q.fallFloor();
+        if (!q.plain()) {
+            return around(q, dx, -shallowest, dz, floor);
+        }
         boolean blocked = false;
         for (int dy = 0; dy <= q.top(); dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return Quick.EXACT;
+                return around(q, dx, -shallowest, dz, floor);
             }
             blocked |= Quick.whole(flags);
         }
         int under = q.cell(dx, -1, dz);
         if (!Quick.simple(under)) {
-            return Quick.EXACT;
+            return around(q, dx, -shallowest, dz, floor);
         }
         if (Quick.whole(under)) {
             return Quick.REJECT;
         }
+        double digs = 0;
         if (blocked) {
-            return q.mayDig() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayDig()) {
+                return Quick.REJECT;
+            }
+            digs = q.digFloor(dx, 0, q.top(), dz);
+            if (Double.isInfinite(digs)) {
+                return Quick.REJECT;
+            }
         }
         int support = q.cell(dx, -2, dz);
         if (!Quick.simple(support)) {
-            return Quick.EXACT;
+            return around(q, dx, -shallowest, dz, floor + digs);
         }
         int depth = 1;
         if (Quick.whole(support)) {
@@ -200,11 +210,11 @@ final class Drop implements Move {
                     return Quick.REJECT;
                 }
                 if (-below > q.scan()) {
-                    return Quick.EXACT;
+                    return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }
                 support = q.cellBelow(dx, below, dz);
                 if (!Quick.simple(support)) {
-                    return Quick.EXACT;
+                    return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }
                 if (Quick.whole(support)) {
                     break;
@@ -214,12 +224,14 @@ final class Drop implements Move {
             depth = -below - 1;
         }
         CostModel model = q.model();
+        double move = movement(q.walkOff(), 1.0, q.landing(depth));
         int damage = model.fallDamage(depth, q.state(dx, -depth - 1, dz));
         if (!model.bearsLanding(q.ground(q.y() - depth), false, depth, damage)) {
-            return model.mayCatch(q.view()) ? Quick.EXACT : Quick.REJECT;
+            // 倒一桶水接住:落进水里不摔,只有走与落的工夫
+            return model.mayCatch(q.view()) ? q.likely(dx, -depth, dz, move + digs) : Quick.REJECT;
         }
-        if (!q.calm() || !q.calmBelow(dx, dz, -depth - 1, -3)) {
-            return Quick.EXACT;
+        if (blocked || !q.calm() || !q.calmBelow(dx, dz, -depth - 1, -3)) {
+            return q.likely(dx, -depth, dz, move + Strides.bruise(damage) + digs);
         }
         q.entering();
         for (int dy = -depth; dy <= q.top(); dy++) {
@@ -228,8 +240,12 @@ final class Drop implements Move {
         if (q.forbidsPassing() || !q.standsOn(dx, -depth - 1, dz, support)) {
             return Quick.REJECT;
         }
-        double move = movement(q.walkOff(), 1.0, q.landing(depth));
         return q.holds(q.x() + dx, q.y() - depth, q.z() + dz, move + Strides.bruise(damage) + q.overhead(dx, -depth - 1, dz), move);
+    }
+
+    /** 标志字定不下落点时答"可能":下一级的落点只有低一个节点那一处,下落的落点是猜的最浅的那个。 */
+    private int around(Quick q, int dx, int dy, int dz, double cost) {
+        return kind == MoveKind.DESCEND ? q.likely(dx, dy, dz, cost) : q.likelyNear(dx, dy, dz, cost);
     }
 
     @Override

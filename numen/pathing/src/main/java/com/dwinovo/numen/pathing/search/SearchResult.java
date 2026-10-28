@@ -21,9 +21,10 @@ import net.minecraft.core.BlockPos;
  *                      到了或没有可学的为空
  * @param blocking      没到目标时,离目标最近的那个节点上朝目标的步子被拒的头一条(哪种走法、从哪个节点、哪一格、哪一条前提),
  *                      收场说"缺什么"取它;没有为 null
+ * @param checks        取出未核的候选时精确判断的账:按走法记判了几次、几次不成立、几次真价比估价贵
  */
 public record SearchResult(Stop stop, Route route, int expanded, boolean breathless, double startEstimate,
-                           Long2DoubleMap raised, Blocking blocking) {
+                           Long2DoubleMap raised, Blocking blocking, Checks checks) {
 
     /** 搜索为什么停。"没有路"只有 {@link #EXHAUSTED} 能说;时间到、节点上限、碰到没加载的区块只是没搜完。 */
     public enum Stop {
@@ -51,6 +52,22 @@ public record SearchResult(Stop stop, Route route, int expanded, boolean breathl
      * @param fails 被拒的是哪一格、哪一条前提
      */
     public record Blocking(MoveKind move, BlockPos from, Premise.Fails fails) {}
+
+    /**
+     * 取出未核的候选时精确判断的账(惰性评估,{@link AStar}),下标是 {@link MoveKind#ordinal}:快判断对哪种走法太乐观,看它取出来
+     * 不成立、真价更贵的比例。
+     *
+     * @param checked 精确判了几次
+     * @param refused 其中不成立的
+     * @param dearer  其中成立、真价比快判断的估价贵、按真价放回去的
+     */
+    public record Checks(int[] checked, int[] refused, int[] dearer) {
+
+        public static Checks none() {
+            int n = MoveKind.values().length;
+            return new Checks(new int[n], new int[n], new int[n]);
+        }
+    }
 
     public SearchResult {
         raised = raised == null ? Long2DoubleMaps.EMPTY_MAP : raised;

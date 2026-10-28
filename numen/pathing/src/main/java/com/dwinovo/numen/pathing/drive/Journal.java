@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.search.SearchResult;
 
 /**
  * 这次导航的行程:段状态机一路上搜了几次、几次没到目标(抬高了估价)、按什么原因重规划了几次、在活世界上判了几次前提、
@@ -50,6 +51,8 @@ public final class Journal {
     private final List<Integer> expansions = new ArrayList<>();
     private final List<Long> searchNanos = new ArrayList<>();
     private int learned;
+    /** 各次搜索取出候选时精确判断的账,加在一起。 */
+    private final SearchResult.Checks checks = SearchResult.Checks.none();
     private double routeCost;
     private final Map<Replan, Integer> replans = new EnumMap<>(Replan.class);
     private int rechecks;
@@ -67,10 +70,15 @@ public final class Journal {
 
     /**
      * 一次搜索有了结论;{@code expanded} 是它展开了几个节点,{@code nanos} 是它在工作线程上跑了多久,{@code learned} 是它没到目标、
-     * 展开过的格子的估价抬高了。
+     * 展开过的格子的估价抬高了,{@code checks} 是它取出候选时精确判断的账。
      */
-    void searched(int expanded, long nanos, boolean learned) {
+    void searched(int expanded, long nanos, boolean learned, SearchResult.Checks checks) {
         searches++;
+        for (int k = 0; k < checks.checked().length; k++) {
+            this.checks.checked()[k] += checks.checked()[k];
+            this.checks.refused()[k] += checks.refused()[k];
+            this.checks.dearer()[k] += checks.dearer()[k];
+        }
         expansions.add(expanded);
         searchNanos.add(nanos);
         if (learned) {
@@ -98,6 +106,11 @@ public final class Journal {
     void timed(MoveKind kind, double ticks, double estimated) {
         timings.merge(kind, new Timing(1, ticks, estimated),
                 (a, b) -> new Timing(a.steps + b.steps, a.ticks + b.ticks, a.estimated + b.estimated));
+    }
+
+    /** 这一趟各次搜索取出候选时精确判断的账(按走法),加在一起:判了几次、几次不成立、几次真价比估价贵。 */
+    public SearchResult.Checks checks() {
+        return new SearchResult.Checks(checks.checked().clone(), checks.refused().clone(), checks.dearer().clone());
     }
 
     /** 搜索有了结论的次数(不含为"没有路"而做的诊断)。 */

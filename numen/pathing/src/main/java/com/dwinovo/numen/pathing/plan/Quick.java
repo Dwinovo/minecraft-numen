@@ -15,17 +15,20 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 走法的快判断用的一节点的上下文:搜索每展开一个节点,先在这里读好它四周一圈的标志字({@link CellFlags}),各走法
- * ({@link Move#quick})只读标志字、按位判断、查表得价,不建 {@link Maneuver}、不叠草稿、不算碰撞箱。一步有三种答复:
+ * ({@link Move#quick})只读标志字、按位判断、查表得价,不建 {@link Maneuver}、不叠草稿、不算碰撞箱、不问许可。一步有三种答复:
  * <ul>
  *   <li>{@link #REJECT}:这一步的前提必然不成立,精确的 {@link Move#premise} 一定交出 {@link Premise.Fails};</li>
  *   <li>{@link #HOLDS}:前提必然成立,落点与代价在 {@link #toX}、{@link #cost} 等处,与精确判断得出的一模一样;
  *       只有"平地上站着不改地形"的步子({@link #plain})会这样答;</li>
- *   <li>{@link #EXACT}:标志字不足以断定(四周有半砖、楼梯、水、梯子……,或要挖要放),走精确判断。</li>
+ *   <li>{@link #LIKELY}:可能成立,{@link #cost} 是乐观的代价——不高于精确判断成立时的代价,落点按标志字定(落点随地形而定的下落、
+ *       跑酷取最近的那个)。要挖要放、四周有半砖、楼梯、水、梯子这类标志字说不清的格,都这样答;搜索把它当未核的候选放进开放集,
+ *       取出来时才做精确判断(Lazy Weighted A*,Cohen、Phillips、Likhachev 2014)。</li>
  * </ul>
  * 答 {@link #REJECT} 与 {@link #HOLDS} 的条件都由精确的几何({@link com.dwinovo.numen.pathing.world.Stepping}、
- * {@code Footing}、{@code Clearance}、{@link Contact})在"四周全是 {@link CellFlags#PASS} 与 {@link CellFlags#WHOLE}"时的结果推出,
- * 单测在随机世界上逐节点逐走法逐方向与精确判断核对。价钱用的是各走法自己的同一个公式({@code Walk.movement} 等),只是步速、
- * 落差这些量已经给出。
+ * {@code Footing}、{@code Clearance}、{@link Contact})在"四周全是 {@link CellFlags#PASS} 与 {@link CellFlags#WHOLE}"时的结果推出;
+ * {@link #LIKELY} 的代价由同一份公式在最省的情形下给出:步速取各种步态里最快的、脚下的步速系数取 1、不加按位置的价与罚分,
+ * 标志字断定要挖的整块按 {@link CostModel#digFloor}、要垫的一块按 {@link CostModel#placeFloor} 计。单测在随机世界上逐节点逐走法逐方向
+ * 与精确判断核对:答"不成立"的精确一定不成立,答"可能"的代价不高于精确的。
  *
  * <p>节点面对的世界是快照加上走到这个节点的那一步做过的改动(挖开的格、垫下的块、开关过的门):改过的那几格的标志字由改完的
  * 世界上的方块状态推出({@link EditedView}),盖在快照读来的标志字上。
@@ -36,13 +39,13 @@ public final class Quick {
 
     public static final int REJECT = 0;
     public static final int HOLDS = 1;
-    public static final int EXACT = 2;
+    public static final int LIKELY = 2;
 
     /** 读标志字的范围:节点所在的列往四周各两列(四个角不读),往下两格、往上到头顶上一格。 */
     private static final int RADIUS = 2;
     private static final int SIDE = 2 * RADIUS + 1;
     private static final int BELOW = 2;
-    /** 往下找落点最多看这么多格,再深的交给精确判断。 */
+    /** 往下找落点最多看这么多格,再深的答"可能"。 */
     private static final int SCAN = 64;
 
     private final CostModel model;
@@ -68,6 +71,15 @@ public final class Quick {
     /** 走出边沿的工夫,与落下 {@code depth} 格再落地的工夫(用到才算,算过就记下;还没算为 NaN)。 */
     private final double walkOff;
     private final double[] landing = new double[SCAN + 2];
+    /** 各种步态里平地走一格最快的刻数:疾跑(跑不动时平走)与涉水取快的,脚下的步速系数只会更慢。 */
+    private final double fastest;
+    /** 先在原地改地形再迈步的一步每走一格至少几刻:这样的步跑不起来({@link Maneuver#runnable}),至少是平走。 */
+    private final double working;
+    /** 放一块、挖一格之外加的那些都不少于 0:放一块至少 {@link CostModel#placeFloor}。 */
+    private final double placeFloor;
+    /** 走出边沿往下落一个节点、两个节点以上至少要几刻:落差分别大于 0 格与 1 格。 */
+    private final double descendFloor;
+    private final double fallFloor;
 
     // ---- 此刻的节点 ----
     private int x;
@@ -94,6 +106,7 @@ public final class Quick {
     private int toZ;
     private double cost;
     private double ticks;
+    private boolean guessed;
 
     /** 为一次搜索备好:{@code view} 是搜索读的快照,{@code model} 是搜索用的(已并进目标格保护的)成本模型。 */
     public Quick(CostModel model, WorldView view) {
@@ -114,13 +127,18 @@ public final class Quick {
         this.levelJump = Strides.jump(model, 0.0);
         this.walkOff = Kinematics.walkOffEdgeTicks(body);
         Arrays.fill(landing, Double.NaN);
+        this.fastest = Math.min(pace, model.waterStep());
+        this.working = Strides.pace(model, false, false, false, 1.0);
+        this.placeFloor = model.placeFloor();
+        this.descendFloor = walkOff + Strides.landing(model, 0.0);
+        this.fallFloor = walkOff + Strides.landing(model, 1.0);
         this.ground = new Stance[view.getHeight() + 2];
         this.usable = usable(body);
     }
 
     /**
      * 快判断推导时假设的身体:细雪托不住(托得住的身体踩细雪不算伤身),宽度不到一格,站直了占两格高(高过一格、不过 1.8),
-     * 眼睛在头两格之内,迈步比一格低、起跳比一格高比两格低。再不一样的身体一律走精确判断。
+     * 眼睛在头两格之内,迈步比一格低、起跳比一格高比两格低。再不一样的身体只答"不成立"与"可能"。
      */
     private static boolean usable(BodyStats body) {
         double jump = Kinematics.jumpHeight(body, 1.0);
@@ -278,6 +296,45 @@ public final class Quick {
         return walkOff;
     }
 
+    /** 平地走一格最快的刻数:疾跑(跑不动时平走)与涉水取快的。 */
+    double fastest() {
+        return fastest;
+    }
+
+    /** 要挖要放的一步、不泡水时每走一格至少几刻:跑不起来,至少是平走。 */
+    double working() {
+        return working;
+    }
+
+    /** 放一块至少多少钱。 */
+    double placeFloor() {
+        return placeFloor;
+    }
+
+    /** 走出边沿往下落一个节点至少几刻。 */
+    double descendFloor() {
+        return descendFloor;
+    }
+
+    /** 走出边沿往下落两个节点以上至少几刻。 */
+    double fallFloor() {
+        return fallFloor;
+    }
+
+    /**
+     * 挖掉相对节点 {@code (dx, dy, dz)} 那一列从 {@code fromDy} 到 {@code toDy}(含)里整块的格至少多少钱({@link CostModel#digFloor},
+     * 节点面对的世界里的方块);有一格挖不动为无穷大。
+     */
+    double digFloor(int dx, int fromDy, int toDy, int dz) {
+        double sum = 0;
+        for (int dy = fromDy; dy <= toDy; dy++) {
+            if (whole(cell(dx, dy, dz))) {
+                sum += model.digFloor(state(dx, dy, dz));
+            }
+        }
+        return sum;
+    }
+
     /** 落下 {@code depth} 格再落地的工夫({@link Strides#landing})。 */
     double landing(int depth) {
         double ticks = landing[depth];
@@ -432,7 +489,36 @@ public final class Quick {
         this.toZ = toZ;
         this.cost = cost;
         this.ticks = ticks;
+        this.guessed = false;
         return HOLDS;
+    }
+
+    /** 这一步可能成立:成立的话落到节点相对 {@code (dx, dy, dz)} 处,代价至少 {@code cost}。 */
+    int likely(int dx, int dy, int dz, double cost) {
+        return likely(dx, dy, dz, cost, false);
+    }
+
+    /**
+     * 这一步可能成立,落点随地形而定、标志字定不下来(往下落多深、跳过几列):{@code (dx, dy, dz)} 是最近的那个可能的落点,
+     * 代价至少 {@code cost}——对哪个落点都不高估。
+     */
+    int likelyNear(int dx, int dy, int dz, double cost) {
+        return likely(dx, dy, dz, cost, true);
+    }
+
+    private int likely(int dx, int dy, int dz, double cost, boolean guessed) {
+        this.toX = x + dx;
+        this.toY = y + dy;
+        this.toZ = z + dz;
+        this.cost = cost;
+        this.ticks = Double.NaN;
+        this.guessed = guessed;
+        return LIKELY;
+    }
+
+    /** 答"可能"时,落点是猜的最近的那个:精确判断可能落在更远处。 */
+    public boolean guessed() {
+        return guessed;
     }
 
     public int toX() {
