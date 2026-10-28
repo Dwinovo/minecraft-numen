@@ -19,6 +19,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -167,7 +169,7 @@ public enum Groups {
             if (a.pos() == null || f.placed() == null) {
                 return false;
             }
-            Whose group = Whose.valueOf(arg.toUpperCase(java.util.Locale.ROOT));
+            Whose group = NEAR_GROUPS.get(arg);
             return f.placed().anyPlacedWithin(a.pos(), NEAR_RADIUS, f.view(),
                     placer -> Whose.ofPlacer(placer, f.actor()) == group);
         }
@@ -181,6 +183,13 @@ public enum Groups {
 
     /** {@code near} 的邻域:放置点周围这么多格(切比雪夫距离)内有玩家放的方块就算。 */
     public static final int NEAR_RADIUS = 3;
+
+    /** {@code near(<组>)} 认的三个归属;判断时直接查,不每次拼名字再解析枚举。 */
+    private static final Map<String, Whose> NEAR_GROUPS =
+            Map.of("self", Whose.SELF, "owner", Whose.OWNER, "other", Whose.OTHER);
+
+    /** 按规则名查组的表;判断路径上每问一项都查,不能每次走 {@link #values()}(它每次新建一份数组)。 */
+    private static final Map<String, Groups> BY_NAME = indexByName();
 
     /** 放下去会烧、会炸、会淹的东西。 */
     private static final Set<Item> HAZARD_ITEMS = Set.of(
@@ -224,12 +233,15 @@ public enum Groups {
 
     /** 按规则文本里的名字取;没有这个名字返回 null。 */
     public static Groups byName(String name) {
-        for (Groups s : values()) {
-            if (s.ruleName.equals(name)) {
-                return s;
-            }
+        return BY_NAME.get(name);
+    }
+
+    private static Map<String, Groups> indexByName() {
+        Map<String, Groups> out = new HashMap<>();
+        for (Groups g : values()) {
+            out.put(g.ruleName, g);
         }
-        return null;
+        return Map.copyOf(out);
     }
 
     /** 用原版的名字表解析一行规则;写错了抛 {@link Rule.Mistake}。全仓解析规则文本都走这里。 */
@@ -244,7 +256,7 @@ public enum Groups {
                 case STRUCTURE -> builder.namedWithOptionalArgument(g.ruleName, g.description, "#minecraft:village",
                         Groups::isTag);
                 case NEAR -> builder.namedWithArgument(g.ruleName, g.description, "owner",
-                        arg -> Set.of("self", "owner", "other").contains(arg));
+                        NEAR_GROUPS::containsKey);
                 default -> {
                     if (g.irreversibleOn.isEmpty()) {
                         builder.name(g.ruleName, g.description);
