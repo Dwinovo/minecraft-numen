@@ -107,7 +107,24 @@ public class BuildGameTests {
 
     /** 半径 3、高 4 的空心圆柱(底层中心 center):墙上的格进 rel,圈里留空的格进 inside。 */
     private static void hollowCylinderCells(BlockPos center, List<BlockPos> rel, List<BlockPos> inside) {
-        throw new UnsupportedOperationException("净室重写中");
+        double inv = 1 / 3.5;
+        for (int y = 0; y < 4; y++) {
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dz = -4; dz <= 4; dz++) {
+                    double ax = Math.abs(dx);
+                    double az = Math.abs(dz);
+                    if (!inRound(ax * inv, az * inv)) {
+                        continue;
+                    }
+                    boolean enclosed = inRound((ax + 1) * inv, az * inv) && inRound(ax * inv, (az + 1) * inv);
+                    (enclosed ? inside : rel).add(center.offset(dx, y, dz));
+                }
+            }
+        }
+    }
+
+    private static boolean inRound(double a, double b) {
+        return a * a + b * b <= 1;
     }
 
     /**

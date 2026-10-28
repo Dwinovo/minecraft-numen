@@ -163,7 +163,32 @@ class TerrainReadsTest {
 
     /** 另写的一份核:5 的半径、sigma 1.0 的高斯,float 的算法,加 0.5 再取整。 */
     private static int[] blur(int[] heights, int width, int length, int passes) {
-        throw new UnsupportedOperationException("净室重写中");
+        double total = 0;
+        for (int a = -5; a <= 5; a++) {
+            for (int b = -5; b <= 5; b++) {
+                total += Math.exp(-(a * a + b * b) / 2.0);
+            }
+        }
+        int[] now = heights.clone();
+        for (int pass = 0; pass < passes; pass++) {
+            int[] next = new int[now.length];
+            for (int i = 0; i < now.length; i++) {
+                int x = i % width;
+                int z = i / width;
+                float sum = 0f;
+                for (int a = -5; a <= 5; a++) {
+                    int zz = (z + a >= 0 && z + a < length) ? z + a : z;
+                    for (int b = -5; b <= 5; b++) {
+                        int xx = (x + b >= 0 && x + b < width) ? x + b : x;
+                        float weight = (float) (Math.exp(-(a * a + b * b) / 2.0) / total);
+                        sum += weight * now[zz * width + xx];
+                    }
+                }
+                next[i] = (int) Math.floor(sum + 0.5);
+            }
+            now = next;
+        }
+        return now;
     }
 
     @Test
