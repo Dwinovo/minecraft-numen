@@ -411,7 +411,7 @@ final class Matrix {
             Route.Leg leg = new Route.Leg(hold.maneuver(), hold.move().cost(hold.model(), hold.maneuver()), expected,
                     hold.model().body().breath().now());
             Route route = new Route(from, start, List.of(leg));
-            Navigator navigator = Navigator.of(body, new Ports(Trial.ALLOW_ALL, materials.apply(body), Threats.NONE));
+            Navigator navigator = Navigator.of(body, new Ports(Trial.ALLOW_ALL, materials.apply(body), Threats.NONE, Trial.CLOCK));
             this.navigation = navigator.drive(NavRequest.to(Goals.at(hold.maneuver().to()), spec).following(route));
         }
 

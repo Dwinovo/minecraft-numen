@@ -63,7 +63,7 @@ public final class Navigator {
             from = start.get();
         }
         long t0 = System.nanoTime();
-        WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from);
+        WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
         PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
         Search search = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(arrival);
@@ -78,6 +78,6 @@ public final class Navigator {
                 request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Driver(body, ports.terrain(), ports.materials(), ports.threats(),
-                request.goal(), request.spec(), request.budget(), request.route(), request.through()), entity);
+                request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()), entity);
     }
 }

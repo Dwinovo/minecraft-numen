@@ -28,11 +28,11 @@ final class Nodes {
     int[] used = new int[INITIAL];
     /** 憋气的档({@link Breath#band})。 */
     int[] band = new int[INITIAL];
-    /** 估价:到这次搜索要去的地方(这一段的终点,或目标)至少还要多少刻;到了就是 0。 */
+    /** 估价:到目标至少还要多少刻;到了就是 0。 */
     double[] h = new double[INITIAL];
     /** 已走的代价。 */
     double[] g = new double[INITIAL];
-    /** 总价。 */
+    /** 开放集的排序键:走到的代价加估价的加权倍数。 */
     double[] f = new double[INITIAL];
     /** 堆里排序用的总价:f 取整到 {@link OpenSet#TIE};入堆、改键时由堆更新。 */
     long[] key = new long[INITIAL];

@@ -197,7 +197,7 @@ final class TerrainRun {
     private Ports ports() {
         TerrainRoutes.Stage stage = route.stage();
         if (stage == null) {
-            return new Ports(Trial.ALLOW_ALL, Trial.NO_MATERIALS, Threats.NONE);
+            return new Ports(Trial.ALLOW_ALL, Trial.NO_MATERIALS, Threats.NONE, Trial.CLOCK);
         }
         TerrainPolicy policy = stage.noEdit().isEmpty() ? Trial.ALLOW_ALL : (change, pos, state, view) -> {
             for (TerrainRoutes.Box zone : stage.noEdit()) {
@@ -209,10 +209,10 @@ final class TerrainRun {
             return Permit.ALLOW;
         };
         if (stage.cobblestone() == 0) {
-            return new Ports(policy, Trial.NO_MATERIALS, Threats.NONE);
+            return new Ports(policy, Trial.NO_MATERIALS, Threats.NONE, Trial.CLOCK);
         }
         body.getInventory().add(new ItemStack(Items.COBBLESTONE, stage.cobblestone()));
-        return new Ports(policy, Trial.carried(body, Blocks.COBBLESTONE), Threats.NONE);
+        return new Ports(policy, Trial.carried(body, Blocks.COBBLESTONE), Threats.NONE, Trial.CLOCK);
     }
 
     /** 到了才算过;悬空场地的硬挡路线,没到、收场的结局满足它自己写的预期才算过。 */
@@ -291,9 +291,6 @@ final class TerrainRun {
         JsonArray searchMs = new JsonArray();
         journal.searchNanos().forEach(n -> searchMs.add(Math.round(n / 1e5) / 10.0));
         o.add("searchMs", searchMs);
-        JsonArray gaps = new JsonArray();
-        journal.gaps().forEach(g -> gaps.add(Double.isNaN(g) ? -1 : Math.round(g * 100) / 100.0));
-        o.add("gaps", gaps);
         o.addProperty("startMs", movedNanos == 0 ? -1 : Math.round((movedNanos - orderedNanos) / 1e5) / 10.0);
         JsonArray expansions = new JsonArray();
         journal.expansions().forEach(expansions::add);

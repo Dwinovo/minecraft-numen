@@ -147,17 +147,16 @@ class SearchTest {
     }
 
     /**
-     * 整片石头里只空着身体站的那两格,空手挖:每挖一格的价钱比估价里走一格贵几十倍。贪心那一遍朝终点直挖,几十个节点就拿到解——
-     * 不用逐个展开最便宜的节点,把石头里每一格的挖法都翻一遍。
+     * 整片石头里只空着身体站的那两格,空手挖:每挖一格的价钱比估价里走一格贵几十倍。埋深把绕不开的挖掘算进估价,加权搜索朝终点
+     * 挖过去,几千个节点就到——不把石头里每一格的挖法都翻一遍;挖的格数不多于一条两格高的直隧道。
      */
     @Test
-    void aLongTunnelInSolidRockIsFoundByPushingStraightAtTheGoal() {
+    void aLongTunnelInSolidRockIsFoundWithoutFloodingTheRock() {
         TestWorld rock = new TestWorld().fill(-4, Y - 6, -8, 40, Y + 8, 8, STONE)
                 .fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
-        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 100);
+        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 5_000);
         assertTrue(result.arrived(), result.stop().toString());
-        assertEquals(100, result.expanded(), "贪心那一遍几十个节点拿到解,剩下的预算花在加权那一遍找更便宜的");
-        assertEquals(60, result.route().alterations(), "一条两格高的隧道,每列挖两格");
+        assertTrue(result.route().alterations() <= 60, "不多于一条两格高的直隧道:" + result.route().alterations());
     }
 
     /**
@@ -222,36 +221,28 @@ class SearchTest {
 
     private static final BlockPos ACROSS = new BlockPos(36, Y, 0);
 
-    /** 一段的长度:十二格疾跑的耗时。 */
-    private static final double SEGMENT = 12 * Fixtures.PACE.sprint();
+    /** 测试的表:每展开一个节点记十微秒,与 GameTest 宿主同一个折算。 */
+    private static final SearchClock CLOCK = SearchClock.counting(10_000);
 
-    /**
-     * 许放块时要搭一长段桥:一段只要走到估价比起点低一段的节点,不必搜到目标——交出整条通到那里的路线,停因是"到了这一段的终点",
-     * 终点朝目标推进了一段那么远。
-     */
-    @Test
-    void aSegmentEndsAtANodeWhoseEstimateIsOneSegmentLower() {
-        CostModel model = Fixtures.withCobble(natural());
-        Search search = new Search(chasm(), model, START, Goals.at(ACROSS), 50_000, Favoring.NONE).advancing(SEGMENT);
-        SearchResult result = AStar.run(search, () -> false);
-        assertEquals(SearchResult.Stop.SEGMENT, result.stop(), "没到目标,到了这一段的终点");
-        assertTrue(result.reached());
-        assertFalse(result.arrived());
-        BlockPos end = result.route().end();
-        assertEquals(12, end.getX(), "朝目标推进了一段:" + end);
+    /** 一次只想得了 {@code nodes} 个节点那么久的时限。 */
+    private static Deadline thinking(int nodes) {
+        return new Deadline(CLOCK, nodes * 10_000L);
     }
 
-    /** 目标就在这一段里:走到目标,路线与不分段时一样。 */
+    /**
+     * 许放块时要搭一长段桥,时限只够想几百个节点:时间到了交出半程,停因是"时间到";不限时就一次搜到目标。想多久只改搜多深,
+     * 表按展开的节点数折算时,同样的时限两次搜出一模一样的路线。
+     */
     @Test
-    void aGoalInsideTheSegmentIsArrivedAtThroughTheSameRoute() {
-        TestWorld world = field().fill(6, Y, -6, 6, Y + 1, 6, STONE);
-        Goal goal = Goals.at(new BlockPos(15, Y, 3));
-        Search whole = new Search(world, Fixtures.withCobble(natural()), START, goal, Fixtures.BUDGET, Favoring.NONE);
-        SearchResult plain = AStar.run(whole, () -> false);
-        SearchResult segmented = AStar.run(whole.advancing(40 * Fixtures.PACE.sprint()), () -> false);
-        assertTrue(plain.arrived());
-        assertTrue(segmented.arrived());
-        assertEquals(legs(plain.route()), legs(segmented.route()));
+    void aSearchOutOfTimeHandsOverPartOfTheWay() {
+        CostModel model = Fixtures.withCobble(natural());
+        Search search = new Search(chasm(), model, START, Goals.at(ACROSS), 50_000, Favoring.NONE);
+        SearchResult hurried = AStar.run(search.within(thinking(300)), () -> false);
+        assertEquals(SearchResult.Stop.TIME, hurried.stop(), "没到目标,时间到了");
+        assertEquals(300, hurried.expanded(), "想多久按展开的节点数折算");
+        assertNotNull(hurried.route(), "交出半程");
+        assertEquals(legs(hurried.route()), legs(AStar.run(search.within(thinking(300)), () -> false).route()), "可复现");
+        assertTrue(AStar.run(search, () -> false).arrived(), "不限时一次搜到目标");
     }
 
     private static List<String> legs(Route route) {
@@ -259,8 +250,20 @@ class SearchTest {
                 + leg.maneuver().to() + " " + leg.cost() + " " + leg.maneuver().edits()).toList();
     }
 
+    /** 搭到空隙上方的一截路线:过空隙的整条路线截到第一块悬在空隙上方的桥为止。 */
+    private static Route halfway(TestWorld world, CostModel model, Goal goal) {
+        Route whole = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE), () -> false).route();
+        assertNotNull(whole);
+        for (int i = 0; i < whole.legs().size(); i++) {
+            if (whole.legs().get(i).maneuver().to().getX() > 4) {
+                return new Route(whole.start(), whole.startStance(), whole.legs().subList(0, i + 1));
+            }
+        }
+        throw new AssertionError("过空隙的路线没走到空隙上方");
+    }
+
     /**
-     * 接着一段搭到半空的路线往下搜:起点是那段路线的终点,脚下那块桥还没放、快照里是空的。只给起点,身体在那里待不住;
+     * 接着一截搭到半空的路线往下搜:起点是那截路线的终点,脚下那块桥还没放、快照里是空的。只给起点,身体在那里待不住;
      * 给出走到那里的那一步,就照它的落点与它垫下的块接着搜下去。
      */
     @Test
@@ -268,12 +271,9 @@ class SearchTest {
         TestWorld world = chasm();
         CostModel model = Fixtures.withCobble(natural());
         Goal goal = Goals.at(ACROSS);
-        Route route = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).advancing(SEGMENT),
-                () -> false).route();
-        assertNotNull(route);
+        Route route = halfway(world, model, goal);
         BlockPos end = route.end();
-        assertTrue(end.getX() > 2, "第一段搭到了空隙上方:" + end);
-        Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE).advancing(SEGMENT);
+        Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE);
         assertEquals(SearchResult.Stop.STRANDED, AStar.run(fromEnd, () -> false).stop(), "快照里桥还没搭,起点待不住");
         SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1)), () -> false);
         assertNotNull(next.route(), "照最后一步的落点与它垫的块接着搜:" + next.stop());
@@ -735,9 +735,7 @@ class SearchTest {
         TestWorld world = chasm();
         CostModel model = Fixtures.withCobble(natural());
         Goal goal = Goals.at(ACROSS);
-        Route first = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).advancing(SEGMENT),
-                () -> false).route();
-        assertNotNull(first);
+        Route first = halfway(world, model, goal);
         BlockPos end = first.end();
         Route.Leg last = first.legs().get(first.legs().size() - 1);
         SearchResult bare = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE), () -> false);

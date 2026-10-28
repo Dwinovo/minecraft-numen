@@ -9,7 +9,7 @@ import java.util.Map;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 
 /**
- * 这次导航的行程:段状态机一路上搜了几次、几次没搜到这一段的终点(抬高了估价)、按什么原因重规划了几次、在活世界上判了几次前提、
+ * 这次导航的行程:段状态机一路上搜了几次、几次没到目标(抬高了估价)、按什么原因重规划了几次、在活世界上判了几次前提、
  * 判前提共用了多久。每种走法走完的步数、实际共用的刻数与最短耗时共多少刻,看得出哪种走法实际比几何最短慢。
  * 计数记在事件发生的那一处——与写日志的是同一处——不另行推算;随实际账({@link EditLedger},含实际走完的各种步)一起交出。
  */
@@ -49,7 +49,6 @@ public final class Journal {
     private int searches;
     private final List<Integer> expansions = new ArrayList<>();
     private final List<Long> searchNanos = new ArrayList<>();
-    private final List<Double> gaps = new ArrayList<>();
     private int learned;
     private double routeCost;
     private final Map<Replan, Integer> replans = new EnumMap<>(Replan.class);
@@ -67,14 +66,13 @@ public final class Journal {
     public record Timing(int steps, double ticks, double estimated) {}
 
     /**
-     * 一次搜索有了结论;{@code expanded} 是它展开了几个节点,{@code nanos} 是它在工作线程上跑了多久,{@code learned} 是它没搜到这一段的终点、
-     * 展开过的格子的估价抬高了,{@code gap} 是交出的路线证到的界({@link com.dwinovo.numen.pathing.search.SearchResult#gap})。
+     * 一次搜索有了结论;{@code expanded} 是它展开了几个节点,{@code nanos} 是它在工作线程上跑了多久,{@code learned} 是它没到目标、
+     * 展开过的格子的估价抬高了。
      */
-    void searched(int expanded, long nanos, boolean learned, double gap) {
+    void searched(int expanded, long nanos, boolean learned) {
         searches++;
         expansions.add(expanded);
         searchNanos.add(nanos);
-        gaps.add(gap);
         if (learned) {
             this.learned++;
         }
@@ -117,17 +115,12 @@ public final class Journal {
         return Collections.unmodifiableList(searchNanos);
     }
 
-    /** 每次搜索证到的界(路线的价钱 ÷ 这一段最优价的下界;没交出整段为 NaN),按先后。 */
-    public List<Double> gaps() {
-        return Collections.unmodifiableList(gaps);
-    }
-
     /** 实际走完的各步按规划算的代价之和:这条路线值多少钱。 */
     public double routeCost() {
         return routeCost;
     }
 
-    /** 其中没搜到这一段的终点、抬高了估价往边界推进的次数。 */
+    /** 其中没到目标、抬高了估价往边界推进的次数。 */
     public int learned() {
         return learned;
     }

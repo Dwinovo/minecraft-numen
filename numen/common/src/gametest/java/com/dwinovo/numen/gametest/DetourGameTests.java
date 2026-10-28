@@ -31,7 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 绕路的代价,从入口量(套件 {@code numen_detour},只用 {@code -Pgametest=numen_detour} 手动选跑,不在日常批里):{@code numen.move.to}
- * 走一趟,每一段搜索交出的结论(停因、展开数、证到的界、离目标最近处被拒的原因)一段一段记进日志({@code [detour-probe]} 开头的行),
+ * 走一趟,每一次搜索交出的结论(停因、展开数、离目标最近处被拒的原因)一段一段记进日志({@code [detour-probe]} 开头的行),
  * 收场时再记一行总账和模型读到的回执。每段两个比值,分母都是第一段起点的估价(还没抬高过,就是直线估价):
  * <ul>
  *   <li>起点估价:搜索对"从这一段起点到目标至少多少刻"的下界,含这一趟记忆里抬高的增量;</li>
@@ -327,7 +327,7 @@ public class DetourGameTests {
             }
             Route route = r.route();
             SearchResult.Blocking b = r.blocking();
-            String blocking = b == null || r.reached() ? "-"
+            String blocking = b == null || r.arrived() ? "-"
                     : b.move() + " 从 " + rel(b.from()) + " 卡在 " + rel(b.fails().cell()) + " 前提=" + b.fails().reason();
             // 从脚下搜的,起点就是身体此刻的位置:之前装进去的路线没走完的部分不算数,只算走完的步
             if (String.valueOf(field(driver, "purpose")).equals("FROM_BODY")) {
@@ -336,10 +336,9 @@ public class DetourGameTests {
             double bound = committed + h;
             committed += route == null ? 0 : route.cost();
             Constants.LOG.info(String.format(Locale.ROOT,
-                    "[detour-probe] %s #%d 刻 %d 墙钟 %dms 起点 %s %s 停因 %s 展开 %d 界 %s 起点估价 %.1f(直线估价的 %.2f 倍) 总价下界 %.1f(直线估价的 %.2f 倍) 路线 %s 总预算 %s/%s 离目标最近处被拒:%s",
+                    "[detour-probe] %s #%d 刻 %d 墙钟 %dms 起点 %s %s 停因 %s 展开 %d 起点估价 %.1f(直线估价的 %.2f 倍) 总价下界 %.1f(直线估价的 %.2f 倍) 路线 %s 总预算 %s/%s 离目标最近处被拒:%s",
                     label, ++searches, her.level().getGameTime() - startTick, (System.nanoTime() - startNanos) / 1_000_000,
-                    rel(search.start()), field(driver, "purpose"), r.stop(), r.expanded(),
-                    Double.isNaN(r.gap()) ? "-" : String.format(Locale.ROOT, "%.2f", r.gap()), h, h / first, bound, bound / first,
+                    rel(search.start()), field(driver, "purpose"), r.stop(), r.expanded(), h, h / first, bound, bound / first,
                     route == null ? "无" : String.format(Locale.ROOT, "%d步 代价%.1f 终点%s", route.legs().size(), route.cost(),
                             rel(route.end())),
                     field(allowance, "spent"), field(allowance, "total"), blocking));
