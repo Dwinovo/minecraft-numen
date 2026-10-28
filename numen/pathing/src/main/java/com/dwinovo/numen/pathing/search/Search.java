@@ -20,8 +20,8 @@ import net.minecraft.core.BlockPos;
  *                 快照里还没有那一步垫下的块;从身体脚下搜为 null
  * @param air      身体在起点时憋气的样子:从脚下搜是身体此刻的({@link Breath#now}),接着一条路线往下搜是走完那一步时的
  * @param deadline 最多想多久:时间到了交出手里最好的半程;{@link Deadline#NONE} 不限时
- * @param advance  一段走到哪算完:到了目标,或到了一个估价比起点低 {@code advance} 刻的节点({@link AStar});无穷大是只认目标。
- *                 估价已经是每种目标统一的"还差多少",段就用它量,不另造"离终点多远"
+ * @param advance  一段走到哪算完:到了目标,或到了一个相对目标的估价比起点低 {@code advance} 刻的节点({@link AStar});无穷大是只认目标。
+ *                 估价已经是每种目标统一的"还差多少",段就用它量(不含这一趟记忆里抬高的增量),不另造"离终点多远"
  */
 public record Search(SearchView view, CostModel model, BlockPos start, Goal goal, int budget, Favoring favoring,
                      double advance, TripMemory.Frozen memory, Maneuver arrival, Breath.Air air, Deadline deadline) {

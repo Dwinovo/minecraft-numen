@@ -87,6 +87,23 @@ class PartialSearchTest {
         assertTrue(arrived.arrived(), arrived.stop().toString());
     }
 
+    /**
+     * 这一趟的记忆抬高了起点的估价(前一次搜索在这里没搜出路):一段量的是离目标近了多少,不把抬高的增量算进去,
+     * 不然旁边没探过的节点一个个都算"近了一段",一段段往外走。
+     */
+    @Test
+    void aSegmentIsMeasuredTowardTheGoalNotAgainstWhatTheTripLearned() {
+        CostModel model = Fixtures.model(Fixtures.natural());
+        double sprint = com.dwinovo.numen.pathing.world.Kinematics.pace(model.body().stats()).sprint();
+        TripMemory memory = new TripMemory();
+        memory.raise(START.asLong(), 100 * sprint);
+        Search search = new Search(field(), model, START, Goals.at(new BlockPos(20, Y, 0)), Fixtures.BUDGET, Favoring.NONE)
+                .remembering(memory.frozen()).advancing(8 * sprint);
+        SearchResult segment = AStar.run(search, () -> false);
+        assertEquals(SearchResult.Stop.SEGMENT, segment.stop());
+        assertTrue(segment.route().end().getX() >= 8, "朝目标推进了一段:" + segment.route().end());
+    }
+
     /** 四壁是基岩、里面是实心石头的竖井(边长 {@code size}),空手;起点是井底角上挖好的两格空间。 */
     private static TestWorld shaft(int size, int height) {
         return new TestWorld().fill(-3, Y - 3, -3, size + 2, Y + height + 3, size + 2, Blocks.BEDROCK.defaultBlockState())

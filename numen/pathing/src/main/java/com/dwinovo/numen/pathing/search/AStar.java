@@ -46,7 +46,7 @@ import net.minecraft.world.level.material.FluidState;
  *       ({@link #maneuver});许可在这次搜索里按格缓存({@link CostModel#searching});</li>
  *   <li><b>身体面对的世界</b>:展开一个节点时,前提读的是快照加上走到这个节点的最近 {@value #HISTORY} 步做过的改动——刚挖开的格是空的,
  *       刚垫下的块托着脚,斜着一级一级往山上凿台阶时,下一级脚下的格正是前几步自己挖开的。更早的步子已经离得远了,不叠;</li>
- *   <li><b>终止</b>只有几种:到了目标;到了这一段的终点——一个估价比起点低 {@link Search#advance} 的节点(没憋着气),
+ *   <li><b>终止</b>只有几种:到了目标;到了这一段的终点——一个相对目标的估价比起点低 {@link Search#advance} 的节点(没憋着气),
  *       远路一段一段地交、身体边走边接着搜;这次的时限到了({@link Search#deadline},表是宿主给的 {@link SearchClock});展开节点的上限
  *       用完({@link Search#budget});能走到的都搜过了。估价按真终点算,段终点只是"推进够了"的停止判据,开放集的排法不因它变。
  *       加权 A*(Pohl 1970)交出的路线至多比最优贵 {@link #WEIGHT} 倍;不先贪心拿一个解;</li>
@@ -116,7 +116,11 @@ public final class AStar {
     private int closest = -1;
     /** 取出候选时精确判断的账。 */
     private final SearchResult.Checks checks = SearchResult.Checks.none();
-    /** 这一段的终点在估价上的位置:估价不高于它的节点(不是目标的成员也)算到了这一段的终点;只认目标时是负无穷。 */
+    /**
+     * 这一段的终点在估价上的位置:相对目标的估价({@link Estimate#base},不含这一趟记忆里抬高的增量)不高于它的节点(不是目标的成员也)
+     * 算到了这一段的终点;只认目标时是负无穷。量的是离目标近了多少:抬高的增量只说明那片地方走不通,把它算进来,学习抬高了起点之后,
+     * 没探过的远处(增量为零)会被当成"近了一段",一段段往外走。
+     */
     private double segmentEnd;
     /** 搜到的终点在目标里(不是这一段的终点)。 */
     private boolean reachedGoal;
@@ -161,7 +165,7 @@ public final class AStar {
         }
         probe = new Probe(view, new Recall(body));
         quick = new Quick(model, view);
-        segmentEnd = startEstimate - search.advance();
+        segmentEnd = estimate.base(startPos.getX(), startPos.getY(), startPos.getZ()) - search.advance();
         // 表在真开跑时才开始走:排队的时间不算这次搜索想了多久
         int terminal = search(startStance, search.deadline().start(), cancelled);
         if (terminal >= 0) {
@@ -229,8 +233,8 @@ public final class AStar {
                     reachedGoal = true;
                     return current;
                 }
-            } else if (current != start && nodes.h[current] <= segmentEnd && nodes.air[current].held() <= 0) {
-                // 到了这一段的终点:估价比起点低一段,没憋着气(憋着气的节点不当终点:身体停在水下等下一段,接不上就困在那里)
+            } else if (current != start && nodes.air[current].held() <= 0 && estimate.base(cx, cy, cz) <= segmentEnd) {
+                // 到了这一段的终点:相对目标的估价比起点低一段,没憋着气(憋着气的节点不当终点:身体停在水下等下一段,接不上就困在那里)
                 return current;
             }
             if (expanded >= search.budget()) {
