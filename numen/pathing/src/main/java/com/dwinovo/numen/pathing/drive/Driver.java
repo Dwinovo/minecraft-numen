@@ -80,16 +80,19 @@ public final class Driver {
 
     /** 为什么派这次搜索。 */
     private enum Purpose {
-        /** 从身体脚下搜(首段,或走不下去之后重搜)。 */
-        FROM_BODY("从脚下"),
-        /** 从当前路线的终点接着搜。 */
-        NEXT("接续");
+        /** 从身体脚下搜(首段,或走不下去之后重搜):身体站着等它。 */
+        FROM_BODY("从脚下", Searches.Urgency.NOW),
+        /** 从当前路线的终点接着搜:身体边走边等它。 */
+        NEXT("接续", Searches.Urgency.AHEAD);
 
         /** 日志里的叫法。 */
         final String label;
+        /** 在派发口排哪一级。 */
+        final Searches.Urgency urgency;
 
-        Purpose(String label) {
+        Purpose(String label, Searches.Urgency urgency) {
             this.label = label;
+            this.urgency = urgency;
         }
     }
 
@@ -586,7 +589,7 @@ public final class Driver {
                 .remembering(memory.frozen()).after(arrival).within(deadline);
         pendingSearch = search;
         purpose = why;
-        pending = Searches.submit(search);
+        pending = Searches.submit(search, why.urgency);
     }
 
     /** 从身体脚下搜。 */

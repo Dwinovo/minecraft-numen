@@ -1,11 +1,12 @@
 package com.dwinovo.numen.pathing.search;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
@@ -15,14 +16,27 @@ import java.util.function.Function;
  * <p>池子是固定大小(处理器数减二,至少两个)、队列不设上限的守护线程池,线程优先级最低——搜索是纯计算,线程数封顶才不会
  * 同伴一多就挤占服务器与渲染线程;闲着的线程超时回收。交进来的输入里,世界是派发前在世界所在线程上拷好的快照
  * ({@link WorldSnapshot}),成本模型只读,所以工作线程从不碰活世界。
+ *
+ * <p>排队分两级({@link Urgency}):身体站着等的(从脚下搜、只搜不走的规划、诊断为什么没路)排在身体边走边等的接续前面,
+ * 同一级里先来先跑。池子满了时,接续让首段先跑:首段决定她多久开始动,接续还有剩下那截路的时间。
  */
 public final class Searches {
 
     private static final int POOL_SIZE = Math.max(2, Runtime.getRuntime().availableProcessors() - 2);
     private static final AtomicInteger THREADS = new AtomicInteger();
+    /** 派发的先后:同一级里先来先跑。 */
+    private static final AtomicLong ORDER = new AtomicLong();
     private static final ThreadPoolExecutor POOL = pool();
 
     private Searches() {}
+
+    /** 一件活排队的级别。 */
+    public enum Urgency {
+        /** 身体站着等它:从脚下搜、只搜不走的规划、诊断为什么没路。 */
+        NOW,
+        /** 身体边走边等它:从手上路线的终点接着搜。 */
+        AHEAD
+    }
 
     /** 工作线程池的大小。 */
     public static int poolSize() {
@@ -38,7 +52,7 @@ public final class Searches {
 
     private static ThreadPoolExecutor pool() {
         ThreadPoolExecutor pool = new ThreadPoolExecutor(POOL_SIZE, POOL_SIZE, 60, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(), task -> {
+                new PriorityBlockingQueue<>(), task -> {
                     Thread thread = new Thread(task, "numen-pathing-" + THREADS.incrementAndGet());
                     thread.setDaemon(true);
                     thread.setPriority(Thread.MIN_PRIORITY);
@@ -48,9 +62,9 @@ public final class Searches {
         return pool;
     }
 
-    /** 派发一次搜索。 */
-    public static Pending<SearchResult> submit(Search search) {
-        return dispatch(cancelled -> AStar.run(search, cancelled));
+    /** 派发一次搜索,排在 {@code urgency} 那一级。 */
+    public static Pending<SearchResult> submit(Search search, Urgency urgency) {
+        return dispatch(cancelled -> AStar.run(search, cancelled), urgency);
     }
 
     /** 一件由搜索组成的活:在工作线程上跑,{@code cancelled} 答是就尽快收手。 */
@@ -59,24 +73,39 @@ public final class Searches {
         T run(BooleanSupplier cancelled);
     }
 
-    /** 派发一件由搜索组成的活(门面诊断"为什么没路"时在同一份快照上换几份规格再搜)。 */
+    /** 派发一件由搜索组成的活(门面诊断"为什么没路"时在同一份快照上换几份规格再搜):有人站着等它。 */
     public static <T> Pending<T> submit(Job<T> job) {
-        return dispatch(job::run);
+        return dispatch(job::run, Urgency.NOW);
     }
 
-    private static <T> Pending<T> dispatch(Function<BooleanSupplier, T> job) {
+    private static <T> Pending<T> dispatch(Function<BooleanSupplier, T> job, Urgency urgency) {
         AtomicBoolean cancelled = new AtomicBoolean();
         Pending.Clock clock = new Pending.Clock();
         CompletableFuture<T> future = new CompletableFuture<>();
-        Runnable task = () -> {
+        Task task = new Task(urgency, ORDER.getAndIncrement(), () -> {
             try {
                 future.complete(clock.time(() -> job.apply(cancelled::get)));
             } catch (Throwable e) {
                 future.completeExceptionally(e);
             }
-        };
+        });
         POOL.execute(task);
         // 叫停时还在队里排着的,直接从队里拿走:它握着的快照与成本模型不必等到有线程空出来、跑到它、发现被叫停才放掉
         return new Pending<>(future, cancelled, clock, () -> POOL.remove(task));
+    }
+
+    /** 队里的一件活:先比级别,再比派发的先后。 */
+    private record Task(Urgency urgency, long order, Runnable body) implements Runnable, Comparable<Task> {
+
+        @Override
+        public void run() {
+            body.run();
+        }
+
+        @Override
+        public int compareTo(Task other) {
+            int byUrgency = urgency.compareTo(other.urgency);
+            return byUrgency != 0 ? byUrgency : Long.compare(order, other.order);
+        }
     }
 }

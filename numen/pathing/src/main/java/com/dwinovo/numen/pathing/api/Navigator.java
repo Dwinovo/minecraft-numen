@@ -67,7 +67,7 @@ public final class Navigator {
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
         PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
         Search search = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(arrival);
-        return new Planning(Searches.submit(search), search, who);
+        return new Planning(Searches.submit(search, Searches.Urgency.NOW), search, who);
     }
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
