@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /** 一趟的总预算与每次搜索的时限:总预算与估价成正比、用完收场、一次搜索再没有进展也要花预算;时限按首段、接续、加时重试定。不经 Driver。 */
 class AllowanceTest {
 
-    private static final SearchClock CLOCK = SearchClock.counting(10_000);
+    private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
 
     @Test
     void theTotalGrowsWithTheEstimate() {

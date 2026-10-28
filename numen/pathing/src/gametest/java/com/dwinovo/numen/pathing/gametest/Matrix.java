@@ -24,6 +24,7 @@ import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.plan.Premise;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -411,7 +412,7 @@ final class Matrix {
             Route.Leg leg = new Route.Leg(hold.maneuver(), hold.move().cost(hold.model(), hold.maneuver()), expected,
                     hold.model().body().breath().now());
             Route route = new Route(from, start, List.of(leg));
-            Navigator navigator = Navigator.of(body, new Ports(Trial.ALLOW_ALL, materials.apply(body), Threats.NONE, Trial.CLOCK));
+            Navigator navigator = Navigator.of(body, new Ports(Trial.ALLOW_ALL, materials.apply(body), Threats.NONE, SearchClock.STEADY));
             this.navigation = navigator.drive(NavRequest.to(Goals.at(hold.maneuver().to()), spec).following(route));
         }
 

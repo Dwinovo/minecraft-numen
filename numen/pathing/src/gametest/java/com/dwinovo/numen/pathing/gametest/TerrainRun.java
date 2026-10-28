@@ -10,6 +10,7 @@ import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
@@ -197,7 +198,7 @@ final class TerrainRun {
     private Ports ports() {
         TerrainRoutes.Stage stage = route.stage();
         if (stage == null) {
-            return new Ports(Trial.ALLOW_ALL, Trial.NO_MATERIALS, Threats.NONE, Trial.CLOCK);
+            return new Ports(Trial.ALLOW_ALL, Trial.NO_MATERIALS, Threats.NONE, SearchClock.STEADY);
         }
         TerrainPolicy policy = stage.noEdit().isEmpty() ? Trial.ALLOW_ALL : (change, pos, state, view) -> {
             for (TerrainRoutes.Box zone : stage.noEdit()) {
@@ -209,10 +210,10 @@ final class TerrainRun {
             return Permit.ALLOW;
         };
         if (stage.cobblestone() == 0) {
-            return new Ports(policy, Trial.NO_MATERIALS, Threats.NONE, Trial.CLOCK);
+            return new Ports(policy, Trial.NO_MATERIALS, Threats.NONE, SearchClock.STEADY);
         }
         body.getInventory().add(new ItemStack(Items.COBBLESTONE, stage.cobblestone()));
-        return new Ports(policy, Trial.carried(body, Blocks.COBBLESTONE), Threats.NONE, Trial.CLOCK);
+        return new Ports(policy, Trial.carried(body, Blocks.COBBLESTONE), Threats.NONE, SearchClock.STEADY);
     }
 
     /** 到了才算过;悬空场地的硬挡路线,没到、收场的结局满足它自己写的预期才算过。 */

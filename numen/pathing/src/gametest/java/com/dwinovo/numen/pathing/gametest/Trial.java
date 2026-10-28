@@ -61,12 +61,6 @@ final class Trial {
     static final Materials NO_MATERIALS = Optional::empty;
     /** 什么都放行。 */
     static final TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
-    /**
-     * 测试里搜索看的表:每展开一个节点记 {@value #NODE_NANOS} 纳秒(可挖可放时每个节点的目标耗时)。按节点数折算,
-     * 用例与靶场的结论与机器快慢无关、逐字节可复现;正式运行看墙钟,搜索代码是同一份。
-     */
-    static final long NODE_NANOS = 10_000;
-    static final SearchClock CLOCK = SearchClock.counting(NODE_NANOS);
 
     /** 高场地模板(按高度爬高)。 */
     static final String TALL = "pathing_tall";
@@ -239,7 +233,7 @@ final class Trial {
 
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(body, new Ports(terrain, materials, threats, CLOCK));
+        return Navigator.of(body, new Ports(terrain, materials, threats, SearchClock.STEADY));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */

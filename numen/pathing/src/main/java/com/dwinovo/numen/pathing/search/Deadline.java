@@ -11,7 +11,7 @@ import java.util.Objects;
 public record Deadline(SearchClock clock, long nanos) {
 
     /** 不限时。 */
-    public static final Deadline NONE = new Deadline(nanos -> expanded -> false, Long.MAX_VALUE);
+    public static final Deadline NONE = new Deadline(nanos -> (expanded, checked) -> false, Long.MAX_VALUE);
 
     public Deadline {
         Objects.requireNonNull(clock, "clock");

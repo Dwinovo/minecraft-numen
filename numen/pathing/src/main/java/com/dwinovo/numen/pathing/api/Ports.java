@@ -13,7 +13,7 @@ import com.dwinovo.numen.pathing.search.SearchClock;
  * @param terrain   一格能不能挖或放
  * @param materials 下一块垫路料用哪种
  * @param threats   此刻要避开的生物
- * @param clock     搜索看的表:正式运行是 {@link SearchClock#WALL},测试按展开的节点数折算({@link SearchClock#counting})
+ * @param clock     搜索看的表:正式运行是 {@link SearchClock#WALL},测试按做了多少活折算({@link SearchClock#STEADY})
  */
 public record Ports(TerrainPolicy terrain, Materials materials, Threats threats, SearchClock clock) {
 

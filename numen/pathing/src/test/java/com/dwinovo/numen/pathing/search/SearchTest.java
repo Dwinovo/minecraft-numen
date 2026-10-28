@@ -222,7 +222,7 @@ class SearchTest {
     private static final BlockPos ACROSS = new BlockPos(36, Y, 0);
 
     /** 测试的表:每展开一个节点记十微秒,与 GameTest 宿主同一个折算。 */
-    private static final SearchClock CLOCK = SearchClock.counting(10_000);
+    private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
 
     /** 一次只想得了 {@code nodes} 个节点那么久的时限。 */
     private static Deadline thinking(int nodes) {

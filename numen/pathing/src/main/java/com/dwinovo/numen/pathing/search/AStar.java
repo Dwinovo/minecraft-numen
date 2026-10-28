@@ -71,7 +71,7 @@ import net.minecraft.world.level.material.FluidState;
  *       节点停下也办不成,不算到。</li>
  * </ul>
  *
- * <p>只读 {@link Search#view()} 这份快照,单线程跑完;表是按节点数折算的假钟时结论逐字节可复现,不引入随机。
+ * <p>只读 {@link Search#view()} 这份快照,单线程跑完;表按做了多少活折算({@link SearchClock#STEADY})时结论逐字节可复现,不引入随机。
  */
 public final class AStar {
 
@@ -114,6 +114,8 @@ public final class AStar {
     private int closest = -1;
     /** 取出候选时精确判断的账。 */
     private final SearchResult.Checks checks = SearchResult.Checks.none();
+    /** 取出候选时一共做了几次精确判断:表按它与展开数折算这次搜索想了多久。 */
+    private int judged;
     // 边:从展开过的节点出去的每一步成立的走法,抬高估价时用
     private int[] edgeFrom = new int[256];
     private int[] edgeTo = new int[256];
@@ -224,7 +226,7 @@ public final class AStar {
                 stop = SearchResult.Stop.BUDGET;
                 return -1;
             }
-            if (timer.up(expanded)) {
+            if (timer.up(expanded, judged)) {
                 stop = SearchResult.Stop.TIME;
                 return -1;
             }
@@ -315,6 +317,7 @@ public final class AStar {
             return;
         }
         checks.checked()[kind]++;
+        judged++;
         if (!(premise instanceof Premise.Holds holds)) {
             checks.refused()[kind]++;
             return;
