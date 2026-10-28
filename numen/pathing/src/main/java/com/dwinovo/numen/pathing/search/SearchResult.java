@@ -8,8 +8,8 @@ import it.unimi.dsi.fastutil.longs.Long2DoubleMaps;
 import net.minecraft.core.BlockPos;
 
 /**
- * 一次搜索的结论:为什么停,以及交出的路线。到了目标或这一段的终点交出整条;没到时,只有朝边界上走得最近的节点推进、已经截到回得了头的
- * 一截、又离起点足够远的才交出({@link HandOver#cut}),否则没有路线。
+ * 一次搜索的结论:为什么停,以及交出的路线。到了目标或这一段的终点交出整条;没到时交出往边界上一个节点去的一截,去哪、截到哪由
+ * {@link HandOver} 定(边界上总价最小的节点、截到回得了头的地方、离起点足够远),交不出就没有路线。
  *
  * @param stop          为什么停
  * @param route         交出的路线;没有为 null

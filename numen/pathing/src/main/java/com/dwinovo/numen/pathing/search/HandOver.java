@@ -1,24 +1,77 @@
 package com.dwinovo.numen.pathing.search;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.IntFunction;
 
 import net.minecraft.core.BlockPos;
 
 /**
- * 局部前进交出哪一截,只在这里定。一段搜索没搜到这一段的终点({@link Search#advance})时,身体不干等:前进到边界上总价最小的节点
- * (LSS-LRTA* [Koenig &amp; Sun 2009]),而走到那里的路线里<b>只能停在最后一个回得了头的节点上</b>
- * ({@link com.dwinovo.numen.pathing.plan.Maneuver#reversible}):含着回不了头的一步(落差回不去的坠落、往下挖穿又爬不回来)就往回
- * 截到它之前。局部前进可能走进死路,只有停在退得回来的地方,走过去不对劲还能原路退回来。憋着气的节点也不当终点:身体停在水下
- * 等下一段,下一段接不上就困在那里。
+ * 一次搜索没搜到要去的地方时身体去哪、交哪一截,只在这里定。输入是这次搜索的边界节点(各带走到它的价钱与估价),输出是交出的一截;
+ * 和搜索怎么组织(一次搜到哪、预算多少)无关。
  *
- * <p>搜到了这一段的终点的路线是完整的,里面的坠落、往下挖穿都允许——落点之后的路已经找到了,不截。
+ * <p><b>去哪</b>:LSS-LRTA* 的选点 [Koenig &amp; Sun 2009]——边界上总价 {@code g + h} 最小的节点。估价含这一趟抬过的增量
+ * ({@link TripMemory}),走进过的死路估价已抬高,不会再被当成最近的去处。
+ *
+ * <p><b>交哪一截</b>:走到那里的路线里<b>只能停在最后一个回得了头的节点上</b>
+ * ({@link com.dwinovo.numen.pathing.plan.Maneuver#reversible}):含着回不了头的一步(落差回不去的坠落、往下挖穿又爬不回来)就往回
+ * 截到它之前。半程可能走进死路,只有停在退得回来的地方,走过去不对劲还能原路退回来。憋着气的节点不当终点:身体停在水下等下一次搜索,
+ * 接不上就困在那里——憋着气的边界节点不当去处,路线上憋着气的节点不当截点。
+ *
+ * <p>搜到了要去的地方的路线是完整的,里面的坠落、往下挖穿都允许——落点之后的路已经找到了,不截。
  */
 public final class HandOver {
 
     /** 交出的一截,终点至少要离起点这么多格。 */
     static final int MIN_PARTIAL = 5;
+    /** 最多试几个边界节点:走到它的路第一步就回不了头、截不出来,换下一个。 */
+    static final int TRIES = 16;
 
     private HandOver() {}
+
+    /**
+     * 边界上的一个节点。
+     *
+     * @param node     节点
+     * @param cost     从起点走到它的价钱({@code g})
+     * @param estimate 它的估价({@code h},含这一趟抬过的增量,与搜索用的同一份)
+     * @param holding  走到它时憋着气
+     */
+    record Candidate(int node, double cost, double estimate, boolean holding) {}
+
+    /**
+     * 先比总价,总价取整到堆里同一个刻度:沿最优路线走下去总价不变,总价平手的先取离目标近的(沿着走得最远的那个)。
+     */
+    private static final Comparator<Candidate> PREFERENCE = Comparator
+            .comparingLong((Candidate c) -> Math.round((c.cost() + c.estimate()) / OpenSet.TIE))
+            .thenComparingDouble(Candidate::estimate);
+
+    /** 边界节点按去处的优先次序排好(憋着气的不当去处,不在里面)。 */
+    static List<Candidate> order(List<Candidate> frontier) {
+        List<Candidate> sorted = new ArrayList<>(frontier.size());
+        for (Candidate c : frontier) {
+            if (!c.holding()) {
+                sorted.add(c);
+            }
+        }
+        sorted.sort(PREFERENCE);
+        return sorted;
+    }
+
+    /**
+     * 交出的半程:按 {@link #order} 的先后,走到它的路线({@code route})截得出一截的头一个;最多试 {@link #TRIES} 个,都截不出为 null。
+     */
+    static Route choose(List<Candidate> frontier, IntFunction<Route> route) {
+        List<Candidate> order = order(frontier);
+        for (int i = 0; i < order.size() && i < TRIES; i++) {
+            Route cut = cut(route.apply(order.get(i).node()));
+            if (cut != null) {
+                return cut;
+            }
+        }
+        return null;
+    }
 
     /** 一条路线交出的一截:前面回得了头的一段里,最后一个没憋着气的节点之前;离起点不够远为 null。 */
     static Route cut(Route route) {

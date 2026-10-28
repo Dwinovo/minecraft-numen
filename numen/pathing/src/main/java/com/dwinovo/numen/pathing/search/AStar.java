@@ -56,8 +56,8 @@ import net.minecraft.world.level.material.FluidState;
  *       [Hansen &amp; Zhou 2007;ARA*,Likhachev、Gordon &amp; Thrun 2003,同样以解的价钱与下界的比停]。贪心那一遍在实心岩石里就是朝终点直挖,
  *       在地表就是朝终点直走、挡了就挖或垫——走法、前提、许可全是同一套;</li>
  *   <li><b>没搜到这一段的终点</b>(预算用完、走得到的都搜过了、有路伸进没加载的区块):LSS-LRTA* [Koenig &amp; Sun 2009]。展开过的节点的
- *       估价抬高({@link Learning},交给宿主记进 {@link TripMemory}),交出的半程路线通到边界上总价最小的节点、截到回得了头的地方
- *       ({@link HandOver#cut});另记离目标最近的节点上朝目标的步子为什么被拒({@link SearchResult.Blocking}),收场时说缺什么;</li>
+ *       估价抬高({@link Learning},交给宿主记进 {@link TripMemory}),交出的半程路线去哪、截到哪由 {@link HandOver} 定
+ *       (边界上总价最小的节点,截到回得了头的地方);另记离目标最近的节点上朝目标的步子为什么被拒({@link SearchResult.Blocking}),收场时说缺什么;</li>
  *   <li><b>预算</b>按展开的节点数计,两遍合起来;结论不随机器快慢漂移;</li>
  *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、到了这一段的终点、搜完无路、预算用完、有路伸进快照外没加载的区块。
  *       一步的前提读到了没加载的列,它成不成立就不知道,这一步不走、结论记成"未加载";前提没读到那些列就定了的(规格没开这种
@@ -92,8 +92,6 @@ public final class AStar {
     private static final double MIN_IMPROVEMENT = 0.01;
     /** 一个节点面对的世界叠几步之前的改动:走到它的最近这么多步。 */
     static final int HISTORY = 8;
-    /** 没搜到这一段的终点时,交出的半程路线最多试几个边界上的节点(第一步就回不了头的截不出来,换下一个)。 */
-    private static final int ADVANCE_TRIES = 16;
 
     private final Search search;
     private final CostModel model;
@@ -493,41 +491,19 @@ public final class AStar {
             return !nodes.expanded[n] || nodes.holed[n];
         }
 
-        /**
-         * 交出的半程路线:通到边界上总价(走到加估价)最小的节点,截到回得了头的地方({@link HandOver#cut});第一步就回不了头的
-         * 截不出来,换下一个边界节点,最多试 {@link #ADVANCE_TRIES} 个。边界上一个都没有、或都截不出为 null。
-         */
+        /** 交出的半程路线:边界节点交给 {@link HandOver#choose} 挑去处、截到回得了头的地方;没有可交的为 null。 */
         Route advance() {
-            int size = nodes.size;
-            long[] value = new long[size];
-            double[] remaining = new double[size];
-            Arrays.fill(value, Long.MAX_VALUE);
-            for (int n = 0; n < size; n++) {
-                if (n != start && boundary(n) && Double.isFinite(nodes.g[n]) && nodes.air[n].held() <= 0) {
-                    BlockPos at = BlockPos.of(nodes.pos[n]);
-                    remaining[n] = estimate.at(at.getX(), at.getY(), at.getZ());
-                    // 总价取整到堆里同一个刻度:沿最优路线走下去总价不变,总价平手的先取离目标近的(沿着走得最远的那个)
-                    value[n] = Math.round((nodes.g[n] + remaining[n]) / OpenSet.TIE);
+            List<HandOver.Candidate> frontier = new ArrayList<>();
+            for (int n = 0; n < nodes.size; n++) {
+                if (n != start && boundary(n) && Double.isFinite(nodes.g[n])) {
+                    long at = nodes.pos[n];
+                    int x = BlockPos.getX(at);
+                    int y = BlockPos.getY(at);
+                    int z = BlockPos.getZ(at);
+                    frontier.add(new HandOver.Candidate(n, nodes.g[n], estimate.at(x, y, z), nodes.air[n].held() > 0));
                 }
             }
-            for (int tries = 0; tries < ADVANCE_TRIES; tries++) {
-                int best = -1;
-                for (int n = 0; n < size; n++) {
-                    if (value[n] != Long.MAX_VALUE && (best < 0 || value[n] < value[best]
-                            || value[n] == value[best] && remaining[n] < remaining[best])) {
-                        best = n;
-                    }
-                }
-                if (best < 0) {
-                    return null;
-                }
-                value[best] = Long.MAX_VALUE;
-                Route cut = HandOver.cut(route(best));
-                if (cut != null) {
-                    return cut;
-                }
-            }
-            return null;
+            return HandOver.choose(frontier, this::route);
         }
 
         /**
