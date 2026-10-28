@@ -57,10 +57,21 @@ public record Search(SearchView view, CostModel model, BlockPos start, Goal goal
         return new Search(view, model, start, goal, budget, favoring, memory, arrival, air, deadline);
     }
 
-    /** 同一次搜索,起点是 {@code step} 这一步的落点:接着一条路线往下搜,憋气从走完这一步时的样子起。 */
-    public Search after(Route.Leg step) {
-        return step == null ? this
-                : new Search(view, model, start, goal, budget, favoring, memory, step.maneuver(), step.air(), deadline);
+    /**
+     * 同一次搜索,接着 {@code route} 往下搜:起点是它的终点,身体到那里时怎么待着、憋气的样子照它最后一步;世界是快照叠上这条路线
+     * 从第 {@code done} 步起还没在世界里做的改动({@link PlannedView})——她走到终点时世界就是这样。最后一步的改动随起点叠
+     * (展开起点时叠"走到它的那一步",同展开别的节点),这里叠的是它之前的。{@code done} 是已经做完、改动已在快照里的步数:
+     * 只搜不走的规划接在上一段后面为 0,边走边接续为身体此刻正在走的那一步(那一步做了一半也不要紧:叠改动叠两遍结果一样)。
+     * 没有路线或路线一步都没有,就是这次搜索本身。
+     */
+    public Search after(Route route, int done) {
+        if (route == null || route.legs().isEmpty()) {
+            return this;
+        }
+        int last = route.legs().size() - 1;
+        Route.Leg step = route.legs().get(last);
+        return new Search(PlannedView.of(view, route.edits(Math.min(done, last), last)), model, start, goal, budget, favoring,
+                memory, step.maneuver(), step.air(), deadline);
     }
 
     /** 同一次搜索,憋气从 {@code from} 起(诊断问"憋得住的话有没有路"时是 {@link Breath#UNLIMITED})。 */

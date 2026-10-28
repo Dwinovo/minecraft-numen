@@ -573,10 +573,10 @@ public final class Driver {
 
     /**
      * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组;目标是真终点,
-     * 带着这一趟的记忆,最多想到 {@code deadline}。接着路线往下搜时起点接在 {@code arrival} 那一步后面
-     * (憋气从走完那一步时的样子起),从身体脚下搜为 null(憋气从身体此刻的样子起)。
+     * 带着这一趟的记忆,最多想到 {@code deadline}。接着手上的路线往下搜时起点是它的终点,读的世界叠上身体从此刻这一步走到那里要做的
+     * 改动({@link Search#after(Route, int)});从身体脚下搜时 {@code ahead} 为 null(憋气从身体此刻的样子起)。
      */
-    private void dispatch(Purpose why, BlockPos from, Route.Leg arrival, Deadline deadline) {
+    private void dispatch(Purpose why, BlockPos from, Route ahead, Deadline deadline) {
         long t0 = System.nanoTime();
         WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
         long t1 = System.nanoTime();
@@ -586,7 +586,7 @@ public final class Driver {
         PathLog.debug("{} 派搜索 {} 从 {} 去 {} 时限 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
                 PathLog.ms(deadline.nanos()), PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
         Search search = new Search(view, model, from, goal, allowance.nodes(), favoring)
-                .remembering(memory.frozen()).after(arrival).within(deadline);
+                .remembering(memory.frozen()).after(ahead, course.cur()).within(deadline);
         pendingSearch = search;
         purpose = why;
         pending = Searches.submit(search, why.urgency);
@@ -603,9 +603,8 @@ public final class Driver {
             continuation.skip();
             return;
         }
-        Route.Leg last = course.lastLeg();
         rig.journal.replanned(Journal.Replan.CONTINUE);
-        dispatch(Purpose.NEXT, last.maneuver().to(), last, allowance.next(Continuation.aheadTicks(course)));
+        dispatch(Purpose.NEXT, course.end(), course.route(), allowance.next(Continuation.aheadTicks(course)));
     }
 
     /** 在飞的搜索不要了:叫停,连它的输入(快照、成本模型)一起放手。 */

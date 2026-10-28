@@ -80,9 +80,14 @@ public record Route(BlockPos start, Stance startStance, List<Leg> legs) {
 
     /** 路上要做的全部改动,按先后。 */
     public List<Edit> edits() {
+        return edits(0, legs.size());
+    }
+
+    /** 第 {@code from} 步(含)到第 {@code to} 步(不含)要做的改动,按先后。 */
+    public List<Edit> edits(int from, int to) {
         List<Edit> out = new ArrayList<>();
-        for (Leg leg : legs) {
-            out.addAll(leg.maneuver().edits());
+        for (int i = from; i < to; i++) {
+            out.addAll(legs.get(i).maneuver().edits());
         }
         return out;
     }

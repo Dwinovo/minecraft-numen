@@ -275,10 +275,26 @@ class SearchTest {
         BlockPos end = route.end();
         Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE);
         assertEquals(SearchResult.Stop.STRANDED, AStar.run(fromEnd, () -> false).stop(), "快照里桥还没搭,起点待不住");
-        SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1)), () -> false);
+        SearchResult next = AStar.run(fromEnd.after(route, 0), () -> false);
         assertNotNull(next.route(), "照最后一步的落点与它垫的块接着搜:" + next.stop());
         assertEquals(end, next.route().start());
         assertTrue(next.route().end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
+    }
+
+    /**
+     * 接着一截搭到半空的路线往下搜,读到的世界叠着这一截前面每一步搭下的桥(身体走到那里时世界就是这样),不只是最后一块:
+     * 回到出发的台子上,走的是自己搭的桥,一块也不再垫。
+     */
+    @Test
+    void aSearchContinuingARouteSeesEveryBridgeTheRouteLaysBeforeItsEnd() {
+        TestWorld world = chasm();
+        CostModel model = Fixtures.withCobble(natural());
+        Route route = halfway(world, model, Goals.at(ACROSS));
+        assertTrue(route.edits().stream().filter(e -> e instanceof Edit.Place).count() >= 2, "这一截搭了不止一块桥");
+        SearchResult back = AStar.run(new Search(world, model, route.end(), Goals.at(START), 50_000, Favoring.NONE)
+                .after(route, 0), () -> false);
+        assertTrue(back.arrived(), back.stop().toString());
+        assertEquals(0, back.route().edits().stream().filter(e -> e instanceof Edit.Place).count(), "回去走在搭好的桥上");
     }
 
     @Test
@@ -737,10 +753,9 @@ class SearchTest {
         Goal goal = Goals.at(ACROSS);
         Route first = halfway(world, model, goal);
         BlockPos end = first.end();
-        Route.Leg last = first.legs().get(first.legs().size() - 1);
         SearchResult bare = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE), () -> false);
         assertEquals(SearchResult.Stop.STRANDED, bare.stop(), "快照里桥还没搭,起点待不住");
-        SearchResult next = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE).after(last), () -> false);
+        SearchResult next = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE).after(first, 0), () -> false);
         Route continued = next.route();
         assertNotNull(continued, "接着规划出了路:" + next.stop());
         assertEquals(end, continued.start());
@@ -905,7 +920,7 @@ class SearchTest {
         assertNotNull(first);
         Goal far = Goals.at(new BlockPos(32, Y, 0));
         Search fromMiddle = new Search(world, defaults(), middle, far, Fixtures.BUDGET, Favoring.NONE);
-        SearchResult carried = AStar.run(fromMiddle.after(first.legs().get(first.legs().size() - 1)), () -> false);
+        SearchResult carried = AStar.run(fromMiddle.after(first, 0), () -> false);
         assertEquals(SearchResult.Stop.EXHAUSTED, carried.stop());
         assertTrue(carried.breathless());
         assertTrue(AStar.run(fromMiddle, () -> false).arrived(), "满氧气从正中出发游得完");

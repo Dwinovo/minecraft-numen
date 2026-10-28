@@ -225,7 +225,7 @@ final class Draft extends EditedView {
                     return false;
                 }
                 record(new Edit.Door(cell.immutable(), state));
-                toggle(cell);
+                toggle(cell, state);
                 if (!Clearance.fits(this, body, bx, feetY, bz)) {
                     // 翻过来的门板落进了身体此刻站着的这一格(开着的活板门关上,门板压在头顶):身体就卡在原地
                     return fail(cell, Reason.NO_CLEARANCE);
