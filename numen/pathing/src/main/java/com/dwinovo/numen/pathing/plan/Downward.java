@@ -71,7 +71,7 @@ final class Downward implements Move {
         if (!q.stance().grounded() || q.stance().supportY() != q.y() - 1) {
             return Quick.REJECT;
         }
-        if (!q.mayDig() && q.plain()) {
+        if (!q.mayDig() && q.loadedAround(0, 0)) {
             return Quick.REJECT;
         }
         if ((q.own() & CellFlags.FLUID) != 0 && q.loadedAround(0, 0)) {

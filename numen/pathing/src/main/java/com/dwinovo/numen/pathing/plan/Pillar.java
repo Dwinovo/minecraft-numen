@@ -80,7 +80,7 @@ final class Pillar implements Move {
         if (!q.stance().grounded() || (q.own() & CellFlags.FLUID) != 0) {
             return Quick.REJECT;
         }
-        if (!q.mayPlace() && q.plain()) {
+        if (!q.mayPlace() && q.loadedAround(0, 0)) {
             return Quick.REJECT;
         }
         return q.likely(0, 1, 0, q.stepJump() + q.jumpPenalty() + q.placeFloor());
