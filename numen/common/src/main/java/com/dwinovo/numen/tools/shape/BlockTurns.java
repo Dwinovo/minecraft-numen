@@ -77,7 +77,7 @@ final class BlockTurns {
 
     static BlockState turn(BlockState state, double[][] m) {
         Optional<BlockState> vanilla = horizontal(state, m);
-        return vanilla.orElseGet(() -> weTurn(state, m));
+        return vanilla.orElseGet(() -> nearestTurn(state, m));
     }
 
     // ---- 原版能做的:水平面里的四分之一转与镜像 ----
@@ -130,28 +130,148 @@ final class BlockTurns {
     private static final List<String> STRAIGHT_RAILS = List.of("north_south", "east_west", "ascending_east", "ascending_west",
             "ascending_north", "ascending_south");
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static BlockState weTurn(BlockState original, double[][] m) {
-        throw new UnsupportedOperationException("净室重写中");
+    /**
+     * 原版管不到的变换:按原状态的属性次序一个个改(后面的读前面改过的),每个属性只认它的类型或名字;最后把东南西北四面搬到转后的面上。
+     * 设的值这个方块不接受的,那个属性不变。
+     */
+    private static BlockState nearestTurn(BlockState original, double[][] m) {
+        boolean sideFlip = m[0][0] * m[2][2] - m[0][2] * m[2][0] < 0;
+        boolean upFlip = m[1][1] < 0;
+        BlockState turned = original;
+        for (Property<?> p : original.getProperties()) {
+            String value = name(p, turned.getValue(p));
+            if (p instanceof DirectionProperty facing) {
+                Direction to = closest(m, turned.getValue(facing), List.copyOf(facing.getPossibleValues()), true);
+                if (to != null) {
+                    turned = with(turned, p, to.getSerializedName());
+                }
+            } else if (p.getName().equals("axis")) {
+                Direction along = switch (value) {
+                    case "x" -> Direction.EAST;
+                    case "y" -> Direction.UP;
+                    case "z" -> Direction.NORTH;
+                    default -> null;
+                };
+                Direction to = along == null ? null : closest(m, along, UPRIGHT_AND_CARDINAL, true);
+                if (to != null) {
+                    turned = with(turned, p, to.getAxis().getName());
+                }
+            } else if (p.getName().equals("type")) {
+                String type = sideFlip ? swapped(value, "left", "right") : value;
+                turned = with(turned, p, upFlip ? swapped(type, "bottom", "top") : type);
+            } else if (p.getName().equals("half")) {
+                if (upFlip) {
+                    turned = with(turned, p, swapped(value, "bottom", "top"));
+                }
+            } else if (p.getName().equals("shape")) {
+                String shape = sideFlip ? swapped(swapped(value, "outer_left", "outer_right"), "inner_left", "inner_right") : value;
+                turned = with(turned, p, shape);
+                if (isRailShape(p)) {
+                    turned = with(turned, p, railShape(p, name(p, turned.getValue(p)), m, upFlip));
+                }
+            } else if (p.getName().equals("orientation")) {
+                turned = with(turned, p, crafterOrientation(value, m));
+            } else if (p.getName().equals("rotation") && p instanceof IntegerProperty steps && steps.getPossibleValues().size() == 16) {
+                turned = turned.setValue(steps, turnedRotation(turned.getValue(steps), m));
+            }
+        }
+        return sides(original, turned, m);
     }
 
-    /** 东南西北四面(围栏、墙、玻璃板、红石线、藤蔓…):每一面有的,搬到变换后最接近的那一面。 */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    /**
+     * 东南西北四面(围栏、墙、玻璃板、红石线、藤蔓…):原状态里开着的面(布尔真,或枚举不是 none),先全部清掉,再统一搬到变换后最接近的那一面;
+     * 两面落到同一面时按北东南西靠后的为准。没开着的、或转不出方向的面保持 turned 里的值。
+     */
     private static BlockState sides(BlockState original, BlockState turned, double[][] m) {
-        throw new UnsupportedOperationException("净室重写中");
+        Map<Property<?>, String> moved = new HashMap<>();
+        BlockState out = turned;
+        for (Direction side : CARDINAL) {
+            Property<?> from = original.getBlock().getStateDefinition().getProperty(side.getSerializedName());
+            if (from == null) {
+                continue;
+            }
+            boolean flag = from.getValueClass() == Boolean.class;
+            String value = name(from, original.getValue(from));
+            if (value.equals(flag ? "false" : "none")) {
+                continue;
+            }
+            Direction to = closest(m, side, CARDINAL, false);
+            if (to == null) {
+                continue;
+            }
+            out = with(out, from, flag ? "false" : "none");
+            Property<?> target = original.getBlock().getStateDefinition().getProperty(to.getSerializedName());
+            if (target != null) {
+                moved.put(target, value);
+            }
+        }
+        for (Map.Entry<Property<?>, String> e : moved.entrySet()) {
+            out = with(out, e.getKey(), e.getValue());
+        }
+        return out;
     }
 
+    /** 铁轨的 shape:取值里有全部六种直轨的那种。 */
     private static boolean isRailShape(Property<?> p) {
-        throw new UnsupportedOperationException("净室重写中");
+        List<String> values = new ArrayList<>();
+        for (Comparable<?> v : p.getPossibleValues()) {
+            values.add(name(p, v));
+        }
+        return values.containsAll(STRAIGHT_RAILS);
     }
 
+    /**
+     * 铁轨形状 {@code a_b}:竖直翻转先把上坡的方向反过来;两段里是方向的各自在水平四向里取最近的,{@code a_b} 不是这种铁轨的取值就试
+     * {@code b_a},都不是就留竖直翻转后的值。
+     */
     private static String railShape(Property<?> p, String shape, double[][] m, boolean verticalFlip) {
-        throw new UnsupportedOperationException("净室重写中");
+        String flipped = verticalFlip
+                ? swapped(swapped(shape, "ascending_east", "ascending_west"), "ascending_north", "ascending_south") : shape;
+        int cut = flipped.indexOf('_');
+        if (cut < 0) {
+            return flipped;
+        }
+        String a = horizontalTurn(flipped.substring(0, cut), m);
+        String b = horizontalTurn(flipped.substring(cut + 1), m);
+        if (p.getValue(a + "_" + b).isPresent()) {
+            return a + "_" + b;
+        }
+        if (p.getValue(b + "_" + a).isPresent()) {
+            return b + "_" + a;
+        }
+        return flipped;
+    }
+
+    /** 方向名在水平四向里转到最近的那个;不是方向名(如 ascending)或转不出方向的原样。 */
+    private static String horizontalTurn(String part, double[][] m) {
+        Direction d = Direction.byName(part);
+        if (d == null) {
+            return part;
+        }
+        Direction to = closest(m, d, CARDINAL, false);
+        return to == null ? part : to.getSerializedName();
     }
 
     /** 合成器的 orientation:{@code 朝向_上方}(朝向可以是上下,上方只在水平方向里选,朝下换成朝上)。 */
     private static String crafterOrientation(String orientation, double[][] m) {
-        throw new UnsupportedOperationException("净室重写中");
+        int cut = orientation.indexOf('_');
+        if (cut < 0) {
+            return orientation;
+        }
+        Direction front = Direction.byName(orientation.substring(0, cut));
+        Direction top = Direction.byName(orientation.substring(cut + 1));
+        if (front == null || top == null) {
+            return orientation;
+        }
+        Direction newFront = closest(m, front, UPRIGHT_AND_CARDINAL, true);
+        Direction newTop = closest(m, top, UPRIGHT_AND_CARDINAL, true);
+        if (newFront == null || newTop == null) {
+            return orientation;
+        }
+        if (newTop == Direction.DOWN) {
+            newTop = Direction.UP;
+        }
+        return newFront.getSerializedName() + "_" + newTop.getSerializedName();
     }
 
     /** 告示牌、旗帜、头颅的 0..15 档:十六个水平方向里取变换后最接近的;0 是南,每档 22.5°,4 是西。 */
@@ -169,7 +289,24 @@ final class BlockTurns {
      * 一个方向变换后,候选里最接近的那个(点积最大,并列取后面的,同 WorldEdit);{@code withY} 为否时竖直分量不算。变换把它转成了零向量是 null。
      */
     private static Direction closest(double[][] m, Direction d, List<Direction> candidates, boolean withY) {
-        throw new UnsupportedOperationException("净室重写中");
+        double[] v = apply(m, d.getStepX(), d.getStepY(), d.getStepZ());
+        if (!withY) {
+            v[1] = 0;
+        }
+        double length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        if (length < 1e-9) {
+            return null;
+        }
+        Direction best = null;
+        double bestDot = Double.NEGATIVE_INFINITY;
+        for (Direction c : candidates) {
+            double dot = (v[0] * c.getStepX() + v[1] * c.getStepY() + v[2] * c.getStepZ()) / length;
+            if (dot >= bestDot) {
+                best = c;
+                bestDot = dot;
+            }
+        }
+        return best;
     }
 
     private static double[] apply(double[][] m, double x, double y, double z) {
