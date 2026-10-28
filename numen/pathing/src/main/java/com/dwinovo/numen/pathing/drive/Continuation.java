@@ -40,6 +40,14 @@ final class Continuation {
         return course.complete() || failed || course.cur() < waitingStep(course);
     }
 
+    /**
+     * 身体不停下来还能走多久(几何最短的刻数):从正在走的这一步走到等接续的位置。接续要在这之前搜完,她才不用站着等;
+     * 半程短得不到末尾那几步,她一步也走不了,是 0。
+     */
+    static double aheadTicks(Course course) {
+        return course.ticksBefore(Math.max(course.cur(), waitingStep(course)));
+    }
+
     /** 等接续的位置:末尾那几步的头一步;起点攀着的往前退,退不过正在走的这一步。 */
     private static int waitingStep(Course course) {
         int step = course.size() - TAIL;

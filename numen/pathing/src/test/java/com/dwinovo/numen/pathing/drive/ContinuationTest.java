@@ -78,6 +78,15 @@ class ContinuationTest {
         assertTrue(new Continuation().due(course), "半程一交出就接着搜");
     }
 
+    /** 接续想多久按身体不停下来还能走多久定:走到末尾那几步之前;已经走到那里就是 0,不按整条路线剩下的算。 */
+    @Test
+    void theTimeAheadEndsWhereTheBodyWouldWait() {
+        Course course = TrackerTest.straightCourse(false, 10);
+        assertEquals((course.size() - Continuation.TAIL) * 10, Continuation.aheadTicks(course), 1e-9);
+        course.advanceTo(course.size() - Continuation.TAIL);
+        assertEquals(0, Continuation.aheadTicks(course), 1e-9);
+    }
+
     @Test
     void aRouteThatReachesTheGoalOrHasNoRouteAfterIsNeverSearchedPast() {
         Continuation continuation = new Continuation();

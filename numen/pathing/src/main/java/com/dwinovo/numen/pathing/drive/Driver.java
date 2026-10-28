@@ -605,7 +605,7 @@ public final class Driver {
         }
         Route.Leg last = course.lastLeg();
         rig.journal.replanned(Journal.Replan.CONTINUE);
-        dispatch(Purpose.NEXT, last.maneuver().to(), last, allowance.next(course.remainingTicks()));
+        dispatch(Purpose.NEXT, last.maneuver().to(), last, allowance.next(Continuation.aheadTicks(course)));
     }
 
     /** 在飞的搜索不要了:叫停,连它的输入(快照、成本模型)一起放手。 */
