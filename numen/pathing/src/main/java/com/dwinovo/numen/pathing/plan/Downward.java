@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.plan;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.CellFlags;
 
 import net.minecraft.core.BlockPos;
 
@@ -71,6 +72,10 @@ final class Downward implements Move {
             return Quick.REJECT;
         }
         if (!q.mayDig() && q.plain()) {
+            return Quick.REJECT;
+        }
+        if ((q.own() & CellFlags.FLUID) != 0 && q.loadedAround(0, 0)) {
+            // 脚所在的格有液体:挖掉脚下那格,液体往下灌({@code DigRules} 的漏液)
             return Quick.REJECT;
         }
         double dig = q.model().digFloor(q.state(0, -1, 0));

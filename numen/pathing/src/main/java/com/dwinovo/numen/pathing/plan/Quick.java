@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.plan;
 import java.util.Arrays;
 import java.util.List;
 
+import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.CellFlags;
@@ -377,6 +378,26 @@ public final class Quick {
     boolean loadedAround(int dx, int dz) {
         return ((flagsAt(dx, 0, dz) | flagsAt(dx + 1, 0, dz) | flagsAt(dx - 1, 0, dz) | flagsAt(dx, 0, dz + 1) | flagsAt(dx, 0, dz - 1))
                 & CellFlags.UNLOADED) == 0;
+    }
+
+    /**
+     * 节点相对 {@code (dx, dz)} 那一列加载着:只读落点那一列就断定得了的(落点托不托得住脚、待不待得住),断定"不成立"之前确认它。
+     */
+    boolean loadedColumn(int dx, int dz) {
+        return (flagsAt(dx, 0, dz) & CellFlags.UNLOADED) == 0;
+    }
+
+    /** 身体在节点相对 {@code (dx, dy, dz)} 那个节点上待不待得住({@link Stance#at},节点面对的世界里的)。 */
+    boolean holdsAt(int dx, int dy, int dz) {
+        return Stance.at(reading, model.body().stats(), x + dx, y + dy, z + dz) != null;
+    }
+
+    /**
+     * 往节点相对 {@code (dx, dy, dz)} 那一格放这一趟的垫路料时,没有一个邻格的面可贴({@link Faces#against}:有轮廓、不会被顶替的邻格),
+     * 怎么瞄也放不下。放置的精确判断问的是同一个判据。
+     */
+    boolean nothingToClick(int dx, int dy, int dz) {
+        return Faces.against(reading, probe.set(x + dx, y + dy, z + dz).immutable(), model.placing().orElse(null)).isEmpty();
     }
 
     /** 身体站在节点相对 {@code (dx, dy, dz)} 那个节点时脚的高度({@link Footing#height},节点面对的世界里的);托不住为 NaN。 */

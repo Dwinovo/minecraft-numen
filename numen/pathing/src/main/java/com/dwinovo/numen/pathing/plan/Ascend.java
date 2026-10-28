@@ -109,29 +109,28 @@ final class Ascend implements Move {
         int dx = heading.dx();
         int dz = heading.dz();
         if (!q.plain()) {
-            // 攀着、浮着起步时垫不了台阶:落点那一格托不住脚就上不去(精确判断头一条就是它)
-            return !q.stance().grounded() && q.loadedAround(dx, dz) && Double.isNaN(q.footing(dx, 1, dz))
-                    ? Quick.REJECT : q.likely(dx, 1, dz, q.fastest());
+            return likely(q, dx, dz, q.fastest());
         }
         int step = q.cell(dx, 0, dz);
         if (!Quick.simple(step)) {
-            return q.likely(dx, 1, dz, q.fastest());
+            return likely(q, dx, dz, q.fastest());
         }
         boolean blocked = false;
         for (int dy = 1; dy <= q.top() + 1; dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return q.likely(dx, 1, dz, q.fastest());
+                return likely(q, dx, dz, q.fastest());
             }
             blocked |= Quick.whole(flags);
         }
         int head = q.cell(0, q.top() + 1, 0);
         if (!Quick.simple(head)) {
-            return q.likely(dx, 1, dz, q.fastest());
+            return likely(q, dx, dz, q.fastest());
         }
         double edits = 0;
         if (Quick.pass(step)) {
-            if (!q.mayPlace()) {
+            // 台阶垫在半空:四面上下都是空气就没有一面点得中
+            if (!q.mayPlace() || q.nothingToClick(dx, 0, dz)) {
                 return Quick.REJECT;
             }
             edits += q.placeFloor();
@@ -165,6 +164,18 @@ final class Ascend implements Move {
         }
         double move = movement(q.pace(), true, q.stepJump(), true, 0);
         return q.holds(q.x() + dx, q.y() + 1, q.z() + dz, move + q.jumpPenalty() + q.overhead(dx, 0, dz), move);
+    }
+
+    /**
+     * 标志字说不清时答"可能";落点那一格托不住脚时要垫一块台阶(精确判断头一条):攀着、浮着垫不了,没料、不许放、台阶那一格
+     * 四面上下都是空气(没有一面点得中)也垫不了,当场不成立。
+     */
+    private static int likely(Quick q, int dx, int dz, double floor) {
+        if (q.loadedAround(dx, dz) && Double.isNaN(q.footing(dx, 1, dz))
+                && (!q.stance().grounded() || !q.mayPlace() || q.nothingToClick(dx, 0, dz))) {
+            return Quick.REJECT;
+        }
+        return q.likely(dx, 1, dz, floor);
     }
 
     @Override

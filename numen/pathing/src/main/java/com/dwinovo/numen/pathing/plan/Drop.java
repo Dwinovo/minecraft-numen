@@ -245,8 +245,14 @@ final class Drop implements Move {
         return q.holds(q.x() + dx, q.y() - depth, q.z() + dz, move + Strides.bruise(damage) + q.overhead(dx, -depth - 1, dz), move);
     }
 
-    /** 标志字定不下落点时答"可能":下一级的落点只有低一个节点那一处,下落的落点是猜的最浅的那个。 */
+    /**
+     * 标志字定不下落点时答"可能":下一级的落点只有低一个节点那一处,下落的落点是猜的最浅的那个。精确判断往下找落点,第一个待得住的
+     * 节点就是落点:低一个节点处待得住,下落就落不到更深;待不住,下一级就没有落点——这两样当场不成立。
+     */
     private int around(Quick q, int dx, int dy, int dz, double cost) {
+        if (q.loadedColumn(dx, dz) && q.holdsAt(dx, -1, dz) == (kind == MoveKind.FALL)) {
+            return Quick.REJECT;
+        }
         return kind == MoveKind.DESCEND ? q.likely(dx, dy, dz, cost) : q.likelyNear(dx, dy, dz, cost);
     }
 
