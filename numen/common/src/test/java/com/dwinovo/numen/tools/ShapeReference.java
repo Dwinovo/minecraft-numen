@@ -14,111 +14,15 @@ final class ShapeReference {
     private ShapeReference() {}
 
     static Set<String> cylinder(int cx, int cy, int cz, double rx, double rz, int height, boolean filled) {
-        Set<String> out = new LinkedHashSet<>();
-        rx = Math.max(1, rx) + 0.5;
-        rz = Math.max(1, rz) + 0.5;
-        if (height == 0) {
-            return out;
-        }
-        int y0 = height < 0 ? cy + height : cy;
-        int layers = Math.abs(height);
-        double ix = 1 / rx;
-        double iz = 1 / rz;
-        for (int dx = -(int) Math.ceil(rx); dx <= (int) Math.ceil(rx); dx++) {
-            for (int dz = -(int) Math.ceil(rz); dz <= (int) Math.ceil(rz); dz++) {
-                int x = Math.abs(dx);
-                int z = Math.abs(dz);
-                double xn = x * ix;
-                double zn = z * iz;
-                if (xn * xn + zn * zn > 1) {
-                    continue;
-                }
-                if (!filled) {
-                    double nx = (x + 1) * ix;
-                    double nz = (z + 1) * iz;
-                    if (nx * nx + zn * zn <= 1 && xn * xn + nz * nz <= 1) {
-                        continue;
-                    }
-                }
-                for (int y = 0; y < layers; y++) {
-                    out.add(ShapeLua.at(cx + dx, y0 + y, cz + dz));
-                }
-            }
-        }
-        return out;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     static Set<String> sphere(int cx, int cy, int cz, double rx, double ry, double rz, boolean raised, boolean filled) {
-        Set<String> out = new LinkedHashSet<>();
-        rx = Math.max(0, rx);
-        ry = Math.max(0, ry);
-        rz = Math.max(0, rz);
-        if (raised) {
-            cy += (int) ry;
-        }
-        rx += 0.5;
-        ry += 0.5;
-        rz += 0.5;
-        double ix = 1 / rx;
-        double iy = 1 / ry;
-        double iz = 1 / rz;
-        for (int dx = -(int) Math.ceil(rx); dx <= (int) Math.ceil(rx); dx++) {
-            for (int dy = -(int) Math.ceil(ry); dy <= (int) Math.ceil(ry); dy++) {
-                for (int dz = -(int) Math.ceil(rz); dz <= (int) Math.ceil(rz); dz++) {
-                    int x = Math.abs(dx);
-                    int y = Math.abs(dy);
-                    int z = Math.abs(dz);
-                    double xn = x * ix;
-                    double yn = y * iy;
-                    double zn = z * iz;
-                    if (xn * xn + yn * yn + zn * zn > 1) {
-                        continue;
-                    }
-                    if (!filled) {
-                        double nx = (x + 1) * ix;
-                        double ny = (y + 1) * iy;
-                        double nz = (z + 1) * iz;
-                        if (nx * nx + yn * yn + zn * zn <= 1 && xn * xn + ny * ny + zn * zn <= 1
-                                && xn * xn + yn * yn + nz * nz <= 1) {
-                            continue;
-                        }
-                    }
-                    out.add(ShapeLua.at(cx + dx, cy + dy, cz + dz));
-                }
-            }
-        }
-        return out;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     static Set<String> cone(int cx, int cy, int cz, double rx, double rz, int height, boolean filled, double thickness) {
-        Set<String> out = new LinkedHashSet<>();
-        rx = Math.max(1, rx);
-        rz = Math.max(1, rz);
-        int layers = Math.abs(height);
-        for (int y = 0; y < layers; y++) {
-            double drop = Math.pow(y - layers, 2) / Math.pow(height, 2);
-            for (int dx = -(int) Math.ceil(rx); dx <= (int) Math.ceil(rx); dx++) {
-                for (int dz = -(int) Math.ceil(rz); dz <= (int) Math.ceil(rz); dz++) {
-                    int x = Math.abs(dx);
-                    int z = Math.abs(dz);
-                    double xs = Math.pow(x, 2) / Math.pow(rx, 2);
-                    double zs = Math.pow(z, 2) / Math.pow(rz, 2);
-                    if (xs + zs - drop > 0) {
-                        continue;
-                    }
-                    if (!filled) {
-                        double xNext = Math.pow(x + thickness, 2) / Math.pow(rx, 2) + zs - drop;
-                        double yNext = xs + zs - Math.pow(y + thickness - layers, 2) / Math.pow(height, 2);
-                        double zNext = xs + Math.pow(z + thickness, 2) / Math.pow(rz, 2) - drop;
-                        if (xNext <= 0 && zNext <= 0 && yNext <= 0 && y + thickness != layers) {
-                            continue;
-                        }
-                    }
-                    out.add(ShapeLua.at(cx + dx, cy + (height < 0 ? -y : y), cz + dz));
-                }
-            }
-        }
-        return out;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** 金字塔:第 y 层(从 0 起)是以中心为心、边长 2 * (size - 1 - y) + 1 的方块;空心的只留这一层的外圈。 */
@@ -139,28 +43,7 @@ final class ShapeReference {
 
     /** 折线:每段按最长的轴一格一格走、别的轴四舍五入跟上,再给每一格套一个半径为 thickness 的球。 */
     static Set<String> line(int[][] points, double thickness, boolean filled) {
-        Set<String> centre = new LinkedHashSet<>();
-        for (int i = 0; i + 1 < points.length; i++) {
-            int[] a = points[i];
-            int[] b = points[i + 1];
-            int[] d = {Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), Math.abs(b[2] - a[2])};
-            int top = Math.max(d[0], Math.max(d[1], d[2]));
-            if (top == 0) {
-                centre.add(ShapeLua.at(a[0], a[1], a[2]));
-                continue;
-            }
-            int lead = d[0] == top ? 0 : d[1] == top ? 1 : 2;
-            for (int step = 0; step <= top; step++) {
-                int[] p = new int[3];
-                for (int axis = 0; axis < 3; axis++) {
-                    int sign = b[axis] - a[axis] > 0 ? 1 : -1;
-                    p[axis] = axis == lead ? a[axis] + step * sign
-                            : (int) Math.round(a[axis] + step * (double) d[axis] / (double) d[lead] * sign);
-                }
-                centre.add(ShapeLua.at(p[0], p[1], p[2]));
-            }
-        }
-        return thick(centre, thickness, filled);
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /**
@@ -168,57 +51,11 @@ final class ShapeReference {
      * 长度按每段八个子区间的梯形法算(//curve 就是这样,采样密度因此和它一致)。
      */
     static Set<String> curve(int[][] points, double thickness, boolean filled) {
-        int n = points.length;
-        double[][] node = new double[n][3];
-        for (int i = 0; i < n; i++) {
-            for (int k = 0; k < 3; k++) {
-                node[i][k] = points[i][k] + 0.5;
-            }
-        }
-        double[][][] coeff = new double[n][4][3];
-        for (int i = 0; i < n; i++) {
-            double[] p0 = node[Math.max(0, i - 1)];
-            double[] p1 = node[i];
-            double[] p2 = node[Math.min(n - 1, i + 1)];
-            double[] p3 = node[Math.min(n - 1, i + 2)];
-            for (int k = 0; k < 3; k++) {
-                coeff[i][0][k] = -0.5 * p0[k] + 1.5 * p1[k] - 1.5 * p2[k] + 0.5 * p3[k];
-                coeff[i][1][k] = p0[k] - 2.5 * p1[k] + 2 * p2[k] - 0.5 * p3[k];
-                coeff[i][2][k] = -0.5 * p0[k] + 0.5 * p2[k];
-                coeff[i][3][k] = p1[k];
-            }
-        }
-        double length = 0;
-        for (int i = 0; i + 1 < n; i++) {
-            double sum = speed(coeff[i], 0) / 2;
-            for (int k = 1; k <= 6; k++) {
-                sum += speed(coeff[i], k / 8.0);
-            }
-            sum += speed(coeff[i], 1) / 2;
-            length += sum / 8;
-        }
-        Set<String> centre = new LinkedHashSet<>();
-        double step = 1 / length / 10;
-        for (double at = 0; at <= 1; at += step) {
-            double scaled = at * (n - 1);
-            int i = (int) Math.floor(scaled);
-            double t = scaled - i;
-            int[] cell = new int[3];
-            for (int k = 0; k < 3; k++) {
-                cell[k] = (int) Math.floor(((coeff[i][0][k] * t + coeff[i][1][k]) * t + coeff[i][2][k]) * t + coeff[i][3][k]);
-            }
-            centre.add(ShapeLua.at(cell[0], cell[1], cell[2]));
-        }
-        return thick(centre, thickness, filled);
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static double speed(double[][] c, double t) {
-        double sum = 0;
-        for (int k = 0; k < 3; k++) {
-            double v = (3 * c[0][k] * t + 2 * c[1][k]) * t + c[2][k];
-            sum += v * v;
-        }
-        return Math.sqrt(sum);
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** 一串中心线的格,每个套一个半径为 thickness 的球;不填满的只留有一面朝外的格。 */

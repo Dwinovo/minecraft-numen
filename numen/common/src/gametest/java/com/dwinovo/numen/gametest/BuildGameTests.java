@@ -98,29 +98,16 @@ public class BuildGameTests {
     @GameTest(template = "floor20", timeoutTicks = 3126, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
-        double inverse = 1 / 3.5;
         List<BlockPos> rel = new ArrayList<>();
         List<BlockPos> inside = new ArrayList<>();
-        for (int y = 0; y < 4; y++) {
-            for (int dx = -4; dx <= 4; dx++) {
-                for (int dz = -4; dz <= 4; dz++) {
-                    double x = Math.abs(dx) * inverse;
-                    double z = Math.abs(dz) * inverse;
-                    if (x * x + z * z > 1) {
-                        continue;
-                    }
-                    double nextX = (Math.abs(dx) + 1) * inverse;
-                    double nextZ = (Math.abs(dz) + 1) * inverse;
-                    if (nextX * nextX + z * z <= 1 && x * x + nextZ * nextZ <= 1) {
-                        inside.add(center.offset(dx, y, dz));
-                    } else {
-                        rel.add(center.offset(dx, y, dz));
-                    }
-                }
-            }
-        }
+        hollowCylinderCells(center, rel, inside);
         placeCase(helper, "gametest_mason2", center,
                 c -> "numen.shape.hcyl(" + xyz(c) + ", \"cobblestone\", 3, 4)", rel, inside, 2);
+    }
+
+    /** 半径 3、高 4 的空心圆柱(底层中心 center):墙上的格进 rel,圈里留空的格进 inside。 */
+    private static void hollowCylinderCells(BlockPos center, List<BlockPos> rel, List<BlockPos> inside) {
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /**

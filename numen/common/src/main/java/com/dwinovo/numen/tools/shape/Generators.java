@@ -223,35 +223,7 @@ final class Generators {
 
     /** WorldEdit 的"松树":一小截树干,往上一层层的橡木叶子;只在空气里放。 */
     private static boolean pine(RecordedLevel level, BlockPos base) {
-        RandomSource random = level.random();
-        int trunkHeight = random.nextInt(2) + 3;
-        int height = random.nextInt(5) + 8;
-        BlockState log = Blocks.OAK_LOG.defaultBlockState();
-        BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState();
-        for (int i = 0; i < trunkHeight; i++) {
-            if (!ifAir(level, base.above(i), log)) {
-                return false;
-            }
-        }
-        BlockPos top = base.above(trunkHeight);
-        for (int i = 0; i < height; i++) {
-            ifAir(level, top.above(i), log);
-            double chance = i == 0 || i == height - 1 ? 0.6 : 1;
-            int[][] inner = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
-            for (int[] d : inner) {
-                byChance(level, top.offset(d[0], i, d[1]), leaves, chance);
-            }
-            if (i != 0 && i != height - 1) {
-                for (int j = -2; j <= 2; j++) {
-                    byChance(level, top.offset(-2, i, j), leaves, 0.6);
-                    byChance(level, top.offset(2, i, j), leaves, 0.6);
-                    byChance(level, top.offset(j, i, -2), leaves, 0.6);
-                    byChance(level, top.offset(j, i, 2), leaves, 0.6);
-                }
-            }
-        }
-        ifAir(level, top.above(height), leaves);
-        return true;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static boolean ifAir(RecordedLevel level, BlockPos pos, BlockState state) {
@@ -263,9 +235,7 @@ final class Generators {
     }
 
     private static void byChance(RecordedLevel level, BlockPos pos, BlockState state, double chance) {
-        if (level.random().nextDouble() <= chance) {
-            ifAir(level, pos, state);
-        }
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** {@code //flora}:草地上长草与小花,沙子上长枯灌木与仙人掌(其余的地面不长);一列一格,落在地面上一格。 */
@@ -302,85 +272,11 @@ final class Generators {
 
     /** {@code //pumpkins}:草地上零星的"南瓜田":一圈叶子藤蔓、橡木和南瓜,在 at 周围 apothem 格、高低 -5 到 +10 层里,密度 2%。 */
     static List<BlockAt> pumpkins(LoadedBlocks w, BlockPos at, int apothem) {
-        RecordedLevel recorded = new RecordedLevel(w);
-        List<BlockPos> columns = new ArrayList<>();
-        for (int x = at.getX() - apothem; x <= at.getX() + apothem; x++) {
-            for (int z = at.getZ() - apothem; z <= at.getZ() + apothem; z++) {
-                columns.add(new BlockPos(x, at.getY(), z));
-            }
-        }
-        TerrainReads.requireAround(w, columns, 0);
-        BlockState leaf = Blocks.OAK_LEAVES.defaultBlockState().setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, true);
-        eachColumn(recorded, columns, at.getY() - 5, at.getY() + 10, 0.02, (rec, ground) -> {
-            BlockPos pos = rec.at(ground).isAir() ? ground : ground.above();
-            if (!rec.at(pos.below()).is(Blocks.GRASS_BLOCK)) {
-                return;
-            }
-            ifAir(rec, pos, leaf);
-            for (BlockPos side : new BlockPos[]{pos.south(), pos.north(), pos.east(), pos.west()}) {
-                vine(rec, pos, side, leaf);
-            }
-        });
-        return recorded.blocks();
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static void vine(RecordedLevel level, BlockPos base, BlockPos start, BlockState leaf) {
-        BlockPos pos = start;
-        if (Math.sqrt(pos.distSqr(base)) > 4 || !level.at(pos).isAir()) {
-            return;
-        }
-        for (int i = -1; i > -3; i--) {
-            BlockPos test = pos.offset(0, i, 0);
-            if (level.at(test).isAir()) {
-                pos = test;
-            } else {
-                break;
-            }
-        }
-        ifAir(level, pos, leaf);
-        RandomSource random = level.random();
-        int t = random.nextInt(4);
-        int h = random.nextInt(3) - 1;
-        BlockState log = Blocks.OAK_LOG.defaultBlockState();
-        BlockState pumpkin = Blocks.PUMPKIN.defaultBlockState();
-        switch (t) {
-            case 0 -> {
-                if (random.nextBoolean()) {
-                    vine(level, base, pos.offset(1, 0, 0), leaf);
-                }
-                if (random.nextBoolean()) {
-                    ifAir(level, pos.offset(1, h, -1), log);
-                }
-                ifAir(level, pos.offset(0, 0, -1), pumpkin);
-            }
-            case 1 -> {
-                if (random.nextBoolean()) {
-                    vine(level, base, pos.offset(0, 0, 1), leaf);
-                }
-                if (random.nextBoolean()) {
-                    ifAir(level, pos.offset(1, h, 0), log);
-                }
-                ifAir(level, pos.offset(1, 0, 1), pumpkin);
-            }
-            case 2 -> {
-                if (random.nextBoolean()) {
-                    vine(level, base, pos.offset(0, 0, -1), leaf);
-                }
-                if (random.nextBoolean()) {
-                    ifAir(level, pos.offset(-1, h, 0), log);
-                }
-                ifAir(level, pos.offset(-1, 0, 1), pumpkin);
-            }
-            default -> {
-                if (random.nextBoolean()) {
-                    vine(level, base, pos.offset(-1, 0, 0), leaf);
-                }
-                if (random.nextBoolean()) {
-                    ifAir(level, pos.offset(-1, h, -1), log);
-                }
-                ifAir(level, pos.offset(-1, 0, -1), pumpkin);
-            }
-        }
+        throw new UnsupportedOperationException("净室重写中");
     }
 
 }

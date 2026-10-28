@@ -132,134 +132,26 @@ final class BlockTurns {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static BlockState weTurn(BlockState original, double[][] m) {
-        boolean horizontalFlip = m[0][0] * m[2][2] - m[0][2] * m[2][0] < 0;
-        boolean verticalFlip = m[1][1] < 0;
-        BlockState state = original;
-        for (Property<?> p : original.getProperties()) {
-            String name = p.getName();
-            String value = name(p, original.getValue(p));
-            if (p instanceof DirectionProperty facing) {
-                Direction now = original.getValue(facing);
-                Direction next = closest(m, now, List.copyOf(facing.getPossibleValues()), true);
-                if (next != null) {
-                    state = state.setValue(facing, next);
-                }
-            } else if (name.equals("axis")) {
-                Direction as = switch (value) {
-                    case "x" -> Direction.EAST;
-                    case "y" -> Direction.UP;
-                    case "z" -> Direction.NORTH;
-                    default -> null;
-                };
-                Direction next = as == null ? null : closest(m, as, UPRIGHT_AND_CARDINAL, true);
-                if (next != null) {
-                    state = with(state, p, next.getAxis().getName());
-                }
-            } else if (name.equals("type")) {
-                if (horizontalFlip) {
-                    state = with(state, p, swapped(name(p, state.getValue(p)), "left", "right"));
-                }
-                if (verticalFlip) {
-                    state = with(state, p, swapped(name(p, state.getValue(p)), "bottom", "top"));
-                }
-            } else if (name.equals("half")) {
-                if (verticalFlip) {
-                    state = with(state, p, swapped(value, "bottom", "top"));
-                }
-            } else if (name.equals("shape")) {
-                if (horizontalFlip) {
-                    state = with(state, p, swapped(swapped(name(p, state.getValue(p)), "outer_left", "outer_right"),
-                            "inner_left", "inner_right"));
-                }
-                if (isRailShape(p)) {
-                    state = with(state, p, railShape(p, name(p, state.getValue(p)), m, verticalFlip));
-                }
-            } else if (name.equals("orientation")) {
-                state = with(state, p, crafterOrientation(value, m));
-            } else if (p instanceof IntegerProperty rotation && name.equals("rotation") && rotation.getPossibleValues().size() == 16) {
-                state = state.setValue(rotation, turnedRotation(original.getValue(rotation), m));
-            }
-        }
-        return sides(original, state, m);
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** 东南西北四面(围栏、墙、玻璃板、红石线、藤蔓…):每一面有的,搬到变换后最接近的那一面。 */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static BlockState sides(BlockState original, BlockState turned, double[][] m) {
-        Map<Direction, Object> moved = new HashMap<>();
-        List<Property<?>> present = new ArrayList<>();
-        BlockState cleared = turned;
-        for (Direction d : CARDINAL) {
-            Property<?> side = original.getBlock().getStateDefinition().getProperty(d.getName());
-            if (side == null) {
-                continue;
-            }
-            present.add(side);
-            Comparable<?> held = original.getValue(side);
-            boolean on = held instanceof Boolean b ? b : !name(side, held).equals("none");
-            if (!on) {
-                continue;
-            }
-            Direction to = closest(m, d, CARDINAL, false);
-            if (to != null) {
-                moved.put(to, held);
-                cleared = held instanceof Boolean ? cleared.setValue((Property) side, false) : with(cleared, side, "none");
-            }
-        }
-        BlockState out = cleared;
-        for (Map.Entry<Direction, Object> e : moved.entrySet()) {
-            Property<?> side = original.getBlock().getStateDefinition().getProperty(e.getKey().getName());
-            if (side != null) {
-                out = out.setValue((Property) side, (Comparable) e.getValue());
-            }
-        }
-        return out;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static boolean isRailShape(Property<?> p) {
-        List<String> names = new ArrayList<>();
-        p.getPossibleValues().forEach(v -> names.add(name(p, v)));
-        return names.containsAll(STRAIGHT_RAILS);
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static String railShape(Property<?> p, String shape, double[][] m, boolean verticalFlip) {
-        if (verticalFlip) {
-            shape = switch (shape) {
-                case "ascending_east" -> "ascending_west";
-                case "ascending_west" -> "ascending_east";
-                case "ascending_north" -> "ascending_south";
-                case "ascending_south" -> "ascending_north";
-                default -> shape;
-            };
-        }
-        String[] parts = shape.split("_", 2);
-        String start = parts[0];
-        if (!start.equals("ascending")) {
-            Direction to = closest(m, Direction.byName(start), CARDINAL, false);
-            start = to == null ? start : to.getName();
-        }
-        Direction end = closest(m, Direction.byName(parts[1]), CARDINAL, false);
-        String last = end == null ? parts[1] : end.getName();
-        List<String> allowed = new ArrayList<>();
-        p.getPossibleValues().forEach(v -> allowed.add(name(p, v)));
-        if (allowed.contains(start + "_" + last)) {
-            return start + "_" + last;
-        }
-        return allowed.contains(last + "_" + start) ? last + "_" + start : shape;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** 合成器的 orientation:{@code 朝向_上方}(朝向可以是上下,上方只在水平方向里选,朝下换成朝上)。 */
     private static String crafterOrientation(String orientation, double[][] m) {
-        String[] parts = orientation.split("_", 2);
-        Direction facing = closest(m, Direction.byName(parts[0]), UPRIGHT_AND_CARDINAL, true);
-        Direction top = closest(m, Direction.byName(parts[1]), UPRIGHT_AND_CARDINAL, true);
-        if (facing == null || top == null) {
-            return orientation;
-        }
-        if (top == Direction.DOWN) {
-            top = Direction.UP;
-        }
-        return facing.getName() + "_" + top.getName();
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     /** 告示牌、旗帜、头颅的 0..15 档:十六个水平方向里取变换后最接近的;0 是南,每档 22.5°,4 是西。 */
@@ -277,22 +169,7 @@ final class BlockTurns {
      * 一个方向变换后,候选里最接近的那个(点积最大,并列取后面的,同 WorldEdit);{@code withY} 为否时竖直分量不算。变换把它转成了零向量是 null。
      */
     private static Direction closest(double[][] m, Direction d, List<Direction> candidates, boolean withY) {
-        double[] v = apply(m, d.getStepX(), d.getStepY(), d.getStepZ());
-        double y = withY ? v[1] : 0;
-        double length = Math.sqrt(v[0] * v[0] + y * y + v[2] * v[2]);
-        if (length < 1e-9) {
-            return null;
-        }
-        Direction best = null;
-        double bestDot = -2;
-        for (Direction c : candidates) {
-            double dot = (c.getStepX() * v[0] + c.getStepY() * y + c.getStepZ() * v[2]) / length;
-            if (dot >= bestDot) {
-                best = c;
-                bestDot = dot;
-            }
-        }
-        return best;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     private static double[] apply(double[][] m, double x, double y, double z) {

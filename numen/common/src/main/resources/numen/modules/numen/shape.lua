@@ -479,23 +479,11 @@ local function row_reach(inside, guess)
 end
 
 local function even_sideways(what, changes, with_y)
-  local dx, dz, dy = 0, 0, 0
-  for _, c in ipairs(changes) do
-    dx, dz, dy = dx + c.x, dz + c.z, dy + c.y
-  end
-  if dx % 2 ~= 0 or dz % 2 ~= 0 or (with_y and dy % 2 ~= 0) then
-    bad("a " .. what .. " changes by steps that add up to an even number along each axis it scales (its centre stays on "
-        .. "a block); these add up to " .. dx .. ", " .. dy .. ", " .. dz, "region:expand(2, \"north\")")
-  end
-  return dx, dy, dz
+  error("净室重写中")
 end
 
 local function absolute_sum(changes, axis)
-  local total = 0
-  for _, c in ipairs(changes) do
-    total = total + abs(c[axis])
-  end
-  return floor(total / 2)
+  error("净室重写中")
 end
 
 -- cyl: centre column cx, cz, radii rx, rz and the layers min_y to max_y
@@ -543,23 +531,10 @@ KINDS.cyl = {
     return math.pi * (r.rx + 0.5) * (r.rz + 0.5) * math.max(0, r.max_y - r.min_y + 1)
   end,
   expand = function(r, changes)
-    local dx, _, dz = even_sideways("cyl", changes, false)
-    local min_y, max_y = r.min_y, r.max_y
-    for _, c in ipairs(changes) do
-      if c.y > 0 then max_y = max_y + c.y else min_y = min_y + c.y end
-    end
-    return changed(r, {cx = r.cx + dx / 2, cz = r.cz + dz / 2, rx = r.rx + absolute_sum(changes, "x"),
-                       rz = r.rz + absolute_sum(changes, "z"), min_y = min_y, max_y = max_y})
+    error("净室重写中")
   end,
   contract = function(r, changes)
-    local dx, _, dz = even_sideways("cyl", changes, false)
-    local min_y, max_y = r.min_y, r.max_y
-    for _, c in ipairs(changes) do
-      local height = max_y - min_y
-      if c.y > 0 then min_y = min_y + math.min(height, c.y) else max_y = max_y + math.max(-height, c.y) end
-    end
-    return changed(r, {cx = r.cx - dx / 2, cz = r.cz - dz / 2, rx = math.max(1, r.rx - absolute_sum(changes, "x")),
-                       rz = math.max(1, r.rz - absolute_sum(changes, "z")), min_y = min_y, max_y = max_y})
+    error("净室重写中")
   end,
   shift = function(r, v)
     return changed(r, {cx = r.cx + v.x, cz = r.cz + v.z, min_y = r.min_y + v.y, max_y = r.max_y + v.y})
@@ -626,17 +601,10 @@ KINDS.ellipsoid = {
     return 4 / 3 * math.pi * (r.rx + 0.5) * (r.ry + 0.5) * (r.rz + 0.5)
   end,
   expand = function(r, changes)
-    local dx, dy, dz = even_sideways("sphere", changes, true)
-    return changed(r, {cx = r.cx + dx / 2, cy = r.cy + dy / 2, cz = r.cz + dz / 2,
-                       rx = r.rx + absolute_sum(changes, "x"), ry = r.ry + absolute_sum(changes, "y"),
-                       rz = r.rz + absolute_sum(changes, "z")})
+    error("净室重写中")
   end,
   contract = function(r, changes)
-    local dx, dy, dz = even_sideways("sphere", changes, true)
-    return changed(r, {cx = r.cx - dx / 2, cy = r.cy - dy / 2, cz = r.cz - dz / 2,
-                       rx = math.max(1, r.rx - absolute_sum(changes, "x")),
-                       ry = math.max(1, r.ry - absolute_sum(changes, "y")),
-                       rz = math.max(1, r.rz - absolute_sum(changes, "z"))})
+    error("净室重写中")
   end,
   shift = function(r, v)
     return changed(r, {cx = r.cx + v.x, cy = r.cy + v.y, cz = r.cz + v.z})
@@ -1226,23 +1194,7 @@ end
 ---@param pattern string|Cells|table
 ---@return Cells
 function M.Region:center(pattern)
-  local x, y, z = KINDS[self.kind].center(self)
-  local function span(c)
-    local round = (c < 0 and -1 or 1) * floor(abs(c) + 0.5)
-    return c < 0 and ceil(c) or floor(c), round
-  end
-  local x1, x2 = span(x)
-  local y1, y2 = span(y)
-  local z1, z2 = span(z)
-  local list = {}
-  for yy = math.min(y1, y2), math.max(y1, y2) do
-    for zz = math.min(z1, z2), math.max(z1, z2) do
-      for xx = math.min(x1, x2), math.max(x1, x2) do
-        list[#list + 1] = {x = xx, y = yy, z = zz}
-      end
-    end
-  end
-  return painted(list, pattern, self.origin)
+  error("净室重写中")
 end
 
 -- ---- changing a selection ----
@@ -1662,45 +1614,7 @@ end
 
 -- the cells of a cone: fn(x, y, z) for each; hollow keeps a wall of the given thickness
 local function cone_cells(c, r, height, hollow, thickness, fn)
-  local rx, rz = r[1], r[2]
-  local layers = abs(height)
-  local rx2, rz2, h2 = rx * rx, rz * rz, height * height
-  for y = 0, layers - 1 do
-    local drop = (y - layers) * (y - layers) / h2
-    local yy = c.y + (height < 0 and -y or y)
-    for x = 0, ceil(rx) do
-      local xs = x * x / rx2
-      if xs - drop > 1 then
-        break
-      end
-      for z = 0, ceil(rz) do
-        local zs = z * z / rz2
-        local d = xs + zs - drop
-        if d > 1 then
-          break
-        end
-        local skip = false
-        if hollow then
-          local x_next = (x + thickness) * (x + thickness) / rx2 + zs - drop
-          local y_next = xs + zs - (y + thickness - layers) * (y + thickness - layers) / h2
-          local z_next = xs + (z + thickness) * (z + thickness) / rz2 - drop
-          skip = x_next <= 0 and z_next <= 0 and y_next <= 0 and y + thickness ~= layers
-        end
-        if d <= 0 and not skip then
-          fn(c.x + x, yy, c.z + z)
-          if x ~= 0 then
-            fn(c.x - x, yy, c.z + z)
-          end
-          if z ~= 0 then
-            fn(c.x + x, yy, c.z - z)
-            if x ~= 0 then
-              fn(c.x - x, yy, c.z - z)
-            end
-          end
-        end
-      end
-    end
-  end
+  error("净室重写中")
 end
 
 ---A cone standing on at, which is the middle of its base, height layers up (a negative height goes down) to a point;
@@ -1736,21 +1650,7 @@ end
 
 -- the cells of a pyramid of size layers standing on c; hollow keeps only each layer's ring and no floor
 local function pyramid_cells(c, size, hollow, fn)
-  local s = size
-  for y = 0, size do
-    s = s - 1
-    for x = 0, s do
-      for z = 0, s do
-        if not hollow or z == s or x == s then
-          for dx = 1, x ~= 0 and 2 or 1 do
-            for dz = 1, z ~= 0 and 2 or 1 do
-              fn(c.x + (dx == 1 and x or -x), c.y + y, c.z + (dz == 1 and z or -z))
-            end
-          end
-        end
-      end
-    end
-  end
+  error("净室重写中")
 end
 
 ---A stepped pyramid standing on at, which is the middle of its base: size layers, the base 2 * size - 1 cells across.
@@ -1845,31 +1745,7 @@ end
 -- the cells of the straight lines between consecutive points, as WorldEdit's //line draws them: the longest axis
 -- steps one cell at a time, the others follow, rounded
 local function centre_line(points)
-  local set = {}
-  for i = 1, #points - 1 do
-    local a, b = cell_at(points[i]), cell_at(points[i + 1])
-    local dx, dy, dz = abs(b.x - a.x), abs(b.y - a.y), abs(b.z - a.z)
-    local top = math.max(dx, dy, dz)
-    if top == 0 then
-      set[key(a)] = a
-    else
-      for step = 0, top do
-        local p
-        if top == dx then
-          p = {x = a.x + step * sign(b.x - a.x), y = round(a.y + step * dy / dx * sign(b.y - a.y)),
-               z = round(a.z + step * dz / dx * sign(b.z - a.z))}
-        elseif top == dy then
-          p = {y = a.y + step * sign(b.y - a.y), x = round(a.x + step * dx / dy * sign(b.x - a.x)),
-               z = round(a.z + step * dz / dy * sign(b.z - a.z))}
-        else
-          p = {z = a.z + step * sign(b.z - a.z), y = round(a.y + step * dy / dz * sign(b.y - a.y)),
-               x = round(a.x + step * dx / dz * sign(b.x - a.x))}
-        end
-        set[key(p)] = p
-      end
-    end
-  end
-  return set
+  error("净室重写中")
 end
 
 ---A line through points (two or more Pos; diagonals included), thickness the radius of the ball drawn round each cell
@@ -1900,64 +1776,12 @@ end
 
 -- the length of the Catmull-Rom spline through nodes, summed over its segments; eight steps each
 local function spline_length(coeff)
-  local total = 0
-  local function speed(a, b, c, t)
-    local x, y, z = (a[1] * t + b[1]) * t + c[1], (a[2] * t + b[2]) * t + c[2], (a[3] * t + b[3]) * t + c[3]
-    return math.sqrt(x * x + y * y + z * z)
-  end
-  for i = 1, #coeff - 1 do
-    local a, b, c = coeff[i].a, coeff[i].b, coeff[i].c
-    local a3 = {a[1] * 3, a[2] * 3, a[3] * 3}
-    local b2 = {b[1] * 2, b[2] * 2, b[3] * 2}
-    local sum = speed(a3, b2, c, 0) / 2
-    for k = 1, 6 do
-      sum = sum + speed(a3, b2, c, k / 8)
-    end
-    sum = sum + speed(a3, b2, c, 1) / 2
-    total = total + sum / 8
-  end
-  return total
+  error("净室重写中")
 end
 
 -- the cells a smooth curve through the points passes: the spline is sampled ten times a cell of its length
 local function curve_line(points)
-  local nodes = {}
-  for i, p in ipairs(points) do
-    local c = cell_at(p)
-    nodes[i] = {c.x + 0.5, c.y + 0.5, c.z + 0.5}
-  end
-  local function node(i)
-    return nodes[math.max(1, math.min(#nodes, i))]
-  end
-  local coeff = {}
-  for i = 1, #nodes do
-    local p0, p1, p2, p3 = node(i - 1), node(i), node(i + 1), node(i + 2)
-    local a, b, c = {}, {}, {}
-    for k = 1, 3 do
-      a[k] = -0.5 * p0[k] + 1.5 * p1[k] - 1.5 * p2[k] + 0.5 * p3[k]
-      b[k] = p0[k] - 2.5 * p1[k] + 2 * p2[k] - 0.5 * p3[k]
-      c[k] = -0.5 * p0[k] + 0.5 * p2[k]
-    end
-    coeff[i] = {a = a, b = b, c = c, d = p1}
-  end
-  local scaling = #nodes - 1
-  local set = {}
-  local step = 1 / spline_length(coeff) / 10
-  local at = 0
-  while at <= 1 do
-    local position = at * scaling
-    local index = floor(position)
-    local rest = position - index
-    local seg = coeff[index + 1]
-    local p = {}
-    for k = 1, 3 do
-      p[k] = floor(((seg.a[k] * rest + seg.b[k]) * rest + seg.c[k]) * rest + seg.d[k])
-    end
-    local cellp = {x = p[1], y = p[2], z = p[3]}
-    set[key(cellp)] = cellp
-    at = at + step
-  end
-  return set
+  error("净室重写中")
 end
 
 ---A smooth curve through points (Kochanek-Bartels with tension, bias and continuity 0: it passes through every point), thickness
@@ -2013,44 +1837,7 @@ end
 -- the cells of region where fn(x, y, z) says true, as WorldEdit's //generate: fn gets each cell's coordinates in the
 -- space mode names; hollow keeps the cells that have a neighbour where fn says false (asked for the neighbours too)
 local function generated(r, fn, mode, hollow)
-  local lo, hi = KINDS[r.kind].bounds(r)
-  local zero, unit = space_of(lo, hi, mode)
-  local function ask(x, y, z)
-    local v = fn((x - zero.x) / unit.x, (y - zero.y) / unit.y, (z - zero.z) / unit.z)
-    if type(v) ~= "boolean" then
-      bad("the function returns true for a cell that is part of the shape and false for one that is not; it gave "
-          .. type(v), "function(x, y, z) return x * x + y * y + z * z <= 1 end")
-    end
-    return v
-  end
-  local list = {}
-  if not hollow then
-    visit(r, function(x, y, z)
-      if ask(x, y, z) then
-        list[#list + 1] = {x = x, y = y, z = z}
-      end
-    end)
-    return list
-  end
-  -- the neighbours are asked too, so each cell is asked once
-  local depth, width = hi.y - lo.y + 3, hi.z - lo.z + 3
-  local known = {}
-  local function inside(x, y, z)
-    local i = ((x - lo.x + 1) * depth + (y - lo.y + 1)) * width + (z - lo.z + 1)
-    local v = known[i]
-    if v == nil then
-      v = ask(x, y, z)
-      known[i] = v
-    end
-    return v
-  end
-  visit(r, function(x, y, z)
-    if inside(x, y, z) and not (inside(x + 1, y, z) and inside(x - 1, y, z) and inside(x, y + 1, z)
-        and inside(x, y - 1, z) and inside(x, y, z + 1) and inside(x, y, z - 1)) then
-      list[#list + 1] = {x = x, y = y, z = z}
-    end
-  end)
-  return list
+  error("净室重写中")
 end
 
 ---The cells of region (a selection, or Cells) where fn(x, y, z) returns true, as WorldEdit's //generate with a function

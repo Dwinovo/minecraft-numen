@@ -163,44 +163,7 @@ class TerrainReadsTest {
 
     /** 另写的一份核:5 的半径、sigma 1.0 的高斯,float 的算法,加 0.5 再取整。 */
     private static int[] blur(int[] heights, int width, int length, int passes) {
-        int d = 11;
-        float[] kernel = new float[d * d];
-        float sum = 0;
-        for (int y = -5; y <= 5; y++) {
-            for (int x = -5; x <= 5; x++) {
-                float v = (float) (Math.exp(-(x * x + y * y) / 2.0) / (Math.PI * 2.0));
-                kernel[(y + 5) * d + x + 5] = v;
-                sum += v;
-            }
-        }
-        for (int i = 0; i < kernel.length; i++) {
-            kernel[i] /= sum;
-        }
-        int[] now = heights.clone();
-        for (int p = 0; p < passes; p++) {
-            int[] next = new int[now.length];
-            for (int z = 0; z < length; z++) {
-                for (int x = 0; x < width; x++) {
-                    float acc = 0;
-                    for (int kz = 0; kz < d; kz++) {
-                        int zz = z + kz - 5;
-                        if (zz < 0 || zz >= length) {
-                            zz = z;
-                        }
-                        for (int kx = 0; kx < d; kx++) {
-                            int xx = x + kx - 5;
-                            if (xx < 0 || xx >= width) {
-                                xx = x;
-                            }
-                            acc += kernel[kz * d + kx] * now[zz * width + xx];
-                        }
-                    }
-                    next[z * width + x] = (int) Math.floor(acc + 0.5F);
-                }
-            }
-            now = next;
-        }
-        return now;
+        throw new UnsupportedOperationException("净室重写中");
     }
 
     @Test
