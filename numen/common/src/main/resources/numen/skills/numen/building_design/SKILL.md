@@ -1,373 +1,260 @@
 ---
 name: building_design
-description: Building design knowledge for Minecraft - building sizes, floors and doorways, which way stairs, doors, trapdoors, ladders, beds, lanterns and logs face, roof geometry and the details that make a roof read as a style, interiors and what furniture is made of, mixing materials, and a library of 40 architectural style references with their materials, proportions and signature moves.
+description: Building design knowledge for Minecraft - how a building fits its site and biome, sizes and room heights, floors and doorways, which way stairs, doors, trapdoors, ladders, beds, lanterns and logs face, roof shapes and pitches and the bands that make a roof read as a style, wall depth and block palettes, interiors with measured furnishing data, what furniture is made of, light levels and mob spawning, and a library of 40 architectural style references with their materials, proportions and signature moves.
 ---
 
 # Building design
 
-What separates a build that reads as designed from a box of blocks. The style files under `references/` describe one architectural style each; `references/decoration.md` collects finishing touches.
+What separates a build that reads as designed from a box of blocks. Builders, and the judges of the Generative
+Design in Minecraft competition (GDMC), look at four things: whether a building **fits its site**, whether it
+**works** for a body walking through it, whether it **tells** who built it and why, and whether it **looks**
+composed. The sections below are the knowledge behind each. The style files under `references/` describe one
+architectural style each; `references/decoration.md` collects finishing touches.
 
-## Size reference (width x depth x height)
+## Site and terrain
+
+- **Ground is rarely flat.** On a slope a building either stands on a foundation reaching down to the lowest ground or
+  on deliberate stilts; otherwise one side hangs in the air or sinks into the hill. A stone base high enough that no
+  dirt shows under the walls anchors a building to the ground.
+- **A fitting building changes the terrain little.** It follows the contours — steps down a hillside as several floor
+  levels, sits on posts over water or marsh, digs into a slope — rather than levelling the hill flat around itself.
+- **The biome sets the native palette.** Vanilla villages show it: plains build in oak and cobblestone, desert in
+  sandstone and terracotta, savanna in acacia and terracotta, taiga in spruce and mossy cobblestone, snowy plains in
+  spruce, stone bricks and packed ice. Native materials make a building look grown in place; imported ones read as a
+  deliberate statement.
+- **Climate argues for form.** Steep roofs belong to snow, heavy rain and thatch (real thatch needs a pitch of 45° or
+  more to shed water); flat roofs and thick walls with small openings to dry heat; raised floors to floods and swamps.
+- **A body moves through it.** A player is 1.8 tall and needs 2 clear cells of headroom; walks up slabs and stairs
+  without jumping but needs a jump for a full block; cannot jump a fence or wall (1.5 tall). Every part of a building
+  or settlement that is meant to be reached has a walkable way to it — a path, a stair, a bridge over the water.
+
+## Size and height
 
 - hut / shed: 7 x 7 x 6      - house / shop: 12 x 10 x 8
 - mansion / temple: 18 x 15 x 12      - castle / cathedral: 30 x 25 x 20
 
-Interior walls at least 3 tall so rooms don't feel cramped. Ground is rarely flat: a building on a slope either gets a
-foundation built up from the lowest ground to the floor level, or stands on stilts on purpose; otherwise one side hangs
-in the air or sinks into the hill.
+A room 2 cells tall is the least a player fits in and reads cramped; 3–4 is a normal room, and a hall or a great room
+runs far taller. Varying ceiling height between rooms is part of what makes a plan read. Corridors are 2 wide in a
+small house, 3–4 in a large one.
 
 ## Floors and doorways
 
-A building has **exactly one floor slab**, with the walls standing on it. A second solid course under the walls or over
-the floor half-buries the doorway, and the door jams against the raised interior.
+A ground floor is **one floor slab**, with the walls standing on it. A second solid course under the walls or over the
+floor half-buries the doorway, and the door jams against the raised interior.
 
-- A doorway is two air cells tall, cut through the wall.
-- The lower door cell sits at the level of a body standing on the interior floor — directly above the floor slab.
-- The interior walking level should equal the outside ground; if the floor slab raises it by one, a step block goes
-  outside the door.
-- Walk the doorway in your head: outside ground → (step?) → lower door cell → interior floor. Any solid block on that
-  line jams the door.
-- Windows sit 1-2 blocks above the floor, filled with glass or panes.
+- A doorway is two air cells tall, cut through the wall; its lower cell sits directly above the floor slab, at the
+  level of a body standing on the interior floor.
+- Where the floor slab lifts the interior one above the outside ground, a step block stands outside the door. Any solid block on the line outside ground → step → door → interior floor jams the doorway.
+- Windows sit 1–2 above the floor, filled with glass or panes.
 
 ## Which way a block faces
 
 These are the game's own rules (north is -z, south +z, east +x).
 
-- **stairs** — `facing` is the side the tall back is on, the way you walk UP
-  them. A roof slope rises toward the ridge, so its stairs face the ridge: on a
-  south slope (the side that drops away to the south) they face north, on a
-  north slope south. `half=top` turns them upside down.
-- **door** — the closed panel lies against the edge of its cell opposite
-  `facing`: in a south wall, `facing=north` sets it flush with the outside,
-  `facing=south` with the inside.
-- **trapdoor** — open, it stands as a full-height panel against the edge of its
-  cell opposite `facing` (`facing=south` stands on the north edge, against a
-  north wall); shut, `half=top` is a slab at the top of the cell and
+- **stairs** — `facing` is the side the tall back is on, the way you walk UP them. A roof slope rises toward the
+  ridge, so its stairs face the ridge: on a south slope (the side that drops away to the south) they face north.
+  `half=top` turns them upside down.
+- **slab** — `type=bottom` fills the lower half of the cell, `type=top` the upper half, `type=double` the whole cell.
+- **door** — the closed panel lies against the edge of its cell opposite `facing`: in a south wall, `facing=north`
+  sets it flush with the outside, `facing=south` with the inside.
+- **trapdoor** — open, it is a full-height panel against the edge of its cell opposite `facing`, whatever its `half`
+  (`facing=south` stands on the north edge); shut, `half=top` is a thin plate at the top of the cell and
   `half=bottom` one at the bottom.
-- **ladder** — hangs on the block on the side opposite `facing`:
-  `ladder[facing=north]` needs a solid block just south of it.
-- **bed** — `facing` points from the foot to the head; the head goes one cell
-  that way.
-- **lantern** — `hanging=true` hangs from the block above it and needs one
-  there; `hanging=false` stands on the block below.
-- **log / pillar** — `axis` is the way it runs: `y` upright, `x` east–west,
-  `z` north–south.
+- **ladder** — hangs on the block on the side opposite `facing`: `ladder[facing=north]` needs a solid block just
+  south of it.
+- **bed** — `facing` points from the foot to the head; the head is the next cell that way.
+- **lantern** — `hanging=true` hangs from the block above it and needs one there; `hanging=false` stands on the
+  block below.
+- **log / pillar** — `axis` is the way it runs: `y` upright, `x` east–west, `z` north–south.
 
+## Roofs
 
-## The parts of a building
-
-1. **Foundation / floor** — one solid course, one block thick; it is the interior floor.
-2. **Walls** — from floor + 1 up to at least floor + 3.
-3. **Roof** — see below; a dome is the top half of a hollow sphere.
-4. **Openings** — doorways two cells tall, windows 1-2 above the floor.
-5. **Interior fittings** — on an inhabited floor 35-50% of the cells (see Interiors).
-6. **Exterior details** — stairs and slabs as trim, glass panes, lanterns, paths, and flowers and grass around the yard.
-
-Torches, signs, ladders, carpets, flowers, rails, buttons, pressure plates and hanging lanterns need a block to hold
-onto, so they go up after the blocks around them. Ponds, moats, canals and fountains are dug and lined first; one water
-source poured in spreads through a whole shallow basin.
-
-## Roofs (the part most builds get wrong)
-
-There is no roof block: a roof is built course by course, one level at a time, which is why any footprint — L-shaped,
+There is no roof block: a roof is a stack of courses, one level at a time, which is why any footprint — L-shaped,
 cross-shaped — can carry a fitting roof.
 
-### The one rule that keeps a roof watertight
+### Pitch, and the rule that keeps a roof closed
 
-A cell can hold a slab in three states, and that is how a roof climbs:
+Three pitches come straight out of the blocks:
 
-- `oak_slab` — the lower half of the cell
-- `oak_slab[type=top]` — the upper half
-- `oak_slab[type=double]` — the whole cell
+- **slabs, half a block per cell** — a bottom slab, then a double slab, then a bottom slab one level up. The
+  shallowest pitch (1 up per 2 across); what a tiled roof is made of, and what East Asian roofs need.
+- **stairs, one block per cell** — one course of stairs per level (1 in 1, 45°).
+- **full blocks, two up per cell** — the steep 2-in-1 pitch (about 63°), for spires and steep northern roofs.
 
-**Neighbouring courses must touch.** A course may climb at most half a block over
-the course beside it; climb a whole block between two bottom slabs and the two
-never meet — you get a visible slit and a row of slabs hanging in the air. Two
-ways to climb that always meet:
+**Neighbouring courses must touch** — the top of one meets the underside of the next. Two bottom slabs a whole block
+apart never meet: a visible slit, and a row of slabs hanging in the air. Where a slab plane and a stair plane meet, the
+half-block levels of one and the whole-block levels of the other have to line up, or the join opens exactly that gap.
+An eave course of upside-down stairs reads thinner than a plain one.
 
-- **Slabs, half a block per cell**: alternate `[type=double]` and a plain bottom
-  slab as you go up. This is what a tiled roof is actually made of, it is the
-  shallowest pitch, and it is what East Asian roofs need.
-- **Stairs, one block per cell**: one course of stairs per level, `facing` the
-  way the roof RISES, toward the ridge (a south slope's stairs face north).
-  Steeper, western, and the cheapest roof to write. Under a deep overhang put
-  the lowest course as `[half=top]` stairs so the eave reads thin.
+On a stair roof an odd span ends in a single ridge cell that takes a slab or full block; an even span ends in two
+stair courses meeting back to back.
 
-Never mix the two on one plane — the join is exactly where the gap appears.
+### Height
 
-### Pitch and height
+A roof's height is usually 0.5–0.75 of the half-span; below that it reads as a lid, above it as a tower (each style
+file gives its own range). On an inhabited building the roof is one to two storeys tall. A stair roof is fixed at
+1.0, which suits a narrow building and looks absurd on a wide hall. A single simple roof starts to look strange past
+about 15 x 15, and a gable reads best under about 12 wide; larger plans carry several joined roof sections.
 
-Roof height ≈ 0.5-0.75 × half-span. Below that it reads as a lid, above it as a
-tower. With stairs (one block per cell) you get 1.0 automatically, which is why
-a stair roof suits a narrow building and looks absurd on a wide hall.
+East Asian roofs are **concave**: shallow at the eave, steeper near the ridge. On hand-built halls the surface rises
+half a block per cell for the first two thirds and a full block per cell near the ridge, about 0.6 of a block per
+cell overall — a 13-cell half-span ends about 8 blocks up.
 
-East Asian roofs are **concave**: shallow at the eave, steeper near the ridge.
-Measured off hand-built halls, the surface rises one half-block per cell for the
-first two thirds and two half-blocks per cell near the ridge, averaging 1.2 —
-i.e. a 13-cell half-span ends about 8 blocks up. Write that as slab courses that
-start `double`/`bottom` alternating and switch to one course per level near the
-top.
+### Shapes
 
-### The shapes, as grids
+- **Gable** — two slopes meeting at a ridge; the triangular gable ends are walls.
+- **Hip** — four slopes; each course is a ring inset one cell on all four sides from the course below, and the
+  diagonals fall out of the ring corners. On a square plan it closes to a point: a **pyramid**.
+- **Half-hip** — hipped for the lower part, gabled above, with a small gable end at the top (or the reverse).
+- **Shed / lean-to** — one slope, from a low edge to a high one.
+- **Saltbox** — a gable with one slope much longer than the other.
+- **Gambrel** — a steep lower slope and a shallow upper one on each side (the barn roof); **mansard** — the same on
+  all four sides, with a near-flat top. **Bell-cast** — the reverse: a shallow lower kick under a steep upper slope.
+- **Helm** — a square tower roof with a gable on each of its four faces.
+- **Saw-tooth** — a row of asymmetric ridges, the steep face of each glazed.
+- **Flat** — level, finished by a parapet or a lip; without an edge it reads unfinished.
+- **Dome** — a hemisphere shell, not a roof of courses at all.
 
-A 12-wide, 10-deep building, ridge along x, eave level `y`. Course k sits at
-`y+k` and is drawn twice — one row from the north edge, one from the south:
-
-```
-k=0   ############        <- both eave rows
-      ............
-      ............
-      ############
-k=1   ............
-      ############
-      ############
-      ............
-```
-
-- **Gable (two slopes)** — as above: two rows per course marching inward,
-  the gable ends filled in as a triangle with the wall material.
-- **Hip (four slopes)** — each course is a RING inset by k on all four sides.
-  The four diagonals fall out of the ring corners; a line of the ridge
-  material runs along each of them.
-- **Pyramid** — a hip roof on a square footprint; the rings shrink to a point.
-- **Half-hip** — rings for the lower third, then switch to two rows and finish
-  as a gable, with a decorated panel filling the small end wall.
-- **Shed** — one row per course, marching from the low edge to the high one.
-- **Dome** — the top half of a hollow `sphere`, not a roof at all.
-
-For a cross-shaped or L-shaped building, draw the courses of both wings in the
-same grid and keep the inner corner filled — the valley is a diagonal of cells
-that belong to both slopes. One grid per level; the wings cannot fight each other
-because they are the same drawing.
+Where two wings meet (L, T, cross) their roofs join in a valley: a diagonal line of cells that belongs to both slopes.
+Multi-winged buildings carry one roof per wing at different heights rather than one roof stretched over everything;
+a pagoda is a pyramid roof repeated once per storey, each a little smaller.
 
 ### The four bands (this is what makes a style)
 
-The structure above is the same everywhere. What makes one roof Chinese, another
-Gothic and another Mediterranean is which block goes in which band:
+The structure is the same everywhere. What makes one roof Chinese, another Gothic and another Mediterranean is which
+block goes in which band:
 
-- **Ridge** — stands PROUD of the tiles: a `line` of a contrasting solid block
-  along the crest, one cell higher than the top course, plus the four diagonals
-  of a hip roof and the bargeboards of a gable. This single line is most of what
-  makes a roof read as designed rather than extruded, and every shape wants it.
-- **Eave** — the outermost course only: `[type=top]` slabs, or inverted stairs,
-  in a contrasting material. One cell of width, enormous effect.
-- **Gable ends** — the triangle under a gable slope. Fill it with the wall
-  material or a contrasting panel; leave it out and you can see into the attic.
-- **Soffit** — a second skin one cell under the tiles, following the same slope.
-  This is what the roof looks like from below and through an open gable. It
-  roughly doubles the cell count: spend it on a porch, a temple, a deep-eaved
-  hall; skip it on a shed nobody looks up at.
+- **Ridge** — stands PROUD of the tiles: a contrasting solid block along the crest, one cell higher than the top
+  course, plus the four diagonals of a hip roof and the bargeboards of a gable. This single line is most of what makes
+  a roof read as designed rather than extruded.
+- **Eave** — the outermost course only: top slabs or upside-down stairs in a contrasting material. One cell of width,
+  enormous effect.
+- **Gable ends** — the triangle under a gable slope, in the wall material or a contrasting panel; left open, the attic
+  shows.
+- **Soffit** — a second skin one cell under the tiles following the same slope: what the roof looks like from below
+  and through an open gable. It roughly doubles the roof's cells, and pays off on a porch, a temple, a deep-eaved
+  hall rather than a shed nobody looks up at.
 
 ### Eaves and corners
 
-Extend the roof grid 1-4 cells beyond the walls. 0 reads as unfinished almost
-everywhere; 1-2 suits most western work; East Asian roofs live on their overhang
-and want 2-4. A deep eave buys more character than a taller wall.
+A roof overhangs the walls by 1–4 cells. No overhang reads unfinished in almost every style (flush eaves are a
+deliberate modern move); 1–2 suits most western work; East Asian roofs live on their overhang at 2–4. A deep eave buys
+more character than a taller wall.
 
-Lift the four eave corners 1-3 cells with the ridge material for an East Asian
-roof — the upturned corner is the most recognisable feature of the style, and
-one cell per corner buys it. Leave it flat for western buildings.
+An East Asian roof lifts its four eave corners 1–3 cells in the ridge material — the upturned corner is the most
+recognisable feature of the style. Western roofs keep the corners flat.
 
-### Under the eave
+Under a deep eave the underside is visible:
 
-A deep overhang leaves a visible underside, and leaving it blank wastes the most
-characterful part of an East Asian building. Two cheap details:
+- **Rafter ends** — a full block poking out under the eave every two cells, the spacing the slab slope itself uses.
+- **Bracket clusters** — upside-down stairs flanking a full block, repeated along the eave, facing ALONG the wall
+  rather than outward. This is the detail East Asian work is recognised by.
 
-- **Rafter ends** — a full block poking out under the eave every two cells along
-  the eave line. Two is the spacing the slope itself uses, so they line up.
-- **Bracket clusters** — a band of `[half=top]` stairs flanking a full block,
-  repeated along the eave, facing ALONG the wall rather than outward. This is the
-  detail people recognise the style by.
+### Materials and choice
 
-### What roofs are made of
+Roof planes want a **weathered, textured** material. Gold and polished blocks read as treasure, not as tile, and a
+large flat plane of them looks worse the bigger it gets; verdigris copper, dark prismarine, deepslate tiles, grey
+concrete and dark wood all read as roofing, and gold belongs on a one-block finial. The roof is usually the biggest
+single plane on a building, so it is the last place to take one flat colour; weathering lightens what faces the sun
+(ridges) and darkens where water runs off (the eave line).
 
-Roof planes want a **weathered, textured** material. The most common mistake is
-reaching for something bright and metallic — gold and polished blocks read as
-treasure, not as tile, and a large flat plane of them looks worse the bigger it
-gets. Verdigris copper, dark prismarine, deepslate tile, grey concrete and dark
-wood all read as roofing; save any gold for a finial the size of one block.
+What holds across styles:
 
-Mix the roof palette like any other large surface. The roof is usually the
-biggest single plane on the building, which makes it the last place to accept one
-flat colour.
+- Long thin building → a gable (the ridge wants a direction). Squat or square → hip or pyramid.
+- Something added onto something else → a shed roof. One main roof plus a lean-to reads lived-in rather than designed.
+- Rank in Chinese work: hip > half-hip > gable. The roof announces the status of what stands under it.
+- Chinese, Japanese and Korean roofs are slabs, a concave pitch, lifted corners and a deep overhang; without those a
+  building reads as a western house wearing Asian materials.
+- Steeper suits snow, thatch and Gothic; shallower suits sun, tile and anything meant to look calm.
 
-### Choosing, rather than copying
+## Walls: depth and palette
 
-The style reference tells you what the roof should *feel* like — "low and wide",
-"steep, for snow", "four-sided", "corners lifted", "the roof is the building".
-Turning that into courses is your call, and two buildings in one style should not
-land on the same numbers.
+**Depth.** A flat wall is the second most common sign of an unconsidered build, after a flat colour. Depth comes from
+structure: posts and pillars standing 1 proud of the infill, windows and doors set back 1 so the opening casts a
+shadow, sills and lintels of stairs or slabs, an upper floor oversailing the lower, buttresses, the roof's eave. Depth
+with no structural reason behind it reads arbitrary; a long run of one block with nothing breaking it reads as a
+texture swatch.
 
-Decision rules that hold across styles:
+**Palette.** A building's palette is usually 3–5 blocks — a main material, a secondary, an accent — sharing one
+temperature (warm or cool) and varying in texture. Blocks in a palette rank first by lightness, then by hue, then by
+texture. Roof, walls and ceilings belong to one palette; an acacia ceiling in an oak-and-spruce house breaks it.
 
-- Long thin building → a gable (the ridge wants a direction). Squat or square →
-  hip or pyramid read better than a gable on a near-square plan.
-- Something added onto something else → a shed roof. It is worth reaching for far
-  more often than it gets used; one main roof plus a lean-to instantly looks
-  lived-in rather than designed.
-- Rank matters in Chinese work: hip > half-hip > gable. The roof announces the
-  status of what stands under it, so do not put the grandest roof on an outhouse
-  and a plain gable on the temple beside it.
-- Anything Chinese, Japanese or Korean → slabs, a concave pitch, lifted corners,
-  and a deep overhang. Without those it will read as a western house wearing
-  Asian materials.
-- Steeper suits snow, thatch and Gothic; shallower suits sun, tile and anything
-  meant to look calm. Let the climate and the material argue for the pitch.
-
-A pagoda is not one roof — it is a pyramid roof repeated once per storey, each a
-little smaller. Multi-winged buildings likewise get one roof per wing at
-different heights, not a single roof stretched over everything.
-
+**Mixing a surface.** One flat colour over a large surface is the most reliable way to make a build look fake. 10–20%
+of a weathered or neighbouring variant spread unevenly reads as texture rather than pattern. In a gradient each step
+is next to its neighbour in lightness — skipping steps reads as splatter. Weather darkens and roughens the places it
+acts on: the base where rain splashes, the corners, around openings, under the eave drip line; the lightest blocks sit
+where the eye should land. Horizontal stripes laid across a wall regardless of its features flatten it.
 
 ## Interiors (this is where builds are actually lost)
 
-**On an inhabited level, 35-50% of the blocks you place are furnishing.** That is
-measured off a hand-built compound: on its living floors, four in ten placed cells
-are a trapdoor, a barrel, a shelf, a carpet or a lantern; across the whole build,
-furnishing is 16% of 5859 cells. If your interior is a bed, a crafting table and
-two torches, you are not slightly under-furnished — you are two orders of
-magnitude short, and the room will read as a storage shed with a bed in it.
+Measured off a hand-built 40 x 45 compound: **on its inhabited levels 35–50% of the placed cells are furnishing** —
+four in ten are a trapdoor, a barrel, a shelf, a carpet or a lantern — and across the whole build furnishing is 16% of
+5859 cells. An interior of a bed, a crafting table and two torches is a storage shed with a bed in it.
 
-Budget for it: a house whose shell is 3000 cells wants roughly 800-1200 more for
-the inside.
-
-### What furniture is actually made of
-
-There is no furniture block in Minecraft, so furniture is ordinary blocks used for
-their shape. Measured frequencies from the same building, in order:
-
-- **Trapdoors — 397 of 941 furnishing cells, across seven different woods.** By a
-  wide margin the most useful detail block in the game, because it is the only
-  thin one you can put in any orientation. All three shapes earn their keep:
-  - `open=true` → a **thin vertical panel** against one edge of the cell (the
-    edge opposite `facing`; `half` does not change it): a screen, a shutter, a
-    cupboard front, railing infill, a partition that does not eat the room.
-  - `open=false, half=top` → a **shelf hanging under a beam**, or a ceiling panel.
-  - `open=false, half=bottom` → a **low ledge at floor level**: a step, a hearth
-    lip, the edge of a platform.
-  - Mixing wood types (spruce / oak / dark_oak / jungle / bamboo / acacia) reads
-    as different pieces of furniture rather than one repeated fitting.
-- **Utility blocks used as furniture, in quantity**: `barrel` (68), `composter`
-  (41), `chest` (32), `chiseled_bookshelf` (24), `bookshelf` (20), `loom` (17),
-  `lectern` (12), `smoker`, `cauldron`, `cartography_table`. The key word is
-  quantity — a wall of barrels reads as a storeroom; three barrels reads as three
-  barrels.
-- **`campfire` (78)** — the hearth, and its smoke is free atmosphere. Set
-  `signal_fire=false` for a domestic one; `soul_campfire` for anything eerie.
-- **Carpets in muted colours** — the cheapest way to zone a floor and say "this
-  part of the room is for sitting".
-- **Wall signs and wall banners** — the cheapest "someone lives here" marker.
-- **`lantern`, `candle`, `soul_lantern`** — sparingly, and hung, not scattered.
-- **`scaffolding`, `ladder`** — open frameworks and vertical circulation that
-  read as built rather than as a hole in the floor.
-
-**A bed, a crafting table and a furnace is a survival starter base, not a home.**
-None of those three appear in the reference building's twenty most-used blocks.
-Place them if the player will use them, but never mistake them for furnishing.
-
-### Rules that measured out
-
-- **98% of furniture touches a wall** (390 of 399 pieces; nine free-standing).
-  Furniture in the middle of a room reads as an obstacle, because in a game where
-  the player is two blocks tall, it is one. Leave the centre clear and line the
-  walls.
-- **Furnish every level.** The reference has furnishing on 17 of its 23 layers.
-  An upper floor left as a bare box is the most common way a good exterior is
-  betrayed the moment someone climbs the stairs.
-- **The frame continues indoors** — 30-42 timber cells per storey. Posts and
-  beams do not stop at the outside face; if the style shows its frame, show it in
+- **98% of furniture touches a wall** (390 of 399 pieces). For a body two blocks tall a block in the middle of a room
+  is an obstacle; room centres are circulation.
+- **Every level is furnished** — the reference has furnishing on 17 of its 23 layers. A bare upper floor betrays a
+  good exterior the moment someone climbs the stairs.
+- **The frame continues indoors** — 30–42 timber cells per storey. A style that shows its frame outside shows it in
   the rooms too.
-- **Light is sparse and comes from above.** 130 light sources across a 40x45
-  compound. Enough that nothing spawns, few enough that the room has shadows in
-  it. Hang lanterns from beams; a torch stuck on a wall at head height is the
-  look of an unfinished build.
+- **Light is sparse and comes from above** — 130 light sources across the compound. Hostile mobs spawn only where
+  block light is 0; a lantern emits 15 and light falls by 1 per cell of walking distance (x + y + z), so a few hung
+  lanterns keep a whole floor safe and still leave shadows. A torch stuck on a wall at head height is the look of an
+  unfinished build.
 
-### Zone by height
+### What furniture is made of
 
-The measured distribution sorts itself into bands, and using them keeps a room
-from being furniture-along-the-floor-and-nothing-else:
+There is no furniture block, so furniture is ordinary blocks used for their shape. In order of measured frequency:
 
-- **floor** — carpet, campfire, low ledges (`half=bottom` trapdoors), the odd
-  `decorated_pot`
-- **1-2 above the floor** — the furniture band: barrels, chests, bookshelves,
-  loom, lectern, cauldron. This is where the eye goes and where most cells go.
-- **2-3 above the floor** — the wall band: wall signs, wall banners, shelves
-  (`half=top` trapdoors), a `flower_pot` on a ledge
-- **ceiling** — exposed beams, hanging lanterns, `half=top` trapdoor panels
-  between the beams
+- **Trapdoors — 397 of 941 furnishing cells, in seven woods**: the only thin block that takes any orientation. Open,
+  a vertical panel: screen, shutter, cupboard front, railing infill, a partition that does not eat the room. Shut at
+  the top of the cell, a shelf under a beam or a ceiling panel; shut at the bottom, a low ledge, a step, a hearth lip.
+  Mixed wood types read as separate pieces of furniture rather than one repeated fitting.
+- **Utility blocks in quantity**: `barrel` (68), `composter` (41), `chest` (32), `chiseled_bookshelf` (24),
+  `bookshelf` (20), `loom` (17), `lectern` (12), `smoker`, `cauldron`, `cartography_table`. A wall of barrels reads
+  as a storeroom; three barrels read as three barrels.
+- **`campfire` (78)** — the hearth, smoke included; `campfire[signal_fire=false]` is a domestic one, `soul_campfire`
+  an eerie one.
+- **Carpets** in muted colours zone a floor; **wall signs and banners** are the cheapest "someone lives here" marker;
+  **`lantern`, `candle`, `soul_lantern`** are hung rather than scattered; **`scaffolding`, `ladder`** read as built
+  circulation rather than a hole in the floor.
+
+A bed, a crafting table and a furnace are utilities, not furnishing — none of them is among the reference building's
+twenty most-used blocks.
+
+### Height bands
+
+- **floor** — carpet, campfire, low trapdoor ledges, the odd `decorated_pot`
+- **1–2 above the floor** — the furniture band: barrels, chests, bookshelves, loom, lectern, cauldron; most cells
+- **2–3 above the floor** — the wall band: wall signs, wall banners, trapdoor shelves, a `flower_pot` on a ledge
+- **ceiling** — exposed beams, hanging lanterns, trapdoor panels between the beams
 
 ### A room is a function, and the props say which
 
-An unlabelled furnished room is still a shed. Give each room one legible purpose
-and let three or four props carry it:
+Three or four props make a room's purpose legible; more turns it into a shop display. Two rooms with the same props
+are one room built twice.
 
-- kitchen — `smoker` or `furnace` + `cauldron` + barrels + a campfire
-- study — `lectern` + `bookshelf`/`chiseled_bookshelf` wall + candles
-- storeroom — barrels and chests in a grid, `composter`, sacks read as `hay_block`
-- workshop — `loom`, `stonecutter`, `grindstone`, `smithing_table`, barrels
-- bedroom — bed, a chest at its foot, a lantern, a carpet, one shelf
-- shrine or hearth room — campfire on a stone plinth, banners, paired lanterns
-
-Two rooms with the same props are one room built twice. Vary the purpose before
-you vary the blocks.
-
-The state is the whole point of most interior detail blocks:
-
-- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]` (stands on the cell's south edge)
-- hanging shelf: `oak_trapdoor[half=top,open=false]`
-- lit hearth: `campfire[signal_fire=false,lit=true]`
-- hanging lantern: `lantern[hanging=true]` under a beam
-
-A row of barrels along a wall, a floor of carpet with the odd pot: placed where each piece belongs, not sprinkled at
-random.
-
-## Mix your materials
-
-A large surface in one flat colour is the single most reliable way to make a build look fake, so **mix every wall,
-floor and roof that covers real area**: 10-20% of a weathered or contrasting variant is usually enough; the eye reads it
-as texture rather than as a pattern. Spread the variant unevenly across the surface rather than in visible stripes or
-patches.
-
-## What a finished build has
-
-- exactly one floor course; every doorway passable
-- large surfaces mixed, not one flat colour
-- roofs that overhang the walls, a ridge standing proud of the tiles, closed gable ends, and no gap between neighbouring
-  courses
-- windows 1-2 above the floor, with panes or glass
-- **every inhabited level furnished**, not just the ground floor
-- furniture along the walls, room centres clear
-- each room with one legible purpose, carried by three or four props
-- lit well enough that nothing spawns, dim enough to still have shadows
-- one main material family plus one accent, rather than a single-material box
+- kitchen — `smoker` + `cauldron` + a run of barrels + a campfire, a `composter` in the corner
+- study — `lectern`, a wall of `bookshelf` / `chiseled_bookshelf`, candles on a trapdoor shelf
+- storeroom — barrels and chests in a grid two or three high, `hay_block` sacks
+- workshop — `loom`, `stonecutter`, `grindstone`, `smithing_table`, barrels, a lantern overhead
+- bedroom — bed against the wall, a chest at its foot, a carpet, one shelf, one hanging lantern
+- shrine or hearth room — campfire on a stone plinth, banners, paired lanterns, `decorated_pot`
 
 ## Style references — how to read them
 
-A style file is a **vocabulary, not a template**. It gives you the character of
-a style and the reasoning behind it; composing the actual building stays yours.
+A style file is a **vocabulary, not a template**: the character of a style and the reasoning behind it.
 
-- **Materials** are semantic slots (frame / infill / roof / floor / accent /
-  light) with SEVERAL candidates each and a note on why they read that way.
-  Choose per site, per biome, and per what she actually carries. Never default
-  to the first candidate just because it is first.
-- **Proportions** are ratios and ranges, never fixed dimensions. A style says
-  "roof rise about 0.4–0.7 of the half-span"; it never says "13x9x3".
-- **Signature moves** state the INTENT first and one possible execution second.
-  Hit the intent however the site allows — the listed method is an example.
-- **Variants** exist so two buildings in one style are not twins. Pick one, or
-  blend two.
-- **Avoid** is the sharpest section. Negative constraints carry more style
-  information than positive ones, and they are what keeps a style recognisable
-  while everything else varies.
+- **Materials** are semantic slots (frame / infill / roof / floor / accent / light) with several interchangeable
+  candidates each and a note on why they read that way; order within a slot carries no preference.
+- **Proportions** are ratios and ranges, never fixed dimensions.
+- **Signature moves** state the intent first and one possible execution second; the intent is what matters.
+- **Variants** are distinct buildings within one style; two can be blended.
+- **Avoid** is the sharpest section: negative constraints carry more style information than positive ones, and they
+  keep a style recognisable while everything else varies.
 
-**Two buildings in the same style SHOULD differ** in footprint, height, massing
-and exact blocks. If yours come out as twins, you are reading the reference as a
-template rather than as a vocabulary.
-
-A style file deliberately never names tool parameters. It says the roof is "low
-and wide with lifted corners"; translating that into courses, materials, an
-overhang and a corner lift is yours to do, and doing it differently on two
-buildings of the same style is the point, not a mistake.
+Two buildings in the same style differ in footprint, height, massing and exact blocks; twins mean the reference was
+read as a template.
 
 Each style is the file `references/<name>.md` of this skill, e.g. `references/baroque.md`.
 
@@ -403,9 +290,8 @@ Each style is the file `references/<name>.md` of this skill, e.g. `references/ba
 `steampunk` 蒸汽朋克 · `cyberpunk` 赛博朋克 · `fantasy_floating` 浮空 ·
 `underwater` 水下
 
-`ruins_overgrown` 废墟 is not a style of its own — it is a **treatment you apply
-on top of any other one**: a ruined, abandoned, ancient or reclaimed version of a base style.
+`ruins_overgrown` 废墟 is not a style of its own — it is a **treatment applied on top of any other one**: a ruined,
+abandoned, ancient or reclaimed version of a base style.
 
-`references/decoration.md` collects finishing touches (windows, paths, gardens,
-chimneys, interiors) that work in any style.
-
+`references/decoration.md` collects finishing touches (ceilings, lighting, windows, paths, gardens, chimneys, water)
+that work in any style.
