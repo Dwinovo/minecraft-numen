@@ -77,7 +77,9 @@ final class Downward implements Move {
         if (Double.isInfinite(dig)) {
             return q.plain() ? Quick.REJECT : q.likely(0, -1, 0, q.descendFloor() - q.walkOff());
         }
-        return q.likely(0, -1, 0, q.descendFloor() - q.walkOff() + dig);
+        // 平地上挖掉脚下那块、再下面是整块:正好落一格
+        double landing = q.plain() && Quick.whole(q.cell(0, -2, 0)) ? q.landing(1) : q.descendFloor() - q.walkOff();
+        return q.likely(0, -1, 0, landing + dig);
     }
 
     @Override

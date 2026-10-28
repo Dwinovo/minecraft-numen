@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.CellFlags;
 import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Semantics;
 
@@ -361,9 +362,26 @@ public final class Quick {
         return window[((dz + RADIUS) * SIDE + dx + RADIUS) * rows + dy + BELOW] & 0xFF;
     }
 
-    /** 读好的一圈之外(往下更深)的一格:现读。 */
-    int cellBelow(int dx, int dy, int dz) {
+    /**
+     * 节点相对位置 {@code (dx, dy, dz)} 那一格的标志字,现读:读好的一圈之外(往下更深)的格,或节点不平、那一圈没读时。
+     * 没加载的列带 {@link CellFlags#UNLOADED}。
+     */
+    int flagsAt(int dx, int dy, int dz) {
         return flags(x + dx, y + dy, z + dz);
+    }
+
+    /**
+     * 节点相对 {@code (dx, dz)} 那一列和它四面紧挨着的列都加载着:精确判断看一步的落点时读到的列不出这几列,节点不平、那一圈没读时,
+     * 快判断凭现读的标志字断定"不成立"之前先确认这一点(断定了的步子,精确判断不能读到没加载的列)。
+     */
+    boolean loadedAround(int dx, int dz) {
+        return ((flagsAt(dx, 0, dz) | flagsAt(dx + 1, 0, dz) | flagsAt(dx - 1, 0, dz) | flagsAt(dx, 0, dz + 1) | flagsAt(dx, 0, dz - 1))
+                & CellFlags.UNLOADED) == 0;
+    }
+
+    /** 身体站在节点相对 {@code (dx, dy, dz)} 那个节点时脚的高度({@link Footing#height},节点面对的世界里的);托不住为 NaN。 */
+    double footing(int dx, int dy, int dz) {
+        return Footing.height(reading, model.body().stats(), x + dx, y + dy, z + dz);
     }
 
     /** 节点面对的世界里 {@code (x, y, z)} 那一格的标志字:快照读来的,被这一步改过的格换成改完之后的。 */
@@ -385,7 +403,7 @@ public final class Quick {
      */
     boolean calmBelow(int dx, int dz, int fromDy, int toDy) {
         for (int dy = fromDy; dy <= toDy; dy++) {
-            if (((cellBelow(dx + 1, dy, dz) | cellBelow(dx - 1, dy, dz) | cellBelow(dx, dy, dz + 1) | cellBelow(dx, dy, dz - 1))
+            if (((flagsAt(dx + 1, dy, dz) | flagsAt(dx - 1, dy, dz) | flagsAt(dx, dy, dz + 1) | flagsAt(dx, dy, dz - 1))
                     & CellFlags.HARMFUL) != 0) {
                 return false;
             }

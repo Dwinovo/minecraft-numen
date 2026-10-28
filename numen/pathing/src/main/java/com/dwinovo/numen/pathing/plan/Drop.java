@@ -164,7 +164,9 @@ final class Drop implements Move {
         int shallowest = kind == MoveKind.DESCEND ? 1 : 2;
         double floor = kind == MoveKind.DESCEND ? q.descendFloor() : q.fallFloor();
         if (!q.plain()) {
-            return around(q, dx, -shallowest, dz, floor);
+            // 落点那一列脚下一格是整块:往下落不过去(同下面平地上的判断,只是现读)
+            return Quick.whole(q.flagsAt(dx, -1, dz)) && q.loadedAround(dx, dz) ? Quick.REJECT
+                    : around(q, dx, -shallowest, dz, floor);
         }
         boolean blocked = false;
         for (int dy = 0; dy <= q.top(); dy++) {
@@ -212,7 +214,7 @@ final class Drop implements Move {
                 if (-below > q.scan()) {
                     return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }
-                support = q.cellBelow(dx, below, dz);
+                support = q.flagsAt(dx, below, dz);
                 if (!Quick.simple(support)) {
                     return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }

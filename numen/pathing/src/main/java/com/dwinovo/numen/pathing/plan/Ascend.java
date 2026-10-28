@@ -109,7 +109,9 @@ final class Ascend implements Move {
         int dx = heading.dx();
         int dz = heading.dz();
         if (!q.plain()) {
-            return q.likely(dx, 1, dz, q.fastest());
+            // 攀着、浮着起步时垫不了台阶:落点那一格托不住脚就上不去(精确判断头一条就是它)
+            return !q.stance().grounded() && q.loadedAround(dx, dz) && Double.isNaN(q.footing(dx, 1, dz))
+                    ? Quick.REJECT : q.likely(dx, 1, dz, q.fastest());
         }
         int step = q.cell(dx, 0, dz);
         if (!Quick.simple(step)) {
