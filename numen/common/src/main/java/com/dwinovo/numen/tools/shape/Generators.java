@@ -14,6 +14,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
@@ -223,7 +224,38 @@ final class Generators {
 
     /** WorldEdit 的"松树":一小截树干,往上一层层的橡木叶子;只在空气里放。 */
     private static boolean pine(RecordedLevel level, BlockPos base) {
-        throw new UnsupportedOperationException("净室重写中");
+        RandomSource random = level.random();
+        BlockState log = Blocks.OAK_LOG.defaultBlockState();
+        BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState();
+        int trunk = 3 + random.nextInt(2);
+        int crown = 8 + random.nextInt(5);
+        for (int i = 0; i < trunk; i++) {
+            if (!ifAir(level, base.above(i), log)) {
+                return false;
+            }
+        }
+        BlockPos top = base.above(trunk);
+        for (int i = 0; i < crown; i++) {
+            BlockPos center = top.above(i);
+            ifAir(level, center, log);
+            boolean edge = i == 0 || i == crown - 1;
+            for (int dx = -2; dx <= 2; dx++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    int ring = Math.max(Math.abs(dx), Math.abs(dz));
+                    if (ring == 1) {
+                        byChance(level, center.offset(dx, 0, dz), leaves, edge ? 0.6 : 1);
+                    } else if (ring == 2 && !edge) {
+                        // 外圈四角各试两次,角上的叶子更常有
+                        int tries = Math.abs(dx) == 2 && Math.abs(dz) == 2 ? 2 : 1;
+                        for (int t = 0; t < tries; t++) {
+                            byChance(level, center.offset(dx, 0, dz), leaves, 0.6);
+                        }
+                    }
+                }
+            }
+        }
+        ifAir(level, top.above(crown), leaves);
+        return true;
     }
 
     private static boolean ifAir(RecordedLevel level, BlockPos pos, BlockState state) {
@@ -234,8 +266,11 @@ final class Generators {
         return true;
     }
 
+    /** 掷一次 [0,1) 的数,不超过 chance 就往这格放(仍只放进空气)。 */
     private static void byChance(RecordedLevel level, BlockPos pos, BlockState state, double chance) {
-        throw new UnsupportedOperationException("净室重写中");
+        if (level.random().nextDouble() <= chance) {
+            ifAir(level, pos, state);
+        }
     }
 
     /** {@code //flora}:草地上长草与小花,沙子上长枯灌木与仙人掌(其余的地面不长);一列一格,落在地面上一格。 */
@@ -272,11 +307,58 @@ final class Generators {
 
     /** {@code //pumpkins}:草地上零星的"南瓜田":一圈叶子藤蔓、橡木和南瓜,在 at 周围 apothem 格、高低 -5 到 +10 层里,密度 2%。 */
     static List<BlockAt> pumpkins(LoadedBlocks w, BlockPos at, int apothem) {
-        throw new UnsupportedOperationException("净室重写中");
+        List<BlockPos> columns = new ArrayList<>();
+        for (int x = at.getX() - apothem; x <= at.getX() + apothem; x++) {
+            for (int z = at.getZ() - apothem; z <= at.getZ() + apothem; z++) {
+                columns.add(new BlockPos(x, at.getY(), z));
+            }
+        }
+        TerrainReads.requireAround(w, columns, 0);
+        RecordedLevel recorded = new RecordedLevel(w);
+        BlockState leaf = Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.PERSISTENT, true);
+        eachColumn(recorded, columns, at.getY() - 5, at.getY() + 10, 0.02, (rec, ground) -> {
+            BlockPos patch = rec.at(ground).isAir() ? ground : ground.above();
+            if (!rec.at(patch.below()).is(Blocks.GRASS_BLOCK)) {
+                return;
+            }
+            rec.set(patch, leaf);
+            vine(rec, patch, patch.south(), leaf);
+            vine(rec, patch, patch.north(), leaf);
+            vine(rec, patch, patch.east(), leaf);
+            vine(rec, patch, patch.west(), leaf);
+        });
+        return recorded.blocks();
     }
 
+    /** 南瓜藤的一段:t 选下表的一行,依次是再长一段藤的起点、可能有的橡木(高低随 h)、南瓜,偏移相对这段藤落定的那一格。 */
+    private static final int[][][] VINE_TURNS = {
+            {{1, 0, 0}, {1, 0, -1}, {0, 0, -1}},
+            {{0, 0, 1}, {1, 0, 0}, {1, 0, 1}},
+            {{0, 0, -1}, {-1, 0, 0}, {-1, 0, 1}},
+            {{-1, 0, 0}, {-1, 0, -1}, {-1, 0, -1}},
+    };
+
+    /** 从 start 长一段藤,离 base 超过 4 格或 start 不空就不长;先长完下一段,再放这一段的橡木和南瓜。 */
     private static void vine(RecordedLevel level, BlockPos base, BlockPos start, BlockState leaf) {
-        throw new UnsupportedOperationException("净室重写中");
+        if (start.distSqr(base) > 16 || !level.at(start).isAir()) {
+            return;
+        }
+        // 悬空的藤往下落,最多两格
+        BlockPos at = start;
+        for (int i = 0; i < 2 && level.at(at.below()).isAir(); i++) {
+            at = at.below();
+        }
+        ifAir(level, at, leaf);
+        RandomSource random = level.random();
+        int[][] turn = VINE_TURNS[random.nextInt(4)];
+        int h = random.nextInt(3) - 1;
+        if (random.nextBoolean()) {
+            vine(level, base, at.offset(turn[0][0], turn[0][1], turn[0][2]), leaf);
+        }
+        if (random.nextBoolean()) {
+            ifAir(level, at.offset(turn[1][0], h, turn[1][2]), Blocks.OAK_LOG.defaultBlockState());
+        }
+        ifAir(level, at.offset(turn[2][0], turn[2][1], turn[2][2]), Blocks.PUMPKIN.defaultBlockState());
     }
 
 }
