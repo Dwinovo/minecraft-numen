@@ -11,8 +11,8 @@ import com.dwinovo.numen.pathing.search.SearchClock;
  * <p><b>每次想多久看表</b>(表是宿主经端口给的 {@link SearchClock}),三种时限:
  * <ul>
  *   <li>首段({@link #FIRST_NANOS}):从身体脚下搜,身体站着等,时间到就交半程让她先动(Baritone 首段 0.5 s、mineflayer-pathfinder
- *       每刻 40 ms,我们节点便宜,取几十毫秒);</li>
- *   <li>接续:半程一交出就从半程终点接着搜,身体走到那里之前搜完就不停顿:时限是走完剩下的路几何上最短要的时间减余量
+ *       每刻 40 ms);</li>
+ *   <li>接续:半程一交出就从半程终点接着搜,身体走到要等接续的那几步之前搜完就不停顿:时限是走到那里几何上最短要的时间减余量
  *       ({@link #MARGIN_NANOS}),封顶 {@link #NEXT_MAX_NANOS}(Baritone 走路时下一段 4 s),不低于首段;</li>
  *   <li>搜不出路线(时间到或节点上限用完、又截不出半程)就加时重搜:下一次的时限翻倍,直到搜出路线(Azalea 的加时重试)。</li>
  * </ul>
@@ -24,8 +24,11 @@ import com.dwinovo.numen.pathing.search.SearchClock;
  */
 final class Allowance {
 
-    /** 首段的时限。 */
-    static final long FIRST_NANOS = TimeUnit.MILLISECONDS.toNanos(30);
+    /**
+     * 首段的时限。近的路几毫秒就搜到终点,用不满它;它管的是难路:靶场上 30 毫秒时一百二十八格以内的十九条里 11 条一次搜到,
+     * 200 毫秒时 15 条,开始走的中位 17 毫秒不变、最慢的从 0.3 秒到 0.37 秒;再长(3 秒)17 条,最慢的要等五秒多。
+     */
+    static final long FIRST_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
     /** 接续的时限封顶。 */
     static final long NEXT_MAX_NANOS = TimeUnit.SECONDS.toNanos(3);
     /** 接续要在身体走到半程终点之前搜完,留这么多余量(拷快照、排队、走得比几何最短还快一点)。 */
@@ -72,9 +75,12 @@ final class Allowance {
         return new Deadline(clock, grown(FIRST_NANOS));
     }
 
-    /** 接续的时限:身体走完剩下的 {@code remainingTicks} 刻之前搜完,不低于首段的(接连没搜出路线时同样翻倍),封顶 {@link #NEXT_MAX_NANOS}。 */
-    Deadline next(double remainingTicks) {
-        long walking = (long) (remainingTicks * TICK_NANOS) - MARGIN_NANOS;
+    /**
+     * 接续的时限:身体不停下来还能走 {@code aheadTicks} 刻({@link Continuation#aheadTicks}),在这之前搜完;不低于首段的(接连没搜出路线时
+     * 同样翻倍),封顶 {@link #NEXT_MAX_NANOS}。
+     */
+    Deadline next(double aheadTicks) {
+        long walking = (long) (aheadTicks * TICK_NANOS) - MARGIN_NANOS;
         return new Deadline(clock, Math.max(grown(FIRST_NANOS), Math.min(NEXT_MAX_NANOS, walking)));
     }
 

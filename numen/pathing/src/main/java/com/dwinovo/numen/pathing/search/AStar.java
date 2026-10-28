@@ -75,8 +75,11 @@ import net.minecraft.world.level.material.FluidState;
  */
 public final class AStar {
 
-    /** 加权的倍数:交出的路线至多比最优贵这么多倍。 */
-    static final double WEIGHT = 1.5;
+    /**
+     * 加权的倍数:交出的路线至多比最优贵这么多倍。靶场(10-29,27 条可达路线)上扫过 1.2、1.5、2.0、2.5:到达 25/24/25/25 条,
+     * 每节点 25.6/27.0/23.4/17.9 微秒,路线价合计相差不到 2%;2.5 时埋在岩石里的空腔一次搜索几百个节点就挖到,湖面、破碎地形一次搜到。
+     */
+    static final double WEIGHT = 2.5;
     /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */
     private static final double MIN_IMPROVEMENT = 0.01;
     /** 一个节点面对的世界叠几步之前的改动:走到它的最近这么多步。 */
