@@ -69,6 +69,24 @@ class PartialSearchTest {
         assertEquals(0, result.route().alterations(), "绕缺口走,不挖");
     }
 
+    /**
+     * 一段推进八格疾跑的估价:搜到一个估价比起点低这么多的节点就交出到那里的整截,目标还在前面;同一个世界只认目标时一次走到底。
+     */
+    @Test
+    void aSegmentEndsAtTheFirstNodeThatIsASegmentCloserToTheGoal() {
+        CostModel model = Fixtures.model(Fixtures.natural());
+        double sprint = com.dwinovo.numen.pathing.world.Kinematics.pace(model.body().stats()).sprint();
+        Goal goal = Goals.at(new BlockPos(20, Y, 0));
+        Search whole = new Search(field(), model, START, goal, Fixtures.BUDGET, Favoring.NONE);
+        SearchResult segment = AStar.run(whole.advancing(8 * sprint), () -> false);
+        assertEquals(SearchResult.Stop.SEGMENT, segment.stop());
+        assertTrue(segment.reached());
+        BlockPos end = segment.route().end();
+        assertTrue(end.getX() >= 8 && end.getX() < 20, "推进了一段,没到目标:" + end);
+        SearchResult arrived = AStar.run(whole, () -> false);
+        assertTrue(arrived.arrived(), arrived.stop().toString());
+    }
+
     /** 四壁是基岩、里面是实心石头的竖井(边长 {@code size}),空手;起点是井底角上挖好的两格空间。 */
     private static TestWorld shaft(int size, int height) {
         return new TestWorld().fill(-3, Y - 3, -3, size + 2, Y + height + 3, size + 2, Blocks.BEDROCK.defaultBlockState())

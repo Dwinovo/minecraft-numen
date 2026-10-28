@@ -20,9 +20,11 @@ import net.minecraft.core.BlockPos;
  *                 快照里还没有那一步垫下的块;从身体脚下搜为 null
  * @param air      身体在起点时憋气的样子:从脚下搜是身体此刻的({@link Breath#now}),接着一条路线往下搜是走完那一步时的
  * @param deadline 最多想多久:时间到了交出手里最好的半程;{@link Deadline#NONE} 不限时
+ * @param advance  一段走到哪算完:到了目标,或到了一个估价比起点低 {@code advance} 刻的节点({@link AStar});无穷大是只认目标。
+ *                 估价已经是每种目标统一的"还差多少",段就用它量,不另造"离终点多远"
  */
 public record Search(SearchView view, CostModel model, BlockPos start, Goal goal, int budget, Favoring favoring,
-                     TripMemory.Frozen memory, Maneuver arrival, Breath.Air air, Deadline deadline) {
+                     double advance, TripMemory.Frozen memory, Maneuver arrival, Breath.Air air, Deadline deadline) {
 
     public Search {
         Objects.requireNonNull(view, "view");
@@ -36,6 +38,9 @@ public record Search(SearchView view, CostModel model, BlockPos start, Goal goal
         if (budget <= 0) {
             throw new IllegalArgumentException("展开预算要是正数:" + budget);
         }
+        if (!(advance > 0)) {
+            throw new IllegalArgumentException("一段要推进的估价要是正数:" + advance);
+        }
         if (arrival != null && !arrival.to().equals(start)) {
             throw new IllegalArgumentException("起点 " + start + " 不是那一步的落点 " + arrival.to());
         }
@@ -43,18 +48,23 @@ public record Search(SearchView view, CostModel model, BlockPos start, Goal goal
 
     /** 从身体脚下出发、不限时的一次搜索:憋气从身体此刻的样子起,没有记忆。 */
     public Search(SearchView view, CostModel model, BlockPos start, Goal goal, int budget, Favoring favoring) {
-        this(view, model, start, goal, budget, favoring, TripMemory.Frozen.NONE, null, model.body().breath().now(),
-                Deadline.NONE);
+        this(view, model, start, goal, budget, favoring, Double.POSITIVE_INFINITY, TripMemory.Frozen.NONE, null,
+                model.body().breath().now(), Deadline.NONE);
+    }
+
+    /** 同一次搜索,走到估价比起点低 {@code ticks} 刻的节点就算这一段完了。 */
+    public Search advancing(double ticks) {
+        return new Search(view, model, start, goal, budget, favoring, ticks, memory, arrival, air, deadline);
     }
 
     /** 同一次搜索,最多想到 {@code deadline}。 */
     public Search within(Deadline deadline) {
-        return new Search(view, model, start, goal, budget, favoring, memory, arrival, air, deadline);
+        return new Search(view, model, start, goal, budget, favoring, advance, memory, arrival, air, deadline);
     }
 
     /** 同一次搜索,带着这一趟的记忆。 */
     public Search remembering(TripMemory.Frozen memory) {
-        return new Search(view, model, start, goal, budget, favoring, memory, arrival, air, deadline);
+        return new Search(view, model, start, goal, budget, favoring, advance, memory, arrival, air, deadline);
     }
 
     /**
@@ -71,19 +81,20 @@ public record Search(SearchView view, CostModel model, BlockPos start, Goal goal
         int last = route.legs().size() - 1;
         Route.Leg step = route.legs().get(last);
         return new Search(PlannedView.of(view, route.edits(Math.min(done, last), last)), model, start, goal, budget, favoring,
-                memory, step.maneuver(), step.air(), deadline);
+                advance, memory, step.maneuver(), step.air(), deadline);
     }
 
     /** 同一次搜索,憋气从 {@code from} 起(诊断问"憋得住的话有没有路"时是 {@link Breath#UNLIMITED})。 */
     public Search breathing(Breath.Air from) {
-        return new Search(view, model, start, goal, budget, favoring, memory, arrival, from, deadline);
+        return new Search(view, model, start, goal, budget, favoring, advance, memory, arrival, from, deadline);
     }
 
     /**
      * 同一份快照、起点与目标,换一份成本模型再搜(诊断问"换一种条件有没有路"时):不沿旧路,也不带这一趟的记忆——抬高过的估价
-     * 是对着原来的规格算的,放宽之后真实代价更低,它不再是下界;也不限时,"有没有路"只由节点上限定,与机器快慢无关。
+     * 是对着原来的规格算的,放宽之后真实代价更低,它不再是下界;也不限时、只认目标,"有没有路"只由节点上限定,与机器快慢无关。
      */
     public Search under(CostModel other) {
-        return new Search(view, other, start, goal, budget, Favoring.NONE, TripMemory.Frozen.NONE, arrival, air, Deadline.NONE);
+        return new Search(view, other, start, goal, budget, Favoring.NONE, Double.POSITIVE_INFINITY, TripMemory.Frozen.NONE, arrival,
+                air, Deadline.NONE);
     }
 }

@@ -4,6 +4,8 @@ import java.util.concurrent.TimeUnit;
 
 import com.dwinovo.numen.pathing.search.Deadline;
 import com.dwinovo.numen.pathing.search.SearchClock;
+import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
 
 /**
  * 一趟愿意付多少:每次搜索想多久、最多展开几个节点,一趟总共展开几个节点,和这一趟已经花了多少。
@@ -18,9 +20,12 @@ import com.dwinovo.numen.pathing.search.SearchClock;
  * </ul>
  * 一次搜索最多展开 {@link #SEARCH_NODES} 个节点:只防内存,和时钟无关。
  *
- * <p><b>放不放弃看节点</b>:一趟的收场只有一个判据——总预算(按展开的节点数)用完还没到;另外是搜索证明了到不了。总预算与起点到终点的
- * 估价成正比({@link #NODES_PER_TICK}),至少够一次搜满({@link #SEARCH_NODES})。真实世界有限但很大,LRTA* 的"保证到达"要配一个
- * 总预算才有意义 [Korf 1990];它按节点数计,所以"到不了"的结论与机器快慢无关(0006 按墙钟定预算时"没有路"时有时无)。
+ * <p><b>一段走到哪</b>:每次搜索到了目标、或到了一个估价比起点低 {@link #SEGMENT_BLOCKS} 格疾跑的节点就交出
+ * ({@link com.dwinovo.numen.pathing.search.Search#advance}),身体走着,接续从那里往下搜。
+ *
+ * <p><b>放不放弃看节点</b>:一趟的收场只有一个判据——总预算(按展开的节点数)用完还没到;另外是搜索证明了到不了。总预算是"按估价走完
+ * 要几段({@link #MIN_SEGMENTS} 段起)、每段展开典型的量({@link #SEGMENT_NODES})"的 {@link #SLACK} 倍。真实世界有限但很大,
+ * LRTA* 的"保证到达"要配一个总预算才有意义 [Korf 1990];它按节点数计,所以"到不了"的结论与机器快慢无关(0006 按墙钟定预算时"没有路"时有时无)。
  */
 final class Allowance {
 
@@ -41,10 +46,23 @@ final class Allowance {
      */
     static final int SEARCH_NODES = 200_000;
     /**
-     * 一趟的总预算:起点估价每一刻给这么多个节点。按每节点十微秒算,想的时间至多是按估价走完那段路的五分之一,
-     * 再多就是在一片到不了的地方里打转。
+     * 一段推进多少:这一段的终点,估价比起点低这么多格疾跑的耗时。靶场(10-29)上扫过 32、64、96 格:到达一样(27 条可达的 26 条),
+     * 64 与 96 的搜索总耗时比 32 少四成、路线价低一成,开始走的延迟三者相当;96 格时多数中距离一次搜到终点,难路上一段要搜得更久
+     * (峡谷底一段十五万个节点),取 64。
      */
-    static final int NODES_PER_TICK = 1_000;
+    static final int SEGMENT_BLOCKS = 64;
+    /**
+     * 一段典型展开几个节点。靶场(10-29,一段 64 格)上每次搜索展开数的九成分位约一万,难路(下峡谷底、盆地、三百格长路)
+     * 走完一段平均两千到四千个,峡谷底那段要七万多。
+     */
+    static final int SEGMENT_NODES = 20_000;
+    /** 总预算是"按估价走完所有段、每段展开典型的量"的几倍:留给绕路、接续证出死路后的重搜、难走的那几段。 */
+    static final int SLACK = 5;
+    /**
+     * 总预算至少按几段算:估价是下界,真实要走的路常比它远得多(峡谷底、石头里),近处的估价不到一段,只给一段的预算连一次绕路的
+     * 重搜都撑不住(靶场上峡谷底的那一趟估价不到一段,走完要展开十五万个节点)。
+     */
+    static final int MIN_SEGMENTS = 4;
 
     private final int fixed;
     private final SearchClock clock;
@@ -63,10 +81,18 @@ final class Allowance {
         this.clock = clock;
     }
 
-    /** 这一趟从估价 {@code estimate}(刻)的地方起头:总预算按它定(调用方指定了的不动);已经定下的不再改。 */
-    void begun(double estimate) {
+    /** 一段要推进多少估价(刻):{@link #SEGMENT_BLOCKS} 格疾跑的耗时。 */
+    static double advance(BodyStats body) {
+        return SEGMENT_BLOCKS * Kinematics.pace(body).sprint();
+    }
+
+    /**
+     * 这一趟从估价 {@code estimate}(刻)的地方起头,一段推进 {@code advance} 刻:总预算按它定(调用方指定了的不动);已经定下的不再改。
+     */
+    void begun(double estimate, double advance) {
         if (total == 0) {
-            total = (int) Math.min(Integer.MAX_VALUE, Math.max(SEARCH_NODES, Math.ceil(estimate) * NODES_PER_TICK));
+            double segments = Math.max(MIN_SEGMENTS, Math.ceil(estimate / advance));
+            total = (int) Math.min(Integer.MAX_VALUE, segments * SEGMENT_NODES * SLACK);
         }
     }
 

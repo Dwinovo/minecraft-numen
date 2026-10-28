@@ -586,7 +586,8 @@ public final class Driver {
         PathLog.debug("{} 派搜索 {} 从 {} 去 {} 时限 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
                 PathLog.ms(deadline.nanos()), PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
         Search search = new Search(view, model, from, goal, allowance.nodes(), favoring)
-                .remembering(memory.frozen()).after(ahead, course.cur()).within(deadline);
+                .advancing(Allowance.advance(model.body().stats())).remembering(memory.frozen()).after(ahead, course.cur())
+                .within(deadline);
         pendingSearch = search;
         purpose = why;
         pending = Searches.submit(search, why.urgency);
@@ -636,7 +637,7 @@ public final class Driver {
         }
         allowance.spend(result.expanded());
         if (Double.isFinite(result.startEstimate())) {
-            allowance.begun(result.startEstimate());
+            allowance.begun(result.startEstimate(), search.advance());
         }
         breathless |= result.breathless();
         boolean learned = memory.raise(result.raised());
@@ -727,7 +728,7 @@ public final class Driver {
         String why = result.blocking() == null || result.arrived() ? ""
                 : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
         String what = route == null ? "没交出路线"
-                : (result.arrived() ? "到目标 " : "往边界推进 ") + PathLog.route(route);
+                : (result.arrived() ? "到目标 " : result.reached() ? "到这一段的终点 " : "往边界推进 ") + PathLog.route(route);
         PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 时限 {} 用时 {}({}) 排队 {} 停因 {} {}{}", rig.who, purpose.label,
                 PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
                 search.deadline() == Deadline.NONE ? "-" : PathLog.ms(search.deadline().nanos()),

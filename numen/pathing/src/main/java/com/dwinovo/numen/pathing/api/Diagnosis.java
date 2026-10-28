@@ -52,7 +52,7 @@ final class Diagnosis {
             case BUDGET, TIME -> new Outcome.OutOfBudget(cause(failed, blocking));
             case UNLOADED -> new Outcome.Unloaded();
             case STRANDED -> new Outcome.Stranded(failed.start(), failed.view().getBlockState(failed.start()));
-            case EXHAUSTED, CANCELLED, ARRIVED -> {
+            case EXHAUSTED, CANCELLED, ARRIVED, SEGMENT -> {
                 Outcome breath = breathless ? breathless(failed, cancelled) : null;
                 yield breath != null ? breath : exhausted(failed, cause(failed, blocking), cancelled);
             }

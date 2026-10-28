@@ -13,20 +13,23 @@ class AllowanceTest {
 
     private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
 
+    /** 一段推进的估价(刻)。 */
+    private static final double ADVANCE = 10;
+
     @Test
-    void theTotalGrowsWithTheEstimate() {
+    void theTotalGrowsWithTheSegmentsLeft() {
         Allowance near = new Allowance(0, CLOCK);
-        near.begun(30);
+        near.begun(0.5 * ADVANCE, ADVANCE);
         Allowance far = new Allowance(0, CLOCK);
-        far.begun(1000);
-        assertEquals(Allowance.SEARCH_NODES, drain(near), "近处的也至少够搜满一次");
-        assertEquals(1000 * Allowance.NODES_PER_TICK, drain(far), "远的按估价给");
+        far.begun(9.5 * ADVANCE, ADVANCE);
+        assertTrue(drain(near) >= Allowance.SEARCH_NODES, "近处的也至少够搜满一次");
+        assertEquals(10L * Allowance.SEGMENT_NODES * Allowance.SLACK, drain(far), "远的按估价要走几段给");
     }
 
     @Test
     void aSpecifiedTotalIsNotRescaledByTheEstimate() {
         Allowance fixed = new Allowance(500, CLOCK);
-        fixed.begun(100_000);
+        fixed.begun(100_000, ADVANCE);
         assertEquals(500, drain(fixed));
     }
 
@@ -50,11 +53,13 @@ class AllowanceTest {
     @Test
     void restartingGivesTheNewGoalItsOwnTotal() {
         Allowance allowance = new Allowance(0, CLOCK);
-        allowance.begun(1000);
+        allowance.begun(1000 * ADVANCE, ADVANCE);
         allowance.spend(5);
         allowance.restart();
-        allowance.begun(30);
-        assertEquals(Allowance.SEARCH_NODES, drain(allowance));
+        allowance.begun(0.5 * ADVANCE, ADVANCE);
+        Allowance near = new Allowance(0, CLOCK);
+        near.begun(0.5 * ADVANCE, ADVANCE);
+        assertEquals(drain(near), drain(allowance), "重新开始的一趟和新来的一样");
     }
 
     @Test

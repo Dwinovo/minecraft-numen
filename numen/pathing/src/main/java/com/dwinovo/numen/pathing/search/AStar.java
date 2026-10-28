@@ -46,13 +46,14 @@ import net.minecraft.world.level.material.FluidState;
  *       ({@link #maneuver});许可在这次搜索里按格缓存({@link CostModel#searching});</li>
  *   <li><b>身体面对的世界</b>:展开一个节点时,前提读的是快照加上走到这个节点的最近 {@value #HISTORY} 步做过的改动——刚挖开的格是空的,
  *       刚垫下的块托着脚,斜着一级一级往山上凿台阶时,下一级脚下的格正是前几步自己挖开的。更早的步子已经离得远了,不叠;</li>
- *   <li><b>终止</b>只有几种:到了目标;这次的时限到了({@link Search#deadline},表是宿主给的 {@link SearchClock});展开节点的上限
- *       用完({@link Search#budget});能走到的都搜过了。加权 A*(Pohl 1970)交出的路线至多比最优贵 {@link #WEIGHT} 倍;不分段、
- *       也不先贪心拿一个解——Baritone 与 mineflayer-pathfinder 同样是一次朝终点、时限内交手里最好的;</li>
+ *   <li><b>终止</b>只有几种:到了目标;到了这一段的终点——一个估价比起点低 {@link Search#advance} 的节点(没憋着气),
+ *       远路一段一段地交、身体边走边接着搜;这次的时限到了({@link Search#deadline},表是宿主给的 {@link SearchClock});展开节点的上限
+ *       用完({@link Search#budget});能走到的都搜过了。估价按真终点算,段终点只是"推进够了"的停止判据,开放集的排法不因它变。
+ *       加权 A*(Pohl 1970)交出的路线至多比最优贵 {@link #WEIGHT} 倍;不先贪心拿一个解;</li>
  *   <li><b>没到目标</b>(时间到、上限用完、走得到的都搜过了、有路伸进没加载的区块):LSS-LRTA* [Koenig &amp; Sun 2009]。展开过的节点的
  *       估价抬高({@link Learning},交给宿主记进 {@link TripMemory}),交出的半程路线去哪、截到哪由 {@link HandOver} 定
  *       (边界上总价最小的节点,截到回得了头的地方);另记离目标最近的节点上朝目标的步子为什么被拒({@link SearchResult.Blocking}),收场时说缺什么;</li>
- *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、时间到、上限用完、搜完无路、有路伸进快照外没加载的区块。
+ *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、到了这一段的终点、时间到、上限用完、搜完无路、有路伸进快照外没加载的区块。
  *       一步的前提读到了没加载的列,它成不成立就不知道,这一步不走、结论记成"未加载";前提没读到那些列就定了的(规格没开这种
  *       走法、紧挨着的一列就挡住了),与那边是什么无关,不算;快判断只在节点四周读全了才断定成立或不成立,读不全的答"可能",取出时由精确判断去断;</li>
  *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
@@ -78,6 +79,7 @@ public final class AStar {
     /**
      * 加权的倍数:交出的路线至多比最优贵这么多倍。靶场(10-29,27 条可达路线)上扫过 1.2、1.5、2.0、2.5:到达 25/24/25/25 条,
      * 每节点 25.6/27.0/23.4/17.9 微秒,路线价合计相差不到 2%;2.5 时埋在岩石里的空腔一次搜索几百个节点就挖到,湖面、破碎地形一次搜到。
+     * 分段(一段 64 格)之后又扫过 4 与 8:到达不变,中距离路线价合计高 21% 与 32%。
      */
     static final double WEIGHT = 2.5;
     /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */
@@ -114,6 +116,10 @@ public final class AStar {
     private int closest = -1;
     /** 取出候选时精确判断的账。 */
     private final SearchResult.Checks checks = SearchResult.Checks.none();
+    /** 这一段的终点在估价上的位置:估价不高于它的节点(不是目标的成员也)算到了这一段的终点;只认目标时是负无穷。 */
+    private double segmentEnd;
+    /** 搜到的终点在目标里(不是这一段的终点)。 */
+    private boolean reachedGoal;
     /** 取出候选时一共做了几次精确判断:表按它与展开数折算这次搜索想了多久。 */
     private int judged;
     // 边:从展开过的节点出去的每一步成立的走法,抬高估价时用
@@ -155,11 +161,12 @@ public final class AStar {
         }
         probe = new Probe(view, new Recall(body));
         quick = new Quick(model, view);
+        segmentEnd = startEstimate - search.advance();
         // 表在真开跑时才开始走:排队的时间不算这次搜索想了多久
         int terminal = search(startStance, search.deadline().start(), cancelled);
         if (terminal >= 0) {
-            return new SearchResult(SearchResult.Stop.ARRIVED, route(terminal), expanded, breathless, startEstimate, null, null,
-                    checks);
+            return new SearchResult(reachedGoal ? SearchResult.Stop.ARRIVED : SearchResult.Stop.SEGMENT, route(terminal), expanded,
+                    breathless, startEstimate, null, null, checks);
         }
         if (stop == SearchResult.Stop.CANCELLED) {
             return new SearchResult(stop, null, expanded, breathless, startEstimate, null, null, checks);
@@ -173,7 +180,7 @@ public final class AStar {
         return g + WEIGHT * h;
     }
 
-    /** 跑这一遍:到了目标交出终点节点;没到为 -1,为什么停记在 {@link #stop}。 */
+    /** 跑这一遍:到了目标或这一段的终点交出终点节点;没到为 -1,为什么停记在 {@link #stop}。 */
     private int search(Stance startStance, SearchClock.Timer timer, BooleanSupplier cancelled) {
         BlockPos startPos = search.start();
         start = nodes.add(startPos.asLong(), 0, breath.band(search.air()), estimate.at(startPos));
@@ -219,8 +226,12 @@ public final class AStar {
                     nodes.f[current] = nodes.g[current] + stopping;
                     open.push(current);
                 } else {
+                    reachedGoal = true;
                     return current;
                 }
+            } else if (current != start && nodes.h[current] <= segmentEnd && nodes.air[current].held() <= 0) {
+                // 到了这一段的终点:估价比起点低一段,没憋着气(憋着气的节点不当终点:身体停在水下等下一段,接不上就困在那里)
+                return current;
             }
             if (expanded >= search.budget()) {
                 stop = SearchResult.Stop.BUDGET;
