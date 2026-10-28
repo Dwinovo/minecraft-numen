@@ -33,8 +33,7 @@ not get to pick freely.
 
 ## Proportions
 - an odd number of bays across the front (3, 5, 7); the centre bay is the door
-- roof rise 0.6–0.75 of half-span — measured off hand-built halls, and the
-  generator's `concave` curve already lands there
+- roof rise 0.6–0.75 of half-span, concave — measured off hand-built halls
 - eaves overhang 2–3, deeper at the corners
 - rafter ends every 2 cells along the eave, which is the spacing the slope itself
   uses

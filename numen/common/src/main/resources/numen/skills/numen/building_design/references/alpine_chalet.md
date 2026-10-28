@@ -23,7 +23,7 @@ timber sits on top, and the sunny side gets a long balcony with a carved rail.
 
 ## Signature moves
 - **Enormous eaves** — the roof extends far past the walls on all sides. This is
-  the first thing to get right.
+  what the style is read by first.
 - **Exposed purlins** — the roof beams visibly stick out past the gable wall.
 - **Full-width balcony** with a rail of fences and posts.
 - **Stone below, wood above** — a clear horizontal break between the two.

@@ -23,7 +23,7 @@ larger than the walls holding it up.
 
 ## Signature moves
 - **Jetty** — the upper storey oversails the lower by a block. Instantly
-  medieval, and it costs two ops.
+  medieval.
 - **Stone base, timber above** — a course or two of rough stone before the wood
   begins, because damp rots timber.
 - **Crooked repetition** — vary post spacing and wall height by a block here and
