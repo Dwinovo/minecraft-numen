@@ -6,9 +6,12 @@ import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -21,9 +24,13 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
 
+import java.util.List;
+import java.util.function.BiConsumer;
+
 /**
- * 执行复核:规划之后、执行之前世界变了,那一步开始前在活世界上用同一个前提复核,不成立就停下,结局点出哪一格、什么方块、
- * 哪一条前提;规划看不见的东西让身体做不到那一步时,同一步几次走不下去就收场,不无休止地重搜同一条路。
+ * 执行复核:规划之后、执行之前世界变了,每一步开始前在活世界上用同一个前提往前核接下来几步,不成立就停下,结局点出哪一格、什么方块、
+ * 哪一条前提;走在路上前方几步的格被改了,走到跟前之前就停下重规划;规划看不见的东西让身体做不到那一步时,同一步几次走不下去就收场,
+ * 不无休止地重搜同一条路。
  */
 public class RecheckGameTests {
 
@@ -90,5 +97,67 @@ public class RecheckGameTests {
                     }
                 })
                 .then(r -> boat.discard());
+    }
+
+    /**
+     * 平地上一条朝 +x 的直路,走过 x = 10 时把路线上往后第 3 步的落点 {@code change} 掉:她因往前核不成立停下、从脚下重规划,
+     * 最后照样到达。往前核不成立的那一刻,身体还没走到改掉的那一步的起点。
+     */
+    private static Trial.Run changesAhead(GameTestHelper helper, BiConsumer<Trial, BlockPos> change) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = t.body(4, 1, 5);
+        Maneuver[] changed = {null};
+        boolean[] noticed = {false};
+        return t.go(body, Goals.at(t.at(30, 1, 5)), RouteSpec.defaults()).within(600)
+                .during(r -> {
+                    if (changed[0] == null) {
+                        List<Route.Leg> legs = r.navigation.remaining();
+                        if (r.body.getX() - t.origin.getX() >= 10 && legs.size() > 3) {
+                            changed[0] = legs.get(3).maneuver();
+                            change.accept(t, changed[0].to().subtract(t.origin));
+                        }
+                        return;
+                    }
+                    if (!noticed[0] && r.navigation.report().journal().replans(Journal.Replan.AHEAD) > 0) {
+                        noticed[0] = true;
+                        if (r.body.getX() >= changed[0].from().getX()) {
+                            throw new GameTestAssertException("走到了改掉的那一步 " + t.rel(changed[0].from()) + "→" + t.rel(changed[0].to())
+                                    + " 的起点才停下,身体在 " + t.rel(r.body.blockPosition()));
+                        }
+                    }
+                })
+                .arrives().then(r -> {
+                    if (changed[0] == null) {
+                        throw new GameTestAssertException("场景没起作用:没在路上改到格子");
+                    }
+                    if (r.report.journal().replans(Journal.Replan.AHEAD) < 1) {
+                        throw new GameTestAssertException("没有因往前核不成立重规划:" + r.report.journal().replans());
+                    }
+                });
+    }
+
+    /** 前方第 3 步的落点被砌上两格高的石头:那一步不成立,她没走到那一步的起点就停下。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void replans_before_a_block_placed_three_steps_ahead(GameTestHelper helper) {
+        changesAhead(helper, (t, at) -> {
+            t.change(at.getX(), at.getY(), at.getZ(), Blocks.STONE.defaultBlockState());
+            t.change(at.getX(), at.getY() + 1, at.getZ(), Blocks.STONE.defaultBlockState());
+        });
+    }
+
+    /** 前方第 3 步落点脚下的地板被挖开:那一步不成立,她没走到那一步的起点就停下。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void replans_before_the_floor_dug_out_three_steps_ahead(GameTestHelper helper) {
+        changesAhead(helper, (t, at) -> t.change(at.getX(), at.getY() - 1, at.getZ(), Blocks.AIR.defaultBlockState()));
+    }
+
+    /**
+     * 前方第 3 步落点脚下的那块地板换成一格水(像挖开了倒进一桶水):落点托不住身体,那一步不成立,她没走到那一步的起点就停下。
+     * 水往地板底下流开是原版自己流的,对账时不算。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void replans_before_water_poured_three_steps_ahead(GameTestHelper helper) {
+        changesAhead(helper, (t, at) -> t.change(at.getX(), at.getY() - 1, at.getZ(), Blocks.WATER.defaultBlockState()))
+                .passive((before, now) -> now.getFluidState().is(net.minecraft.tags.FluidTags.WATER));
     }
 }
