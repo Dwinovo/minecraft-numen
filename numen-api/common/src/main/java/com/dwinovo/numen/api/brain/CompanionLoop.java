@@ -167,7 +167,7 @@ public final class CompanionLoop {
         this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), parts.tools(),
                 this::receiptAfterCut);
         this.tokens = new TokenLedger(companion, new JsonDoc(home.file(STATS), JsonDoc.Format.of(1), home.io()));
-        this.compactor = new Compactor(companion.toString(), convo, log, this::modelWindow);
+        this.compactor = new Compactor(companion.toString(), convo, log, () -> parts.mind().endpoint(providerId));
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
         this.goals = new GoalSteward(companion.toString(), loop, convo, queue, runtime::xml,
                 runtime::bodyOnFiniteTask, this::persistGoal, readGoal());
