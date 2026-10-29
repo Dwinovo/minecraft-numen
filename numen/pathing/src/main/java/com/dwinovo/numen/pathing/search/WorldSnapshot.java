@@ -4,7 +4,6 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.ObjIntConsumer;
 import java.util.function.Predicate;
 
 import com.dwinovo.numen.pathing.world.CellFlags;
@@ -172,7 +171,7 @@ public final class WorldSnapshot implements SearchView {
      * 全局调色板时调色板答"也许有",逐格找一遍。只看 {@code [fromY, toY)} 里的层。
      */
     @Override
-    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor) {
+    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, BlockVisitor visitor) {
         List<BlockState> hits = new ArrayList<>(4);
         BlockState[] scratch = new BlockState[256];
         int firstSection = Math.max(0, (fromY >> 4) - minSection);
@@ -203,9 +202,12 @@ public final class WorldSnapshot implements SearchView {
                 for (int y = Math.max(0, fromY - bottom); y < Math.min(16, toY - bottom); y++) {
                     // 搜索读过的层现成的就用;没读过的解到一块共用的缓冲里,扫完就丢(估价扫的段大多搜索一辈子也不会读)
                     BlockState[] known = (BlockState[]) LAYER.getAcquire(layers[c], s << 4 | y);
-                    for (BlockState state : known != null ? known : decode(section, y, scratch)) {
+                    BlockState[] layer = known != null ? known : decode(section, y, scratch);
+                    for (int cell = 0; cell < 256; cell++) {
+                        BlockState state = layer[cell];
                         if (everything ? wanted.test(state) : hits.contains(state)) {
-                            visitor.accept(state, bottom + y);
+                            visitor.accept(state, ((minChunkX + c / side) << 4) + (cell & 15), bottom + y,
+                                    ((minChunkZ + c % side) << 4) + (cell >> 4));
                         }
                     }
                 }

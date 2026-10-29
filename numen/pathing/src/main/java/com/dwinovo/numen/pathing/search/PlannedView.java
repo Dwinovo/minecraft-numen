@@ -1,7 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
 import java.util.List;
-import java.util.function.ObjIntConsumer;
 import java.util.function.Predicate;
 
 import com.dwinovo.numen.pathing.plan.Edit;
@@ -88,11 +87,11 @@ final class PlannedView implements SearchView {
     }
 
     @Override
-    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor) {
+    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, BlockVisitor visitor) {
         base.forEachBlock(fromY, toY, wanted, visitor);
         after.forEachChanged((pos, state) -> {
             if (pos.getY() >= fromY && pos.getY() < toY && wanted.test(state)) {
-                visitor.accept(state, pos.getY());
+                visitor.accept(state, pos.getX(), pos.getY(), pos.getZ());
             }
         });
     }

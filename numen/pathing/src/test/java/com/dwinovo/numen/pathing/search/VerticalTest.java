@@ -106,6 +106,26 @@ class VerticalTest {
         assertTrue(Vertical.of(wet, model, deep).floor(Y + 12) < Vertical.of(dry, model, deep).floor(Y + 12));
     }
 
+    /**
+     * 水只在落得进去的地方才免去落差上限:水潭上面压着整块屋顶(洞穴里的水),从高处落不进去,落脚照常有上限;屋顶上开一个洞、
+     * 水潭头顶空着,就落得进去。
+     */
+    @Test
+    void waterOnALevelOnlyLiftsTheFallLimitWhereABodyCanFallIntoIt() {
+        CostModel model = model(RouteSpec.defaults());
+        Goal deep = Goals.level(Y - 4);
+        TestWorld open = new TestWorld().floor(-4, -4, 4, 4, Y - 5).fill(-4, Y - 4, -4, 4, Y - 1, 4, Blocks.WATER.defaultBlockState());
+        TestWorld dry = new TestWorld().floor(-4, -4, 4, 4, Y - 5);
+        TestWorld roofed = new TestWorld().floor(-4, -4, 4, 4, Y - 5).fill(-4, Y - 4, -4, 4, Y - 1, 4, Blocks.WATER.defaultBlockState())
+                .fill(-4, Y, -4, 4, Y, 4, Blocks.STONE.defaultBlockState());
+        TestWorld holed = new TestWorld().floor(-4, -4, 4, 4, Y - 5).fill(-4, Y - 4, -4, 4, Y - 1, 4, Blocks.WATER.defaultBlockState())
+                .fill(-4, Y, -4, 4, Y, 4, Blocks.STONE.defaultBlockState()).set(0, Y, 0, Blocks.AIR.defaultBlockState());
+        double capped = Vertical.of(dry, model, deep).floor(Y + 12);
+        assertEquals(capped, Vertical.of(roofed, model, deep).floor(Y + 12), 1e-9, "屋顶盖着,落不进水里");
+        assertEquals(Vertical.of(open, model, deep).floor(Y + 12), Vertical.of(holed, model, deep).floor(Y + 12), 1e-9, "头顶有洞,落得进去");
+        assertTrue(Vertical.of(holed, model, deep).floor(Y + 12) < capped);
+    }
+
     /** 身上带着水桶:摔不起的坠落可以倒水接住,没有上限。 */
     @Test
     void aWaterBucketRemovesTheFallLimitToo() {

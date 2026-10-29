@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.ObjIntConsumer;
 import java.util.function.Predicate;
 
 import com.dwinovo.numen.pathing.search.SearchView;
@@ -74,15 +73,16 @@ public final class TestWorld implements SearchView {
     }
 
     @Override
-    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor) {
+    public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, BlockVisitor visitor) {
         blocks.forEach((pos, state) -> {
             if (pos.getY() >= fromY && pos.getY() < toY && wanted.test(state)) {
-                visitor.accept(state, pos.getY());
+                visitor.accept(state, pos.getX(), pos.getY(), pos.getZ());
             }
         });
+        // 往四面无边铺开的地板只在原点那一列回调:测试里的地板都是实心的,没有值得逐列找的
         if (wanted.test(ground)) {
             for (int y = Math.max(getMinBuildHeight(), fromY); y <= groundTop && y < toY; y++) {
-                visitor.accept(ground, y);
+                visitor.accept(ground, 0, y, 0);
             }
         }
     }
