@@ -92,6 +92,7 @@ public final class Journey {
     /** 路程回执:停在 {@code pos}、离要去的地方还差 {@code distanceLeft} 格,加上这本账里挖了几格、放了几格、裁定了什么。 */
     public Walked walked(Vec3 pos, double distanceLeft) {
         NavText.Tally edits = NavText.tally(entries);
-        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), rulings);
+        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), edits.dugCells(), edits.placedCells(),
+                rulings);
     }
 }

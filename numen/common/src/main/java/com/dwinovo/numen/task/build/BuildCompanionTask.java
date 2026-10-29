@@ -913,8 +913,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected Placed value() {
         Map<Item, Integer> shortfall = r.consumeMaterials
                 ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
+        com.dwinovo.numen.nav.Walked walk = walked(player.position(), 0);
         return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
-                r.setDirectly(), outstanding(), r.replaced(), r.broken(),
+                r.setDirectly(), outstanding(), r.replaced(), r.broken(), walk.dugAt(), walk.placedAt(),
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
@@ -936,13 +937,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Blocks that stood there and were swapped for the right one.")
                          int replaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell broken while walking up to the site, in order; the "
+                                 + "receipt text lists only the first few of each kind.") List<BlockPos> walkDugAt,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell placed while walking up to the site (bridge, pillar "
+                                 + "and step blocks, not the design), in order; the receipt text lists only the first few "
+                                 + "of each kind.") List<BlockPos> walkPlacedAt,
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
                          @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
 
         /** 要的样子已经立着,什么都没放。 */
-        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, Optional.empty(), Optional.empty(),
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, List.of(), List.of(), Optional.empty(), Optional.empty(),
                 Optional.empty());
     }
 

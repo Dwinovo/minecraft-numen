@@ -2027,6 +2027,40 @@ public class BuildGameTests {
     }
 
     /**
+     * 要放的一格在一座她上不去的基岩台顶:她为够着它垫柱子上去,结构化回执的 {@code walk_placed_at} 列出垫的每一块(都还立在世界里),
+     * 要放的那一格不在其中。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_build")
+    public static void build_place_lists_every_cell_it_laid_on_the_way(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.BEDROCK.defaultBlockState());
+                }
+            }
+        }
+        BlockPos cell = helper.absolutePos(new BlockPos(11, 5, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_laylist", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        companion.getInventory().add(new ItemStack(Items.STONE, 1));
+        ToolRun run = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(cell) + "}})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "numen.build.place has not finished");
+            helper.assertTrue(run.succeeded(), "numen.build.place failed: " + run.outcome());
+            var result = run.result(BuildCompanionTask.Placed.class);
+            helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE), "the cell was not placed: " + run.outcome());
+            helper.assertTrue(!result.walkPlacedAt().isEmpty(), "no cell laid on the way is listed: " + result);
+            for (BlockPos laid : result.walkPlacedAt()) {
+                helper.assertTrue(level.getBlockState(laid).is(Blocks.DIRT) && !laid.equals(cell),
+                        "walk_placed_at names " + laid.toShortString() + ", which is not a pillar block of hers");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 一次 {@code numen.build.place} 里先放墙、再去放墙另一侧够不着的一格:走过去的路线不挖刚放好的墙。墙两格高、七格长横在她和
      * 那一格之间,创造模式挖一块几乎不花时间,路线若把刚放下的墙当地形,一定直接挖穿——绕开靠的是放置记号。
      */
