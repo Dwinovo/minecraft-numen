@@ -2,12 +2,17 @@ package com.dwinovo.numen.api.agent.llm;
 
 import com.dwinovo.numen.api.agent.catalog.Api;
 import com.dwinovo.numen.api.agent.catalog.ThinkingTable;
+import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.Compat;
 import com.dwinovo.numen.api.agent.provider.Compats;
+import com.dwinovo.numen.api.agent.provider.LlmProvider;
 import com.dwinovo.numen.api.agent.provider.ModelSpec;
 import com.dwinovo.numen.api.agent.provider.RequestOptions;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
 
+import com.google.gson.JsonObject;
+
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -66,5 +71,15 @@ public record LlmEndpoint(String providerId, String baseUrl, Map<String, String>
      */
     public String origin() {
         return api().id() + "/" + providerId + "/" + model.id();
+    }
+
+    /**
+     * 一条助手回合发给这个端点时的线格式——请求怎么写它、压缩估算按什么量它,都问这一处。
+     * 上一家的私货(思考签名、reasoning_content)只有产它的那家认:出处对不上就脱掉再发,
+     * 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
+     */
+    public List<JsonObject> assistantWireItems(AssistantTurn turn) {
+        return LlmProvider.of(compat).assistantToRequestItems(
+                turn.sameOrigin(origin()) ? turn : turn.withoutProviderPrivateFields());
     }
 }

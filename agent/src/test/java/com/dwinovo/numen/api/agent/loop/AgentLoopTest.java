@@ -276,6 +276,19 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void aManualCompactionWithNothingToCompactSendsNoRequestAndLeavesTheLoopIdle() {
+            memory.nothingToCompact = true;
+            control(EventTypes.COMPACT);
+
+            assertEquals(List.of(false), memory.compactions);
+            assertTrue(model.calls.isEmpty(), "没有可压的就不发摘要请求");
+            assertNull(loop.status().phase());
+
+            ownerSays("好了没");
+            assertEquals(1, model.calls.size(), "之后的话照常开 run");
+        }
+
+        @Test
         void wordsBehindAControlEntryWaitForIt() {
             ownerSays("去挖矿");
             Call first = model.last();

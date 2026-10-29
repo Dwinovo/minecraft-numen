@@ -166,10 +166,7 @@ public final class NumenLlmClient {
         for (ConvoState.Msg m : sendable) {
             switch (m) {
                 case ConvoState.Msg.User u -> wire.add(provider.buildUserMessage(u.content()));
-                // 上一家的私货(思考签名、reasoning_content)只有产它的那家认:换过模型就脱掉再发。
-                // 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
-                case ConvoState.Msg.Assistant a -> wire.addAll(provider.assistantToRequestItems(
-                        a.turn().sameOrigin(endpoint.origin()) ? a.turn() : a.turn().withoutProviderPrivateFields()));
+                case ConvoState.Msg.Assistant a -> wire.addAll(endpoint.assistantWireItems(a.turn()));
                 case ConvoState.Msg.Tool t -> wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
                 case ConvoState.Msg.Halt h -> throw new IllegalStateException(
                         "ProtocolView.forWire never emits Halt: " + h.reason());

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -162,6 +163,8 @@ public abstract class LoopHarness {
 
     public final class FakeMemory implements MemoryPort {
         public boolean due;
+        /** 切完没有新消息可总结:不压,不发请求。 */
+        public boolean nothingToCompact;
         public int clears;
         public int applied;
         public final List<Boolean> compactions = new ArrayList<>();
@@ -171,14 +174,17 @@ public abstract class LoopHarness {
 
         @Override
         public boolean compactionDue() {
-            return due;
+            return due && !nothingToCompact;   // 和真实的闸门一样:压不出东西就不放行
         }
 
         @Override
-        public Compaction compaction(boolean auto) {
+        public Optional<Compaction> compaction(boolean auto) {
             compactions.add(auto);
             historyAtSplit = transcript.snapshot();
-            return new Compaction() {
+            if (nothingToCompact) {
+                return Optional.empty();
+            }
+            return Optional.of(new Compaction() {
                 @Override
                 public ModelRequest request() {
                     return new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact");
@@ -200,7 +206,7 @@ public abstract class LoopHarness {
                     failures.add(why);
                     due = false;
                 }
-            };
+            });
         }
 
         @Override

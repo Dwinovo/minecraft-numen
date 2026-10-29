@@ -515,10 +515,14 @@ public final class AgentLoop {
 
     /**
      * 发一次整理记忆,落地后接着 {@code then}(调用失败或摘要为空也接着——历史不动,照原样往下走)。
-     * 被切断的话结果作废,{@code then} 不再执行。
+     * 被切断的话结果作废,{@code then} 不再执行。没有可压的就不发请求,直接接着 {@code then}。
      */
     private void compact(boolean auto, Runnable then) {
-        MemoryPort.Compaction compaction = memory.compaction(auto);
+        MemoryPort.Compaction compaction = memory.compaction(auto).orElse(null);
+        if (compaction == null) {
+            then.run();
+            return;
+        }
         run.phase = Phase.COMPACT;
         compactChars = 0;
         long id = run.id;

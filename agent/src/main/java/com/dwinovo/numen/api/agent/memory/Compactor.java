@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.agent.memory;
 import com.dwinovo.numen.api.agent.llm.CompactSplit;
 import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.MemoryPort;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
@@ -14,7 +15,8 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.function.IntSupplier;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * 上下文整理——循环内核的 {@link MemoryPort}:什么时候该自动压缩、怎么切、压缩提示怎么写、摘要怎么落地、
@@ -24,7 +26,7 @@ import java.util.function.IntSupplier;
  * <p>自动压缩的判据是上一次对话请求的实测体量({@link #on} 从 {@code ModelUsed} 里记下);服务端不报用量时
  * 退到本地估算,好让闸门总能落下来。整理或清空之后这个数不再作数,熔断也从头计。
  *
- * <p>纯 JVM:窗口多大由宿主给({@code contextWindow}),落盘走 {@link ConvoLog}。
+ * <p>纯 JVM:窗口多大、历史怎么量,都取自她此刻绑定的端点({@code endpoint},宿主给),落盘走 {@link ConvoLog}。
  */
 public final class Compactor implements MemoryPort {
 
@@ -103,7 +105,7 @@ public final class Compactor implements MemoryPort {
     private final String name;
     private final ConvoState convo;
     private final ConvoLog log;
-    private final IntSupplier contextWindow;
+    private final Supplier<LlmEndpoint> endpoint;
     /** 上一次对话请求的实测体量(服务端报的 prompt tokens);0 = 还不知道。 */
     private long lastPromptTokens;
     /** 自动压缩连着失败的次数——熔断用。 */
@@ -113,13 +115,13 @@ public final class Compactor implements MemoryPort {
      * @param name          日志里认这只同伴用的名字
      * @param convo         会话历史;压缩与清空换的就是它
      * @param log           会话日志;压缩与清空的边界落在这里
-     * @param contextWindow 这只同伴绑定的模型的上下文窗口
+     * @param endpoint      这只同伴此刻绑定的端点:上下文窗口取自它,历史按它真正会发出去的样子估量
      */
-    public Compactor(String name, ConvoState convo, ConvoLog log, IntSupplier contextWindow) {
+    public Compactor(String name, ConvoState convo, ConvoLog log, Supplier<LlmEndpoint> endpoint) {
         this.name = name;
         this.convo = convo;
         this.log = log;
-        this.contextWindow = contextWindow;
+        this.endpoint = endpoint;
     }
 
     /**
@@ -145,7 +147,7 @@ public final class Compactor implements MemoryPort {
 
     /** 上下文水位百分比:上一次请求的实测体量占窗口多少;用量或窗口未知时返回 0。 */
     public int contextPercent() {
-        int window = contextWindow.getAsInt();
+        int window = endpoint.get().contextWindow();
         if (lastPromptTokens <= 0 || window <= 0) return 0;
         return Math.min(100, Math.round(lastPromptTokens * 100f / window));
     }
@@ -158,12 +160,15 @@ public final class Compactor implements MemoryPort {
      */
     @Override
     public boolean compactionDue() {
-        int window = contextWindow.getAsInt();
+        LlmEndpoint current = endpoint.get();
+        int window = current.contextWindow();
         List<ConvoState.Msg> history = convo.snapshot();
-        long contextTokens = lastPromptTokens > 0 ? lastPromptTokens : estimateContextTokens(history);
+        long contextTokens = lastPromptTokens > 0 ? lastPromptTokens : estimateContextTokens(history, current);
+        // 切分后没有新消息可总结(只剩上一份摘要)时压不出东西:同一份判据 plan 给,压了也是白烧一次请求
         boolean due = contextTokens >= window - AUTO_COMPACT_BUFFER_TOKENS
                 && history.size() >= MIN_COMPACT_MESSAGES
-                && failures < MAX_COMPACT_FAILURES;
+                && failures < MAX_COMPACT_FAILURES
+                && plan(history, current) != null;
         if (due) {
             AiLog.LOG.info("[numen-entity#{}] auto-compacting: {} context {} tokens >= {} - {}",
                     name, lastPromptTokens > 0 ? "measured" : "estimated",
@@ -173,37 +178,62 @@ public final class Compactor implements MemoryPort {
     }
 
     /**
-     * Cut the summarization call: the OLDER span of the history + the compact prompt as the final
-     * user message, NO tools, a minimal system prompt (skills XML and the persona would only waste
-     * the very tokens we're trying to reclaim). 最近约 {@link #KEEP_RECENT_TOKENS} 的消息不进请求也不被
-     * 替换——它们原文跟在摘要之后(切分规则见 {@link CompactSplit})。整段都在近段预算内时(基本只有
-     * 手动 /compact 会遇到)退化为全量总结,只逐字保留末尾那句回答。压缩期间内核不往历史里写,
-     * 切好的这一份到摘要落地时仍然成立。
+     * 这一次压缩切出来的三份:{@code toSummarize} 是要总结的新消息,{@code previous} 是上一份摘要
+     * (没有则 null),{@code kept} 是原文跟在摘要之后的近段。
      */
-    @Override
-    public Compaction compaction(boolean auto) {
-        List<ConvoState.Msg> history = convo.snapshot();
-        CompactSplit.Split split = CompactSplit.byRecentBudget(history, KEEP_RECENT_TOKENS);
-        final List<ConvoState.Msg> toSummarize;
+    private record Plan(List<ConvoState.Msg> toSummarize, String previous, List<ConvoState.Msg> kept) {}
+
+    /**
+     * 切分并摘出上一份摘要;<b>除上一份摘要外没有新消息可总结就返回 null</b>——不压、不调模型
+     * (参考 pi 的 prepareCompaction)。自动闸门与 {@link #compaction} 共用这一处判据,
+     * 所以闸门不会在"压不出东西"时反复放行。
+     *
+     * <p>最近约 {@link #KEEP_RECENT_TOKENS} 的消息原文保留(切分规则见 {@link CompactSplit},按真正发出去的量算,
+     * 回传的思考也在内)。整段都在近段预算内时(基本只有手动 /compact 会遇到)退化为全量总结,
+     * 只逐字保留末尾那句回答。
+     */
+    private Plan plan(List<ConvoState.Msg> history, LlmEndpoint current) {
+        CompactSplit.Split split = CompactSplit.byRecentBudget(history, KEEP_RECENT_TOKENS, current);
+        final List<ConvoState.Msg> older;
         final List<ConvoState.Msg> kept;
         if (split.toSummarize().isEmpty()) {
-            toSummarize = new ArrayList<>(history);
-            kept = preservedTail();
-            toSummarize.removeAll(kept);
+            kept = preservedTail(history);
+            older = history.subList(0, history.size() - kept.size());
         } else {
-            toSummarize = new ArrayList<>(split.toSummarize());
+            older = split.toSummarize();
             kept = split.kept();
         }
         // 上一份摘要摘出来单独给:它是累积的账,要在它之上更新,不是再被总结一遍
         String previous = null;
-        for (java.util.Iterator<ConvoState.Msg> it = toSummarize.iterator(); it.hasNext(); ) {
-            ConvoState.Msg msg = it.next();
+        List<ConvoState.Msg> toSummarize = new ArrayList<>();
+        for (ConvoState.Msg msg : older) {
             if (msg instanceof ConvoState.Msg.User u && u.content() != null
                     && u.content().startsWith(SUMMARY_HEADER)) {
                 previous = u.content().substring(SUMMARY_HEADER.length());
-                it.remove();
+            } else {
+                toSummarize.add(msg);
             }
         }
+        return toSummarize.isEmpty() ? null : new Plan(toSummarize, previous, kept);
+    }
+
+    /**
+     * Cut the summarization call: the OLDER span of the history + the compact prompt as the final
+     * user message, NO tools, a minimal system prompt (skills XML and the persona would only waste
+     * the very tokens we're trying to reclaim). 近段原文不进请求也不被替换(切法见 {@link #plan})。
+     * 压缩期间内核不往历史里写,切好的这一份到摘要落地时仍然成立。没有新消息可总结时返回空。
+     */
+    @Override
+    public Optional<Compaction> compaction(boolean auto) {
+        Plan plan = plan(convo.snapshot(), endpoint.get());
+        if (plan == null) {
+            AiLog.LOG.info("[numen-entity#{}] compaction skipped ({}): nothing new since the last summary",
+                    name, auto ? "auto" : "manual");
+            return Optional.empty();
+        }
+        final List<ConvoState.Msg> toSummarize = plan.toSummarize();
+        final String previous = plan.previous();
+        final List<ConvoState.Msg> kept = plan.kept();
         List<ConvoState.Msg> request = new ArrayList<>();
         if (previous != null) {
             request.add(new ConvoState.Msg.User("""
@@ -217,7 +247,7 @@ public final class Compactor implements MemoryPort {
                 name, auto ? "auto" : "manual", previous == null ? "summarizing" : "updating over last summary,",
                 toSummarize.size(), kept.size());
         final long startMs = System.currentTimeMillis();
-        return new Compaction() {
+        return Optional.of(new Compaction() {
             @Override
             public ModelRequest request() {
                 return new ModelRequest(request, List.of(), COMPACT_SYSTEM_PROMPT);
@@ -269,7 +299,7 @@ public final class Compactor implements MemoryPort {
                 AiLog.LOG.warn("[numen-entity#{}] compaction failed ({}/{}): {}",
                         name, failures, MAX_COMPACT_FAILURES, why);
             }
-        };
+        });
     }
 
     /**
@@ -290,8 +320,8 @@ public final class Compactor implements MemoryPort {
      * 正常就是以一句回答收尾。这一截自己必须合乎协议——带工具调用却没有结果的回复、孤零零的工具结果,
      * 下一次请求都会被拒。
      */
-    private List<ConvoState.Msg> preservedTail() {
-        if (convo.lastMessage() instanceof ConvoState.Msg.Assistant a
+    private static List<ConvoState.Msg> preservedTail(List<ConvoState.Msg> history) {
+        if (!history.isEmpty() && history.get(history.size() - 1) instanceof ConvoState.Msg.Assistant a
                 && !a.turn().hasToolCalls()) {
             return List.of(a);
         }
@@ -312,10 +342,10 @@ public final class Compactor implements MemoryPort {
      * the 13k {@link #AUTO_COMPACT_BUFFER_TOKENS} absorbs the error; what
      * matters is that the auto gate fires AT ALL without a usage frame.
      */
-    private static int estimateContextTokens(List<ConvoState.Msg> history) {
+    private static int estimateContextTokens(List<ConvoState.Msg> history, LlmEndpoint current) {
         // 字尺只有一把:与压缩切分共用 CompactSplit 的估算(CJK ~1 token/字、ASCII ~4 字符/token、
         // 每条 8 token 结构开销),这里只加系统提示/工具表的固定开销。
-        return CompactSplit.estimateTokens(history) + ESTIMATED_FIXED_OVERHEAD_TOKENS;
+        return CompactSplit.estimateTokens(history, current) + ESTIMATED_FIXED_OVERHEAD_TOKENS;
     }
 
     /**
