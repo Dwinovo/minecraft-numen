@@ -125,7 +125,7 @@ class EstimateConsistencyTest {
         scenes.add(new Scene("一级台", field().fill(-1, Y, -8, 0, Y, 8, STONE), plain, around));
         TestWorld tall = field().fill(-1, Y, -8, 1, Y + 7, 8, STONE);
         scenes.add(new Scene("八格高的台(摔不起,下不去)", tall, plain, around));
-        scenes.add(new Scene("八格高的台(许落十格)", tall, Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(10).build()), around));
+        scenes.add(new Scene("八格高的台(愿受 7 点伤)", tall, Fixtures.model(RouteSpec.defaults().edit().maxFallDamage(7).build()), around));
 
         // 土径与耕地:顶面离格底不到半格的矮块,整块与它相邻时落差只有几分之一格
         TestWorld paths = field().fill(4, Y - 1, -8, 24, Y - 1, 8, Blocks.DIRT_PATH.defaultBlockState());
@@ -149,7 +149,7 @@ class EstimateConsistencyTest {
         // 十格高的台旁边一池水:落进水里不摔,落多高都行
         TestWorld plunge = new TestWorld().floor(-6, -8, 12, 8, Y - 4).fill(-6, Y - 3, -8, 0, Y - 1, 8, STONE)
                 .fill(1, Y - 3, -8, 8, Y - 1, 8, Blocks.WATER.defaultBlockState()).fill(-1, Y, -8, 0, Y + 9, 8, STONE);
-        scenes.add(new Scene("高台落进水里", plunge, Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(3).build()), goals(-4, -2, 3, 9)));
+        scenes.add(new Scene("高台落进水里", plunge, Fixtures.model(RouteSpec.defaults()), goals(-4, -2, 3, 9)));
 
         // 垫柱:许放不许挖,身上带着圆石
         CostModel pillaring = Fixtures.withCobble(RouteSpec.defaults().edit().place(true).consent(false).build());

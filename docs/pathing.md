@@ -129,7 +129,7 @@ A*、目标族、时钟端口与节点上限、异步派发与区块快照。
   往上一个节点是跳上去的一步:起跳间隔(`Kinematics.jumpCycleTicks`,10 刻)加规格的起跳罚分(2)减去水平底价已经付了的疾跑一格(出厂 8.44 刻);
   这一层快照里出现过顶面离下一格底不到迈步高度的方块(下半砖、楼梯、土径,`Footing.tops`)就不用跳,为零;许跑酷只剩起跳罚分。
   往下 n 个节点是把 n 拆成若干次落脚、每次付"走出边沿 + 落下去的工夫(`Kinematics.fallLandingTicks`)− 疾跑一格"、总和最小;一次落脚的落差
-  至少是节点数减去落脚那一层落脚高度的小数部分,最高是规格的无水落差,落脚那一层出现过液体、可攀爬的方块或身上带水桶则不受这个上限。
+  至少是节点数减去落脚那一层落脚高度的小数部分,最高是身体在规格愿意承受的摔伤下换算出的落差(`CostModel.maxFallDrop`),落脚那一层出现过液体、可攀爬的方块、落上去比石头摔得轻的方块或身上带水桶则不受这个上限。
   斜走不升降节点,它的落差由跳与落带过。表按层在开搜时读一遍快照(`SearchView.forEachBlock`,只扫调色板里有这些方块的方块段)算好,
   每个节点只查表。
 一次搜索没到目标时,展开过的格子的估价抬高(`Learning`),增量记在这一趟的记忆里(`TripMemory`),以后所有搜索的估价都是"以上三样加这里的增量"。
@@ -506,7 +506,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 - 流水按原版水流判：悬空、四周无依托的下落水柱水流为零，算静水;要确认这对水里的动作合不合适。
 - 细雪一律按不穿皮靴处理;`BodyStats` 里没有装备信息，要不要进身体快照。
 - 起跳是保守近似(先竖直升到最高点再平移);碰撞箱随身体变化的方块按起点脚高取形状。
-- `RouteSpec.maxFallHeightNoWater` 原样保留，要和第十二节第 8 条"摔落上限只在一处"对齐。
+- `RouteSpec` 的摔落上限与第十二节第 8 条"摔落上限只在一处"对齐:规格只说愿意承受的摔伤 `maxFallDamage`,落差由身体换算。
 - 点中会被使用的方块(箱子、门等)要潜行才能贴着放，归执行层。
 
 ### 第二批(09-27,`pathing-rewrite` 上 61784a26..ee6b86ee)
@@ -529,8 +529,9 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
   与 `Player.getDestroySpeed`(效率附魔按原版属性算法叠加，急迫、疲劳、破坏速度、水下、离地),所需状态来自身体快照;
   `ToolChoice` 看全背包，一样快时空手优先、其次不耗耐久的。
 - **门**:开关门是 `Edit.Door`,不算改地形、不问许可,不许挖不许放也开;任何一种走法被门挡着都一样处理。
-- **摔落**:上限只在 `BodySnapshot.maxFall`——摔不疼的高度都行，要掉血的只到摔完还剩 6 点血;
-  `RouteSpec.maxFallHeightNoWater` 只能收紧它(`CostModel.fallLimit`)。落进水里、抓住梯子不受上限;摔疼的按掉的血折价。
+- **摔落**:上限只在 `BodySnapshot.bears`——摔不疼的都行，要掉血的只到摔完还剩 6 点血;
+  `RouteSpec.maxFallDamage`(愿意承受的摔伤,出厂 0)只能收紧它(`CostModel.bearsFall`),能跳多高由身体按摔伤公式换算(`BodySnapshot.maxDrop`):
+  满血生存身体出厂是 3 格,创造模式不摔伤、不限。落进水里、抓住梯子不受上限;摔疼的按掉的血折价。
 - **搜索**:`AStar` 展开一个节点时，前提读"快照加上走到这个节点那一步的改动"(`EditedView.after`),刚挖开的格是空的、
   刚垫的块托着脚。设了改动预算时节点按"位置 + 已改格数"区分，搜出来的路一定在预算内。停下的原因:`ARRIVED`、`EXHAUSTED`、
   `BUDGET`、`UNLOADED`、`STRANDED`(起点待不住)、`CANCELLED`;半程路线离起点超过 5 格才交出。目标格保护是
@@ -787,7 +788,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   `HoneyBlock`),床落差减半(`BedBlock`),黏液块不潜行时倍率 0(`SlimeBlock`),细雪不结算(`PowderSnowBlock`);之后照
   `LivingEntity.calculateFallDamage` 减安全高度、乘倍率(这两步是 float)、乘属性 `fall_damage_multiplier`、向上取整。耕地、海龟蛋
   覆写 `fallOn` 只为踩坏它们,摔伤照默认。这条规则只在 `BodySnapshot.fallDamage(落差, 落点方块)`;摔落上限是 `BodySnapshot.bears`
-  (摔完还留 6 点血),规格的无水落差只能收紧(`CostModel.bearsFall`,原来的 `maxFall`/`fallLimit` 只按硬地算,删去)。规划时算好
+  (摔完还留 6 点血),规格愿意承受的摔伤只能收紧(`CostModel.bearsFall`,原来的 `maxFall`/`fallLimit` 只按硬地算,删去;落差上限不再写在规格里,由身体按摔伤公式换算)。规划时算好
   这一步摔掉几点血记进 `Maneuver.fallDamage`,定价(每点 `FALL_DAMAGE_PER_POINT`)与"摔不摔得起"都读它;下一级、下落、斜走、
   向下挖都算,其余走法落差不到一格,原版落在哪种方块上都不疼,恒为 0。
 - **朝上的滴水石锥不算"碰了就伤身"**:原版它没有 `entityInside`、`stepOn` 伤害,站上去、走过去都不疼,只在落上去时加重摔伤,归摔伤算;

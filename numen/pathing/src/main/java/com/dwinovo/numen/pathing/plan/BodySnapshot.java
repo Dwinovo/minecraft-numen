@@ -118,9 +118,22 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
 
     /**
      * 摔掉 {@code damage} 点血受不受得起:不疼的都行,疼的只到摔完还留 {@link #HEALTH_RESERVE} 点血为止。
-     * 这是全模块唯一的摔落上限;路线规格的无水落差只能比它更紧({@link CostModel#bearsFall})。
+     * 这是全模块唯一的摔落上限;路线规格愿意承受的摔伤只能比它更紧({@link CostModel#bearsFall})。
      */
     public boolean bears(int damage) {
         return damage <= 0 || health - damage >= HEALTH_RESERVE;
+    }
+
+    /**
+     * 落在硬地(倍率 1 的方块)上,摔伤不超过 {@code accepted} 点、又受得起({@link #bears})的最大落差,由 {@link #fallDamage}
+     * 的公式反推;不会摔伤的身体(创造模式、{@code fall_damage_multiplier} 为 0)不限,为正无穷。落点方块减轻摔伤的,落差还能更高,
+     * 这里不管(估价把这样的落点另算)。
+     */
+    public double maxDrop(int accepted) {
+        if (creative() || fallDamageMultiplier <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        int damage = Math.max(0, Math.min(accepted, (int) Math.floor(health - HEALTH_RESERVE)));
+        return safeFallDistance + damage / fallDamageMultiplier;
     }
 }

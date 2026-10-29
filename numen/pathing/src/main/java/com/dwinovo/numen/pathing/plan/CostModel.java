@@ -9,7 +9,6 @@ import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.api.entity.Faces;
-import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.api.entity.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -122,11 +121,17 @@ public final class CostModel {
     // ==================== 身体与规格合起来的上限 ====================
 
     /**
-     * 从 {@code drop} 高处站着落地、摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage}),这一下摔不摔得起:
-     * 身体受得起({@link BodySnapshot#bears}),落差也在规格的无水落差以内——规格只能收紧身体的上限。
+     * 站着落地摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage},已按落差、落点方块、游戏模式与属性算好),这一下摔不摔得起:
+     * 身体受得起({@link BodySnapshot#bears}),也不超过规格愿意承受的摔伤——规格只能收紧身体的上限。能跳多高就是这两样换算出来的,
+     * 不另设一个写死的落差。
      */
-    public boolean bearsFall(double drop, int damage) {
-        return body.bears(damage) && drop <= spec.maxFallHeightNoWater() + Footing.EPSILON;
+    public boolean bearsFall(int damage) {
+        return damage <= spec.maxFallDamage() && body.bears(damage);
+    }
+
+    /** 落在硬地上最高能落多少({@link BodySnapshot#maxDrop}):身体受得起、规格也愿意承受的摔伤换算出来的落差,不会摔伤的身体不限。 */
+    public double maxFallDrop() {
+        return body.maxDrop(spec.maxFallDamage());
     }
 
     /**
@@ -149,12 +154,12 @@ public final class CostModel {
     }
 
     /**
-     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、落差也在规格的无水落差以内
+     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、也在规格愿意承受的摔伤以内
      * ({@link #bearsFall});攀着、浮着、落进水里的不摔。所有会落下去的走法(落下一级、斜走、向下挖)与步态({@code Gait}
      * 判多掉一次摔不摔得起)问的都是这一处。
      */
-    public boolean bearsLanding(Stance landing, boolean wading, double drop, int damage) {
-        return !landing.grounded() || wading || bearsFall(drop, damage);
+    public boolean bearsLanding(Stance landing, boolean wading, int damage) {
+        return !landing.grounded() || wading || bearsFall(damage);
     }
 
     /** 这次能不能疾跑:身体跑得动(饱食度够,或能飞)。 */

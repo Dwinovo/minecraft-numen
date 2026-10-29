@@ -20,7 +20,7 @@ import net.minecraft.core.SectionPos;
  *       就落不下去;</li>
  *   <li>迈出去不用起跳,走完落到的脚高与落点一致(第 0 层 {@link Stepping#walkOff});身体在起步的脚高上走进那一列
  *       途中挡着的格,门开关、其余挖开;</li>
- *   <li>站着落地时摔得起({@link CostModel#bearsFall}:摔掉几点血按落差与落点脚下那一格算,朝上的滴水石锥尖加重,干草块、
+ *   <li>站着落地时摔得起({@link CostModel#bearsFall}:摔掉几点血按落差、落点脚下那一格与身体算,朝上的滴水石锥尖加重,干草块、
  *       床这些减轻);落进水里、抓住梯子不摔伤,不受这个上限;摔不起而身上有水桶时,在落点倒一桶水接住(落定后收回,
  *       {@link Edit.Catch})。</li>
  * </ul>
@@ -118,7 +118,7 @@ final class Drop implements Move {
         double drop = f0 - landing.feetY();
         BlockPos support = landing.support(tx, tz);
         int damage = model.fallDamage(draft, landing, support, drop, wading);
-        if (!model.bearsLanding(landing, wading, drop, damage)) {
+        if (!model.bearsLanding(landing, wading, damage)) {
             // 摔不起:身上有水桶就在落点倒一桶水接住,落进水里
             if (!draft.catchFall(to)) {
                 return draft.failure();
@@ -228,7 +228,7 @@ final class Drop implements Move {
         CostModel model = q.model();
         double move = movement(q.walkOff(), 1.0, q.landing(depth));
         int damage = model.fallDamage(depth, q.state(dx, -depth - 1, dz));
-        if (!model.bearsLanding(q.ground(q.y() - depth), false, depth, damage)) {
+        if (!model.bearsLanding(q.ground(q.y() - depth), false, damage)) {
             // 倒一桶水接住:落进水里不摔,只有走与落的工夫
             return model.mayCatch(q.view()) ? q.likely(dx, -depth, dz, move + digs) : Quick.REJECT;
         }

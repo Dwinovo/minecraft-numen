@@ -31,7 +31,7 @@ class HandOverTest {
     }
 
     private static CostModel loose() {
-        return Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(10).build());
+        return Fixtures.model(RouteSpec.defaults().edit().maxFallDamage(7).build());
     }
 
     private static Route full(TestWorld world, BlockPos from, BlockPos to) {

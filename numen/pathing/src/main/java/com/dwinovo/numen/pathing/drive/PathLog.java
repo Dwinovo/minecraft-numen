@@ -139,7 +139,7 @@ public final class PathLog {
     public static String spec(RouteSpec spec) {
         StringBuilder out = new StringBuilder("dig=").append(spec.dig()).append(" place=").append(spec.place())
                 .append(" consent=").append(spec.consent() ? num(spec.consentMultiplier()) : "false");
-        out.append(" maxFall=").append(spec.maxFallHeightNoWater());
+        out.append(" maxFallDamage=").append(spec.maxFallDamage());
         if (spec.budgeted()) {
             out.append(" alterBudget=").append(spec.alterBudget());
         }

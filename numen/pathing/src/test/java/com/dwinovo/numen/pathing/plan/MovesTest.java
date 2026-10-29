@@ -292,12 +292,12 @@ class MovesTest {
 
     @Test
     void theFallLimitTightensWithHealthAndTheSpecCanOnlyTightenIt() {
-        RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(10).build();
+        RouteSpec loose = RouteSpec.defaults().edit().maxFallDamage(7).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         CostModel hurt = CostModel.of(loose, Fixtures.body(8), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         holds(MoveKind.FALL, healthy, ledge(8), AT, EAST);
         assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, hurt, ledge(8), AT, EAST).reason(), "血少了摔不起");
-        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, healthy, ledge(12), AT, EAST).reason(), "规格只到 10 格");
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, healthy, ledge(12), AT, EAST).reason(), "规格只愿受 7 点伤,十二格摔 9 点");
         assertTrue(Steps.cost(healthy, holds(MoveKind.FALL, healthy, ledge(8), AT, EAST))
                 > Steps.cost(healthy, holds(MoveKind.FALL, healthy, ledge(3), AT, EAST)) + 5 * ActionCosts.FALL_DAMAGE_PER_POINT - 1,
                 "摔疼的按掉血折价");
@@ -315,7 +315,7 @@ class MovesTest {
 
     @Test
     void aFallOfTwoBlocksOrMoreCannotBeUndoneOnFoot() {
-        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(10).build());
+        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallDamage(7).build());
         assertFalse(holds(MoveKind.FALL, loose, ledge(2), AT, EAST).reversible(), "两格:起跳最高 1.25,爬不回去");
         assertFalse(holds(MoveKind.FALL, loose, ledge(3), AT, EAST).reversible());
         assertFalse(holds(MoveKind.FALL, loose, ledge(5), AT, EAST).reversible(), "四格以上更不行");
@@ -375,7 +375,7 @@ class MovesTest {
 
     @Test
     void whatTheFallLandsOnDecidesWhetherItIsBearable() {
-        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(30).build());
+        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallDamage(27).build());
         // 同一道十格的崖:落在石头上掉 7 点;落在朝上的滴水石锥尖上(顶面 11/16)按原版掉 17 点,满血也摔不起
         assertEquals(7, holds(MoveKind.FALL, loose, ledge(10), AT, EAST).fallDamage());
         TestWorld spike = ledge(10).set(1, Y - 10, 0, net.minecraft.world.level.block.Blocks.POINTED_DRIPSTONE.defaultBlockState());
@@ -469,13 +469,14 @@ class MovesTest {
         assertEquals(Reason.NO_FOOTING, fails(MoveKind.DOWNWARD, Fixtures.model(natural()), hollow, AT, Heading.DOWN).reason());
     }
 
-    /** 规格不许落(无水落差 0)时,向下挖落一格同落下一级一样要问规格的无水落差:不落。 */
+    /** 创造模式摔不伤:出厂规格(不愿受伤)下十七格高的崖也跳得下去;同样的崖,生存模式的身体不跳。 */
     @Test
-    void aSpecThatAllowsNoFallDoesNotDigDownEither() {
-        TestWorld world = ground().set(0, Y - 3, 0, Blocks.STONE.defaultBlockState());
-        world.set(0, Y - 2, 0, Blocks.STONE.defaultBlockState());
-        RouteSpec noFall = natural().edit().maxFallHeightNoWater(0).build();
-        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.DOWNWARD, Fixtures.model(noFall), world, AT, Heading.DOWN).reason());
+    void aBodyThatCannotBeHurtByFallingFallsAnyHeightUnderTheFactorySpec() {
+        CostModel creative = CostModel.of(RouteSpec.defaults(),
+                Fixtures.body(Vanilla.SURVIVAL, GameType.CREATIVE, 20, List.of()),
+                Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        assertEquals(0, holds(MoveKind.FALL, creative, ledge(17), AT, EAST).fallDamage());
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, Fixtures.model(RouteSpec.defaults()), ledge(17), AT, EAST).reason());
     }
 
     // ==================== 攀爬 ====================
