@@ -13,7 +13,7 @@ import net.minecraft.core.BlockPos;
  *   <li>升降的额外代价:要升降几个节点,每个至少比水平底价多花多少({@link Vertical})。</li>
  * </ul>
  * 后两样在开搜时按世界算一次,之后每个节点只查表加乘法。再加上这一趟的记忆里抬高过的增量({@link TripMemory}):
- * 展开过却没通到这一段终点的节点,估价比原来更远。
+ * 展开过却没通到目标的节点,估价比原来更远。
  */
 final class Estimate {
 

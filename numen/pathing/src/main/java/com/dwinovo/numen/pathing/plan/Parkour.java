@@ -151,13 +151,16 @@ final class Parkour implements Move {
                 true));
     }
 
-    /** 规格不许跑酷,一步也不成立;要站着、脚所在的格不泡在流体里;其余精确判断。 */
+    /**
+     * 规格不许跑酷,一步也不成立;要站着、脚所在的格不泡在流体里;其余答"可能":落点取最近的第 2 列,代价至少是助跑的步速跨过两列,
+     * 加上起跳的罚分。
+     */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.model().spec().parkour() || !q.stance().grounded() || (q.own() & CellFlags.FLUID) != 0) {
             return Quick.REJECT;
         }
-        return Quick.EXACT;
+        return q.likelyNear(2 * heading.dx(), 0, 2 * heading.dz(), 2 * q.pace() + q.jumpPenalty());
     }
 
     @Override

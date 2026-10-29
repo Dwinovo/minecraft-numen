@@ -28,10 +28,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * 一段一段搜:先贪心再加权、没搜到时的学习与边界上的推进、这一趟记忆里走不通的步、收场说缺什么(被拒的候选)。
- * 地板在 {@code Y - 1}。
+ * 一次搜索的路线与没到目标时:加权 A* 交出的路、每一步在前面步子做完的世界里成立、没到目标时的学习与边界上的推进、这一趟记忆里
+ * 走不通的步、收场说缺什么(被拒的候选)。地板在 {@code Y - 1}。
  */
-class SegmentSearchTest {
+class PartialSearchTest {
 
     private static final int Y = 64;
     private static final BlockPos START = new BlockPos(0, Y, 0);
@@ -56,38 +56,52 @@ class SegmentSearchTest {
 
     private static final BlockPos BEYOND = new BlockPos(12, Y, 0);
 
-    // ==================== 先贪心再加权 ====================
+    // ==================== 加权 A* ====================
 
     /**
-     * 一堵墙横在去处前面,只在远处留了个缺口:朝终点直挖的那一遍很快有解,可挖两格墙比走一段缺口贵得多;加权那一遍有预算才找得到
-     * 绕缺口过去的路。预算越多,交出的路线越便宜——第二遍换下了第一遍的解。
+     * 一堵墙横在去处前面,只在远处留了个缺口:空手挖两格墙比绕一段缺口贵得多。朝真终点的加权搜索一次搜到底,交出绕缺口过去的路,不挖。
      */
     @Test
-    void theWeightedPassReplacesTheGreedySolutionWithACheaperOne() {
+    void theSearchGoesAroundAWallThroughAFarGapRatherThanDiggingIt() {
         TestWorld wall = field().fill(6, Y, -12, 6, Y + 3, 12, stone).fill(6, Y, 9, 6, Y + 3, 9, air);
-        CostModel model = Fixtures.model(Fixtures.natural());
-        Goal goal = Goals.at(BEYOND);
-        SearchResult greedy = Fixtures.search(wall, model, START, goal, 40);
-        SearchResult more = Fixtures.search(wall, model, START, goal, 3000);
-        assertTrue(greedy.arrived() && more.arrived());
-        assertTrue(greedy.route().alterations() > 0, "第一遍直接挖墙");
-        assertTrue(more.route().cost() < greedy.route().cost() * 0.6,
-                "加权那一遍找到的路便宜得多:" + more.route().cost() + " 对 " + greedy.route().cost());
-        assertEquals(0, more.route().alterations(), "绕缺口走,不挖");
-        assertTrue(greedy.gap() > AStar.WEIGHT, "挖墙的解证不出界:" + greedy.gap());
-        assertTrue(more.gap() <= AStar.WEIGHT, "绕缺口的解证到了界:" + more.gap());
+        SearchResult result = Fixtures.search(wall, Fixtures.model(Fixtures.natural()), START, Goals.at(BEYOND), 3000);
+        assertTrue(result.arrived(), result.stop().toString());
+        assertEquals(0, result.route().alterations(), "绕缺口走,不挖");
     }
 
-    /** 平地上贪心那一遍的解已经证明不差于最优的加权倍数:不再开加权那一遍,多给预算也不多展开一个节点。 */
+    /**
+     * 一段推进八格疾跑的估价:搜到一个估价比起点低这么多的节点就交出到那里的整截,目标还在前面;同一个世界只认目标时一次走到底。
+     */
     @Test
-    void aGreedySolutionProvedGoodEnoughEndsTheSearch() {
+    void aSegmentEndsAtTheFirstNodeThatIsASegmentCloserToTheGoal() {
         CostModel model = Fixtures.model(Fixtures.natural());
+        double sprint = com.dwinovo.numen.pathing.world.Kinematics.pace(model.body().stats()).sprint();
         Goal goal = Goals.at(new BlockPos(20, Y, 0));
-        SearchResult small = Fixtures.search(field(), model, START, goal, 200);
-        SearchResult large = Fixtures.search(field(), model, START, goal, 3000);
-        assertTrue(large.arrived());
-        assertTrue(large.gap() <= AStar.WEIGHT, "证到的界:" + large.gap());
-        assertEquals(small.expanded(), large.expanded());
+        Search whole = new Search(field(), model, START, goal, Fixtures.BUDGET, Favoring.NONE);
+        SearchResult segment = AStar.run(whole.advancing(8 * sprint), () -> false);
+        assertEquals(SearchResult.Stop.SEGMENT, segment.stop());
+        assertTrue(segment.reached());
+        BlockPos end = segment.route().end();
+        assertTrue(end.getX() >= 8 && end.getX() < 20, "推进了一段,没到目标:" + end);
+        SearchResult arrived = AStar.run(whole, () -> false);
+        assertTrue(arrived.arrived(), arrived.stop().toString());
+    }
+
+    /**
+     * 这一趟的记忆抬高了起点的估价(前一次搜索在这里没搜出路):一段量的是离目标近了多少,不把抬高的增量算进去,
+     * 不然旁边没探过的节点一个个都算"近了一段",一段段往外走。
+     */
+    @Test
+    void aSegmentIsMeasuredTowardTheGoalNotAgainstWhatTheTripLearned() {
+        CostModel model = Fixtures.model(Fixtures.natural());
+        double sprint = com.dwinovo.numen.pathing.world.Kinematics.pace(model.body().stats()).sprint();
+        TripMemory memory = new TripMemory();
+        memory.raise(START.asLong(), 100 * sprint);
+        Search search = new Search(field(), model, START, Goals.at(new BlockPos(20, Y, 0)), Fixtures.BUDGET, Favoring.NONE)
+                .remembering(memory.frozen()).advancing(8 * sprint);
+        SearchResult segment = AStar.run(search, () -> false);
+        assertEquals(SearchResult.Stop.SEGMENT, segment.stop());
+        assertTrue(segment.route().end().getX() >= 8, "朝目标推进了一段:" + segment.route().end());
     }
 
     /** 四壁是基岩、里面是实心石头的竖井(边长 {@code size}),空手;起点是井底角上挖好的两格空间。 */
@@ -121,7 +135,7 @@ class SegmentSearchTest {
                 Fixtures.search(shaft(2, 7), model, START, Goals.at(new BlockPos(1, Y + 7, 1))).stop());
     }
 
-    // ==================== 没搜到:学习、推进 ====================
+    // ==================== 没到目标:学习、推进 ====================
 
     /**
      * 去处在一间朝西开口的 U 形屋子后面:朝它直走的路都进了屋子深处的死角。预算只够把屋子里翻一遍,没搜到:展开过的格子的估价
@@ -148,12 +162,36 @@ class SegmentSearchTest {
         assertTrue(after.at(deepest.getX(), deepest.getY(), deepest.getZ()) > before.at(deepest.getX(), deepest.getY(), deepest.getZ()),
                 "死角深处的估价比原来远");
         SearchResult second = AStar.run(first.remembering(memory.frozen()), () -> false);
-        BlockPos reached = second.route() == null ? null : second.route().end();
-        assertNotNull(reached, "带着记忆再搜,交得出朝外走的一截");
-        assertTrue(reached.getX() < 11, "不再往死角深处走:" + reached);
+        assertNotNull(second.route(), "带着记忆再搜,交得出朝外走的路");
+        for (BlockPos node : second.route().nodes()) {
+            assertFalse(node.getX() > 6 && node.getX() < 12 && Math.abs(node.getZ()) < 4, "不再往死角深处走:" + node);
+        }
     }
 
-    /** 能走到的地方都搜过了、没有这一段的终点:展开过的格子估价无穷大,再带着这份记忆搜一个节点也不展开。 */
+    /**
+     * 往石头里挖下去的竖井里,一个节点往外的步子全是没取出的未核候选(再往下挖、往旁边挖,取出来才精确判;井里没有往回走的路):
+     * 它们与没展开的节点一样是出路,不是死路——抬高之后每一格的估价都有限,起点(它身后没有改动,与重搜同一个世界)的估价仍是下界,
+     * 不超过从起点重搜走到目标的真实代价。
+     */
+    @Test
+    void raisedEstimatesStayFiniteAndTheStartsStaysBelowTheRealCostWhenTheExitsAreUnverifiedCandidates() {
+        TestWorld ground = new TestWorld().ground(Y - 1, stone).loadedWithin(6);
+        CostModel model = CostModel.of(Fixtures.natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
+                Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        Goal goal = Goals.dig(new BlockPos(20, Y - 20, 5), Vanilla.SURVIVAL, Goals.Clearing.ANY);
+        SearchResult failed = AStar.run(new Search(ground, model, START, goal, 3000, Favoring.NONE), () -> false);
+        assertEquals(SearchResult.Stop.BUDGET, failed.stop());
+        for (it.unimi.dsi.fastutil.longs.Long2DoubleMap.Entry e : failed.raised().long2DoubleEntrySet()) {
+            assertTrue(Double.isFinite(e.getDoubleValue()), "抬成了无穷:" + BlockPos.of(e.getLongKey()));
+        }
+        Estimate estimate = Estimate.of(ground, model, goal, START, Fixtures.BUDGET, TripMemory.Frozen.NONE, 1);
+        SearchResult real = Fixtures.search(ground, model, START, goal, Fixtures.BUDGET);
+        assertTrue(real.arrived(), real.stop().toString());
+        double raised = estimate.at(START) + failed.raised().get(START.asLong());
+        assertTrue(raised <= real.route().cost() + 1e-6, "起点抬到 " + raised + ",重搜走到目标只要 " + real.route().cost());
+    }
+
+    /** 能走到的地方都搜过了、没有目标:展开过的格子估价无穷大,再带着这份记忆搜一个节点也不展开。 */
     @Test
     void aSearchedOutRegionIsRememberedAsUnreachable() {
         TestWorld room = field().fill(-2, Y, -2, 2, Y + 2, 2, stone).fill(-1, Y, -1, 1, Y + 1, 1, air);
@@ -193,7 +231,7 @@ class SegmentSearchTest {
 
     private static SearchResult.Blocking blocked(TestWorld world, CostModel model) {
         SearchResult result = Fixtures.search(world, model, START, Goals.at(BEYOND));
-        assertFalse(result.reached(), "这面墙过不去:" + result.stop());
+        assertFalse(result.arrived(), "这面墙过不去:" + result.stop());
         assertNotNull(result.blocking(), "要说为什么过不去");
         return result.blocking();
     }

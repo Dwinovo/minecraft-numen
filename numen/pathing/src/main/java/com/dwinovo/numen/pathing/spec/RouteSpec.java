@@ -29,7 +29,8 @@ import net.minecraft.world.level.BlockGetter;
  * @param consent              许可答"要问"的格算能走:进路线,执行到那一格时由宿主问主人;不算就是墙
  * @param consentMultiplier    要问的格挖或放的价钱乘几倍:有限,这样的路才搜得到;要贵到长度相当的不用问的路线都胜出
  * @param parkour              可以跑酷:越过一到三格的空隙
- * @param maxFallHeightNoWater 下面没有水时愿意跳下的最大落差;身体快照按血量给出摔得起的上限,这里只能比它更紧
+ * @param maxFallDamage        愿意承受的摔伤点数,默认 0:不受伤。能跳多高不在这里定——身体按它的安全落差、血量、游戏模式、护甲类属性与落点
+ *                             方块把这点数换算成落差({@code BodySnapshot.fallDamage}),落进水里、抓住梯子不摔伤,不受这个限制
  * @param alterBudget          整条路挖加放最多几格,{@link #UNLIMITED} 即不限;搜索展开每一步时就按它剪枝
  * @param excluded             排除的格子种类
  * @param positions            按坐标的代价与禁令
@@ -40,7 +41,7 @@ import net.minecraft.world.level.BlockGetter;
  * @param wadePenalty          水里走一格的罚分
  */
 public record RouteSpec(boolean dig, boolean place, boolean consent, double consentMultiplier, boolean parkour,
-                        int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
+                        int maxFallDamage, int alterBudget, Set<Kind> excluded,
                         PositionCosts positions, BlockBans bans, double placeCost, double breakPenalty,
                         double jumpPenalty, double wadePenalty) {
 
@@ -54,20 +55,20 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
 
     /**
      * 出厂规格:只走不改(不挖、不放;要问主人的格算能走,价钱乘 {@link #CONSENT_MULTIPLIER},许挖或许放时才用得上),
-     * 不跑酷平跳;无水落差上限 3(原版摔不疼的高度);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
+     * 不跑酷平跳;不愿受摔伤(满血的生存身体就是原版摔不疼的 3 格,创造模式不摔伤、不限);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
      * 会触发,都默认不进,规格可以放开;放置 20、挖掘另加 30(约等于多走 6.5 格:破坏是绕不开时的下策)、起跳 2、涉水 3。
      */
     private static final RouteSpec DEFAULTS = new RouteSpec(
             false, false, true, CONSENT_MULTIPLIER, false,
-            3, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
+            0, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
             PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 30.0, 2.0, 3.0);
 
     public RouteSpec {
         Objects.requireNonNull(positions, "positions");
         Objects.requireNonNull(bans, "bans");
         excluded = Collections.unmodifiableSet(excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(excluded));
-        if (maxFallHeightNoWater < 0) {
-            throw new IllegalArgumentException("最大落差不能为负:" + maxFallHeightNoWater);
+        if (maxFallDamage < 0) {
+            throw new IllegalArgumentException("愿意承受的摔伤不能为负:" + maxFallDamage);
         }
         if (alterBudget < 0) {
             throw new IllegalArgumentException("改动预算不能为负:" + alterBudget);
@@ -121,7 +122,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         private boolean consent;
         private double consentMultiplier;
         private boolean parkour;
-        private int maxFallHeightNoWater;
+        private int maxFallDamage;
         private int alterBudget;
         private final EnumSet<Kind> excluded;
         private PositionCosts positions;
@@ -137,7 +138,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
             consent = from.consent;
             consentMultiplier = from.consentMultiplier;
             parkour = from.parkour;
-            maxFallHeightNoWater = from.maxFallHeightNoWater;
+            maxFallDamage = from.maxFallDamage;
             alterBudget = from.alterBudget;
             excluded = from.excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(from.excluded);
             positions = from.positions;
@@ -180,8 +181,8 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
             return this;
         }
 
-        public Builder maxFallHeightNoWater(int maxFallHeightNoWater) {
-            this.maxFallHeightNoWater = maxFallHeightNoWater;
+        public Builder maxFallDamage(int maxFallDamage) {
+            this.maxFallDamage = maxFallDamage;
             return this;
         }
 
@@ -233,7 +234,7 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         }
 
         public RouteSpec build() {
-            return new RouteSpec(dig, place, consent, consentMultiplier, parkour, maxFallHeightNoWater, alterBudget,
+            return new RouteSpec(dig, place, consent, consentMultiplier, parkour, maxFallDamage, alterBudget,
                     excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty);
         }
     }

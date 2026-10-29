@@ -20,6 +20,7 @@ import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
@@ -112,6 +113,17 @@ public class GeneratorGameTests {
     }
 
     /**
+     * 放下的不透光整块的光照都算过了。放方块只把这一格的光照更新排给光照线程,这一刻不算;一次更新算完的几格是一起换上去的,
+     * 不透光整块里的光照算完是 0。拍"前"的快照要等到这一刻,不然更新落在两次快照之间,快照里的光照不一样。
+     */
+    private static void assertLit(GameTestHelper helper, ServerLevel level, Iterable<BlockPos> placed) {
+        for (BlockPos p : placed) {
+            helper.assertTrue(level.getBrightness(LightLayer.SKY, p) == 0 && level.getBrightness(LightLayer.BLOCK, p) == 0,
+                    "the light engine has not taken in the block at " + p.toShortString() + " yet");
+        }
+    }
+
+    /**
      * feature:一棵原版橡树种在一块泥土上头。交回的是原木与树叶,真实世界一格没动;放下去之后一致。
      */
     @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
@@ -120,25 +132,29 @@ public class GeneratorGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_tree", new BlockPos(2, 2, 2), true);
         BlockPos dirt = helper.absolutePos(new BlockPos(10, 2, 10));
         scene(level, dirt, Blocks.DIRT);
-        Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-        ToolRun run = lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")");
-        helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
-        JsonArray cells = returned(run).getAsJsonArray("cells");
-        long logs = cells.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")).count();
-        long leaves = cells.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_leaves")).count();
-        helper.assertTrue(logs >= 4 && leaves >= 10, "a tree: " + logs + " logs and " + leaves + " leaves of " + cells.size() + " cells");
-        helper.assertTrue(cells.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
-                && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")), "the trunk stands on the cell above the dirt");
-        helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
-                "the real world changed under the recorded one");
-        helper.assertTrue(returned(run).getAsJsonArray("lost").isEmpty(), "a tree adds nothing Cells cannot hold: " + returned(run));
-        ToolRun build = lua(her, "numen.build.place(" + literal(cells) + ")");
-        succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "place failed: " + build.outcome());
-            String wrong = problem(level, cells);
+        AtomicReference<JsonArray> cells = new AtomicReference<>();
+        AtomicReference<ToolRun> build = new AtomicReference<>();
+        steps(helper).thenWaitUntil(() -> assertLit(helper, level, List.of(dirt))).thenExecute(() -> {
+            Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
+            ToolRun run = lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")");
+            helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
+            JsonArray tree = returned(run).getAsJsonArray("cells");
+            long logs = tree.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")).count();
+            long leaves = tree.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_leaves")).count();
+            helper.assertTrue(logs >= 4 && leaves >= 10, "a tree: " + logs + " logs and " + leaves + " leaves of " + tree.size() + " cells");
+            helper.assertTrue(tree.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
+                    && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")), "the trunk stands on the cell above the dirt");
+            helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
+                    "the real world changed under the recorded one");
+            helper.assertTrue(returned(run).getAsJsonArray("lost").isEmpty(), "a tree adds nothing Cells cannot hold: " + returned(run));
+            cells.set(tree);
+            build.set(lua(her, "numen.build.place(" + literal(tree) + ")"));
+        }).thenWaitUntil(() -> {
+            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
+            String wrong = problem(level, cells.get());
             helper.assertTrue(wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
-        });
+        }).thenSucceed();
     }
 
     /**
@@ -209,23 +225,27 @@ public class GeneratorGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_forest", new BlockPos(2, 2, 2), true);
         BlockPos dirt = helper.absolutePos(new BlockPos(10, 2, 10));
         scene(level, dirt, Blocks.DIRT);
-        Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-        ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0)) + ", " + xyz(dirt.offset(0, 4, 0))
-                + "):forest(\"minecraft:oak_checked\", 100)");
-        helper.assertTrue(run.ranToTheEnd(), "forest failed: " + run.receipt());
-        JsonArray cells = returned(run).getAsJsonArray("cells");
-        helper.assertTrue(cells.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
-                && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")),
-                "a tree on the dirt: " + cells.size() + " cells");
-        helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
-                "the real world changed under the recorded one");
-        ToolRun build = lua(her, "numen.build.place(" + literal(cells) + ")");
-        succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "place failed: " + build.outcome());
-            String wrong = problem(level, cells);
+        AtomicReference<JsonArray> cells = new AtomicReference<>();
+        AtomicReference<ToolRun> build = new AtomicReference<>();
+        steps(helper).thenWaitUntil(() -> assertLit(helper, level, List.of(dirt))).thenExecute(() -> {
+            Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
+            ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0)) + ", " + xyz(dirt.offset(0, 4, 0))
+                    + "):forest(\"minecraft:oak_checked\", 100)");
+            helper.assertTrue(run.ranToTheEnd(), "forest failed: " + run.receipt());
+            JsonArray forest = returned(run).getAsJsonArray("cells");
+            helper.assertTrue(forest.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
+                    && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")),
+                    "a tree on the dirt: " + forest.size() + " cells");
+            helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
+                    "the real world changed under the recorded one");
+            cells.set(forest);
+            build.set(lua(her, "numen.build.place(" + literal(forest) + ")"));
+        }).thenWaitUntil(() -> {
+            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
+            String wrong = problem(level, cells.get());
             helper.assertTrue(wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
-        });
+        }).thenSucceed();
     }
 
     /** flora:草地上每列一格草或小花(密度 100),交回之后世界没变;放下去之后一致。 */
@@ -234,23 +254,29 @@ public class GeneratorGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_flora", new BlockPos(2, 2, 2), true);
         BlockPos from = helper.absolutePos(new BlockPos(6, 2, 6));
+        List<BlockPos> grass = new ArrayList<>();
         for (BlockPos p : BlockPos.betweenClosed(from, from.offset(3, 0, 3))) {
             scene(level, p.immutable(), Blocks.GRASS_BLOCK);
+            grass.add(p.immutable());
         }
-        Snapshot before = snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4));
-        ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(from) + ", " + xyz(from.offset(3, 3, 3)) + "):flora(100)");
-        helper.assertTrue(run.ranToTheEnd(), "flora failed: " + run.receipt());
-        JsonArray cells = run.data().getAsJsonArray("returned");
-        helper.assertTrue(cells.size() == 16 && cells.asList().stream().allMatch(c -> pos(c.getAsJsonObject()).getY() == from.getY() + 1),
-                "one plant above each of the 16 grass blocks: " + cells);
-        helper.assertTrue(snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4)).equals(before), "the real world changed");
-        ToolRun build = lua(her, "numen.build.place(" + literal(cells) + ")");
-        succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "place failed: " + build.outcome());
-            String wrong = problem(level, cells);
+        AtomicReference<JsonArray> cells = new AtomicReference<>();
+        AtomicReference<ToolRun> build = new AtomicReference<>();
+        steps(helper).thenWaitUntil(() -> assertLit(helper, level, grass)).thenExecute(() -> {
+            Snapshot before = snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4));
+            ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(from) + ", " + xyz(from.offset(3, 3, 3)) + "):flora(100)");
+            helper.assertTrue(run.ranToTheEnd(), "flora failed: " + run.receipt());
+            JsonArray plants = run.data().getAsJsonArray("returned");
+            helper.assertTrue(plants.size() == 16 && plants.asList().stream().allMatch(c -> pos(c.getAsJsonObject()).getY() == from.getY() + 1),
+                    "one plant above each of the 16 grass blocks: " + plants);
+            helper.assertTrue(snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4)).equals(before), "the real world changed");
+            cells.set(plants);
+            build.set(lua(her, "numen.build.place(" + literal(plants) + ")"));
+        }).thenWaitUntil(() -> {
+            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
+            String wrong = problem(level, cells.get());
             helper.assertTrue(wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
-        });
+        }).thenSucceed();
     }
 
     /** 生成器读到没加载的区块:整个调用失败,说出是哪一片,不读一半。 */

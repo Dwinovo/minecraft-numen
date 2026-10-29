@@ -124,10 +124,10 @@ final class Course {
         return legs.isEmpty() ? startStance : at(legs.size() - 1).landing();
     }
 
-    /** 从正在走的那一步起,剩下的步子几何上最短要多少刻。 */
-    double remainingTicks() {
+    /** 从正在走的那一步起,到第 {@code end} 步之前(不含),这些步几何上最短要多少刻。 */
+    double ticksBefore(int end) {
         double left = 0;
-        for (int i = cur; i < legs.size(); i++) {
+        for (int i = cur; i < end; i++) {
             left += minimum.get(i);
         }
         return left;

@@ -309,7 +309,7 @@ public class UpDownGameTests {
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
     public static void low_health_tightens_the_fall_limit(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
         for (int side : new int[] {0, 20}) {
             t.fill(side + 2, 1, 2, side + 6, 7, 6, Blocks.STONE);
             for (int i = 0; i < 7; i++) {
@@ -338,7 +338,7 @@ public class UpDownGameTests {
     @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 300)
     public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
         t.fill(22, 1, 2, 26, 1, 6, Blocks.POINTED_DRIPSTONE);
         for (int side : new int[] {0, 19}) {
             t.fill(side + 4, 1, 3, side + 6, 9, 5, Blocks.STONE);
@@ -361,7 +361,7 @@ public class UpDownGameTests {
     @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 276)
     public static void hay_takes_a_higher_fall_than_stone(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
         t.fill(22, 0, 1, 28, 0, 7, Blocks.HAY_BLOCK);
         for (int side : new int[] {0, 19}) {
             t.fill(side + 4, 1, 3, side + 6, 8, 5, Blocks.STONE);

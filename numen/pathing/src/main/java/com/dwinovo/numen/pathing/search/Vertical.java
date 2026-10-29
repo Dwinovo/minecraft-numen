@@ -4,12 +4,14 @@ import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
+import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -27,8 +29,8 @@ import net.minecraft.world.level.block.state.BlockState;
  *       付了,只剩起跳罚分;</li>
  *   <li><b>往下 {@code n} 个节点</b>:一次落脚(下一级、下落)是走出边沿再落到地上,至少付走出边沿的工夫加落下去的工夫
  *       ({@link Kinematics#fallLandingTicks})减去水平底价;规格许挖时,向下挖只付落下去的工夫。落差至少是节点数减去落脚那一层
- *       落脚高度的小数部分,最高是规格的无水落差;落脚那一层出现过液体、可攀爬的方块(活板门也可能接在梯子上),或身上带着水桶
- *       (倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
+ *       落脚高度的小数部分,最高是身体在规格愿意承受的摔伤下换算出的落差({@link CostModel#maxFallDrop});落脚那一层出现过液体、
+ *       可攀爬的方块(活板门也可能接在梯子上)、落上去比石头摔得轻的方块(干草、床、黏液……),或身上带着水桶(倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
  *       斜走不升降节点,它的升降落差由跳与落带过。</li>
  * </ul>
  * 目标交出到了时脚所在的高度范围({@link Goal#heights()}):节点比它低就要升,比它高就要降,在范围里不用。没有范围的目标不加。
@@ -52,6 +54,8 @@ final class Vertical {
     private final double jump;
     private final double sprint;
     private final boolean bucket;
+    /** 落在硬地上最高能落多少:身体与规格合起来的摔落上限。 */
+    private final double fallLimit;
     /** {@code up[y - base]}:节点在第 {@code y} 层(低于 {@code lo})走到 {@code lo} 层至少多花的刻数;只填到 {@code upFrom}。 */
     private final double[] up;
     private int upFrom;
@@ -78,12 +82,14 @@ final class Vertical {
             this.jump = 0;
             this.sprint = 0;
             this.bucket = false;
+            this.fallLimit = 0;
         } else {
             double penalty = model.spec().jumpPenalty();
             double jumping = Math.max(0, Kinematics.jumpCycleTicks(body, 1.0, body.stepHeight()) + penalty - Kinematics.sprintTicksPerBlock(body));
             this.jump = model.spec().parkour() ? Math.min(jumping, penalty) : jumping;
             this.sprint = Kinematics.sprintTicksPerBlock(body);
             this.bucket = model.body().carriesWaterBucket();
+            this.fallLimit = model.maxFallDrop();
         }
         this.up = new double[Math.max(0, top - base)];
         this.upFrom = Math.min(lo, top);
@@ -112,7 +118,7 @@ final class Vertical {
         }
         BodyStats body = model.body().stats();
         int base = view.getMinBuildHeight();
-        return new Vertical(model, body, new Levels(view, body), base, base + view.getHeight(), heights.lo(), heights.hi());
+        return new Vertical(model, body, new Levels(view, model.body()), base, base + view.getHeight(), heights.lo(), heights.hi());
     }
 
     /** 往上:从目标那一层往下一层层累加,累加的先后与逐层填满整张表时一样。 */
@@ -146,7 +152,7 @@ final class Vertical {
             int land = y - k;
             double fraction = levels.fraction(land);
             if (!bucket && !levels.bypass(land)
-                    && k > Math.max(1, (int) Math.floor(model.spec().maxFallHeightNoWater() + fraction + Footing.EPSILON))) {
+                    && k > Math.max(1, Math.floor(fallLimit + fraction + Footing.EPSILON))) {
                 continue;
             }
             double once = fraction == 0 ? fresh(k) : landing(k, fraction);
@@ -179,7 +185,7 @@ final class Vertical {
      */
     private static final class Levels {
         private final SearchView view;
-        private final BodyStats body;
+        private final BodySnapshot body;
         private final int base;
         /** 节点在这一层、脚踩在矮方块上,脚在格里最高的小数部分。 */
         private final double[] fraction;
@@ -189,7 +195,7 @@ final class Vertical {
         private final boolean[] bandRead;
         private final Map<BlockState, Info> known = new IdentityHashMap<>();
 
-        private Levels(SearchView view, BodyStats body) {
+        private Levels(SearchView view, BodySnapshot body) {
             this.view = view;
             this.body = body;
             this.base = view.getMinBuildHeight();
@@ -218,7 +224,7 @@ final class Vertical {
 
         /** 从第 {@code y} 层的节点升到上一层不用跳:这一层有顶面离下一格底不到迈步高度的落脚。 */
         boolean smoothRise(int y) {
-            return 1 - fraction(y) <= body.stepHeight() + Footing.EPSILON;
+            return 1 - fraction(y) <= body.stats().stepHeight() + Footing.EPSILON;
         }
 
         /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了。 */
@@ -251,15 +257,21 @@ final class Vertical {
         }
     }
 
+    /** 比较"落上去摔多重"用的落差:大到任何减轻摔伤的方块都与石头分得出。 */
+    private static final double SOFT_PROBE = 1000;
+
     /**
      * 一种方块状态:碰撞箱顶面的高度、能不能落进去不摔;以及值得逐格找出来的({@code interesting}):顶面有小数(不是整格也不是空),
-     * 或落进去不摔。调色板里每种状态每个方块段都问一遍,所以开搜时算定。
+     * 或落进去不摔(含落上去比石头摔得轻)。调色板里每种状态每个方块段都问一遍,所以开搜时算定。
      */
     private record Info(double[] tops, boolean bypass, boolean interesting) {
 
-        static Info of(BodyStats body, BlockState state) {
-            boolean bypass = !state.getFluidState().isEmpty() || state.is(BlockTags.CLIMBABLE) || state.getBlock() instanceof TrapDoorBlock;
-            double[] tops = Footing.tops(body, state);
+        static Info of(BodySnapshot body, BlockState state) {
+            // 落上去比石头摔得轻的方块(摔伤的公式只在 BodySnapshot.fallDamage 一处):落差不受硬地上限约束
+            boolean softens = body.fallDamage(SOFT_PROBE, state) < body.fallDamage(SOFT_PROBE, Blocks.STONE.defaultBlockState());
+            boolean bypass = !state.getFluidState().isEmpty() || state.is(BlockTags.CLIMBABLE) || state.getBlock() instanceof TrapDoorBlock
+                    || softens;
+            double[] tops = Footing.tops(body.stats(), state);
             boolean interesting = bypass;
             for (double top : tops) {
                 interesting |= top - Math.floor(top + Footing.EPSILON) > Footing.EPSILON;

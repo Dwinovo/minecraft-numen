@@ -181,7 +181,7 @@ class CostModelTest {
 
     @Test
     void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
-        RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(100).build();
+        RouteSpec loose = RouteSpec.defaults().edit().maxFallDamage(100).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertTrue(bears(healthy, 17), "20 点血摔完留 6 点:能摔 17 格");
         assertFalse(bears(healthy, 18));
@@ -190,12 +190,12 @@ class CostModelTest {
         assertFalse(bears(weak, 4));
         CostModel factory = CostModel.of(RouteSpec.defaults(), Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 Threats.NONE);
-        assertTrue(bears(factory, 3), "出厂规格收紧到 3");
+        assertTrue(bears(factory, 3), "出厂规格不愿受伤:满血的身体就是摔不疼的 3 格");
         assertFalse(bears(factory, 4));
     }
 
     /** 从 {@code height} 格高处落到石头上摔不摔得起。 */
     private static boolean bears(CostModel model, int height) {
-        return model.bearsFall(height, model.body().fallDamage(height, Blocks.STONE.defaultBlockState()));
+        return model.bearsFall(model.body().fallDamage(height, Blocks.STONE.defaultBlockState()));
     }
 }

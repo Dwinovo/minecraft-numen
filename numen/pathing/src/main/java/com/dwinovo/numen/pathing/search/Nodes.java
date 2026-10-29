@@ -13,6 +13,9 @@ import it.unimi.dsi.fastutil.HashCommon;
  * 编码)、设了改动预算时到这儿已经改了几格、憋气的档三样确定——同一格,已改格数或憋气的档不同是另一个节点;开放寻址的
  * 哈希表把这三样映射到下标。
  *
+ * <p>同一套数组里还放未核的候选({@link #pending}):快判断答"可能"的一步,父节点、走法、方向、乐观的代价都在,落点是快判断给的,
+ * 不进哈希表——同一格可以同时有几条从不同父节点来的候选,取出来精确判过才落成真正的节点。
+ *
  * <p>数组会随节点增多而换成更大的,所以别在调用之间留着数组的引用,每次都经字段取。只在跑这次搜索的线程上用。
  */
 final class Nodes {
@@ -28,11 +31,11 @@ final class Nodes {
     int[] used = new int[INITIAL];
     /** 憋气的档({@link Breath#band})。 */
     int[] band = new int[INITIAL];
-    /** 估价:到这次搜索要去的地方(这一段的终点,或目标)至少还要多少刻;到了就是 0。 */
+    /** 估价:到目标至少还要多少刻;到了就是 0。 */
     double[] h = new double[INITIAL];
     /** 已走的代价。 */
     double[] g = new double[INITIAL];
-    /** 总价。 */
+    /** 开放集的排序键:走到的代价加估价的加权倍数。 */
     double[] f = new double[INITIAL];
     /** 堆里排序用的总价:f 取整到 {@link OpenSet#TIE};入堆、改键时由堆更新。 */
     long[] key = new long[INITIAL];
@@ -49,10 +52,14 @@ final class Nodes {
     /** 走到这里的那一步:走法在 {@code Moves.ALL} 里的下标,与方向在那个走法的 {@code headings()} 里的下标。 */
     byte[] move = new byte[INITIAL];
     byte[] heading = new byte[INITIAL];
-    /** 走到这里那一步的代价(不含旧路折扣)。 */
+    /** 走到这里那一步的代价(不含旧路折扣);未核的候选是快判断给的乐观价,真价不会比它低。 */
     double[] viaCost = new double[INITIAL];
     /** 走到这里时身体怎么待着。 */
     Stance[] stance = new Stance[INITIAL];
+    /** 未核的候选:快判断答"可能"的一步,还没精确判过;不进哈希表,不是边界,不学习。 */
+    boolean[] pending = new boolean[INITIAL];
+    /** 未核的候选的落点是猜的最近的那个({@link com.dwinovo.numen.pathing.plan.Quick#guessed}):精确判断可能落在别处。 */
+    boolean[] guessed = new boolean[INITIAL];
     /** 走到这里时身体憋气的样子。 */
     Breath.Air[] air = new Breath.Air[INITIAL];
     /**
@@ -99,6 +106,7 @@ final class Nodes {
         g[id] = Double.POSITIVE_INFINITY;
         parent[id] = NONE;
         heapIndex[id] = NONE;
+        pending[id] = false;
         int slot = slot(at, used, band);
         while (table[slot] != NONE) {
             slot = (slot + 1) & mask;
@@ -107,6 +115,29 @@ final class Nodes {
         if (size * 2 > table.length) {
             rehash();
         }
+        return id;
+    }
+
+    /**
+     * 新建一条未核的候选:快判断说从 {@code parent} 按第 {@code move} 种走法第 {@code heading} 个方向走,可能落到 {@code at},
+     * 走到那儿至少 {@code g}。不进哈希表、在不在堆里由调用方定。
+     */
+    int candidate(long at, boolean guess, int used, double estimate, int parent, int move, int heading, double g) {
+        if (size == pos.length) {
+            grow();
+        }
+        int id = size++;
+        pos[id] = at;
+        this.used[id] = used;
+        band[id] = 0;
+        h[id] = estimate;
+        this.g[id] = g;
+        this.parent[id] = parent;
+        heapIndex[id] = NONE;
+        pending[id] = true;
+        guessed[id] = guess;
+        this.move[id] = (byte) move;
+        this.heading[id] = (byte) heading;
         return id;
     }
 
@@ -124,6 +155,8 @@ final class Nodes {
         expanded = Arrays.copyOf(expanded, n);
         holed = Arrays.copyOf(holed, n);
         paid = Arrays.copyOf(paid, n);
+        pending = Arrays.copyOf(pending, n);
+        guessed = Arrays.copyOf(guessed, n);
         move = Arrays.copyOf(move, n);
         heading = Arrays.copyOf(heading, n);
         viaCost = Arrays.copyOf(viaCost, n);
@@ -136,6 +169,9 @@ final class Nodes {
         table = filled(table.length * 2);
         mask = table.length - 1;
         for (int id = 0; id < size; id++) {
+            if (pending[id]) {
+                continue;
+            }
             int slot = slot(pos[id], used[id], band[id]);
             while (table[slot] != NONE) {
                 slot = (slot + 1) & mask;

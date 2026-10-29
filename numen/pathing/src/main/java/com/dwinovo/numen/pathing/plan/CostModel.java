@@ -9,12 +9,14 @@ import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.api.entity.Faces;
-import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.api.entity.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
+import com.dwinovo.numen.pathing.world.Recall;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.BlockGetter;
@@ -52,17 +54,20 @@ public final class CostModel {
     private final Block placing;
     private final PositionCosts danger;
     private final ToolChoice tools;
+    /** 这次搜索里问过的许可;不是给一次搜索用的(执行复核、诊断前)为 null。 */
+    private final Permits permits;
     /** 规格排除的格子种类,按 {@link Semantics#mask(java.util.Set)} 编成掩码。 */
     private final int excluded;
 
     private CostModel(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Block placing, PositionCosts danger,
-                      ToolChoice tools) {
+                      ToolChoice tools, Permits permits) {
         this.spec = Objects.requireNonNull(spec, "spec");
         this.body = Objects.requireNonNull(body, "body");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
         this.placing = placing;
         this.danger = danger;
         this.tools = tools;
+        this.permits = permits;
         this.excluded = Semantics.mask(spec.excluded());
     }
 
@@ -70,22 +75,30 @@ public final class CostModel {
     public static CostModel of(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Materials materials,
                                Threats threats) {
         Block next = materials.next().orElse(null);
-        return new CostModel(spec, body, terrain, next, dangerCosts(threats.current(), body.stats()), new ToolChoice(body));
+        return new CostModel(spec, body, terrain, next, dangerCosts(threats.current(), body.stats()), new ToolChoice(body), null);
     }
 
     /** 同一具身体、同样的端口答复,换一份路线规格。 */
     public CostModel withSpec(RouteSpec spec) {
-        return new CostModel(spec, body, terrain, placing, danger, tools);
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
     }
 
     /** 同一份模型,换一个许可(诊断"换一种答复有没有路"用)。 */
     public CostModel withTerrain(TerrainPolicy terrain) {
-        return new CostModel(spec, body, terrain, placing, danger, tools);
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
     }
 
     /** 同一份模型,下一块垫路料换成 {@code placing}(诊断"有料的话有没有路"用)。 */
     public CostModel withPlacing(Block placing) {
-        return new CostModel(spec, body, terrain, placing, danger, tools);
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
+    }
+
+    /**
+     * 同一份模型,给一次搜索用:许可的答复在这次搜索里按"格、改动、方块状态"记下,同一格同一种改动只问一次。只记快照里没被这一路
+     * 改过的格(叠了改动的格,周围变了,照问)。一次搜索在一个线程上跑完,记下的答复只活这一次搜索;许可层本身不动。
+     */
+    public CostModel searching() {
+        return new CostModel(spec, body, terrain, placing, danger, tools, new Permits());
     }
 
     public TerrainPolicy terrain() {
@@ -108,11 +121,17 @@ public final class CostModel {
     // ==================== 身体与规格合起来的上限 ====================
 
     /**
-     * 从 {@code drop} 高处站着落地、摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage}),这一下摔不摔得起:
-     * 身体受得起({@link BodySnapshot#bears}),落差也在规格的无水落差以内——规格只能收紧身体的上限。
+     * 站着落地摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage},已按落差、落点方块、游戏模式与属性算好),这一下摔不摔得起:
+     * 身体受得起({@link BodySnapshot#bears}),也不超过规格愿意承受的摔伤——规格只能收紧身体的上限。能跳多高就是这两样换算出来的,
+     * 不另设一个写死的落差。
      */
-    public boolean bearsFall(double drop, int damage) {
-        return body.bears(damage) && drop <= spec.maxFallHeightNoWater() + Footing.EPSILON;
+    public boolean bearsFall(int damage) {
+        return damage <= spec.maxFallDamage() && body.bears(damage);
+    }
+
+    /** 落在硬地上最高能落多少({@link BodySnapshot#maxDrop}):身体受得起、规格也愿意承受的摔伤换算出来的落差,不会摔伤的身体不限。 */
+    public double maxFallDrop() {
+        return body.maxDrop(spec.maxFallDamage());
     }
 
     /**
@@ -135,12 +154,12 @@ public final class CostModel {
     }
 
     /**
-     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、落差也在规格的无水落差以内
+     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、也在规格愿意承受的摔伤以内
      * ({@link #bearsFall});攀着、浮着、落进水里的不摔。所有会落下去的走法(落下一级、斜走、向下挖)与步态({@code Gait}
      * 判多掉一次摔不摔得起)问的都是这一处。
      */
-    public boolean bearsLanding(Stance landing, boolean wading, double drop, int damage) {
-        return !landing.grounded() || wading || bearsFall(drop, damage);
+    public boolean bearsLanding(Stance landing, boolean wading, int damage) {
+        return !landing.grounded() || wading || bearsFall(damage);
     }
 
     /** 这次能不能疾跑:身体跑得动(饱食度够,或能飞)。 */
@@ -296,7 +315,11 @@ public final class CostModel {
     }
 
     private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {
-        Permit permit = terrain.judge(change, pos.immutable(), state, view);
+        // 搜索读的视图都记着相对快照改过哪些格({@link Recall.Source}):这一路改过的格照问
+        Permit permit = permits != null && view instanceof Recall.Source source
+                && !source.changed(pos.getX(), pos.getY(), pos.getY(), pos.getZ())
+                ? permits.judge(terrain, change, pos, state, view)
+                : terrain.judge(change, pos.immutable(), state, view);
         return switch (permit) {
             case Permit.Allow allow -> new Admission(permit, null, null);
             case Permit.Ask ask -> spec.consent()
@@ -304,6 +327,31 @@ public final class CostModel {
                     : Admission.refuse(Reason.NEEDS_CONSENT);
             case Permit.Deny deny -> new Admission(null, Reason.DENIED, deny.reason());
         };
+    }
+
+    /**
+     * 一次搜索里许可的答复,按"格、改动、方块状态"记。搜索要对很多候选步问同一格(四面八方挖进同一块石头),许可每问一次都要
+     * 新建动作与事实、过一遍规则表;这一格在快照里没变过,答复就不会变。
+     */
+    private static final class Permits {
+
+        /** 一格上记下的一条答复;同一格上不同的改动、方块状态串成一串。 */
+        private record Entry(TerrainPolicy.Change change, BlockState state, Permit permit, Entry next) {}
+
+        private final Long2ObjectOpenHashMap<Entry> byCell = new Long2ObjectOpenHashMap<>();
+
+        Permit judge(TerrainPolicy terrain, TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {
+            long cell = pos.asLong();
+            Entry first = byCell.get(cell);
+            for (Entry e = first; e != null; e = e.next()) {
+                if (e.state() == state && e.change().equals(change)) {
+                    return e.permit();
+                }
+            }
+            Permit permit = terrain.judge(change, pos.immutable(), state, view);
+            byCell.put(cell, new Entry(change, state, permit, first));
+            return permit;
+        }
     }
 
     // ==================== 价钱 ====================
@@ -320,7 +368,7 @@ public final class CostModel {
 
     /**
      * 挖掉 {@code state} 至少要多少钱:{@link #digCost} 在最省的情形下——眼睛不在水里、脚踏实地、没有按位置加价、许可放行。
-     * 挖不动的(硬度为负)是无穷大。搜索的估价拿它给"绕不开的挖掘"定下界({@code search.Burial})。
+     * 挖不动的(硬度为负)是无穷大。搜索的估价拿它给"绕不开的挖掘"定下界({@code search.Burial}),快判断拿它给要挖的整块定乐观的价。
      */
     public double digFloor(BlockState state) {
         return tooHard(state) ? Double.POSITIVE_INFINITY : tools.handTicks(state, false, true) + spec.breakPenalty();
@@ -340,6 +388,13 @@ public final class CostModel {
             cost *= spec.consentMultiplier();
         }
         return cost;
+    }
+
+    /**
+     * 放一块至少多少钱:{@link #placeCost} 在最省的情形下——没有按位置加价、许可放行。搜索的快判断拿它给要垫的一块定乐观的价。
+     */
+    public double placeFloor() {
+        return spec.placeCost();
     }
 
     /**

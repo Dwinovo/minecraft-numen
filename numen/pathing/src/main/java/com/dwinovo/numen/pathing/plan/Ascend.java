@@ -101,39 +101,58 @@ final class Ascend implements Move {
 
     /**
      * 平地上站着的节点,要踏上去的那一格是整块、它上面身体要占的格与起步那一列头顶都是空的,就是起跳上去;上面有整块挡着,
-     * 起跳也过不去(要挖,不许挖的走法过不去);要踏的那一格是空的,要垫一块台阶(要放,没料或不许放就过不去)。
+     * 要挖掉每一块再跳(不许挖、挖不动的过不去);要踏的那一格是空的,要垫一块台阶(没料或不许放就过不去)。要挖要放的,与标志字
+     * 说不清的格,答"可能":代价按最快的步速,只挖不垫时台阶还在、照样起跳,加上起跳的工夫与罚分,再加要挖要放的那几格的最低价。
      */
     @Override
     public int quick(Quick q, Heading heading) {
-        if (!q.plain()) {
-            return Quick.EXACT;
-        }
         int dx = heading.dx();
         int dz = heading.dz();
+        if (!q.plain()) {
+            return likely(q, dx, dz, q.fastest());
+        }
         int step = q.cell(dx, 0, dz);
         if (!Quick.simple(step)) {
-            return Quick.EXACT;
+            return likely(q, dx, dz, q.fastest());
         }
         boolean blocked = false;
         for (int dy = 1; dy <= q.top() + 1; dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return Quick.EXACT;
+                return likely(q, dx, dz, q.fastest());
             }
             blocked |= Quick.whole(flags);
         }
         int head = q.cell(0, q.top() + 1, 0);
         if (!Quick.simple(head)) {
-            return Quick.EXACT;
+            return likely(q, dx, dz, q.fastest());
         }
+        double edits = 0;
         if (Quick.pass(step)) {
-            return q.mayPlace() ? Quick.EXACT : Quick.REJECT;
+            // 台阶垫在半空:四面上下都是空气就没有一面点得中
+            if (!q.mayPlace() || q.nothingToClick(dx, 0, dz)) {
+                return Quick.REJECT;
+            }
+            edits += q.placeFloor();
         }
         if (blocked || Quick.whole(head)) {
-            return q.mayDig() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayDig()) {
+                return Quick.REJECT;
+            }
+            edits += q.digFloor(dx, 1, q.top() + 1, dz) + q.digFloor(0, q.top() + 1, q.top() + 1, 0);
+            if (Double.isInfinite(edits)) {
+                return Quick.REJECT;
+            }
+        }
+        if (Quick.pass(step)) {
+            return q.likely(dx, 1, dz, q.working() + edits);
+        }
+        double jump = movement(q.working(), true, q.stepJump(), true, 0) + q.jumpPenalty();
+        if (blocked || Quick.whole(head)) {
+            return q.likely(dx, 1, dz, jump + edits);
         }
         if (!q.calm()) {
-            return Quick.EXACT;
+            return q.likely(dx, 1, dz, movement(q.pace(), true, q.stepJump(), true, 0) + q.jumpPenalty());
         }
         q.entering();
         for (int dy = 0; dy <= q.top() + 1; dy++) {
@@ -145,6 +164,18 @@ final class Ascend implements Move {
         }
         double move = movement(q.pace(), true, q.stepJump(), true, 0);
         return q.holds(q.x() + dx, q.y() + 1, q.z() + dz, move + q.jumpPenalty() + q.overhead(dx, 0, dz), move);
+    }
+
+    /**
+     * 标志字说不清时答"可能";落点那一格托不住脚时要垫一块台阶(精确判断头一条):攀着、浮着垫不了,没料、不许放、台阶那一格
+     * 四面上下都是空气(没有一面点得中)也垫不了,当场不成立。
+     */
+    private static int likely(Quick q, int dx, int dz, double floor) {
+        if (q.loadedAround(dx, dz) && Double.isNaN(q.footing(dx, 1, dz))
+                && (!q.stance().grounded() || !q.mayPlace() || q.nothingToClick(dx, 0, dz))) {
+            return Quick.REJECT;
+        }
+        return q.likely(dx, 1, dz, floor);
     }
 
     @Override

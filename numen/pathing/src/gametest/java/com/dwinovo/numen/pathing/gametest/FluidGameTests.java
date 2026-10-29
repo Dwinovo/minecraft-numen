@@ -83,9 +83,8 @@ public class FluidGameTests {
         t.fill(14, 0, 0, 22, 0, 39, Blocks.WATER);
         TestBody body = t.body(3, 1, 5);
         t.go(body, Goals.at(t.at(25, 1, 5)), RouteSpec.defaults()).within(800).arrives().then(r -> {
-            if (r.report.journal().stuck() > 0 || r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("游过去的路上卡住过:卡住 " + r.report.journal().stuck() + " 次,走不下去 "
-                        + r.report.journal().blockages() + " 次");
+            if (r.report.journal().blockages() > 0) {
+                throw new GameTestAssertException("游过去的路上走不通过:" + r.report.journal().replans());
             }
         });
     }

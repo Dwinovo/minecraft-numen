@@ -5,10 +5,10 @@ import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Route;
 
 /**
- * 接续:一条没到目标的路线(半程路线)走到快完了,从它的终点提前搜下一段,接在后面,段与段之间不停顿。管两件事:
+ * 接续:一条没到目标的路线(半程路线)一交出,就从它的终点在后台接着搜,接在后面,身体边走边等,前后两截之间不停顿。管两件事:
  * <ul>
- *   <li><b>何时搜</b>:路线剩下的步子几何上最短还要 {@link #LOOKAHEAD_TICKS} 刻以内({@link Course#remainingTicks},运动学算的)就搜。
- *       按路线上的位置定,不按墙钟;</li>
+ *   <li><b>何时搜</b>:半程路线一装上就搜(Baritone 的 plan-ahead、mineflayer-pathfinder 的边走边续)。想多久按身体走完剩下的路
+ *       要多久定({@link Allowance#next});</li>
  *   <li><b>何时能接着走</b>:身体只在"后面接什么"已经定下来之后,才开始走路线末尾那几步——接续段到了(或者确认接不上、没有后面了),
  *       末尾那几步才开始。接续段先到还是后到,只改变身体要不要在末尾前几步的起点上等一等,不改变每一步怎么走:后面有没有路由路线数据
  *       定,不由工作线程快慢定。末尾那几步的范围是认步看得到的范围({@link Tracker#WINDOW})再加这一步。
@@ -20,17 +20,15 @@ import com.dwinovo.numen.pathing.search.Route;
  */
 final class Continuation {
 
-    /** 路线剩下的步子最短还要这么多刻就提前搜下一段。 */
-    static final double LOOKAHEAD_TICKS = 100;
     /** 末尾这么多步要等"后面接什么"定下来才开始走:认步往前看的 {@link Tracker#WINDOW} 步,再加走这一步时要看的下一步。 */
     static final int TAIL = Tracker.WINDOW + 1;
 
     /** 从这条路线的终点接着搜过,没搜出能接上的一段,或不再接了。 */
     private boolean failed;
 
-    /** 该提前搜下一段了。 */
+    /** 该从路线终点接着搜了:手上是一条没到目标的路线,也还没确认接不上。 */
     boolean due(Course course) {
-        return !course.complete() && !failed && !course.isEmpty() && course.remainingTicks() < LOOKAHEAD_TICKS;
+        return !course.complete() && !failed && !course.isEmpty();
     }
 
     /**
@@ -40,6 +38,14 @@ final class Continuation {
      */
     boolean settled(Course course) {
         return course.complete() || failed || course.cur() < waitingStep(course);
+    }
+
+    /**
+     * 身体不停下来还能走多久(几何最短的刻数):从正在走的这一步走到等接续的位置。接续要在这之前搜完,她才不用站着等;
+     * 半程短得不到末尾那几步,她一步也走不了,是 0。
+     */
+    static double aheadTicks(Course course) {
+        return course.ticksBefore(Math.max(course.cur(), waitingStep(course)));
     }
 
     /** 等接续的位置:末尾那几步的头一步;起点攀着的往前退,退不过正在走的这一步。 */

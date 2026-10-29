@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.search.Deadline;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Origin;
@@ -19,6 +20,7 @@ import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.Search;
 import com.dwinovo.numen.pathing.search.SearchResult;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.search.TripMemory;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
@@ -31,24 +33,30 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 段状态机:一次导航从头到尾怎么走,一段一段地走。每一段的目标是"到终点,或到一个估价比现在低一段的节点"({@link Search#advance}),
- * 首段从身体脚下搜;路线走到只剩几秒、又没到目标时,提前从路线终点搜下一段,接在后面,段与段之间不停顿。
+ * 段状态机:一次导航从头到尾怎么走。每次搜索的目标都是真终点,时限由表定({@link Allowance}):从身体脚下搜的首段想几十毫秒,
+ * 到了就交整条,没到就交半程让身体先动;半程一交出,马上从它的终点在后台接着搜,接在后面,前后两截之间不停顿。
  *
  * <p>走不通有两种,共用这一趟的记忆({@link TripMemory}):
  * <ul>
- *   <li>搜索没搜到这一段的终点:展开过的格子的估价抬高、记进记忆,身体前进到边界上总价最小的节点(截到回得了头的地方),从那里接着搜
- *       (LSS-LRTA* [Koenig &amp; Sun 2009]);</li>
- *   <li>执行里一步走不下去或卡住:这一步记为不通,只扔掉在走的路、从身体此刻的位置重搜这一段(旧路打折,不无谓换道)。</li>
+ *   <li>搜索没到目标:展开过的格子的估价抬高、记进记忆,身体前进到边界上总价最小的节点(截到回得了头的地方),从那里接着搜
+ *       (LSS-LRTA* [Koenig &amp; Sun 2009]);半程也截不出来就加时重搜;</li>
+ *   <li>执行里一步走不通:这一步记为不通,只扔掉在走的路、从身体此刻的位置重搜(旧路打折,不无谓换道)。</li>
  * </ul>
+ *
+ * <h2>重规划</h2>
+ * 什么情况下扔掉在走的路、或从路线终点接着搜,原因只有 {@link Journal.Replan} 这几种,全在 {@link #replan} 与 {@link #next}
+ * 记账与记日志:每一步开始前往前核接下来几步({@link Lookahead}),有一步在活世界上不成立;一步走着走不下去({@link Blockage});
+ * 一步超时({@link Watchdog});半程路线快走完({@link Continuation});另有走着离开了路线、到了终点不算到、接续段证明终点是死路。
+ * 世界变化靠往前核每一步开始时读一遍活世界发现,不订阅事件。
  * 收场只有一个判据:这一趟的总预算(按展开的节点数,{@link Allowance})用完还没到;另外是搜索证明了到不了(能走到的都搜过了),
- * 或根本动不了。身体不传送,不做模型不知道的事:重搜与原因都进日志与行程报告({@link Journal})。
+ * 或根本动不了。时钟只决定每次想多久,不决定放不放弃。身体不传送,不做模型不知道的事:重搜与原因都进日志与行程报告({@link Journal})。
  *
  * <p>这里只做组装:派搜索(拷快照、组成本模型、记日志)、驱动正在走的那一步({@link Step})、下载具、对外交出状态。其余各归一个部件——
  * <ul>
  *   <li>路线与进度:{@link Course};</li>
  *   <li>认步,即身体此刻在路线上的哪一步:{@link Tracker}(身体此刻在哪个节点,照搜索定起点的同一条规则({@link Origin})在活世界上定);</li>
- *   <li>接续,何时搜下一段、怎么拼、末尾几步何时能开始走:{@link Continuation};</li>
- *   <li>总预算与段的大小:{@link Allowance};</li>
+ *   <li>接续,何时搜下一截、怎么拼、末尾几步何时能开始走:{@link Continuation};</li>
+ *   <li>每次想多久、展开几个节点、一趟的总预算:{@link Allowance};</li>
  *   <li>到达,停稳之后到没到:{@link Arrival}(路过的导航不停稳,走进目标就算到了)。</li>
  * </ul>
  *
@@ -72,16 +80,19 @@ public final class Driver {
 
     /** 为什么派这次搜索。 */
     private enum Purpose {
-        /** 从身体脚下搜(首段,或走不下去之后重搜)。 */
-        FROM_BODY("从脚下"),
-        /** 从当前路线的终点搜下一段。 */
-        NEXT("接续");
+        /** 从身体脚下搜(首段,或走不下去之后重搜):身体站着等它。 */
+        FROM_BODY("从脚下", Searches.Urgency.NOW),
+        /** 从当前路线的终点接着搜:身体边走边等它。 */
+        NEXT("接续", Searches.Urgency.AHEAD);
 
         /** 日志里的叫法。 */
         final String label;
+        /** 在派发口排哪一级。 */
+        final Searches.Urgency urgency;
 
-        Purpose(String label) {
+        Purpose(String label, Searches.Urgency urgency) {
             this.label = label;
+            this.urgency = urgency;
         }
     }
 
@@ -107,7 +118,7 @@ public final class Driver {
     /** 最近一次搜索的输入与结论:总预算用完收场时诊断它。 */
     private Search lastSearch;
     private SearchResult lastResult;
-    /** 最近一次没搜到这一段终点的搜索里,离目标最近处朝目标的那一步为什么被拒;还没有为 null。一趟走得久了要对人说"卡在哪",读它。 */
+    /** 最近一次没到目标的搜索里,离目标最近处朝目标的那一步为什么被拒;还没有为 null。一趟走得久了要对人说"卡在哪",读它。 */
     private Blockage nearestRefusal;
     /** 最近一次没走成的一步的原因;之后走成了一步就清掉。从那里重搜把能走的都搜过了还是没路,没路的原因就是它。 */
     private Blockage lastBlockage;
@@ -127,13 +138,14 @@ public final class Driver {
      * @param budget 这一趟总共最多展开几个节点;0 是按起点到终点的估价定({@link Allowance})
      * @param seed    先照这条路走(调用方给的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
      * @param passing 路过这个目标:走进去就算到了,不停稳
+     * @param clock   搜索看的表(宿主的端口):只定每次想多久
      */
     public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
-                  RouteSpec spec, int budget, Route seed, boolean passing) {
+                  RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
         this.rig = new Rig(body, terrain, materials, threats);
         this.goal = goal;
         this.spec = spec;
-        this.allowance = new Allowance(budget);
+        this.allowance = new Allowance(budget, clock);
         this.passing = passing;
         if (seed != null) {
             install(seed, goalHas(seed.end(), seed.endStance()));
@@ -317,7 +329,7 @@ public final class Driver {
                     spentOut();
                     return;
                 }
-                dispatch(Purpose.FROM_BODY, node, null);
+                fromBody(node);
             }
             watchdog.waiting(body.position());
             return;
@@ -343,18 +355,27 @@ public final class Driver {
                 watchdog.waiting(body.position());
                 return;
             }
-            Maneuver planned = course.current();
-            List<Maneuver> diving = new ArrayList<>();
-            for (int i = course.cur() + 1; planned.submerged() && i < course.size() && course.at(i).submerged(); i++) {
-                diving.add(course.at(i));
+            switch (Lookahead.verify(rig, goal, spec, course)) {
+                case Lookahead.Broken broken -> {
+                    fail(Journal.Replan.AHEAD, broken.step(), broken.blockage());
+                    return;
+                }
+                case Lookahead.Clear clear -> {
+                    Maneuver planned = course.current();
+                    List<Maneuver> diving = new ArrayList<>();
+                    for (int i = course.cur() + 1; planned.submerged() && i < course.size() && course.at(i).submerged(); i++) {
+                        diving.add(course.at(i));
+                    }
+                    step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, clear.fresh(), clear.model(),
+                            course.ahead(Continuation.TAIL - 1), diving, watchdog);
+                }
             }
-            step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, planned, course.ahead(Continuation.TAIL - 1), diving,
-                    goal, spec, watchdog);
         }
         Beat beat = step.tick();
         switch (beat) {
-            case Beat.Going going -> lookahead();
-            case Beat.Blocked blocked -> fail(blocked.blockage());
+            case Beat.Going going -> continueAhead();
+            case Beat.Blocked blocked -> fail(blocked.blockage().hitch() == Blockage.Hitch.STUCK ? Journal.Replan.TIMEOUT
+                    : Journal.Replan.FAILED, course.current(), blocked.blockage());
             case Beat.Denied denied -> {
                 rig.mouse.release();
                 halt(new Halt.Denied(denied.cell(), denied.reason()));
@@ -436,21 +457,21 @@ public final class Driver {
                 // 落回了前面一步的起点:正在走的这一步没走成,和走不下去一样记一次、从这里重搜。悄悄退回去重走的话,同一处一圈圈地退,
                 // 每一步的期限都从头算,永远等不到"卡住"
                 Maneuver current = course.current();
-                fail(current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(), null,
-                        Blockage.Hitch.FELL_BACK));
+                fail(Journal.Replan.FAILED, current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(),
+                        null, Blockage.Hitch.FELL_BACK));
                 return true;
             }
             case Tracker.Fix.Lost lost -> {
                 if (step == null) {
                     // 还没开始走这一步(上一步的冲劲把身子带出了路线):不怪它,从这里重新搜
-                    replan("离开路线,落在 " + PathLog.pos(node) + ",该在 " + PathLog.step(course.current()));
+                    replan(Journal.Replan.OFF_ROUTE, "落在 " + PathLog.pos(node) + ",该在 " + PathLog.step(course.current()));
                     return true;
                 }
                 // 走着这一步,身体落在了路线之外:这一步没把身体带到它的落点,和走不下去一样记一次。只重搜不记的话,规划看不见的墙前面
                 // 斜走一步滑到旁边一行,重搜又斜走回来,每一次都是一条新路线的第一步,期限从头算,永远等不到"卡住",永远走不出去
                 Maneuver current = course.current();
-                fail(current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(), null,
-                        Blockage.Hitch.LOST));
+                fail(Journal.Replan.FAILED, current, new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(),
+                        null, Blockage.Hitch.LOST));
                 return true;
             }
             case Tracker.Fix.Here here -> {
@@ -495,9 +516,7 @@ public final class Driver {
         if (!still || node == null || !settled(endStance.kind())) {
             if (node != null && !node.equals(end) && settled(Stance.Kind.GROUND) && tracker.strays()) {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
-                Maneuver last = course.lastLeg().maneuver();
-                PathLog.info("{} 没停在终点 {},落在 {}", rig.who, PathLog.pos(end), PathLog.pos(node));
-                fail(last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                missedEnd(rig.who + " 没停在终点 " + PathLog.pos(end) + ",落在 " + PathLog.pos(node));
             }
             return;
         }
@@ -509,13 +528,11 @@ public final class Driver {
                         return;
                     }
                     // 回不去:最后一步没把身体带到它的落点,记为不通再重搜(同一处终点一圈圈冲过头、重搜、再冲过头,永远收不了场)
-                    Maneuver last = course.lastLeg().maneuver();
-                    PathLog.info("{} {}", rig.who, replan.why());
-                    fail(last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                    missedEnd(rig.who + " " + replan.why());
                     return;
                 }
                 unsettled = 0;
-                replan(replan.why());
+                replan(Journal.Replan.ARRIVAL, replan.why());
             }
             case Arrival.Verdict.Blind blind -> {
                 rig.keys.releaseAll();
@@ -551,34 +568,40 @@ public final class Driver {
     }
 
     /**
-     * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照(只拷一段那么远),成本模型按此刻的身体与端口现组;
-     * 目标是这一段的终点({@link Allowance#advance}),带着这一趟的记忆。接着路线往下搜时起点接在 {@code arrival} 那一步后面
-     * (憋气从走完那一步时的样子起),从身体脚下搜为 null(憋气从身体此刻的样子起)。
+     * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组;目标是真终点,
+     * 带着这一趟的记忆,最多想到 {@code deadline}。接着手上的路线往下搜时起点是它的终点,读的世界叠上身体从此刻这一步走到那里要做的
+     * 改动({@link Search#after(Route, int)});从身体脚下搜时 {@code ahead} 为 null(憋气从身体此刻的样子起)。
      */
-    private void dispatch(Purpose why, BlockPos from, Route.Leg arrival) {
+    private void dispatch(Purpose why, BlockPos from, Route ahead, Deadline deadline) {
         long t0 = System.nanoTime();
-        WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from, Allowance.SNAPSHOT_RADIUS);
+        WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
         long t1 = System.nanoTime();
         CostModel model = model();
         long t2 = System.nanoTime();
         rig.tally.dispatched(t1 - t0, t2 - t1);
-        PathLog.debug("{} 派搜索 {} 从 {} 去 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
-                PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
-        Search search = new Search(view, model, from, goal, allowance.segment(), favoring)
-                .advancing(Allowance.advance(model.body().stats())).remembering(memory.frozen()).after(arrival);
+        PathLog.debug("{} 派搜索 {} 从 {} 去 {} 时限 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
+                PathLog.ms(deadline.nanos()), PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
+        Search search = new Search(view, model, from, goal, allowance.nodes(), favoring)
+                .advancing(Allowance.advance(model.body().stats())).remembering(memory.frozen()).after(ahead, course.cur())
+                .within(deadline);
         pendingSearch = search;
         purpose = why;
-        pending = Searches.submit(search);
+        pending = Searches.submit(search, why.urgency);
     }
 
-    /** 从当前路线的终点搜下一段;这一趟的总预算用完了就不再接,路线走到头在那里收场。 */
+    /** 从身体脚下搜。 */
+    private void fromBody(BlockPos node) {
+        dispatch(Purpose.FROM_BODY, node, null, allowance.first());
+    }
+
+    /** 从当前路线的终点接着搜;这一趟的总预算用完了就不再接,路线走到头在那里收场。 */
     private void next() {
         if (allowance.spent()) {
             continuation.skip();
             return;
         }
-        Route.Leg last = course.lastLeg();
-        dispatch(Purpose.NEXT, last.maneuver().to(), last);
+        rig.journal.replanned(Journal.Replan.CONTINUE);
+        dispatch(Purpose.NEXT, course.end(), course.route(), allowance.next(Continuation.aheadTicks(course)));
     }
 
     /** 在飞的搜索不要了:叫停,连它的输入(快照、成本模型)一起放手。 */
@@ -605,7 +628,7 @@ public final class Driver {
         pending = null;
         lastSearch = search;
         lastResult = result;
-        if (result.blocking() != null && !result.reached()) {
+        if (result.blocking() != null && !result.arrived()) {
             nearestRefusal = Blockage.refused(search, result.blocking());
         }
         allowance.spend(result.expanded());
@@ -614,21 +637,27 @@ public final class Driver {
         }
         breathless |= result.breathless();
         boolean learned = memory.raise(result.raised());
+        if (result.route() != null) {
+            allowance.found();
+        } else if (result.stop() == SearchResult.Stop.TIME || result.stop() == SearchResult.Stop.BUDGET) {
+            // 没搜完,半程也截不出来:下一次多想一倍(Azalea 的加时重试),放不放弃只由总预算定
+            allowance.missed();
+        }
         if (purpose == Purpose.NEXT) {
             if (result.stop() == SearchResult.Stop.EXHAUSTED) {
-                // 从路线的终点往外走得到的地方都搜过了,没有这一段的终点:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
-                // 从此刻的位置重搜这一段,绕开它——走进去就出不来了(往下挖的竖井、封死的坑)
-                replan("接续段证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
+                // 从路线的终点往外走得到的地方都搜过了,没有目标:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
+                // 从此刻的位置重搜,绕开它——走进去就出不来了(往下挖的竖井、封死的坑)
+                replan(Journal.Replan.DEAD_END, "接续证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
                 return;
             }
             if (continuation.splice(course, result.route(), result.arrived())) {
                 return;
             }
             if (result.route() == null) {
-                PathLog.info("{} 接续段没搜出路线,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
+                PathLog.info("{} 接续没搜出路线,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
             } else {
-                // 接续段的起点不是路线的终点:走到终点后从脚下再搜
-                PathLog.info("{} 接续段接不上,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
+                // 接续的起点不是路线的终点:走到终点后从脚下再搜
+                PathLog.info("{} 接续接不上,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
             }
             return;
         }
@@ -649,15 +678,22 @@ public final class Driver {
     }
 
     /**
-     * 一次从脚下的搜索没交出路线。搜完了能走到的地方都没有这一段的终点、或根本动不了,这一趟就此收场;预算用完、有路伸进没加载的
-     * 区块而身体没处可推进时,搜索让这一趟的记忆里估价又升高了({@code learned})就再搜(估价变了,不是同一次搜索),什么也没学到就是
-     * 原地不动、再搜也一样,收场。总预算用完由下一次派搜索时判({@link #spentOut})。
+     * 一次从脚下的搜索没交出路线。搜完了能走到的地方都没有目标、或根本动不了,这一趟就此收场。时间到、节点上限用完只是没搜完,
+     * 与机器快慢有关,不拿它收场:下一刻加时再搜({@link Allowance#missed})。有路伸进没加载的区块而身体没处可推进时,搜索让这一趟的
+     * 记忆里估价又升高了({@code learned})就再搜(估价变了,不是同一次搜索),什么也没学到就是原地不动、再搜也一样,收场。
+     * 总预算用完由下一次派搜索时判({@link #spentOut})。
      */
     private void unsolved(SearchResult result, Search search, boolean learned) {
-        if (learned && result.stop() != SearchResult.Stop.EXHAUSTED && result.stop() != SearchResult.Stop.STRANDED) {
-            return;
+        switch (result.stop()) {
+            case TIME, BUDGET -> {
+            }
+            case UNLOADED -> {
+                if (!learned) {
+                    giveUp(result, search);
+                }
+            }
+            default -> giveUp(result, search);
         }
-        giveUp(result, search);
     }
 
     /**
@@ -684,14 +720,14 @@ public final class Driver {
      */
     private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
         Route route = result.route();
-        rig.journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.gap());
-        String why = result.blocking() == null || result.reached() ? ""
+        rig.journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.checks());
+        String why = result.blocking() == null || result.arrived() ? ""
                 : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
         String what = route == null ? "没交出路线"
-                : (result.arrived() ? "到目标 " : result.reached() ? "一段 " : "往边界推进 ") + PathLog.route(route);
-        PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 界 {} 用时 {}({}) 排队 {} 停因 {} {}{}", rig.who, purpose.label,
+                : (result.arrived() ? "到目标 " : result.reached() ? "到这一段的终点 " : "往边界推进 ") + PathLog.route(route);
+        PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 时限 {} 用时 {}({}) 排队 {} 停因 {} {}{}", rig.who, purpose.label,
                 PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
-                Double.isNaN(result.gap()) ? "-" : String.format("%.2f", result.gap()),
+                search.deadline() == Deadline.NONE ? "-" : PathLog.ms(search.deadline().nanos()),
                 PathLog.ms(done.ranNanos()), PathLog.load(done, result.expanded()), PathLog.ms(done.queuedNanos()), result.stop(),
                 what, result.raised().isEmpty() ? why : " 抬高了 " + result.raised().size() + " 格的估价" + why);
         if (route != null && PathLog.debugging()) {
@@ -707,18 +743,32 @@ public final class Driver {
         tracker.reset();
     }
 
-    /** 路线快走完、又没到目标:从终点提前搜下一段。 */
-    private void lookahead() {
+    /** 手上的路线没到目标:从它的终点接着搜(边走边搜)。 */
+    private void continueAhead() {
         if (pending == null && continuation.due(course)) {
             next();
         }
     }
 
-    /** 扔掉当前路线,从身体脚下重新搜,旧路打折;{@code why} 记进日志。 */
-    private void replan(String why) {
-        rig.journal.replanned();
-        PathLog.info("{} 重搜:{} 身体 {}", rig.who, why, PathLog.at(rig.entity.position()));
+    /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
+    private void replan(Journal.Replan why, String detail) {
+        rig.journal.replanned(why);
+        PathLog.info("{} 重搜({}):{} 身体 {}", rig.who, why.label, detail, PathLog.body(rig.entity));
         reset();
+    }
+
+    /**
+     * 路线走完了,身体却没停在终点上:最后一步没把它带到落点,这一步记为不通再重搜(只重搜不记的话,同一处终点一圈圈冲过头、
+     * 重搜、再冲过头)。路线一步都没有(起点就是站位)时没有哪一步可怪,身体只是被带离了站位——从这里重搜。
+     */
+    private void missedEnd(String detail) {
+        if (course.isEmpty()) {
+            replan(Journal.Replan.OFF_ROUTE, detail);
+            return;
+        }
+        Maneuver last = course.lastLeg().maneuver();
+        PathLog.info("{}", detail);
+        fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
     }
 
     /** 扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
@@ -736,21 +786,13 @@ public final class Driver {
     }
 
     /**
-     * 一步走不下去:这一步(走法、起点、落点)在这一趟里记为不通,以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。
-     * 同一步不会走第二次,重搜多少次由这一趟的总预算管。
+     * 第 {@code m} 步走不通({@code why} 是 {@link Journal.Replan#blocks} 的一种):这一步(走法、起点、落点)在这一趟里记为不通,
+     * 以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。同一步不会走第二次,重搜多少次由这一趟的总预算管。
      */
-    private void fail(Blockage blockage) {
-        fail(course.current(), blockage);
-    }
-
-    /** 同 {@link #fail(Blockage)},没走成的是 {@code m} 这一步(路线走完之后停不到终点,是最后一步没走成)。 */
-    private void fail(Maneuver m, Blockage blockage) {
+    private void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
         memory.block(m.kind(), m.from(), m.to());
         lastBlockage = blockage;
-        rig.journal.blocked();
-        PathLog.info("{} 走不下去 {} 这一步 {} -> 记为不通,从脚下重搜这一段 {}", rig.who, PathLog.blockage(blockage),
-                PathLog.step(m), PathLog.body(rig.entity));
-        reset();
+        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
     }
 
     private void hold() {

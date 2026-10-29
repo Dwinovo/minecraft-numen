@@ -18,7 +18,7 @@ import net.minecraft.world.item.Item;
 
 /**
  * 同伴接入寻路的端口,只在这里组:她的身体(键盘、视角、鼠标、快捷栏都在它上面)、此刻的权限快照({@link GateTerrain})、这一趟愿意
- * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
+ * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers}),搜索看这台服务器定的表({@link NavClock})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
  * 用的都是这一套。在世界所在的线程上调:权限快照与垫路料在这一刻取。
  */
 public final class CompanionPorts {
@@ -36,7 +36,7 @@ public final class CompanionPorts {
     /** 她的寻路门面,避开 {@code threats},垫路从 {@code materials} 里挑。 */
     public static Navigator navigator(NumenPlayer player, Threats threats, List<Item> materials) {
         return Navigator.of(new CompanionBody(player), new Ports(terrain(player), materials(player, materials),
-                threats));
+                threats, NavClock.of(player.server)));
     }
 
     /** 按 {@code spec} 与她此刻的身体、端口组一份成本模型:估一格挖多久、许不许挖,与寻路用的是同一份定价。 */

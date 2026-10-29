@@ -105,7 +105,7 @@ class RouteSpecTest {
         assertThrows(IllegalArgumentException.class,
                 () -> RouteSpec.defaults().edit().placeCost(Double.POSITIVE_INFINITY).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().alterBudget(-1).build());
-        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().maxFallHeightNoWater(-1).build());
+        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().maxFallDamage(-1).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().consentMultiplier(0.5).build());
         assertThrows(IllegalArgumentException.class,
                 () -> RouteSpec.defaults().edit().consentMultiplier(Double.POSITIVE_INFINITY).build());

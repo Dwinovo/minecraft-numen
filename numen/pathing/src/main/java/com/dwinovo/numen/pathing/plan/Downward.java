@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.plan;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.CellFlags;
 
 import net.minecraft.core.BlockPos;
 
@@ -50,7 +51,7 @@ final class Downward implements Move {
         double drop = f0 - landing.feetY();
         boolean wading = Strides.inWater(draft, below);
         int damage = model.fallDamage(draft, landing, support, drop, wading);
-        if (!model.bearsLanding(landing, wading, drop, damage)) {
+        if (!model.bearsLanding(landing, wading, damage)) {
             return Premise.fail(support, Reason.TOO_FAR_TO_FALL);
         }
         if (!contact.admit(draft, model, support, drop > 0.5)) {
@@ -63,14 +64,27 @@ final class Downward implements Move {
 
     /**
      * 向下挖要站着、脚踩的正是下面那一格,还要许挖。不许挖的,精确判断在拒绝之前要先瞄(射线读四周的格),所以只在四周读全了
-     * 的节点上断定;能挖的,挖不挖得了、落下去摔不摔得起,精确判断。
+     * 的节点上断定;其余答"可能",代价至少是落下去的工夫加挖掉脚下那一格的最低价(挖不动的那一格,四周读全了时当场不成立)。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.stance().grounded() || q.stance().supportY() != q.y() - 1) {
             return Quick.REJECT;
         }
-        return !q.mayDig() && q.plain() ? Quick.REJECT : Quick.EXACT;
+        if (!q.mayDig() && q.loadedAround(0, 0)) {
+            return Quick.REJECT;
+        }
+        if ((q.own() & CellFlags.FLUID) != 0 && q.loadedAround(0, 0)) {
+            // 脚所在的格有液体:挖掉脚下那格,液体往下灌({@code DigRules} 的漏液)
+            return Quick.REJECT;
+        }
+        double dig = q.model().digFloor(q.state(0, -1, 0));
+        if (Double.isInfinite(dig)) {
+            return q.plain() ? Quick.REJECT : q.likely(0, -1, 0, q.descendFloor() - q.walkOff());
+        }
+        // 平地上挖掉脚下那块、再下面是整块:正好落一格
+        double landing = q.plain() && Quick.whole(q.cell(0, -2, 0)) ? q.landing(1) : q.descendFloor() - q.walkOff();
+        return q.likely(0, -1, 0, landing + dig);
     }
 
     @Override

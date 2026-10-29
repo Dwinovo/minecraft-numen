@@ -139,7 +139,7 @@ public final class PathLog {
     public static String spec(RouteSpec spec) {
         StringBuilder out = new StringBuilder("dig=").append(spec.dig()).append(" place=").append(spec.place())
                 .append(" consent=").append(spec.consent() ? num(spec.consentMultiplier()) : "false");
-        out.append(" maxFall=").append(spec.maxFallHeightNoWater());
+        out.append(" maxFallDamage=").append(spec.maxFallDamage());
         if (spec.budgeted()) {
             out.append(" alterBudget=").append(spec.alterBudget());
         }
@@ -204,6 +204,13 @@ public final class PathLog {
     public static String blockage(Blockage b) {
         return b.move() + " 卡在 " + pos(b.cell()) + " " + block(b.block()) + " "
                 + (b.reason() != null ? "前提=" + b.reason() : "执行=" + b.hitch());
+    }
+
+    /** 一趟里按原因分的重规划次数,如 "往前核不成立 2 一步超时 1";一次也没有为 "-"。 */
+    public static String replans(Journal journal) {
+        StringBuilder out = new StringBuilder();
+        journal.replans().forEach((why, n) -> out.append(out.isEmpty() ? "" : " ").append(why.label).append(' ').append(n));
+        return out.isEmpty() ? "-" : out.toString();
     }
 
     /** 身体此刻的状态:精确位置、在地上还是空中、泡没泡水、眼睛在不在水里、氧气、血量。 */

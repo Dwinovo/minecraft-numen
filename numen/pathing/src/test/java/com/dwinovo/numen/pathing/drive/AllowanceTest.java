@@ -4,33 +4,38 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.dwinovo.numen.pathing.search.SearchClock;
+
 import org.junit.jupiter.api.Test;
 
-/** 一趟的总预算:与估价成正比、用完收场、一次搜索再没有进展也要花预算;不经 Driver。 */
+/** 一趟的总预算与每次搜索的时限:总预算与估价成正比、用完收场、一次搜索再没有进展也要花预算;时限按首段、接续、加时重试定。不经 Driver。 */
 class AllowanceTest {
 
-    private static final double SEGMENT = 100;
+    private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
+
+    /** 一段推进的估价(刻)。 */
+    private static final double ADVANCE = 10;
 
     @Test
-    void theTotalGrowsWithTheEstimateInWholeSegments() {
-        Allowance near = new Allowance(0);
-        near.begun(30, SEGMENT);
-        Allowance far = new Allowance(0);
-        far.begun(1000, SEGMENT);
-        assertEquals(Allowance.MIN_SEGMENTS * Allowance.SEGMENT_NODES, drain(near), "近处的也至少够搜几段");
-        assertEquals(10 * Allowance.SLACK * Allowance.SEGMENT_NODES, drain(far), "远的按走完要几段、留余量");
+    void theTotalGrowsWithTheSegmentsLeft() {
+        Allowance near = new Allowance(0, CLOCK);
+        near.begun(0.5 * ADVANCE, ADVANCE);
+        Allowance far = new Allowance(0, CLOCK);
+        far.begun(9.5 * ADVANCE, ADVANCE);
+        assertTrue(drain(near) >= Allowance.SEARCH_NODES, "近处的也至少够搜满一次");
+        assertEquals(10L * Allowance.SEGMENT_NODES * Allowance.SLACK, drain(far), "远的按估价要走几段给");
     }
 
     @Test
     void aSpecifiedTotalIsNotRescaledByTheEstimate() {
-        Allowance fixed = new Allowance(500);
-        fixed.begun(100_000, SEGMENT);
+        Allowance fixed = new Allowance(500, CLOCK);
+        fixed.begun(100_000, ADVANCE);
         assertEquals(500, drain(fixed));
     }
 
     @Test
     void aSearchThatExpandedNothingStillCosts() {
-        Allowance allowance = new Allowance(2);
+        Allowance allowance = new Allowance(2, CLOCK);
         allowance.spend(0);
         assertFalse(allowance.spent());
         allowance.spend(0);
@@ -38,21 +43,47 @@ class AllowanceTest {
     }
 
     @Test
-    void aSegmentNeverSearchesMoreThanWhatIsLeft() {
-        Allowance allowance = new Allowance(Allowance.SEGMENT_NODES + 10);
-        assertEquals(Allowance.SEGMENT_NODES, allowance.segment());
-        allowance.spend(Allowance.SEGMENT_NODES);
-        assertEquals(10, allowance.segment());
+    void aSearchNeverExpandsMoreThanWhatIsLeft() {
+        Allowance allowance = new Allowance(Allowance.SEARCH_NODES + 10, CLOCK);
+        assertEquals(Allowance.SEARCH_NODES, allowance.nodes());
+        allowance.spend(Allowance.SEARCH_NODES);
+        assertEquals(10, allowance.nodes());
     }
 
     @Test
     void restartingGivesTheNewGoalItsOwnTotal() {
-        Allowance allowance = new Allowance(0);
-        allowance.begun(1000, SEGMENT);
+        Allowance allowance = new Allowance(0, CLOCK);
+        allowance.begun(1000 * ADVANCE, ADVANCE);
         allowance.spend(5);
         allowance.restart();
-        allowance.begun(30, SEGMENT);
-        assertEquals(Allowance.MIN_SEGMENTS * Allowance.SEGMENT_NODES, drain(allowance));
+        allowance.begun(0.5 * ADVANCE, ADVANCE);
+        Allowance near = new Allowance(0, CLOCK);
+        near.begun(0.5 * ADVANCE, ADVANCE);
+        assertEquals(drain(near), drain(allowance), "重新开始的一趟和新来的一样");
+    }
+
+    @Test
+    void theNextSearchThinksAsLongAsTheBodyTakesToWalkWhatIsLeft() {
+        Allowance allowance = new Allowance(0, CLOCK);
+        assertEquals(Allowance.FIRST_NANOS, allowance.first().nanos());
+        assertEquals(40 * Allowance.TICK_NANOS - Allowance.MARGIN_NANOS, allowance.next(40).nanos(), "走完剩下的路之前搜完");
+        assertEquals(Allowance.NEXT_MAX_NANOS, allowance.next(10_000).nanos(), "封顶");
+        assertEquals(Allowance.FIRST_NANOS, allowance.next(1).nanos(), "不低于首段");
+    }
+
+    @Test
+    void aSearchThatHandsNothingOverMakesTheNextOneThinkLonger() {
+        Allowance allowance = new Allowance(0, CLOCK);
+        allowance.missed();
+        assertEquals(2 * Allowance.FIRST_NANOS, allowance.first().nanos());
+        allowance.missed();
+        assertEquals(4 * Allowance.FIRST_NANOS, allowance.first().nanos());
+        for (int i = 0; i < 30; i++) {
+            allowance.missed();
+        }
+        assertEquals(Allowance.NEXT_MAX_NANOS, allowance.first().nanos(), "加时也有顶");
+        allowance.found();
+        assertEquals(Allowance.FIRST_NANOS, allowance.first().nanos(), "交出了路线,时限回到原样");
     }
 
     /** 一次花一个节点,数能花多少个才用完。 */
@@ -62,6 +93,6 @@ class AllowanceTest {
             allowance.spend(1);
             n++;
         }
-        return n + 0;
+        return n;
     }
 }

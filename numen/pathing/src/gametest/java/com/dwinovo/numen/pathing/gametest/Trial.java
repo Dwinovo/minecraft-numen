@@ -23,6 +23,7 @@ import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -232,7 +233,7 @@ final class Trial {
 
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(body, new Ports(terrain, materials, threats));
+        return Navigator.of(body, new Ports(terrain, materials, threats, SearchClock.STEADY));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */
