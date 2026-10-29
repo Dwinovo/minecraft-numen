@@ -935,11 +935,28 @@ public final class LuaSandbox {
         /** 只读不跑时各模块另装的那一份:模块名 → 它返回的表。 */
         private final Map<String, LuaValue> classModules = new java.util.HashMap<>();
 
+        /** 各个类的元表,查过一次就记下(没有的记 {@link LuaValue#NIL}):一次答复里成千上万个带方法的值只查一遍。键是 {@code 模块|类}。 */
+        private final Map<String, LuaValue> classMetas = new java.util.HashMap<>();
+
         /**
          * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code numen.shape.Pos} 是同一张,
          * 比较、运算对得上);只读不跑时从 {@link Builder#classes} 另装一份。模块不在、或模块里没有这张表,是 null。
+         * 向来源要模块、装模块、沿路径找表都只在第一次做:模块来源每问一次都可能要读库,一份答复有多少个值就问多少次,脚本的计量与墙钟
+         * 就随格数成倍地涨。
          */
         private LuaValue classMeta(String home, String type) {
+            LuaValue known = classMetas.get(home + '|' + type);
+            if (known != null) {
+                return known.istable() ? known : null;
+            }
+            LuaValue meta = findClassMeta(home, type);
+            if (meta != null || !loading.contains(home)) {
+                classMetas.put(home + '|' + type, meta == null ? LuaValue.NIL : meta);
+            }
+            return meta;
+        }
+
+        private LuaValue findClassMeta(String home, String type) {
             LuaValue module;
             if (modules != null) {
                 if (modules.code(home) == null || loading.contains(home)) {

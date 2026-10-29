@@ -230,8 +230,16 @@ public final class Modules implements ScriptCatalog.ModuleSource {
      */
     @Override
     public String code(String name) {
-        Module module = get(name);
-        return module == null ? null : module.code();
+        EntryId id = idOf(name);
+        if (id == null) {
+            return null;
+        }
+        if (library == null) {
+            BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+            return builtin == null ? null : builtin.code();
+        }
+        Library.Entry entry = library.find(id);
+        return entry == null ? null : entry.text();
     }
 
     @Override
