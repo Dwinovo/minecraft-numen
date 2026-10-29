@@ -355,6 +355,12 @@ class MovesTest {
     }
 
     @Test
+    void pillaringCannotBeUndoneBecauseTheCellFeetLeftIsFilled() {
+        // 只升一格,落差远在迈步高度以内,可脚刚离开的那一格已经垫上了方块:不改地形回不去
+        assertFalse(holds(MoveKind.PILLAR, withCobble(natural()), ground(), AT, Heading.UP).reversible());
+    }
+
+    @Test
     void climbingJumpingBackAcrossAGapAndDiggingDownOneBlockCanAllBeUndone() {
         CostModel parkour = Fixtures.model(RouteSpec.defaults().edit().parkour(true).build());
         assertTrue(holds(MoveKind.PARKOUR, parkour, gap(2), AT, EAST).reversible(), "跳回去的跨距与落差不比去时难");

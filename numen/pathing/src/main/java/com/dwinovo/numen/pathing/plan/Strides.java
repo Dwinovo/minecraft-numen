@@ -128,6 +128,8 @@ final class Strides {
      * 不改地形,身体能不能从落点 {@code to} 回到起点 {@code from}(没搜到这一段的终点时,往边界推进的一截只能停在回得了头的节点上)。判据全是运动学与第 0 层的几何:
      * <ul>
      *   <li>起点不是站着的(攀着、浮着):回去是爬上去、游上去,都回得去;</li>
+     *   <li>起点站着,可这一步自己改过的格已经让身体在起点那一列站不回去了(垫柱放在脚刚离开的那一格里):回去要经过被改的格,
+     *       不改地形就回不去,不论落差多小;</li>
      *   <li>站着落在站着的地方,落差(起点的脚高减落点的)不超过迈步高度,回去只是走上去,回得去;更高就看回去那一步
      *       ({@link Stepping#between},落差在起跳能到的高度以内才回得去);同一列(往下挖穿)没有那一步,落差要在起跳能到的高度以内;</li>
      *   <li>落在攀着、浮着的地方:顺着梯子、藤蔓爬上去,爬到头了剩下的落差要在起跳能到的高度以内;在水里游到水面,岸沿高出水面不超过
@@ -138,6 +140,9 @@ final class Strides {
     static boolean reversible(BlockGetter level, BodyStats body, BlockPos from, Stance start, BlockPos to, Stance landing) {
         if (!start.grounded()) {
             return true;
+        }
+        if (!Clearance.fits(level, body, from.getX(), start.feetY(), from.getZ())) {
+            return false;
         }
         double rise = start.feetY() - landing.feetY();
         int dx = from.getX() - to.getX();

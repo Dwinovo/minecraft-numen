@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Permit;
@@ -126,6 +127,29 @@ public class AlterGameTests {
                 throw new GameTestAssertException("应当垫柱上去、不挖:" + r.report.ledger().entries());
             }
         });
+    }
+
+    /**
+     * 站在八格高的石柱顶上,四周一圈两格高的基岩(上面是空的),身上有圆石、许放不许挖,去处在地面上:下不去(摔不起),往上垫两块就能
+     * 踩上基岩圈、再搭桥朝去处过去,可搭到去处正上方也还是下不来。垫柱把脚刚离开的那一格填上,不改地形退不回来,半程不交这样的一截——
+     * 身体原地不动,世界一格不改,不往上搭。总预算收小,搜索走到预算才停、交半程(不是搜完),半程才是要看的。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void does_not_pillar_up_from_a_pillar_top_it_cannot_climb_down(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(6, 1, 6, 6, 8, 6, Blocks.STONE);
+        t.fill(5, 9, 5, 7, 10, 7, Blocks.BEDROCK);
+        t.fill(6, 9, 6, 6, 10, 6, Blocks.AIR);
+        TestBody body = t.body(6, 9, 6);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        double feet = body.getY();
+        t.go(body, Trial.budgeted(NavRequest.to(Goals.at(t.at(12, 1, 6)), RouteSpec.defaults().edit().place(true).consent(false).build()), 3000)).within(600)
+                .fails(Outcome.class).then(Scenes::unaltered).then(r -> {
+                    if (r.body.getY() > feet + 0.01) {
+                        throw new GameTestAssertException("往上搭了:脚从 " + feet + " 到 " + r.body.getY());
+                    }
+                });
     }
 
     /** 两块基岩台子之间一道四格宽的沟:身上有圆石,在台面那一层搭四格桥过去。 */
