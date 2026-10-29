@@ -606,7 +606,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着最低一层里最远那一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
+     * 这一站放完了:整份都对上了就收工;还有够不着的,走到离她最近、够得着最低一层里任一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
      * 没放好的照实进回执。
      */
     private TaskState endPass() {
@@ -635,13 +635,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
             return conclude(null);
         }
-        // 最低一层里离她最远的那一格:站到够得着它的地方,在那里先放远处够得着的,再退回来——近处的格留到最后放,
-        // 站在这边点远处邻格的视线才不被先放下的近格挡住
+        // 最低一层里所有够不着的格一起交给寻路:它去离她最近、够得着其中任一格的站位,走得最少;到了那里先放远处够得着的,
+        // 再退回来(见 farthestPendingInLayer)——近处的格留到最后放,站在这边点远处邻格的视线才不被先放下的近格挡住
         int lowest = far.get(0).getY();
-        Vec3 here = player.position();
-        BlockPos farthest = far.stream().filter(p -> p.getY() == lowest)
-                .max(java.util.Comparator.comparingDouble(p -> p.distToCenterSqr(here.x, here.y, here.z))).orElseThrow();
-        walkingTo = List.of(farthest);
+        walkingTo = far.stream().filter(p -> p.getY() == lowest).toList();
         triedWhenWalking = tried.size();
         phase = Phase.WALK;
         return TaskState.RUNNING;
