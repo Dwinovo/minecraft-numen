@@ -516,9 +516,7 @@ public final class Driver {
         if (!still || node == null || !settled(endStance.kind())) {
             if (node != null && !node.equals(end) && settled(Stance.Kind.GROUND) && tracker.strays()) {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
-                Maneuver last = course.lastLeg().maneuver();
-                PathLog.info("{} 没停在终点 {},落在 {}", rig.who, PathLog.pos(end), PathLog.pos(node));
-                fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                missedEnd(rig.who + " 没停在终点 " + PathLog.pos(end) + ",落在 " + PathLog.pos(node));
             }
             return;
         }
@@ -530,9 +528,7 @@ public final class Driver {
                         return;
                     }
                     // 回不去:最后一步没把身体带到它的落点,记为不通再重搜(同一处终点一圈圈冲过头、重搜、再冲过头,永远收不了场)
-                    Maneuver last = course.lastLeg().maneuver();
-                    PathLog.info("{} {}", rig.who, replan.why());
-                    fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
+                    missedEnd(rig.who + " " + replan.why());
                     return;
                 }
                 unsettled = 0;
@@ -759,6 +755,20 @@ public final class Driver {
         rig.journal.replanned(why);
         PathLog.info("{} 重搜({}):{} 身体 {}", rig.who, why.label, detail, PathLog.body(rig.entity));
         reset();
+    }
+
+    /**
+     * 路线走完了,身体却没停在终点上:最后一步没把它带到落点,这一步记为不通再重搜(只重搜不记的话,同一处终点一圈圈冲过头、
+     * 重搜、再冲过头)。路线一步都没有(起点就是站位)时没有哪一步可怪,身体只是被带离了站位——从这里重搜。
+     */
+    private void missedEnd(String detail) {
+        if (course.isEmpty()) {
+            replan(Journal.Replan.OFF_ROUTE, detail);
+            return;
+        }
+        Maneuver last = course.lastLeg().maneuver();
+        PathLog.info("{}", detail);
+        fail(Journal.Replan.FAILED, last, new Blockage(last.to(), rig.world().getBlockState(last.to()), last.kind(), null, Blockage.Hitch.LOST));
     }
 
     /** 扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
