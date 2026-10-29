@@ -7,11 +7,9 @@ import java.util.Map;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.pathing.world.CellFlags;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TrapDoorBlock;
@@ -32,8 +30,7 @@ import net.minecraft.world.level.block.state.BlockState;
  *   <li><b>往下 {@code n} 个节点</b>:一次落脚(下一级、下落)是走出边沿再落到地上,至少付走出边沿的工夫加落下去的工夫
  *       ({@link Kinematics#fallLandingTicks})减去水平底价;规格许挖时,向下挖只付落下去的工夫。落差至少是节点数减去落脚那一层
  *       落脚高度的小数部分,最高是身体在规格愿意承受的摔伤下换算出的落差({@link CostModel#maxFallDrop});落脚那一层出现过液体、
- *       可攀爬的方块(活板门也可能接在梯子上)、落上去比石头摔得轻的方块(干草、床、黏液……),而且那一格头顶空着的格数不少于落差(身体落得进去:
- *       被屋顶盖住的洞穴水潭从高处落不进去),或身上带着水桶(倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
+ *       可攀爬的方块(活板门也可能接在梯子上)、落上去比石头摔得轻的方块(干草、床、黏液……),或身上带着水桶(倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
  *       斜走不升降节点,它的升降落差由跳与落带过。</li>
  * </ul>
  * 目标交出到了时脚所在的高度范围({@link Goal#heights()}):节点比它低就要升,比它高就要降,在范围里不用。没有范围的目标不加。
@@ -154,7 +151,8 @@ final class Vertical {
         for (int k = 1; y - k >= hi; k++) {
             int land = y - k;
             double fraction = levels.fraction(land);
-            if (!bucket && k > Math.max(1, Math.floor(fallLimit + fraction + Footing.EPSILON)) && !levels.catches(land, k)) {
+            if (!bucket && !levels.bypass(land)
+                    && k > Math.max(1, Math.floor(fallLimit + fraction + Footing.EPSILON))) {
                 continue;
             }
             double once = fraction == 0 ? fresh(k) : landing(k, fraction);
@@ -181,7 +179,7 @@ final class Vertical {
     }
 
     /**
-     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的方块(液体、可攀爬的……)与它们头顶空着的高度。问到哪一层才读哪一层:按区段高度(16 层)一带一带读,
+     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层:按区段高度(16 层)一带一带读,
      * 一带里的调色板只问一遍。第 {@code y} 层的落脚来自这一层的矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看
      * 这两层),所以问第 {@code y} 层读它所在的一带,它是这一带最低的一层时再读下面那一带。
      */
@@ -191,11 +189,8 @@ final class Vertical {
         private final int base;
         /** 节点在这一层、脚踩在矮方块上,脚在格里最高的小数部分。 */
         private final double[] fraction;
-        /**
-         * 这一层有落进去不摔的方块(液体、可攀爬的、落上去摔得轻的)时,落到其中最上面一格上的落差至多多少:那一格头顶往上连着空着
-         * (不是整块实心)的格数,{@link #UNBOUNDED} 是扫到 {@link #SPAN} 格或读到没加载的列还空着;没有这样的方块为 0。
-         */
-        private final int[] reach;
+        /** 这一层有液体或可攀爬的方块。 */
+        private final boolean[] bypass;
         /** 这一带读过了。 */
         private final boolean[] bandRead;
         private final Map<BlockState, Info> known = new IdentityHashMap<>();
@@ -205,7 +200,7 @@ final class Vertical {
             this.body = body;
             this.base = view.getMinBuildHeight();
             this.fraction = new double[view.getHeight()];
-            this.reach = new int[view.getHeight()];
+            this.bypass = new boolean[view.getHeight()];
             this.bandRead = new boolean[(view.getHeight() + 15) >> 4];
         }
 
@@ -218,46 +213,13 @@ final class Vertical {
             return fraction[i];
         }
 
-        /**
-         * 从高 {@code k} 层的地方落到第 {@code y} 层,能不能落进一格不摔的方块:这一层有这样的方块,头顶空着的格数不少于 {@code k}。
-         * 身体落进去要穿过那一列上面的格,头顶压着整块实心(洞穴里的水潭、被屋顶盖住的梯井)的,从高处落不进去。
-         */
-        boolean catches(int y, int k) {
+        boolean bypass(int y) {
             int i = y - base;
-            if (i < 0 || i >= reach.length) {
+            if (i < 0 || i >= bypass.length) {
                 return false;
             }
             read(i);
-            return reach[i] >= k;
-        }
-
-        private final byte[] scan = new byte[SPAN];
-        private final BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos();
-
-        /**
-         * 落进 {@code (x, y, z)} 这一格不摔的方块,它头顶往上连着空着的格数。上面还有一格同样落进去不摔的:从上面落下来先落在那一格,
-         * 这一格不是落脚,为 0;只有整块实心({@link CellFlags#WHOLE})才拦得住落下来的身体,别的(半砖、栅栏……)一律当空着数,
-         * 宽松的一侧;读到没加载的列、或数满 {@link #SPAN} 格,{@link #UNBOUNDED}。
-         */
-        private int openAbove(int x, int y, int z) {
-            BlockState above = view.loadedBlockState(cell.set(x, y + 1, z));
-            if (above == null) {
-                return UNBOUNDED;
-            }
-            if (known.computeIfAbsent(above, s -> Info.of(body, s)).bypass()) {
-                return 0;
-            }
-            int blocking = CellFlags.WHOLE | CellFlags.UNLOADED;
-            if ((view.cellFlags(x, y + 1, z, SPAN, scan, 0) & blocking) == 0) {
-                return UNBOUNDED;
-            }
-            for (int k = 0; k < SPAN; k++) {
-                int flags = scan[k] & 0xFF;
-                if ((flags & blocking) != 0) {
-                    return (flags & CellFlags.UNLOADED) != 0 ? UNBOUNDED : k;
-                }
-            }
-            return UNBOUNDED;
+            return bypass[i];
         }
 
         /** 从第 {@code y} 层的节点升到上一层不用跳:这一层有顶面离下一格底不到迈步高度的落脚。 */
@@ -279,11 +241,11 @@ final class Vertical {
             }
             bandRead[band] = true;
             int from = base + (band << 4);
-            view.forEachBlock(from, from + 16, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, x, y, z) -> {
+            view.forEachBlock(from, from + 16, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
                 Info info = known.get(state);
                 int i = y - base;
-                if (info.bypass() && i >= 0 && i < reach.length) {
-                    reach[i] = Math.max(reach[i], openAbove(x, y, z));
+                if (info.bypass() && i >= 0 && i < bypass.length) {
+                    bypass[i] = true;
                 }
                 for (double top : info.tops()) {
                     int at = y + (int) Math.floor(top + Footing.EPSILON) - base;
@@ -294,11 +256,6 @@ final class Vertical {
             });
         }
     }
-
-    /** {@link Levels#reach} 里"扫满了还空着"。 */
-    private static final int UNBOUNDED = Integer.MAX_VALUE;
-    /** 头顶的空格最多往上数几格:数满了就当落多高都落得进来(宽松的一侧,估价仍是下界)。 */
-    private static final int SPAN = 64;
 
     /** 比较"落上去摔多重"用的落差:大到任何减轻摔伤的方块都与石头分得出。 */
     private static final double SOFT_PROBE = 1000;

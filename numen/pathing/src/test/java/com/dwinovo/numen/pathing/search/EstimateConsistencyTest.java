@@ -151,12 +151,6 @@ class EstimateConsistencyTest {
                 .fill(1, Y - 3, -8, 8, Y - 1, 8, Blocks.WATER.defaultBlockState()).fill(-1, Y, -8, 0, Y + 9, 8, STONE);
         scenes.add(new Scene("高台落进水里", plunge, Fixtures.model(RouteSpec.defaults()), goals(-4, -2, 3, 9)));
 
-        // 十格高的台旁边一池水,水池上压着整块屋顶只在远处开一个洞:落不进去的地方不能算免摔
-        TestWorld roofed = new TestWorld().floor(-6, -8, 12, 8, Y - 4).fill(-6, Y - 3, -8, 0, Y - 1, 8, STONE)
-                .fill(1, Y - 3, -8, 8, Y - 1, 8, Blocks.WATER.defaultBlockState()).fill(-1, Y, -8, 0, Y + 9, 8, STONE)
-                .fill(1, Y, -8, 8, Y, 8, STONE).set(8, Y, 8, Blocks.AIR.defaultBlockState());
-        scenes.add(new Scene("屋顶盖着的水池", roofed, Fixtures.model(RouteSpec.defaults()), goals(-4, -2, 3, 9)));
-
         // 垫柱:许放不许挖,身上带着圆石
         CostModel pillaring = Fixtures.withCobble(RouteSpec.defaults().edit().place(true).consent(false).build());
         scenes.add(new Scene("垫柱", field(), pillaring, around));

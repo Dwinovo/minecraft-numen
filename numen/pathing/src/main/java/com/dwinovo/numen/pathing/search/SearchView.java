@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
+import java.util.function.ObjIntConsumer;
 import java.util.function.Predicate;
 
 import com.dwinovo.numen.pathing.plan.WorldView;
@@ -30,15 +31,9 @@ public interface SearchView extends WorldView {
     }
 
     /**
-     * 快照里第 {@code fromY} 层(含)到 {@code toY} 层(不含)之间,状态让 {@code wanted} 答是的每一格,回调它的状态与位置。
+     * 快照里第 {@code fromY} 层(含)到 {@code toY} 层(不含)之间,状态让 {@code wanted} 答是的每一格,回调它的状态与所在的层(格的 y)。
      * 估价靠它知道每一层有什么台阶、水、梯子,只问要用到的那几层。{@code wanted} 会对每个相关区段调色板里列着的每种状态问一遍
      * (调色板可能多列几种已经没有的),只有答是的状态才逐格找;高度范围正好是一个区段,每个区段的调色板就只问一遍。
      */
-    void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, BlockVisitor visitor);
-
-    /** {@link #forEachBlock} 逐格回调的接收方。 */
-    @FunctionalInterface
-    interface BlockVisitor {
-        void accept(BlockState state, int x, int y, int z);
-    }
+    void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor);
 }

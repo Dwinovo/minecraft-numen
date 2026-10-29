@@ -78,17 +78,17 @@ class SnapshotAndDispatchTest {
         live[heights.getSectionIndex(Y)].setBlockState(2, (Y + 1) & 15, 2, Blocks.OAK_STAIRS.defaultBlockState());
         WorldSnapshot snapshot = WorldSnapshot.capture(heights, new WorldBorder(), false, (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 1);
         java.util.List<Integer> levels = new java.util.ArrayList<>();
-        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.is(Blocks.OAK_STAIRS), (state, x, y, z) -> levels.add(y));
+        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.is(Blocks.OAK_STAIRS), (state, y) -> levels.add(y));
         assertEquals(java.util.List.of(Y + 1), levels);
         java.util.List<Integer> inRange = new java.util.ArrayList<>();
-        snapshot.forEachBlock(Y + 1, Y + 2, state -> state.is(Blocks.OAK_STAIRS), (state, x, y, z) -> inRange.add(y));
+        snapshot.forEachBlock(Y + 1, Y + 2, state -> state.is(Blocks.OAK_STAIRS), (state, y) -> inRange.add(y));
         assertEquals(java.util.List.of(Y + 1), inRange, "范围正好含着这一层");
         java.util.List<Integer> outside = new java.util.ArrayList<>();
-        snapshot.forEachBlock(Y + 2, Y + 40, state -> state.is(Blocks.OAK_STAIRS), (state, x, y, z) -> outside.add(y));
-        snapshot.forEachBlock(Y - 40, Y + 1, state -> state.is(Blocks.OAK_STAIRS), (state, x, y, z) -> outside.add(y));
+        snapshot.forEachBlock(Y + 2, Y + 40, state -> state.is(Blocks.OAK_STAIRS), (state, y) -> outside.add(y));
+        snapshot.forEachBlock(Y - 40, Y + 1, state -> state.is(Blocks.OAK_STAIRS), (state, y) -> outside.add(y));
         assertTrue(outside.isEmpty(), "范围之外的层不找");
         java.util.List<Integer> none = new java.util.ArrayList<>();
-        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.is(Blocks.WATER), (state, x, y, z) -> none.add(y));
+        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.is(Blocks.WATER), (state, y) -> none.add(y));
         assertTrue(none.isEmpty());
     }
 
@@ -146,7 +146,7 @@ class SnapshotAndDispatchTest {
         assertTrue(expected.size() > 20, "场景里有这种方块");
         WorldSnapshot snapshot = WorldSnapshot.capture(heights, new WorldBorder(), false, (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 1);
         List<Integer> levels = new ArrayList<>();
-        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.getBlock() instanceof net.minecraft.world.level.block.StairBlock, (state, x, y, z) -> levels.add(y));
+        snapshot.forEachBlock(snapshot.getMinBuildHeight(), snapshot.getMinBuildHeight() + snapshot.getHeight(), state -> state.getBlock() instanceof net.minecraft.world.level.block.StairBlock, (state, y) -> levels.add(y));
         assertEquals(expected, levels);
     }
 
