@@ -52,7 +52,7 @@ final class Nodes {
     /** 走到这里的那一步:走法在 {@code Moves.ALL} 里的下标,与方向在那个走法的 {@code headings()} 里的下标。 */
     byte[] move = new byte[INITIAL];
     byte[] heading = new byte[INITIAL];
-    /** 走到这里那一步的代价(不含旧路折扣)。 */
+    /** 走到这里那一步的代价(不含旧路折扣);未核的候选是快判断给的乐观价,真价不会比它低。 */
     double[] viaCost = new double[INITIAL];
     /** 走到这里时身体怎么待着。 */
     Stance[] stance = new Stance[INITIAL];

@@ -291,20 +291,24 @@ public final class AStar {
                 int used = budgeted ? nodes.used[current] : 0;
                 double g = nodes.g[current] + quick.cost() * search.favoring().factor(to);
                 boolean guessed = quick.guessed();
-                if (!guessed && settled(to, used, g)) {
+                int real = guessed ? -1 : settledNode(to, used, g);
+                if (real >= 0) {
+                    // 不放进开放集:那一格已经有不比它贵的节点。从这儿走到那个节点的路仍在,乐观价是它的下界,学习要这条边
+                    edge(current, real, g - nodes.g[current]);
                     continue;
                 }
                 int candidate = nodes.candidate(to, guessed, used, estimate.at(tx, ty, tz), current, mi, hi, g);
+                nodes.viaCost[candidate] = quick.cost();
                 nodes.f[candidate] = key(g, nodes.h[candidate]);
                 open.push(candidate);
             }
         }
     }
 
-    /** 格 {@code to}(已改 {@code used} 格)上憋气最宽裕的那一档已经有走到那儿不比 {@code g} 贵的节点。 */
-    private boolean settled(long to, int used, double g) {
+    /** 格 {@code to}(已改 {@code used} 格)上憋气最宽裕的那一档已经有走到那儿不比 {@code g} 贵的节点:是它的下标,没有为 -1。 */
+    private int settledNode(long to, int used, double g) {
         int real = nodes.find(to, used, 0);
-        return real >= 0 && nodes.g[real] - g <= MIN_IMPROVEMENT;
+        return real >= 0 && nodes.g[real] - g <= MIN_IMPROVEMENT ? real : -1;
     }
 
     /**
@@ -313,10 +317,12 @@ public final class AStar {
      * 取出时落点那一格已经有不比它贵的节点,不判。
      */
     private void verify(int candidate) {
-        if (!nodes.guessed[candidate] && settled(nodes.pos[candidate], nodes.used[candidate], nodes.g[candidate])) {
+        int parent = nodes.parent[candidate];
+        int real = nodes.guessed[candidate] ? -1 : settledNode(nodes.pos[candidate], nodes.used[candidate], nodes.g[candidate]);
+        if (real >= 0) {
+            edge(parent, real, candidateStep(candidate));
             return;
         }
-        int parent = nodes.parent[candidate];
         int mi = nodes.move[candidate];
         int hi = nodes.heading[candidate];
         Move move = Moves.ALL.get(mi);
@@ -426,6 +432,11 @@ public final class AStar {
         return false;
     }
 
+    /** 未核的候选那一步在搜索里记的乐观价(含旧路折扣):真价不会比它低。 */
+    private double candidateStep(int candidate) {
+        return nodes.viaCost[candidate] * search.favoring().factor(nodes.pos[candidate]);
+    }
+
     private void edge(int from, int to, double cost) {
         if (edges == edgeFrom.length) {
             edgeFrom = Arrays.copyOf(edgeFrom, edges * 2);
@@ -440,7 +451,10 @@ public final class AStar {
 
     // ==================== 没到目标:往边界推进、抬高估价、说缺什么 ====================
 
-    /** 边界:没展开过的节点,和展开时有一步没看全(读到没加载的列)的节点;未核的候选不是节点,不算。 */
+    /**
+     * 边界(可以交出去走的去处):没展开过的节点,和展开时有一步没看全(读到没加载的列)的节点;未核的候选还没确认走得通,不算。
+     * 学习另当别论({@link #learned}):那里没取出的候选算边界。
+     */
     private boolean boundary(int n) {
         return !nodes.pending[n] && (!nodes.expanded[n] || nodes.holed[n]);
     }
@@ -459,11 +473,18 @@ public final class AStar {
     }
 
     /**
-     * 展开过的格子的估价该抬高多少({@link Learning}):格 → 这一趟记忆里该有的增量(含搜索开始时已有的)。同一格有几个节点
+     * 展开过的格子的估价该抬高多少({@link Learning},边界含没取出的未核候选):格 → 这一趟记忆里该有的增量(含搜索开始时已有的)。同一格有几个节点
      * (已改格数、憋气的档不同)时取其中最小的增量——对哪一个都不高估;只有一格没展开过的节点也算,它的增量是 0。
      */
     private Long2DoubleMap learned() {
         int size = nodes.size;
+        // 没取出的未核候选(还在开放集里)是出路:从展开过的父节点出去的一步,乐观价是真价的下界,落点的估价是落点的下界。
+        // 不算进来,可挖可放时出口全是候选的节点会被抬成无穷,违反"抬过的仍是下界"
+        for (int n = 0; n < size; n++) {
+            if (nodes.pending[n] && nodes.heapIndex[n] >= 0) {
+                edge(nodes.parent[n], n, candidateStep(n));
+            }
+        }
         boolean[] settled = new boolean[size];
         double[] h = new double[size];
         for (int n = 0; n < size; n++) {

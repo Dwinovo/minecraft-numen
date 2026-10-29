@@ -168,6 +168,29 @@ class PartialSearchTest {
         }
     }
 
+    /**
+     * 往石头里挖下去的竖井里,一个节点往外的步子全是没取出的未核候选(再往下挖、往旁边挖,取出来才精确判;井里没有往回走的路):
+     * 它们与没展开的节点一样是出路,不是死路——抬高之后每一格的估价都有限,起点(它身后没有改动,与重搜同一个世界)的估价仍是下界,
+     * 不超过从起点重搜走到目标的真实代价。
+     */
+    @Test
+    void raisedEstimatesStayFiniteAndTheStartsStaysBelowTheRealCostWhenTheExitsAreUnverifiedCandidates() {
+        TestWorld ground = new TestWorld().ground(Y - 1, stone).loadedWithin(6);
+        CostModel model = CostModel.of(Fixtures.natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
+                Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        Goal goal = Goals.dig(new BlockPos(20, Y - 20, 5), Vanilla.SURVIVAL, Goals.Clearing.ANY);
+        SearchResult failed = AStar.run(new Search(ground, model, START, goal, 3000, Favoring.NONE), () -> false);
+        assertEquals(SearchResult.Stop.BUDGET, failed.stop());
+        for (it.unimi.dsi.fastutil.longs.Long2DoubleMap.Entry e : failed.raised().long2DoubleEntrySet()) {
+            assertTrue(Double.isFinite(e.getDoubleValue()), "抬成了无穷:" + BlockPos.of(e.getLongKey()));
+        }
+        Estimate estimate = Estimate.of(ground, model, goal, START, Fixtures.BUDGET, TripMemory.Frozen.NONE, 1);
+        SearchResult real = Fixtures.search(ground, model, START, goal, Fixtures.BUDGET);
+        assertTrue(real.arrived(), real.stop().toString());
+        double raised = estimate.at(START) + failed.raised().get(START.asLong());
+        assertTrue(raised <= real.route().cost() + 1e-6, "起点抬到 " + raised + ",重搜走到目标只要 " + real.route().cost());
+    }
+
     /** 能走到的地方都搜过了、没有目标:展开过的格子估价无穷大,再带着这份记忆搜一个节点也不展开。 */
     @Test
     void aSearchedOutRegionIsRememberedAsUnreachable() {
