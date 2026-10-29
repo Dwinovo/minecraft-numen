@@ -316,8 +316,22 @@ public final class NavText {
             return count(placed);
         }
 
+        /** 挖掉的每一格,按账上的先后。 */
+        List<BlockPos> dugCells() {
+            return cells(broke);
+        }
+
+        /** 放下的每一格(倒下又收回的水不算),按账上的先后。 */
+        List<BlockPos> placedCells() {
+            return cells(placed);
+        }
+
         private static int count(Map<Block, List<BlockPos>> heaps) {
             return heaps.values().stream().mapToInt(List::size).sum();
+        }
+
+        private static List<BlockPos> cells(Map<Block, List<BlockPos>> heaps) {
+            return heaps.values().stream().flatMap(List::stream).toList();
         }
     }
 

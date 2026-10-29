@@ -1281,6 +1281,37 @@ public class BuildGameTests {
     }
 
     /**
+     * 铺满一大片地基层(40 x 45 = 1800 格)。够不着的格一起交给寻路,它去离她最近、够得着其中任一格的站位,所以她沿着地基从近的一头
+     * 推向远的一头;每次都取"最远那一格"去站,她就在工地两头来回横穿。判据:地基一格不缺,她一共走的路在就近推过去的量级里。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 14000, batch = "numen_build")
+    public static void a_big_foundation_is_laid_from_one_end_to_the_other(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_foundation", new BlockPos(2, 2, 2), true);
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 4));
+        ToolRun lay = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(min) + ", " + xyz(min.offset(39, 0, 44))
+                + "):set(\"cobblestone\"))");
+        double[] walked = {0};
+        Vec3[] last = {companion.position()};
+
+        succeedWhen(helper, () -> {
+            walked[0] += companion.position().distanceTo(last[0]);
+            last[0] = companion.position();
+            helper.assertTrue(lay.receipt() != null, "numen.build.place has not finished");
+            helper.assertTrue(lay.ranToTheEnd(), "numen.build.place failed: " + lay.receipt());
+            // 每次取最远那一格去站时她走了两千多格;就近一站一站推过去约一千一
+            helper.assertTrue(walked[0] < 1400, "she crossed the site back and forth: walked " + (int) walked[0] + " blocks");
+            for (int dx = 0; dx < 40; dx++) {
+                for (int dz = 0; dz < 45; dz++) {
+                    helper.assertTrue(level.getBlockState(min.offset(dx, 0, dz)).is(Blocks.COBBLESTONE),
+                            "the foundation is missing at " + min.offset(dx, 0, dz).toShortString());
+                }
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 生存模式,照模型的写法画好再开工:一圈两格高的圆石墙,再在南墙正中装一扇门(合起来时门盖掉墙的那一格)。
      * 墙一格不缺,门的上下两半都在,圆石按格扣。
      */
@@ -1993,6 +2024,40 @@ public class BuildGameTests {
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * 要放的一格在一座她上不去的基岩台顶:她为够着它垫柱子上去,结构化回执的 {@code walk_placed_at} 列出垫的每一块(都还立在世界里),
+     * 要放的那一格不在其中。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_build")
+    public static void build_place_lists_every_cell_it_laid_on_the_way(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.BEDROCK.defaultBlockState());
+                }
+            }
+        }
+        BlockPos cell = helper.absolutePos(new BlockPos(11, 5, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_laylist", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        companion.getInventory().add(new ItemStack(Items.STONE, 1));
+        ToolRun run = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(cell) + "}})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "numen.build.place has not finished");
+            helper.assertTrue(run.succeeded(), "numen.build.place failed: " + run.outcome());
+            var result = run.result(BuildCompanionTask.Placed.class);
+            helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE), "the cell was not placed: " + run.outcome());
+            helper.assertTrue(!result.walkPlacedAt().isEmpty(), "no cell laid on the way is listed: " + result);
+            for (BlockPos laid : result.walkPlacedAt()) {
+                helper.assertTrue(level.getBlockState(laid).is(Blocks.DIRT) && !laid.equals(cell),
+                        "walk_placed_at names " + laid.toShortString() + ", which is not a pillar block of hers");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /**

@@ -62,6 +62,14 @@ public class WalkGameTests {
             JsonObject account = returned(walk);
             helper.assertTrue(account.get("dug").getAsInt() == broken && account.get("distance_left").getAsDouble() < 2,
                     "the account does not match the world (" + broken + " blocks gone): " + account);
+            // 结构化回执给全路上挖掉的每一格坐标(文字回执只列前几个),都是世界里已经空了的格
+            var dugAt = account.getAsJsonArray("dug_at");
+            helper.assertTrue(dugAt.size() == broken, "dug_at does not list every broken cell: " + account);
+            for (var cell : dugAt) {
+                var at = cell.getAsJsonObject();
+                BlockPos pos = new BlockPos(at.get("x").getAsInt(), at.get("y").getAsInt(), at.get("z").getAsInt());
+                helper.assertTrue(level.getBlockState(pos).isAir(), "dug_at names " + pos.toShortString() + ", which is not empty");
+            }
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

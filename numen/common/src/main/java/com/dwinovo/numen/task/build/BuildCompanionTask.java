@@ -606,7 +606,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着最低一层里最远那一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
+     * 这一站放完了:整份都对上了就收工;还有够不着的,走到离她最近、够得着最低一层里任一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
      * 没放好的照实进回执。
      */
     private TaskState endPass() {
@@ -635,13 +635,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
             return conclude(null);
         }
-        // 最低一层里离她最远的那一格:站到够得着它的地方,在那里先放远处够得着的,再退回来——近处的格留到最后放,
-        // 站在这边点远处邻格的视线才不被先放下的近格挡住
+        // 最低一层里所有够不着的格一起交给寻路:它去离她最近、够得着其中任一格的站位,走得最少;到了那里先放远处够得着的,
+        // 再退回来(见 farthestPendingInLayer)——近处的格留到最后放,站在这边点远处邻格的视线才不被先放下的近格挡住
         int lowest = far.get(0).getY();
-        Vec3 here = player.position();
-        BlockPos farthest = far.stream().filter(p -> p.getY() == lowest)
-                .max(java.util.Comparator.comparingDouble(p -> p.distToCenterSqr(here.x, here.y, here.z))).orElseThrow();
-        walkingTo = List.of(farthest);
+        walkingTo = far.stream().filter(p -> p.getY() == lowest).toList();
         triedWhenWalking = tried.size();
         phase = Phase.WALK;
         return TaskState.RUNNING;
@@ -916,8 +913,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected Placed value() {
         Map<Item, Integer> shortfall = r.consumeMaterials
                 ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
+        com.dwinovo.numen.nav.Walked walk = walked(player.position(), 0);
         return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
-                r.setDirectly(), outstanding(), r.replaced(), r.broken(),
+                r.setDirectly(), outstanding(), r.replaced(), r.broken(), walk.dugAt(), walk.placedAt(),
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
@@ -939,13 +937,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Blocks that stood there and were swapped for the right one.")
                          int replaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell broken while walking up to the site, in order; the "
+                                 + "receipt text lists only the first few of each kind.") List<BlockPos> walkDugAt,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell placed while walking up to the site (bridge, pillar "
+                                 + "and step blocks, not the design), in order; the receipt text lists only the first few "
+                                 + "of each kind.") List<BlockPos> walkPlacedAt,
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
                          @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
 
         /** 要的样子已经立着,什么都没放。 */
-        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, Optional.empty(), Optional.empty(),
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, List.of(), List.of(), Optional.empty(), Optional.empty(),
                 Optional.empty());
     }
 

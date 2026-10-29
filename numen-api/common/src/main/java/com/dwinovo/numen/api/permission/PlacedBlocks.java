@@ -38,7 +38,7 @@ import java.util.function.Predicate;
  * 于是主人名下别的同伴放的也算主人这一边,她被遣散以后也不变。双格方块连它带出来的另一半一起记。
  * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
  * 由对象组对着要动手的同伴判。
- * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
+ * 查:视图里是空气的格子视为无记号,查本身不改记录(搜索的视图可以是过时的快照或计划里的假想);读的是活世界、而那一格已是空气时才清掉({@link #placerIn})——不另挂方块变化钩子,谁挖的都一样。
  *
  * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
  * {@link ConcurrentHashMap#compute}),寻路工作线程无锁读。
@@ -208,10 +208,7 @@ public final class PlacedBlocks extends SavedData {
         setDirty();
     }
 
-    /**
-     * 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号,
-     * 并顺手把记号清掉。任何线程可调。
-     */
+    /** 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号。任何线程可调。 */
     public boolean isPlaced(BlockPos pos, BlockState now) {
         return placerAt(pos, now) != null;
     }
@@ -227,18 +224,28 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
-     * 放这一格的人;不是玩家放的是 null(已是空气同 {@link #isPlaced},顺手清掉)。不知道是谁放的是
-     * {@link Placer#UNKNOWN}。任何线程可调。
+     * 放这一格的人;没有记录、或 {@code now} 是空气是 null。不知道是谁放的是 {@link Placer#UNKNOWN}。纯读取,任何线程可调:
+     * 寻路搜索拿来问的视图可以是过时的快照,或套着"计划里已经挖掉"的假想,那里的空气不是世界的话,所以这里不抹记录。
      */
     public Placer placerAt(BlockPos pos, BlockState now) {
         Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
         Placer placer = cells == null ? null : cells.get(pos.asLong());
-        if (placer == null) {
-            return null;
-        }
-        if (now.isAir()) {
-            forget(pos);
-            return null;
+        return placer == null || now.isAir() ? null : placer;
+    }
+
+    /**
+     * 同 {@link #placerAt(BlockPos, BlockState)},读的是 {@code view} 里这一格此刻的方块。{@code view} 是活世界({@link ServerLevel},
+     * 主线程)而这一格已是空气,就把记录一并抹掉:之后落进这一格的东西(沙砾落下、树叶长出)不算那个人放的。别的视图(搜索快照、
+     * 计划里的假想)不抹——记录清不清只看世界本身,这是唯一清记录的地方。
+     */
+    public Placer placerIn(BlockGetter view, BlockPos pos) {
+        BlockState now = view.getBlockState(pos);
+        Placer placer = placerAt(pos, now);
+        if (placer == null && now.isAir() && view instanceof ServerLevel) {
+            Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
+            if (cells != null && cells.containsKey(pos.asLong())) {
+                forget(pos);
+            }
         }
         return placer;
     }
@@ -258,7 +265,7 @@ public final class PlacedBlocks extends SavedData {
                     if (cells == null || !cells.containsKey(cursor.asLong())) {
                         continue;
                     }
-                    Placer placer = placerAt(cursor.immutable(), view.getBlockState(cursor));
+                    Placer placer = placerIn(view, cursor.immutable());
                     if (placer != null && counts.test(placer)) {
                         return true;
                     }

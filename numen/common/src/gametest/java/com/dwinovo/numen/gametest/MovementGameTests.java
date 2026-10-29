@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskRecord;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -379,20 +381,30 @@ public class MovementGameTests {
     }
 
     /**
-     * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的泥土记在她名下;主人在场,{@code numen.work.dig} 拆掉其中一格,
-     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。
+     * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的每一块泥土都记在她名下;寻路搜索拿来问权限的视图可以是过时的快照、
+     * 套着计划里已经挖掉的假想(那里这些格是空气),问过之后记录还在;主人在场,{@code numen.work.dig} 拆掉其中一格,
+     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。生存与创造两种模式一样。
      */
     @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
     public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
+        herPillarIsHers(helper, "gametest_stacker", false);
+    }
+
+    @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
+    public static void the_pillar_she_built_in_creative_is_hers_to_take_down(GameTestHelper helper) {
+        herPillarIsHers(helper, "gametest_stacker_creative", true);
+    }
+
+    private static void herPillarIsHers(GameTestHelper helper, String name, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos top = bedrockTower(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_stacker", new BlockPos(3, 2, 7), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_watcher");
+        NumenPlayer companion = spawnAt(helper, name, new BlockPos(3, 2, 7), creative);
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, name + "_watcher");
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.api.permission.ConsentDesk.of(companion).pending() != null);
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(top) + ")");
-        BlockPos[] pillar = new BlockPos[1];
+        List<BlockPos> pillar = new ArrayList<>();
         ToolRun[] clear = new ToolRun[1];
 
         steps(helper)
@@ -400,26 +412,52 @@ public class MovementGameTests {
                         "she did not get onto the tower: " + walk.outcome()))
                 .thenExecute(() -> {
                     var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-                    pillar[0] = BlockPos.betweenClosedStream(helper.absolutePos(new BlockPos(0, 2, 0)),
+                    BlockPos.betweenClosedStream(helper.absolutePos(new BlockPos(0, 2, 0)),
                                     helper.absolutePos(new BlockPos(15, 6, 15)))
                             .filter(p -> level.getBlockState(p).is(Blocks.DIRT))
-                            .map(BlockPos::immutable)
-                            .findFirst().orElse(null);
-                    helper.assertTrue(pillar[0] != null, "no dirt of hers stands anywhere");
-                    var placer = placed.placerAt(pillar[0], level.getBlockState(pillar[0]));
-                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
-                            "the dirt she pillared with is not recorded as hers: " + placer);
-                    clear[0] = lua(companion, "numen.work.dig(" + xyz(pillar[0]) + ")");
+                            .forEach(p -> pillar.add(p.immutable()));
+                    helper.assertTrue(!pillar.isEmpty(), "no dirt of hers stands anywhere");
+                    var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+                    for (BlockPos cell : pillar) {
+                        // 搜索视图里这一格是空气:问一句裁决,不该把记录问没了
+                        gate.judge(com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState()),
+                                net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
+                        var placer = placed.placerAt(cell, level.getBlockState(cell));
+                        helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                                "the dirt she pillared with at " + cell.toShortString() + " is not recorded as hers: " + placer);
+                    }
+                    clear[0] = lua(companion, "numen.work.dig(" + xyz(pillar.get(0)) + ")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(clear[0].done(), "taking the pillar down has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(clear[0].ranToTheEnd() && level.getBlockState(pillar[0]).isAir(),
+                    helper.assertTrue(clear[0].ranToTheEnd() && level.getBlockState(pillar.get(0)).isAir(),
                             "her pillar block is still there: " + clear[0].receipt());
                     helper.assertTrue(!asked[0], "she asked the owner about her own pillar");
                     CompanionFactory.despawn(level.getServer(), companion);
                     leave(owner);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * 放置记录只被活世界清:一格记着她放的、世界里已被别人挖空,拿搜索快照(这里全是空气)问权限,记录还在;拿活世界问,
+     * 世界里没了的记录就清掉,之后落进这一格的东西不算她放的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 20, batch = "numen_terrain")
+    public static void a_placement_record_is_cleared_only_by_reading_the_live_world(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_recorder", new BlockPos(3, 2, 7), false);
+        BlockPos cell = helper.absolutePos(new BlockPos(8, 2, 8));
+        var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+        placed.record(cell, new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(companion.getUUID(), "gametest_recorder"));
+        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+        var action = com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState());
+        gate.judge(action, net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
+        helper.assertTrue(placed.isBuilt(cell.asLong()), "a snapshot's air cleared the record");
+        gate.judge(action, level);
+        helper.assertTrue(!placed.isBuilt(cell.asLong()), "the live world's air left the record standing");
+        CompanionFactory.despawn(level.getServer(), companion);
+        helper.succeed();
     }
 
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */

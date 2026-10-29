@@ -47,7 +47,7 @@ enum Whose {
     static Whose ofBlock(Action action, Facts facts) {
         BlockPos pos = action.pos();
         PlacedBlocks.Placer placer = facts.placed() == null ? null
-                : facts.placed().placerAt(pos, facts.view().getBlockState(pos));
+                : facts.placed().placerIn(facts.view(), pos);
         Whose whose;
         if (placer != null) {
             whose = ofPlacer(placer, facts.actor());
