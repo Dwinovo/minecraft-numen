@@ -439,6 +439,27 @@ public class MovementGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 放置记录只被活世界清:一格记着她放的、世界里已被别人挖空,拿搜索快照(这里全是空气)问权限,记录还在;拿活世界问,
+     * 世界里没了的记录就清掉,之后落进这一格的东西不算她放的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 20, batch = "numen_terrain")
+    public static void a_placement_record_is_cleared_only_by_reading_the_live_world(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_recorder", new BlockPos(3, 2, 7), false);
+        BlockPos cell = helper.absolutePos(new BlockPos(8, 2, 8));
+        var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+        placed.record(cell, new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(companion.getUUID(), "gametest_recorder"));
+        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+        var action = com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState());
+        gate.judge(action, net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
+        helper.assertTrue(placed.isBuilt(cell.asLong()), "a snapshot's air cleared the record");
+        gate.judge(action, level);
+        helper.assertTrue(!placed.isBuilt(cell.asLong()), "the live world's air left the record standing");
+        CompanionFactory.despawn(level.getServer(), companion);
+        helper.succeed();
+    }
+
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_up_a_tower_without_materials_says_so(GameTestHelper helper) {
