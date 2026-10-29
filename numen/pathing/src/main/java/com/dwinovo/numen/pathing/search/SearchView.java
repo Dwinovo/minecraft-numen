@@ -36,4 +36,22 @@ public interface SearchView extends WorldView {
      * (调色板可能多列几种已经没有的),只有答是的状态才逐格找;高度范围正好是一个区段,每个区段的调色板就只问一遍。
      */
     void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor);
+
+    /**
+     * {@code (x, y, z)} 所在的区段里可能有状态让 {@code wanted} 答是的方块:问的是区段的调色板,答"否"就是一格也没有,答"是"只是也许有
+     * (全局调色板总答也许有)。估价靠它跳过整段不含水的区段。
+     */
+    boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted);
+
+    /**
+     * 快照边界上的列:在快照里、四个正方向上紧挨着不在快照里的列。目标在快照之外时,路线要从这些列出去,估价从目标往外算时
+     * 它们带着各自到目标的直线下界当种子({@link Columns})。整个世界都在快照里(没有边界)就一列也不回调。
+     */
+    void forEachBoundaryColumn(ColumnVisitor visitor);
+
+    /** {@link #forEachBoundaryColumn} 逐列回调的接收方。 */
+    @FunctionalInterface
+    interface ColumnVisitor {
+        void accept(int x, int z);
+    }
 }

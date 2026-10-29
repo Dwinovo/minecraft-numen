@@ -88,6 +88,37 @@ public final class TestWorld implements SearchView {
     }
 
     @Override
+    public boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted) {
+        int sx = SectionPos.blockToSectionCoord(x);
+        int sy = SectionPos.blockToSectionCoord(y);
+        int sz = SectionPos.blockToSectionCoord(z);
+        for (Map.Entry<BlockPos, BlockState> e : blocks.entrySet()) {
+            BlockPos p = e.getKey();
+            if (SectionPos.blockToSectionCoord(p.getX()) == sx && SectionPos.blockToSectionCoord(p.getY()) == sy
+                    && SectionPos.blockToSectionCoord(p.getZ()) == sz && wanted.test(e.getValue())) {
+                return true;
+            }
+        }
+        return sy <= SectionPos.blockToSectionCoord(groundTop) && wanted.test(ground);
+    }
+
+    /** 只有设了 {@link #loadedWithin} 才有边界:那一圈区块的外沿一列一列回调;整个世界都在时没有。 */
+    @Override
+    public void forEachBoundaryColumn(ColumnVisitor visitor) {
+        if (loadedRadius == Integer.MAX_VALUE) {
+            return;
+        }
+        int lo = -(loadedRadius << 4);
+        int hi = (loadedRadius << 4) + 15;
+        for (int k = lo; k <= hi; k++) {
+            visitor.accept(lo, k);
+            visitor.accept(hi, k);
+            visitor.accept(k, lo);
+            visitor.accept(k, hi);
+        }
+    }
+
+    @Override
     public boolean isLoaded(int x, int z) {
         return Math.abs(SectionPos.blockToSectionCoord(x)) <= loadedRadius
                 && Math.abs(SectionPos.blockToSectionCoord(z)) <= loadedRadius;

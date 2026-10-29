@@ -26,9 +26,10 @@ public interface Goal {
     boolean contains(int x, int y, int z, Stance stance);
 
     /**
-     * 从节点 {@code (x, y, z)} 到目标的水平底价(刻):水平距离乘疾跑一格的耗时({@link Kinematics#pace},搜索每次搜索算一份传进来)。
-     * 必须是下界:水平上不高过任何一条路线走到目标至少要付的。挖开、升降、涉水的额外代价不在这里,搜索按世界另算
-     * ({@link Burial}、{@link Vertical}),与它相加才是估价。
+     * 从节点 {@code (x, y, z)} 到目标的直线水平底价(刻):水平距离乘疾跑一格的耗时({@link Kinematics#pace},搜索每次搜索算一份传进来)。
+     * 必须是下界:水平上不高过任何一条路线走到目标至少要付的。它不看地形:估价的水平项由按列的放宽图算({@link Columns}),
+     * 这里的值只当图的种子——目标在快照之外时快照边界上各列的值,以及没有固定终点格的目标(没有图可算)整个的水平项。
+     * 挖开、升降的额外代价也不在这里,搜索按世界另算({@link Burial}、{@link Vertical}),与水平项相加才是估价。
      */
     double estimate(int x, int y, int z, Kinematics.Pace pace);
 

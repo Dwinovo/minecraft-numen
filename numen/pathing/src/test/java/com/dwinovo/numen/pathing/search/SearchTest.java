@@ -466,16 +466,17 @@ class SearchTest {
 
     /**
      * 挖几格里的任意一格({@link Goals#dig(java.util.List, com.dwinovo.numen.pathing.world.BodyStats, Goals.Clearing)}):她站在一条南北向、一格宽的
-     * 石头走廊正中,走廊两头各嵌着矿——一头一格,另一头并排两格(多出来的那格在走廊外侧,不比正对走廊的那格近)。两头最先够得着矿的站位离她一样远、
-     * 估价一样,够着的格数不同:同样划算,
-     * 挑一次够得着最多格的那一头。两个朝向各试一次,不靠搜索先往哪边铺。
+     * 石头走廊正中,走廊两头各嵌着矿——一头一格(再远一格),另一头并排两格(多出来的那格在走廊外侧,不比正对走廊的那格近)。并排两格的那头
+     * 最先够得着矿的站位更近、够着的格数也多,她该停在那一头。两个朝向各试一次,不靠搜索先往哪边铺。
+     * (估价按地形从目标反着算之后更紧,两头的站位一样远时加权搜索停在先够着矿的一头,不再展开另一头去比到达价那一点差;
+     * 所以单格的一头放远一格,考的是挑近的、多的一头。)
      */
     @Test
     void diggingSeveralCellsStopsWhereTheHandReachesTheMost() {
         for (int side : new int[]{-1, 1}) {
             TestWorld world = field().fill(-3, Y, -8, 3, Y + 2, 8, STONE).fill(0, Y, -5, 0, Y + 1, 5,
                     Blocks.AIR.defaultBlockState());
-            BlockPos single = new BlockPos(0, Y, -6 * side);
+            BlockPos single = new BlockPos(0, Y, -7 * side);
             List<BlockPos> pair = List.of(new BlockPos(0, Y, 6 * side), new BlockPos(1, Y, 6 * side));
             world.set(single, Blocks.IRON_ORE.defaultBlockState());
             pair.forEach(ore -> world.set(ore, Blocks.IRON_ORE.defaultBlockState()));
