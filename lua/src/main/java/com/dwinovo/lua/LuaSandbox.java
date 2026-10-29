@@ -941,8 +941,8 @@ public final class LuaSandbox {
         /**
          * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code numen.shape.Pos} 是同一张,
          * 比较、运算对得上);只读不跑时从 {@link Builder#classes} 另装一份。模块不在、或模块里没有这张表,是 null。
-         * 向来源要模块、装模块、沿路径找表都只在第一次做:模块来源每问一次都可能要读库,一份答复有多少个值就问多少次,脚本的计量与墙钟
-         * 就随格数成倍地涨。
+         * 向来源要模块、装模块、沿路径找表都只在第一次做:来源每问一次都要过库,一份答复有多少个值就问多少次。实测(她真实的模块库,
+         * 一次读 5844 格再读 16384 格,共约 4.4 万个带方法的值)不记下要 10.6 秒,记下 1.1 秒。
          */
         private LuaValue classMeta(String home, String type) {
             LuaValue known = classMetas.get(home + '|' + type);
