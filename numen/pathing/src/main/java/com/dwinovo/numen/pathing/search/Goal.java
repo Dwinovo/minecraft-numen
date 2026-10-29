@@ -43,6 +43,15 @@ public interface Goal {
     }
 
     /**
+     * 站在终点格 {@code cell}({@link #endCells} 里的一格,{@link BlockPos#asLong} 编码)上,停下还要付的价钱至少多少(刻),默认 0:
+     * 必须是 {@link #arrival} 的下界。估价从目标反着算时({@link Columns})终点格带着它当种子的初值,同样走到,终点价低的那一格更值。
+     * 目前只有挖几格里的任意一格({@code Goals.dig(List, …)})交出非零的值:每少够着一格停下多付的那份。别的带到达价的目标按需补。
+     */
+    default double endCost(long cell) {
+        return 0;
+    }
+
+    /**
      * 到了时脚可能在哪些节点({@link BlockPos#asLong}):一个有限的超集,可以多、不能少。搜索拿它从目标往外算"至少还要挖开
      * 多少"({@link Burial})。每个目标都要明确交代:没有固定终点(某一列、某一高度、离某处多远且范围无边、远离这些)交 null。
      * 不给默认值:忘了交代,编译就过不去,估价不会悄悄少算埋深。

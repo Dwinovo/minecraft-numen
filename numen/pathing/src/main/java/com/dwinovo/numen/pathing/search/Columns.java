@@ -33,7 +33,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * 含水的半砖、台阶、活板门露在水面上的那一格也算),或是可攀爬的格、岩浆。一列上有一处这样的格,就按陆地算(宽松的一侧:下面的洞穴也算,
  * 下界仍成立)。挖开的格另由 {@link Burial} 算,升降由 {@link Vertical} 算,这里只管水平。
  *
- * <p><b>种子</b>:终点格所在的列(价 0);快照边界上的列({@link SearchView#forEachBoundaryColumn}),各带自己到目标的直线疾跑下界
+ * <p><b>种子</b>:终点格所在的列(价是 {@link Goal#endCost},多数目标为 0);快照边界上的列({@link SearchView#forEachBoundaryColumn}),各带自己到目标的直线疾跑下界
  * ({@link Goal#estimate})——目标在快照之外时路线要从边界出去。没有固定终点格的目标({@link Goal#endCells} 为 null)没有可反着做的图:
  * 每一列都是自己的种子,值就是直线下界,Dijkstra 改不了它,所以不跑,估价直接取 {@link Goal#estimate}。
  *
@@ -127,7 +127,7 @@ final class Columns {
             int x = BlockPos.getX(end);
             int z = BlockPos.getZ(end);
             if (view.isLoaded(x, z)) {
-                offer(x, z, 0);
+                offer(x, z, goal.endCost(end));
             }
         }
         int seedY = goal.heights() != null ? goal.heights().lo() : start.getY();
