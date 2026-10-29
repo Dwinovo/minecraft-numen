@@ -66,6 +66,9 @@ public final class Gate {
      * 规划时逐格定价的 {@link #judge} 不记。
      */
     public Verdict judgeLive(Action action, ServerLevel level) {
+        if (placed != null && action.pos() != null) {
+            placed.forgetIfGone(level, action.pos());
+        }
         Verdict verdict = decide(action, facts(level, level));
         if (verdict.rule() != null) {
             hits.record(verdict.layer(), verdict.kind(), verdict.rule());

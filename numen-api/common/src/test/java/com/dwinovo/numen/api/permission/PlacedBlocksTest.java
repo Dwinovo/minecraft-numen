@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 放置记录的记与清:记了就有,抹了就没;查到格子已是空气视为无记号并顺手清掉;跨区块各记各的;
+ * 放置记录的记与清:记了就有,抹了就没;视图里是空气的格子视为无记号、查询不改记录;跨区块各记各的;
  * 存档来回不丢。模式存档也来回一趟。
  */
 @Tag("mc")
@@ -49,11 +49,10 @@ class PlacedBlocksTest {
         placed.record(a, STEVE);
         assertTrue(placed.isPlaced(a, Blocks.STONE.defaultBlockState()));
         assertEquals(1, placed.size());
-        // 格子已是空气:视为无记号,并顺手清掉
+        // 视图里是空气(过时的搜索快照、计划里挖掉的假想):视为无记号,但记录还在,世界里的方块回来时仍是她放的
         assertFalse(placed.isPlaced(a, Blocks.AIR.defaultBlockState()));
-        assertEquals(0, placed.size());
-        assertFalse(placed.isPlaced(a, Blocks.STONE.defaultBlockState()), "清掉后再放的东西不是玩家放的");
-        placed.record(a, STEVE);
+        assertEquals(1, placed.size());
+        assertTrue(placed.isPlaced(a, Blocks.STONE.defaultBlockState()), "问一句空气不抹记录");
         placed.forget(a);
         assertEquals(0, placed.size());
     }
@@ -90,11 +89,11 @@ class PlacedBlocksTest {
         assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world, anyone -> true));
         assertFalse(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, p -> !p.id().equals(STEVE.id())),
                 "不合条件的人放的不算:邻域里只有他放的");
-        // 邻域查询也按视图清空气
+        // 邻域查询按视图里的空气算没有,也不抹记录
         world.set(a, Blocks.AIR.defaultBlockState());
         world.set(b, Blocks.AIR.defaultBlockState());
         assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world, anyone -> true));
-        assertEquals(0, placed.size());
+        assertEquals(2, placed.size());
     }
 
     @Test

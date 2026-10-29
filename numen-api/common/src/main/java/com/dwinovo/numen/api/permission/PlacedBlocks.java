@@ -38,7 +38,7 @@ import java.util.function.Predicate;
  * 于是主人名下别的同伴放的也算主人这一边,她被遣散以后也不变。双格方块连它带出来的另一半一起记。
  * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
  * 由对象组对着要动手的同伴判。
- * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
+ * 查:视图里是空气的格子视为无记号,查本身不改记录(搜索的视图可以是过时的快照或计划里的假想);记录在活世界上被问到 动作时才按世界里真没了清掉({@link #forgetIfGone})——不另挂方块变化钩子,谁挖的都一样。
  *
  * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
  * {@link ConcurrentHashMap#compute}),寻路工作线程无锁读。
@@ -208,10 +208,7 @@ public final class PlacedBlocks extends SavedData {
         setDirty();
     }
 
-    /**
-     * 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号,
-     * 并顺手把记号清掉。任何线程可调。
-     */
+    /** 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号。任何线程可调。 */
     public boolean isPlaced(BlockPos pos, BlockState now) {
         return placerAt(pos, now) != null;
     }
@@ -227,20 +224,22 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
-     * 放这一格的人;不是玩家放的是 null(已是空气同 {@link #isPlaced},顺手清掉)。不知道是谁放的是
-     * {@link Placer#UNKNOWN}。任何线程可调。
+     * 放这一格的人;没有记录、或 {@code now} 是空气是 null。不知道是谁放的是 {@link Placer#UNKNOWN}。纯读取,任何线程可调:
+     * 寻路搜索拿来问的视图可以是过时的快照,或套着"计划里已经挖掉"的假想,那里的空气不是世界的话,所以这里不抹记录;
+     * 世界里真没了的记录由 {@link #forgetIfGone} 在活世界上清。
      */
     public Placer placerAt(BlockPos pos, BlockState now) {
         Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
         Placer placer = cells == null ? null : cells.get(pos.asLong());
-        if (placer == null) {
-            return null;
-        }
-        if (now.isAir()) {
+        return placer == null || now.isAir() ? null : placer;
+    }
+
+    /** 主线程:这一格记着有人放过、而活世界里此刻已是空气,就抹掉记录(之后别的东西落在这一格不算那个人放的)。 */
+    public void forgetIfGone(ServerLevel level, BlockPos pos) {
+        Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
+        if (cells != null && cells.containsKey(pos.asLong()) && level.getBlockState(pos).isAir()) {
             forget(pos);
-            return null;
         }
-        return placer;
     }
 
     /**
