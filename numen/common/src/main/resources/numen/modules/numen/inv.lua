@@ -81,8 +81,8 @@ function M.make(item, count)
   item = id(item)
   count = count or 1
   local recipe, closest = nil, nil
-  for _, r in ipairs(numen.inv.recipes(item)) do
-    if r.station == "crafting" and r.grid > 0 then
+  for _, r in ipairs(numen.inv.recipes(item).recipes) do
+    if r.category == "minecraft:crafting" and r.grid > 0 then
       if not r.missing then
         recipe = r
         break

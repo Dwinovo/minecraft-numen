@@ -13,6 +13,7 @@ import com.github.tartaricacid.touhoulittlemaid.entity.info.ServerCustomPackLoad
 import com.github.tartaricacid.touhoulittlemaid.entity.misc.MonsterType;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.PickType;
+import com.github.tartaricacid.touhoulittlemaid.init.InitRecipes;
 import com.github.tartaricacid.touhoulittlemaid.init.InitTaskData;
 import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.google.gson.JsonElement;
@@ -323,6 +324,37 @@ public class TlmGameTests {
                         && recipe.getAsJsonArray("needs").size() > 0 && recipe.get("power").getAsDouble() > 0;
             }
             helper.assertTrue(revive, "the altar's maid revival recipe is not listed: " + recipes.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
+    /**
+     * 模组自己的配方类型(祭坛)也经通用的 {@code numen.inv.recipes} 读得到:一条做出物品的祭坛配方,照它的产物去查,
+     * 列出来的那一条带着祭坛的类别、同一个配方 id 与它的输入;祭坛的配方类是合成配方,但不在合成格里做,所以没有"装得下的格",合成函数也不认它。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
+    public static void a_mods_recipe_type_is_listed_by_the_generic_recipe_verb(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_reader", new BlockPos(3, 2, 3));
+        var altar = helper.getLevel().getRecipeManager().getAllRecipesFor(InitRecipes.ALTAR_CRAFTING.get()).stream()
+                .filter(holder -> holder.value().isItemCraft()).findFirst().orElseThrow();
+        String product = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(altar.value().getResult().getItem()).toString();
+
+        ToolRun recipes = lua(her, "numen.inv.recipes(\"" + product + "\")");
+        ToolRun crafted = lua(her, "numen.inv.craft(\"" + altar.id() + "\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(recipes.succeeded(), "recipes of the altar's product failed: " + recipes.reply());
+            boolean listed = false;
+            for (JsonElement row : valueIn(recipes.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
+                var recipe = row.getAsJsonObject();
+                listed |= recipe.get("id").getAsString().equals(altar.id().toString())
+                        && recipe.get("category").getAsString().equals("touhou_little_maid:altar_recipe")
+                        && recipe.getAsJsonArray("ingredients").size() > 0 && !recipe.has("grid");
+            }
+            helper.assertTrue(listed, "the altar recipe " + altar.id() + " is not listed: " + recipes.reply());
+            helper.assertTrue(!crafted.succeeded() && crafted.outcome().contains("touhou_little_maid:altar_recipe"),
+                    "the crafting grid took an altar recipe: " + crafted.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
     }
