@@ -910,8 +910,9 @@ public class BuildGameTests {
      * 铺满一片地基层(15 x 15 = 225 格)。够不着的格一起交给寻路,它去离她最近、够得着其中任一格的站位,所以她沿着地基从近的一头
      * 推向远的一头;每次都取"最远那一格"去站,她就在工地两头来回横穿。判据:地基一格不缺,她一共走的路在就近推过去的量级里。
      *
-     * <p>走的路的上限:原来铺 40 x 45 = 1800 格时上限是 1400 格路(每次取最远一格去站走了两千多,就近推过去约一千一),
-     * 即每格 1400 / 1800 的路;就近推过去走的路跟着格数走,所以缩成 225 格上限按同一比例是 1400 x 225 / 1800 = 175。
+     * <p>走的路的上限 80 格是量出来的:15 x 15 上就近挑站位走 70 格(NeoForge 与 Fabric 各三次,每次一样——搜索按做了多少活折算想多久,
+     * 与机器快慢无关);退回"走到够得着最远那一格的站位"(这条用例为它写的缺陷,见 6d31938c2)走 93 格。80 在两者之间,离好的 14%、离坏的
+     * 14%。格数少了两种走法的差也小了(原来铺 1800 格是一千一对两千多),所以不按面积线性缩。
      */
     @GameTest(template = "floor20", timeoutTicks = 3000, batch = "numen_build")
     public static void a_big_foundation_is_laid_from_one_end_to_the_other(GameTestHelper helper) {
@@ -928,7 +929,7 @@ public class BuildGameTests {
             last[0] = companion.position();
             helper.assertTrue(lay.receipt() != null, "numen.build.place has not finished");
             helper.assertTrue(lay.ranToTheEnd(), "numen.build.place failed: " + lay.receipt());
-            helper.assertTrue(walked[0] < 175, "she crossed the site back and forth: walked " + (int) walked[0] + " blocks");
+            helper.assertTrue(walked[0] < 80, "she crossed the site back and forth: walked " + (int) walked[0] + " blocks");
             for (int dx = 0; dx < 15; dx++) {
                 for (int dz = 0; dz < 15; dz++) {
                     helper.assertTrue(level.getBlockState(min.offset(dx, 0, dz)).is(Blocks.COBBLESTONE),
