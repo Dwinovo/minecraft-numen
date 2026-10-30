@@ -675,6 +675,45 @@ public class BrainGameTests {
         });
     }
 
+    /**
+     * 外脑的一段程序跑到一半她死了:那一次调用恰好收到一条失败的回答(不是挂着不回),她重生之后外脑再发的调用照常收下、照常跑完——
+     * 不是永远被"已有调用在跑"挡在外面(#152)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_brain")
+    public static void a_program_cut_by_her_death_answers_once_and_the_next_call_runs(GameTestHelper helper)
+            throws Exception {
+        Brain her = new Brain(helper, "gametest_cut_driven");
+        her.driving = true;
+        UUID uuid = her.companion.getUUID();
+        List<String> cutAnswers = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> nextAnswers = new java.util.concurrent.CopyOnWriteArrayList<>();
+        var cut = new com.dwinovo.numen.api.agent.provider.LlmToolCall("ext-gt-1", ScriptEngine.IN_USE.toolName(),
+                ScriptTool.args("numen.time.wait(60)").toString());
+        helper.assertTrue(her.loop.runExternal(cut, p -> {}, cutAnswers::add), "the long program was not accepted");
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(cutAnswers.isEmpty(), "the program ended before she died: " + cutAnswers);
+            her.companion.kill();
+        });
+
+        boolean[] nextSent = {false};
+        succeedWhen(helper, () -> {
+            helper.assertTrue(cutAnswers.size() == 1, "the cut call was answered " + cutAnswers.size() + " time(s): " + cutAnswers);
+            NumenPlayer now = NumenPlayer.findByUuid(helper.getLevel().getServer(), uuid);
+            helper.assertTrue(now != null && now.isAlive() && her.loop.status().hold() != Hold.DEAD, "she has not respawned");
+            if (!nextSent[0]) {
+                var next = new com.dwinovo.numen.api.agent.provider.LlmToolCall("ext-gt-2", ScriptEngine.IN_USE.toolName(),
+                        ScriptTool.args("return 1 + 1").toString());
+                helper.assertTrue(her.loop.runExternal(next, p -> {}, nextAnswers::add),
+                        "the call after her death was refused as busy");
+                nextSent[0] = true;
+            }
+            helper.assertTrue(nextAnswers.size() == 1 && nextAnswers.get(0).contains("2"),
+                    "the call after her death did not run to its value: " + nextAnswers);
+            helper.assertTrue(cutAnswers.size() == 1, "the cut call was answered again: " + cutAnswers);
+            her.close();
+        });
+    }
+
     /** 群里 @ 谁谁醒,别人旁听:旁听是捎带的事件,不叫醒她。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void in_a_group_the_one_called_wakes_and_the_other_only_overhears(GameTestHelper helper)

@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.inventory.InvApi.Stack;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -37,8 +36,7 @@ final class StonecutterKind implements MenuKind.Chooses<StonecutterMenu> {
         List<RecipeHolder<StonecutterRecipe>> held = menu.getRecipes();
         for (int i = 0; i < held.size(); i++) {
             ItemStack makes = held.get(i).value().getResultItem(her.level().registryAccess());
-            recipes.add(new Screen.Cut(i + 1, new Stack(BuiltInRegistries.ITEM.getKey(makes.getItem()).toString(),
-                    makes.getCount())));
+            recipes.add(new Screen.Cut(i + 1, Stack.of(makes, makes.getCount())));
         }
         int selected = menu.getSelectedRecipeIndex();
         return new Screen.Stonecutting(recipes, selected < 0 ? Optional.empty() : Optional.of(selected + 1));

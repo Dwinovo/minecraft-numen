@@ -527,15 +527,16 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         // 落没落成由 BuildPlacer 看世界判:手放被拒(保护、事件被取消)与直接写不进去(超出建造高度)都是世界没变,不记账。
-        BuildPlacer.Way way = placer.place(target, cost);
-        if (way == null) {
+        BuildPlacer.Placement placement = placer.place(target, cost);
+        if (placement == null) {
             return missed(pos, BuildOutstanding.Cause.REFUSED, null);
         }
         BlockState now = player.level().getBlockState(pos);
-        if (way == BuildPlacer.Way.SET_DIRECTLY) {
+        boolean directly = placement.way() == BuildPlacer.Way.SET_DIRECTLY;
+        if (directly) {
             written.add(pos);
         }
-        r.placedOne(occupied, way == BuildPlacer.Way.SET_DIRECTLY);
+        r.placedOne(occupied, directly, placement.spent());
         if (!target.matches(now)) {
             // 放下去了,原版随即弹掉或改了样子:以世界为准,不算完成、不记账,这一次也不重放。动过手,算这一刻的预算
             missed.put(pos.asLong(), new Miss(BuildOutstanding.Cause.DID_NOT_STAY, whyNotStay(target, now)));
@@ -919,7 +920,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
-                shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)));
+                shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)),
+                r.spentWithData().isEmpty() ? Optional.empty() : Optional.of(r.spentWithData()));
     }
 
     /** {@code numen.build.place} 交回的值。 */
@@ -945,11 +947,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
-                         @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
+                         @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort,
+                         @com.dwinovo.numen.api.sdk.Doc("The stacks with data that were spent, as the inventory "
+                                 + "lists them (a shulker box with its contents, an enchanted item) and how many; "
+                                 + "absent when only plain items were used. Naming only an item spends the stack in "
+                                 + "your main hand, else the first slot.") Optional<String> spent) {
 
         /** 要的样子已经立着,什么都没放。 */
         public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, List.of(), List.of(), Optional.empty(), Optional.empty(),
-                Optional.empty());
+                Optional.empty(), Optional.empty());
     }
 
     /**
@@ -1015,6 +1021,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             sb.append(" (").append(r.replaced()).append(" replacing what stood there)");
         }
         sb.append(", cleared ").append(r.broken());
+        if (!r.spentWithData().isEmpty()) {
+            sb.append(", spent ").append(r.spentWithData());
+        }
         return sb.toString();
     }
 
