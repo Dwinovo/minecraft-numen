@@ -21,12 +21,8 @@ dependencies {
     // 权限、程序、大脑的公开签名里的类型也在它们里面;发行 jar 里它们的类由下方 jar 块平铺进来,运行时自含。
     // 沙箱 Lua 的包名是本仓自己的 com.dwinovo.lua,不会和别的模组带的 LuaJ(org.luaj)撞包。
     Modules.ALL.each { api project(it) }
-    compileOnly(project(':numen-api:common')) {
-        def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-        attributes {
-            attribute(loaderAttribute, 'common')
-        }
-    }
+    // common 的源码由下面的 compileJava 并进本模块一起编,类路径上不放 :numen-api:common 编好的类(同一个类名既在源码里又在类路径上,
+    // Gradle 的增量编译认不出,见 numen-loader.gradle)。
     commonJava project(path: ':numen-api:common', configuration: 'commonJava')
     commonClientJava project(path: ':numen-api:common', configuration: 'commonClientJava')
     commonResources project(path: ':numen-api:common', configuration: 'commonResources')
