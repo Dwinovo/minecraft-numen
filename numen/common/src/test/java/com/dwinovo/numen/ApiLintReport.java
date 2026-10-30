@@ -6,7 +6,6 @@ import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiDocs;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import com.dwinovo.numen.api.task.reflex.ReflexRegistry;
-import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -15,19 +14,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 /**
- * Numen 的 lint 报告,不是守卫:登记的每个函数与随模组发的模块的写法({@link ApiTester#lint()}),技能文档、系统提示、工具说明里写着的
+ * Numen 的 lint 报告,不是测试也不是守卫(Gradle 任务 {@code apiLintReport}):登记的每个函数与随模组发的模块的写法({@link ApiTester#lint()}),技能文档、系统提示、工具说明里写着的
  * 调用({@link ApiTester#lint(List)})。报告写进 {@code build/reports/api-lint.txt} 并打印;它不让构建失败——写法好不好由评测的分数说话,
  * 读这份报告的是写 API 与技能的人;整份 API 的 LuaLS 存根与元数据挨着它写出。插件的报告经同样的 {@link #documents} 与 {@link #write}。
  */
 public class ApiLintReport {
 
-    @Test
-    void writeTheReport() throws IOException, URISyntaxException {
+    public static void main(String[] args) throws IOException, URISyntaxException {
         NumenApiFixture.install();
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint());
         List<ApiTester.Text> texts = new ArrayList<>(documents("numen/skills"));
@@ -58,7 +55,7 @@ public class ApiLintReport {
     /** 类路径上一个目录里的每一份 Markdown(技能正文与它按需读的参考文件)。 */
     public static List<ApiTester.Text> documents(String dir) throws IOException, URISyntaxException {
         URL root = ApiLintReport.class.getClassLoader().getResource(dir);
-        assertNotNull(root, dir + " is not on the classpath");
+        Objects.requireNonNull(root, dir + " is not on the classpath");
         Path base = Path.of(root.toURI());
         List<ApiTester.Text> out = new ArrayList<>();
         try (Stream<Path> files = Files.walk(base)) {

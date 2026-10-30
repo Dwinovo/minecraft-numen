@@ -178,6 +178,10 @@ test {
     useJUnitPlatform()
 }
 
+// API 体检报告任务(定义见 buildSrc 的 numen-api-lint):入口是本模块单测源码集里的 ApiLintReport,插件各自一个
+pluginManager.apply('numen-api-lint')
+tasks.named('apiLintReport') { mainClass = 'com.dwinovo.numen.ApiLintReport' }
+
 // 服务端安全门:Numen 的 common 主源码集全部是服务端代码(工具/任务/寻路/
 // 建造),客户端半边在 src/client/java。common 编译用的是合并的客户端 MC jar,
 // 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上

@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.ApiLintReport;
 import com.dwinovo.numen.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
-import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -15,10 +14,9 @@ import java.util.List;
  * YSM 联动的 lint 报告,不是守卫:{@code ysm} 名字空间下的函数的写法,与随它发的技能文档里写着的调用,对着 Numen 的组与本组读一遍。
  * 本组经 {@link NumenPlugins} 那扇门、用联动自己登记它的那一段装上;存法取 NeoForge 那一种,说明文字与存法无关。报告写进 {@code build/reports/api-lint.txt},不让构建失败。
  */
-class YsmApiLintReport {
+public class ApiLint {
 
-    @Test
-    void writeTheReport() throws IOException, URISyntaxException {
+    public static void main(String[] args) throws IOException, URISyntaxException {
         NumenApiFixture.install();
         Ysm ysm = new Ysm(Ysm.Storage.NEOFORGE);
         NumenPlugins.register(YsmApi.NAMESPACE, numen -> YsmApi.install(numen, ysm, new Emotes(ysm)));
