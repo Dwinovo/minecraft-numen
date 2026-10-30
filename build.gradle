@@ -26,6 +26,7 @@ ext.numenSuites = [
         ':plugins:tlm'   : [gametest: 'numen_tlm', bench: 'tlm'],
         ':plugins:ysm:gametest': [gametest: 'numen_ysm'],
         ':plugins:ftbquests': [gametest: 'numen_ftbquests'],
+        ':plugins:kubejs': [gametest: 'numen_kubejs'],
 ]
 // Numen 本体的 GameTest 跑批(两个加载器上都是这一份)带哪些模块的用例;联动的 GameTest 另开一次,不在里面。
 ext.numenGameTestModules = [':numen:common', ':numen:pathing']
@@ -39,6 +40,17 @@ ext.numenTerrainProperties = {
                'numen.terrain.bake.dimension': findProperty('bakeDimension') ?: 'terrain']
             : [:]
 }
+// 每次 GameTest 跑批都从空的插件开关名单开始:世界每次是新的,但服务器配置目录里的 plugins.json 不跟着世界走,上一次跑批里被关掉的
+// 插件会留到这一次,开关类用例就从中间开始。所有模块的 runGameTestServer 共用这一处,不在各个用例里清。
+subprojects {
+    tasks.matching { it.name == 'runGameTestServer' && it instanceof JavaExec }.configureEach { run ->
+        run.doFirst {
+            def switches = new File(run.workingDir, 'config/numen/server/plugins.json')
+            project.delete(switches, new File(switches.parentFile, switches.name + '.tmp'))
+        }
+    }
+}
+
 ['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge', 'numen-api:paper'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'
