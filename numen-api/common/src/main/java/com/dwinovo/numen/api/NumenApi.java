@@ -93,6 +93,13 @@ public interface NumenApi {
             com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner);
 
     /**
+     * 登记一种远程武器的提供者:攻击任务打远处的东西时问它"这件认不认得、此刻能不能射、弹道什么样、怎么起一发"
+     * ({@link com.dwinovo.numen.api.combat.RangedWeapon})。弓和弩是 Numen 自己的两个提供者,模组的枪、魔杖这样的新名词加在这里;
+     * 该不该打由权限层裁决,提供者只管怎么射。在门里登记,插件撤回时一起撤。
+     */
+    void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon);
+
+    /**
      * 给你的一种类型登记它与脚本的值怎么互转,连同它在签名里写成什么。record、枚举、列表与 {@code Map<String, T>} 不用登记。
      *
      * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名被占了
