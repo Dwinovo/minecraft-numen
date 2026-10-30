@@ -30,19 +30,26 @@ public class UpDownGameTests {
 
     private static final String BATCH = "pathing_updown";
 
-    /** 和平难度每秒回一点血,看摔掉几点血的用例要这一批关掉自然回血,批后照原样还回去。 */
-    private static boolean regeneration;
-
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
+        Worlds.settle(level);
+    }
+
+    /** 落在什么上:和平难度每秒回一点血,看摔掉几点血的用例在这一批里关掉自然回血,批后照原样还回去。 */
+    private static final String LANDING = "pathing_landing";
+
+    private static boolean regeneration;
+
+    @BeforeBatch(batch = LANDING)
+    public static void settleLanding(ServerLevel level) {
         Worlds.settle(level);
         GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION);
         regeneration = rule.get();
         GameTestWorld.INSTANCE.setRule(level, rule, false);
     }
 
-    @AfterBatch(batch = BATCH)
-    public static void restore(ServerLevel level) {
+    @AfterBatch(batch = LANDING)
+    public static void restoreLanding(ServerLevel level) {
         GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION), regeneration);
     }
 
@@ -330,7 +337,7 @@ public class UpDownGameTests {
      * 规格许落二十格,满血的身体站在九格高的石柱顶上。一边柱脚四周是石头地:落九格掉 6 点血,跳下去;另一边柱脚四周一圈
      * 朝上的滴水石锥尖:落上去按原版掉 15 点,摔完不到 6 点血,不跳,不许改地形就没有路,一点血不掉。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)
+    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 300)
     public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
@@ -353,7 +360,7 @@ public class UpDownGameTests {
      * 只剩 8 点血的身体站在八格高的石柱顶上,规格许落二十格。落在石头上掉 5 点,摔完不到 6 点血,不跳;落在干草块上按原版
      * 只掉 1 点,跳下去。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
+    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 276)
     public static void hay_takes_a_higher_fall_than_stone(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
