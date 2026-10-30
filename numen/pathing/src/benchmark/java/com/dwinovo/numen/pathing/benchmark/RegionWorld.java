@@ -192,6 +192,14 @@ final class RegionWorld implements WorldSnapshot.Sections {
         return WorldSnapshot.capture(heights, new WorldBorder(), ultraWarm, this, from.getX() >> 4, from.getZ() >> 4, SEARCH_RADIUS);
     }
 
+    /** 为从 {@code from} 出发的搜索拷的快照,窗口是不是伸出了区域(区域之外永远没有加载的区块)。 */
+    boolean beyond(BlockPos from) {
+        int cx = from.getX() >> 4;
+        int cz = from.getZ() >> 4;
+        return cx - SEARCH_RADIUS < regionX * REGION || cx + SEARCH_RADIUS >= (regionX + 1) * REGION
+                || cz - SEARCH_RADIUS < regionZ * REGION || cz + SEARCH_RADIUS >= (regionZ + 1) * REGION;
+    }
+
     /** 整块区域一次拷下的快照(标准答案求解器用)。 */
     WorldSnapshot whole() {
         return WorldSnapshot.capture(heights, new WorldBorder(), ultraWarm, this, regionX * REGION + REGION / 2, regionZ * REGION + REGION / 2,

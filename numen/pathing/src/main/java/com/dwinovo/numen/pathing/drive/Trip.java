@@ -365,7 +365,7 @@ public final class Trip {
      */
     private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
         Route route = result.route();
-        journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.checks());
+        journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.stop(), result.checks());
         String why = result.blocking() == null || result.arrived() ? ""
                 : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
         String what = route == null ? "没交出路线"

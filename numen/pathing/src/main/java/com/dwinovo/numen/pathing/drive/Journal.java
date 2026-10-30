@@ -49,6 +49,7 @@ public final class Journal {
 
     private int searches;
     private final List<Integer> expansions = new ArrayList<>();
+    private final List<SearchResult.Stop> stops = new ArrayList<>();
     private final List<Long> searchNanos = new ArrayList<>();
     private int learned;
     /** 各次搜索取出候选时精确判断的账,加在一起。 */
@@ -69,11 +70,12 @@ public final class Journal {
     public record Timing(int steps, double ticks, double estimated) {}
 
     /**
-     * 一次搜索有了结论;{@code expanded} 是它展开了几个节点,{@code nanos} 是它在工作线程上跑了多久,{@code learned} 是它没到目标、
+     * 一次搜索有了结论;{@code expanded} 是它展开了几个节点,{@code nanos} 是它在工作线程上跑了多久,{@code stop} 是它为什么停,{@code learned} 是它没到目标、
      * 展开过的格子的估价抬高了,{@code checks} 是它取出候选时精确判断的账。
      */
-    void searched(int expanded, long nanos, boolean learned, SearchResult.Checks checks) {
+    void searched(int expanded, long nanos, boolean learned, SearchResult.Stop stop, SearchResult.Checks checks) {
         searches++;
+        stops.add(stop);
         for (int k = 0; k < checks.checked().length; k++) {
             this.checks.checked()[k] += checks.checked()[k];
             this.checks.refused()[k] += checks.refused()[k];
@@ -121,6 +123,11 @@ public final class Journal {
     /** 每次搜索展开的节点数,按先后。 */
     public List<Integer> expansions() {
         return Collections.unmodifiableList(expansions);
+    }
+
+    /** 每次搜索为什么停,按先后。 */
+    public List<SearchResult.Stop> stops() {
+        return Collections.unmodifiableList(stops);
     }
 
     /** 每次搜索在工作线程上跑了多少纳秒,按先后。 */

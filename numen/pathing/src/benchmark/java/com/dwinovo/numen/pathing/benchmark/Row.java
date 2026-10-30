@@ -10,7 +10,7 @@ import com.google.gson.JsonObject;
  * 评测结果的一行:一道题在一种规格下走一遍的全部指标。{@code results.jsonl} 的一行就是它;{@link Bench} 写、{@link Report} 与
  * {@link Diff} 读,指标只在这里定义一次。时间都是按表折算的毫秒(不是墙钟),所以同一份代码、同一批题,跑几遍这一行逐字节一致。
  *
- * @param outcome    结局的三类({@link Outcome})
+ * @param outcome    结局的四类({@link Outcome})
  * @param refStatus  标准答案的状态;数据集里没有答案文件为 null
  * @param ended      怎么收场的细节:{@code arrived},或 {@code searched:<停因>}、{@code blocked} 等
  * @param firstMoveMs 起步耗时:下令到交出第一段
@@ -31,18 +31,21 @@ record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.G
      *   <li>{@code ARRIVED}:到了;</li>
      *   <li>{@code UNREACHABLE}:证明到不了。一次搜索把能走到的都搜完了,没有目标({@code Stop.EXHAUSTED})。搜索只要读到快照之外没加载的列
      *       (区域边缘、快照半径的边),停因就是 {@code UNLOADED} 而不是 {@code EXHAUSTED},所以这一类里没有"被区域边缘截断"的;</li>
-     *   <li>{@code GAVE_UP}:放弃,别的一切——总预算用完、搜索路伸出了区域、重搜之后才搜完、执行里走不下去……</li>
+     *   <li>{@code BEYOND}:要区域之外的地形。没到,并且有一次搜索停在"没加载"、它的快照窗口伸出了区域;区域之外在评测里永远不加载,
+     *       游戏里区块随身体走动加载,不会有这种停法,所以不是规划的失败,不进成功率。数据集有标准答案时,答案说区域内能到(最优、已知最好)
+     *       或证明区域内无解的,不算这一类,仍是放弃——不让它盖住真正的失败;</li>
+     *   <li>{@code GAVE_UP}:放弃,别的一切——总预算用完、重搜之后才搜完、执行里走不下去……</li>
      * </ul>
      */
-    enum Outcome { ARRIVED, UNREACHABLE, GAVE_UP }
+    enum Outcome { ARRIVED, UNREACHABLE, BEYOND, GAVE_UP }
 
     boolean arrived() {
         return outcome == Outcome.ARRIVED;
     }
 
-    /** 这一行进成功率的分母:到了或放弃(证明到不了的不是规划的失败)。 */
+    /** 这一行进成功率的分母:到了或放弃(证明到不了的、要区域之外地形的不是规划的失败)。 */
     boolean attempted() {
-        return outcome != Outcome.UNREACHABLE;
+        return outcome == Outcome.ARRIVED || outcome == Outcome.GAVE_UP;
     }
 
     /** 这一行进次优比:到了、标准答案是最优价。已知最好的只是上界,算进去会让次优比偏小。 */

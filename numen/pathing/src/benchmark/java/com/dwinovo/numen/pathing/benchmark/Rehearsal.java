@@ -53,19 +53,30 @@ final class Rehearsal {
      *
      * @param snapshots 为从某个节点出发的一次搜索拷的世界
      * @param budget    这一趟总共最多展开几个节点;0 是按起点到终点的估价定({@code drive.Allowance})
+     * @param beyond    从某个节点出发的搜索,拷的窗口是不是伸出了这份世界的边(边之外永远没有加载的区块,只有评测的固定世界才有)
      */
-    record Scene(Function<BlockPos, SearchView> snapshots, CostModel model, RouteSpec spec, Goal goal, BlockPos start, int budget) {}
+    record Scene(Function<BlockPos, SearchView> snapshots, Predicate<BlockPos> beyond, CostModel model, RouteSpec spec, Goal goal, BlockPos start,
+                 int budget) {}
 
     /** 一趟预演的结果。时间都是游戏刻,按表折算(不是墙钟)。 */
-    record Result(boolean arrived, Halt halt, double firstMove, double maxThink, double waited, double ticks, int searches,
+    record Result(boolean arrived, Halt halt, boolean edge, double firstMove, double maxThink, double waited, double ticks, int searches,
                   int expanded, Map<Journal.Replan, Integer> replans, double cost, List<Edit> edits, int steps) {
 
-        /** 结局的三类({@link Row.Outcome}):把能走到的都搜完了没有目标才算证明到不了。 */
-        Row.Outcome outcome() {
+        /**
+         * 结局的四类({@link Row.Outcome})。把能走到的都搜完了没有目标才算证明到不了。没到、碰到了世界的边({@code edge})、
+         * 标准答案又没说区域内有解或无解的,是要区域之外的地形;答案说区域内能到({@code OPTIMAL}、{@code BEST_KNOWN})或证明区域内无解
+         * ({@code UNSOLVABLE})的,这条路线本该到、本该证出无解,仍是放弃。
+         *
+         * @param reference 这道题的标准答案状态;数据集里没有答案文件为 null
+         */
+        Row.Outcome outcome(Answers.Status reference) {
             if (arrived) {
                 return Row.Outcome.ARRIVED;
             }
-            return halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED ? Row.Outcome.UNREACHABLE : Row.Outcome.GAVE_UP;
+            if (halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED) {
+                return Row.Outcome.UNREACHABLE;
+            }
+            return edge && (reference == null || reference == Answers.Status.UNKNOWN) ? Row.Outcome.BEYOND : Row.Outcome.GAVE_UP;
         }
 
         int replansTotal() {
@@ -123,10 +134,17 @@ final class Rehearsal {
             this.at = scene.start();
         }
 
+        /** 有一次搜索的窗口伸出了世界的边。 */
+        private boolean beyond;
+
         @Override
         public SearchView snapshot(BlockPos from) {
-            SearchView base = scene.snapshots().apply(from);
-            return PlannedView.of(base, List.copyOf(done));
+            beyond |= scene.beyond().test(from);
+            return view(from);
+        }
+
+        private SearchView view(BlockPos from) {
+            return PlannedView.of(scene.snapshots().apply(from), List.copyOf(done));
         }
 
         @Override
@@ -136,7 +154,7 @@ final class Rehearsal {
 
         @Override
         public Trip.Standing standing() {
-            Stance stance = Stance.at(snapshot(at), scene.model().body().stats(), at);
+            Stance stance = Stance.at(view(at), scene.model().body().stats(), at);
             return stance == null ? null : new Trip.Standing(at, stance);
         }
 
@@ -227,7 +245,7 @@ final class Rehearsal {
                 ticks += walk(Double.POSITIVE_INFINITY) - before;
             }
         }
-        return new Result(halt == null, halt, Double.isNaN(firstMove) ? 0 : firstMove, maxThink, waited, ticks, journal.searches(),
+        return new Result(halt == null, halt, ground.beyond && journal.stops().contains(SearchResult.Stop.UNLOADED), Double.isNaN(firstMove) ? 0 : firstMove, maxThink, waited, ticks, journal.searches(),
                 journal.expansions().stream().mapToInt(Integer::intValue).sum(), journal.replans(), cost, edits, steps);
     }
 

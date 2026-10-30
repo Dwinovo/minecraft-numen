@@ -799,15 +799,18 @@ class SearchTest {
     }
 
     /**
-     * 浮沉几下就是憋气更紧的一档、总价更高的同一格:它们走得到的地方,宽裕的那一个都走得到,不展开。不去重的话,宽阔的干地边上那条封顶水道里,
-     * 搜索在浮沉的各档上铺满一段的预算(四千个节点),搜不完能走到的干地,收场说成"预算用完"、往边界推进,身体下水去试;去重之后搜完能走到的地方,
-     * 说"到不了、是憋气丢下了步子"。
+     * 浮沉几下就是憋气更紧的一档、总价更高的同一格:它们走得到的地方,宽裕的那一个都走得到,不展开。场景是一池封死的水(十六乘十六、三格深,
+     * 地、四壁与顶都是基岩),西边一间干屋是起点,目标在池子另一头的墙外,走不到:池里每一格都有几档憋气的节点,不去重的话搜索在这些
+     * 浮沉的各档上铺开——去重后搜完能走到的地方要 575 个节点,关掉去重要 3095 个(五倍多);预算 1800 取在两数中间。去重之后搜完说
+     * "到不了、是憋气丢下了步子",不去重就用完预算、说成"预算用完"、往边界推进,身体下水去试。
+     * 搜索的节点数是确定的(不看时钟),估价或权重一变这两个数跟着变,但差着五倍,预算不必跟着调。
      */
     @Test
-    void bobbingInTheWaterDoesNotFillTheSegmentBudgetWithDominatedStates() {
-        TestWorld world = sealedChannel(28).fill(-5, Y, 0, -4, Y + 1, 0, Blocks.AIR.defaultBlockState())
-                .floor(-50, -28, -5, 28, Y - 1);
-        SearchResult result = Fixtures.search(world, defaults(), new BlockPos(-30, Y, 0), Goals.at(new BlockPos(30, Y, 0)), 4000);
+    void bobbingInTheWaterDoesNotFillTheBudgetWithDominatedStates() {
+        TestWorld world = new TestWorld().fill(-4, Y - 1, -2, 20, Y + 3, 18, Blocks.BEDROCK.defaultBlockState());
+        world.fill(0, Y, 0, 16, Y + 2, 16, Blocks.WATER.defaultBlockState());
+        world.fill(-3, Y, 0, -1, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        SearchResult result = Fixtures.search(world, defaults(), WEST_ROOM, Goals.at(new BlockPos(24, Y, 0)), 1800);
         assertEquals(SearchResult.Stop.EXHAUSTED, result.stop(), "expanded " + result.expanded());
         assertNull(result.route());
         assertTrue(result.breathless());
