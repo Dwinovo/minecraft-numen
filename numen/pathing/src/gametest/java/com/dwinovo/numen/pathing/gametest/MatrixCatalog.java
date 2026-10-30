@@ -30,6 +30,24 @@ final class MatrixCatalog {
         boolean fluid() {
             return water || parts.stream().anyMatch(p -> !p.state().getFluidState().isEmpty());
         }
+
+        /** 方块状态里有随朝向变的属性:场景转个方向,这样的方块才跟着变;没有的转不转都一样,不必转着再走一遍。 */
+        boolean oriented() {
+            return parts.stream().anyMatch(part -> part.state().getProperties().stream().anyMatch(MatrixCatalog::turns));
+        }
+    }
+
+    private static final java.util.Set<String> SIDES = java.util.Set.of("north", "east", "south", "west");
+
+    /**
+     * 一个属性是不是随朝向变:值是方向或轴(facing、axis),旋转角(rotation),楼梯与铁轨的拐角(shape),
+     * 以及四向的连接(栅栏、墙、玻璃板、绊线的 north、east、south、west)。
+     */
+    private static boolean turns(net.minecraft.world.level.block.state.properties.Property<?> property) {
+        Class<?> values = property.getValueClass();
+        return values == Direction.class || values == Direction.Axis.class
+                || property.getName().equals("rotation") || property.getName().equals("shape")
+                || SIDES.contains(property.getName());
     }
 
     private static Variant one(String family, String name, BlockState state) {

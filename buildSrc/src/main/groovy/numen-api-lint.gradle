@@ -1,0 +1,11 @@
+/*
+ * API 体检报告的 Gradle 任务(不是测试,不拦构建):登记的函数、随模组发的模块、技能与提示词里写着的调用经 ApiTester.lint 查一遍,
+ * 写进本模块的 build/reports/api-lint.txt。Numen 与每个联动各有一个入口类(main),跑在本模块 test 源码集的运行类路径上;
+ * 入口类由应用本约定的构建脚本在 apiLintReport 上写 mainClass。
+ */
+tasks.register('apiLintReport', JavaExec) {
+    group = 'verification'
+    description = 'Writes build/reports/api-lint.txt for the API groups and skills of this module.'
+    classpath = sourceSets.test.runtimeClasspath
+}
+tasks.named('check') { dependsOn 'apiLintReport' }

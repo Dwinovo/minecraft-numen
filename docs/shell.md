@@ -569,7 +569,7 @@ public final class LocateApi {                         // 一组:一个公开类
 
 写法上的问题不拦,交给 `ApiTester.lint()` 的报告:没写说明、参数没写 `@Doc`、没写例子、例子读不通或没调到自己或参数读不成、
 `@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。Numen 与
-各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
+各插件的 Gradle 任务 `apiLintReport` 各写一份报告到 `build/reports/api-lint.txt`(不是测试,不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
 与机器可读的元数据 `numen-api.json`。好写法好不好用,由评测的分数说话(见下)。
 
 ### 组成
