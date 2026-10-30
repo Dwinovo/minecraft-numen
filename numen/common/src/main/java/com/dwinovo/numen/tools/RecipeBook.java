@@ -12,6 +12,7 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.SmithingRecipe;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
 
@@ -58,6 +59,14 @@ public final class RecipeBook {
         return BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()).toString();
     }
 
+    /**
+     * 在合成格里做的配方:类型是原版的合成。模组机器的配方也可以实现 {@code CraftingRecipe}(类型是它自己的),那不是在合成格里做的,
+     * 照别的类型只给类型、输入与产物。
+     */
+    private static boolean isCrafting(Recipe<?> recipe) {
+        return recipe instanceof CraftingRecipe && recipe.getType() == RecipeType.CRAFTING;
+    }
+
     static boolean takes(Recipe<?> recipe, ItemStack stack) {
         if (recipe instanceof SmithingRecipe sm) {
             return sm.isTemplateIngredient(stack) || sm.isBaseIngredient(stack) || sm.isAdditionIngredient(stack);
@@ -92,11 +101,11 @@ public final class RecipeBook {
                 Recipe<?> r = holder.value();
                 ItemStack result = RecipeProbe.resultOf(r, registries);
                 // 合成里产出依赖输入的配方(烟花、镶零件的装备)静态描述答不了;锻造配方在原版里一律标 special,不是这个意思
-                if ((r instanceof CraftingRecipe && r.isSpecial()) || result.isEmpty()
+                if ((isCrafting(r) && r.isSpecial()) || result.isEmpty()
                         || !RecipeProbe.usableIngredients(r) || !wanted.test(r, result)) {
                     continue;
                 }
-                if (r instanceof CraftingRecipe cr) {
+                if (r instanceof CraftingRecipe cr && isCrafting(r)) {
                     // 1.21.1 没有 PlacementInfo,空输入表的老启发式保留
                     if (cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
                         continue;
