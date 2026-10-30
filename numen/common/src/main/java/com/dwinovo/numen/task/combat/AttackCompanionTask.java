@@ -76,6 +76,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 没挑到武器的这一刻沿用上一刻的(弓没了回去走位,环不要跳)。
      */
     private Handling handling = VanillaRanged.HANDLING;
+    /** 手上这件远程武器的名字(提供者说的),站位日志用它,不写死某一种武器。 */
+    private String rangedName = "ranged";
 
     private Entity target;
     private Vec3 lastTargetPosition;
@@ -375,7 +377,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         noPath.add(foe.getId());
         Loadout.Ranged ranged = Loadout.forTarget(player, foe).ranged();
         if (ranged != null && shotExistsTo(foe, ranged)) {
-            return;   // 走不到但射得到:顶层下一刻自然改判弓
+            return;   // 走不到但射得到:顶层下一刻自然改判远程
         }
         r.unreachable(foe.getId());
         Constants.LOG.info("[numen-attack] 放弃 目标={} 走不到,也没有弹道", foe.getId());
@@ -589,6 +591,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         Loadout loadout = Loadout.forTarget(player, target);
         if (loadout.ranged() != null) {
             handling = loadout.ranged().weapon().handling(player, loadout.ranged().stack());
+            rangedName = loadout.ranged().weapon().name();
         }
         driveApproach();
         return shootAt(loadout);
@@ -776,7 +779,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         String line = target == null || target.isRemoved()
                 ? String.format("无目标(只拉开) 太近=%d 场上=%d", tooClose, field.size())
                 : String.format("%s 目标=%d 距离=%.1f 带=[%.2f, %.2f] 太近=%d 场上=%d",
-                        bowFighting ? "弓" : "剑", target.getId(), player.distanceTo(target),
+                        bowFighting ? rangedName : "剑", target.getId(), player.distanceTo(target),
                         skirmishInner(), skirmishOuter(), tooClose, field.size());
         if (!line.equals(lastStandoffLog)) {
             lastStandoffLog = line;
@@ -789,7 +792,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState shootAt(Loadout loadout) {
         Loadout.Ranged ranged = loadout.ranged();
         if (ranged == null) {
-            return closeIn();   // 弓没了:回去走位,别放弃这只
+            return closeIn();   // 远程武器没了:回去走位,别放弃这只
         }
         RangedWeapon weapon = ranged.weapon();
         // <b>攻击层不管距离。</b>射程之内就射,拉开是寻路的事(环的内沿 handling.innerRing)。
@@ -798,7 +801,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 重新起手、僵尸又跟进来 —— 一箭都放不出去。距离是走位的判据,混进攻击层就成了
         // 一个把自己打断的开关。
         if (player.distanceTo(target) > handling.outerRing()) {
-            return TaskState.RUNNING;   // 射程外:不放,但<b>也不取消</b>,弓接着拉
+            return TaskState.RUNNING;   // 射程外:不放,但<b>也不取消</b>,这一发接着准备
         }
         Flight flight = shot != null ? shot.flight() : weapon.flight(player, ranged.stack());
         Aim aim = Ballistics.findShot(player.level(), player, target, flight, handling.maxRange());
@@ -840,7 +843,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 r.strike(target.getId());
                 misfires = 0;
             } else if (++misfires >= MAX_MISFIRES) {
-                fail(weapon.misfireText(), FailureType.WRONG_TOOL);
+                fail(weapon.misfireText(), FailureType.UNKNOWN);   // 没射出去不是拿错了工具:原因在回执那句话里
                 return TaskState.FAILED;
             }
         }
