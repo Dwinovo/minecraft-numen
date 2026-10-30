@@ -1190,6 +1190,7 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s gear source(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s body-state fragment(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s ranged weapon(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s recipe/item knowledge source(s)");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
@@ -1920,6 +1921,7 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s 处穿戴来源");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s 段身体状态");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s 种远程武器");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s 个配方与物品知识来源");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");

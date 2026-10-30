@@ -126,6 +126,34 @@ public interface NumenApi {
     void bundleContent(Path root);
 
     /**
+     * 登记一个<b>知识来源</b>:{@code numen.inv.recipes}(怎么做)、{@code numen.inv.uses}(能拿来做什么)、{@code numen.inv.info}
+     * (物品说明)各是一个动词,动词把各来源的结果合在一起交给模型,每条注明出自哪个来源。原版的配方表是第一个来源;
+     * 装了 JEI 的主人的客户端、整合包写的说明是另外的来源。
+     *
+     * <p>来源是一个隐藏的函数(不进模型的 API 索引):{@code function} 里恰有一个 {@code @Fn} 静态方法,收一个物品,交回
+     * {@link com.dwinovo.numen.api.knowledge.KnowledgeKind#returns} 那种页。它在哪一端执行由函数自己的描述说:在主人客户端上的({@code ClientCall})经现有的客户端调用通道问,
+     * 主人不在线、没装对应的模组、超时,动词的结果里都会明写这个来源缺了、为什么、缺的是哪一类信息({@code provides})。
+     * 读不到的字段({@code notProvided}:概率、耗时、热量、能量……)如实声明,来源不猜、不从提示文字里抠。
+     *
+     * <p>一个名字空间每种动词至多一个来源。两侧都登记,在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
+     *
+     * @param kind        来源服务哪个动词
+     * @param provides    这个来源多给的是哪一类信息(一句话,来源缺席时拿它对模型说缺了什么)
+     * @param notProvided 它读不到的字段
+     * @param function    恰有一个 {@code @Fn} 的类
+     * @throws IllegalArgumentException 这个名字空间这种来源已经有了,或函数写得不对
+     */
+    void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                         java.util.List<String> notProvided, Class<?> function);
+
+    /**
+     * 登记一个知识来源,函数的描述用代码写({@link com.dwinovo.numen.api.sdk.ApiFunction#builder}),不读 Java 类:脚本里写的插件走这条。
+     * 其余同 {@link #knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind, String, java.util.List, Class)}。
+     */
+    void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                         java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function);
+
+    /**
      * 服务端:往 {@code /numen} 下挂一格给<b>玩家</b>用的指令(如 {@code /numen mynav debug})。
      *
      * <p>{@code /numen} 这个根只给不是她的来源(她不能经指令召唤、改权限、改设置),挂在它下面的每一格都随之:

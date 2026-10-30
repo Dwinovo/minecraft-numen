@@ -70,7 +70,8 @@ public final class PluginRoster {
 
     /** 插件往 Numen 里加的东西,按种类记数。 */
     public enum Kind {
-        API_GROUP, MODULE, SKILL, COMMAND, EVENT_LISTENER, EVENT_TYPE, GEAR_SOURCE, BODY_STATE, RANGED_WEAPON
+        API_GROUP, MODULE, SKILL, COMMAND, EVENT_LISTENER, EVENT_TYPE, GEAR_SOURCE, BODY_STATE, RANGED_WEAPON,
+        KNOWLEDGE_SOURCE
     }
 
     /** 加载器对一个模组的说法;没有的项是空串/空表。 */
