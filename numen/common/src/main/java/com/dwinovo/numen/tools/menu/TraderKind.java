@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.inventory.InvApi.Stack;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.inventory.MerchantMenu;
@@ -98,7 +97,7 @@ final class TraderKind implements MenuKind.Chooses<MerchantMenu> {
     }
 
     private static Stack stack(ItemStack stack) {
-        return new Stack(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount());
+        return Stack.of(stack, stack.getCount());
     }
 
     /** 此刻在和她交易的那只商人(在她附近的实体里找):原版把"谁在和谁交易"记在商人身上。 */

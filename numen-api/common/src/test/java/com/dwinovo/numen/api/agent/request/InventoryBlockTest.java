@@ -154,6 +154,20 @@ class InventoryBlockTest {
         assertFalse(block.contains("minecraft:dirt["), block);
     }
 
+    /** 同一种物品里装着钻石的潜影盒与空盒是两行,各自带着描述;模型选得出要哪一个。 */
+    @Test
+    void sameItemWithDifferentContentsIsListedApart() {
+        assumeTrue(booted);
+        ItemStack full = new ItemStack(Items.SHULKER_BOX);
+        full.set(net.minecraft.core.component.DataComponents.CONTAINER,
+                net.minecraft.world.item.component.ItemContainerContents.fromItems(
+                        List.of(new ItemStack(Items.DIAMOND, 3))));
+        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+                new ItemStack(Items.SHULKER_BOX), full));
+        assertTrue(block.contains("carrying=minecraft:shulker_box x1, "
+                + "minecraft:shulker_box[holds diamond x3] x1"), block);
+    }
+
     private static ItemStack potion(
             net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
         ItemStack stack = new ItemStack(Items.POTION);

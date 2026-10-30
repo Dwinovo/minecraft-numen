@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.inventory.InvApi.Stack;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.item.ItemStack;
 
@@ -32,7 +31,7 @@ final class AnvilKind implements MenuKind.Renames<AnvilMenu> {
         ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
         return new Screen.Anvil(menu.getCost(),
                 result.isEmpty() ? Optional.empty()
-                        : Optional.of(new Stack(BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount())),
+                        : Optional.of(Stack.of(result, result.getCount())),
                 result.isEmpty() ? Optional.empty() : Optional.of(result.getHoverName().getString()));
     }
 
