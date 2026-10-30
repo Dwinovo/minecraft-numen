@@ -693,4 +693,131 @@ public class CombatGameTests {
                 })
                 .thenSucceed();
     }
+
+    /** 只带远程武器的她:背包清空,换成 {@code items}。 */
+    private static NumenPlayer shooter(GameTestHelper helper, BlockPos rel, net.minecraft.world.item.ItemStack... items) {
+        NumenPlayer companion = armedCompanion(helper, rel);
+        companion.getInventory().clearContent();
+        for (var item : items) {
+            companion.getInventory().add(item);
+        }
+        return companion;
+    }
+
+    /**
+     * 原版的弓是远程武器的一个提供者:只带弓和箭的她点名打一只站着不动的僵尸,弓拉开、对准、松手,箭把它射倒。
+     * 提供者表里的弓与弩是 Numen 自己登记的两个,和模组的枪走同一条路。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_shoots_a_zombie_with_a_bow(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8), new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW, 64));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    "the zombie is still up — her bow never brought it down");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 测试用的命中扫描武器(一根烈焰棒):每次起手就是一发,打在目标身上,数着打了几发。 */
+    private static final class TestGun implements com.dwinovo.numen.api.combat.RangedWeapon {
+        final java.util.concurrent.atomic.AtomicInteger shots = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public String name() {
+            return "test gun";
+        }
+
+        @Override
+        public boolean handles(net.minecraft.world.item.ItemStack stack) {
+            return stack.is(net.minecraft.world.item.Items.BLAZE_ROD);
+        }
+
+        @Override
+        public Readiness readiness(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return Readiness.READY;
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Flight flight(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Handling handling(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Handling(3.0, 14.0, 30.0);
+        }
+
+        @Override
+        public Shot begin(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new Shot() {
+                private boolean fired;
+
+                @Override
+                public com.dwinovo.numen.api.combat.Flight flight() {
+                    return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+                }
+
+                @Override
+                public boolean aboutToRelease() {
+                    return true;
+                }
+
+                @Override
+                public boolean tick(com.dwinovo.numen.api.combat.Aim aim, net.minecraft.world.entity.Entity target) {
+                    if (!aim.aligned(body.getViewVector(1.0f))) {
+                        return false;
+                    }
+                    target.hurt(body.damageSources().playerAttack(body), 6.0f);
+                    shots.incrementAndGet();
+                    fired = true;
+                    return true;
+                }
+
+                @Override
+                public boolean fired() {
+                    return fired;
+                }
+
+                @Override
+                public void abort() {
+                }
+            };
+        }
+
+        @Override
+        public String misfireText() {
+            return "the test gun did not fire";
+        }
+    }
+
+    /**
+     * 插件登记的远程武器:没有提供者时一根烈焰棒什么也不是(她挑不到远程武器);经插件的门登记了提供者,同一个她点名打同一只僵尸,
+     * 攻击任务挑了它、站在它的环里、用它的命中扫描瞄准,一发发打倒目标。权限照旧由任务提出、权限层裁决。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_uses_a_ranged_weapon_a_plugin_provides(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BLAZE_ROD));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() == null,
+                "she found a ranged weapon in a blaze rod before any plugin provided one");
+        TestGun gun = new TestGun();
+        com.dwinovo.numen.api.NumenPlugins.register("gt_gun", numen -> numen.rangedWeapon(gun));
+        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
+                "she did not pick the plugin's weapon once it was provided");
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
+                    "the plugin's weapon did not bring the zombie down (shots " + gun.shots.get() + ")");
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

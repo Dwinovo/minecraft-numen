@@ -1,5 +1,7 @@
 package com.dwinovo.numen.act;
 
+import com.dwinovo.numen.api.combat.Aim;
+import com.dwinovo.numen.api.combat.Flight;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
@@ -16,10 +18,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.DoubleUnaryOperator;
 
-/** Projectile aiming helpers for gravity-affected arrows. */
+/** Aiming helpers: gravity-affected projectiles (arrows) and hitscan lines (guns). */
 public final class Ballistics {
-
-    public record Aim(Vec3 lookPoint, Vec3 direction, double travelTicks) {}
 
     private record SimulationHit(double ticks, double centerDistance) {}
 
@@ -28,6 +28,44 @@ public final class Ballistics {
     private static final double EPS = 1.0e-6;
 
     private Ballistics() {}
+
+    /**
+     * 这一发该怎么瞄:按提供者说的弹道({@link Flight})。抛物线走 {@link #findArrowShot},命中扫描走 {@link #findHitscan}。
+     *
+     * @return 瞄准;这一刻打不到是 null
+     */
+    public static Aim findShot(Level level, Entity shooter, Entity target, Flight flight, double maxRange) {
+        return switch (flight) {
+            case Flight.Arc arc -> findArrowShot(level, shooter, target, arc.velocity(), arc.gravity(), arc.drag(),
+                    arc.hitboxRadius(), maxRange, arc.copiesShooterVelocity());
+            case Flight.Hitscan scan -> findHitscan(level, shooter, target, maxRange);
+        };
+    }
+
+    /**
+     * 命中扫描:一条线从眼睛打到目标,射程以内、没有方块挡着就打得到。瞄它的中心,中心被挡就试头与脚两个高度。没有飞行时间。
+     *
+     * @return 瞄准;射程外或都被挡着是 null
+     */
+    public static Aim findHitscan(Level level, Entity shooter, Entity target, double maxRange) {
+        if (target.isRemoved()) {
+            return null;
+        }
+        Vec3 eye = shooter.getEyePosition();
+        AABB box = target.getBoundingBox();
+        Vec3 center = boxCenter(box);
+        if (eye.distanceToSqr(center) > maxRange * maxRange) {
+            return null;
+        }
+        for (Vec3 point : List.of(center, new Vec3(center.x, box.maxY - 0.1, center.z), new Vec3(center.x, box.minY + 0.1, center.z))) {
+            BlockHitResult block = level.clip(new ClipContext(eye, point, ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, shooter));
+            if (block.getType() == HitResult.Type.MISS || block.getLocation().distanceToSqr(eye) >= point.distanceToSqr(eye) - EPS) {
+                return new Aim(point, point.subtract(eye).normalize(), 0.0);
+            }
+        }
+        return null;
+    }
 
     public static Aim findArrowShot(Level level, Entity shooter, Entity target,
                                     double velocity, double gravity, double drag,
@@ -147,12 +185,7 @@ public final class Ballistics {
     }
 
     public static double angleDegrees(Vec3 a, Vec3 b) {
-        if (a == null || b == null || a.lengthSqr() < EPS || b.lengthSqr() < EPS) {
-            return Double.MAX_VALUE;
-        }
-        double dot = a.normalize().dot(b.normalize());
-        dot = clamp(dot, -1.0, 1.0);
-        return Math.toDegrees(Math.acos(dot));
+        return Aim.angleDegrees(a, b);
     }
 
     private static void addDragAwareCandidates(List<Vec3> out, Vec3 eye, AABB box, Vec3 targetVelocity,
