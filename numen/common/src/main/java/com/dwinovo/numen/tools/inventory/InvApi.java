@@ -1,6 +1,8 @@
 package com.dwinovo.numen.tools.inventory;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.task.inventory.DropCompanionTask;
 import com.dwinovo.numen.task.inventory.DropItemsTaskRecord;
@@ -23,13 +25,11 @@ import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Item;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -48,27 +48,44 @@ public final class InvApi {
         numen.api("inv", "Your inventory: what you carry, recipes, crafting, eating, dropping.", InvApi.class);
     }
 
-    /** 背包里的一样东西。 */
+    /** 背包里的一种东西。 */
     public record Stack(@Doc("The item id, minecraft:cobblestone.") String item,
-                        @Doc("How many you carry, all stacks together.") int count) {}
+                        @Doc("How many you carry of this kind, all its stacks together.") int count,
+                        @Doc("What tells this kind apart from the same item without it: a shulker box's contents, a "
+                                + "custom name, enchantments, a potion's effect. Absent for a plain item.")
+                        Optional<String> detail) {
 
-    /** 背包 36 格里的东西按种类合起来,先见先列。 */
+        /** 一叠(或合起来的一种)东西在模型眼里的样子:物品 id、件数,区别由 {@link StackLabel#detail} 说。背包清单与窗口里的各项同用。 */
+        public static Stack of(ItemStack sample, int count) {
+            return of(sample, count, StackLabel.detail(sample));
+        }
+
+        /** 同上,描述由调用方给({@link StackLabel#details} 排过重的)。 */
+        public static Stack of(ItemStack sample, int count, String detail) {
+            return new Stack(BuiltInRegistries.ITEM.getKey(sample.getItem()).toString(), count,
+                    detail.isEmpty() ? Optional.empty() : Optional.of(detail));
+        }
+    }
+
+    /** 背包 36 格里的东西按"物品与组件都相同"合成一种,先见先列。 */
     @Fn("What you carry in your backpack, one entry per kind of item.")
-    @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count) end")
+    @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count, s.detail) end")
     @Note("Instant and read-only. Only the backpack (hotbar included): what you wear and hold in the off hand is in "
             + "<worn>. Empty means an empty table.")
+    @Note("Stacks of one item that differ — a shulker box with diamonds in it and an empty one, two different potions — "
+            + "are separate entries, each with a detail. Naming only the item in a call picks the stack in your main "
+            + "hand, else the first slot, and the result says which. To use another one, move it into your main hand's "
+            + "slot first: numen.gui.view lists every slot with its detail, numen.gui.move puts a stack there.")
     @SeeAlso("numen.inv.count")
     public static List<Stack> items(ServerCall call) {
         Inventory inventory = call.her().getInventory();
-        Map<Item, Integer> totals = new LinkedHashMap<>();
-        for (int i = 0; i < Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size()); i++) {
-            ItemStack s = inventory.items.get(i);
-            if (!s.isEmpty()) {
-                totals.merge(s.getItem(), s.getCount(), Integer::sum);
-            }
-        }
+        List<Stacks.Kind> kinds = Stacks.kinds(inventory.items.subList(0,
+                Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())));
+        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
         List<Stack> out = new ArrayList<>();
-        totals.forEach((item, n) -> out.add(new Stack(BuiltInRegistries.ITEM.getKey(item).toString(), n)));
+        for (int i = 0; i < kinds.size(); i++) {
+            out.add(Stack.of(kinds.get(i).sample(), kinds.get(i).count(), details.get(i)));
+        }
         return out;
     }
 
@@ -150,8 +167,8 @@ public final class InvApi {
 
     /** 丢哪一样、丢几件。 */
     public record Drop(@Doc("The item to drop.") Item item,
-                       @Doc("How many to drop (1-999); more than you carry drops all you have of it.")
-                       @Omitted("drop all you carry of it") Optional<Integer> count) {}
+                       @Doc("How many to drop (1-999); more than you carry of that stack drops all of it.")
+                       @Omitted("drop all you carry of that stack") Optional<Integer> count) {}
 
     /** 有界短活:丢东西每次都过权限层,可能挂着等主人。{@code count} 没给就是她带着的全部(至少一件,一件都没有由任务的前置条件如实说)。 */
     @Fn("Drop items from your inventory on the ground in front of you.")
@@ -159,11 +176,14 @@ public final class InvApi {
     @Example("numen.inv.drop(\"rotten_flesh\")")
     @Note("Asks your owner first unless their rules allow it; the call waits for the answer.")
     @Note("Dropped items despawn after 5 minutes. To store things, numen.inv.store puts them into a chest instead.")
+    @Note("Drops one kind of stack: the one in your main hand, else the first slot (numen.inv.items lists the kinds, "
+            + "say a shulker box with contents and an empty one). The result names the stack with its detail and the other "
+            + "stacks of the item that stay.")
     @Note("Returns how many were dropped and how many remain.")
     @SeeAlso("numen.use.block")
     public static Pending<DropCompanionTask.Dropped> drop(ServerCall call, Drop args) {
         Item item = args.item();
-        int carried = PlayerInv.count(call.her().getInventory(), item);
+        int carried = Stacks.pick(call.her().getInventory(), item).map(Stacks.Pick::count).orElse(0);
         int n = args.count().orElse(Math.max(1, carried));
         return call.sync(new DropItemsTaskRecord(call, item, Math.clamp(n, 1, DROP_MAX_COUNT),
                 BuiltInRegistries.ITEM.getKey(item).getPath()));

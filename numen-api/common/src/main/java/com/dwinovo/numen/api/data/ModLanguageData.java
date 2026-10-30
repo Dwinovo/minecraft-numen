@@ -131,6 +131,8 @@ public final class ModLanguageData {
         public static final String CONSENT_WITHDRAWN      = "numen.consent.withdrawn";
         /** 第四个按钮与点了它之后输入框上方那条提示栏的抬头。 */
         public static final String CONSENT_DENY_NOTE      = "numen.consent.deny_note";
+        /** 问话下面那行淡字:选"以后都允许"会记下哪几条规则({@code %s} 是规则行,多条用分号连)。 */
+        public static final String CONSENT_REMEMBER_SCOPE = "numen.consent.remember_scope";
         /** 答完以后消息下面那条结果:点了哪个键、拒绝时说的那句、在别处(命令)答的。 */
         public static final String CONSENT_CHOSE          = "numen.consent.chose";
         public static final String CONSENT_DENIED_SAYING  = "numen.consent.denied_saying";
@@ -1020,6 +1022,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "she left the world");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "she died");
         adder.add(Keys.CONSENT_DENY_NOTE,      "Deny with a note");
+        adder.add(Keys.CONSENT_REMEMBER_SCOPE, "“Always allow” remembers: %s");
         adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "You said no: %s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "Answered elsewhere");
@@ -1747,6 +1750,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "她离开了世界");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "她死了");
         adder.add(Keys.CONSENT_DENY_NOTE,      "说一句再拒绝");
+        adder.add(Keys.CONSENT_REMEMBER_SCOPE, "「以后都允许」会记下:%s");
         adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "你拒绝了:%s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "已在别处答复");

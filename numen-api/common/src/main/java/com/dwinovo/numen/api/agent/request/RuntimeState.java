@@ -1,9 +1,12 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.agent.inbox.EventClock;
 import com.dwinovo.numen.api.task.Activity;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -260,16 +263,18 @@ public final class RuntimeState {
     }
 
     static String renderInventory(BodySnapshot snapshot) {
-        java.util.Map<String, Integer> totals = new java.util.TreeMap<>();
-        for (net.minecraft.world.item.ItemStack stack : snapshot.items()) {
-            if (!stack.isEmpty()) {
-                totals.merge(itemId(stack), stack.getCount(), Integer::sum);
-            }
+        // 物品与组件都相同的叠合成一行(Stacks.kinds,和选叠同一个"种"),不同的分行:装着钻石的潜影盒与空盒、不同的药水各占一行,
+        // 描述见 StackLabel(写得一样的几种它会加序号)
+        List<Stacks.Kind> kinds = Stacks.kinds(snapshot.items());
+        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
+        java.util.TreeMap<String, Integer> totals = new java.util.TreeMap<>();
+        for (int i = 0; i < kinds.size(); i++) {
+            totals.put(StackLabel.of(kinds.get(i).sample(), details.get(i)), kinds.get(i).count());
         }
         StringBuilder items = new StringBuilder();
-        totals.forEach((id, count) -> {
+        totals.forEach((label, count) -> {
             if (items.length() > 0) items.append(", ");
-            items.append(id).append(" x").append(count);
+            items.append(xml(label)).append(" x").append(count);
         });
         // 总数看不出占了几格,空格数照实写上:一格都不空时,不叠在已有那堆上的东西就捡不起来。
         long empty = snapshot.items().stream().filter(net.minecraft.world.item.ItemStack::isEmpty).count();
@@ -278,6 +283,8 @@ public final class RuntimeState {
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
                 + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
+                + "Stacks of one item that differ (a shulker box with contents, another potion) are listed apart; "
+                + "naming only the item picks the one in your main hand, else the first slot. "
                 + "Call numen.gui.view() only when exact slots matter. A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nempty slots=" + empty + " of " + snapshot.items().size()
@@ -288,42 +295,7 @@ public final class RuntimeState {
 
     /** 手上拿的<b>是什么</b>,不含数量——数量归 {@code carrying} 一处管。 */
     private static String describe(net.minecraft.world.item.ItemStack stack) {
-        return stack.isEmpty() ? "(empty)" : xml(itemId(stack));
-    }
-
-    private static String itemId(net.minecraft.world.item.ItemStack stack) {
-        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                .getKey(stack.getItem()).toString();
-        String brew = brewLabel(stack);
-        return brew.isEmpty() ? id : id + "[" + brew + "]";
-    }
-
-    /**
-     * 瓶子里装的是什么。<b>治疗、剧毒、夜视的 item id 全都是 {@code minecraft:potion}</b> ——
-     * 内容在 {@code POTION_CONTENTS} 组件里,只印 id 的话她背包里三瓶完全不同的东西长得
-     * 一模一样,选不出该喝哪瓶。药箭同理。
-     *
-     * <p>印的是原版药水的<b>注册名</b>({@code strong_healing}、{@code long_poison}),不是
-     * "安全/危险"那种结论 —— 该不该喝是她的判断,身体只负责说清楚这是什么。喷溅型和滞留型
-     * 本来就是另外的 item id,照实印就分开了,不用另写判据。
-     */
-    private static String brewLabel(net.minecraft.world.item.ItemStack stack) {
-        var contents = stack.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
-        if (contents == null) {
-            return "";
-        }
-        StringBuilder label = new StringBuilder();
-        contents.potion().ifPresent(held -> label.append(held.unwrapKey()
-                .map(key -> key.location().getPath()).orElse("unknown")));
-        // 酿造出来的、模组的药水没有预设名,效果只在自定义列表里 —— 两处都读,不用维护白名单。
-        for (var effect : contents.customEffects()) {
-            if (label.length() > 0) {
-                label.append('+');
-            }
-            label.append(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().getPath()).orElse("unknown"));
-        }
-        return label.toString();
+        return stack.isEmpty() ? "(empty)" : xml(StackLabel.of(stack));
     }
 
     private static String truncate(String s, int max) {

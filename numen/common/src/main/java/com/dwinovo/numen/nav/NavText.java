@@ -11,6 +11,7 @@ import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.DiveLog;
@@ -388,10 +389,11 @@ public final class NavText {
     private static String action(BodyAction action) {
         return switch (action) {
             case BodyAction.Held h when h.item() == Items.AIR -> "put away what was in my hand";
-            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + item(h.item())
+            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + StackLabel.brief(h.stack())
                     + " from my offhand into my hand";
-            case BodyAction.Held h when h.from() == h.to() -> "switched to " + item(h.item()) + " in my hotbar";
-            case BodyAction.Held h -> "took " + item(h.item()) + " from my inventory into my hand";
+            case BodyAction.Held h when h.from() == h.to() -> "switched to " + StackLabel.brief(h.stack())
+                    + " in my hotbar";
+            case BodyAction.Held h -> "took " + StackLabel.brief(h.stack()) + " from my inventory into my hand";
             case BodyAction.Conjured c -> "took a stack of " + item(c.item()) + " from the creative inventory";
         };
     }
