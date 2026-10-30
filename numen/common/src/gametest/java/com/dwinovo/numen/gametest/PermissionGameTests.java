@@ -105,8 +105,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         level.setBlockAndUpdate(helper.absolutePos(rel), log.defaultBlockState());
         level.setBlockAndUpdate(helper.absolutePos(rel.above()), log.defaultBlockState());
-        level.setBlockAndUpdate(helper.absolutePos(rel.above(2)), Blocks.OAK_LEAVES.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
+        level.setBlockAndUpdate(helper.absolutePos(rel.above(2)), GameTestKit.naturalLeaves());
     }
 
     /** 主人的屋子西半边那一格:要出去得先走过屋里两格,再挖东墙。 */
@@ -412,8 +411,7 @@ public class PermissionGameTests {
         }
         // 野树:每根树干都贴着不持久的树叶(先砍上头的,剩下的桩子也连着叶子),不然是说不清谁的,要问
         for (BlockPos log : java.util.stream.Stream.concat(named.stream(), other.stream()).toList()) {
-            level.setBlockAndUpdate(helper.absolutePos(log.east()), Blocks.OAK_LEAVES.defaultBlockState()
-                    .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
+            level.setBlockAndUpdate(helper.absolutePos(log.east()), GameTestKit.naturalLeaves());
         }
         NumenPlayer companion = spawnAt(helper, "gametest_feller", new BlockPos(7, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
@@ -1883,8 +1881,7 @@ public class PermissionGameTests {
         BlockPos wildLeafRel = new BlockPos(5, 2, 12);
         wildLog(helper, wildRel, Blocks.OAK_LOG);
         level.setBlockAndUpdate(helper.absolutePos(cabinRel), Blocks.OAK_LOG.defaultBlockState());
-        level.setBlockAndUpdate(helper.absolutePos(wildLeafRel), Blocks.OAK_LEAVES.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false));
+        level.setBlockAndUpdate(helper.absolutePos(wildLeafRel), GameTestKit.naturalLeaves());
         ServerPlayer owner = presentOwner(helper, null, "gametest_forest_ranger");
         playerPlaces(helper, owner, leafRel, Items.OAK_LEAVES);
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_woodcutter", new BlockPos(3, 2, 7), true), owner);

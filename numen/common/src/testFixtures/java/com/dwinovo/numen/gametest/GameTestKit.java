@@ -180,6 +180,16 @@ public final class GameTestKit {
      * (装模组前盖的东西),要问主人;这些用例测的是挖、搬、走的机制,主人又不在场,所以把场景里的方块记成她自己放的
      * (她的东西她可以拆)。权限用例要的正是没有记录的场景,用 {@link #spawnBare}。
      */
+    /**
+     * 自然长出的树叶:不持久(玩家放的才带持久标记),距离 1(贴着树干,生成的树就是这样)。直接 {@code setBlockAndUpdate} 放一块不持久的
+     * 树叶,距离是默认的 7,没有谁去更新它,它就是会随机凋落的树叶——野树的"邻着不持久树叶"在用例中途可能无端消失。
+     */
+    static net.minecraft.world.level.block.state.BlockState naturalLeaves() {
+        return Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false)
+                .setValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE, 1);
+    }
+
     static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         NumenPlayer companion = spawnBare(helper, name, rel, creative);
         ServerLevel level = helper.getLevel();
