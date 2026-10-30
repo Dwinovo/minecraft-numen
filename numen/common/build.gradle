@@ -28,8 +28,9 @@ dependencies {
     // 单元测试可以看完整的 Numen API(夹具要登记处、排程机器),编译与运行类路径补上同一模块。
     testImplementation project(':numen-api:common')
     testImplementation project(':numen:pathing')
-    // 目标族的终点格核对表要原版世界夹具(TestWorld、Vanilla),与寻路模块的单测共用同一份
+    // 目标族的终点格核对表要原版世界夹具:TestWorld 与寻路模块的单测共用同一份,原版引导 Vanilla 在寻路模块的 fixtures 源码集里(单测与规划评测共用)
     testImplementation project(':numen:pathing').sourceSets.test.output
+    testImplementation project(':numen:pathing').sourceSets.fixtures.output
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
