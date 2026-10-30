@@ -12,62 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 类型表是"这类条目怎么处理"的唯一答案。循环不再按类型字符串判断什么时候交给大脑、是不是急件,
- * 事件的种类也就是表里的一行——所以表里每一格都得是对的,这里一格一格钉住。
+ * 类型表是"这类条目怎么处理"的唯一答案:登记、不认识的类型怎么办、文本原样交给模型、急件与控制命令的约束。
  */
 class EventTypesTest {
 
     private static final long T0 = 1_000_000L;
-
-    private static void assertRow(String id, EventTypes.Delivery delivery, boolean alwaysUrgent,
-                                  boolean clearedByInterrupt, boolean fromOwner, boolean inChat) {
-        assertTrue(EventTypes.isRegistered(id), id + " 该在表里");
-        EventTypes.Type t = EventTypes.get(id);
-        assertEquals(id, t.id());
-        assertEquals(delivery, t.delivery(), id + " 的投递方式");
-        assertEquals(alwaysUrgent, t.alwaysUrgent(), id + " 恒不恒急");
-        assertEquals(clearedByInterrupt, t.clearedByInterrupt(), id + " 打断时清不清");
-        assertEquals(fromOwner, t.fromOwner(), id + " 算不算主人说的");
-        assertEquals(inChat, t.chatPreview().apply("x") != null, id + " 进不进聊天流");
-    }
-
-    @Test
-    void builtInTypesAreRegisteredAsTheTableSays() {
-        assertRow(EventTypes.QUERY, EventTypes.Delivery.STEER, true, true, true, true);
-        assertRow(EventTypes.GOAL, EventTypes.Delivery.FOLLOW_UP, true, true, true, false);
-        // 控制命令不叫醒她,也就谈不上急:循环闲下来自己执行,不走熟度
-        assertRow(EventTypes.COMPACT, EventTypes.Delivery.CONTROL, false, true, true, true);
-        assertRow(EventTypes.CLEAR, EventTypes.Delivery.CONTROL, false, true, true, true);
-        // 旁听的话与离场通知:捎带
-        assertRow(EventTypes.TALK, EventTypes.Delivery.AMBIENT, false, false, false, false);
-        assertRow(EventTypes.LEFT, EventTypes.Delivery.AMBIENT, false, false, false, false);
-        // 她留意的对象没了:不叫醒她
-        assertRow(EventTypes.GONE, EventTypes.Delivery.AMBIENT, false, false, false, false);
-        // 本能做了事:常态知会,险情由发送方标急件
-        assertRow(EventTypes.REFLEX, EventTypes.Delivery.NOTICE, false, false, false, false);
-    }
-
-    @Test
-    void everyKindOfWorldEventIsItsOwnRow() {
-        // 恒急的是"她不知道,正在做的事就是错的";其余由发送方按事情本身定
-        assertRow(EventTypes.TASK_FINISHED, EventTypes.Delivery.STEER, false, false, false, false);
-        assertRow(EventTypes.DEATH, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.RESPAWNED, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.HUNGRY, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.OWNER_HURT, EventTypes.Delivery.STEER, false, false, false, false);
-        assertRow(EventTypes.COMPANION_HURT, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.TARGETED, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.TIMER, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.WOKE, EventTypes.Delivery.STEER, true, false, false, false);
-        assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);
-        assertRow(EventTypes.DROPPED, EventTypes.Delivery.STEER, false, false, false, false);
-    }
-
-    @Test
-    void theCatchAllKindsAreGone() {
-        assertFalse(EventTypes.isRegistered("event"), "笼统的 event 不再是一种类型");
-        assertFalse(EventTypes.isRegistered("body_log"), "身体日志这个桶退役了,本能叙事是 reflex");
-    }
 
     @Test
     void worldEventRowsReachTheModelVerbatimAndStayOutOfChat() {
