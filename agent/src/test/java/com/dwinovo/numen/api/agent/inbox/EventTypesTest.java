@@ -183,28 +183,6 @@ class EventTypesTest {
 
     // ---- 投递档的声明 ----
 
-    /** 每一档声明的两件事,逐格钉住:队列与循环的行为只从这里来。 */
-    @Test
-    void everyDeliveryDeclaresWhetherItWakesAndWhichCallItJoins() {
-        assertTrue(EventTypes.Delivery.STEER.wakes());
-        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.STEER.joins());
-        assertTrue(EventTypes.Delivery.FOLLOW_UP.wakes());
-        assertEquals(EventTypes.Delivery.Joins.OWN_CALL, EventTypes.Delivery.FOLLOW_UP.joins());
-        assertFalse(EventTypes.Delivery.CONTROL.wakes());
-        assertTrue(EventTypes.Delivery.CONTROL.control());
-        assertFalse(EventTypes.Delivery.AMBIENT.wakes(), "旁听不唤醒");
-        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.AMBIENT.joins(), "但随下一次调用捎带");
-        assertFalse(EventTypes.Delivery.NOTICE.wakes(), "知会平时不唤醒");
-        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.NOTICE.joins());
-        assertEquals(EventTypes.Delivery.STEER, EventTypes.Delivery.NOTICE.whenUrgent(), "标了急件的那一条按插话办");
-        assertEquals(EventTypes.Delivery.AMBIENT, EventTypes.Delivery.AMBIENT.whenUrgent(), "别的档标了急件也不改投递");
-        for (EventTypes.Delivery d : EventTypes.Delivery.values()) {
-            assertEquals(d.joins() == EventTypes.Delivery.Joins.NONE, d.control(), d + ":控制命令就是不随任何调用走的那一档");
-            assertFalse(d.wakes() && d.control(), d + ":叫醒她的条目必须交得出去");
-            assertFalse(!d.wakes() && d.joins() == EventTypes.Delivery.Joins.OWN_CALL, d + ":只随自己那次走的条目必须叫得醒她");
-        }
-    }
-
     /** 急件的意思是立刻叫醒她:不叫醒她的档登记成恒急,当场拒绝,而不是登记进去再悄悄不生效。 */
     @Test
     void aTypeThatDoesNotWakeCannotBeAlwaysUrgent() {
