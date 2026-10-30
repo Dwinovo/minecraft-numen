@@ -52,13 +52,13 @@ public final class Dispatcher {
             throw new ApiError(ErrorKind.NO_FUNCTION, "there is no API function " + call.function(),
                     "the <api> index lists every group; " + Call.help(call.group()) + " lists one.");
         }
-        Record args = read(fn, call);
+        FnArgs args = read(fn, call);
         return new Invocation(fn.groupName(), fn.name(), fn.fullName(),
                 (JsonObject) JsonValues.toJson(fn.encode(args)));
     }
 
     /** 读参数;读不成是一次 {@code bad_argument},下一步是改好的那一整行(看得出时)或这个函数的帮助。 */
-    private static Record read(ApiFunction fn, ScriptRun.Call call) {
+    private static FnArgs read(ApiFunction fn, ScriptRun.Call call) {
         try {
             return fn.decode(fn.named(call.args(), call.options()));
         } catch (ApiFunction.BadArgument bad) {
@@ -112,8 +112,8 @@ public final class Dispatcher {
                     + " on the client", null, null).toString());
             return;
         }
-        Record values = decodeOrReply(fn, args, reply);
-        if (values == null && fn.argsType() != null) {
+        FnArgs values = decodeOrReply(fn, args, reply);
+        if (values == null) {
             return;
         }
         run(fn, () -> fn.invoke(new ClientCall(companion, fn, values), values), null, null, null, reply);
@@ -134,8 +134,8 @@ public final class Dispatcher {
                     + " on the server", null, null).toString());
             return;
         }
-        Record values = decodeOrReply(fn, args, reply);
-        if (values == null && fn.argsType() != null) {
+        FnArgs values = decodeOrReply(fn, args, reply);
+        if (values == null) {
             return;
         }
         run(fn, () -> fn.invoke(new ServerCall(her, companion, fn, values, callId), values), her, values, callId, reply);
@@ -156,8 +156,8 @@ public final class Dispatcher {
         return named;
     }
 
-    /** 线上的参数读成参数 record;读不成回一条 {@code bad_argument},返回 null。 */
-    private static Record decodeOrReply(ApiFunction fn, JsonObject args, Consumer<String> reply) {
+    /** 线上的参数读成参数;读不成回一条 {@code bad_argument},返回 null。 */
+    private static FnArgs decodeOrReply(ApiFunction fn, JsonObject args, Consumer<String> reply) {
         try {
             return fn.decode(named(args));
         } catch (ApiFunction.BadArgument bad) {
@@ -173,7 +173,7 @@ public final class Dispatcher {
         Object run();
     }
 
-    private static void run(ApiFunction fn, Body body, NumenPlayer her, Record args, String callId,
+    private static void run(ApiFunction fn, Body body, NumenPlayer her, FnArgs args, String callId,
                             Consumer<String> reply) {
         Object result;
         try {
@@ -204,7 +204,7 @@ public final class Dispatcher {
     /**
      * 受理一件占身体的活:准备过了才受理、才顶掉手上那件,回它的编号;准备不过当场失败。重启后再跑的是这次调用写成的那一行 Lua。
      */
-    private static void accept(ApiFunction fn, Job<?> job, NumenPlayer her, Record args, Consumer<String> reply) {
+    private static void accept(ApiFunction fn, Job<?> job, NumenPlayer her, FnArgs args, Consumer<String> reply) {
         TaskRecord<?> record = job.record();
         if (record == null) {
             reply.accept(value(fn, job.done()).toString());

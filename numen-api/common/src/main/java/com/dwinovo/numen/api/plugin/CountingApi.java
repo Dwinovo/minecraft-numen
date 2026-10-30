@@ -55,6 +55,12 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions) {
+        door.api(group, summary, functions);
+        one(PluginRoster.Kind.API_GROUP);
+    }
+
+    @Override
     public <T> void codec(Class<T> type, Codec<T> codec) {
         door.codec(type, codec);
     }

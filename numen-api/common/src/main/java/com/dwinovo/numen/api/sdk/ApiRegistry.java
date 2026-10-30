@@ -63,12 +63,23 @@ public final class ApiRegistry {
     }
 
     /**
-     * 登记一组:{@code functions} 里每个 {@link Fn} 方法是这一组的一个函数。
+     * 登记一组:{@code functions} 里每个 {@link Fn} 方法是这一组的一个函数(反射读出函数的描述,见 {@link Binder})。
      *
      * @return 撤回这一组的句柄:撤掉后这个全名又没有主了
      * @throws IllegalArgumentException 名字写不出来、这一组已经有主、有函数绑定不了
      */
-    public static synchronized Handle register(String namespace, String group, String summary, Class<?> functions) {
+    public static Handle register(String namespace, String group, String summary, Class<?> functions) {
+        return register(namespace, group, summary, Binder.bind(namespace, group, functions));
+    }
+
+    /**
+     * 登记一组:{@code functions} 是这一组各个函数的描述(反射读的或代码写的,来路一样)。
+     *
+     * @return 撤回这一组的句柄:撤掉后这个全名又没有主了
+     * @throws IllegalArgumentException 名字写不出来、这一组已经有主、没有函数、函数重名
+     */
+    public static synchronized Handle register(String namespace, String group, String summary,
+                                               List<ApiFunction> functions) {
         checkNamespace(namespace);
         String bad = Binder.badName(group);
         if (bad != null) {
@@ -79,8 +90,17 @@ public final class ApiRegistry {
             throw new IllegalArgumentException("the group " + full + " already has an owner: each namespace adds "
                     + "functions only to its own groups");
         }
-        Group made = new Group(namespace, group, summary == null ? "" : summary,
-                Binder.bind(namespace, group, functions));
+        if (functions.isEmpty()) {
+            throw new IllegalArgumentException("the group " + full + " has no function");
+        }
+        List<ApiFunction> owned = new ArrayList<>();
+        for (ApiFunction fn : functions.stream().sorted(java.util.Comparator.comparing(ApiFunction::name)).toList()) {
+            if (!owned.isEmpty() && owned.getLast().name().equals(fn.name())) {
+                throw new IllegalArgumentException("the group " + full + " has the function " + fn.name() + " twice");
+            }
+            owned.add(fn.in(namespace, group));
+        }
+        Group made = new Group(namespace, group, summary == null ? "" : summary, List.copyOf(owned));
         GROUPS.put(full, made);
         return () -> {
             synchronized (ApiRegistry.class) {

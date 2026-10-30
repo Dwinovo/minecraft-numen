@@ -4,6 +4,7 @@ import com.dwinovo.numen.script.ScriptCatalog;
 import com.dwinovo.numen.script.ScriptEngine;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -18,7 +19,8 @@ import java.util.regex.Pattern;
 
 /**
  * 从签名推出一个函数({@link ApiFunction}):一个类里每个 {@link Fn} 方法一个。签名就是契约——名字、在哪执行、怎么交回、参数、返回
- * 类型、说明全从方法与它的参数 record 读出来,不另写一份。
+ * 类型、说明全从方法与它的参数 record 读出来,不另写一份。这是函数描述的一个生产者(反射),另一个是 {@link FunctionBuilder}(代码);
+ * 出来的描述还没有主人,{@link ApiRegistry} 登记时盖上。
  *
  * <h2>只拦会破坏系统的</h2>
  * 绑定不了就抛出({@link IllegalArgumentException},说是哪个函数、哪一条),登记就此失败:
@@ -42,6 +44,7 @@ public final class Binder {
     /**
      * 这个类里的函数,按方法名排(和类里写的先后无关,帮助字节稳定)。
      *
+     * @param namespace 登记进的名字空间:现造 record 的类名带它
      * @throws IllegalArgumentException 有一个绑定不了(见类注释),或一个 {@code @Fn} 方法都没有
      */
     public static List<ApiFunction> bind(String namespace, String group, Class<?> functions) {
@@ -79,10 +82,6 @@ public final class Binder {
         String name = nameOf(m);
         String where = namespace + "." + group + "." + name + " (" + m.getDeclaringClass().getSimpleName() + "."
                 + m.getName() + ")";
-        String bad = badName(name);
-        if (bad != null) {
-            throw new IllegalArgumentException(where + ": " + bad);
-        }
         if (!Modifier.isStatic(m.getModifiers()) || !Modifier.isPublic(m.getModifiers())
                 || !Modifier.isPublic(m.getDeclaringClass().getModifiers())) {
             throw new IllegalArgumentException(where + ": an @Fn method is public static, in a public class");
@@ -93,16 +92,16 @@ public final class Binder {
                     + "then optionally one record of arguments");
         }
         ApiFunction.Side side = types[0] == ServerCall.class ? ApiFunction.Side.SERVER : ApiFunction.Side.CLIENT;
-        Constructor<? extends Record> args = null;
+        RecordArgs record = null;
         List<ApiFunction.Param> params = List.of();
         if (types.length == 2) {
             if (!types[1].isRecord()) {
                 throw new IllegalArgumentException(where + ": its arguments are a record, not " + types[1].getName());
             }
             @SuppressWarnings("unchecked")
-            Class<? extends Record> record = (Class<? extends Record>) types[1];
-            params = params(where, namespace, record);
-            args = constructor(where, record);
+            Class<? extends Record> type = (Class<? extends Record>) types[1];
+            params = params(where, namespace, type);
+            record = new RecordArgs(type, constructor(where, type), params);
         }
         Type returned = m.getGenericReturnType();
         ScriptCatalog.Kind kind = ScriptCatalog.Kind.VALUE;
@@ -113,10 +112,6 @@ public final class Binder {
         } else if (returned == Pending.class || returned == Job.class) {
             throw new IllegalArgumentException(where + ": say what it returns, Pending<R> or Job<R>");
         }
-        if (side == ApiFunction.Side.CLIENT && kind != ScriptCatalog.Kind.VALUE) {
-            throw new IllegalArgumentException(where + ": a function on the owner's client answers at once; Pending "
-                    + "and Job are for the server");
-        }
         Codec<Object> returns;
         try {
             returns = codec(value, namespace);
@@ -124,23 +119,75 @@ public final class Binder {
             throw new IllegalArgumentException(where + ": what it returns: " + none.getMessage());
         }
         m.setAccessible(true);
-        return new ApiFunction(namespace, group, name, m.getAnnotation(Fn.class).value(), side, kind, params, args,
-                returns, Arrays.stream(m.getAnnotationsByType(Example.class)).map(Example::value).toList(),
-                Arrays.stream(m.getAnnotationsByType(Note.class)).map(Note::value).toList(),
-                m.isAnnotationPresent(SeeAlso.class) ? List.of(m.getAnnotation(SeeAlso.class).value()) : List.of(),
-                m);
+        try {
+            return new ApiFunction(null, null, name, m.getAnnotation(Fn.class).value(), side, kind, params, returns,
+                    Arrays.stream(m.getAnnotationsByType(Example.class)).map(Example::value).toList(),
+                    Arrays.stream(m.getAnnotationsByType(Note.class)).map(Note::value).toList(),
+                    m.isAnnotationPresent(SeeAlso.class) ? List.of(m.getAnnotation(SeeAlso.class).value()) : List.of(),
+                    new MethodHandler(where, m, record));
+        } catch (IllegalArgumentException contradictory) {
+            throw new IllegalArgumentException(where + ": " + contradictory.getMessage(), contradictory);
+        }
+    }
+
+    /** 调用静态方法的执行体:读好的参数组成参数 record,再调方法。 */
+    private record MethodHandler(String where, Method method, RecordArgs record) implements ApiFunction.Handler {
+
+        @Override
+        public void check(FnArgs args) {
+            if (record != null) {
+                record.make(args);
+            }
+        }
+
+        @Override
+        public Object invoke(Object call, FnArgs args) {
+            try {
+                return record == null ? method.invoke(null, call) : method.invoke(null, call, record.make(args));
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof RuntimeException thrown) {
+                    throw thrown;
+                }
+                throw new IllegalStateException(where + " threw", e.getCause());
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(where + " cannot be called", e);
+            }
+        }
+    }
+
+    /** 参数 record:读好的参数按参数表的先后组成它(可以不写的是 {@code Optional})。 */
+    private record RecordArgs(Class<? extends Record> type, Constructor<? extends Record> constructor,
+                              List<ApiFunction.Param> params) {
+
+        /**
+         * @throws IllegalArgumentException record 的构造器说这些参数此刻不成立
+         */
+        Record make(FnArgs args) {
+            Object[] values = new Object[params.size()];
+            for (int i = 0; i < values.length; i++) {
+                ApiFunction.Param p = params.get(i);
+                Object value = args.values().get(p.name());
+                values[i] = p.role() == ApiFunction.Role.REQUIRED || p.role() == ApiFunction.Role.REST
+                        ? value : Optional.ofNullable(value);
+            }
+            try {
+                return constructor.newInstance(values);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof IllegalArgumentException wrong) {
+                    throw wrong;
+                }
+                throw new IllegalStateException(type.getName() + ": cannot make its arguments", e.getCause());
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(type.getName() + ": cannot make its arguments", e);
+            }
+        }
     }
 
     /** 参数 record 的组件读成参数,并查位置参数的规矩。 */
     private static List<ApiFunction.Param> params(String where, String namespace, Class<? extends Record> record) {
         List<ApiFunction.Param> out = new ArrayList<>();
-        boolean lastPositional = false;
         for (RecordComponent c : record.getRecordComponents()) {
             String name = LuaCodecs.snake(c.getName());
-            String bad = badName(name);
-            if (bad != null) {
-                throw new IllegalArgumentException(where + ": argument " + bad);
-            }
             Type t = c.getGenericType();
             boolean optional = t instanceof ParameterizedType p && p.getRawType() == Optional.class;
             Type inner = optional ? ((ParameterizedType) t).getActualTypeArguments()[0] : t;
@@ -161,11 +208,6 @@ public final class Binder {
             } else {
                 role = optional ? ApiFunction.Role.OPTION : ApiFunction.Role.REQUIRED;
             }
-            if (role != ApiFunction.Role.OPTION && lastPositional) {
-                throw new IllegalArgumentException(where + ": " + name + " comes after the argument that may be left out "
-                        + "or takes the rest; that one is the last object");
-            }
-            lastPositional |= role == ApiFunction.Role.OPTIONAL || role == ApiFunction.Role.REST;
             Codec<Object> codec;
             try {
                 codec = codec(inner, namespace);

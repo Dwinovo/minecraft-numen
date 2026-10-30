@@ -44,10 +44,10 @@ public final class ServerCall {
     private final NumenPlayer her;
     private final UUID companion;
     private final ApiFunction function;
-    private final Record args;
+    private final FnArgs args;
     private final String callId;
 
-    ServerCall(NumenPlayer her, UUID companion, ApiFunction function, Record args, String callId) {
+    ServerCall(NumenPlayer her, UUID companion, ApiFunction function, FnArgs args, String callId) {
         this.her = her;
         this.companion = companion;
         this.function = function;

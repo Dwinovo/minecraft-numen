@@ -74,6 +74,17 @@ public interface NumenApi {
     void api(String group, String summary, Class<?> functions);
 
     /**
+     * 登记一组 API 函数,函数的描述用代码写({@link com.dwinovo.numen.api.sdk.ApiFunction#builder}),不读 Java 类:脚本里写的插件走这条。
+     * 和 {@link #api(String, String, Class)} 同一张登记表、同一套规矩,描述出自哪个生产者,登记、帮助、体检、派发都分不出来。
+     *
+     * @param group     组名,小写英文
+     * @param summary   一句话说明
+     * @param functions 这一组各个函数的描述(还没有主人的,登记时盖上你的名字空间与这个组)
+     * @throws IllegalArgumentException 组名已被占、名字写不出来、没有函数、函数重名
+     */
+    void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions);
+
+    /**
      * 给你的一种类型登记它与脚本的值怎么互转,连同它在签名里写成什么。record、枚举、列表与 {@code Map<String, T>} 不用登记。
      *
      * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名被占了

@@ -299,6 +299,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions) {
+            open().add(com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions));
+        }
+
+        @Override
         public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
             open().add(com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec));
         }
