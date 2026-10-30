@@ -20,6 +20,8 @@ dependencies {
     compileOnly project(':plugins:kaleidoscope')
     compileOnly project(':plugins:curios')
     compileOnly project(':plugins:ftbquests')
+    // KubeJS 联动不经 Builtin 的闸门:KubeJS 读 jar 根上的 kubejs.plugins.txt 找到它,KubeJS 在场才会加载它的类
+    compileOnly project(':plugins:kubejs')
     // Litematica 联动用 Loom 编译(Mojang 名),NeoForge 运行时也是 Mojang 名,同一份类原样可用;Loom 项目的默认变体是重映射成
     // intermediary 的 jar,要的是 Mojang 名的那份。目标模组在 NeoForge 上是 Forgematica(它登记的模组 id 也叫 litematica)。
     compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
@@ -141,6 +143,7 @@ tasks.named('jar', Jar) {
     from({ project(':plugins:kaleidoscope').sourceSets.main.output })
     from({ project(':plugins:curios').sourceSets.main.output })
     from({ project(':plugins:ftbquests').sourceSets.main.output })
+    from({ project(':plugins:kubejs').sourceSets.main.output })
     from({ project(':plugins:litematica').sourceSets.main.output })
 }
 
