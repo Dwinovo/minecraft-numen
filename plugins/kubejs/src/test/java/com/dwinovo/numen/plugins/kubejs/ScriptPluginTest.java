@@ -103,4 +103,38 @@ class ScriptPluginTest {
         assertThrows(IllegalArgumentException.class,
                 () -> NumenPlugins.admit(PluginRoster.Source.SCRIPT, "gt_kjs_java", ""));
     }
+
+    /** 知识来源的说明必填(它缺席时模型据此知道缺了什么)、执行体必填、种类要认得。 */
+    @Test
+    void aKnowledgeSourceNeedsItsProvidesAndBodyAndAKnownKind() {
+        ScriptPlugin plugin = new ScriptPlugin("gt_kjs_know_bad");
+
+        IllegalArgumentException noProvides = assertThrows(IllegalArgumentException.class,
+                () -> plugin.knowledgeSource("info", source -> source.run(item -> null)));
+        assertTrue(noProvides.getMessage().contains("provides"), noProvides.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> plugin.knowledgeSource("info", source -> source.provides("x")));
+        IllegalArgumentException unknown = assertThrows(IllegalArgumentException.class,
+                () -> plugin.knowledgeSource("lore", source -> source.provides("x").run(item -> null)));
+        assertTrue(unknown.getMessage().contains("recipes, uses and info"), unknown.getMessage());
+    }
+
+    /** 声明的来源经门登记进来源表(同 Java 插件),说清它读不到什么;撤回之后不在。 */
+    @Test
+    void aDeclaredKnowledgeSourceIsListedWithWhatItCannotSayAndWithdrawnWithItsPlugin() {
+        ScriptPlugin plugin = new ScriptPlugin("gt_kjs_know");
+        plugin.knowledgeSource("recipes", source -> source.provides("Pack machine recipes.").notProvided("chance", "energy")
+                .run(item -> List.of()));
+        NumenPlugins.admit(PluginRoster.Source.SCRIPT, "gt_kjs_know", "");
+        NumenPlugins.register("gt_kjs_know", plugin::setup);
+
+        var listed = com.dwinovo.numen.api.knowledge.KnowledgeSources.of(com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES)
+                .stream().filter(s -> s.id().equals("gt_kjs_know")).toList();
+        assertEquals(1, listed.size());
+        assertEquals(List.of("chance", "energy"), listed.get(0).notProvided());
+        assertEquals("gt_kjs_know.recipes_source.read", listed.get(0).call());
+
+        NumenPlugins.roster().withdraw("gt_kjs_know");
+        assertTrue(com.dwinovo.numen.api.knowledge.KnowledgeSources.of(com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES)
+                .stream().noneMatch(s -> s.id().equals("gt_kjs_know")));
+    }
 }

@@ -225,4 +225,87 @@ public class KubeJsGameTests {
                 .thenExecute(() -> CompanionFactory.despawn(server, her))
                 .thenSucceed();
     }
+
+    /** 另一批:脚本重载会换掉整批脚本,和上一个用例各占一批,不并行抢 {@code /reload}。 */
+    private static final String KNOWLEDGE_BATCH = "numen_kubejs_knowledge";
+    private static final String KNOWLEDGE_SCRIPT = "numen_gametest_knowledge.js";
+
+    /** 一个插件登记一个说明来源和一个配方来源。 */
+    private static final String KNOWLEDGE = """
+            NumenEvents.register(event => {
+              event.plugin('gt_pack', plugin => {
+                plugin.knowledgeSource('info', source => source
+                  .provides('How the pack wants items used.')
+                  .run(item => item == 'minecraft:stick' ? ['Feed sticks to the Flux Press.'] : []))
+                plugin.knowledgeSource('recipes', source => source
+                  .provides('Recipes of the pack machine.')
+                  .notProvided('chance')
+                  .run(item => item == 'minecraft:stick'
+                    ? [{category: 'gt_pack:press', item: 'minecraft:stick', makes: 4, ingredients: ['oak_log'],
+                        catalysts: ['gt_pack:flux_press']}]
+                    : []))
+              })
+            })
+            """;
+
+    @BeforeBatch(batch = KNOWLEDGE_BATCH)
+    public static void prepareKnowledgeBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /**
+     * 整合包作者在脚本里登记知识来源(control 0016):她问 {@code numen.inv.info}、{@code numen.inv.recipes} 时,脚本写的说明与配方和原版的合在
+     * 一起,注明出自这个插件;删了脚本、重载,来源撤回。从入口调(她的 Lua 程序、真的 {@code /reload})。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = KNOWLEDGE_BATCH)
+    public static void a_script_registers_knowledge_sources_she_reads_through_the_verbs(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        NumenPlayer her = spawnAt(helper, "gametest_kubejs_reader", new BlockPos(3, 2, 3), false);
+        AtomicReference<ToolRun> run = new AtomicReference<>();
+        try {
+            Path file = KubeJSPaths.SERVER_SCRIPTS.resolve(KNOWLEDGE_SCRIPT);
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, KNOWLEDGE);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        reload(server);
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.recipes_source.read") != null,
+                        "the script's knowledge sources were not registered after /reload"))
+                .thenExecute(() -> run.set(lua(her, """
+                        local i = numen.inv.info('minecraft:stick')
+                        local r = numen.inv.recipes('minecraft:stick')
+                        local made
+                        for _, x in ipairs(r.recipes) do
+                          if x.category == 'gt_pack:press' then made = x.sources[1] .. ':' .. x.catalysts[1] end
+                        end
+                        return i.notes[1].source .. '=' .. i.notes[1].text .. '|' .. tostring(made)
+                        """)))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(run.get().receipt() != null && run.get().ranToTheEnd(),
+                            "the verbs failed: " + run.get().receipt());
+                    var merged = run.get().data().get("returned");
+                    helper.assertTrue(merged != null && merged.isJsonPrimitive()
+                                    && "gt_pack=Feed sticks to the Flux Press.|gt_pack:gt_pack:flux_press"
+                                            .equals(merged.getAsString()),
+                            "the script's sources were not merged into the verbs: " + run.get().receipt());
+                })
+                .thenExecute(() -> {
+                    try {
+                        Files.deleteIfExists(KubeJSPaths.SERVER_SCRIPTS.resolve(KNOWLEDGE_SCRIPT));
+                    } catch (IOException e) {
+                        throw new IllegalStateException(e);
+                    }
+                    reload(server);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.recipes_source.read") == null
+                                && com.dwinovo.numen.api.knowledge.KnowledgeSources.of(
+                                        com.dwinovo.numen.api.knowledge.KnowledgeKind.INFO).stream()
+                                .noneMatch(s -> s.id().equals("gt_pack")),
+                        "deleting the script did not withdraw its sources"))
+                .thenExecute(() -> CompanionFactory.despawn(server, her))
+                .thenSucceed();
+    }
 }
