@@ -43,10 +43,11 @@ ext.numenTerrainProperties = {
 // 每次 GameTest 跑批都从空的插件开关名单开始:世界每次是新的,但服务器配置目录里的 plugins.json 不跟着世界走,上一次跑批里被关掉的
 // 插件会留到这一次,开关类用例就从中间开始。所有模块的 runGameTestServer 共用这一处,不在各个用例里清。
 subprojects {
-    tasks.matching { it.name == 'runGameTestServer' && it instanceof JavaExec }.configureEach { run ->
+    tasks.matching { it.name == 'runGameTestServer' }.configureEach { run ->
+        // 各模块的运行目录都是 <模块>/runs/gametestserver
+        def switches = run.project.file('runs/gametestserver/config/numen/server/plugins.json')
         run.doFirst {
-            def switches = new File(run.workingDir, 'config/numen/server/plugins.json')
-            project.delete(switches, new File(switches.parentFile, switches.name + '.tmp'))
+            run.project.delete(switches, new File(switches.parentFile, switches.name + '.tmp'))
         }
     }
 }
