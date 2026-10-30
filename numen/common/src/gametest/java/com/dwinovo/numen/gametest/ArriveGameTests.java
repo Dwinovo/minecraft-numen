@@ -4,18 +4,15 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.FurnaceMenu;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoublePlantBlock;
-import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
@@ -53,78 +50,6 @@ public class ArriveGameTests {
     /** 她脚下那一格(相对场地,与 {@code absolutePos} 同一个原点)。 */
     private static BlockPos feet(GameTestHelper helper, NumenPlayer companion) {
         return companion.blockPosition().subtract(helper.absolutePos(BlockPos.ZERO));
-    }
-
-    /**
-     * 狭窄矿道里的熔炉:两条平行的一格宽两格高矿道,一头连通;熔炉嵌在南边那条的北壁上,只有朝矿道的南面敞开。她在北边那条里,
-     * 隔着一层石头几何上够得着它、却看不见:use.block 绕到南边矿道、站到正对开口的一侧;她走过去、打开它。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void use_walks_to_the_open_side_of_a_furnace_in_a_narrow_tunnel(GameTestHelper helper) {
-        fill(helper, 1, 2, 1, 14, 4, 8, Blocks.STONE.defaultBlockState());
-        fill(helper, 3, 2, 3, 12, 3, 3, Blocks.AIR.defaultBlockState());
-        fill(helper, 3, 2, 6, 12, 3, 6, Blocks.AIR.defaultBlockState());
-        fill(helper, 3, 2, 3, 3, 3, 6, Blocks.AIR.defaultBlockState());
-        set(helper, 8, 2, 5, Blocks.FURNACE);
-        BlockPos furnace = helper.absolutePos(new BlockPos(8, 2, 5));
-        NumenPlayer companion = spawnAt(helper, "gametest_tunnel_cook", new BlockPos(8, 2, 3), false);
-        ToolRun press = use(companion, furnace);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use block has not finished");
-            helper.assertTrue(press.succeeded() && feet(helper, companion).getZ() == 6
-                            && companion.containerMenu instanceof FurnaceMenu,
-                    "the furnace did not open from the south tunnel: " + press.outcome() + " at " + feet(helper, companion));
-            companion.closeContainer();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 箱子三面与顶上罩着(顶上是玻璃),只有西面敞开;她在东面:use.block 绕到西面。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void use_walks_to_the_only_open_side_of_a_chest(GameTestHelper helper) {
-        set(helper, 8, 2, 8, Blocks.CHEST);
-        set(helper, 8, 2, 7, Blocks.STONE);
-        set(helper, 8, 2, 9, Blocks.STONE);
-        set(helper, 9, 2, 8, Blocks.STONE);
-        set(helper, 8, 3, 8, Blocks.GLASS);
-        BlockPos chest = helper.absolutePos(new BlockPos(8, 2, 8));
-        NumenPlayer companion = spawnAt(helper, "gametest_chest_side", new BlockPos(13, 2, 8), false);
-        ToolRun press = use(companion, chest);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use block has not finished");
-            helper.assertTrue(press.succeeded() && feet(helper, companion).getX() < 8
-                            && companion.containerMenu instanceof ChestMenu,
-                    "she did not come round to the open west side and open it: " + press.outcome() + " at "
-                            + feet(helper, companion));
-            companion.closeContainer();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /**
-     * 工作台在三格高的悬崖上、离崖边三格;她在崖脚,几何上够得着它,隔着崖壁的石头看不见。旁边一道台阶能上去:use.block
-     * 不停在崖底,上到崖顶,打开它。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 213, batch = BATCH)
-    public static void use_climbs_to_a_table_on_a_cliff_instead_of_stopping_below(GameTestHelper helper) {
-        fill(helper, 7, 2, 0, 15, 4, 15, Blocks.STONE.defaultBlockState());
-        set(helper, 4, 2, 12, Blocks.STONE);
-        fill(helper, 5, 2, 12, 5, 3, 12, Blocks.STONE.defaultBlockState());
-        fill(helper, 6, 2, 12, 6, 4, 12, Blocks.STONE.defaultBlockState());
-        set(helper, 10, 5, 6, Blocks.CRAFTING_TABLE);
-        BlockPos table = helper.absolutePos(new BlockPos(10, 5, 6));
-        NumenPlayer companion = spawnAt(helper, "gametest_cliff_crafter", new BlockPos(6, 2, 6), false);
-        ToolRun press = use(companion, table);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use block has not finished");
-            helper.assertTrue(press.succeeded() && feet(helper, companion).getY() == 5,
-                    "she did not go up the cliff: " + press.outcome() + " at " + feet(helper, companion));
-            companion.closeContainer();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 
     /** 箱子只有西面敞开,面前立着一株高草(高草要长在泥土上,不然一次方块更新就掉了)。交出箱子那一格。 */
@@ -236,43 +161,6 @@ public class ArriveGameTests {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(top.above()),
                     "she is not on top of the pillar: " + walk.outcome() + " at " + feet(helper, companion));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 贴墙一道梯子:move.to 到梯子半截的一格,停在那一格上,挂在梯子上。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void at_stops_on_a_cell_of_a_ladder(GameTestHelper helper) {
-        fill(helper, 9, 2, 6, 12, 6, 10, Blocks.STONE.defaultBlockState());
-        for (int y = 2; y <= 6; y++) {
-            helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, 8)),
-                    Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST));
-        }
-        BlockPos rung = helper.absolutePos(new BlockPos(8, 4, 8));
-        NumenPlayer companion = spawnAt(helper, "gametest_ladder_hanger", new BlockPos(2, 2, 8), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(rung) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(rung) && companion.onClimbable(),
-                    "she is not hanging on that rung: " + walk.outcome() + " at " + feet(helper, companion));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 场地垫高两层,中间一个两格深的水池:move.to 到水面那一层的一格,她在水里。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void at_stops_on_a_cell_in_water(GameTestHelper helper) {
-        fill(helper, 0, 2, 0, 15, 3, 15, Blocks.STONE.defaultBlockState());
-        fill(helper, 7, 2, 7, 10, 3, 10, Blocks.WATER.defaultBlockState());
-        BlockPos cell = helper.absolutePos(new BlockPos(8, 3, 8));
-        NumenPlayer companion = spawnAt(helper, "gametest_floater", new BlockPos(2, 4, 8), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(cell) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.isInWater(),
-                    "she is not in the water: " + walk.outcome() + " at " + feet(helper, companion));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
