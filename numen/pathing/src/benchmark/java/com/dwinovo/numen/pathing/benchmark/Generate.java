@@ -22,7 +22,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * 出题:在每块地上用固定随机种子撒点,写成题库(见 {@link Dataset})。用法:{@code Generate <数据集目录> <主仓库提交>}。每块地、每个距离档收
  * {@link #QUOTA} 道题。题只由地形与种子定出,不依赖任何搜索算法,也不需要标准答案({@link Answers} 另算)。
  *
- * <p><b>怎么撒</b>:先随机一个起点(七成地表,三成洞穴地面;下界没有地表,什么站得住的格都算),再按档的距离范围随机一个方向与距离定出终点所在的列,
+ * <p><b>怎么撒</b>:先随机一个起点(七成地表,三成洞穴地面;下界没有地表,什么站得住的格都算),再按档的距离范围随机一个方向与水平距离定出终点所在的列,
  * 在那一列上按终点的种类({@link Problem.EndClass})取一格:
  * <ul>
  *   <li>地表:这一列最高的站得住的格(含水面);洞穴:地表以下站得住、连着大片空间的地面;</li>
@@ -35,7 +35,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p><b>平凡题</b>:起终点之间的直线明摆着一路平走过去(没有水、没有高于一格的台阶、没有无地面的列,见 {@link Straight})的不进题库。
  * 判据只看地形,与搜索算法无关。直线上的事实同时给报表的标签。
  *
- * <p><b>无解</b>:规格 A 不挖不垫,"走到"封死的空腔或封闭在实心里的一格,按构造到不了({@link Problem#unsolvable}),单独成一类。
+ * <p><b>不适用于 A</b>:规格 A 不挖不垫,需要编辑才做得成的题(挖到某格、走到封死的一格)按构造不适用({@link Problem#applicable}),出题时分出来,
+ * 数目记进 manifest,评测不给 A 跑。
  */
 final class Generate {
 
@@ -60,6 +61,7 @@ final class Generate {
         manifest.addProperty("minecraft", net.minecraft.SharedConstants.getCurrentVersion().getName());
         manifest.addProperty("commit", args[1]);
         manifest.addProperty("quota", QUOTA);
+        manifest.addProperty("notApplicableToA", "需要编辑才做得成的题:挖到某格,和走到封死的空腔或封闭在实心里的一格;规格 A 不挖不垫,这些题不给 A 跑");
         JsonObject regionStats = new JsonObject();
         for (Dataset.Region region : dataset.regions()) {
             long r0 = System.nanoTime();
@@ -126,15 +128,15 @@ final class Generate {
             Map<Problem.Split, Integer> bySplit = new EnumMap<>(Problem.Split.class);
             Map<Problem.GoalType, Integer> byGoal = new EnumMap<>(Problem.GoalType.class);
             Map<Problem.Bucket, Integer> byBucket = new EnumMap<>(Problem.Bucket.class);
-            int unsolvable = 0;
+            int notApplicable = 0;
             for (Problem p : problems) {
                 byClass.merge(p.endClass(), 1, Integer::sum);
                 bySplit.merge(p.split(), 1, Integer::sum);
                 byGoal.merge(p.goalType(), 1, Integer::sum);
                 byBucket.merge(p.bucket(), 1, Integer::sum);
-                unsolvable += p.unsolvable(Spec.A) ? 1 : 0;
+                notApplicable += p.applicable(Spec.A) ? 0 : 1;
             }
-            o.addProperty("unsolvableUnderA", unsolvable);
+            o.addProperty("notApplicableToA", notApplicable);
             o.add("byBucket", count(byBucket));
             o.add("byEndClass", count(byClass));
             o.add("byGoal", count(byGoal));
@@ -152,10 +154,12 @@ final class Generate {
 
         private record Candidate(BlockPos from, BlockPos to, Problem.GoalType type, int radius, Problem.EndClass endClass) {
 
+            /** 三维直线距离:分档的依据。 */
             double distance() {
                 double dx = to.getX() - from.getX();
+                double dy = to.getY() - from.getY();
                 double dz = to.getZ() - from.getZ();
-                return Math.sqrt(dx * dx + dz * dz);
+                return Math.sqrt(dx * dx + dy * dy + dz * dz);
             }
         }
 

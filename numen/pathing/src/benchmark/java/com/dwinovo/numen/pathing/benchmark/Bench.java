@@ -42,6 +42,7 @@ final class Bench {
         List<Row> rows = new ArrayList<>();
         long loadMillis = 0;
         long runStart = 0;
+        int notApplicable = 0;
         try {
             for (Dataset.Region region : dataset.regions()) {
                 long l0 = System.currentTimeMillis();
@@ -56,6 +57,10 @@ final class Bench {
                         continue;
                     }
                     for (Spec spec : Spec.values()) {
+                        if (!p.applicable(spec)) {
+                            notApplicable++;
+                            continue;
+                        }
                         Answers.Answer answer = answers.flatMap(k -> k.of(p, spec)).orElse(null);
                         jobs.add(pool.submit(() -> run(world, p, spec, answer)));
                     }
@@ -74,7 +79,7 @@ final class Bench {
             jsonl.append(row.toJson()).append('\n');
         }
         Files.writeString(out.resolve("results.jsonl"), jsonl.toString(), StandardCharsets.UTF_8);
-        Files.writeString(out.resolve("summary.md"), Report.summary(rows, which, commit, answers.map(Answers.Known::commit)), StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("summary.md"), Report.summary(rows, which, commit, answers.map(Answers.Known::commit), notApplicable), StandardCharsets.UTF_8);
         JsonObject meta = new JsonObject();
         meta.addProperty("commit", commit);
         meta.addProperty("split", which);
@@ -93,8 +98,8 @@ final class Bench {
     private static Row run(RegionWorld world, Problem p, Spec spec, Answers.Answer answer) {
         Rehearsal.Result r = new Rehearsal(new Rehearsal.Scene(world::snapshot, spec.model(), spec.route(), p.goal(Spec.STATS), p.from(), 0), p.id()).run();
         boolean priced = r.arrived() && answer != null && !Double.isNaN(answer.cost());
-        return new Row(p.id(), p.region(), p.bucket(), spec, p.goalType(), p.endClass(), p.split(), p.tags(), p.unsolvable(spec),
-                answer == null ? null : answer.status(), r.arrived(),
+        return new Row(p.id(), p.region(), p.bucket(), spec, p.goalType(), p.endClass(), p.split(), p.tags(), r.outcome(),
+                answer == null ? null : answer.status(),
                 r.halt() == null ? "arrived" : halt(r.halt()), ms(r.firstMove()), ms(r.maxThink()), ms(r.waited()), ms(r.ticks()), r.searches(),
                 r.expanded(), r.replans(Journal.Replan.DEAD_END), r.replansTotal(), Math.round(r.cost() * 1000) / 1000.0,
                 priced ? Math.round(r.cost() / answer.cost() * 10000) / 10000.0 : Double.NaN, r.dug(), r.placed(), r.steps());

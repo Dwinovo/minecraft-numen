@@ -57,7 +57,7 @@ final class Diff {
                 List<String> keys = new ArrayList<>();
                 for (String k : common) {
                     Row r = before.get(k);
-                    if (r.spec() == spec && r.bucket() == bucket && !r.unsolvable()) {
+                    if (r.spec() == spec && r.bucket() == bucket && r.attempted()) {
                         keys.add(k);
                     }
                 }

@@ -16,8 +16,8 @@ import net.minecraft.core.BlockPos;
  * 两种规格各自的标准答案是另一个文件({@link Answers})。
  *
  * @param id       地块名-档-序号,题的唯一名字;dev 与封存的划分按它的哈希({@link Split})
- * @param bucket   起终点水平直线距离的档({@link Bucket})
- * @param distance 起终点水平直线距离
+ * @param bucket   起终点三维直线距离的档({@link Bucket})
+ * @param distance 起终点三维直线距离
  * @param goalType 目标种类
  * @param radius   {@code NEAR} 的半径;其余为 0
  * @param endClass 终点是哪一类格子
@@ -27,7 +27,7 @@ import net.minecraft.core.BlockPos;
 record Problem(String id, String region, Bucket bucket, double distance, BlockPos from, GoalType goalType, BlockPos to, int radius,
                EndClass endClass, Split split, List<Tag> tags) {
 
-    /** 起终点水平直线距离的档:与价钱模型无关,题目永远稳定。 */
+    /** 起终点三维直线距离的档(含高低差,深处的终点自然落进远的档):与价钱模型无关,题目永远稳定。 */
     enum Bucket {
         SHORT("short", 0, 32), MEDIUM("medium", 32, 128), LONG("long", 128, 400);
 
@@ -106,11 +106,11 @@ record Problem(String id, String region, Bucket bucket, double distance, BlockPo
     }
 
     /**
-     * 这种规格下按构造到不了:规格 A 不挖不垫,"走到"一格封死的空腔或封闭在实心里的一格,进不去。题库里单独成一类,量多快认输;
-     * 不跑标准答案求解器(搜索看不到区域外的世界,在开阔的地形上证明不了"搜完了")。
+     * 这种规格下这道题有没有意义:规格 A 不挖不垫,需要编辑才做得成的题——"挖到某格"、"走到"一格封死的空腔或封闭在实心里的一格——
+     * 按构造不适用于 A,不给 A 跑(也不算失败);出题时就分出来,数目记在题库的 manifest 里。
      */
-    boolean unsolvable(Spec spec) {
-        return spec == Spec.A && goalType == GoalType.AT && endClass.sealed();
+    boolean applicable(Spec spec) {
+        return spec != Spec.A || !(goalType == GoalType.DIG || goalType == GoalType.AT && endClass.sealed());
     }
 
     /** 这道题的目标。 */

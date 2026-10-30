@@ -21,6 +21,7 @@ import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.PlannedView;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.SearchClock;
+import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.search.SearchView;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -58,6 +59,14 @@ final class Rehearsal {
     /** 一趟预演的结果。时间都是游戏刻,按表折算(不是墙钟)。 */
     record Result(boolean arrived, Halt halt, double firstMove, double maxThink, double waited, double ticks, int searches,
                   int expanded, Map<Journal.Replan, Integer> replans, double cost, List<Edit> edits, int steps) {
+
+        /** 结局的三类({@link Row.Outcome}):第一次从脚下搜就搜完了没有目标才算证明到不了。 */
+        Row.Outcome outcome() {
+            if (arrived) {
+                return Row.Outcome.ARRIVED;
+            }
+            return halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED && searches == 1 ? Row.Outcome.UNREACHABLE : Row.Outcome.GAVE_UP;
+        }
 
         int replansTotal() {
             return replans.values().stream().mapToInt(Integer::intValue).sum();

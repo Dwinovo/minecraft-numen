@@ -15,7 +15,8 @@ class RowTest {
 
     private static Row row(String id, Spec spec, boolean arrived, double subopt, Answers.Status ref) {
         return new Row(id, "hills", Problem.Bucket.MEDIUM, spec, Problem.GoalType.NEAR, Problem.EndClass.CAVE, Problem.Split.DEV,
-                List.of(Problem.Tag.WATER, Problem.Tag.UNDERGROUND), false, ref, arrived, arrived ? "arrived" : "searched:budget",
+                List.of(Problem.Tag.WATER, Problem.Tag.UNDERGROUND), arrived ? Row.Outcome.ARRIVED : Row.Outcome.GAVE_UP, ref,
+                arrived ? "arrived" : "searched:budget",
                 12.3, 45.6, 7.8, 900.0, 3, 1234, 1, 2, 321.0, subopt, 4, 5, 60);
     }
 
@@ -43,22 +44,24 @@ class RowTest {
     }
 
     @Test
-    void bucketsAreByHorizontalDistance() {
+    void bucketsAreByDistance() {
         assertEquals(Problem.Bucket.SHORT, Problem.Bucket.of(32));
         assertEquals(Problem.Bucket.MEDIUM, Problem.Bucket.of(32.1));
         assertEquals(Problem.Bucket.LONG, Problem.Bucket.of(400));
     }
 
-    /** 规格 A 不挖不垫:走到封死的空腔或封闭的一格按构造到不了;规格 B 与"挖到"、"走到附近"都不是。 */
+    /** 规格 A 不挖不垫:需要编辑才做得成的题(挖到某格、走到封死的一格)不适用于 A;规格 B 与"走到附近"、地表的都适用。 */
     @Test
-    void aSealedCellCannotBeWalkedToWithoutDigging() {
+    void goalsThatNeedEditingDoNotApplyToSpecA() {
         BlockPos at = new BlockPos(0, 0, 0);
         Problem walkToBuried = new Problem("a", "r", Problem.Bucket.SHORT, 10, at, Problem.GoalType.AT, at, 0, Problem.EndClass.BURIED, Problem.Split.DEV, List.of());
-        assertTrue(walkToBuried.unsolvable(Spec.A));
-        assertFalse(walkToBuried.unsolvable(Spec.B));
+        assertFalse(walkToBuried.applicable(Spec.A));
+        assertTrue(walkToBuried.applicable(Spec.B));
         Problem digBuried = new Problem("b", "r", Problem.Bucket.SHORT, 10, at, Problem.GoalType.DIG, at, 0, Problem.EndClass.BURIED, Problem.Split.DEV, List.of());
-        assertFalse(digBuried.unsolvable(Spec.A));
+        assertFalse(digBuried.applicable(Spec.A));
+        Problem nearCavity = new Problem("d", "r", Problem.Bucket.SHORT, 10, at, Problem.GoalType.NEAR, at, 3, Problem.EndClass.CAVITY, Problem.Split.DEV, List.of());
+        assertTrue(nearCavity.applicable(Spec.A));
         Problem surface = new Problem("c", "r", Problem.Bucket.SHORT, 10, at, Problem.GoalType.AT, at, 0, Problem.EndClass.SURFACE, Problem.Split.DEV, List.of());
-        assertFalse(surface.unsolvable(Spec.A));
+        assertTrue(surface.applicable(Spec.A));
     }
 }

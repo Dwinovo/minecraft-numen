@@ -177,7 +177,7 @@ final class Answers {
         for (Dataset.Region region : dataset.regions()) {
             for (Problem p : dataset.problems(region.name())) {
                 for (Spec spec : Spec.values()) {
-                    if (!p.unsolvable(spec) && (buckets == null || buckets.contains(p.bucket().label))) {
+                    if (p.applicable(spec) && (buckets == null || buckets.contains(p.bucket().label))) {
                         pairs.add(new Pair(p, spec));
                     }
                 }
@@ -269,7 +269,7 @@ final class Answers {
         for (Dataset.Region region : dataset.regions()) {
             for (Problem p : dataset.problems(region.name())) {
                 for (Spec spec : Spec.values()) {
-                    if (!p.unsolvable(spec)) {
+                    if (p.applicable(spec)) {
                         total.merge(p.bucket().label + " " + spec, 1, Integer::sum);
                     }
                 }
