@@ -34,6 +34,7 @@
 | [0027](0027-depression-avoidance.md) | 10-28 | 洼地回避:半程往不在洼地里的边界走 | 不采纳(10-29) |
 | [0028](0028-execution-lookahead.md) | 10-28 | 执行往前核 5 步与重规划触发 | 已接受 |
 | [0029](0029-terrain-aware-horizontal-estimate.md) | 10-30 | 估价的水平项:按列的放宽图上从目标反着做的最短路 | 已接受 |
+| [0030](0030-trip-split.md) | 10-30 | 一趟分两半:规划的 `Trip` 与执行的 `Driver` | 已接受 |
 
 ## 沿着一件事看
 
