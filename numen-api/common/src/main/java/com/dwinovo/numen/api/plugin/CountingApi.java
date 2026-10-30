@@ -61,6 +61,12 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+            com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
+        door.taskRunner(record, runner);
+    }
+
+    @Override
     public <T> void codec(Class<T> type, Codec<T> codec) {
         door.codec(type, codec);
     }

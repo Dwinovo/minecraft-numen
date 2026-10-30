@@ -304,6 +304,12 @@ public final class NumenPlugins {
         }
 
         @Override
+        public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+                com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
+            open().add(com.dwinovo.numen.api.task.TaskFactory.register(record, runner));
+        }
+
+        @Override
         public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
             open().add(com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec));
         }

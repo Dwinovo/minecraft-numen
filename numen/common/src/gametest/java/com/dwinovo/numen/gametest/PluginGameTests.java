@@ -183,12 +183,52 @@ public class PluginGameTests {
         public static int ping(com.dwinovo.numen.api.sdk.ServerCall call) {
             return 7;
         }
+
+        @com.dwinovo.numen.api.sdk.Fn("Hold still for a few ticks while the caller waits (a short body job).")
+        @com.dwinovo.numen.api.sdk.Example("gt_dyn.dyn.hold()")
+        public static com.dwinovo.numen.api.sdk.Pending<Void> hold(com.dwinovo.numen.api.sdk.ServerCall call) {
+            return call.sync(new DynRecord(call));
+        }
     }
 
-    /** 她这一刻调 {@code gt_dyn.dyn.ping()} 的结果:调到了是它的回执,函数不在是 null(程序在调用处就以 no_function 失败,没有派出去)。 */
-    private static com.google.gson.JsonElement pingReply(NumenPlayer companion) {
-        ToolRun run = lua(companion, "return gt_dyn.dyn.ping()");
-        return run.reply() == null ? null : valueIn(run.reply());
+    /** 会来会去的插件带的一种活:它的执行器是经门登记的,插件撤回时一起撤。 */
+    private static final class DynRecord extends com.dwinovo.numen.api.task.TaskRecord<Void> {
+        DynRecord(com.dwinovo.numen.api.sdk.ServerCall call) {
+            super(call, call.her().level().getGameTime() + 100);
+        }
+    }
+
+    private static final class DynTask implements com.dwinovo.numen.api.task.Task {
+        private int held;
+
+        @Override
+        public String name() {
+            return "gt_dyn_hold";
+        }
+
+        @Override
+        public com.dwinovo.numen.api.task.TaskState tick(NumenPlayer companion) {
+            return ++held >= 3 ? com.dwinovo.numen.api.task.TaskState.SUCCESS
+                    : com.dwinovo.numen.api.task.TaskState.RUNNING;
+        }
+
+        @Override
+        public void stop(NumenPlayer companion, StopReason why) {
+        }
+
+        @Override
+        public com.dwinovo.numen.api.task.TaskResult result(com.dwinovo.numen.api.task.TaskState terminal) {
+            return com.dwinovo.numen.api.task.TaskResult.ok("held");
+        }
+    }
+
+    /** 她这一刻调一次 {@code gt_dyn.dyn.ping()}。 */
+    private static ToolRun ping(NumenPlayer companion) {
+        return lua(companion, "return gt_dyn.dyn.ping()");
+    }
+
+    private static boolean answered(ToolRun run) {
+        return run.succeeded() && valueIn(run.reply()).getAsInt() == 7;
     }
 
     private static boolean listsDyn() {
@@ -203,8 +243,13 @@ public class PluginGameTests {
     public static void an_admin_switches_a_plugin_off_and_her_function_listing_loses_its_group(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         NumenPlayer companion = spawnAt(helper, "gametest_dynamic", new BlockPos(4, 2, 4), false);
-        com.dwinovo.numen.api.NumenPlugins.register("gt_dyn", numen ->
-                numen.api("dyn", "Test fixture: a group that comes and goes with its plugin.", Dyn.class));
+        int before = com.dwinovo.numen.api.task.TaskFactory.size();
+        com.dwinovo.numen.api.NumenPlugins.register("gt_dyn", numen -> {
+            numen.api("dyn", "Test fixture: a group that comes and goes with its plugin.", Dyn.class);
+            numen.taskRunner(DynRecord.class, (body, record) -> new DynTask());
+        });
+        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before + 1,
+                "the plugin's task runner was not registered");
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_plugin_toggler");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
                 4, false));
@@ -212,8 +257,8 @@ public class PluginGameTests {
         GameTestKit.received(admin);
 
         helper.assertTrue(listsDyn(), "her listing lacks the group before it was switched off");
-        var on = pingReply(companion);
-        helper.assertTrue(on != null && on.getAsInt() == 7, "the group's function did not answer: " + on);
+        ToolRun on = ping(companion);
+        helper.assertTrue(answered(on), "the group's function did not answer: " + on.outcome());
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
                 "{\"id\":\"gt_dyn\"}");
@@ -222,7 +267,9 @@ public class PluginGameTests {
                         && "disabled".equals(row.get("status").getAsString()),
                 "the admin was not shown the plugin as off at once, without a restart: " + row);
         helper.assertTrue(!listsDyn(), "her listing still has the group after the plugin was switched off");
-        helper.assertTrue(pingReply(companion) == null, "her program could still call the switched-off group");
+        ToolRun off = ping(companion);
+        helper.assertTrue(!off.succeeded() && "no_function".equals(off.kind()),
+                "her program could still call the switched-off group: " + off.outcome());
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
                 "{\"id\":\"gt_dyn\"}");
@@ -230,13 +277,30 @@ public class PluginGameTests {
         helper.assertTrue(row != null && !row.get("disabled").getAsBoolean() && "loaded".equals(row.get("status").getAsString()),
                 "the admin was not shown the plugin as on again: " + row);
         helper.assertTrue(listsDyn(), "her listing did not get the group back");
-        var back = pingReply(companion);
-        helper.assertTrue(back != null && back.getAsInt() == 7, "the group's function did not answer after switching on: " + back);
+        ToolRun back = ping(companion);
+        helper.assertTrue(answered(back), "the group's function did not answer after switching on: " + back.outcome());
 
+        // 再关再开一轮:任务执行器不留尸体、也不登记两份
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
+                "{\"id\":\"gt_dyn\"}");
+        GameTestKit.received(admin);
+        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before,
+                "the task runner stayed registered after the plugin was switched off");
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
+                "{\"id\":\"gt_dyn\"}");
+        GameTestKit.received(admin);
+        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before + 1,
+                "the task runner was registered twice or not at all after switching the plugin on again");
         server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(admin);
-        CompanionFactory.despawn(server, companion);
-        helper.succeed();
+
+        java.util.concurrent.atomic.AtomicReference<ToolRun> held = new java.util.concurrent.atomic.AtomicReference<>();
+        steps(helper)
+                .thenExecute(() -> held.set(lua(companion, "gt_dyn.dyn.hold()")))
+                .thenWaitUntil(() -> helper.assertTrue(held.get().succeeded(),
+                        "the switched-on plugin's task did not run: " + held.get().outcome()))
+                .thenExecute(() -> CompanionFactory.despawn(server, companion))
+                .thenSucceed();
     }
 
     /** 联动的目标模组没装:闸门不装它,它也不算这台服务器上的插件,花名册里没有这一行。 */

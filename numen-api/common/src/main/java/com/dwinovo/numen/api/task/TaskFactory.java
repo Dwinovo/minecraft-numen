@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.task;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.Map;
@@ -39,9 +40,15 @@ public final class TaskFactory {
 
     private TaskFactory() {}
 
-    /** Register the runner for a concrete record type. Tick-thread + init safe. */
-    public static <R extends TaskRecord<?>> void register(Class<R> type, Runner<R> runner) {
+    /**
+     * Register the runner for a concrete record type. Tick-thread + init safe.
+     *
+     * @return the handle that takes this runner out again (only if it is still the one registered for the type);
+     *         a record of the type that is still around afterwards falls back to {@link UnsupportedTask}
+     */
+    public static <R extends TaskRecord<?>> Handle register(Class<R> type, Runner<R> runner) {
         RUNNERS.put(type, runner);
+        return () -> RUNNERS.remove(type, runner);
     }
 
     /** How many record types are currently registered. */

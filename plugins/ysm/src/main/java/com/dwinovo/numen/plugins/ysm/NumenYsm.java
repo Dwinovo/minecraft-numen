@@ -3,7 +3,6 @@ package com.dwinovo.numen.plugins.ysm;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.plugin.PluginRoster;
-import com.dwinovo.numen.api.task.TaskFactory;
 
 import java.nio.file.Path;
 
@@ -34,7 +33,7 @@ public final class NumenYsm {
         NumenPlugins.register(YsmApi.NAMESPACE, PluginRoster.Unloading.NEEDS_RESTART, numen -> {
             YsmApi.install(numen, ysm, emotes);
             // ysm.model.switch 派下来的换装由谁来跑
-            TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, emotes, record));
+            numen.taskRunner(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, emotes, record));
 
             if (content != null) numen.bundleContent(content);
 
