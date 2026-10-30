@@ -25,9 +25,9 @@ import org.slf4j.Logger;
 
 /**
  * 制作真实地形的固定存档(套件 {@code numen_pathing_terrain_bake},只在制作时手动选跑,见 terrain/README.md):
- * 在真实地形维度里把一个区域文件(32×32 个区块,{@code r.X.Z.mca})连同外面一圈邻居生成到 FULL,摆上几块哨兵方块,存盘,
+ * 在真实地形维度(主世界或下界,{@code -PbakeDimension})里把一个区域文件(32×32 个区块,{@code r.X.Z.mca})连同外面一圈邻居生成到 FULL,摆上几块哨兵方块,存盘,
  * 把这个区域文件、描述它的 {@code terrain.properties} 写进输出目录;另把整块地的勘测表写进运行目录的
- * {@code terrain-survey.txt}(挑路线用,不进仓库)。外面一圈邻居只为让区域边缘的树完整,它们的区域文件不留。
+ * {@code terrain-survey.txt}(挑种子与区域用,不进仓库)。外面一圈邻居只为让区域边缘的树完整,它们的区域文件不留。
  */
 public class TerrainBakeGameTests {
 
@@ -36,8 +36,8 @@ public class TerrainBakeGameTests {
     private static final int REGION = 32;
     /** 票据距离:中心区块往外 17 圈(35×35)全部到 FULL,正好罩住区域和外面一圈。 */
     private static final int TICKET_DISTANCE = 18;
-    /** 哨兵方块的高度:在地形之上的空气里,现场生成的地形不会有它。 */
-    private static final int SENTINEL_Y = 310;
+    /** 哨兵方块离建筑高度上限的距离:在地形之上的空气里,现场生成的地形不会有它。 */
+    private static final int SENTINEL_BELOW_TOP = 10;
 
     @GameTest(template = "numen_pathing:pathing_empty", timeoutTicks = 2_000_000)
     public static void bake(GameTestHelper helper) {
@@ -49,7 +49,8 @@ public class TerrainBakeGameTests {
         }
         int rx = Integer.parseInt(region[0].trim());
         int rz = Integer.parseInt(region[1].trim());
-        ServerLevel level = helper.getLevel().getServer().getLevel(TerrainWorld.DIMENSION);
+        boolean nether = "nether".equals(System.getProperty("numen.terrain.bake.dimension", "terrain"));
+        ServerLevel level = helper.getLevel().getServer().getLevel(nether ? TerrainWorld.NETHER : TerrainWorld.DIMENSION);
         ChunkPos center = new ChunkPos(rx * REGION + REGION / 2 - 1, rz * REGION + REGION / 2 - 1);
         level.getChunkSource().addRegionTicket(TicketType.FORCED, center, TICKET_DISTANCE, center);
         LOG.info("[terrain-bake] 种子 {},区域 r.{}.{},开始生成", level.getSeed(), rx, rz);
@@ -101,13 +102,13 @@ public class TerrainBakeGameTests {
 
         List<BlockPos> sentinels = new ArrayList<>();
         for (int i = 1; i <= 3; i++) {
-            BlockPos pos = new BlockPos(bx + i * 128 + 2, SENTINEL_Y, bz + i * 128 + 3);
+            BlockPos pos = new BlockPos(bx + i * 128 + 2, level.getMaxBuildHeight() - SENTINEL_BELOW_TOP, bz + i * 128 + 3);
             level.setBlock(pos, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
             sentinels.add(pos);
         }
         level.save(null, true, false);
 
-        Path regionFile = TerrainWorld.regionDir(level.getServer()).resolve("r." + rx + "." + rz + ".mca");
+        Path regionFile = TerrainWorld.regionDir(level.getServer(), level.dimension()).resolve("r." + rx + "." + rz + ".mca");
         Path regionOut = out.resolve("region");
         Files.createDirectories(regionOut);
         try (var old = Files.list(regionOut)) {
@@ -119,7 +120,13 @@ public class TerrainBakeGameTests {
 
         StringBuilder props = new StringBuilder("# 由 TerrainBakeGameTests 写出,制作方法见同目录 README.md\n");
         props.append("seed=").append(level.getSeed()).append('\n');
-        props.append("dimension=").append(TerrainWorld.DIMENSION_ID).append('\n');
+        props.append("dimension=").append(level.dimension().location()).append('\n');
+        // 规划评测读存档要知道的维度事实:建筑高度范围、下界的水倒不倒得出、找站得住的格从哪层往下扫(下界的基岩顶盖之下)
+        props.append("min_y=").append(level.getMinBuildHeight()).append('\n');
+        props.append("height=").append(level.getHeight()).append('\n');
+        props.append("ultra_warm=").append(level.dimensionType().ultraWarm()).append('\n');
+        props.append("scan_top=").append(level.dimensionType().hasCeiling() ? level.dimensionType().logicalHeight() - 2 : level.getMaxBuildHeight() - 1)
+                .append('\n');
         props.append("region=").append(rx).append(',').append(rz).append('\n');
         for (int i = 0; i < sentinels.size(); i++) {
             BlockPos p = sentinels.get(i);
