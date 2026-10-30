@@ -2,6 +2,7 @@ package com.dwinovo.numen.task.build;
 
 import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.platform.NumenServices;
 
@@ -12,12 +13,14 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 把施工图里的一格放进世界:施工期间每一格都只经这里落下,两种放法。
@@ -40,7 +43,8 @@ import java.util.List;
  * 其中与目标状态一字不差的优先;一个都没有才直接写。手放点下去之后原版说不行(领地模组取消了事件),这一格就是放不下,
  * 不拿直接写绕过去。
  *
- * <p>直接写的格数如实进回执({@link BuildCompanionTask.Placed#setDirectly}):它量的是手放做不到的格有多常见。
+ * <p>直接写的格数如实进回执({@link BuildCompanionTask.Placed#setDirectly}):它量的是手放做不到的格有多常见。两种放法放的、扣的、
+ * 回执报的都是背包里同一叠({@link Stacks#pick}):手放是拿到手里的那一叠,直接写是把那一叠的数据灌进方块。
  *
  * <p><b>分工</b>——本类只管一格怎么落进世界;这一格该不该放、料够不够、放完怎么记账是 {@link BuildCompanionTask} 的事,
  * 演出是 {@link BuildShowmanship}。
@@ -49,6 +53,9 @@ final class BuildPlacer {
 
     /** 一格是怎么落进世界的。 */
     enum Way { BY_HAND, SET_DIRECTLY }
+
+    /** 一格落下了:怎么落的,以及为它花掉的每一叠(样子与件数,免耗材为空)——回执说"用了哪一叠"读的就是它。 */
+    record Placement(Way way, List<ItemStack> spent) {}
 
     private final NumenPlayer player;
     private final BuildInventory inv;
@@ -64,9 +71,9 @@ final class BuildPlacer {
      * 把这一格放进世界。
      *
      * @param cost  这一格要花几件;免耗材时由调用方给 0
-     * @return 怎么放的;放不下(事件被取消、写不进去)为 null,世界没变
+     * @return 怎么放的、花了哪几叠;放不下(事件被取消、写不进去)为 null,世界没变
      */
-    Way place(BuildTaskRecord.Target target, int cost) {
+    Placement place(BuildTaskRecord.Target target, int cost) {
         if (target.materialCount() <= 1 && target.item() instanceof BlockItem item
                 && item.getBlock().isEnabled(player.level().enabledFeatures())) {
             // 点着潜行:点中的方块若自己会响应右键(箱子、工作台、门),原版只有潜行时才往上贴方块;箱子的放置规则也看潜行
@@ -74,15 +81,15 @@ final class BuildPlacer {
             boolean sneaking = player.isShiftKeyDown();
             player.setShiftKeyDown(true);
             try {
-                Hand hand = byHand(target, item);
-                if (hand != Hand.NONE) {
-                    return hand == Hand.PLACED ? Way.BY_HAND : null;
+                HandTry tried = byHand(target, item);
+                if (tried.hand() != Hand.NONE) {
+                    return tried.hand() == Hand.PLACED ? new Placement(Way.BY_HAND, tried.spent()) : null;
                 }
             } finally {
                 player.setShiftKeyDown(sneaking);
             }
         }
-        return setDirectly(target, cost) ? Way.SET_DIRECTLY : null;
+        return setDirectly(target, cost);
     }
 
     // ------------------------------------------------------------------
@@ -92,12 +99,18 @@ final class BuildPlacer {
     /** 手放的结局:没有可点的点击(该直接写)、点下去落成了、点下去世界没让落。 */
     private enum Hand { NONE, PLACED, REFUSED }
 
+    /** 手放试了一遍:结局,以及点下去时拿在手里的那一叠(生存时,原版扣的就是它;免耗材为空)。 */
+    private record HandTry(Hand hand, List<ItemStack> spent) {
+        static final HandTry NONE = new HandTry(Hand.NONE, List.of());
+        static final HandTry REFUSED = new HandTry(Hand.REFUSED, List.of());
+    }
+
     /**
      * 试着手放:按 {@link #workable} 排好的先后,转向、再问一次原版会放成什么(转头取整依赖转之前的朝向,问的必须是真点那一刻的朝向),
      * 与目标对得上的那一下就点下去:拿着物品右键、挥手。落没落成看世界,不看返回值——物品的 place 可以吃掉点击却什么都没放。
      * 一个点击都对不上是 {@link Hand#NONE}。
      */
-    private Hand byHand(BuildTaskRecord.Target target, BlockItem item) {
+    private HandTry byHand(BuildTaskRecord.Target target, BlockItem item) {
         for (Faces.Face face : workable(target, item)) {
             BlockHitResult hit = lookAt(face);
             BlockState state = hit == null ? null : simulate(target, item, hit);
@@ -106,12 +119,14 @@ final class BuildPlacer {
             }
             BlockState before = player.level().getBlockState(target.pos());
             ItemStack restore = null;
+            List<ItemStack> spent = List.of();
             if (consumeMaterials) {
-                int slot = inv.findSlot(target.item());
-                if (slot < 0) {
-                    return Hand.REFUSED;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
+                Optional<Stacks.Pick> pick = inv.pick(target.item());
+                if (pick.isEmpty()) {
+                    return HandTry.REFUSED;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
                 }
-                player.hotbar().hold(slot);
+                player.hotbar().hold(pick.get().slot());
+                spent = List.of(pick.get().sample());   // 原版右键扣的是手里这一叠,就是选中的这一叠
             } else {
                 // 免耗材:凭空一叠拿在手里,放完把原来的东西还回去,不动她的真背包
                 restore = player.getMainHandItem();
@@ -129,9 +144,10 @@ final class BuildPlacer {
                 }
             }
             // 世界变了就是放下了,留不留得住由调用方比对;一格没变是被拒了(事件被取消、保护)
-            return player.level().getBlockState(target.pos()) != before ? Hand.PLACED : Hand.REFUSED;
+            return player.level().getBlockState(target.pos()) != before ? new HandTry(Hand.PLACED, spent)
+                    : HandTry.REFUSED;
         }
-        return Hand.NONE;
+        return HandTry.NONE;
     }
 
     /**
@@ -188,35 +204,47 @@ final class BuildPlacer {
      * 照图直写这一格,带着原版的方块更新(与手放同一种:邻居当场按原版规则反应)。写不进去就什么都不算:{@code setBlock} 在超出
      * 建造高度时直接返回假、世界毫无变化,照样扣料会让材料凭空消失。
      *
+     * <p><b>写下去的是她背包里选中的那一叠,不是同名的白货。</b>要放的那一种由 {@link BuildInventory#pick} 定,方块的数据照原版放置时
+     * 对一叠物品做的那几步灌进去({@link BlockItem#updateCustomBlockEntityTag}、{@link BlockEntity#applyComponentsFromItemStack},
+     * 原版 {@code BlockItem.place} 里就是这两个调用):潜影盒里的东西、旗帜的花纹、头颅的主人、蜂箱里的蜂,都跟着方块走;
+     * 随后扣的、回执报的,还是这一叠。免耗材时没有背包里的叠,用一件新的。
+     *
      * <p>写下去之后让原版给这一格自己也复核一次({@code Block.updateFromNeighbourShapes}:六个邻居各自对它的形状说一句,火把没有
      * 依附就变成空气并掉落、栅栏与玻璃板按邻居连上)——手放时这一步在放置规则里,直接写的格绕过了放置规则,所以补在这里。
      * 结果以世界为准,留不留得住由调用方比对。
      *
      * <p>复核之前给方块一次"我被放下了"的回调({@code setPlacedBy}):命名牌、告示牌、部分方块实体靠它初始化,门/床/高草的回调写
-     * 另一半(所以次半根本不进目标集)。回调拿到的是"她手里那件东西":有料单的格给单子上
-     * 第一叠真货(带花纹的旗帜),不是一件同名的白货。
+     * 另一半(所以次半根本不进目标集)。回调拿到的是同一叠。
      */
-    private boolean setDirectly(BuildTaskRecord.Target target, int cost) {
+    private Placement setDirectly(BuildTaskRecord.Target target, int cost) {
         BlockPos pos = target.pos();
         BlockState desired = target.desiredState();
+        Optional<Stacks.Pick> pick = cost > 0 ? inv.pick(target.item()) : Optional.empty();
+        if (cost > 0 && pick.isEmpty()) {
+            return null;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
+        }
+        ItemStack placing = pick.map(Stacks.Pick::sample).orElseGet(() -> new ItemStack(target.item()));
         if (!player.level().setBlock(pos, desired, Block.UPDATE_ALL)) {
-            return false;
+            return null;
+        }
+        BlockItem.updateCustomBlockEntityTag(player.level(), player, pos, placing);
+        BlockEntity entity = player.level().getBlockEntity(pos);
+        if (entity != null) {
+            entity.applyComponentsFromItemStack(placing);
+            entity.setChanged();
         }
         try {
-            desired.getBlock().setPlacedBy(player.level(), pos, desired, player,
-                    new ItemStack(target.item()));
+            desired.getBlock().setPlacedBy(player.level(), pos, desired, player, placing);
         } catch (RuntimeException ignored) {
             // 回调本是给"玩家手持物品放置"设计的,这里没有那个上下文,个别方块会在里面自己炸掉;放置本身已经成功,
             // 回调失败只影响那一格的附加数据,不该让整栋楼停工
         }
-        for (int k = 0; k < cost; k++) {
-            inv.consumeOne(target.item());
-        }
+        List<ItemStack> spent = pick.map(p -> inv.consume(p, cost)).orElse(List.of());
         BlockState written = player.level().getBlockState(pos);
         Block.updateOrDestroy(written, Block.updateFromNeighbourShapes(written, player.level(), pos), player.level(), pos,
                 Block.UPDATE_ALL);
         // 直写不经 BlockItem.place,放置记录在这里记:这一格(连回调补出的另一半)是她放的。手放那条路由 BlockItem 上的 Mixin 记
         PlacedBlocks.placedBy(player.serverLevel(), pos, player);
-        return true;
+        return new Placement(Way.SET_DIRECTLY, spent);
     }
 }

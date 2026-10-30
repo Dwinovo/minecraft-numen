@@ -2,6 +2,7 @@ package com.dwinovo.numen.task.build;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.build.BuildValidity;
 
+import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 
@@ -25,6 +26,9 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     public final boolean consumeMaterials;
     /** 按格找目标({@link #targetAt});第一次问时建。 */
     private Map<Long, Target> byCell;
+
+    /** 花掉的带数据的叠(潜影盒里装着东西、附魔物……):描述 → 件数,先见先列。和白货没区别的不记,清单里本来就看得见。 */
+    private final Map<String, Integer> spentWithData = new java.util.LinkedHashMap<>();
 
     private int placed;
     private int setDirectly;
@@ -85,8 +89,16 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         return setDirectly;
     }
 
-    /** 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code directly} 是手放不出那个样子、直接写进去的。 */
-    public void placedOne(boolean replacing, boolean directly) {
+    /**
+     * 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code directly} 是手放不出那个样子、直接写进去的,{@code spent}
+     * 是为它花掉的每一叠。
+     */
+    public void placedOne(boolean replacing, boolean directly, List<net.minecraft.world.item.ItemStack> spent) {
+        for (net.minecraft.world.item.ItemStack stack : spent) {
+            if (!StackLabel.detail(stack).isEmpty()) {
+                spentWithData.merge(StackLabel.brief(stack), stack.getCount(), Integer::sum);
+            }
+        }
         placed++;
         if (directly) {
             setDirectly++;
@@ -94,6 +106,13 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         if (replacing) {
             replaced++;
         }
+    }
+
+    /** 花掉的带数据的叠,写成 {@code shulker_box[holds diamond x3] x1, ...};一叠都没有为空。 */
+    public String spentWithData() {
+        StringBuilder out = new StringBuilder();
+        spentWithData.forEach((label, n) -> out.append(out.length() > 0 ? ", " : "").append(label).append(" x").append(n));
+        return out.toString();
     }
 
     /** 放下的格里,先拆掉挡着的东西才放的有几格。 */
