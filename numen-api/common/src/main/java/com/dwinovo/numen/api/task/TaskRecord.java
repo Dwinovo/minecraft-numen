@@ -188,7 +188,8 @@ public abstract class TaskRecord<V> {
         TASK_STOP("you stopped it with numen.task.stop", ConsentDesk.Withdrawal.TASK_ENDED),
         COMMAND("stopped by a /numen command", ConsentDesk.Withdrawal.TASK_ENDED),
         REPLACED("a newer body action replaced it", ConsentDesk.Withdrawal.TASK_ENDED),
-        BODY_LEFT("the body left the world", ConsentDesk.Withdrawal.BODY_LEFT);
+        BODY_LEFT("the body left the world", ConsentDesk.Withdrawal.BODY_LEFT),
+        PLUGIN_WITHDRAWN("the plugin that runs it was switched off or reloaded", ConsentDesk.Withdrawal.TASK_ENDED);
 
         private final String words;
         private final ConsentDesk.Withdrawal withdrawal;

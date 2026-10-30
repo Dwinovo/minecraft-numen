@@ -576,8 +576,10 @@ public final class LocateApi {                         // 一组:一个公开类
 
 | 部件 | 做什么 |
 |---|---|
-| `Binder` | 从签名推出 `ApiFunction`(参数、种类、返回的值转换、例子、注意、相关),只抛上面那几条硬错误 |
-| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`) |
+| `ApiFunction` | 一个函数的描述:名字、参数(类型、说明、位置还是选项)、返回、在哪执行、怎么交回、例子,以及执行它的 `Handler`。登记、派发、帮助、体检只认它 |
+| `Binder` | 描述的反射生产者:从 `@Fn` 签名推出 `ApiFunction`,只抛上面那几条硬错误 |
+| `FunctionBuilder` | 描述的代码生产者(`ApiFunction.builder(名字)…server(体)`),出来的描述和反射读的分不出来;脚本插件的函数这样写 |
+| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`);登记交回撤回它的句柄 |
 | `LuaCodecs` / `Codec` | 值转换,连同签名里写成什么;record、枚举、列表、表现造,别的登记 |
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
 | `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
@@ -586,6 +588,29 @@ public final class LocateApi {                         // 一组:一个公开类
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
 `{"ok": false, "error": {kind, message, hint, data}}`,等到的值另带 `stderr`(API 报告的话)。
+
+### 登记归在插件名下:句柄、作用域、重登(control 0014)
+
+照主流的"登记即句柄、按作用域撤销"(VS Code 的 `Disposable`、Guava 的 `Closer`、IntelliJ 的动态插件;撤回之后旧的上下文再用就报错,照
+pi-mono 扩展运行时重载的做法)。每张登记表——函数组(`ApiRegistry`)、值转换(`LuaCodecs`)、同伴事件订阅(`CompanionEvents`)、事件类型
+(`EventTypes`)、身体状态片段与穿戴来源、随附的内容目录与 Lua 模块(`Shipped`、`BuiltinModules`)、`/numen` 下的指令(`NumenCommands`)、
+还没跑的客户端块——登记时交回一个 `Handle`,`close()` 只撤这一条;一个插件的门把拿到的全部句柄收进一个 `Scope`。
+
+- **撤回 = 关掉作用域,重登 = 撤回后再跑一遍 setup**(`PluginRoster.reload`);服主的开关、脚本重载、单测都是这同一对操作。
+  同一个插件 id 登记几次是一个插件,setup 都留着。
+- **撤回之后旧门作废**:拿着上一次登记的门再登记、订阅、发事件,抛 `IllegalStateException` 点名是哪个插件。
+- **门外的东西撤不回**(Mixin、直接挂在加载器上的监听、已经跑过的客户端块):登记时声明 `Unloading.NEEDS_RESTART`
+  (`NumenPlugins.register(id, Unloading.NEEDS_RESTART, setup)`),开关对它仍是"重启后生效"。内嵌的 Numen、车万女仆、YSM、FTB Quests
+  声明了;森罗厨房、Curios、Litematica 与脚本插件是动态的。
+- **"登记变了"只一个信号**(`Registrations`):花名册装上或撤回一个插件后发一次。系统提示、帮助、脚本目录每次从当前的表现算,不缓存,
+  不听它;已经发给玩家的 `/numen` 指令树是拷贝,听它在服务器线程上重发(`/numen` 根每次被读按当前挂的几格现算,撤回即时生效)。
+  MCP 端点只有四个固定工具,函数清单在 `guide` 的文本里、每次现取,所以没有 `tools/list_changed` 可发。
+
+### 受权的动作是一块积木
+
+"提出这几个动作 → 权限层判 允许/拒绝/要问 → 要问就发问并等答复 → 结论与主人的准许交回"是 `permission.GatedAct`:按刻推进的活**持有**它
+(`gate().permit(action)`、`gate().permitAll(actions)`、`gate().consult(items)`,收场时接上 `allowanceNote()`),不继承。Numen 的任务基类、
+森罗厨房的 `PotActTask` 用的是同一块。一次函数调用里(`Pending`)的对应原语是 `ServerCall.authorize`。
 
 ### 三个例子
 

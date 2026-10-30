@@ -1,6 +1,6 @@
 # 0014 插件的登记归在插件名下:能撤回、能重登,函数可由代码描述,受权的动作只有一块积木
 
-- 状态:已接受,未落地
+- 状态:已接受,已落地(实现说明见文末)
 - 日期:2026-10-31
 - 另见:control 0009(Lua API 登记)、control 0015(KubeJS 联动)、issue #108
 
@@ -43,3 +43,20 @@
 - 每张登记表多一个撤回的口子,登记的接口(`NumenApi`)对插件不变,现有插件不用改。
 - 森罗厨房等插件删掉自抄的权限流程,改用同一块组件。
 - 这是 control 0015(KubeJS 联动)的前提;它只是这套机制的又一个使用者。
+
+## 实现说明
+
+- 句柄与作用域:`Handle`、`Scope`(`agent/…/scope`,纯 JVM,放在登记表里最低的那个模块,`EventTypes` 在那里)。表:函数组、值转换、同伴事件订阅、
+  事件类型、身体状态片段、穿戴来源、内容目录、内置 Lua 模块、`/numen` 指令、没跑的客户端块。`registerForClientMod` 的目标模组声明是插件自己的
+  属性,不是登记,不进作用域。引擎自己的登记(`registerHost`)也走作用域,只是不撤。门外的 `TaskFactory`、`ToolRegistry` 等表不在门里,用它们的插件
+  声明要重启;`TaskFactory.register` 同类型是替换,森罗厨房重登没有副作用。
+- 门过期:作用域一关,那扇门的每个登记方法都抛 `IllegalStateException`,点名插件(照 pi-mono 的"重载后旧上下文失效而不是静默生效")。
+- 声明卸下要重启:`NumenPlugins.register(id, Unloading.NEEDS_RESTART, setup)`。声明的有:`numen`(工具、任务执行器、本能链、网络包在门外)、
+  `tlm`、`ysm`、`ftbquests`(加载器总线与 Mixin、宿主每刻钩子在门外)。`kaleidoscope`、`curios`、`litematica` 只经门登记,是动态的。
+- 花名册:停用名单是现行的唯一设定,开关翻一下落盘并当场装上或撤回;"这次启动/下次启动"两份设定删了。`pending` 只在开关和状态要重启才对得上时
+  为真(声明了要重启的装着时被关;启动时就在名单上、登记方没交 setup 的被开)。来源多一种 `SCRIPT`。
+- 函数描述:`ApiFunction` 是描述,`Binder`(反射)与 `FunctionBuilder`(代码)是两个生产者;读参数得到 `FnArgs`,反射的生产者再组成参数 record。
+  描述生产出来没有主人,`ApiRegistry` 登记时盖上名字空间与组;门多一个 `api(group, summary, List<ApiFunction>)`。
+- "登记变了":`Registrations`。MCP 端点没有函数清单(四个固定工具,函数在 `guide` 文本里现取),所以不发 `tools/list_changed`。
+- 受权的动作:`permission.GatedAct`;`AbstractCompanionTask` 与 `PotActTask` 各持一块,抄的两份流程删了。森罗厨房被拒的回执现在是"cannot <动作>:
+  <理由或主人的原话>",主人答复被拒也带这个前缀(以前只有规则拒绝带)。

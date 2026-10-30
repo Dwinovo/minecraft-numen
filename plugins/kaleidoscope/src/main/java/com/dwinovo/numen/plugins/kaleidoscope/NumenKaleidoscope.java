@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.api.task.TaskFactory;
 
 import java.nio.file.Path;
 
@@ -27,7 +26,7 @@ public final class NumenKaleidoscope {
             KaleidoscopeApi.install(numen);
 
             // kaleidoscope.pot 的每一步派下来的记录由谁来跑
-            TaskFactory.register(PotActRecord.class, (player, record) -> new PotActTask(record));
+            numen.taskRunner(PotActRecord.class, (player, record) -> new PotActTask(player, record));
 
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),
             // 所以直接调,不放进 onClient

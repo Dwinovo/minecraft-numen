@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.script.ScriptType;
 import net.minecraft.core.BlockPos;
@@ -133,9 +134,10 @@ public final class LuaCodecs {
     /**
      * 登记一种类型的值转换(插件经 {@code NumenApi.codec} 来)。它声明的类一并登记。
      *
+     * @return 撤回它的句柄:撤掉后这个类型没有值转换,它声明的类也一并撤掉
      * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名已经被别的类型占了
      */
-    public static synchronized <T> void register(Class<T> type, Codec<T> codec) {
+    public static synchronized <T> Handle register(Class<T> type, Codec<T> codec) {
         if (BY_CLASS.containsKey(type)) {
             throw new IllegalArgumentException(type.getName() + " already has a codec");
         }
@@ -143,6 +145,17 @@ public final class LuaCodecs {
             declare(c, type);
         }
         BY_CLASS.put(type, codec);
+        return Handle.once(() -> {
+            synchronized (LuaCodecs.class) {
+                if (BY_CLASS.get(type) == codec) {
+                    BY_CLASS.remove(type);
+                    for (ScriptType.Class c : codec.classes()) {
+                        NAMED.remove(c.name(), type);
+                        CLASSES.remove(c.name(), c);
+                    }
+                }
+            }
+        });
     }
 
     /** 声明一个类;名字已经归了另一个类型是硬错误。 */
@@ -163,6 +176,11 @@ public final class LuaCodecs {
     /** 这个名字的类;没有是 null。 */
     public static synchronized ScriptType.Class classNamed(String name) {
         return CLASSES.get(name);
+    }
+
+    /** 一串同一种的值({@code T[]})的值转换:代码写的函数描述({@link FunctionBuilder})用它写列表类型的参数与返回。 */
+    public static <T> Codec<List<T>> listOf(Codec<T> item) {
+        return new ListCodec<>(item);
     }
 
     /**

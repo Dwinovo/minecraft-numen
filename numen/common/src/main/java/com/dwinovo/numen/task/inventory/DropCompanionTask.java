@@ -1,4 +1,6 @@
 package com.dwinovo.numen.task.inventory;
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.FailureType;
 
 import com.dwinovo.numen.api.task.TaskState;
@@ -52,7 +54,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
      * 不许就带着理由收场。
      */
     private TaskState tryDrop() {
-        Permit permit = permit(com.dwinovo.numen.api.permission.Action.drop(r.item));
+        Permit permit = gate().permit(com.dwinovo.numen.api.permission.Action.drop(r.item));
         if (permit.state() == PermitState.WAITING) {
             return TaskState.RUNNING;
         }

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.task;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.Map;
@@ -39,9 +40,25 @@ public final class TaskFactory {
 
     private TaskFactory() {}
 
-    /** Register the runner for a concrete record type. Tick-thread + init safe. */
-    public static <R extends TaskRecord<?>> void register(Class<R> type, Runner<R> runner) {
+    /**
+     * Register the runner for a concrete record type. Tick-thread + init safe.
+     *
+     * @return the handle that takes this runner out again (only if it is still the one registered for the type) and stops
+     *         the tasks of that type still running: a task must not outlive the plugin that provides it
+     */
+    public static <R extends TaskRecord<?>> Handle register(Class<R> type, Runner<R> runner) {
         RUNNERS.put(type, runner);
+        return Handle.once(() -> {
+            // 只在表里现在的还是这一个时才撤:同一种活后来被别的登记顶掉了,这一个的句柄不动那一个
+            boolean[] removed = {false};
+            RUNNERS.computeIfPresent(type, (key, current) -> {
+                removed[0] = current == runner;
+                return removed[0] ? null : current;
+            });
+            if (removed[0]) {
+                CompanionTickDispatcher.cancelOfType(type);
+            }
+        });
     }
 
     /** How many record types are currently registered. */

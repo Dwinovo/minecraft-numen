@@ -983,8 +983,8 @@ public final class Libraries {
     // ---- 插件 ----
 
     /**
-     * 插件花名册的行,人人看得到同样的内容:谁、哪个版本、联动谁、此刻的状态、加了什么,以及下次启动它开还是关
-     * ({@code disabledNext})、和这一次运行不一样没有({@code pending})。{@code toggle} 是这位玩家能不能改它的开关。
+     * 插件花名册的行,人人看得到同样的内容:谁、哪个版本、联动谁、此刻的状态、加了什么,以及服主关了没有({@code disabled})、
+     * 开关和此刻的状态是不是要重启才对得上({@code pending})。{@code toggle} 是这位玩家能不能改它的开关。
      */
     private void pluginRows(boolean mayToggle, JsonArray out) {
         for (PluginRoster.Plugin plugin : sources.plugins().plugins()) {
@@ -1001,7 +1001,7 @@ public final class Libraries {
             row.addProperty("source", plugin.source().name().toLowerCase(java.util.Locale.ROOT));
             row.addProperty("status", plugin.status().name().toLowerCase(java.util.Locale.ROOT));
             row.addProperty("reason", plugin.reason());
-            row.addProperty("disabledNext", plugin.disabledNext());
+            row.addProperty("disabled", plugin.disabled());
             row.addProperty("pending", plugin.pending());
             row.addProperty("toggle", mayToggle);
             JsonObject adds = new JsonObject();
@@ -1011,7 +1011,7 @@ public final class Libraries {
         }
     }
 
-    /** 插件的开关:改的是下次启动的停用名单,管理员与房主才能改,别人只读。 */
+    /** 插件的开关:当场装上或撤回它的登记(声明了卸下要重启的除外),管理员与房主才能改,别人只读。 */
     private String plugin(boolean mayToggle, String op, JsonObject body) {
         if (LIST.equals(op)) {
             return null;

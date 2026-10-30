@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import dev.ftb.mods.ftbquests.events.ObjectCompletedEvent;
 import dev.ftb.mods.ftbteams.api.event.TeamEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -29,7 +30,8 @@ public final class NumenFtbQuests {
 
     /** 由 {@code Builtin} 在确认 FTB Quests 在场后调用。 */
     public static void install(Path content) {
-        NumenPlugins.register(FtbqApi.NAMESPACE, numen -> {
+        // FTB 的事件与 NeoForge 总线上的监听、对 Architectury 的 Mixin 都在门外,撤不回:卸下要重启
+        NumenPlugins.register(FtbqApi.NAMESPACE, PluginRoster.Unloading.NEEDS_RESTART, numen -> {
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以直接调,不放进 onClient
             FtbqEvents.bind(numen);
             // 两侧都登记:读书的函数在主人客户端上执行,提交与入队在服务端执行

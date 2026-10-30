@@ -74,6 +74,25 @@ public interface NumenApi {
     void api(String group, String summary, Class<?> functions);
 
     /**
+     * 登记一组 API 函数,函数的描述用代码写({@link com.dwinovo.numen.api.sdk.ApiFunction#builder}),不读 Java 类:脚本里写的插件走这条。
+     * 和 {@link #api(String, String, Class)} 同一张登记表、同一套规矩,描述出自哪个生产者,登记、帮助、体检、派发都分不出来。
+     *
+     * @param group     组名,小写英文
+     * @param summary   一句话说明
+     * @param functions 这一组各个函数的描述(还没有主人的,登记时盖上你的名字空间与这个组)
+     * @throws IllegalArgumentException 组名已被占、名字写不出来、没有函数、函数重名
+     */
+    void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions);
+
+    /**
+     * 登记一种活的执行器:你的函数返回 {@code Job.of(记录)} 派下的活({@link com.dwinovo.numen.api.task.TaskRecord} 的某个具体类),
+     * 由 {@code runner} 在她的身体上按刻执行。在门里登记,所以插件撤回时它一起撤掉(门外直接调
+     * {@link com.dwinovo.numen.api.task.TaskFactory#register} 撤不回,那样的插件得声明卸下要重启)。
+     */
+    <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+            com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner);
+
+    /**
      * 给你的一种类型登记它与脚本的值怎么互转,连同它在签名里写成什么。record、枚举、列表与 {@code Map<String, T>} 不用登记。
      *
      * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名被占了

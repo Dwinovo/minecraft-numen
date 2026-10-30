@@ -338,12 +338,12 @@ public final class ServerLibraries {
     // ---- 插件 ----
 
     /**
-     * 花名册里的一行(服务端编码的这一份:{@code Libraries#pluginRows})。{@code status} 是这一次运行的样子,{@code disabledNext}
-     * 是下次启动的设定,{@code pending} 说两者不一样;{@code toggle} 是这位玩家改不改得了它的开关;{@code clientMod} 说它的目标模组只在客户端(这一行装没装看这台客户端自己,见
+     * 花名册里的一行(服务端编码的这一份:{@code Libraries#pluginRows})。{@code status} 是此刻的样子,{@code disabled}
+     * 是服主的设定,{@code pending} 说两者要重启才对得上;{@code toggle} 是这位玩家改不改得了它的开关;{@code clientMod} 说它的目标模组只在客户端(这一行装没装看这台客户端自己,见
      * {@code ClientMods})。
      */
     public record Plugin(String id, String name, String version, List<String> authors, String target,
-                         PluginRoster.Source source, PluginRoster.Status status, String reason, boolean disabledNext,
+                         PluginRoster.Source source, PluginRoster.Status status, String reason, boolean disabled,
                          boolean pending, boolean toggle, boolean clientMod, java.util.Map<PluginRoster.Kind, Integer> adds) {}
 
     /** 登记顺序。 */
@@ -360,7 +360,7 @@ public final class ServerLibraries {
             out.add(new Plugin(text(o, "id"), text(o, "name"), text(o, "version"), List.copyOf(authors),
                     text(o, "target"), PluginRoster.Source.valueOf(text(o, "source").toUpperCase(java.util.Locale.ROOT)),
                     PluginRoster.Status.valueOf(text(o, "status").toUpperCase(java.util.Locale.ROOT)),
-                    text(o, "reason"), flag(o, "disabledNext"), flag(o, "pending"), flag(o, "toggle"), flag(o, "clientMod"),
+                    text(o, "reason"), flag(o, "disabled"), flag(o, "pending"), flag(o, "toggle"), flag(o, "clientMod"),
                     java.util.Collections.unmodifiableMap(adds)));
         }
         return out;

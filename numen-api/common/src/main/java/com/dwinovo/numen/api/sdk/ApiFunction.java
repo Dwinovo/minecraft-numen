@@ -4,21 +4,20 @@ import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ScriptCatalog;
 import com.dwinovo.numen.script.ScriptType;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 一个登记了的 API 函数,由 {@link Binder} 从 {@code @Fn} 方法与它的参数 record 推出,之后不变。登记处、派发、帮助、测试都只读它:
- * 名字、在哪执行、怎么交回、参数(名字、位置还是选项、值转换、说明)、返回类型、例子、注意、相关。
+ * 一个 API 函数的描述,之后不变。登记处({@link ApiRegistry})、派发({@link Dispatcher})、值转换、帮助({@link ApiDocs})、体检
+ * ({@link ApiTester})都只读它:名字、在哪执行、怎么交回、参数(名字、位置还是选项、值转换、说明)、返回类型、例子、注意、相关,
+ * 以及执行它的{@link Handler}。
+ *
+ * <p>描述有两个生产者,出来的东西一样:{@link Binder} 从 {@code @Fn} 方法与它的参数 record 反射读出来(Java 插件),{@link #builder}
+ * 用代码一项项写出来(脚本里没有 Java 类可读)。生产出来的描述还没有主人({@link #in} 之前没有名字空间与组);登记处给它盖上。
  *
  * <p>参数怎么写:按顺序的对象依次给位置参数({@link Role#REQUIRED},最后可以有一个可以不写的 {@link Role#OPTIONAL} 或收下余下全部的
  * {@link Role#REST}:{@code f(a, b)}、{@code f({a, b})} 一样,一项是扫描交回的一团时展开成它的每一格),写在最后的选项表按名字给选项
@@ -94,6 +93,23 @@ public final class ApiFunction {
         }
     }
 
+    /**
+     * 执行一个函数的那一段:{@code call} 是这一侧的调用({@link ServerCall} 或 {@link ClientCall}),{@code args} 是读好的参数。
+     * 交回什么按函数的{@link #kind 种类}:当场的值、{@link Pending}、{@link Job}。反射的生产者把参数组成 record 调那个静态方法;
+     * 代码的生产者直接写。
+     */
+    @FunctionalInterface
+    public interface Handler {
+
+        Object invoke(Object call, FnArgs args);
+
+        /**
+         * 读好的参数在此刻成不成立(参数 record 的紧凑构造器那类检查):不成立抛 {@link IllegalArgumentException},和读不成同一种
+         * {@code bad_argument},在调用处就报,不等派出去。
+         */
+        default void check(FnArgs args) {}
+    }
+
     private final String namespace;
     private final String group;
     private final String name;
@@ -101,16 +117,38 @@ public final class ApiFunction {
     private final Side side;
     private final ScriptCatalog.Kind kind;
     private final List<Param> params;
-    private final Constructor<? extends Record> args;
     private final Codec<Object> returns;
     private final List<String> examples;
     private final List<String> notes;
     private final List<String> seeAlso;
-    private final Method method;
+    private final Handler handler;
 
+    /**
+     * @throws IllegalArgumentException 描述自相矛盾:名字写不出来、可以不写的位置参数不在位置参数的最后、客户端的函数不当场返回
+     */
     ApiFunction(String namespace, String group, String name, String summary, Side side, ScriptCatalog.Kind kind,
-                List<Param> params, Constructor<? extends Record> args, Codec<Object> returns, List<String> examples,
-                List<String> notes, List<String> seeAlso, Method method) {
+                List<Param> params, Codec<Object> returns, List<String> examples, List<String> notes,
+                List<String> seeAlso, Handler handler) {
+        String bad = Binder.badName(name);
+        if (bad != null) {
+            throw new IllegalArgumentException(name + ": " + bad);
+        }
+        boolean lastPositional = false;
+        for (Param p : params) {
+            bad = Binder.badName(p.name());
+            if (bad != null) {
+                throw new IllegalArgumentException(name + ": argument " + bad);
+            }
+            if (p.role() != Role.OPTION && lastPositional) {
+                throw new IllegalArgumentException(name + ": " + p.name() + " comes after the argument that may be left "
+                        + "out or takes the rest; that one is the last object");
+            }
+            lastPositional |= p.role() == Role.OPTIONAL || p.role() == Role.REST;
+        }
+        if (side == Side.CLIENT && kind != ScriptCatalog.Kind.VALUE) {
+            throw new IllegalArgumentException(name + ": a function on the owner's client answers at once; Pending "
+                    + "and Job are for the server");
+        }
         this.namespace = namespace;
         this.group = group;
         this.name = name;
@@ -118,19 +156,30 @@ public final class ApiFunction {
         this.side = side;
         this.kind = kind;
         this.params = List.copyOf(params);
-        this.args = args;
         this.returns = returns;
         this.examples = List.copyOf(examples);
         this.notes = List.copyOf(notes);
         this.seeAlso = List.copyOf(seeAlso);
-        this.method = method;
+        this.handler = handler;
     }
 
+    /** 盖上主人:同一份描述登记进这个名字空间的这一组。 */
+    ApiFunction in(String namespace, String group) {
+        return new ApiFunction(namespace, group, name, summary, side, kind, params, returns, examples, notes, seeAlso,
+                handler);
+    }
+
+    /** 用代码写一份描述。 */
+    public static FunctionBuilder builder(String name) {
+        return new FunctionBuilder(name);
+    }
+
+    /** 名字空间;还没登记过(没有主人)是 null。 */
     public String namespace() {
         return namespace;
     }
 
-    /** 组名,不带名字空间:{@code work}。 */
+    /** 组名,不带名字空间:{@code work};还没登记过是 null。 */
     public String group() {
         return group;
     }
@@ -142,6 +191,9 @@ public final class ApiFunction {
 
     /** 组的全名:{@code numen.work}。 */
     public String groupName() {
+        if (namespace == null) {
+            throw new IllegalStateException(name + " is not registered in a group yet");
+        }
         return namespace + "." + group;
     }
 
@@ -244,29 +296,23 @@ public final class ApiFunction {
     }
 
     /**
-     * 按参数名排好的脚本的值读成参数 record。nil 与没写同义。
+     * 按参数名排好的脚本的值读成参数。nil 与没写同义:没写的可以不写的参数不在里面。
      *
-     * @throws BadArgument 缺了必须写的、一个值读不成(说哪一个参数、要什么、给了什么)
+     * @throws BadArgument 缺了必须写的、一个值读不成(说哪一个参数、要什么、给了什么)、读好的参数此刻不成立
      */
-    public Record decode(Map<String, Object> named) {
-        if (args == null) {
-            if (!named.isEmpty()) {
-                throw new BadArgument(null, "takes no arguments, got " + String.join(", ", named.keySet()), null);
-            }
-            return null;
+    public FnArgs decode(Map<String, Object> named) {
+        if (params.isEmpty() && !named.isEmpty()) {
+            throw new BadArgument(null, "takes no arguments, got " + String.join(", ", named.keySet()), null);
         }
-        Object[] values = new Object[params.size()];
-        for (int i = 0; i < params.size(); i++) {
-            Param p = params.get(i);
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (Param p : params) {
             Object given = named.get(p.name());
             if (given == null) {
                 if (p.role() == Role.REQUIRED || p.role() == Role.REST) {
                     throw new BadArgument(p, "argument '" + p.name() + "' is missing (or nil)", null);
                 }
-                values[i] = Optional.empty();
                 continue;
             }
-            Object read;
             try {
                 if (p.role() == Role.REST) {
                     // 一项是扫描交回的一团时,那一团的每一格各是一项
@@ -279,49 +325,30 @@ public final class ApiFunction {
                             throw items.size() == 1 ? bad : bad.in("item " + (k + 1));
                         }
                     }
-                    read = List.copyOf(out);
+                    values.put(p.name(), List.copyOf(out));
                 } else {
-                    read = p.codec().decode(given);
+                    values.put(p.name(), p.codec().decode(given));
                 }
             } catch (BadValue bad) {
                 throw new BadArgument(p, "argument '" + p.name() + "': " + bad.getMessage(), bad.instead());
             }
-            values[i] = p.role() == Role.REQUIRED || p.role() == Role.REST ? read : Optional.of(read);
         }
+        FnArgs args = new FnArgs(values);
         try {
-            return args.newInstance(values);
-        } catch (InvocationTargetException e) {
-            if (e.getCause() instanceof IllegalArgumentException wrong) {
-                throw new BadArgument(null, wrong.getMessage(), null);
-            }
-            throw new IllegalStateException(fullName() + ": cannot make its arguments", e.getCause());
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(fullName() + ": cannot make its arguments", e);
+            handler.check(args);
+        } catch (IllegalArgumentException wrong) {
+            throw new BadArgument(null, wrong.getMessage(), null);
         }
+        return args;
     }
 
     /** 读好的参数写回脚本的值,按参数名(没写的可以不写的参数不在里面);{@link #decode} 读回来是同一份。 */
-    public Map<String, Object> encode(Record values) {
+    public Map<String, Object> encode(FnArgs values) {
         Map<String, Object> out = new LinkedHashMap<>();
-        if (values == null) {
-            return out;
-        }
-        RecordComponent[] components = values.getClass().getRecordComponents();
-        for (int i = 0; i < params.size(); i++) {
-            Param p = params.get(i);
-            Object v;
-            try {
-                var accessor = components[i].getAccessor();
-                accessor.setAccessible(true);
-                v = accessor.invoke(values);
-            } catch (ReflectiveOperationException e) {
-                throw new IllegalStateException(fullName() + ": cannot read its arguments", e);
-            }
-            if (v instanceof Optional<?> o) {
-                if (o.isEmpty()) {
-                    continue;
-                }
-                v = o.get();
+        for (Param p : params) {
+            Object v = values.values().get(p.name());
+            if (v == null) {
+                continue;
             }
             if (p.role() == Role.REST) {
                 List<Object> items = new ArrayList<>();
@@ -334,27 +361,13 @@ public final class ApiFunction {
         return out;
     }
 
-    /** 参数 record 的类型;不收参数是 null。 */
-    public Class<? extends Record> argsType() {
-        return args == null ? null : args.getDeclaringClass();
-    }
-
     /**
      * 执行它:{@code call} 是这一侧的调用({@link ServerCall} 或 {@link ClientCall}),{@code values} 是读好的参数。
      *
      * @throws ApiError 它说的失败
      */
-    Object invoke(Object call, Record values) {
-        try {
-            return args == null ? method.invoke(null, call) : method.invoke(null, call, values);
-        } catch (InvocationTargetException e) {
-            if (e.getCause() instanceof RuntimeException thrown) {
-                throw thrown;
-            }
-            throw new IllegalStateException(fullName() + " threw", e.getCause());
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException(fullName() + " cannot be called", e);
-        }
+    Object invoke(Object call, FnArgs values) {
+        return handler.invoke(call, values);
     }
 
     @Override

@@ -157,6 +157,25 @@ class NumenCommandsTest {
                 dispatcher.getRoot().getChild(NumenCommands.ROOT)), "her usage lists /numen");
     }
 
+    /** 插件挂的一格只在它的句柄开着时在树里:撤回即时生效,不用重建树;撞名的在登记那一刻就抛。 */
+    @Test
+    void aPluggedVerbIsInTheTreeOnlyWhileItsHandleIsOpen() {
+        var handle = NumenCommands.plug(net.minecraft.commands.Commands.literal("gt_live").executes(ctx -> 1));
+        runs("numen gt_live");
+        assertTrue(!dispatcher.getRoot().getChild(NumenCommands.ROOT).getChildren().isEmpty());
+        assertTrue(fails("numen gt_live", her), "the root is still the players' only");
+        assertThrows(IllegalStateException.class,
+                () -> NumenCommands.plug(net.minecraft.commands.Commands.literal("gt_live")));
+        assertThrows(IllegalStateException.class,
+                () -> NumenCommands.plug(net.minecraft.commands.Commands.literal("permission")));
+
+        handle.close();
+        assertTrue(fails("numen gt_live"));
+        assertTrue(dispatcher.getRoot().getChild(NumenCommands.ROOT).getChildren().stream()
+                .noneMatch(n -> n.getName().equals("gt_live")));
+        runs("numen permission rules list");
+    }
+
     /** 同名的一格挂两次:Brigadier 会悄悄并成一格,留下先来那一格的观众,所以当场抛出。 */
     @Test
     void aNameUnderNumenIsGraftedOnce() {

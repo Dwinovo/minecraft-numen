@@ -36,7 +36,9 @@ public final class ClientMods {
 
     private ClientMods() {}
 
-    /** 登记一个目标模组只在客户端的名字空间。<b>Numen API 内部调用</b>,插件经 {@code NumenPlugins.registerForClientMod}。 */
+    /**
+     * 声明一个目标模组只在客户端的名字空间。这是插件自己的属性(花名册那一行的写法与客户端报到的依据),不是登记的内容:
+     * 插件被撤回、重登时它不变,所以不进作用域。<b>Numen API 内部调用</b>,插件经 {@code NumenPlugins.registerForClientMod}。 */
     public static void declare(String namespace, String targetMod) {
         TARGETS.put(namespace, targetMod);
     }

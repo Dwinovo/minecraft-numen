@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.CompanionEvent;
 
 import java.util.List;
@@ -26,10 +27,13 @@ public final class CompanionEvents {
 
     private CompanionEvents() {}
 
-    /** 插件侧入口在 {@code NumenApi#on};这里是它落到的地方。 */
-    public static <T> void subscribe(CompanionEvent<T> event, Consumer<T> handler) {
-        if (event == null || handler == null) return;
-        BUCKETS.computeIfAbsent(event, e -> new CopyOnWriteArrayList<>()).add(handler);
+    /** 插件侧入口在 {@code NumenApi#on};这里是它落到的地方;返回撤掉这一条订阅的句柄。 */
+    public static <T> Handle subscribe(CompanionEvent<T> event, Consumer<T> handler) {
+        if (event == null || handler == null) return () -> { };
+        // 每次订阅一个自己的条目:同一个处理器订阅两次,撤回时各撤各的
+        Consumer<T> entry = handler::accept;
+        BUCKETS.computeIfAbsent(event, e -> new CopyOnWriteArrayList<>()).add(entry);
+        return Handle.once(() -> BUCKETS.get(event).remove(entry));
     }
 
     /**

@@ -1,4 +1,6 @@
 package com.dwinovo.numen.task.interact;
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.PlayerInv;
 
@@ -108,7 +110,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             List<com.dwinovo.numen.api.permission.Action> proposed =
                     player.mouse().intents(hit, button() == Interaction.Button.ATTACK);
             if (!proposed.isEmpty()) {
-                List<Permit> permits = permitAll(proposed);
+                List<Permit> permits = gate().permitAll(proposed);
                 for (int i = 0; i < permits.size(); i++) {
                     if (permits.get(i).state() == PermitState.REFUSED) {
                         fail("cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),

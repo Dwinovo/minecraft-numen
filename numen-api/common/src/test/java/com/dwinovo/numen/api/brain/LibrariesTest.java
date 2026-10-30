@@ -102,7 +102,8 @@ class LibrariesTest {
         serverKeys.put("deepseek", "sk-secret");
         plugins = new PluginRoster(() -> new PluginSwitches(new JsonDoc(dir.resolve("server").resolve("plugins.json"),
                 JsonDoc.Format.of(1), io)), id -> PluginRoster.Meta.NONE);
-        plugins.admit(PluginRoster.Source.JAR, "probe", "");
+        plugins.run("probe", numen -> { }, PluginRoster.Unloading.LIVE,
+                com.dwinovo.numen.api.plugin.PluginRosterFixture.INERT_DOORS);
         signed = new java.util.concurrent.Semaphore(0);
         SkinCache skinCache = new SkinCache(new Home(dir.resolve("server"), io));
         signer = new SkinSigning(new SkinSigning.Backend() {
@@ -1089,18 +1090,18 @@ class LibrariesTest {
 
         Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.PLUGIN, Libraries.DISABLE, body("id", "probe"));
         assertNotNull(refused.problem());
-        assertFalse(plugin(refused.entries(), "probe").get("disabledNext").getAsBoolean());
+        assertFalse(plugin(refused.entries(), "probe").get("disabled").getAsBoolean());
 
         Libraries.Result done = libraries.handle(ADMIN, true, Libraries.PLUGIN, Libraries.DISABLE, body("id", "probe"));
         assertNull(done.problem());
         assertTrue(done.shared(), "别的在线玩家的表也要跟着变");
         JsonObject row = plugin(done.entries(), "probe");
-        assertTrue(row.get("disabledNext").getAsBoolean());
-        assertTrue(row.get("pending").getAsBoolean(), "这一次的运行没变,下次启动才关");
-        assertEquals("loaded", row.get("status").getAsString());
+        assertTrue(row.get("disabled").getAsBoolean());
+        assertFalse(row.get("pending").getAsBoolean(), "只经门登记的插件当场撤回,不用重启");
+        assertEquals("disabled", row.get("status").getAsString());
 
         assertNull(libraries.handle(OTHER, false, Libraries.PLUGIN, Libraries.ENABLE, body("id", "probe")).problem());
-        assertFalse(plugin(libraries.view(PLAYER, false, Libraries.PLUGIN), "probe").get("disabledNext").getAsBoolean());
+        assertFalse(plugin(libraries.view(PLAYER, false, Libraries.PLUGIN), "probe").get("disabled").getAsBoolean());
         assertNotNull(libraries.handle(ADMIN, true, Libraries.PLUGIN, Libraries.DISABLE, body("id", "nobody")).problem());
     }
 

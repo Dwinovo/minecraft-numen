@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
@@ -92,15 +93,96 @@ public final class NumenCommands {
     /** 谁开了"UI 文本不过滤直出"的调试模式。 */
     private static final java.util.Set<java.util.UUID> DEBUG_TEXT = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-    /** 插件经 {@link com.dwinovo.numen.api.NumenApi#command} 挂的指令;每次建指令树时一并挂上。 */
+    /** 插件经 {@link com.dwinovo.numen.api.NumenApi#command} 挂的指令:{@code /numen} 的根每次被读都按这张表现算,撤回即时生效。 */
     private static final List<LiteralArgumentBuilder<CommandSourceStack>> PLUGGED =
             new java.util.concurrent.CopyOnWriteArrayList<>();
 
+    /** 现行的 {@code /numen} 根(服务器每建一棵指令树换一个);插件登记时用它查有没有撞名。 */
+    private static volatile Root live;
+
     private NumenCommands() {}
 
-    /** 登记一格插件的指令,下一次建指令树时挂上。 */
-    public static void plug(LiteralArgumentBuilder<CommandSourceStack> verb) {
-        PLUGGED.add(verb);
+    /**
+     * 登记一格插件的指令。返回撤回它的句柄:撤掉后这一格从 {@code /numen} 下消失(服务器重发指令树之后玩家的补全也跟着变,见 {@link #resend})。
+     *
+     * @throws IllegalStateException 和 {@code /numen} 下现有的一格或另一个插件的一格撞名
+     */
+    public static Handle plug(LiteralArgumentBuilder<CommandSourceStack> verb) {
+        synchronized (PLUGGED) {
+            Root root = live;
+            if (root != null) {
+                root.requireFree(verb.getLiteral());
+            }
+            PLUGGED.add(verb);
+        }
+        return Handle.once(() -> PLUGGED.remove(verb));
+    }
+
+    /**
+     * 登记变了之后,把现行的指令树重发给在线的每位玩家(客户端的补全是服务器发的那一份拷贝)。树本身不用重建:{@link Root} 每次被读
+     * 都按 {@link #PLUGGED} 现算。
+     */
+    public static void resend(net.minecraft.server.MinecraftServer server) {
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            server.getCommands().sendCommands(player);
+        }
+    }
+
+    /**
+     * {@code /numen} 这个根:固定的几格照常挂在它下面,插件的几格不挂,每次被读时从 {@link #PLUGGED} 现建(同一个登记同一个节点,
+     * 缓存着)——Brigadier 的树只能加子节点、不能删,撤回要即时生效,所以插件的那几格不放进树里,放在这张表里。
+     */
+    private static final class Root extends com.mojang.brigadier.tree.LiteralCommandNode<CommandSourceStack> {
+
+        private final java.util.Map<LiteralArgumentBuilder<CommandSourceStack>, CommandNode<CommandSourceStack>> built =
+                new java.util.IdentityHashMap<>();
+
+        Root() {
+            super(ROOT, null, FOR_PLAYERS, null, null, false);
+        }
+
+        private synchronized List<CommandNode<CommandSourceStack>> plugged() {
+            List<CommandNode<CommandSourceStack>> out = new java.util.ArrayList<>();
+            built.keySet().retainAll(PLUGGED);
+            for (LiteralArgumentBuilder<CommandSourceStack> verb : PLUGGED) {
+                out.add(built.computeIfAbsent(verb, LiteralArgumentBuilder::build));
+            }
+            return out;
+        }
+
+        /** 固定的一格;没有是 null。 */
+        CommandNode<CommandSourceStack> fixed(String literal) {
+            return super.getChild(literal);
+        }
+
+        void requireFree(String literal) {
+            if (fixed(literal) != null || PLUGGED.stream().anyMatch(v -> v.getLiteral().equals(literal))) {
+                throw new IllegalStateException("/" + ROOT + " " + literal + " is registered twice");
+            }
+        }
+
+        @Override
+        public java.util.Collection<CommandNode<CommandSourceStack>> getChildren() {
+            List<CommandNode<CommandSourceStack>> out = new java.util.ArrayList<>(super.getChildren());
+            out.addAll(plugged());
+            return out;
+        }
+
+        @Override
+        public CommandNode<CommandSourceStack> getChild(String name) {
+            CommandNode<CommandSourceStack> own = super.getChild(name);
+            return own != null ? own : plugged().stream().filter(n -> n.getName().equals(name)).findFirst().orElse(null);
+        }
+
+        @Override
+        public java.util.Collection<? extends CommandNode<CommandSourceStack>> getRelevantNodes(
+                com.mojang.brigadier.StringReader input) {
+            String text = input.getRemaining();
+            int space = text.indexOf(' ');
+            String word = space < 0 ? text : text.substring(0, space);
+            CommandNode<CommandSourceStack> node = getChild(word);
+            return node == null ? List.of() : List.of(node);
+        }
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -138,8 +220,15 @@ public final class NumenCommands {
                                 .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))
                         .then(Commands.argument("program", StringArgumentType.greedyString())
                                 .executes(NumenCommands::drive))));
-        for (LiteralArgumentBuilder<CommandSourceStack> verb : PLUGGED) {
-            graft(dispatcher, verb);
+        // 插件的几格不在这里挂,见 Root;建树时就撞名的照旧在这里说清
+        Root root = (Root) dispatcher.getRoot().getChild(ROOT);
+        synchronized (PLUGGED) {
+            for (LiteralArgumentBuilder<CommandSourceStack> verb : PLUGGED) {
+                if (root.fixed(verb.getLiteral()) != null) {
+                    throw new IllegalStateException("/" + ROOT + " " + verb.getLiteral() + " is registered twice");
+                }
+            }
+            live = root;
         }
     }
 
@@ -152,7 +241,8 @@ public final class NumenCommands {
                              LiteralArgumentBuilder<CommandSourceStack> node) {
         CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(ROOT);
         if (root == null) {
-            root = dispatcher.register(Commands.literal(ROOT).requires(FOR_PLAYERS));
+            root = new Root();
+            dispatcher.getRoot().addChild(root);
         }
         if (root.getChild(node.getLiteral()) != null) {
             throw new IllegalStateException("/" + ROOT + " " + node.getLiteral() + " is registered twice");

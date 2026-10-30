@@ -101,8 +101,8 @@ class BinderTest {
         Map<String, Object> named = new LinkedHashMap<>();
         named.put("blocks", List.of("a", "b"));
         named.put("max_count", 3L);
-        Record args = fn("dig").decode(named);
-        assertEquals(new Shapes.Dig(List.of("a", "b"), Optional.of(3)), args);
+        FnArgs args = fn("dig").decode(named);
+        assertEquals(Map.of("blocks", List.of("a", "b"), "max_count", 3), args.values());
         assertEquals(named, fn("dig").encode(args));
         assertEquals("gt.gt_shapes.dig(\"a\", \"b\", {max_count = 3})", Call.of(fn("dig"), args));
     }

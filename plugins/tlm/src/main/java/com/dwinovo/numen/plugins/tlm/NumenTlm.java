@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -30,7 +31,8 @@ public final class NumenTlm {
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
     public static void install(IEventBus modBus, Path content) {
         Outfit.register(modBus);
-        NumenPlugins.register(NAMESPACE, numen -> {
+        // 模型渲染与女仆的钩子挂在加载器的总线上(门外),撤不回:卸下要重启
+        NumenPlugins.register(NAMESPACE, PluginRoster.Unloading.NEEDS_RESTART, numen -> {
             // 几组 API 两侧都登记(帮助要它们的说明);查模型名册的在主人客户端跑,穿脱模型、管女仆与祭坛的在服务端跑
             SkinApi.install(numen);
 
