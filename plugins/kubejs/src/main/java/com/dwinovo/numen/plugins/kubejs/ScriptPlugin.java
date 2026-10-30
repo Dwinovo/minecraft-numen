@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gear.GearSource;
+import com.dwinovo.numen.api.knowledge.KnowledgeKind;
 import dev.latvian.mods.rhino.util.HideFromJS;
 
 import java.util.ArrayList;
@@ -16,7 +17,7 @@ import java.util.function.Function;
  * 脚本里声明的一个插件:往门里登记什么,只是一串记录。登记({@link #setup})把它们按序交给{@code NumenPlugins.register}拿到的那扇门——
  * 和 Java 插件的 setup 一样;撤回之后重登(管理员关了再开)再交一遍,所以声明时就读好的东西(函数的描述)不依赖那扇门。
  *
- * <p>脚本能做的就是门能做的:函数组、同伴事件、事件类型与发事件、身体状态片段、穿戴来源。动世界的事只能经函数里的
+ * <p>脚本能做的就是门能做的:函数组、同伴事件、事件类型与发事件、身体状态片段、穿戴来源、知识来源(物品说明与配方)。动世界的事只能经函数里的
  * {@link ScriptCall} 受权的几个动作,身体做了什么照常报告给模型。
  */
 public final class ScriptPlugin {
@@ -48,6 +49,22 @@ public final class ScriptPlugin {
         declare.accept(group);
         var functions = group.functions();
         registrations.add(numen -> numen.api(name, summary, functions));
+    }
+
+    /**
+     * 一个知识来源:{@code kind} 是 {@code recipes}、{@code uses}、{@code info}(物品说明);{@code declare} 里写它({@link ScriptSource})。
+     * 模型读到的动词 {@code numen.inv.recipes|uses|info} 把它的答复和原版、JEI 的合在一起,每条注明出自这个插件。
+     *
+     * @throws IllegalArgumentException 没有这种知识、说明或执行体没写
+     */
+    public void knowledgeSource(String kind, Consumer<ScriptSource> declare) {
+        KnowledgeKind known = java.util.Arrays.stream(KnowledgeKind.values()).filter(k -> k.verb().equals(kind)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no knowledge '" + kind + "'; the kinds are recipes, "
+                        + "uses and info"));
+        ScriptSource source = new ScriptSource(namespace, known);
+        declare.accept(source);
+        var function = source.build();
+        registrations.add(numen -> numen.knowledgeSource(known, source.provides(), source.notProvided(), function));
     }
 
     /**

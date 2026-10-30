@@ -45,10 +45,42 @@ NumenEvents.register(event => {
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |
 | `plugin.gear({slots(body){…}, kindsOf(body, stack){…}})` | 一个穿戴来源 |
 | `plugin.rangedWeapon(名字, weapon => …)` | 一种远程武器(枪、魔杖),攻击任务像用弓一样用它,见下一节 |
+| `plugin.knowledgeSource(种类, source => …)` | 一个知识来源:物品说明或配方(见下) |
 
 一个函数 `group.fn(名字, fn => …)` 里:`summary`(必填)、`param(名字, 类型, 说明)`、`option(名字, 类型, 说明, 不写时会怎样)`、`rest`、
 `returns(类型)`、`example`、`note`、`run(call => …)`。类型名:`string`、`integer`、`number`、`boolean`、`block`、`item`、`id`、`pos`,
 后面加 `[]` 是一串(`string[]`)。每个参数的说明必填。`run` 里 `call.arg(名字)` 取必须写的参数,`call.option(名字)` 取可以不写的(没写是 `null`)。
+
+## 把整合包的知识交给她
+
+她问"这个怎么做""能拿来做什么""这个是干嘛的"(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.info`)时,动词会把游戏的配方表、
+装了 JEI 的主人客户端和**你的脚本**的答复合在一起,每条注明出自哪个来源。脚本里登记一个来源,写法同函数:
+
+```js
+NumenEvents.register(event => {
+  event.plugin('mypack', plugin => {
+    // 物品说明:整合包作者写给她的话
+    plugin.knowledgeSource('info', source => source
+      .provides('How the pack wants the item used.')
+      .run(item => item == 'mypack:flux_core'
+        ? ['Feed it to the Flux Press with a redstone signal; it is not a fuel.']
+        : []))
+
+    // 配方:不在原版配方表里的,比如脚本定义的机器
+    plugin.knowledgeSource('recipes', source => source
+      .provides('Recipes of the pack's Flux Press, which the recipe list does not hold.')
+      .notProvided('chance', 'energy')
+      .run(item => item == 'minecraft:stick'
+        ? [{category: 'mypack:flux_press', item: 'minecraft:stick', makes: 4, ingredients: ['oak_log'],
+            catalysts: ['mypack:flux_press']}]
+        : []))
+  })
+})
+```
+
+`run` 收物品 id,`info` 返回一串说明文字;`recipes`、`uses` 返回一串配方对象,必填 `category`(配方类型或机器的 id)与 `item`(产出),
+可选 `id`、`makes`、`ingredients`、`catalysts`、`categoryName`、`alsoMakes`、`ticks`。`provides`(这个来源多给哪一类信息)必填:来源哪天没答上,
+她据此知道缺了什么。`notProvided` 如实写你给不了的字段,不写不猜。
 
 ## 动世界只能经受权的动作
 

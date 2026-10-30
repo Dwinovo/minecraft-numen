@@ -87,6 +87,20 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                java.util.List<String> notProvided, Class<?> function) {
+        door.knowledgeSource(kind, provides, notProvided, function);
+        one(PluginRoster.Kind.KNOWLEDGE_SOURCE);
+    }
+
+    @Override
+    public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function) {
+        door.knowledgeSource(kind, provides, notProvided, function);
+        one(PluginRoster.Kind.KNOWLEDGE_SOURCE);
+    }
+
+    @Override
     public void command(LiteralArgumentBuilder<CommandSourceStack> verb) {
         door.command(verb);
         if (verb != null) one(PluginRoster.Kind.COMMAND);

@@ -92,11 +92,12 @@ public final class ApiDocs {
 
     /**
      * 这位主人的客户端提供的组:目标模组只在客户端的联动({@code ClientMods}),主人的客户端没报它就不列、不给帮助;别的组都在。
-     * 判据在 {@code ClientMods#offered},这里只是按它筛。
+     * 判据在 {@code ClientMods#offered},这里只是按它筛;隐藏的组({@link ApiRegistry.Group#hidden})不列。
      */
     private static List<ApiRegistry.Group> offered(Modules modules) {
         return ApiRegistry.groups().stream()
-                .filter(g -> com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace())).toList();
+                .filter(g -> !g.hidden() && com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace()))
+                .toList();
     }
 
     /** 索引里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */

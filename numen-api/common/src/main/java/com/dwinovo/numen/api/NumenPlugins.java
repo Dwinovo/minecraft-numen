@@ -332,6 +332,20 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                    java.util.List<String> notProvided, Class<?> function) {
+            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
+                    function));
+        }
+
+        @Override
+        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                    java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function) {
+            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
+                    function));
+        }
+
+        @Override
         public void command(com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> verb) {
             if (verb != null) open().add(com.dwinovo.numen.api.entity.NumenCommands.plug(verb));
         }

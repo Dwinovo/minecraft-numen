@@ -1,7 +1,7 @@
 package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.knowledge.RecipePage;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -28,7 +28,7 @@ import java.util.function.BiPredicate;
  */
 public final class RecipeBook {
 
-    /** 一次交回的配方条数上限:答复要装进脚本与大模型的上下文;超出的条数在 {@link Found#omitted} 里如实说。 */
+    /** 一次交回的配方条数上限:答复要装进脚本与大模型的上下文;超出的条数在 {@link RecipePage#omitted} 里如实说。 */
     public static final int MAX_RECIPES = 40;
 
     /** "any[...]" 一类料最多把几种东西列出来,其余记一个数。 */
@@ -36,25 +36,18 @@ public final class RecipeBook {
 
     private RecipeBook() {}
 
-    /** 一次查询的结果。 */
-    @Doc("The recipes that match, and how many more matched beyond what is listed.")
-    public record Found(@Doc("The recipes: crafting, cooking, stonecutting and smithing first, in full; then every other "
-            + "type with its type id, inputs and product.") List<com.dwinovo.numen.tools.Recipe> recipes,
-                        @Doc("How many more recipes matched but are not listed; absent when all are listed.")
-                        Optional<Integer> omitted) {}
-
     /** 做这样东西的每一条配方,每个类别;找不到就是空表(它靠挖或交易得来,不是做出来的)。 */
-    public static Found recipesFor(Item target, NumenPlayer self) {
+    public static RecipePage recipesFor(Item target, NumenPlayer self) {
         return collect(self, (recipe, result) -> result.getItem() == target);
     }
 
     /** 拿这样东西当输入的每一条配方:标签展开后的输入里有它(锻造看三个槽认不认它)。 */
-    public static Found usesOf(Item input, NumenPlayer self) {
+    public static RecipePage usesOf(Item input, NumenPlayer self) {
         ItemStack probe = new ItemStack(input);
         return collect(self, (recipe, result) -> takes(recipe, probe));
     }
 
-    /** 配方类型在注册表里的名字,即 {@link com.dwinovo.numen.tools.Recipe#category}。 */
+    /** 配方类型在注册表里的名字,即 {@link com.dwinovo.numen.api.knowledge.Recipe#category}。 */
     public static String categoryOf(Recipe<?> recipe) {
         return BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()).toString();
     }
@@ -79,7 +72,7 @@ public final class RecipeBook {
         return false;
     }
 
-    private static Found collect(NumenPlayer self, BiPredicate<Recipe<?>, ItemStack> wanted) {
+    private static RecipePage collect(NumenPlayer self, BiPredicate<Recipe<?>, ItemStack> wanted) {
         ServerLevel level = self.serverLevel();
         return collect(level.getRecipeManager().getRecipes(), level.registryAccess(), wanted,
                 (holder, recipe, result) -> CraftOps.recipe(holder, recipe, result, self));
@@ -87,14 +80,14 @@ public final class RecipeBook {
 
     /** 合成配方的那一行:装得下的格、还缺什么要看她背着什么,所以由调用方给。 */
     interface CraftingRow {
-        com.dwinovo.numen.tools.Recipe of(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result);
+        com.dwinovo.numen.api.knowledge.Recipe of(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result);
     }
 
     /** 从这些配方里挑出 {@code wanted} 要的,每条描述成一行;一条坏配方只丢它自己。 */
-    static Found collect(Iterable<? extends RecipeHolder<?>> holders, HolderLookup.Provider registries,
+    static RecipePage collect(Iterable<? extends RecipeHolder<?>> holders, HolderLookup.Provider registries,
                          BiPredicate<Recipe<?>, ItemStack> wanted, CraftingRow crafting) {
-        List<com.dwinovo.numen.tools.Recipe> described = new ArrayList<>();
-        List<com.dwinovo.numen.tools.Recipe> skeletons = new ArrayList<>();
+        List<com.dwinovo.numen.api.knowledge.Recipe> described = new ArrayList<>();
+        List<com.dwinovo.numen.api.knowledge.Recipe> skeletons = new ArrayList<>();
         for (RecipeHolder<?> holder : holders) {
             // 每条配方自成一格:整合包里一条坏配方(产出为 null、输入表为 null)只丢它自己,绝不让它杀掉整个查询。见 RecipeProbe。
             try {
@@ -130,16 +123,16 @@ public final class RecipeBook {
         }
         described.addAll(skeletons);
         int omitted = Math.max(0, described.size() - MAX_RECIPES);
-        return new Found(described.subList(0, described.size() - omitted),
+        return new RecipePage(described.subList(0, described.size() - omitted),
                 omitted == 0 ? Optional.empty() : Optional.of(omitted));
     }
 
     /** 不在合成格里做的一条配方(合成配方的那一行由 {@link CraftOps#recipe} 出)。 */
-    private static com.dwinovo.numen.tools.Recipe row(RecipeHolder<?> holder, Recipe<?> recipe, ItemStack result,
+    private static com.dwinovo.numen.api.knowledge.Recipe row(RecipeHolder<?> holder, Recipe<?> recipe, ItemStack result,
                                                           List<String> ingredients, Optional<Integer> ticks) {
-        return new com.dwinovo.numen.tools.Recipe(holder.id().toString(), categoryOf(recipe),
-                BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(), ingredients,
-                Optional.empty(), Optional.empty(), ticks);
+        return new com.dwinovo.numen.api.knowledge.Recipe(Optional.of(holder.id().toString()), categoryOf(recipe),
+                Optional.empty(), BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
+                List.of(), ingredients, List.of(), Optional.empty(), Optional.empty(), ticks, List.of());
     }
 
     /**

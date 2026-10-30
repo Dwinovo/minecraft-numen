@@ -23,6 +23,9 @@
         ],
         "fabric-datagen": [
             "com.dwinovo.numen.data.FabricDataGenerators"
+        ],
+        "jei_mod_plugin": [
+            "com.dwinovo.numen.plugins.jei.NumenJeiPlugin"
         ]
     },
     "mixins": [

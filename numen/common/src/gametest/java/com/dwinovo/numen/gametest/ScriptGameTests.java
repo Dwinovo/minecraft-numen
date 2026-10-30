@@ -687,6 +687,81 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
+    /** 夹具:主人客户端上的一个配方来源,答一条机器配方和一条与原版同名的合成配方(补上原版没有的机器与类别名)。 */
+    public static final class KnowledgeClient {
+
+        private KnowledgeClient() {}
+
+        public record Query(@Doc("The item.") net.minecraft.world.item.Item item) {}
+
+        @Fn("Fixture: a recipe source on the owner's client.")
+        public static com.dwinovo.numen.api.knowledge.RecipePage read(ClientCall call, Query args) {
+            return com.dwinovo.numen.api.knowledge.RecipePage.of(List.of(
+                    new com.dwinovo.numen.api.knowledge.Recipe(java.util.Optional.of("gt:press_sticks"), "gt:press",
+                            java.util.Optional.of("Press"), "minecraft:stick", 4, List.of("250mB water"),
+                            List.of("oak_log"), List.of("gt_press"), java.util.Optional.empty(),
+                            java.util.Optional.empty(), java.util.Optional.empty(), List.of()),
+                    new com.dwinovo.numen.api.knowledge.Recipe(java.util.Optional.of("minecraft:stick"),
+                            "minecraft:crafting", java.util.Optional.of("Crafting"), "minecraft:stick", 4, List.of(),
+                            List.of(), List.of("minecraft:crafting_table"), java.util.Optional.empty(),
+                            java.util.Optional.empty(), java.util.Optional.empty(), List.of())));
+        }
+    }
+
+    /**
+     * 配方来源经插件的门登记:动词 {@code numen.inv.recipes} 逐个问来源,原版的与主人客户端上的合成一份、同一条配方只列一次并注明两个来源;
+     * 目标模组主人没装的那个来源在结果里明写缺了、为什么、缺的是哪类信息,什么也不静默丢。撤回插件后来源不再被问。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void recipe_sources_are_merged_and_a_missing_one_is_named(GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_sourced", new BlockPos(2, 2, 2), false);
+        ServerPlayer owner = presentOwner(helper, her, "gametest_sourced_owner");
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        NumenPlugins.register("gtk", numen -> numen.knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES,
+                "which machine does it", List.of("chance"), KnowledgeClient.class));
+        NumenPlugins.registerForClientMod("gtm", "gametest_machine_mod", numen -> numen.knowledgeSource(
+                com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES, "fluids", List.of("energy"),
+                KnowledgeClient.class));
+        AtomicReference<Program.Outcome> result = new AtomicReference<>();
+        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("sources-" + UUID.randomUUID(),
+                """
+                local r = numen.inv.recipes("minecraft:stick")
+                local state = {}
+                for _, s in ipairs(r.sources) do
+                  state[#state + 1] = s.source .. "=" .. s.status .. (s.why and ("(" .. s.why .. ")") or "")
+                end
+                local merged, machine
+                for _, x in ipairs(r.recipes) do
+                  if x.id == "minecraft:stick" then merged = table.concat(x.sources, "+") .. ":" .. x.catalysts[1] end
+                  if x.category == "gt:press" then machine = x.sources[1] .. ":" .. x.category_name end
+                end
+                return table.concat(state, ",") .. "|" .. tostring(merged) .. "|" .. tostring(machine)
+                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
+
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    for (CustomPacketPayload payload : received(owner)) {
+                        if (payload instanceof ClientCallPayload call) {
+                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
+                        }
+                    }
+                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    String said = JsonParser.parseString(result.get().receipt()).getAsJsonObject().get("message")
+                            .getAsString();
+                    helper.assertTrue(said.contains("returned: numen=answered,gtk=answered,gtm=missing(no_function: ")
+                                    && said.contains("gametest_machine_mod")
+                                    && said.endsWith("|numen+gtk:minecraft:crafting_table|gtk:Press"),
+                            "the sources were not merged and reported: " + said);
+                    NumenPlugins.roster().withdraw("gtk");
+                    NumenPlugins.roster().withdraw("gtm");
+                    leave(owner);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
+                })
+                .thenSucceed();
+    }
+
     /**
      * 目标模组只在客户端的联动:主人的客户端报到时没报它,她调它当场以 {@code no_function} 失败、说明缺哪个模组,什么也没发给主人的客户端;
      * 她的系统提示里也没有它。报了它之后,同一个调用走到主人的客户端,提示里也有了。

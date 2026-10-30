@@ -1,5 +1,6 @@
 package com.dwinovo.numen.tools;
 
+import com.dwinovo.numen.api.knowledge.RecipePage;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
@@ -67,7 +68,7 @@ class RecipeBookTest {
         return new Machine(NonNullList.of(Ingredient.EMPTY, in), result);
     }
 
-    private static RecipeBook.Found collect(List<RecipeHolder<?>> holders, java.util.function.BiPredicate<Recipe<?>, ItemStack> wanted) {
+    private static RecipePage collect(List<RecipeHolder<?>> holders, java.util.function.BiPredicate<Recipe<?>, ItemStack> wanted) {
         return RecipeBook.collect(holders, RegistryAccess.EMPTY, wanted, (h, r, res) -> {
             throw new AssertionError("no crafting recipe in this list");
         });
@@ -81,11 +82,11 @@ class RecipeBookTest {
                 holder("press", machine(new ItemStack(Items.IRON_NUGGET, 9), Ingredient.of(Items.IRON_INGOT))),
                 holder("other", machine(new ItemStack(Items.GOLD_NUGGET), Ingredient.of(Items.GOLD_INGOT))));
 
-        RecipeBook.Found found = collect(all, (r, result) -> result.getItem() == Items.IRON_NUGGET);
+        RecipePage found = collect(all, (r, result) -> result.getItem() == Items.IRON_NUGGET);
 
         assertEquals(1, found.recipes().size());
-        com.dwinovo.numen.tools.Recipe row = found.recipes().get(0);
-        assertEquals("gametest:press", row.id());
+        com.dwinovo.numen.api.knowledge.Recipe row = found.recipes().get(0);
+        assertEquals(Optional.of("gametest:press"), row.id());
         assertEquals("minecraft:stonecutting", row.category());
         assertEquals("minecraft:iron_nugget", row.item());
         assertEquals(9, row.makes());
@@ -102,9 +103,9 @@ class RecipeBookTest {
                 holder("b", machine(new ItemStack(Items.STICK), Ingredient.of(Items.GOLD_INGOT))));
         ItemStack iron = new ItemStack(Items.IRON_INGOT);
 
-        RecipeBook.Found found = collect(all, (r, result) -> RecipeBook.takes(r, iron));
+        RecipePage found = collect(all, (r, result) -> RecipeBook.takes(r, iron));
 
-        assertEquals(List.of("gametest:a"), found.recipes().stream().map(com.dwinovo.numen.tools.Recipe::id).toList());
+        assertEquals(List.of("gametest:a"), found.recipes().stream().map(r -> r.id().orElseThrow()).toList());
         assertEquals(List.of("coal", "iron_ingot"), found.recipes().get(0).ingredients());
     }
 
@@ -117,9 +118,9 @@ class RecipeBookTest {
                 holder("no_result", new Machine(NonNullList.of(Ingredient.EMPTY, Ingredient.of(Items.COAL)), null)),
                 holder("fine", machine(new ItemStack(Items.STICK), Ingredient.of(Items.COAL))));
 
-        RecipeBook.Found found = collect(all, (r, result) -> true);
+        RecipePage found = collect(all, (r, result) -> true);
 
-        assertEquals(List.of("gametest:fine"), found.recipes().stream().map(com.dwinovo.numen.tools.Recipe::id).toList());
+        assertEquals(List.of("gametest:fine"), found.recipes().stream().map(r -> r.id().orElseThrow()).toList());
     }
 
     /** 条数封顶,超出的数如实说。 */
@@ -131,7 +132,7 @@ class RecipeBookTest {
             all.add(holder("r" + i, machine(new ItemStack(Items.STICK), Ingredient.of(Items.COAL))));
         }
 
-        RecipeBook.Found found = collect(all, (r, result) -> true);
+        RecipePage found = collect(all, (r, result) -> true);
 
         assertEquals(RecipeBook.MAX_RECIPES, found.recipes().size());
         assertEquals(Optional.of(5), found.omitted());
@@ -158,8 +159,8 @@ class RecipeBookTest {
                 Ingredient.of(Items.NETHERITE_INGOT), new ItemStack(Items.NETHERITE_PICKAXE))));
         ItemStack ingot = new ItemStack(Items.NETHERITE_INGOT);
 
-        RecipeBook.Found byInput = collect(all, (r, result) -> RecipeBook.takes(r, ingot));
-        RecipeBook.Found byProduct = collect(all, (r, result) -> result.getItem() == Items.NETHERITE_PICKAXE);
+        RecipePage byInput = collect(all, (r, result) -> RecipeBook.takes(r, ingot));
+        RecipePage byProduct = collect(all, (r, result) -> result.getItem() == Items.NETHERITE_PICKAXE);
 
         assertEquals(1, byInput.recipes().size());
         assertEquals("minecraft:smithing", byInput.recipes().get(0).category());
