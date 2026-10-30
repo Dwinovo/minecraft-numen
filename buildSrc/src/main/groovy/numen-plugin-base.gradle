@@ -68,6 +68,8 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // 联动可以一个单测也没有:src/test 里只放着体检报告的入口(下面的 ApiLint),那不是测试
+    failOnNoDiscoveredTests = false
 }
 
 // 报告的入口是联动包里的 ApiLint(没有就不登记,如 curios);任务定义见 numen-api-lint
