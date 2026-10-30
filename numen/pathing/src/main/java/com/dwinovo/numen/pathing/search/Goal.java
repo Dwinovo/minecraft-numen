@@ -27,8 +27,7 @@ public interface Goal {
 
     /**
      * 从节点 {@code (x, y, z)} 到目标的直线水平底价(刻):水平距离乘疾跑一格的耗时({@link Kinematics#pace},搜索每次搜索算一份传进来)。
-     * 必须是下界:水平上不高过任何一条路线走到目标至少要付的。它不看地形:估价的水平项由按列的放宽图算({@link Columns}),
-     * 这里的值只当图的种子——目标在快照之外时快照边界上各列的值,以及没有固定终点格的目标(没有图可算)整个的水平项。
+     * 必须是下界:水平上不高过任何一条路线走到目标至少要付的。它不看地形,就是估价的水平项。
      * 挖开、升降的额外代价也不在这里,搜索按世界另算({@link Burial}、{@link Vertical}),与水平项相加才是估价。
      */
     double estimate(int x, int y, int z, Kinematics.Pace pace);
@@ -39,15 +38,6 @@ public interface Goal {
      * {@code level} 是身体停在那儿时面对的世界:搜索时是快照(叠着走到那儿那一步的改动),换目标时是活世界。
      */
     default double arrival(WorldView level, int x, int y, int z, Stance stance) {
-        return 0;
-    }
-
-    /**
-     * 站在终点格 {@code cell}({@link #endCells} 里的一格,{@link BlockPos#asLong} 编码)上,停下还要付的价钱至少多少(刻),默认 0:
-     * 必须是 {@link #arrival} 的下界。估价从目标反着算时({@link Columns})终点格带着它当种子的初值,同样走到,终点价低的那一格更值。
-     * 目前只有挖几格里的任意一格({@code Goals.dig(List, …)})交出非零的值:每少够着一格停下多付的那份。别的带到达价的目标按需补。
-     */
-    default double endCost(long cell) {
         return 0;
     }
 

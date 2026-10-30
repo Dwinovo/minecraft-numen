@@ -10,13 +10,12 @@ import com.dwinovo.numen.pathing.world.Kinematics;
 /**
  * 一趟愿意付多少:每次搜索想多久、最多展开几个节点,一趟总共展开几个节点,和这一趟已经花了多少。
  *
- * <p><b>每次想多久看表</b>(表是宿主经端口给的 {@link SearchClock}),三种时限:
+ * <p><b>每次想多久看表</b>(表是宿主经端口给的 {@link SearchClock}),两种时限:
  * <ul>
  *   <li>首段({@link #FIRST_NANOS}):从身体脚下搜,身体站着等,时间到就交半程让她先动(Baritone 首段 0.5 s、mineflayer-pathfinder
  *       每刻 40 ms);</li>
  *   <li>接续:半程一交出就从半程终点接着搜,身体走到要等接续的那几步之前搜完就不停顿:时限是走到那里几何上最短要的时间减余量
  *       ({@link #MARGIN_NANOS}),封顶 {@link #NEXT_MAX_NANOS}(Baritone 走路时下一段 4 s),不低于首段;</li>
- *   <li>搜不出路线(时间到或节点上限用完、又截不出半程)就加时重搜:下一次的时限翻倍,直到搜出路线(Azalea 的加时重试)。</li>
  * </ul>
  * 一次搜索最多展开 {@link #SEARCH_NODES} 个节点:只防内存,和时钟无关。
  *
@@ -70,8 +69,6 @@ final class Allowance {
     private final SearchClock clock;
     private int total;
     private int spent;
-    /** 接连几次搜索没交出路线:下一次的时限翻这么多倍。 */
-    private int misses;
 
     /** @param fixed 调用方指定的总预算;0 是按估价定 */
     Allowance(int fixed, SearchClock clock) {
@@ -98,32 +95,17 @@ final class Allowance {
         }
     }
 
-    /** 从身体脚下搜的时限:首段的,接连没搜出路线时翻倍,封顶 {@link #NEXT_MAX_NANOS}。 */
+    /** 从身体脚下搜的时限:首段的。 */
     Deadline first() {
-        return new Deadline(clock, grown(FIRST_NANOS));
+        return new Deadline(clock, FIRST_NANOS);
     }
 
     /**
-     * 接续的时限:身体不停下来还能走 {@code aheadTicks} 刻({@link Continuation#aheadTicks}),在这之前搜完;不低于首段的(接连没搜出路线时
-     * 同样翻倍),封顶 {@link #NEXT_MAX_NANOS}。
+     * 接续的时限:身体不停下来还能走 {@code aheadTicks} 刻({@link Continuation#aheadTicks}),在这之前搜完;不低于首段的,封顶 {@link #NEXT_MAX_NANOS}。
      */
     Deadline next(double aheadTicks) {
         long walking = (long) (aheadTicks * TICK_NANOS) - MARGIN_NANOS;
-        return new Deadline(clock, Math.max(grown(FIRST_NANOS), Math.min(NEXT_MAX_NANOS, walking)));
-    }
-
-    private long grown(long nanos) {
-        return Math.min(NEXT_MAX_NANOS, nanos << Math.min(misses, 20));
-    }
-
-    /** 一次搜索没交出路线:下一次多想一倍。 */
-    void missed() {
-        misses++;
-    }
-
-    /** 一次搜索交出了路线:时限回到原样。 */
-    void found() {
-        misses = 0;
+        return new Deadline(clock, Math.max(FIRST_NANOS, Math.min(NEXT_MAX_NANOS, walking)));
     }
 
     /** 下一次搜索最多展开几个节点:一次的上限,和总预算还剩的,取小的。 */
@@ -150,6 +132,5 @@ final class Allowance {
     void restart() {
         total = fixed;
         spent = 0;
-        misses = 0;
     }
 }

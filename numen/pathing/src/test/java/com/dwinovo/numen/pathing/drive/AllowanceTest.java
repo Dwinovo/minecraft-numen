@@ -71,21 +71,6 @@ class AllowanceTest {
         assertEquals(Allowance.FIRST_NANOS, allowance.next(1).nanos(), "不低于首段");
     }
 
-    @Test
-    void aSearchThatHandsNothingOverMakesTheNextOneThinkLonger() {
-        Allowance allowance = new Allowance(0, CLOCK);
-        allowance.missed();
-        assertEquals(2 * Allowance.FIRST_NANOS, allowance.first().nanos());
-        allowance.missed();
-        assertEquals(4 * Allowance.FIRST_NANOS, allowance.first().nanos());
-        for (int i = 0; i < 30; i++) {
-            allowance.missed();
-        }
-        assertEquals(Allowance.NEXT_MAX_NANOS, allowance.first().nanos(), "加时也有顶");
-        allowance.found();
-        assertEquals(Allowance.FIRST_NANOS, allowance.first().nanos(), "交出了路线,时限回到原样");
-    }
-
     /** 一次花一个节点,数能花多少个才用完。 */
     private static int drain(Allowance allowance) {
         int n = 0;

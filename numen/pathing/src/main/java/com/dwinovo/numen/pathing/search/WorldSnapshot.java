@@ -167,49 +167,6 @@ public final class WorldSnapshot implements SearchView {
         return chunk(x, z) != null;
     }
 
-    @Override
-    public boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted) {
-        PalettedContainer<BlockState>[] states = chunk(x, z);
-        int index = SectionPos.blockToSectionCoord(y) - minSection;
-        return states != null && index >= 0 && index < states.length && states[index] != null && states[index].maybeHas(wanted);
-    }
-
-    /** 加载了的区块里,哪一边挨着没加载的区块(或快照范围之外),那一边 16 列就是边界列(区块角上的列可能回调两次)。 */
-    @Override
-    public void forEachBoundaryColumn(ColumnVisitor visitor) {
-        for (int i = 0; i < side; i++) {
-            for (int j = 0; j < side; j++) {
-                if (chunks[i * side + j] == null) {
-                    continue;
-                }
-                int x0 = (minChunkX + i) << 4;
-                int z0 = (minChunkZ + j) << 4;
-                boolean west = !loadedChunk(i - 1, j);
-                boolean east = !loadedChunk(i + 1, j);
-                boolean north = !loadedChunk(i, j - 1);
-                boolean south = !loadedChunk(i, j + 1);
-                for (int k = 0; k < 16; k++) {
-                    if (west) {
-                        visitor.accept(x0, z0 + k);
-                    }
-                    if (east) {
-                        visitor.accept(x0 + 15, z0 + k);
-                    }
-                    if (north) {
-                        visitor.accept(x0 + k, z0);
-                    }
-                    if (south) {
-                        visitor.accept(x0 + k, z0 + 15);
-                    }
-                }
-            }
-        }
-    }
-
-    private boolean loadedChunk(int i, int j) {
-        return i >= 0 && j >= 0 && i < side && j < side && chunks[i * side + j] != null;
-    }
-
     /**
      * 先问每个方块段的调色板里有没有 {@code wanted} 答是的状态,有的段才逐格找(段全空的不算,那是空气)。段里状态太多、用上了
      * 全局调色板时调色板答"也许有",逐格找一遍。只看 {@code [fromY, toY)} 里的层。

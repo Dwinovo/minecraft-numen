@@ -18,9 +18,6 @@ import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.api.entity.Reach;
 import com.dwinovo.numen.api.entity.Sight;
 
-import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2IntMap;
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
@@ -172,9 +169,8 @@ public final class Goals {
     /**
      * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats, Clearing)},挡着的由
      * {@code clearing} 这一方清)就算到。停下的价钱是够得着的那些格里"到达价 + 挖它的价钱"最低的一个,所以挖起来贵的格(要问
-     * 主人的)只在便宜的远出它那份价钱时才去。同样划算的站位里优先一次够得着最多格的——站位每少够着一格,停下多付
-     * 一格平走的耗时除以格数(全少了也不到多走一格),所以走路的价钱差得出一格时仍按近的挑,只在不相上下的
-     * 站位之间按够得着几格分先后。
+     * 主人的)只在便宜的远出它那份价钱时才去。站位每少够着一格,到达价多收一格平走的耗时除以格数(全少了也不到多走一格),
+     * 所以走路的价钱差得出一格时仍按近的挑。这份只在到达价里,估价不含它:不相上下的站位之间不保证挑够得着多的那个。
      */
     public static Goal dig(List<DigTarget> targets, BodyStats body, Clearing clearing) {
         if (targets.isEmpty()) {
@@ -186,29 +182,7 @@ public final class Goals {
             members.add(new Dig(targets.get(i).cell().immutable(), body, clearing));
             prices[i] = targets.get(i).price();
         }
-        return new DigAny(List.copyOf(members), prices, endCosts(members, prices, body));
-    }
-
-    /**
-     * 挖几格里的任意一格,每个终点格的终点价:够得着这一格的成员里最低的 {@code prices},加上每一格(按终点格算)够不着的那份。
-     * 终点格是超集,真停在那儿实际够着的只会更少,所以是 {@link DigAny#arrival} 的下界。
-     */
-    private static Long2DoubleOpenHashMap endCosts(List<Dig> members, double[] prices, BodyStats body) {
-        Long2IntOpenHashMap covered = new Long2IntOpenHashMap();
-        Long2DoubleOpenHashMap cheapest = new Long2DoubleOpenHashMap();
-        cheapest.defaultReturnValue(Double.POSITIVE_INFINITY);
-        for (int i = 0; i < members.size(); i++) {
-            for (long cell : members.get(i).endCells()) {
-                covered.addTo(cell, 1);
-                cheapest.put(cell, Math.min(cheapest.get(cell), prices[i]));
-            }
-        }
-        double miss = Kinematics.walkTicksPerBlock(body) / members.size();
-        Long2DoubleOpenHashMap costs = new Long2DoubleOpenHashMap(covered.size());
-        for (Long2IntMap.Entry e : covered.long2IntEntrySet()) {
-            costs.put(e.getLongKey(), cheapest.get(e.getLongKey()) + (members.size() - e.getIntValue()) * miss);
-        }
-        return costs;
+        return new DigAny(List.copyOf(members), prices);
     }
 
     /**
@@ -675,7 +649,7 @@ public final class Goals {
     }
 
     /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats, Clearing)}。 */
-    private record DigAny(List<Dig> members, double[] prices, Long2DoubleOpenHashMap endCosts) implements Goal {
+    private record DigAny(List<Dig> members, double[] prices) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Dig g : members) {
@@ -719,13 +693,11 @@ public final class Goals {
 
         @Override
         public LongSet endCells() {
-            return new LongOpenHashSet(endCosts.keySet());
-        }
-
-        /** 够得着这一格的成员里最低的价,加上够不着的成员各一份;见 {@link #endCosts}。 */
-        @Override
-        public double endCost(long cell) {
-            return endCosts.get(cell);
+            LongSet cells = new LongOpenHashSet();
+            for (Dig g : members) {
+                cells.addAll(g.endCells());
+            }
+            return cells;
         }
 
         /** 各成员的范围合起来。 */

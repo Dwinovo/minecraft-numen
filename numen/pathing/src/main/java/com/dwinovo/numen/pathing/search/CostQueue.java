@@ -2,7 +2,7 @@ package com.dwinovo.numen.pathing.search;
 
 import java.util.Arrays;
 
-/** 按价钱、同价按离起点远近排的二叉堆(估价从目标往外做 Dijkstra 用:{@link Burial}、{@link Columns});同一格可以进来几次,出来时旧的那次由调用方丢掉。 */
+/** 按价钱、同价按离起点远近排的二叉堆(估价从目标往外做 Dijkstra 用:{@link Burial});同一格可以进来几次,出来时旧的那次由调用方丢掉。 */
 final class CostQueue {
     private double[] costs = new double[256];
     private int[] ties = new int[256];
