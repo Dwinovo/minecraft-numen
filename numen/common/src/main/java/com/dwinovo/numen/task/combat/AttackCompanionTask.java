@@ -198,7 +198,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 bowFighting = false;
                 yield closeIn();
             }
-            case BOW -> {
+            case RANGED -> {
                 bowFighting = true;
                 yield bowFight();
             }
