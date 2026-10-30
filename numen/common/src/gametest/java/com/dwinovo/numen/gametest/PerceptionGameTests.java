@@ -266,16 +266,25 @@ public class PerceptionGameTests {
         });
     }
 
+    /**
+     * 一段程序(知识动词是 Lua 模块函数,里面逐个问来源)跑到最后交回的那张表。{@code ToolRun#reply} 是程序<b>最后一次 API 调用</b>的回执,
+     * 不是程序交回的值,所以动词的结果要读结局里的 {@code returned}。
+     */
+    private static JsonObject returned(GameTestHelper helper, ToolRun run) {
+        helper.assertTrue(run.receipt() != null, "the program has not ended");
+        helper.assertTrue(run.ranToTheEnd(), "the program did not run to the end: " + run.receipt());
+        return run.data().getAsJsonObject("returned");
+    }
+
     /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和类别。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_lists_every_category(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:iron_ingot\")");
+        ToolRun recipe = lua(companion, "return numen.inv.recipes(\"minecraft:iron_ingot\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded(), "the recipes were not read: " + recipe.reply());
             java.util.Set<String> categories = new java.util.HashSet<>();
-            for (var one : valueIn(recipe.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
+            for (var one : returned(helper, recipe).getAsJsonArray("recipes")) {
                 var r = one.getAsJsonObject();
                 helper.assertTrue(r.get("id").getAsString().contains(":")
                                 && r.get("item").getAsString().equals("minecraft:iron_ingot"),
@@ -427,12 +436,11 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:ender_pearl\")");
+        ToolRun recipe = lua(companion, "return numen.inv.recipes(\"minecraft:ender_pearl\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded()
-                            && valueIn(recipe.reply()).getAsJsonObject().getAsJsonArray("recipes").isEmpty(),
-                    "ender pearls are given a recipe: " + recipe.reply());
+            helper.assertTrue(returned(helper, recipe).getAsJsonArray("recipes").isEmpty(),
+                    "ender pearls are given a recipe: " + recipe.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -441,12 +449,11 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_uses_lists_every_recipe_that_takes_the_item(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_user", new BlockPos(3, 2, 3), false);
-        ToolRun uses = lua(companion, "numen.inv.uses(\"minecraft:netherite_ingot\")");
+        ToolRun uses = lua(companion, "return numen.inv.uses(\"minecraft:netherite_ingot\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(uses.succeeded(), "the uses were not read: " + uses.reply());
             java.util.Map<String, java.util.Set<String>> made = new java.util.HashMap<>();
-            for (var one : valueIn(uses.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
+            for (var one : returned(helper, uses).getAsJsonArray("recipes")) {
                 var r = one.getAsJsonObject();
                 made.computeIfAbsent(r.get("category").getAsString(), k -> new java.util.HashSet<>())
                         .add(r.get("item").getAsString());
@@ -459,20 +466,26 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品。 */
+    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品;来源表里有原版这一个、答了。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_item_info_reports_what_the_game_knows(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
-        ToolRun info = lua(companion, "numen.inv.info(\"minecraft:golden_apple\")");
+        ToolRun info = lua(companion, "return numen.inv.info(\"minecraft:golden_apple\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(info.succeeded(), "the item info was not read: " + info.reply());
-            JsonObject facts = valueIn(info.reply()).getAsJsonObject();
+            JsonObject whole = returned(helper, info);
+            JsonObject facts = whole.getAsJsonObject("facts");
             helper.assertTrue(facts.get("item").getAsString().equals("minecraft:golden_apple")
                             && facts.get("max_stack").getAsInt() == 64
                             && facts.getAsJsonObject("food").get("nutrition").getAsInt() == 4
                             && !facts.has("places"),
-                    "the facts are not the golden apple's: " + info.reply());
+                    "the facts are not the golden apple's: " + whole);
+            boolean answered = false;
+            for (var source : whole.getAsJsonArray("sources")) {
+                answered |= source.getAsJsonObject().get("source").getAsString().equals("numen")
+                        && source.getAsJsonObject().get("status").getAsString().equals("answered");
+            }
+            helper.assertTrue(answered, "the vanilla source is not named as answering: " + whole);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -484,9 +497,10 @@ public class PerceptionGameTests {
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:no_such_item\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("there is no item minecraft:no_such_item")
-                            && recipe.outcome().contains("\nusage: numen.inv.recipes("),
-                    "the unknown id was not rejected by name: " + recipe.outcome());
+            helper.assertTrue(recipe.receipt() != null, "the program has not ended");
+            helper.assertTrue(!recipe.ranToTheEnd() && recipe.receipt().contains("there is no item minecraft:no_such_item")
+                            && recipe.receipt().contains("numen.inv.recipes("),
+                    "the unknown id was not rejected by name: " + recipe.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

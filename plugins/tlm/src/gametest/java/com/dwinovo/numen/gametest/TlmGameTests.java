@@ -340,19 +340,20 @@ public class TlmGameTests {
         String product = net.minecraft.core.registries.BuiltInRegistries.ITEM
                 .getKey(altar.value().getResult().getItem()).toString();
 
-        ToolRun recipes = lua(her, "numen.inv.recipes(\"" + product + "\")");
+        ToolRun recipes = lua(her, "return numen.inv.recipes(\"" + product + "\")");
         ToolRun crafted = lua(her, "numen.inv.craft(\"" + altar.id() + "\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipes.succeeded(), "recipes of the altar's product failed: " + recipes.reply());
+            helper.assertTrue(recipes.receipt() != null && recipes.ranToTheEnd(),
+                    "recipes of the altar's product failed: " + recipes.receipt());
             boolean listed = false;
-            for (JsonElement row : valueIn(recipes.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
+            for (JsonElement row : recipes.data().getAsJsonObject("returned").getAsJsonArray("recipes")) {
                 var recipe = row.getAsJsonObject();
                 listed |= recipe.get("id").getAsString().equals(altar.id().toString())
                         && recipe.get("category").getAsString().equals("touhou_little_maid:altar_recipe")
                         && recipe.getAsJsonArray("ingredients").size() > 0 && !recipe.has("grid");
             }
-            helper.assertTrue(listed, "the altar recipe " + altar.id() + " is not listed: " + recipes.reply());
+            helper.assertTrue(listed, "the altar recipe " + altar.id() + " is not listed: " + recipes.receipt());
             helper.assertTrue(!crafted.succeeded() && crafted.outcome().contains("touhou_little_maid:altar_recipe"),
                     "the crafting grid took an altar recipe: " + crafted.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);

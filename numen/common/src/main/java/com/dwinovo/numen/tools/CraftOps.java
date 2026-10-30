@@ -18,6 +18,7 @@ import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import com.dwinovo.numen.api.knowledge.Recipe;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -191,11 +192,12 @@ public final class CraftOps {
     static Recipe recipe(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result, NumenPlayer self) {
         List<Ingredient> ings = ingredientsOf(recipe);
         Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
-        return new Recipe(holder.id().toString(), RecipeBook.categoryOf(recipe),
-                BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
-                ings.stream().map(RecipeBook::describeIngredient).toList(), java.util.Optional.of(gridOf(recipe)),
+        return new Recipe(java.util.Optional.of(holder.id().toString()), RecipeBook.categoryOf(recipe),
+                java.util.Optional.empty(), BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
+                List.of(), ings.stream().map(RecipeBook::describeIngredient).toList(), List.of(),
+                java.util.Optional.of(gridOf(recipe)),
                 feasibleBatch(ings, pool, 1) == 0 ? java.util.Optional.of(missingFor(ings, pool))
-                        : java.util.Optional.empty(), java.util.Optional.empty());
+                        : java.util.Optional.empty(), java.util.Optional.empty(), List.of());
     }
 
     /** 这条合成配方装得下的最小的格:2(她自己的)、3(工作台);更大的(模组工位)是 0。 */

@@ -81,7 +81,9 @@ function M.make(item, count)
   item = id(item)
   count = count or 1
   local recipe, closest = nil, nil
-  for _, r in ipairs(numen.inv.recipes(item).recipes) do
+  -- the game's own recipe list: it alone knows the grid a recipe fits and what you lack for it, and asking it does not
+  -- wait for a source on your owner's client
+  for _, r in ipairs(numen.recipes_source.read(item).recipes) do
     if r.category == "minecraft:crafting" and r.grid > 0 then
       if not r.missing then
         recipe = r
@@ -190,6 +192,144 @@ function M.give(target, item, count)
     return numen.inv.drop(id(item), {count = count}).dropped
   end
   return numen.inv.drop(id(item)).dropped
+end
+
+-- ---- what the game, the mods and your owner's client know about items ----
+-- numen.inv.recipes, numen.inv.uses and numen.inv.info each ask every source registered for them (numen.api.sources),
+-- put the answers together and say which source gave what and which one did not answer. The sources themselves are
+-- hidden functions; a plugin registers one with NumenApi.knowledgeSource.
+
+---@class SourceReport
+---@field source string The source: the plugin that registered it (numen is the game's own recipe list).
+---@field status string "answered", or "missing" when it did not answer.
+---@field why? string When missing: why, as the call failed (your owner's client is offline, the mod is not installed on it, it timed out).
+---@field missing? string When missing: the kind of information that is therefore not in the result.
+---@field not_provided string[] What this source cannot say at all, so no value for these is ever given: never guessed.
+M.SourceReport = {}
+
+---@class RecipeResult
+---@field recipes Recipe[] The recipes, each saying which sources listed it.
+---@field omitted? integer How many more matched but are not listed.
+---@field sources SourceReport[] Every source asked and whether it answered.
+M.RecipeResult = {}
+
+---@class InfoNote
+---@field source string Who wrote it.
+---@field text string
+M.InfoNote = {}
+
+---@class InfoResult
+---@field facts? ItemFacts The game's own facts about the item.
+---@field notes InfoNote[] Descriptions of what it is for, from modpack and mod sources.
+---@field sources SourceReport[] Every source asked and whether it answered.
+M.InfoResult = {}
+
+-- the function a source's call names: ns.group.fn walked from the globals
+local function resolve(call)
+  local fn = _ENV
+  for part in call:gmatch("[^.]+") do
+    fn = fn[part]
+  end
+  return fn
+end
+
+-- asks every source of one verb about the item; a source that does not answer is reported, never skipped silently
+local function gather(kind, item)
+  local pages, report = {}, {}
+  for _, s in ipairs(numen.api.sources(kind)) do
+    local ok, page = pcall(resolve(s.call), item)
+    if ok then
+      pages[#pages + 1] = {source = s.id, page = page}
+      report[#report + 1] = {source = s.id, status = "answered", not_provided = s.not_provided}
+    else
+      if type(page) == "table" and page.kind == "bad_argument" then
+        -- the item is wrong for every source alike: that is the caller's mistake, not a source that is absent
+        raise("bad_argument", page.message, "numen.inv." .. kind .. "(\"minecraft:stone\")")
+      end
+      local why = type(page) == "table" and (page.kind .. ": " .. page.message) or tostring(page)
+      report[#report + 1] = {source = s.id, status = "missing", why = why, missing = s.provides,
+          not_provided = s.not_provided}
+    end
+  end
+  return pages, report
+end
+
+-- fills what a recipe lacks from the same recipe another source listed: a value, or a list that is empty
+local function fill(into, from)
+  for k, v in pairs(from) do
+    if k ~= "sources" and (into[k] == nil or (type(into[k]) == "table" and next(into[k]) == nil)) then
+      into[k] = v
+    end
+  end
+end
+
+local function recipes_of(kind, item)
+  local pages, report = gather(kind, id(item))
+  local out, by_id, omitted = {}, {}, 0
+  for _, p in ipairs(pages) do
+    omitted = omitted + (p.page.omitted or 0)
+    for _, r in ipairs(p.page.recipes) do
+      local seen = r.id and by_id[r.id]
+      if seen then
+        fill(seen, r)
+        seen.sources[#seen.sources + 1] = p.source
+      else
+        r.sources = {p.source}
+        out[#out + 1] = r
+        if r.id then
+          by_id[r.id] = r
+        end
+      end
+    end
+  end
+  return {recipes = out, omitted = omitted > 0 and omitted or nil, sources = report}
+end
+
+---How an item is made, like JEI: every recipe that outputs it, from every source (numen.api.sources("recipes") lists them).
+---The game's recipe list (source numen) holds the recipes of every mod: crafting, cooking, stonecutting and smithing in
+---full, a mod's machine types with their category, inputs and product only. A source on your owner's client, such as
+---JEI, adds which machine does it, the category's name in their language and fluids; a recipe two sources list is one
+---entry naming both. Chance, time, heat and energy are given by no source: they are not in the result, never guessed.
+---Instant. At most 40 recipes per source come back, omitted says how many more matched. A source that did not answer
+---is in sources with the reason and the kind of information that is missing: ask your owner to join, or go on with
+---what the other sources gave. Empty recipes with every source answered means the item is mined or traded, not made.
+---To make it: crafting is numen.inv.make(item, N) (picks the recipe and the grid) or numen.inv.craft(id) in the open
+---grid; smelting, blasting, smoking numen.inv.smelt(furnace, input, N); stonecutter: numen.use.block it,
+---numen.gui.put the input, numen.gui.choose the recipe, take the output; smithing: numen.use.block it, numen.gui.move
+---template + base + addition; a mod's machine: the catalysts (or the machine block of the category), numen.use.block
+---it, then the numen.gui functions.
+---@param item string
+---@return RecipeResult
+function M.recipes(item)
+  return recipes_of("recipes", item)
+end
+
+---What an item can be used for, like JEI's uses page: every recipe that takes it as an input, from every source. Same
+---sources, shape and limits as numen.inv.recipes; each entry is a recipe with the item among its inputs (a tag input
+---such as planks(any) counts when the item is in the tag) and says what it makes. Empty with every source answered
+---means no recipe takes it; it may still be a fuel, food or a tool: numen.inv.info says.
+---@param item string
+---@return RecipeResult
+function M.uses(item)
+  return recipes_of("uses", item)
+end
+
+---What is known about an item: the game's own facts (stack size, durability, food values, the block it places, its
+---item tags) and the descriptions modpack and mod sources wrote (JEI's information pages); numen.api.sources("info")
+---lists the sources. It does not say how the item is made or used: that is numen.inv.recipes and numen.inv.uses.
+---Instant. A source that did not answer is in sources with the reason and the kind of information that is missing.
+---@param item string
+---@return InfoResult
+function M.info(item)
+  local pages, report = gather("info", id(item))
+  local result = {notes = {}, sources = report}
+  for _, p in ipairs(pages) do
+    result.facts = result.facts or p.page.facts
+    for _, text in ipairs(p.page.notes) do
+      result.notes[#result.notes + 1] = {source = p.source, text = text}
+    end
+  end
+  return result
 end
 
 return M
