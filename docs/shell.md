@@ -414,7 +414,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
   `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
-- **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
+- **Recipe**(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.craftable`):编号、类别(配方类型的 id,模组机器也有)、合出几件、每格的料;合成配方带最小的格和还缺什么;`recipes`、`uses` 外包一层 `{recipes, omitted}`,条数封顶,超出的数如实说。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
 - 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。

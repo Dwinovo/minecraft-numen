@@ -41,7 +41,7 @@ public final class HandOver {
     record Candidate(int node, double cost, double estimate, boolean holding) {}
 
     /**
-     * 挑去处时估价的系数:按 {@code g + 5·h} 比。搜索按 {@code g + 2.5·h} 排开放集,估价在平台上(凹地口、地下的一大片等价格)几乎不变,
+     * 挑去处时估价的系数:按 {@code g + 5·h} 比。搜索按 {@code g + }{@link AStar#WEIGHT}{@code ·h} 排开放集,估价在平台上(凹地口、地下的一大片等价格)几乎不变,
      * 按 {@code g + h} 挑会选中离起点近、总价最小的那批,不朝目标走——规划评测里 mountains-short-027 的首段往反方向走了五十格,
      * 接续又从头泛洪,三次搜索把总预算花完。系数取偏向离目标近的一侧,与 Baritone 对一串系数(1.5 到 10)各记一个最接近目标的节点、
      * 取大系数的做法同向;走进死路的风险由估价抬高({@link TripMemory})与回得了头的截断兜着。

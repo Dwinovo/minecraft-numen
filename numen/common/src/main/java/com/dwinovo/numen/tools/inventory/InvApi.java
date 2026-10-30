@@ -10,8 +10,11 @@ import com.dwinovo.numen.task.inventory.EatCompanionTask;
 import com.dwinovo.numen.task.inventory.EatItemTaskRecord;
 import com.dwinovo.numen.tools.Books;
 import com.dwinovo.numen.tools.CraftOps;
+import com.dwinovo.numen.tools.ItemFacts;
+import com.dwinovo.numen.tools.ItemNames;
 import com.dwinovo.numen.tools.Recipe;
 import com.dwinovo.numen.tools.RecipeBook;
+import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -45,7 +48,7 @@ public final class InvApi {
     private InvApi() {}
 
     public static void install(NumenApi numen) {
-        numen.api("inv", "Your inventory: what you carry, recipes, crafting, eating, dropping.", InvApi.class);
+        numen.api("inv", "Your inventory and what you know about items: what you carry, recipes, uses, item facts, finding items by name, crafting, eating, dropping.", InvApi.class);
     }
 
     /** 背包里的一种东西。 */
@@ -103,21 +106,73 @@ public final class InvApi {
     /** 要做哪一样。 */
     public record Recipes(@Doc("The item you want to make.") Item item) {}
 
-    @Fn("How an item is made, like JEI: every recipe that outputs it, at every station.")
-    @Example("for _, r in ipairs(numen.inv.recipes(\"minecraft:diamond_pickaxe\")) do print(r.id, r.station) end")
-    @Note("Instant and read-only. Every recipe comes with its id; a crafting recipe says the smallest grid it fits "
-            + "and, when you are short, what you lack.")
-    @Note("No recipe found means the item is mined or traded, not made: an empty table.")
+    @Fn("How an item is made, like JEI: every recipe that outputs it, of every recipe type.")
+    @Example("for _, r in ipairs(numen.inv.recipes(\"minecraft:diamond_pickaxe\").recipes) do print(r.id, r.category) end")
+    @Note("Instant and read-only. Source: the game's recipe list, which holds the recipes of every mod. Each recipe has its "
+            + "id, its category (the recipe type: minecraft:crafting, minecraft:smelting, or a mod's machine such as "
+            + "create:mixing), what it makes and its inputs; a crafting recipe says the smallest grid it fits and, when "
+            + "you are short, what you lack.")
+    @Note("A mod's recipe types give only that skeleton: which machine, how many of what in, what out. Chance, time, "
+            + "fluids and energy are not known here. Crafting, cooking, stonecutting and smithing recipes are listed first "
+            + "and in full. At most " + RecipeBook.MAX_RECIPES + " come back; omitted says how many more matched.")
+    @Note("No recipe found means the item is mined or traded, not made: an empty recipes list.")
     @Note("To make it — crafting: numen.inv.make(<item>, N) picks the recipe and the grid (a crafting table for a "
             + "3x3 one) and crafts; numen.inv.craft(<id>) crafts once in the grid you have open. Smelting, blasting, "
             + "smoking: numen.inv.smelt(<furnace>, <input>, N) loads the furnace, waits and takes the output. "
             + "Stonecutter: numen.use.block it, numen.gui.put the input (the menu routes it in), numen.gui.view to see "
             + "the recipes, numen.gui.choose one, take the output. "
             + "Smithing: numen.use.block it, numen.gui.view, then numen.gui.move template + base + addition each into "
-            + "its own slot.")
-    @SeeAlso({"numen.inv.craft", "numen.inv.craftable"})
-    public static List<Recipe> recipes(ServerCall call, Recipes args) {
+            + "its own slot. A mod's machine: find the machine block of the category, numen.use.block it, then the "
+            + "numen.gui functions.")
+    @SeeAlso({"numen.inv.craft", "numen.inv.craftable", "numen.inv.uses"})
+    public static RecipeBook.Found recipes(ServerCall call, Recipes args) {
         return RecipeBook.recipesFor(args.item(), call.her());
+    }
+
+    /** 拿哪一样当输入。 */
+    public record Uses(@Doc("The item to look for among the inputs.") Item item) {}
+
+    @Fn("What an item can be used for, like JEI's uses page: every recipe that takes it as an input, of every recipe type.")
+    @Example("for _, r in ipairs(numen.inv.uses(\"minecraft:iron_ingot\").recipes) do print(r.id, r.category, r.item) end")
+    @Note("Instant and read-only. Same source, same shape and same limits as numen.inv.recipes: each entry is a recipe "
+            + "that has the item among its inputs (a tag input such as planks(any) counts when the item is in the tag), "
+            + "with what it makes. A smithing recipe is listed when the item fits its template, base or addition slot, "
+            + "but does not list its inputs.")
+    @Note("An empty recipes list means no recipe takes it. It may still be a fuel, food or a tool: numen.inv.info says.")
+    @SeeAlso({"numen.inv.recipes", "numen.inv.info"})
+    public static RecipeBook.Found uses(ServerCall call, Uses args) {
+        return RecipeBook.usesOf(args.item(), call.her());
+    }
+
+    /** 查哪一样的事实。 */
+    public record Info(@Doc("The item to read facts of.") Item item) {}
+
+    @Fn("What the game says about an item: stack size, durability, food values, the block it places, its item tags.")
+    @Example("print(numen.inv.info(\"minecraft:golden_apple\").food.nutrition)")
+    @Note("Instant and read-only. Source: the game's own item data on the server, the same for every mod's items. "
+            + "It does not say how the item is made or used (numen.inv.recipes, numen.inv.uses) nor what a mod's own "
+            + "description pages say.")
+    @SeeAlso({"numen.inv.recipes", "numen.inv.uses", "numen.inv.lookup"})
+    public static ItemFacts info(ServerCall call, Info args) {
+        return ItemFacts.of(args.item());
+    }
+
+    /** 找哪个名字。 */
+    public record Lookup(@Doc("Part of the item's name as your owner sees it in the game, in their language, or of its id: "
+            + "iron ingot, 铁锭, rail.") String name) {}
+
+    @Fn("Find items by the name your owner reads in the game, in their language.")
+    @Example("for _, m in ipairs(numen.inv.lookup(\"铁锭\").items) do print(m.item, m.name) end")
+    @Note("Read-only, answered by your owner's client, which holds the language files: it waits for them, fails with "
+            + "timeout when they do not answer in time (the same call is safe to repeat), and cannot be answered when "
+            + "your owner is offline. Nothing in the world or in any other mod's screens is touched.")
+    @Note("Matches the name in your owner's language, else the id, case ignored: whole name first, then names that start "
+            + "with it, then names that contain it, then ids. Up to " + ItemNames.MAX_MATCHES + " come back, omitted says "
+            + "how many more matched; a longer name narrows it. Use the item ids it returns with the other numen.inv "
+            + "functions.")
+    @SeeAlso({"numen.inv.recipes", "numen.inv.info"})
+    public static ItemNames.Matches lookup(ClientCall call, Lookup args) {
+        return ItemNames.find(args.name());
     }
 
     @Fn("Every crafting recipe you can craft right now from what you carry.")

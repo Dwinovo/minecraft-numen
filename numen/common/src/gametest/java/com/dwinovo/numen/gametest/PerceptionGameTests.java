@@ -266,24 +266,24 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和工位。 */
+    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和类别。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_lists_every_station(GameTestHelper helper) {
+    public static void lookup_recipe_lists_every_category(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:iron_ingot\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded(), "the recipes were not read: " + recipe.reply());
-            java.util.Set<String> stations = new java.util.HashSet<>();
-            for (var one : valueIn(recipe.reply()).getAsJsonArray()) {
+            java.util.Set<String> categories = new java.util.HashSet<>();
+            for (var one : valueIn(recipe.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
                 var r = one.getAsJsonObject();
                 helper.assertTrue(r.get("id").getAsString().contains(":")
                                 && r.get("item").getAsString().equals("minecraft:iron_ingot"),
                         "a recipe has no id or names another item: " + r);
-                stations.add(r.get("station").getAsString());
+                categories.add(r.get("category").getAsString());
             }
-            helper.assertTrue(stations.contains("smelting") && stations.contains("crafting"),
-                    "the recipes' stations are not both there: " + stations);
+            helper.assertTrue(categories.contains("minecraft:smelting") && categories.contains("minecraft:crafting"),
+                    "the recipes' categories are not both there: " + categories);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -430,8 +430,49 @@ public class PerceptionGameTests {
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:ender_pearl\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded() && List.of().equals(recipe.value()),
+            helper.assertTrue(recipe.succeeded()
+                            && valueIn(recipe.reply()).getAsJsonObject().getAsJsonArray("recipes").isEmpty(),
                     "ender pearls are given a recipe: " + recipe.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 查用途:下界合金锭既合成下界合金块、也是锻造下界合金装备的那一格料,两个类别都列出来,每条带着它做出什么。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void lookup_uses_lists_every_recipe_that_takes_the_item(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_user", new BlockPos(3, 2, 3), false);
+        ToolRun uses = lua(companion, "numen.inv.uses(\"minecraft:netherite_ingot\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(uses.succeeded(), "the uses were not read: " + uses.reply());
+            java.util.Map<String, java.util.Set<String>> made = new java.util.HashMap<>();
+            for (var one : valueIn(uses.reply()).getAsJsonObject().getAsJsonArray("recipes")) {
+                var r = one.getAsJsonObject();
+                made.computeIfAbsent(r.get("category").getAsString(), k -> new java.util.HashSet<>())
+                        .add(r.get("item").getAsString());
+            }
+            helper.assertTrue(made.getOrDefault("minecraft:crafting", java.util.Set.of()).contains("minecraft:netherite_block")
+                            && made.getOrDefault("minecraft:smithing", java.util.Set.of())
+                                    .contains("minecraft:netherite_pickaxe"),
+                    "the netherite ingot's uses are not both there: " + made);
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void lookup_item_info_reports_what_the_game_knows(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
+        ToolRun info = lua(companion, "numen.inv.info(\"minecraft:golden_apple\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(info.succeeded(), "the item info was not read: " + info.reply());
+            JsonObject facts = valueIn(info.reply()).getAsJsonObject();
+            helper.assertTrue(facts.get("item").getAsString().equals("minecraft:golden_apple")
+                            && facts.get("max_stack").getAsInt() == 64
+                            && facts.getAsJsonObject("food").get("nutrition").getAsInt() == 4
+                            && !facts.has("places"),
+                    "the facts are not the golden apple's: " + info.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

@@ -96,9 +96,9 @@ final class Bench {
     }
 
     private static Row run(RegionWorld world, Problem p, Spec spec, Answers.Answer answer) {
-        Rehearsal.Result r = new Rehearsal(new Rehearsal.Scene(world::snapshot, spec.model(), spec.route(), p.goal(Spec.STATS), p.from(), 0), p.id()).run();
+        Rehearsal.Result r = new Rehearsal(new Rehearsal.Scene(world::snapshot, world::beyond, spec.model(), spec.route(), p.goal(Spec.STATS), p.from(), 0), p.id()).run();
         boolean priced = r.arrived() && answer != null && !Double.isNaN(answer.cost());
-        return new Row(p.id(), p.region(), p.bucket(), spec, p.goalType(), p.endClass(), p.split(), p.tags(), r.outcome(),
+        return new Row(p.id(), p.region(), p.bucket(), spec, p.goalType(), p.endClass(), p.split(), p.tags(), r.outcome(answer == null ? null : answer.status()),
                 answer == null ? null : answer.status(),
                 r.halt() == null ? "arrived" : halt(r.halt()), ms(r.firstMove()), ms(r.maxThink()), ms(r.waited()), ms(r.ticks()), r.searches(),
                 r.expanded(), r.replans(Journal.Replan.DEAD_END), r.replansTotal(), Math.round(r.cost() * 1000) / 1000.0,
