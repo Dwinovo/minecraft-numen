@@ -57,7 +57,7 @@ class RehearsalTest {
 
     private static Rehearsal.Scene scene(TestWorld world, RouteSpec spec, BodySnapshot body, Materials materials, BlockPos start, Goal goal, int budget) {
         CostModel model = CostModel.of(spec, body, Fixtures.ALLOW_ALL, materials, Threats.NONE);
-        return new Rehearsal.Scene(from -> world.window(from, WorldSnapshot.SEARCH_RADIUS), model, spec, goal, start, budget);
+        return new Rehearsal.Scene(from -> world.window(from, WorldSnapshot.SEARCH_RADIUS), from -> false, model, spec, goal, start, budget);
     }
 
     private static Rehearsal.Scene scene(TestWorld world, RouteSpec spec, BlockPos start, Goal goal) {
@@ -79,6 +79,28 @@ class RehearsalTest {
         Halt.Searched halt = assertInstanceOf(Halt.Searched.class, tight.halt());
         assertEquals(com.dwinovo.numen.pathing.search.SearchResult.Stop.BUDGET, halt.stop());
         assertTrue(tight.edits().isEmpty());
+    }
+
+    /**
+     * 世界在身前就到头了(边之外永远没有加载的区块),去处在边外:这一趟没到,又停在"没加载"、窗口伸出了边——是要区域之外的地形。
+     * 同样的失败,窗口没伸出过边就是放弃;标准答案说区域内能到、或证明区域内无解的,也仍是放弃。
+     */
+    @Test
+    void aTripThatRunsIntoTheEdgeOfTheWorldNeedsTerrainBeyondIt() {
+        TestWorld world = new TestWorld().floor(0, 0, 40, 40, Y - 1);
+        Goal goal = Goals.at(at(120, 1, 20));
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        Rehearsal.Result edge = new Rehearsal(new Rehearsal.Scene(from -> world.window(from, 1), from -> true, model, RouteSpec.defaults(), goal, at(2, 1, 20), 0),
+                "edge").run();
+        assertTrue(edge.edge(), String.valueOf(edge.halt()));
+        assertEquals(Row.Outcome.BEYOND, edge.outcome(null));
+        assertEquals(Row.Outcome.BEYOND, edge.outcome(Answers.Status.UNKNOWN));
+        assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.OPTIMAL), "答案说区域内能到:是规划没做成");
+        assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.BEST_KNOWN));
+        assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.UNSOLVABLE), "答案说区域内无解:本该证出无解");
+        Rehearsal.Result inside = new Rehearsal(new Rehearsal.Scene(from -> world.window(from, 1), from -> false, model, RouteSpec.defaults(), goal, at(2, 1, 20), 0),
+                "inside").run();
+        assertEquals(Row.Outcome.GAVE_UP, inside.outcome(null), "窗口没伸出过边:没加载是快照半径的边,不是区域的边");
     }
 
     /** 两百格长的平地:一段一段搜、一段一段接上,从起步到终点,除了第一次从脚下搜,身体一刻也没站着等搜索。 */
