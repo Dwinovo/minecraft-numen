@@ -44,6 +44,7 @@ NumenEvents.register(event => {
 | `plugin.eventType(类型, 恒为急件)` / `plugin.emit(同伴, 类型, 属性, 文字, 急件)` | 登记一种事件,往她的收件箱发一条 |
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |
 | `plugin.gear({slots(body){…}, kindsOf(body, stack){…}})` | 一个穿戴来源 |
+| `plugin.rangedWeapon(名字, weapon => …)` | 一种远程武器(枪、魔杖),攻击任务像用弓一样用它,见下一节 |
 
 一个函数 `group.fn(名字, fn => …)` 里:`summary`(必填)、`param(名字, 类型, 说明)`、`option(名字, 类型, 说明, 不写时会怎样)`、`rest`、
 `returns(类型)`、`example`、`note`、`run(call => …)`。类型名:`string`、`integer`、`number`、`boolean`、`block`、`item`、`id`、`pos`,
@@ -64,6 +65,83 @@ group.fn('pet', fn => fn
     call.report('petted ' + animal.name.string)
   })))
 ```
+
+## 远程武器:让攻击任务用上模组的枪
+
+模组带来的枪是"远程攻击"这个已有动作上的新名词。两种接法:
+
+- **让攻击任务自己用枪**(`plugin.rangedWeapon`):`numen.fight.attack` 像用弓一样挑枪、走位到枪的环里、瞄准、开枪、连发,没弹药就换别的。
+- **让模型一次开一枪**(一个受权的函数):模型调 `tacz.gun.fire(目标)`,见后面的第二个例子。
+
+两种都过权限层:该不该打由权限层按 `attack` 裁决,你的脚本只说"怎么射"。
+
+### 例子一:TaCZ 的枪是一种远程武器
+
+```js
+NumenEvents.register(event => {
+  event.plugin('tacz', plugin => {
+    const IGun = Java.loadClass('com.tacz.guns.api.item.IGun')
+    const Operator = Java.loadClass('com.tacz.guns.api.entity.IGunOperator')
+    plugin.rangedWeapon('tacz gun', weapon => weapon
+      .handles(stack => IGun.getIGunOrNull(stack) != null)
+      .readiness((body, stack) => {
+        const gun = IGun.getIGunOrNull(stack)
+        return gun.getCurrentAmmoCount(stack) > 0 || gun.hasBulletInBarrel(stack) ? 'ready' : 'empty'
+      })
+      .hitscan(48)            // 命中扫描,射程 48 格
+      .standoff(6, 24)        // 她站在离目标 6 到 24 格之间
+      .fire((body, stack, target, facing) => {
+        const operator = Operator.fromLivingEntity(body)
+        const result = String(operator.shoot(facing.pitch(), facing.yaw()))
+        if (result == 'SUCCESS') return true
+        if (result == 'NOT_DRAW') { operator.draw(() => body.mainHandItem); return 'wait' }
+        if (result == 'NEED_BOLT') { operator.bolt(); return 'wait' }
+        return ['COOL_DOWN', 'IS_DRAWING', 'IS_RELOADING', 'IS_BOLTING', 'IS_MELEE'].includes(result) ? 'wait' : false
+      }))
+  })
+})
+```
+
+`weapon` 上能写的:
+
+| 方法 | 做什么 |
+|---|---|
+| `handles(stack => 布尔)` | 背包里这件是不是这种武器(必填) |
+| `readiness((body, stack) => 'ready' \| 'loadable' \| 'empty')` | 此刻能不能射:现成的、要先 `prepare`(换弹、拉栓)、没弹药(必填) |
+| `hitscan(射程)` 或 `arc(初速, 重力, 阻力, 射程)` | 弹道:一条线,或受重力的弹射物(必填其一) |
+| `standoff(内沿, 外沿)` | 站位的环;不写,内沿 3 格、外沿是射程的四分之三 |
+| `prepare((body, stack) => …)` | `readiness` 说 `loadable` 时每刻调一次,直到变成 `ready` |
+| `fire((body, stack, target, facing) => …)` | 射一发(必填)。身体已经对准了目标。返回 `true` 是射出去了,返回 `'wait'` 是这一刻射不了(冷却、还没切好枪)下一刻再来,别的算哑火;连着两发哑火攻击任务就收场、回执说这件武器没射出去 |
+
+几件会踩的事:
+
+- **类过滤**:`Java.loadClass` 受 KubeJS 的类过滤约束。默认放行,各模组 jar 根上的 `kubejs.classfilter.txt` 里 `- 前缀` 是拒绝、`+ 完整类名` 是放行。`Java.loadClass` 报类不允许,就是你的整合包里有一个模组的过滤拒绝了它。
+- **`Supplier<Float>`**:TaCZ 这类接口要的 `Supplier<Float>`,脚本里写箭头函数交回的是 JavaScript 的数,到 Java 一侧不是 `Float`,会 `ClassCastException`。用 `facing.pitch()`、`facing.yaw()`(现成的 Java 供应器),或者函数版里的 `call.facingTo(目标)`。
+- **TaCZ 的计时按真实时间算**:切枪、射击冷却用的是毫秒的真实时间,不是游戏刻。真实服务器每刻 50 毫秒,感觉不到;在不限速的无头测试服务器上(GameTest、跑得比真实时间快的测试)刻会飞快地过,切枪还没完成"准备上限"(200 刻)就用完了,会被当成哑火。在无头环境里测枪,先切好枪、等真实的一两秒再让她打。这是 TaCZ 的性质,Numen 的上限不会为它放宽。
+
+### 例子二:模型一次开一枪
+
+```js
+NumenEvents.register(event => event.plugin('tacz', plugin => {
+  const Operator = Java.loadClass('com.tacz.guns.api.entity.IGunOperator')
+  plugin.group('gun', 'Guns from Timeless and Classic Guns.', group => {
+    group.fn('fire', fn => fn
+      .summary('Fire the gun in your hand once at a creature.')
+      .param('target', 'string', 'Its id, like zombie@3f9a1c from numen.scan.entities.')
+      .returns('string')
+      .pending()
+      .example('tacz.gun.fire("zombie@3f9a1c")')
+      .run(call => call.attack(call.arg('target'), (her, target) => {
+        const facing = call.facingTo(target)
+        const result = String(Operator.fromLivingEntity(her).shoot(facing.pitch(), facing.yaw()))
+        call.report('fired the gun: ' + result)
+        return result
+      })))
+  })
+}))
+```
+
+这两个例子在真的挂着 TaCZ 的服务器上验过(见 `docs/adr/control/0017-ranged-weapon-providers.md` 的实现说明)。TaCZ 不随 Numen 发。
 
 ## 关掉与出错
 
