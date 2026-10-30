@@ -59,9 +59,9 @@ test {
 }
 
 // ==================== 规划评测(src/benchmark) ====================
-// 数据集目录:-PpathingDataset=<本地目录>,没给就是 fetchPathingDataset 下载并核过校验码的缓存。版本与校验码在下面,发布之后填。
-ext.pathingDatasetVersion = ''
-ext.pathingDatasetSha256 = ''
+// 数据集目录:-PpathingDataset=<本地目录>,没给就是 fetchPathingDataset 下载并核过校验码的缓存。
+ext.pathingDatasetVersion = 'v1'
+ext.pathingDatasetSha256 = '65df7517a300a1c4ed13df1ccc64faa180e0fe594fa5398cb0b9433953463d94'
 
 def datasetCache = layout.buildDirectory.dir('pathing-dataset')
 
