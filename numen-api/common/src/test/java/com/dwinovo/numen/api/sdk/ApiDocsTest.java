@@ -7,12 +7,12 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 帮助是模型读的界面,全从签名写出,写成脚本里的样子:一组一行一个函数,一个函数给全(参数逐个带说明、选项表与结果的类、例子、注意、
- * 相关)。样子逐字钉住,措辞一变这里就红。
+ * 帮助是模型读的界面,全从签名写出,写成脚本里的样子(LuaLS 的存根):一组一行一个函数,一个函数给全(参数逐个带说明、选项表与结果的类、例子、
+ * 注意、相关)。这里查的是结构:登记了的每个函数都出现、带着自己的签名与登记时写下的说明,帮助里指的函数都是登记了的;措辞不钉。
  */
 class ApiDocsTest {
 
@@ -48,52 +48,69 @@ class ApiDocsTest {
         SdkFixture.register("gt_pantry", Pantry.class);
     }
 
+    private static ApiRegistry.Group pantry() {
+        return ApiRegistry.group("gt.gt_pantry");
+    }
+
+    /** 帮助里写着的 {@code gt.gt_pantry.<名字>}(后面不再接下去)都是登记了的函数。 */
+    private static void assertReferencesAreRegistered(String help) {
+        var reference = java.util.regex.Pattern.compile("gt\\.gt_pantry\\.(\\w+)(?![\\w.])").matcher(help);
+        while (reference.find()) {
+            assertNotNull(ApiRegistry.function("gt.gt_pantry." + reference.group(1)),
+                    "the help names a function that is not registered: " + reference.group() + "\n" + help);
+        }
+    }
+
     @Test
     void aGroupIsOneTypedLinePerFunction() {
-        assertEquals("""
-                ---Test fixture.
-                ---@class gt.gt_pantry
-                ---@field list fun(): string[] What the pantry holds.
-                ---@field take fun(item: string, count?: integer, opts?: {shelf?: string}): gt.Taken Take something \
-                from the pantry.
-                gt.gt_pantry = {}
-
-                ---What was taken.
-                ---@class gt.Taken
-                ---@field taken integer How many came out.
-                ---@field left? integer Left on the shelf.""", ApiDocs.help("gt.gt_pantry", Modules.factory()));
+        String help = ApiDocs.help("gt.gt_pantry", Modules.factory());
+        for (ApiFunction fn : pantry().functions()) {
+            String line = help.lines().filter(l -> l.startsWith("---@field " + fn.name() + " ")).findFirst()
+                    .orElseThrow(() -> new AssertionError(fn.name() + " is not in the group help:\n" + help));
+            assertTrue(line.contains("fun("), line);
+            for (ApiFunction.Param p : fn.positionals()) {
+                assertTrue(line.contains(p.name() + (p.role() == ApiFunction.Role.REQUIRED ? ": " : "?: ")), line);
+            }
+            for (String option : fn.options()) {
+                assertTrue(line.contains(option + "?: "), line);
+            }
+            assertTrue(line.contains(fn.summary()), line);
+        }
+        assertTrue(help.contains("string[]") && help.contains("gt.Taken"), "the result types are written: " + help);
+        assertTrue(help.contains("---@field taken integer") && help.contains("---@field left? integer"),
+                "the result class is described with its fields: " + help);
+        assertReferencesAreRegistered(help);
     }
 
     @Test
     void aFunctionGivesEverything() {
-        assertEquals("""
-                ---Take something from the pantry.
-                ---@param item string The item, minecraft:bread.
-                ---@param count? integer How many. Omit to take one.
-                ---@param opts? gt.gt_pantry.take.opts
-                ---@return gt.Taken
-                function gt.gt_pantry.take(item, count, opts) end
-
-                ---@class gt.gt_pantry.take.opts
-                ---@field shelf? string Which shelf. Omit to look on every shelf.
-                -- Examples:
-                --   gt.gt_pantry.take("minecraft:bread", 2, {shelf = "top"})
-                -- Notes:
-                --   Instant.
-                -- See also: gt.gt_pantry.list
-
-                ---What was taken.
-                ---@class gt.Taken
-                ---@field taken integer How many came out.
-                ---@field left? integer Left on the shelf.""", ApiDocs.help("gt.gt_pantry.take", Modules.factory()));
+        ApiFunction take = ApiRegistry.function("gt.gt_pantry.take");
+        String help = ApiDocs.help(take.fullName(), Modules.factory());
+        assertTrue(help.contains("function gt.gt_pantry.take(item, count, opts) end"), help);
+        assertTrue(help.contains(take.summary()), help);
+        for (ApiFunction.Param p : take.params()) {
+            assertTrue(help.contains(p.name()) && help.contains(p.doc().replaceAll("\\.$", "")), p.name() + ": " + help);
+            if (p.omitted() != null) {
+                assertTrue(help.contains(p.omitted()), p.name() + " says what happens when it is left out: " + help);
+            }
+        }
+        assertTrue(help.contains("---@param count? integer") && help.contains("---@field shelf? string"), help);
+        assertTrue(help.contains("---@return gt.Taken"), help);
+        take.examples().forEach(e -> assertTrue(help.contains(e), "the example is shown: " + help));
+        take.notes().forEach(n -> assertTrue(help.contains(n), "the note is shown: " + help));
+        take.seeAlso().forEach(f -> assertTrue(help.contains(f), "the related function is shown: " + help));
+        assertTrue(help.contains("---@field taken integer") && help.contains("---@field left? integer"), help);
+        assertReferencesAreRegistered(help);
     }
 
     @Test
     void theIndexListsTheGroupAndAWrongCallsUsageShowsTheExamples() {
         assertTrue(ApiDocs.index(Modules.factory()).contains("gt.gt_pantry"), ApiDocs.index(Modules.factory()));
-        assertEquals("""
-                gt.gt_pantry.take(item, [count], {shelf=\u2026})
-                  e.g. gt.gt_pantry.take("minecraft:bread", 2, {shelf = "top"})""",
-                ApiDocs.usage(ApiRegistry.function("gt.gt_pantry.take")));
+        ApiFunction take = ApiRegistry.function("gt.gt_pantry.take");
+        String usage = ApiDocs.usage(take);
+        assertTrue(usage.startsWith("gt.gt_pantry.take("), usage);
+        assertTrue(usage.contains("item") && usage.contains("[count]") && !usage.contains("[item]")
+                && usage.contains("shelf"), "the optional position is bracketed and the option is named: " + usage);
+        take.examples().forEach(e -> assertTrue(usage.contains(e), "the usage shows the example: " + usage));
     }
 }
