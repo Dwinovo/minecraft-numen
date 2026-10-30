@@ -25,12 +25,9 @@ dependencies {
     // (Mojang 名),Fabric 的 intermediary 成品另有重映射,编译期用不着。
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
     Modules.PLUGIN_VISIBLE.each { compileOnly project(it) }
-    compileOnly(project(':numen:common')) {
-        def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-        attributes {
-            attribute(loaderAttribute, 'common')
-        }
-    }
+    // common 的主源码与客户端源码由下面的 compileJava 并进本模块一起编:编译类路径上不再放 :numen:common 编好的类。同一个类名既在
+    // 源码里又在类路径上,Gradle 的增量编译认不出——Numen API 的公开签名变了(返回类型之类),本模块里调用它的 common 类(NumenContent)
+    // 不会重编,留着旧字节码,运行时 NoSuchMethodError。
     // 寻路(只依赖原版)是 Numen 的内容,不是 Numen API 的:编译期看得见,发行 jar 里由下方 jar 块平铺进来、不作为依赖进 POM
     // (它不发布)。Loom 的开发运行类路径上另外补一份(localRuntime 不进 POM);NeoForge 的开发运行靠模组的 sourceSet。
     compileOnly project(':numen:pathing')
