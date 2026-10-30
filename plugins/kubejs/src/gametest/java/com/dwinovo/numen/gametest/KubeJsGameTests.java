@@ -155,4 +155,74 @@ public class KubeJsGameTests {
                 .thenExecute(() -> CompanionFactory.despawn(server, her))
                 .thenSucceed();
     }
+
+    private static final String BATCH_RANGED = "numen_kubejs_ranged";
+    private static final String RANGED_SCRIPT = "numen_gametest_ranged.js";
+
+    /** 一根烈焰棒当"枪":命中扫描,总是现成的,射出去就把目标收走。 */
+    private static final String BLASTER = """
+            NumenEvents.register(event => {
+              event.plugin('gt_ranged', plugin => {
+                plugin.rangedWeapon('blaster', weapon => weapon
+                  .handles(stack => stack.id == 'minecraft:blaze_rod')
+                  .readiness((body, stack) => 'ready')
+                  .hitscan(30)
+                  .standoff(3, 14)
+                  .fire((body, stack, target) => {
+                    target.kill()
+                    return true
+                  }))
+              })
+            })
+            """;
+
+    @BeforeBatch(batch = BATCH_RANGED)
+    public static void prepareRangedBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, MIDNIGHT);
+    }
+
+    /**
+     * 脚本里声明的远程武器:没有脚本时一根烈焰棒什么也不是(她挑不到远程武器);脚本声明了、{@code /reload} 之后,攻击任务挑它、站进它
+     * 的环、用它的命中扫描瞄准,调脚本写的 fire 把目标放倒;删掉脚本再 {@code /reload},它又不在了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 800, batch = BATCH_RANGED)
+    public static void a_script_declared_ranged_weapon_is_used_by_the_attack_task(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_kubejs_shooter", new BlockPos(2, 2, 8), false);
+        her.getInventory().clearContent();
+        her.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BLAZE_ROD));
+        var zombie = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(11, 2, 8));
+        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        level.addFreshEntity(zombie);
+        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(her, zombie).ranged() == null,
+                "she found a ranged weapon in a blaze rod before any script provided one");
+        try {
+            Files.writeString(KubeJSPaths.SERVER_SCRIPTS.resolve(RANGED_SCRIPT), BLASTER);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        reload(server);
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(her, zombie).ranged() != null,
+                        "the script's ranged weapon was not provided after /reload"))
+                .thenExecute(() -> lua(her, "numen.fight.attack(" + ref(zombie) + ")"))
+                .thenWaitUntil(() -> helper.assertTrue(zombie.isRemoved() || zombie.isDeadOrDying(),
+                        "the script's fire never brought the zombie down"))
+                .thenExecute(() -> {
+                    try {
+                        Files.deleteIfExists(KubeJSPaths.SERVER_SCRIPTS.resolve(RANGED_SCRIPT));
+                    } catch (IOException e) {
+                        throw new IllegalStateException(e);
+                    }
+                    reload(server);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(her, her).ranged() == null,
+                        "the script's ranged weapon stayed after the script was deleted"))
+                .thenExecute(() -> CompanionFactory.despawn(server, her))
+                .thenSucceed();
+    }
 }
