@@ -62,6 +62,27 @@ class StacksTest {
         assertEquals("minecraft:shulker_box[holds diamond x4]", StackLabel.of(kinds.get(3).sample()));
     }
 
+    /** 区别落在描述没写出来的组件值上(custom_data 不同):仍是两种,清单里各有自己的写法。 */
+    @Test
+    void kindsThatRenderTheSameAreStillTwoKindsWithTheirOwnLabels() {
+        ItemStack a = new ItemStack(Items.STICK);
+        a.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag("a")));
+        ItemStack b = new ItemStack(Items.STICK);
+        b.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag("b")));
+        List<Stacks.Kind> kinds = Stacks.kinds(List.of(a, b, a.copy()));
+        assertEquals(2, kinds.size());
+        assertEquals(2, kinds.get(0).count());
+        assertEquals(StackLabel.detail(a), StackLabel.detail(b));
+        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
+        assertEquals(List.of("with custom_data; variant 1", "with custom_data; variant 2"), details);
+    }
+
+    private static net.minecraft.nbt.CompoundTag tag(String v) {
+        net.minecraft.nbt.CompoundTag t = new net.minecraft.nbt.CompoundTag();
+        t.putString("k", v);
+        return t;
+    }
+
     @Test
     void whatTellsAStackApartIsSaidAndAPlainItemSaysNothing() {
         assertEquals("", StackLabel.detail(new ItemStack(Items.DIRT)));

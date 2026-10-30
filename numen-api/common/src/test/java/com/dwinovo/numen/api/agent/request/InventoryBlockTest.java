@@ -168,6 +168,22 @@ class InventoryBlockTest {
                 + "minecraft:shulker_box[holds diamond x3] x1"), block);
     }
 
+    /** 两种只差在描述没写出来的组件值上:清单里仍是两行,各有序号。 */
+    @Test
+    void kindsThatRenderTheSameStayTwoLines() {
+        assumeTrue(booted);
+        ItemStack a = new ItemStack(Items.STICK);
+        a.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData
+                .of(new net.minecraft.nbt.CompoundTag()));
+        net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+        tag.putString("k", "b");
+        ItemStack b = new ItemStack(Items.STICK);
+        b.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY, a, b));
+        assertTrue(block.contains("carrying=minecraft:stick[with custom_data; variant 1] x1, "
+                + "minecraft:stick[with custom_data; variant 2] x1"), block);
+    }
+
     private static ItemStack potion(
             net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
         ItemStack stack = new ItemStack(Items.POTION);

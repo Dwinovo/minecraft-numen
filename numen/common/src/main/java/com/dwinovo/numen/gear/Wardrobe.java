@@ -159,7 +159,7 @@ public final class Wardrobe {
                 empty = s;
                 break;
             }
-            if (ItemStack.isSameItemSameComponents(worn, one)) {
+            if (Stacks.sameKind(worn, one)) {
                 if (same == null) same = s;
                 continue;
             }

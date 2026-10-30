@@ -57,7 +57,11 @@ public final class InvApi {
 
         /** 一叠(或合起来的一种)东西在模型眼里的样子:物品 id、件数,区别由 {@link StackLabel#detail} 说。背包清单与窗口里的各项同用。 */
         public static Stack of(ItemStack sample, int count) {
-            String detail = StackLabel.detail(sample);
+            return of(sample, count, StackLabel.detail(sample));
+        }
+
+        /** 同上,描述由调用方给({@link StackLabel#details} 排过重的)。 */
+        public static Stack of(ItemStack sample, int count, String detail) {
             return new Stack(BuiltInRegistries.ITEM.getKey(sample.getItem()).toString(), count,
                     detail.isEmpty() ? Optional.empty() : Optional.of(detail));
         }
@@ -75,10 +79,12 @@ public final class InvApi {
     @SeeAlso("numen.inv.count")
     public static List<Stack> items(ServerCall call) {
         Inventory inventory = call.her().getInventory();
+        List<Stacks.Kind> kinds = Stacks.kinds(inventory.items.subList(0,
+                Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())));
+        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
         List<Stack> out = new ArrayList<>();
-        for (Stacks.Kind kind : Stacks.kinds(inventory.items.subList(0,
-                Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())))) {
-            out.add(Stack.of(kind.sample(), kind.count()));
+        for (int i = 0; i < kinds.size(); i++) {
+            out.add(Stack.of(kinds.get(i).sample(), kinds.get(i).count(), details.get(i)));
         }
         return out;
     }

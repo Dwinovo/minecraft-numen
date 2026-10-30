@@ -30,7 +30,12 @@ public final class StackLabel {
 
     /** 物品 id,带描述时后接 {@code [描述]}:{@code minecraft:shulker_box[holds diamond x3]}。 */
     public static String of(ItemStack stack) {
-        return wrap(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), detail(stack));
+        return of(stack, detail(stack));
+    }
+
+    /** 同 {@link #of(ItemStack)},描述由调用方给({@link #details} 排过重的)。 */
+    public static String of(ItemStack stack, String detail) {
+        return wrap(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), detail);
     }
 
     /** 不带命名空间的 {@link #of}:回执正文里用,{@code shulker_box[holds diamond x3]}。 */
@@ -40,6 +45,36 @@ public final class StackLabel {
 
     private static String wrap(String id, String detail) {
         return detail.isEmpty() ? id : id + "[" + detail + "]";
+    }
+
+    /**
+     * 一批互不相同的种({@link Stacks#kinds})各自的描述。区别落在描述没写出来的组件值上(两叠 {@code custom_data} 不同)时,
+     * 同物品同描述的几种会写得一样,模型分不出;这里给它们依次加上 {@code variant N},清单与回执里每一种都有自己的写法。
+     */
+    public static List<String> details(List<ItemStack> kinds) {
+        List<String> out = new ArrayList<>();
+        for (ItemStack kind : kinds) {
+            out.add(detail(kind));
+        }
+        for (int i = 0; i < kinds.size(); i++) {
+            int n = 0;
+            for (int j = 0; j < kinds.size(); j++) {
+                if (kinds.get(j).is(kinds.get(i).getItem()) && detail(kinds.get(j)).equals(detail(kinds.get(i)))) {
+                    n++;
+                }
+            }
+            if (n > 1) {
+                int nth = 1;
+                for (int j = 0; j < i; j++) {
+                    if (kinds.get(j).is(kinds.get(i).getItem()) && detail(kinds.get(j)).equals(detail(kinds.get(i)))) {
+                        nth++;
+                    }
+                }
+                String base = detail(kinds.get(i));
+                out.set(i, (base.isEmpty() ? "" : base + "; ") + "variant " + nth);
+            }
+        }
+        return out;
     }
 
     /** 区分这一叠的描述,几条用分号连;和新物品没有区别为空。 */

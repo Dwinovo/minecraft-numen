@@ -13,7 +13,7 @@ import net.minecraft.world.item.ItemStack;
  * <b>把 id 落到具体一叠只在这里</b>——手放、直接写、拿到手上、丢出去、吃、穿戴都问它,放哪一叠、扣哪一叠、回执报哪一叠
  * 是同一叠,不会出现"放下去的是这一叠、扣的是那一叠"。
  *
- * <p>两叠算同一种只看物品与全部组件({@link ItemStack#isSameItemSameComponents})。只说了 id、而背包里有几种不同的叠时,
+ * <p>两叠算同一种只看物品与全部组件({@link #sameKind})。只说了 id、而背包里有几种不同的叠时,
  * 取确定的一叠:<b>主手那一格先,其余按格号</b>——主手拿着哪一叠就是她指的哪一叠(真玩家拿着东西右键也是用手里这一叠),要用另一叠,
  * 先用 {@code numen.gui.move} 把它挪进主手那一格。不按内容猜"哪一叠更像她要的"。清单({@link #kinds})把这几种分开列出来,
  * 回执说用了哪一叠,拿不拿哪一叠由模型定。
@@ -21,6 +21,11 @@ import net.minecraft.world.item.ItemStack;
 public final class Stacks {
 
     private Stacks() {}
+
+    /** 两叠是不是同一种:物品与全部组件都相同。选叠、合种、丢、穿戴比的都是它,"什么算一种"只此一处。 */
+    public static boolean sameKind(ItemStack a, ItemStack b) {
+        return ItemStack.isSameItemSameComponents(a, b);
+    }
 
     /**
      * 选中的一种。
@@ -49,7 +54,7 @@ public final class Stacks {
             int count = 0;
             for (int slot : order) {
                 ItemStack there = inventory.items.get(slot);
-                if (ItemStack.isSameItemSameComponents(chosen, there)) {
+                if (sameKind(chosen, there)) {
                     slots.add(slot);
                     count += there.getCount();
                 }
@@ -83,7 +88,7 @@ public final class Stacks {
                 continue;
             }
             int at = 0;
-            while (at < samples.size() && !ItemStack.isSameItemSameComponents(samples.get(at), stack)) {
+            while (at < samples.size() && !sameKind(samples.get(at), stack)) {
                 at++;
             }
             if (at == samples.size()) {

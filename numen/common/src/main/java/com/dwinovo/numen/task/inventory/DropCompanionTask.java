@@ -105,7 +105,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         List<String> left = new ArrayList<>();
         for (Stacks.Kind kind : Stacks.kinds(inv.items)) {
             if (kind.sample().is(pick.get().sample().getItem())
-                    && !ItemStack.isSameItemSameComponents(kind.sample(), pick.get().sample())) {
+                    && !Stacks.sameKind(kind.sample(), pick.get().sample())) {
                 left.add(StackLabel.brief(kind.sample()) + " x" + kind.count());
             }
         }

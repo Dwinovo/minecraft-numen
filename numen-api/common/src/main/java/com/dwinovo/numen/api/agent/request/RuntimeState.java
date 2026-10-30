@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.agent.inbox.EventClock;
 import com.dwinovo.numen.api.task.Activity;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -262,10 +263,13 @@ public final class RuntimeState {
     }
 
     static String renderInventory(BodySnapshot snapshot) {
-        // 物品与组件都相同的叠合成一行,不同的分行:装着钻石的潜影盒与空盒、不同的药水各占一行,描述见 StackLabel
+        // 物品与组件都相同的叠合成一行(Stacks.kinds,和选叠同一个"种"),不同的分行:装着钻石的潜影盒与空盒、不同的药水各占一行,
+        // 描述见 StackLabel(写得一样的几种它会加序号)
+        List<Stacks.Kind> kinds = Stacks.kinds(snapshot.items());
+        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
         java.util.TreeMap<String, Integer> totals = new java.util.TreeMap<>();
-        for (Stacks.Kind kind : Stacks.kinds(snapshot.items())) {
-            totals.merge(StackLabel.of(kind.sample()), kind.count(), Integer::sum);
+        for (int i = 0; i < kinds.size(); i++) {
+            totals.put(StackLabel.of(kinds.get(i).sample(), details.get(i)), kinds.get(i).count());
         }
         StringBuilder items = new StringBuilder();
         totals.forEach((label, count) -> {
