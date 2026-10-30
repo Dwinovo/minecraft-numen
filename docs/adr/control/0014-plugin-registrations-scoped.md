@@ -48,8 +48,11 @@
 
 - 句柄与作用域:`Handle`、`Scope`(`agent/…/scope`,纯 JVM,放在登记表里最低的那个模块,`EventTypes` 在那里)。表:函数组、值转换、同伴事件订阅、
   事件类型、身体状态片段、穿戴来源、内容目录、内置 Lua 模块、`/numen` 指令、没跑的客户端块。`registerForClientMod` 的目标模组声明是插件自己的
-  属性,不是登记,不进作用域。引擎自己的登记(`registerHost`)也走作用域,只是不撤。门外的 `TaskFactory`、`ToolRegistry` 等表不在门里,用它们的插件
-  声明要重启;`TaskFactory.register` 同类型是替换,森罗厨房重登没有副作用。
+  属性,不是登记,不进作用域。引擎自己的登记(`registerHost`)也走作用域,只是不撤。活的执行器也在门里:`numen.taskRunner(记录类, 执行器)` 经 `TaskFactory.register`
+  登记,句柄 `close()` 撤掉执行器,并把这种活里正在跑的叫停(`StopCause.PLUGIN_WITHDRAWN`),一个插件的活不比它的作用域活得久。
+  还在门外的表(`ToolRegistry`、网络包、每刻钩子等)不是门能撤的,用它们的插件声明要重启。
+- 句柄:`Handle.once` 保证只撤一次;按键放的表(`TaskFactory` 同类型后登记的顶掉先登记的,函数组、事件类型、值转换、内置模块拒绝第二次
+  登记)撤之前先比引用,表里现在的不是自己登记的那条就不动——两次登记出来的 record 可以 `equals` 相等,不能比值。
 - 门过期:作用域一关,那扇门的每个登记方法都抛 `IllegalStateException`,点名插件(照 pi-mono 的"重载后旧上下文失效而不是静默生效")。
 - 声明卸下要重启:`NumenPlugins.register(id, Unloading.NEEDS_RESTART, setup)`。声明的有:`numen`(工具、任务执行器、本能链、网络包在门外)、
   `tlm`、`ysm`、`ftbquests`(加载器总线与 Mixin、宿主每刻钩子在门外)。`kaleidoscope`、`curios`、`litematica` 只经门登记,是动态的。
