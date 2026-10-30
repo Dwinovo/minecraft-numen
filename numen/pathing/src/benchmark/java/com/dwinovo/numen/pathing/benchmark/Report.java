@@ -32,7 +32,7 @@ final class Report {
         md.append("# 寻路规划评测\n\n提交 `").append(commit).append("`,题集 ").append(split).append(",").append(rows.size())
                 .append(" 行(题 × 规格)。时间是按表折算的毫秒,不是墙钟。四个数依次是 中位/P90/P99/最大。\n\n");
         md.append(answersCommit.map(c -> "标准答案由提交 `" + c + "` 算出。\n\n").orElse("数据集里没有答案文件:没有次优比这一列。\n\n"));
-        md.append("结局三类:到了;证明到不了(第一次从脚下搜就把能走到的都搜完了没有目标,没读到区域边缘或快照边缘外的列;不是规划的失败,不进成功率);放弃(别的一切)。")
+        md.append("结局三类:到了;证明到不了(一次搜索把能走到的都搜完了没有目标,没读到区域边缘或快照边缘外的列;不是规划的失败,不进成功率);放弃(别的一切)。")
                 .append("成功率 = 到了 ÷ (到了 + 放弃)。规格 A 不挖不垫,需要编辑的题(挖到某格、走到封死的一格)按构造不适用于 A,没有给 A 跑:本题集 ")
                 .append(notApplicable).append(" 道。\n\n");
         md.append("## 主表:按 规格 × 档 × 终点种类\n\n").append(header("终点", priced));

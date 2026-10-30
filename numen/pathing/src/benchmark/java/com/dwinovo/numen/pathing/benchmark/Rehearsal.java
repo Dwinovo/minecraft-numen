@@ -60,12 +60,12 @@ final class Rehearsal {
     record Result(boolean arrived, Halt halt, double firstMove, double maxThink, double waited, double ticks, int searches,
                   int expanded, Map<Journal.Replan, Integer> replans, double cost, List<Edit> edits, int steps) {
 
-        /** 结局的三类({@link Row.Outcome}):第一次从脚下搜就搜完了没有目标才算证明到不了。 */
+        /** 结局的三类({@link Row.Outcome}):把能走到的都搜完了没有目标才算证明到不了。 */
         Row.Outcome outcome() {
             if (arrived) {
                 return Row.Outcome.ARRIVED;
             }
-            return halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED && searches == 1 ? Row.Outcome.UNREACHABLE : Row.Outcome.GAVE_UP;
+            return halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED ? Row.Outcome.UNREACHABLE : Row.Outcome.GAVE_UP;
         }
 
         int replansTotal() {

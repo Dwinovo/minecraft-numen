@@ -29,9 +29,8 @@ record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.G
      * 一趟怎么收的,三类:
      * <ul>
      *   <li>{@code ARRIVED}:到了;</li>
-     *   <li>{@code UNREACHABLE}:证明到不了。第一次从脚下搜(这一趟还没有记忆、世界是原样)就把能走到的都搜完了,没有目标
-     *       ({@code Stop.EXHAUSTED})。搜索只要读到快照之外没加载的列(区域边缘、快照半径的边),停因就是 {@code UNLOADED} 而不是
-     *       {@code EXHAUSTED},所以这一类里没有"被区域边缘截断"的;</li>
+     *   <li>{@code UNREACHABLE}:证明到不了。一次搜索把能走到的都搜完了,没有目标({@code Stop.EXHAUSTED})。搜索只要读到快照之外没加载的列
+     *       (区域边缘、快照半径的边),停因就是 {@code UNLOADED} 而不是 {@code EXHAUSTED},所以这一类里没有"被区域边缘截断"的;</li>
      *   <li>{@code GAVE_UP}:放弃,别的一切——总预算用完、搜索路伸出了区域、重搜之后才搜完、执行里走不下去……</li>
      * </ul>
      */
