@@ -40,15 +40,15 @@ class HandOverTest {
         return result.route();
     }
 
-    /** 去处:边界上总价最小的先,总价平手的先取离目标近的;憋着气的边界节点不当去处。 */
+    /** 去处:边界上 g + 5·h 最小的先(偏向离目标近的),平手的先取离目标近的;憋着气的边界节点不当去处。 */
     @Test
-    void theFrontierIsTriedCheapestFirstAndANodeHoldingBreathIsNoDestination() {
+    void theFrontierIsTriedByCostPlusWeightedEstimateAndANodeHoldingBreathIsNoDestination() {
         java.util.List<HandOver.Candidate> order = HandOver.order(java.util.List.of(
                 new HandOver.Candidate(0, 10, 30, false),
                 new HandOver.Candidate(1, 5, 20, true),
                 new HandOver.Candidate(2, 20, 20, false),
                 new HandOver.Candidate(3, 8, 25, false)));
-        assertEquals(java.util.List.of(3, 2, 0), order.stream().map(HandOver.Candidate::node).toList());
+        assertEquals(java.util.List.of(2, 3, 0), order.stream().map(HandOver.Candidate::node).toList());
     }
 
     @Test

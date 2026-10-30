@@ -11,7 +11,7 @@ import net.minecraft.core.BlockPos;
  * 一次搜索没搜到要去的地方时身体去哪、交哪一截,只在这里定。输入是这次搜索的边界节点(各带走到它的价钱与估价),输出是交出的一截;
  * 和搜索怎么组织(一次搜到哪、预算多少)无关。
  *
- * <p><b>去哪</b>:LSS-LRTA* 的选点 [Koenig &amp; Sun 2009]——边界上总价 {@code g + h} 最小的节点。估价含这一趟抬过的增量
+ * <p><b>去哪</b>:LSS-LRTA* 的选点 [Koenig &amp; Sun 2009]——边界上 {@code g + }{@link #TARGET_WEIGHT}{@code ·h} 最小的节点。估价含这一趟抬过的增量
  * ({@link TripMemory}),走进过的死路估价已抬高,不会再被当成最近的去处。
  *
  * <p><b>交哪一截</b>:走到那里的路线里<b>只能停在最后一个回得了头的节点上</b>
@@ -41,10 +41,19 @@ public final class HandOver {
     record Candidate(int node, double cost, double estimate, boolean holding) {}
 
     /**
-     * 先比总价,总价取整到堆里同一个刻度:沿最优路线走下去总价不变,总价平手的先取离目标近的(沿着走得最远的那个)。
+     * 挑去处时估价的系数:按 {@code g + 5·h} 比。搜索按 {@code g + 2.5·h} 排开放集,估价在平台上(凹地口、地下的一大片等价格)几乎不变,
+     * 按 {@code g + h} 挑会选中离起点近、总价最小的那批,不朝目标走——规划评测里 mountains-short-027 的首段往反方向走了五十格,
+     * 接续又从头泛洪,三次搜索把总预算花完。系数取偏向离目标近的一侧,与 Baritone 对一串系数(1.5 到 10)各记一个最接近目标的节点、
+     * 取大系数的做法同向;走进死路的风险由估价抬高({@link TripMemory})与回得了头的截断兜着。
+     * 规划评测 dev(668 行)上 5 与 10 一样:B 多到 8 行、丢 3 行,起步与单次最长思考的 p90 不变。
+     */
+    static final double TARGET_WEIGHT = 5;
+
+    /**
+     * 先比 {@code g + }{@link #TARGET_WEIGHT}{@code ·h},取整到堆里同一个刻度;平手的先取离目标近的(沿着走得最远的那个)。
      */
     private static final Comparator<Candidate> PREFERENCE = Comparator
-            .comparingLong((Candidate c) -> Math.round((c.cost() + c.estimate()) / OpenSet.TIE))
+            .comparingLong((Candidate c) -> Math.round((c.cost() + TARGET_WEIGHT * c.estimate()) / OpenSet.TIE))
             .thenComparingDouble(Candidate::estimate);
 
     /** 边界节点按去处的优先次序排好(憋着气的不当去处,不在里面)。 */
