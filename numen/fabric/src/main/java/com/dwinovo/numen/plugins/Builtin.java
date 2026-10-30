@@ -33,6 +33,20 @@ public final class Builtin {
         Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", content -> () -> YsmOnFabric.install(content));
         gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnFabric.install(content));
+        gate.openClientMod("jei", "jei", () -> JeiOnFabric::install);
+    }
+
+    /** JEI 联动要加载器答的一件事:流体成分在 Fabric 上是 {@code IJeiFluidIngredient},数量以 81000 为一桶(碎片),换成毫桶。 */
+    private static final class JeiOnFabric implements com.dwinovo.numen.plugins.jei.JeiHost {
+        static void install() {
+            com.dwinovo.numen.plugins.jei.NumenJei.install(new JeiOnFabric());
+        }
+
+        @Override
+        public long milliBuckets(Object fluid) {
+            return ((mezz.jei.api.fabric.ingredients.fluids.IJeiFluidIngredient) fluid).getAmount() * 1000
+                    / net.fabricmc.fabric.api.transfer.v1.fluid.FluidConstants.BUCKET;
+        }
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,Fabric 的答案在这里。 */
