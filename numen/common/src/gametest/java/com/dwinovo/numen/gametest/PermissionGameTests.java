@@ -1137,6 +1137,45 @@ public class PermissionGameTests {
         helper.succeed();
     }
 
+    /**
+     * 只有玩家做主人才算有主:主人是一只活着的唤魔者(它的随从)的狼,没有人的主人,按野生的放行;
+     * 主人找不到(离线的玩家)的狼仍是别人的,硬规则拒绝。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void only_a_player_owner_makes_an_entity_someones(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos at = helper.absolutePos(new BlockPos(6, 2, 9));
+        var evoker = EntityType.EVOKER.create(level);
+        var minion = EntityType.WOLF.create(level);
+        var pet = EntityType.WOLF.create(level);
+        helper.assertTrue(evoker != null && minion != null && pet != null, "entities did not spawn");
+        evoker.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        evoker.setNoAi(true);
+        level.addFreshEntity(evoker);
+        minion.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        minion.setNoAi(true);
+        minion.setOwnerUUID(evoker.getUUID());
+        level.addFreshEntity(minion);
+        pet.moveTo(at.getX() + 4.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pet.setNoAi(true);
+        pet.setOwnerUUID(java.util.UUID.randomUUID());
+        level.addFreshEntity(pet);
+        NumenPlayer companion = spawnAt(helper, "gametest_hunter", new BlockPos(3, 2, 5), false);
+
+        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+        var minionVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(minion), level);
+        helper.assertTrue(minionVerdict.allowed(), "a wolf owned by an evoker is nobody's: " + minionVerdict);
+        var petVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(pet), level);
+        helper.assertTrue(!petVerdict.allowed() && !petVerdict.asks(),
+                "a wolf owned by an absent player is someone's: " + petVerdict);
+
+        evoker.discard();
+        minion.discard();
+        pet.discard();
+        CompanionFactory.despawn(level.getServer(), companion);
+        helper.succeed();
+    }
+
     /** 把打开的界面里第 0 格整叠拿进背包。 */
     private static ToolRun takeFirstSlot(NumenPlayer companion) {
         return lua(companion, "numen.gui.quick(0)");

@@ -8,12 +8,14 @@ import com.dwinovo.numen.permission.Vocabulary;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.npc.AbstractVillager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -226,9 +228,18 @@ public enum Groups {
     /**
      * 实体的主人是谁:原版 {@link OwnableEntity} 记的主人 UUID(狼、猫、鹦鹉,以及继承原版驯服的模组宠物,比如车万女仆);
      * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读——对象组与扫描实体都问它。
+     *
+     * <p>只有玩家做主人才算有主:主人是世界里一只活着的非玩家(唤魔者的恼鬼、召唤者的随从)时,它没有人的主人,按没主算。
+     * 找不到这个主人(离线的玩家、没加载的区块)按人算——不知道是谁的就当是人的。
      */
     public static UUID ownerOf(Entity entity) {
-        return entity instanceof OwnableEntity o ? o.getOwnerUUID() : null;
+        if (!(entity instanceof OwnableEntity o) || o.getOwnerUUID() == null) {
+            return null;
+        }
+        UUID owner = o.getOwnerUUID();
+        boolean mobOwner = entity.level() instanceof ServerLevel level
+                && level.getEntity(owner) instanceof Entity found && !(found instanceof Player);
+        return mobOwner ? null : owner;
     }
 
     /** 按规则文本里的名字取;没有这个名字返回 null。 */
