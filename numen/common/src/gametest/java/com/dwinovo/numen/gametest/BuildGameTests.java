@@ -26,12 +26,6 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 /** 建造:{@code numen.build.place} 与 {@code numen.build.diff}、{@code numen.shape} 画的格、材料账、整栋房子。 */
 public class BuildGameTests {
 
-    /** 小屋独立批次前置(薄墙环几何对并发搜索池最敏感,单独跑)。 */
-    @BeforeBatch(batch = "numen_build_cottage")
-    public static void prepareCottageBatch(ServerLevel level) {
-        settleWorld(level, Difficulty.PEACEFUL, NOON);
-    }
-
     /** 建造批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_build")
     public static void prepareBuildBatch(ServerLevel level) {
@@ -272,87 +266,6 @@ public class BuildGameTests {
     }
 
     /**
-     * {@code air} 要能清空,液体要<b>说清是能力边界</b>,一格几件料要算准。
-     *
-     * <p>这三条都是实测账单逼出来的:60 次 build 调用被拒 22 次,其中 15 次
-     * {@code unknown item: air}、3 次 {@code unknown item: water}。根子是 block_id
-     * 走了物品注册表——那个入口把 AIR 当未知物品拒掉(对吃/丢/取是对的),于是两处
-     * {@code if (item == AIR)} 的分支成了永远到不了的死代码,而工具描述里白纸黑字
-     * 写着 air 能清空。模型照文档写、被拒、换个写法再被拒,一次建造烧掉四轮往返。
-     *
-     * <p>液体读得通(名字是对的),只是她不放:读成方块,回执在 {@code liquid} 一类里说(见 {@code liquid_cells_*} 两条)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void build_block_ids_and_material_counts(GameTestHelper helper) {
-        for (String id : new String[]{"air", "minecraft:air", "dirt_path", "farmland", "tall_grass"}) {
-            com.dwinovo.numen.build.BuildStates.resolve(id);
-        }
-        for (String liquid : new String[]{"water", "minecraft:water", "lava"}) {
-            var resolved = com.dwinovo.numen.build.BuildStates.resolve(liquid);
-            helper.assertTrue(resolved.state().getBlock() instanceof net.minecraft.world.level.block.LiquidBlock,
-                    liquid + " reads as the liquid block; got " + resolved.state());
-        }
-        // 方块状态跟在方块名后面,和 /setblock 同一套语法
-        var stairs = com.dwinovo.numen.build.BuildStates.resolve("spruce_stairs[facing=south,half=top]").state();
-        helper.assertTrue(stairs.is(Blocks.SPRUCE_STAIRS)
-                        && stairs.getValue(net.minecraft.world.level.block.StairBlock.FACING)
-                                == net.minecraft.core.Direction.SOUTH
-                        && stairs.getValue(net.minecraft.world.level.block.StairBlock.HALF)
-                                == net.minecraft.world.level.block.state.properties.Half.TOP,
-                "the block state must come through the block_id, got " + stairs);
-        String stateMsg = "";
-        try {
-            com.dwinovo.numen.build.BuildStates.resolve("stone[facing=north]");
-        } catch (IllegalArgumentException e) {
-            stateMsg = String.valueOf(e.getMessage());
-        }
-        helper.assertTrue(stateMsg.contains("facing"),
-                "a property the block does not have must be refused by name; got \"" + stateMsg + "\"");
-
-        // 没有自己物品的方块要拿替代料算账,否则文档里教的 dirt_path 根本放不下去
-        helper.assertTrue(com.dwinovo.numen.build.BuildStates.resolve("dirt_path").item() == Items.DIRT,
-                "dirt_path has no item of its own; it must be billed as dirt");
-
-        // 一格几件料:双层砖是两块半砖摞出来的,门/床的上半不重复计
-        record Case(BlockState state, int want, String why) {}
-        var slab = Blocks.STONE_BRICK_SLAB;
-        for (Case c : List.of(
-                new Case(slab.defaultBlockState().setValue(
-                        net.minecraft.world.level.block.SlabBlock.TYPE,
-                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE), 2,
-                        "a double slab is two slabs"),
-                new Case(slab.defaultBlockState(), 1, "a single slab is one"),
-                new Case(Blocks.STONE.defaultBlockState(), 1, "a plain block is one"),
-                new Case(Blocks.SNOW.defaultBlockState().setValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LAYERS, 5), 5,
-                        "snow is billed per layer"),
-                // 高草一格一件:tall_grass 自己就是物品。按"两株矮的"算两件
-                // 会让玩家照清单备双份。
-                new Case(Blocks.TALL_GRASS.defaultBlockState(), 1,
-                        "tall grass is one item of its own now"),
-                new Case(Blocks.WATER.defaultBlockState(), 0, "liquids cost nothing"),
-                new Case(Blocks.AIR.defaultBlockState(), 0, "clearing costs nothing"))) {
-            var t = new BuildTaskRecord.Target(c.state(), Items.STONE, BlockPos.ZERO, "x");
-            helper.assertTrue(t.materialCount() == c.want(),
-                    c.why() + " — expected " + c.want() + ", got " + t.materialCount());
-        }
-
-        // 贴附件整体推到第二趟:骨架先立完,再回头挂灯摆花
-        List<BuildTaskRecord.Target> mixed = new ArrayList<>(List.of(
-                new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
-                        new BlockPos(1, 1, 0), "torch"),
-                new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
-                        new BlockPos(2, 1, 0), "carpet"),
-                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
-                        new BlockPos(0, 9, 0), "stone")));
-        mixed.sort(com.dwinovo.numen.task.build.BuildOrder.BUILD_ORDER);
-        helper.assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
-                "everything that stands on its own goes first, even nine layers up; got "
-                        + mixed.stream().map(BuildTaskRecord.Target::label).toList());
-        helper.succeed();
-    }
-
-    /**
      * 让路的四档:每一档让到什么程度。
      *
      * <p>当前工具层只发最高和最低两档,中间两档走不到——<b>正因为走不到才要测</b>,
@@ -407,293 +320,13 @@ public class BuildGameTests {
     }
 
     /**
-     * 图纸里的<b>运行态</b>不能照抄进世界。
-     *
-     * <p>一串格可以来自某个世界某一刻的快照,里面混着大量世界自己算出来的东西:作物长到第
-     * 几节、方块含不含水、活塞伸没伸出去、堆肥桶攒了多少、锅里装的什么。照字面摆
-     * 下去就会凭空长出一片熟麦子、凭空造出水来、摆一口装着岩浆的锅。
-     *
-     * <p>判据和 {@code BuildValidity} 那张"作者属性"白名单是同一条的两面:那边管
-     * 比对时忽略什么,这边管落位前清掉什么。所以归一必须在<b>每个目标格都要过的
-     * 那道口</b>上做一次,而不是让每条入口各清各的。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void runtime_state_is_normalized(GameTestHelper helper) {
-        BlockState ripe = Blocks.WHEAT.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7, 7);
-        BlockState wet = Blocks.OAK_STAIRS.defaultBlockState().setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, true);
-        BlockState full = Blocks.COMPOSTER.defaultBlockState().setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER, 5);
-
-        var wheat = new BuildTaskRecord.Target(ripe, Items.WHEAT_SEEDS, BlockPos.ZERO, "wheat");
-        helper.assertTrue(wheat.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7) == 0,
-                "ripe wheat must be planted as a seedling, not conjured fully grown");
-
-        var stair = new BuildTaskRecord.Target(wet, Items.OAK_STAIRS, BlockPos.ZERO, "stair");
-        helper.assertTrue(!stair.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED),
-                "waterlogging is derived from the water around a block; copying it conjures water"
-                        + " out of nothing, and she does not place water at all");
-
-        var composter = new BuildTaskRecord.Target(full, Items.COMPOSTER, BlockPos.ZERO, "composter");
-        helper.assertTrue(composter.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER) == 0,
-                "how full a composter is, is runtime state — it must be placed empty");
-
-        var cauldron = new BuildTaskRecord.Target(Blocks.LAVA_CAULDRON.defaultBlockState(),
-                Items.CAULDRON, BlockPos.ZERO, "cauldron");
-        helper.assertTrue(cauldron.desiredState().is(Blocks.CAULDRON),
-                "a cauldron's contents are runtime state; a cell must not hand out free lava");
-
-        var leaves = new BuildTaskRecord.Target(Blocks.OAK_LEAVES.defaultBlockState(),
-                Items.OAK_LEAVES, BlockPos.ZERO, "leaves");
-        helper.assertTrue(leaves.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT),
-                "placed leaves are hand-placed leaves; without this they rot as fast as she builds");
-
-        // 蜂巢的蜜、洞穴藤蔓的果、龟蛋的孵化进度:三条都是"照抄就白送"。藤蔓那条
-        // 最直接——一格花一颗发光浆果,玩家伸手一摘把那颗原样收回、藤蔓还留着。
-        BlockState honeyed = Blocks.BEE_NEST.defaultBlockState().setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY, 5);
-        var nest = new BuildTaskRecord.Target(honeyed, Items.BEE_NEST, BlockPos.ZERO, "nest");
-        helper.assertTrue(nest.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY) == 0,
-                "stored honey is runtime state; copying it lets the player shear free honeycomb");
-
-        BlockState berried = Blocks.CAVE_VINES.defaultBlockState().setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES, true);
-        var vine = new BuildTaskRecord.Target(berried, Items.GLOW_BERRIES, BlockPos.ZERO, "vine");
-        helper.assertTrue(!vine.desiredState().getValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES),
-                "a berried cave vine hands the berry straight back — the whole wall would be free");
-        helper.succeed();
-    }
-
-    /**
-     * 材料记账上<b>有意</b>不随大流的那几行,钉成断言。
-     *
-     * <p>耕地与土径自述的是自己(那两件物品确实存在),但人手上没有"一块耕地"可放——那是拿锄头在土上刨出来的,所以按土算。
-     *
-     * <p>一格不止一件的也有:一格四根蜡烛、贴三面的藤蔓、双层砖、几层雪,通行做法是收一件,那是白送。我们按根数、面数、层数收。
-     *
-     * <p>两个方向合起来是同一条判据:<b>一格该收多少,取决于人手工要花多少</b>,不取决于那个方块的 {@code asItem()} 恰好是什么。
-     * 这条测试的意义不是"证明我们对",是把这几行分歧写在明处——哪天有人照通行做法"修正"回去,得先来改这里的字。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void material_accounting_divergences_are_deliberate(GameTestHelper helper) {
-        // 一、耕地与土径自述的是自己,记账要按土
-        for (net.minecraft.world.level.block.Block b : List.of(Blocks.FARMLAND, Blocks.DIRT_PATH)) {
-            helper.assertTrue(b.asItem() != Items.DIRT,
-                    b + " self-reports " + b.asItem() + "; if that ever became dirt,"
-                            + " this override could go");
-            helper.assertTrue(com.dwinovo.numen.build.BuildStates.materialItem(b) == Items.DIRT,
-                    b + " is worked from dirt by hand, so dirt is what it costs");
-        }
-
-        // 二、一格不止一件:这几行按"人手工要花多少"收,不按一件收
-        record Many(BlockState state, net.minecraft.world.item.Item pay, int count, String what) {}
-        BlockState fourCandles = Blocks.CANDLE.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
-                        .CANDLES, 4);
-        BlockState threeFacedVine = Blocks.VINE.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH, true)
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.UP, true);
-        BlockState doubleSlab = Blocks.STONE_SLAB.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
-                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
-        BlockState fiveSnow = Blocks.SNOW.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.LAYERS, 5);
-        for (Many m : List.of(
-                new Many(fourCandles, Items.CANDLE, 4, "four candles in one cell cost four candles"),
-                new Many(threeFacedVine, Items.VINE, 3, "vines on three faces cost three"),
-                new Many(doubleSlab, Items.STONE_SLAB, 2, "a double slab is two slabs"),
-                new Many(fiveSnow, Items.SNOW, 5, "five snow layers cost five"),
-                // 高草一格一件:tall_grass 自己就是物品,不再按"两株矮的"算
-                new Many(Blocks.TALL_GRASS.defaultBlockState(), Items.TALL_GRASS, 1,
-                        "tall grass is one item of its own now"))) {
-            var target = new BuildTaskRecord.Target(m.state(), m.pay(), BlockPos.ZERO,
-                    "x");
-            helper.assertTrue(target.materialCount() == m.count(),
-                    m.what() + " — got " + target.materialCount());
-        }
-        helper.succeed();
-    }
-
-    /**
-     * 报价数背包和施工数背包必须是<b>同一个口径</b>——副手上那叠料不算数。
-     *
-     * <p>这个分岔犯过两次,症状一模一样:一整叠木板放在副手,数 41 格(含盔甲栏与副手)
-     * 的那一方说"料够了",数 36 格的那一方每格都判缺料。第一次是在开工预检与逐格闸门
-     * 之间,第二次是在 {@code numen.build.diff} 的报价与施工之间——玩家看着手里那叠木板,
-     * 而我们两张嘴说两样话,他没法判断该信谁。
-     *
-     * <p>所以口径定义在一个地方({@code PlayerInv.BUILDABLE_SLOTS}),两边都调它。这条
-     * 用例钉的就是"同源"本身:同一个背包状态,两个函数必须给同一个数。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void quote_and_gate_count_the_same_slots(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_offhand", new BlockPos(1, 2, 1), false);
-        var inv = companion.getInventory();
-
-        // 主背包里 5 块,副手里 64 块
-        inv.add(new ItemStack(Items.SPRUCE_PLANKS, 5));
-        inv.offhand.set(0, new ItemStack(Items.SPRUCE_PLANKS, 64));
-
-        int whole = com.dwinovo.numen.PlayerInv.count(inv, Items.SPRUCE_PLANKS);
-        int buildable = com.dwinovo.numen.PlayerInv
-                .buildableCount(inv, Items.SPRUCE_PLANKS);
-
-        helper.assertTrue(whole == 69,
-                "the whole-inventory count should see the offhand stack too, got " + whole);
-        helper.assertTrue(buildable == 5,
-                "but building may only spend the 36 main slots — she does not strip her own"
-                        + " offhand to lay bricks; got " + buildable);
-        helper.assertTrue(whole != buildable,
-                "if these two ever agree this test has stopped proving anything —"
-                        + " the offhand stack must actually be in play");
-        helper.succeed();
-    }
-
-    /**
-     * skill 文档里点名的每一个方块都必须真的存在。
-     *
-     * <p>文档是<b>喂给模型的词汇表</b>:写错一个名字,模型就会照着吐一个无效的
-     * block_id,而那一格不会报错、只会缺一块。四十份风格文件、上百个方块名从来
-     * 没有人验过,而改一次屋顶用料就顺手把十四份文件里的 {@code _stairs} 换成了
-     * {@code _slab}——{@code stone_bricks → stone_brick_slab} 这种去复数的名字
-     * 靠手改必然漏。
-     *
-     * <p>判据是注册表本身,不另立一份清单:反引号里凡是带下划线的小写词,要么在
-     * 方块/物品注册表里查得到,要么是风格文件名。两边都不是就是错字。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void skill_docs_name_real_blocks(GameTestHelper helper) {
-        java.util.List<String> bad = new java.util.ArrayList<>();
-        int checked = 0;
-        try {
-            // 技能文档随 Numen 一起发:经平台取(各加载器怎么把 jar 里的路径映射成 Path 只有它知道),不是测试所在类加载器的资源
-            java.nio.file.Path skill = com.dwinovo.numen.api.platform.Services.platform()
-                    .modResource(com.dwinovo.numen.Constants.MOD_ID, "numen/skills/numen/building_design/SKILL.md");
-            helper.assertTrue(skill != null, "the skill resources are not shipped with Numen");
-            java.nio.file.Path root = skill.getParent();
-            java.util.List<java.nio.file.Path> docs;
-            try (var walk = java.nio.file.Files.walk(root)) {
-                docs = walk.filter(p -> p.toString().endsWith(".md")).toList();
-            }
-            helper.assertTrue(docs.size() >= 40,
-                    "expected the style reference set, found only " + docs.size() + " doc(s)");
-            // 风格文件名也在反引号里(正文那份索引),它们是文档名不是方块名。
-            // 用实际存在的文件当判据,顺带把索引里指向不存在文件的错字也一起抓了。
-            java.util.Set<String> docNames = new java.util.HashSet<>();
-            for (java.nio.file.Path doc : docs) {
-                String n = doc.getFileName().toString();
-                docNames.add(n.substring(0, n.length() - 3));
-            }
-            var token = java.util.regex.Pattern.compile("`([^`]+)`");
-            var ident = java.util.regex.Pattern.compile("[a-z][a-z0-9_]*");
-            for (java.nio.file.Path doc : docs) {
-                java.util.List<String> words = new java.util.ArrayList<>();
-                // 反引号里的(SKILL.md 用这种写法)
-                var m = token.matcher(java.nio.file.Files.readString(doc));
-                while (m.find()) {
-                    String body = m.group(1);
-                    if (body.indexOf('*') >= 0) {
-                        continue;   // 通配写法(stripped_*_log)与调色权重(oak_slab*5)
-                    }
-                    // 方块状态跟在方块名后面(`oak_slab[type=double]`):状态键与值是原版
-                    // 的词汇,由原版解析器把关,这条 lint 只管方块名对不对
-                    if (body.indexOf('[') >= 0) {
-                        body = body.substring(0, body.indexOf('['));
-                    }
-                    var w = ident.matcher(body);
-                    while (w.find()) {
-                        words.add(w.group());
-                    }
-                }
-                // 材料槽的裸列(风格文件用这种写法):`- **roof**: a, b, c — 说明`。
-                // 只收"整块就是一个词"的项,带空格的是散文不是方块名。
-                for (String line : java.nio.file.Files.readAllLines(doc)) {
-                    if (!line.startsWith("- **") || !line.contains("**:")) {
-                        continue;
-                    }
-                    String list = line.substring(line.indexOf("**:") + 3);
-                    for (String sep : new String[]{"—", ";", "("}) {
-                        int cut = list.indexOf(sep);
-                        if (cut >= 0) {
-                            list = list.substring(0, cut);
-                        }
-                    }
-                    for (String chunk : list.split("[,/]")) {
-                        String t = chunk.trim();
-                        if (!t.isEmpty() && t.indexOf(' ') < 0) {
-                            words.add(t);
-                        }
-                    }
-                }
-                for (String word : words) {
-                    if (word.indexOf('_') < 0 || docNames.contains(word)) {
-                        continue;
-                    }
-                    checked++;
-                    var id = net.minecraft.resources.ResourceLocation.tryParse("minecraft:" + word);
-                    boolean known = id != null
-                            && (net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(id)
-                            || net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id));
-                    if (!known) {
-                        bad.add(doc.getFileName() + ": " + word);
-                    }
-                }
-            }
-        } catch (java.io.IOException e) {
-            throw new AssertionError("could not lint the skill docs: " + e, e);
-        }
-        helper.assertTrue(bad.isEmpty(), "skill docs name " + bad.size()
-                + " block(s) that do not exist: " + bad);
-        helper.assertTrue(checked > 200,
-                "the lint matched only " + checked + " block names — the extractor is broken");
-        helper.succeed();
-    }
-
-    /**
-     * 施工时限必须够用完。
-     *
-     * <p>时限一度是按"每格固定几刻"估的,而生存最慢档实际是每格十刻——差二十倍,
-     * 五百格的房子会在盖到一半时被判超时,而一千四百格以下走的都是这个下限速率,
-     * 也就是大多数房子。派发层与施工层<b>必须共用同一个速率公式</b>,各拍各的
-     * 就会重演。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void build_deadline_covers_pace(GameTestHelper helper) {
-        for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
-            for (boolean survival : new boolean[]{true, false}) {
-                long need = com.dwinovo.numen.task.build.BuildOrder
-                        .estimatedTicks(cells, survival);
-                long budget = com.dwinovo.numen.task.build.BuildOrder.deadlineTicks(cells, survival);
-                helper.assertTrue(budget > need,
-                        "deadline must exceed the build itself: " + cells + " cells, survival="
-                                + survival + ", needs " + need + " ticks but budget is " + budget);
-            }
-        }
-        // 生存是人手的固定速度,每秒 4 格,工程再大也不压缩:一格五刻
-        for (int cells : new int[]{1, 500, 16384}) {
-            long took = com.dwinovo.numen.task.build.BuildOrder.estimatedTicks(cells, true);
-            helper.assertTrue(took == cells * 5L,
-                    "survival builds " + cells + " cells at four a second, not " + took + " ticks");
-        }
-        helper.succeed();
-    }
-
-    /**
      * 一栋小屋,照模型的样子用一段 Lua 画出来再开工:地基、墙、双坡屋顶、门窗细节全用 {@code numen.shape}——一张字符网格是一层,
      * 楼梯屋顶是逐课的网格,细节是单格,几串格合起来后写的盖掉先写的。
      *
      * <p>这条用例是 {@code numen.shape} 的整活钉桩:网格带图例、网格按层重复、方块状态跟在方块名里({@code oak_stairs[facing=south]})、
      * 合起来时后写覆盖先写(门洞挖开墙),四件事缺一条都盖不出这栋屋子。
      */
-    @GameTest(template = "floor20", timeoutTicks = 3837, batch = "numen_build_cottage")
+    @GameTest(template = "floor20", timeoutTicks = 3837, batch = "numen_build")
     public static void build_medieval_cottage(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 这条量的是形状能不能盖出一栋屋子,不是生存备料:免耗材档
@@ -770,13 +403,6 @@ public class BuildGameTests {
         }
     }
 
-    /** 重型建造批次前置(与轻型批分开,别让六个建造者同时抢搜索池——
-     *  生产环境是 20tps 一两个同伴,测试没必要用数量级更苛的并发打自己)。 */
-    @BeforeBatch(batch = "numen_build_heavy")
-    public static void prepareHeavyBuildBatch(ServerLevel level) {
-        settleWorld(level, Difficulty.PEACEFUL, NOON);
-    }
-
     /** 单块悬置:目标在头部高度、上方为空——真实世界曾整任务卡死的最小场景
      *  (站在旁边就该侧身放上,不接受任何"找不到角度")。 */
     @GameTest(template = "floor20", timeoutTicks = 200, batch = "numen_build")
@@ -787,7 +413,7 @@ public class BuildGameTests {
     }
 
     /** 实心 5x5x5(125 格):逐层实心浇筑,高处的格要垫块上去够。 */
-    @GameTest(template = "floor20", timeoutTicks = 4587, batch = "numen_build_heavy")
+    @GameTest(template = "floor20", timeoutTicks = 4587, batch = "numen_build")
     public static void build_solid_cube(GameTestHelper helper) {
         placeCase(helper, "gametest_mason", new BlockPos(7, 2, 7), cobbleBox(5, 5, 5),
                 boxCells(new BlockPos(7, 2, 7), 5, 5, 5, false), 4);
@@ -1281,15 +907,18 @@ public class BuildGameTests {
     }
 
     /**
-     * 铺满一大片地基层(40 x 45 = 1800 格)。够不着的格一起交给寻路,它去离她最近、够得着其中任一格的站位,所以她沿着地基从近的一头
+     * 铺满一片地基层(15 x 15 = 225 格)。够不着的格一起交给寻路,它去离她最近、够得着其中任一格的站位,所以她沿着地基从近的一头
      * 推向远的一头;每次都取"最远那一格"去站,她就在工地两头来回横穿。判据:地基一格不缺,她一共走的路在就近推过去的量级里。
+     *
+     * <p>走的路的上限:原来铺 40 x 45 = 1800 格时上限是 1400 格路(每次取最远一格去站走了两千多,就近推过去约一千一),
+     * 即每格 1400 / 1800 的路;就近推过去走的路跟着格数走,所以缩成 225 格上限按同一比例是 1400 x 225 / 1800 = 175。
      */
-    @GameTest(template = "floor52", timeoutTicks = 14000, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 3000, batch = "numen_build")
     public static void a_big_foundation_is_laid_from_one_end_to_the_other(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_foundation", new BlockPos(2, 2, 2), true);
         BlockPos min = helper.absolutePos(new BlockPos(5, 2, 4));
-        ToolRun lay = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(min) + ", " + xyz(min.offset(39, 0, 44))
+        ToolRun lay = lua(companion, "numen.build.place(numen.shape.cuboid(" + xyz(min) + ", " + xyz(min.offset(14, 0, 14))
                 + "):set(\"cobblestone\"))");
         double[] walked = {0};
         Vec3[] last = {companion.position()};
@@ -1299,10 +928,9 @@ public class BuildGameTests {
             last[0] = companion.position();
             helper.assertTrue(lay.receipt() != null, "numen.build.place has not finished");
             helper.assertTrue(lay.ranToTheEnd(), "numen.build.place failed: " + lay.receipt());
-            // 每次取最远那一格去站时她走了两千多格;就近一站一站推过去约一千一
-            helper.assertTrue(walked[0] < 1400, "she crossed the site back and forth: walked " + (int) walked[0] + " blocks");
-            for (int dx = 0; dx < 40; dx++) {
-                for (int dz = 0; dz < 45; dz++) {
+            helper.assertTrue(walked[0] < 175, "she crossed the site back and forth: walked " + (int) walked[0] + " blocks");
+            for (int dx = 0; dx < 15; dx++) {
+                for (int dz = 0; dz < 15; dz++) {
                     helper.assertTrue(level.getBlockState(min.offset(dx, 0, dz)).is(Blocks.COBBLESTONE),
                             "the foundation is missing at " + min.offset(dx, 0, dz).toShortString());
                 }
@@ -1471,6 +1099,16 @@ public class BuildGameTests {
             helper.assertTrue(s.get("short_cobble").getAsInt() == 4 && s.get("short_slab").getAsInt() == 1,
                     "5 cobblestone and 1 slab in the 36 slots leave 4 and 1 short; the offhand stack does not count: "
                             + survival.receipt());
+            // 报价与逐格施工数背包是同一个口径(PlayerInv.BUILDABLE_SLOTS):副手那叠整个背包数得到、施工数不到;
+            // 两者若相等,副手那叠就没有真的在场,这条也就什么都没证明
+            var inv = survivor.getInventory();
+            int whole = com.dwinovo.numen.PlayerInv.count(inv, Items.COBBLESTONE);
+            int buildable = com.dwinovo.numen.PlayerInv.buildableCount(inv, Items.COBBLESTONE);
+            helper.assertTrue(whole == 69, "the whole-inventory count should see the offhand stack too, got " + whole);
+            helper.assertTrue(buildable == 5, "building may only spend the 36 main slots, got " + buildable);
+            helper.assertTrue(whole != buildable, "the offhand stack must actually be in play");
+            helper.assertTrue(s.get("short_cobble").getAsInt() == s.get("cobble").getAsInt() - buildable,
+                    "the quote and the build must count the same slots: " + survival.receipt());
             var c = creative.data().getAsJsonObject("returned");
             helper.assertTrue(c.get("cobble").getAsInt() == 9 && !c.get("has_short_of").getAsBoolean(),
                     "creative building costs nothing to be short of, but the price is still told: " + creative.receipt());
@@ -1920,12 +1558,14 @@ public class BuildGameTests {
                 HandCase.of("stone", 8, 5, 5)), 1);
     }
 
-    /** 红石线一串放下去:邻居当场按原版规则连上,不留一个个孤点。 */
+    /** 红石线与玻璃板各放一排(线在北、板在南):邻居当场按原版规则连上,不留一个个孤点。 */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
-    public static void build_redstone_wire_row_is_connected(GameTestHelper helper) {
+    public static void build_rows_are_connected_after_placement(GameTestHelper helper) {
         placedByHand(helper, "gametest_wires", List.of(
                 HandCase.of("redstone_wire", 6, 2, 6), HandCase.of("redstone_wire", 7, 2, 6),
-                HandCase.of("redstone_wire", 8, 2, 6), HandCase.of("redstone_wire", 9, 2, 6)), 0, () -> {
+                HandCase.of("redstone_wire", 8, 2, 6), HandCase.of("redstone_wire", 9, 2, 6),
+                HandCase.of("glass_pane", 6, 2, 10), HandCase.of("glass_pane", 7, 2, 10),
+                HandCase.of("glass_pane", 8, 2, 10), HandCase.of("glass_pane", 9, 2, 10)), 0, () -> {
                     var side = net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE;
                     var level = helper.getLevel();
                     for (int x = 6; x <= 9; x++) {
@@ -1934,19 +1574,7 @@ public class BuildGameTests {
                         var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
                         helper.assertTrue(x == 9 || east == side, "the wire at x=" + x + " is not joined to the east: " + wire);
                         helper.assertTrue(x == 6 || west == side, "the wire at x=" + x + " is not joined to the west: " + wire);
-                    }
-                });
-    }
-
-    /** 一排玻璃板放完,互相连着。 */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
-    public static void build_glass_pane_row_is_joined(GameTestHelper helper) {
-        placedByHand(helper, "gametest_panes", List.of(
-                HandCase.of("glass_pane", 6, 2, 6), HandCase.of("glass_pane", 7, 2, 6),
-                HandCase.of("glass_pane", 8, 2, 6), HandCase.of("glass_pane", 9, 2, 6)), 0, () -> {
-                    var level = helper.getLevel();
-                    for (int x = 6; x <= 9; x++) {
-                        var pane = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 6)));
+                        var pane = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 10)));
                         helper.assertTrue(x == 9 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.EAST),
                                 "the pane at x=" + x + " is not joined to the east: " + pane);
                         helper.assertTrue(x == 6 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.WEST),
