@@ -19,8 +19,8 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 ```bash
 ./gradlew :numen:fabric:build :numen:neoforge:build
 ./gradlew :ai:test :script:test :agent:test :numen-api:common:test :numen:common:test
-./gradlew :numen:neoforge:runGameTestServer
 ./gradlew :numen:pathing:pathingBench -PpathingDataset=<目录>   # 寻路规划评测(纯 JVM,不要服务器;数据集在 Dwinovo/numen-pathfinding-benchmark,改寻路前后各跑一次,pathingBenchDiff 对比) / pathfinding planning benchmark (plain JVM, no server; dataset in Dwinovo/numen-pathfinding-benchmark; run before and after a pathing change, compare with pathingBenchDiff)
+./gradlew :numen:neoforge:runGameTestServer
 ./gradlew :numen:fabric:runGameTestServer
 ./gradlew :plugins:tlm:runGameTestServer      # 车万女仆联动的那一批,单开一次跑批 / the Touhou Little Maid integration cases, a run of their own
 ./gradlew :plugins:ysm:gametest:runGameTestServer  # YSM 联动的那一批,同样单开一次跑批 / the Yes Steve Model integration cases, also a run of their own
