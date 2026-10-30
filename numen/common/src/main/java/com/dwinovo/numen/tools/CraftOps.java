@@ -68,6 +68,11 @@ public final class CraftOps {
     public static Crafted craft(ResourceLocation id, int want, NumenPlayer self) {
         ServerLevel level = self.serverLevel();
         RecipeHolder<?> found = level.getRecipeManager().byKey(id).orElse(null);
+        if (found != null && !RecipeBook.isCrafting(found.value())) {
+            throw new ApiError(ErrorKind.FAILED, "recipe " + id + " is not made in a crafting grid: its category is "
+                    + RecipeBook.categoryOf(found.value()),
+                    "numen.inv.recipes(item) shows how it is made and at which station");
+        }
         if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
                 || ingredientsOf(recipe).isEmpty()) {
             throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,

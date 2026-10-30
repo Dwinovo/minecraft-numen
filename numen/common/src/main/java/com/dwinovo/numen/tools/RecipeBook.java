@@ -61,9 +61,9 @@ public final class RecipeBook {
 
     /**
      * 在合成格里做的配方:类型是原版的合成。模组机器的配方也可以实现 {@code CraftingRecipe}(类型是它自己的),那不是在合成格里做的,
-     * 照别的类型只给类型、输入与产物。
+     * 照别的类型只给类型、输入与产物。配方书描述合成配方与 {@code numen.inv.craft} 认合成配方,都问这一处。
      */
-    private static boolean isCrafting(Recipe<?> recipe) {
+    static boolean isCrafting(Recipe<?> recipe) {
         return recipe instanceof CraftingRecipe && recipe.getType() == RecipeType.CRAFTING;
     }
 

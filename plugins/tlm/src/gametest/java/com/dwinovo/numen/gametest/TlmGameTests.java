@@ -330,7 +330,7 @@ public class TlmGameTests {
 
     /**
      * 模组自己的配方类型(祭坛)也经通用的 {@code numen.inv.recipes} 读得到:一条做出物品的祭坛配方,照它的产物去查,
-     * 列出来的那一条带着祭坛的类别、同一个配方 id 与它的输入;祭坛的配方类是合成配方,但不在合成格里做,所以没有"装得下的格"。
+     * 列出来的那一条带着祭坛的类别、同一个配方 id 与它的输入;祭坛的配方类是合成配方,但不在合成格里做,所以没有"装得下的格",合成函数也不认它。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
     public static void a_mods_recipe_type_is_listed_by_the_generic_recipe_verb(GameTestHelper helper) {
@@ -341,6 +341,7 @@ public class TlmGameTests {
                 .getKey(altar.value().getResult().getItem()).toString();
 
         ToolRun recipes = lua(her, "numen.inv.recipes(\"" + product + "\")");
+        ToolRun crafted = lua(her, "numen.inv.craft(\"" + altar.id() + "\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipes.succeeded(), "recipes of the altar's product failed: " + recipes.reply());
@@ -352,6 +353,8 @@ public class TlmGameTests {
                         && recipe.getAsJsonArray("ingredients").size() > 0 && !recipe.has("grid");
             }
             helper.assertTrue(listed, "the altar recipe " + altar.id() + " is not listed: " + recipes.reply());
+            helper.assertTrue(!crafted.succeeded() && crafted.outcome().contains("touhou_little_maid:altar_recipe"),
+                    "the crafting grid took an altar recipe: " + crafted.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
     }
