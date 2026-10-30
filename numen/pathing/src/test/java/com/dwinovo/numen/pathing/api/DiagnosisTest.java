@@ -52,4 +52,27 @@ class DiagnosisTest {
         assertTrue(breathless.held() > 310 && breathless.held() < 330, "要憋的刻数:" + breathless.held());
         assertEquals(300 - (int) Breath.RESERVE, breathless.spare());
     }
+
+    /** 一道基岩墙挡在身前,口在二十格外,只许展开两百个节点:搜不到口就用完了——诊断说"预算用完",不说无路。 */
+    @Test
+    void runningOutOfBudgetIsOutOfBudgetNotNoRoute() {
+        TestWorld world = new TestWorld().floor(0, 0, 40, 39, Y - 1);
+        world.fill(10, Y, 0, 10, Y + 2, 33, Blocks.BEDROCK.defaultBlockState());
+        Search search = new Search(world, Fixtures.model(RouteSpec.defaults()), new BlockPos(8, Y, 15), Goals.at(new BlockPos(13, Y, 15)), 200,
+                Favoring.NONE);
+        SearchResult failed = AStar.run(search, () -> false);
+        assertEquals(SearchResult.Stop.BUDGET, failed.stop());
+        assertInstanceOf(Outcome.OutOfBudget.class, Diagnosis.of(failed.stop(), failed.breathless(), search, failed.blocking(), () -> false));
+    }
+
+    /** 去处在加载区块之外:走得到的都搜过了,路却伸出了快照、那边是什么不知道——诊断说"未加载",不说无路或预算用完。 */
+    @Test
+    void aRouteIntoUnloadedChunksIsUnloaded() {
+        TestWorld world = new TestWorld().floor(0, 0, 40, 3, Y - 1).loadedWithin(0);
+        Search search = new Search(world, Fixtures.model(RouteSpec.defaults()), new BlockPos(1, Y, 1), Goals.at(new BlockPos(40, Y, 1)), Fixtures.BUDGET,
+                Favoring.NONE);
+        SearchResult failed = AStar.run(search, () -> false);
+        assertEquals(SearchResult.Stop.UNLOADED, failed.stop());
+        assertInstanceOf(Outcome.Unloaded.class, Diagnosis.of(failed.stop(), failed.breathless(), search, failed.blocking(), () -> false));
+    }
 }

@@ -78,6 +78,26 @@ class ArrivalTest {
                 Arrival.judge(use, world, SURVIVAL, here, elsewhere, SURVIVAL.blockReach()));
     }
 
+    /**
+     * 工作台摆在一块石头上,只有西面敞开;列好站位之后,正对西面的那一格(半空,不是站位)被放上一块玻璃:走到了搜索挑的站位,在世界上复核时
+     * 看不见它,不报到达,是"看不见"。
+     */
+    @Test
+    void sightBlockedAfterPlanningIsNotArrival() {
+        TestWorld world = new TestWorld().floor(-4, -4, 20, 8, Y - 1);
+        BlockPos table = new BlockPos(10, Y + 1, 5);
+        world.set(new BlockPos(10, Y, 5), Blocks.STONE.defaultBlockState()).set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        for (BlockPos glass : new BlockPos[] {new BlockPos(10, Y + 1, 4), new BlockPos(10, Y + 1, 6), new BlockPos(11, Y + 1, 5),
+                new BlockPos(10, Y + 2, 5)}) {
+            world.set(glass, Blocks.GLASS.defaultBlockState());
+        }
+        Goal use = Goals.use(world, SURVIVAL, table);
+        BlockPos here = new BlockPos(8, Y, 5);
+        assertInstanceOf(Arrival.Verdict.Arrived.class, Arrival.judge(use, world, SURVIVAL, here, eye(here), SURVIVAL.blockReach()));
+        world.set(new BlockPos(9, Y + 1, 5), Blocks.GLASS.defaultBlockState());
+        assertEquals(new Arrival.Verdict.Blind(table), Arrival.judge(use, world, SURVIVAL, here, eye(here), SURVIVAL.blockReach()));
+    }
+
     @Test
     void passingThroughIsJustBeingInsideTheGoal() {
         BlockPos goalCell = new BlockPos(5, Y, 0);
