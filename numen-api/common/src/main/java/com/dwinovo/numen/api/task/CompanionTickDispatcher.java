@@ -262,6 +262,21 @@ public final class CompanionTickDispatcher {
         return target;
     }
 
+    /**
+     * 一种活的执行器撤回了(它的插件关了或重载了):正在跑的这种活全部叫停,原因是 {@link TaskRecord.StopCause#PLUGIN_WITHDRAWN}。
+     * 执行器撤了、跑着的活还接着跑,它留在门外的东西(发事件用的门)就会在下一刻抛出来;所以一个插件的活不会比它的作用域活得久。
+     * 服务端主线程。
+     */
+    static void cancelOfType(Class<? extends TaskRecord<?>> type) {
+        for (CompanionBrain brain : BRAINS.values()) {
+            for (TaskSlot slot : new TaskSlot[] {brain.current, brain.sync}) {
+                if (type.isInstance(slot.record())) {
+                    slot.cancel(TaskRecord.StopCause.PLUGIN_WITHDRAWN);
+                }
+            }
+        }
+    }
+
     /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick).
      *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
      *  the explicit-hold session dies with the task it served (constitution §5). */

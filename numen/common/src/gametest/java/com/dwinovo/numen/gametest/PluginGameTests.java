@@ -299,6 +299,14 @@ public class PluginGameTests {
                 .thenExecute(() -> held.set(lua(companion, "gt_dyn.dyn.hold()")))
                 .thenWaitUntil(() -> helper.assertTrue(held.get().succeeded(),
                         "the switched-on plugin's task did not run: " + held.get().outcome()))
+                // 她手上正跑着这个插件的活时插件被关掉:活被叫停、说是因为插件关了,不会留着去碰已经过期的门
+                .thenExecute(() -> held.set(lua(companion, "gt_dyn.dyn.hold()")))
+                .thenExecute(() -> com.dwinovo.numen.api.NumenPlugins.roster().setDisabled("gt_dyn", true))
+                .thenWaitUntil(() -> helper.assertTrue(held.get().done() && !held.get().succeeded()
+                                && held.get().outcome().contains("switched off or reloaded"),
+                        "the running task of a switched-off plugin was not stopped for that reason: "
+                                + held.get().outcome()))
+                .thenExecute(() -> com.dwinovo.numen.api.NumenPlugins.roster().setDisabled("gt_dyn", false))
                 .thenExecute(() -> CompanionFactory.despawn(server, companion))
                 .thenSucceed();
     }

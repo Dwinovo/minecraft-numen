@@ -43,12 +43,16 @@ public final class TaskFactory {
     /**
      * Register the runner for a concrete record type. Tick-thread + init safe.
      *
-     * @return the handle that takes this runner out again (only if it is still the one registered for the type);
-     *         a record of the type that is still around afterwards falls back to {@link UnsupportedTask}
+     * @return the handle that takes this runner out again (only if it is still the one registered for the type) and stops
+     *         the tasks of that type still running: a task must not outlive the plugin that provides it
      */
     public static <R extends TaskRecord<?>> Handle register(Class<R> type, Runner<R> runner) {
         RUNNERS.put(type, runner);
-        return () -> RUNNERS.remove(type, runner);
+        return () -> {
+            if (RUNNERS.remove(type, runner)) {
+                CompanionTickDispatcher.cancelOfType(type);
+            }
+        };
     }
 
     /** How many record types are currently registered. */
