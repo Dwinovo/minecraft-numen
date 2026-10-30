@@ -177,6 +177,11 @@ public final class LuaCodecs {
         return CLASSES.get(name);
     }
 
+    /** 一串同一种的值({@code T[]})的值转换:代码写的函数描述({@link FunctionBuilder})用它写列表类型的参数与返回。 */
+    public static <T> Codec<List<T>> listOf(Codec<T> item) {
+        return new ListCodec<>(item);
+    }
+
     /**
      * 这个 Java 类型的值转换:登记了的、内置的,或按它的样子现造(record、枚举、{@code List}、{@code Map<String, T>})。
      *
