@@ -1,6 +1,6 @@
 # 0015 KubeJS 联动:脚本里写的插件,和 Java 插件走同一扇门
 
-- 状态:已接受,未落地
+- 状态:已接受,已落地(实现说明见文末)
 - 日期:2026-10-31
 - 另见:control 0014(登记归属与撤回)、control 0009(Lua API 登记)、issue #108
 
@@ -30,3 +30,19 @@
 - Numen 本体只管原版与接口,第三方兼容交给社区。
 - 要 Mixin 才做得到的仍得写 Java 插件。
 - 脚本写的函数质量参差;体检报告(`ApiTester.lint`)与 Java 插件一样跑在脚本插件上。
+
+## 实现说明
+
+- 模块 `plugins/kubejs`(只 NeoForge,编译只引用 KubeJS 与 Rhino 的接口,`kubejs-neoforge:2101.7.2-build.379`):类与资源和别的内嵌联动一样平铺进成品 jar。
+  发现不经 Numen 的闸门——KubeJS 读各模组 jar 根上的 `kubejs.plugins.txt` 找到 `NumenKubeJSPlugin`,KubeJS 在场才会读,Numen 的 `Builtin` 里没有它的一行。
+- 脚本接口:事件组 `NumenEvents`,服务端事件 `register`(`event.plugin(名字空间, plugin => …)`)。声明只是记录;每次服务端脚本加载完
+  (`KubeJSPlugin.afterScriptsLoaded`,启动与 `/reload` 同一条路)先把上一批脚本插件逐个 `PluginRoster.withdraw`,再发事件、对声明的每个插件
+  `NumenPlugins.admit(SCRIPT, …)` 加 `NumenPlugins.register`——只经 0014 的两个操作,没有专为 KubeJS 开的路。
+- 函数用 0014 的描述写(`ApiFunction.builder`),类型名 `string`/`integer`/`number`/`boolean`/`block`/`item`/`id`/`pos` 加 `[]` 对应 `LuaCodecs` 里的值转换;
+  `summary` 与每个参数的说明在脚本这一层必填(缺了登记那个函数时就抛,点名缺什么),Java 一侧的生产者仍只拦硬错误、写法交给 lint。
+- 失败隔离:一个插件的声明回调抛了,只它记为失败(`NumenPlugins.failed`),原因写进 KubeJS 控制台;登记抛了同样;别的脚本插件照常。
+  脚本插件与 Java 插件同名的,`admit` 拒绝(一个来源的 id 不让另一种来源往里加登记)。
+- 动世界:`ScriptCall` 只有四个受权的动作(`useEntity`、`attack`、`useBlock`、`breakBlock`),都先 `ServerCall.authorize` 过权限层,放行才跑脚本给的那一段,
+  `call.report` 说的话随结果写进回执。0014 的 `GatedAct` 是按刻推进的活用的积木;脚本函数是一次调用(`Pending`),用的是它的调用级对应物
+  `ServerCall.authorize`,两者都只是权限层的判与问,没有第二套裁决。这条没有照 ADR 原文"脚本也用 GatedAct"写,理由是脚本不持有按刻推进的活。
+- 第一个真实用例 TaCZ 开枪还没做:枪是"远程攻击"这个已有动作上的新名词,要先在 numen-api 开远程武器的扩展点(见提案),再用脚本接枪。
