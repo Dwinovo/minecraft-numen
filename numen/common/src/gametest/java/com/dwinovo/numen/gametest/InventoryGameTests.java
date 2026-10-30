@@ -361,13 +361,20 @@ public class InventoryGameTests {
         });
     }
 
-    /** 卸甲:头盔和靴子一起脱下来收进背包,两个槽都空了,回执点名脱了哪两件。 */
+    /**
+     * 卸甲:{@code slot = "armor"} 时头盔和靴子一起脱下来收进背包,两个槽都空了,回执点名脱了哪两件;{@code --slot} 不写就是盔甲
+     * (四件甲),头盔卸进背包,手上的剑不动。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void unequip_armor_takes_every_piece_off(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_undresser", new BlockPos(4, 2, 4), false);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"armor\"})");
+        NumenPlayer vague = spawnAt(helper, "gametest_vague", new BlockPos(11, 2, 11), false);
+        vague.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        vague.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+        ToolRun noSlot = lua(vague, "numen.gear.remove()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
@@ -380,7 +387,15 @@ public class InventoryGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1
                             && companion.getInventory().countItem(Items.IRON_BOOTS) == 1,
                     "the armor did not go into her inventory");
+            helper.assertTrue(noSlot.done(), "gear remove has not replied");
+            helper.assertTrue(noSlot.succeeded() && noSlot.outcome().contains("took off iron_helmet (head)"),
+                    "gear remove without a slot did not take the armor off: " + noSlot.outcome());
+            helper.assertTrue(vague.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                            && vague.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the helmet did not go into the backpack");
+            helper.assertTrue(vague.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+            CompanionFactory.despawn(helper.getLevel().getServer(), vague);
         });
     }
 
@@ -420,32 +435,17 @@ public class InventoryGameTests {
         });
     }
 
-    /** 卸甲不说卸哪个槽:{@code --slot} 不写就是盔甲(四件甲),头盔卸进背包,手上的剑不动。 */
+    /**
+     * 穿戴的参数写不通就退回:armor 只是卸下的别名(四件甲),穿戴没有这个目标,按参数错误退回,头盔还在背包里;不说穿什么,这一行写不通,
+     * 当场失败并附上 numen.gear.wear 的用法,不派活。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void unequip_without_a_slot_takes_off_the_armor(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_vague", new BlockPos(4, 2, 4), false);
-        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
-        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
-        ToolRun unequip = lua(companion, "numen.gear.remove()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not replied");
-            helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("took off iron_helmet (head)"),
-                    "gear remove without a slot did not take the armor off: " + unequip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
-                            && companion.getInventory().countItem(Items.IRON_HELMET) == 1,
-                    "the helmet did not go into the backpack");
-            helper.assertTrue(companion.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** armor 只是卸下的别名(四件甲),穿戴没有这个目标:按参数错误退回,头盔还在背包里。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void wear_into_the_armor_alias_is_rejected(GameTestHelper helper) {
+    public static void wear_with_bad_arguments_is_rejected(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_overdresser", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_HELMET));
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:iron_helmet\", {slot = \"armor\"})");
+        NumenPlayer bare = spawnAt(helper, "gametest_emptyhanded", new BlockPos(11, 2, 11), false);
+        ToolRun noItem = lua(bare, "numen.gear.wear()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not replied");
@@ -454,34 +454,27 @@ public class InventoryGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1
                             && companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty(),
                     "the helmet moved anyway");
+            helper.assertTrue(noItem.done() && noItem.task() == null, "gear wear has not replied, or dispatched work");
+            helper.assertTrue(!noItem.succeeded() && noItem.outcome().contains("usage: numen.gear.wear(item, {slot=…})"),
+                    "the rejection does not show the usage: " + noItem.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 穿戴不说穿什么:这一行写不通,当场失败并附上 numen.gear.wear 的用法,不派活。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void wear_without_an_item_is_rejected(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_emptyhanded", new BlockPos(4, 2, 4), false);
-        ToolRun equip = lua(companion, "numen.gear.wear()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done() && equip.task() == null, "gear wear has not replied, or dispatched work");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("usage: numen.gear.wear(item, {slot=…})"),
-                    "the rejection does not show the usage: " + equip.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+            CompanionFactory.despawn(helper.getLevel().getServer(), bare);
         });
     }
 
     /**
-     * 拿水桶不等于倒水:她低头对着地面,numen.gear.hold water_bucket 只把桶拿到主手,地上没有水、桶里的水还在。
-     * 倒水是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
+     * 拿东西不等于用东西:她低头对着地面,numen.gear.hold water_bucket 只把桶拿到主手,地上没有水、桶里的水还在;numen.gear.hold snowball
+     * 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。倒水、扔雪球都是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void equip_a_water_bucket_does_not_pour_it(GameTestHelper helper) {
+    public static void holding_an_item_never_uses_it(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_waterbearer", new BlockPos(4, 2, 4), false);
         companion.setXRot(90f);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:water_bucket\")");
+        NumenPlayer keeper = spawnAt(helper, "gametest_snowkeeper", new BlockPos(11, 2, 11), false);
+        keeper.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        ToolRun hold = lua(keeper, "numen.gear.hold(\"minecraft:snowball\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear hold has not finished");
@@ -493,27 +486,16 @@ public class InventoryGameTests {
             for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, -2, -3), feet.offset(3, 2, 3))) {
                 helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty(), "water was poured at " + p);
             }
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 拿雪球不等于扔雪球:numen.gear.hold snowball 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void equip_a_snowball_does_not_throw_it(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_snowkeeper", new BlockPos(4, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
-        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:snowball\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear hold has not finished");
-            helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
-                    "the reply does not say the snowball is in her main hand: " + equip.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.SNOWBALL) == 4,
-                    "a snowball left her inventory: " + companion.getInventory().countItem(Items.SNOWBALL));
+            helper.assertTrue(hold.done(), "gear hold has not finished");
+            helper.assertTrue(hold.succeeded() && hold.outcome().contains("main hand"),
+                    "the reply does not say the snowball is in her main hand: " + hold.outcome());
+            helper.assertTrue(keeper.getInventory().countItem(Items.SNOWBALL) == 4,
+                    "a snowball left her inventory: " + keeper.getInventory().countItem(Items.SNOWBALL));
             helper.assertTrue(helper.getLevel().getEntitiesOfClass(
                             net.minecraft.world.entity.projectile.Snowball.class,
-                            companion.getBoundingBox().inflate(16)).isEmpty(), "a snowball was thrown");
+                            keeper.getBoundingBox().inflate(16)).isEmpty(), "a snowball was thrown");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+            CompanionFactory.despawn(helper.getLevel().getServer(), keeper);
         });
     }
 

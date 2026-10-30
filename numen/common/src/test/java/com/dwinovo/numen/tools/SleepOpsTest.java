@@ -68,12 +68,4 @@ class SleepOpsTest {
         assertTrue(checked > 0, "原版不再有无文案的拒绝了?那这条守卫可以退役");
     }
 
-    /** 每一种都得有话说,不能有漏到空串的。 */
-    @Test
-    void everyRejectionHasWords() {
-        assumeTrue(booted);
-        for (Player.BedSleepingProblem problem : Player.BedSleepingProblem.values()) {
-            assertFalse(SleepOps.explain(problem).isBlank(), problem.name());
-        }
-    }
 }

@@ -203,19 +203,25 @@ public class TaskControlGameTests {
 
     /**
      * 查、定表、叫停都只是 {@code task} 组的函数:工具表里只有跑程序的那一个,没有 task_status、set_timer、task_stop。
-     * 走在路上时 numen.task.status 照样报出这件活与挂着的表。
+     * 走在路上时 numen.task.status 照样报出这件活与挂着的表;点名不存在的编号叫停,拒绝里列出还挂着的表,表都还在。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void task_status_and_set_timer_are_commands_only(GameTestHelper helper) {
+    public static void task_status_and_stop_are_commands_only(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_asked", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(far) + ")");
         ToolRun timer = lua(companion, "numen.task.timer(\"turn the compost\", {after = 600})");
         AtomicReference<ToolRun> status = new AtomicReference<>();
+        NumenPlayer refused = spawnAt(helper, "gametest_twice_refused", new BlockPos(6, 2, 2), false);
+        ToolRun cellarTimer = lua(refused, "numen.task.timer(\"air out the cellar\", {after = 600})");
+        ToolRun viaTool = lua(refused, "numen.task.stop({task_id = \"t9999\"})");
+        ToolRun viaCommand = lua(refused, "numen.task.stop({task_id = \"t9999\"})");
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
                 .thenExecuteAfter(3, () -> status.set(lua(companion, "numen.task.status()")))
+                .thenWaitUntil(() -> helper.assertTrue(cellarTimer.done() && viaTool.done() && viaCommand.done(),
+                        "the timer and the refused stops have not answered"))
                 .thenExecute(() -> {
                     helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null
                                     && ToolRegistry.get("task_stop") == null,
@@ -227,29 +233,18 @@ public class TaskControlGameTests {
                                     && status.get().reply().contains(walk.task().publicId())
                                     && status.get().reply().contains("turn the compost"),
                             "task status does not name the walk and the timer: " + status.get().reply());
+                    helper.assertTrue(cellarTimer.succeeded(), "the timer failed: " + cellarTimer.reply());
+                    helper.assertTrue(!viaTool.succeeded() && viaTool.reply().contains("air out the cellar"),
+                            "the refusal does not list what is pending: " + viaTool.reply());
+                    helper.assertTrue(viaTool.reply().equals(viaCommand.reply()),
+                            "the tool and the command refuse differently: " + viaTool.reply() + " / "
+                                    + viaCommand.reply());
+                    helper.assertTrue(TimerRegistry.get(helper.getLevel().getServer()).list(refused.getUUID()).size() == 1,
+                            "a refused stop removed the timer");
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), refused);
                 })
                 .thenSucceed();
-    }
-
-    /** 同源:点名不存在的编号,工具与命令的拒绝一字不差,表都还在。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void task_stop_refuses_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_twice_refused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = lua(companion, "numen.task.timer(\"air out the cellar\", {after = 600})");
-        ToolRun viaTool = lua(companion, "numen.task.stop({task_id = \"t9999\"})");
-        ToolRun viaCommand = lua(companion, "numen.task.stop({task_id = \"t9999\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
-            helper.assertTrue(!viaTool.succeeded() && viaTool.reply().contains("air out the cellar"),
-                    "the refusal does not list what is pending: " + viaTool.reply());
-            helper.assertTrue(viaTool.reply().equals(viaCommand.reply()),
-                    "the tool and the command refuse differently: " + viaTool.reply() + " / " + viaCommand.reply());
-            helper.assertTrue(TimerRegistry.get(helper.getLevel().getServer()).list(companion.getUUID()).size() == 1,
-                    "a refused stop removed the timer");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 
     /**

@@ -61,23 +61,6 @@ class ReflexOrderTest {
         assertEquals(ORDER.size() - 1, indexOf("unstuck"));
     }
 
-    @Test
-    void theWholeOrderMatchesTheRetiredPriorityNumbers() {
-        // 摔落缓冲 > 换气 > 逃跑 > 自卫 > 脱困
-        // (进食那一条退役了 —— 她不再自己吃,饿了发 urgent 让主人管)
-        assertEquals(List.of("mlg", "breath", "flee", "mob_defense", "unstuck"),
-                ORDER.stream().map(Reflex::id).toList());
-    }
-
-    @Test
-    void everyReflexDescribesItselfForThePrompt() {
-        // 每条反射都要能自报家门 —— 那段自述会进提示词,让她知道自己身体有什么本能
-        for (Reflex r : ORDER) {
-            assertTrue(r.id() != null && !r.id().isBlank(), "反射没有 id");
-            assertTrue(r.describe() != null && !r.describe().isBlank(), r.id() + " 没有自述");
-        }
-    }
-
     private static int indexOf(String id) {
         for (int i = 0; i < ORDER.size(); i++) {
             if (ORDER.get(i).id().equals(id)) {

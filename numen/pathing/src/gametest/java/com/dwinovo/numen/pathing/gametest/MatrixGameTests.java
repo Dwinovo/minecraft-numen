@@ -148,27 +148,22 @@ public class MatrixGameTests {
         run(helper, scenes(MatrixCatalog.hazards(), DRY, List.of(Where.DEST, Where.SIDES), 0));
     }
 
-    /** 场景转三个四分之一圈(西、南、北):每个家族挑几种朝向敏感的方块,四个方向都走一遍。 */
+    /** 转起来的样子每个家族取前这么多种:同一家族里朝向不同的几种,转过四个方向就把绝对方向都走全了。 */
+    private static final int TURNING_PER_FAMILY = 2;
+
+    /**
+     * 场景转三个四分之一圈(西、南、北),四个方向都走一遍。只转方块状态里带朝向的样子({@link Variant#oriented}),没有朝向的在各家族的
+     * 用例里已经走过,转起来不会多走出什么。
+     */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = LIMIT + 200)
     public static void matrix_rotated(GameTestHelper helper) {
-        List<Variant> picks = new ArrayList<>();
-        pick(picks, MatrixCatalog.slabs(), "slab_bottom", "slab_top");
-        pick(picks, MatrixCatalog.stairs(), "stair_bottom_e", "stair_top_s");
-        pick(picks, MatrixCatalog.doors(), "oak_door_shut_e", "oak_door_open_s");
-        pick(picks, MatrixCatalog.trapdoors(), "oak_trapdoor_bottom_shut", "oak_trapdoor_top_open_e");
-        pick(picks, MatrixCatalog.fences(), "oak_fence", "fence_gate_shut_e");
-        pick(picks, MatrixCatalog.thin(), "carpet", "snow_4");
-        pick(picks, MatrixCatalog.floors(), "soul_sand");
-        pick(picks, MatrixCatalog.low(), "bed", "chest");
-        run(helper, scenes(picks, both(), 1, 2, 3));
-    }
-
-    private static void pick(List<Variant> into, List<Variant> from, String... names) {
-        for (Variant variant : from) {
-            if (List.of(names).contains(variant.name())) {
-                into.add(variant);
-            }
+        List<Variant> turning = new ArrayList<>();
+        for (List<Variant> family : List.of(MatrixCatalog.slabs(), MatrixCatalog.stairs(), MatrixCatalog.doors(),
+                MatrixCatalog.trapdoors(), MatrixCatalog.fences(), MatrixCatalog.thin(), MatrixCatalog.floors(),
+                MatrixCatalog.low())) {
+            turning.addAll(family.stream().filter(Variant::oriented).limit(TURNING_PER_FAMILY).toList());
         }
+        run(helper, scenes(turning, both(), 1, 2, 3));
     }
 
     /** 许挖许放、身上有镐有料:垫柱往上垫(头顶有东西压着、脚下是各种方块),向下挖穿各种方块。 */

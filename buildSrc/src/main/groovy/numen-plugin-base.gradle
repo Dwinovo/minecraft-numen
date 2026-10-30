@@ -47,12 +47,12 @@ dependencies {
 
 /*
  * API 体检报告:联动登记的函数与技能里写着的每一行调用,经 ApiTester.lint 查一遍,写进 build/reports(Numen 的
- * ApiLintReport),不拦构建。
+ * ApiLintReport),不拦构建;Gradle 任务 apiLintReport,不是测试。
  *
- * 测试跑在 Numen 单测的原版环境里,不跑在本模块的加载器环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来
+ * 报告跑在 Numen 单测的原版环境里,不跑在本模块的加载器环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来
  * (Bootstrap 要 LoadingModList),而体检只要原版、Numen 登记的函数与联动自己的登记代码。目标模组不在场,
- * 也不需要在场——测试不经 Builtin 的闸门、不假装模组已装,只执行联动登记函数的那一段(同一个 install,经同一扇
- * NumenPlugins 的门),那一段只碰 Numen API。联动的组只进它自己这个测试进程,不混进 Numen 的单测。
+ * 也不需要在场——它不经 Builtin 的闸门、不假装模组已装,只执行联动登记函数的那一段(同一个 install,经同一扇
+ * NumenPlugins 的门),那一段只碰 Numen API。联动的组只进它自己这个进程,不混进 Numen 的单测。
  */
 def numenTests = { project(':numen:common').sourceSets.test }
 sourceSets.test {
@@ -68,4 +68,12 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // 联动可以一个单测也没有:src/test 里只放着体检报告的入口(下面的 ApiLint),那不是测试
+    failOnNoDiscoveredTests = false
+}
+
+// 报告的入口是联动包里的 ApiLint(没有就不登记,如 curios);任务定义见 numen-api-lint
+if (file("src/test/java/com/dwinovo/numen/plugins/${project.name}/ApiLint.java").exists()) {
+    pluginManager.apply('numen-api-lint')
+    tasks.named('apiLintReport') { mainClass = "com.dwinovo.numen.plugins.${project.name}.ApiLint" }
 }

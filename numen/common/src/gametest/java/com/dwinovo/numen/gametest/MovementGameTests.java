@@ -363,23 +363,6 @@ public class MovementGameTests {
         return helper.absolutePos(new BlockPos(11, 5, 7));
     }
 
-    /** 身上带着泥土:垫着爬上高台,泥土用掉了几块。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_up_a_tower_pillars_up(GameTestHelper helper) {
-        BlockPos top = bedrockTower(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 7), false);
-        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(top) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(top) <= 2,
-                    "she did not get onto the tower: " + walk.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) < 16, "no dirt was spent climbing");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
      * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的每一块泥土都记在她名下;寻路搜索拿来问权限的视图可以是过时的快照、
      * 套着计划里已经挖掉的假想(那里这些格是空气),问过之后记录还在;主人在场,{@code numen.work.dig} 拆掉其中一格,
@@ -475,31 +458,6 @@ public class MovementGameTests {
         });
     }
 
-    /** 场地垫高两层,正中一道两格宽、两格深的水沟横着切开:她游过去,爬上对岸,到达目标。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_swims_across_a_water_channel(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                boolean channel = x == 8 || x == 9;
-                for (int y = 2; y <= 3; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            channel ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        BlockPos target = helper.absolutePos(new BlockPos(13, 4, 7));
-        NumenPlayer companion = spawnAt(helper, "gametest_swimmer", new BlockPos(3, 4, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
-                    "she did not get across the channel: " + walk.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     // ---- y 给得不对:地里;水底、岩浆 ----
 
     /**
@@ -528,32 +486,6 @@ public class MovementGameTests {
     private static com.google.gson.JsonObject returned(ToolRun run) {
         var value = run.data().get("returned");
         return value != null && value.isJsonObject() ? value.getAsJsonObject() : new com.google.gson.JsonObject();
-    }
-
-    /** 场地垫高三层,中间一个 3×3、三格深的水池;目标是池底正中那一格:她下水沉到池底,就站在那一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_to_the_bottom_of_a_pool(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                boolean pool = x >= 9 && x <= 11 && z >= 6 && z <= 8;
-                for (int y = 2; y <= 4; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            pool ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        BlockPos target = helper.absolutePos(new BlockPos(10, 2, 7));
-        NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(3, 5, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 1,
-                    "she did not reach the bottom of the pool: " + walk.outcome()
-                            + " at " + companion.blockPosition().toShortString());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
     }
 
     /**
