@@ -14,6 +14,12 @@ public final class PluginRosterFixture {
 
     private static boolean installed;
 
+    /** 什么都不做的门:只验花名册的账与撤回,登记本身不是那里的事。 */
+    public static final java.util.function.Function<com.dwinovo.numen.api.agent.scope.Scope, com.dwinovo.numen.api.NumenApi>
+            INERT_DOORS = scope -> (com.dwinovo.numen.api.NumenApi) java.lang.reflect.Proxy.newProxyInstance(
+                    PluginRosterFixture.class.getClassLoader(), new Class<?>[] {com.dwinovo.numen.api.NumenApi.class},
+                    (proxy, method, args) -> null);
+
     private PluginRosterFixture() {}
 
     public static synchronized void install() {

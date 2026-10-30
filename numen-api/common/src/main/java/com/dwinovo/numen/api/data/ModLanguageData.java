@@ -447,6 +447,7 @@ public final class ModLanguageData {
         public static final String PLUGIN_NAV               = "numen.settings.nav.plugins";
         public static final String PLUGIN_BUNDLED           = "numen.plugin.bundled";
         public static final String PLUGIN_JAR               = "numen.plugin.jar";
+        public static final String PLUGIN_SCRIPT            = "numen.plugin.script";
         public static final String PLUGIN_ABOUT             = "numen.plugin.about";
         public static final String PLUGIN_RESTART           = "numen.plugin.restart";
         public static final String PLUGIN_LOADED            = "numen.plugin.loaded";
@@ -1170,7 +1171,8 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_NAV,             "Plugins");
         adder.add(Keys.PLUGIN_BUNDLED,         "Bundled with Numen");
         adder.add(Keys.PLUGIN_JAR,             "Installed separately");
-        adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect when the server restarts. Only a server admin or the host can switch them.");
+        adder.add(Keys.PLUGIN_SCRIPT,          "Written in scripts");
+        adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect at once; one that changes things outside Numen's door says it needs a restart. Only a server admin or the host can switch them.");
         adder.add(Keys.PLUGIN_RESTART,         "takes effect after restart");
         adder.add(Keys.PLUGIN_LOADED,          "loaded");
         adder.add(Keys.PLUGIN_DISABLED,        "off");
@@ -1898,7 +1900,8 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_NAV,             "插件");
         adder.add(Keys.PLUGIN_BUNDLED,         "随 Numen 内嵌");
         adder.add(Keys.PLUGIN_JAR,             "单独安装");
-        adder.add(Keys.PLUGIN_ABOUT,           "开关在服务器重启后生效,只有管理员和房主能改。");
+        adder.add(Keys.PLUGIN_SCRIPT,          "脚本里写的");
+        adder.add(Keys.PLUGIN_ABOUT,           "开关当场生效;在 Numen 的门外动了东西的插件会标明要重启。只有管理员和房主能改。");
         adder.add(Keys.PLUGIN_RESTART,         "重启后生效");
         adder.add(Keys.PLUGIN_LOADED,          "已加载");
         adder.add(Keys.PLUGIN_DISABLED,        "已关闭");

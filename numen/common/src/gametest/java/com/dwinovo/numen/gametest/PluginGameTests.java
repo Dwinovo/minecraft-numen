@@ -79,8 +79,8 @@ public class PluginGameTests {
     }
 
     /**
-     * 管理员经协议关掉一个插件:他收到的表里那一行下次启动是关的、这一次仍是已加载,停用名单落了盘;再打开,名单里就没了。
-     * 写盘在后台车道上,所以等它落下去再看文件。
+     * 管理员经协议关掉一个插件:他收到的表里那一行是关的、状态当场是已关闭(只经门登记的插件不用重启),停用名单落了盘;再打开,名单里
+     * 就没了。写盘在后台车道上,所以等它落下去再看文件。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
     public static void an_admin_switches_a_plugin_off_and_the_list_is_written_to_disk(GameTestHelper helper) {
@@ -95,9 +95,9 @@ public class PluginGameTests {
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
                 "{\"id\":\"gt_toggle\"}");
         var row = pluginRow(GameTestKit.received(admin), "gt_toggle");
-        helper.assertTrue(row != null && row.get("disabledNext").getAsBoolean() && row.get("pending").getAsBoolean()
-                        && row.get("toggle").getAsBoolean() && "loaded".equals(row.get("status").getAsString()),
-                "the admin was not shown the plugin as off from the next start while still running: " + row);
+        helper.assertTrue(row != null && row.get("disabled").getAsBoolean() && !row.get("pending").getAsBoolean()
+                        && row.get("toggle").getAsBoolean() && "disabled".equals(row.get("status").getAsString()),
+                "the admin was not shown the plugin as switched off at once: " + row);
 
         GameTestKit.steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(listed("gt_toggle"), "the list has not reached the disk"))
@@ -123,7 +123,7 @@ public class PluginGameTests {
                 "{\"id\":\"gt_fixed\"}");
         var told = GameTestKit.received(player);
         var row = pluginRow(told, "gt_fixed");
-        helper.assertTrue(row != null && !row.get("toggle").getAsBoolean() && !row.get("disabledNext").getAsBoolean(),
+        helper.assertTrue(row != null && !row.get("toggle").getAsBoolean() && !row.get("disabled").getAsBoolean(),
                 "the player was shown a switch, or the plugin as off: " + row);
         helper.assertTrue(told.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l
                         && l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PLUGIN) && !l.problem().isEmpty()),
@@ -134,13 +134,11 @@ public class PluginGameTests {
     }
 
     /**
-     * 启动时名单上的插件不 setup、状态是已关闭,没在名单上的照常装:用一份预先写好名单的新花名册,
-     * 经真的那扇门(登记得到的)装两个插件,看它们登记的事件种类在不在。
+     * 启动时名单上的插件不 setup、状态是已关闭,没在名单上的照常装:换一份预先写好名单的新花名册,经真的那扇门(登记得到的)
+     * 装两个插件,看它们登记的事件种类在不在。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
     public static void a_plugin_on_the_list_at_start_is_not_set_up(GameTestHelper helper) throws java.io.IOException {
-        var door = new java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.api.NumenApi>();
-        com.dwinovo.numen.api.NumenPlugins.register("gt_door", door::set);
         java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("numen-gametest-plugins-");
         var switches = new com.dwinovo.numen.api.plugin.PluginSwitches(new com.dwinovo.numen.api.store.JsonDoc(
                 dir.resolve(com.dwinovo.numen.api.plugin.PluginSwitches.FILE),
@@ -149,9 +147,16 @@ public class PluginGameTests {
                 })));
         switches.write(java.util.Set.of("gt_start_off"));
         var roster = new com.dwinovo.numen.api.plugin.PluginRoster(() -> switches, id -> com.dwinovo.numen.api.plugin.PluginRoster.Meta.NONE);
-
-        roster.run("gt_start_off", numen -> numen.registerEventType("gametest_start_off", false), door.get());
-        roster.run("gt_start_on", numen -> numen.registerEventType("gametest_start_on", false), door.get());
+        var before = com.dwinovo.numen.api.NumenPlugins.roster();
+        com.dwinovo.numen.api.NumenPlugins.useRoster(roster);
+        try {
+            com.dwinovo.numen.api.NumenPlugins.register("gt_start_off",
+                    numen -> numen.registerEventType("gametest_start_off", false));
+            com.dwinovo.numen.api.NumenPlugins.register("gt_start_on",
+                    numen -> numen.registerEventType("gametest_start_on", false));
+        } finally {
+            com.dwinovo.numen.api.NumenPlugins.useRoster(before);
+        }
 
         var rows = roster.plugins();
         helper.assertTrue(!com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gametest_start_off"),
@@ -165,6 +170,72 @@ public class PluginGameTests {
                         && r.status() == com.dwinovo.numen.api.plugin.PluginRoster.Status.LOADED
                         && r.adds().get(com.dwinovo.numen.api.plugin.PluginRoster.Kind.EVENT_TYPE) == 1),
                 "the plugin off the list is not shown as loaded with what it added: " + rows);
+        helper.succeed();
+    }
+
+    /** 一组会来会去的函数:管理员关开它所在的插件时,她的函数清单跟着变。 */
+    public static final class Dyn {
+
+        private Dyn() {}
+
+        @com.dwinovo.numen.api.sdk.Fn("Answer with seven, to show the group is there.")
+        @com.dwinovo.numen.api.sdk.Example("gt_dyn.dyn.ping()")
+        public static int ping(com.dwinovo.numen.api.sdk.ServerCall call) {
+            return 7;
+        }
+    }
+
+    /** 她这一刻调 {@code gt_dyn.dyn.ping()} 的结果:调到了是它的回执,函数不在是 null(程序在调用处就以 no_function 失败,没有派出去)。 */
+    private static com.google.gson.JsonElement pingReply(NumenPlayer companion) {
+        ToolRun run = lua(companion, "return gt_dyn.dyn.ping()");
+        return run.reply() == null ? null : valueIn(run.reply());
+    }
+
+    private static boolean listsDyn() {
+        return com.dwinovo.numen.api.sdk.ApiDocs.index(com.dwinovo.numen.api.script.Modules.factory()).contains("gt_dyn.dyn");
+    }
+
+    /**
+     * 管理员当场关掉一个只经门登记的插件,不用重启:她的函数清单里它那一组没了、调它得 no_function;再打开,那一组回来、能调。
+     * 管理员收到的那一行是已关闭、不标重启。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
+    public static void an_admin_switches_a_plugin_off_and_her_function_listing_loses_its_group(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        NumenPlayer companion = spawnAt(helper, "gametest_dynamic", new BlockPos(4, 2, 4), false);
+        com.dwinovo.numen.api.NumenPlugins.register("gt_dyn", numen ->
+                numen.api("dyn", "Test fixture: a group that comes and goes with its plugin.", Dyn.class));
+        var admin = GameTestKit.presentPlayer(helper, null, "gametest_plugin_toggler");
+        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
+                4, false));
+        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        GameTestKit.received(admin);
+
+        helper.assertTrue(listsDyn(), "her listing lacks the group before it was switched off");
+        var on = pingReply(companion);
+        helper.assertTrue(on != null && on.getAsInt() == 7, "the group's function did not answer: " + on);
+
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
+                "{\"id\":\"gt_dyn\"}");
+        var row = pluginRow(GameTestKit.received(admin), "gt_dyn");
+        helper.assertTrue(row != null && row.get("disabled").getAsBoolean() && !row.get("pending").getAsBoolean()
+                        && "disabled".equals(row.get("status").getAsString()),
+                "the admin was not shown the plugin as off at once, without a restart: " + row);
+        helper.assertTrue(!listsDyn(), "her listing still has the group after the plugin was switched off");
+        helper.assertTrue(pingReply(companion) == null, "her program could still call the switched-off group");
+
+        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
+                "{\"id\":\"gt_dyn\"}");
+        row = pluginRow(GameTestKit.received(admin), "gt_dyn");
+        helper.assertTrue(row != null && !row.get("disabled").getAsBoolean() && "loaded".equals(row.get("status").getAsString()),
+                "the admin was not shown the plugin as on again: " + row);
+        helper.assertTrue(listsDyn(), "her listing did not get the group back");
+        var back = pingReply(companion);
+        helper.assertTrue(back != null && back.getAsInt() == 7, "the group's function did not answer after switching on: " + back);
+
+        server.getPlayerList().deop(admin.getGameProfile());
+        GameTestKit.leave(admin);
+        CompanionFactory.despawn(server, companion);
         helper.succeed();
     }
 

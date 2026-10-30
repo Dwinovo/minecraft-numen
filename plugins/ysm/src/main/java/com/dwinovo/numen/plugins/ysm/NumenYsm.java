@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.api.task.TaskFactory;
 
 import java.nio.file.Path;
@@ -29,7 +30,8 @@ public final class NumenYsm {
         OwnerSync sync = new OwnerSync(ysm);
         Emotes emotes = new Emotes(ysm);
 
-        NumenPlugins.register(YsmApi.NAMESPACE, numen -> {
+        // 主人授权的镜像与表情每刻挂在宿主的钩子上(门外),撤不回:卸下要重启
+        NumenPlugins.register(YsmApi.NAMESPACE, PluginRoster.Unloading.NEEDS_RESTART, numen -> {
             YsmApi.install(numen, ysm, emotes);
             // ysm.model.switch 派下来的换装由谁来跑
             TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, emotes, record));

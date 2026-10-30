@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.script.ScriptCatalog;
 import com.dwinovo.numen.script.ScriptEngine;
 
@@ -64,9 +65,10 @@ public final class ApiRegistry {
     /**
      * 登记一组:{@code functions} 里每个 {@link Fn} 方法是这一组的一个函数。
      *
+     * @return 撤回这一组的句柄:撤掉后这个全名又没有主了
      * @throws IllegalArgumentException 名字写不出来、这一组已经有主、有函数绑定不了
      */
-    public static synchronized void register(String namespace, String group, String summary, Class<?> functions) {
+    public static synchronized Handle register(String namespace, String group, String summary, Class<?> functions) {
         checkNamespace(namespace);
         String bad = Binder.badName(group);
         if (bad != null) {
@@ -77,8 +79,14 @@ public final class ApiRegistry {
             throw new IllegalArgumentException("the group " + full + " already has an owner: each namespace adds "
                     + "functions only to its own groups");
         }
-        GROUPS.put(full, new Group(namespace, group, summary == null ? "" : summary,
-                Binder.bind(namespace, group, functions)));
+        Group made = new Group(namespace, group, summary == null ? "" : summary,
+                Binder.bind(namespace, group, functions));
+        GROUPS.put(full, made);
+        return () -> {
+            synchronized (ApiRegistry.class) {
+                GROUPS.remove(full, made);
+            }
+        };
     }
 
     /** 登记了的各组,按全名排序。 */

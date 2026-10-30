@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.scope.Handle;
+import com.dwinovo.numen.api.agent.scope.Scope;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.api.entity.CompanionEvents;
@@ -9,6 +11,7 @@ import com.dwinovo.numen.api.entity.WaterState;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.api.plugin.PluginRoster.Source;
+import com.dwinovo.numen.api.plugin.PluginRoster.Unloading;
 import com.dwinovo.numen.api.plugin.PluginSwitches;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
@@ -64,9 +67,22 @@ public final class NumenPlugins {
      * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
      */
     public static void register(String namespace, NumenPlugin plugin) {
+        register(namespace, Unloading.LIVE, plugin);
+    }
+
+    /**
+     * 登记一个插件,并声明卸下它要不要重启。{@link Unloading#LIVE}(默认,即 {@link #register(String, NumenPlugin)})说它只经门登记:
+     * 服主关它、脚本重载时,门里登记的一切当场撤回,再开时 setup 再跑一遍。在门外动了东西——Mixin、直接挂在加载器上的监听、改不回的
+     * 客户端块——的插件用 {@link Unloading#NEEDS_RESTART}:它装着时关它,登记照旧留着、花名册标"重启后生效"。门外的东西撤不回,
+     * 撤了一半比不撤更糟,所以只看这一句声明,不去猜。
+     *
+     * <p>撤回之后,这次登记时拿到的那扇门再登记任何东西都抛 {@link IllegalStateException},点名是哪个插件:重登的 setup 会拿到新的门,
+     * 旧的不该还有人拿着用。
+     */
+    public static void register(String namespace, Unloading unloading, NumenPlugin plugin) {
         if (plugin == null) return;
         com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
-        ROSTER.run(namespace, plugin, new Impl(namespace));
+        ROSTER.run(namespace, plugin, unloading, scope -> new Impl(namespace, scope));
     }
 
     /**
@@ -96,8 +112,11 @@ public final class NumenPlugins {
      * <b>Numen API 内部调用</b>。
      */
     public static void registerHost(NumenPlugin plugin) {
-        plugin.setup(new Impl(NUMEN));
+        plugin.setup(new Impl(NUMEN, HOST));
     }
+
+    /** 引擎自己的登记的作用域:进程一生都不撤,但和插件的登记走同一条路(同样的句柄、同样的表)。 */
+    private static final Scope HOST = new Scope();
 
     /**
      * 联动型插件在装之前报到,让花名册里有它的一行:{@code id} 是它之后 {@link #register} 用的名字空间,{@code targetMod}
@@ -237,7 +256,7 @@ public final class NumenPlugins {
         return sb.toString();
     }
 
-    private static final List<Runnable> PENDING = new ArrayList<>();
+    private static final List<Runnable> PENDING = new CopyOnWriteArrayList<>();
 
     private static void runClientBlock(Runnable r) {
         try {
@@ -251,54 +270,84 @@ public final class NumenPlugins {
 
         /** 这扇门登记进的名字空间。 */
         private final String namespace;
+        /** 这扇门登记的每一条的句柄都收在这里;作用域关了,门就过期了。 */
+        private final Scope scope;
 
-        Impl(String namespace) {
+        Impl(String namespace, Scope scope) {
             this.namespace = namespace;
+            this.scope = scope;
+        }
+
+        /** 撤回之后还拿着这扇门登记,是拿着上一次登记的门:点名是哪个插件,别让半死的登记留下。 */
+        private Scope open() {
+            if (scope.closed()) {
+                throw new IllegalStateException("the door of plugin '" + namespace + "' is stale: the plugin was "
+                        + "withdrawn (switched off or reloaded), so this door registers nothing any more; use the "
+                        + "door its setup is given when it registers again");
+            }
+            return scope;
         }
 
         @Override
         public <T> void on(CompanionEvent<T> event, Consumer<T> handler) {
-            CompanionEvents.subscribe(event, handler);
+            open().add(CompanionEvents.subscribe(event, handler));
         }
 
         @Override
         public void api(String group, String summary, Class<?> functions) {
-            com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions);
+            open().add(com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions));
         }
 
         @Override
         public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
-            com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec);
+            open().add(com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec));
         }
 
         @Override
         public void bundleContent(Path root) {
             if (root == null) return;
+            Scope scope = open();
             Path modules = root.resolve(com.dwinovo.numen.api.script.Modules.KIND.dir());
-            if (com.dwinovo.numen.api.library.Shipped.bundle(namespace, root) && java.nio.file.Files.isDirectory(modules)) {
-                com.dwinovo.numen.api.script.BuiltinModules.bundle(modules);
+            java.util.Optional<Handle> bundled = com.dwinovo.numen.api.library.Shipped.bundle(namespace, root);
+            bundled.ifPresent(scope::add);
+            if (bundled.isPresent() && java.nio.file.Files.isDirectory(modules)) {
+                scope.add(com.dwinovo.numen.api.script.BuiltinModules.bundle(modules));
             }
         }
 
         @Override
         public void command(com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> verb) {
-            if (verb != null) com.dwinovo.numen.api.entity.NumenCommands.plug(verb);
+            if (verb != null) open().add(com.dwinovo.numen.api.entity.NumenCommands.plug(verb));
         }
 
         @Override
         public void onClient(Runnable clientOnly) {
             if (clientOnly == null) return;
-            if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);
+            Scope scope = open();
+            if (clientReady) {
+                runClientBlock(clientOnly);
+            } else {
+                // 还没接上时攒着:撤回时没跑的撤掉;跑过的撤不回,动了门外东西的插件声明了要重启
+                PENDING.add(clientOnly);
+                scope.add(() -> PENDING.remove(clientOnly));
+            }
         }
 
         @Override
         public void contributeBodyState(Function<NumenPlayer, String> fragment) {
-            if (fragment != null) BODY_STATE.add(fragment);
+            if (fragment == null) return;
+            BODY_STATE.add(fragment);
+            open().add(() -> {
+                BODY_STATE.remove(fragment);
+                FAILING.remove(fragment);
+            });
         }
 
         @Override
         public void registerGear(GearSource source) {
-            if (source != null) GEAR.add(source);
+            if (source == null) return;
+            GEAR.add(source);
+            open().add(() -> GEAR.remove(source));
         }
 
         @Override
@@ -308,17 +357,19 @@ public final class NumenPlugins {
 
         @Override
         public void registerEventType(String type, boolean alwaysUrgent) {
-            EventTypes.register(EventTypes.event(type, alwaysUrgent));
+            open().add(EventTypes.register(EventTypes.event(type, alwaysUrgent)));
         }
 
         @Override
         public void emit(NumenPlayer companion, String type, Map<String, String> attrs, String text,
                          boolean urgent) {
+            open();
             NumenEvents.emit(companion, type, attrs, text, urgent);
         }
 
         @Override
         public Delivery emit(UUID companion, String type, String text) {
+            open();
             NumenEvents.requireClientInput(type);
             ClientInput input = clientInput;
             return input == null ? Delivery.REJECTED : input.emit(companion, type, text);
