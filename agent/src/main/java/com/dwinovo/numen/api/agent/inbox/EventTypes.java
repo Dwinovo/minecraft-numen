@@ -362,11 +362,13 @@ public final class EventTypes {
             throw new IllegalArgumentException("事件类型 " + type.id() + " 已经登记过,换一个 id");
         }
         TYPES.put(type.id(), type);
-        return () -> {
+        return Handle.once(() -> {
             synchronized (EventTypes.class) {
-                TYPES.remove(type.id(), type);
+                if (TYPES.get(type.id()) == type) {
+                    TYPES.remove(type.id());
+                }
             }
-        };
+        });
     }
 
     /** 查表;没登记过返回 {@link #UNKNOWN}。 */

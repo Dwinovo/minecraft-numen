@@ -94,11 +94,13 @@ public final class BuiltinModules {
         }
         Builtin made = new Builtin(code, engine.summary(code));
         MODULES.put(name, made);
-        return () -> {
+        return Handle.once(() -> {
             synchronized (BuiltinModules.class) {
-                MODULES.remove(name, made);
+                if (MODULES.get(name) == made) {
+                    MODULES.remove(name);
+                }
             }
-        };
+        });
     }
 
     /** 叫这个名字的内置模块;没有是 null。 */

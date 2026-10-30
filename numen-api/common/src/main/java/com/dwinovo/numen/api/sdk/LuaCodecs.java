@@ -145,16 +145,17 @@ public final class LuaCodecs {
             declare(c, type);
         }
         BY_CLASS.put(type, codec);
-        return () -> {
+        return Handle.once(() -> {
             synchronized (LuaCodecs.class) {
-                if (BY_CLASS.remove(type, codec)) {
+                if (BY_CLASS.get(type) == codec) {
+                    BY_CLASS.remove(type);
                     for (ScriptType.Class c : codec.classes()) {
                         NAMED.remove(c.name(), type);
                         CLASSES.remove(c.name(), c);
                     }
                 }
             }
-        };
+        });
     }
 
     /** 声明一个类;名字已经归了另一个类型是硬错误。 */

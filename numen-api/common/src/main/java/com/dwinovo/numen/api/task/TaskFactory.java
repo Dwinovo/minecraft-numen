@@ -48,11 +48,17 @@ public final class TaskFactory {
      */
     public static <R extends TaskRecord<?>> Handle register(Class<R> type, Runner<R> runner) {
         RUNNERS.put(type, runner);
-        return () -> {
-            if (RUNNERS.remove(type, runner)) {
+        return Handle.once(() -> {
+            // 只在表里现在的还是这一个时才撤:同一种活后来被别的登记顶掉了,这一个的句柄不动那一个
+            boolean[] removed = {false};
+            RUNNERS.computeIfPresent(type, (key, current) -> {
+                removed[0] = current == runner;
+                return removed[0] ? null : current;
+            });
+            if (removed[0]) {
                 CompanionTickDispatcher.cancelOfType(type);
             }
-        };
+        });
     }
 
     /** How many record types are currently registered. */

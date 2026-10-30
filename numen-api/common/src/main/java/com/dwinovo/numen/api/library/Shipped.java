@@ -65,7 +65,7 @@ public final class Shipped {
         }
         requireDistinct(candidate, BUNDLES);
         BUNDLES.add(candidate);
-        return Optional.of(() -> BUNDLES.remove(candidate));
+        return Optional.of(Handle.once(() -> BUNDLES.removeIf(bundle -> bundle == candidate)));
     }
 
     /** 同一条路径只许一个来源带:{@code candidate} 带的文件里有已登记的来源也带了的,抛出。 */

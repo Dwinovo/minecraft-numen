@@ -340,7 +340,7 @@ public final class NumenPlugins {
             } else {
                 // 还没接上时攒着:撤回时没跑的撤掉;跑过的撤不回,动了门外东西的插件声明了要重启
                 PENDING.add(clientOnly);
-                scope.add(() -> PENDING.remove(clientOnly));
+                scope.add(Handle.once(() -> PENDING.remove(clientOnly)));
             }
         }
 
@@ -348,17 +348,17 @@ public final class NumenPlugins {
         public void contributeBodyState(Function<NumenPlayer, String> fragment) {
             if (fragment == null) return;
             BODY_STATE.add(fragment);
-            open().add(() -> {
+            open().add(Handle.once(() -> {
                 BODY_STATE.remove(fragment);
                 FAILING.remove(fragment);
-            });
+            }));
         }
 
         @Override
         public void registerGear(GearSource source) {
             if (source == null) return;
             GEAR.add(source);
-            open().add(() -> GEAR.remove(source));
+            open().add(Handle.once(() -> GEAR.remove(source)));
         }
 
         @Override

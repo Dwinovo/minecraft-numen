@@ -102,11 +102,13 @@ public final class ApiRegistry {
         }
         Group made = new Group(namespace, group, summary == null ? "" : summary, List.copyOf(owned));
         GROUPS.put(full, made);
-        return () -> {
+        return Handle.once(() -> {
             synchronized (ApiRegistry.class) {
-                GROUPS.remove(full, made);
+                if (GROUPS.get(full) == made) {
+                    GROUPS.remove(full);
+                }
             }
-        };
+        });
     }
 
     /** 登记了的各组,按全名排序。 */

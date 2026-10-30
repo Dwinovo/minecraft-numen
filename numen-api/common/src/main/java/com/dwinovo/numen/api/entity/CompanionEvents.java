@@ -33,7 +33,7 @@ public final class CompanionEvents {
         // 每次订阅一个自己的条目:同一个处理器订阅两次,撤回时各撤各的
         Consumer<T> entry = handler::accept;
         BUCKETS.computeIfAbsent(event, e -> new CopyOnWriteArrayList<>()).add(entry);
-        return () -> BUCKETS.get(event).remove(entry);
+        return Handle.once(() -> BUCKETS.get(event).remove(entry));
     }
 
     /**

@@ -115,7 +115,7 @@ public final class NumenCommands {
             }
             PLUGGED.add(verb);
         }
-        return () -> PLUGGED.remove(verb);
+        return Handle.once(() -> PLUGGED.remove(verb));
     }
 
     /**
