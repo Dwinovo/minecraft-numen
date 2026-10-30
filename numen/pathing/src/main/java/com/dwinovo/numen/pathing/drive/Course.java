@@ -133,6 +133,11 @@ public final class Course {
         return left;
     }
 
+    /** 第 {@code index} 步:走法、代价、几何最短刻数。 */
+    public Route.Leg leg(int index) {
+        return legs.get(index);
+    }
+
     /** 第 {@code index} 步按成本模型算出的代价(含罚分)。 */
     public double costAt(int index) {
         return legs.get(index).cost();

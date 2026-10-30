@@ -550,13 +550,10 @@ public final class Driver {
         afterDiscard();
     }
 
-    /**
-     * 第 {@code m} 步走不通({@code why} 是 {@link Journal.Replan#blocks} 的一种):这一步(走法、起点、落点)在这一趟里记为不通,
-     * 以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。同一步不会走第二次,重搜多少次由这一趟的总预算管。
-     */
+    /** 第 {@code m} 步走不通:{@link Trip#fail} 记账、扔掉路线,执行这边跟着从头。 */
     private void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
-        trip.blocked(m, blockage);
-        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
+        trip.fail(why, m, blockage);
+        afterDiscard();
     }
 
     private void hold() {

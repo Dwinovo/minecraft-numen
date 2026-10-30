@@ -22,7 +22,7 @@ import net.minecraft.world.level.material.FluidState;
  * <p>没改过的格照快照的快路径读(标志字成层现成的);改过的格按叠完的方块状态推出标志字。估价按层扫方块({@link #forEachBlock})时,
  * 改过的格的新状态也报一遍,原来的状态照快照报:多报只会让估价更低,仍是下界。
  */
-final class PlannedView implements SearchView {
+public final class PlannedView implements SearchView {
 
     private final SearchView base;
     private final EditedView after;
@@ -33,7 +33,7 @@ final class PlannedView implements SearchView {
     }
 
     /** {@code base} 做完 {@code edits} 之后的样子;没有改动就是 {@code base} 本身。 */
-    static SearchView of(SearchView base, List<Edit> edits) {
+    public static SearchView of(SearchView base, List<Edit> edits) {
         return edits.isEmpty() ? base : new PlannedView(base, EditedView.over(base, edits));
     }
 

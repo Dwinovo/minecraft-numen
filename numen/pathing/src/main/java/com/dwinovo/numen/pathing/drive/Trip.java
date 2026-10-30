@@ -16,7 +16,7 @@ import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.search.TripMemory;
-import com.dwinovo.numen.pathing.search.WorldSnapshot;
+import com.dwinovo.numen.pathing.search.SearchView;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -37,7 +37,7 @@ public final class Trip {
     public interface Ground {
 
         /** 为从 {@code from} 出发的一次搜索拷下的世界快照。 */
-        WorldSnapshot snapshot(BlockPos from);
+        SearchView snapshot(BlockPos from);
 
         /** 按身体与宿主端口此刻的样子组成的成本模型。 */
         CostModel model();
@@ -163,6 +163,11 @@ public final class Trip {
         return pending != null;
     }
 
+    /** 在飞的搜索有了结论、还没收下({@link #poll} 收)。不收结论,只看一眼。 */
+    public boolean ready() {
+        return pending != null && pending.poll() != null;
+    }
+
     /**
      * 身体此刻站着等一次搜索的结论:没有路可走(或路走完了还没到),或路线末尾的几步要等接续段到了才开始({@link Continuation#settled}),
      * 派出去的搜索还没回来。
@@ -224,7 +229,7 @@ public final class Trip {
      */
     private void dispatch(Purpose why, BlockPos from, Route ahead, Deadline deadline) {
         long t0 = System.nanoTime();
-        WorldSnapshot view = ground.snapshot(from);
+        SearchView view = ground.snapshot(from);
         long t1 = System.nanoTime();
         CostModel model = ground.model();
         long t2 = System.nanoTime();
@@ -395,10 +400,14 @@ public final class Trip {
         lastBlockage = null;
     }
 
-    /** 第 {@code m} 步走不通:这一步(走法、起点、落点)在这一趟里记为不通,以后的搜索不再走它;原因留着,收场时用。 */
-    void blocked(Maneuver m, Blockage blockage) {
+    /**
+     * 第 {@code m} 步走不通({@code why} 是 {@link Journal.Replan#blocks} 的一种):这一步(走法、起点、落点)在这一趟里记为不通,以后的搜索不再走它,
+     * 原因留着、收场时用;只扔掉在走的路,下一刻从身体此刻的位置重搜这一段。同一步不会走第二次,重搜多少次由这一趟的总预算管。
+     */
+    public void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
         memory.block(m.kind(), m.from(), m.to());
         lastBlockage = blockage;
+        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
     }
 
     /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
