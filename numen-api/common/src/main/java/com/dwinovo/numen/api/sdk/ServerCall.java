@@ -5,9 +5,7 @@ import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;
-import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.GatedAct;
 import com.dwinovo.numen.api.task.TaskDispatch;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -87,13 +85,12 @@ public final class ServerCall {
      * @param action 要做的事,如 {@code Action.useEntity(maid)}、{@code Action.command(…)}
      */
     public Pending<Void> authorize(Action action) {
-        Gate gate = Permission.gateFor(her);
-        Verdict verdict = gate.judgeLive(action, her.serverLevel());
-        return switch (verdict.kind()) {
-            case ALLOW -> Pending.of(null);
-            case DENY -> Pending.failed(refused(lua(), verdict.reason()));
-            case ASK -> Consents.of(her).await(lua(),
-                    List.of(gate.consentItemLive(action, verdict, her.serverLevel())));
+        GatedAct.Judgement judged = GatedAct.judge(her, List.of(action));
+        GatedAct.Permit permit = judged.permits().get(0);
+        return switch (permit.state()) {
+            case ALLOWED -> Pending.of(null);
+            case REFUSED -> Pending.failed(refused(lua(), permit.refusal()));
+            case WAITING -> Consents.of(her).await(lua(), judged.asks());
         };
     }
 

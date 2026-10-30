@@ -36,6 +36,38 @@ public final class GatedAct {
         }
     }
 
+    /**
+     * 一批动作过权限层的结论:{@code permits} 与动作一一对应(要问的是 WAITING),{@code asks} 是要问的那几件的征询项(按动作的先后)。
+     *
+     * @param askedAt 要问的那几件各在 {@code permits} 的第几位
+     */
+    public record Judgement(List<Permit> permits, List<ConsentItem> asks, List<Integer> askedAt) {}
+
+    /**
+     * 全系统<b>唯一</b>的"逐个动作交给权限层判、要问的收成一张征询"的地方:按刻推进的活({@link #permitAll})与一次调用({@code ServerCall#authorize})
+     * 都经它,之后各自只管怎么等主人的答复(活每刻读一张 {@link ConsentDesk.Ticket},调用挂在 {@code Consents} 里),征询本身也只有
+     * {@link ConsentDesk} 一处。
+     */
+    public static Judgement judge(NumenPlayer player, List<Action> actions) {
+        var gate = Permission.gateFor(player);
+        List<Permit> permits = new ArrayList<>(actions.size());
+        List<ConsentItem> asks = new ArrayList<>();
+        List<Integer> askedAt = new ArrayList<>();
+        for (Action action : actions) {
+            Verdict verdict = gate.judgeLive(action, player.serverLevel());
+            switch (verdict.kind()) {
+                case ALLOW -> permits.add(Permit.ALLOWED);
+                case DENY -> permits.add(Permit.refused(verdict.reason()));
+                case ASK -> {
+                    askedAt.add(permits.size());
+                    asks.add(gate.consentItemLive(action, verdict, player.serverLevel()));
+                    permits.add(Permit.WAITING);
+                }
+            }
+        }
+        return new Judgement(permits, asks, askedAt);
+    }
+
     private final NumenPlayer player;
     private final Supplier<Object> scope;
     /** 在等主人答复的那张号;没在问是 null。 */
@@ -61,22 +93,9 @@ public final class GatedAct {
      * 同 {@link #permit},一批动作一起:各自裁决,要问的合成一次征询,主人的答复对这一批里要问的全部生效。结果与 {@code actions} 一一对应。
      */
     public List<Permit> permitAll(List<Action> actions) {
-        var gate = Permission.gateFor(player);
-        List<Permit> out = new ArrayList<>(actions.size());
-        List<ConsentItem> asks = new ArrayList<>();
-        List<Integer> askedAt = new ArrayList<>();
-        for (Action action : actions) {
-            Verdict verdict = gate.judgeLive(action, player.serverLevel());
-            switch (verdict.kind()) {
-                case ALLOW -> out.add(Permit.ALLOWED);
-                case DENY -> out.add(Permit.refused(verdict.reason()));
-                case ASK -> {
-                    askedAt.add(out.size());
-                    asks.add(gate.consentItemLive(action, verdict, player.serverLevel()));
-                    out.add(Permit.WAITING);
-                }
-            }
-        }
+        Judgement judged = judge(player, actions);
+        List<Permit> out = new ArrayList<>(judged.permits());
+        List<ConsentItem> asks = judged.asks();
         if (asks.isEmpty()) {
             settle();
             return out;
@@ -84,7 +103,7 @@ public final class GatedAct {
         ConsentAnswer answer = consult(asks);
         if (answer != null) {
             Permit settled = answer.allowed() ? Permit.ALLOWED : Permit.refused(answer.refusal(asks));
-            for (int i : askedAt) {
+            for (int i : judged.askedAt()) {
                 out.set(i, settled);
             }
         }
