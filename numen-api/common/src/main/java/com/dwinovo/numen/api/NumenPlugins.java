@@ -310,6 +310,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon) {
+            open().add(com.dwinovo.numen.api.combat.RangedWeapons.register(weapon));
+        }
+
+        @Override
         public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
             open().add(com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec));
         }

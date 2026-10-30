@@ -67,6 +67,12 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon) {
+        door.rangedWeapon(weapon);
+        one(PluginRoster.Kind.RANGED_WEAPON);
+    }
+
+    @Override
     public <T> void codec(Class<T> type, Codec<T> codec) {
         door.codec(type, codec);
     }

@@ -6,6 +6,10 @@ import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Ballistics;
+import com.dwinovo.numen.api.combat.Aim;
+import com.dwinovo.numen.api.combat.Flight;
+import com.dwinovo.numen.api.combat.Handling;
+import com.dwinovo.numen.api.combat.RangedWeapon;
 import com.dwinovo.numen.combat.AttackPlan;
 import com.dwinovo.numen.combat.Battlefield;
 import com.dwinovo.numen.combat.Loadout;
@@ -60,13 +64,6 @@ import java.util.List;
  */
 public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord, Fought> {
 
-    // 弹道常数:箭的物理与两种发射器的初速。
-    private static final double MAX_FIRING_RANGE = 32.0;
-    private static final double ARROW_GRAVITY = 0.05;
-    private static final double ARROW_DRAG = 0.99;
-    private static final double ARROW_HITBOX_RADIUS = 0.5;
-    private static final double BOW_FULL_SPEED = 3.0;
-    private static final double CROSSBOW_SPEED = 3.15;
     /** 连续几发没能真的射出去就判这把武器不顶用。 */
     private static final int MAX_MISFIRES = 2;
     /** 射击时与目标保持的最小距离——太近了弹道压得太平,而且白白挨打。 */
@@ -75,22 +72,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private static final double FIELD_RADIUS = 12.0;
 
     /**
-     * 弓战斗的环内沿:比这更近就拉不开弓 —— 弹道压得平,而且白白挨打。
-     *
-     * <p>它<b>就是</b>弓那一套的"危险半径",和剑那一套的 {@code Menace.rawDangerRadius}
-     * 同一个位置、不同的数。以前它是散在判据里的一个 {@code if},和剑的环互相打架。
-     *
-     * <p>八格,不是五格:<b>拉满一张弓要二十刻</b>,这二十刻里僵尸能走四格半。五格的话她刚
-     * 拉到一半人就贴脸了,只能中断重来 —— 实测她在 0.6~2.9 格里挣扎,最后被爬行者炸死。
-     * 内沿要装得下"拉一次弓的工夫对方能走多远"。
+     * 远程战斗的站位:环的内外沿与瞄得到的射程,来自手上这件武器的提供者({@link RangedWeapon#handling});弓是八到十二格。
+     * 没挑到武器的这一刻沿用上一刻的(弓没了回去走位,环不要跳)。
      */
-    private static final double BOW_MIN_DISTANCE = 8.0;
-
-    /**
-     * 弓战斗的环外沿。<b>不是射程上限</b> —— 三十二格的话她能站在天边,而箭有下坠、目标
-     * 会走,那么远基本射不中。十二格是"稳稳能中、又够得开"的量级:太远就往回走。
-     */
-    private static final double BOW_MAX_DISTANCE = 12.0;
+    private Handling handling = VanillaRanged.HANDLING;
+    /** 手上这件远程武器的名字(提供者说的),站位日志用它,不写死某一种武器。 */
+    private String rangedName = "ranged";
 
     private Entity target;
     private Vec3 lastTargetPosition;
@@ -118,7 +105,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 上一行站位日志。数字没变就不再打,免得每 tick 一行把别的全冲掉。 */
     private String lastStandoffLog;
 
-    private RangedShot shot;
+    private RangedWeapon.Shot shot;
     private int misfires;
     private int lastPlanLogTick = -1000;
     private AttackPlan.Action lastLoggedAction;
@@ -211,7 +198,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 bowFighting = false;
                 yield closeIn();
             }
-            case BOW -> {
+            case RANGED -> {
                 bowFighting = true;
                 yield bowFight();
             }
@@ -388,18 +375,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private void judgeNoPath(Entity foe) {
         noPath.add(foe.getId());
-        if (Loadout.forTarget(player, foe).hasRanged() && shotExistsTo(foe)) {
-            return;   // 走不到但射得到:顶层下一刻自然改判弓
+        Loadout.Ranged ranged = Loadout.forTarget(player, foe).ranged();
+        if (ranged != null && shotExistsTo(foe, ranged)) {
+            return;   // 走不到但射得到:顶层下一刻自然改判远程
         }
         r.unreachable(foe.getId());
         Constants.LOG.info("[numen-attack] 放弃 目标={} 走不到,也没有弹道", foe.getId());
     }
 
-    /** 这一刻算不算得出一条能打到它的箭道。射不到的角落里的怪就是无解。 */
-    private boolean shotExistsTo(Entity foe) {
-        return Ballistics.findArrowShot(player.level(), player, foe,
-                BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15), ARROW_GRAVITY, ARROW_DRAG,
-                ARROW_HITBOX_RADIUS, MAX_FIRING_RANGE, true) != null;
+    /** 这一刻手上这件武器算不算得出一条能打到它的弹道。射不到的角落里的怪就是无解。 */
+    private boolean shotExistsTo(Entity foe, Loadout.Ranged ranged) {
+        return Ballistics.findShot(player.level(), player, foe, ranged.weapon().flight(player, ranged.stack()),
+                ranged.weapon().handling(player, ranged.stack()).maxRange()) != null;
     }
 
     /** 打完了 —— 名单清空(点名),或没人再追她(无差别)。 */
@@ -601,8 +588,13 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState bowFight() {
         // <b>两层并行</b>:脚一直在走位,手一直在拉弓。原版拉弓时本来就能走(只是慢),
         // 是我在 shootAt 里主动 halt 的 —— 于是每刻建一次导航、拆一次,看着像被打断。
+        Loadout loadout = Loadout.forTarget(player, target);
+        if (loadout.ranged() != null) {
+            handling = loadout.ranged().weapon().handling(player, loadout.ranged().stack());
+            rangedName = loadout.ranged().weapon().name();
+        }
         driveApproach();
-        return shootAt(Loadout.forTarget(player, target));
+        return shootAt(loadout);
     }
 
 
@@ -669,18 +661,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /**
      * 走位环的外沿,按离它的中心距:剑是够到距离({@link Swing#reachTo},用来判内沿还剩不剩一条带、打站位日志;剑的环本身由
-     * {@link #reachOf} 判),弓是 {@link #BOW_MAX_DISTANCE}。
+     * {@link #reachOf} 判),远程是武器的外沿({@link Handling#outerRing})。
      */
     private double skirmishOuter() {
-        return bowFighting ? BOW_MAX_DISTANCE : reachToTarget();
+        return bowFighting ? handling.outerRing() : reachToTarget();
     }
 
     /**
-     * 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。它够得比她的外沿还远(大史莱姆、点着的苦力怕)时,
+     * 走位环的内沿:剑是"它够得着我",远程是武器的内沿(弓:拉得开弓的距离)。它够得比她的外沿还远(大史莱姆、点着的苦力怕)时,
      * 打得着又挨不着的那条带本来就不存在,内沿归零:环退成"走进够得着的地方"。
      */
     private double skirmishInner() {
-        double inner = bowFighting ? BOW_MIN_DISTANCE
+        double inner = bowFighting ? handling.innerRing()
                 : target == null ? 0.0 : Menace.rawDangerRadius(target, player);
         return inner < skirmishOuter() ? inner : 0.0;
     }
@@ -770,7 +762,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 弓那一套的内沿对<b>每一只</b>都成立:她要跟所有怪保持五格,不只是当前目标。
         List<Threat> keepOff = bowFighting
                 ? others.stream()
-                        .map(t -> new Threat(t.x(), t.y(), t.z(), Math.max(t.radius(), BOW_MIN_DISTANCE)))
+                        .map(t -> new Threat(t.x(), t.y(), t.z(), Math.max(t.radius(), handling.innerRing())))
                         .toList()
                 : others;
         return Goals.allOf(List.of(ring, Goals.awayFrom(keepOff)));
@@ -787,7 +779,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         String line = target == null || target.isRemoved()
                 ? String.format("无目标(只拉开) 太近=%d 场上=%d", tooClose, field.size())
                 : String.format("%s 目标=%d 距离=%.1f 带=[%.2f, %.2f] 太近=%d 场上=%d",
-                        bowFighting ? "弓" : "剑", target.getId(), player.distanceTo(target),
+                        bowFighting ? rangedName : "剑", target.getId(), player.distanceTo(target),
                         skirmishInner(), skirmishOuter(), tooClose, field.size());
         if (!line.equals(lastStandoffLog)) {
             lastStandoffLog = line;
@@ -798,22 +790,21 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     // ==================== 远程 ====================
 
     private TaskState shootAt(Loadout loadout) {
-        Loadout.Pick weapon = loadout.ranged();
-        if (weapon == null) {
-            return closeIn();   // 弓没了:回去走位,别放弃这只
+        Loadout.Ranged ranged = loadout.ranged();
+        if (ranged == null) {
+            return closeIn();   // 远程武器没了:回去走位,别放弃这只
         }
-        // <b>攻击层不管距离。</b>射程之内就射,拉开是寻路的事(环的内沿 BOW_MIN_DISTANCE)。
+        RangedWeapon weapon = ranged.weapon();
+        // <b>攻击层不管距离。</b>射程之内就射,拉开是寻路的事(环的内沿 handling.innerRing)。
         //
         // 这里曾经"近于内沿就 abortShot":僵尸一走进八格,拉到一半的弓当场取消;她退开、
         // 重新起手、僵尸又跟进来 —— 一箭都放不出去。距离是走位的判据,混进攻击层就成了
         // 一个把自己打断的开关。
-        if (player.distanceTo(target) > BOW_MAX_DISTANCE) {
-            return TaskState.RUNNING;   // 射程外:不放,但<b>也不取消</b>,弓接着拉
+        if (player.distanceTo(target) > handling.outerRing()) {
+            return TaskState.RUNNING;   // 射程外:不放,但<b>也不取消</b>,这一发接着准备
         }
-        boolean crossbow = RangedShot.isCrossbow(weapon);
-        Ballistics.Aim aim = Ballistics.findArrowShot(player.level(), player, target,
-                shotVelocity(crossbow), ARROW_GRAVITY, ARROW_DRAG, ARROW_HITBOX_RADIUS,
-                MAX_FIRING_RANGE, !crossbow);
+        Flight flight = shot != null ? shot.flight() : weapon.flight(player, ranged.stack());
+        Aim aim = Ballistics.findShot(player.level(), player, target, flight, handling.maxRange());
         if (aim == null) {
             // 这一刻算不出弹道。<b>弓接着拉</b> —— 脚一直在走位,下一刻位置变了自会有窗口,
             // 取消了就白等一次拉满的时间。
@@ -831,11 +822,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
 
         ItemStack before = player.getMainHandItem();
-        player.hotbar().hold(weapon.slot());
+        player.hotbar().hold(ranged.slot());
         if (player.getMainHandItem() != before && shot == null) {
             return TaskState.RUNNING;   // 这一刻只换手,下一刻才起手
         }
-        if (!RangedShot.stillHolding(crossbow, player.getMainHandItem())) {
+        if (!weapon.handles(player.getMainHandItem())) {
             abortShot();
             return TaskState.RUNNING;
         }
@@ -843,7 +834,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             return TaskState.RUNNING;
         }
         if (shot == null) {
-            shot = new RangedShot(player, crossbow);
+            shot = weapon.begin(player, player.getMainHandItem());
         }
         if (shot.tick(aim, target)) {
             boolean fired = shot.fired();
@@ -852,16 +843,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 r.strike(target.getId());
                 misfires = 0;
             } else if (++misfires >= MAX_MISFIRES) {
-                fail("the bow or crossbow did not launch an arrow", FailureType.WRONG_TOOL);
+                fail(weapon.misfireText(), FailureType.UNKNOWN);   // 没射出去不是拿错了工具:原因在回执那句话里
                 return TaskState.FAILED;
             }
         }
         return TaskState.RUNNING;
-    }
-
-    private double shotVelocity(boolean crossbow) {
-        return shot != null ? shot.projectileVelocity(BOW_FULL_SPEED, CROSSBOW_SPEED)
-                : crossbow ? CROSSBOW_SPEED : BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15);
     }
 
     // ==================== 拾荒 ====================

@@ -84,6 +84,19 @@ public final class ScriptPlugin {
         registrations.add(numen -> numen.contributeBodyState(fragment));
     }
 
+    /**
+     * 一种远程武器(枪、魔杖):{@code declare} 里写它怎么认、怎么准备、怎么射、弹道什么样({@link ScriptWeapon})。攻击任务像用弓一样用它,
+     * 该不该打由权限层裁决。
+     *
+     * @throws IllegalArgumentException 描述不全
+     */
+    public void rangedWeapon(String name, Consumer<ScriptWeapon> declare) {
+        ScriptWeapon weapon = new ScriptWeapon(name);
+        declare.accept(weapon);
+        var provider = weapon.build();
+        registrations.add(numen -> numen.rangedWeapon(provider));
+    }
+
     /** 一个穿戴来源:对象带 {@code slots(body)} 与 {@code kindsOf(body, stack)} 两个方法。 */
     public void gear(GearSource source) {
         registrations.add(numen -> numen.registerGear(source));

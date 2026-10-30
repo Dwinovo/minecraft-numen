@@ -58,6 +58,17 @@ public final class ScriptCall {
         return call.entity(new EntityRef(ref));
     }
 
+    /**
+     * 从她的眼睛看向 {@code target} 的朝向(俯仰与偏航,度),给要朝向的模组接口用——{@code facing.pitch()}、{@code facing.yaw()} 是现成的
+     * Java 供应器(见 {@link ScriptWeapon.Facing})。只是算,不转她的身体。
+     */
+    public ScriptWeapon.Facing facingTo(Entity target) {
+        net.minecraft.world.phys.Vec3 d = target.getBoundingBox().getCenter().subtract(call.her().getEyePosition());
+        double horizontal = Math.sqrt(d.x * d.x + d.z * d.z);
+        return new ScriptWeapon.Facing((float) -Math.toDegrees(Math.atan2(d.y, horizontal)),
+                (float) (Math.toDegrees(Math.atan2(d.z, d.x)) - 90.0));
+    }
+
     /** 往这一次调用的回执里说一句:{@code deed} 里身体做了什么、出了什么事。 */
     public void report(String words) {
         said.add(words);

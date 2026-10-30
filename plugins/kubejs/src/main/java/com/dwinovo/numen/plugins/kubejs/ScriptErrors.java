@@ -13,6 +13,11 @@ final class ScriptErrors {
 
     private ScriptErrors() {}
 
+    /** 脚本自己的错写进 KubeJS 的服务端控制台,脚本作者在那里看。 */
+    static void log(String what, RuntimeException error) {
+        ScriptType.SERVER.console.error(what + " failed: " + error.getMessage(), error);
+    }
+
     /** {@code error} 里的 API 失败;没有就是脚本自己的错,记控制台并说成这次调用的失败。 */
     static ApiError asFailure(String function, RuntimeException error) {
         for (Throwable t = error; t != null; t = t.getCause()) {
@@ -20,7 +25,7 @@ final class ScriptErrors {
                 return failed;
             }
         }
-        ScriptType.SERVER.console.error("Numen function " + function + " failed: " + error.getMessage(), error);
+        log("Numen function " + function, error);
         return new ApiError(ErrorKind.FAILED, function + " failed in its script: " + error.getMessage(), null);
     }
 }

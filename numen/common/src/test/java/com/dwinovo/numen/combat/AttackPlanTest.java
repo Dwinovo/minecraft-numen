@@ -61,7 +61,7 @@ class AttackPlanTest {
     @Test
     void unreachableIsWhatBowsAreFor() {
         Foe far = new Foe(1, 20.0, false, false, true, false, true);
-        assertEquals(Action.BOW, AttackPlan.decide(field(true, true, far), null).action());
+        assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
@@ -89,14 +89,14 @@ class AttackPlanTest {
     @Test
     void aLitCreeperIsHandledByTheRingNotByAnAction() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 3.0)), null);
-        assertEquals(Action.BOW, m.action(), "有弓就远远射它");
+        assertEquals(Action.RANGED, m.action(), "有弓就远远射它");
     }
 
     /** 有弓:退到安全线外射它。 */
     @Test
     void withABowAnExplosiveTargetIsShotFromOutside() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 9.0)), null);
-        assertEquals(Action.BOW, m.action());
+        assertEquals(Action.RANGED, m.action());
         assertEquals(1, m.foeId());
     }
 
@@ -200,9 +200,9 @@ class AttackPlanTest {
      */
     @Test
     void withOnlyABowItIsAlwaysABowFight() {
-        assertEquals(Action.BOW,
+        assertEquals(Action.RANGED,
                 AttackPlan.decide(field(false, true, mob(1, 3.0)), null).action());
-        assertEquals(Action.BOW,
+        assertEquals(Action.RANGED,
                 AttackPlan.decide(field(false, true, mob(1, 12.0)), null).action());
     }
 

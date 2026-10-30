@@ -159,6 +159,9 @@ public final class NumenContent {
             com.dwinovo.numen.tools.inventory.GearApi.install(numen);
             com.dwinovo.numen.tools.inventory.CreativeApi.install(numen);
             com.dwinovo.numen.tools.time.TimeApi.install(numen);
+            // 原版的弓与弩是远程武器的两个提供者,和模组的枪走同一张表(弓先登记,同档里排在弩前)
+            numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.BOW);
+            numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
         });
     }
 
