@@ -8,7 +8,7 @@ import net.minecraft.core.BlockPos;
 /**
  * 一次搜索的估价:节点走到目标至少还要多少刻。全模块只在这里把三样加起来,每一样都是下界,所以估价不高过任何一条路线的真实代价:
  * <ul>
- *   <li>疾跑底价:水平距离乘疾跑一格({@link Goal#estimate});</li>
+ *   <li>水平价:按列的放宽图上从目标反着做的最短路,陆地疾跑、水里游或涉水({@link Columns});</li>
  *   <li>挖开的额外代价:路上绕不开要挖掉的格至少多少钱({@link Burial});</li>
  *   <li>升降的额外代价:要升降几个节点,每个至少比水平底价多花多少({@link Vertical})。</li>
  * </ul>
@@ -17,17 +17,15 @@ import net.minecraft.core.BlockPos;
  */
 final class Estimate {
 
-    private final Goal goal;
-    private final Kinematics.Pace pace;
+    private final Columns columns;
     private final Burial burial;
     private final Vertical vertical;
     private final TripMemory.Frozen memory;
     /** 估价乘多少:沿旧路打折之后({@link Favoring#floor})每一步的价钱可能低到没折扣时的几分之几,估价同乘才仍是下界。 */
     private final double scale;
 
-    private Estimate(Goal goal, Kinematics.Pace pace, Burial burial, Vertical vertical, TripMemory.Frozen memory, double scale) {
-        this.goal = goal;
-        this.pace = pace;
+    private Estimate(Columns columns, Burial burial, Vertical vertical, TripMemory.Frozen memory, double scale) {
+        this.columns = columns;
         this.burial = burial;
         this.vertical = vertical;
         this.memory = memory;
@@ -37,8 +35,13 @@ final class Estimate {
     /** 这次搜索的估价:在 {@code view} 上按 {@code model} 的身体与规格,从 {@code start} 往 {@code goal};埋深最多定下 {@code cap} 格。 */
     static Estimate of(SearchView view, CostModel model, Goal goal, BlockPos start, int cap, TripMemory.Frozen memory,
                        double scale) {
-        return new Estimate(goal, Kinematics.pace(model.body().stats()), Burial.of(view, model, goal, start, cap),
-                Vertical.of(view, model, goal), memory, scale);
+        return new Estimate(Columns.of(view, model, goal, start, Kinematics.pace(model.body().stats())),
+                Burial.of(view, model, goal, start, cap), Vertical.of(view, model, goal), memory, scale);
+    }
+
+    /** 水平项已经定下多少列({@link Columns#settled}):预计算的活量,搜索把它记进时钟。 */
+    int precomputed() {
+        return columns.settled();
     }
 
     /** 脚在节点 {@code (x, y, z)} 的身体走到目标至少还要多少刻。 */
@@ -48,7 +51,7 @@ final class Estimate {
 
     /** 同上,不含这一趟记忆里抬高的增量:纯粹是这一格相对目标的位置。 */
     double base(int x, int y, int z) {
-        return scale * (goal.estimate(x, y, z, pace) + burial.floor(x, y, z) + vertical.floor(y));
+        return scale * (columns.floor(x, y, z) + burial.floor(x, y, z) + vertical.floor(y));
     }
 
     double at(BlockPos node) {

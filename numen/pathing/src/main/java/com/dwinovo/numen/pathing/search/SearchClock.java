@@ -10,6 +10,9 @@ package com.dwinovo.numen.pathing.search;
 @FunctionalInterface
 public interface SearchClock {
 
+    /** 估价的预计算读一列(扫一遍整列的标志字、判种类)折多少纳秒:靶场实测,见 ADR 0029。 */
+    long PER_COLUMN = 2_000;
+
     /** 墙钟每展开这么多个节点才看一次:读纳秒钟在 Windows 上比展开一个节点还贵(Baritone 同样每 64 个节点看一次)。 */
     int WALL_EVERY = 64;
 
@@ -24,22 +27,41 @@ public interface SearchClock {
      * 依据:10-29 靶场 42 次整路线跑(最终常数),每条路线的搜索墙钟对"展开数、精确判断数"做无截距最小二乘;平均每展开一个节点
      * 伴随 2.4 次精确判断,合起来约 11 微秒。精确判断里多数是一读就不成立的(水里往岸上够、脚下整块落不下),所以平均比一次展开便宜。
      */
-    SearchClock STEADY = counting(4_400, 2_700);
+    SearchClock STEADY = counting(4_400, 2_700, PER_COLUMN);
 
-    /** 按做了多少活折算的表:每展开一个节点记 {@code perExpansion} 纳秒,每做一次精确判断记 {@code perCheck} 纳秒。 */
+    /** 按做了多少活折算的表:每展开一个节点记 {@code perExpansion} 纳秒,每做一次精确判断记 {@code perCheck} 纳秒,不记估价的预计算。 */
     static SearchClock counting(long perExpansion, long perCheck) {
-        if (perExpansion <= 0 || perCheck < 0) {
-            throw new IllegalArgumentException("折算的纳秒数不对:" + perExpansion + "、" + perCheck);
+        return counting(perExpansion, perCheck, 0);
+    }
+
+    /** 同上,估价的预计算每读一列({@link Timer#precomputed})再记 {@code perColumn} 纳秒。 */
+    static SearchClock counting(long perExpansion, long perCheck, long perColumn) {
+        if (perExpansion <= 0 || perCheck < 0 || perColumn < 0) {
+            throw new IllegalArgumentException("折算的纳秒数不对:" + perExpansion + "、" + perCheck + "、" + perColumn);
         }
-        return nanos -> (expanded, checked) -> (long) expanded * perExpansion + (long) checked * perCheck >= nanos;
+        return nanos -> new Timer() {
+            private long precomputed;
+
+            @Override
+            public void precomputed(int columns) {
+                precomputed = (long) columns * perColumn;
+            }
+
+            @Override
+            public boolean up(int expanded, int checked) {
+                return precomputed + (long) expanded * perExpansion + (long) checked * perCheck >= nanos;
+            }
+        };
     }
 
     /** 开搜:从此刻起最多想 {@code nanos} 纳秒。 */
     Timer start(long nanos);
 
     /** 一次搜索的表。 */
-    @FunctionalInterface
     interface Timer {
+
+        /** 估价的预计算读了 {@code columns} 列({@link Columns}):算在这次搜索想的时间里。墙钟自己在走,不用记;按活量折算的表要记。 */
+        default void precomputed(int columns) {}
 
         /** 已经展开了 {@code expanded} 个节点、做了 {@code checked} 次精确判断,时间到了。 */
         boolean up(int expanded, int checked);

@@ -146,6 +146,38 @@ class EstimateConsistencyTest {
                 .fill(-4, Y - 4, -6, 4, Y - 1, 6, Blocks.WATER.defaultBlockState());
         scenes.add(new Scene("水池", pool, plain, goals(0, -4, -2, 3)));
 
+        // 湖:一池很宽的水,对岸的终点。岸上、水面、水里、水底各站位;下水是下落或平走,水里是游或涉水。水列(整列没有站得住的格)按游水价,
+        // 从岸上走进第一列仍按疾跑价,不然高估。
+        BlockState water = Blocks.WATER.defaultBlockState();
+        List<Goal> acrossLake = List.of(Goals.at(new BlockPos(14, Y, 0)), Goals.at(new BlockPos(14, Y, 2)), Goals.at(new BlockPos(7, Y - 2, 0)),
+                Goals.at(new BlockPos(-2, Y, 1)));
+        TestWorld lake = new TestWorld().floor(-6, -8, 20, 8, Y - 4).fill(-6, Y - 3, -8, 1, Y - 1, 8, STONE).fill(13, Y - 3, -8, 20, Y - 1, 8, STONE)
+                .fill(2, Y - 3, -8, 12, Y - 1, 8, water);
+        scenes.add(new Scene("湖", lake, plain, acrossLake));
+        // 浅水:一格深,水底站得住也涉得过去
+        TestWorld shallows = new TestWorld().floor(-6, -8, 20, 8, Y - 2).fill(2, Y - 1, -8, 12, Y - 1, 8, water);
+        scenes.add(new Scene("浅水", shallows, plain, acrossLake));
+        // 冰面:水面上盖着整块的冰,站得住,按陆地走
+        TestWorld ice = new TestWorld().floor(-6, -8, 20, 8, Y - 4).fill(-6, Y - 3, -8, 1, Y - 1, 8, STONE).fill(13, Y - 3, -8, 20, Y - 1, 8, STONE)
+                .fill(2, Y - 3, -8, 12, Y - 2, 8, water).fill(2, Y - 1, -8, 12, Y - 1, 8, Blocks.ICE.defaultBlockState());
+        scenes.add(new Scene("冰面", ice, plain, acrossLake));
+        // 睡莲:一条睡莲踩得过去的路(其余是水)
+        TestWorld lilies = new TestWorld().floor(-6, -8, 20, 8, Y - 4).fill(-6, Y - 3, -8, 1, Y - 1, 8, STONE).fill(13, Y - 3, -8, 20, Y - 1, 8, STONE)
+                .fill(2, Y - 3, -8, 12, Y - 2, 8, water).fill(2, Y - 1, 0, 12, Y - 1, 0, Blocks.LILY_PAD.defaultBlockState());
+        scenes.add(new Scene("睡莲", lilies, plain, acrossLake));
+        // 含水的半砖:水面上的这一格脚踩得上去
+        TestWorld logged = new TestWorld().floor(-6, -8, 20, 8, Y - 4).fill(-6, Y - 3, -8, 1, Y - 1, 8, STONE).fill(13, Y - 3, -8, 20, Y - 1, 8, STONE)
+                .fill(2, Y - 3, -8, 12, Y - 1, 8, water)
+                .fill(2, Y - 1, 0, 12, Y - 1, 0, Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP)
+                        .setValue(SlabBlock.WATERLOGGED, true));
+        scenes.add(new Scene("含水的半砖", logged, plain, acrossLake));
+        // 桥:同一个湖,规格许放、身上有圆石——水列的价取游与搭桥里低的;不许放就是上面的湖
+        CostModel bridging = Fixtures.withCobble(RouteSpec.defaults().edit().place(true).consent(false).build());
+        scenes.add(new Scene("湖(许放)", lake, bridging, acrossLake));
+        // 目标在快照之外:只加载一圈区块,终点在更远处,估价从边界列带着直线下界出发
+        scenes.add(new Scene("目标在快照外", field().floor(25, -12, 60, 12, Y - 1).loadedWithin(1), plain,
+                List.of(Goals.at(new BlockPos(60, Y, 0)), Goals.at(new BlockPos(48, Y + 3, 5)))));
+
         // 十格高的台旁边一池水:落进水里不摔,落多高都行
         TestWorld plunge = new TestWorld().floor(-6, -8, 12, 8, Y - 4).fill(-6, Y - 3, -8, 0, Y - 1, 8, STONE)
                 .fill(1, Y - 3, -8, 8, Y - 1, 8, Blocks.WATER.defaultBlockState()).fill(-1, Y, -8, 0, Y + 9, 8, STONE);
