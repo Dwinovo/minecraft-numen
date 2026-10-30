@@ -1,6 +1,6 @@
 # 0016 配方与物品知识:一个动词,多个来源;JEI 是主人客户端上的一个来源
 
-- 状态:已接受,未落地
+- 状态:已接受,已落地(实现说明见文末)
 - 日期:2026-10-31
 - 另见:control 0014(登记归属)、control 0015(KubeJS 联动)、调研 `jei_kubejs_info_research`(10-31)
 
@@ -40,3 +40,19 @@
 - 查询可能要等主人的客户端应答(有时限),结果要按物品过滤、限条数,不超过客户端应答的大小上限。
 - 来源各自的文档写进动词的帮助,模型知道还有哪些来源、各给什么。
 - 先做 1.21.1;JEI 各版本 API 有弃用项,移植时逐版本核。
+
+## 实现说明
+
+- 三个动词:`numen.inv.recipes`(怎么做)、`numen.inv.uses`(能拿来做什么)、`numen.inv.info`(物品说明),是 Lua 模块函数(`inv.lua`),逐个问来源、合并;
+  `numen.inv.lookup` 是客户端函数(按主人语言里的名字找物品,不经 JEI)。来源表是 `numen-api` 的 `KnowledgeSources`,三个扩展点由 `KnowledgeKind` 区分,
+  经门 `NumenApi.knowledgeSource`(Java 类或代码写的 `ApiFunction` 两种)登记,句柄进插件的作用域;花名册多一种 `KNOWLEDGE_SOURCE`。
+- 一个来源是名字空间里隐藏的一个函数(`<名字空间>.<recipes|uses|info>_source.<函数>`,不进索引与帮助,`numen.api.sources(种类)` 列出),
+  在哪一端执行由函数的描述说:主人客户端上的经现有的客户端调用通道问,等待与超时就是通道已有的那一套。
+  没答上的来源,动词结果的 `sources` 里写明哪个、调用怎么失败的(主人不在线、没装对应模组、超时)、缺的是哪一类信息(来源登记的 `provides`);
+  来源读不到的字段(`notProvided`)是它登记时如实声明的,结果里没有对应的值。
+- 配方与来源交换用的值类型(`Recipe`、`RecipePage`、`InfoPage`、`ItemFacts`)在 `numen-api` 的 `knowledge` 包。同一条配方(同一个配方 id)出自几个来源时合成一条,
+  `sources` 列出各个来源;`inv.make` 只读原版来源(只有它知道合成格与还缺什么,也不必等主人的客户端)。
+- 第一个来源是 `numen` 自己的(`VanillaKnowledge`):配方表里每种配方类型都读,类型不是原版合成的配方实现 `CraftingRecipe` 也不当合成配方描述
+  (`RecipeBook.isCrafting`,`numen.inv.craft` 同问这一处)。第二个是 `plugins/jei`:`NumenJeiPlugin` 向 JEI 报到拿运行时,查询在客户端主线程上做
+  (客户端调用通道的接收在两个加载器上都投回主线程);流体数量是加载器各异的一件事,由各加载器的 `Builtin` 里的 `JeiHost` 回答。
+- KubeJS 脚本经 `plugin.knowledgeSource(种类, source => …)` 登记说明或配方来源,见 `docs/kubejs.md`。
