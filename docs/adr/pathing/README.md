@@ -37,6 +37,7 @@
 | [0030](0030-trip-split.md) | 10-30 | 一趟分两半:规划的 `Trip` 与执行的 `Driver` | 已接受 |
 | [0031](0031-planning-benchmark.md) | 10-30 | 规划评测:大量自动出的题 + 分档 + 标准答案,取代手挑路线 | 已接受 |
 | [0032](0032-simplification-audit.md) | 10-30 | 简化审计:逐个机制开关,中性的删(Columns、endCost、接续加时),半程去处按 g+5h | 已接受 |
+| [0033](0033-underground-estimate-weight.md) | 10-31 | 地下的失败:估价松在水平项(绕路),权重 2.5 改 4 | 已接受 |
 
 ## 沿着一件事看
 

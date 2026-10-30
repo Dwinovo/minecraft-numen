@@ -800,14 +800,14 @@ class SearchTest {
 
     /**
      * 浮沉几下就是憋气更紧的一档、总价更高的同一格:它们走得到的地方,宽裕的那一个都走得到,不展开。不去重的话,宽阔的干地边上那条封顶水道里,
-     * 搜索在浮沉的各档上铺满一段的预算(四千个节点),搜不完能走到的干地,收场说成"预算用完"、往边界推进,身体下水去试;去重之后搜完能走到的地方,
+     * 搜索在浮沉的各档上铺满预算(六千个节点;权重 4 时搜完这片干地要约四千六百个),搜不完能走到的干地,收场说成"预算用完"、往边界推进,身体下水去试;去重之后搜完能走到的地方,
      * 说"到不了、是憋气丢下了步子"。
      */
     @Test
     void bobbingInTheWaterDoesNotFillTheSegmentBudgetWithDominatedStates() {
         TestWorld world = sealedChannel(28).fill(-5, Y, 0, -4, Y + 1, 0, Blocks.AIR.defaultBlockState())
                 .floor(-50, -28, -5, 28, Y - 1);
-        SearchResult result = Fixtures.search(world, defaults(), new BlockPos(-30, Y, 0), Goals.at(new BlockPos(30, Y, 0)), 4000);
+        SearchResult result = Fixtures.search(world, defaults(), new BlockPos(-30, Y, 0), Goals.at(new BlockPos(30, Y, 0)), 6000);
         assertEquals(SearchResult.Stop.EXHAUSTED, result.stop(), "expanded " + result.expanded());
         assertNull(result.route());
         assertTrue(result.breathless());
