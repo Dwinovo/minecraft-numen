@@ -1,5 +1,7 @@
 package com.dwinovo.numen.task.dig;
 
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.area.Cells;
@@ -250,7 +252,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord,
         }
         justWalked = false;
         // 动手之前:这一格交给权限层。要问就站着等主人,不许就带着理由收场
-        Permit permit = permit(Action.breakBlock(target, level.getBlockState(target)));
+        Permit permit = gate().permit(Action.breakBlock(target, level.getBlockState(target)));
         if (permit.state() == PermitState.WAITING) {
             player.controls().stop();
             return TaskState.RUNNING;

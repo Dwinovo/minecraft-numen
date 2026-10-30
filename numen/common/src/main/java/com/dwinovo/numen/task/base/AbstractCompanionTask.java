@@ -15,12 +15,9 @@ import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.BodyDelta;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.dwinovo.numen.api.permission.GatedAct;
 import com.dwinovo.numen.api.permission.ConsentItem;
-import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.task.TaskResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -103,10 +100,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
      */
     private TaskState pendingTerminal;
 
-    /** 在等主人答复的那张号;没在问是 null。 */
-    private ConsentDesk.Ticket consent;
-    /** 主人点头的那几次,回执末尾交代。 */
-    private final List<String> allowances = new ArrayList<>();
+    /** 动手前过权限层、要问就问主人的那一块;主人点过的头回执末尾交代。 */
+    private final GatedAct gate;
 
     /** 开工那一刻的身体;收场时据此说这件活里有没有装备用坏。没开过工是 null。 */
     private BodyDelta bodyAtStart;
@@ -132,6 +127,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
     protected AbstractCompanionTask(NumenPlayer player, R record) {
         this.player = player;
         this.r = record;
+        this.gate = new GatedAct(player, this::scope);
     }
 
     // ---------------------------------------------------------------------
@@ -221,7 +217,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
 
     /** 身体这一刻在等,不在干活。见 {@link #workTicks()}。 */
     private boolean waiting() {
-        return (nav != null && nav.waiting()) || consent != null || awaitingSearch;
+        return (nav != null && nav.waiting()) || gate.waiting() || awaitingSearch;
     }
 
     /** 征询记在谁名下,见 {@link #consentScope}。 */
@@ -244,7 +240,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
             return null;
         }
         player.controls().stop();
-        ConsentAnswer answer = consult(needed);
+        ConsentAnswer answer = gate.consult(needed);
         if (answer == null) {
             return TaskState.RUNNING;
         }
@@ -260,105 +256,12 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
     // Permission — the task proposes actions; the permission layer decides
     // ---------------------------------------------------------------------
 
-    /** 执行开始时一个动作过权限层的结论。 */
-    protected enum PermitState { ALLOWED, WAITING, REFUSED }
-
     /**
-     * @param state   放行 / 在等主人 / 不许
-     * @param refusal 不许时回执的理由(规则、模式、外部强制的自述,或主人的原话);其余为空串
+     * 动手前过权限层的那一块({@link GatedAct}):任务持有它、不继承它。提出动作、等主人答复、记下主人点过的头都在里面;任务自己不判
+     * 能不能,只提出动作。
      */
-    protected record Permit(PermitState state, String refusal) {
-        static final Permit ALLOWED = new Permit(PermitState.ALLOWED, "");
-        static final Permit WAITING = new Permit(PermitState.WAITING, "");
-
-        static Permit refused(String why) {
-            return new Permit(PermitState.REFUSED, why);
-        }
-    }
-
-    /**
-     * 执行开始:把要做的一个动作交给权限层。放行就做;拒绝就带着理由收场;要问就发起征询,
-     * 等待期间返回 WAITING(调用方让身体站住,每刻再调),主人答应后返回 ALLOWED——同一行规则
-     * 问出来的同一种东西从此在本任务内放行,不再问。任务自己不判能不能,只提出动作。
-     */
-    protected final Permit permit(Action action) {
-        return permitAll(List.of(action)).get(0);
-    }
-
-    /**
-     * 同 {@link #permit},一批动作一起:各自裁决,要问的合成一次征询,主人的答复对这一批里要问的
-     * 全部生效。结果与 {@code actions} 一一对应。
-     */
-    protected final List<Permit> permitAll(List<Action> actions) {
-        var gate = Permission.gateFor(player);
-        List<Permit> out = new ArrayList<>(actions.size());
-        List<ConsentItem> asks = new ArrayList<>();
-        List<Integer> askedAt = new ArrayList<>();
-        for (Action action : actions) {
-            Verdict verdict = gate.judgeLive(action, player.serverLevel());
-            switch (verdict.kind()) {
-                case ALLOW -> out.add(Permit.ALLOWED);
-                case DENY -> out.add(Permit.refused(verdict.reason()));
-                case ASK -> {
-                    askedAt.add(out.size());
-                    asks.add(gate.consentItemLive(action, verdict, player.serverLevel()));
-                    out.add(Permit.WAITING);
-                }
-            }
-        }
-        if (asks.isEmpty()) {
-            settleConsult();
-            return out;
-        }
-        ConsentAnswer answer = consult(asks);
-        if (answer != null) {
-            Permit settled = answer.allowed() ? Permit.ALLOWED : Permit.refused(answer.refusal(asks));
-            for (int i : askedAt) {
-                out.set(i, settled);
-            }
-        }
-        return out;
-    }
-
-    /**
-     * 问主人一批事:第一次调用发起征询,之后每刻读结论;清单变了就重发(新的顶掉旧的)。
-     * 主人答应的清单由登记处记成本任务的授权,回执末尾交代。
-     *
-     * @return 结论;还在等是 null
-     */
-    protected final ConsentAnswer consult(List<ConsentItem> items) {
-        if (consent != null && !consent.request().items().equals(items)) {
-            consent = null;
-        }
-        if (consent == null) {
-            consent = ConsentDesk.of(player).ask(scope(), items);
-        }
-        ConsentAnswer answer = consent.poll();
-        if (answer == null) {
-            return null;
-        }
-        consent = null;
-        if (answer.allowed()) {
-            allowances.add(answer.allowance(items));
-        }
-        return answer;
-    }
-
-    /**
-     * 要做的事此刻不用问了:主人刚答应(授权已经让裁决变成放行)就把这次允许记进回执;
-     * 还没答复就撤回挂着的征询。
-     */
-    private void settleConsult() {
-        if (consent == null) {
-            return;
-        }
-        ConsentAnswer answer = consent.poll();
-        if (answer == null) {
-            ConsentDesk.of(player).withdraw(consent);
-        } else if (answer.allowed()) {
-            allowances.add(answer.allowance(consent.request().items()));
-        }
-        consent = null;
+    protected final GatedAct gate() {
+        return gate;
     }
 
     /**
@@ -396,7 +299,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         String travelled = soFar().describe();
         String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
-                + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".")
+                + gate.allowanceNote()
                 + (broken.isEmpty() ? "" : " " + broken);
         TaskResult result = outcome(finalState, enRoute);
         cleanup();
@@ -646,7 +549,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         a.cleanup();
         this.failType = a.lastFailure();
         journey.add(a.journey);
-        allowances.addAll(a.allowances);
+        gate.absorb(a.gate);
         return result;
     }
 

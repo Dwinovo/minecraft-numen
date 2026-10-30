@@ -276,7 +276,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState tickConsent() {
         player.controls().stop();
-        var answer = consult(consentItems);
+        var answer = gate().consult(consentItems);
         if (answer == null) {
             return TaskState.RUNNING;
         }

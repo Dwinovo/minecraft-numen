@@ -3,12 +3,7 @@ package com.dwinovo.numen.plugins.kaleidoscope;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
-import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.dwinovo.numen.api.permission.ConsentItem;
-import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.GatedAct;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.Task;
@@ -19,7 +14,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,9 +36,8 @@ final class PotActTask implements Task {
     private Dish dish;
     private int[] portions;
     private boolean permitted;
-    private ConsentDesk.Ticket consent;
-    /** 主人点头之后回执末尾要交代的那一句;没问过主人时是空串。 */
-    private String allowance = "";
+    /** 动手前过权限层、要问就问主人的那一块;主人点过的头回执末尾交代。 */
+    private final GatedAct gate;
     /** 走到终态时说给模型听的那句话。 */
     private String outcome = "";
     /** 失败收场时是哪一类、能照抄的下一步(没有为 null)。 */
@@ -54,8 +47,9 @@ final class PotActTask implements Task {
     private String lastStep = "not started yet";
     private ItemStack plated = ItemStack.EMPTY;
 
-    PotActTask(PotActRecord record) {
+    PotActTask(NumenPlayer cook, PotActRecord record) {
         this.r = record;
+        this.gate = new GatedAct(cook, () -> record);
     }
 
     @Override
@@ -184,35 +178,17 @@ final class PotActTask implements Task {
         List<Action> proposed = r.act == PotAct.PLATE
                 ? List.of(Action.useBlock(r.pos, state), Action.take(r.pos, state, dish.result().getItem()))
                 : List.of(Action.useBlock(r.pos, state));
-        Gate gate = Permission.gateFor(cook);
-        List<ConsentItem> asks = new ArrayList<>();
-        for (Action action : proposed) {
-            Verdict verdict = gate.judgeLive(action, level);
-            switch (verdict.kind()) {
-                case ALLOW -> { }
-                case DENY -> {
-                    return failed(ErrorKind.DENIED, "cannot " + action.describe() + ": " + verdict.reason(), null);
-                }
-                case ASK -> asks.add(gate.consentItemLive(action, verdict, level));
+        List<GatedAct.Permit> permits = gate.permitAll(proposed);
+        for (int i = 0; i < proposed.size(); i++) {
+            if (permits.get(i).state() == GatedAct.PermitState.REFUSED) {
+                return failed(ErrorKind.DENIED, "cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),
+                        null);
             }
         }
-        if (asks.isEmpty()) {
-            permitted = true;
-            return null;
-        }
-        if (consent == null || !consent.request().items().equals(asks)) {
-            consent = ConsentDesk.of(cook).ask(r, asks);
-        }
-        ConsentAnswer answer = consent.poll();
-        if (answer == null) {
+        if (permits.stream().anyMatch(p -> p.state() == GatedAct.PermitState.WAITING)) {
             cook.controls().stop();
             return TaskState.RUNNING;
         }
-        consent = null;
-        if (!answer.allowed()) {
-            return failed(ErrorKind.DENIED, answer.refusal(asks), null);
-        }
-        allowance = answer.allowance(asks);
         permitted = true;
         return null;
     }
@@ -231,7 +207,7 @@ final class PotActTask implements Task {
     public TaskResult result(TaskState terminal) {
         KaleidoscopeApi.Done data = new KaleidoscopeApi.Done(r.pos,
                 plated.isEmpty() ? Optional.empty() : Optional.of(Dish.idOf(plated.getItem())));
-        String tail = allowance.isEmpty() ? "" : " " + allowance + ".";
+        String tail = gate.allowanceNote();
         return switch (terminal) {
             case SUCCESS -> TaskResult.ok(outcome + tail, data);
             case TIMEOUT -> TaskResult.timeout("ran out of time at " + r.act.word + " on the "

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task.combat;
 
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
 import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.Constants;
@@ -309,7 +310,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         for (Entity e : candidates) {
             attacks.add(Action.attack(e));
         }
-        List<Permit> permits = permitAll(attacks);
+        List<Permit> permits = gate().permitAll(attacks);
         java.util.Set<Integer> cleared = new java.util.HashSet<>();
         awaitingOwner = false;
         for (int i = 0; i < candidates.size(); i++) {
