@@ -233,12 +233,7 @@ final class BuildPlacer {
             entity.applyComponentsFromItemStack(placing);
             entity.setChanged();
         }
-        try {
-            desired.getBlock().setPlacedBy(player.level(), pos, desired, player, placing);
-        } catch (RuntimeException ignored) {
-            // 回调本是给"玩家手持物品放置"设计的,这里没有那个上下文,个别方块会在里面自己炸掉;放置本身已经成功,
-            // 回调失败只影响那一格的附加数据,不该让整栋楼停工
-        }
+        desired.getBlock().setPlacedBy(player.level(), pos, desired, player, placing);
         List<ItemStack> spent = pick.map(p -> inv.consume(p, cost)).orElse(List.of());
         BlockState written = player.level().getBlockState(pos);
         Block.updateOrDestroy(written, Block.updateFromNeighbourShapes(written, player.level(), pos), player.level(), pos,
