@@ -218,7 +218,9 @@ public class PluginGameTests {
 
         @Override
         public com.dwinovo.numen.api.task.TaskResult result(com.dwinovo.numen.api.task.TaskState terminal) {
-            return com.dwinovo.numen.api.task.TaskResult.ok("held");
+            return terminal == com.dwinovo.numen.api.task.TaskState.SUCCESS
+                    ? com.dwinovo.numen.api.task.TaskResult.ok("held")
+                    : com.dwinovo.numen.api.task.TaskResult.fail("stopped after " + held + " ticks");
         }
     }
 
