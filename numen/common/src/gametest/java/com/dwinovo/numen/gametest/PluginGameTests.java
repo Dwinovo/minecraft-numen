@@ -196,6 +196,11 @@ public class PluginGameTests {
         DynRecord(com.dwinovo.numen.api.sdk.ServerCall call) {
             super(call, call.her().level().getGameTime() + 100);
         }
+
+        /** 只为问"这种活此刻有没有执行器"造的一条,不派下去。 */
+        DynRecord(long deadline) {
+            super("gt_dyn.dyn.hold", "probe", deadline);
+        }
     }
 
     private static final class DynTask implements com.dwinovo.numen.api.task.Task {
@@ -224,6 +229,11 @@ public class PluginGameTests {
         }
     }
 
+    /** 这种活此刻有没有登记着执行器(别的用例并行登记的执行器不会混进来,只看这一种)。 */
+    private static boolean runnerRegistered(NumenPlayer body) {
+        return com.dwinovo.numen.api.task.TaskFactory.create(body, new DynRecord(0L)) instanceof DynTask;
+    }
+
     /** 她这一刻调一次 {@code gt_dyn.dyn.ping()}。 */
     private static ToolRun ping(NumenPlayer companion) {
         return lua(companion, "return gt_dyn.dyn.ping()");
@@ -245,13 +255,11 @@ public class PluginGameTests {
     public static void an_admin_switches_a_plugin_off_and_her_function_listing_loses_its_group(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         NumenPlayer companion = spawnAt(helper, "gametest_dynamic", new BlockPos(4, 2, 4), false);
-        int before = com.dwinovo.numen.api.task.TaskFactory.size();
         com.dwinovo.numen.api.NumenPlugins.register("gt_dyn", numen -> {
             numen.api("dyn", "Test fixture: a group that comes and goes with its plugin.", Dyn.class);
             numen.taskRunner(DynRecord.class, (body, record) -> new DynTask());
         });
-        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before + 1,
-                "the plugin's task runner was not registered");
+        helper.assertTrue(runnerRegistered(companion), "the plugin's task runner was not registered");
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_plugin_toggler");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
                 4, false));
@@ -286,13 +294,11 @@ public class PluginGameTests {
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
                 "{\"id\":\"gt_dyn\"}");
         GameTestKit.received(admin);
-        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before,
-                "the task runner stayed registered after the plugin was switched off");
+        helper.assertTrue(!runnerRegistered(companion), "the task runner stayed registered after the plugin was switched off");
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
                 "{\"id\":\"gt_dyn\"}");
         GameTestKit.received(admin);
-        helper.assertTrue(com.dwinovo.numen.api.task.TaskFactory.size() == before + 1,
-                "the task runner was registered twice or not at all after switching the plugin on again");
+        helper.assertTrue(runnerRegistered(companion), "the task runner did not come back after switching the plugin on again");
         server.getPlayerList().deop(admin.getGameProfile());
         GameTestKit.leave(admin);
 
