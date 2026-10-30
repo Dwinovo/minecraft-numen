@@ -13,6 +13,12 @@ public interface SearchClock {
     /** 估价的预计算读一列(扫一遍整列的标志字、判种类)折多少纳秒:靶场实测,见 ADR 0029。 */
     long PER_COLUMN = 2_000;
 
+    /** 按活量折算的表:展开一个节点(快判断、松弛)记多少纳秒。 */
+    long PER_EXPANSION = 4_400;
+
+    /** 按活量折算的表:取出一条候选做一次精确判断记多少纳秒。 */
+    long PER_CHECK = 2_700;
+
     /** 墙钟每展开这么多个节点才看一次:读纳秒钟在 Windows 上比展开一个节点还贵(Baritone 同样每 64 个节点看一次)。 */
     int WALL_EVERY = 64;
 
@@ -27,7 +33,7 @@ public interface SearchClock {
      * 依据:10-29 靶场 42 次整路线跑(最终常数),每条路线的搜索墙钟对"展开数、精确判断数"做无截距最小二乘;平均每展开一个节点
      * 伴随 2.4 次精确判断,合起来约 11 微秒。精确判断里多数是一读就不成立的(水里往岸上够、脚下整块落不下),所以平均比一次展开便宜。
      */
-    SearchClock STEADY = counting(4_400, 2_700, PER_COLUMN);
+    SearchClock STEADY = counting(PER_EXPANSION, PER_CHECK, PER_COLUMN);
 
     /** 按做了多少活折算的表:每展开一个节点记 {@code perExpansion} 纳秒,每做一次精确判断记 {@code perCheck} 纳秒,不记估价的预计算。 */
     static SearchClock counting(long perExpansion, long perCheck) {

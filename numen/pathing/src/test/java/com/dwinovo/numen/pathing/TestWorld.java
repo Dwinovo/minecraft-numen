@@ -23,13 +23,44 @@ import net.minecraft.world.level.material.FluidState;
  */
 public final class TestWorld implements SearchView {
 
-    private final Map<BlockPos, BlockState> blocks = new HashMap<>();
+    private final Map<BlockPos, BlockState> blocks;
     /** 摆过非空气方块的区段;摆回空气也不划掉,只会让 {@link #airSection} 少答一次是。 */
-    private final Set<Long> occupied = new HashSet<>();
+    private final Set<Long> occupied;
+    /** 每个区段里摆过哪几种方块(摆走了也不划掉):{@link #sectionMayHold} 只问它,不扫整张表。 */
+    private final Map<Long, Set<BlockState>> kinds;
     private final WorldBorder border = new WorldBorder();
     private int loadedRadius = Integer.MAX_VALUE;
+    /** 加载的那块正方形的中心区块。 */
+    private int loadedX;
+    private int loadedZ;
     private BlockState ground = Blocks.AIR.defaultBlockState();
     private int groundTop = Integer.MIN_VALUE;
+
+    public TestWorld() {
+        this.blocks = new HashMap<>();
+        this.occupied = new HashSet<>();
+        this.kinds = new HashMap<>();
+    }
+
+    /** 同一份方块表的另一个视窗:加载的区块换一块。 */
+    private TestWorld(TestWorld shared, int centerX, int centerZ, int radius) {
+        this.blocks = shared.blocks;
+        this.occupied = shared.occupied;
+        this.kinds = shared.kinds;
+        this.ground = shared.ground;
+        this.groundTop = shared.groundTop;
+        this.loadedX = centerX;
+        this.loadedZ = centerZ;
+        this.loadedRadius = radius;
+    }
+
+    /**
+     * 为从 {@code from} 出发的一次搜索拷的快照那样的视窗:同一份方块,只有以 {@code from} 所在区块为中心、半径 {@code chunks} 个区块的区块算加载了
+     * (真实运行里搜索的快照就是这样,{@code WorldSnapshot.around})。
+     */
+    public TestWorld window(BlockPos from, int chunks) {
+        return new TestWorld(this, SectionPos.blockToSectionCoord(from.getX()), SectionPos.blockToSectionCoord(from.getZ()), chunks);
+    }
 
     public TestWorld set(int x, int y, int z, BlockState state) {
         return set(new BlockPos(x, y, z), state);
@@ -38,7 +69,9 @@ public final class TestWorld implements SearchView {
     public TestWorld set(BlockPos pos, BlockState state) {
         blocks.put(pos.immutable(), state);
         if (!state.isAir()) {
-            occupied.add(SectionPos.blockToSection(pos.asLong()));
+            long section = SectionPos.blockToSection(pos.asLong());
+            occupied.add(section);
+            kinds.computeIfAbsent(section, k -> new HashSet<>()).add(state);
         }
         return this;
     }
@@ -89,15 +122,10 @@ public final class TestWorld implements SearchView {
 
     @Override
     public boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted) {
-        int sx = SectionPos.blockToSectionCoord(x);
         int sy = SectionPos.blockToSectionCoord(y);
-        int sz = SectionPos.blockToSectionCoord(z);
-        for (Map.Entry<BlockPos, BlockState> e : blocks.entrySet()) {
-            BlockPos p = e.getKey();
-            if (SectionPos.blockToSectionCoord(p.getX()) == sx && SectionPos.blockToSectionCoord(p.getY()) == sy
-                    && SectionPos.blockToSectionCoord(p.getZ()) == sz && wanted.test(e.getValue())) {
-                return true;
-            }
+        Set<BlockState> here = kinds.get(SectionPos.asLong(SectionPos.blockToSectionCoord(x), sy, SectionPos.blockToSectionCoord(z)));
+        if (here != null && here.stream().anyMatch(wanted)) {
+            return true;
         }
         return sy <= SectionPos.blockToSectionCoord(groundTop) && wanted.test(ground);
     }
@@ -108,20 +136,24 @@ public final class TestWorld implements SearchView {
         if (loadedRadius == Integer.MAX_VALUE) {
             return;
         }
-        int lo = -(loadedRadius << 4);
-        int hi = (loadedRadius << 4) + 15;
-        for (int k = lo; k <= hi; k++) {
-            visitor.accept(lo, k);
-            visitor.accept(hi, k);
-            visitor.accept(k, lo);
-            visitor.accept(k, hi);
+        int loX = (loadedX - loadedRadius) << 4;
+        int hiX = ((loadedX + loadedRadius) << 4) + 15;
+        int loZ = (loadedZ - loadedRadius) << 4;
+        int hiZ = ((loadedZ + loadedRadius) << 4) + 15;
+        for (int k = loZ; k <= hiZ; k++) {
+            visitor.accept(loX, k);
+            visitor.accept(hiX, k);
+        }
+        for (int k = loX; k <= hiX; k++) {
+            visitor.accept(k, loZ);
+            visitor.accept(k, hiZ);
         }
     }
 
     @Override
     public boolean isLoaded(int x, int z) {
-        return Math.abs(SectionPos.blockToSectionCoord(x)) <= loadedRadius
-                && Math.abs(SectionPos.blockToSectionCoord(z)) <= loadedRadius;
+        return Math.abs(SectionPos.blockToSectionCoord(x) - loadedX) <= loadedRadius
+                && Math.abs(SectionPos.blockToSectionCoord(z) - loadedZ) <= loadedRadius;
     }
 
     @Override

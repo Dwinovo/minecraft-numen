@@ -1,6 +1,8 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
+import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
+import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
 import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.pathing.drive.Journal;
@@ -509,5 +511,49 @@ public class UpDownGameTests {
         t.fill(x0 - 1, -depth, z0 - 1, x1 + 1, -1, z1 + 1, Blocks.STONE);
         t.fill(x0 - 1, -depth - 1, z0 - 1, x1 + 1, -depth - 1, z1 + 1, Blocks.STONE);
         t.fill(x0, 1 - depth, z0, x1, 0, z1, Blocks.WATER);
+    }
+
+    /**
+     * 按高度的目标:在平地上垫五十格高的柱子上去;一路对外都是"在推进",不被当成停滞。这一条要真身体:看护({@code Watchdog})
+     * 每刻看着垫柱的身体在不在推进。
+     */
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1539)
+    public static void pillars_fifty_blocks_up_to_a_level(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = t.body(8, 1, 8);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        int level = t.origin.getY() + 51;
+        t.go(body, Goals.level(level), natural).within(2800)
+                .during(r -> {
+                    if (r.ticks > 1 && !r.navigation.progressing()) {
+                        throw new GameTestAssertException("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
+                    }
+                })
+                .arrives().then(r -> {
+                    if (r.body.blockPosition().getY() != level) {
+                        throw new GameTestAssertException("没到那一层:" + t.rel(r.body.blockPosition()));
+                    }
+                });
+    }
+
+    /**
+     * 两块基岩台子之间一百五十格宽的空隙(跳下去摔不起,底下的地也挖不出路),身上有三叠圆石,许挖许放:过去只能一路搭桥,对岸远在一次搜索的快照
+     * 之外。每段搜索搜到"估价比起点低一段"的节点就交出这一段,她先走这一段,快走完时从桥头(快照里还没有那块桥)接着搜下一段;一段段搭过去,
+     * 到对岸。这一条要真身体:一块块真的搭,看护每刻看着在不在推进。
+     */
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 7000)
+    public static void bridges_a_wide_chasm_in_segments(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 9, 4, 23, Blocks.BEDROCK);
+        t.fill(160, 1, 0, 180, 4, 23, Blocks.BEDROCK);
+        TestBody body = t.body(6, 5, 12);
+        for (int i = 0; i < 3; i++) {
+            Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        t.go(body, Goals.at(t.at(164, 5, 12)), natural).within(6800).arrives();
     }
 }

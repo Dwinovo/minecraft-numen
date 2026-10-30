@@ -464,6 +464,7 @@ public class AlterGameTests {
 
     // ==================== 世界边界 ====================
 
+    // 世界边界是整个世界的一份状态:这一条改它,同批里并行跑的别的用例会跟着变,所以单独一批,批后照原样还回去。
     private static double borderX;
     private static double borderZ;
     private static double borderSize;

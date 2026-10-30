@@ -12,17 +12,10 @@ import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
-import com.dwinovo.numen.pathing.search.Deadline;
-import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Origin;
-import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Route;
-import com.dwinovo.numen.pathing.search.Search;
-import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.search.SearchClock;
-import com.dwinovo.numen.pathing.search.Searches;
-import com.dwinovo.numen.pathing.search.TripMemory;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -51,12 +44,13 @@ import net.minecraft.world.phys.Vec3;
  * 收场只有一个判据:这一趟的总预算(按展开的节点数,{@link Allowance})用完还没到;另外是搜索证明了到不了(能走到的都搜过了),
  * 或根本动不了。时钟只决定每次想多久,不决定放不放弃。身体不传送,不做模型不知道的事:重搜与原因都进日志与行程报告({@link Journal})。
  *
- * <p>这里只做组装:派搜索(拷快照、组成本模型、记日志)、驱动正在走的那一步({@link Step})、下载具、对外交出状态。其余各归一个部件——
+ * <p>这里是执行那一半:驱动正在走的那一步({@link Step})、认步、停稳、对外交出状态。规划那一半是 {@link Trip}(不带身体:搜索的派发与收结论、
+ * 路线与接续、总预算、一趟的记忆与收场的判断),身体与世界经 {@link Trip.Ground} 交给它。其余各归一个部件——
  * <ul>
- *   <li>路线与进度:{@link Course};</li>
+ *   <li>路线与进度:{@link Course}(归 {@link Trip});</li>
  *   <li>认步,即身体此刻在路线上的哪一步:{@link Tracker}(身体此刻在哪个节点,照搜索定起点的同一条规则({@link Origin})在活世界上定);</li>
- *   <li>接续,何时搜下一截、怎么拼、末尾几步何时能开始走:{@link Continuation};</li>
- *   <li>每次想多久、展开几个节点、一趟的总预算:{@link Allowance};</li>
+ *   <li>接续,何时搜下一截、怎么拼、末尾几步何时能开始走:{@link Continuation}(归 {@link Trip});</li>
+ *   <li>每次想多久、展开几个节点、一趟的总预算:{@link Allowance}(归 {@link Trip});</li>
  *   <li>到达,停稳之后到没到:{@link Arrival}(路过的导航不停稳,走进目标就算到了)。</li>
  * </ul>
  *
@@ -78,52 +72,16 @@ public final class Driver {
         RUNNING, ARRIVED, HALTED
     }
 
-    /** 为什么派这次搜索。 */
-    private enum Purpose {
-        /** 从身体脚下搜(首段,或走不下去之后重搜):身体站着等它。 */
-        FROM_BODY("从脚下", Searches.Urgency.NOW),
-        /** 从当前路线的终点接着搜:身体边走边等它。 */
-        NEXT("接续", Searches.Urgency.AHEAD);
-
-        /** 日志里的叫法。 */
-        final String label;
-        /** 在派发口排哪一级。 */
-        final Searches.Urgency urgency;
-
-        Purpose(String label, Searches.Urgency urgency) {
-            this.label = label;
-            this.urgency = urgency;
-        }
-    }
-
     private final Rig rig;
     private final RouteSpec spec;
-    private final Allowance allowance;
     /** 路过这个目标,不停下。 */
     private final boolean passing;
     private final Watchdog watchdog = new Watchdog();
-    private Goal goal;
-
-    private final Course course = new Course();
+    /** 规划那一半:搜索、路线、接续、总预算、记忆、收场的判断。 */
+    private final Trip trip;
+    private final Course course;
     private final Tracker tracker = new Tracker();
-    private final Continuation continuation = new Continuation();
-    /** 这一趟的记忆:搜索与执行共用。 */
-    private final TripMemory memory = new TripMemory();
     private Step step;
-
-    private Pending<SearchResult> pending;
-    private Purpose purpose;
-    private Search pendingSearch;
-    private Favoring favoring = Favoring.NONE;
-    /** 最近一次搜索的输入与结论:总预算用完收场时诊断它。 */
-    private Search lastSearch;
-    private SearchResult lastResult;
-    /** 最近一次没到目标的搜索里,离目标最近处朝目标的那一步为什么被拒;还没有为 null。一趟走得久了要对人说"卡在哪",读它。 */
-    private Blockage nearestRefusal;
-    /** 最近一次没走成的一步的原因;之后走成了一步就清掉。从那里重搜把能走的都搜过了还是没路,没路的原因就是它。 */
-    private Blockage lastBlockage;
-    /** 这一趟里哪一次搜索因为憋不住气丢下过前提成立的步子:收场诊断"憋得住的话有没有路"看的是整趟,不只最后一次。 */
-    private boolean breathless;
 
     private int stranded;
     /** 路线走完、身体停住了却不在终点那一格,已经等了几刻({@link #SETTLE_TICKS})。 */
@@ -143,12 +101,12 @@ public final class Driver {
     public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
         this.rig = new Rig(body, terrain, materials, threats);
-        this.goal = goal;
         this.spec = spec;
-        this.allowance = new Allowance(budget, clock);
+        this.trip = new Trip(new Eyes(), rig.who, rig.journal, goal, spec, budget, clock);
+        this.course = trip.course();
         this.passing = passing;
         if (seed != null) {
-            install(seed, goalHas(seed.end(), seed.endStance()));
+            install(seed, trip.goalHas(seed.end(), seed.endStance()));
         }
     }
 
@@ -182,7 +140,7 @@ public final class Driver {
 
     /** 这一趟里最近一次"离目标最近处被拒"的那一步;没有为 null。 */
     public Blockage nearestRefusal() {
-        return nearestRefusal;
+        return trip.nearestRefusal();
     }
 
     /** 在推进:{@link Watchdog} 对外交出的信号。 */
@@ -210,7 +168,7 @@ public final class Driver {
      * 派出去的搜索还没回来。
      */
     public boolean waiting() {
-        return state == State.RUNNING && pending != null && (course.finished() || !continuation.settled(course));
+        return state == State.RUNNING && trip.waiting();
     }
 
     /** 此刻在走的路线(不含已经走过的步);没有为空。 */
@@ -225,35 +183,14 @@ public final class Driver {
      * 交进来的还是同一个目标(目标是值,每刻重编一次也相等),什么都不变:在走的路与在飞的搜索照旧。
      */
     public void retarget(Goal next) {
-        if (next.equals(goal)) {
-            return;
+        if (!trip.retarget(next, rig.world())) {
+            reset();
         }
-        Goal before = goal;
-        goal = next;
-        // 抬高过的估价是对着旧目标算的;这一趟的总预算也按新目标的远近重定
-        memory.forgetRaised();
-        allowance.restart();
-        breathless = false;
-        if (course.isEmpty() && pending != null) {
-            // 手上没有路、从脚下的搜索还在飞:让它搜完。跟着会动的东西时目标每刻都变,变一次就作废重派的话,在飞的那一次永远
-            // 搜不完,她就一直站着;交回来的路照走,走到终点按那时的目标判,不在里面就从那儿重搜
-            PathLog.debug("{} 换目标 {} -> {},在飞的搜索搜完再说", rig.who, before, next);
-            return;
-        }
-        BlockPos end = course.end();
-        Stance endStance = course.endStance();
-        if (course.complete() && end != null && endStance != null && Goal.keepsStop(rig.world(), before, next, end, endStance)) {
-            PathLog.debug("{} 换目标 {} -> {},在走的路终点还算数,照走", rig.who, before, next);
-            return;
-        }
-        // 跟随、战斗走位的目标随对方挪动一再换,记 DEBUG;换了之后的搜索照常记 INFO
-        PathLog.debug("{} 换目标 {} -> {},从脚下重搜", rig.who, before, next);
-        reset();
     }
 
     /** 叫停:在飞的搜索作废,松开所有键(包括潜行),手上正在挖的放下。 */
     public void stop() {
-        abandon();
+        trip.abandon();
         rig.keys.releaseAll();
         rig.mouse.release();
         if (state == State.RUNNING) {
@@ -284,7 +221,7 @@ public final class Driver {
             PathLog.info("{} 出水 从 {} 到 {} 憋了 {} 刻 氧气最低 {}/{}", rig.who, PathLog.pos(surfaced.from()),
                     PathLog.pos(surfaced.to()), surfaced.ticks(), surfaced.lowestAir(), surfaced.maxAir());
         }
-        poll();
+        collect();
         if (state != State.RUNNING) {
             return state;
         }
@@ -311,10 +248,10 @@ public final class Driver {
     private void drive() {
         ServerPlayer body = rig.entity;
         BlockPos node = node();
-        if (course.isEmpty() && !course.complete() || course.finished() && !course.complete()) {
+        if (trip.stalled()) {
             // 没有路,或路走完了还没到:等在飞的搜索,没有就从脚下搜
             hold();
-            if (pending == null) {
+            if (!trip.searching()) {
                 if (node == null) {
                     // 脚下待不住:朝旁边待得住的节点挪,挪了一阵还不行就收场
                     if (++stranded > STRANDED_TICKS) {
@@ -325,11 +262,11 @@ public final class Driver {
                     return;
                 }
                 stranded = 0;
-                if (allowance.spent()) {
-                    spentOut();
+                if (trip.spent()) {
+                    halt(trip.spentOut());
                     return;
                 }
-                fromBody(node);
+                trip.fromBody(node);
             }
             watchdog.waiting(body.position());
             return;
@@ -346,16 +283,14 @@ public final class Driver {
             return;
         }
         if (step == null) {
-            if (!continuation.settled(course)) {
+            if (!trip.settled()) {
                 // 后面接什么还没定下来:不开始走末尾这几步,等接续段到了(或确认接不上)。末尾的步怎么走只由路线数据定,不由线程快慢定
                 hold();
-                if (pending == null) {
-                    next();
-                }
+                trip.continueAhead();
                 watchdog.waiting(body.position());
                 return;
             }
-            switch (Lookahead.verify(rig, goal, spec, course)) {
+            switch (Lookahead.verify(rig, trip.goal(), spec, course)) {
                 case Lookahead.Broken broken -> {
                     fail(Journal.Replan.AHEAD, broken.step(), broken.blockage());
                     return;
@@ -373,7 +308,7 @@ public final class Driver {
         }
         Beat beat = step.tick();
         switch (beat) {
-            case Beat.Going going -> continueAhead();
+            case Beat.Going going -> trip.continueAhead();
             case Beat.Blocked blocked -> fail(blocked.blockage().hitch() == Blockage.Hitch.STUCK ? Journal.Replan.TIMEOUT
                     : Journal.Replan.FAILED, course.current(), blocked.blockage());
             case Beat.Denied denied -> {
@@ -444,12 +379,11 @@ public final class Driver {
                     Maneuver walked = course.at(k);
                     rig.ledger.stepped(walked.kind());
                     rig.journal.walked(course.costAt(k));
-                    lastBlockage = null;
                     if (step != null) {
                         rig.journal.timed(walked.kind(), watchdog.stepTicks() * course.minimumAt(k) / shortest, course.minimumAt(k));
                     }
                 }
-                course.advanceTo(advanced.to());
+                trip.advance(advanced.to());
                 step = null;
                 return false;
             }
@@ -498,7 +432,7 @@ public final class Driver {
         BlockPos end = course.end();
         Stance endStance = course.endStance();
         step = null;
-        if (passing && node != null && Arrival.passes(goal, rig.world(), rig.snapshot().stats(), node)) {
+        if (passing && node != null && Arrival.passes(trip.goal(), rig.world(), rig.snapshot().stats(), node)) {
             PathLog.debug("{} 路过 {},不停", rig.who, PathLog.pos(node));
             state = State.ARRIVED;
             return;
@@ -520,7 +454,7 @@ public final class Driver {
             }
             return;
         }
-        switch (Arrival.judge(goal, rig.world(), rig.snapshot().stats(), node, body.getEyePosition(), body.blockInteractionRange())) {
+        switch (Arrival.judge(trip.goal(), rig.world(), rig.snapshot().stats(), node, body.getEyePosition(), body.blockInteractionRange())) {
             case Arrival.Verdict.Replan replan -> {
                 if (!node.equals(end)) {
                     if (++unsettled <= SETTLE_TICKS) {
@@ -548,213 +482,52 @@ public final class Driver {
         }
     }
 
-    private boolean goalHas(BlockPos node, Stance stance) {
-        return stance != null && goal.contains(node.getX(), node.getY(), node.getZ(), stance);
-    }
-
     // ==================== 搜索 ====================
-
-    private CostModel model() {
-        return CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, rig.threats);
-    }
 
     /** 排障用:此刻在哪一步。走过的经过见日志({@link PathLog})。 */
     @Override
     public String toString() {
         String at = !course.finished() ? course.cur() + "/" + course.size() + " " + PathLog.step(course.current())
                 : course.cur() + "/" + course.size();
-        return "Driver[" + state + " step " + at + " complete=" + course.complete() + " pending=" + (pending == null ? "-" : purpose)
+        return "Driver[" + state + " step " + at + " complete=" + course.complete() + " pending=" + trip.pending()
                 + "]";
     }
 
-    /**
-     * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组;目标是真终点,
-     * 带着这一趟的记忆,最多想到 {@code deadline}。接着手上的路线往下搜时起点是它的终点,读的世界叠上身体从此刻这一步走到那里要做的
-     * 改动({@link Search#after(Route, int)});从身体脚下搜时 {@code ahead} 为 null(憋气从身体此刻的样子起)。
-     */
-    private void dispatch(Purpose why, BlockPos from, Route ahead, Deadline deadline) {
-        long t0 = System.nanoTime();
-        WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
-        long t1 = System.nanoTime();
-        CostModel model = model();
-        long t2 = System.nanoTime();
-        rig.tally.dispatched(t1 - t0, t2 - t1);
-        PathLog.debug("{} 派搜索 {} 从 {} 去 {} 时限 {} 拷快照 {} 组成本模型 {}", rig.who, why.label, PathLog.pos(from), goal,
-                PathLog.ms(deadline.nanos()), PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
-        Search search = new Search(view, model, from, goal, allowance.nodes(), favoring)
-                .advancing(Allowance.advance(model.body().stats())).remembering(memory.frozen()).after(ahead, course.cur())
-                .within(deadline);
-        pendingSearch = search;
-        purpose = why;
-        pending = Searches.submit(search, why.urgency);
-    }
-
-    /** 从身体脚下搜。 */
-    private void fromBody(BlockPos node) {
-        dispatch(Purpose.FROM_BODY, node, null, allowance.first());
-    }
-
-    /** 从当前路线的终点接着搜;这一趟的总预算用完了就不再接,路线走到头在那里收场。 */
-    private void next() {
-        if (allowance.spent()) {
-            continuation.skip();
-            return;
-        }
-        rig.journal.replanned(Journal.Replan.CONTINUE);
-        dispatch(Purpose.NEXT, course.end(), course.route(), allowance.next(Continuation.aheadTicks(course)));
-    }
-
-    /** 在飞的搜索不要了:叫停,连它的输入(快照、成本模型)一起放手。 */
-    private void abandon() {
-        if (pending != null) {
-            pending.cancel();
-            pending = null;
-            pendingSearch = null;
-        }
-    }
-
-    private void poll() {
-        if (pending == null) {
-            return;
-        }
-        SearchResult result = pending.poll();
-        if (result == null) {
-            return;
-        }
-        // 搜索交了结论,它的输入(快照、成本模型)不再由段状态机握着;收场要诊断的,各自带着
-        Search search = pendingSearch;
-        pendingSearch = null;
-        logSearch(search, result, pending);
-        pending = null;
-        lastSearch = search;
-        lastResult = result;
-        if (result.blocking() != null && !result.arrived()) {
-            nearestRefusal = Blockage.refused(search, result.blocking());
-        }
-        allowance.spend(result.expanded());
-        if (Double.isFinite(result.startEstimate())) {
-            allowance.begun(result.startEstimate(), search.advance());
-        }
-        breathless |= result.breathless();
-        boolean learned = memory.raise(result.raised());
-        if (result.route() != null) {
-            allowance.found();
-        } else if (result.stop() == SearchResult.Stop.TIME || result.stop() == SearchResult.Stop.BUDGET) {
-            // 没搜完,半程也截不出来:下一次多想一倍(Azalea 的加时重试),放不放弃只由总预算定
-            allowance.missed();
-        }
-        if (purpose == Purpose.NEXT) {
-            if (result.stop() == SearchResult.Stop.EXHAUSTED) {
-                // 从路线的终点往外走得到的地方都搜过了,没有目标:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
-                // 从此刻的位置重搜,绕开它——走进去就出不来了(往下挖的竖井、封死的坑)
-                replan(Journal.Replan.DEAD_END, "接续证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
-                return;
+    /** 收下在飞的搜索的结论(路线怎么变、收没收场由 {@link Trip#poll} 定),执行这边按路线的变化接着做。 */
+    private void collect() {
+        switch (trip.poll()) {
+            case NONE, EXTENDED -> {
             }
-            if (continuation.splice(course, result.route(), result.arrived())) {
-                return;
-            }
-            if (result.route() == null) {
-                PathLog.info("{} 接续没搜出路线,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
-            } else {
-                // 接续的起点不是路线的终点:走到终点后从脚下再搜
-                PathLog.info("{} 接续接不上,走到终点 {} 再从脚下搜", rig.who, PathLog.pos(course.end()));
-            }
-            return;
-        }
-        if (result.route() == null) {
-            BlockPos node = node();
-            Stance here = node == null ? null : Stance.at(rig.world(), rig.snapshot().stats(), node);
-            if (here != null && goalHas(node, here) && settled(here.kind())) {
-                // 最后一步进了目标的同一刻,这次搜索没交出路:她已经到了
-                PathLog.debug("{} 搜索没交出路,可她已经站在目标里 {}", rig.who, PathLog.pos(node));
-                course.clear();
-                course.install(new Route(node, here, List.of()), true);
-                return;
-            }
-            unsolved(result, search, learned);
-            return;
-        }
-        install(result.route(), result.arrived());
-    }
-
-    /**
-     * 一次从脚下的搜索没交出路线。搜完了能走到的地方都没有目标、或根本动不了,这一趟就此收场。时间到、节点上限用完只是没搜完,
-     * 与机器快慢有关,不拿它收场:下一刻加时再搜({@link Allowance#missed})。有路伸进没加载的区块而身体没处可推进时,搜索让这一趟的
-     * 记忆里估价又升高了({@code learned})就再搜(估价变了,不是同一次搜索),什么也没学到就是原地不动、再搜也一样,收场。
-     * 总预算用完由下一次派搜索时判({@link #spentOut})。
-     */
-    private void unsolved(SearchResult result, Search search, boolean learned) {
-        switch (result.stop()) {
-            case TIME, BUDGET -> {
-            }
-            case UNLOADED -> {
-                if (!learned) {
-                    giveUp(result, search);
-                }
-            }
-            default -> giveUp(result, search);
-        }
-    }
-
-    /**
-     * 一次搜索没交出路线,这一趟就此收场。走不下去之后重搜把能走的都搜过了还是没路,而最后那步走不下去是执行里出的事(卡住、
-     * 看不见、落点变了……)或几何上的缘故,没路的原因就是那一步的阻碍;其余是搜索自己的停因,缺料、不许挖、挖不动、权限这类
-     * 说"缺什么"的原因由门面在同一份快照上诊断({@link com.dwinovo.numen.pathing.plan.Reason#informative})。
-     */
-    private void giveUp(SearchResult result, Search search) {
-        boolean executionFailed = lastBlockage != null && (lastBlockage.hitch() != null || !lastBlockage.reason().informative());
-        halt(executionFailed && result.stop() == SearchResult.Stop.EXHAUSTED
-                ? new Halt.Blocked(lastBlockage)
-                : new Halt.Searched(result.stop(), breathless, search, result.blocking()));
-    }
-
-    /** 这一趟的总预算用完了:以最后一次搜索的结论收场。 */
-    private void spentOut() {
-        PathLog.info("{} 这一趟的总预算 {} 个节点用完了,还没到,收场", rig.who, allowance.used());
-        halt(new Halt.Searched(SearchResult.Stop.BUDGET, breathless, lastSearch, lastResult.blocking()));
-    }
-
-    /**
-     * 一次搜索的结论记一行:谁、为什么搜、从哪到哪、规格要点、展开几个节点、在工作线程上跑了多久(连同 CPU、JIT、回收、每节点的读数,见 {@link PathLog#load})与排队多久、为什么停、
-     * 交出的路线;DEBUG 再记一行路线上的每一步。
-     */
-    private void logSearch(Search search, SearchResult result, Pending<SearchResult> done) {
-        Route route = result.route();
-        rig.journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.checks());
-        String why = result.blocking() == null || result.arrived() ? ""
-                : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
-        String what = route == null ? "没交出路线"
-                : (result.arrived() ? "到目标 " : result.reached() ? "到这一段的终点 " : "往边界推进 ") + PathLog.route(route);
-        PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 时限 {} 用时 {}({}) 排队 {} 停因 {} {}{}", rig.who, purpose.label,
-                PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
-                search.deadline() == Deadline.NONE ? "-" : PathLog.ms(search.deadline().nanos()),
-                PathLog.ms(done.ranNanos()), PathLog.load(done, result.expanded()), PathLog.ms(done.queuedNanos()), result.stop(),
-                what, result.raised().isEmpty() ? why : " 抬高了 " + result.raised().size() + " 格的估价" + why);
-        if (route != null && PathLog.debugging()) {
-            PathLog.debug("{} 路线 {}", rig.who, PathLog.legs(route));
+            case FRESH -> afterInstall();
+            case DISCARDED -> afterDiscard();
+            case HALTED -> halt(trip.halt());
         }
     }
 
     private void install(Route route, boolean arrived) {
+        trip.install(route, arrived);
+        afterInstall();
+    }
+
+    /** 换了新路线:执行从头开始。 */
+    private void afterInstall() {
         unsettled = 0;
-        course.install(route, arrived);
-        continuation.reset();
         step = null;
         tracker.reset();
     }
 
-    /** 手上的路线没到目标:从它的终点接着搜(边走边搜)。 */
-    private void continueAhead() {
-        if (pending == null && continuation.due(course)) {
-            next();
-        }
+    /** 路线扔掉了:手上正在挖的放下,认步与在走的那一步从头。 */
+    private void afterDiscard() {
+        unsettled = 0;
+        rig.mouse.release();
+        tracker.reset();
+        step = null;
     }
 
     /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
     private void replan(Journal.Replan why, String detail) {
-        rig.journal.replanned(why);
-        PathLog.info("{} 重搜({}):{} 身体 {}", rig.who, why.label, detail, PathLog.body(rig.entity));
-        reset();
+        trip.replan(why, detail);
+        afterDiscard();
     }
 
     /**
@@ -773,26 +546,14 @@ public final class Driver {
 
     /** 扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
     private void reset() {
-        unsettled = 0;
-        if (!course.isEmpty()) {
-            favoring = Favoring.along(course.route());
-        }
-        abandon();
-        rig.mouse.release();
-        course.clear();
-        continuation.reset();
-        tracker.reset();
-        step = null;
+        trip.discard();
+        afterDiscard();
     }
 
-    /**
-     * 第 {@code m} 步走不通({@code why} 是 {@link Journal.Replan#blocks} 的一种):这一步(走法、起点、落点)在这一趟里记为不通,
-     * 以后的搜索不再走它;只扔掉在走的路,从身体此刻的位置重搜这一段。同一步不会走第二次,重搜多少次由这一趟的总预算管。
-     */
+    /** 第 {@code m} 步走不通:{@link Trip#fail} 记账、扔掉路线,执行这边跟着从头。 */
     private void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
-        memory.block(m.kind(), m.from(), m.to());
-        lastBlockage = blockage;
-        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
+        trip.fail(why, m, blockage);
+        afterDiscard();
     }
 
     private void hold() {
@@ -807,7 +568,7 @@ public final class Driver {
     private void halt(Halt why) {
         halt = why;
         state = State.HALTED;
-        abandon();
+        trip.abandon();
         rig.keys.releaseAll();
     }
 
@@ -820,6 +581,37 @@ public final class Driver {
         double dx = c.x - rig.entity.getX();
         double dz = c.z - rig.entity.getZ();
         return dx * dx + dz * dz;
+    }
+
+    /** 规划向身体与世界要的东西,取自活世界与身体此刻的样子。 */
+    private final class Eyes implements Trip.Ground {
+
+        @Override
+        public WorldSnapshot snapshot(BlockPos from) {
+            return WorldSnapshot.around(rig.entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
+        }
+
+        @Override
+        public CostModel model() {
+            return CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, rig.threats);
+        }
+
+        @Override
+        public Trip.Standing standing() {
+            BlockPos node = node();
+            Stance here = node == null ? null : Stance.at(rig.world(), rig.snapshot().stats(), node);
+            return here != null && settled(here.kind()) ? new Trip.Standing(node, here) : null;
+        }
+
+        @Override
+        public String body() {
+            return PathLog.body(rig.entity);
+        }
+
+        @Override
+        public void dispatched(long snapshotNanos, long modelNanos) {
+            rig.tally.dispatched(snapshotNanos, modelNanos);
+        }
     }
 
 }

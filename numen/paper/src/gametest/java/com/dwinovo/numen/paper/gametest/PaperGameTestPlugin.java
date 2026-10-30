@@ -49,7 +49,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li><b>结构模板</b>:原版只在 IDE 旗标下从 SNBT 目录读模板,这里把目录里每个用例要的模板读出来,放进结构管理器的缓存;</li>
  *   <li><b>世界</b>:{@code GameTestServer} 的世界是它自己建的(超平坦、一组固定的游戏规则、种子由 Mixin 指定、每次从空目录开始),
  *       Paper 的世界由起服的一层给:全新的运行目录、{@code server.properties} 里的超平坦与种子;游戏规则在这里定。
- *       真实地形维度({@code numen_test:terrain})要数据包定义的维度,Paper 起服后加不了维度,依赖它的套件({@code numen_pathing_terrain}…)
+ *       真实地形维度({@code numen_test:terrain})要数据包定义的维度,Paper 起服后加不了维度,依赖它的套件({@code numen_pathing_terrain_bake})
  *       不在这里跑;</li>
  *   <li><b>收场</b>:全部用例结束,把结果写成 JSON({@value #RESULT} 指的文件)并关服。</li>
  * </ul>

@@ -17,10 +17,20 @@ neoForge {
 }
 
 sourceSets {
+    // 原版环境的引导(注册表加原版标签):单测与规划评测共用的一份,所以单独一个源码集,两边都依赖它。
+    fixtures {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    // 规划评测:纯 JVM 程序,读固定存档、跑真实的趟逻辑(drive.Trip),不要服务器、不要 GameTest。设计见 docs/adr/pathing/0031。
+    benchmark {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath + sourceSets.fixtures.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath + sourceSets.fixtures.output
+    }
     // 单测跑在原版环境里:引导注册表、用真实的 BlockState,所以测试的类路径就是主源码集的那一份原版。
     test {
-        compileClasspath += sourceSets.main.compileClasspath
-        runtimeClasspath += sourceSets.main.runtimeClasspath
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.fixtures.output + sourceSets.benchmark.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.fixtures.output + sourceSets.benchmark.output
     }
     // 模块自己的 GameTest:用一个不是同伴的普通假玩家真走,只看模块与原版,用例只写原版的注解。套件 numen_pathing 经
     // META-INF/services 报到,由 numen:neoforge 的 GameTest 服务器一起跑(见 numen/neoforge/build.gradle),所以不进发行 jar;
@@ -36,6 +46,7 @@ dependencies {
     compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
     // 单测跑起来也要这扇门里的类(挖掘公式、视线几何):运行期同一个瘦 jar
     testRuntimeOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    benchmarkRuntimeOnly files(project(':numen-api:common').tasks.named('apiJar'))
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -45,4 +56,100 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+// ==================== 规划评测(src/benchmark) ====================
+// 数据集目录:-PpathingDataset=<本地目录>,没给就是 fetchPathingDataset 下载并核过校验码的缓存。版本与校验码在下面,发布之后填。
+ext.pathingDatasetVersion = ''
+ext.pathingDatasetSha256 = ''
+
+def datasetCache = layout.buildDirectory.dir('pathing-dataset')
+
+tasks.register('fetchPathingDataset') {
+    group = 'verification'
+    description = '下载寻路评测数据集的发布包,核 sha256,解到 build/pathing-dataset'
+    outputs.dir(datasetCache)
+    doLast {
+        if (pathingDatasetVersion.isEmpty() || pathingDatasetSha256.isEmpty()) {
+            throw new GradleException('数据集版本与校验码还没填(numen/pathing/build.gradle 的 pathingDatasetVersion、pathingDatasetSha256);本地用 -PpathingDataset=<目录>')
+        }
+        def zip = new File(temporaryDir, 'dataset.zip')
+        def url = "https://github.com/Dwinovo/numen-pathfinding-benchmark/releases/download/${pathingDatasetVersion}/numen-pathfinding-benchmark-${pathingDatasetVersion}-mc1.21.1.zip"
+        new URL(url).withInputStream { input -> zip.withOutputStream { it << input } }
+        def actual = java.security.MessageDigest.getInstance('SHA-256').digest(zip.bytes).encodeHex().toString()
+        if (actual != pathingDatasetSha256) {
+            throw new GradleException("数据集校验码不对:要 ${pathingDatasetSha256},下到 ${actual}")
+        }
+        delete(datasetCache)
+        copy { from zipTree(zip); into datasetCache }
+    }
+}
+
+/** 评测用的数据集目录:本地属性,或下载的缓存(此时任务依赖 fetchPathingDataset)。 */
+def datasetDir = providers.gradleProperty('pathingDataset').orElse(datasetCache.map { it.asFile.absolutePath })
+def mainCommit = providers.exec { commandLine 'git', 'rev-parse', 'HEAD'; workingDir = rootDir }.standardOutput.asText.map { it.trim() }
+
+// 出题(手动跑一次,结果进数据集;不需要标准答案):./gradlew :numen:pathing:pathingGenerate -PpathingDataset=<目录>
+tasks.register('pathingGenerate', JavaExec) {
+    group = 'verification'
+    description = '出题:每块地每档撒点,写进数据集的 problems/ 与 manifest.json'
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.pathing.benchmark.Generate'
+    maxHeapSize = providers.gradleProperty('pathingHeap').orElse('26g').get()
+    doFirst {
+        args = [project.property('pathingDataset'), mainCommit.get()]
+    }
+}
+// 标准答案(单独一步,慢,可分片、可续算,在哪台机器上算都行):
+//   ./gradlew :numen:pathing:pathingAnswers -PpathingDataset=<目录> -PpathingShards=<分片目录> [-PpathingShard=i/n] [-PpathingBuckets=short,medium] [-PpathingLimit=N]
+//   ./gradlew :numen:pathing:pathingAnswersMerge -PpathingDataset=<目录> -PpathingShards=<分片目录>
+tasks.register('pathingAnswers', JavaExec) {
+    group = 'verification'
+    description = '标准答案:把"题 × 规格"按题号分片,算最优价,追加写进分片目录(可续算)'
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.pathing.benchmark.Answers'
+    maxHeapSize = providers.gradleProperty('pathingHeap').orElse('26g').get()
+    doFirst {
+        def extra = []
+        ['pathingShard': '--shard', 'pathingBuckets': '--buckets', 'pathingLimit': '--limit'].each { prop, flag ->
+            if (providers.gradleProperty(prop).isPresent()) {
+                extra += [flag, providers.gradleProperty(prop).get()]
+            }
+        }
+        args = ['solve', project.property('pathingDataset'), project.property('pathingShards')] + extra
+    }
+}
+tasks.register('pathingAnswersMerge', JavaExec) {
+    group = 'verification'
+    description = '标准答案:把分片并起来,按题号排好,记下主仓库提交,写进数据集的 answers.jsonl,并报每题的 CPU 成本'
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.pathing.benchmark.Answers'
+    doFirst {
+        args = ['merge', project.property('pathingDataset'), project.property('pathingShards'), mainCommit.get()]
+    }
+}
+// 规划评测:-PpathingSplit=dev|held|all(默认 dev),-PpathingOut=<输出目录>(默认 build/pathing-bench)
+tasks.register('pathingBench', JavaExec) {
+    group = 'verification'
+    description = '规划评测:题库里每道题走一遍真实的趟逻辑,写 results.jsonl、summary.md'
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.pathing.benchmark.Bench'
+    maxHeapSize = providers.gradleProperty('pathingHeap').orElse('26g').get()
+    if (!providers.gradleProperty('pathingDataset').isPresent()) {
+        dependsOn 'fetchPathingDataset'
+    }
+    doFirst {
+        def out = providers.gradleProperty('pathingOut').orElse(layout.buildDirectory.dir('pathing-bench').map { it.asFile.absolutePath }).get()
+        args = [datasetDir.get(), out, providers.gradleProperty('pathingSplit').orElse('dev').get(), mainCommit.get()]
+    }
+}
+// 对比两次结果:-PpathingOld=<旧 results.jsonl> -PpathingNew=<新 results.jsonl> [-PpathingDiffOut=<md>]
+tasks.register('pathingBenchDiff', JavaExec) {
+    group = 'verification'
+    description = '对比两次规划评测的结果'
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.pathing.benchmark.Diff'
+    doFirst {
+        args = [project.property('pathingOld'), project.property('pathingNew')] + (providers.gradleProperty('pathingDiffOut').isPresent() ? [providers.gradleProperty('pathingDiffOut').get()] : [])
+    }
 }

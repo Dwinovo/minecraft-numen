@@ -81,13 +81,15 @@ public final class AStar {
      * 每节点 25.6/27.0/23.4/17.9 微秒,路线价合计相差不到 2%;2.5 时埋在岩石里的空腔一次搜索几百个节点就挖到,湖面、破碎地形一次搜到。
      * 分段(一段 64 格)之后又扫过 4 与 8:到达不变,中距离路线价合计高 21% 与 32%。
      */
-    static final double WEIGHT = 2.5;
+    public static final double WEIGHT = 2.5;
     /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */
     private static final double MIN_IMPROVEMENT = 0.01;
     /** 一个节点面对的世界叠几步之前的改动:走到它的最近这么多步。 */
     static final int HISTORY = 8;
 
     private final Search search;
+    /** 开放集排序里估价的倍数:生产用 {@link #WEIGHT};标准答案求解器用 1,交出的就是最优路线。 */
+    private final double weight;
     private final CostModel model;
     private final BodyStats body;
     private final Goal goal;
@@ -132,8 +134,9 @@ public final class AStar {
     private double[] edgeCost = new double[256];
     private int edges;
 
-    private AStar(Search search) {
+    private AStar(Search search, double weight) {
         this.search = search;
+        this.weight = weight;
         RouteSpec spec = search.model().spec();
         this.goal = search.goal();
         this.model = Goal.guarded(goal, search.model()).searching();
@@ -146,7 +149,12 @@ public final class AStar {
 
     /** 在当前线程上跑完一次搜索;{@code cancelled} 在每展开一个节点前问一次。 */
     public static SearchResult run(Search search, BooleanSupplier cancelled) {
-        return new AStar(search).run(cancelled);
+        return run(search, WEIGHT, cancelled);
+    }
+
+    /** 同上,开放集按 {@code g + weight·h} 排:权重 1 时估价是下界,交出的路线最优(标准答案求解器用)。 */
+    public static SearchResult run(Search search, double weight, BooleanSupplier cancelled) {
+        return new AStar(search, weight).run(cancelled);
     }
 
     private SearchResult run(BooleanSupplier cancelled) {
@@ -180,9 +188,9 @@ public final class AStar {
         return new SearchResult(why, advance(), expanded, breathless, startEstimate, learned(), blocking(), checks);
     }
 
-    /** 开放集的排序键:走到的代价加估价的 {@link #WEIGHT} 倍。 */
-    private static double key(double g, double h) {
-        return g + WEIGHT * h;
+    /** 开放集的排序键:走到的代价加估价的 {@link #weight} 倍。 */
+    private double key(double g, double h) {
+        return g + weight * h;
     }
 
     /** 跑这一遍:到了目标或这一段的终点交出终点节点;没到为 -1,为什么停记在 {@link #stop}。 */

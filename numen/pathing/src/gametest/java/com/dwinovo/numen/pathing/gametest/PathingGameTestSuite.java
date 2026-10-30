@@ -12,7 +12,6 @@ public final class PathingGameTestSuite implements GameTestSuite {
                 AlterGameTests.class,
                 BlockGameTests.class,
                 BreathGameTests.class,
-                BudgetGameTests.class,
                 ClimbGameTests.class,
                 DigGameTests.class,
                 DoorGameTests.class,
@@ -27,7 +26,6 @@ public final class PathingGameTestSuite implements GameTestSuite {
                 RecheckGameTests.class,
                 StairGameTests.class,
                 TerminationGameTests.class,
-                TickRateGameTests.class,
                 UpDownGameTests.class
         );
     }

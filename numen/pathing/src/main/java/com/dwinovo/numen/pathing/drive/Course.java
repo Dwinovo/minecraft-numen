@@ -12,7 +12,7 @@ import net.minecraft.core.BlockPos;
  * 正在走的路线:一串步子、走到了第几步、是不是已经到目标,和每一步几何上最短要几刻(运动学算的,装进来的时候算一次)。
  * 认步({@link Tracker})、接续({@link Continuation})、段状态机({@link Driver})都读写这一份,路线上的事实只在这里。
  */
-final class Course {
+public final class Course {
 
     private final List<Route.Leg> legs = new ArrayList<>();
     private final List<Double> minimum = new ArrayList<>();
@@ -60,26 +60,26 @@ final class Course {
         cur = to;
     }
 
-    int size() {
+    public int size() {
         return legs.size();
     }
 
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return legs.isEmpty();
     }
 
     /** 正在走的那一步的下标;等于 {@link #size} 是路线走完了。 */
-    int cur() {
+    public int cur() {
         return cur;
     }
 
     /** 路线走完了(不含"终点在不在目标里")。 */
-    boolean finished() {
+    public boolean finished() {
         return cur >= legs.size();
     }
 
     /** 路线的终点在目标里。 */
-    boolean complete() {
+    public boolean complete() {
         return complete;
     }
 
@@ -115,7 +115,7 @@ final class Course {
     }
 
     /** 终点节点;空路线是起点。 */
-    BlockPos end() {
+    public BlockPos end() {
         return legs.isEmpty() ? start : at(legs.size() - 1).to();
     }
 
@@ -133,13 +133,18 @@ final class Course {
         return left;
     }
 
+    /** 第 {@code index} 步:走法、代价、几何最短刻数。 */
+    public Route.Leg leg(int index) {
+        return legs.get(index);
+    }
+
     /** 第 {@code index} 步按成本模型算出的代价(含罚分)。 */
-    double costAt(int index) {
+    public double costAt(int index) {
         return legs.get(index).cost();
     }
 
     /** 第 {@code index} 步几何上最短要几刻。 */
-    double minimumAt(int index) {
+    public double minimumAt(int index) {
         return minimum.get(index);
     }
 

@@ -26,23 +26,7 @@ public final class BackgroundSettle {
     static final long LIMIT_SECONDS = 60;
     private static final long POLL_NANOS = TimeUnit.MICROSECONDS.toNanos(200);
 
-    /** 用例故意压着后台不放的期限(纳秒钟);0 是没有。 */
-    private static volatile long heldUntil;
-
     private BackgroundSettle() {}
-
-    /**
-     * 用例故意让后台工作停着不动(例如把寻路线程池占满、等某个时机再放),它自己管那段时间的先后,这段时间里每刻开头不等。
-     * 最多这么久,用例没来得及 {@link #release} 就失败了也不会一直不等。
-     */
-    public static void hold(long seconds) {
-        heldUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
-    }
-
-    /** 故意压着的后台放行了,每刻开头照常等。 */
-    public static void release() {
-        heldUntil = 0;
-    }
 
     /** @param sources 每一项答"此刻还没停下的是什么",停下了是 {@code null} */
     static void install(List<Supplier<String>> sources) {
@@ -50,9 +34,6 @@ public final class BackgroundSettle {
     }
 
     private static void settle(List<Supplier<String>> sources) {
-        if (System.nanoTime() < heldUntil) {
-            return;
-        }
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(LIMIT_SECONDS);
         for (String unsettled = firstUnsettled(sources); unsettled != null; unsettled = firstUnsettled(sources)) {
             if (System.nanoTime() > deadline) {

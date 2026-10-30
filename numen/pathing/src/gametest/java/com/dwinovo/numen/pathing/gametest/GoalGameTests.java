@@ -3,16 +3,12 @@ package com.dwinovo.numen.pathing.gametest;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
-import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.api.entity.Sight;
 
@@ -43,19 +39,6 @@ public class GoalGameTests {
 
     private static final String BATCH = "pathing_goals";
     private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
-
-    /** 要拦住搜索线程池的用例单独一批,不挡着别的用例的搜索。 */
-    private static final String HELD_BATCH = "pathing_goals_held";
-
-    @BeforeBatch(batch = BATCH)
-    public static void settle(ServerLevel level) {
-        Worlds.settle(level);
-    }
-
-    @BeforeBatch(batch = HELD_BATCH)
-    public static void settleHeld(ServerLevel level) {
-        Worlds.settle(level);
-    }
 
     /** 身体脚下的那一格(相对场地)。 */
     private static BlockPos feet(Trial t, Trial.Run r) {
@@ -294,49 +277,6 @@ public class GoalGameTests {
         t.go(body, goal, RouteSpec.defaults()).within(300).arrives().then(r -> at(t, r, 10, 1, 16));
     }
 
-    /**
-     * 去处是一片压力板(出厂规格排除机关格,搜索永远走不进去),身体被一下推着滑进了那一片;推的那一刻派出的搜索要很久才说
-     * 没路:它说没路的那一刻她已经停在去处里了,报到达。压力板被她踩下去是原版自己的事,不算进账。
-     *
-     * <p>"很久"不靠搜索慢:派搜索之前先让搜索的线程池每个线程都等着放行,推的那一刻派出的搜索排在它们后面;她停住了才放行。
-     * 放行最多等十秒,用例失败也不会一直占着线程池。
-     */
-    @GameTest(template = ARENA, batch = HELD_BATCH, timeoutTicks = 228)
-    public static void arrives_when_a_failing_search_returns_after_it_slid_in(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 3, 14, 1, 7, Blocks.STONE_PRESSURE_PLATE);
-        TestBody body = t.body(8, 1, 5);
-        CountDownLatch release = new CountDownLatch(1);
-        // 线程池是故意占满的,每刻开头不等它空下来;放行的那一刻起照常等
-        BackgroundSettle.hold(10);
-        for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
-            Searches.submit(cancelled -> {
-                try {
-                    release.await(10, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                return null;
-            });
-        }
-        boolean[] pushed = {false};
-        t.go(body, Goals.within(Goals.at(t.at(12, 1, 5)), 0, 2), RouteSpec.defaults()).within(500).realTime()
-                .passive((before, now) -> before.is(Blocks.STONE_PRESSURE_PLATE) && now.is(Blocks.STONE_PRESSURE_PLATE))
-                .during(r -> {
-                    if (!pushed[0]) {
-                        pushed[0] = true;
-                        r.body.setDeltaMovement(0.9, 0, 0);
-                        r.body.hurtMarked = true;
-                    } else if (r.body.onGround() && r.body.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6) {
-                        release.countDown();
-                        BackgroundSettle.release();
-                        // 放行之后搜索回来的那一刻与她报到的那一刻之间不靠墙钟:等它回来
-                        r.awaitSearch();
-                    }
-                })
-                .arrives();
-    }
-
     /** 去处在头顶三格高的半空,身上有圆石:垫柱上去,停稳在那一格上才报到。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 261)
     public static void arrives_only_once_settled_on_its_own_pillar(GameTestHelper helper) {
@@ -367,28 +307,6 @@ public class GoalGameTests {
                 || Math.sqrt(v.x * v.x + v.z * v.z) > 0.1) {
             throw new GameTestAssertException("还没站稳就报到了:脚高 " + feetY + " 着地 " + r.body.onGround() + " 速度 " + v);
         }
-    }
-
-    /**
-     * 工作台摆在一块石头上,只有西面敞开;列好站位之后、开走之前,正对西面的那一格(半空,不是站位)被放上一块玻璃:
-     * 走到了搜索挑的站位,在活世界上复核时看不见它,不报到达,结局是"看不见"。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
-    public static void sight_blocked_after_planning_is_not_arrival(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(10, 1, 5, Blocks.STONE);
-        t.set(10, 2, 5, Blocks.CRAFTING_TABLE);
-        t.set(10, 2, 4, Blocks.GLASS).set(10, 2, 6, Blocks.GLASS).set(11, 2, 5, Blocks.GLASS).set(10, 3, 5, Blocks.GLASS);
-        BlockPos table = t.at(10, 2, 5);
-        TestBody body = t.body(4, 1, 5);
-        Goals.Use use = Goals.use(t.level, Snapshots.of(body).stats(), table);
-        t.change(9, 2, 5, Blocks.GLASS.defaultBlockState());
-        t.go(body, use, RouteSpec.defaults()).within(300)
-                .fails(Outcome.NoLineOfSight.class, o -> {
-                    if (!o.target().equals(table)) {
-                        throw new GameTestAssertException("看不见的应当是那张工作台:" + o);
-                    }
-                });
     }
 
     /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去。 */
