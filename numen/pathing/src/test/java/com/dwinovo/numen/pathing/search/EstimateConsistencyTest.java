@@ -146,8 +146,7 @@ class EstimateConsistencyTest {
                 .fill(-4, Y - 4, -6, 4, Y - 1, 6, Blocks.WATER.defaultBlockState());
         scenes.add(new Scene("水池", pool, plain, goals(0, -4, -2, 3)));
 
-        // 湖:一池很宽的水,对岸的终点。岸上、水面、水里、水底各站位;下水是下落或平走,水里是游或涉水。水列(整列没有站得住的格)按游水价,
-        // 从岸上走进第一列仍按疾跑价,不然高估。
+        // 湖:一池很宽的水,对岸的终点。岸上、水面、水里、水底各站位;下水是下落或平走,水里是游或涉水。估价取直线疾跑价,游水不比它快,不能高估。
         BlockState water = Blocks.WATER.defaultBlockState();
         List<Goal> acrossLake = List.of(Goals.at(new BlockPos(14, Y, 0)), Goals.at(new BlockPos(14, Y, 2)), Goals.at(new BlockPos(7, Y - 2, 0)),
                 Goals.at(new BlockPos(-2, Y, 1)));
@@ -171,10 +170,10 @@ class EstimateConsistencyTest {
                 .fill(2, Y - 1, 0, 12, Y - 1, 0, Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP)
                         .setValue(SlabBlock.WATERLOGGED, true));
         scenes.add(new Scene("含水的半砖", logged, plain, acrossLake));
-        // 桥:同一个湖,规格许放、身上有圆石——水列的价取游与搭桥里低的;不许放就是上面的湖
+        // 桥:同一个湖,规格许放、身上有圆石;不许放就是上面的湖
         CostModel bridging = Fixtures.withCobble(RouteSpec.defaults().edit().place(true).consent(false).build());
         scenes.add(new Scene("湖(许放)", lake, bridging, acrossLake));
-        // 目标在快照之外:只加载一圈区块,终点在更远处,估价从边界列带着直线下界出发
+        // 目标在快照之外:只加载一圈区块,终点在更远处
         scenes.add(new Scene("目标在快照外", field().floor(25, -12, 60, 12, Y - 1).loadedWithin(1), plain,
                 List.of(Goals.at(new BlockPos(60, Y, 0)), Goals.at(new BlockPos(48, Y + 3, 5)))));
 

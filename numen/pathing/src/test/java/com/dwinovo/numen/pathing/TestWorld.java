@@ -26,8 +26,6 @@ public final class TestWorld implements SearchView {
     private final Map<BlockPos, BlockState> blocks;
     /** 摆过非空气方块的区段;摆回空气也不划掉,只会让 {@link #airSection} 少答一次是。 */
     private final Set<Long> occupied;
-    /** 每个区段里摆过哪几种方块(摆走了也不划掉):{@link #sectionMayHold} 只问它,不扫整张表。 */
-    private final Map<Long, Set<BlockState>> kinds;
     private final WorldBorder border = new WorldBorder();
     private int loadedRadius = Integer.MAX_VALUE;
     /** 加载的那块正方形的中心区块。 */
@@ -39,14 +37,12 @@ public final class TestWorld implements SearchView {
     public TestWorld() {
         this.blocks = new HashMap<>();
         this.occupied = new HashSet<>();
-        this.kinds = new HashMap<>();
     }
 
     /** 同一份方块表的另一个视窗:加载的区块换一块。 */
     private TestWorld(TestWorld shared, int centerX, int centerZ, int radius) {
         this.blocks = shared.blocks;
         this.occupied = shared.occupied;
-        this.kinds = shared.kinds;
         this.ground = shared.ground;
         this.groundTop = shared.groundTop;
         this.loadedX = centerX;
@@ -69,9 +65,7 @@ public final class TestWorld implements SearchView {
     public TestWorld set(BlockPos pos, BlockState state) {
         blocks.put(pos.immutable(), state);
         if (!state.isAir()) {
-            long section = SectionPos.blockToSection(pos.asLong());
-            occupied.add(section);
-            kinds.computeIfAbsent(section, k -> new HashSet<>()).add(state);
+            occupied.add(SectionPos.blockToSection(pos.asLong()));
         }
         return this;
     }
@@ -117,36 +111,6 @@ public final class TestWorld implements SearchView {
             for (int y = Math.max(getMinBuildHeight(), fromY); y <= groundTop && y < toY; y++) {
                 visitor.accept(ground, y);
             }
-        }
-    }
-
-    @Override
-    public boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted) {
-        int sy = SectionPos.blockToSectionCoord(y);
-        Set<BlockState> here = kinds.get(SectionPos.asLong(SectionPos.blockToSectionCoord(x), sy, SectionPos.blockToSectionCoord(z)));
-        if (here != null && here.stream().anyMatch(wanted)) {
-            return true;
-        }
-        return sy <= SectionPos.blockToSectionCoord(groundTop) && wanted.test(ground);
-    }
-
-    /** 只有设了 {@link #loadedWithin} 才有边界:那一圈区块的外沿一列一列回调;整个世界都在时没有。 */
-    @Override
-    public void forEachBoundaryColumn(ColumnVisitor visitor) {
-        if (loadedRadius == Integer.MAX_VALUE) {
-            return;
-        }
-        int loX = (loadedX - loadedRadius) << 4;
-        int hiX = ((loadedX + loadedRadius) << 4) + 15;
-        int loZ = (loadedZ - loadedRadius) << 4;
-        int hiZ = ((loadedZ + loadedRadius) << 4) + 15;
-        for (int k = loZ; k <= hiZ; k++) {
-            visitor.accept(loX, k);
-            visitor.accept(hiX, k);
-        }
-        for (int k = loX; k <= hiX; k++) {
-            visitor.accept(k, loZ);
-            visitor.accept(k, hiZ);
         }
     }
 

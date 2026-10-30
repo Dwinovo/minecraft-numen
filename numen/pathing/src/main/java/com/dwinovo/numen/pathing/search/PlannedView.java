@@ -47,16 +47,6 @@ public final class PlannedView implements SearchView {
     }
 
     @Override
-    public boolean sectionMayHold(int x, int y, int z, Predicate<BlockState> wanted) {
-        return base.sectionMayHold(x, y, z, wanted);
-    }
-
-    @Override
-    public void forEachBoundaryColumn(ColumnVisitor visitor) {
-        base.forEachBoundaryColumn(visitor);
-    }
-
-    @Override
     public BlockState loadedBlockState(BlockPos pos) {
         return base.isLoaded(pos.getX(), pos.getZ()) ? after.getBlockState(pos) : null;
     }

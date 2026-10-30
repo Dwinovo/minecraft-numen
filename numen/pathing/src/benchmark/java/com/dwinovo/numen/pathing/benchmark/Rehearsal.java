@@ -88,24 +88,16 @@ final class Rehearsal {
     /** 默认的表:按搜索表的同一套系数折算做了多少活({@link SearchClock#STEADY} 同一套),读出一次搜索想了多久。 */
     static final class Steady implements Metered {
 
-        private volatile long precomputed;
         private volatile long nanos;
 
         @Override
         public Timer start(long limit) {
-            precomputed = 0;
             nanos = 0;
             Timer inner = SearchClock.STEADY.start(limit);
             return new Timer() {
                 @Override
-                public void precomputed(int columns) {
-                    inner.precomputed(columns);
-                    precomputed = (long) columns * SearchClock.PER_COLUMN;
-                }
-
-                @Override
                 public boolean up(int expanded, int checked) {
-                    nanos = precomputed + (long) expanded * SearchClock.PER_EXPANSION + (long) checked * SearchClock.PER_CHECK;
+                    nanos = (long) expanded * SearchClock.PER_EXPANSION + (long) checked * SearchClock.PER_CHECK;
                     return inner.up(expanded, checked);
                 }
             };

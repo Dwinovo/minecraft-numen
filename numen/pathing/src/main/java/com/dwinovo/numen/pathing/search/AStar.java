@@ -59,7 +59,7 @@ import net.minecraft.world.level.material.FluidState;
  *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
  *       展开起点时叠上那一步的改动——快照里还没有它垫下的块;</li>
  *   <li><b>这一趟里走不通的步</b>({@link TripMemory}):展开时跳过,当它不存在;</li>
- *   <li><b>估价</b>:水平价加额外代价下界({@link Estimate}):按列的放宽图上从目标反着做的最短路({@link Columns},惰性,问到哪算到哪),
+ *   <li><b>估价</b>:水平价加额外代价下界({@link Estimate}):目标自己的直线疾跑下界({@link Goal#estimate}),
  *       加上路上绕不开要挖掉的格至少多少钱、要升降几个节点每个至少多花多少,再加上这一趟记忆里抬高过的增量。每一项都是下界;
  *       后两样在开搜时按世界算一次,每个节点只查表加乘法;</li>
  *   <li><b>目标格保护</b>:目标的 {@link Goal#protection()} 并进路线规格的按位置禁令,规划不挖自己要站、要够的格;</li>
@@ -250,7 +250,6 @@ public final class AStar {
                 stop = SearchResult.Stop.BUDGET;
                 return -1;
             }
-            timer.precomputed(estimate.precomputed());
             if (timer.up(expanded, judged)) {
                 stop = SearchResult.Stop.TIME;
                 return -1;
