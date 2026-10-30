@@ -8,7 +8,7 @@ import com.google.gson.JsonObject;
 
 /**
  * 评测结果的一行:一道题在一种规格下走一遍的全部指标。{@code results.jsonl} 的一行就是它;{@link Bench} 写、{@link Report} 与
- * {@link Diff} 读,指标只在这里定义一次。时间都是按表折算的毫秒(不是墙钟),{@code wallMs} 是唯一的墙钟字段。
+ * {@link Diff} 读,指标只在这里定义一次。时间都是按表折算的毫秒(不是墙钟),所以同一份代码、同一批题,跑几遍这一行逐字节一致。
  *
  * @param unsolvable 这种规格下按构造到不了的题({@link Problem#unsolvable}):单独成表,量多快认输
  * @param refStatus  标准答案的状态;数据集里没有答案文件为 null
@@ -20,12 +20,10 @@ import com.google.gson.JsonObject;
  * @param deadEnds   接续证明终点是死路、扔掉路线重搜的次数
  * @param cost       虚拟身体走过的路线价
  * @param subopt     路线价除以最优价:到了、而且标准答案有价钱时才有,否则 NaN
- * @param wallMs     这一行在工作线程上用的墙钟毫秒
  */
 record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.GoalType goal, Problem.EndClass endClass, Problem.Split split,
            List<Problem.Tag> tags, boolean unsolvable, Answers.Status refStatus, boolean arrived, String ended, double firstMoveMs, double maxThinkMs, double waitedMs,
-           double tripMs, int searches, int expanded, int deadEnds, int replans, double cost, double subopt, int dug, int placed, int steps,
-           double wallMs) {
+           double tripMs, int searches, int expanded, int deadEnds, int replans, double cost, double subopt, int dug, int placed, int steps) {
 
     /** 这一行进次优比:到了、标准答案是最优价。已知最好的只是上界,算进去会让次优比偏小。 */
     boolean optimal() {
@@ -70,7 +68,6 @@ record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.G
         o.addProperty("dug", dug);
         o.addProperty("placed", placed);
         o.addProperty("steps", steps);
-        o.addProperty("wallMs", wallMs);
         return o;
     }
 
@@ -86,6 +83,6 @@ record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.G
                 o.get("ended").getAsString(), o.get("firstMoveMs").getAsDouble(), o.get("maxThinkMs").getAsDouble(), o.get("waitedMs").getAsDouble(),
                 o.get("tripMs").getAsDouble(), o.get("searches").getAsInt(), o.get("expanded").getAsInt(), o.get("deadEnds").getAsInt(),
                 o.get("replans").getAsInt(), o.get("cost").getAsDouble(), o.has("subopt") ? o.get("subopt").getAsDouble() : Double.NaN,
-                o.get("dug").getAsInt(), o.get("placed").getAsInt(), o.get("steps").getAsInt(), o.get("wallMs").getAsDouble());
+                o.get("dug").getAsInt(), o.get("placed").getAsInt(), o.get("steps").getAsInt());
     }
 }

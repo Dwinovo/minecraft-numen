@@ -133,7 +133,13 @@ record Problem(String id, String region, Bucket bucket, double distance, BlockPo
         for (int i = 0; i < id.length(); i++) {
             h = (h ^ id.charAt(i)) * 0x01000193;
         }
-        return (h >>> 16 & 1) == 0 ? Split.DEV : Split.HELD;
+        // 序号只差最后几位,要把它们混开才五五开(MurmurHash3 的收尾)
+        h ^= h >>> 16;
+        h *= 0x85EBCA6B;
+        h ^= h >>> 13;
+        h *= 0xC2B2AE35;
+        h ^= h >>> 16;
+        return (h & 1) == 0 ? Split.DEV : Split.HELD;
     }
 
     JsonObject toJson() {

@@ -91,15 +91,13 @@ final class Bench {
     }
 
     private static Row run(RegionWorld world, Problem p, Spec spec, Answers.Answer answer) {
-        long t0 = System.nanoTime();
         Rehearsal.Result r = new Rehearsal(new Rehearsal.Scene(world::snapshot, spec.model(), spec.route(), p.goal(Spec.STATS), p.from(), 0), p.id()).run();
         boolean priced = r.arrived() && answer != null && !Double.isNaN(answer.cost());
         return new Row(p.id(), p.region(), p.bucket(), spec, p.goalType(), p.endClass(), p.split(), p.tags(), p.unsolvable(spec),
                 answer == null ? null : answer.status(), r.arrived(),
                 r.halt() == null ? "arrived" : halt(r.halt()), ms(r.firstMove()), ms(r.maxThink()), ms(r.waited()), ms(r.ticks()), r.searches(),
                 r.expanded(), r.replans(Journal.Replan.DEAD_END), r.replansTotal(), Math.round(r.cost() * 1000) / 1000.0,
-                priced ? Math.round(r.cost() / answer.cost() * 10000) / 10000.0 : Double.NaN, r.dug(), r.placed(), r.steps(),
-                Math.round((System.nanoTime() - t0) / 1e5) / 10.0);
+                priced ? Math.round(r.cost() / answer.cost() * 10000) / 10000.0 : Double.NaN, r.dug(), r.placed(), r.steps());
     }
 
     /** 游戏刻折成毫秒,取到 0.1 毫秒。 */

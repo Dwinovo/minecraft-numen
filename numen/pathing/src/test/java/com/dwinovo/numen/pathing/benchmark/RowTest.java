@@ -16,7 +16,7 @@ class RowTest {
     private static Row row(String id, Spec spec, boolean arrived, double subopt, Answers.Status ref) {
         return new Row(id, "hills", Problem.Bucket.MEDIUM, spec, Problem.GoalType.NEAR, Problem.EndClass.CAVE, Problem.Split.DEV,
                 List.of(Problem.Tag.WATER, Problem.Tag.UNDERGROUND), false, ref, arrived, arrived ? "arrived" : "searched:budget",
-                12.3, 45.6, 7.8, 900.0, 3, 1234, 1, 2, 321.0, subopt, 4, 5, 60, 8.5);
+                12.3, 45.6, 7.8, 900.0, 3, 1234, 1, 2, 321.0, subopt, 4, 5, 60);
     }
 
     @Test
