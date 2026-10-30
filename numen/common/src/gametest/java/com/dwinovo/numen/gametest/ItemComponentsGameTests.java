@@ -103,6 +103,34 @@ public class ItemComponentsGameTests {
         });
     }
 
+    /**
+     * 只说了 id、背包里有两种盒子时放的是主手那一叠:模型用 {@code numen.gui.move} 把装着钻石的盒子挪进主手那一格,
+     * 放下去的就是它。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void the_stack_moved_into_the_main_hand_is_the_one_placed(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_box_g", new BlockPos(3, 2, 5), false);
+        var inv = companion.getInventory();
+        inv.setItem(0, new ItemStack(Items.SHULKER_BOX));
+        inv.setItem(10, fullBox());
+        BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
+        BlockPos placedAt = floor.above();
+        // 背包界面里快捷栏第 0 格是 36 号、主背包第 10 格是 10 号
+        ToolRun place = lua(companion, "numen.gui.move(10, 36)\n"
+                + "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:shulker_box\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(place.done() && place.succeeded(), "the program did not succeed: " + place.outcome());
+            helper.assertTrue(level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
+            helper.assertTrue(diamondsPlaced(level, placedAt) == DIAMONDS,
+                    "the placed box holds " + diamondsPlaced(level, placedAt) + " diamonds, not the " + DIAMONDS
+                            + " of the box moved into her hand");
+            helper.assertTrue(diamondsInBoxes(companion) == 0, "the box she kept still holds diamonds");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** {@code numen.build.place} 放一个潜影盒:同上,钻石守恒。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_place_puts_a_shulker_box_without_losing_contents_full_first(GameTestHelper helper) {

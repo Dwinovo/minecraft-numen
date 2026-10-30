@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Doc;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -103,11 +105,13 @@ public final class Wardrobe {
         String label = label(item);
         Sheet data = new Sheet();
         data.item = label;
-        int src = carriedSlot(inv, item);
-        if (src < 0) {
+        Optional<Stacks.Pick> pick = Stacks.pick(inv, item);
+        if (pick.isEmpty()) {
             return Outcome.failed("no " + label + " in inventory to equip", FailureType.NO_MATERIAL, data);
         }
-        ItemStack one = inv.getItem(src).copyWithCount(1);
+        int src = pick.get().slot();
+        ItemStack one = pick.get().sample();
+        String what = StackLabel.brief(one);   // 说清穿的、拿的是哪一叠:同名的几叠不一样时,模型靠这一句知道
 
         String where = slot;
         List<GearSlot> candidates = List.of();
@@ -127,7 +131,7 @@ public final class Wardrobe {
         if (MAINHAND.equals(where)) {
             body.hotbar().hold(src);
             data.slot = MAINHAND;
-            return Outcome.done("holding " + label + " in main hand", data);
+            return Outcome.done("holding " + what + " in main hand", data);
         }
         if (OFFHAND.equals(where)) {
             candidates = List.of(new OffHand(body));
@@ -155,7 +159,7 @@ public final class Wardrobe {
                 empty = s;
                 break;
             }
-            if (worn.is(item)) {
+            if (ItemStack.isSameItemSameComponents(worn, one)) {
                 if (same == null) same = s;
                 continue;
             }
@@ -168,7 +172,7 @@ public final class Wardrobe {
         }
         if (empty == null && same != null) {
             data.slot = same.name();
-            return Outcome.done(label + " already equipped in " + same.name(), data);
+            return Outcome.done(what + " already equipped in " + same.name(), data);
         }
         GearSlot target = empty != null ? empty : swappable;
         if (target == null) {
@@ -187,7 +191,7 @@ public final class Wardrobe {
         }
         inv.setChanged();
         data.slot = target.name();
-        return Outcome.done("equipped " + label + " in " + target.name(), data);
+        return Outcome.done("equipped " + what + " in " + target.name(), data);
     }
 
     // ---------------------------------------------------------------------
@@ -361,14 +365,6 @@ public final class Wardrobe {
             names.add(s.name());
         }
         return List.copyOf(names);
-    }
-
-    /** 背包 36 格里第一格放着 {@code item} 的下标;没有是 -1。 */
-    private static int carriedSlot(Inventory inv, Item item) {
-        for (int i = 0; i < inv.items.size(); i++) {
-            if (inv.items.get(i).is(item)) return i;
-        }
-        return -1;
     }
 
     private static String label(Item item) {

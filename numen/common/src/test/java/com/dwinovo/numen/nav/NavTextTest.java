@@ -16,6 +16,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -63,8 +64,8 @@ class NavTextTest {
                 new EditLedger.Dug(B, planks()),
                 new EditLedger.Placed(C, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()),
                 new EditLedger.Toggled(C.above(), Blocks.OAK_DOOR.defaultBlockState(), Blocks.OAK_DOOR.defaultBlockState()));
-        List<BodyAction> actions = List.of(new BodyAction.Held(Items.COBBLESTONE, 3, 3),
-                new BodyAction.Held(Items.COBBLESTONE, 3, 3));
+        List<BodyAction> actions = List.of(new BodyAction.Held(new ItemStack(Items.COBBLESTONE), 3, 3),
+                new BodyAction.Held(new ItemStack(Items.COBBLESTONE), 3, 3));
         assertEquals("En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone"
                 + " (121,64,-33). I also switched to cobblestone in my hotbar (2 times).",
                 NavText.journey(entries, actions, List.of(), List.of()));
@@ -143,7 +144,7 @@ class NavTextTest {
     @Test
     void puttingAwayWhatWasInHandIsToldAsSuch() {
         assertEquals("En route I put away what was in my hand.",
-                NavText.journey(List.of(), List.of(new BodyAction.Held(Items.AIR, 8, 8)), List.of(), List.of()));
+                NavText.journey(List.of(), List.of(new BodyAction.Held(ItemStack.EMPTY, 8, 8)), List.of(), List.of()));
     }
 
     /** 路上潜过的水照实说:几段,憋得最久的那一段从哪儿到哪儿、憋了几秒、氧气最低到多少;跟在改动与身体动作后面。 */

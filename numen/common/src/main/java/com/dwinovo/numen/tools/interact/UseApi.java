@@ -78,6 +78,9 @@ public final class UseApi {
     @Example("local w = numen.use.block({x = 120, y = 64, z = -35})")
     @Example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
     @Example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
+    @Note("With item, the stack taken in hand is the one already in your main hand, else the first slot holding that item "
+            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which. To use "
+            + "another one, numen.gui.move it into your main hand's slot first.")
     @Note("When the click opens a window, it returns the Window, the same as numen.gui.view(): its methods put, take, "
             + "move, quick and close work on it (see the numen.gui group).")
     @Note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like a real "
