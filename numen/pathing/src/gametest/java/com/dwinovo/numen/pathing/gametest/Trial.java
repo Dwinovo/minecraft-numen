@@ -335,8 +335,6 @@ final class Trial {
         private boolean passed;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
-        /** 搜索按墙钟自己跑、刻不等它;默认每刻在等搜索的结论时等它回来。 */
-        private boolean realTime;
         /**
          * 拉起身体之后等这么多刻才开走:原版玩家进世界后有 60 刻的出生无敌,这期间摔落不掉血,掉没掉血就看不出来。
          */
@@ -414,38 +412,14 @@ final class Trial {
         }
 
         /**
-         * 搜索按墙钟自己跑,刻不等它:用例要看的正是搜索与刻的快慢比(搜索迟到、提前搜下一段来不来得及、接着走时有没有去搜)
-         * 时用,要等搜索回来的那一刻自己调 {@link #awaitSearch}。不调它,一刻里导航在等搜索的结论,这一刻就等它回来再往下:
-         * 测试服务器的刻不等墙钟(一刻做完就接着下一刻),一次要几百毫秒的搜索在这里会占去上千刻,按刻写的时限就被机器忙不忙
-         * 吃掉了。
+         * 导航此刻在等搜索的结论的话,等它回来、接着推到不再等为止:测试服务器的刻不等墙钟(一刻做完就接着下一刻),一次要几百毫秒的
+         * 搜索在这里会占去上千刻,按刻写的时限就被机器忙不忙吃掉了。
          */
-        Run realTime() {
-            realTime = true;
-            return this;
-        }
-
-        /** 导航此刻在等搜索的结论的话,等它回来、接着推到不再等为止。 */
-        void awaitSearch() {
+        private void awaitSearch() {
             while (navigation.waiting()) {
                 nap();
                 status = navigation.tick();
             }
-        }
-
-        /**
-         * 每刻至少占 {@code millis} 毫秒墙钟,搜索按墙钟自己跑({@link #realTime}):让刻与搜索的快慢比接近真实服务器
-         * (真实服务器一刻五十毫秒),"提前搜下一段来得及"才有意义。
-         */
-        Run paced(long millis) {
-            realTime = true;
-            everyTick.add(r -> {
-                try {
-                    Thread.sleep(millis);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            return this;
         }
 
         /** 每刻在推导航之前做(用例中途改世界、推身体)。 */
@@ -469,9 +443,7 @@ final class Trial {
                 }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 status = navigation.tick();
-                if (!realTime) {
-                    awaitSearch();
-                }
+                awaitSearch();
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 highestRise = Math.max(highestRise, body.getDeltaMovement().y);
                 highestFeet = Math.max(highestFeet, body.getY() - trial.origin.getY());

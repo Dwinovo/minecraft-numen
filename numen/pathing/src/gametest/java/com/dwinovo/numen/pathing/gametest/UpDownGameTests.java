@@ -1,6 +1,8 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
+import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
+import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
 import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.pathing.drive.Journal;
@@ -28,26 +30,19 @@ public class UpDownGameTests {
 
     private static final String BATCH = "pathing_updown";
 
-    @BeforeBatch(batch = BATCH)
-    public static void settle(ServerLevel level) {
-        Worlds.settle(level);
-    }
-
-    /** 落在什么上:和平难度每秒回一点血,看摔掉几点血的用例在这一批里关掉自然回血,批后照原样还回去。 */
-    private static final String LANDING = "pathing_landing";
-
+    /** 和平难度每秒回一点血,看摔掉几点血的用例要这一批关掉自然回血,批后照原样还回去。 */
     private static boolean regeneration;
 
-    @BeforeBatch(batch = LANDING)
-    public static void settleLanding(ServerLevel level) {
+    @BeforeBatch(batch = BATCH)
+    public static void settle(ServerLevel level) {
         Worlds.settle(level);
         GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION);
         regeneration = rule.get();
         GameTestWorld.INSTANCE.setRule(level, rule, false);
     }
 
-    @AfterBatch(batch = LANDING)
-    public static void restoreLanding(ServerLevel level) {
+    @AfterBatch(batch = BATCH)
+    public static void restore(ServerLevel level) {
         GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION), regeneration);
     }
 
@@ -335,7 +330,7 @@ public class UpDownGameTests {
      * 规格许落二十格,满血的身体站在九格高的石柱顶上。一边柱脚四周是石头地:落九格掉 6 点血,跳下去;另一边柱脚四周一圈
      * 朝上的滴水石锥尖:落上去按原版掉 15 点,摔完不到 6 点血,不跳,不许改地形就没有路,一点血不掉。
      */
-    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 300)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)
     public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
@@ -358,7 +353,7 @@ public class UpDownGameTests {
      * 只剩 8 点血的身体站在八格高的石柱顶上,规格许落二十格。落在石头上掉 5 点,摔完不到 6 点血,不跳;落在干草块上按原版
      * 只掉 1 点,跳下去。
      */
-    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 276)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
     public static void hay_takes_a_higher_fall_than_stone(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
@@ -509,5 +504,49 @@ public class UpDownGameTests {
         t.fill(x0 - 1, -depth, z0 - 1, x1 + 1, -1, z1 + 1, Blocks.STONE);
         t.fill(x0 - 1, -depth - 1, z0 - 1, x1 + 1, -depth - 1, z1 + 1, Blocks.STONE);
         t.fill(x0, 1 - depth, z0, x1, 0, z1, Blocks.WATER);
+    }
+
+    /**
+     * 按高度的目标:在平地上垫五十格高的柱子上去;一路对外都是"在推进",不被当成停滞。这一条要真身体:看护({@code Watchdog})
+     * 每刻看着垫柱的身体在不在推进。
+     */
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1539)
+    public static void pillars_fifty_blocks_up_to_a_level(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = t.body(8, 1, 8);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        int level = t.origin.getY() + 51;
+        t.go(body, Goals.level(level), natural).within(2800)
+                .during(r -> {
+                    if (r.ticks > 1 && !r.navigation.progressing()) {
+                        throw new GameTestAssertException("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
+                    }
+                })
+                .arrives().then(r -> {
+                    if (r.body.blockPosition().getY() != level) {
+                        throw new GameTestAssertException("没到那一层:" + t.rel(r.body.blockPosition()));
+                    }
+                });
+    }
+
+    /**
+     * 两块基岩台子之间一百五十格宽的空隙(跳下去摔不起,底下的地也挖不出路),身上有三叠圆石,许挖许放:过去只能一路搭桥,对岸远在一次搜索的快照
+     * 之外。每段搜索搜到"估价比起点低一段"的节点就交出这一段,她先走这一段,快走完时从桥头(快照里还没有那块桥)接着搜下一段;一段段搭过去,
+     * 到对岸。这一条要真身体:一块块真的搭,看护每刻看着在不在推进。
+     */
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 7000)
+    public static void bridges_a_wide_chasm_in_segments(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 9, 4, 23, Blocks.BEDROCK);
+        t.fill(160, 1, 0, 180, 4, 23, Blocks.BEDROCK);
+        TestBody body = t.body(6, 5, 12);
+        for (int i = 0; i < 3; i++) {
+            Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        t.go(body, Goals.at(t.at(164, 5, 12)), natural).within(6800).arrives();
     }
 }
