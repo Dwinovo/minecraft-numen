@@ -280,12 +280,6 @@ public final class Trip {
         }
         breathless |= result.breathless();
         boolean learned = memory.raise(result.raised());
-        if (result.route() != null) {
-            allowance.found();
-        } else if (result.stop() == SearchResult.Stop.TIME || result.stop() == SearchResult.Stop.BUDGET) {
-            // 没搜完,半程也截不出来:下一次多想一倍(Azalea 的加时重试),放不放弃只由总预算定
-            allowance.missed();
-        }
         if (purpose == Purpose.NEXT) {
             if (result.stop() == SearchResult.Stop.EXHAUSTED) {
                 // 从路线的终点往外走得到的地方都搜过了,没有目标:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
@@ -321,7 +315,7 @@ public final class Trip {
 
     /**
      * 一次从脚下的搜索没交出路线。搜完了能走到的地方都没有目标、或根本动不了,这一趟就此收场。时间到、节点上限用完只是没搜完,
-     * 与机器快慢有关,不拿它收场:下一刻加时再搜({@link Allowance#missed})。有路伸进没加载的区块而身体没处可推进时,搜索让这一趟的
+     * 与机器快慢有关,不拿它收场:下一刻再搜。有路伸进没加载的区块而身体没处可推进时,搜索让这一趟的
      * 记忆里估价又升高了({@code learned})就再搜(估价变了,不是同一次搜索),什么也没学到就是原地不动、再搜也一样,收场。
      * 总预算用完由下一次派搜索前判({@link #spentOut})。
      */
