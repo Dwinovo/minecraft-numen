@@ -652,6 +652,42 @@ public class ScriptGameTests {
     }
 
     /**
+     * 按玩家语言里的名字找物品是一个客户端函数:从 Lua 入口 {@code numen.inv.lookup} 出发,经主人的连接发给主人的客户端、由客户端查物品注册表
+     * 与语言文件,答复回到程序。名字和 id 都对得上的排在前面。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void item_names_are_looked_up_by_the_owners_client(GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_namer", new BlockPos(2, 2, 2), false);
+        ServerPlayer owner = presentOwner(helper, her, "gametest_namer_owner");
+        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        AtomicReference<Program.Outcome> result = new AtomicReference<>();
+        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("lookup-" + UUID.randomUUID(),
+                """
+                local found = numen.inv.lookup("iron ingot")
+                return found.items[1].item .. "|" .. found.items[1].name
+                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
+
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    for (CustomPacketPayload payload : received(owner)) {
+                        if (payload instanceof ClientCallPayload call) {
+                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
+                        }
+                    }
+                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    String receipt = result.get().receipt();
+                    helper.assertTrue(JsonParser.parseString(receipt).getAsJsonObject().get("message").getAsString()
+                                    .endsWith("\nreturned: minecraft:iron_ingot|Iron Ingot"),
+                            "the name was not looked up by the owner's client: " + receipt);
+                    leave(owner);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
+                })
+                .thenSucceed();
+    }
+
+    /**
      * 目标模组只在客户端的联动:主人的客户端报到时没报它,她调它当场以 {@code no_function} 失败、说明缺哪个模组,什么也没发给主人的客户端;
      * 她的系统提示里也没有它。报了它之后,同一个调用走到主人的客户端,提示里也有了。
      */

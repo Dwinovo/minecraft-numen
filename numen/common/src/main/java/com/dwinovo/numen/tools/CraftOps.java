@@ -186,7 +186,7 @@ public final class CraftOps {
     static Recipe recipe(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result, NumenPlayer self) {
         List<Ingredient> ings = ingredientsOf(recipe);
         Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
-        return new Recipe(holder.id().toString(), Recipe.Station.CRAFTING,
+        return new Recipe(holder.id().toString(), RecipeBook.categoryOf(recipe),
                 BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
                 ings.stream().map(RecipeBook::describeIngredient).toList(), java.util.Optional.of(gridOf(recipe)),
                 feasibleBatch(ings, pool, 1) == 0 ? java.util.Optional.of(missingFor(ings, pool))
