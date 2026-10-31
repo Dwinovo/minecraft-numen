@@ -35,7 +35,7 @@ import com.google.gson.JsonParser;
  * <ol>
  *   <li>{@code Answers solve <数据集目录> <分片目录> [--shard i/n] [--buckets short,medium] [--limit N]}:把"题 × 规格"按题号排序,
  *       取第 i 份(共 n 份),每算完一条就追加写进 {@code <分片目录>/shard-<i>-of-<n>.jsonl};重启时跳过已有的,中断不丢活。
- *       并行度按堆能装下几个求解器定({@link #solvers});</li>
+ *       按内存预算排程({@link Solver});</li>
  *   <li>{@code Answers merge <数据集目录> <分片目录> <主仓库提交>}:把所有分片并起来、按题号排好、记下算出它们的主仓库提交,写进数据集目录的
  *       {@code answers.jsonl} 与 {@code answers-manifest.json};再按档 × 规格报每题用了多少 CPU 时间、整个数据集还要多少。</li>
  * </ol>
@@ -140,13 +140,16 @@ final class Answers {
     static final long NODE_BYTES = 1_800;
 
     /**
-     * 同时跑几个求解器:每个最多展开 {@code cap} 个节点,占 {@code cap × NODE_BYTES} 字节的活数据。并行收集器的老年代默认只占堆的三分之二,
-     * 活着的节点都在那里,所以按"三分之二的堆装得下几个"算,不超过处理器数减一。活数据装不下,收集器就在整堆回收里空转到
-     * "GC overhead limit exceeded"。
+     * 求解器的内存预算:活着的节点最多占多少字节。并行收集器的老年代默认只占堆的三分之二,活着的节点都在那里,所以取三分之二的堆;
+     * 装不下,收集器就在整堆回收里空转到"GC overhead limit exceeded"。{@link Solver} 按每个作业这一档的 {@code 上限 × NODE_BYTES} 从里面预留。
      */
-    static int solvers(int cap) {
-        long old = Runtime.getRuntime().maxMemory() / 3 * 2;
-        return (int) Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() - 1, old / ((long) cap * NODE_BYTES)));
+    static long memoryBudget() {
+        return Runtime.getRuntime().maxMemory() / 3 * 2;
+    }
+
+    /** 同时跑几个求解作业的核数上限:处理器数减一,至少一个。 */
+    static int threads() {
+        return Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
     }
 
     public static void main(String[] args) throws Exception {
@@ -210,10 +213,9 @@ final class Answers {
         Map<String, List<Pair>> byRegion = mine.stream().filter(p -> !done.contains(p.key()))
                 .collect(Collectors.groupingBy(p -> p.problem().region(), LinkedHashMap::new, Collectors.toList()));
         int pending = byRegion.values().stream().mapToInt(List::size).sum();
-        Solver solver = Solver.standard();
-        System.out.println("[answers] 分片 " + index + "/" + count + ":" + mine.size() + " 条,已有 " + (mine.size() - pending) + " 条,求解器 "
-                + Answers.solvers(solver.cap()) + "/" + Answers.solvers(solver.largeCap()) + " 个(两档)");
-        try (BufferedWriter out = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+        System.out.println("[answers] 分片 " + index + "/" + count + ":" + mine.size() + " 条,已有 " + (mine.size() - pending) + " 条,线程 "
+                + threads() + " 个,内存预算 " + memoryBudget() / (1 << 20) + " MB");
+        try (Solver solver = Solver.standard(); BufferedWriter out = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             for (Map.Entry<String, List<Pair>> region : byRegion.entrySet()) {
                 RegionWorld world = RegionWorld.load(region.getKey(), dataset.save(region.getKey()));
                 var whole = world.whole();

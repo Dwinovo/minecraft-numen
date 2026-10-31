@@ -8,6 +8,8 @@ import com.dwinovo.numen.pathing.search.Search;
 import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.search.SearchView;
 
+import java.util.function.BooleanSupplier;
+
 import net.minecraft.core.BlockPos;
 
 /**
@@ -47,9 +49,12 @@ final class Reference {
 
     private Reference() {}
 
-    /** 权重 1、最多展开 {@code cap} 个节点的一遍搜索:{@code OPTIMAL}、{@code UNSOLVABLE}、{@code BEYOND_REGION} 或 {@code TOO_HARD}。 */
-    static Solved solve(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap) {
-        SearchResult exact = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), 1.0, () -> false);
+    /**
+     * 权重 1、最多展开 {@code cap} 个节点的一遍搜索:{@code OPTIMAL}、{@code UNSOLVABLE}、{@code BEYOND_REGION} 或 {@code TOO_HARD}。
+     * {@code cancelled} 为真时搜索尽快收手(结论没有意义,调用方丢弃)。
+     */
+    static Solved solve(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, BooleanSupplier cancelled) {
+        SearchResult exact = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), 1.0, cancelled::getAsBoolean);
         if (exact.arrived()) {
             return new Solved(Answers.Status.OPTIMAL, exact.route().cost(), exact.expanded(), exact.startEstimate());
         }
@@ -62,8 +67,8 @@ final class Reference {
     }
 
     /** {@code TOO_HARD} 的题再按生产权重搜一遍(同样最多 {@code cap} 个节点):搜到了路是 {@code BEST_KNOWN},否则原样。 */
-    static Solved upperBound(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, Solved tooHard) {
-        SearchResult known = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), AStar.WEIGHT, () -> false);
+    static Solved upperBound(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, Solved tooHard, BooleanSupplier cancelled) {
+        SearchResult known = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), AStar.WEIGHT, cancelled::getAsBoolean);
         return known.arrived() ? new Solved(Answers.Status.BEST_KNOWN, known.route().cost(), tooHard.expanded(), tooHard.startEstimate()) : tooHard;
     }
 }

@@ -1,11 +1,17 @@
 package com.dwinovo.numen.pathing.benchmark;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import net.minecraft.core.BlockPos;
 
@@ -36,7 +42,7 @@ class GenerateTest {
         Map<Generate.Reject, Integer> rejected = new EnumMap<>(Generate.Reject.class);
         rejected.put(Generate.Reject.PLAIN_WALK, 7);
         rejected.put(Generate.Reject.TOO_HARD, 3);
-        Generate.Unit unit = new Generate.Unit(List.of(p), List.of(a), 31, rejected, new long[] {0, 5, 2}, new long[] {0, 1500, 9000});
+        Generate.Unit unit = new Generate.Unit(List.of(p), List.of(a), 31, rejected, new long[] {0, 5, 2}, new long[] {0, 1500, 9000}, 1, List.of(4000L, 5000L));
         Generate.Unit back = Generate.Unit.fromJson(unit.toJson());
         assertEquals(unit.problems().get(0).id(), back.problems().get(0).id());
         assertEquals(unit.problems().get(0).to(), back.problems().get(0).to());
@@ -47,5 +53,45 @@ class GenerateTest {
         assertEquals(0, back.rejected().get(Generate.Reject.BEYOND_REGION), "没写的理由读回是 0");
         assertEquals(2, back.tierJobs()[2]);
         assertEquals(9000, back.tierMillis()[2]);
+        assertEquals(1, back.tier2Conclusive());
+        assertEquals(List.of(4000L, 5000L), back.tier2JobMillis());
+    }
+
+    /**
+     * 收题的顺序只看候选的序号:结论以相反的先后到,取出的结果与一个一个串行地做的一样;收满配额就停、不再往后抽(最多多抽一个窗口)。
+     */
+    @Test
+    void candidatesAreTakenInDrawOrderWhateverOrderTheVerdictsArriveIn() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            AtomicInteger drawn = new AtomicInteger();
+            List<Integer> taken = Generate.sequence(() -> drawn.get() < 100 ? drawn.incrementAndGet() : null, candidate -> {
+                // 序号小的结论反而晚到
+                CompletableFuture<Integer> f = new CompletableFuture<>();
+                pool.execute(() -> {
+                    try {
+                        Thread.sleep(Math.max(0, 40 - candidate * 3L));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    f.complete(candidate);
+                });
+                return f;
+            }, candidate -> candidate % 3 != 0, 5, 8);
+            // 串行:1 2 (3 拒) 4 5 (6 拒) 7,第五个收下的是 7
+            assertEquals(List.of(1, 2, 3, 4, 5, 6, 7), taken);
+            assertTrue(drawn.get() <= 7 + 8, "停了就不再抽,多抽的不超过一个窗口:" + drawn.get());
+        } finally {
+            pool.shutdownNow();
+            pool.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void stopsWhenThereAreNoMoreCandidates() {
+        AtomicInteger drawn = new AtomicInteger();
+        List<Integer> taken = Generate.sequence(() -> drawn.get() < 4 ? drawn.incrementAndGet() : null, c -> CompletableFuture.completedFuture(c),
+                c -> c % 2 == 0, 10, 3);
+        assertEquals(List.of(1, 2, 3, 4), taken, "抽不出了就收到哪算哪,不凑数");
     }
 }

@@ -41,7 +41,7 @@ class ReferenceTest {
     @Test
     void aReachableGoalHasAnOptimalPrice() {
         TestWorld world = new TestWorld().floor(0, 0, 40, 6, Y - 1);
-        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(30, 3)), 100_000);
+        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(30, 3)), 100_000, () -> false);
         assertEquals(Answers.Status.OPTIMAL, s.status());
         assertTrue(s.cost() > 0);
     }
@@ -49,7 +49,7 @@ class ReferenceTest {
     @Test
     void aGoalSealedOffInsideTheRegionIsProvenUnsolvable() {
         TestWorld world = new TestWorld().floor(0, 0, 40, 6, Y - 1).fill(20, Y, 0, 20, Y + 2, 6, Blocks.BEDROCK.defaultBlockState());
-        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(30, 3)), 100_000);
+        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(30, 3)), 100_000, () -> false);
         assertEquals(Answers.Status.UNSOLVABLE, s.status());
     }
 
@@ -58,14 +58,14 @@ class ReferenceTest {
     void aComponentThatReachesTheRegionEdgeHasNoVerdict() {
         TestWorld region = new TestWorld().floor(0, 0, 40, 6, Y - 1);
         TestWorld window = region.window(at(2, 3), 0);
-        Reference.Solved s = Reference.solve(window, model(), at(2, 3), Goals.at(at(100, 3)), 100_000);
+        Reference.Solved s = Reference.solve(window, model(), at(2, 3), Goals.at(at(100, 3)), 100_000, () -> false);
         assertEquals(Answers.Status.BEYOND_REGION, s.status());
     }
 
     @Test
     void runningOutOfNodesIsTooHardNotUnsolvable() {
         TestWorld world = new TestWorld().floor(0, 0, 100, 6, Y - 1);
-        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(90, 3)), 20);
+        Reference.Solved s = Reference.solve(world, model(), at(2, 3), Goals.at(at(90, 3)), 20, () -> false);
         assertEquals(Answers.Status.TOO_HARD, s.status());
     }
 
@@ -73,7 +73,7 @@ class ReferenceTest {
     @Test
     void theLargerCapIsOnlyUsedForWhatTheFirstCouldNotSolve() {
         TestWorld world = new TestWorld().floor(0, 0, 100, 6, Y - 1);
-        Solver solver = new Solver(40, 100_000);
+        Solver solver = new Solver(40, 100_000, 1L << 40, 2);
         Solver.Job near = new Solver.Job(world, model(), at(2, 3), Goals.at(at(8, 3)));
         Solver.Job far = new Solver.Job(world, model(), at(2, 3), Goals.at(at(90, 3)));
         List<Solver.Outcome> out = solver.solve(List.of(near, far), (i, o) -> { });
@@ -83,15 +83,33 @@ class ReferenceTest {
         assertEquals(2, out.get(1).tier());
     }
 
-    /** 求解器的并行度装得进老年代:每个求解器的活数据加起来不超过三分之二的堆(只剩一个时不再往下减)。 */
+    /**
+     * 预算不超:同时在跑的作业预留的字节加起来不超过预算,预算只够几个就只同时跑几个,作业都解得出来;大作业(第二档)也能拿到预算,不被小作业饿死。
+     */
     @Test
-    void theSolversFitInTheOldGeneration() {
-        long old = Runtime.getRuntime().maxMemory() / 3 * 2;
-        for (int cap : new int[] {Reference.NODE_CAP, Reference.LARGE_NODE_CAP}) {
-            int n = Answers.solvers(cap);
-            assertTrue(n >= 1);
-            assertTrue(n == 1 || (long) n * cap * Answers.NODE_BYTES <= old, cap + " 档 " + n + " 个求解器装不进 " + old);
+    void reservedMemoryNeverExceedsTheBudget() {
+        TestWorld world = new TestWorld().floor(0, 0, 100, 6, Y - 1);
+        int cap = 40;
+        int largeCap = 100_000;
+        long oneFirst = (long) cap * Answers.NODE_BYTES;
+        // 预算够 3 个第一档作业,或一个第二档作业(四舍五入到整块)
+        long budget = Math.max(3 * oneFirst, (long) largeCap * Answers.NODE_BYTES);
+        try (Solver solver = new Solver(cap, largeCap, budget, 8)) {
+            List<Solver.Job> jobs = new java.util.ArrayList<>();
+            for (int i = 0; i < 24; i++) {
+                jobs.add(new Solver.Job(world, model(), at(2, 3), Goals.at(at(i % 3 == 0 ? 90 : 8 + i, 3))));
+            }
+            List<Solver.Outcome> out = solver.solve(jobs, (i, o) -> { });
+            assertTrue(out.stream().allMatch(o -> o.solved().status() == Answers.Status.OPTIMAL), "都解得出来(远的在第二档)");
+            assertTrue(out.stream().anyMatch(o -> o.tier() == 2));
+            assertTrue(solver.peakReservedBytes() <= solver.budgetBytes(), solver.peakReservedBytes() + " 超过预算 " + solver.budgetBytes());
+            assertTrue(solver.peakReservedBytes() > 0);
         }
-        assertTrue(Answers.solvers(Reference.LARGE_NODE_CAP) <= Answers.solvers(Reference.NODE_CAP), "上限越大同时跑的越少");
+    }
+
+    @Test
+    void theBudgetIsTwoThirdsOfTheHeapAndThreadsLeaveACore() {
+        assertEquals(Runtime.getRuntime().maxMemory() / 3 * 2, Answers.memoryBudget());
+        assertTrue(Answers.threads() >= 1 && Answers.threads() <= Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
     }
 }

@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.SplittableRandom;
 
 import com.dwinovo.numen.pathing.Vanilla;
@@ -61,8 +63,8 @@ final class Generate {
     static final int POCKET = 4000;
     /** 每个档最多试这么多个候选(抽到的,含被拒的),试不满就少收,不凑数。 */
     private static final int MAX_CANDIDATES = 20_000;
-    /** 一批同时求解的候选数(与机器无关,收题的先后只看候选的抽样顺序,结果可复现)。 */
-    private static final int BATCH = 48;
+    /** 同时在求解的候选最多这么多个(与机器无关;收题的先后只看候选的抽样顺序,结果可复现)。 */
+    private static final int WINDOW = 32;
     private static final long SEED = 0x4E554D454E504233L;
 
     /** 拒题的理由,按该先说哪个的次序(多个规格各有各的结论时说最靠前的)。 */
@@ -101,10 +103,13 @@ final class Generate {
     /**
      * 一块地一档的收获:收下的题、它们的答案,与出这一档用掉的候选与求解的账。这一档收完就写进 {@code .generate},续跑时读回。
      *
-     * @param tierJobs   各档上限(下标 1、2)解了几条
-     * @param tierMillis 各档上限的墙钟毫秒加总
+     * @param tierJobs       各档上限(下标 1、2)解了几条
+     * @param tierMillis     各档上限的墙钟毫秒加总
+     * @param tier2Conclusive 第二档的作业里最后有了定论(最优或区域内无解)的条数
+     * @param tier2JobMillis  第二档每条作业用的墙钟毫秒(看耗时分布、定第二档值不值)
      */
-    record Unit(List<Problem> problems, List<Answers.Answer> answers, int candidates, Map<Reject, Integer> rejected, long[] tierJobs, long[] tierMillis) {
+    record Unit(List<Problem> problems, List<Answers.Answer> answers, int candidates, Map<Reject, Integer> rejected, long[] tierJobs, long[] tierMillis,
+                int tier2Conclusive, List<Long> tier2JobMillis) {
 
         JsonObject toJson() {
             JsonObject o = new JsonObject();
@@ -122,6 +127,10 @@ final class Generate {
             o.addProperty("tier2Jobs", tierJobs[2]);
             o.addProperty("tier1Millis", tierMillis[1]);
             o.addProperty("tier2Millis", tierMillis[2]);
+            o.addProperty("tier2Conclusive", tier2Conclusive);
+            com.google.gson.JsonArray ms = new com.google.gson.JsonArray();
+            tier2JobMillis.forEach(ms::add);
+            o.add("tier2JobMillis", ms);
             return o;
         }
 
@@ -134,9 +143,12 @@ final class Generate {
             for (Reject why : Reject.values()) {
                 rejected.put(why, o.getAsJsonObject("rejected").has(why.key) ? o.getAsJsonObject("rejected").get(why.key).getAsInt() : 0);
             }
+            List<Long> tier2JobMillis = new ArrayList<>();
+            o.getAsJsonArray("tier2JobMillis").forEach(e -> tier2JobMillis.add(e.getAsLong()));
             return new Unit(problems, answers, o.get("candidates").getAsInt(), rejected,
                     new long[] {0, o.get("tier1Jobs").getAsLong(), o.get("tier2Jobs").getAsLong()},
-                    new long[] {0, o.get("tier1Millis").getAsLong(), o.get("tier2Millis").getAsLong()});
+                    new long[] {0, o.get("tier1Millis").getAsLong(), o.get("tier2Millis").getAsLong()},
+                    o.get("tier2Conclusive").getAsInt(), tier2JobMillis);
         }
     }
 
@@ -145,11 +157,48 @@ final class Generate {
         return dataset.dir.resolve(".generate").resolve(region + "-" + bucket.label + ".json");
     }
 
+    /**
+     * 候选流水线地求解、按抽到的顺序收:{@code draw} 一个一个抽候选(抽不出了为 null),每抽到一个就交给 {@code judge} 去求解(同时最多 {@code window} 个在途),
+     * 结论按候选的序号一个一个取出来,前面的候选都有了结论才轮到后面的;取到第 {@code quota} 个收下的就停(后面在途的结论丢弃),抽不出了也停。
+     * 交回按序取出的(候选的)结论,含被拒的;收不收由 {@code accepts} 说。所以结果只看候选的序号与各自的结论,与求解的快慢、先后无关——与一个一个串行地做一样。
+     */
+    static <C, R> List<R> sequence(java.util.function.Supplier<C> draw, java.util.function.Function<C, CompletableFuture<R>> judge,
+                                   java.util.function.Predicate<R> accepts, int quota, int window) {
+        List<R> taken = new ArrayList<>();
+        java.util.ArrayDeque<CompletableFuture<R>> inFlight = new java.util.ArrayDeque<>();
+        boolean exhausted = false;
+        int accepted = 0;
+        while (accepted < quota) {
+            while (!exhausted && inFlight.size() < window) {
+                C next = draw.get();
+                if (next == null) {
+                    exhausted = true;
+                } else {
+                    inFlight.add(judge.apply(next));
+                }
+            }
+            if (inFlight.isEmpty()) {
+                break;
+            }
+            R result = inFlight.poll().join();
+            taken.add(result);
+            if (accepts.test(result)) {
+                accepted++;
+            }
+        }
+        return taken;
+    }
+
     public static void main(String[] args) throws IOException {
         Vanilla.boot();
         Dataset dataset = new Dataset(Path.of(args[0]));
         String commit = args[1];
-        Solver solver = Solver.standard();
+        try (Solver solver = Solver.standard()) {
+            generate(dataset, commit, solver);
+        }
+    }
+
+    private static void generate(Dataset dataset, String commit, Solver solver) throws IOException {
         long t0 = System.nanoTime();
         JsonObject manifest = new JsonObject();
         manifest.addProperty("dataset", "numen-pathfinding-benchmark");
@@ -198,8 +247,6 @@ final class Generate {
             this.heldOnly = heldOnly;
         }
 
-        private record Drawn(Candidate candidate, Straight.Facts facts, Problem draft) {}
-
         /** 三个档的题,按档的顺序;已经收完的档(有过程文件)读回,不再求解。 */
         List<Problem> generate() throws IOException {
             List<Problem> out = new ArrayList<>();
@@ -224,80 +271,99 @@ final class Generate {
             return units.values().stream().flatMap(u -> u.answers().stream()).toList();
         }
 
-        /** 一档:按固定种子一批一批抽候选、求解、收题,收满配额或试满候选为止。 */
+        /** 一个候选:抽到的序号、候选本身与几何事实;{@code futures} 是它在各适用规格下的求解(平凡题没有)。 */
+        private record Drawn(int index, Candidate candidate, Straight.Facts facts, Problem draft, List<Spec> specs, List<CompletableFuture<Solver.Outcome>> futures) {}
+
+        /** 一个候选的结论:拒的理由(收了为 empty)与各规格的求解结果。 */
+        private record Verdict(Drawn drawn, Optional<Reject> why, List<Solver.Outcome> outcomes) {}
+
+        /**
+         * 一档:按固定种子抽候选,候选一抽到就排进求解器(同时在求解的最多 {@link #WINDOW} 个),结论按候选的序号收,收满配额或试满候选为止
+         * ({@link #sequence})。收了的题的号、拒绝的计数只看序号在它之前(含)的候选,所以与一个一个串行地做结果一样。
+         */
         private Unit bucket(Problem.Bucket bucket) {
-            List<Problem> out = new ArrayList<>();
-            List<Answers.Answer> answers = new ArrayList<>();
-            Map<Reject, Integer> rejected = new EnumMap<>(Reject.class);
-            long[] tierJobs = new long[3];
-            long[] tierMillis = new long[3];
-            int candidates = 0;
             SplittableRandom rng = new SplittableRandom(SEED ^ (world.name.hashCode() * 31L + bucket.ordinal()));
-            int accepted = 0;
-            int tried = 0;
-            while (accepted < QUOTA && tried < MAX_CANDIDATES) {
-                List<Drawn> batch = new ArrayList<>();
-                int want = Math.min(BATCH, QUOTA - accepted);
-                while (batch.size() < want && tried < MAX_CANDIDATES) {
-                    tried++;
+            int[] drawn = {0};
+            AtomicBoolean stop = new AtomicBoolean();
+            List<Verdict> taken = sequence(() -> {
+                while (drawn[0] < MAX_CANDIDATES) {
+                    int index = ++drawn[0];
                     Candidate c = draw(rng, bucket);
                     if (c == null) {
                         continue;
                     }
-                    candidates++;
                     Straight.Facts facts = Straight.along(whole, c.from, c.to);
-                    if (facts.plainWalk()) {
-                        rejected.merge(Reject.PLAIN_WALK, 1, Integer::sum);
-                        continue;
-                    }
-                    batch.add(new Drawn(c, facts, new Problem(world.name + "-" + bucket.label + "-draft", world.name, bucket, c.distance(), c.from,
-                            c.type, c.to, c.radius, c.endClass, Problem.Split.DEV, facts.tags(c.endClass))));
-                }
-                List<Solver.Job> jobs = new ArrayList<>();
-                for (Drawn d : batch) {
-                    for (Spec spec : Spec.values()) {
-                        if (d.draft.applicable(spec)) {
-                            jobs.add(new Solver.Job(whole, spec.model(), d.draft.from(), d.draft.goal(Spec.STATS)));
-                        }
-                    }
-                }
-                List<Solver.Outcome> outcomes = solver.solve(jobs, (i, o) -> { });
-                int next = 0;
-                for (Drawn d : batch) {
+                    Problem draft = new Problem(world.name + "-" + bucket.label + "-draft", world.name, bucket, c.distance(), c.from, c.type, c.to, c.radius,
+                            c.endClass, Problem.Split.DEV, facts.tags(c.endClass));
                     List<Spec> specs = new ArrayList<>();
-                    List<Solver.Outcome> mine = new ArrayList<>();
-                    for (Spec spec : Spec.values()) {
-                        if (d.draft.applicable(spec)) {
-                            specs.add(spec);
-                            Solver.Outcome o = outcomes.get(next++);
-                            mine.add(o);
-                            tierJobs[o.tier()]++;
-                            tierMillis[o.tier()] += o.millis();
+                    List<CompletableFuture<Solver.Outcome>> futures = new ArrayList<>();
+                    if (!facts.plainWalk()) {
+                        for (Spec spec : Spec.values()) {
+                            if (draft.applicable(spec)) {
+                                specs.add(spec);
+                                futures.add(solver.submit(new Solver.Job(whole, spec.model(), draft.from(), draft.goal(Spec.STATS)), index, stop::get));
+                            }
                         }
                     }
-                    Optional<Reject> why = verdict(mine.stream().map(Solver.Outcome::solved).toList());
-                    if (why.isPresent()) {
-                        rejected.merge(why.get(), 1, Integer::sum);
-                        continue;
-                    }
-                    String id = world.name + "-" + bucket.label + "-" + String.format("%03d", ++accepted);
-                    Candidate c = d.candidate;
-                    out.add(new Problem(id, world.name, bucket, c.distance(), c.from, c.type, c.to, c.radius, c.endClass,
-                            heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts.tags(c.endClass)));
-                    for (int k = 0; k < specs.size(); k++) {
-                        Reference.Solved s = mine.get(k).solved();
-                        answers.add(new Answers.Answer(id, specs.get(k), s.status(), s.cost(), s.expanded(), s.startEstimate()));
+                    return new Drawn(index, c, facts, draft, specs, futures);
+                }
+                return null;
+            }, d -> judge(d), v -> v.why().isEmpty(), QUOTA, WINDOW);
+            stop.set(true);
+
+            List<Problem> out = new ArrayList<>();
+            List<Answers.Answer> answers = new ArrayList<>();
+            Map<Reject, Integer> rejected = new EnumMap<>(Reject.class);
+            for (Reject why : Reject.values()) {
+                rejected.put(why, 0);
+            }
+            long[] tierJobs = new long[3];
+            long[] tierMillis = new long[3];
+            int tier2Conclusive = 0;
+            List<Long> tier2JobMillis = new ArrayList<>();
+            int accepted = 0;
+            int tried = 0;
+            for (Verdict v : taken) {
+                Drawn d = v.drawn();
+                tried = d.index();
+                for (Solver.Outcome o : v.outcomes()) {
+                    tierJobs[o.tier()]++;
+                    tierMillis[o.tier()] += o.millis();
+                    if (o.tier() == 2) {
+                        tier2JobMillis.add(o.millis());
+                        tier2Conclusive += o.solved().conclusive() ? 1 : 0;
                     }
                 }
-                System.out.println("[generate] " + world.name + " " + bucket.label + " 收到 " + accepted + "/" + QUOTA + ",试了 " + tried);
+                if (v.why().isPresent()) {
+                    rejected.merge(v.why().get(), 1, Integer::sum);
+                    continue;
+                }
+                String id = world.name + "-" + bucket.label + "-" + String.format("%03d", ++accepted);
+                Candidate c = d.candidate();
+                out.add(new Problem(id, world.name, bucket, c.distance(), c.from, c.type, c.to, c.radius, c.endClass,
+                        heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts().tags(c.endClass)));
+                for (int k = 0; k < d.specs().size(); k++) {
+                    Reference.Solved s = v.outcomes().get(k).solved();
+                    answers.add(new Answers.Answer(id, d.specs().get(k), s.status(), s.cost(), s.expanded(), s.startEstimate()));
+                }
             }
             if (accepted < QUOTA) {
+                tried = drawn[0];
                 System.out.println("[generate] " + world.name + " " + bucket.label + " 只收到 " + accepted + " 道");
             }
-            for (Reject why : Reject.values()) {
-                rejected.putIfAbsent(why, 0);
+            System.out.println("[generate] " + world.name + " " + bucket.label + " 收到 " + accepted + "/" + QUOTA + ",试了 " + tried);
+            return new Unit(out, answers, taken.size(), rejected, tierJobs, tierMillis, tier2Conclusive, tier2JobMillis);
+        }
+
+        /** 等一个候选各规格的求解都完,说它收不收、不收为什么。平凡题没有求解,直接是 {@link Reject#PLAIN_WALK}。 */
+        private static CompletableFuture<Verdict> judge(Drawn d) {
+            if (d.facts().plainWalk()) {
+                return CompletableFuture.completedFuture(new Verdict(d, Optional.of(Reject.PLAIN_WALK), List.of()));
             }
-            return new Unit(out, answers, candidates, rejected, tierJobs, tierMillis);
+            return CompletableFuture.allOf(d.futures().toArray(new CompletableFuture[0])).thenApply(ignored -> {
+                List<Solver.Outcome> outcomes = d.futures().stream().map(CompletableFuture::join).toList();
+                return new Verdict(d, verdict(outcomes.stream().map(Solver.Outcome::solved).toList()), outcomes);
+            });
         }
 
         JsonObject stats(List<Problem> problems) {
@@ -324,6 +390,13 @@ final class Generate {
                 JsonObject tj = new JsonObject();
                 tj.addProperty("jobs", units.values().stream().mapToLong(u -> u.tierJobs()[t]).sum());
                 tj.addProperty("cpuSeconds", Math.round(units.values().stream().mapToLong(u -> u.tierMillis()[t]).sum() / 100.0) / 10.0);
+                if (tier == 2) {
+                    tj.addProperty("conclusive", units.values().stream().mapToInt(Unit::tier2Conclusive).sum());
+                    List<Double> seconds = units.values().stream().flatMap(u -> u.tier2JobMillis().stream()).map(ms -> ms / 1000.0).toList();
+                    tj.addProperty("medianSeconds", Math.round(Stats.percentile(seconds, 0.5) * 10) / 10.0);
+                    tj.addProperty("p90Seconds", Math.round(Stats.percentile(seconds, 0.9) * 10) / 10.0);
+                    tj.addProperty("maxSeconds", Math.round(Stats.percentile(seconds, 1.0) * 10) / 10.0);
+                }
                 solve.add("tier" + tier, tj);
             }
             o.add("solve", solve);
