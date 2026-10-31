@@ -115,6 +115,52 @@ public class CollectGameTests {
         });
     }
 
+    /**
+     * 掉落物落在一个只有一格高的坑里(头顶是石头,她挤不进去),躺在坑里远离她的那一侧:坑的这一格不能站,她只能站在坑边那一格——
+     * 站格中心够不着,朝物品走到被石头挡住就够着。她就在坑边把它捡起来,不去挖坑顶的石头。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
+    public static void work_collect_reaches_an_item_in_a_pocket_from_the_next_cell(GameTestHelper helper) {
+        itemInAPocket(helper, "gametest_pocket", 4, 0.45);
+    }
+
+    /** 同上,物品偏到最外侧,她一开始就站在坑边那一格的中心:不用走,只朝物品走几步。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
+    public static void work_collect_leans_toward_an_item_in_a_pocket_beside_her(GameTestHelper helper) {
+        itemInAPocket(helper, "gametest_leaner", 7, 0.49);
+    }
+
+    /** 坑是 (8,2,8) 与 (8,2,9) 两格一格高的洞;物品在 (8,2,8) 里朝 z 增大的一侧偏出格中心 {@code offset}。 */
+    private static void itemInAPocket(GameTestHelper helper, String name, int spawnZ, double offset) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    boolean trench = x == 8 && z >= 3 && z <= 7 && y <= 3;
+                    boolean pocket = x == 8 && (z == 8 || z == 9) && y == 2;
+                    if (!trench && !pocket) {
+                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.STONE.defaultBlockState());
+                    }
+                }
+            }
+        }
+        Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))).add(0, 0, offset);
+        ItemEntity drop = new ItemEntity(level, at.x, at.y, at.z, new ItemStack(Items.IRON_INGOT, 3));
+        drop.setDeltaMovement(Vec3.ZERO);
+        level.addFreshEntity(drop);
+        NumenPlayer companion = spawnAt(helper, name, new BlockPos(8, 2, spawnZ), false);
+        ToolRun collect = lua(companion, "return numen.work.collect()");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
+            helper.assertTrue(returned(collect, 3) && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
+                    "the ingots in the pocket were not picked up: " + collect.receipt());
+            helper.assertTrue(level.getBlockState(helper.absolutePos(new BlockPos(8, 3, 8))).is(Blocks.STONE),
+                    "she dug the roof of the pocket instead of reaching in from beside it");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 在 rel 那一格的地面上放一堆 {@code count} 个 {@code item},不带初速。 */
     private static void dropOnFloor(GameTestHelper helper, BlockPos rel, Item item, int count) {
         Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(rel));

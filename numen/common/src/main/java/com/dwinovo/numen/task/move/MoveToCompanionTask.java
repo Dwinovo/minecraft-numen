@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -38,6 +39,12 @@ import net.minecraft.world.phys.Vec3;
 public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskRecord, Walked> {
 
     private static final long TICKS_PER_BLOCK = 20;
+    /** 朝掉落物走的最后一段最多几刻:走到碰上、或被挡住只要几刻,这是兜住物品被挪走时不一直往前走的上限。 */
+    private static final int LEAN_MAX_TICKS = 40;
+    /** 连着这么多刻身体没往前挪,就是被挡住了。 */
+    private static final int LEAN_STILL_TICKS = 3;
+    /** 一刻挪不到这么远算没挪动。 */
+    private static final double LEAN_STILL = 0.005;
     private static final long MAX_EXTRA_TICKS = 5 * 60 * 20;
     /** Progress lease: while the journey is making progress, the deadline is kept this far ahead — a healthy
      *  multi-minute dig route never times out mid-stride, and a stalled one still returns the body within one lease. */
@@ -56,6 +63,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private BoatNav boat;
     /** 驾船画出的航线到不了目标所在的水域(目标在岸上):开到岸边就算这一趟走完。 */
     private boolean shore;
+    /** 到了掉落物旁边之后朝它走的最后一段:还在走为 true。 */
+    private boolean leaning;
+    /** 最后一段走了几刻、上一刻身体在哪、连着几刻没挪动。 */
+    private int leanTicks;
+    private Vec3 leanFrom;
+    private int leanStill;
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
@@ -147,12 +160,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // Progress lease: while the walk is making progress, keep the deadline PROGRESS_LEASE ahead — never past the
         // check-in cap. Progress, NOT goal distance, is the liveness signal: healthy routes routinely move away from
         // the goal (skirting a lake, spiraling down), and the flat budget above can't price terrain.
+        if (leaning) {
+            return lean();
+        }
         if (nav.progressing()) {
             renewLease();
         }
         return switch (nav.tick()) {
             case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> TaskState.SUCCESS;
+            case ARRIVED -> destination.goal() instanceof ItemReach ? lean() : TaskState.SUCCESS;
             case FAILED -> {
                 String why = nav.failReason();
                 FailureType type = nav.failType();
@@ -162,6 +178,36 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 yield TaskState.FAILED;
             }
         };
+    }
+
+    /**
+     * 到了掉落物旁边的格:朝物品走,碰上它(原版每刻的捡取判据)、被碰撞挡住、或到了上限就收场。被挡住时身体半宽贴墙,位置是几何定的,
+     * 所以不靠停点的精度({@link ItemReach#contains} 认的就是这一点)。刚掉下来的东西还捡不了,身体碰上它就停手,等多久是调用方的事。
+     */
+    private TaskState lean() {
+        ItemReach reach = (ItemReach) destination.goal();
+        Vec3 here = player.position();
+        if (!leaning) {
+            leaning = true;
+            leanTicks = 0;
+            leanStill = 0;
+        } else {
+            leanStill = here.distanceToSqr(leanFrom) < LEAN_STILL * LEAN_STILL ? leanStill + 1 : 0;
+        }
+        leanFrom = here;
+        if (reach.reaches(player.getBoundingBox()) || leanStill >= LEAN_STILL_TICKS || ++leanTicks > LEAN_MAX_TICKS) {
+            stopLean();
+            return TaskState.SUCCESS;
+        }
+        player.look().faceToward(reach.center().x, reach.center().z);
+        player.controls().press(Controls.Key.FORWARD);
+        player.controls().release(Controls.Key.SPRINT);
+        return TaskState.RUNNING;
+    }
+
+    private void stopLean() {
+        leaning = false;
+        player.controls().release(Controls.Key.FORWARD);
     }
 
     /** 驾船的一刻:到了就是这一趟走完;搁浅、下了船照实收场。船留在原地,那是她的船,不是垃圾。 */
@@ -273,6 +319,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     @Override
     protected void cleanup() {
         super.cleanup();
+        if (leaning) {
+            stopLean();
+        }
         if (boat != null) {
             boat.stop();   // 中途被取消/让位:收桨,别让船带着按下的前进键漂走
             boat = null;
