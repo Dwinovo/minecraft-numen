@@ -47,11 +47,16 @@ public final class CostModel {
      */
     public static final int MAX_DIG_TICKS = 20 * 60;
 
+    /** 倒一桶水接住坠落:往格里放水。 */
+    private static final TerrainPolicy.Change POUR = new TerrainPolicy.Change.Place(Blocks.WATER);
+
     private final RouteSpec spec;
     private final BodySnapshot body;
     private final TerrainPolicy terrain;
     /** 下一块垫路料;没料为 null。 */
     private final Block placing;
+    /** 往格里放 {@link #placing} 这件改动:许可每问一次都要一份,问得极多,组模型时造一份共用;没料为 null。 */
+    private final TerrainPolicy.Change placingChange;
     private final PositionCosts danger;
     private final ToolChoice tools;
     /** 这次搜索里问过的许可;不是给一次搜索用的(执行复核、诊断前)为 null。 */
@@ -65,6 +70,7 @@ public final class CostModel {
         this.body = Objects.requireNonNull(body, "body");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
         this.placing = placing;
+        this.placingChange = placing == null ? null : new TerrainPolicy.Change.Place(placing);
         this.danger = danger;
         this.tools = tools;
         this.permits = permits;
@@ -278,7 +284,7 @@ public final class CostModel {
         if (Faces.against(view, pos, placing).isEmpty()) {
             return Admission.refuse(Reason.NO_FACE);
         }
-        return judge(new TerrainPolicy.Change.Place(placing), pos, current, view);
+        return judge(placingChange, pos, current, view);
     }
 
     /**
@@ -311,7 +317,7 @@ public final class CostModel {
         if (Faces.against(view, pos, Blocks.WATER).isEmpty()) {
             return Admission.refuse(Reason.NO_FACE);
         }
-        return judge(new TerrainPolicy.Change.Place(Blocks.WATER), pos, current, view);
+        return judge(POUR, pos, current, view);
     }
 
     private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {

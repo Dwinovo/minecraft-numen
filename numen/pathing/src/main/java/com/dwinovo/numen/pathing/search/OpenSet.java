@@ -26,25 +26,25 @@ final class OpenSet {
         return size == 0;
     }
 
-    /** 放进来(不在堆里的节点)。 */
-    void push(int id) {
+    /** 放进来(不在堆里的节点),总价为 {@code f}。 */
+    void push(int id, double f) {
         if (size == items.length) {
             items = Arrays.copyOf(items, size * 2);
         }
         items[size] = id;
         nodes.heapIndex[id] = size;
-        nodes.key[id] = key(nodes.f[id]);
+        nodes.key[id] = key(f);
         size++;
         up(nodes.heapIndex[id]);
     }
 
-    /** 在堆里的降键,不在堆里的(没进过、或已出过堆)放进来。 */
-    void pushOrUpdate(int id) {
+    /** 在堆里的降键到总价 {@code f},不在堆里的(没进过、或已出过堆)放进来。 */
+    void pushOrUpdate(int id, double f) {
         if (nodes.heapIndex[id] >= 0) {
-            nodes.key[id] = key(nodes.f[id]);
+            nodes.key[id] = key(f);
             up(nodes.heapIndex[id]);
         } else {
-            push(id);
+            push(id, f);
         }
     }
 

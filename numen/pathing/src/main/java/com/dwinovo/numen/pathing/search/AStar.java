@@ -205,8 +205,7 @@ public final class AStar {
         nodes.stance[start] = startStance;
         nodes.via[start] = search.arrival();
         nodes.air[start] = search.air();
-        nodes.f[start] = key(0, nodes.h[start]);
-        open.push(start);
+        open.push(start, key(0, nodes.h[start]));
 
         double closestH = Double.POSITIVE_INFINITY;
         while (!open.isEmpty()) {
@@ -239,8 +238,7 @@ public final class AStar {
                 if (stopping > MIN_IMPROVEMENT && !nodes.paid[current]) {
                     // 到达价还没付:按总价放回堆里,同时照常往外展开——起点在贵的成员里时要走得出去
                     nodes.paid[current] = true;
-                    nodes.f[current] = nodes.g[current] + stopping;
-                    open.push(current);
+                    open.push(current, nodes.g[current] + stopping);
                 } else {
                     reachedGoal = true;
                     return current;
@@ -311,8 +309,7 @@ public final class AStar {
                 }
                 int candidate = nodes.candidate(to, guessed, used, estimate.at(tx, ty, tz), current, mi, hi, g);
                 nodes.viaCost[candidate] = quick.cost();
-                nodes.f[candidate] = key(g, nodes.h[candidate]);
-                open.push(candidate);
+                open.push(candidate, key(g, nodes.h[candidate]));
             }
         }
     }
@@ -408,7 +405,6 @@ public final class AStar {
             return;
         }
         nodes.g[next] = g;
-        nodes.f[next] = key(g, nodes.h[next]);
         nodes.parent[next] = from;
         nodes.via[next] = m;
         nodes.viaCost[next] = cost;
@@ -416,7 +412,7 @@ public final class AStar {
         nodes.air[next] = air;
         nodes.move[next] = (byte) mi;
         nodes.heading[next] = (byte) hi;
-        open.pushOrUpdate(next);
+        open.pushOrUpdate(next, key(g, nodes.h[next]));
     }
 
     /**
