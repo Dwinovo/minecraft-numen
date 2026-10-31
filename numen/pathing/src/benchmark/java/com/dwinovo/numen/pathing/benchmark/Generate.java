@@ -59,7 +59,7 @@ final class Generate {
     /** 每个档最多试这么多个候选(抽到的,含被拒的),试不满就少收,不凑数。 */
     private static final int MAX_CANDIDATES = 20_000;
     /** 一批同时求解的候选数(与机器无关,收题的先后只看候选的抽样顺序,结果可复现)。 */
-    private static final int BATCH = 16;
+    private static final int BATCH = 48;
     private static final long SEED = 0x4E554D454E504233L;
 
     /** 拒题的理由,按该先说哪个的次序(多个规格各有各的结论时说最靠前的)。 */
