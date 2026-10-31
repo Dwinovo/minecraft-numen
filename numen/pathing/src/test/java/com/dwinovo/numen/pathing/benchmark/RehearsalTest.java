@@ -94,7 +94,8 @@ class RehearsalTest {
                 "edge").run();
         assertTrue(edge.edge(), String.valueOf(edge.halt()));
         assertEquals(Row.Outcome.BEYOND, edge.outcome(null));
-        assertEquals(Row.Outcome.BEYOND, edge.outcome(Answers.Status.UNKNOWN));
+        assertEquals(Row.Outcome.BEYOND, edge.outcome(Answers.Status.BEYOND_REGION));
+        assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.TOO_HARD), "答案说算不动:不是区域的边挡的");
         assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.OPTIMAL), "答案说区域内能到:是规划没做成");
         assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.BEST_KNOWN));
         assertEquals(Row.Outcome.GAVE_UP, edge.outcome(Answers.Status.UNSOLVABLE), "答案说区域内无解:本该证出无解");

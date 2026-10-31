@@ -64,8 +64,9 @@ final class Rehearsal {
 
         /**
          * 结局的四类({@link Row.Outcome})。把能走到的都搜完了没有目标才算证明到不了。没到、碰到了世界的边({@code edge})、
-         * 标准答案又没说区域内有解或无解的,是要区域之外的地形;答案说区域内能到({@code OPTIMAL}、{@code BEST_KNOWN})或证明区域内无解
-         * ({@code UNSOLVABLE})的,这条路线本该到、本该证出无解,仍是放弃。
+         * 又没有标准答案或答案说区域内没有定论({@code BEYOND_REGION})的,是要区域之外的地形;答案说区域内能到({@code OPTIMAL}、
+         * {@code BEST_KNOWN})或证明区域内无解({@code UNSOLVABLE})的,这条路线本该到、本该证出无解,仍是放弃。题库里只有后两种答案,
+         * 所以有答案文件时这一类基本不出现。
          *
          * @param reference 这道题的标准答案状态;数据集里没有答案文件为 null
          */
@@ -76,7 +77,7 @@ final class Rehearsal {
             if (halt instanceof Halt.Searched s && s.stop() == SearchResult.Stop.EXHAUSTED) {
                 return Row.Outcome.UNREACHABLE;
             }
-            return edge && (reference == null || reference == Answers.Status.UNKNOWN) ? Row.Outcome.BEYOND : Row.Outcome.GAVE_UP;
+            return edge && (reference == null || reference == Answers.Status.BEYOND_REGION) ? Row.Outcome.BEYOND : Row.Outcome.GAVE_UP;
         }
 
         int replansTotal() {

@@ -89,10 +89,10 @@ tasks.register('fetchPathingDataset') {
 def datasetDir = providers.gradleProperty('pathingDataset').orElse(datasetCache.map { it.asFile.absolutePath })
 def mainCommit = providers.exec { commandLine 'git', 'rev-parse', 'HEAD'; workingDir = rootDir }.standardOutput.asText.map { it.trim() }
 
-// 出题(手动跑一次,结果进数据集;不需要标准答案):./gradlew :numen:pathing:pathingGenerate -PpathingDataset=<目录>
+// 出题与标准答案(手动跑一次,慢,结果进数据集;只收有定论的题,可续跑):./gradlew :numen:pathing:pathingGenerate -PpathingDataset=<目录>
 tasks.register('pathingGenerate', JavaExec) {
     group = 'verification'
-    description = '出题:每块地每档撒点,写进数据集的 problems/ 与 manifest.json'
+    description = '出题:每块地每档撒点、求解,只收有定论的题,写进数据集的 problems/、answers.jsonl 与 manifest.json'
     classpath = sourceSets.benchmark.runtimeClasspath
     mainClass = 'com.dwinovo.numen.pathing.benchmark.Generate'
     maxHeapSize = providers.gradleProperty('pathingHeap').orElse('26g').get()
@@ -100,7 +100,7 @@ tasks.register('pathingGenerate', JavaExec) {
         args = [project.property('pathingDataset'), mainCommit.get()]
     }
 }
-// 标准答案(单独一步,慢,可分片、可续算,在哪台机器上算都行):
+// 重算现有题的标准答案(成本模型变了才用;慢,可分片、可续算,在哪台机器上算都行):
 //   ./gradlew :numen:pathing:pathingAnswers -PpathingDataset=<目录> -PpathingShards=<分片目录> [-PpathingShard=i/n] [-PpathingBuckets=short,medium] [-PpathingLimit=N]
 //   ./gradlew :numen:pathing:pathingAnswersMerge -PpathingDataset=<目录> -PpathingShards=<分片目录>
 tasks.register('pathingAnswers', JavaExec) {

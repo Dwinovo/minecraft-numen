@@ -12,8 +12,8 @@ import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 
 /**
- * 一道题:在哪块地、从哪到哪、什么目标。题库文件里一行一道题,只由地形与固定随机种子定出,不依赖任何搜索算法;
- * 两种规格各自的标准答案是另一个文件({@link Answers})。
+ * 一道题:在哪块地、从哪到哪、什么目标。题库文件里一行一道题,由地形、固定随机种子与成本模型下的精确解定出(只收有定论的,见 {@link Generate}),
+ * 不看生产寻路;两种规格各自的标准答案是另一个文件({@link Answers})。
  *
  * @param id       地块名-档-序号,题的唯一名字;dev 与封存的划分按它的哈希({@link Split})
  * @param bucket   起终点三维直线距离的档({@link Bucket})
