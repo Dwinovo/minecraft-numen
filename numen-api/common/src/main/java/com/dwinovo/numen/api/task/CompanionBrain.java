@@ -30,13 +30,6 @@ import java.util.List;
  */
 final class CompanionBrain {
 
-    /**
-     * 任务闲下来多久之后,主手的意图占用自动松开(宪法 §5 / 第 11 条)。
-     * 用去抖而不是裸边沿:客户端严格串行地派工具,一个回合里两次调用之间链是空的,
-     * 空多久取决于模型想多久;30 秒足够盖住那个间隙,又能在活真干完后不久放手。
-     */
-    private static final int HAND_PIN_GRACE_TICKS = 600;
-
     /** 结算完等着送回主人的记录。 */
     private final Deque<TaskRecord<?>> outbox = new ArrayDeque<>();
 
@@ -74,9 +67,6 @@ final class CompanionBrain {
     private String pushedDescribe = "";
     /** 距上次推过了几刻。 */
     private int ticksSinceTaskPush;
-
-    /** 手部占用的空闲边沿(纯计数器,见 {@link #HAND_PIN_GRACE_TICKS})。 */
-    private final HandPinRelease handPinRelease = new HandPinRelease(HAND_PIN_GRACE_TICKS);
 
     CompanionBrain() {
         this.reflexes = List.copyOf(BrainChains.build());
@@ -143,12 +133,6 @@ final class CompanionBrain {
         body = companion;
         // 准备不占身体:先问它有没有结论,就绪的这一刻受理进槽,接着和槽里的活一样参加这一刻的选择
         preparing.tick();
-        // 任务结束边沿(宪法 §5):两个槽都空过了宽限窗口,显式占用的会话就结束了,
-        // 手还给反射。护甲的占用不动(它的生命是 §5 的四个自然终点),只有主手是任务作用域的。
-        if (handPinRelease.tick(!sync.isEmpty() || !current.isEmpty())) {
-            TaskSessionHooks.fireSessionEnd(companion);
-        }
-
         floating.release(companion);
         Task winner = TaskSelector.select(reflexes, slotTask(sync, companion),
                 slotTask(current, companion), idlePoses, companion);
@@ -243,11 +227,10 @@ final class CompanionBrain {
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */
     private boolean wasIdle = true;
 
-    /** 死亡:丢掉在跑的任务与在准备的调用,并结束任务作用域的手部占用。 */
+    /** 死亡:丢掉在跑的任务与在准备的调用。 */
     void dropActiveNoResult(NumenPlayer companion) {
         // 在准备的那次调用也不回结果:客户端按死因结算了在飞的调用
         preparing.drop();
-        TaskSessionHooks.fireSessionEnd(companion);
         sync.dropNoResult(companion);
         current.dropNoResult(companion);
         holder = null;

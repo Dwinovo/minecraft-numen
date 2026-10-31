@@ -20,7 +20,7 @@
  *
  * <p>Everything else in this package — the scheduler's own machinery
  * ({@code CompanionBrain}, {@code TaskQueue}, {@code ChainScheduler},
- * {@code LlmTaskChain}, {@code TaskSessionHooks}, {@code HandPinRelease},
+ * {@code LlmTaskChain},
  * {@code chain/}) — is internal and excluded from the {@code :api} jar. The
  * Numen API schedules; how a tool actually does its work (packet transport,
  * multi-tick driving) lives in the tool pack.
