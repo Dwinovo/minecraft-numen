@@ -81,7 +81,7 @@ public final class CompanionBrains {
                     return entry != null && entry.removed() ? HaltReason.REMOVED : null;
                 },
                 ownerOnline, driving, initiative, persona,
-                () -> server.overworld().getDayTime(), rooms));
+                () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(), rooms));
         CompanionLoops.install(owner, loop, link, rooms);
         return loop;
     }

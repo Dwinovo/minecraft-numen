@@ -21,7 +21,7 @@ AI 怎么操控一个服务端玩家。网站上的长文是《怎么让 AI 操�
 | [0015](0015-kubejs-bridge.md) | 10-31 | KubeJS 联动:脚本里写的插件和 Java 插件走同一扇门 | 已接受,已落地 |
 | [0016](0016-recipe-and-item-knowledge-sources.md) | 10-31 | 配方与物品知识:一个动词多个来源,JEI 是主人客户端上的来源 | 已接受,已落地 |
 | [0017](0017-ranged-weapon-providers.md) | 10-31 | 远程武器:一个动词多个提供者,弓和弩是 Numen 自己的两个提供者 | 已接受,已落地 |
-| [0018](0018-agent-hooks-and-owner-schedules.md) | 11-01 | 插件经门只读订阅大脑事件;主人定时对她说一句话 | 已接受 |
+| [0018](0018-agent-hooks-and-owner-schedules.md) | 11-01 | 插件经门只读订阅大脑事件;主人定时对她说一句话 | 已接受,已落地 |
 
 ## 沿着一件事看
 
