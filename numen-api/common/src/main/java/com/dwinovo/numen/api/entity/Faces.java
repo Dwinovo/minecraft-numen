@@ -31,6 +31,9 @@ public final class Faces {
     /** 放方块时点的那一下:点 {@code clicked} 这一格的 {@code side} 面上的 {@code point}。 */
     public record Face(BlockPos clicked, Direction side, Vec3 point) {}
 
+    /** 六个方向,固定一份:{@link Direction#values} 每次调用都复制整个数组。 */
+    private static final Direction[] DIRECTIONS = Direction.values();
+
     /** 按节点中心算站位时给交互距离留的余量:身体停在节点里不一定正在中心。 */
     private static final double STANDING_SLACK = 0.4;
 
@@ -102,7 +105,7 @@ public final class Faces {
 
     /** 往 {@code target} 放方块时有没有能点的地方(不管看不看得见、够不够得着):{@link #first} 会不会交出任何候选。 */
     private static boolean anyCandidate(BlockGetter level, BlockPos target, Block placing) {
-        return !against(level, target, placing).isEmpty()
+        return anyAgainst(level, target, placing)
                 || Sight.clickable(level, target) && Replaceable.replaceableBy(level.getBlockState(target), placing);
     }
 
@@ -223,14 +226,31 @@ public final class Faces {
      */
     public static Set<Direction> against(BlockGetter level, BlockPos target, Block placing) {
         EnumSet<Direction> out = EnumSet.noneOf(Direction.class);
-        for (Direction dir : Direction.values()) {
-            BlockPos neighbor = target.relative(dir);
-            BlockState state = level.getBlockState(neighbor);
-            if (!state.getShape(level, neighbor).isEmpty() && !Replaceable.replaceableBy(state, placing)) {
+        // 搜索里每个节点都问好几次:一个可变坐标走完六个邻格,不为每个邻格建 BlockPos、不每次复制一份方向数组
+        BlockPos.MutableBlockPos neighbor = new BlockPos.MutableBlockPos();
+        for (Direction dir : DIRECTIONS) {
+            if (clickableNeighbor(level, neighbor.setWithOffset(target, dir), placing)) {
                 out.add(dir);
             }
         }
         return out;
+    }
+
+    /** {@link #against} 是不是非空:找到第一个能点的邻格就停,不建集合。只问"有没有面可贴"的地方用它。 */
+    public static boolean anyAgainst(BlockGetter level, BlockPos target, Block placing) {
+        BlockPos.MutableBlockPos neighbor = new BlockPos.MutableBlockPos();
+        for (Direction dir : DIRECTIONS) {
+            if (clickableNeighbor(level, neighbor.setWithOffset(target, dir), placing)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** {@code neighbor} 这一格有轮廓可点、又不会被 {@code placing} 顶替。 */
+    private static boolean clickableNeighbor(BlockGetter level, BlockPos neighbor, Block placing) {
+        BlockState state = level.getBlockState(neighbor);
+        return !state.getShape(level, neighbor).isEmpty() && !Replaceable.replaceableBy(state, placing);
     }
 
     /**
