@@ -137,6 +137,23 @@ class NoteBookTest {
     }
 
     @Test
+    void anUnnamedNoteTakesTheSmallestFreeNoteNumber() {
+        NoteBook book = NoteBook.of(SHE);
+
+        assertEquals("note-1", book.write(null, "第一条", "world", "").name());
+        assertEquals("note-2", book.write(null, "第二条", "world", "").name());
+        book.forget("note-1");
+        assertEquals("note-1", book.write(null, "补上第一个空位", "world", "").name());
+    }
+
+    @Test
+    void aTypeIsOneOfTheThreeOrTheDefault() {
+        assertEquals(NoteBook.DEFAULT_TYPE, NoteBook.typeOrDefault(null));
+        assertEquals("lesson", NoteBook.typeOrDefault("lesson"));
+        assertThrows(IllegalArgumentException.class, () -> NoteBook.typeOrDefault("reference"));
+    }
+
+    @Test
     void forgettingRemovesIt() {
         NoteBook book = NoteBook.of(SHE);
         book.write("base", "主基地", "world", "");

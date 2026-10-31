@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.ModelCatalog;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.keys.Keychain;
@@ -93,12 +94,13 @@ class LibrariesTest {
         Io io = Io.direct(e -> {
             throw e;
         });
+        NoteBook.init(uuid -> new Home(dir.resolve("memory").resolve(uuid.toString()), io), () -> 0);
         catalog = new ModelCatalog(dir.resolve("server").resolve("cache").resolve("models-dev.json"), () -> "");
         serverKeys = new Keychain(new Home(dir.resolve("server"), io));
         // 服主放在服务器目录里的一份推荐档案,key 在服主的钥匙串里
         hub.server(ProviderLibrary.KIND).write(new EntryId("server", "服主的 DeepSeek"), ProviderLibrary.write(
                 new ConnectionProfile("deepseek", null, "deepseek-chat", null, "https://relay.example",
-                        "127.0.0.1:7890", null, 0, null, 0, null)));
+                        "127.0.0.1:7890", null, 0, null, 0, null, 0, 0)));
         serverKeys.put("deepseek", "sk-secret");
         plugins = new PluginRoster(() -> new PluginSwitches(new JsonDoc(dir.resolve("server").resolve("plugins.json"),
                 JsonDoc.Format.of(1), io)), id -> PluginRoster.Meta.NONE);
@@ -987,6 +989,72 @@ class LibrariesTest {
         assertNotNull(libraries.handle(OTHER, false, Libraries.SKIN, Libraries.PUT,
                 wear("name", "借", "player", "Notch")).problem(), "别人的同伴他动不了");
         assertTrue(worn.isEmpty());
+    }
+
+    private JsonObject note(String... keyValues) {
+        JsonObject o = body(keyValues);
+        o.addProperty("companion", HER.toString());
+        return o;
+    }
+
+    @Test
+    void theOwnerAddsEditsAndDeletesHerNotesAndTheFullTextIsAskedForSeparately(@TempDir Path dir) {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        Libraries libraries = libraries(dir);
+
+        Libraries.Result added = libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.PUT,
+                note("description", "铁在东边", "type", "world", "content", "东边 30 格"));
+        assertNull(added.problem());
+        JsonObject row = array(added.entries()).get(0).getAsJsonObject();
+        assertEquals("note-1", row.get("name").getAsString(), "不填名字就自动起名");
+        assertFalse(row.has("content"), "索引里没有全文");
+
+        JsonArray full = array(libraries.handle(PLAYER, false, Libraries.NOTE, Libraries.LIST,
+                note("name", "note-1")).entries());
+        assertEquals("东边 30 格", full.get(0).getAsJsonObject().get("content").getAsString());
+
+        Libraries.Result edited = libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.PUT,
+                note("name", "note-1", "description", "铁在西边", "type", "lesson", "content", "西边 10 格"));
+        assertNull(edited.problem());
+        assertEquals(1, array(edited.entries()).size(), "同名是改,不是再加一条");
+        JsonObject changed = array(edited.entries()).get(0).getAsJsonObject();
+        assertEquals("铁在西边", changed.get("description").getAsString());
+        assertEquals("lesson", changed.get("type").getAsString());
+        assertEquals("西边 10 格", NoteBook.of(HER).read("note-1").content(), "落在她的工具读写的那一本里");
+
+        Libraries.Result deleted = libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.DELETE,
+                note("name", "note-1"));
+        assertNull(deleted.problem());
+        assertEquals(0, array(deleted.entries()).size());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.DELETE, note("name", "note-1"))
+                .problem(), "没有这条");
+    }
+
+    @Test
+    void nobodyButTheOwnerCanChangeOrReadHerNotes(@TempDir Path dir) {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        Libraries libraries = libraries(dir);
+        NoteBook.of(HER).write("base", "主基地", "world", "门朝东");
+
+        assertNotNull(libraries.handle(OTHER, false, Libraries.NOTES, Libraries.PUT,
+                note("description", "我也要写")).problem());
+        assertNotNull(libraries.handle(OTHER, false, Libraries.NOTES, Libraries.DELETE, note("name", "base")).problem());
+        assertEquals("[]", libraries.handle(OTHER, false, Libraries.NOTE, Libraries.LIST, note("name", "base")).entries(),
+                "别人读不到全文");
+        assertEquals(1, NoteBook.of(HER).index().size());
+        assertEquals("主基地", NoteBook.of(HER).read("base").description());
+    }
+
+    @Test
+    void aNoteWithoutADescriptionOrWithAnUnknownTypeIsRefused(@TempDir Path dir) {
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
+        Libraries libraries = libraries(dir);
+
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.PUT, note("content", "只有正文"))
+                .problem());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.NOTES, Libraries.PUT,
+                note("description", "x", "type", "reference")).problem());
+        assertTrue(NoteBook.of(HER).index().isEmpty());
     }
 
     @Test

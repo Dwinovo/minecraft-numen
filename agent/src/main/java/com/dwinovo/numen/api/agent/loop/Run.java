@@ -24,6 +24,8 @@ final class Run {
     boolean ownerSpoke;
     /** 这条链已经为一次失败重试过。模型回了话就清掉:之后再失败,又有一次重试。 */
     boolean retried;
+    /** 这条链已经为一次"上下文超长"整理过并重试了。模型回了话就清掉。 */
+    boolean overflowRecovered;
 
     Run(long id, boolean control, boolean retried, boolean ownerSpoke) {
         this.id = id;

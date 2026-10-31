@@ -66,6 +66,8 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_PROXY_HINT         = "numen.gui.providers.proxy.hint";
         public static final String GUI_PROVIDERS_CTX                = "numen.gui.providers.ctx";
         public static final String GUI_PROVIDERS_CTX_HINT           = "numen.gui.providers.ctx.hint";
+        public static final String GUI_PROVIDERS_RESERVE            = "numen.gui.providers.reserve";
+        public static final String GUI_PROVIDERS_KEEP_RECENT        = "numen.gui.providers.keep_recent";
         public static final String GUI_PROVIDERS_THINKING           = "numen.gui.providers.thinking";
         public static final String GUI_PROVIDERS_THINKING_AUTO      = "numen.gui.providers.thinking.auto";
         public static final String GUI_PROVIDERS_THINKING_OFF       = "numen.gui.providers.thinking.off";
@@ -264,6 +266,18 @@ public final class ModLanguageData {
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
         public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
+        // Notes: the owner adds, edits and deletes her notes from the profile page's memory section.
+        public static final String NOTE_ADD = "numen.note.add";
+        public static final String NOTE_TITLE_NEW = "numen.note.title_new";
+        public static final String NOTE_TITLE_EDIT = "numen.note.title_edit";
+        public static final String NOTE_DESCRIPTION = "numen.note.description";
+        public static final String NOTE_TYPE = "numen.note.type";
+        public static final String NOTE_CONTENT = "numen.note.content";
+        public static final String NOTE_DELETE = "numen.note.delete";
+        public static final String NOTE_DELETE_TITLE = "numen.note.delete_title";
+        public static final String NOTE_DELETE_WARNING = "numen.note.delete_warning";
+        /** 整理过记忆重试之后服务商仍说上下文超长:回合失败的话。 */
+        public static final String CAUSE_CONTEXT_OVERFLOW = "numen.cause.context_overflow";
 
         // Libraries: the server-provided / mine groups every content library shows, and what is said about a bundled entry.
         public static final String LIBRARY_SERVER   = "numen.library.server";
@@ -523,6 +537,8 @@ public final class ModLanguageData {
         public static final String CMD_UNKNOWN = "numen.cmd.unknown";
         public static final String CMD_CRASHED = "numen.cmd.crashed";
         public static final String CMD_CLEAR = "numen.cmd.clear";
+        public static final String CMD_MEMORY = "numen.cmd.memory";
+        public static final String CMD_COMPACT_ARGS = "numen.cmd.compact_args";
         public static final String CMD_COMPACT_STARTED = "numen.cmd.compact_started";
         public static final String CMD_COMPACT_QUEUED = "numen.cmd.compact_queued";
         public static final String CMD_GOAL = "numen.cmd.goal";
@@ -838,7 +854,6 @@ public final class ModLanguageData {
         adder.add("numen.profile.bio", "Bio");
         adder.add("numen.profile.memories", "Memory");
         adder.add("numen.profile.memories_none", "Nothing remembered yet");
-        adder.add("numen.profile.memories_more", "%s more");
         adder.add("numen.profile.note_meta", "Day %s · %s");
         adder.add("numen.profile.groups", "Groups in common");
         adder.add("numen.profile.backpack", "Backpack · %s items");
@@ -880,6 +895,7 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_UNLIMITED,  "none");
         adder.add(Keys.USAGE_NOBODY,     "Nobody has used the server's keys today.");
         adder.add(Keys.USAGE_LINE,       "%s: %s"); 
+        adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "The context is still too long for the model even after compacting — reduce the context or switch to a model with a larger window");
         adder.add(Keys.ENDPOINT_QUOTA,   "The server's shared key has hit today's token limit for you — put your own key in Settings → Model Configs, or try again tomorrow");
 
         // Voice (TTS) section
@@ -951,6 +967,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port, blank = global");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "Context length (optional)");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens; blank = auto by model");
+        adder.add(Keys.GUI_PROVIDERS_RESERVE,           "Compact reserve (optional)");
+        adder.add(Keys.GUI_PROVIDERS_KEEP_RECENT,       "Keep recent (optional)");
         adder.add("numen.gui.list.bound",               "Now using: %s");
         adder.add("numen.gui.list.bind_cleared",        "Unbound — back to default");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "Thinking");
@@ -1254,6 +1272,20 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_UNKNOWN, "There is no %s command. Type %s to see the ones there are.");
         adder.add(Keys.CMD_CRASHED, "%s went wrong: %s");
         adder.add(Keys.CMD_CLEAR, "Clear the context and start over (the chat log stays)");
+        adder.add(Keys.CMD_MEMORY, "Open her notes: add, edit or delete them");
+        adder.add(Keys.CMD_COMPACT_ARGS, "[what the summary should keep in focus]");
+        adder.add(Keys.NOTE_ADD, "Add a note");
+        adder.add(Keys.NOTE_TITLE_NEW, "New note");
+        adder.add(Keys.NOTE_TITLE_EDIT, "Edit note");
+        adder.add(Keys.NOTE_DESCRIPTION, "The line she sees in her memory index");
+        adder.add(Keys.NOTE_TYPE, "Type");
+        adder.add(Keys.NOTE_CONTENT, "Body (optional)");
+        adder.add("numen.note.type.owner", "Owner");
+        adder.add("numen.note.type.world", "World");
+        adder.add("numen.note.type.lesson", "Lesson");
+        adder.add(Keys.NOTE_DELETE, "Delete");
+        adder.add(Keys.NOTE_DELETE_TITLE, "Delete this note?");
+        adder.add(Keys.NOTE_DELETE_WARNING, "She is told you deleted it and will not write it back.");
         adder.add(Keys.CMD_COMPACT_STARTED, "Compacting memory…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "Compacting is queued; it starts when she finishes this turn");
         adder.add(Keys.CMD_GOAL, "Long-term goal: she keeps at it turn after turn");
@@ -1568,7 +1600,6 @@ public final class ModLanguageData {
         adder.add("numen.profile.bio", "简介");
         adder.add("numen.profile.memories", "记忆");
         adder.add("numen.profile.memories_none", "还没记下什么");
-        adder.add("numen.profile.memories_more", "还有 %s 条");
         adder.add("numen.profile.note_meta", "第 %s 天 · %s");
         adder.add("numen.profile.groups", "共同群聊");
         adder.add("numen.profile.backpack", "背包 · %s 件");
@@ -1610,6 +1641,7 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_UNLIMITED,  "不限");
         adder.add(Keys.USAGE_NOBODY,     "今天还没有人用过服主的 key。");
         adder.add(Keys.USAGE_LINE,       "%s:%s");
+        adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "整理过记忆之后上下文对这个模型还是太长了——减少上下文,或换一个窗口更大的模型");
         adder.add(Keys.ENDPOINT_QUOTA,   "服主提供的 key 今天给你的 token 额度用完了——到 设置 → 模型配置 填上你自己的 key,或明天再来");
 
         // Voice (TTS) section
@@ -1682,6 +1714,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port，留空跟随全局");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "上下文长度（可选）");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens；留空按模型表自动");
+        adder.add(Keys.GUI_PROVIDERS_RESERVE,           "整理记忆的预留（可选）");
+        adder.add(Keys.GUI_PROVIDERS_KEEP_RECENT,       "整理时保留近段原文（可选）");
         adder.add("numen.gui.list.bound",               "已换用：%s");
         adder.add("numen.gui.list.bind_cleared",        "已解绑，回到默认");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "思考");
@@ -1983,6 +2017,20 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_UNKNOWN, "没有 %s 这条命令。输入 %s 看看有哪些。");
         adder.add(Keys.CMD_CRASHED, "%s 出错了:%s");
         adder.add(Keys.CMD_CLEAR, "清空上下文重新开始(聊天记录保留)");
+        adder.add(Keys.CMD_MEMORY, "打开她的札记:新增、修改、删除");
+        adder.add(Keys.CMD_COMPACT_ARGS, "[摘要要特别留意的]");
+        adder.add(Keys.NOTE_ADD, "新增札记");
+        adder.add(Keys.NOTE_TITLE_NEW, "新建札记");
+        adder.add(Keys.NOTE_TITLE_EDIT, "编辑札记");
+        adder.add(Keys.NOTE_DESCRIPTION, "她在记忆索引里看到的那一句");
+        adder.add(Keys.NOTE_TYPE, "类型");
+        adder.add(Keys.NOTE_CONTENT, "正文(可选)");
+        adder.add("numen.note.type.owner", "主人");
+        adder.add("numen.note.type.world", "世界");
+        adder.add("numen.note.type.lesson", "教训");
+        adder.add(Keys.NOTE_DELETE, "删除");
+        adder.add(Keys.NOTE_DELETE_TITLE, "删除这条札记?");
+        adder.add(Keys.NOTE_DELETE_WARNING, "她会被告知你删掉了它,也不会再把它写回去。");
         adder.add(Keys.CMD_COMPACT_STARTED, "开始整理记忆…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "整理记忆已排上,她手上这轮完就走");
         adder.add(Keys.CMD_GOAL, "长期目标:她会一轮接一轮做下去");

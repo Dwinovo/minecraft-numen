@@ -54,6 +54,10 @@ final class ProfilePage {
         record Dismiss() implements Hit {}
         record Export() implements Hit {}
         record Wipe() implements Hit {}
+        /** 点开一条札记编辑。 */
+        record Note(String name) implements Hit {}
+        /** 新增一条札记。 */
+        record NewNote() implements Hit {}
         record Open(Conversation conversation) implements Hit {}
     }
 
@@ -67,8 +71,6 @@ final class ProfilePage {
     private static final int GAP_H = 7;
     private static final int PAD = 8;
     private static final int TEXT_DX = Sprites.SIZE + 10;
-    /** 记忆摆几条;多的说"还有 N 条"。 */
-    private static final int NOTES_SHOWN = 3;
     private static final EquipmentSlot[] ARMOR = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -93,7 +95,6 @@ final class ProfilePage {
     private int viewX, viewY, viewW;
     /** 背包那一行这一帧的顶边;点它是页内开合。 */
     private int itemsRowY = Integer.MIN_VALUE;
-    /** 札记按"哪一本、写过几次"缓存:索引要读盘,不能每帧读。 */
     /** 上次向服务端要她的札记索引的时刻:面板开着时隔几秒要一次最新的。 */
     private long notesAskedMs;
     private static final long NOTES_REFRESH_MS = 5_000L;
@@ -108,6 +109,17 @@ final class ProfilePage {
         scrollTarget = 0;
         itemsOpen = false;
         itemsShown = 0;
+        memoryPending = false;
+    }
+
+    /** 记忆那一节(札记)顶边在整页内容里的位置(像素,从页顶起);画过一帧才有。 */
+    private int memoryTop = -1;
+    /** 有人要看记忆那一节:这页画出它的位置后滚过去(按趋近走,不硬切)。 */
+    private boolean memoryPending;
+
+    /** 滚到记忆那一节({@code /memory} 把主人带到这里)。 */
+    void showMemory() {
+        memoryPending = true;
     }
 
     boolean scroll(double sy) {
@@ -226,8 +238,13 @@ final class ProfilePage {
         infoRow(g, t, Sprites.MAP_PIN, where, I18n.get("numen.profile.distance"), x + PAD, cy, iw);
         cy += ROW_H + 4;
 
-        // ---- 记忆 ----
+        // ---- 记忆:全部札记,点开编辑;最后一行新增 ----
         cy = gap(g, t, x, w, cy);
+        memoryTop = cy + Math.round(scroll) - y;
+        if (memoryPending && contentH > 0) {
+            scrollTarget = Math.clamp((float) (memoryTop - 4), 0f, Math.max(0, contentH - viewH));
+            memoryPending = false;
+        }
         List<ServerLibraries.Note> all = notes(who);
         cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
                 x + PAD, cy, iw);
@@ -235,19 +252,18 @@ final class ProfilePage {
             Nb.text(g, font, I18n.get("numen.profile.memories_none"), x + PAD, cy, t.textDim());
             cy += 14;
         } else {
-            for (int i = 0; i < Math.min(NOTES_SHOWN, all.size()); i++) {
-                ServerLibraries.Note n = all.get(i);
+            for (ServerLibraries.Note n : all) {
+                boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + ROW_H - 2;
+                if (hot) g.fill(x, cy - 2, x + w, cy + ROW_H - 2, t.over());
                 infoRow(g, t, Sprites.BOOK, n.description(),
                         I18n.get("numen.profile.note_meta", n.day(), n.type()), x + PAD, cy, iw);
+                rects.add(new Rect(new Hit.Note(n.name()), x, cy - 2, w, ROW_H));
                 cy += ROW_H;
-            }
-            if (all.size() > NOTES_SHOWN) {
-                Nb.text(g, font, I18n.get("numen.profile.memories_more", all.size() - NOTES_SHOWN),
-                        x + PAD + TEXT_DX, cy, t.textDim());
-                cy += 12;
             }
             cy += 2;
         }
+        cy = actionRow(g, t, new Hit.NewNote(), Sprites.EDIT, I18n.get(ModLanguageData.Keys.NOTE_ADD), t.accent(),
+                x, cy, w, mouseX, mouseY);
 
         // ---- 共同群聊:她在的那几个群,点了进去 ----
         List<Conversation> groups = new ArrayList<>();

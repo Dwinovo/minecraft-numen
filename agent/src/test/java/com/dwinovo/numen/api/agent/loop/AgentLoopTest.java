@@ -258,6 +258,55 @@ class AgentLoopTest extends LoopHarness {
         }
 
         @Test
+        void theFocusTheOwnerAttachedReachesTheCompaction() {
+            control(EventTypes.COMPACT, EventTypes.controlText("compact", "坐标别丢"));
+
+            assertEquals(List.of(false), memory.compactions);
+            assertEquals(List.of("坐标别丢"), memory.focuses);
+        }
+
+        @Test
+        void aCompactionWithoutAFocusAsksForNone() {
+            control(EventTypes.COMPACT);
+
+            assertEquals(List.of(""), memory.focuses);
+        }
+
+        /** 一轮被切开时整理有两份摘要请求:一份一份发,都答完才落地。 */
+        @Test
+        void aSplitTurnSendsItsSummaryRequestsOneAfterAnother() {
+            memory.compactRequests = List.of(
+                    new ModelRequest(List.of(new ConvoState.Msg.User("历史")), List.of(), "compact"),
+                    new ModelRequest(List.of(new ConvoState.Msg.User("前缀")), List.of(), "compact"));
+
+            control(EventTypes.COMPACT);
+
+            assertEquals(1, model.calls.size(), "先发第一份");
+            model.last().say("历史摘要");
+            assertEquals(2, model.calls.size(), "答完一份再发下一份");
+            assertEquals(0, memory.applied, "还没答完,历史不动");
+            model.last().say("前缀摘要");
+            assertEquals(1, memory.applied);
+            assertEquals(List.of(LoopEvent.Purpose.COMPACT, LoopEvent.Purpose.COMPACT),
+                    eventsOf(LoopEvent.ModelUsed.class).stream().map(LoopEvent.ModelUsed::purpose).toList());
+        }
+
+        @Test
+        void aFailureInTheSecondSummaryRequestLeavesTheHistoryAlone() {
+            memory.compactRequests = List.of(
+                    new ModelRequest(List.of(new ConvoState.Msg.User("历史")), List.of(), "compact"),
+                    new ModelRequest(List.of(new ConvoState.Msg.User("前缀")), List.of(), "compact"));
+            control(EventTypes.COMPACT);
+            model.last().say("历史摘要");
+
+            model.last().fail(NETWORK);
+
+            assertEquals(0, memory.applied);
+            assertEquals(1, memory.failures.size());
+            assertNull(loop.status().phase());
+        }
+
+        @Test
         void manualCompactionHoldsOffRunsUntilItLands() {
             control(EventTypes.COMPACT);
             Call compaction = model.last();
@@ -918,6 +967,56 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(2, model.calls.size(), "一条链只重试一次");
             assertEquals(List.of(new LoopEvent.TurnFailed(NETWORK)), eventsOf(LoopEvent.TurnFailed.class));
             assertEquals(Hold.FAILED, loop.hold());
+        }
+
+        private static final Cause OVERFLOW = Cause.llm(Cause.CONTEXT_OVERFLOW, 400, "api.example", "prompt is too long");
+
+        /** 服务商说上下文超长:整理一次、原样重试一次;重试成功就和平常一样。 */
+        @Test
+        void aContextOverflowCompactsOnceAndRetries() {
+            ownerSays("挖矿");
+
+            model.last().fail(OVERFLOW);
+
+            assertEquals(List.of(true), memory.compactions, "超长了先整理");
+            assertEquals(Phase.COMPACT, loop.status().phase());
+            assertTrue(eventsOf(LoopEvent.TurnFailed.class).isEmpty(), "还在恢复,不打扰主人");
+            model.last().say("摘要");
+            assertEquals(3, model.calls.size(), "压完重试同一轮");
+            assertEquals(1, eventsOf(LoopEvent.RunStarted.class).size(), "不另开 run");
+            model.last().say("挖好了");
+            assertTrue(eventsOf(LoopEvent.TurnFailed.class).isEmpty());
+            assertNull(loop.hold());
+        }
+
+        /** 整理过重试了仍然超长:停下如实告诉主人,不再整理、不再重试、不再循环。 */
+        @Test
+        void aSecondOverflowStopsAndSaysSo() {
+            ownerSays("挖矿");
+            model.last().fail(OVERFLOW);
+            model.last().say("摘要");
+
+            model.last().fail(OVERFLOW);
+
+            assertEquals(List.of(new LoopEvent.TurnFailed(OVERFLOW)), eventsOf(LoopEvent.TurnFailed.class));
+            assertEquals(3, model.calls.size(), "不再重试");
+            assertEquals(List.of(true), memory.compactions, "不再整理");
+            assertEquals(Hold.FAILED, loop.hold());
+        }
+
+        /** 模型回过话,下一次超长又有一次整理重试的机会:一次回复清掉"已经试过"。 */
+        @Test
+        void anAnswerRestoresTheOverflowRecovery() {
+            ownerSays("挖矿");
+            model.last().fail(OVERFLOW);
+            model.last().say("摘要");
+            model.last().callTools(new LlmToolCall("c1", "lua", "{}"));
+            tools.finish("c1");
+
+            model.last().fail(OVERFLOW);
+
+            assertEquals(List.of(true, true), memory.compactions, "这一次又整理了一次");
+            assertTrue(eventsOf(LoopEvent.TurnFailed.class).isEmpty());
         }
 
         @Test

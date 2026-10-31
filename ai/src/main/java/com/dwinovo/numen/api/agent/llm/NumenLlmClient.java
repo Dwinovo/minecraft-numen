@@ -173,8 +173,11 @@ public final class NumenLlmClient {
             }
         }
         JsonArray toolList = provider.buildToolList(tools);
+        // 输出上限按这次请求剩下的窗口定(普通一轮与整理的摘要都这样,见 LlmEndpoint#optionsFor)
+        int inputTokens = CompactSplit.estimateTokens(sendable, endpoint) + CompactSplit.estimateText(systemPrompt)
+                + CompactSplit.estimateText(toolList.toString());
         JsonObject body = provider.buildRequestBody(endpoint.model(), systemPrompt, wire, toolList,
-                endpoint.options(), sessionId);
+                endpoint.optionsFor(inputTokens), sessionId);
 
         if (AiLog.LOG.isDebugEnabled()) {
             AiLog.LOG.debug("[numen-llm] chat start: provider={}, model={}, msgs={}, tools={}, system_prompt_chars={}",

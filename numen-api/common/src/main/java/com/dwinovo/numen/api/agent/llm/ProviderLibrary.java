@@ -139,7 +139,11 @@ public final class ProviderLibrary {
                 o.has("temperature") && o.get("temperature").isJsonPrimitive()
                         ? o.get("temperature").getAsDouble() : null,
                 o.has("max_tokens") && o.get("max_tokens").isJsonPrimitive() ? o.get("max_tokens").getAsInt() : 0,
-                o.has("compat") && o.get("compat").isJsonObject() ? o.getAsJsonObject("compat") : null);
+                o.has("compat") && o.get("compat").isJsonObject() ? o.getAsJsonObject("compat") : null,
+                o.has("reserve_tokens") && o.get("reserve_tokens").isJsonPrimitive()
+                        ? o.get("reserve_tokens").getAsInt() : 0,
+                o.has("keep_recent_tokens") && o.get("keep_recent_tokens").isJsonPrimitive()
+                        ? o.get("keep_recent_tokens").getAsInt() : 0);
     }
 
     /** {@link #profileFromJson} 的逆。 */
@@ -155,6 +159,8 @@ public final class ProviderLibrary {
         if (p.temperature() != null) o.addProperty("temperature", p.temperature());
         if (p.maxTokens() > 0) o.addProperty("max_tokens", p.maxTokens());
         if (p.compat() != null && p.compat().size() > 0) o.add("compat", p.compat());
+        if (p.reserveTokens() > 0) o.addProperty("reserve_tokens", p.reserveTokens());
+        if (p.keepRecentTokens() > 0) o.addProperty("keep_recent_tokens", p.keepRecentTokens());
         return o;
     }
 

@@ -154,4 +154,16 @@ class EventTypesTest {
         assertFalse(EventTypes.get(EventTypes.TALK).ownerWords(), "旁听到的话不是主人对她说的");
         assertFalse(EventTypes.get(EventTypes.TASK_FINISHED).ownerWords());
     }
+
+    @Test
+    void aControlEntryCarriesItsLabelAndTheOwnersArgument() {
+        String withFocus = EventTypes.controlText("numen.loop.compact", " 坐标别丢 ");
+        assertEquals("numen.loop.compact", EventTypes.controlLabel(withFocus));
+        assertEquals("坐标别丢", EventTypes.controlArg(withFocus));
+
+        String bare = EventTypes.controlText("numen.loop.compact", "  ");
+        assertEquals("numen.loop.compact", bare, "没有参数就只有标签");
+        assertEquals("numen.loop.compact", EventTypes.controlLabel(bare));
+        assertEquals("", EventTypes.controlArg(bare));
+    }
 }

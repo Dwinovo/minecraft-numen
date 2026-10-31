@@ -54,6 +54,7 @@ public final class ChatCommands {
         SOURCES.add(loop -> List.copyOf(BUILTIN.values()));
         SOURCES.add(new SkillCommandSource());
         register(new CompactCommand());
+        register(new MemoryCommand());
         register(new ClearCommand());
         register(new GoalCommand());
         register(new SkillsCommand());
@@ -208,6 +209,23 @@ public final class ChatCommands {
         }
         remember(command.name());
         return popup.popup(loop);
+    }
+
+    /**
+     * 这串输入要带主人去的资料页那一节;不是页面命令(或命令不存在/此刻不可用)返回 {@code null}。
+     * 同 {@link #popupFor}:带去就是执行,记一笔"最近用过"。
+     */
+    public static PageCommand.Page pageFor(RemoteCompanion loop, String text) {
+        Parsed p = parse(text);
+        if (p == null || p.name().isEmpty()) {
+            return null;
+        }
+        ChatCommand command = find(loop, p.name());
+        if (!(command instanceof PageCommand page) || command.unavailable(loop) != null) {
+            return null;
+        }
+        remember(command.name());
+        return page.page();
     }
 
     /**

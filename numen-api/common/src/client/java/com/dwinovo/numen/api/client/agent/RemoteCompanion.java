@@ -218,12 +218,12 @@ public final class RemoteCompanion {
         send.accept(new OwnerInput.Command(uuid, echo));
     }
 
-    /** 能不能整理的判据在服务端、随状态推来;不能就当场回理由,能就发出去。 */
-    public String requestCompact() {
+    /** 能不能整理的判据在服务端、随状态推来;不能就当场回理由,能就发出去。{@code focus} 是摘要要特别留意的,没有传空串。 */
+    public String requestCompact(String focus) {
         if (state.compactProblem() != null) {
             return state.compactProblem();
         }
-        send.accept(new OwnerInput.Compact(uuid));
+        send.accept(new OwnerInput.Compact(uuid, focus.isBlank() ? null : focus.strip()));
         return null;
     }
 

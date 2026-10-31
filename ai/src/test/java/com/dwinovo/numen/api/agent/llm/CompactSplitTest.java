@@ -31,7 +31,7 @@ class CompactSplitTest {
     private static final LlmEndpoint DEEPSEEK = new LlmEndpoint("deepseek", "https://api.deepseek.com", Map.of(), "k", "",
             new ModelSpec("deepseek-v4", ThinkingTable.AUTO_ONLY, true), 64_000,
             Compats.resolve(Api.CHAT, "deepseek", "https://api.deepseek.com", "deepseek-v4", ThinkingTable.AUTO_ONLY, null),
-            RequestOptions.NONE);
+            RequestOptions.NONE, 16_384, 20_000);
 
     private static ConvoState.Msg user(int approxTokens) {
         return new ConvoState.Msg.User("字".repeat(Math.max(0, approxTokens - 8)));
@@ -86,6 +86,30 @@ class CompactSplitTest {
                 assertTrue(callKept, "orphan tool result in kept span: " + t.toolCallId());
             }
         }
+    }
+
+    /** 劈在一轮中间:那一轮切点之前的半截是前缀,单独成段,不混进更早的历史。 */
+    @Test
+    void aTurnSplitInTheMiddleHasItsFirstHalfAsThePrefix() {
+        List<ConvoState.Msg> h = List.of(
+                user(100), assistant(100),          // 更早的一轮
+                user(500),                          // 被劈的这一轮的开头
+                assistantWithCall("a"), tool("a", 40),
+                assistantWithCall("b"), tool("b", 40),
+                assistant(40));
+        var split = CompactSplit.byRecentBudget(h, 150, PLAIN);
+
+        assertEquals(2, split.toSummarize().size(), "更早的一轮");
+        assertEquals(h.get(2), split.turnPrefix().get(0), "前缀从被劈那一轮的开头(User)起");
+        assertEquals(h.subList(2, 2 + split.turnPrefix().size()), split.turnPrefix(), "到切点为止,连续");
+        assertTrue(split.kept().get(0) instanceof ConvoState.Msg.Assistant);
+        assertEquals(h.size(), split.toSummarize().size() + split.turnPrefix().size() + split.kept().size());
+    }
+
+    @Test
+    void cuttingAtATurnBoundaryHasNoPrefix() {
+        List<ConvoState.Msg> h = List.of(user(100), assistant(100), user(50), assistant(50));
+        assertTrue(CompactSplit.byRecentBudget(h, 120, PLAIN).turnPrefix().isEmpty());
     }
 
     @Test

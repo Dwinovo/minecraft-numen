@@ -52,6 +52,15 @@ public final class NoteBook {
     /** 索引上摆给她看的余量分母。到顶不拒写,只提醒——删哪条是她的事,不是我们的。 */
     public static final int SOFT_MAX = 50;
 
+    /** 札记只有三种,索引里按它标出来。 */
+    public static final List<String> TYPES = List.of("owner", "world", "lesson");
+
+    /** 不写类型时记成哪一种:多数札记记的是看到的地方与东西。 */
+    public static final String DEFAULT_TYPE = "world";
+
+    /** 不点名的札记用的名字的前缀:{@code note-1}、{@code note-2}…… */
+    private static final String UNNAMED = "note-";
+
     /** 一条记忆。{@code description} 是索引里那一行,{@code content} 要 recall 才读得到。 */
     public record Note(String name, String description, String type, int day, String content) {}
 
@@ -166,13 +175,28 @@ public final class NoteBook {
     // ---- 写 ----
 
     /**
+     * 写进来的类型:不写是 {@link #DEFAULT_TYPE},写了得是 {@link #TYPES} 里的一种。她的工具和主人的编辑都先过这一道,
+     * 再交给 {@link #write}。
+     */
+    public static String typeOrDefault(String type) {
+        if (type == null) {
+            return DEFAULT_TYPE;
+        }
+        if (!TYPES.contains(type)) {
+            throw new IllegalArgumentException("type is one of " + String.join(", ", TYPES) + "; got \"" + type + "\"");
+        }
+        return type;
+    }
+
+    /**
      * 记一条(同名覆盖)。天数由这里盖,不让她自己填——她填的是"第几天"这种相对说法时,
      * 过两周就没人知道那是哪天了。
      *
+     * @param name 没点名({@code null})时用还没用过的 {@code note-N} 里最小的那个
      * @return 落盘后的这一条
      */
     public synchronized Note write(String name, String description, String type, String content) {
-        String slug = slug(name);
+        String slug = name == null ? freeName() : slug(name);
         if (slug.isEmpty()) {
             throw new IllegalArgumentException("name must contain letters or digits");
         }
@@ -189,6 +213,15 @@ public final class NoteBook {
         String text = render(note);
         io.write(() -> Atomic.write(file, text));
         return note;
+    }
+
+    /** 还没用过的 {@code note-N} 里 N 最小的那个名字。 */
+    private String freeName() {
+        int k = 1;
+        while (notes().containsKey(UNNAMED + k)) {
+            k++;
+        }
+        return UNNAMED + k;
     }
 
     /** 忘掉一条;没有这条返回 false。 */

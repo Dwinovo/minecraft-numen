@@ -18,10 +18,12 @@ import com.google.gson.JsonObject;
  * @param temperature     温度;null = 不发
  * @param maxTokens       输出上限(token);0 = 不发
  * @param compat          兼容项覆盖(键见 {@link com.dwinovo.numen.api.agent.provider.Compats});null = 全用缺省
+ * @param reserveTokens   整理记忆的预留(token):上下文超过 窗口 − 预留 就整理;0 = 缺省({@link EndpointResolver#DEFAULT_RESERVE_TOKENS})
+ * @param keepRecentTokens 整理时原文保留的近段预算(token);0 = 缺省({@link EndpointResolver#DEFAULT_KEEP_RECENT_TOKENS})
  */
 public record ConnectionProfile(String provider, String protocol, String model, String apiKey, String baseUrl,
                                 String proxy, String reasoningEffort, int ctx, Double temperature,
-                                int maxTokens, JsonObject compat) {
+                                int maxTokens, JsonObject compat, int reserveTokens, int keepRecentTokens) {
 
     /** 自定义厂家:不在目录里,地址和协议全由档案给。 */
     public static final String CUSTOM = "custom";
@@ -29,18 +31,18 @@ public record ConnectionProfile(String provider, String protocol, String model, 
     /** 换掉接口地址覆盖的副本(空 = 用目录缺省)。 */
     public ConnectionProfile withBaseUrl(String baseUrl) {
         return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort, ctx,
-                temperature, maxTokens, compat);
+                temperature, maxTokens, compat, reserveTokens, keepRecentTokens);
     }
 
     /** 换掉密钥的副本。 */
     public ConnectionProfile withApiKey(String apiKey) {
         return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort, ctx,
-                temperature, maxTokens, compat);
+                temperature, maxTokens, compat, reserveTokens, keepRecentTokens);
     }
 
     /** 换掉思考档位的副本。 */
     public ConnectionProfile withReasoningEffort(String reasoningEffort) {
         return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort, ctx,
-                temperature, maxTokens, compat);
+                temperature, maxTokens, compat, reserveTokens, keepRecentTokens);
     }
 }

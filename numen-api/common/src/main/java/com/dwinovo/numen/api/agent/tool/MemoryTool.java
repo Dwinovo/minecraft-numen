@@ -5,10 +5,8 @@ import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -29,13 +27,6 @@ public final class MemoryTool implements NumenTool {
     static final String REMEMBER = "remember";
     static final String RECALL = "recall";
     static final String FORGET = "forget";
-
-    /** 不写 {@code type} 时记成哪一种:多数札记记的是看到的地方与东西。 */
-    private static final String DEFAULT_TYPE = "world";
-    /** 札记只有三种,索引里按它标出来。 */
-    private static final List<String> TYPES = List.of("owner", "world", "lesson");
-    /** 不点名的札记用的名字的前缀:{@code note-1}、{@code note-2}…… */
-    private static final String UNNAMED = "note-";
 
     @Override
     public String name() {
@@ -70,8 +61,8 @@ public final class MemoryTool implements NumenTool {
                 + "the next free note-1, note-2, …; recall and forget: the name exactly as <memory> lists it; recall: omit it to get the index.");
         schema.optionalString("description", "remember: the one line you will see in <memory>.");
         schema.optionalEnum("type", "remember: owner = the owner's habits and wishes, world = places and things you "
-                + "have seen, lesson = something you tried that did not work. Omit to file it as " + DEFAULT_TYPE
-                + ".", TYPES.toArray(String[]::new));
+                + "have seen, lesson = something you tried that did not work. Omit to file it as " + NoteBook.DEFAULT_TYPE
+                + ".", NoteBook.TYPES.toArray(String[]::new));
         schema.optionalString("content", "remember: a longer body, read back with recall. Omit to keep just the line.");
         schema.optionalInteger("page", "recall: which page of a long body. Omit for the first.", 1, 99);
         return schema.build();
@@ -102,22 +93,9 @@ public final class MemoryTool implements NumenTool {
      */
     private static String remember(UUID companion, JsonObject args) {
         String description = required(args, "description");
-        String type = text(args, "type") == null ? DEFAULT_TYPE : text(args, "type");
-        if (!TYPES.contains(type)) {
-            throw new IllegalArgumentException("type is one of " + String.join(", ", TYPES) + "; got \"" + type + "\"");
-        }
+        String type = NoteBook.typeOrDefault(text(args, "type"));
         NoteBook book = NoteBook.of(companion);
-        String name = text(args, "name");
-        if (name == null) {
-            Set<String> taken = new HashSet<>();
-            book.index().forEach(n -> taken.add(n.name()));
-            int k = 1;
-            while (taken.contains(UNNAMED + k)) {
-                k++;
-            }
-            name = UNNAMED + k;
-        }
-        NoteBook.Note note = book.write(name, description, type, text(args, "content"));
+        NoteBook.Note note = book.write(text(args, "name"), description, type, text(args, "content"));
         int count = book.index().size();
         return ToolOutcome.success(count >= NoteBook.SOFT_MAX
                 ? "remembered " + note.name() + " — you now keep " + count + " notes; look for ones to merge or forget"
