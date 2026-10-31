@@ -647,10 +647,28 @@ public final class CompanionLoop {
         }
         log.wipe();
         requestClearContext();   // 内存里的上下文走清空的控制条目;日志已经是空的
-        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.SERVER_MESSAGE, null, WIPED_NOTICE,
-                System.currentTimeMillis(), false)));
+        tell(WIPED_NOTICE);
         Constants.LOG.info("[numen-entity#{}] 记忆被主人清空", companion);
         return null;
+    }
+
+    /** 往她的收件箱放一条不叫醒她的知会(服务器消息);她下一次开口前读到。 */
+    private void tell(String text) {
+        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.SERVER_MESSAGE, null, text,
+                System.currentTimeMillis(), false)));
+    }
+
+    /** 主人在札记里新增或改了一条:如实告诉她,免得她按旧的印象再写一遍。 */
+    public void ownerWroteNote(NoteBook.Note note, boolean replaced) {
+        tell("主人" + (replaced ? "改了你的札记 " : "在你的札记里加了一条 ") + note.name() + ":" + note.description()
+                + "。这是他的决定,以札记现在的样子为准。");
+        Constants.LOG.info("[numen-entity#{}] 主人{}了札记 {}", companion, replaced ? "改" : "加", note.name());
+    }
+
+    /** 主人删了她一条札记:告诉她,她不该再把它写回去。 */
+    public void ownerForgotNote(NoteBook.Note note) {
+        tell("主人删掉了你的札记 " + note.name() + "(" + note.description() + ")。这是他的决定,别再把它记回去。");
+        Constants.LOG.info("[numen-entity#{}] 主人删了札记 {}", companion, note.name());
     }
 
     /** 清空之后她读到的第一件事。 */

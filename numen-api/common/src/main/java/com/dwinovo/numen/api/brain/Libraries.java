@@ -69,7 +69,9 @@ import java.util.UUID;
  *       失败的原因都作为表里的几行({@code row: "pending"})交给他;{@link #DELETE} 脱掉;{@link #CANCEL} 撤掉排着的或不再显示失败的;</li>
  *   <li><b>服务器配置</b>(代理、默认人设):只有管理员。</li>
  *   <li><b>偏好</b>({@link #PREFS}):每位主人自己的,自己读写;</li>
- *   <li><b>她的札记</b>({@link #NOTES}):只读,主人名下各只的札记索引(名字、一句话、类型、哪天);全文要她自己 recall;</li>
+ *   <li><b>她的札记</b>({@link #NOTES}):主人名下各只的札记索引(名字、一句话、类型、哪天);主人可以 {@link #PUT} 新增(不填名字就自动起名)或修改、
+ *       {@link #DELETE} 删除,走的是她的工具用的同一本 {@link NoteBook},并往她的收件箱里放一条不叫醒她的知会。单条的全文是另一张表({@link #NOTE},
+ *       带 {@code companion}、{@code name} 问);</li>
  *   <li><b>权限</b>({@link #PERMISSION}):主人自己的规则与他名下每只同伴的模式,只有他读写他那一份(管理员也一样),
  *       见 {@link PermissionLibrary};</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
@@ -90,6 +92,8 @@ public final class Libraries {
     public static final String PREFS = "prefs";
     public static final String SKILL = "skill";
     public static final String NOTES = "notes";
+    /** 一条札记的全文:按 {@code companion}、{@code name} 问,答一行;问不到(不是他的同伴、没有这条)是空表。 */
+    public static final String NOTE = "note";
     public static final String CATALOG = "catalog";
     public static final String PROVIDER_CHECK = "provider-check";
     public static final String KEY = "key";
@@ -382,7 +386,8 @@ public final class Libraries {
             case MCP_SERVER -> Done.of(mcpServer(admin, op, body), true);
             case PLUGIN -> Done.of(plugin(admin || sources.host(owner), op, body), true);
             case PREFS -> Done.of(prefs(owner, op, body), false);
-            case NOTES, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
+            case NOTES -> notes(owner, op, body);
+            case NOTE, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
         };
         JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
@@ -471,18 +476,84 @@ public final class Libraries {
             case CATALOG -> out.add(ProviderForm.answer(catalog, ask));
             case PREFS -> out.add(sources.prefs(owner).toJson());
             case PERMISSION -> out.addAll(PermissionLibrary.view(sources.permission(owner)));
-            case NOTES -> sources.companions(owner).forEach(companion -> NoteBook.of(companion).index().forEach(note -> {
-                JsonObject o = new JsonObject();
-                o.addProperty("companion", companion.toString());
-                o.addProperty("name", note.name());
-                o.addProperty("description", note.description());
-                o.addProperty("type", note.type());
-                o.addProperty("day", note.day());
-                out.add(o);
-            }));
+            case NOTES -> sources.companions(owner).forEach(companion -> NoteBook.of(companion).index()
+                    .forEach(note -> out.add(noteRow(companion, note, false))));
+            case NOTE -> {
+                UUID companion = ownedCompanion(owner, ask);
+                NoteBook.Note note = companion == null ? null : NoteBook.of(companion).read(string(ask, "name"));
+                if (note != null) {
+                    out.add(noteRow(companion, note, true));
+                }
+            }
             default -> { }
         }
         return out.toString();
+    }
+
+    /** 一条札记的一行:索引那几项,{@code full} 时再带全文。 */
+    private static JsonObject noteRow(UUID companion, NoteBook.Note note, boolean full) {
+        JsonObject o = new JsonObject();
+        o.addProperty("companion", companion.toString());
+        o.addProperty("name", note.name());
+        o.addProperty("description", note.description());
+        o.addProperty("type", note.type());
+        o.addProperty("day", note.day());
+        if (full) {
+            o.addProperty("content", note.content());
+        }
+        return o;
+    }
+
+    /** 请求里 {@code companion} 写的那只,前提是它在这位玩家名下;不是(没写、写坏了、别人的)是 {@code null}。 */
+    private UUID ownedCompanion(UUID owner, JsonObject body) {
+        String text = string(body, "companion");
+        UUID companion;
+        try {
+            companion = text == null ? null : UUID.fromString(text);
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
+        return companion != null && sources.companions(owner).contains(companion) ? companion : null;
+    }
+
+    // ---- 她的札记:主人增删改 ----
+
+    /**
+     * 主人改她的札记。写与删都走 {@link NoteBook}(她的工具用的那一本)的 write/forget,只有这一条写路径;她开着脑子时,
+     * 往她的收件箱放一条不叫醒她的知会,她下一次开口前读到。
+     */
+    private Done notes(UUID owner, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return Done.ok();
+        }
+        if (!PUT.equals(op) && !DELETE.equals(op)) {
+            return Done.problem("unknown operation");
+        }
+        UUID companion = ownedCompanion(owner, body);
+        if (companion == null) {
+            return Done.problem("not your companion");
+        }
+        NoteBook book = NoteBook.of(companion);
+        java.util.Optional<CompanionLoop> loop = CompanionLoops.get(companion);
+        String name = string(body, "name");
+        if (DELETE.equals(op)) {
+            NoteBook.Note gone = book.read(name);
+            if (gone == null || !book.forget(name)) {
+                return Done.problem("no such note");
+            }
+            loop.ifPresent(l -> l.ownerForgotNote(gone));
+            return Done.ok();
+        }
+        boolean replaced = name != null && book.read(name) != null;
+        NoteBook.Note note;
+        try {
+            note = book.write(name, string(body, "description"), NoteBook.typeOrDefault(string(body, "type")),
+                    string(body, "content"));
+        } catch (IllegalArgumentException refused) {
+            return Done.problem(refused.getMessage());
+        }
+        loop.ifPresent(l -> l.ownerWroteNote(note, replaced));
+        return Done.ok();
     }
 
     // ---- 内容库:同一套操作、同一种行 ----
@@ -696,14 +767,8 @@ public final class Libraries {
             default:
                 return Done.problem("unknown operation");
         }
-        String companionText = string(body, "companion");
-        UUID companion;
-        try {
-            companion = companionText == null ? null : UUID.fromString(companionText);
-        } catch (IllegalArgumentException notAUuid) {
-            companion = null;
-        }
-        if (companion == null || !sources.companions(owner).contains(companion)) {
+        UUID companion = ownedCompanion(owner, body);
+        if (companion == null) {
             return Done.problem("not your companion");
         }
         if (DELETE.equals(op)) {

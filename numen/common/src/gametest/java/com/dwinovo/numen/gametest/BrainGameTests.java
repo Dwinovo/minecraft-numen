@@ -365,6 +365,63 @@ public class BrainGameTests {
                 "the panel was not told")).thenExecute(her::close).thenSucceed();
     }
 
+    /**
+     * 主人经札记库新增、修改、删除她的一条札记:她的索引(她的工具读写的那一本)跟着变,收件箱里每次都有一条知会;
+     * 不是她主人的人动不了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void the_owner_adds_edits_and_deletes_her_notes_and_she_is_told_each_time(GameTestHelper helper)
+            throws Exception {
+        Brain her = new Brain(helper, "gametest_noted");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+        var libraries = com.dwinovo.numen.api.brain.Libraries.of(server);
+        var notes = com.dwinovo.numen.api.brain.Libraries.NOTES;
+        NoteBook book = NoteBook.of(her.companion.getUUID());
+        int revision = book.revision();
+
+        JsonObject add = new JsonObject();
+        add.addProperty("companion", her.companion.getUUID().toString());
+        add.addProperty("description", "铁在东边");
+        var added = libraries.handle(owner, false, notes, com.dwinovo.numen.api.brain.Libraries.PUT, add);
+        helper.assertTrue(added.problem() == null, "the owner's note was refused: " + added.problem());
+        helper.assertTrue(book.index().size() == 1 && book.index().get(0).name().equals("note-1"),
+                "the note was not filed under a name of its own: " + book.index());
+        helper.assertTrue(book.revision() > revision && book.formatXml().contains("铁在东边"),
+                "her index did not change: " + book.formatXml());
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("note-1")
+                && e.text().contains("加了一条")), "she was not told of the new note: " + her.loop.inbox().entries());
+
+        JsonObject edit = add.deepCopy();
+        edit.addProperty("name", "note-1");
+        edit.addProperty("description", "铁在西边");
+        helper.assertTrue(libraries.handle(owner, false, notes, com.dwinovo.numen.api.brain.Libraries.PUT, edit)
+                .problem() == null, "the edit was refused");
+        helper.assertTrue(book.formatXml().contains("铁在西边") && !book.formatXml().contains("铁在东边"),
+                "her index still has the old line: " + book.formatXml());
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("改了你的札记")),
+                "she was not told of the edit: " + her.loop.inbox().entries());
+
+        JsonObject stranger = edit.deepCopy();
+        stranger.addProperty("description", "不是我写的");
+        helper.assertTrue(libraries.handle(UUID.randomUUID(), false, notes,
+                com.dwinovo.numen.api.brain.Libraries.PUT, stranger).problem() != null, "someone else wrote her note");
+        helper.assertTrue(libraries.handle(UUID.randomUUID(), false, notes,
+                com.dwinovo.numen.api.brain.Libraries.DELETE, stranger).problem() != null, "someone else deleted it");
+        helper.assertTrue(book.read("note-1").description().equals("铁在西边"), "a stranger changed her note");
+
+        JsonObject drop = new JsonObject();
+        drop.addProperty("companion", her.companion.getUUID().toString());
+        drop.addProperty("name", "note-1");
+        helper.assertTrue(libraries.handle(owner, false, notes, com.dwinovo.numen.api.brain.Libraries.DELETE, drop)
+                .problem() == null, "the owner's delete was refused");
+        helper.assertTrue(book.index().isEmpty(), "the note is still there: " + book.index());
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("删掉了你的札记")),
+                "she was not told of the delete: " + her.loop.inbox().entries());
+        her.close();
+        helper.succeed();
+    }
+
     /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {
