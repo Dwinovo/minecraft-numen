@@ -306,6 +306,54 @@ public final class ServerLibraries {
         return out;
     }
 
+    /** 一条札记的全文(主人打开编辑时才问服务端要)。 */
+    public record NoteText(String name, String description, String type, String content) {}
+
+    /** 最近一次读到的这条札记的全文;没读到(没问过、服务端说没有)是 {@code null}。 */
+    public static NoteText noteText(java.util.UUID companion, String name) {
+        for (JsonElement e : entries(Libraries.NOTE)) {
+            JsonObject o = e.getAsJsonObject();
+            if (companion.toString().equals(text(o, "companion")) && name.equals(text(o, "name"))) {
+                return new NoteText(name, text(o, "description"), text(o, "type"), text(o, "content"));
+            }
+        }
+        return null;
+    }
+
+    /** 向服务端要这条札记的全文;答复到了({@code onReply})之后用 {@link #noteText} 读。 */
+    public static void askNote(java.util.UUID companion, String name,
+                               java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.NOTE, Libraries.LIST, noteBody(companion, name), onReply);
+    }
+
+    /**
+     * 新增或改一条札记({@code name} 为 {@code null} = 新增,服务端自动起名)。能不能办由服务端判(是不是她的主人),
+     * 答复到了({@code onReply})带回办不成的原因。
+     */
+    public static void saveNote(java.util.UUID companion, String name, String description, String type, String content,
+                                java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        JsonObject body = noteBody(companion, name);
+        body.addProperty("description", description);
+        body.addProperty("type", type);
+        body.addProperty("content", content);
+        RemoteCompanions.library().request(Libraries.NOTES, Libraries.PUT, body, onReply);
+    }
+
+    /** 删一条札记。 */
+    public static void deleteNote(java.util.UUID companion, String name,
+                                  java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.NOTES, Libraries.DELETE, noteBody(companion, name), onReply);
+    }
+
+    private static JsonObject noteBody(java.util.UUID companion, String name) {
+        JsonObject body = new JsonObject();
+        body.addProperty("companion", companion.toString());
+        if (name != null) {
+            body.addProperty("name", name);
+        }
+        return body;
+    }
+
     // ---- 技能 ----
 
     public record Skill(Base base, String skill, String description) {

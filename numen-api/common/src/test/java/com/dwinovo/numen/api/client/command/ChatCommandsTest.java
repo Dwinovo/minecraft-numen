@@ -9,6 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -86,6 +87,15 @@ class ChatCommandsTest {
     void completionForACommandWithoutArgumentsDoesNotAppendASpace() {
         Completion skills = ChatCommands.complete(null, "/skills").get(0);
         assertEquals("/skills", skills.insert(), "不吃参数的命令补完就该能直接回车");
+    }
+
+    @Test
+    void memoryTakesTheOwnerToTheMemorySectionAndOtherCommandsDoNot() {
+        assertEquals(PageCommand.Page.MEMORY, ChatCommands.pageFor(null, "/memory"));
+        assertEquals(PageCommand.Page.MEMORY, ChatCommands.pageFor(null, "/memory 随便什么参数"), "多余的参数不理会");
+        assertNull(ChatCommands.pageFor(null, "/skills"));
+        assertNull(ChatCommands.pageFor(null, "/nosuchthing"));
+        assertNull(ChatCommands.pageFor(null, "memory"));
     }
 
     @Test

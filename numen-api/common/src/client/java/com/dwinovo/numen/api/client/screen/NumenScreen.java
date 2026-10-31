@@ -14,6 +14,7 @@ import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.SelectedCompanion;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
@@ -833,6 +834,71 @@ public final class NumenScreen extends Screen {
         return modalCard != null && cardBox.shown();
     }
 
+    /** 札记编辑卡对着哪只、哪一条({@code null} = 新增)。 */
+    private UUID noteOf;
+    private String noteName;
+    private NoteEditPanel noteEditPanel;
+
+    private NoteEditPanel noteEditPanel() {
+        if (noteEditPanel == null) {
+            noteEditPanel = new NoteEditPanel(new NoteHost());
+        }
+        return noteEditPanel;
+    }
+
+    /** 新增或编辑她的一条札记。编辑要先向服务端要这条的全文(索引里没有),答复到了才开卡。 */
+    private void openNote(UUID who, String name) {
+        noteOf = who;
+        noteName = name;
+        if (name == null) {
+            openCard(noteEditPanel());
+            return;
+        }
+        ServerLibraries.askNote(who, name, reply -> {
+            if (reply.ok()) {
+                openCard(noteEditPanel());
+            } else {
+                warn(reply.problem());
+            }
+        });
+    }
+
+    private static void warn(String text) {
+        com.dwinovo.numen.api.client.hud.NumenHudToasts.push(
+                com.dwinovo.numen.api.client.ui.NumenToasts.Severity.WARN, text);
+    }
+
+    /** 札记编辑卡的宿主面:存与删都发给服务端(谁能动由它判),没办成的原因进 toast;删先过确认卡。 */
+    private final class NoteHost implements NoteEditPanel.Host {
+        @Override public UUID companion() { return noteOf; }
+
+        @Override public String note() { return noteName; }
+
+        @Override public void onSave(String name, String description, String type, String content) {
+            ServerLibraries.saveNote(noteOf, name, description, type, content, reply -> {
+                if (!reply.ok()) warn(reply.problem());
+            });
+            closeCard();
+        }
+
+        @Override public void onDelete(String name) {
+            UUID her = noteOf;
+            closeCard();
+            dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                    I18n.get(ModLanguageData.Keys.NOTE_DELETE_TITLE),
+                    I18n.get(ModLanguageData.Keys.NOTE_DELETE_WARNING),
+                    I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.NOTE_DELETE),
+                    () -> ServerLibraries.deleteNote(her, name, reply -> {
+                        if (!reply.ok()) warn(reply.problem());
+                    }));
+            rebuild();
+        }
+
+        @Override public void onClose() {
+            closeCard();
+        }
+    }
+
     /** 邀请卡的宿主面:请进来的人拉进会话,然后面板对着它。 */
     private final class InviteHost implements InvitePanel.Host {
         @Override public Conversation conversation() { return conv; }
@@ -1126,6 +1192,16 @@ public final class NumenScreen extends Screen {
             showCommandReply(reply);
             chatView.pinToBottom();
         }
+
+        /** /memory:翻到她的资料页,滚到记忆那一节。群里没有"她",给不了。 */
+        @Override public boolean openPage(com.dwinovo.numen.api.client.command.PageCommand.Page page) {
+            UUID her = solo();
+            if (her == null) return false;
+            if (!(tab == Tab.ITEMS && her.equals(profileOf))) toggleInfo(her);
+            if (profilePage == null) profilePage = new ProfilePage(font);
+            profilePage.showMemory();
+            return true;
+        }
     }
 
     /** 斜杠命令回给主人的话,画在输入框上方,几秒后自己消失。 */
@@ -1287,6 +1363,8 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
             case ProfilePage.Hit.Export ignored -> com.dwinovo.numen.api.client.agent.MemoryFiles.ask(who, nameFor(who));
             case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
+            case ProfilePage.Hit.Note note -> openNote(who, note.name());
+            case ProfilePage.Hit.NewNote ignored -> openNote(who, null);
             case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }
         return true;
