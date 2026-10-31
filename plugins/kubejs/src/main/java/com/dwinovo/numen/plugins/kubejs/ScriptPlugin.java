@@ -27,7 +27,10 @@ public final class ScriptPlugin {
             "remove", CompanionEvent.REMOVE,
             "death", CompanionEvent.DEATH,
             "abort", CompanionEvent.ABORT,
-            "hurt", CompanionEvent.HURT);
+            "hurt", CompanionEvent.HURT,
+            "run_started", CompanionEvent.RUN_STARTED,
+            "run_ended", CompanionEvent.RUN_ENDED,
+            "task_finished", CompanionEvent.TASK_FINISHED);
 
     private final String namespace;
     private final List<Consumer<NumenApi>> registrations = new ArrayList<>();
@@ -68,7 +71,7 @@ public final class ScriptPlugin {
     }
 
     /**
-     * 订阅同伴身上的事:{@code event} 是 spawn、remove、death、abort、hurt 之一。
+     * 订阅同伴身上的事:{@code event} 是 spawn、remove、death、abort、hurt、run_started、run_ended、task_finished 之一。
      *
      * @throws IllegalArgumentException 没有这个事件
      */

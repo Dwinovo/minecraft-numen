@@ -248,8 +248,8 @@ public final class CompanionTickDispatcher {
     }
 
     /**
-     * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路(含 MAINHAND
-     * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
+     * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路,
+     * 原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
      * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。
      */
     public static TaskRecord<?> stopActive(NumenPlayer player, TaskRecord.StopCause cause) {
@@ -258,7 +258,6 @@ public final class CompanionTickDispatcher {
         TaskRecord<?> target = brain.current.record();
         if (target == null) return null;
         brain.current.cancel(cause);
-        TaskSessionHooks.fireSessionEnd(player);
         return target;
     }
 
@@ -277,9 +276,7 @@ public final class CompanionTickDispatcher {
         }
     }
 
-    /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick).
-     *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
-     *  the explicit-hold session dies with the task it served (constitution §5). */
+    /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick). */
     public static void cancelFor(NumenPlayer player) {
         // 等主人点头的指令不在槽里,同一下叫停(撤掉征询,回执说被主人叫停)。
         com.dwinovo.numen.api.sdk.Consents.stop(player, TaskRecord.StopCause.OWNER);
@@ -289,7 +286,6 @@ public final class CompanionTickDispatcher {
         brain.preparing.withdraw(TaskRecord.StopCause.OWNER.words());
         brain.sync.cancel(TaskRecord.StopCause.OWNER);
         brain.current.cancel(TaskRecord.StopCause.OWNER);
-        TaskSessionHooks.fireSessionEnd(player);
     }
 
     /**

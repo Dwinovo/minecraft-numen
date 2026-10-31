@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.brain.OwnerSchedules;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
@@ -38,6 +39,7 @@ import java.util.function.Function;
  *   <li>顶部居中:大头像、名字、此刻在干什么(没在干活才说在线/忙碌),体征,一排操作块(发消息、编辑);</li>
  *   <li>资料:简介(她人设的开头一段)、在你哪边多远;</li>
  *   <li>记忆:最新几条札记(Telegram 的共享媒体那一节,我们这里最有意思的是她记住了什么);</li>
+ *   <li>定时:主人给她定的话(每隔多久对她说一句),点开编辑,最后一行新增;</li>
  *   <li>共同群聊:她在哪几个群里,点了进去;</li>
  *   <li>背包:收成一行"背包 · N 件",点开往下展开格子;</li>
  *   <li>设置:人设、模型、声线、游戏模式、上下文,一行一项、左名右值,点了开编辑卡;</li>
@@ -58,6 +60,10 @@ final class ProfilePage {
         record Note(String name) implements Hit {}
         /** 新增一条札记。 */
         record NewNote() implements Hit {}
+        /** 点开一条定时编辑。 */
+        record Schedule(String id) implements Hit {}
+        /** 新增一条定时。 */
+        record NewSchedule() implements Hit {}
         record Open(Conversation conversation) implements Hit {}
     }
 
@@ -95,9 +101,9 @@ final class ProfilePage {
     private int viewX, viewY, viewW;
     /** 背包那一行这一帧的顶边;点它是页内开合。 */
     private int itemsRowY = Integer.MIN_VALUE;
-    /** 上次向服务端要她的札记索引的时刻:面板开着时隔几秒要一次最新的。 */
-    private long notesAskedMs;
-    private static final long NOTES_REFRESH_MS = 5_000L;
+    /** 上次向服务端要她的札记与定时的时刻:面板开着时隔几秒要一次最新的。 */
+    private long askedMs;
+    private static final long REFRESH_MS = 5_000L;
 
     ProfilePage(Font font) {
         this.font = font;
@@ -245,7 +251,8 @@ final class ProfilePage {
             scrollTarget = Math.clamp((float) (memoryTop - 4), 0f, Math.max(0, contentH - viewH));
             memoryPending = false;
         }
-        List<ServerLibraries.Note> all = notes(who);
+        refreshTables();
+        List<ServerLibraries.Note> all = ServerLibraries.notes(who);
         cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
                 x + PAD, cy, iw);
         if (all.isEmpty()) {
@@ -264,6 +271,30 @@ final class ProfilePage {
         }
         cy = actionRow(g, t, new Hit.NewNote(), Sprites.EDIT, I18n.get(ModLanguageData.Keys.NOTE_ADD), t.accent(),
                 x, cy, w, mouseX, mouseY);
+
+        // ---- 定时:到点她听到主人的这句话;点开编辑,最后一行新增 ----
+        cy = gap(g, t, x, w, cy);
+        List<ServerLibraries.Schedule> timed = ServerLibraries.schedules(who);
+        cy = sectionHead(g, t, I18n.get(ModLanguageData.Keys.SCHEDULE_SECTION),
+                timed.isEmpty() ? "" : String.valueOf(timed.size()), x + PAD, cy, iw);
+        if (timed.isEmpty()) {
+            for (var line : font.split(Component.translatable(ModLanguageData.Keys.SCHEDULE_NONE), iw)) {
+                g.drawString(font, line, x + PAD, cy, t.textDim(), false);
+                cy += font.lineHeight + 1;
+            }
+            cy += 3;
+        } else {
+            for (ServerLibraries.Schedule s : timed) {
+                boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + ROW_H - 2;
+                if (hot) g.fill(x, cy - 2, x + w, cy + ROW_H - 2, t.over());
+                infoRow(g, t, Sprites.MESSAGE, s.text(), every(s.every()), x + PAD, cy, iw);
+                rects.add(new Rect(new Hit.Schedule(s.id()), x, cy - 2, w, ROW_H));
+                cy += ROW_H;
+            }
+            cy += 2;
+        }
+        cy = actionRow(g, t, new Hit.NewSchedule(), Sprites.EDIT, I18n.get(ModLanguageData.Keys.SCHEDULE_ADD),
+                t.accent(), x, cy, w, mouseX, mouseY);
 
         // ---- 共同群聊:她在的那几个群,点了进去 ----
         List<Conversation> groups = new ArrayList<>();
@@ -414,14 +445,21 @@ final class ProfilePage {
         }
     }
 
-    /** 她的札记,新的在前;同一本写过几次没变就不重读。 */
-    private List<ServerLibraries.Note> notes(UUID who) {
+    /** 间隔用玩家看得懂的单位写:整日的按游戏日,否则按游戏小时(1000 刻)。 */
+    private static String every(long ticks) {
+        return ticks % OwnerSchedules.DAY_TICKS == 0
+                ? I18n.get(ModLanguageData.Keys.SCHEDULE_EVERY_DAYS, ticks / OwnerSchedules.DAY_TICKS)
+                : I18n.get(ModLanguageData.Keys.SCHEDULE_EVERY_HOURS, Math.max(1, Math.round(ticks / 1000f)));
+    }
+
+    /** 札记与定时的表:服务端那一份才算数,面板开着时隔几秒问一次。 */
+    private void refreshTables() {
         long now = System.currentTimeMillis();
-        if (now - notesAskedMs > NOTES_REFRESH_MS) {
-            notesAskedMs = now;
+        if (now - askedMs > REFRESH_MS) {
+            askedMs = now;
             RemoteCompanions.library().ask(Libraries.NOTES);
+            RemoteCompanions.library().ask(Libraries.SCHEDULES);
         }
-        return ServerLibraries.notes(who);
     }
 
     /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */

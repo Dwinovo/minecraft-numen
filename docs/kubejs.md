@@ -40,7 +40,7 @@ NumenEvents.register(event => {
 | 方法 | 做什么 |
 |---|---|
 | `plugin.group(组名, 一句话, group => { group.fn(…) })` | 登记一组函数 |
-| `plugin.on(事件, body => …)` | 听同伴身上的事:`spawn`、`remove`、`death`、`abort`、`hurt` |
+| `plugin.on(事件, body => …)` | 听同伴身上与大脑的事:`spawn`、`remove`、`death`、`abort`、`hurt`、`run_started`、`run_ended`、`task_finished`(只读;外接大脑驾驶时没有 `run_*`) |
 | `plugin.eventType(类型, 恒为急件)` / `plugin.emit(同伴, 类型, 属性, 文字, 急件)` | 登记一种事件,往她的收件箱发一条 |
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |
 | `plugin.gear({slots(body){…}, kindsOf(body, stack){…}})` | 一个穿戴来源 |

@@ -455,6 +455,10 @@ public final class ConvoLog {
     }
 
     private static final Pattern QUERY = Pattern.compile("(?s)<query(?: [^>]*)?>(.*?)</query>");
+    private static final Pattern QUERY_TAG = Pattern.compile("<query((?: [^>]*)?)>");
+
+    /** 一句话来自主人给她定的定时({@code <query>} 开标签上多的那个属性,带前面的空格);认它也只在这一处,见 {@link #scheduled}。 */
+    public static final String SCHEDULED_ATTR = " source=\"schedule\"";
 
     /**
      * 一条 user 消息里主人的原话——{@code <query>} 标记里的那些,按出现顺序;没有标记则空。
@@ -466,6 +470,21 @@ public final class ConvoLog {
         java.util.regex.Matcher m = QUERY.matcher(content);
         while (m.find()) out.add(m.group(1));
         return out;
+    }
+
+    /**
+     * 这条 user 消息里的主人的话是不是全部来自定时({@link #SCHEDULED_ATTR}):面板据此在这一句前标"定时"。
+     * 夹着主人亲口说的话(没有标)的不算——那一条气泡里有他自己的话,不能整条说成定时。没有 {@code <query>} 的不算。
+     */
+    public static boolean scheduled(String content) {
+        if (content == null) return false;
+        java.util.regex.Matcher m = QUERY_TAG.matcher(content);
+        boolean any = false;
+        while (m.find()) {
+            if (!m.group(1).contains(SCHEDULED_ATTR)) return false;
+            any = true;
+        }
+        return any;
     }
 
     /**

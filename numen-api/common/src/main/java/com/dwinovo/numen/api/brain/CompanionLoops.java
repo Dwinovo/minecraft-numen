@@ -55,6 +55,8 @@ public final class CompanionLoops {
         final CompanionLoop loop;
         final Link link;
         final FeedEncoder feed;
+        /** 她的 run 开收,攒着在 {@link #tick} 里派给插件。 */
+        final BrainEventBridge bridge;
         /** 主人客户端的朗读此刻在放。 */
         volatile boolean voicePlaying;
 
@@ -67,6 +69,13 @@ public final class CompanionLoops {
                     link.send(loop.companion(), events);
                 }
             });
+            this.bridge = new BrainEventBridge(loop);
+        }
+
+        /** 大脑退场:在飞的回合作废,它因此收尾的 run 先派给插件,开了的 run 都有收。 */
+        void retire() {
+            loop.dispose();
+            bridge.flush();
         }
     }
 
@@ -94,15 +103,16 @@ public final class CompanionLoops {
         Voice.attach(loop, rooms, link);
         Entry old = LOOPS.put(loop.companion(), entry);
         if (old != null) {
-            old.loop.dispose();
+            old.retire();
         }
     }
 
-    /** 每个服务器刻一次:各大脑播报停牌变化、问熟度,攒下的事件推给主人,身体据此决定是不是在说话。 */
+    /** 每个服务器刻一次:各大脑播报停牌变化、问熟度,攒下的事件推给主人、攒下的 run 开收派给插件,身体据此决定是不是在说话。 */
     public static void tick() {
         for (Entry entry : LOOPS.values()) {
             entry.loop.tick();
             entry.feed.flush();
+            entry.bridge.flush();
             Phase phase = entry.loop.status().phase();
             CompanionSpeech.setSpeaking(entry.loop.companion(),
                     phase == Phase.MODEL || phase == Phase.TOOLS || entry.voicePlaying);
@@ -188,7 +198,7 @@ public final class CompanionLoops {
     public static void dismissed(MinecraftServer server, UUID companion) {
         Entry entry = LOOPS.remove(companion);
         if (entry != null) {
-            entry.loop.dispose();
+            entry.retire();
         }
         CompanionSpeech.setSpeaking(companion, false);
         Homes homes = Homes.of(server);
@@ -201,7 +211,7 @@ public final class CompanionLoops {
     static void release(UUID companion) {
         Entry entry = LOOPS.remove(companion);
         if (entry != null) {
-            entry.loop.dispose();
+            entry.retire();
         }
     }
 

@@ -57,7 +57,7 @@ public final class AgentLoop {
     private final EventQueue inbox;
     private final MemoryPort memory;
     private final HostPort host;
-    private final List<Consumer<? super LoopEvent>> listeners = new ArrayList<>();
+    private final List<Subscriber> listeners = new ArrayList<>();
 
     private Run run;
     private long lastRunId;
@@ -98,9 +98,12 @@ public final class AgentLoop {
     /**
      * 订阅事件。事件在内核的线程上按发生顺序同步送达。内核发事件时正走在一步的中间,
      * 订阅者只做自己那一份(画、记账、落盘),不在回调里同步推进内核。
+     *
+     * <p>订阅者逐个隔离:一个抛了(运行时异常)只记日志,事件接着送给排在后面的订阅者,内核的这一步照常走完。
+     * 同一个订阅者连续出错只在第一次记日志,它再成功处理一次事件之后重新计。
      */
     public void subscribe(Consumer<? super LoopEvent> listener) {
-        listeners.add(listener);
+        listeners.add(new Subscriber(listener));
     }
 
     // ---- 输入 ----
@@ -742,8 +745,31 @@ public final class AgentLoop {
     }
 
     private void emit(LoopEvent event) {
-        for (Consumer<? super LoopEvent> listener : List.copyOf(listeners)) {
-            listener.accept(event);
+        for (Subscriber subscriber : List.copyOf(listeners)) {
+            subscriber.deliver(event);
+        }
+    }
+
+    /** 一个订阅者,带着"上一次是不是出错了"——连续出错只记一次日志。 */
+    private final class Subscriber {
+        private final Consumer<? super LoopEvent> listener;
+        private boolean failing;
+
+        Subscriber(Consumer<? super LoopEvent> listener) {
+            this.listener = listener;
+        }
+
+        void deliver(LoopEvent event) {
+            try {
+                listener.accept(event);
+                failing = false;
+            } catch (RuntimeException e) {
+                if (!failing) {
+                    AiLog.LOG.error("[numen-entity#{}] 事件订阅者处理 {} 时出错,其余订阅者照常收(它连续出错不再重复记)", name,
+                            event.getClass().getSimpleName(), e);
+                }
+                failing = true;
+            }
         }
     }
 

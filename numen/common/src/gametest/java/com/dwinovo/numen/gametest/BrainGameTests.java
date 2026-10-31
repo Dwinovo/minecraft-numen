@@ -422,6 +422,132 @@ public class BrainGameTests {
         helper.succeed();
     }
 
+    /** 她听到的、来自定时的话有几句(日志里开标签带定时来源的 user 消息)。 */
+    private static long scheduledHeard(Brain her) {
+        return her.transcript().stream().filter(m -> m instanceof ConvoState.Msg.User u
+                && com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(u.content())).count();
+    }
+
+    /** 一条定时的最短间隔那么久之后,她才听到它:这批用例要等到这一刻,所以单开一批、时限放宽。 */
+    private static final int ONE_INTERVAL = (int) com.dwinovo.numen.api.brain.OwnerSchedules.MIN_EVERY_TICKS;
+
+    /**
+     * 主人给她定的定时到点只送一次:到期后她听到这句话(开标签带定时来源),之后一个间隔之内不再有;她的大脑换新(重载存档)之后
+     * 也不重发——下次到期刻是落了盘的绝对刻。
+     */
+    @GameTest(template = "floor16", timeoutTicks = ONE_INTERVAL + 400, batch = "numen_schedule")
+    public static void a_schedule_is_heard_once_at_its_time_and_a_reload_does_not_repeat_it(GameTestHelper helper)
+            throws Exception {
+        Path dir = Files.createTempDirectory("numen-gametest-schedule-");
+        Brain her = new Brain(helper, "gametest_scheduled", dir);
+        her.mind.say("好").say("好").say("好");
+        her.loop.putSchedule(null, "看看炉子", ONE_INTERVAL);
+        long[] heardAt = {-1};
+        UUID id = her.companion.getUUID();
+
+        helper.onEachTick(() -> {
+            if (heardAt[0] < 0 && scheduledHeard(her) == 1) {
+                heardAt[0] = helper.getTick();
+            }
+            if (heardAt[0] >= 0 && helper.getTick() == heardAt[0] + 20) {
+                helper.assertTrue(scheduledHeard(her) == 1, "the schedule was heard more than once");
+                // 重载:同一个家里换一个新的大脑;它读回来的下次到期刻在后面,不会立刻再送
+                var again = CompanionBrains.create(helper.getLevel().getServer(), id, her.companion.getOwnerUuid(),
+                        new Home(dir.resolve("her"), NumenIo.inline("numen-gametest")), her.mind, her.owner,
+                        () -> true, () -> false);
+                helper.assertTrue(again.schedules().size() == 1 && again.schedules().get(0).text().equals("看看炉子"),
+                        "the schedule did not survive the reload: " + again.schedules());
+            }
+            if (heardAt[0] >= 0 && helper.getTick() == heardAt[0] + 120) {
+                var again = CompanionLoops.get(id).orElseThrow();
+                long heard = again.log().loadLines(100).stream().filter(l -> l.msg() instanceof ConvoState.Msg.User u
+                        && com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(u.content())).count();
+                helper.assertTrue(heard == 1, "the reloaded brain heard the schedule again: " + heard);
+                her.close();
+                helper.succeed();
+            }
+        });
+    }
+
+    /**
+     * 主人不在线时到期的定时不送、不丢:一直留到他回来,回来后只收到一句。
+     */
+    @GameTest(template = "floor16", timeoutTicks = ONE_INTERVAL + 400, batch = "numen_schedule")
+    public static void a_schedule_due_while_the_owner_is_away_is_heard_once_when_he_returns(GameTestHelper helper)
+            throws Exception {
+        Brain her = new Brain(helper, "gametest_schedule_away");
+        her.ownerOnline = false;
+        her.mind.say("好").say("好").say("好");
+        her.loop.putSchedule(null, "早点回来", ONE_INTERVAL);
+        long[] backAt = {-1};
+
+        helper.onEachTick(() -> {
+            if (backAt[0] < 0 && helper.getTick() == ONE_INTERVAL + 40) {
+                helper.assertTrue(scheduledHeard(her) == 0 && her.loop.inbox().entries().stream().noneMatch(
+                                e -> com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(e.text())),
+                        "the schedule was delivered while the owner was away: " + her.loop.inbox().entries());
+                her.ownerOnline = true;
+                backAt[0] = helper.getTick();
+            }
+            if (backAt[0] >= 0 && helper.getTick() == backAt[0] + 100) {
+                helper.assertTrue(scheduledHeard(her) == 1, "the owner back did not hear exactly one schedule: "
+                        + scheduledHeard(her));
+                her.close();
+                helper.succeed();
+            }
+        });
+    }
+
+    /**
+     * 定时只有她的主人能增删改(别人被拒),服务端判条数与间隔,答复是这位玩家看得到的整表。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void only_the_owner_adds_edits_and_deletes_her_schedules(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_schedule_owner");
+        var server = helper.getLevel().getServer();
+        UUID owner = her.companion.getOwnerUuid();
+        var libraries = com.dwinovo.numen.api.brain.Libraries.of(server);
+        String kind = com.dwinovo.numen.api.brain.Libraries.SCHEDULES;
+        String put = com.dwinovo.numen.api.brain.Libraries.PUT;
+
+        JsonObject add = new JsonObject();
+        add.addProperty("companion", her.companion.getUUID().toString());
+        add.addProperty("text", "看看炉子");
+        add.addProperty("every", ONE_INTERVAL);
+        var added = libraries.handle(owner, false, kind, put, add);
+        helper.assertTrue(added.problem() == null && added.entries().contains("看看炉子"),
+                "the owner's schedule was refused or not listed: " + added.problem() + " " + added.entries());
+        String id = her.loop.schedules().get(0).id();
+
+        JsonObject edit = add.deepCopy();
+        edit.addProperty("id", id);
+        edit.addProperty("text", "看看箱子");
+        helper.assertTrue(libraries.handle(owner, false, kind, put, edit).problem() == null
+                && her.loop.schedules().size() == 1 && her.loop.schedules().get(0).text().equals("看看箱子"),
+                "the edit did not replace the schedule: " + her.loop.schedules());
+
+        JsonObject tooOften = add.deepCopy();
+        tooOften.addProperty("every", ONE_INTERVAL - 1);
+        helper.assertTrue(libraries.handle(owner, false, kind, put, tooOften).problem() != null,
+                "a schedule shorter than the minimum interval was accepted");
+
+        JsonObject stranger = edit.deepCopy();
+        stranger.addProperty("text", "不是我定的");
+        helper.assertTrue(libraries.handle(UUID.randomUUID(), false, kind, put, stranger).problem() != null,
+                "someone else changed her schedule");
+        helper.assertTrue(libraries.handle(UUID.randomUUID(), false, kind,
+                com.dwinovo.numen.api.brain.Libraries.DELETE, stranger).problem() != null, "someone else deleted it");
+        helper.assertTrue(her.loop.schedules().get(0).text().equals("看看箱子"), "a stranger changed her schedule");
+
+        JsonObject drop = new JsonObject();
+        drop.addProperty("companion", her.companion.getUUID().toString());
+        drop.addProperty("id", id);
+        helper.assertTrue(libraries.handle(owner, false, kind, com.dwinovo.numen.api.brain.Libraries.DELETE, drop)
+                .problem() == null && her.loop.schedules().isEmpty(), "the owner's delete did not remove it");
+        her.close();
+        helper.succeed();
+    }
+
     /** 历史按游标一页一页往前翻,翻完正好是整份记录,一行不重不漏。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void history_pages_walk_back_by_cursor(GameTestHelper helper) throws Exception {
@@ -669,6 +795,9 @@ public class BrainGameTests {
         String name = "gametest_driven";
         Brain her = new Brain(helper, name);
         her.driving = true;
+        List<String> pluginHeard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        String pluginId = "gt_driven_hears";
+        hearRuns(pluginId, her.companion.getUUID(), pluginHeard);
         int port;
         try (var probe = new java.net.ServerSocket(0)) {
             port = probe.getLocalPort();
@@ -728,6 +857,60 @@ public class BrainGameTests {
             helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Replied r
                     && r.content().equals("收到")), "the owner's client was not told what she said");
             helper.assertTrue(her.mind.asked.isEmpty(), "her own brain thought while the external one drove");
+            helper.assertTrue(pluginHeard.isEmpty(), "a run event went out while the external brain drove: " + pluginHeard);
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw(pluginId);
+            her.close();
+        });
+    }
+
+    /** 一个听她的 run 开收的插件:把她的每一次开收记成一行;只记这只同伴的(别的用例的同伴也在发)。 */
+    private static void hearRuns(String pluginId, UUID companion, List<String> heard) {
+        com.dwinovo.numen.api.NumenPlugins.register(pluginId, numen -> {
+            numen.on(com.dwinovo.numen.api.CompanionEvent.RUN_STARTED, started -> {
+                if (started.companion().equals(companion)) {
+                    heard.add("started " + started.runId());
+                }
+            });
+            numen.on(com.dwinovo.numen.api.CompanionEvent.RUN_ENDED, ended -> {
+                if (ended.companion().equals(companion)) {
+                    heard.add("ended " + ended.runId() + " " + ended.outcome() + " " + ended.reason());
+                }
+            });
+        });
+    }
+
+    /**
+     * 插件听得到她的 run:一次正常的 run 先开后收、结局是完成;一次被主人停止切断的 run 结局是被切断、原因是主人停止。
+     * 一次 run 一对,按发生的先后。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void a_plugin_hears_her_runs_start_and_end_in_order(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_run_heard");
+        List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        String pluginId = "gt_run_hears";
+        hearRuns(pluginId, her.companion.getUUID(), heard);
+        her.mind.say("好的");
+
+        her.loop.submitPrompt("你好");
+
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(heard.size() == 2 && heard.get(0).startsWith("started ")
+                            && heard.get(1).endsWith(" DONE ") && heard.get(1).startsWith("ended "
+                            + heard.get(0).substring("started ".length())),
+                    "a finished run was not heard as one start then one end: " + heard);
+            heard.clear();
+            her.mind.holding = true;
+            her.mind.say("这句不该被听到");
+            her.loop.submitPrompt("去挖矿");
+        });
+        helper.runAfterDelay(30, () -> {
+            helper.assertTrue(heard.size() == 1 && heard.get(0).startsWith("started "), "the second run did not start: " + heard);
+            her.loop.abort();
+        });
+        succeedWhen(helper, () -> {
+            helper.assertTrue(heard.size() == 2 && heard.get(1).endsWith(" HALTED halt.owner_stop"),
+                    "the cut run was not heard as halted by the owner: " + heard);
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw(pluginId);
             her.close();
         });
     }

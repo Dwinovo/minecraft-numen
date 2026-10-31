@@ -100,17 +100,19 @@ public final class CompanionLoop {
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
      * @param tools       她看得到的工具
      * @param dayTime     游戏内时刻,给事件盖时间戳
+     * @param gameTime    主世界的游戏刻(世界不跑它就不走,{@code /time set} 改不了它),主人的定时按它算到期
      */
     public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
                         Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
-                        Function<String, String> persona, LongSupplier dayTime, Rooms rooms) {}
+                        Function<String, String> persona, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
     private static final String STATS = "stats.json";
     private static final String GOAL = "goal.json";
     private static final String BINDING = "binding.json";
+    private static final String SCHEDULES = "schedules.json";
     /** 绑定文件里穿的皮肤那一项。 */
     private static final String SKIN = "skin";
 
@@ -128,6 +130,7 @@ public final class CompanionLoop {
     private final AgentLoop loop;
     private final JsonDoc goalDoc;
     private final JsonDoc bindingDoc;
+    private final OwnerSchedules schedules;
 
     /**
      * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。{@code null} = 就他俩(她的单成员会话)。
@@ -163,6 +166,8 @@ public final class CompanionLoop {
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(BINDING), JsonDoc.Format.of(1), home.io());
+        JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
+        this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
         ToolAnchor anchor = () -> companion;
         this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), parts.tools(),
                 this::receiptAfterCut);
@@ -376,6 +381,16 @@ public final class CompanionLoop {
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded));
     }
 
+    /**
+     * 主人给她定的定时到点了,说那句话:和主人的话同一条路进收件箱(同样走停牌、停止、外接大脑),开标签上带来源,面板据此标"定时"。
+     * 是私聊里说的,所以不属于任何群会话,回话回到面板。
+     */
+    private boolean submitScheduled(String text) {
+        this.venue = Venue.PANEL;
+        this.conversation = null;
+        return enqueueOwnerWords(EventQueue.scheduledQuery(text, parts.dayTime().getAsLong()));
+    }
+
     private boolean enqueueOwnerWords(String wire) {
         String audience = parts.rooms().audienceLine(companion, conversation);
         return deliver(new EventQueue.Entry(EventTypes.QUERY,
@@ -427,7 +442,34 @@ public final class CompanionLoop {
             loop.halt(HaltReason.EXTERNAL);
         }
         wasDriving = driving;
+        // 主人在场才问定时:不在场时到期刻留在过去,他回来后的第一次问到就送一次(错过几个间隔都合成一次)
+        if (parts.ownerOnline().getAsBoolean()) {
+            for (String words : schedules.due(parts.gameTime().getAsLong())) {
+                submitScheduled(words);
+            }
+        }
         loop.tick();
+    }
+
+    // ---- 主人的定时 ----
+
+    /** 主人给她定的几条定时。 */
+    public List<OwnerSchedules.Schedule> schedules() {
+        return schedules.list();
+    }
+
+    /**
+     * 新增({@code id} 为 {@code null})或修改一条定时。
+     *
+     * @throws IllegalArgumentException 见 {@link OwnerSchedules#put}
+     */
+    public OwnerSchedules.Schedule putSchedule(String id, String text, long every) {
+        return schedules.put(id, text, every, parts.gameTime().getAsLong());
+    }
+
+    /** 删一条定时;没有这一条返回 {@code false}。 */
+    public boolean deleteSchedule(String id) {
+        return schedules.delete(id);
     }
 
     // ---- 外接大脑 ----

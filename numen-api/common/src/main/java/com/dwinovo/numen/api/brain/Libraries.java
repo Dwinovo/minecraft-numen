@@ -72,6 +72,8 @@ import java.util.UUID;
  *   <li><b>她的札记</b>({@link #NOTES}):主人名下各只的札记索引(名字、一句话、类型、哪天);主人可以 {@link #PUT} 新增(不填名字就自动起名)或修改、
  *       {@link #DELETE} 删除,走的是她的工具用的同一本 {@link NoteBook},并往她的收件箱里放一条不叫醒她的知会。单条的全文是另一张表({@link #NOTE},
  *       带 {@code companion}、{@code name} 问);</li>
+ *   <li><b>主人的定时</b>({@link #SCHEDULES}):主人名下各只的定时(话、间隔);主人可以 {@link #PUT} 新增(不带 {@code id})或修改、
+ *       {@link #DELETE} 删除,条数与间隔的限制在 {@link OwnerSchedules},状态以服务端为准;
  *   <li><b>权限</b>({@link #PERMISSION}):主人自己的规则与他名下每只同伴的模式,只有他读写他那一份(管理员也一样),
  *       见 {@link PermissionLibrary};</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
@@ -94,6 +96,8 @@ public final class Libraries {
     public static final String NOTES = "notes";
     /** 一条札记的全文:按 {@code companion}、{@code name} 问,答一行;问不到(不是他的同伴、没有这条)是空表。 */
     public static final String NOTE = "note";
+    /** 主人给她们定的定时:一行一条(companion、id、text、every 游戏刻)。 */
+    public static final String SCHEDULES = "schedules";
     public static final String CATALOG = "catalog";
     public static final String PROVIDER_CHECK = "provider-check";
     public static final String KEY = "key";
@@ -387,6 +391,7 @@ public final class Libraries {
             case PLUGIN -> Done.of(plugin(admin || sources.host(owner), op, body), true);
             case PREFS -> Done.of(prefs(owner, op, body), false);
             case NOTES -> notes(owner, op, body);
+            case SCHEDULES -> schedules(owner, op, body);
             case NOTE, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
         };
@@ -478,6 +483,8 @@ public final class Libraries {
             case PERMISSION -> out.addAll(PermissionLibrary.view(sources.permission(owner)));
             case NOTES -> sources.companions(owner).forEach(companion -> NoteBook.of(companion).index()
                     .forEach(note -> out.add(noteRow(companion, note, false))));
+            case SCHEDULES -> sources.companions(owner).forEach(companion -> CompanionLoops.get(companion)
+                    .ifPresent(loop -> loop.schedules().forEach(s -> out.add(scheduleRow(companion, s)))));
             case NOTE -> {
                 UUID companion = ownedCompanion(owner, ask);
                 NoteBook.Note note = companion == null ? null : NoteBook.of(companion).read(string(ask, "name"));
@@ -488,6 +495,15 @@ public final class Libraries {
             default -> { }
         }
         return out.toString();
+    }
+
+    private static JsonObject scheduleRow(UUID companion, OwnerSchedules.Schedule s) {
+        JsonObject o = new JsonObject();
+        o.addProperty("companion", companion.toString());
+        o.addProperty("id", s.id());
+        o.addProperty("text", s.text());
+        o.addProperty("every", s.every());
+        return o;
     }
 
     /** 一条札记的一行:索引那几项,{@code full} 时再带全文。 */
@@ -553,6 +569,38 @@ public final class Libraries {
             return Done.problem(refused.getMessage());
         }
         loop.ifPresent(l -> l.ownerWroteNote(note, replaced));
+        return Done.ok();
+    }
+
+    // ---- 主人的定时:增删改 ----
+
+    /** 主人增删改她的定时。只有她的主人({@link #ownedCompanion})能做;存与删落在她的家里({@link OwnerSchedules})。 */
+    private Done schedules(UUID owner, String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return Done.ok();
+        }
+        if (!PUT.equals(op) && !DELETE.equals(op)) {
+            return Done.problem("unknown operation");
+        }
+        UUID companion = ownedCompanion(owner, body);
+        if (companion == null) {
+            return Done.problem("not your companion");
+        }
+        java.util.Optional<CompanionLoop> loop = CompanionLoops.get(companion);
+        if (loop.isEmpty()) {
+            return Done.problem("she has no brain here");
+        }
+        String id = string(body, "id");
+        if (DELETE.equals(op)) {
+            return loop.get().deleteSchedule(id) ? Done.ok() : Done.problem("no such schedule");
+        }
+        long every;
+        try {
+            every = Long.parseLong(String.valueOf(string(body, "every")));
+            loop.get().putSchedule(id, string(body, "text"), every);
+        } catch (IllegalArgumentException refused) {
+            return Done.problem(refused.getMessage());
+        }
         return Done.ok();
     }
 

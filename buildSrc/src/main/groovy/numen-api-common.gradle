@@ -207,8 +207,6 @@ tasks.register('apiJar', Jar) {
     exclude 'com/dwinovo/numen/api/task/CompanionBrain*.class'
     exclude 'com/dwinovo/numen/api/task/ChainScheduler*.class'
     exclude 'com/dwinovo/numen/api/task/LlmTaskChain*.class'
-    exclude 'com/dwinovo/numen/api/task/TaskSessionHooks*.class'
-    exclude 'com/dwinovo/numen/api/task/HandPinRelease*.class'
     exclude 'com/dwinovo/numen/api/task/chain/**'
 }
 

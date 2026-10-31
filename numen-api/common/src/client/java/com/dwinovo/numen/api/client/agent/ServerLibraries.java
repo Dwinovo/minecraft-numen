@@ -354,6 +354,49 @@ public final class ServerLibraries {
         return body;
     }
 
+    // ---- 主人的定时 ----
+
+    /** 一条定时:{@code every} 是间隔,游戏刻。 */
+    public record Schedule(String id, String text, long every) {}
+
+    /** 这只同伴的定时,按服务端给的顺序。 */
+    public static List<Schedule> schedules(java.util.UUID companion) {
+        List<Schedule> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SCHEDULES)) {
+            JsonObject o = e.getAsJsonObject();
+            if (companion.toString().equals(text(o, "companion"))) {
+                out.add(new Schedule(text(o, "id"), text(o, "text"), o.get("every").getAsLong()));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 新增({@code id} 为 {@code null})或改一条定时。能不能办、条数与间隔够不够格都由服务端判,答复到了({@code onReply})带回办不成的原因。
+     */
+    public static void saveSchedule(java.util.UUID companion, String id, String text, long every,
+                                    java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        JsonObject body = scheduleBody(companion, id);
+        body.addProperty("text", text);
+        body.addProperty("every", every);
+        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.PUT, body, onReply);
+    }
+
+    /** 删一条定时。 */
+    public static void deleteSchedule(java.util.UUID companion, String id,
+                                      java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.DELETE, scheduleBody(companion, id), onReply);
+    }
+
+    private static JsonObject scheduleBody(java.util.UUID companion, String id) {
+        JsonObject body = new JsonObject();
+        body.addProperty("companion", companion.toString());
+        if (id != null) {
+            body.addProperty("id", id);
+        }
+        return body;
+    }
+
     // ---- 技能 ----
 
     public record Skill(Base base, String skill, String description) {

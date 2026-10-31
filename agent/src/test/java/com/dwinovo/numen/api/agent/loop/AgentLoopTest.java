@@ -53,6 +53,27 @@ class AgentLoopTest extends LoopHarness {
         }
     }
 
+    // ---- 订阅者隔离 ----
+
+    @Nested
+    class Subscribers {
+
+        @Test
+        void aThrowingSubscriberDoesNotKeepTheOthersFromEventsOrStopTheStep() {
+            List<LoopEvent> after = new ArrayList<>();
+            loop.subscribe(e -> {
+                throw new IllegalStateException("订阅者写坏了");
+            });
+            loop.subscribe(after::add);
+
+            ownerSays("过来");
+
+            assertEquals(1, model.calls.size(), "内核的这一步照常走完,模型照样被调用");
+            assertFalse(events.isEmpty());
+            assertEquals(events, after, "排在出错者前后的订阅者收到同样的事件");
+        }
+    }
+
     // ---- 开 run 的时机 ----
 
     @Nested

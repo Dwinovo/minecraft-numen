@@ -552,6 +552,8 @@ sealed interface LoopEvent {
 - **显示记录**:`TranscriptBoundary` 驱动分隔线;现在"写日志事件 + 手动加分隔"的三处双写删除,
   显示记录与 `ConvoLog.loadDisplay` 共用一份映射。
 - **WorkBlockMemory**:`ToolFinished` 里收工作站坐标(现在的 `harvestWorkBlocks`)。
+- **BrainEventBridge → 插件**:`RunStarted`、`RunEnded` 按刻攒下,在 `CompanionLoops.tick` 里于内核两步之间、服务端主线程译成 `CompanionEvent.RUN_STARTED`、`RUN_ENDED` 派给插件(循环换新桥跟着换;外接大脑驾驶时没有 run 也就不发)。
+- 订阅者逐个隔离:`AgentLoop.emit` 里一个订阅者抛了只记日志、事件接着送给后面的,同一个连续出错只记一次。
 
 ---
 
