@@ -41,6 +41,8 @@ public final class EventTypes {
      *
      * <p>进队列而不是当场执行,是因为她忙的时候也该按得下:按了就一定会发生,
      * 主人不必盯着什么时候能按。
+     *
+     * <p>条目的字由 {@link #controlText} 组成:语言键,和主人 {@code /compact} 后面附的关注点(没有就没有)。
      */
     public static final String COMPACT = "compact";
     /**
@@ -296,6 +298,26 @@ public final class EventTypes {
      */
     public static Type event(String id, boolean alwaysUrgent) {
         return new Type(id, s -> s, s -> null, false, false, Delivery.STEER, alwaysUrgent);
+    }
+
+    /**
+     * 控制条目的字:第一行是界面按语言翻的标签(语言键),之后是主人附的参数({@code /compact} 的关注点);
+     * 没有参数就只有标签。条目的字不能为空(队列不收),所以标签总在。
+     */
+    public static String controlText(String label, String arg) {
+        return arg == null || arg.isBlank() ? label : label + "\n" + arg.strip();
+    }
+
+    /** {@link #controlText} 里的标签。 */
+    public static String controlLabel(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? text : text.substring(0, cut);
+    }
+
+    /** {@link #controlText} 里主人附的参数;没有是空串。 */
+    public static String controlArg(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? "" : text.substring(cut + 1);
     }
 
     /**

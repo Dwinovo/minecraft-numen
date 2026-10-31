@@ -583,18 +583,20 @@ public final class CompanionLoop {
     }
 
     /**
-     * 主人要求整理记忆:进队列排着,闲下来自己走。条目的字是语言键,界面按主人的语言翻译(控制条目不进模型)。
+     * 主人要求整理记忆:进队列排着,闲下来自己走。条目的字是语言键加主人附的关注点({@link EventTypes#controlText}),
+     * 界面按主人的语言翻语言键(控制条目不进模型)。
      *
+     * @param focus 摘要要特别留意的;没有是 {@code null} 或空串
      * @return 拒绝的理由(语言键);{@code null} = 已排上
      */
-    public String requestCompact() {
+    public String requestCompact(String focus) {
         String problem = compactProblem();
         if (problem != null) {
             Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", companion, problem);
             return problem;
         }
-        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, Keys.LOOP_COMPACT, System.currentTimeMillis(),
-                false)));
+        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, EventTypes.controlText(Keys.LOOP_COMPACT, focus),
+                System.currentTimeMillis(), false)));
         return null;
     }
 

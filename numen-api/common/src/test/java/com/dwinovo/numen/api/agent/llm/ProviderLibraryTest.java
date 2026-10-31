@@ -51,7 +51,7 @@ class ProviderLibraryTest {
     void everyProfileFieldSurvivesAReloadAndTheKeyIsNotAmongThem() throws IOException {
         JsonObject compat = JsonParser.parseString("{\"thinking_format\":\"none\"}").getAsJsonObject();
         ConnectionProfile profile = new ConnectionProfile("deepseek", "chat", "deepseek-v4-flash", "sk-1",
-                "https://x.example/v1", "127.0.0.1:7890", "high", 32_000, 0.4, 2048, compat);
+                "https://x.example/v1", "127.0.0.1:7890", "high", 32_000, 0.4, 2048, compat, 30_000, 5_000);
         ProviderLibrary.Entry e = fresh().create("我的 DeepSeek", profile);
 
         assertEquals("my:我的 DeepSeek", e.id());
@@ -68,6 +68,8 @@ class ProviderLibraryTest {
         assertEquals(0.4, back.profile().temperature());
         assertEquals(2048, back.profile().maxTokens());
         assertEquals(compat, back.profile().compat());
+        assertEquals(30_000, back.profile().reserveTokens());
+        assertEquals(5_000, back.profile().keepRecentTokens());
         Path file = dir.resolve("players").resolve(OWNER.toString()).resolve("provider").resolve("my")
                 .resolve("我的 DeepSeek.json");
         assertFalse(Files.readString(file).contains("sk-1"), "磁盘上的档案文件里没有 key");
@@ -93,7 +95,7 @@ class ProviderLibraryTest {
     void theRequestUsesHisOwnKeyFirstThenTheServersAndNoKeyMeansNoKey() {
         ProviderLibrary library = fresh();
         ProviderLibrary.Entry e = library.create("x", new ConnectionProfile("deepseek", null, "deepseek-chat", null,
-                null, null, null, 0, null, 0, null));
+                null, null, null, 0, null, 0, null, 0, 0));
 
         assertFalse(library.resolve(e.id()).hasApiKey());
         assertNull(library.key(e.id()));
@@ -109,7 +111,7 @@ class ProviderLibraryTest {
     @Test
     void sameNamesGetASuffixAndARemovedProfileIsGone() {
         ProviderLibrary library = fresh();
-        ConnectionProfile profile = new ConnectionProfile("deepseek", null, "m", null, null, null, null, 0, null, 0, null);
+        ConnectionProfile profile = new ConnectionProfile("deepseek", null, "m", null, null, null, null, 0, null, 0, null, 0, 0);
 
         ProviderLibrary.Entry first = library.create("档案", profile);
         ProviderLibrary.Entry second = library.create("档案", profile);

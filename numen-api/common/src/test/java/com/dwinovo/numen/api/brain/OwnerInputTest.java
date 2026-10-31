@@ -22,7 +22,8 @@ class OwnerInputTest {
     @Test
     void everyKindSurvivesTheWire() {
         List<OwnerInput> all = List.of(new OwnerInput.Say("G", "你好"), new OwnerInput.Command(HER, "/build 木屋"),
-                new OwnerInput.Stop("G"), new OwnerInput.Compact(HER), new OwnerInput.Clear(HER),
+                new OwnerInput.Stop("G"), new OwnerInput.Compact(HER, null), new OwnerInput.Compact(HER, "坐标别丢"),
+                new OwnerInput.Clear(HER),
                 new OwnerInput.SetGoal(HER, "挖 64 个铁", "/goal 挖 64 个铁"), new OwnerInput.ClearGoal(HER),
                 new OwnerInput.Bind(HER, Slot.PROVIDER, "server:prov1"), new OwnerInput.Bind(HER, Slot.PROVIDER, null),
                 new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.VOICE, "my:派蒙"),

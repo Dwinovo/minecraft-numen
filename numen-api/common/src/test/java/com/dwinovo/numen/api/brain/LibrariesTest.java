@@ -100,7 +100,7 @@ class LibrariesTest {
         // 服主放在服务器目录里的一份推荐档案,key 在服主的钥匙串里
         hub.server(ProviderLibrary.KIND).write(new EntryId("server", "服主的 DeepSeek"), ProviderLibrary.write(
                 new ConnectionProfile("deepseek", null, "deepseek-chat", null, "https://relay.example",
-                        "127.0.0.1:7890", null, 0, null, 0, null)));
+                        "127.0.0.1:7890", null, 0, null, 0, null, 0, 0)));
         serverKeys.put("deepseek", "sk-secret");
         plugins = new PluginRoster(() -> new PluginSwitches(new JsonDoc(dir.resolve("server").resolve("plugins.json"),
                 JsonDoc.Format.of(1), io)), id -> PluginRoster.Meta.NONE);

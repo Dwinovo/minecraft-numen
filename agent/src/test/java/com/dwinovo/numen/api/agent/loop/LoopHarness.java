@@ -168,6 +168,11 @@ public abstract class LoopHarness {
         public int clears;
         public int applied;
         public final List<Boolean> compactions = new ArrayList<>();
+        /** 一次整理要依次发的摘要请求;缺省一份,测试要看"劈轮之后两份"时自己放两份。 */
+        public List<ModelRequest> compactRequests = List.of(
+                new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact"));
+        /** 每次切分收到的关注点,和 {@link #compactions} 一一对应。 */
+        public final List<String> focuses = new ArrayList<>();
         public final List<String> failures = new ArrayList<>();
         /** 切分那一刻的历史——自动压缩在注入之前,主人刚说的话不该在这里面。 */
         public List<ConvoState.Msg> historyAtSplit;
@@ -178,20 +183,22 @@ public abstract class LoopHarness {
         }
 
         @Override
-        public Optional<Compaction> compaction(boolean auto) {
+        public Optional<Compaction> compaction(boolean auto, String focus) {
             compactions.add(auto);
+            focuses.add(focus);
             historyAtSplit = transcript.snapshot();
             if (nothingToCompact) {
                 return Optional.empty();
             }
             return Optional.of(new Compaction() {
                 @Override
-                public ModelRequest request() {
-                    return new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact");
+                public List<ModelRequest> requests() {
+                    return compactRequests;
                 }
 
                 @Override
-                public boolean apply(AssistantTurn reply, Usage usage) {
+                public boolean apply(List<ModelOutcome.Answered> answers) {
+                    AssistantTurn reply = answers.get(0).turn();
                     if (reply.content().isBlank()) {
                         return false;
                     }
@@ -286,7 +293,11 @@ public abstract class LoopHarness {
     }
 
     protected void control(String type) {
-        loop.push(List.of(new EventQueue.Entry(type, type, 0, false)));
+        control(type, type);
+    }
+
+    protected void control(String type, String text) {
+        loop.push(List.of(new EventQueue.Entry(type, text, 0, false)));
     }
 
     protected <E extends LoopEvent> List<E> eventsOf(Class<E> type) {

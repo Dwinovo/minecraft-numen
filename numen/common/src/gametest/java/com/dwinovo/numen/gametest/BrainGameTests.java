@@ -462,7 +462,7 @@ public class BrainGameTests {
 
         helper.assertTrue(OwnerInputs.apply(server, stranger, new OwnerInput.Say(her.companion.getUUID().toString(),
                 "我不是你主人")).problem() != null, "a stranger's words were accepted");
-        helper.assertTrue(OwnerInputs.apply(server, stranger, new OwnerInput.Compact(her.companion.getUUID()))
+        helper.assertTrue(OwnerInputs.apply(server, stranger, new OwnerInput.Compact(her.companion.getUUID(), null))
                 .problem() != null, "a stranger's command was accepted");
         helper.assertTrue(her.mind.asked.isEmpty(), "she thought about a stranger's words");
 
@@ -873,7 +873,7 @@ public class BrainGameTests {
             var profiles = com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID());
             var profile = profiles.create("gametest_profile",
                     new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", null,
-                            "https://relay.example", null, null, 0, null, 0, null));
+                            "https://relay.example", null, null, 0, null, 0, null, 0, 0));
             var hub = com.dwinovo.numen.api.library.LibraryHub.of(server);
             var voiceId = com.dwinovo.numen.api.library.EntryId.mine("gametest_voice");
             hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().write(voiceId,

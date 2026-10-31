@@ -31,10 +31,12 @@ import java.util.Map;
  * @param contextWindow 上下文窗口(token):压缩闸门与水位显示的唯一口径;没解析出端点时是 0
  * @param compat        这个端点的兼容项,同时决定协议
  * @param options       玩家的生成参数
+ * @param reserveTokens 整理记忆的预留:上下文超过 窗口 − 预留 就整理(档案没填是 {@link EndpointResolver#DEFAULT_RESERVE_TOKENS})
+ * @param keepRecentTokens 整理时原文保留的近段预算(档案没填是 {@link EndpointResolver#DEFAULT_KEEP_RECENT_TOKENS})
  */
 public record LlmEndpoint(String providerId, String baseUrl, Map<String, String> headers, String apiKey,
                           String proxy, ModelSpec model, int contextWindow, Compat compat,
-                          RequestOptions options) {
+                          RequestOptions options, int reserveTokens, int keepRecentTokens) {
 
     public LlmEndpoint {
         apiKey = apiKey == null ? "" : apiKey.strip();
@@ -45,7 +47,8 @@ public record LlmEndpoint(String providerId, String baseUrl, Map<String, String>
     public static LlmEndpoint unresolved(String proxy) {
         return new LlmEndpoint("", "", Map.of(), "", proxy,
                 new ModelSpec("", ThinkingTable.AUTO_ONLY, true), 0,
-                Compats.resolve(Api.CHAT, "", "", "", ThinkingTable.AUTO_ONLY, null), RequestOptions.NONE);
+                Compats.resolve(Api.CHAT, "", "", "", ThinkingTable.AUTO_ONLY, null), RequestOptions.NONE,
+                EndpointResolver.DEFAULT_RESERVE_TOKENS, EndpointResolver.DEFAULT_KEEP_RECENT_TOKENS);
     }
 
     public boolean hasApiKey() {
@@ -72,6 +75,30 @@ public record LlmEndpoint(String providerId, String baseUrl, Map<String, String>
     public String origin() {
         return api().id() + "/" + providerId + "/" + model.id();
     }
+
+    /** 今天这个窗口里,上下文超过多少就该整理记忆。 */
+    public int compactionThreshold() {
+        return contextWindow - reserveTokens;
+    }
+
+    /**
+     * 这一次请求真正发的生成参数:输出上限取玩家设的(没设就是型号的输出上限),再收到不超过窗口里还剩的量
+     * (窗口 − 请求输入的估计 − {@value #OUTPUT_SAFETY_TOKENS} 的余量,至少 1)——普通一轮与整理的摘要都这样定,
+     * 请求本身很大时输出不会超出窗口。上限和窗口都不知道时不发,吃服务端和协议的缺省。
+     *
+     * @param inputTokens 这次请求的输入(历史、系统提示、工具表)按 {@link CompactSplit} 那把尺估的量
+     */
+    public RequestOptions optionsFor(int inputTokens) {
+        int desired = options.maxTokens() > 0 ? options.maxTokens() : model.thinking().maxOutput();
+        if (desired <= 0 || contextWindow <= 0) {
+            return options;
+        }
+        long room = (long) contextWindow - inputTokens - OUTPUT_SAFETY_TOKENS;
+        return options.withMaxTokens((int) Math.min(desired, Math.max(1, room)));
+    }
+
+    /** 输出上限留给窗口的余量:输入的估计是粗的。 */
+    private static final int OUTPUT_SAFETY_TOKENS = 4096;
 
     /**
      * 一条助手回合发给这个端点时的线格式——请求怎么写它、压缩估算按什么量它,都问这一处。

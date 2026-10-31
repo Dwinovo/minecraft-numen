@@ -100,8 +100,8 @@ class ChatCommandsTest {
         // 而不是碰巧排在前面的那条 —— 否则手滑就执行了别的命令。
         ChatCommands.remember("skills");
         assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
-        ChatCommands.remember("compact");
-        assertEquals("/compact", ChatCommands.complete(null, "/").get(0).label());
+        ChatCommands.remember("usage");
+        assertEquals("/usage", ChatCommands.complete(null, "/").get(0).label());
         ChatCommands.remember("skills");
         assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
     }

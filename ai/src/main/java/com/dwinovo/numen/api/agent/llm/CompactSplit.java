@@ -26,8 +26,12 @@ public final class CompactSplit {
 
     private CompactSplit() {}
 
-    /** 切分结果:{@code toSummarize} 交给摘要请求,{@code kept} 原文保留在摘要之后。 */
-    public record Split(List<ConvoState.Msg> toSummarize, List<ConvoState.Msg> kept) {}
+    /**
+     * 切分结果:{@code toSummarize} 交给摘要请求,{@code kept} 原文保留在摘要之后。切点劈在一轮中间(落在 Assistant 上)时,
+     * 那一轮留在保留段之前的那半截是 {@code turnPrefix}:它单独做一份前缀摘要(照 pi 的 split turn),不和更早的历史混在一起;
+     * 没劈轮时是空。
+     */
+    public record Split(List<ConvoState.Msg> toSummarize, List<ConvoState.Msg> turnPrefix, List<ConvoState.Msg> kept) {}
 
     /**
      * 从最新往回攒,攒到 {@code budgetTokens} 为止;在预算内选<b>最早的</b>合法切点。
@@ -49,7 +53,17 @@ public final class CompactSplit {
             }
         }
         int cut = cutUser >= 0 ? cutUser : cutAssistant >= 0 ? cutAssistant : history.size();
-        return new Split(List.copyOf(history.subList(0, cut)),
+        // 劈轮:切点前最近的一条 User 是这一轮的开头,从它到切点是前缀
+        int turnStart = cut;
+        if (cut < history.size() && !(history.get(cut) instanceof ConvoState.Msg.User)) {
+            for (int i = cut - 1; i >= 0; i--) {
+                if (history.get(i) instanceof ConvoState.Msg.User) {
+                    turnStart = i;
+                    break;
+                }
+            }
+        }
+        return new Split(List.copyOf(history.subList(0, turnStart)), List.copyOf(history.subList(turnStart, cut)),
                 List.copyOf(history.subList(cut, history.size())));
     }
 
@@ -72,13 +86,18 @@ public final class CompactSplit {
                 yield sb.toString();
             }
         };
+        return estimateText(text) + 8;
+    }
+
+    /** 一段文字的粗略 token 数(不含结构开销):CJK 约 1 token/字,其余约 4 字符/token。全仓只有这一把尺。 */
+    public static int estimateText(String text) {
         long cjk = 0, ascii = 0;
         if (text != null) {
             for (int i = 0; i < text.length(); i++) {
                 if (text.charAt(i) > 0x2E7F) cjk++; else ascii++;
             }
         }
-        return (int) (cjk + ascii / 4 + 8);
+        return (int) (cjk + ascii / 4);
     }
 
     /** 整段历史的粗略 token 数(不含系统提示/工具表的固定开销,那份由调用方加)。 */

@@ -331,7 +331,7 @@ public final class AgentLoop {
      */
     private void callModel(boolean answerDue) {
         if (memory.compactionDue()) {
-            compact(true, () -> callModel(answerDue));
+            compact(true, "", () -> callModel(answerDue));
             return;
         }
         inject(inbox.takeForCall(answerDue, host.now(), host.dayTime()));
@@ -378,7 +378,18 @@ public final class AgentLoop {
             return;
         }
         switch (outcome) {
-            case ModelOutcome.Failed failed -> end(new RunEnd.Failed(failed.cause(), true));
+            case ModelOutcome.Failed failed -> {
+                boolean overflow = Cause.CONTEXT_OVERFLOW.equals(failed.cause().code());
+                if (overflow && !run.overflowRecovered) {
+                    // 服务商说上下文超长:整理一次再原样重试一次(照 pi 的 overflow recovery)
+                    run.overflowRecovered = true;
+                    AiLog.LOG.info("[numen-entity#{}] context overflow reported by the provider: compacting and retrying once", name);
+                    compact(true, "", () -> callModel(true));
+                } else {
+                    // 整理过重试了仍然超长就停下告诉主人,不再循环——也不让失败重试再开一轮去重蹈覆辙
+                    end(new RunEnd.Failed(failed.cause(), !overflow));
+                }
+            }
             case ModelOutcome.Answered answered -> {
                 emit(new LoopEvent.ModelUsed(answered.usage(), LoopEvent.Purpose.TURN));
                 AssistantTurn reply = answered.turn();
@@ -388,6 +399,7 @@ public final class AgentLoop {
                     return;
                 }
                 run.retried = false;
+                run.overflowRecovered = false;
                 run.ownerSpoke = false;
                 transcript.addAssistant(reply);
                 emit(new LoopEvent.AssistantMessage(id, reply));
@@ -493,7 +505,7 @@ public final class AgentLoop {
                 return false;
             }
         }
-        inbox.takeControls();
+        List<EventQueue.Entry> controls = inbox.takeControls();
         if (clears) {
             // 排在清空前面、没叫醒她的旁听是她在清空之前听见的,属于被清掉的那段上下文,一并清掉;要她回应的条目
             // 留着,清完进新的上下文。整理不丢:它只把历史换成摘要,排着的条目还没进历史,照旧跟下一次调用走。
@@ -505,7 +517,11 @@ public final class AgentLoop {
         }
         AiLog.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", name);
         run = new Run(++lastRunId, true, false, false);
-        compact(false, () -> {
+        // 连着按的几次整理算一次,各次附的关注点都留着
+        String focus = controls.stream().filter(e -> EventTypes.COMPACT.equals(e.type()))
+                .map(e -> EventTypes.controlArg(e.text())).filter(arg -> !arg.isEmpty())
+                .collect(java.util.stream.Collectors.joining("\n"));
+        compact(false, focus, () -> {
             run = null;
             announceHold();
             pump();
@@ -517,16 +533,30 @@ public final class AgentLoop {
      * 发一次整理记忆,落地后接着 {@code then}(调用失败或摘要为空也接着——历史不动,照原样往下走)。
      * 被切断的话结果作废,{@code then} 不再执行。没有可压的就不发请求,直接接着 {@code then}。
      */
-    private void compact(boolean auto, Runnable then) {
-        MemoryPort.Compaction compaction = memory.compaction(auto).orElse(null);
+    private void compact(boolean auto, String focus, Runnable then) {
+        MemoryPort.Compaction compaction = memory.compaction(auto, focus).orElse(null);
         if (compaction == null) {
             then.run();
             return;
         }
         run.phase = Phase.COMPACT;
         compactChars = 0;
-        long id = run.id;
-        model.call(compaction.request(), run.cancel,
+        summarize(compaction, compaction.requests(), 0, new ArrayList<>(), run.id, then);
+    }
+
+    /** 摘要请求一份份发:答完一份发下一份,都答完才落地。任何一份失败这次整理就算没压成,历史不动。 */
+    private void summarize(MemoryPort.Compaction compaction, List<ModelRequest> requests, int next,
+                           List<ModelOutcome.Answered> answers, long id, Runnable then) {
+        if (next == requests.size()) {
+            if (compaction.apply(answers)) {
+                emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.COMPACT));
+            } else {
+                compaction.failed("摘要是空的");
+            }
+            then.run();
+            return;
+        }
+        model.call(requests.get(next), run.cancel,
                 delta -> {
                     if (current(id)) {
                         compactChars += delta.content().length();
@@ -537,17 +567,16 @@ public final class AgentLoop {
                         return;
                     }
                     switch (outcome) {
-                        case ModelOutcome.Failed failed -> compaction.failed(failed.cause().forModel());
+                        case ModelOutcome.Failed failed -> {
+                            compaction.failed(failed.cause().forModel());
+                            then.run();
+                        }
                         case ModelOutcome.Answered answered -> {
                             emit(new LoopEvent.ModelUsed(answered.usage(), LoopEvent.Purpose.COMPACT));
-                            if (compaction.apply(answered.turn(), answered.usage())) {
-                                emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.COMPACT));
-                            } else {
-                                compaction.failed("摘要是空的");
-                            }
+                            answers.add(answered);
+                            summarize(compaction, requests, next + 1, answers, id, then);
                         }
                     }
-                    then.run();
                 });
     }
 

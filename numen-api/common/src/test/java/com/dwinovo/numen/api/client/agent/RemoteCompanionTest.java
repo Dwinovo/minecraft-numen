@@ -101,7 +101,8 @@ class RemoteCompanionTest {
 
         assertTrue(her.submitPrompt("你好"));
         her.submitSkill("/build 木屋", "build", "木屋");
-        assertNull(her.requestCompact());
+        assertNull(her.requestCompact(""));
+        assertNull(her.requestCompact(" 坐标别丢 "));
         assertNull(her.requestClearContext());
         her.abort();
         her.setGoal(GoalState.of("挖铁", 0), "/goal 挖铁");
@@ -111,7 +112,7 @@ class RemoteCompanionTest {
         her.bind(Slot.VOICE, null);
 
         assertEquals(List.of(new OwnerInput.Say(HER.toString(), "你好"), new OwnerInput.Command(HER, "/build 木屋"),
-                new OwnerInput.Compact(HER), new OwnerInput.Clear(HER), new OwnerInput.Stop(HER.toString()),
+                new OwnerInput.Compact(HER, null), new OwnerInput.Compact(HER, "坐标别丢"), new OwnerInput.Clear(HER), new OwnerInput.Stop(HER.toString()),
                 new OwnerInput.SetGoal(HER, "挖铁", "/goal 挖铁"), new OwnerInput.ClearGoal(HER),
                 new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.PROVIDER, "my:prov2"),
                 new OwnerInput.Bind(HER, Slot.VOICE, null)), sent);
@@ -121,7 +122,7 @@ class RemoteCompanionTest {
     void aCompactTheServerSaysIsNotPossibleIsNotSent() {
         her.apply(List.of(new Feed.Status(state(Phase.COMPACT, "numen.loop.compacting", List.of()))));
 
-        assertEquals("numen.loop.compacting", her.requestCompact(), "理由是服务端算的,随状态推来");
+        assertEquals("numen.loop.compacting", her.requestCompact(""), "理由是服务端算的,随状态推来");
         assertTrue(sent.isEmpty());
     }
 }
