@@ -26,7 +26,7 @@ import net.minecraft.core.BlockPos;
  */
 final class Reference {
 
-    /** 第一档节点上限:一个节点连同它的边在内存里约一千五百字节,同时跑几个求解器({@link Answers#solvers})就占几倍。 */
+    /** 第一档节点上限:一个节点连同它的边活在堆里约 {@link Answers#NODE_BYTES} 字节,同时跑几个求解器({@link Answers#solvers})就占几倍。 */
     static final int NODE_CAP = 2_000_000;
     /** 第二档:第一档撞上限的题用它再解一遍。 */
     static final int LARGE_NODE_CAP = 8_000_000;

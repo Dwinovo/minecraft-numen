@@ -133,10 +133,20 @@ final class Answers {
         return out;
     }
 
-    /** 同时跑几个求解器:每个最多展开 {@code cap} 个节点,一个节点连同它的边约 1.5 千字节,堆装得下几个就几个,不超过处理器数减一。 */
+    /**
+     * 一个节点连同它的边活在堆里约这么多字节。实测:一个求解器展开到 8M 个节点,整堆回收后活着的有 13 688 MB,即 1 794 字节一个节点;
+     * v1 在 2M 档并行 19 个求解器的老年代约 48 GB,一个约 3.5 GB,同一个量级。
+     */
+    static final long NODE_BYTES = 1_800;
+
+    /**
+     * 同时跑几个求解器:每个最多展开 {@code cap} 个节点,占 {@code cap × NODE_BYTES} 字节的活数据。并行收集器的老年代默认只占堆的三分之二,
+     * 活着的节点都在那里,所以按"三分之二的堆装得下几个"算,不超过处理器数减一。活数据装不下,收集器就在整堆回收里空转到
+     * "GC overhead limit exceeded"。
+     */
     static int solvers(int cap) {
-        long perSolver = (long) cap * 1_500;
-        return (int) Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() - 1, Runtime.getRuntime().maxMemory() / perSolver));
+        long old = Runtime.getRuntime().maxMemory() / 3 * 2;
+        return (int) Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() - 1, old / ((long) cap * NODE_BYTES)));
     }
 
     public static void main(String[] args) throws Exception {

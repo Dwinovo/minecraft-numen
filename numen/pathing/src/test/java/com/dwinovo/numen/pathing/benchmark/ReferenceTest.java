@@ -82,4 +82,16 @@ class ReferenceTest {
         assertEquals(Answers.Status.OPTIMAL, out.get(1).solved().status());
         assertEquals(2, out.get(1).tier());
     }
+
+    /** 求解器的并行度装得进老年代:每个求解器的活数据加起来不超过三分之二的堆(只剩一个时不再往下减)。 */
+    @Test
+    void theSolversFitInTheOldGeneration() {
+        long old = Runtime.getRuntime().maxMemory() / 3 * 2;
+        for (int cap : new int[] {Reference.NODE_CAP, Reference.LARGE_NODE_CAP}) {
+            int n = Answers.solvers(cap);
+            assertTrue(n >= 1);
+            assertTrue(n == 1 || (long) n * cap * Answers.NODE_BYTES <= old, cap + " 档 " + n + " 个求解器装不进 " + old);
+        }
+        assertTrue(Answers.solvers(Reference.LARGE_NODE_CAP) <= Answers.solvers(Reference.NODE_CAP), "上限越大同时跑的越少");
+    }
 }
