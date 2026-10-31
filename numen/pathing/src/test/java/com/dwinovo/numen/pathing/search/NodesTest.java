@@ -53,26 +53,28 @@ class NodesTest {
         Nodes nodes = new Nodes();
         OpenSet open = new OpenSet(nodes);
         List<Integer> inHeap = new ArrayList<>();
+        // 每个节点此刻的总价:堆不存它,入堆与改键时传进去
+        double[] total = new double[50_000];
         int ids = 0;
         for (int step = 0; step < 50_000; step++) {
             int action = random.nextInt(10);
             if (action < 5 || inHeap.isEmpty()) {
                 int id = nodes.add(BlockPos.asLong(ids, 64, 0), 0, 0, random.nextInt(8));
                 ids++;
-                nodes.f[id] = random.nextInt(200) * 0.5 + random.nextInt(3) * 1e-9;
-                open.push(id);
+                total[id] = random.nextInt(200) * 0.5 + random.nextInt(3) * 1e-9;
+                open.push(id, total[id]);
                 inHeap.add(id);
             } else if (action < 7) {
                 // 降键:总价变低(或不变)
                 int id = inHeap.get(random.nextInt(inHeap.size()));
-                nodes.f[id] -= random.nextInt(4) * 0.5;
-                open.pushOrUpdate(id);
+                total[id] -= random.nextInt(4) * 0.5;
+                open.pushOrUpdate(id, total[id]);
             } else if (action < 8) {
                 // 出过堆的节点重新放回
                 int id = random.nextInt(ids);
                 if (!inHeap.contains(id)) {
-                    nodes.f[id] = random.nextInt(200) * 0.5;
-                    open.pushOrUpdate(id);
+                    total[id] = random.nextInt(200) * 0.5;
+                    open.pushOrUpdate(id, total[id]);
                     inHeap.add(id);
                 }
             } else {

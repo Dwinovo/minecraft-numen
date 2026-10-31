@@ -35,9 +35,7 @@ final class Nodes {
     double[] h = new double[INITIAL];
     /** 已走的代价。 */
     double[] g = new double[INITIAL];
-    /** 开放集的排序键:走到的代价加估价的加权倍数。 */
-    double[] f = new double[INITIAL];
-    /** 堆里排序用的总价:f 取整到 {@link OpenSet#TIE};入堆、改键时由堆更新。 */
+    /** 堆里排序用的总价:走到的代价加估价的加权倍数,取整到 {@link OpenSet#TIE};入堆、改键时由堆更新。 */
     long[] key = new long[INITIAL];
     /** 走到这里的上一个节点;起点为 -1。 */
     int[] parent = new int[INITIAL];
@@ -148,7 +146,6 @@ final class Nodes {
         band = Arrays.copyOf(band, n);
         h = Arrays.copyOf(h, n);
         g = Arrays.copyOf(g, n);
-        f = Arrays.copyOf(f, n);
         key = Arrays.copyOf(key, n);
         parent = Arrays.copyOf(parent, n);
         heapIndex = Arrays.copyOf(heapIndex, n);
