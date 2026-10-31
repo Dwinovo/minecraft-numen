@@ -45,4 +45,6 @@
 - 动世界:`ScriptCall` 只有四个受权的动作(`useEntity`、`attack`、`useBlock`、`breakBlock`),都先 `ServerCall.authorize` 过权限层,放行才跑脚本给的那一段,
   `call.report` 说的话随结果写进回执。0014 的 `GatedAct` 是按刻推进的活用的积木;脚本函数是一次调用(`Pending`),用的是它的调用级对应物
   `ServerCall.authorize`,两者都只是权限层的判与问,没有第二套裁决。这条没有照 ADR 原文"脚本也用 GatedAct"写,理由是脚本不持有按刻推进的活。
-- 第一个真实用例 TaCZ 开枪还没做:枪是"远程攻击"这个已有动作上的新名词,要先在 numen-api 开远程武器的扩展点(见提案),再用脚本接枪。
+- 第一个真实用例 TaCZ 开枪:枪是"远程攻击"这个已有动作上的新名词,接在远程武器的扩展点上(control 0017),脚本经 `plugin.rangedWeapon` 登记提供者,
+  或用受权的函数一次开一枪;两种写法的脚本在 `docs/kubejs.md`,用 TaCZ 的 1.21.1 移植真机无头验过(见 0017 的实现说明)。
+- 后来开给脚本的扩展点还有知识来源(control 0016,`plugin.knowledgeSource`)。
