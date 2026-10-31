@@ -24,13 +24,16 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 出题:在每块地上用固定随机种子撒点,写成题库(见 {@link Dataset})和标准答案(答案文件见 {@link Answers})。用法:
- * {@code Generate <数据集目录> <主仓库提交> [--resume]}。每块地、每个距离档收 {@link #QUOTA} 道题。
+ * {@code Generate <数据集目录> <主仓库提交>}。每块地、每个距离档收 {@link #QUOTA} 道题。
  *
  * <p><b>只收有定论的题</b>:候选题在每个适用的规格下的标准答案都是最优价({@code OPTIMAL})或区域内证明的无解({@code UNSOLVABLE})才收;
  * 可连通块碰到区域边的({@code BEYOND_REGION})、两档节点上限都算不动的({@code TOO_HARD})、只有生产权重搜出的上界的({@code BEST_KNOWN})
  * 都拒掉,继续抽候选直到配额满。拒绝按原因计数写进 manifest。判据只看地形、种子与成本模型下的精确解({@link Reference}、{@link Solver}),
  * 不看生产寻路;所以题库里每道题评测失败了,说得清是寻路没做成,不会是本来就到不了或区域不够大。出题与答案同一份求解代码一次产出,
- * 答案文件的 {@code commit} 就是出题的主仓库提交。{@code --resume}:manifest 里已有的块跳过,接着往下做。
+ * 答案文件的 {@code commit} 就是出题的主仓库提交。
+ *
+ * <p><b>断点续跑</b>:每块地的每一档收完就把它收下的题、答案与计数写进 {@code <数据集目录>/.generate/<地块>-<档>.json},重启时已有的档直接读回、不再求解
+ * (题库、答案文件与 manifest 总是从这些档文件汇出来,新跑与续跑是同一条路)。要整个重来就删 {@code .generate}。{@code .generate} 是过程文件,不进数据集的发布包。
  *
  * <p><b>怎么撒</b>:先随机一个起点(七成地表,三成洞穴地面;下界没有地表,什么站得住的格都算),再按档的距离范围随机一个方向与水平距离定出终点所在的列,
  * 在那一列上按终点的种类({@link Problem.EndClass})取一格:
@@ -95,14 +98,60 @@ final class Generate {
         return Optional.ofNullable(worst);
     }
 
+    /**
+     * 一块地一档的收获:收下的题、它们的答案,与出这一档用掉的候选与求解的账。这一档收完就写进 {@code .generate},续跑时读回。
+     *
+     * @param tierJobs   各档上限(下标 1、2)解了几条
+     * @param tierMillis 各档上限的墙钟毫秒加总
+     */
+    record Unit(List<Problem> problems, List<Answers.Answer> answers, int candidates, Map<Reject, Integer> rejected, long[] tierJobs, long[] tierMillis) {
+
+        JsonObject toJson() {
+            JsonObject o = new JsonObject();
+            com.google.gson.JsonArray ps = new com.google.gson.JsonArray();
+            problems.forEach(p -> ps.add(p.toJson()));
+            o.add("problems", ps);
+            com.google.gson.JsonArray as = new com.google.gson.JsonArray();
+            answers.forEach(a -> as.add(a.toJson()));
+            o.add("answers", as);
+            o.addProperty("candidates", candidates);
+            JsonObject rejects = new JsonObject();
+            rejected.forEach((why, n) -> rejects.addProperty(why.key, n));
+            o.add("rejected", rejects);
+            o.addProperty("tier1Jobs", tierJobs[1]);
+            o.addProperty("tier2Jobs", tierJobs[2]);
+            o.addProperty("tier1Millis", tierMillis[1]);
+            o.addProperty("tier2Millis", tierMillis[2]);
+            return o;
+        }
+
+        static Unit fromJson(JsonObject o) {
+            List<Problem> problems = new ArrayList<>();
+            o.getAsJsonArray("problems").forEach(e -> problems.add(Problem.fromJson(e.getAsJsonObject())));
+            List<Answers.Answer> answers = new ArrayList<>();
+            o.getAsJsonArray("answers").forEach(e -> answers.add(Answers.Answer.fromJson(e.getAsJsonObject())));
+            Map<Reject, Integer> rejected = new EnumMap<>(Reject.class);
+            for (Reject why : Reject.values()) {
+                rejected.put(why, o.getAsJsonObject("rejected").has(why.key) ? o.getAsJsonObject("rejected").get(why.key).getAsInt() : 0);
+            }
+            return new Unit(problems, answers, o.get("candidates").getAsInt(), rejected,
+                    new long[] {0, o.get("tier1Jobs").getAsLong(), o.get("tier2Jobs").getAsLong()},
+                    new long[] {0, o.get("tier1Millis").getAsLong(), o.get("tier2Millis").getAsLong()});
+        }
+    }
+
+    /** 一档的过程文件:数据集目录里的 {@code .generate/<地块>-<档>.json}。 */
+    private static Path unitFile(Dataset dataset, String region, Problem.Bucket bucket) {
+        return dataset.dir.resolve(".generate").resolve(region + "-" + bucket.label + ".json");
+    }
+
     public static void main(String[] args) throws IOException {
         Vanilla.boot();
         Dataset dataset = new Dataset(Path.of(args[0]));
         String commit = args[1];
-        boolean resume = args.length > 2 && args[2].equals("--resume");
         Solver solver = Solver.standard();
         long t0 = System.nanoTime();
-        JsonObject manifest = resume && Files.exists(dataset.dir.resolve("manifest.json")) ? dataset.manifest() : new JsonObject();
+        JsonObject manifest = new JsonObject();
         manifest.addProperty("dataset", "numen-pathfinding-benchmark");
         manifest.addProperty("minecraft", net.minecraft.SharedConstants.getCurrentVersion().getName());
         manifest.addProperty("commit", commit);
@@ -111,31 +160,24 @@ final class Generate {
         manifest.addProperty("largeNodeCap", solver.largeCap());
         manifest.addProperty("accepted", "每个适用规格下的标准答案都是最优价或区域内证明的无解;可连通块碰到区域边的、两档节点上限都算不动的、只有上界的、平凡的都拒掉,拒绝按原因计数在各块的 rejected 里");
         manifest.addProperty("notApplicableToA", "需要编辑才做得成的题:挖到某格,和走到封死的空腔或封闭在实心里的一格;规格 A 不挖不垫,这些题不给 A 跑");
-        JsonObject regionStats = resume && manifest.has("regions") ? manifest.getAsJsonObject("regions") : new JsonObject();
+        JsonObject regionStats = new JsonObject();
         Map<String, Answers.Answer> answers = new LinkedHashMap<>();
-        if (resume) {
-            Answers.load(dataset.dir).ifPresent(known -> answers.putAll(known.answers()));
-        }
         for (Dataset.Region region : dataset.regions()) {
-            if (regionStats.has(region.name())) {
-                System.out.println("[generate] " + region.name() + " 已做完,跳过");
-                continue;
-            }
             long r0 = System.nanoTime();
             RegionWorld world = RegionWorld.load(region.name(), dataset.save(region.name()));
-            Regional gen = new Regional(world, solver);
-            List<Problem> problems = gen.generate(region.heldOnly());
+            Regional gen = new Regional(world, solver, dataset, region.heldOnly());
+            List<Problem> problems = gen.generate();
             dataset.writeProblems(region.name(), problems);
-            answers.putAll(gen.answers);
-            Answers.write(dataset.dir, commit, answers.values());
+            gen.answers().forEach(a -> answers.put(a.key(), a));
             JsonObject stats = gen.stats(problems);
             stats.addProperty("seconds", Math.round((System.nanoTime() - r0) / 1e8) / 10.0);
             regionStats.add(region.name(), stats);
-            manifest.add("regions", regionStats);
-            manifest.addProperty("generateSeconds", Math.round((System.nanoTime() - t0) / 1e8) / 10.0);
-            dataset.writeManifest(manifest);
             System.out.println("[generate] " + region.name() + " " + stats);
         }
+        Answers.write(dataset.dir, commit, answers.values());
+        manifest.add("regions", regionStats);
+        manifest.addProperty("generateSeconds", Math.round((System.nanoTime() - t0) / 1e8) / 10.0);
+        dataset.writeManifest(manifest);
     }
 
     /** 一块地上的出题。 */
@@ -144,120 +186,145 @@ final class Generate {
         private final RegionWorld world;
         private final SearchView whole;
         private final Solver solver;
-        /** 收下的题的答案,按 {@code 题号|规格}。 */
-        final Map<String, Answers.Answer> answers = new LinkedHashMap<>();
-        private int candidates;
-        private final Map<Problem.Bucket, EnumMap<Reject, Integer>> rejected = new EnumMap<>(Problem.Bucket.class);
-        /** 各档上限(下标 1、2)用了几条、墙钟毫秒加总。 */
-        private final long[] tierJobs = new long[3];
-        private final long[] tierMillis = new long[3];
+        private final Dataset dataset;
+        private final boolean heldOnly;
+        private final Map<Problem.Bucket, Unit> units = new EnumMap<>(Problem.Bucket.class);
 
-        Regional(RegionWorld world, Solver solver) {
+        Regional(RegionWorld world, Solver solver, Dataset dataset, boolean heldOnly) {
             this.world = world;
             this.whole = world.whole();
             this.solver = solver;
+            this.dataset = dataset;
+            this.heldOnly = heldOnly;
         }
 
         private record Drawn(Candidate candidate, Straight.Facts facts, Problem draft) {}
 
-        List<Problem> generate(boolean heldOnly) {
+        /** 三个档的题,按档的顺序;已经收完的档(有过程文件)读回,不再求解。 */
+        List<Problem> generate() throws IOException {
             List<Problem> out = new ArrayList<>();
             for (Problem.Bucket bucket : Problem.Bucket.values()) {
-                SplittableRandom rng = new SplittableRandom(SEED ^ (world.name.hashCode() * 31L + bucket.ordinal()));
-                int accepted = 0;
-                int tried = 0;
-                while (accepted < QUOTA && tried < MAX_CANDIDATES) {
-                    List<Drawn> batch = new ArrayList<>();
-                    int want = Math.min(BATCH, QUOTA - accepted);
-                    while (batch.size() < want && tried < MAX_CANDIDATES) {
-                        tried++;
-                        Candidate c = draw(rng, bucket);
-                        if (c == null) {
-                            continue;
-                        }
-                        candidates++;
-                        Straight.Facts facts = Straight.along(whole, c.from, c.to);
-                        if (facts.plainWalk()) {
-                            reject(bucket, Reject.PLAIN_WALK);
-                            continue;
-                        }
-                        batch.add(new Drawn(c, facts, new Problem(world.name + "-" + bucket.label + "-draft", world.name, bucket, c.distance(), c.from,
-                                c.type, c.to, c.radius, c.endClass, Problem.Split.DEV, facts.tags(c.endClass))));
-                    }
-                    List<Solver.Job> jobs = new ArrayList<>();
-                    for (Drawn d : batch) {
-                        for (Spec spec : Spec.values()) {
-                            if (d.draft.applicable(spec)) {
-                                jobs.add(new Solver.Job(whole, spec.model(), d.draft.from(), d.draft.goal(Spec.STATS)));
-                            }
-                        }
-                    }
-                    List<Solver.Outcome> outcomes = solver.solve(jobs, (i, o) -> { });
-                    int next = 0;
-                    for (Drawn d : batch) {
-                        List<Spec> specs = new ArrayList<>();
-                        List<Solver.Outcome> mine = new ArrayList<>();
-                        for (Spec spec : Spec.values()) {
-                            if (d.draft.applicable(spec)) {
-                                specs.add(spec);
-                                Solver.Outcome o = outcomes.get(next++);
-                                mine.add(o);
-                                tierJobs[o.tier()]++;
-                                tierMillis[o.tier()] += o.millis();
-                            }
-                        }
-                        Optional<Reject> why = verdict(mine.stream().map(Solver.Outcome::solved).toList());
-                        if (why.isPresent()) {
-                            reject(bucket, why.get());
-                            continue;
-                        }
-                        String id = world.name + "-" + bucket.label + "-" + String.format("%03d", ++accepted);
-                        Candidate c = d.candidate;
-                        out.add(new Problem(id, world.name, bucket, c.distance(), c.from, c.type, c.to, c.radius, c.endClass,
-                                heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts.tags(c.endClass)));
-                        for (int k = 0; k < specs.size(); k++) {
-                            Reference.Solved s = mine.get(k).solved();
-                            Answers.Answer a = new Answers.Answer(id, specs.get(k), s.status(), s.cost(), s.expanded(), s.startEstimate());
-                            answers.put(a.key(), a);
-                        }
-                    }
-                    System.out.println("[generate] " + world.name + " " + bucket.label + " 收到 " + accepted + "/" + QUOTA + ",试了 " + tried);
+                Path file = unitFile(dataset, world.name, bucket);
+                Unit unit;
+                if (Files.exists(file)) {
+                    unit = Unit.fromJson(com.google.gson.JsonParser.parseString(Files.readString(file, java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject());
+                    System.out.println("[generate] " + world.name + " " + bucket.label + " 已收完(" + unit.problems().size() + " 道),读回");
+                } else {
+                    unit = bucket(bucket);
+                    Files.createDirectories(file.getParent());
+                    Files.writeString(file, Dataset.GSON.toJson(unit.toJson()) + "\n", java.nio.charset.StandardCharsets.UTF_8);
                 }
-                if (accepted < QUOTA) {
-                    System.out.println("[generate] " + world.name + " " + bucket.label + " 只收到 " + accepted + " 道");
-                }
+                units.put(bucket, unit);
+                out.addAll(unit.problems());
             }
             return out;
         }
 
-        private void reject(Problem.Bucket bucket, Reject why) {
-            rejected.computeIfAbsent(bucket, b -> new EnumMap<>(Reject.class)).merge(why, 1, Integer::sum);
+        List<Answers.Answer> answers() {
+            return units.values().stream().flatMap(u -> u.answers().stream()).toList();
+        }
+
+        /** 一档:按固定种子一批一批抽候选、求解、收题,收满配额或试满候选为止。 */
+        private Unit bucket(Problem.Bucket bucket) {
+            List<Problem> out = new ArrayList<>();
+            List<Answers.Answer> answers = new ArrayList<>();
+            Map<Reject, Integer> rejected = new EnumMap<>(Reject.class);
+            long[] tierJobs = new long[3];
+            long[] tierMillis = new long[3];
+            int candidates = 0;
+            SplittableRandom rng = new SplittableRandom(SEED ^ (world.name.hashCode() * 31L + bucket.ordinal()));
+            int accepted = 0;
+            int tried = 0;
+            while (accepted < QUOTA && tried < MAX_CANDIDATES) {
+                List<Drawn> batch = new ArrayList<>();
+                int want = Math.min(BATCH, QUOTA - accepted);
+                while (batch.size() < want && tried < MAX_CANDIDATES) {
+                    tried++;
+                    Candidate c = draw(rng, bucket);
+                    if (c == null) {
+                        continue;
+                    }
+                    candidates++;
+                    Straight.Facts facts = Straight.along(whole, c.from, c.to);
+                    if (facts.plainWalk()) {
+                        rejected.merge(Reject.PLAIN_WALK, 1, Integer::sum);
+                        continue;
+                    }
+                    batch.add(new Drawn(c, facts, new Problem(world.name + "-" + bucket.label + "-draft", world.name, bucket, c.distance(), c.from,
+                            c.type, c.to, c.radius, c.endClass, Problem.Split.DEV, facts.tags(c.endClass))));
+                }
+                List<Solver.Job> jobs = new ArrayList<>();
+                for (Drawn d : batch) {
+                    for (Spec spec : Spec.values()) {
+                        if (d.draft.applicable(spec)) {
+                            jobs.add(new Solver.Job(whole, spec.model(), d.draft.from(), d.draft.goal(Spec.STATS)));
+                        }
+                    }
+                }
+                List<Solver.Outcome> outcomes = solver.solve(jobs, (i, o) -> { });
+                int next = 0;
+                for (Drawn d : batch) {
+                    List<Spec> specs = new ArrayList<>();
+                    List<Solver.Outcome> mine = new ArrayList<>();
+                    for (Spec spec : Spec.values()) {
+                        if (d.draft.applicable(spec)) {
+                            specs.add(spec);
+                            Solver.Outcome o = outcomes.get(next++);
+                            mine.add(o);
+                            tierJobs[o.tier()]++;
+                            tierMillis[o.tier()] += o.millis();
+                        }
+                    }
+                    Optional<Reject> why = verdict(mine.stream().map(Solver.Outcome::solved).toList());
+                    if (why.isPresent()) {
+                        rejected.merge(why.get(), 1, Integer::sum);
+                        continue;
+                    }
+                    String id = world.name + "-" + bucket.label + "-" + String.format("%03d", ++accepted);
+                    Candidate c = d.candidate;
+                    out.add(new Problem(id, world.name, bucket, c.distance(), c.from, c.type, c.to, c.radius, c.endClass,
+                            heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts.tags(c.endClass)));
+                    for (int k = 0; k < specs.size(); k++) {
+                        Reference.Solved s = mine.get(k).solved();
+                        answers.add(new Answers.Answer(id, specs.get(k), s.status(), s.cost(), s.expanded(), s.startEstimate()));
+                    }
+                }
+                System.out.println("[generate] " + world.name + " " + bucket.label + " 收到 " + accepted + "/" + QUOTA + ",试了 " + tried);
+            }
+            if (accepted < QUOTA) {
+                System.out.println("[generate] " + world.name + " " + bucket.label + " 只收到 " + accepted + " 道");
+            }
+            for (Reject why : Reject.values()) {
+                rejected.putIfAbsent(why, 0);
+            }
+            return new Unit(out, answers, candidates, rejected, tierJobs, tierMillis);
         }
 
         JsonObject stats(List<Problem> problems) {
             JsonObject o = new JsonObject();
             o.addProperty("problems", problems.size());
-            o.addProperty("candidates", candidates);
+            o.addProperty("candidates", units.values().stream().mapToInt(Unit::candidates).sum());
             JsonObject rejects = new JsonObject();
             JsonObject total = new JsonObject();
             for (Reject why : Reject.values()) {
-                total.addProperty(why.key, rejected.values().stream().mapToInt(m -> m.getOrDefault(why, 0)).sum());
+                total.addProperty(why.key, units.values().stream().mapToInt(u -> u.rejected().getOrDefault(why, 0)).sum());
             }
             rejects.add("total", total);
             for (Problem.Bucket bucket : Problem.Bucket.values()) {
                 JsonObject b = new JsonObject();
                 for (Reject why : Reject.values()) {
-                    b.addProperty(why.key, rejected.getOrDefault(bucket, new EnumMap<>(Reject.class)).getOrDefault(why, 0));
+                    b.addProperty(why.key, units.get(bucket).rejected().getOrDefault(why, 0));
                 }
                 rejects.add(bucket.label, b);
             }
             o.add("rejected", rejects);
             JsonObject solve = new JsonObject();
             for (int tier = 1; tier <= 2; tier++) {
-                JsonObject t = new JsonObject();
-                t.addProperty("jobs", tierJobs[tier]);
-                t.addProperty("cpuSeconds", Math.round(tierMillis[tier] / 100.0) / 10.0);
-                solve.add("tier" + tier, t);
+                int t = tier;
+                JsonObject tj = new JsonObject();
+                tj.addProperty("jobs", units.values().stream().mapToLong(u -> u.tierJobs()[t]).sum());
+                tj.addProperty("cpuSeconds", Math.round(units.values().stream().mapToLong(u -> u.tierMillis()[t]).sum() / 100.0) / 10.0);
+                solve.add("tier" + tier, tj);
             }
             o.add("solve", solve);
             Map<Problem.EndClass, Integer> byClass = new EnumMap<>(Problem.EndClass.class);
@@ -265,6 +332,8 @@ final class Generate {
             Map<Problem.GoalType, Integer> byGoal = new EnumMap<>(Problem.GoalType.class);
             Map<Problem.Bucket, Integer> byBucket = new EnumMap<>(Problem.Bucket.class);
             Map<Answers.Status, Integer> byStatus = new EnumMap<>(Answers.Status.class);
+            Map<String, Answers.Answer> byKey = new LinkedHashMap<>();
+            answers().forEach(a -> byKey.put(a.key(), a));
             int notApplicable = 0;
             for (Problem p : problems) {
                 byClass.merge(p.endClass(), 1, Integer::sum);
@@ -274,7 +343,7 @@ final class Generate {
                 notApplicable += p.applicable(Spec.A) ? 0 : 1;
                 for (Spec spec : Spec.values()) {
                     if (p.applicable(spec)) {
-                        byStatus.merge(answers.get(Answers.Answer.key(p.id(), spec)).status(), 1, Integer::sum);
+                        byStatus.merge(byKey.get(Answers.Answer.key(p.id(), spec)).status(), 1, Integer::sum);
                     }
                 }
             }
