@@ -162,7 +162,7 @@ final class Draft extends EditedView {
      * (上一级垫一块台阶)执行时就是站在那儿瞄这个面,点不中就放不下。
      */
     boolean placeInSight(BlockPos pos, int bx, double feetY, int bz) {
-        Block block = model.placing().orElse(null);
+        Block block = model.placing();
         if (block != null && Faces.inSight(this, body.eye(bx, feetY, bz), body.blockReach(), pos,
                 block) == null) {
             return fail(pos, Reason.NO_FACE);
@@ -185,7 +185,7 @@ final class Draft extends EditedView {
         if (!Reach.reaches(body.eye(bx, feetY, bz), pos, body.blockReach())) {
             return fail(pos, Reason.OUT_OF_REACH);
         }
-        Block block = model.placing().orElseThrow();
+        Block block = model.placing();
         record(new Edit.Place(pos.immutable(), current, block, admission.permit()));
         place(pos, block);
         return true;

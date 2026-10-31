@@ -50,12 +50,12 @@ final class Strides {
         return !level.getFluidState(feet).isEmpty();
     }
 
-    /** 水:静的与流动的。 */
-    private static final java.util.EnumSet<Kind> WATERS = java.util.EnumSet.of(Kind.WATER, Kind.FLOWING_WATER);
+    /** 水:静的与流动的,合成一个掩码({@link Semantics#mask(BlockGetter, BlockPos)} 的编法),问一格时按位与就答完。 */
+    private static final int WATERS = Semantics.bit(Kind.WATER) | Semantics.bit(Kind.FLOWING_WATER);
 
     /** 脚所在的这一格泡在水里。 */
     static boolean inWater(BlockGetter level, BlockPos feet) {
-        return Semantics.isAny(level, feet, WATERS);
+        return (Semantics.mask(level, feet) & WATERS) != 0;
     }
 
     /**

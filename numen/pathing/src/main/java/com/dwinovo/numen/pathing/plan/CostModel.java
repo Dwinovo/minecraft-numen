@@ -2,7 +2,6 @@ package com.dwinovo.numen.pathing.plan;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
@@ -119,9 +118,9 @@ public final class CostModel {
         return body;
     }
 
-    /** 下一块垫路料;身上没料为空。 */
-    public Optional<Block> placing() {
-        return Optional.ofNullable(placing);
+    /** 下一块垫路料;身上没料为 null(规划一步要问几十次,不包 {@link java.util.Optional})。 */
+    public Block placing() {
+        return placing;
     }
 
     // ==================== 身体与规格合起来的上限 ====================
@@ -281,7 +280,7 @@ public final class CostModel {
         if (!Replaceable.replaceableBy(current, placing)) {
             return Admission.refuse(Reason.NOT_REPLACEABLE);
         }
-        if (Faces.against(view, pos, placing).isEmpty()) {
+        if (!Faces.anyAgainst(view, pos, placing)) {
             return Admission.refuse(Reason.NO_FACE);
         }
         return judge(placingChange, pos, current, view);
@@ -314,7 +313,7 @@ public final class CostModel {
         if (!Replaceable.replaceableBy(current, Blocks.WATER)) {
             return Admission.refuse(Reason.NOT_REPLACEABLE);
         }
-        if (Faces.against(view, pos, Blocks.WATER).isEmpty()) {
+        if (!Faces.anyAgainst(view, pos, Blocks.WATER)) {
             return Admission.refuse(Reason.NO_FACE);
         }
         return judge(POUR, pos, current, view);

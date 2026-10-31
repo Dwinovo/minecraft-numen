@@ -91,7 +91,7 @@ final class Diagnosis {
     private static Outcome exhausted(Search failed, Blockage cause, BooleanSupplier cancelled) {
         CostModel model = failed.model();
         RouteSpec spec = model.spec();
-        boolean hadMaterials = model.placing().isPresent();
+        boolean hadMaterials = model.placing() != null;
         if (!spec.dig() || !spec.place()) {
             RouteSpec changing = spec.edit().changes(true).build();
             Route route = find(failed, withMaterials(model).withSpec(changing), cancelled);
@@ -143,7 +143,7 @@ final class Diagnosis {
     }
 
     private static CostModel withMaterials(CostModel model) {
-        return model.placing().isPresent() ? model : model.withPlacing(ANY_BLOCK);
+        return model.placing() != null ? model : model.withPlacing(ANY_BLOCK);
     }
 
     /** 同一份快照、同一个起点(连同接在哪一步后面、那时憋气的样子)、目标与节点上限,按这份成本模型不限时地搜;到了目标就交出路。 */

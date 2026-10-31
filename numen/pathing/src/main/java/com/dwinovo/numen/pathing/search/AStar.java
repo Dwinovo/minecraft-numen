@@ -104,6 +104,8 @@ public final class AStar {
     private final OpenSet open = new OpenSet(nodes);
     /** {@link #recentEdits} 找到的步子,每次调用都从头写;一次搜索在一个线程上跑完,共用这一块。 */
     private final Maneuver[] steps = new Maneuver[HISTORY];
+    /** {@link #recentEdits} 合并几步改动的结果:每次调用清空重写,调用方只在这一次展开或判断里用,不留着。 */
+    private final List<Edit> merged = new ArrayList<>();
     /** 有前提成立的步子因为憋不住气没走。 */
     private boolean breathless;
     /** 有一步读到了没加载的列、没能判断。 */
@@ -558,16 +560,14 @@ public final class AStar {
     /**
      * 走到节点 {@code n} 的最近 {@link AStar#HISTORY} 步做过的改动,按先后。前提读的只是身边几格,可它们可能是几步之前自己挖开的:
      * 斜着一级一级往山上凿台阶,下一级的脚下正是上一级刚挖开的头顶。只叠最后一步的话,前提会当那一格还是实心的。
-     * 更早的步子离得远了(沿路折回来最多隔着几步),不叠。
+     * 更早的步子离得远了(沿路折回来最多隔着几步),不叠。多步合并的结果是 {@link #merged},下一次调用就被覆盖。
      */
     private List<Edit> recentEdits(int n) {
         int count = 0;
-        int total = 0;
         for (int i = 0, node = n; i < HISTORY && node >= 0; i++, node = nodes.parent[node]) {
             Maneuver m = nodes.via[node];
             if (m != null && !m.edits().isEmpty()) {
                 steps[count++] = m;
-                total += m.edits().size();
             }
         }
         if (count == 0) {
@@ -576,11 +576,15 @@ public final class AStar {
         if (count == 1) {
             return steps[0].edits();
         }
-        List<Edit> out = new ArrayList<>(total);
+        merged.clear();
         for (int i = count - 1; i >= 0; i--) {
-            out.addAll(steps[i].edits());
+            // 按下标一个个放:addAll 会先把整张表 toArray 成一份新数组
+            List<Edit> edits = steps[i].edits();
+            for (int j = 0; j < edits.size(); j++) {
+                merged.add(edits.get(j));
+            }
         }
-        return out;
+        return merged;
     }
 
     private Route route(int end) {

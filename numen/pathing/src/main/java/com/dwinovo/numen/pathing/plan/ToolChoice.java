@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.dwinovo.numen.api.entity.DigTime;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -22,14 +23,13 @@ public final class ToolChoice {
     /**
      * 一个选择。
      *
-     * @param slot 主背包的槽位;{@link #BARE_HAND} 是空手
+     * @param slot       主背包的槽位;{@link #BARE_HAND} 是空手
+     * @param floorTicks 脚踏实地、眼睛不在水里时用它挖要几刻:挑的时候就比过的那个数,{@link #ticks} 这个情形直接用,不再算一遍
      */
-    public record Pick(int slot, ItemStack tool) {
+    public record Pick(int slot, ItemStack tool, int floorTicks) {
 
         public static final int BARE_HAND = -1;
     }
-
-    private static final Pick HAND = new Pick(Pick.BARE_HAND, ItemStack.EMPTY);
 
     private final BodySnapshot body;
     private final List<ItemStack> inventory;
@@ -37,6 +37,8 @@ public final class ToolChoice {
     private final double[] efficiency;
     private final double handEfficiency;
     private final ConcurrentHashMap<BlockState, Pick> picks = new ConcurrentHashMap<>();
+    /** 缓存里没有时才算的那个函数:每次查表都现建一个方法引用,规划里一步要问几十次。 */
+    private final Function<BlockState, Pick> chooser = this::choose;
 
     public ToolChoice(BodySnapshot body) {
         this.body = body;
@@ -50,7 +52,7 @@ public final class ToolChoice {
 
     /** 挖 {@code state} 用哪件。 */
     public Pick best(BlockState state) {
-        return picks.computeIfAbsent(state, this::choose);
+        return picks.computeIfAbsent(state, chooser);
     }
 
     /**
@@ -64,6 +66,9 @@ public final class ToolChoice {
     /** 用挑中的那件挖 {@code state} 要几刻,见 {@link DigTime#ticks}。 */
     public int ticks(BlockState state, boolean eyeInWater, boolean grounded) {
         Pick pick = best(state);
+        if (!eyeInWater && grounded) {
+            return pick.floorTicks();
+        }
         double eff = pick.slot() == Pick.BARE_HAND ? handEfficiency : efficiency[pick.slot()];
         return DigTime.ticks(body.mining(), body.creative(), pick.tool(), eff, state, eyeInWater, grounded);
     }
@@ -78,7 +83,8 @@ public final class ToolChoice {
     }
 
     private Pick choose(BlockState state) {
-        Pick best = HAND;
+        int bestSlot = Pick.BARE_HAND;
+        ItemStack best = ItemStack.EMPTY;
         int bestTicks = DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, handEfficiency, state, false, true);
         for (int slot = 0; slot < inventory.size(); slot++) {
             ItemStack tool = inventory.get(slot);
@@ -87,11 +93,12 @@ public final class ToolChoice {
             }
             int ticks = DigTime.ticks(body.mining(), body.creative(), tool, efficiency[slot], state, false, true);
             // 严格更快才换;一样快时保留先到的,而先到的是空手,再是不耗耐久的物品
-            if (ticks < bestTicks || (ticks == bestTicks && best.tool().isDamageableItem() && !tool.isDamageableItem())) {
-                best = new Pick(slot, tool);
+            if (ticks < bestTicks || (ticks == bestTicks && best.isDamageableItem() && !tool.isDamageableItem())) {
+                bestSlot = slot;
+                best = tool;
                 bestTicks = ticks;
             }
         }
-        return best;
+        return new Pick(bestSlot, best, bestTicks);
     }
 }

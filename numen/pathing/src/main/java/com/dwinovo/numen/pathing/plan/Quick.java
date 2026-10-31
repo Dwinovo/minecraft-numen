@@ -397,7 +397,7 @@ public final class Quick {
      * 怎么瞄也放不下。放置的精确判断问的是同一个判据。
      */
     boolean nothingToClick(int dx, int dy, int dz) {
-        return Faces.against(reading, probe.set(x + dx, y + dy, z + dz).immutable(), model.placing().orElse(null)).isEmpty();
+        return !Faces.anyAgainst(reading, probe.set(x + dx, y + dy, z + dz), model.placing());
     }
 
     /** 身体站在节点相对 {@code (dx, dy, dz)} 那个节点时脚的高度({@link Footing#height},节点面对的世界里的);托不住为 NaN。 */
