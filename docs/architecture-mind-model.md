@@ -115,7 +115,8 @@ LLM 不在 tick 循环里。每只同伴有一个循环内核(`AgentLoop`,纯 Ja
   (叫不叫停身体、清不清队列、进哪种停牌、目标收不收工)。
 - **内核不碰界面**:它只发 `LoopEvent`,打字机与语音与气泡(`TurnPresenter`)、token 台账、整理记忆
   (`Compactor`)、长期目标(`GoalSteward`)、工作站坐标、当前任务镜像各自订阅。"她忙不忙、为什么不动、
-  排着什么"只从 `LoopStatus` 一处读。
+  排着什么"只从 `LoopStatus` 一处读。订阅者逐个隔离(一个抛了只记日志,其余照收)。插件经门只读地听大脑:`BrainEventBridge` 把 run 的开收
+  攒下,在 `CompanionLoops.tick` 里于内核两步之间派成 `CompanionEvent.RUN_STARTED`/`RUN_ENDED`;`TASK_FINISHED` 从 `NumenEvents.taskFinished` 那一处发。
 
 ## 三、模型输入全景
 

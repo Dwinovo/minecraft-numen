@@ -178,6 +178,38 @@ class NumenPluginScopeTest {
         assertTrue(EventTypes.isRegistered("gt_stale_event"));
     }
 
+    /** 大脑事件走同一个门:按登记顺序送、一个订阅者抛了其余照收、撤回之后收不到。 */
+    @Test
+    void brainEventsAreDeliveredInOrderIsolatedAndWithdrawnWithThePlugin() {
+        List<String> heard = new java.util.ArrayList<>();
+        UUID id = UUID.randomUUID();
+        NumenPlugins.register("gt_brain_a", numen -> {
+            numen.on(CompanionEvent.RUN_ENDED, ended -> heard.add("a:" + ended.outcome()));
+            numen.on(CompanionEvent.RUN_STARTED, started -> {
+                throw new IllegalStateException("订阅者写坏了");
+            });
+        });
+        NumenPlugins.register("gt_brain_b", numen -> {
+            numen.on(CompanionEvent.RUN_STARTED, started -> heard.add("b:started " + started.runId()));
+            numen.on(CompanionEvent.RUN_ENDED, ended -> heard.add("b:" + ended.reason()));
+        });
+
+        CompanionEvents.fire(CompanionEvent.RUN_STARTED, new CompanionEvent.RunStarted(id, 7));
+        CompanionEvents.fire(CompanionEvent.RUN_ENDED,
+                new CompanionEvent.RunEnded(id, 7, CompanionEvent.Outcome.HALTED, "halt.owner_stop"));
+
+        assertEquals(List.of("b:started 7", "a:HALTED", "b:halt.owner_stop"), heard);
+
+        assertNull(NumenPlugins.roster().setDisabled("gt_brain_a", true));
+        heard.clear();
+        CompanionEvents.fire(CompanionEvent.RUN_ENDED,
+                new CompanionEvent.RunEnded(id, 8, CompanionEvent.Outcome.DONE, ""));
+
+        assertEquals(List.of("b:"), heard, "the withdrawn plugin hears nothing, the other still does");
+        NumenPlugins.roster().withdraw("gt_brain_a");
+        NumenPlugins.roster().withdraw("gt_brain_b");
+    }
+
     /** 声明了卸下要重启的插件:关它,登记留着。 */
     @Test
     void aPluginThatNeedsARestartKeepsItsRegistrationsWhenSwitchedOff() {

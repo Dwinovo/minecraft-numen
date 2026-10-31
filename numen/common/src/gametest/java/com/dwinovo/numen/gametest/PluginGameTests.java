@@ -22,6 +22,37 @@ public class PluginGameTests {
     }
 
     /**
+     * 插件听得到她派出去的活收尾:派一件 move,活完成时插件收到一次 {@code TASK_FINISHED},载荷是她的身体、这件活的编号与名字、
+     * 状态 done 和她读到的那段结果文字。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_plugin")
+    public static void a_plugin_hears_a_task_finish_once_with_its_account(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnBare(helper, "gametest_task_heard", new BlockPos(4, 2, 4), false);
+        java.util.List<com.dwinovo.numen.api.CompanionEvent.TaskFinished> heard =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
+        com.dwinovo.numen.api.NumenPlugins.register("gt_task_hears", numen -> numen.on(
+                com.dwinovo.numen.api.CompanionEvent.TASK_FINISHED, finished -> {
+                    if (finished.companion() == companion) {
+                        heard.add(finished);
+                    }
+                }));
+        BlockPos target = helper.absolutePos(new BlockPos(8, 2, 4));
+        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done() && walk.succeeded(), "move to has not finished: " + walk.outcome());
+            helper.assertTrue(heard.size() == 1, "the plugin did not hear the task finish exactly once: " + heard);
+            var finished = heard.get(0);
+            helper.assertTrue(finished.status().equals("done") && !finished.taskId().isEmpty()
+                            && !finished.task().isEmpty() && !finished.result().isEmpty(),
+                    "the payload is incomplete: " + finished);
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_task_hears");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 插件经那扇门挂上的东西,和 Numen API 自带的走同一条路:测试里登记一个假插件,它从身体上读一段状态
      * (只对这只同伴说话),再登记一种事件并发一条。{@code status_self} 里有那段状态;
      * 那条事件以插件登记的类型进她的收件箱,kind 就是那个类型。

@@ -669,6 +669,9 @@ public class BrainGameTests {
         String name = "gametest_driven";
         Brain her = new Brain(helper, name);
         her.driving = true;
+        List<String> pluginHeard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        String pluginId = "gt_driven_hears";
+        hearRuns(pluginId, her.companion.getUUID(), pluginHeard);
         int port;
         try (var probe = new java.net.ServerSocket(0)) {
             port = probe.getLocalPort();
@@ -728,6 +731,60 @@ public class BrainGameTests {
             helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Replied r
                     && r.content().equals("收到")), "the owner's client was not told what she said");
             helper.assertTrue(her.mind.asked.isEmpty(), "her own brain thought while the external one drove");
+            helper.assertTrue(pluginHeard.isEmpty(), "a run event went out while the external brain drove: " + pluginHeard);
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw(pluginId);
+            her.close();
+        });
+    }
+
+    /** 一个听她的 run 开收的插件:把她的每一次开收记成一行;只记这只同伴的(别的用例的同伴也在发)。 */
+    private static void hearRuns(String pluginId, UUID companion, List<String> heard) {
+        com.dwinovo.numen.api.NumenPlugins.register(pluginId, numen -> {
+            numen.on(com.dwinovo.numen.api.CompanionEvent.RUN_STARTED, started -> {
+                if (started.companion().equals(companion)) {
+                    heard.add("started " + started.runId());
+                }
+            });
+            numen.on(com.dwinovo.numen.api.CompanionEvent.RUN_ENDED, ended -> {
+                if (ended.companion().equals(companion)) {
+                    heard.add("ended " + ended.runId() + " " + ended.outcome() + " " + ended.reason());
+                }
+            });
+        });
+    }
+
+    /**
+     * 插件听得到她的 run:一次正常的 run 先开后收、结局是完成;一次被主人停止切断的 run 结局是被切断、原因是主人停止。
+     * 一次 run 一对,按发生的先后。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void a_plugin_hears_her_runs_start_and_end_in_order(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_run_heard");
+        List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        String pluginId = "gt_run_hears";
+        hearRuns(pluginId, her.companion.getUUID(), heard);
+        her.mind.say("好的");
+
+        her.loop.submitPrompt("你好");
+
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(heard.size() == 2 && heard.get(0).startsWith("started ")
+                            && heard.get(1).endsWith(" DONE ") && heard.get(1).startsWith("ended "
+                            + heard.get(0).substring("started ".length())),
+                    "a finished run was not heard as one start then one end: " + heard);
+            heard.clear();
+            her.mind.holding = true;
+            her.mind.say("这句不该被听到");
+            her.loop.submitPrompt("去挖矿");
+        });
+        helper.runAfterDelay(30, () -> {
+            helper.assertTrue(heard.size() == 1 && heard.get(0).startsWith("started "), "the second run did not start: " + heard);
+            her.loop.abort();
+        });
+        succeedWhen(helper, () -> {
+            helper.assertTrue(heard.size() == 2 && heard.get(1).endsWith(" HALTED halt.owner_stop"),
+                    "the cut run was not heard as halted by the owner: " + heard);
+            com.dwinovo.numen.api.NumenPlugins.roster().withdraw(pluginId);
             her.close();
         });
     }
