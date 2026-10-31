@@ -29,8 +29,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 /**
- * 标准答案:每道题(无解的除外)在两种规格下的最优价,由 {@link Reference} 算,存成独立的答案文件,与题库分开。算一次、成本模型变了才重算,
- * 在哪台机器上算都行:只要 Java、构建好的评测类路径和数据集目录,不要游戏服务器。两步:
+ * 标准答案:每道题在适用的规格下的结论(最优价,或区域内证明的无解),由 {@link Reference} 算,存成独立的答案文件,与题库分开。
+ * 出题时({@link Generate})答案跟着题一起产出,只收有定论的题;这里的两步留给"成本模型变了,重算现有题"用,在哪台机器上算都行:
+ * 只要 Java、构建好的评测类路径和数据集目录,不要游戏服务器。两步:
  * <ol>
  *   <li>{@code Answers solve <数据集目录> <分片目录> [--shard i/n] [--buckets short,medium] [--limit N]}:把"题 × 规格"按题号排序,
  *       取第 i 份(共 n 份),每算完一条就追加写进 {@code <分片目录>/shard-<i>-of-<n>.jsonl};重启时跳过已有的,中断不丢活。
@@ -42,16 +43,18 @@ import com.google.gson.JsonParser;
  */
 final class Answers {
 
-    /** 标准答案的状态。 */
+    /** 标准答案的状态。题库里只有 {@code OPTIMAL} 与 {@code UNSOLVABLE}:别的状态是求解的结论,出题时拒题的理由。 */
     enum Status {
-        /** 权重 1、不限时的搜索到了目标:价钱是这套成本模型下的最优价。 */
+        /** 权重 1 的搜索到了目标:价钱是区域内这套成本模型下的最优价。 */
         OPTIMAL,
-        /** 权重 1 的搜索用完节点上限没到:按生产权重再搜,取到的价钱只是一个已知的上界,次优比只作参考。 */
-        BEST_KNOWN,
-        /** 能走到的都搜完了没有目标:证明过的无解。 */
+        /** 能走到的都搜完了没有目标、没碰到区域边:区域内证明过的无解。 */
         UNSOLVABLE,
-        /** 两种搜索都没搜出路:没有标准答案。 */
-        UNKNOWN
+        /** 能走到的都搜完了没有目标,可连通块碰到了区域边:这份数据里没有定论,加算力也没用。 */
+        BEYOND_REGION,
+        /** 节点上限(两档都)用完了,算不动。 */
+        TOO_HARD,
+        /** 算不动,但按生产权重搜到了一条路:价钱只是一个已知的上界,次优比只作参考。 */
+        BEST_KNOWN
     }
 
     /** 一道题在一种规格下的标准答案。 */
@@ -130,9 +133,9 @@ final class Answers {
         return out;
     }
 
-    /** 同时跑几个求解器:每个最多展开 {@link Reference#NODE_CAP} 个节点,一个节点连同它的边约 1.5 千字节,堆装得下几个就几个,不超过处理器数减一。 */
-    static int solvers() {
-        long perSolver = (long) Reference.NODE_CAP * 1_500;
+    /** 同时跑几个求解器:每个最多展开 {@code cap} 个节点,一个节点连同它的边约 1.5 千字节,堆装得下几个就几个,不超过处理器数减一。 */
+    static int solvers(int cap) {
+        long perSolver = (long) cap * 1_500;
         return (int) Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() - 1, Runtime.getRuntime().maxMemory() / perSolver));
     }
 
@@ -197,69 +200,76 @@ final class Answers {
         Map<String, List<Pair>> byRegion = mine.stream().filter(p -> !done.contains(p.key()))
                 .collect(Collectors.groupingBy(p -> p.problem().region(), LinkedHashMap::new, Collectors.toList()));
         int pending = byRegion.values().stream().mapToInt(List::size).sum();
+        Solver solver = Solver.standard();
         System.out.println("[answers] 分片 " + index + "/" + count + ":" + mine.size() + " 条,已有 " + (mine.size() - pending) + " 条,求解器 "
-                + solvers() + " 个");
-        ExecutorService pool = Executors.newFixedThreadPool(solvers());
+                + Answers.solvers(solver.cap()) + "/" + Answers.solvers(solver.largeCap()) + " 个(两档)");
         try (BufferedWriter out = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             for (Map.Entry<String, List<Pair>> region : byRegion.entrySet()) {
                 RegionWorld world = RegionWorld.load(region.getKey(), dataset.save(region.getKey()));
                 var whole = world.whole();
-                List<Future<?>> jobs = new ArrayList<>();
-                for (Pair pair : region.getValue()) {
-                    jobs.add(pool.submit(() -> {
-                        long t0 = System.nanoTime();
-                        Reference.Solved s = Reference.solve(whole, pair.spec().model(), pair.problem().from(), pair.problem().goal(Spec.STATS));
-                        JsonObject o = new Answer(pair.problem().id(), pair.spec(), s.status(), s.cost(), s.expanded(), s.startEstimate()).toJson();
-                        o.addProperty("millis", (System.nanoTime() - t0) / 1_000_000);
-                        synchronized (out) {
-                            try {
-                                out.write(o + "\n");
-                                out.flush();
-                            } catch (IOException e) {
-                                throw new UncheckedIOException(e);
-                            }
-                        }
-                    }));
-                }
-                for (Future<?> job : jobs) {
-                    job.get();
-                }
+                List<Pair> regionPairs = region.getValue();
+                List<Solver.Job> jobs = regionPairs.stream()
+                        .map(pair -> new Solver.Job(whole, pair.spec().model(), pair.problem().from(), pair.problem().goal(Spec.STATS))).toList();
+                solver.solve(jobs, (i, outcome) -> {
+                    Reference.Solved s = outcome.solved();
+                    JsonObject o = new Answer(regionPairs.get(i).problem().id(), regionPairs.get(i).spec(), s.status(), s.cost(), s.expanded(), s.startEstimate())
+                            .toJson();
+                    o.addProperty("millis", outcome.millis());
+                    o.addProperty("tier", outcome.tier());
+                    try {
+                        out.write(o + "\n");
+                        out.flush();
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
             }
-        } finally {
-            pool.shutdownNow();
         }
     }
 
-    // ==================== 并 ====================
+    // ==================== 并与写 ====================
+
+    /**
+     * 把 {@code answers} 写成数据集目录里的 {@code answers.jsonl}(按题号与规格排好)与 {@code answers-manifest.json}(算出它们的主仓库提交、两档节点上限、
+     * 各状态的条数)。出题与重算答案共用这一处。
+     */
+    static void write(Path dataset, String commit, java.util.Collection<Answer> answers) throws IOException {
+        TreeMap<String, Answer> sorted = new TreeMap<>();
+        answers.forEach(a -> sorted.put(a.key(), a));
+        StringBuilder text = new StringBuilder();
+        Map<Status, Integer> counts = new EnumMap<>(Status.class);
+        sorted.values().forEach(a -> {
+            text.append(a.toJson()).append('\n');
+            counts.merge(a.status(), 1, Integer::sum);
+        });
+        Files.writeString(dataset.resolve(FILE), text.toString(), StandardCharsets.UTF_8);
+        JsonObject manifest = new JsonObject();
+        manifest.addProperty("commit", commit);
+        manifest.addProperty("nodeCap", Reference.NODE_CAP);
+        manifest.addProperty("largeNodeCap", Reference.LARGE_NODE_CAP);
+        manifest.addProperty("count", sorted.size());
+        JsonObject by = new JsonObject();
+        counts.forEach((k, v) -> by.addProperty(k.name().toLowerCase().replace('_', '-'), v));
+        manifest.add("status", by);
+        Files.writeString(dataset.resolve(MANIFEST), Dataset.GSON.toJson(manifest) + "\n", StandardCharsets.UTF_8);
+        System.out.println("[answers] 写了 " + sorted.size() + " 条 " + counts);
+    }
 
     private static void merge(Path dataset, Path shards, String commit) throws IOException {
-        Map<String, JsonObject> merged = new TreeMap<>();
+        Map<String, Answer> merged = new TreeMap<>();
         Map<String, Long> millis = new LinkedHashMap<>();
         try (var files = Files.list(shards)) {
             for (Path file : files.filter(f -> f.getFileName().toString().matches("shard-\\d+-of-\\d+\\.jsonl")).sorted().toList()) {
                 for (JsonObject o : lines(file)) {
                     Answer a = Answer.fromJson(o);
-                    if (merged.put(a.key(), a.toJson()) != null) {
+                    if (merged.put(a.key(), a) != null) {
                         throw new IllegalStateException("同一条答案出现了两次:" + a.key());
                     }
                     millis.put(a.key(), o.get("millis").getAsLong());
                 }
             }
         }
-        StringBuilder text = new StringBuilder();
-        merged.values().forEach(o -> text.append(o).append('\n'));
-        Files.writeString(dataset.resolve(FILE), text.toString(), StandardCharsets.UTF_8);
-        Map<Status, Integer> counts = new EnumMap<>(Status.class);
-        merged.values().forEach(o -> counts.merge(Answer.fromJson(o).status(), 1, Integer::sum));
-        JsonObject manifest = new JsonObject();
-        manifest.addProperty("commit", commit);
-        manifest.addProperty("nodeCap", Reference.NODE_CAP);
-        manifest.addProperty("count", merged.size());
-        JsonObject by = new JsonObject();
-        counts.forEach((k, v) -> by.addProperty(k.name().toLowerCase().replace('_', '-'), v));
-        manifest.add("status", by);
-        Files.writeString(dataset.resolve(MANIFEST), Dataset.GSON.toJson(manifest) + "\n", StandardCharsets.UTF_8);
-        System.out.println("[answers] 并了 " + merged.size() + " 条 " + counts);
+        write(dataset, commit, merged.values());
         report(new Dataset(dataset), millis);
     }
 

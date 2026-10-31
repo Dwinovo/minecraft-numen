@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.benchmark;
 
-
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.search.AStar;
 import com.dwinovo.numen.pathing.search.Favoring;
@@ -13,17 +12,24 @@ import net.minecraft.core.BlockPos;
 
 /**
  * 标准答案求解器:同一套走法生成与成本模型({@link AStar} 的 {@code Moves}/{@code CostModel}/{@code Goal}),权重 1,不分段、
- * 不惰性地限时、不带这一趟的记忆、不沿旧路,在整块区域的快照上一次搜到底。放弃的条件只有一个:展开节点数用完 {@link #NODE_CAP}。
+ * 不惰性地限时、不带这一趟的记忆、不沿旧路,在整块区域的快照上一次搜到底。放弃的条件只有一个:展开节点数用完调用方给的上限。
  *
- * <p>权重 1 搜到了目标,价钱就是最优价({@link Answers.Status#OPTIMAL});能走到的都搜完了没有目标,是证明过的无解
- * ({@link Answers.Status#UNSOLVABLE});能走到的都搜完了没有目标、可路伸出了区域(没加载的那边是什么不知道),没有答案
- * ({@link Answers.Status#UNKNOWN});节点上限用完了,没有最优解可记,改按生产权重再搜一遍取一个已知的上界
- * ({@link Answers.Status#BEST_KNOWN},次优比只作参考),再搜不出也是 {@link Answers.Status#UNKNOWN}。
+ * <p>结论分四种,没有"不知道"这一类含糊的:
+ * <ul>
+ *   <li>{@link Answers.Status#OPTIMAL}:权重 1 搜到了目标,价钱是区域内这套成本模型下的最优价;</li>
+ *   <li>{@link Answers.Status#UNSOLVABLE}:能走到的都搜完了没有目标,没碰到区域边——区域内证明过的无解;</li>
+ *   <li>{@link Answers.Status#BEYOND_REGION}:能走到的都搜完了没有目标,可连通块碰到了区域边(区域之外没加载,那边是什么不知道):
+ *       这份数据里没有定论,加算力也没用;</li>
+ *   <li>{@link Answers.Status#TOO_HARD}:节点上限用完了,算不动。{@link #upperBound} 再按生产权重搜一遍,搜到了路是
+ *       {@link Answers.Status#BEST_KNOWN}(价钱只是上界,次优比只作参考),也搜不出来仍是 {@code TOO_HARD}。</li>
+ * </ul>
  */
 final class Reference {
 
-    /** 权重 1 的搜索最多展开几个节点;用完就算"算不动"。一个节点连同它的边在内存里约一千字节,同时跑几个求解器({@link Answers#solvers})就占几倍。 */
+    /** 第一档节点上限:一个节点连同它的边在内存里约一千五百字节,同时跑几个求解器({@link Answers#solvers})就占几倍。 */
     static final int NODE_CAP = 2_000_000;
+    /** 第二档:第一档撞上限的题用它再解一遍。 */
+    static final int LARGE_NODE_CAP = 8_000_000;
 
     /**
      * 求解的结论。
@@ -31,26 +37,33 @@ final class Reference {
      * @param expanded      权重 1 那一遍展开的节点数(这道题的难度);用完上限就是上限
      * @param startEstimate 起点的估价
      */
-    record Solved(Answers.Status status, double cost, int expanded, double startEstimate) {}
+    record Solved(Answers.Status status, double cost, int expanded, double startEstimate) {
+
+        /** 有定论:最优价,或区域内证明的无解——题只收这两种。 */
+        boolean conclusive() {
+            return status == Answers.Status.OPTIMAL || status == Answers.Status.UNSOLVABLE;
+        }
+    }
 
     private Reference() {}
 
-    static Solved solve(SearchView whole, CostModel model, BlockPos start, Goal goal) {
-        Search search = new Search(whole, model, start, goal, NODE_CAP, Favoring.NONE);
-        SearchResult exact = AStar.run(search, 1.0, () -> false);
+    /** 权重 1、最多展开 {@code cap} 个节点的一遍搜索:{@code OPTIMAL}、{@code UNSOLVABLE}、{@code BEYOND_REGION} 或 {@code TOO_HARD}。 */
+    static Solved solve(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap) {
+        SearchResult exact = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), 1.0, () -> false);
         if (exact.arrived()) {
             return new Solved(Answers.Status.OPTIMAL, exact.route().cost(), exact.expanded(), exact.startEstimate());
         }
-        if (exact.stop() == SearchResult.Stop.EXHAUSTED) {
-            return new Solved(Answers.Status.UNSOLVABLE, Double.NaN, exact.expanded(), exact.startEstimate());
-        }
-        if (exact.stop() == SearchResult.Stop.UNLOADED) {
-            // 走得到的都搜过了,没有目标,路却伸出了区域:再按生产权重搜也搜不出权重 1 漏掉的路,不必再搜
-            return new Solved(Answers.Status.UNKNOWN, Double.NaN, exact.expanded(), exact.startEstimate());
-        }
-        SearchResult known = AStar.run(search, AStar.WEIGHT, () -> false);
-        return known.arrived()
-                ? new Solved(Answers.Status.BEST_KNOWN, known.route().cost(), exact.expanded(), exact.startEstimate())
-                : new Solved(Answers.Status.UNKNOWN, Double.NaN, exact.expanded(), exact.startEstimate());
+        Answers.Status status = switch (exact.stop()) {
+            case EXHAUSTED -> Answers.Status.UNSOLVABLE;
+            case UNLOADED -> Answers.Status.BEYOND_REGION;
+            default -> Answers.Status.TOO_HARD;
+        };
+        return new Solved(status, Double.NaN, exact.expanded(), exact.startEstimate());
+    }
+
+    /** {@code TOO_HARD} 的题再按生产权重搜一遍(同样最多 {@code cap} 个节点):搜到了路是 {@code BEST_KNOWN},否则原样。 */
+    static Solved upperBound(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, Solved tooHard) {
+        SearchResult known = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), AStar.WEIGHT, () -> false);
+        return known.arrived() ? new Solved(Answers.Status.BEST_KNOWN, known.route().cost(), tooHard.expanded(), tooHard.startEstimate()) : tooHard;
     }
 }
