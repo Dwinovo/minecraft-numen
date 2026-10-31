@@ -899,6 +899,53 @@ public final class NumenScreen extends Screen {
         }
     }
 
+    /** 定时编辑卡对着哪只、哪一条({@code null} = 新增)。 */
+    private UUID scheduleOf;
+    private ServerLibraries.Schedule scheduleEdited;
+    private ScheduleEditPanel scheduleEditPanel;
+
+    /** 新增或编辑她的一条定时:全部内容都在表里,直接开卡。 */
+    private void openSchedule(UUID who, String id) {
+        scheduleOf = who;
+        scheduleEdited = id == null ? null : ServerLibraries.schedules(who).stream()
+                .filter(s -> s.id().equals(id)).findFirst().orElse(null);
+        if (scheduleEditPanel == null) {
+            scheduleEditPanel = new ScheduleEditPanel(new ScheduleHost());
+        }
+        openCard(scheduleEditPanel);
+    }
+
+    /** 定时编辑卡的宿主面:存与删都发给服务端(谁能动、够不够格由它判),没办成的原因进 toast;删先过确认卡。 */
+    private final class ScheduleHost implements ScheduleEditPanel.Host {
+        @Override public UUID companion() { return scheduleOf; }
+
+        @Override public ServerLibraries.Schedule schedule() { return scheduleEdited; }
+
+        @Override public void onSave(String id, String text, long everyTicks) {
+            ServerLibraries.saveSchedule(scheduleOf, id, text, everyTicks, reply -> {
+                if (!reply.ok()) warn(reply.problem());
+            });
+            closeCard();
+        }
+
+        @Override public void onDelete(String id) {
+            UUID her = scheduleOf;
+            closeCard();
+            dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                    I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE_TITLE),
+                    I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE_WARNING),
+                    I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE),
+                    () -> ServerLibraries.deleteSchedule(her, id, reply -> {
+                        if (!reply.ok()) warn(reply.problem());
+                    }));
+            rebuild();
+        }
+
+        @Override public void onClose() {
+            closeCard();
+        }
+    }
+
     /** 邀请卡的宿主面:请进来的人拉进会话,然后面板对着它。 */
     private final class InviteHost implements InvitePanel.Host {
         @Override public Conversation conversation() { return conv; }
@@ -1365,6 +1412,8 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
             case ProfilePage.Hit.Note note -> openNote(who, note.name());
             case ProfilePage.Hit.NewNote ignored -> openNote(who, null);
+            case ProfilePage.Hit.Schedule schedule -> openSchedule(who, schedule.id());
+            case ProfilePage.Hit.NewSchedule ignored -> openSchedule(who, null);
             case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }
         return true;

@@ -190,7 +190,7 @@ public final class RemoteCompanions {
         host = p.host();
         // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
         for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL, Libraries.NOTES,
-                Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
+                Libraries.SCHEDULES, Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
             LIBRARY.ask(kind);
         }
     }

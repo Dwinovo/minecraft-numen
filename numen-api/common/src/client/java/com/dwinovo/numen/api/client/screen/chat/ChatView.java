@@ -949,6 +949,10 @@ public final class ChatView {
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
+                    if (ConvoLog.scheduled(u.content())) {
+                        notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_SCHEDULED), bubbleMaxW);   // 主人定的定时到点说的,不是他此刻开的口
+                        f.last = null;
+                    }
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
                     out.add(bubble(true, null, rich(q.body(), true), TXT,
                             OWN_FILL, innerW, null,
