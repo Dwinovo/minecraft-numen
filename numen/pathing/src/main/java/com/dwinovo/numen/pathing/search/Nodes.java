@@ -68,6 +68,8 @@ final class Nodes {
 
     private int[] table = filled(2 * INITIAL);
     private int mask = 2 * INITIAL - 1;
+    /** 哈希表里有几个节点(未核的候选不进表,所以比 {@link #size} 少得多):表按它长大,不按候选数。 */
+    private int hashed;
 
     private int slot(long at, int used, int band) {
         return (int) HashCommon.mix(at * 31 + used * 1_000_003L + band) & mask;
@@ -110,7 +112,7 @@ final class Nodes {
             slot = (slot + 1) & mask;
         }
         table[slot] = id;
-        if (size * 2 > table.length) {
+        if (++hashed * 2 > table.length) {
             rehash();
         }
         return id;
