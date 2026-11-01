@@ -179,11 +179,15 @@ final class Vertical {
     }
 
     /**
-     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层:一层一层读,读过的层记下。
-     * 第 {@code y} 层的落脚来自这一层的矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看这两层),
-     * 所以问第 {@code y} 层读它和它下面那一层。
+     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层;第 {@code y} 层的落脚来自这一层的
+     * 矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看这两层),所以问第 {@code y} 层读它和它下面那一层。
+     *
+     * <p>读一次要把快照里每个方块段的调色板问一遍,与读几层关系不大;所以一个区段高度(16 层)那一带里读过的层是连续的一段,
+     * 再问到它外面的层时,这一段向那个方向长一倍(至少到那一层),一带最多读四五次、多读的不超过要的一倍。
      */
     private static final class Levels {
+        private static final int BAND = 16;
+
         private final SearchView view;
         private final BodySnapshot body;
         private final int base;
@@ -191,8 +195,9 @@ final class Vertical {
         private final double[] fraction;
         /** 这一层有液体或可攀爬的方块。 */
         private final boolean[] bypass;
-        /** 这一层的方块读过了。 */
-        private final boolean[] layerRead;
+        /** 每一带读过的层是 {@code [readFrom, readTo)}(从最低的一层数起);没读过两头相等。 */
+        private final int[] readFrom;
+        private final int[] readTo;
         private final Map<BlockState, Info> known = new IdentityHashMap<>();
 
         private Levels(SearchView view, BodySnapshot body) {
@@ -201,7 +206,9 @@ final class Vertical {
             this.base = view.getMinBuildHeight();
             this.fraction = new double[view.getHeight()];
             this.bypass = new boolean[view.getHeight()];
-            this.layerRead = new boolean[view.getHeight()];
+            int bands = (view.getHeight() + BAND - 1) / BAND;
+            this.readFrom = new int[bands];
+            this.readTo = new int[bands];
         }
 
         double fraction(int y) {
@@ -229,19 +236,40 @@ final class Vertical {
 
         /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了:它自己的方块,和下面一层顶面够高、伸进它的方块。 */
         private void read(int i) {
-            readLayer(i);
+            ensure(i);
             if (i > 0) {
-                readLayer(i - 1);
+                ensure(i - 1);
             }
         }
 
-        private void readLayer(int i) {
-            if (layerRead[i]) {
+        /** 第 {@code i} 层的方块读过了:没读过就把它所在一带读过的那一段向它长一倍(至少到它)。 */
+        private void ensure(int i) {
+            int band = i / BAND;
+            int from = readFrom[band];
+            int to = readTo[band];
+            if (i >= from && i < to) {
                 return;
             }
-            layerRead[i] = true;
-            int from = base + i;
-            view.forEachBlock(from, from + 1, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
+            int bottom = band * BAND;
+            int top = Math.min(bottom + BAND, fraction.length);
+            if (from == to) {
+                scan(i, i + 1);
+                readFrom[band] = i;
+                readTo[band] = i + 1;
+            } else if (i >= to) {
+                int upTo = Math.min(top, Math.max(i + 1, to + (to - from)));
+                scan(to, upTo);
+                readTo[band] = upTo;
+            } else {
+                int downTo = Math.max(bottom, Math.min(i, from - (to - from)));
+                scan(downTo, from);
+                readFrom[band] = downTo;
+            }
+        }
+
+        /** 读第 {@code [from, to)} 层(从最低的一层数起)的方块。 */
+        private void scan(int from, int to) {
+            view.forEachBlock(base + from, base + to, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
                 Info info = known.get(state);
                 int at = y - base;
                 if (info.bypass() && at >= 0 && at < bypass.length) {

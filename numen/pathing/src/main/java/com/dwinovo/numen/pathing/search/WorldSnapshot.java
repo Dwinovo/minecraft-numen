@@ -174,7 +174,14 @@ public final class WorldSnapshot implements SearchView {
     @Override
     public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor) {
         List<BlockState> hits = new ArrayList<>(4);
-        BlockState[] scratch = new BlockState[256];
+        // 调色板里要的状态逐个记下来(谓词一律答否,调色板就把每一种都问一遍);一次扫描共用这一个回调,不为每个方块段建一个
+        Predicate<BlockState> collect = state -> {
+            if (wanted.test(state)) {
+                hits.add(state);
+            }
+            return false;
+        };
+        BlockState[] scratch = null;
         int firstSection = Math.max(0, (fromY >> 4) - minSection);
         for (int c = 0; c < chunks.length; c++) {
             PalettedContainer<BlockState>[] states = chunks[c];
@@ -187,15 +194,9 @@ public final class WorldSnapshot implements SearchView {
                 if (section == null) {
                     continue;
                 }
-                // 调色板里要的状态逐个记下来(谓词一律答否,调色板就把每一种都问一遍);用上全局调色板时它不问、直接答"也许有",
-                // 就逐格问谓词
+                // 用上全局调色板时调色板不问、直接答"也许有",就逐格问谓词
                 hits.clear();
-                boolean everything = section.maybeHas(state -> {
-                    if (wanted.test(state)) {
-                        hits.add(state);
-                    }
-                    return false;
-                });
+                boolean everything = section.maybeHas(collect);
                 if (!everything && hits.isEmpty()) {
                     continue;
                 }
@@ -203,6 +204,9 @@ public final class WorldSnapshot implements SearchView {
                 for (int y = Math.max(0, fromY - bottom); y < Math.min(16, toY - bottom); y++) {
                     // 搜索读过的层现成的就用;没读过的解到一块共用的缓冲里,扫完就丢(估价扫的段大多搜索一辈子也不会读)
                     BlockState[] known = (BlockState[]) LAYER.getAcquire(layers[c], s << 4 | y);
+                    if (known == null && scratch == null) {
+                        scratch = new BlockState[256];
+                    }
                     for (BlockState state : known != null ? known : decode(section, y, scratch)) {
                         if (everything ? wanted.test(state) : hits.contains(state)) {
                             visitor.accept(state, bottom + y);
