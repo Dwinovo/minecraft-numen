@@ -102,7 +102,7 @@ final class Bench {
                 answer == null ? null : answer.status(),
                 r.halt() == null ? "arrived" : halt(r.halt()), ms(r.firstMove()), ms(r.maxThink()), ms(r.waited()), ms(r.ticks()), r.searches(),
                 r.expanded(), r.replans(Journal.Replan.DEAD_END), r.replansTotal(), Math.round(r.cost() * 1000) / 1000.0,
-                priced ? Math.round(r.cost() / answer.cost() * 10000) / 10000.0 : Double.NaN, r.dug(), r.placed(), r.steps());
+                priced ? Math.round(r.routeTicks() / answer.cost() * 10000) / 10000.0 : Double.NaN, r.dug(), r.placed(), r.steps());
     }
 
     /** 游戏刻折成毫秒,取到 0.1 毫秒。 */

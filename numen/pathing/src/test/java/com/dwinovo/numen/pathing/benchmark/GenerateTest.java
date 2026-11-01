@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class GenerateTest {
 
     private static Reference.Solved solved(Answers.Status status) {
-        return new Reference.Solved(status, Double.NaN, 0, 0);
+        return new Reference.Solved(status, Double.NaN, 0, 0, 0, 0);
     }
 
     @Test
@@ -38,7 +38,7 @@ class GenerateTest {
     void aFinishedBucketReadsBackExactlyAsWritten() {
         Problem p = new Problem("hills-short-001", "hills", Problem.Bucket.SHORT, 20.5, new BlockPos(1, 2, 3), Problem.GoalType.AT, new BlockPos(4, 5, 6), 0,
                 Problem.EndClass.SURFACE, Problem.split("hills-short-001"), List.of(Problem.Tag.ROUGH));
-        Answers.Answer a = new Answers.Answer("hills-short-001", Spec.A, Answers.Status.OPTIMAL, 123.456, 789, 100.5);
+        Answers.Answer a = new Answers.Answer("hills-short-001", Spec.A, Answers.Status.OPTIMAL, 123.456, 3, 2, 789, 100.5);
         Map<Generate.Reject, Integer> rejected = new EnumMap<>(Generate.Reject.class);
         rejected.put(Generate.Reject.PLAIN_WALK, 7);
         rejected.put(Generate.Reject.TOO_HARD, 3);
@@ -48,6 +48,8 @@ class GenerateTest {
         assertEquals(unit.problems().get(0).to(), back.problems().get(0).to());
         assertEquals(a.key(), back.answers().get(0).key());
         assertEquals(a.cost(), back.answers().get(0).cost(), 1e-9);
+        assertEquals(3, back.answers().get(0).dug());
+        assertEquals(2, back.answers().get(0).placed());
         assertEquals(31, back.candidates());
         assertEquals(7, back.rejected().get(Generate.Reject.PLAIN_WALK));
         assertEquals(0, back.rejected().get(Generate.Reject.BEYOND_REGION), "没写的理由读回是 0");

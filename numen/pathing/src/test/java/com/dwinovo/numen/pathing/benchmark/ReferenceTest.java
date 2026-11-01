@@ -46,6 +46,16 @@ class ReferenceTest {
         assertTrue(s.cost() > 0);
     }
 
+    /** 物理口径的答案只算耗时:出厂罚分(放、挖、起跳、涉水)不进价钱,同一条路的出厂价只会更高。 */
+    @Test
+    void thePhysicalPriceIgnoresThePenalties() {
+        TestWorld world = new TestWorld().floor(0, 0, 40, 6, Y - 1).fill(10, Y - 1, 0, 10, Y - 1, 6, Blocks.WATER.defaultBlockState());
+        Reference.Solved physical = Reference.solve(world, Spec.B.physicalModel(), at(2, 3), Goals.at(at(30, 3)), 100_000, () -> false);
+        Reference.Solved factory = Reference.solve(world, Spec.B.model(), at(2, 3), Goals.at(at(30, 3)), 100_000, () -> false);
+        assertEquals(Answers.Status.OPTIMAL, physical.status());
+        assertTrue(physical.cost() < factory.cost(), "出厂价含涉水罚分");
+    }
+
     @Test
     void aGoalSealedOffInsideTheRegionIsProvenUnsolvable() {
         TestWorld world = new TestWorld().floor(0, 0, 40, 6, Y - 1).fill(20, Y, 0, 20, Y + 2, 6, Blocks.BEDROCK.defaultBlockState());

@@ -18,8 +18,9 @@ import com.google.gson.JsonObject;
  * @param waitedMs   身体站着等搜索的总时间
  * @param tripMs     整趟(虚拟身体走完)的耗时;证明到不了的题是证出来用了多久,放弃的是放弃用了多久
  * @param deadEnds   接续证明终点是死路、扔掉路线重搜的次数
- * @param cost       虚拟身体走过的路线价
- * @param subopt     路线价除以最优价:到了、而且标准答案有价钱时才有,否则 NaN
+ * @param cost       虚拟身体走过的路线价(带出厂罚分,即搜索眼里的价钱)
+ * @param subopt     路线的物理刻数除以标准答案的物理最优价({@link Spec#PHYSICAL_MODEL}):到了、而且标准答案有价钱时才有,否则 NaN;
+ *                   与罚分、权重无关,所以调罚分不必重算数据集
  */
 record Row(String id, String region, Problem.Bucket bucket, Spec spec, Problem.GoalType goal, Problem.EndClass endClass, Problem.Split split,
            List<Problem.Tag> tags, Outcome outcome, Answers.Status refStatus, String ended, double firstMoveMs, double maxThinkMs, double waitedMs,

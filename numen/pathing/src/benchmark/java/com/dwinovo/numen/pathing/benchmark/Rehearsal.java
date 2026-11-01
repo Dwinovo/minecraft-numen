@@ -60,7 +60,7 @@ final class Rehearsal {
 
     /** 一趟预演的结果。时间都是游戏刻,按表折算(不是墙钟)。 */
     record Result(boolean arrived, Halt halt, boolean edge, double firstMove, double maxThink, double waited, double ticks, int searches,
-                  int expanded, Map<Journal.Replan, Integer> replans, double cost, List<Edit> edits, int steps) {
+                  int expanded, Map<Journal.Replan, Integer> replans, double cost, double routeTicks, List<Edit> edits, int steps) {
 
         /**
          * 结局的四类({@link Row.Outcome})。把能走到的都搜完了没有目标才算证明到不了。没到、碰到了世界的边({@code edge})、
@@ -182,6 +182,8 @@ final class Rehearsal {
     /** 最近一次 {@link #walk} 站住等接续时没用掉的刻数。 */
     private double idle;
     private double cost;
+    /** 路线上走过的步按物理算的刻数(几何最短,不含罚分与思考)。 */
+    private double routeTicks;
     private final List<Edit> edits = new ArrayList<>();
     private int steps;
 
@@ -247,7 +249,7 @@ final class Rehearsal {
             }
         }
         return new Result(halt == null, halt, ground.beyond && journal.stops().contains(SearchResult.Stop.UNLOADED), Double.isNaN(firstMove) ? 0 : firstMove, maxThink, waited, ticks, journal.searches(),
-                journal.expansions().stream().mapToInt(Integer::intValue).sum(), journal.replans(), cost, edits, steps);
+                journal.expansions().stream().mapToInt(Integer::intValue).sum(), journal.replans(), cost, routeTicks, edits, steps);
     }
 
     /**
@@ -274,6 +276,7 @@ final class Rehearsal {
             left -= course.minimumAt(i);
             consumed += course.minimumAt(i);
             cost += course.costAt(i);
+            routeTicks += course.minimumAt(i);
             steps++;
             edits.addAll(leg.maneuver().edits());
             ground.at = leg.maneuver().to();

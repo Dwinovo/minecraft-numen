@@ -301,7 +301,7 @@ final class Generate {
                         for (Spec spec : Spec.values()) {
                             if (draft.applicable(spec)) {
                                 specs.add(spec);
-                                futures.add(solver.submit(new Solver.Job(whole, spec.model(), draft.from(), draft.goal(Spec.STATS)), index, stop::get));
+                                futures.add(solver.submit(new Solver.Job(whole, spec.physicalModel(), draft.from(), Spec.physicalGoal(draft)), index, stop::get));
                             }
                         }
                     }
@@ -344,7 +344,7 @@ final class Generate {
                         heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts().tags(c.endClass)));
                 for (int k = 0; k < d.specs().size(); k++) {
                     Reference.Solved s = v.outcomes().get(k).solved();
-                    answers.add(new Answers.Answer(id, d.specs().get(k), s.status(), s.cost(), s.expanded(), s.startEstimate()));
+                    answers.add(new Answers.Answer(id, d.specs().get(k), s.status(), s.cost(), s.dug(), s.placed(), s.expanded(), s.startEstimate()));
                 }
             }
             if (accepted < QUOTA) {
