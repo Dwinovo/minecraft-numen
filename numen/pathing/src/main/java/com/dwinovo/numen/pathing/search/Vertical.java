@@ -34,7 +34,7 @@ import net.minecraft.world.level.block.state.BlockState;
  *       斜走不升降节点,它的升降落差由跳与落带过。</li>
  * </ul>
  * 目标交出到了时脚所在的高度范围({@link Goal#heights()}):节点比它低就要升,比它高就要降,在范围里不用。没有范围的目标不加。
- * 表是问到哪一层才填到哪一层:快照里有这些方块的层(只扫调色板里有它们的方块段)按区段高度一带一带读,没问到的层一格不读;
+ * 表是问到哪一层才填到哪一层:快照里有这些方块的层(只扫调色板里有它们的方块段)一层一层读,没问到的层一格不读;
  * 填出来的数与一开始把整张表填满逐位相同。
  */
 final class Vertical {
@@ -179,9 +179,9 @@ final class Vertical {
     }
 
     /**
-     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层:按区段高度(16 层)一带一带读,
-     * 一带里的调色板只问一遍。第 {@code y} 层的落脚来自这一层的矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看
-     * 这两层),所以问第 {@code y} 层读它所在的一带,它是这一带最低的一层时再读下面那一带。
+     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层:一层一层读,读过的层记下。
+     * 第 {@code y} 层的落脚来自这一层的矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看这两层),
+     * 所以问第 {@code y} 层读它和它下面那一层。
      */
     private static final class Levels {
         private final SearchView view;
@@ -191,8 +191,8 @@ final class Vertical {
         private final double[] fraction;
         /** 这一层有液体或可攀爬的方块。 */
         private final boolean[] bypass;
-        /** 这一带读过了。 */
-        private final boolean[] bandRead;
+        /** 这一层的方块读过了。 */
+        private final boolean[] layerRead;
         private final Map<BlockState, Info> known = new IdentityHashMap<>();
 
         private Levels(SearchView view, BodySnapshot body) {
@@ -201,7 +201,7 @@ final class Vertical {
             this.base = view.getMinBuildHeight();
             this.fraction = new double[view.getHeight()];
             this.bypass = new boolean[view.getHeight()];
-            this.bandRead = new boolean[(view.getHeight() + 15) >> 4];
+            this.layerRead = new boolean[view.getHeight()];
         }
 
         double fraction(int y) {
@@ -227,30 +227,30 @@ final class Vertical {
             return 1 - fraction(y) <= body.stats().stepHeight() + Footing.EPSILON;
         }
 
-        /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了。 */
+        /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了:它自己的方块,和下面一层顶面够高、伸进它的方块。 */
         private void read(int i) {
-            readBand(i >> 4);
-            if ((i & 15) == 0 && i > 0) {
-                readBand((i >> 4) - 1);
+            readLayer(i);
+            if (i > 0) {
+                readLayer(i - 1);
             }
         }
 
-        private void readBand(int band) {
-            if (bandRead[band]) {
+        private void readLayer(int i) {
+            if (layerRead[i]) {
                 return;
             }
-            bandRead[band] = true;
-            int from = base + (band << 4);
-            view.forEachBlock(from, from + 16, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
+            layerRead[i] = true;
+            int from = base + i;
+            view.forEachBlock(from, from + 1, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
                 Info info = known.get(state);
-                int i = y - base;
-                if (info.bypass() && i >= 0 && i < bypass.length) {
-                    bypass[i] = true;
+                int at = y - base;
+                if (info.bypass() && at >= 0 && at < bypass.length) {
+                    bypass[at] = true;
                 }
                 for (double top : info.tops()) {
-                    int at = y + (int) Math.floor(top + Footing.EPSILON) - base;
-                    if (at >= 0 && at < fraction.length) {
-                        fraction[at] = Math.max(fraction[at], top - Math.floor(top + Footing.EPSILON));
+                    int reaches = y + (int) Math.floor(top + Footing.EPSILON) - base;
+                    if (reaches >= 0 && reaches < fraction.length) {
+                        fraction[reaches] = Math.max(fraction[reaches], top - Math.floor(top + Footing.EPSILON));
                     }
                 }
             });
