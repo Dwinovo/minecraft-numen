@@ -275,8 +275,8 @@ public final class Sight {
     private static final class Line {
 
         /** 逐格的回调不带状态(状态都在 {@code Line} 上),不随每条线新建。 */
-        private static final BiFunction<Line, BlockPos, BlockHitResult> VISIT = Line::visit;
-        private static final Function<Line, BlockHitResult> MISS = line -> null;
+        private static final BiFunction<Line, BlockPos, Direction> VISIT = Line::visit;
+        private static final Function<Line, Direction> MISS = line -> null;
 
         private BlockGetter level;
         private Vec3 eye;
@@ -308,28 +308,29 @@ public final class Sight {
                 uz = dz / length;
             }
             this.through = new Vec3(px + ux * THROUGH, py + uy * THROUGH, pz + uz * THROUGH);
-            BlockHitResult hit = BlockGetter.traverseBlocks(eye, through, this, VISIT, MISS);
+            Direction hit = BlockGetter.traverseBlocks(eye, through, this, VISIT, MISS);
             this.reached = hit != null;
-            this.face = hit == null ? null : hit.getDirection();
+            this.face = hit;
         }
 
-        private BlockHitResult visit(BlockPos pos) {
+        /** 射线碰上这一格时碰上的是哪一面(碰上目标就收线,交回这一面);没碰上、或碰上的是路上的遮挡,交回 null。 */
+        private Direction visit(BlockPos pos) {
             BlockState state = level.getBlockState(pos);
             VoxelShape shape = state.getShape(level, pos);
             boolean isTarget = pos.equals(target);
-            if (!isTarget && shape == Shapes.block()) {
-                // 路上整块的格:只问射线碰没碰上它(碰上的是哪一面不用知道),不为它建原版 clip 要的点、盒、坐标表
-                if (!crossesWholeBlock(pos.getX(), pos.getY(), pos.getZ())) {
-                    return null;
-                }
+            Direction on;
+            if (shape == Shapes.block() && (!isTarget || state.getInteractionShape(level, pos).isEmpty())) {
+                // 整块:自己算碰没碰上、碰哪一面,不为它建原版 clip 要的点、盒、坐标表
+                on = clipUnit(pos.getX(), pos.getY(), pos.getZ());
             } else {
-                BlockHitResult on = level.clipWithInteractionOverride(eye, through, pos, shape, state);
-                if (on == null) {
-                    return null;
-                }
-                if (isTarget) {
-                    return on;
-                }
+                BlockHitResult hit = level.clipWithInteractionOverride(eye, through, pos, shape, state);
+                on = hit == null ? null : hit.getDirection();
+            }
+            if (on == null) {
+                return null;
+            }
+            if (isTarget) {
+                return on;
             }
             if (Sight.soft(state)) {
                 if (soft.isEmpty()) {
@@ -346,26 +347,61 @@ public final class Sight {
         }
 
         /**
-         * 射线({@link #eye} 到 {@link #through})碰没碰上 {@code (px, py, pz)} 那一整格,口径逐步照 {@code VoxelShape.clip} 对整块的做法:
-         * 起点往前挪千分之一在格里就算碰上(射线从格里出发);否则看射线进格的那三个面里有没有一个的交点落在 {@code (0, 1)} 段上、
-         * 面内(各边外放 1e-7)。
+         * 射线({@link #eye} 到 {@link #through})碰上 {@code (px, py, pz)} 那一整格的哪一面,没碰上为 null;口径逐步照
+         * {@code VoxelShape.clip} 对整块的做法:射线短到没有方向(长度平方不到 1e-7)不算碰上;起点往前挪千分之一在格里,射线从格里出发,
+         * 碰上的是射线朝向的反面;否则照 {@code AABB.clip} 看射线进格的那三个面,交点落在面内(各边外放 1e-7)、离起点最近的那一个。
          */
-        private boolean crossesWholeBlock(int px, int py, int pz) {
+        private Direction clipUnit(int px, int py, int pz) {
             double dx = through.x - eye.x;
             double dy = through.y - eye.y;
             double dz = through.z - eye.z;
             if (dx * dx + dy * dy + dz * dz < 1.0E-7) {
-                return false;
+                return null;
             }
             if (within(eye.x + dx * 0.001 - px) && within(eye.y + dy * 0.001 - py) && within(eye.z + dz * 0.001 - pz)) {
-                return true;
+                return Direction.getNearest(dx, dy, dz).getOpposite();
             }
-            return dx > 1.0E-7 && hitsPlane(px, eye.x, dx, eye.y, dy, py, eye.z, dz, pz)
-                    || dx < -1.0E-7 && hitsPlane(px + 1.0, eye.x, dx, eye.y, dy, py, eye.z, dz, pz)
-                    || dy > 1.0E-7 && hitsPlane(py, eye.y, dy, eye.z, dz, pz, eye.x, dx, px)
-                    || dy < -1.0E-7 && hitsPlane(py + 1.0, eye.y, dy, eye.z, dz, pz, eye.x, dx, px)
-                    || dz > 1.0E-7 && hitsPlane(pz, eye.z, dz, eye.x, dx, px, eye.y, dy, py)
-                    || dz < -1.0E-7 && hitsPlane(pz + 1.0, eye.z, dz, eye.x, dx, px, eye.y, dy, py);
+            Direction face = null;
+            double nearest = 1.0;
+            if (dx > 1.0E-7) {
+                double t = along(px, eye.x, dx, eye.y, dy, py, eye.z, dz, pz, nearest);
+                if (t < nearest) {
+                    nearest = t;
+                    face = Direction.WEST;
+                }
+            } else if (dx < -1.0E-7) {
+                double t = along(px + 1.0, eye.x, dx, eye.y, dy, py, eye.z, dz, pz, nearest);
+                if (t < nearest) {
+                    nearest = t;
+                    face = Direction.EAST;
+                }
+            }
+            if (dy > 1.0E-7) {
+                double t = along(py, eye.y, dy, eye.z, dz, pz, eye.x, dx, px, nearest);
+                if (t < nearest) {
+                    nearest = t;
+                    face = Direction.DOWN;
+                }
+            } else if (dy < -1.0E-7) {
+                double t = along(py + 1.0, eye.y, dy, eye.z, dz, pz, eye.x, dx, px, nearest);
+                if (t < nearest) {
+                    nearest = t;
+                    face = Direction.UP;
+                }
+            }
+            if (dz > 1.0E-7) {
+                double t = along(pz, eye.z, dz, eye.x, dx, px, eye.y, dy, py, nearest);
+                if (t < nearest) {
+                    nearest = t;
+                    face = Direction.NORTH;
+                }
+            } else if (dz < -1.0E-7) {
+                double t = along(pz + 1.0, eye.z, dz, eye.x, dx, px, eye.y, dy, py, nearest);
+                if (t < nearest) {
+                    face = Direction.SOUTH;
+                }
+            }
+            return face;
         }
 
         /** 格内坐标在 [0, 1) 里:整块轮廓的体素只有一格。 */
@@ -373,14 +409,17 @@ public final class Sight {
             return Mth.floor(local) == 0;
         }
 
-        /** 射线穿过垂直于某根轴、在 {@code plane} 的那个面时,交点落在这一格那个面的范围里(两个另外的轴各是 {@code [min, min + 1]})。 */
-        private static boolean hitsPlane(double plane, double start, double delta, double startA, double deltaA, double minA,
-                                         double startB, double deltaB, double minB) {
+        /**
+         * 射线穿过垂直于某根轴、在 {@code plane} 的那个面时的位置(0 到 1 之间的比例):比 {@code nearest} 近、交点落在这一格那个面的
+         * 范围里(两个另外的轴各是 {@code [min, min + 1]},外放 1e-7)才算,否则交回 {@code nearest}。
+         */
+        private static double along(double plane, double start, double delta, double startA, double deltaA, double minA,
+                                    double startB, double deltaB, double minB, double nearest) {
             double t = (plane - start) / delta;
             double a = startA + t * deltaA;
             double b = startB + t * deltaB;
-            return 0.0 < t && t < 1.0 && minA - 1.0E-7 < a && a < minA + 1.0 + 1.0E-7
-                    && minB - 1.0E-7 < b && b < minB + 1.0 + 1.0E-7;
+            return 0.0 < t && t < nearest && minA - 1.0E-7 < a && a < minA + 1.0 + 1.0E-7
+                    && minB - 1.0E-7 < b && b < minB + 1.0 + 1.0E-7 ? t : nearest;
         }
 
         /** 碰上了目标,路上没有硬遮挡。 */
