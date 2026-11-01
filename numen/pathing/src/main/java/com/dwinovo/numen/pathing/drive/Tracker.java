@@ -64,7 +64,8 @@ final class Tracker {
                 return new Fix.FellBack(earlier);
             }
         }
-        if (settled.test(Stance.Kind.GROUND) || settled.test(Stance.Kind.CLIMBING) || settled.test(Stance.Kind.SWIMMING)) {
+        if (settled.test(Stance.Kind.GROUND) || settled.test(Stance.Kind.CLIMBING) || settled.test(Stance.Kind.SWIMMING)
+                || settled.test(Stance.Kind.FLYING)) {
             return strays() ? new Fix.Lost() : new Fix.Here();
         }
         return new Fix.Here();

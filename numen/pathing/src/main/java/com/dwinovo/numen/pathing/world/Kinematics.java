@@ -1,5 +1,7 @@
 package com.dwinovo.numen.pathing.world;
 
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 身体怎么动:全模块只在这里算一份。读身体的量({@link BodyStats}:移动速度、起跳力度、重力),照原版逐刻推,规划定价、搜索估价、
@@ -15,6 +17,10 @@ package com.dwinovo.numen.pathing.world;
  * </ul>
  *
  * <p>这里算的是几何上的最短耗时:不含起步加速、转身与跳的时机,规划拿它当一步的价钱、看护拿它的倍数当期限。
+ *
+ * <p>空中另有一族逐刻步进({@link #fly}、{@link #glide}、{@link #boost}):状态(位置与速度)与这一刻的输入进,下一刻的状态出,
+ * 公式取自原版 {@code Player.travel} 的飞行分支、{@code LivingEntity.travel} 的滑翔分支与 {@code FireworkRocketEntity} 的推力,
+ * float 与 double 的混用也照原版,所以与真身体逐刻对得上(GameTest 对照)。步进器不碰世界:撞方块、落地算不进去,要判撞不撞的另扫碰撞({@link Clearance})。
  */
 public final class Kinematics {
 
@@ -236,6 +242,244 @@ public final class Kinematics {
         return 1 / CLIMB_DOWN_SPEED;
     }
 
+    // ==================== 空中:飞行、滑翔、烟花 ====================
+
+    /** 飞行时水平速度每刻乘的阻力:原版 {@code travel} 里的 {@code 0.91F}(空中的摩擦)。 */
+    public static final double FLY_DRAG = 0.91F;
+    /** 飞行时竖直速度每刻乘的系数({@code Player.travel} 飞行分支的 {@code d2 * 0.6})。 */
+    public static final double FLY_VERTICAL_DRAG = 0.6;
+    /** 飞着按跳或潜行每刻加的竖直速度是飞行速度的几倍({@code LocalPlayer.aiStep} 的 {@code * 3.0F})。 */
+    public static final float FLY_LIFT = 3.0F;
+    /** 疾跑时飞行速度翻倍({@code Player.getFlyingSpeed})。 */
+    private static final float FLY_SPRINT = 2.0F;
+    /** 滑翔时水平、竖直速度每刻乘的系数({@code LivingEntity.travel} 滑翔分支末尾的 {@code 0.99F, 0.98F, 0.99F})。 */
+    private static final double GLIDE_HORIZONTAL_DRAG = 0.99F;
+    private static final double GLIDE_VERTICAL_DRAG = 0.98F;
+    /** 一刻里每个方向键的输入强度(原版 {@code LivingEntity.aiStep} 把 {@code xxa}、{@code zza} 乘 {@code 0.98F})。 */
+    private static final float KEY_INPUT = 0.98F;
+    /** 角度转弧度,{@code Entity.getInputVector}(移动输入按偏航转)的写法:{@code (float) Math.PI / 180F}。 */
+    private static final float DEGREES = (float) Math.PI / 180F;
+    /** 角度转弧度,视线与滑翔俯仰({@code Entity.calculateViewVector}、{@code LivingEntity.travel})的写法:{@code (float) (Math.PI / 180.0)}。 */
+    private static final float VIEW_DEGREES = (float) (Math.PI / 180.0);
+
+    /** 空中一刻开始时身体的状态:位置(脚底中心)与速度(格每刻)。 */
+    public record Motion(Vec3 pos, Vec3 velocity) {}
+
+    /**
+     * 一刻里的输入:前后左右(各取 -1、0、1,正的是前、左)、跳、潜行、疾跑、此刻的偏航与俯仰(度),以及这一刻有没有一支烟花在推
+     * ({@link #glide} 在这一刻的滑翔之后加上烟花的推力)。
+     */
+    public record Keys(int forward, int left, boolean jump, boolean sneak, boolean sprint, float yaw, float pitch, boolean rocket) {
+
+        /** 什么键也不按,朝 {@code yaw}、{@code pitch}。 */
+        public static Keys idle(float yaw, float pitch) {
+            return new Keys(0, 0, false, false, false, yaw, pitch, false);
+        }
+    }
+
+    /**
+     * 创造飞行走一刻(原版:{@code LocalPlayer.aiStep} 先往竖直速度里加按键的 ±3 × 飞行速度,{@code LivingEntity.aiStep} 把小于 {@link #REST} 的速度分量归零,
+     * {@code Player.travel} 的飞行分支再走一遍
+     * 空中的 {@code LivingEntity.travel}——水平先把输入加速度加进速度、按这个速度挪,再乘 {@code 0.91F};竖直挪的是加过按键的速度,
+     * 之后速度只剩六成)。不含碰撞。
+     *
+     * @param flyingSpeed 能力里的飞行速度({@code Abilities.getFlyingSpeed},原版 0.05)
+     */
+    public static Motion fly(Motion state, Keys keys, float flyingSpeed) {
+        int lift = (keys.jump() ? 1 : 0) - (keys.sneak() ? 1 : 0);
+        double vy = state.velocity().y;
+        if (lift != 0) {
+            vy += (double) ((float) lift * flyingSpeed * FLY_LIFT);
+        }
+        Vec3 start = settle(new Vec3(state.velocity().x, vy, state.velocity().z));
+        float speed = keys.sprint() ? flyingSpeed * FLY_SPRINT : flyingSpeed;
+        Vec3 input = relative(new Vec3(keys.left() * KEY_INPUT, 0.0, keys.forward() * KEY_INPUT), speed, keys.yaw());
+        Vec3 moving = new Vec3(start.x + input.x, start.y, start.z + input.z);
+        return new Motion(state.pos().add(moving), new Vec3(moving.x * FLY_DRAG, start.y * FLY_VERTICAL_DRAG, moving.z * FLY_DRAG));
+    }
+
+    /**
+     * 滑翔走一刻({@code LivingEntity.travel} 的滑翔分支):重力按俯仰折一部分、俯冲时把下落的速度转成前进、抬头时把前进的速度转成上升,
+     * 水平速度向视线的水平方向靠拢,最后各乘阻力、按这个速度挪。有烟花在推({@link Keys#rocket})就在这之后加上它的推力({@link #boost},
+     * 原版烟花实体在身体的这一刻之后才刻)。不含碰撞。
+     *
+     * @param gravity 身体的重力({@code Attributes.GRAVITY},原版 0.08)
+     */
+    public static Motion glide(Motion state, Keys keys, double gravity) {
+        Vec3 start = settle(state.velocity());
+        Vec3 look = view(keys.pitch(), keys.yaw());
+        float pitch = keys.pitch() * VIEW_DEGREES;
+        double lookHorizontal = Math.sqrt(look.x * look.x + look.z * look.z);
+        double speedHorizontal = start.horizontalDistance();
+        double lookLength = look.length();
+        double cos = Math.cos((double) pitch);
+        cos = cos * cos * Math.min(1.0, lookLength / 0.4);
+        Vec3 v = start.add(0.0, gravity * (-1.0 + cos * 0.75), 0.0);
+        if (v.y < 0.0 && lookHorizontal > 0.0) {
+            double dive = v.y * -0.1 * cos;
+            v = v.add(look.x * dive / lookHorizontal, dive, look.z * dive / lookHorizontal);
+        }
+        if (pitch < 0.0F && lookHorizontal > 0.0) {
+            double climb = speedHorizontal * (double) (-Mth.sin(pitch)) * 0.04;
+            v = v.add(-look.x * climb / lookHorizontal, climb * 3.2, -look.z * climb / lookHorizontal);
+        }
+        if (lookHorizontal > 0.0) {
+            v = v.add((look.x / lookHorizontal * speedHorizontal - v.x) * 0.1, 0.0,
+                    (look.z / lookHorizontal * speedHorizontal - v.z) * 0.1);
+        }
+        v = v.multiply(GLIDE_HORIZONTAL_DRAG, GLIDE_VERTICAL_DRAG, GLIDE_HORIZONTAL_DRAG);
+        return new Motion(state.pos().add(v), keys.rocket() ? boost(v, look) : v);
+    }
+
+    /** 视线的方向({@code Entity.calculateViewVector}):各分量按 float 乘,再转成 double。 */
+    public static Vec3 view(float pitch, float yaw) {
+        float pitchRadians = pitch * VIEW_DEGREES;
+        float yawRadians = -yaw * VIEW_DEGREES;
+        float yawCos = Mth.cos(yawRadians);
+        float yawSin = Mth.sin(yawRadians);
+        float pitchCos = Mth.cos(pitchRadians);
+        float pitchSin = Mth.sin(pitchRadians);
+        return new Vec3((double) (yawSin * pitchCos), (double) (-pitchSin), (double) (yawCos * pitchCos));
+    }
+
+    /** 一支挂在身上的烟花这一刻给滑翔中的身体加的速度({@code FireworkRocketEntity.tick}):朝视线的方向,把速度往每刻 1.5 格拉。 */
+    public static Vec3 boost(Vec3 velocity, Vec3 look) {
+        return velocity.add(look.x * 0.1 + (look.x * 1.5 - velocity.x) * 0.5, look.y * 0.1 + (look.y * 1.5 - velocity.y) * 0.5,
+                look.z * 0.1 + (look.z * 1.5 - velocity.z) * 0.5);
+    }
+
+    /** 原版每刻开头把小于 {@link #REST} 的速度分量归零({@code LivingEntity.aiStep})。 */
+    private static Vec3 settle(Vec3 v) {
+        return new Vec3(Math.abs(v.x) < REST ? 0.0 : v.x, Math.abs(v.y) < REST ? 0.0 : v.y, Math.abs(v.z) < REST ? 0.0 : v.z);
+    }
+
+    /** 把前后左右的输入按飞行速度与偏航转成世界里的加速度({@code Entity.getInputVector}):输入向量长过 1 的先归一。 */
+    private static Vec3 relative(Vec3 input, float speed, float yaw) {
+        double length = input.lengthSqr();
+        if (length < 1.0E-7) {
+            return Vec3.ZERO;
+        }
+        Vec3 scaled = (length > 1.0 ? input.normalize() : input).scale(speed);
+        float sin = Mth.sin(yaw * DEGREES);
+        float cos = Mth.cos(yaw * DEGREES);
+        return new Vec3(scaled.x * cos - scaled.z * sin, scaled.y, scaled.z * cos + scaled.x * sin);
+    }
+
+    /** 飞着一直按住前进,疾跑({@code sprinting})或平飞时水平稳态速度(格每刻):每刻加的速度除以(1 − {@link #FLY_DRAG})。 */
+    public static double flySpeed(float flyingSpeed, boolean sprinting) {
+        return (double) KEY_INPUT * (double) (flyingSpeed * (sprinting ? FLY_SPRINT : 1.0F)) / (1 - FLY_DRAG);
+    }
+
+    /** 飞着一直按住跳(或潜行),竖直稳态速度(格每刻):每刻加的 3 × 飞行速度除以(1 − 0.6)。 */
+    public static double flyClimb(float flyingSpeed) {
+        return flyingSpeed * FLY_LIFT / (1 - FLY_VERTICAL_DRAG);
+    }
+
+    /** 飞着水平挪一格要几刻:疾跑稳态。 */
+    public static double flyTicksPerBlock(float flyingSpeed) {
+        return 1 / flySpeed(flyingSpeed, true);
+    }
+
+    /** 飞着升或降一格要几刻。 */
+    public static double flyClimbTicksPerBlock(float flyingSpeed) {
+        return 1 / flyClimb(flyingSpeed);
+    }
+
+    /** 从地面起飞的按键:按、松、按,连按两下跳(原版 {@code Controls.DOUBLE_TAP} 之内),第三刻切成飞行。 */
+    public static final int TAKEOFF_TAPS = 3;
+
+    /**
+     * 从静止起一直疾飞,逐刻比稳态速度慢掉的那部分合起来是几刻:起飞之后加速到巡航的损失。按步进器({@link #fly})逐刻推到追上稳态。
+     */
+    public static double flyLaunchLoss(float flyingSpeed) {
+        return LAUNCH_LOSS.computeIfAbsent(flyingSpeed, Kinematics::launchLoss);
+    }
+
+    /** 飞行速度各不相同的身体很少,算过的记下:定价每展开一个节点都要问。 */
+    private static final java.util.Map<Float, Double> LAUNCH_LOSS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Float, Double> STOP_LOSS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static double launchLoss(float flyingSpeed) {
+        double cruise = flySpeed(flyingSpeed, true);
+        Keys cruising = new Keys(1, 0, false, false, true, 0, 0, false);
+        Motion m = new Motion(Vec3.ZERO, Vec3.ZERO);
+        double lost = 0;
+        for (int i = 0; i < 400; i++) {
+            Motion next = fly(m, cruising, flyingSpeed);
+            double moved = next.pos().z - m.pos().z;
+            if (moved >= cruise * 0.999) {
+                break;
+            }
+            lost += 1 - moved / cruise;
+            m = next;
+        }
+        return lost;
+    }
+
+    /** 起飞要几刻:连按两下跳,加上起飞之后加速到巡航的损失({@link #flyLaunchLoss})。 */
+    public static double takeoffTicks(float flyingSpeed) {
+        return TAKEOFF_TAPS + flyLaunchLoss(flyingSpeed);
+    }
+
+    /**
+     * 飞着竖直方向这一刻按 {@code lift}(1 是跳、-1 是潜行、0 是松着)之后,脚最终停在比现在高多少:这一刻挪的是竖直速度 {@code vy} 加上按键的 ±3 × 飞行速度,
+     * 之后每刻只剩六成。
+     */
+    public static double flyRise(float flyingSpeed, double vy, int lift) {
+        double moving = vy + (lift == 0 ? 0.0 : (double) ((float) lift * flyingSpeed * FLY_LIFT));
+        return moving / (1 - FLY_VERTICAL_DRAG);
+    }
+
+    /**
+     * 飞着以水平 {@code speed}(格每刻)冲着,要停下:每刻按住后退键(平飞的加速度,没有疾跑加成)直到速度被抵到零,再松开。
+     * 交出这样停下花的刻数与滑出的距离(格);停车的控制器与定价读的是同一份。
+     */
+    public static Stop flyStop(float flyingSpeed, double speed) {
+        double brake = (double) KEY_INPUT * flyingSpeed;
+        double v = speed;
+        double distance = 0;
+        int ticks = 0;
+        while (v > REST) {
+            double moving = v - brake;
+            ticks++;
+            if (moving <= 0) {
+                break;
+            }
+            distance += moving;
+            v = moving * FLY_DRAG;
+        }
+        return new Stop(ticks, distance);
+    }
+
+    /** 从疾飞的巡航速度停下,比一路巡航滑完这段距离多花几刻:降落停在落点上要付的。 */
+    public static double flyStopLoss(float flyingSpeed) {
+        return STOP_LOSS.computeIfAbsent(flyingSpeed, speed -> {
+            double cruise = flySpeed(speed, true);
+            return flyStop(speed, cruise).lost(cruise);
+        });
+    }
+
+    /** 停下花的刻数与滑出的距离(格)。 */
+    public record Stop(int ticks, double distance) {
+
+        /** 比一路按巡航速度 {@code cruise}(格每刻)走完这段距离多花的刻数。 */
+        public double lost(double cruise) {
+            return ticks - distance / cruise;
+        }
+    }
+
+    /**
+     * 飞着这一刻按 {@code first},之后松开所有键,身体最终停在哪(位置):逐刻 {@link #fly} 推到速度小于 {@link #REST}。
+     */
+    public static Vec3 flyRest(Motion state, Keys first, float flyingSpeed) {
+        Motion m = fly(state, first, flyingSpeed);
+        Keys idle = Keys.idle(first.yaw(), first.pitch());
+        for (int i = 0; i < 400 && m.velocity().lengthSqr() > REST * REST; i++) {
+            m = fly(m, idle, flyingSpeed);
+        }
+        return m.pos();
+    }
+
     // ==================== 走出边沿 ====================
 
     /**
@@ -300,7 +544,13 @@ public final class Kinematics {
      * @param walk   平地走一格(权衡以它为单位,不进估价)
      * @param sprint 水平每格:各种走法里最快的,疾跑一格
      */
-    public record Pace(double walk, double sprint) {}
+    public record Pace(double walk, double sprint) {
+
+        /** 身体能飞({@code flyingSpeed} 是能力里的飞行速度)时,水平每格取疾飞与疾跑里更快的那个;下界仍是下界。 */
+        public Pace withFlight(float flyingSpeed) {
+            return new Pace(walk, Math.min(sprint, flyTicksPerBlock(flyingSpeed)));
+        }
+    }
 
     /**
      * 这具身体的估价底价。水平每格取疾跑一格({@link #sprintTicksPerBlock}):平走、潜行、涉水、疾跑跳、爬梯子的水平耗时都不比它短;

@@ -10,6 +10,7 @@ import net.minecraft.world.phys.Vec3;
  *   <li>把这具身体的键盘({@link Controls})此刻按着的键落成身体输入——每刻只在这里落一次;</li>
  *   <li>{@code doTick()}——玩家自己的一刻(原版由网络层驱动):按上面落下的输入走路、起跳、游泳、攀爬,
  *       碰撞与 0.6 格迈步都在原版的 {@code travel} 里;</li>
+ *   <li>飞着落了地就停飞({@link Controls#afterTick},原版客户端在 {@code aiStep} 末尾做);</li>
  *   <li>{@code doCheckFallDamage}——摔伤结算,原版在收到移动包时做;</li>
  *   <li>{@code checkMovementStatistics}——走、跑、游消耗饱食度与统计,原版同样在收包时做;</li>
  *   <li>区块跟着身体走({@code ChunkMap} 的玩家位置),原版同样在收包时做。</li>
@@ -25,6 +26,7 @@ public final class Physics {
         controls.apply(entity);
         Vec3 before = entity.position();
         entity.doTick();
+        controls.afterTick(entity);
         Vec3 moved = entity.position().subtract(before);
         entity.doCheckFallDamage(moved.x, moved.y, moved.z, entity.onGround());
         entity.checkMovementStatistics(moved.x, moved.y, moved.z);

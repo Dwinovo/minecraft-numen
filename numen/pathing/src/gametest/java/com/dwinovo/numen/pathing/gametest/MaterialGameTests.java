@@ -92,6 +92,8 @@ public class MaterialGameTests {
         Trial t = ditch(helper);
         TestBody body = t.body(6, 5, 5);
         body.setGameMode(GameType.CREATIVE);
+        // 这条量的是凭空取料搭桥,不是飞过去:创造模式的身体许飞,飞比搭桥便宜,所以关掉飞行的能力
+        body.getAbilities().mayfly = false;
         t.materials = Trial.carried(body, Blocks.OAK_PLANKS, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
             placedAre(r, Blocks.OAK_PLANKS);

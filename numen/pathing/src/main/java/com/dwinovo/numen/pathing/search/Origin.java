@@ -19,11 +19,19 @@ public final class Origin {
 
     private Origin() {}
 
-    /** 身体脚底中心在 {@code (x, feetY, z)} 时搜索的起点;身体脚底压着的每一列都待不住时为空。 */
+    /** 身体脚底中心在 {@code (x, feetY, z)} 时搜索的起点;身体脚底压着的每一列都待不住时为空。身体没在飞。 */
     public static Optional<BlockPos> of(BlockGetter level, BodyStats body, double x, double feetY, double z) {
+        return of(level, body, x, feetY, z, false);
+    }
+
+    /**
+     * 同上;飞着({@code flying})的身体在空中也待得住:脚所在的那一格世界里待不住、放得下身体,它就是起点({@link Stance#afloat})。
+     * 飞着的身体不是站在边沿,不找旁边的列。
+     */
+    public static Optional<BlockPos> of(BlockGetter level, BodyStats body, double x, double feetY, double z, boolean flying) {
         int y = Footing.cellOf(feetY);
         BlockPos own = BlockPos.containing(x, y, z);
-        if (Stance.at(level, body, own) != null) {
+        if (Stance.at(level, body, own, flying) != null) {
             return Optional.of(own);
         }
         double half = body.width() / 2;

@@ -50,7 +50,7 @@ public final class Navigator {
             from = query.after().end();
         } else {
             Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
-                    entity.getX(), entity.getY(), entity.getZ());
+                    entity.getX(), entity.getY(), entity.getZ(), snapshot.mobility().flying());
             if (start.isEmpty()) {
                 BlockPos at = entity.blockPosition();
                 PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));

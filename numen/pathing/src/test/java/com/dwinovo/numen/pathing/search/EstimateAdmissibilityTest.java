@@ -10,6 +10,7 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -164,7 +165,28 @@ class EstimateAdmissibilityTest {
         seen.addAll(assertAdmissible("垫柱", field(), dig, START, new BlockPos(0, Y + 4, 0)));
         seen.addAll(assertAdmissible("向下挖", new TestWorld().ground(Y - 1, STONE), dig, START, new BlockPos(0, Y - 3, 0)));
 
-        assertTrue(seen.containsAll(EnumSet.allOf(MoveKind.class)), "没走到的走法:" + EnumSet.complementOf(EnumSet.copyOf(seen)));
+        Set<MoveKind> walking = EnumSet.noneOf(MoveKind.class);
+        Moves.forBody(Fixtures.body()).forEach(move -> walking.add(move.kind()));
+        assertTrue(seen.containsAll(walking), "没走到的走法:" + EnumSet.complementOf(EnumSet.copyOf(seen)));
+    }
+
+    /**
+     * 身体许飞:起飞、飞、降落每一步估价也不高过真实代价——飞越走不过去的空隙、悬在半空的一格、飞上一堵高墙再落在顶上。
+     * 与不会飞的身体各跑各的:飞着的估价把水平底价换成疾飞、竖直换成飞着升降,仍要是下界。
+     */
+    @Test
+    void estimateNeverExceedsTheCostOfFlying() {
+        CostModel flier = Fixtures.model(RouteSpec.defaults(), Fixtures.flier(false));
+        Set<MoveKind> seen = EnumSet.noneOf(MoveKind.class);
+        TestWorld canyon = field().fill(3, Y - 1, -12, 14, Y - 1, 12, Blocks.AIR.defaultBlockState());
+        seen.addAll(assertAdmissible("飞越空隙", canyon, flier, START, new BlockPos(18, Y, 0)));
+        seen.addAll(assertAdmissible("悬在半空", field(), flier, START, new BlockPos(8, Y + 5, 0)));
+        TestWorld wall = field().fill(5, Y, -12, 6, Y + 9, 12, STONE);
+        seen.addAll(assertAdmissible("飞上高墙", wall, flier, START, Goals.standingOn(wall, SURVIVAL, new BlockPos(6, Y + 9, 0))));
+        // 已经在飞:从半空出发降落到对岸
+        seen.addAll(assertAdmissible("在飞,降落到对岸", canyon, Fixtures.model(RouteSpec.defaults(), Fixtures.flier(true)),
+                new BlockPos(2, Y + 2, 0), new BlockPos(18, Y, 0)));
+        assertTrue(seen.containsAll(EnumSet.of(MoveKind.TAKEOFF, MoveKind.FLY, MoveKind.LAND)), "没飞到的走法:" + seen);
     }
 
     /** 随机小地形:高低起伏、夹着半砖与空洞,起点到终点的估价不高过最优代价,路线上每个节点也一样。 */

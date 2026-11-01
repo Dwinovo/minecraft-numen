@@ -382,6 +382,8 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, name, new BlockPos(3, 2, 7), creative);
+        // 这条量的是她垫的柱子归她拆,不是飞上去:创造模式的身体许飞,飞比垫柱便宜,所以关掉飞行的能力
+        companion.getAbilities().mayfly = false;
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, name + "_watcher");
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         boolean[] asked = new boolean[1];

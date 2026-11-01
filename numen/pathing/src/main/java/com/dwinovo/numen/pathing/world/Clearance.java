@@ -58,6 +58,24 @@ public final class Clearance {
     }
 
     /**
+     * 身体从脚底中心在 {@code (x0, y0, z0)} 的位置直飞到 {@code (x1, y1, z1)}(都是连续的位置),沿途碰撞箱与它交叠的那些格,自下而上;一路放得下为空。
+     * 取起点与终点两个身体盒的包络:沿一条轴飞,包络就是扫过的体积;斜着飞比实际扫过的略大,宁可多挡。
+     */
+    public static List<BlockPos> blockersAlong(BlockGetter level, BodyStats body, double x0, double y0, double z0, double x1,
+                                               double y1, double z1) {
+        double half = body.width() / 2;
+        double low = Math.min(y0, y1);
+        List<BlockPos> out = new ArrayList<>(4);
+        visit(level, body, Math.min(x0, x1) - half, low, Math.min(z0, z1) - half, Math.max(x0, x1) + half,
+                Math.max(y0, y1) + body.height(), Math.max(z0, z1) + half, low, pos -> {
+            out.add(pos.immutable());
+            return true;
+        });
+        out.sort((a, b) -> Integer.compare(a.getY(), b.getY()));
+        return out;
+    }
+
+    /**
      * 身体脚在 {@code feetY} 时占到的最高一格(碰撞盒的顶在这一格里)。最低一格就是脚所在的格
      * {@link Footing#cellOf}。身体经过哪几格、碰到哪几格,都按这两头数。
      */

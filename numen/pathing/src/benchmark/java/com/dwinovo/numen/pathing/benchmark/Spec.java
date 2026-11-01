@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.benchmark;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -52,7 +53,7 @@ enum Spec {
             inventory.add(i == 0 ? new ItemStack(Items.DIAMOND_PICKAXE) : ItemStack.EMPTY);
         }
         return new BodySnapshot(STATS, GameType.SURVIVAL, 20, 3, 1, 20, 0, inventory, new DigTime.Mining(0, 1, 0.2, -1, -1),
-                new Breath(300, 300, 0, 0, false));
+                new Breath(300, 300, 0, 0, false), Mobility.WALKER);
     }
 
     RouteSpec route() {

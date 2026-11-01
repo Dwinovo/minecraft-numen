@@ -9,6 +9,7 @@ public final class PathingGameTestSuite implements GameTestSuite {
     @Override
     public List<Class<?>> classes() {
         return List.of(
+                AirGameTests.class,
                 AlterGameTests.class,
                 BlockGameTests.class,
                 BreathGameTests.class,
@@ -18,6 +19,7 @@ public final class PathingGameTestSuite implements GameTestSuite {
                 DynamicGameTests.class,
                 FacadeGameTests.class,
                 FlatGameTests.class,
+                FlightGameTests.class,
                 FluidGameTests.class,
                 GoalGameTests.class,
                 MatrixGameTests.class,

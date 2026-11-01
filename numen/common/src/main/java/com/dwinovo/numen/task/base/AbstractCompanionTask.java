@@ -8,6 +8,7 @@ import com.dwinovo.numen.task.move.Arrival;
 import com.dwinovo.numen.task.move.MoveToCompanionTask;
 import com.dwinovo.numen.task.move.MoveToTaskRecord;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.FailureType;
@@ -296,7 +297,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         // 不会读到 cleanup 放掉的导航、手势和跟踪。收场时要先结账的(回执要报它)放在 closeBooks 里
         closeBooks();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
-        String travelled = soFar().describe();
+        String travelled = soFar().describe(Snapshots.flying(player));
         String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
                 + gate.allowanceNote()
@@ -472,7 +473,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
 
     /** 路程回执:停在 {@code pos}、离要去的地方还差 {@code distanceLeft} 格,加上这件活到此刻为止路上的账。 */
     protected final Walked walked(Vec3 pos, double distanceLeft) {
-        return soFar().walked(pos, distanceLeft);
+        return soFar().walked(pos, distanceLeft, Snapshots.flying(player));
     }
 
     /** 动手的活替自己走路的那个子活;没在走是 null。 */

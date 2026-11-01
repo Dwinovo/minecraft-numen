@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.drive;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,7 +43,7 @@ class GaitTest {
     /** 原版身体,吃饱了({@code maySprint})或饿得跑不动。 */
     private static CostModel model(boolean maySprint) {
         BodySnapshot body = new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 3, 1, maySprint ? 20 : 6, 0, List.of(),
-                Fixtures.MINING, Fixtures.BREATH);
+                Fixtures.MINING, Fixtures.BREATH, Mobility.WALKER);
         return CostModel.of(RouteSpec.defaults(), body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 

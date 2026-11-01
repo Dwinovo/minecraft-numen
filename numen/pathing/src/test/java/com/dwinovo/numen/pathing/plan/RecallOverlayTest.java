@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 之内才现算。这里在一批随机的世界与随机的改动上证明两条路的结论一模一样:
  * <ul>
  *   <li>每种按格的结论(站姿、落脚高度)——记事本先在没叠改动的快照上记满,再在叠了改动的视图上问,对着不带记事本的同一份视图现算的;</li>
- *   <li>每种走法每个方向的前提——整个 {@link Moves#ALL},挖放都许,对着不带记事本的同一份视图判的。</li>
+ *   <li>每种走法每个方向的前提——整个 {@link Moves#forBody} 的走法集,挖放都许,对着不带记事本的同一份视图判的。</li>
  * </ul>
  * 一种结论说少了它读的格子,就会在这里出现不一样。
  */
@@ -298,7 +298,7 @@ class RecallOverlayTest {
                                 if (stance == null) {
                                     continue;
                                 }
-                                for (Move move : Moves.ALL) {
+                                for (Move move : Moves.forBody(model.body())) {
                                     for (Heading heading : move.headings()) {
                                         String expected = describe(move.premise(model, fresh, from, stance, heading));
                                         String actual = describe(move.premise(model, view, from, stance, heading));

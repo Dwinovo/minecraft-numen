@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
@@ -33,6 +34,9 @@ import net.minecraft.world.level.block.state.BlockState;
  *       可攀爬的方块(活板门也可能接在梯子上)、落上去比石头摔得轻的方块(干草、床、黏液……),或身上带着水桶(倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
  *       斜走不升降节点,它的升降落差由跳与落带过。</li>
  * </ul>
+ * <p>身体许飞时多一条路:飞着升或降一层,每层至少 {@code 竖直每格的耗时 − 水平疾飞每格的耗时} 刻(水平上同时挪一格的话,水平底价已经付了疾飞一格;
+ * 只升降不挪的更贵)。它与上面的走法按层取便宜的,所以对哪种混着走的路线都仍是下界。
+ *
  * 目标交出到了时脚所在的高度范围({@link Goal#heights()}):节点比它低就要升,比它高就要降,在范围里不用。没有范围的目标不加。
  * 表是问到哪一层才填到哪一层:快照里有这些方块的层(只扫调色板里有它们的方块段)一层一层读,没问到的层一格不读;
  * 填出来的数与一开始把整张表填满逐位相同。
@@ -54,6 +58,8 @@ final class Vertical {
     private final double jump;
     private final double sprint;
     private final boolean bucket;
+    /** 飞着升或降一层至少比水平底价多付多少;不许飞为无穷。 */
+    private final double flight;
     /** 落在硬地上最高能落多少:身体与规格合起来的摔落上限。 */
     private final double fallLimit;
     /** {@code up[y - base]}:节点在第 {@code y} 层(低于 {@code lo})走到 {@code lo} 层至少多花的刻数;只填到 {@code upFrom}。 */
@@ -82,11 +88,13 @@ final class Vertical {
             this.jump = 0;
             this.sprint = 0;
             this.bucket = false;
+            this.flight = Double.POSITIVE_INFINITY;
             this.fallLimit = 0;
         } else {
             double penalty = model.spec().jumpPenalty();
             double jumping = Math.max(0, Kinematics.jumpCycleTicks(body, 1.0, body.stepHeight()) + penalty - Kinematics.sprintTicksPerBlock(body));
-            this.jump = model.spec().parkour() ? Math.min(jumping, penalty) : jumping;
+            this.flight = flightExtra(model);
+            this.jump = Math.min(model.spec().parkour() ? Math.min(jumping, penalty) : jumping, flight);
             this.sprint = Kinematics.sprintTicksPerBlock(body);
             this.bucket = model.body().carriesWaterBucket();
             this.fallLimit = model.maxFallDrop();
@@ -146,8 +154,18 @@ final class Vertical {
         return down[y - base];
     }
 
+    /** 飞着升或降一层至少比水平底价多付的刻数;不许飞为无穷。 */
+    private static double flightExtra(CostModel model) {
+        Mobility mobility = model.body().mobility();
+        if (!mobility.mayFly()) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return Math.max(0, Kinematics.flyClimbTicksPerBlock(mobility.flyingSpeed()) - Kinematics.flyTicksPerBlock(mobility.flyingSpeed()));
+    }
+
     private double cheapestFall(int y) {
-        double best = Double.POSITIVE_INFINITY;
+        // 飞着往下一层(落点在 hi 层之上还要接着往下)
+        double best = y - 1 >= hi ? flight + (y - 1 > hi ? down[y - 1 - base] : 0) : Double.POSITIVE_INFINITY;
         for (int k = 1; y - k >= hi; k++) {
             int land = y - k;
             double fraction = levels.fraction(land);

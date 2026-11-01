@@ -39,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 不低于估价的下降——疾跑底价的下降加上它跨过的升降的额外代价下界({@link Estimate}、{@link Vertical})。
  * 场景把 {@link Moves} 里每一类走法(平走、斜走、上一级、下一级、下落、跑酷、垫柱、向下挖、攀爬、游)都摆进来,
  * 台阶、半砖、楼梯、土径、水池也各摆一处,对一批高低不同的终点,在场景里每个站得住的节点上试每个方向。
- * 找到任何一步违反,就是这一项的下界多估了。
+ * 找到任何一步违反,就是这一项的下界多估了。许飞的身体另摆几处场景(平地、空隙、高台):它多出起飞、飞、降落三种走法,估价的水平底价与竖直额外代价
+ * 也换成飞行的({@link Estimate});在飞的身体空中的格也是节点。
  */
 class EstimateConsistencyTest {
 
@@ -193,6 +194,13 @@ class EstimateConsistencyTest {
                 Goals.within(Goals.at(new BlockPos(0, Y - 6, 0)), 0, 2), Goals.within(Goals.at(new BlockPos(4, Y - 3, 1)), 0, 2),
                 Goals.within(Goals.at(new BlockPos(1, Y + 3, 0)), 1, 3),
                 Goals.touch(new net.minecraft.world.phys.AABB(0.2, Y - 7, 0.2, 0.8, Y - 5.2, 0.8), SURVIVAL, 3))));
+
+        // 许飞、此刻在飞的身体:平地、走不过去的空隙、高台。地上的节点有起飞,空中的节点有飞与降落
+        CostModel flier = Fixtures.model(RouteSpec.defaults(), Fixtures.flier(true));
+        List<Goal> flying = goals(3);
+        scenes.add(new Scene("飞:平地", field(), flier, flying));
+        scenes.add(new Scene("飞:空隙", field().fill(3, Y - 1, -8, 6, Y - 1, 8, Blocks.AIR.defaultBlockState()), flier, flying));
+        scenes.add(new Scene("飞:高台", field().fill(-1, Y, -8, 1, Y + 7, 8, STONE), flier, flying));
         return scenes;
     }
 
@@ -206,11 +214,11 @@ class EstimateConsistencyTest {
                     for (int y = Y - 5; y <= Y + 12; y++) {
                         for (int z = -3; z <= 3; z++) {
                             BlockPos from = new BlockPos(x, y, z);
-                            Stance stance = Stance.at(scene.world(), SURVIVAL, from);
+                            Stance stance = Stance.at(scene.world(), SURVIVAL, from, scene.model().body().mobility().flying());
                             if (stance == null) {
                                 continue;
                             }
-                            for (Move move : Moves.ALL) {
+                            for (Move move : Moves.forBody(scene.model().body())) {
                                 for (Heading heading : move.headings()) {
                                     Premise premise = move.premise(scene.model(), scene.world(), from, stance, heading);
                                     if (!(premise instanceof Premise.Holds holds)) {

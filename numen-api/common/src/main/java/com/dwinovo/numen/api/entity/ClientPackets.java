@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.ServerboundContainerSlotStateChangedP
 import net.minecraft.network.protocol.game.ServerboundEditBookPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundRenameItemPacket;
@@ -27,6 +28,7 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -122,6 +124,13 @@ public final class ClientPackets {
     public void slotState(int slot, boolean enabled) {
         body.connection.handleContainerSlotStateChanged(
                 new ServerboundContainerSlotStateChangedPacket(slot, body.containerMenu.containerId, enabled));
+    }
+
+    /** 玩家能力:客户端切换创造飞行时发的包({@code LocalPlayer.onUpdateAbilities})。{@code flying} 是想要的状态,服务端只在身体许飞({@code mayfly})时认。 */
+    public void flying(boolean flying) {
+        Abilities wanted = new Abilities();
+        wanted.flying = flying;
+        body.connection.handlePlayerAbilities(new ServerboundPlayerAbilitiesPacket(wanted));
     }
 
     /** 玩家指令:起床、鞘翅起飞、骑着时开坐骑的物品栏……。 */

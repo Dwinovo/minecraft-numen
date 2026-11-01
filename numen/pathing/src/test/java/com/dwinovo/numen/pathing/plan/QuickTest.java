@@ -218,12 +218,14 @@ class QuickTest {
                 () -> List.of(new Threat(ox + 0.5, Y + 0.5, oz + 0.5, 3.0)))));
         out.add(new Setup("创造模式", CostModel.of(none, Fixtures.body(Vanilla.CREATIVE, GameType.CREATIVE, 20, List.of()),
                 Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, com.dwinovo.numen.pathing.plan.Threats.NONE)));
+        out.add(new Setup("许飞的身体", CostModel.of(none, Fixtures.flier(false), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
+                com.dwinovo.numen.pathing.plan.Threats.NONE)));
         out.add(new Setup("血量低", CostModel.of(none, Fixtures.body(7), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 com.dwinovo.numen.pathing.plan.Threats.NONE)));
         out.add(new Setup("带水桶", CostModel.of(natural, Fixtures.carrying(0, new ItemStack(net.minecraft.world.item.Items.WATER_BUCKET)),
                 Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, com.dwinovo.numen.pathing.plan.Threats.NONE)));
         out.add(new Setup("饿了不能疾跑", CostModel.of(none, new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 3, 1, 3, 0,
-                List.of(), Fixtures.MINING, Fixtures.BREATH), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
+                List.of(), Fixtures.MINING, Fixtures.BREATH, Mobility.WALKER), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 com.dwinovo.numen.pathing.plan.Threats.NONE)));
         return out;
     }
@@ -250,7 +252,7 @@ class QuickTest {
     private static void check(CostModel model, Quick quick, BlockPos from, Stance stance, WorldView here, List<Edit> edits,
                               Recording recording, Tally tally, String where) {
         quick.begin(from.getX(), from.getY(), from.getZ(), stance, here, edits);
-        for (Move move : Moves.ALL) {
+        for (Move move : Moves.forBody(model.body())) {
             for (Heading heading : move.headings()) {
                 String at = where + " " + move.kind() + " 从 " + from + " 朝 " + heading + (edits.isEmpty() ? "" : " (叠了改动 " + edits + ")");
                 int verdict = move.quick(quick, heading);

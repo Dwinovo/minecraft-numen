@@ -12,7 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 她此刻在哪个节点上、怎么待着——与寻路定起点、认步用的是同一条规则({@link Origin}、{@link Stance}),任务问"我是不是已经
- * 站在该站的地方"时也问这里,不另判。
+ * 站在该站的地方"时也问这里,不另判。飞着(创造飞行)时空中的格也待得住。
  *
  * @param node   脚所在的节点(身体站在边沿时是托着它的那一列)
  * @param stance 在那个节点上怎么待着
@@ -23,11 +23,12 @@ public record Feet(BlockPos node, Stance stance) {
     public static Feet of(ServerPlayer body) {
         LiveWorld world = new LiveWorld(body.serverLevel());
         var stats = Snapshots.stats(body);
-        BlockPos node = Origin.of(world, stats, body.getX(), body.getY(), body.getZ()).orElse(null);
+        boolean flying = Snapshots.flying(body);
+        BlockPos node = Origin.of(world, stats, body.getX(), body.getY(), body.getZ(), flying).orElse(null);
         if (node == null) {
             return null;
         }
-        Stance stance = Stance.at(world, stats, node);
+        Stance stance = Stance.at(world, stats, node, flying);
         return stance == null ? null : new Feet(node, stance);
     }
 

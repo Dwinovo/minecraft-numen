@@ -9,7 +9,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 路程回执:{@code numen.move.to}、{@code away}、{@code follow} 交回的值,也是它们失败时错误值的 {@code data}——停在哪、离要去的地方
- * 还差多远、路上挖了几格放了几格、问过什么、被拒了什么。没到的原因是错误的话,这里是它做到了哪。只有这一个类型:各处走路的活
+ * 还差多远、路上挖了几格放了几格、飞了多远(创造飞行)、问过什么、被拒了什么。没到的原因是错误的话,这里是它做到了哪。只有这一个类型:各处走路的活
  * 回执里说的就是这一份({@link Journey#walked}),路上的细账另在回执末尾的那一句里({@link NavText#journey})。
  */
 @Doc("The account of a walk: where it ended and what it did on the way.")
@@ -23,11 +23,18 @@ public record Walked(@Doc("Where you stand now (decimals).") Vec3 pos,
                              + "lists only the first few of each kind. Break them again with numen.work.dig to clear the "
                              + "way behind you.") List<BlockPos> placedAt,
                      @Doc("What your owner or the rules ruled about the cells it wanted to change on the way: asked and "
-                             + "allowed, asked and refused, refused outright.") List<Ruling> rulings) {
+                             + "allowed, asked and refused, refused outright.") List<Ruling> rulings,
+                     @Doc("Blocks it flew on the way (creative flight; a straight-line sum over the flying steps); 0 when it "
+                             + "only walked.") double flown,
+                     @Doc("Where it took off from the ground, in order.") List<BlockPos> tookOffAt,
+                     @Doc("Where it came down to the ground, in order.") List<BlockPos> landedAt,
+                     @Doc("You are still flying where you ended up: hovering in the air, not on the ground.") boolean flying) {
 
     public Walked {
         dugAt = List.copyOf(dugAt);
         placedAt = List.copyOf(placedAt);
         rulings = List.copyOf(rulings);
+        tookOffAt = List.copyOf(tookOffAt);
+        landedAt = List.copyOf(landedAt);
     }
 }

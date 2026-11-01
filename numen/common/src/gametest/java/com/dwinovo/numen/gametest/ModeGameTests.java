@@ -150,6 +150,8 @@ public class ModeGameTests {
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(7, 2, 7), true);
+        // 这条量的是免耗材的垫柱,不是飞出去:创造模式的身体许飞,飞比垫柱便宜,所以关掉飞行的能力
+        companion.getAbilities().mayfly = false;
         BlockPos target = helper.absolutePos(new BlockPos(14, 2, 14));
         TaskRecord<?> record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
