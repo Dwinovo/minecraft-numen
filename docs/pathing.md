@@ -252,7 +252,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)端口与她的鼠标(执行)读同一个 `Gate`;模型的走路只由它们决定能不能动哪一格(工具与任务里不另判),主人拒了的格这一趟里当墙归 `Trip` |
 | 15 | 代价与罚分 | `ActionCosts`、`RouteSpec` 出厂值、`NavSettings`、建造上下文各有常量;每类格子代价除"禁止"外从没计价;`noise` 没人读;斜向上不收跳罚;涉水罚只在两种动作里收 | 第 1 层 `CostModel`;物理耗时一律来自 `Kinematics`,`ActionCosts` 只留摔伤折价、危险、视线遮挡这类权衡 |
 | 16 | 到没到 ★ | `NavGoal` 与 `goals/Goal` 两族目标经 `GoalAdapter` 映射，`adjacent` 成员集不同;任务层另有 `reached`、`closeEnoughToSucceed`(按高度放宽到 `|dy|≤1`)、跟随按三维距离 | 第 2 层只留一族目标;模块里没有"差不多到了" |
-| 17 | 估价(疾跑底价 + 额外代价下界) | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 2 层 `Estimate` 把三样加起来,再加这一趟记忆里抬高的增量(`TripMemory`,第 54 行),沿旧路打折时同乘 `Favoring.floor`(估价对着没折扣的价钱,打折之后要同乘才仍是下界):疾跑底价是第 0 层 `Kinematics.pace`(`Pace`,水平每格疾跑一格)乘水平距离,每次搜索算一份传给 `Goal.estimate`;绕不开的挖掘(埋深)`Burial`,每格的最低价 `CostModel.digFloor`;升降的额外代价 `Vertical`(起跳间隔加起跳罚分、落脚的工夫都来自 `Kinematics` 与 `CostModel`;表问到哪一层才填到哪一层,快照里那一层所在的区段高度一带才读,`SearchView.forEachBlock(fromY, toY, …)`;目标交出的高度范围是 `Goal.heights`、终点格是 `Goal.endCells`,两个都没有默认实现,每种目标明确交代、没有固定终点的交 null,高度范围能从终点格推的用 `Goal.heightsOf`;挖、放一格、够着碰撞箱(`Goals.touch`)共用一份"够得着的格"几何 `Goals.cellsReaching` / `heightsReaching`,捡掉落物(`ItemReach`)的终点格与 `contains` 共用 `touches`);距离范围目标(`Goals.within`,中心是某一格、半径不超过 16 格)交出范围里的每一格作终点格,高度范围是中心高度上下各 `floor(max)` 层,没有它们估价里没有埋深与升降,往正下方的目标只剩水平的 0;权衡(`ActionCosts` 的 `*_BLOCKS`)只写格数,乘这具身体平走一格的刻数才是刻,见第十三节"挖掘时搜索铺开" |
+| 17 | 估价(疾跑底价 + 额外代价下界) | `NavGoal.COST_HEURISTIC` 常量与 `NavSettings.costHeuristic` 两份 | 第 2 层 `Estimate` 把三样加起来,再加这一趟记忆里抬高的增量(`TripMemory`,第 54 行),沿旧路打折时同乘 `Favoring.floor`(估价对着没折扣的价钱,打折之后要同乘才仍是下界):疾跑底价是第 0 层 `Kinematics.pace`(`Pace`,水平每格疾跑一格)乘水平距离,每次搜索算一份传给 `Goal.estimate`;绕不开的挖掘(埋深)`Burial`,每格的最低价 `CostModel.digFloor`;升降的额外代价 `Vertical`(起跳间隔加起跳罚分、落脚的工夫都来自 `Kinematics` 与 `CostModel`;表问到哪一层才填到哪一层,快照里只读问到的那几层(一个区段高度一带里读过的是连续一段,再问到外面时向那边长一倍),`SearchView.forEachBlock(fromY, toY, …)`;目标交出的高度范围是 `Goal.heights`、终点格是 `Goal.endCells`,两个都没有默认实现,每种目标明确交代、没有固定终点的交 null,高度范围能从终点格推的用 `Goal.heightsOf`;挖、放一格、够着碰撞箱(`Goals.touch`)共用一份"够得着的格"几何 `Goals.cellsReaching` / `heightsReaching`,捡掉落物(`ItemReach`)的终点格与 `contains` 共用 `touches`);距离范围目标(`Goals.within`,中心是某一格、半径不超过 16 格)交出范围里的每一格作终点格,高度范围是中心高度上下各 `floor(max)` 层,没有它们估价里没有埋深与升降,往正下方的目标只剩水平的 0;权衡(`ActionCosts` 的 `*_BLOCKS`)只写格数,乘这具身体平走一格的刻数才是刻,见第十三节"挖掘时搜索铺开" |
 | 18 | 卡没卡住 | 12 处:执行器 6 种、状态机 2 种、导航 2 种、各任务、脱困反射、建造表演、`GoToThenDoTask` | 第 3 层 `Watchdog`,对外交出"在推进"信号 |
 | 19 | 进度量尺 | 导航用估价，goto 用欧氏距离，挖矿用挪没挪 2 格 | 第 3 层 `Watchdog` |
 | 20 | 搜索预算 | 改动预算只在规划时核，A* 不知道，重算不再核 | 第 2 层 |
@@ -541,7 +541,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 - **摔落**:上限只在 `BodySnapshot.bears`——摔不疼的都行，要掉血的只到摔完还剩 6 点血;
   `RouteSpec.maxFallDamage`(愿意承受的摔伤,出厂 0)只能收紧它(`CostModel.bearsFall`),能跳多高由身体按摔伤公式换算(`BodySnapshot.maxDrop`):
   满血生存身体出厂是 3 格,创造模式不摔伤、不限。落进水里、抓住梯子不受上限;摔疼的按掉的血折价。
-- **搜索**:`AStar` 展开一个节点时，前提读"快照加上走到这个节点那一步的改动"(`EditedView.after`),刚挖开的格是空的、
+- **搜索**:`AStar` 展开一个节点时，前提读"快照加上走到这个节点那一步的改动"(搜索重用一份 `EditedView.Reusable` 装填),刚挖开的格是空的、
   刚垫的块托着脚。设了改动预算时节点按"位置 + 已改格数"区分，搜出来的路一定在预算内。停下的原因:`ARRIVED`、`EXHAUSTED`、
   `BUDGET`、`UNLOADED`、`STRANDED`(起点待不住)、`CANCELLED`;半程路线离起点超过 5 格才交出。目标格保护是
   `Goal.protection()`,并进规格的按位置禁令;换目标后在走的路还算不算数只问 `Goal.keepsStop`;旧路打折是 `Favoring`;
@@ -704,7 +704,7 @@ JVM 里成对交替跑、取每对耗时之比的中位数。这台机器上别�
 |---|---|---|
 | 接触检查不建哈希集合与列表,种类按位掩码、排除按整数掩码 | 0.98 / 0.93 / 0.97 / 1.03 / 0.94 | 留:许改有料与隧道有料快 7%、6%,每节点分配少 11%–25% |
 | 往下找落点整段跳过全空的区段 | 0.99 / 0.99 / 1.01 / 1.03 / 0.90 | 留:空中铺开的那一例快 10%,别处没变 |
-| 一次搜索里按格记住落脚、站姿、旁边伤不伤身(直接映射表 4096 槽) | 0.82 / 1.00 / 0.90 / 1.04 / 1.02 | 留:没叠改动的节点多的场景快 10%–18%;隧道里几乎每个节点都叠着挖掉的格,记不上。16384 槽不更快 |
+| 一次搜索里按格记住落脚、站姿、旁边伤不伤身(直接映射表,封顶 4096 槽,从 256 槽起步) | 0.82 / 1.00 / 0.90 / 1.04 / 1.02 | 留:没叠改动的节点多的场景快 10%–18%;隧道里几乎每个节点都叠着挖掉的格,记不上。16384 槽不更快 |
 | 草稿借用底下的改动表、没改动不建列表 | 0.97 / 1.00 / 0.99 / 0.99 / 0.99 | 撤:每节点分配少 3%–13%,耗时没变 |
 | 迈步要看的格全是全空或整块时按整块位图推导 | 0.96 / 1.05 / 1.02 / 0.94 / 0.96(同一版里开关对照两轮:0.95 / 0.96 / 0.95 / 0.89 / 0.96) | 留:整块多的隧道快 4%–11% |
 | 落脚、净空按格分全空、整块、别的形状两条路 | 1.00 / 1.00 / 0.99 / 0.99 / 1.02 | 没留:一次只看一两格,省不下什么 |

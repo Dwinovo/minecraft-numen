@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
@@ -266,6 +267,15 @@ public final class Faces {
         }
         Direction.Axis axis = face.getAxis();
         boolean positive = face.getAxisDirection() == Direction.AxisDirection.POSITIVE;
+        if (shape == Shapes.block()) {
+            // 整块的轮廓就是单位方块,面心在 (面所在的一格边界, 0.5, 0.5);不为它列盒子(搜索里每个垫、挖的候选都问)
+            double flat = positive ? 1.0 : 0.0;
+            return switch (axis) {
+                case X -> new Vec3(flat + block.getX(), 0.5 + block.getY(), 0.5 + block.getZ());
+                case Y -> new Vec3(0.5 + block.getX(), flat + block.getY(), 0.5 + block.getZ());
+                case Z -> new Vec3(0.5 + block.getX(), 0.5 + block.getY(), flat + block.getZ());
+            };
+        }
         double plane = positive ? shape.max(axis) : shape.min(axis);
         AABB best = null;
         double bestArea = -1;

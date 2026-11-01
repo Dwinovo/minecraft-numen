@@ -170,6 +170,25 @@ class RecallOverlayTest {
         }
     }
 
+    /** 表从小起步、顶掉的次数多了才翻倍:问过的格比起手的槽数多得多,答出来的仍是现算的数。 */
+    @Test
+    void aTableThatOutgrowsItsFirstSlotsStillAnswersWhatTheMeasureSays() {
+        Cached world = new Cached(new TestWorld());
+        int[] measured = {0};
+        Recall.HeightFact fact = new Recall.HeightFact((level, stats, x, y, z) -> {
+            measured[0]++;
+            return x * 31.0 + y * 7.0 + z;
+        }, new Recall.Reach(0, 0));
+        for (int round = 0; round < 3; round++) {
+            for (int x = 0; x < 64; x++) {
+                for (int z = 0; z < 64; z++) {
+                    assertEquals(x * 31.0 + Y * 7.0 + z, fact.at(world, body, x, Y, z));
+                }
+            }
+        }
+        assertTrue(measured[0] < 3 * 64 * 64, "问过的格有一部分取回了记下的结论,不是次次现算:" + measured[0]);
+    }
+
     private static TestWorld randomWorld(Random random) {
         TestWorld world = new TestWorld().floor(-RADIUS - 2, -RADIUS - 2, RADIUS + 2, RADIUS + 2, Y - 1);
         for (int x = -RADIUS; x <= RADIUS; x++) {
