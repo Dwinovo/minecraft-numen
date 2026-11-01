@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.drive;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls.Key;
@@ -88,6 +89,8 @@ public final class Driver {
     private int unsettled;
 
     private State state = State.RUNNING;
+    /** 正按着潜行往地上降:落地之后松开。 */
+    private boolean alighting;
     private Halt halt;
     /** 上一刻对外交出的"在推进":变了才记日志。 */
     private boolean moving = true;
@@ -282,6 +285,15 @@ public final class Driver {
             arrive(node);
             return;
         }
+        if (step == null && Snapshots.flying(body) && !course.current().kind().flight()) {
+            // 飞着的身体接下来走地面上的步子:先降到地上,落地原版就停飞
+            alight();
+            return;
+        }
+        if (alighting) {
+            alighting = false;
+            rig.keys.release(Key.SNEAK);
+        }
         if (step == null) {
             if (!trip.settled()) {
                 // 后面接什么还没定下来:不开始走末尾这几步,等接续段到了(或确认接不上)。末尾的步怎么走只由路线数据定,不由线程快慢定
@@ -302,7 +314,7 @@ public final class Driver {
                         diving.add(course.at(i));
                     }
                     step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, clear.fresh(), clear.model(),
-                            course.ahead(Continuation.TAIL - 1), diving, watchdog);
+                            course.ahead(Continuation.TAIL - 1), diving, watchdog, course.flightEnd());
                 }
             }
         }
@@ -324,7 +336,7 @@ public final class Driver {
     private BlockPos node() {
         ServerPlayer body = rig.entity;
         BodyStats stats = rig.snapshot().stats();
-        return Origin.of(rig.world(), stats, body.getX(), body.getY(), body.getZ()).orElse(null);
+        return Origin.of(rig.world(), stats, body.getX(), body.getY(), body.getZ(), Snapshots.flying(body)).orElse(null);
     }
 
     /**
@@ -377,7 +389,7 @@ public final class Driver {
                 }
                 for (int k = course.cur(); k < advanced.to(); k++) {
                     Maneuver walked = course.at(k);
-                    rig.ledger.stepped(walked.kind());
+                    rig.ledger.stepped(walked);
                     rig.journal.walked(course.costAt(k));
                     if (step != null) {
                         rig.journal.timed(walked.kind(), watchdog.stepTicks() * course.minimumAt(k) / shortest, course.minimumAt(k));
@@ -421,6 +433,7 @@ public final class Driver {
             case GROUND -> body.onGround();
             case CLIMBING -> body.onClimbable();
             case SWIMMING -> body.isInWater();
+            case FLYING -> Snapshots.flying(body);
         };
     }
 
@@ -432,29 +445,37 @@ public final class Driver {
         BlockPos end = course.end();
         Stance endStance = course.endStance();
         step = null;
-        if (passing && node != null && Arrival.passes(trip.goal(), rig.world(), rig.snapshot().stats(), node)) {
+        boolean flying = Snapshots.flying(body);
+        if (passing && node != null && Arrival.passes(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying)) {
             PathLog.debug("{} 路过 {},不停", rig.who, PathLog.pos(node));
             state = State.ARRIVED;
             return;
         }
-        rig.keys.release(Key.SPRINT);
-        rig.keys.release(Key.JUMP);
-        rig.keys.set(Key.SNEAK, endStance.kind() == Stance.Kind.CLIMBING);
-        if (endStance.kind() == Stance.Kind.SWIMMING && body.getY() < end.getY() + Control.FLOAT) {
-            rig.keys.press(Key.JUMP);
+        boolean still;
+        if (endStance.kind() == Stance.Kind.FLYING) {
+            // 飞着收场:停在终点那一格的上空;空中没有地面可以靠,键一直管着高度与水平
+            still = Aloft.hold(rig, end);
+        } else {
+            rig.keys.release(Key.SPRINT);
+            rig.keys.release(Key.JUMP);
+            rig.keys.set(Key.SNEAK, endStance.kind() == Stance.Kind.CLIMBING);
+            if (endStance.kind() == Stance.Kind.SWIMMING && body.getY() < end.getY() + Control.FLOAT) {
+                rig.keys.press(Key.JUMP);
+            }
+            Vec3 c = Control.center(end);
+            still = Steering.stop(rig, c.x, c.z, endStance.feetY())
+                    || Math.sqrt(horizontalSpeedSqr()) < Control.STILL && distanceSqr(c) < 0.3 * 0.3;
         }
-        Vec3 c = Control.center(end);
-        boolean still = Steering.stop(rig, c.x, c.z, endStance.feetY())
-                || Math.sqrt(horizontalSpeedSqr()) < Control.STILL && distanceSqr(c) < 0.3 * 0.3;
         watchdog.observe(body.position(), false);
         if (!still || node == null || !settled(endStance.kind())) {
-            if (node != null && !node.equals(end) && settled(Stance.Kind.GROUND) && tracker.strays()) {
+            if (node != null && !node.equals(end) && (settled(Stance.Kind.GROUND) || endStance.kind() == Stance.Kind.FLYING && settled(Stance.Kind.FLYING))
+                    && tracker.strays()) {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
                 missedEnd(rig.who + " 没停在终点 " + PathLog.pos(end) + ",落在 " + PathLog.pos(node));
             }
             return;
         }
-        switch (Arrival.judge(trip.goal(), rig.world(), rig.snapshot().stats(), node, body.getEyePosition(), body.blockInteractionRange())) {
+        switch (Arrival.judge(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying, body.getEyePosition(), body.blockInteractionRange())) {
             case Arrival.Verdict.Replan replan -> {
                 if (!node.equals(end)) {
                     if (++unsettled <= SETTLE_TICKS) {
@@ -556,6 +577,14 @@ public final class Driver {
         afterDiscard();
     }
 
+    /** 飞着的身体要落到地上:停住移动,按住潜行往下降。 */
+    private void alight() {
+        hold();
+        alighting = true;
+        rig.keys.press(Key.SNEAK);
+        watchdog.waiting(rig.entity.position());
+    }
+
     private void hold() {
         rig.keys.release(Key.FORWARD);
         rig.keys.release(Key.BACK);
@@ -599,7 +628,8 @@ public final class Driver {
         @Override
         public Trip.Standing standing() {
             BlockPos node = node();
-            Stance here = node == null ? null : Stance.at(rig.world(), rig.snapshot().stats(), node);
+            Stance here = node == null ? null
+                    : Stance.at(rig.world(), rig.snapshot().stats(), node, Snapshots.flying(rig.entity));
             return here != null && settled(here.kind()) ? new Trip.Standing(node, here) : null;
         }
 

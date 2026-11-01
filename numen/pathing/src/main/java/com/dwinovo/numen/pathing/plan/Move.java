@@ -12,6 +12,14 @@ public interface Move {
 
     MoveKind kind();
 
+    /**
+     * 这种走法能不能从以 {@code stance} 待着的节点出发:飞着的身体只用飞行的走法,别的走法一律从站着、攀着、浮着出发。搜索展开节点、
+     * 找被拒的步子时先问它;飞行的走法覆写它。
+     */
+    default boolean departsFrom(Stance stance) {
+        return stance.kind() != Stance.Kind.FLYING;
+    }
+
     /** 这种走法从一个节点出发可以朝哪些方向。 */
     List<Heading> headings();
 

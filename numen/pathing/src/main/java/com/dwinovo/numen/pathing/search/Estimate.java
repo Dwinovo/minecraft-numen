@@ -8,7 +8,7 @@ import net.minecraft.core.BlockPos;
 /**
  * 一次搜索的估价:节点走到目标至少还要多少刻。全模块只在这里把三样加起来,每一样都是下界,所以估价不高过任何一条路线的真实代价:
  * <ul>
- *   <li>水平价:目标自己的直线疾跑下界({@link Goal#estimate});</li>
+ *   <li>水平价:目标自己的直线疾跑下界({@link Goal#estimate});身体许飞时每格取疾飞与疾跑里更快的({@link Kinematics.Pace#withFlight});</li>
  *   <li>挖开的额外代价:路上绕不开要挖掉的格至少多少钱({@link Burial});</li>
  *   <li>升降的额外代价:要升降几个节点,每个至少比水平底价多花多少({@link Vertical})。</li>
  * </ul>
@@ -37,7 +37,11 @@ final class Estimate {
     /** 这次搜索的估价:在 {@code view} 上按 {@code model} 的身体与规格,从 {@code start} 往 {@code goal};埋深最多定下 {@code cap} 格。 */
     static Estimate of(SearchView view, CostModel model, Goal goal, BlockPos start, int cap, TripMemory.Frozen memory,
                        double scale) {
-        return new Estimate(goal, Kinematics.pace(model.body().stats()), Burial.of(view, model, goal, start, cap), Vertical.of(view, model, goal), memory, scale);
+        Kinematics.Pace pace = Kinematics.pace(model.body().stats());
+        if (model.body().mobility().mayFly()) {
+            pace = pace.withFlight(model.body().mobility().flyingSpeed());
+        }
+        return new Estimate(goal, pace, Burial.of(view, model, goal, start, cap), Vertical.of(view, model, goal), memory, scale);
     }
 
     /** 脚在节点 {@code (x, y, z)} 的身体走到目标至少还要多少刻。 */

@@ -30,20 +30,21 @@ final class Arrival {
 
     private Arrival() {}
 
-    /** 路过的导航:身体走到 {@code node}、它就在目标里,就算到了。 */
-    static boolean passes(Goal goal, WorldView world, BodyStats stats, BlockPos node) {
-        Stance passed = Stance.at(world, stats, node);
+    /** 路过的导航:身体({@code flying}:飞着)走到 {@code node}、它就在目标里,就算到了。 */
+    static boolean passes(Goal goal, WorldView world, BodyStats stats, BlockPos node, boolean flying) {
+        Stance passed = Stance.at(world, stats, node, flying);
         return passed != null && goal.contains(node.getX(), node.getY(), node.getZ(), passed);
     }
 
     /**
      * 身体在 {@code node} 停稳了:按目标自己的判定下结论。
      *
+     * @param flying 身体此刻飞着:空中的格也待得住
      * @param eye   眼睛此刻的位置
      * @param reach 交互距离
      */
-    static Verdict judge(Goal goal, WorldView world, BodyStats stats, BlockPos node, Vec3 eye, double reach) {
-        Stance here = Stance.at(world, stats, node);
+    static Verdict judge(Goal goal, WorldView world, BodyStats stats, BlockPos node, boolean flying, Vec3 eye, double reach) {
+        Stance here = Stance.at(world, stats, node, flying);
         if (here == null || !goal.contains(node.getX(), node.getY(), node.getZ(), here)) {
             return new Verdict.Replan("停在终点 " + PathLog.pos(node) + " 却不在目标 " + goal + " 里");
         }

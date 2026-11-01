@@ -171,7 +171,8 @@ public final class AStar {
         SearchView view = search.view();
         BlockPos startPos = search.start();
         Maneuver arrival = search.arrival();
-        Stance startStance = arrival != null ? arrival.landing() : Stance.at(view, body, startPos);
+        Stance startStance = arrival != null ? arrival.landing()
+                : Stance.at(view, body, startPos, model.body().mobility().flying());
         if (startStance == null) {
             return new SearchResult(SearchResult.Stop.STRANDED, null, 0, false, Double.NaN, null, null, checks);
         }
@@ -285,6 +286,9 @@ public final class AStar {
         quick.begin(cx, cy, cz, stance, here, done);
         for (int mi = 0; mi < moves.size(); mi++) {
             Move move = moves.get(mi);
+            if (!move.departsFrom(stance)) {
+                continue;
+            }
             List<Heading> headings = move.headings();
             for (int hi = 0; hi < headings.size(); hi++) {
                 int verdict = move.quick(quick, headings.get(hi));
@@ -551,6 +555,9 @@ public final class AStar {
         SearchResult.Blocking best = null;
         double bestEstimate = Double.POSITIVE_INFINITY;
         for (Move move : moves) {
+            if (!move.departsFrom(nodes.stance[closest])) {
+                continue;
+            }
             for (Heading heading : move.headings()) {
                 double toward = estimate.base(from.getX() + heading.dx(), from.getY() + heading.dy(), from.getZ() + heading.dz());
                 if (!(toward < now) || toward >= bestEstimate) {

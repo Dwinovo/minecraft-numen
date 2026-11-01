@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.drive;
 import java.util.ArrayList;
 import java.util.List;
 import com.dwinovo.numen.pathing.plan.Maneuver;
+import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Route;
 
@@ -90,6 +91,26 @@ public final class Course {
     /** 正在走的那一步。 */
     Maneuver current() {
         return at(cur);
+    }
+
+    /**
+     * 从正在走的这一步起,连着飞的这一段收在哪一格:起飞、飞、降落连着的步子里最后一步的落点(降落到地上就收在那里,飞着就收在最后一格)。
+     * 这一步不在飞、或这一段飞到路线末尾而路线还没搜完(后面接着飞多远还不知道)为 null。
+     */
+    BlockPos flightEnd() {
+        BlockPos end = null;
+        int i = cur;
+        for (; i < legs.size(); i++) {
+            Maneuver m = at(i);
+            if (!m.kind().flight()) {
+                break;
+            }
+            end = m.to();
+            if (m.kind() == MoveKind.LAND) {
+                return end;
+            }
+        }
+        return i == legs.size() && !complete ? null : end;
     }
 
     /** 紧接着正在走的那一步往后的 {@code count} 步(不够就是剩下的),按先后。 */

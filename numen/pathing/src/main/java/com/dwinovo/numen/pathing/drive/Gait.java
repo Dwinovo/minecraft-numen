@@ -79,7 +79,7 @@ final class Gait {
         return switch (m.kind()) {
             case PARKOUR -> true;
             case WALK, DIAGONAL, ASCEND, DESCEND -> m.runnable() && flanked(level, body, before, m, after);
-            case FALL, PILLAR, DOWNWARD, CLIMB, SWIM -> false;
+            case FALL, PILLAR, DOWNWARD, CLIMB, SWIM, TAKEOFF, FLY, LAND -> false;
         };
     }
 
@@ -102,7 +102,7 @@ final class Gait {
                     && (onward != null && onward.flows() || Kinematics.stopDistance(body, speed) <= room(level, body, next)
                             || wallAhead(level, body, next));
             case DESCEND, FALL, PARKOUR -> true;
-            case PILLAR, DOWNWARD, CLIMB, SWIM -> false;
+            case PILLAR, DOWNWARD, CLIMB, SWIM, TAKEOFF, FLY, LAND -> false;
         };
         if (!flat) {
             return false;

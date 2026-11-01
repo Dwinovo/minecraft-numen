@@ -60,7 +60,7 @@ final class Lookahead {
                 Maneuver planned = course.at(i);
                 BlockPos from = planned.from();
                 if (first == null) {
-                    stance = Stance.at(view, model.body().stats(), from);
+                    stance = Stance.at(view, model.body().stats(), from, model.body().mobility().flying());
                 }
                 judged++;
                 Premise premise = stance == null ? Premise.fail(from, Reason.NOT_STANDING)

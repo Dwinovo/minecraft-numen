@@ -385,6 +385,51 @@ public final class Kinematics {
         return 1 / flyClimb(flyingSpeed);
     }
 
+    /** 从地面起飞的按键:按、松、按,连按两下跳(原版 {@code Controls.DOUBLE_TAP} 之内),第三刻切成飞行。 */
+    public static final int TAKEOFF_TAPS = 3;
+
+    /**
+     * 从静止起一直疾飞,逐刻比稳态速度慢掉的那部分合起来是几刻:起飞之后加速到巡航的损失。按步进器({@link #fly})逐刻推到追上稳态。
+     */
+    public static double flyLaunchLoss(float flyingSpeed) {
+        return LAUNCH_LOSS.computeIfAbsent(flyingSpeed, Kinematics::launchLoss);
+    }
+
+    /** 飞行速度各不相同的身体很少,算过的记下:定价每展开一个节点都要问。 */
+    private static final java.util.Map<Float, Double> LAUNCH_LOSS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Float, Double> STOP_LOSS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static double launchLoss(float flyingSpeed) {
+        double cruise = flySpeed(flyingSpeed, true);
+        Keys cruising = new Keys(1, 0, false, false, true, 0, 0, false);
+        Motion m = new Motion(Vec3.ZERO, Vec3.ZERO);
+        double lost = 0;
+        for (int i = 0; i < 400; i++) {
+            Motion next = fly(m, cruising, flyingSpeed);
+            double moved = next.pos().z - m.pos().z;
+            if (moved >= cruise * 0.999) {
+                break;
+            }
+            lost += 1 - moved / cruise;
+            m = next;
+        }
+        return lost;
+    }
+
+    /** 起飞要几刻:连按两下跳,加上起飞之后加速到巡航的损失({@link #flyLaunchLoss})。 */
+    public static double takeoffTicks(float flyingSpeed) {
+        return TAKEOFF_TAPS + flyLaunchLoss(flyingSpeed);
+    }
+
+    /**
+     * 飞着竖直方向这一刻按 {@code lift}(1 是跳、-1 是潜行、0 是松着)之后,脚最终停在比现在高多少:这一刻挪的是竖直速度 {@code vy} 加上按键的 ±3 × 飞行速度,
+     * 之后每刻只剩六成。
+     */
+    public static double flyRise(float flyingSpeed, double vy, int lift) {
+        double moving = vy + (lift == 0 ? 0.0 : (double) ((float) lift * flyingSpeed * FLY_LIFT));
+        return moving / (1 - FLY_VERTICAL_DRAG);
+    }
+
     /**
      * 飞着以水平 {@code speed}(格每刻)冲着,要停下:每刻按住后退键(平飞的加速度,没有疾跑加成)直到速度被抵到零,再松开。
      * 交出这样停下花的刻数与滑出的距离(格);停车的控制器与定价读的是同一份。
@@ -404,6 +449,14 @@ public final class Kinematics {
             v = moving * FLY_DRAG;
         }
         return new Stop(ticks, distance);
+    }
+
+    /** 从疾飞的巡航速度停下,比一路巡航滑完这段距离多花几刻:降落停在落点上要付的。 */
+    public static double flyStopLoss(float flyingSpeed) {
+        return STOP_LOSS.computeIfAbsent(flyingSpeed, speed -> {
+            double cruise = flySpeed(speed, true);
+            return flyStop(speed, cruise).lost(cruise);
+        });
     }
 
     /** 停下花的刻数与滑出的距离(格)。 */
@@ -491,7 +544,13 @@ public final class Kinematics {
      * @param walk   平地走一格(权衡以它为单位,不进估价)
      * @param sprint 水平每格:各种走法里最快的,疾跑一格
      */
-    public record Pace(double walk, double sprint) {}
+    public record Pace(double walk, double sprint) {
+
+        /** 身体能飞({@code flyingSpeed} 是能力里的飞行速度)时,水平每格取疾飞与疾跑里更快的那个;下界仍是下界。 */
+        public Pace withFlight(float flyingSpeed) {
+            return new Pace(walk, Math.min(sprint, flyTicksPerBlock(flyingSpeed)));
+        }
+    }
 
     /**
      * 这具身体的估价底价。水平每格取疾跑一格({@link #sprintTicksPerBlock}):平走、潜行、涉水、疾跑跳、爬梯子的水平耗时都不比它短;

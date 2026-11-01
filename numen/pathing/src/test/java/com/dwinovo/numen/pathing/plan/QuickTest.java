@@ -218,6 +218,8 @@ class QuickTest {
                 () -> List.of(new Threat(ox + 0.5, Y + 0.5, oz + 0.5, 3.0)))));
         out.add(new Setup("创造模式", CostModel.of(none, Fixtures.body(Vanilla.CREATIVE, GameType.CREATIVE, 20, List.of()),
                 Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, com.dwinovo.numen.pathing.plan.Threats.NONE)));
+        out.add(new Setup("许飞的身体", CostModel.of(none, Fixtures.flier(false), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
+                com.dwinovo.numen.pathing.plan.Threats.NONE)));
         out.add(new Setup("血量低", CostModel.of(none, Fixtures.body(7), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 com.dwinovo.numen.pathing.plan.Threats.NONE)));
         out.add(new Setup("带水桶", CostModel.of(natural, Fixtures.carrying(0, new ItemStack(net.minecraft.world.item.Items.WATER_BUCKET)),

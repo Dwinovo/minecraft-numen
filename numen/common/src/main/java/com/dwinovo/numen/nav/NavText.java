@@ -188,6 +188,9 @@ public final class NavText {
             case DOWNWARD -> "digging down";
             case CLIMB -> "climbing";
             case SWIM -> "swimming";
+            case TAKEOFF -> "taking off";
+            case FLY -> "flying";
+            case LAND -> "landing";
         };
     }
 

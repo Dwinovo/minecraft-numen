@@ -79,7 +79,12 @@ public final class Snapshots {
         if (body.getOffhandItem().is(Items.FIREWORK_ROCKET)) {
             fireworks += body.getOffhandItem().getCount();
         }
-        return new Mobility(abilities.mayfly, abilities.flying, abilities.getFlyingSpeed(), gliderLife, fireworks);
+        return new Mobility(abilities.mayfly, flying(body), abilities.getFlyingSpeed(), gliderLife, fireworks);
+    }
+
+    /** 身体此刻在不在飞(创造飞行):快照里的 {@link Mobility#flying} 与执行时每刻问的是这一处。 */
+    public static boolean flying(ServerPlayer body) {
+        return body.getAbilities().flying;
     }
 
     /** 在水里游一格要几刻:规划给水里一步定价用的同一个数({@link Kinematics#wadeTicksPerBlock})。 */
