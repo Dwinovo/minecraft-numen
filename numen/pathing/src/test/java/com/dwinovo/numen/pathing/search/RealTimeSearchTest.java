@@ -171,7 +171,7 @@ class RealTimeSearchTest {
                     to[e] = edges.get(e)[1];
                     cost[e] = 1;
                 }
-                double[] raised = Learning.raise(expanded, hs, size, from, to, cost, edges.size());
+                double[] raised = Learning.raise(expanded, expanded, hs, size, from, to, cost, edges.size());
                 for (int n = 0; n < size; n++) {
                     h[cell.get(n)] = raised[n];
                 }
