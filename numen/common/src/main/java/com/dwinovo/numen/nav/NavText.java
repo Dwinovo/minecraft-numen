@@ -245,16 +245,17 @@ public final class NavText {
     // ==================== 实际账与身体动作 ====================
 
     /**
-     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水;什么都没有是空串。
+     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水,飞了多远;什么都没有是空串。
      * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
      * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
-     * 60/300.}
+     * 60/300. I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).}
      */
     public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions, List<DiveLog.Dive> dives,
-                                 List<Ruling> rulings) {
+                                 List<Ruling> rulings, Flights flights) {
         String edits = edits(entries);
         String done = actions(actions);
         String under = dives(dives);
+        String flight = flight(flights);
         String refused = refusals(rulings);
         StringBuilder sb = new StringBuilder();
         if (!edits.isEmpty()) {
@@ -266,10 +267,59 @@ public final class NavText {
         if (!under.isEmpty()) {
             sb.append(sb.length() > 0 ? " " : "").append(under);
         }
+        if (!flight.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(flight);
+        }
         if (!refused.isEmpty()) {
             sb.append(sb.length() > 0 ? " " : "").append(refused);
         }
         return sb.toString();
+    }
+
+    /**
+     * 路上飞过的(创造飞行):飞了多远、从哪儿起飞、在哪儿降落,收场时还在空中就说还在飞。没飞过且没在飞是空串。例如
+     * {@code I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).} 或
+     * {@code I flew 12 blocks (took off at 1,64,5). I am still flying, hovering in the air.}
+     */
+    static String flight(Flights flights) {
+        StringBuilder sb = new StringBuilder();
+        if (flights.blocks() >= 0.5) {
+            long flown = Math.round(flights.blocks());
+            sb.append("I flew ").append(flown).append(flown == 1 ? " block" : " blocks");
+            List<String> where = new ArrayList<>();
+            if (!flights.launches().isEmpty()) {
+                where.add("took off at " + coordsList(flights.launches()));
+            }
+            if (!flights.landings().isEmpty()) {
+                where.add("landed at " + coordsList(flights.landings()));
+            }
+            if (!where.isEmpty()) {
+                sb.append(" (").append(String.join("; ", where)).append(')');
+            }
+            sb.append('.');
+        }
+        if (flights.flying()) {
+            sb.append(sb.length() > 0 ? " " : "").append("I am still flying, hovering in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞。
+     */
+    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying) {
+
+        /** 没飞过、也没在飞。 */
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false);
+
+        public Flights {
+            launches = List.copyOf(launches);
+            landings = List.copyOf(landings);
+        }
+    }
+
+    private static String coordsList(List<BlockPos> cells) {
+        return String.join(", ", cells.stream().map(Listing::coords).toList());
     }
 
     /**

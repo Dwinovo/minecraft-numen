@@ -68,10 +68,10 @@ class NavTextTest {
                 new BodyAction.Held(new ItemStack(Items.COBBLESTONE), 3, 3));
         assertEquals("En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone"
                 + " (121,64,-33). I also switched to cobblestone in my hotbar (2 times).",
-                NavText.journey(entries, actions, List.of(), List.of()));
-        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of()), "什么都没做就什么都不说");
+                NavText.journey(entries, actions, List.of(), List.of(), NavText.Flights.NONE));
+        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), NavText.Flights.NONE), "什么都没做就什么都不说");
         assertEquals("En route I took a stack of dirt from the creative inventory.",
-                NavText.journey(List.of(), List.of(new BodyAction.Conjured(Items.DIRT, 0)), List.of(), List.of()), "只有身体动作也要说");
+                NavText.journey(List.of(), List.of(new BodyAction.Conjured(Items.DIRT, 0)), List.of(), List.of(), NavText.Flights.NONE), "只有身体动作也要说");
     }
 
     @Test
@@ -79,7 +79,7 @@ class NavTextTest {
         BlockState water = Blocks.WATER.defaultBlockState();
         BlockState air = Blocks.AIR.defaultBlockState();
         String said = NavText.journey(List.of(new EditLedger.Placed(C, air, water),
-                new EditLedger.Placed(C, water, air)), List.of(), List.of(), List.of());
+                new EditLedger.Placed(C, water, air)), List.of(), List.of(), List.of(), NavText.Flights.NONE);
         assertTrue(said.contains("pour 1 water (121,64,-33) to break a fall")
                 && said.contains("scoop 1 water (121,64,-33) back"), said);
     }
@@ -121,7 +121,7 @@ class NavTextTest {
                 Ruling.refusedByRules(A, "oak_planks", "placed by a player"),
                 new Ruling(B, "break stone", true, "your owner"));
         assertEquals("Refused on the way: change oak_planks at 120,64,-33 (the rules: placed by a player).",
-                NavText.journey(List.of(), List.of(), List.of(), rulings));
+                NavText.journey(List.of(), List.of(), List.of(), rulings, NavText.Flights.NONE));
     }
 
     @Test
@@ -144,7 +144,7 @@ class NavTextTest {
     @Test
     void puttingAwayWhatWasInHandIsToldAsSuch() {
         assertEquals("En route I put away what was in my hand.",
-                NavText.journey(List.of(), List.of(new BodyAction.Held(ItemStack.EMPTY, 8, 8)), List.of(), List.of()));
+                NavText.journey(List.of(), List.of(new BodyAction.Held(ItemStack.EMPTY, 8, 8)), List.of(), List.of(), NavText.Flights.NONE));
     }
 
     /** 路上潜过的水照实说:几段,憋得最久的那一段从哪儿到哪儿、憋了几秒、氧气最低到多少;跟在改动与身体动作后面。 */
@@ -152,11 +152,23 @@ class NavTextTest {
     void theDivesOnTheWayAreToldWithTheLongestHold() {
         List<DiveLog.Dive> dives = List.of(new DiveLog.Dive(A, B, 30, 270, 300), new DiveLog.Dive(B, C, 245, 55, 300));
         assertEquals("I went under water 2 times; the longest: 12 s without a breath from 120,65,-33 to 121,64,-33,"
-                + " air down to 55/300.", NavText.journey(List.of(), List.of(), dives, List.of()));
+                + " air down to 55/300.", NavText.journey(List.of(), List.of(), dives, List.of(), NavText.Flights.NONE));
         String both = NavText.journey(List.of(new EditLedger.Dug(A, planks())), List.of(),
-                List.of(new DiveLog.Dive(A, C, 10, 290, 300)), List.of());
+                List.of(new DiveLog.Dive(A, C, 10, 290, 300)), List.of(), NavText.Flights.NONE);
         assertEquals("En route I had to break 1 oak_planks (120,64,-33). I went under water once: under 1 s without a"
                 + " breath from 120,64,-33 to 121,64,-33, air down to 290/300.", both);
+    }
+
+    /** 路上飞过的照实说:飞了多远、从哪儿起飞、在哪儿降落;收场时还在空中就说还在飞(悬着);没飞过也没在飞什么都不说。 */
+    @Test
+    void theFlightOnTheWayIsToldWithWhereItStartedAndEnded() {
+        assertEquals("I flew 31 blocks (took off at 120,65,-33; landed at 121,64,-33).", NavText.journey(List.of(), List.of(),
+                List.of(), List.of(), new NavText.Flights(30.6, List.of(A.above()), List.of(C), false)));
+        assertEquals("I flew 12 blocks (took off at 120,65,-33). I am still flying, hovering in the air.", NavText.journey(List.of(),
+                List.of(), List.of(), List.of(), new NavText.Flights(12.2, List.of(A.above()), List.of(), true)));
+        assertEquals("I am still flying, hovering in the air.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
+                new NavText.Flights(0, List.of(), List.of(), true)), "起飞前就在飞、一格没飞也要说还在飞");
+        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false)));
     }
 
     /** 憋不住气的结局:说出那一段水下在哪、要憋多久、此刻能安全憋多久,以及换成有水下呼吸就走得了;归到危险一类。 */
