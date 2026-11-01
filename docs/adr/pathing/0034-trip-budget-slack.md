@@ -91,3 +91,22 @@
   - **第二步没有换来东西**:到达少了、封存评测里 `maneuver` 重判与展开时不一致而崩溃(快判断成立、重判 `NO_FOOTING`,疑似父节点换了更便宜的到达路径后姿态变了,子节点是按旧姿态展开的)。
     内存没有测:上次的探针类与现在的 `Reference.solve` 签名对不上。
   - 第一步的评测中性,不值得换掉一个保证;`Lookahead` 的叠加同样没动。
+
+## 试过不收:半程按 Baritone 系数表挑
+
+想法:把 0032 的 `g + 5·h` 换成 Baritone 的做法。核对 `AbstractNodeCostSearch`/`AStarPathFinder`:`COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10}`,每个系数 c 记住使 `h + g/c`(等价于 `g + c·h`)最小的节点;交半程时**按系数从小到大取第一个离起点超过 5 格的**,不是取大系数(0032 当时的说法有误,已更正)。系数小偏向总价、路线稳,大的偏向离目标近;能稳就不冒险。
+
+落地:`HandOver` 按同一串系数各取边界上 `g + c·h` 最小的节点(憋着气的不当去处,平手取离目标近的,重复的节点只留第一次),依次取走到它的路线截得出一截的头一个;"够远"沿用 `MIN_PARTIAL`,`TRIES` 与 `g + 5·h` 删掉,不并存。
+
+评测(v2,计数时钟,出厂规格,与 c2aeb2458 同一机器顺序跑;规格 A 的到达与放弃不变,差在规格 B):
+
+| | dev | 封存 |
+|---|---|---|
+| B 到达 | 314 → 310 | 净 −5(丢 9、得 4) |
+| B short / medium / long 成功率 | 100.0→99.2 / 95.9→93.9 / 94.3→93.4 | 100.0→99.3 / 93.7→93.1 / 97.2→95.1 |
+
+- dev 丢 5(forest-long-022、hills-long-039、hills-medium-011、hills-medium-018、mountains-short-018,都停在 `searched:budget`),得 1(water-long-026)。
+- 封存丢 9(caves-long-001、forest-long-007、forest-medium-017、hills-medium-007、mixed-long-026、mixed-short-028、mountains-long-018、water-medium-005、water-medium-028),得 4(caves-medium-009、forest-medium-031、mixed-long-002、mixed-medium-039)。
+- 起步中位与 p99 不变;dev 单次最长思考 p99:B short 489 → 2260 ms、A short 980 → 1390 ms;展开数 p99:B short 9.0 万 → 35.5 万(dev)、B long 75 万 → 82.8 万(封存)。
+
+不收:到达两边都少,最长思考与展开数在个别格变差。推测原因:我们的边界是惰性搜索按 `g + 2.5·h` 排开放集后留下的没展开节点,小系数在它上面选出的是总价小、离起点近的那批,截出来要么太近、要么朝目标推进很少,接续反复花预算;Baritone 的边界是在各系数下分别扫出来的(每个系数各有自己的 bestSoFar),与我们的边界不是一回事,做法不能直接套。这是推测,没有单独验证。固定系数 5 仍按 0032。
