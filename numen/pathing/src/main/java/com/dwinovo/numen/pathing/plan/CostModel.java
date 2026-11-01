@@ -458,7 +458,7 @@ public final class CostModel {
             cost += extra(Use.PASS, cells[i]);
         }
         if (exposure != 0) {
-            cost += exposure * ActionCosts.EXPOSED_SIDE_BLOCKS * Kinematics.walkTicksPerBlock(body.stats());
+            cost += exposure * spec.exposurePenalty() * Kinematics.walkTicksPerBlock(body.stats());
         }
         if (standing) {
             cost += extra(Use.STAND, support);

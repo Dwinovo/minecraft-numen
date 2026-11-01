@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.benchmark;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.EnumMap;
@@ -13,15 +14,40 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import net.minecraft.core.BlockPos;
+import com.dwinovo.numen.pathing.TestWorld;
+import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.plan.Stance;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
+
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /** 收题的判据:题只收各适用规格下的答案都有定论(最优或区域内无解)的,拒绝按理由的先后次序说最靠前的一个;一档收完的收获写下来、读回来一样(续跑靠它)。 */
 class GenerateTest {
 
+    @BeforeAll
+    static void boot() {
+        Vanilla.boot();
+    }
+
     private static Reference.Solved solved(Answers.Status status) {
-        return new Reference.Solved(status, Double.NaN, 0, 0);
+        return new Reference.Solved(status, Double.NaN, 0, 0, 0, 0);
+    }
+
+    /** 起终点只挑身体碰不到排除种类的格:站在岩浆里(脚下是实心,几何上托得住)、脚边的头格是火,都不是合格的起终点。 */
+    @Test
+    void aStartMustNotTouchAnExcludedCell() {
+        TestWorld world = new TestWorld().floor(0, 0, 8, 8, 63);
+        world.set(2, 64, 2, Blocks.LAVA.defaultBlockState()).set(2, 65, 2, Blocks.LAVA.defaultBlockState());
+        world.set(4, 65, 4, Blocks.FIRE.defaultBlockState());
+        world.set(6, 63, 6, Blocks.MAGMA_BLOCK.defaultBlockState());
+        assertTrue(Generate.clean(world, 0, 0, Stance.at(world, Spec.STATS, 0, 64, 0)), "平地上的一格");
+        assertFalse(Generate.clean(world, 2, 2, Stance.at(world, Spec.STATS, 2, 64, 2)), "站在岩浆里");
+        assertFalse(Generate.clean(world, 4, 4, Stance.at(world, Spec.STATS, 4, 64, 4)), "头格是火");
+        assertFalse(Generate.clean(world, 6, 6, Stance.at(world, Spec.STATS, 6, 64, 6)), "脚踩岩浆块");
+        assertFalse(Generate.clean(world, 1, 1, null), "待不住的不算");
     }
 
     @Test
@@ -38,7 +64,7 @@ class GenerateTest {
     void aFinishedBucketReadsBackExactlyAsWritten() {
         Problem p = new Problem("hills-short-001", "hills", Problem.Bucket.SHORT, 20.5, new BlockPos(1, 2, 3), Problem.GoalType.AT, new BlockPos(4, 5, 6), 0,
                 Problem.EndClass.SURFACE, Problem.split("hills-short-001"), List.of(Problem.Tag.ROUGH));
-        Answers.Answer a = new Answers.Answer("hills-short-001", Spec.A, Answers.Status.OPTIMAL, 123.456, 789, 100.5);
+        Answers.Answer a = new Answers.Answer("hills-short-001", Spec.A, Answers.Status.OPTIMAL, 123.456, 3, 2, 789, 100.5);
         Map<Generate.Reject, Integer> rejected = new EnumMap<>(Generate.Reject.class);
         rejected.put(Generate.Reject.PLAIN_WALK, 7);
         rejected.put(Generate.Reject.TOO_HARD, 3);
@@ -48,6 +74,8 @@ class GenerateTest {
         assertEquals(unit.problems().get(0).to(), back.problems().get(0).to());
         assertEquals(a.key(), back.answers().get(0).key());
         assertEquals(a.cost(), back.answers().get(0).cost(), 1e-9);
+        assertEquals(3, back.answers().get(0).dug());
+        assertEquals(2, back.answers().get(0).placed());
         assertEquals(31, back.candidates());
         assertEquals(7, back.rejected().get(Generate.Reject.PLAIN_WALK));
         assertEquals(0, back.rejected().get(Generate.Reject.BEYOND_REGION), "没写的理由读回是 0");

@@ -1,13 +1,16 @@
 package com.dwinovo.numen.pathing.benchmark;
 
 import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.AStar;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.Search;
 import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.search.SearchView;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import net.minecraft.core.BlockPos;
@@ -36,10 +39,12 @@ final class Reference {
     /**
      * 求解的结论。
      *
-     * @param expanded      权重 1 那一遍展开的节点数(这道题的难度);用完上限就是上限
+     * @param dug           路线上挖了几格;不是最优或已知最好时为 0
+ * @param placed        路线上放了几块;同上
+ * @param expanded      权重 1 那一遍展开的节点数(这道题的难度);用完上限就是上限
      * @param startEstimate 起点的估价
      */
-    record Solved(Answers.Status status, double cost, int expanded, double startEstimate) {
+    record Solved(Answers.Status status, double cost, int dug, int placed, int expanded, double startEstimate) {
 
         /** 有定论:最优价,或区域内证明的无解——题只收这两种。 */
         boolean conclusive() {
@@ -56,19 +61,26 @@ final class Reference {
     static Solved solve(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, BooleanSupplier cancelled) {
         SearchResult exact = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), 1.0, cancelled::getAsBoolean);
         if (exact.arrived()) {
-            return new Solved(Answers.Status.OPTIMAL, exact.route().cost(), exact.expanded(), exact.startEstimate());
+            return solved(Answers.Status.OPTIMAL, exact.route(), exact.expanded(), exact.startEstimate());
         }
         Answers.Status status = switch (exact.stop()) {
             case EXHAUSTED -> Answers.Status.UNSOLVABLE;
             case UNLOADED -> Answers.Status.BEYOND_REGION;
             default -> Answers.Status.TOO_HARD;
         };
-        return new Solved(status, Double.NaN, exact.expanded(), exact.startEstimate());
+        return new Solved(status, Double.NaN, 0, 0, exact.expanded(), exact.startEstimate());
     }
 
     /** {@code TOO_HARD} 的题再按生产权重搜一遍(同样最多 {@code cap} 个节点):搜到了路是 {@code BEST_KNOWN},否则原样。 */
     static Solved upperBound(SearchView whole, CostModel model, BlockPos start, Goal goal, int cap, Solved tooHard, BooleanSupplier cancelled) {
         SearchResult known = AStar.run(new Search(whole, model, start, goal, cap, Favoring.NONE), AStar.WEIGHT, cancelled::getAsBoolean);
-        return known.arrived() ? new Solved(Answers.Status.BEST_KNOWN, known.route().cost(), tooHard.expanded(), tooHard.startEstimate()) : tooHard;
+        return known.arrived() ? solved(Answers.Status.BEST_KNOWN, known.route(), tooHard.expanded(), tooHard.startEstimate()) : tooHard;
+    }
+
+    /** 搜到了路的结论:价钱与路线上的挖、放块数(路线的改动是走法带的)。 */
+    private static Solved solved(Answers.Status status, Route route, int expanded, double startEstimate) {
+        List<Edit> edits = route.legs().stream().flatMap(leg -> leg.maneuver().edits().stream()).toList();
+        return new Solved(status, route.cost(), (int) edits.stream().filter(e -> e instanceof Edit.Dig).count(),
+                (int) edits.stream().filter(e -> e instanceof Edit.Place).count(), expanded, startEstimate);
     }
 }

@@ -17,11 +17,14 @@ import java.util.SplittableRandom;
 
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.search.SearchView;
 import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -79,6 +82,23 @@ final class Generate {
     }
 
     private Generate() {}
+
+    /**
+     * 身体以 {@code stance} 待在 {@code (x, z)} 这一列(待不住为 null),它碰到的格——脚到头占的几格与脚踩的那一格——都不是路线规格排除的种类
+     * (岩浆、火、粉雪……,{@link Spec#excludes},与搜索准入同一个判据):岩浆湖底几何上托得住脚,可那不是题该有的起点或终点。
+     */
+    static boolean clean(BlockGetter level, int x, int z, Stance stance) {
+        if (stance == null) {
+            return false;
+        }
+        int top = Clearance.topCell(Spec.STATS, stance.feetY());
+        for (int y = Footing.cellOf(stance.feetY()); y <= top; y++) {
+            if (Spec.excludes(level, new BlockPos(x, y, z))) {
+                return false;
+            }
+        }
+        return stance.support(x, z) == null || !Spec.excludes(level, stance.support(x, z));
+    }
 
     /**
      * 候选题的结论:各适用规格的答案都有定论({@link Reference.Solved#conclusive})才收({@code empty});否则按 {@link Reject} 的次序说最靠前的一个理由。
@@ -301,7 +321,7 @@ final class Generate {
                         for (Spec spec : Spec.values()) {
                             if (draft.applicable(spec)) {
                                 specs.add(spec);
-                                futures.add(solver.submit(new Solver.Job(whole, spec.model(), draft.from(), draft.goal(Spec.STATS)), index, stop::get));
+                                futures.add(solver.submit(new Solver.Job(whole, spec.physicalModel(), draft.from(), Spec.physicalGoal(draft)), index, stop::get));
                             }
                         }
                     }
@@ -344,7 +364,7 @@ final class Generate {
                         heldOnly ? Problem.Split.HELD : Problem.split(id), d.facts().tags(c.endClass)));
                 for (int k = 0; k < d.specs().size(); k++) {
                     Reference.Solved s = v.outcomes().get(k).solved();
-                    answers.add(new Answers.Answer(id, d.specs().get(k), s.status(), s.cost(), s.expanded(), s.startEstimate()));
+                    answers.add(new Answers.Answer(id, d.specs().get(k), s.status(), s.cost(), s.dug(), s.placed(), s.expanded(), s.startEstimate()));
                 }
             }
             if (accepted < QUOTA) {
@@ -496,8 +516,9 @@ final class Generate {
             };
         }
 
+        /** 站得住而且碰到的格都干净({@link #clean}):出题的起终点只挑这样的格。 */
         private boolean standable(int x, int y, int z) {
-            return Stance.at(whole, Spec.STATS, x, y, z) != null;
+            return clean(whole, x, z, Stance.at(whole, Spec.STATS, x, y, z));
         }
 
         /** 这一列最高的站得住的格;没有为 null。 */
@@ -519,7 +540,7 @@ final class Generate {
             List<BlockPos> cells = new ArrayList<>();
             for (int y = top.getY() - 5; y >= world.heights.getMinBuildHeight(); y--) {
                 Stance stance = Stance.at(whole, Spec.STATS, x, y, z);
-                if (stance != null && stance.kind() == Stance.Kind.GROUND) {
+                if (clean(whole, x, z, stance) && stance.kind() == Stance.Kind.GROUND) {
                     cells.add(new BlockPos(x, y, z));
                 }
             }
@@ -579,7 +600,7 @@ final class Generate {
                 return null;
             }
             BlockPos c = new BlockPos(x, low + rng.nextInt(high - low), z);
-            if (!solid(c)) {
+            if (!solid(c) || Spec.excludes(whole, c)) {
                 return null;
             }
             for (Direction d : Direction.values()) {

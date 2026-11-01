@@ -180,6 +180,16 @@ class CostModelTest {
     }
 
     @Test
+    void walkingBesideHarmfulBlocksCostsWhatTheSpecSays() {
+        double walk = com.dwinovo.numen.pathing.world.Kinematics.walkTicksPerBlock(Fixtures.body().stats());
+        RouteSpec spec = RouteSpec.defaults();
+        CostModel priced = CostModel.of(spec, Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        assertEquals(3 * spec.exposurePenalty() * walk, priced.passing(0, new long[0], 0, 3, false, 0, false), 1e-9);
+        CostModel free = CostModel.of(spec.edit().exposurePenalty(0).build(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        assertEquals(0, free.passing(0, new long[0], 0, 3, false, 0, false), "罚分设为 0 就只剩物理耗时");
+    }
+
+    @Test
     void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
         RouteSpec loose = RouteSpec.defaults().edit().maxFallDamage(100).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);

@@ -58,7 +58,7 @@ final class Answers {
     }
 
     /** 一道题在一种规格下的标准答案。 */
-    record Answer(String id, Spec spec, Status status, double cost, int expanded, double startEstimate) {
+    record Answer(String id, Spec spec, Status status, double cost, int dug, int placed, int expanded, double startEstimate) {
 
         String key() {
             return key(id, spec);
@@ -76,6 +76,10 @@ final class Answers {
             if (!Double.isNaN(cost)) {
                 o.addProperty("cost", Math.round(cost * 1000) / 1000.0);
             }
+            if (!Double.isNaN(cost)) {
+                o.addProperty("dug", dug);
+                o.addProperty("placed", placed);
+            }
             o.addProperty("expanded", expanded);
             o.addProperty("startEstimate", Math.round(startEstimate * 1000) / 1000.0);
             return o;
@@ -84,7 +88,8 @@ final class Answers {
         static Answer fromJson(JsonObject o) {
             return new Answer(o.get("id").getAsString(), Spec.valueOf(o.get("spec").getAsString()),
                     Status.valueOf(o.get("status").getAsString().toUpperCase().replace('-', '_')),
-                    o.has("cost") ? o.get("cost").getAsDouble() : Double.NaN, o.get("expanded").getAsInt(), o.get("startEstimate").getAsDouble());
+                    o.has("cost") ? o.get("cost").getAsDouble() : Double.NaN, o.has("dug") ? o.get("dug").getAsInt() : 0,
+                    o.has("placed") ? o.get("placed").getAsInt() : 0, o.get("expanded").getAsInt(), o.get("startEstimate").getAsDouble());
         }
     }
 
@@ -221,11 +226,11 @@ final class Answers {
                 var whole = world.whole();
                 List<Pair> regionPairs = region.getValue();
                 List<Solver.Job> jobs = regionPairs.stream()
-                        .map(pair -> new Solver.Job(whole, pair.spec().model(), pair.problem().from(), pair.problem().goal(Spec.STATS))).toList();
+                        .map(pair -> new Solver.Job(whole, pair.spec().physicalModel(), pair.problem().from(), Spec.physicalGoal(pair.problem()))).toList();
                 solver.solve(jobs, (i, outcome) -> {
                     Reference.Solved s = outcome.solved();
-                    JsonObject o = new Answer(regionPairs.get(i).problem().id(), regionPairs.get(i).spec(), s.status(), s.cost(), s.expanded(), s.startEstimate())
-                            .toJson();
+                    JsonObject o = new Answer(regionPairs.get(i).problem().id(), regionPairs.get(i).spec(), s.status(), s.cost(), s.dug(), s.placed(), s.expanded(),
+                            s.startEstimate()).toJson();
                     o.addProperty("millis", outcome.millis());
                     o.addProperty("tier", outcome.tier());
                     try {
@@ -257,6 +262,7 @@ final class Answers {
         Files.writeString(dataset.resolve(FILE), text.toString(), StandardCharsets.UTF_8);
         JsonObject manifest = new JsonObject();
         manifest.addProperty("commit", commit);
+        manifest.addProperty("model", Spec.PHYSICAL_MODEL);
         manifest.addProperty("nodeCap", Reference.NODE_CAP);
         manifest.addProperty("largeNodeCap", Reference.LARGE_NODE_CAP);
         manifest.addProperty("count", sorted.size());

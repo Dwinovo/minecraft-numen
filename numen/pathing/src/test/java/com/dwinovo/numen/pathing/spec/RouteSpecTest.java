@@ -95,6 +95,7 @@ class RouteSpecTest {
         assertFalse(edited.consent());
         assertTrue(edited.budgeted());
         assertEquals(RouteSpec.defaults().jumpPenalty(), edited.jumpPenalty());
+        assertEquals(RouteSpec.defaults().exposurePenalty(), edited.exposurePenalty());
         assertEquals(RouteSpec.defaults().excluded(), edited.excluded());
         assertEquals(RouteSpec.defaults(), RouteSpec.defaults().edit().build(), "什么都不改就等于原来那份");
     }
@@ -102,6 +103,7 @@ class RouteSpecTest {
     @Test
     void nonsenseValuesAreRefused() {
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().jumpPenalty(-1).build());
+        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().exposurePenalty(-1).build());
         assertThrows(IllegalArgumentException.class,
                 () -> RouteSpec.defaults().edit().placeCost(Double.POSITIVE_INFINITY).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().alterBudget(-1).build());
