@@ -345,11 +345,13 @@ public class AlterGameTests {
 
     // ==================== 改地形补充 ====================
 
-    /** 两格高的泥土墙,口在六格多的绕路之外:许改地形也不挖,绕过去。 */
+    /**
+     * 两格高的泥土墙,口的绕路只多走两三格(挖一格的罚分 10 约等于多走两格,两格高的墙要挖两格,挖的比绕的贵):许改地形也不挖,绕过去。
+     */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 339)
     public static void detours_rather_than_dig_a_short_way(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        wall(t, 8, 2, Blocks.DIRT, 10);
+        wall(t, 8, 2, Blocks.DIRT, 8);
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(11, 1, 5)), NATURAL).within(400).arrives().then(Scenes::unaltered);
     }
