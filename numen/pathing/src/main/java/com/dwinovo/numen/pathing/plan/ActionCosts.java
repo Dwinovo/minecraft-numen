@@ -5,8 +5,8 @@ package com.dwinovo.numen.pathing.plan;
  * 在 {@link com.dwinovo.numen.pathing.world.Kinematics}。
  *
  * <p>这里是"值不值得":摔伤与要问许可的格子怎么折成刻、走进生物危险半径加多少。以"格平走的耗时"计的权衡只写格数(无量纲),
- * 乘上这具身体平走一格的刻数({@link com.dwinovo.numen.pathing.world.Kinematics#walkTicksPerBlock})才是刻。路线规格里的四项动作罚分
- * (放、挖、跳、涉水)是按次可调的,不在这张表里。搜索的估价不在这里,见 {@link com.dwinovo.numen.pathing.world.Kinematics#pace}。
+ * 乘上这具身体平走一格的刻数({@link com.dwinovo.numen.pathing.world.Kinematics#walkTicksPerBlock})才是刻。路线规格里的动作罚分
+ * (放、挖、跳、涉水)与挨着伤身格走的加价是按次可调的,不在这张表里。搜索的估价不在这里,见 {@link com.dwinovo.numen.pathing.world.Kinematics#pace}。
  */
 public final class ActionCosts {
 
@@ -19,11 +19,6 @@ public final class ActionCosts {
 
     /** 摔掉一点血折多少刻:摔得起的高度也是路,只是疼;有不疼的走法时它自然让位。 */
     public static final double FALL_DAMAGE_PER_POINT = 20.0;
-    /**
-     * 身体走进的格紧挨着一格伤身的方块(岩浆、火、仙人掌),加这么多格平走的耗时:没碰上,可身子歪一点、被推一下就碰上了。
-     * 有稍远一点的路时走远一点,没有也照样走。
-     */
-    public static final double EXPOSED_SIDE_BLOCKS = 2;
     /** 身体进入一只生物危险半径里的一格,加这么多格平走的耗时:穿过去约等于多绕十来格,够让路线绕开,又不至于宁可挖穿一座山。 */
     public static final double DANGER_BLOCKS = 3;
     /**
