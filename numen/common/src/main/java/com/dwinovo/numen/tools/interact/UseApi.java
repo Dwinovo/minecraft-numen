@@ -257,7 +257,7 @@ public final class UseApi {
     @Doc("Where you took off.")
     public record Glided(@Doc("Where you are.") Vec3 pos) {}
 
-    /** 鞘翅起飞:发的是空中按跳跃键发的那个包,条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
+    /** 鞘翅起飞:走键盘展开鞘翅的那一条({@link com.dwinovo.numen.api.entity.Controls#unfurl}),条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
     @Fn("Start gliding with the elytra you wear.")
     @Example("numen.use.glide()")
     @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
@@ -266,12 +266,14 @@ public final class UseApi {
     @SeeAlso({"numen.gear.wear", "numen.use.item"})
     public static Glided glide(ServerCall call) {
         NumenPlayer her = call.her();
-        her.packets().command(ServerboundPlayerCommandPacket.Action.START_FALL_FLYING);
-        if (!her.isFallFlying()) {
+        if (!her.controls().unfurl(her)) {
             java.util.List<String> why = new java.util.ArrayList<>();
             ItemStack chest = her.getItemBySlot(EquipmentSlot.CHEST);
             if (her.onGround()) {
                 why.add("you are on the ground (gliding starts in the air)");
+            }
+            if (her.getAbilities().flying) {
+                why.add("you are flying (creative flight)");
             }
             if (her.isInWater()) {
                 why.add("you are in water");
