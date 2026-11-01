@@ -18,17 +18,19 @@ import net.minecraft.world.level.BlockGetter;
  *   <li><b>读到了没加载的列</b>:搜索要知道一步的前提读没读到快照之外的列({@link #unloaded}),算一个结论时读到了,
  *       这一位随结论记下,取回时照样记上,与现算一模一样;</li>
  *   <li><b>一具身体</b>:结论随身体尺寸而变,记事本只答建它时那一具身体的问;</li>
- *   <li><b>固定大小的直接映射表</b>(同原版 {@code PathTypeCache}):每种结论一张,每格按坐标的哈希落进一个槽,撞了就顶掉
- *       旧的。不逐格建对象、不随搜索变大——逐格建表的缓存会把垃圾回收撑爆。</li>
+ *   <li><b>大小封顶的直接映射表</b>(同原版 {@code PathTypeCache}):每种结论一张,每格按坐标的哈希落进一个槽,撞了就顶掉
+ *       旧的。不逐格建对象、大小封顶 {@value #SLOTS} 槽,从小起步、顶掉的次数多了才翻倍——逐格建表的缓存会把垃圾回收撑爆。
+ *       表只是缓存,丢了就现算,槽数多少不改变任何结论。</li>
  * </ul>
  *
  * <p>一次搜索一本,只在跑这次搜索的线程上用。
  */
 public final class Recall {
 
-    /** 每张表的槽数,同原版 {@code PathTypeCache}:展开一个节点问到的格都挨着它,再多四倍的槽也不见更快。 */
+    /** 每张表最多的槽数,同原版 {@code PathTypeCache}:展开一个节点问到的格都挨着它,再多四倍的槽也不见更快。 */
     private static final int SLOTS = 1 << 12;
-    private static final int MASK = SLOTS - 1;
+    /** 每张表起手的槽数:几十个节点就到的搜索用不满,不为它整张分配出去;被顶掉的次数多过槽数就翻倍。 */
+    private static final int INITIAL_SLOTS = 1 << 8;
     private static final byte FILLED = 1;
     private static final byte UNLOADED = 2;
     private static final AtomicInteger FACTS = new AtomicInteger();
@@ -79,7 +81,7 @@ public final class Recall {
             }
             Table table = recall.table(index, false);
             long cell = BlockPos.asLong(x, y, z);
-            int slot = slot(cell);
+            int slot = table.slot(cell);
             if (table.holds(slot, cell)) {
                 recall.recall(table, slot);
                 return (T) table.objects[slot];
@@ -111,7 +113,7 @@ public final class Recall {
             }
             Table table = recall.table(index, true);
             long cell = BlockPos.asLong(x, y, z);
-            int slot = slot(cell);
+            int slot = table.slot(cell);
             if (table.holds(slot, cell)) {
                 recall.recall(table, slot);
                 return table.heights[slot];
@@ -156,10 +158,6 @@ public final class Recall {
         return null;
     }
 
-    private static int slot(long cell) {
-        return (int) HashCommon.mix(cell) & MASK;
-    }
-
     private Table table(int index, boolean heights) {
         if (index >= tables.length) {
             tables = Arrays.copyOf(tables, index + 1);
@@ -188,25 +186,51 @@ public final class Recall {
 
     /** 记下刚算完的结论,连同它读没读到没加载的列;再并回之前的那一位。 */
     private void store(Table table, int slot, long cell, boolean outer) {
-        table.keys[slot] = cell;
-        table.meta[slot] = (byte) (FILLED | (unloaded ? UNLOADED : 0));
+        table.put(slot, cell, (byte) (FILLED | (unloaded ? UNLOADED : 0)));
         unloaded |= outer;
     }
 
     /** 一种结论的一张表。结果是对象的放 {@link #objects},是高度的放 {@link #heights},只建用得上的那一份。 */
     private static final class Table {
-        final long[] keys = new long[SLOTS];
-        final byte[] meta = new byte[SLOTS];
-        final Object[] objects;
-        final double[] heights;
+        private final boolean heightsTable;
+        long[] keys;
+        byte[] meta;
+        Object[] objects;
+        double[] heights;
+        private int mask;
+        /** 顶掉了别的格的次数,到了槽数就翻倍。 */
+        private int evictions;
 
         Table(boolean heights) {
-            this.objects = heights ? null : new Object[SLOTS];
-            this.heights = heights ? new double[SLOTS] : null;
+            this.heightsTable = heights;
+            allocate(INITIAL_SLOTS);
+        }
+
+        private void allocate(int slots) {
+            keys = new long[slots];
+            meta = new byte[slots];
+            objects = heightsTable ? null : new Object[slots];
+            heights = heightsTable ? new double[slots] : null;
+            mask = slots - 1;
+            evictions = 0;
+        }
+
+        int slot(long cell) {
+            return (int) HashCommon.mix(cell) & mask;
         }
 
         boolean holds(int slot, long cell) {
             return meta[slot] != 0 && keys[slot] == cell;
+        }
+
+        /** 把 {@code cell} 的结论记进 {@code slot}(值已经放进 {@link #objects} 或 {@link #heights}):顶掉别的格太多就换一张大一倍的空表。 */
+        void put(int slot, long cell, byte flags) {
+            boolean evicts = meta[slot] != 0 && keys[slot] != cell;
+            keys[slot] = cell;
+            meta[slot] = flags;
+            if (evicts && ++evictions >= keys.length && keys.length < SLOTS) {
+                allocate(keys.length * 2);
+            }
         }
     }
 }
