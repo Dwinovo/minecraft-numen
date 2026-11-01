@@ -17,57 +17,83 @@ final class Learning {
 
     /**
      * @param expanded 节点展开过没有;没展开的就是边界
+     * @param stepped  节点有没有往外的边:展开过的都有;展开时有一步没看全的节点算边界、也有边,估价不一致时它的值也可能被压低
      * @param h        每个节点现在的估价
      * @param nodes    节点数
-     * @param from     边的起点,必须是展开过的节点
+     * @param from     边的起点,必须是 {@code stepped} 的节点
      * @param to       边的落点
      * @param cost     边的价钱
      * @param edges    边数
      * @return 每个节点抬高之后的估价(边界不变,展开过的不低于原来的)
      */
-    static double[] raise(boolean[] expanded, double[] h, int nodes, int[] from, int[] to, double[] cost, int edges) {
-        // 按落点分组:谁能一步走到它
-        int[] start = new int[nodes + 1];
-        for (int e = 0; e < edges; e++) {
-            start[to[e] + 1]++;
-        }
+    static double[] raise(boolean[] expanded, boolean[] stepped, double[] h, int nodes, int[] from, int[] to, double[] cost, int edges) {
+        // 只有往外有边的节点的值会变,堆、分组、估价都按它们的稠密下标走:一次搜索的节点里大头是没展开的边界与候选,不在其中
+        int[] dense = new int[nodes];
+        int count = 0;
         for (int n = 0; n < nodes; n++) {
-            start[n + 1] += start[n];
+            dense[n] = stepped[n] ? count++ : -1;
         }
-        int[] into = new int[edges];
-        int[] fill = Arrays.copyOf(start, nodes);
+        double[] value = new double[count];
+        double[] origin = new double[count];
+        for (int n = 0; n < nodes; n++) {
+            if (stepped[n]) {
+                origin[dense[n]] = expanded[n] ? Double.POSITIVE_INFINITY : h[n];
+            }
+        }
+        System.arraycopy(origin, 0, value, 0, count);
+        // 落点是边界的边(量最大)按落点原来的估价一次性给起点定出上界,边界不进堆;落点自己也有边的才按落点分组,
+        // 它被压低时用新值再松弛来路
+        int[] start = new int[count + 1];
         for (int e = 0; e < edges; e++) {
-            into[fill[to[e]]++] = e;
+            int t = to[e];
+            if (!expanded[t]) {
+                int f = dense[from[e]];
+                double through = h[t] + cost[e];
+                if (through < value[f]) {
+                    value[f] = through;
+                }
+            }
+            if (stepped[t]) {
+                start[dense[t] + 1]++;
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            start[i + 1] += start[i];
+        }
+        // 来路按落点排好,起点的稠密下标与价钱就地存,松弛时顺着读
+        int[] source = new int[start[count]];
+        double[] price = new double[start[count]];
+        int[] fill = Arrays.copyOf(start, count);
+        for (int e = 0; e < edges; e++) {
+            if (stepped[to[e]]) {
+                int at = fill[dense[to[e]]]++;
+                source[at] = dense[from[e]];
+                price[at] = cost[e];
+            }
         }
 
-        double[] raised = new double[nodes];
-        Queue queue = new Queue(raised, nodes);
-        for (int n = 0; n < nodes; n++) {
-            if (expanded[n]) {
-                raised[n] = Double.POSITIVE_INFINITY;
-            } else {
-                raised[n] = h[n];
-                if (Double.isFinite(h[n])) {
-                    queue.lower(n);
-                }
+        Queue queue = new Queue(value, count);
+        for (int i = 0; i < count; i++) {
+            if (value[i] < origin[i]) {
+                queue.lower(i);
             }
         }
         while (!queue.isEmpty()) {
             int top = queue.pop();
             for (int i = start[top]; i < start[top + 1]; i++) {
-                int e = into[i];
-                int s = from[e];
-                double through = raised[top] + cost[e];
-                if (through < raised[s]) {
-                    raised[s] = through;
+                int s = source[i];
+                double through = value[top] + price[i];
+                if (through < value[s]) {
+                    value[s] = through;
                     queue.lower(s);
                 }
             }
         }
+        double[] raised = Arrays.copyOf(h, nodes);
         for (int n = 0; n < nodes; n++) {
-            if (expanded[n]) {
-                // 估价不一致时(旧路折扣、憋气的档)走出来的价钱可能低于原估价:只升不降
-                raised[n] = Math.max(raised[n], h[n]);
+            if (stepped[n]) {
+                // 估价不一致时(旧路折扣、憋气的档)走出来的价钱可能低于原估价:展开过的只升不降
+                raised[n] = expanded[n] ? Math.max(value[dense[n]], h[n]) : value[dense[n]];
             }
         }
         return raised;

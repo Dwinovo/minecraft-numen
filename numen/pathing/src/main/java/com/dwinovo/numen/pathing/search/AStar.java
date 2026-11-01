@@ -499,29 +499,33 @@ public final class AStar {
             }
         }
         boolean[] settled = new boolean[size];
-        double[] h = new double[size];
         for (int n = 0; n < size; n++) {
             settled[n] = nodes.expanded[n] && !nodes.holed[n];
-            BlockPos at = BlockPos.of(nodes.pos[n]);
-            h[n] = estimate.at(at.getX(), at.getY(), at.getZ());
         }
-        double[] raised = Learning.raise(settled, h, size, edgeFrom, edgeTo, edgeCost, edges);
+        // 节点上存的估价就是 estimate.at(它的格),建节点时算过一次,这里不重算
+        double[] h = nodes.h;
+        double[] raised = Learning.raise(settled, nodes.expanded, h, size, edgeFrom, edgeTo, edgeCost, edges);
+        // 一格的增量取它所有节点里最小的:没展开过(或没看全)的节点增量是 0,它在的格不抬;所以只有一格里的节点全是展开过的才收,
+        // 先按展开过的节点收,再把有增量为 0 的节点的格去掉
         Long2DoubleOpenHashMap by = new Long2DoubleOpenHashMap();
         for (int n = 0; n < size; n++) {
-            if (nodes.pending[n]) {
-                continue;
-            }
-            long cell = nodes.pos[n];
-            double more = settled[n] ? raised[n] - h[n] : 0;
-            if (!by.containsKey(cell) || more < by.get(cell)) {
-                by.put(cell, more);
+            if (!nodes.pending[n] && settled[n]) {
+                double more = raised[n] - h[n];
+                if (more > MIN_IMPROVEMENT && (!by.containsKey(nodes.pos[n]) || more < by.get(nodes.pos[n]))) {
+                    by.put(nodes.pos[n], more);
+                }
             }
         }
-        Long2DoubleOpenHashMap out = new Long2DoubleOpenHashMap();
-        for (Long2DoubleMap.Entry e : by.long2DoubleEntrySet()) {
-            if (e.getDoubleValue() > MIN_IMPROVEMENT) {
-                out.put(e.getLongKey(), memory.raised(e.getLongKey()) + e.getDoubleValue());
+        if (!by.isEmpty()) {
+            for (int n = 0; n < size; n++) {
+                if (!nodes.pending[n] && !(settled[n] && raised[n] - h[n] > MIN_IMPROVEMENT)) {
+                    by.remove(nodes.pos[n]);
+                }
             }
+        }
+        Long2DoubleOpenHashMap out = new Long2DoubleOpenHashMap(by.size());
+        for (Long2DoubleMap.Entry e : by.long2DoubleEntrySet()) {
+            out.put(e.getLongKey(), memory.raised(e.getLongKey()) + e.getDoubleValue());
         }
         return out;
     }
