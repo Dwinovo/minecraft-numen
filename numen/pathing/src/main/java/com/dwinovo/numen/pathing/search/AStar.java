@@ -112,6 +112,8 @@ public final class AStar {
     private boolean skippedUnloaded;
     private Estimate estimate;
     private Probe probe;
+    /** 身体面对的世界({@link #faced})用的那一份叠加视图:反复装填,一次展开或判断里用完就不留着。 */
+    private EditedView.Reusable overlay;
     private Quick quick;
     private int start;
     private int expanded;
@@ -179,6 +181,7 @@ public final class AStar {
             return new SearchResult(SearchResult.Stop.EXHAUSTED, null, 0, false, startEstimate, null, null, checks);
         }
         probe = new Probe(view, new Recall(body));
+        overlay = new EditedView.Reusable(probe);
         quick = new Quick(model, view);
         segmentEnd = estimate.base(startPos.getX(), startPos.getY(), startPos.getZ()) - search.advance();
         int terminal = search(startStance, timer, cancelled);
@@ -232,7 +235,7 @@ public final class AStar {
             List<Edit> done = recentEdits(current);
             Stance stance = nodes.stance[current];
             // 身体此刻面对的世界:快照,加上走到这个节点的最近几步做过的改动
-            WorldView here = done.isEmpty() ? probe : EditedView.after(probe, done);
+            WorldView here = faced(done);
             // 到达价无穷的节点停下也办不成:不算到,照常往外展开
             double stopping = goal.contains(cx, cy, cz, stance)
                     ? goal.arrival(here, cx, cy, cz, stance) : Double.POSITIVE_INFINITY;
@@ -339,7 +342,7 @@ public final class AStar {
         Move move = Moves.ALL.get(mi);
         int kind = move.kind().ordinal();
         List<Edit> done = recentEdits(parent);
-        WorldView here = done.isEmpty() ? probe : EditedView.after(probe, done);
+        WorldView here = faced(done);
         probe.recall.clearUnloaded();
         Premise premise = move.premise(model, here, BlockPos.of(nodes.pos[parent]), nodes.stance[parent],
                 move.headings().get(hi));
@@ -541,7 +544,7 @@ public final class AStar {
         }
         BlockPos from = BlockPos.of(nodes.pos[closest]);
         List<Edit> done = recentEdits(closest);
-        WorldView here = done.isEmpty() ? probe : EditedView.after(probe, done);
+        WorldView here = faced(done);
         double now = estimate.base(from.getX(), from.getY(), from.getZ());
         SearchResult.Blocking best = null;
         double bestEstimate = Double.POSITIVE_INFINITY;
@@ -563,6 +566,14 @@ public final class AStar {
     }
 
     // ==================== 路线 ====================
+
+    /**
+     * 身体此刻面对的世界:快照,加上走到那里的最近几步做过的改动 {@code done}({@link #recentEdits})。没有改动就是快照本身,否则是
+     * {@link #overlay},下一次调用就被覆盖。
+     */
+    private WorldView faced(List<Edit> done) {
+        return overlay.load(done);
+    }
 
     /**
      * 走到节点 {@code n} 的最近 {@link AStar#HISTORY} 步做过的改动,按先后。前提读的只是身边几格,可它们可能是几步之前自己挖开的:
@@ -618,7 +629,7 @@ public final class AStar {
         Move move = Moves.ALL.get(nodes.move[n]);
         Heading heading = move.headings().get(nodes.heading[n]);
         List<Edit> done = recentEdits(parent);
-        WorldView here = done.isEmpty() ? probe : EditedView.after(probe, done);
+        WorldView here = faced(done);
         Premise premise = move.premise(model, here, BlockPos.of(nodes.pos[parent]), nodes.stance[parent], heading);
         if (!(premise instanceof Premise.Holds holds)) {
             throw new IllegalStateException(move.kind() + " " + heading + " 从 " + BlockPos.of(nodes.pos[parent]) + " 快判断成立,精确判断不成立:" + premise);

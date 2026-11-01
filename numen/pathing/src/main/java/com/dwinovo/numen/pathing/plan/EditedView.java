@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.Recall;
@@ -53,17 +54,51 @@ public class EditedView implements WorldView, Recall.Source {
     public static EditedView over(WorldView base, List<Edit> edits) {
         EditedView view = new EditedView(base);
         view.changed = new Changes(view.changed, edits.size());
+        view.apply(edits);
+        return view;
+    }
+
+    private void apply(List<Edit> edits) {
         for (Edit edit : edits) {
             switch (edit) {
-                case Edit.Dig dig -> view.dig(dig.pos());
-                case Edit.Place place -> view.place(place.pos(), place.block());
-                case Edit.Door door -> view.toggle(door.pos(), door.state());
+                case Edit.Dig dig -> dig(dig.pos());
+                case Edit.Place place -> place(place.pos(), place.block());
+                case Edit.Door door -> toggle(door.pos(), door.state());
                 // 倒下的水在这一步里就收回了
                 case Edit.Catch caught -> {
                 }
             }
         }
-        return view;
+    }
+
+    /**
+     * 反复换改动用的一份叠加视图:搜索每展开一个节点、每精确判一步都要把"走到那里的最近几步改动"叠在快照上,用这一份重新装填
+     * ({@link #load}),不为每次新建一份视图与改动表。装填一次,上一次交出的视图和叠在它上面起草的草稿就作废了,
+     * 调用方只在一次展开或判断里用,不留着。
+     */
+    public static final class Reusable extends EditedView {
+
+        /** @param base 快照一类的底层视图,不能再是叠加视图:改动表是这一份自己的,装填时整张清掉 */
+        public Reusable(WorldView base) {
+            super(base);
+            if (super.changed != null) {
+                throw new IllegalArgumentException("底下不能再是叠加视图:" + base);
+            }
+        }
+
+        /** {@code base} 做完 {@code edits} 之后的样子;没有改动就是 {@code base} 本身。 */
+        public WorldView load(List<Edit> edits) {
+            if (edits.isEmpty()) {
+                return super.base;
+            }
+            if (super.changed == null) {
+                super.changed = new Changes(null, edits.size());
+            } else {
+                super.changed.reset(edits.size());
+            }
+            super.apply(edits);
+            return this;
+        }
     }
 
     // ==================== 改动 ====================
@@ -211,6 +246,22 @@ public class EditedView implements WorldView, Recall.Source {
 
         void freeze() {
             frozen = true;
+        }
+
+        /** 清空重来(底下没有别的层):要记 {@code expected} 格,够大就沿用现成的数组。 */
+        void reset(int expected) {
+            int capacity = 4;
+            while (capacity < 2 * expected) {
+                capacity <<= 1;
+            }
+            if (capacity > cells.length) {
+                cells = new long[capacity];
+                states = new BlockState[capacity];
+            } else {
+                Arrays.fill(states, null);
+            }
+            size = 0;
+            frozen = false;
         }
 
         boolean frozen() {
