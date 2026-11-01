@@ -403,7 +403,10 @@ public final class AStar {
             topBand = Math.max(topBand, band);
         }
         edge(from, next, step);
-        if (nodes.g[next] - g <= MIN_IMPROVEMENT) {
+        // 展开过的节点不再换走到它的历史:它的后继是按这段历史(身边几格里前几步的改动、站姿)判的,换了父节点,后继还指着它,
+        // 交路线时按新历史重判就可能与展开时不一致。估价一致时加权 A* 也不必重开,每个节点至多展开一次,路线至多比最优贵权重倍
+        // [Likhachev、Gordon、Thrun 2003,ARA*]
+        if (nodes.expanded[next] || nodes.g[next] - g <= MIN_IMPROVEMENT) {
             return;
         }
         nodes.g[next] = g;
