@@ -30,7 +30,7 @@ class NeutralTest {
 
     @Test
     void passableAndSolidClasses() {
-        is(Cls.AIR, Blocks.AIR, Blocks.SHORT_GRASS, Blocks.TORCH, Blocks.WHITE_CARPET, Blocks.OAK_PRESSURE_PLATE);
+        is(Cls.AIR, Blocks.AIR, Blocks.SHORT_GRASS, Blocks.TORCH, Blocks.WHITE_CARPET);
         is(Cls.SOFT, Blocks.DIRT, Blocks.SAND, Blocks.OAK_LEAVES, Blocks.GRASS_BLOCK);
         is(Cls.STONE, Blocks.STONE, Blocks.COBBLESTONE, Blocks.OAK_PLANKS, Blocks.STONE_BRICKS);
         is(Cls.HARD, Blocks.DEEPSLATE, Blocks.IRON_ORE, Blocks.DEEPSLATE_DIAMOND_ORE, Blocks.OBSIDIAN);
@@ -42,7 +42,8 @@ class NeutralTest {
         is(Cls.WATER, Blocks.WATER, Blocks.SEAGRASS, Blocks.KELP);
         BlockState flowing = Blocks.WATER.defaultBlockState().setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL, 3);
         assertEquals(Cls.FORBIDDEN, Neutral.of(flowing));
-        is(Cls.FORBIDDEN, Blocks.LAVA, Blocks.FIRE, Blocks.CACTUS, Blocks.POWDER_SNOW, Blocks.COBWEB, Blocks.MAGMA_BLOCK);
+        is(Cls.FORBIDDEN, Blocks.LAVA, Blocks.FIRE, Blocks.CACTUS, Blocks.POWDER_SNOW, Blocks.COBWEB, Blocks.MAGMA_BLOCK,
+                Blocks.OAK_PRESSURE_PLATE, Blocks.TRIPWIRE, Blocks.FARMLAND, Blocks.TURTLE_EGG);
     }
 
     @Test

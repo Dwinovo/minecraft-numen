@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.benchmark;
 
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
@@ -14,7 +15,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * 不需要 Minecraft。类别码、标志与说明是导出的 {@code classes.json} 的唯一来源;求解器与验证器读那份文件,不读这里。
  *
  * <p>方块状态到类别由 {@link #of} 算出:碰撞形状取原版的(碰撞高度 ≥ 0.5 算实心,否则算空气),挖掘档按原版硬度,
- * 液体、攀爬、门、危险这些语义取 {@link Semantics}。只看方块状态本身,不看邻格:所以"静水"是水源方块,
+ * 液体、攀爬、门这些语义取 {@link Semantics};禁入是路线规格排除的那些种类({@link RouteSpec#excluded})。只看方块状态本身,不看邻格:所以"静水"是水源方块,
  * 流动的水归禁入;被水淹的梯子仍是梯子。
  */
 final class Neutral {
@@ -24,6 +25,8 @@ final class Neutral {
     /** 挖掘档的硬度分界:原版方块的硬度(破坏速度)小于 1.5 的归软,小于 3 的归石,其余归硬;负数(基岩)挖不动。 */
     private static final float SOFT_BELOW = 1.5F;
     private static final float STONE_BELOW = 3F;
+    /** 禁入的方块状态:路线规格排除的那些语义种类({@link RouteSpec#excluded},搜索准入与出题挑起终点同一个判据)里只看状态就定得了的。 */
+    private static final int EXCLUDED = Semantics.mask(RouteSpec.defaults().excluded());
     /** 碰撞高度到这个值算实心;超过一格(栅栏、墙)是高障碍。 */
     private static final double SOLID_FROM = 0.5;
 
@@ -36,7 +39,7 @@ final class Neutral {
         BEDROCK("bedrock", false, true, false, false, 0, false, "不可挖的实心:基岩等硬度为负的方块"),
         WATER("water", true, false, true, false, 0, true, "静水:水源方块,含海草、海带这类自带水源的方块"),
         FORBIDDEN("forbidden", false, false, false, false, 0, false,
-                "禁入:岩浆、火、仙人掌、细雪、蜘蛛网、流动的水、气泡柱等;进不去、站不上、挖不了、放不了"),
+                "禁入:岩浆、火、仙人掌、粉雪、蜘蛛网、压力板与绊线、耕地与海龟蛋、流动的水、气泡柱等;进不去、站不上、挖不了、放不了"),
         CLIMB("climb", true, false, false, true, 0, false, "可攀爬:梯子、藤蔓、脚手架"),
         DOOR("door", true, false, false, false, 0, false, "门:身体能用手打开的门、活板门、栅栏门;可通行,站不上"),
         TALL("tall", false, false, false, false, 1, false, "高障碍:栅栏、墙等碰撞高过一格的方块;挡路、站不上");
@@ -76,7 +79,7 @@ final class Neutral {
             return Cls.AIR;
         }
         int kinds = Semantics.stateMask(state);
-        if ((kinds & (Semantics.bit(Semantics.Kind.LAVA) | Semantics.bit(Semantics.Kind.HAZARD))) != 0 || state.is(Blocks.BUBBLE_COLUMN)) {
+        if ((kinds & EXCLUDED) != 0 || state.is(Blocks.BUBBLE_COLUMN)) {
             return Cls.FORBIDDEN;
         }
         if ((kinds & Semantics.bit(Semantics.Kind.CLIMBABLE)) != 0) {
