@@ -224,9 +224,10 @@ class SearchTest {
     /** 测试的表:每展开一个节点记十微秒,与 GameTest 宿主同一个折算。 */
     private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
 
-    /** 一次只想得了 {@code nodes} 个节点那么久的时限。 */
+    /** 搜索那一段只想得了 {@code nodes} 个节点那么久的时限(整个周期的时限还含留给学习的份额)。 */
     private static Deadline thinking(int nodes) {
-        return new Deadline(CLOCK, nodes * 10_000L);
+        long share = Deadline.LEARNING_SHARE_DENOMINATOR;
+        return new Deadline(CLOCK, nodes * 10_000L * share / (share - 1));
     }
 
     /**
