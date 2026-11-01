@@ -17,8 +17,10 @@ import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 
@@ -73,6 +75,11 @@ enum Spec {
     /** 标准答案(出题与重算)用的成本模型:{@link #physicalRoute} 下的。 */
     CostModel physicalModel() {
         return CostModel.of(physicalRoute(), body(), ALLOW_ALL, COBBLE, Threats.NONE);
+    }
+
+    /** 这一格是不是路线规格排除的种类(岩浆、火、粉雪、流水、机关、易碎):出题挑起终点与中立地形的"禁入"类别按的是同一个判据。 */
+    static boolean excludes(BlockGetter level, BlockPos pos) {
+        return RouteSpec.defaults().excludes(level, pos);
     }
 
     /** 标准答案里一道题的目标:题的目标去掉挖一格时的遮挡偏好({@link Physical})。 */
