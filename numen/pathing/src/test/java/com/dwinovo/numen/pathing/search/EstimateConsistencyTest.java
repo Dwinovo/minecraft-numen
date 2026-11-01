@@ -210,7 +210,7 @@ class EstimateConsistencyTest {
                             if (stance == null) {
                                 continue;
                             }
-                            for (Move move : Moves.ALL) {
+                            for (Move move : Moves.forBody(scene.model().body())) {
                                 for (Heading heading : move.headings()) {
                                     Premise premise = move.premise(scene.model(), scene.world(), from, stance, heading);
                                     if (!(premise instanceof Premise.Holds holds)) {

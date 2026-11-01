@@ -10,6 +10,7 @@ import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -164,7 +165,9 @@ class EstimateAdmissibilityTest {
         seen.addAll(assertAdmissible("垫柱", field(), dig, START, new BlockPos(0, Y + 4, 0)));
         seen.addAll(assertAdmissible("向下挖", new TestWorld().ground(Y - 1, STONE), dig, START, new BlockPos(0, Y - 3, 0)));
 
-        assertTrue(seen.containsAll(EnumSet.allOf(MoveKind.class)), "没走到的走法:" + EnumSet.complementOf(EnumSet.copyOf(seen)));
+        Set<MoveKind> walking = EnumSet.noneOf(MoveKind.class);
+        Moves.forBody(Fixtures.body()).forEach(move -> walking.add(move.kind()));
+        assertTrue(seen.containsAll(walking), "没走到的走法:" + EnumSet.complementOf(EnumSet.copyOf(seen)));
     }
 
     /** 随机小地形:高低起伏、夹着半砖与空洞,起点到终点的估价不高过最优代价,路线上每个节点也一样。 */

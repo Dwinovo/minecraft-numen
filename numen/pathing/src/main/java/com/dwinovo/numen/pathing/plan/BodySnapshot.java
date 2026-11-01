@@ -36,10 +36,11 @@ import net.minecraft.world.level.block.state.properties.DripstoneThickness;
  * @param inventory               主背包 36 格的副本,下标就是槽位;挑工具看全背包
  * @param mining                  挖掘速度相关的属性与效果
  * @param breath                  氧气、水下呼吸附魔与效果、海龟壳:能憋多久
+ * @param mobility                身上已有的移动方式:许不许飞、在不在飞、滑翔物、烟花
  */
 public record BodySnapshot(BodyStats stats, GameType gameMode, float health, double safeFallDistance,
                            double fallDamageMultiplier, int foodLevel, double waterMovementEfficiency,
-                           List<ItemStack> inventory, DigTime.Mining mining, Breath breath) {
+                           List<ItemStack> inventory, DigTime.Mining mining, Breath breath, Mobility mobility) {
 
     /** 摔完至少要留下的血量(三颗心):按血量推摔落上限时不把她摔到只剩一口气。 */
     static final float HEALTH_RESERVE = 6.0F;
@@ -49,6 +50,7 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
         Objects.requireNonNull(gameMode, "gameMode");
         Objects.requireNonNull(mining, "mining");
         Objects.requireNonNull(breath, "breath");
+        Objects.requireNonNull(mobility, "mobility");
         inventory = inventory.stream().map(ItemStack::copy).toList();
     }
 

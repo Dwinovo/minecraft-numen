@@ -333,7 +333,7 @@ final class Matrix {
                 return List.of();
             }
             List<Hold> out = new ArrayList<>();
-            for (Move move : Moves.ALL) {
+            for (Move move : Moves.forBody(model.body())) {
                 if (!scene.base().moves.contains(move.kind())) {
                     continue;
                 }

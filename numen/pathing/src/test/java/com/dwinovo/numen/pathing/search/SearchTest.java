@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import java.util.List;
 import java.util.Optional;
 
@@ -786,7 +787,7 @@ class SearchTest {
     /** 原版身体,憋气的本钱是 {@code breath}。 */
     private static CostModel breathing(Breath breath) {
         BodySnapshot body = new BodySnapshot(SURVIVAL, net.minecraft.world.level.GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(), Fixtures.MINING, breath);
+                List.of(), Fixtures.MINING, breath, Mobility.WALKER);
         return CostModel.of(RouteSpec.defaults(), body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 

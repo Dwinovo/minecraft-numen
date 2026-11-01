@@ -32,7 +32,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.material.FluidState;
 
 /**
- * 一次朝真终点的加权 A*:从起点节点逐个展开 {@link Moves#ALL} 的每种走法、每个方向,前提成立的步子按它的代价(乘上旧路折扣)松弛,
+ * 一次朝真终点的加权 A*:从起点节点逐个展开这具身体的每种走法({@link Moves#forBody})、每个方向,前提成立的步子按它的代价(乘上旧路折扣)松弛,
  * 开放集按"走到的代价加估价的 {@link #WEIGHT} 倍"排。
  *
  * <ul>
@@ -94,6 +94,8 @@ public final class AStar {
     /** 开放集排序里估价的倍数:生产用 {@link #WEIGHT};标准答案求解器用 1,交出的就是最优路线。 */
     private final double weight;
     private final CostModel model;
+    /** 这具身体这一趟展开的走法:节点里记的走法下标是它在这张表里的位置。 */
+    private final List<Move> moves;
     private final BodyStats body;
     private final Goal goal;
     private final boolean budgeted;
@@ -148,6 +150,7 @@ public final class AStar {
         this.goal = search.goal();
         this.model = Goal.guarded(goal, search.model()).searching();
         this.body = model.body().stats();
+        this.moves = Moves.forBody(model.body());
         this.budgeted = spec.budgeted();
         this.alterBudget = spec.alterBudget();
         this.breath = model.body().breath();
@@ -280,7 +283,6 @@ public final class AStar {
         SearchView view = search.view();
         long at = nodes.pos[current];
         quick.begin(cx, cy, cz, stance, here, done);
-        List<Move> moves = Moves.ALL;
         for (int mi = 0; mi < moves.size(); mi++) {
             Move move = moves.get(mi);
             List<Heading> headings = move.headings();
@@ -339,7 +341,7 @@ public final class AStar {
         }
         int mi = nodes.move[candidate];
         int hi = nodes.heading[candidate];
-        Move move = Moves.ALL.get(mi);
+        Move move = moves.get(mi);
         int kind = move.kind().ordinal();
         List<Edit> done = recentEdits(parent);
         WorldView here = faced(done);
@@ -374,7 +376,7 @@ public final class AStar {
      */
     private void relax(int from, int mi, int hi, int tx, int ty, int tz, int alterations, boolean submerged, double cost,
                        double ticks, Stance landing, Maneuver m) {
-        Move move = Moves.ALL.get(mi);
+        Move move = moves.get(mi);
         if (!Bounds.holdsBody(search.view().border(), body, tx, tz)) {
             return;
         }
@@ -548,7 +550,7 @@ public final class AStar {
         double now = estimate.base(from.getX(), from.getY(), from.getZ());
         SearchResult.Blocking best = null;
         double bestEstimate = Double.POSITIVE_INFINITY;
-        for (Move move : Moves.ALL) {
+        for (Move move : moves) {
             for (Heading heading : move.headings()) {
                 double toward = estimate.base(from.getX() + heading.dx(), from.getY() + heading.dy(), from.getZ() + heading.dz());
                 if (!(toward < now) || toward >= bestEstimate) {
@@ -626,7 +628,7 @@ public final class AStar {
             return m;
         }
         int parent = nodes.parent[n];
-        Move move = Moves.ALL.get(nodes.move[n]);
+        Move move = moves.get(nodes.move[n]);
         Heading heading = move.headings().get(nodes.heading[n]);
         List<Edit> done = recentEdits(parent);
         WorldView here = faced(done);

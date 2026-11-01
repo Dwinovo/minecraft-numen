@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.api.entity.DigTime;
 import java.util.ArrayList;
@@ -77,7 +78,7 @@ public final class Fixtures {
 
     public static BodySnapshot body(BodyStats stats, GameType mode, float health, List<ItemStack> inventory) {
         return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, Fixtures.MINING,
-                Fixtures.BREATH);
+                Fixtures.BREATH, Mobility.WALKER);
     }
 
     /** 这份规格,原版身体,什么都放行,身上没料,没有生物。 */

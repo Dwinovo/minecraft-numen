@@ -5,6 +5,7 @@ import java.util.List;
 import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
@@ -17,6 +18,8 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Abilities;
+import net.minecraft.world.item.ElytraItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -43,7 +46,7 @@ public final class Snapshots {
         return new BodySnapshot(stats, body.gameMode.getGameModeForPlayer(), body.getHealth(),
                 body.getAttributeValue(Attributes.SAFE_FALL_DISTANCE),
                 body.getAttributeValue(Attributes.FALL_DAMAGE_MULTIPLIER), body.getFoodData().getFoodLevel(),
-                body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY), inventory, mining, breath(body));
+                body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY), inventory, mining, breath(body), mobility(body));
     }
 
     /**
@@ -56,6 +59,27 @@ public final class Snapshots {
                 : Math.max(remaining(body, MobEffects.WATER_BREATHING), remaining(body, MobEffects.CONDUIT_POWER));
         return new Breath(body.getAirSupply(), body.getMaxAirSupply(), body.getAttributeValue(Attributes.OXYGEN_BONUS),
                 shield, body.getItemBySlot(EquipmentSlot.HEAD).is(Items.TURTLE_HELMET));
+    }
+
+    /**
+     * 身上已有的移动方式:许不许飞、在不在飞、飞行速度照能力({@link Abilities});滑翔物看胸甲位——1.21.1 是没坏的鞘翅
+     * ({@code ElytraItem.isFlyEnabled}),还能用多少点耐久是离坏掉前剩的;烟花数是背包与副手里的火箭总数。谁能飞、谁能滑翔只在这里判。
+     */
+    public static Mobility mobility(ServerPlayer body) {
+        Abilities abilities = body.getAbilities();
+        ItemStack chest = body.getItemBySlot(EquipmentSlot.CHEST);
+        int gliderLife = chest.is(Items.ELYTRA) && ElytraItem.isFlyEnabled(chest)
+                ? chest.getMaxDamage() - chest.getDamageValue() - 1 : 0;
+        int fireworks = 0;
+        for (ItemStack stack : body.getInventory().items) {
+            if (stack.is(Items.FIREWORK_ROCKET)) {
+                fireworks += stack.getCount();
+            }
+        }
+        if (body.getOffhandItem().is(Items.FIREWORK_ROCKET)) {
+            fireworks += body.getOffhandItem().getCount();
+        }
+        return new Mobility(abilities.mayfly, abilities.flying, abilities.getFlyingSpeed(), gliderLife, fireworks);
     }
 
     /** 在水里游一格要几刻:规划给水里一步定价用的同一个数({@link Kinematics#wadeTicksPerBlock})。 */
