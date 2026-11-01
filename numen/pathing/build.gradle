@@ -128,18 +128,6 @@ tasks.register('pathingAnswersMerge', JavaExec) {
         args = ['merge', project.property('pathingDataset'), project.property('pathingShards'), mainCommit.get()]
     }
 }
-// 中立地形:把数据集的 .mca 导成圈外也读得了的格子(类别码,见数据集的 FORMAT.md),写到 <输出目录>/neutral/:
-//   ./gradlew :numen:pathing:pathingExport -PpathingDataset=<目录> -PpathingExportOut=<输出目录>
-tasks.register('pathingExport', JavaExec) {
-    group = 'verification'
-    description = '导出中立地形格式:每块地一个 grid.bin.gz(每格一个类别码)、grid.json、blockmap.csv,加一份 classes.json'
-    classpath = sourceSets.benchmark.runtimeClasspath
-    mainClass = 'com.dwinovo.numen.pathing.benchmark.Export'
-    maxHeapSize = providers.gradleProperty('pathingHeap').orElse('8g').get()
-    doFirst {
-        args = [project.property('pathingDataset'), project.property('pathingExportOut')]
-    }
-}
 // 规划评测:-PpathingSplit=dev|held|all(默认 dev),-PpathingOut=<输出目录>(默认 build/pathing-bench)
 tasks.register('pathingBench', JavaExec) {
     group = 'verification'
