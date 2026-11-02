@@ -171,6 +171,18 @@ class NavTextTest {
         assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false)));
     }
 
+    /** 鞘翅滑翔的细账:烟花用了几支(计划几支)、鞘翅耐久前后、掉血、迫降、还在空中。 */
+    @Test
+    void aGlideIsTold() {
+        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, 4, 90);
+        assertEquals("I flew 109 blocks (took off at 120,65,-33; landed at 121,64,-33). Gliding used 2 firework rockets (planned about 4)"
+                + " and wore the elytra from 0 to 3 damage; I lost no health.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
+                new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed))));
+        EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true, 4, 90);
+        assertEquals("Gliding used 1 firework rocket (planned about 4) and wore the elytra from 3 to 4 damage; I lost 3 health and had to"
+                + " land early where the ground was within reach. I am still in the air.", NavText.glide(forced));
+    }
+
     /** 憋不住气的结局:说出那一段水下在哪、要憋多久、此刻能安全憋多久,以及换成有水下呼吸就走得了;归到危险一类。 */
     @Test
     void aWayTooLongUnderWaterSaysWhereAndHowLong() {

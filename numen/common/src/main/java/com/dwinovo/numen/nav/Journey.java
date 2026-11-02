@@ -26,6 +26,7 @@ public final class Journey {
     private final List<Ruling> rulings = new ArrayList<>();
     private final List<BlockPos> launches = new ArrayList<>();
     private final List<BlockPos> landings = new ArrayList<>();
+    private final List<EditLedger.Glided> glides = new ArrayList<>();
     private double flown;
 
     /** 并进一趟路的实际账。 */
@@ -35,6 +36,7 @@ public final class Journey {
         dives.addAll(report.dives());
         launches.addAll(report.ledger().launches());
         landings.addAll(report.ledger().landings());
+        glides.addAll(report.ledger().glides());
         flown += report.ledger().flown();
     }
 
@@ -46,6 +48,7 @@ public final class Journey {
         rulings.addAll(other.rulings);
         launches.addAll(other.launches);
         landings.addAll(other.landings);
+        glides.addAll(other.glides);
         flown += other.flown;
     }
 
@@ -97,7 +100,7 @@ public final class Journey {
      * 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、没飞过、也没被拒过时是空串。{@code flying}:此刻身体还在飞。
      */
     public String describe(boolean flying) {
-        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying));
+        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides));
     }
 
     /**
@@ -107,6 +110,6 @@ public final class Journey {
     public Walked walked(Vec3 pos, double distanceLeft, boolean flying) {
         NavText.Tally edits = NavText.tally(entries);
         return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), edits.dugCells(), edits.placedCells(),
-                rulings, flown, launches, landings, flying);
+                rulings, flown, launches, landings, flying, glides.stream().map(Gliding::of).toList());
     }
 }

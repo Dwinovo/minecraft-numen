@@ -1,6 +1,6 @@
 package com.dwinovo.numen.pathing.api;
 
-import com.dwinovo.numen.pathing.drive.Driver;
+import com.dwinovo.numen.pathing.drive.Voyage;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.Halt;
 import com.dwinovo.numen.pathing.drive.PathLog;
@@ -19,7 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
  */
 public final class Navigation {
 
-    private final Driver driver;
+    private final Voyage driver;
     private final ServerPlayer entity;
     private final String who;
     /** 出发时的游戏刻与墙钟:结局里对比用了几刻、几秒,看得出刻速。 */
@@ -30,7 +30,7 @@ public final class Navigation {
     /** 收场那一刻的游戏刻;没收场为 -1。 */
     private long endTick = -1;
 
-    Navigation(Driver driver, ServerPlayer entity) {
+    Navigation(Voyage driver, ServerPlayer entity) {
         this.driver = driver;
         this.entity = entity;
         this.who = PathLog.who(entity);

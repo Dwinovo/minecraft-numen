@@ -58,7 +58,7 @@ import net.minecraft.world.phys.Vec3;
  * <h2>规划的结论</h2>
  * 搜索没有交出路线时,段状态机只交出那次搜索的停因与输入({@link Halt.Searched}),为什么没路由门面在同一份快照上诊断。
  */
-public final class Driver {
+public final class Driver implements Segment {
 
     /** 起点身体待不住(卡在方块里、悬在半空)最多等多少刻。 */
     private static final int STRANDED_TICKS = 60;
@@ -105,7 +105,12 @@ public final class Driver {
      */
     public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
-        this.rig = new Rig(body, terrain, materials, threats);
+        this(new Rig(body, terrain, materials, threats), goal, spec, budget, seed, passing, clock);
+    }
+
+    /** 一趟行程的一段:家伙({@link Rig},账、日志)由行程交进来,几段共用。 */
+    Driver(Rig rig, Goal goal, RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
+        this.rig = rig;
         this.spec = spec;
         this.trip = new Trip(new Eyes(), rig.who, rig.journal, goal, spec, budget, clock);
         this.course = trip.course();

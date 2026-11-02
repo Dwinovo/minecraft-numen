@@ -62,6 +62,9 @@ final class Trial {
     /** 什么都放行。 */
     static final TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
 
+    /** 又长又高的空场地模板(滑翔:爬到巡航高度再飞一百多格)。 */
+    static final String SKY = "pathing_sky";
+
     /** 高场地模板(按高度爬高)。 */
     static final String TALL = "pathing_tall";
 

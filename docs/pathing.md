@@ -1190,6 +1190,13 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - **快照与走法集**:`BodySnapshot.mobility`、`Moves.forBody`(取代全局 `Moves.ALL`);步行的规划评测 `results.jsonl` 与改前逐字节相同。
 - **走法与估价**:`Takeoff`、`Fly`、`Land`,飞着的站姿 `Stance.Kind.FLYING`;估价按身体取,`EstimateAdmissibilityTest`、`EstimateConsistencyTest` 加了许飞的身体。
 - **执行**:`AirControl`、`Pilot`、`Dynamics`、`Airway`;GameTest `FlightGameTests`(创造飞越峡谷到对岸点降落、飞到半空一格悬停、飞上高墙落在顶上、近处不起飞、生存模式面对同一道峡谷没有路;直升四十格、平飞六十四格过沟、斜着爬升二十四格,耗时对着步进器算出的理想耗时)。
+- **鞘翅滑翔**(ADR 0042 第 3 批,`drive/Voyage`、`Glide`、`Sortie`、`Helm`):滑翔不进格子搜索。一趟行程(`Voyage`,`Navigator.drive` 交出的就是它)由几段组成,
+  每段一种移动方式:走路的段(`Driver`)和滑翔的段(`Sortie`),共用一套家伙(`Rig`:账、日志、重规划原因)。第一刻问要不要飞(`Glide.plan`):
+  拿同一个局部控制器在空场里把"起飞点→爬到巡航高度→平飞→按滑翔比下滑→降落点"的线飞一遍,数耗时与烟花,低于全程步行的下界才排;之后 走到起飞点 → 滑翔 → 走到目标。
+  `Pilot` 与创造飞行共用,换的是 `Dynamics`(物理与键集)与代价项;`Helm` 是操舵(转视角、落键、右键放烟花,冷却先锁存),两种飞行共用一份。
+  起飞:拿烟花、抬头、起跳、松开、离地后新按一下跳展开;降落:落地竖直速度不掉血的上限内;迫降:烟花用完够不着降落点,或前方一组候选都过不去。
+  走廊上有区块没加载就不排滑翔。穿鞘翅走路(垫柱上升、跳沟)的 GameTest 验证了 `Controls` 空中按跳展开不会被步行的按键误触发。
+  回执:`Walked.glided`、`NavText.glide`。GameTest `GlideGameTests`;单测 `GlideRehearsalTest`、`AirwayTest`。
 - **已知取舍**:搜索是加权 A*(`AStar.WEIGHT` = 4),交出的路线至多比最优贵 4 倍;疾飞比疾跑快近 4 倍,所以在能走通的开阔地上,走路的路线常因这个倍数先被搜到,
   飞行只在走不通(峡谷、半空的目标、高墙)或一路够长时才挑上。要在能走通的地方也按价钱挑飞,得给飞行的身体另调这个权重,等评测数据再定。
 
