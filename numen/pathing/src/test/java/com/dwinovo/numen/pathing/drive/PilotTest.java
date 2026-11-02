@@ -12,7 +12,6 @@ import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,7 +39,7 @@ class PilotTest {
         assertTrue(pick.keys().forward() < 0, "该往后刹:" + pick.keys());
     }
 
-    /** 离墙还远:疾飞,不用刹车,没有警告。 */
+    /** 离墙还远:疾飞,不用刹车。 */
     @Test
     void farFromTheWallItCruises() {
         Pilot pilot = new Pilot(Dynamics.flying(0.05F), wallAt(90), EYE);
@@ -48,7 +47,6 @@ class PilotTest {
         Action pick = pilot.choose(now, Neck.at(0, 0), line(), 0, false, Supply.NONE);
         assertNotNull(pick);
         assertTrue(pick.keys().forward() > 0 && pick.keys().sprint(), "该疾飞:" + pick.keys());
-        assertFalse(pilot.warned());
     }
 
     /** 滑翔挡在整个前方(哪个方向都撞)时不放弃:还是交出一组(撞上之前飞得最久的),并说得出撞的是哪一格。 */

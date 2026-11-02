@@ -200,8 +200,8 @@ final class Sortie implements Segment {
             loitering = false;
         }
         Beat beat = helm.steer(way, s);
-        if (!emergency && helm.warned()) {
-            // 照这条线飞下去,松开键滑出去就撞:趁还有高度,先挑一处够得着的地面降下去
+        if (!emergency && !loitering && helm.blocked(way, s) != null) {
+            // 照这条线飞下去会撞:趁还有高度,先挑一处够得着的地面降下去
             redirect("前方有东西挡着");
         } else if (beat instanceof Beat.Blocked && !emergency && !loitering) {
             // 一刻都飞不了:改降到够得着的地面;已经在迫降还被围住,身体已在空中,别无他法,键松着等落地(落地的伤害如实记账)

@@ -57,12 +57,6 @@ final class Pilot {
     private BlockPos blocker;
     /** 这一次在跟的线的降落点那一圈({@link Airway#zone})。 */
     private double zone = Airway.SPOT;
-    /** 挑得出来的每一组都要靠刹车才不撞({@link #warned})。 */
-    private boolean warned;
-    /** 这一次推演用了刹车一程。 */
-    private boolean braked;
-    /** 这一次推演滑出去撞到的那一格(靠刹车才不撞的那一组才有)。 */
-    private BlockPos brakedAt;
     /** 这一次推演里落到地面时的伤害扣分({@link Dynamics#impact})。 */
     private double impact;
 
@@ -76,11 +70,6 @@ final class Pilot {
     void forget() {
         held = null;
         age = 0;
-    }
-
-    /** 这一刻挑中的那一组,松开键滑出去会撞、要靠刹车才停得住(创造飞行)或拉起(滑翔):前方有东西,宜早做打算。 */
-    boolean warned() {
-        return warned;
     }
 
     /** 上一次所有候选都被否决时,被撞的那一格;这一刻没被围住为 null。 */
@@ -113,13 +102,9 @@ final class Pilot {
                 && !(held.keys().rocket() && supply.rockets <= 0)
                 && rollout(now, neck, held, way, s, hold, supply) > Double.NEGATIVE_INFINITY) {
             age++;
-            warned = false;
             return held;
         }
         Action best = null;
-        boolean bestBraked = false;
-        BlockPos bestAt = null;
-        boolean unbraked = false;
         double bestScore = Double.NEGATIVE_INFINITY;
         List<Action> actions = physics.actions(aimYaw, aimPitch);
         for (Action action : actions) {
@@ -130,24 +115,17 @@ final class Pilot {
             if (score == Double.NEGATIVE_INFINITY) {
                 continue;
             }
-            unbraked |= !braked;
             if (held != null) {
                 score -= physics.change(held, action);
             }
             if (best == null || score > bestScore) {
                 best = action;
                 bestScore = score;
-                bestBraked = braked;
-                bestAt = brakedAt;
             }
         }
         if (best == null && !physics.stoppable()) {
             best = survive(now, neck, way, supply);
         }
-        // 前方有东西挡着:挑得出来的每一组,松开键滑出去都会撞(只有靠刹车或拉起才不撞)——只有一部分会撞的话,别的组好好的,不是警报
-        // 撞的得是不是地面:降落点那个高度的格(含)以上才算前方有东西(地面本身不算,贴着地面飞的候选撞地,是还没降下去,不是前方有墙)
-        Vec3 down = way.touchdown();
-        warned = best != null && bestBraked && !unbraked && (down == null || bestAt == null || bestAt.getY() >= Math.floor(down.y));
         age = best != null && best.equals(held) ? age + 1 : 1;
         held = best;
         return best;
@@ -194,8 +172,6 @@ final class Pilot {
         Neck n = neck;
         Vec3 down = way.touchdown();
         impact = 0;
-        braked = false;
-        brakedAt = null;
         // 烟花:候选里放,这一刻起推 burn 刻;已经在烧的接着烧
         int burning = action.keys().rocket() ? physics.burn() : supply.burning;
         for (int t = 0; t < hold; t++) {
@@ -218,8 +194,6 @@ final class Pilot {
                 return Double.NEGATIVE_INFINITY;
             }
             penalty = BRAKING;
-            braked = true;
-            brakedAt = blocker;
         } else if (!physics.stoppable() && !tail.touched() && !nearTouchdown(tail.end(), down)
                 && coast(tail.end(), tail.neck(), physics.brake(action), down, 0) == null) {
             // 可恢复的尾巴:停不下来的(滑翔)滑到头的那一点,还得有一程拉起来是通的——否则这一组是往死胡同里钻,现在就不要

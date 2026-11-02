@@ -49,10 +49,26 @@ final class Helm {
                 rig.entity.getEyeHeight());
     }
 
-    /** 这一刻挑中的那一组,松开键滑出去会撞、要靠刹车才停得住:前方有东西,宜早做打算。 */
-    boolean warned() {
-        return pilot.warned();
+    /**
+     * 照 {@code track} 从 {@code along} 起一直飞下去,第一个挡路的方块;没有为 null。线上每隔 {@link #LOOK_STEP} 格取一点,相邻两点之间按飞行的扫掠查
+     * (降落点附近允许擦着地面)。控制器只看近处的推演,绕得开就绕,线本身通不通是这里问的:线被堵了(飞到一半前面多了一堵墙),就该改降,不是在墙前打转。
+     */
+    BlockPos blocked(Airway track, double along) {
+        Vec3 from = track.at(along);
+        for (double s = along; s < track.length(); ) {
+            s = Math.min(track.length(), s + LOOK_STEP);
+            Vec3 to = track.at(s);
+            BlockPos hit = sweep(from, to, track.touchdown(), track.zone());
+            if (hit != null) {
+                return hit;
+            }
+            from = to;
+        }
+        return null;
     }
+
+    /** {@link #blocked} 沿线取点的间距(格)。 */
+    private static final double LOOK_STEP = 8.0;
 
     /** 这一趟放了几支烟花。 */
     int fired() {
