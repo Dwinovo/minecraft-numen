@@ -63,8 +63,8 @@ public final class Driver implements Segment {
     /** 起点身体待不住(卡在方块里、悬在半空)最多等多少刻。 */
     private static final int STRANDED_TICKS = 60;
     /**
-     * 路线走完、身体停住了却不在终点那一格(刚从高处落进水里,冲劲把身子压到水面以下再浮上来;冲劲带出了终点那一格),最多等多少刻让它
-     * 自己回到终点。三秒:从三格多高的地方落进水里,沉下去再浮起来要一两秒。
+     * 路线走完了还没在终点停稳(刚从高处落进水里,冲劲把身子压到水面以下再浮上来;冲劲带出了终点那一格;飞着的悬停还在收),最多等多少刻让它
+     * 自己停稳。三秒:从三格多高的地方落进水里,沉下去再浮起来要一两秒。
      */
     private static final int SETTLE_TICKS = 60;
 
@@ -87,7 +87,7 @@ public final class Driver implements Segment {
     private Step step;
 
     private int stranded;
-    /** 路线走完、身体停住了却不在终点那一格,已经等了几刻({@link #SETTLE_TICKS})。 */
+    /** 路线走完了还没在终点停稳(没停住、不在终点那一格),已经等了几刻({@link #SETTLE_TICKS})。 */
     private int unsettled;
 
     private State state = State.RUNNING;
@@ -526,12 +526,16 @@ public final class Driver implements Segment {
             still = Steering.stop(rig, c.x, c.z, endStance.feetY())
                     || Math.sqrt(horizontalSpeedSqr()) < Control.STILL && distanceSqr(c) < 0.3 * 0.3;
         }
-        watchdog.observe(body.position(), false);
+        // 路线走完了,没有该走的路:停稳在终点上是收场的事,不是卡在哪儿推不动("在推进"只问有路该走而没动)。停不稳有自己的期限:
+        // 等 SETTLE_TICKS 刻还没停稳,最后一步记为不通再重搜
+        watchdog.waiting(body.position());
         if (!still || node == null || !settled(endStance.kind())) {
             if (node != null && !node.equals(end) && (settled(Stance.Kind.GROUND) || endStance.kind() == Stance.Kind.FLYING && settled(Stance.Kind.FLYING))
                     && tracker.strays()) {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
                 missedEnd(rig.who + " 没停在终点 " + PathLog.pos(end) + ",落在 " + PathLog.pos(node));
+            } else if (++unsettled > SETTLE_TICKS) {
+                missedEnd(rig.who + " " + SETTLE_TICKS + " 刻还没在终点 " + PathLog.pos(end) + " 停稳 " + PathLog.body(body));
             }
             return;
         }
