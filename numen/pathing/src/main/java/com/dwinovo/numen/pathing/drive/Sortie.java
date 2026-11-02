@@ -9,6 +9,7 @@ import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
+import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -52,8 +53,8 @@ final class Sortie implements Segment {
     private static final double LOITER_RADIUS = 14.0;
     private static final int LOITER_RETRY = 10;
     private static final int LOITER_LIMIT = 400;
-    /** 迫降:往下最多找多少格的地面。 */
-    private static final int EMERGENCY_DROP = 60;
+    /** 目标那片没加载的飞行:每隔几刻看一眼那片加载了没有。 */
+    private static final int SETTLE_EVERY = 10;
 
     private final Rig rig;
     private final Glide.Plan plan;
@@ -71,6 +72,8 @@ final class Sortie implements Segment {
     private boolean emergency;
     /** 在盘旋等落点:从第几刻起。 */
     private boolean loitering;
+    /** 降落点已经定过(目标那片加载了)。 */
+    private boolean settled;
     private int loiterSince;
     private final int wearBefore;
     private final float healthBefore;
@@ -199,10 +202,29 @@ final class Sortie implements Segment {
         if (loitering && ticks % LOITER_RETRY == 0 && redirect("盘旋中找到了够得着的地面")) {
             loitering = false;
         }
+        if (!plan.known() && !settled && !emergency && !loitering && ticks % SETTLE_EVERY == 0) {
+            // 目标那片先没加载:飞到哪加载到哪,加载了就定真正的降落点,从此刻的位置重排下滑的线
+            Airway next = Glide.settle(rig, plan, body.position());
+            if (next != null) {
+                settled = true;
+                way = next;
+                s = 0;
+                helm.forget();
+                PathLog.info("{} 目标那片加载了,定下降落点 {} 身体 {}", rig.who, PathLog.pos(BlockPos.containing(next.touchdown())), PathLog.body(body));
+            }
+        }
         Beat beat = helm.steer(way, s);
         if (!emergency && !loitering && helm.blocked(way, s) != null) {
-            // 照这条线飞下去会撞:趁还有高度,先挑一处够得着的地面降下去
-            redirect("前方有东西挡着");
+            // 照这条线飞下去会撞(前方飞到哪加载到哪,新加载的那段里有东西):先抬高巡航重排,抬不过去再趁还有高度挑一处够得着的地面降下去
+            Airway up = Glide.raise(rig, way, body.position(), new Motion(body.position(), body.getDeltaMovement()), rig.look.neck());
+            if (up != null) {
+                way = up;
+                s = 0;
+                helm.forget();
+                PathLog.info("{} 前方有东西挡着,抬高巡航重排 {}", rig.who, PathLog.body(body));
+            } else {
+                redirect("前方有东西挡着");
+            }
         } else if (beat instanceof Beat.Blocked && !emergency && !loitering) {
             // 一刻都飞不了:改降到够得着的地面;已经在迫降还被围住,身体已在空中,别无他法,键松着等落地(落地的伤害如实记账)
             redirect("前方推演全被否决");
@@ -275,7 +297,7 @@ final class Sortie implements Segment {
         double speed = Math.hypot(v.x, v.z);
         double ux = speed > 0.05 ? v.x / speed : -Math.sin(Math.toRadians(body.getYRot()));
         double uz = speed > 0.05 ? v.z / speed : Math.cos(Math.toRadians(body.getYRot()));
-        BlockPos under = Glide.ground(rig, rig.snapshot().stats(), body.getBlockX(), body.getBlockZ(), body.getBlockY(), body.getBlockY() - EMERGENCY_DROP);
+        BlockPos under = Glide.ground(rig, rig.snapshot().stats(), body.getBlockX(), body.getBlockZ(), body.getBlockY(), rig.world().getMinBuildHeight());
         if (under == null) {
             return null;
         }
@@ -287,7 +309,7 @@ final class Sortie implements Segment {
             for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * MIN_RATIO; d -= 1.0) {
                 int x = (int) Math.floor(body.getX() + dx * d);
                 int z = (int) Math.floor(body.getZ() + dz * d);
-                BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, body.getBlockY(), body.getBlockY() - EMERGENCY_DROP);
+                BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, body.getBlockY(), rig.world().getMinBuildHeight());
                 if (cell != null && landable(new Vec3(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5))) {
                     return cell;
                 }
@@ -313,7 +335,7 @@ final class Sortie implements Segment {
                 if (level.getChunkSource().getChunkNow(x >> 4, z >> 4) == null) {
                     continue;
                 }
-                BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, at.getY(), at.getY() - EMERGENCY_DROP);
+                BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, at.getY(), rig.world().getMinBuildHeight());
                 if (cell == null) {
                     continue;
                 }

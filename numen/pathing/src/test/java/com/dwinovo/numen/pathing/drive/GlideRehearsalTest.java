@@ -49,4 +49,34 @@ class GlideRehearsalTest {
     void withoutRocketsTheClimbCannotBeFlown() {
         assertNull(Glide.rehearse(line(115), GRAVITY, mobility(0), EYE));
     }
+
+    /** 三百五十格的线(远途):演练飞得完,烟花按比例多用,耗时仍远低于走路。 */
+    @Test
+    void aFarLineIsStillFlownWithinTheRehearsalBudget() {
+        Glide.Result result = Glide.rehearse(line(350), GRAVITY, mobility(16), EYE);
+        assertNotNull(result);
+        assertTrue(result.ticks() < 350 * 3.5, "耗时 " + result.ticks());
+        assertEquals(350.5, result.landedAt().z, 6.0);
+    }
+
+    /** 往降落点去的线:富余的高度够长就先平飞、到按滑翔比下滑的那一点再下滑;高得下不去就绕着降落点盘旋着沉。 */
+    @Test
+    void theApproachGlidesFromWhereTheRatioReachesTheTouchdown() {
+        Vec3 touchdown = new Vec3(0.5, 0, 200.5);
+        List<Vec3> far = Glide.approachCorners(new Vec3(0.5, 10, 0.5), touchdown);
+        assertEquals(3, far.size());
+        assertEquals(200.5 - 10 * Glide.GLIDE_RATIO, far.get(1).z, 1e-9);
+        assertEquals(10, far.get(1).y, 1e-9);
+        // 高得下不去:不朝降落点硬俯冲,绕着它盘旋着往下沉,最后朝降落点下滑
+        Vec3 high = new Vec3(0.5, 40, 150.5);
+        List<Vec3> spiral = Glide.approachCorners(high, touchdown);
+        assertEquals(high, spiral.get(0));
+        assertEquals(touchdown, spiral.get(spiral.size() - 1));
+        assertTrue(spiral.size() > 12, "盘旋至少一圈:" + spiral.size());
+        for (int i = 2; i < spiral.size() - 1; i++) {
+            assertTrue(spiral.get(i).y <= spiral.get(i - 1).y + 1e-9, "只往下沉");
+            assertEquals(14.0, Math.hypot(spiral.get(i).x - touchdown.x, spiral.get(i).z - touchdown.z), 1e-6);
+        }
+        assertTrue((spiral.get(spiral.size() - 2).y - touchdown.y) * Glide.GLIDE_RATIO >= 14, "最后一段朝降落点放得下滑翔比");
+    }
 }
