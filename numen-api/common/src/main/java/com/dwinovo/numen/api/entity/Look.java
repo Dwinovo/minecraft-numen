@@ -27,6 +27,8 @@ public final class Look {
     static final double PIXEL = Math.pow(0.5 * 0.6 + 0.2, 3) * 8 * 0.15;
 
     private final ServerPlayer body;
+    /** 上一次 {@link #steer} 之后的颈部。 */
+    private Neck lastNeck;
 
     public Look(ServerPlayer body) {
         this.body = body;
@@ -56,8 +58,38 @@ public final class Look {
 
     /** 走路时朝 {@code (x, z)} 看去,俯仰留在平视。 */
     public void faceToward(double x, double z) {
-        float yaw = (float) (Math.toDegrees(Math.atan2(z - body.getZ(), x - body.getX())) - 90.0);
-        turn(yaw, 0);
+        turn(yawOf(x - body.getX(), z - body.getZ()), 0);
+    }
+
+    /**
+     * 朝 {@code yaw}、{@code pitch} 转一刻,按颈部模型({@link Neck}):角速度与角加速度都有上限,两轴一起到位,像真人推鼠标,不瞬间甩过去。
+     * 空中的控制器每刻调一次;这里转的就是 {@link #neck} 往前算一刻的结果,控制器推演时复制同一个颈部,看到的朝向与真身体一致。
+     * 不取整到鼠标像素:飞行里要的是顺滑的转动,朝向就是这一刻算出的值。
+     */
+    public void steer(float yaw, float pitch) {
+        Neck next = neck().toward(yaw, pitch);
+        lastNeck = next;
+        rotate(new Rotation(next.yaw(), next.pitch()));
+    }
+
+    /**
+     * 颈部此刻的样子:朝向是身体此刻的朝向,角速度是上一次 {@link #steer} 留下的——要是朝向被别处转走了(转头去挖、去看)就当停着。
+     */
+    public Neck neck() {
+        if (lastNeck != null && lastNeck.yaw() == body.getYRot() && lastNeck.pitch() == body.getXRot()) {
+            return lastNeck;
+        }
+        return Neck.at(body.getYRot(), body.getXRot());
+    }
+
+    /** 水平方向 {@code (dx, dz)} 对应的偏航角(度,原版口径:南是 0)。 */
+    public static float yawOf(double dx, double dz) {
+        return (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
+    }
+
+    /** 方向 {@code (dx, dy, dz)} 对应的俯仰角(度,原版口径:向下为正)。 */
+    public static float pitchOf(double dx, double dy, double dz) {
+        return (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
     }
 
     private void rotate(Rotation to) {
@@ -72,9 +104,7 @@ public final class Look {
         double dx = point.x - eye.x;
         double dy = point.y - eye.y;
         double dz = point.z - eye.z;
-        float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
-        float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
-        return turned(body.getYRot(), body.getXRot(), yaw, pitch);
+        return turned(body.getYRot(), body.getXRot(), yawOf(dx, dz), pitchOf(dx, dy, dz));
     }
 
     /**
