@@ -36,24 +36,53 @@ final class Airway {
     private final double[] arc;
     /** 终点是降落点:落地面的高度(脚),以及水平方向上这个降落点中心;不降落为 null。 */
     private final Vec3 touchdown;
+    /** 降落点这一圈(水平半径,格):圈里把地面当成降落点那一格的高度,脚落到它就算落地。迫降时地面只知道一点,圈大一些。 */
+    private final double zone;
 
-    private Airway(List<Vec3> points, Vec3 touchdown) {
+    private Airway(List<Vec3> points, Vec3 touchdown, double zone) {
         this.points = points.toArray(Vec3[]::new);
         this.arc = new double[this.points.length];
         for (int i = 1; i < this.points.length; i++) {
             arc[i] = arc[i - 1] + this.points[i].distanceTo(this.points[i - 1]);
         }
         this.touchdown = touchdown;
+        this.zone = zone;
     }
 
     /** 直接用这几个点,不拉直。{@code touchdown} 是降落点(脚落在地面上的位置),没有为 null。 */
     static Airway through(List<Vec3> points, Vec3 touchdown) {
-        return new Airway(points, touchdown);
+        return new Airway(points, touchdown, SPOT);
     }
+
+    /** 同样的点,降落点那一圈换成 {@code zone} 格(迫降用)。 */
+    Airway withZone(double zone) {
+        return new Airway(List.of(points), touchdown, zone);
+    }
+
+    /**
+     * 绕 {@code center} 转圈的折线(盘旋):在高度 {@code y},半径 {@code radius},从离 {@code from} 最近的一点起转 {@code laps} 圈,先从 {@code from} 过去。
+     * 没有降落点:盘旋是为了等,不是为了落。
+     */
+    static Airway circle(Vec3 from, Vec3 center, double radius, double y, int laps) {
+        int sides = CIRCLE_SIDES;
+        double start = Math.atan2(from.z - center.z, from.x - center.x);
+        List<Vec3> out = new ArrayList<>();
+        out.add(from);
+        for (int i = 1; i <= sides * laps; i++) {
+            double angle = start + 2 * Math.PI * i / sides;
+            out.add(new Vec3(center.x + radius * Math.cos(angle), y, center.z + radius * Math.sin(angle)));
+        }
+        return new Airway(out, null, SPOT);
+    }
+
+    /** 盘旋的一圈用几条边。 */
+    private static final int CIRCLE_SIDES = 12;
+    /** 计划好的降落点那一圈的半径:落在那一格上。 */
+    static final double SPOT = 1.0;
 
     /** 停在一点上(悬停):只有一个点的折线。 */
     static Airway at(Vec3 point) {
-        return new Airway(List.of(point), null);
+        return new Airway(List.of(point), null, SPOT);
     }
 
     /**
@@ -73,7 +102,7 @@ final class Airway {
             kept.add(raw.get(j));
             i = j;
         }
-        return new Airway(kept, touchdown);
+        return new Airway(kept, touchdown, SPOT);
     }
 
     /**
@@ -112,6 +141,11 @@ final class Airway {
     /** 降落点;不降落为 null。 */
     Vec3 touchdown() {
         return touchdown;
+    }
+
+    /** 降落点那一圈的半径。 */
+    double zone() {
+        return zone;
     }
 
     /** 弧长 {@code s} 处的点;超出两头的按末段、首段的方向延伸。 */

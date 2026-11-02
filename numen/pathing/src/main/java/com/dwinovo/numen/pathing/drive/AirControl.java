@@ -162,7 +162,7 @@ final class AirControl {
         Vec3 touchdown = tail.kind() == MoveKind.LAND ? raw.get(raw.size() - 1) : null;
         CostModel spec = model.get();
         way = Airway.straighten(raw, touchdown, (from, to) -> {
-            BlockPos hit = helm.sweep(from, to, touchdown);
+            BlockPos hit = helm.sweep(from, to, touchdown, Airway.SPOT);
             return hit != null ? hit : Flight.refused(spec, rig.world(), from, to);
         });
         ends = new double[end - base];

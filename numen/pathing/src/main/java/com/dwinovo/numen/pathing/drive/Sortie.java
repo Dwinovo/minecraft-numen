@@ -46,6 +46,12 @@ final class Sortie implements Segment {
     private static final int EMERGENCY_STEP = 3;
     /** 迫降:落点的水平距离至少是下降高度的几倍(再陡就得俯冲,落得重)。 */
     private static final double MIN_RATIO = 4.0;
+    /** 迫降的降落点那一圈的半径:地面当作落点那一格的高度。 */
+    private static final double EMERGENCY_ZONE = 12.0;
+    /** 盘旋:半径、每隔几刻再找一次落点、最多盘旋几刻。 */
+    private static final double LOITER_RADIUS = 14.0;
+    private static final int LOITER_RETRY = 10;
+    private static final int LOITER_LIMIT = 400;
     /** 迫降:往下最多找多少格的地面。 */
     private static final int EMERGENCY_DROP = 60;
 
@@ -63,6 +69,9 @@ final class Sortie implements Segment {
     private int pressedAt = -1;
     private double s;
     private boolean emergency;
+    /** 在盘旋等落点:从第几刻起。 */
+    private boolean loitering;
+    private int loiterSince;
     private final int wearBefore;
     private final float healthBefore;
     private final Vec3 launchedAt;
@@ -95,10 +104,6 @@ final class Sortie implements Segment {
             return state;
         }
         ticks++;
-        if (ticks > plan.ticks() * 2 + 200 && !rig.entity.isFallFlying()) {
-            abort(rig.entity.blockPosition(), "滑翔超时");
-            return state;
-        }
         if (phase == Phase.TAKEOFF) {
             takeoff();
         }
@@ -111,33 +116,39 @@ final class Sortie implements Segment {
     // ==================== 起飞 ====================
 
     /**
-     * 先把视线转到爬升的方向(颈部转得有速度,烟花是朝视线推的,起飞时脸不朝对就白放),转到了起跳、松开、离地后再按一下展开。
+     * 平地起飞:先把视线转到爬升的方向(颈部转得有速度,烟花是朝视线推的,脸没转过来就放等于白放),转到了起跳、松开、离地后再按一下展开。
+     * 从边沿走出去:视线转到下滑的方向、平视,按住前进与疾跑走出边沿,离地后新按一下跳展开(不起跳、不放烟花)。
      * 转头、起跳到展开总共有时限,展不开就放弃。
      */
     private void takeoff() {
         var body = rig.entity;
         if (body.isFallFlying()) {
             rig.keys.release(Key.JUMP);
+            rig.keys.release(Key.FORWARD);
+            rig.keys.release(Key.SPRINT);
             phase = Phase.GLIDE;
             return;
         }
-        if (aligning == 0) {
+        boolean drop = plan.drop();
+        if (aligning == 0 && Snapshots.mobility(body).fireworks() > 0) {
             Hotbar.Grip grip = rig.hotbar.grip(Items.FIREWORK_ROCKET);
             rig.act(grip.action());
-            if (!grip.ready()) {
+            if (!grip.ready() && !drop) {
                 abort(plan.takeoff(), "手上拿不到烟花");
                 return;
             }
         }
         Vec3 aim = way.at(Math.min(way.length(), 8));
         float yaw = Look.yawOf(aim.x - body.getX(), aim.z - body.getZ());
-        rig.look.steer(yaw, Glide.CLIMB_PITCH);
-        rig.keys.release(Key.FORWARD);
+        float pitch = drop ? 0 : Glide.CLIMB_PITCH;
+        rig.look.steer(yaw, pitch);
         rig.keys.release(Key.SNEAK);
         aligning++;
-        if (takeoffTicks == 0 && (Math.abs(Mth.wrapDegrees(yaw - body.getYRot())) > ALIGNED || Math.abs(Glide.CLIMB_PITCH - body.getXRot()) > ALIGNED)) {
+        boolean facing = Math.abs(Mth.wrapDegrees(yaw - body.getYRot())) <= ALIGNED && Math.abs(pitch - body.getXRot()) <= ALIGNED;
+        if (takeoffTicks == 0 && !facing) {
+            rig.keys.release(Key.FORWARD);
             if (aligning > ALIGN_LIMIT) {
-                abort(plan.takeoff(), "视线转不到爬升的方向");
+                abort(plan.takeoff(), "视线转不到起飞的方向");
             }
             return;
         }
@@ -145,9 +156,15 @@ final class Sortie implements Segment {
             abort(plan.takeoff(), "展开不了鞘翅");
             return;
         }
-        if (takeoffTicks == 1) {
+        if (drop) {
+            rig.keys.press(Key.FORWARD);
+            rig.keys.press(Key.SPRINT);
+        } else {
+            rig.keys.release(Key.FORWARD);
+        }
+        if (!drop && takeoffTicks == 1) {
             rig.keys.press(Key.JUMP);
-        } else if (takeoffTicks == 2) {
+        } else if (!drop && takeoffTicks == 2) {
             rig.keys.release(Key.JUMP);
         } else if (!body.onGround() && (pressedAt < 0 || takeoffTicks - pressedAt > UNFURL_RETRY)) {
             // 离地之后新按一下跳:按下沿,原版客户端在这时发展开的指令
@@ -169,14 +186,24 @@ final class Sortie implements Segment {
         }
         Mobility mobility = Snapshots.mobility(body);
         s = way.project(body.position(), s);
-        if (!emergency && mobility.fireworks() == 0 && !reaches(body.position(), way.touchdown())) {
-            redirect("烟花用完了,够不着降落点");
+        // 计划指望着烟花、烟花却用完了(演练已经证明过不放烟花也飞得到的计划不在此列):够不着降落点就改降
+        if (!emergency && !loitering && plan.rockets() > 0 && mobility.fireworks() == 0 && !reaches(body.position(), way.touchdown())
+                && !redirect("烟花用完了,够不着降落点")) {
+            loiter();
+        }
+        if (loitering && ticks - loiterSince > LOITER_LIMIT) {
+            loitering = false;
+            way = plan.way();
+            s = way.project(body.position(), 0);
+        }
+        if (loitering && ticks % LOITER_RETRY == 0 && redirect("盘旋中找到了够得着的地面")) {
+            loitering = false;
         }
         Beat beat = helm.steer(way, s);
         if (!emergency && helm.warned()) {
             // 照这条线飞下去,松开键滑出去就撞:趁还有高度,先挑一处够得着的地面降下去
             redirect("前方有东西挡着");
-        } else if (beat instanceof Beat.Blocked && !emergency) {
+        } else if (beat instanceof Beat.Blocked && !emergency && !loitering) {
             // 一刻都飞不了:改降到够得着的地面;已经在迫降还被围住,身体已在空中,别无他法,键松着等落地(落地的伤害如实记账)
             redirect("前方推演全被否决");
         }
@@ -201,12 +228,33 @@ final class Sortie implements Segment {
             return false;
         }
         Vec3 spot = new Vec3(best.getX() + 0.5, best.getY(), best.getZ() + 0.5);
-        way = Airway.through(List.of(body.position(), spot), spot);
+        // 地面只知道落点这一格的高度:以它为准的一圈里落地都算数(迫降不求落在那一格上,落在它前头的平地上同样行)
+        way = Airway.through(List.of(body.position(), spot), spot).withZone(EMERGENCY_ZONE);
         s = 0;
         emergency = true;
+        loitering = false;
         helm.forget();
         PathLog.info("{} 迫降({}) 改降在 {} {}", rig.who, why, PathLog.pos(best), PathLog.body(body));
         return true;
+    }
+
+    /**
+     * 找不到够得着的落点:绕着前方的一点盘旋(同一个控制器跟一条圆形的线,有烟花就靠烟花撑住高度),隔一阵再找一次落点。
+     * 盘旋只是等,不是办法:盘旋 {@link #LOITER_LIMIT} 刻还没有落点,就照原来的线飞(落点够不着也只能那样落下去)。
+     */
+    private void loiter() {
+        var body = rig.entity;
+        Vec3 v = body.getDeltaMovement();
+        double speed = Math.hypot(v.x, v.z);
+        double ux = speed > 0.05 ? v.x / speed : -Math.sin(Math.toRadians(body.getYRot()));
+        double uz = speed > 0.05 ? v.z / speed : Math.cos(Math.toRadians(body.getYRot()));
+        Vec3 center = body.position().add(ux * LOITER_RADIUS, 0, uz * LOITER_RADIUS);
+        way = Airway.circle(body.position(), center, LOITER_RADIUS, body.getY(), 3);
+        s = 0;
+        loitering = true;
+        loiterSince = ticks;
+        helm.forget();
+        PathLog.info("{} 找不到够得着的落点,盘旋等 {}", rig.who, PathLog.body(body));
     }
 
     /** 够得着(留余量)、直线通得过去、不用俯冲的落点 {@code spot}。 */
@@ -217,7 +265,10 @@ final class Sortie implements Segment {
                 && Airway.sweep(rig.world(), rig.snapshot().stats(), 0).clear(body.position(), spot.add(0, 1, 0));
     }
 
-    /** 顺着此刻水平飞的方向,从远到近、偏左右各几格找落点;没有为 null。 */
+    /**
+     * 顺着此刻水平飞的方向找落点:先不转弯,再往左右各转一点({@link #TURNS} 度,转得越少越先),每个方向从远到近(下滑最平的先)。
+     * 滑翔转弯转得慢(颈部有加速度上限,速度又快),往回掉头的落点来不及,不在这里找。
+     */
     private BlockPos ahead() {
         var body = rig.entity;
         Vec3 v = body.getDeltaMovement();
@@ -229,10 +280,13 @@ final class Sortie implements Segment {
             return null;
         }
         double altitude = body.getY() - under.getY();
-        for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * MIN_RATIO; d -= 1.0) {
-            for (int side : new int[] {0, -2, 2, -4, 4}) {
-                int x = (int) Math.floor(body.getX() + ux * d - uz * side);
-                int z = (int) Math.floor(body.getZ() + uz * d + ux * side);
+        for (int turn : TURNS) {
+            double angle = Math.toRadians(turn);
+            double dx = ux * Math.cos(angle) - uz * Math.sin(angle);
+            double dz = uz * Math.cos(angle) + ux * Math.sin(angle);
+            for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * MIN_RATIO; d -= 1.0) {
+                int x = (int) Math.floor(body.getX() + dx * d);
+                int z = (int) Math.floor(body.getZ() + dz * d);
                 BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, body.getBlockY(), body.getBlockY() - EMERGENCY_DROP);
                 if (cell != null && landable(new Vec3(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5))) {
                     return cell;
@@ -242,7 +296,10 @@ final class Sortie implements Segment {
         return null;
     }
 
-    /** 往四周找落点,离原来的降落点近的优先;没有为 null。 */
+    /** 迫降找落点时往左右转的角度(度),转得少的先试。 */
+    private static final int[] TURNS = {0, 15, -15, 30, -30, 45, -45, 60, -60};
+
+    /** 往四周找落点(不找身后的:掉头来不及),离原来的降落点近的优先;没有为 null。 */
     private BlockPos around() {
         var body = rig.entity;
         ServerLevel level = body.serverLevel();
@@ -262,7 +319,8 @@ final class Sortie implements Segment {
                 }
                 Vec3 spot = new Vec3(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5);
                 double near = Math.hypot(spot.x - plan.way().touchdown().x, spot.z - plan.way().touchdown().z);
-                if (near < bestDistance && landable(spot)) {
+                boolean behind = (spot.x - body.getX()) * body.getDeltaMovement().x + (spot.z - body.getZ()) * body.getDeltaMovement().z < 0;
+                if (!behind && near < bestDistance && landable(spot)) {
                     best = cell;
                     bestDistance = near;
                 }

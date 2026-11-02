@@ -25,8 +25,8 @@ final class Helm {
 
     /** 飞行的线往下多留的一层(格):飞着的身体脚一碰到地面原版就停飞。 */
     private static final double SKIN = 0.05;
-    /** 离降落点水平这么近以内,允许擦着地面(落地就是要碰到它)。 */
-    private static final double LANDING = 6.0;
+    /** 离降落点那一圈再往外这么近以内,允许擦着地面(落地就是要碰到它)。 */
+    private static final double LANDING = 10.0;
     /** 右键放烟花的间隔(刻):原版连续使用的间隔。 */
     static final int COOLDOWN = 4;
 
@@ -44,7 +44,8 @@ final class Helm {
     Helm(Rig rig, Dynamics physics) {
         this.rig = rig;
         this.stats = rig.snapshot().stats();
-        this.pilot = new Pilot(physics, (from, to) -> sweep(from, to, steering == null ? null : steering.touchdown()),
+        this.pilot = new Pilot(physics,
+                (from, to) -> steering == null ? sweep(from, to, null, 0) : sweep(from, to, steering.touchdown(), steering.zone()),
                 rig.entity.getEyeHeight());
     }
 
@@ -64,8 +65,8 @@ final class Helm {
     }
 
     /** 飞过这一段碰不碰方块;离降落点近处允许擦着地面,别处都往下多留 {@link #SKIN}。 */
-    BlockPos sweep(Vec3 from, Vec3 to, Vec3 touchdown) {
-        boolean landing = touchdown != null && Math.hypot(to.x - touchdown.x, to.z - touchdown.z) < LANDING;
+    BlockPos sweep(Vec3 from, Vec3 to, Vec3 touchdown, double zone) {
+        boolean landing = touchdown != null && Math.hypot(to.x - touchdown.x, to.z - touchdown.z) < zone + LANDING;
         return Airway.sweep(rig.world(), stats, landing ? 0 : SKIN).blocker(from, to);
     }
 

@@ -9,6 +9,7 @@ import net.minecraft.world.phys.Vec3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 空中折线:拉直只在扫过去确实通的地方去掉中间的点;弧长认身体走到了哪,末尾之外按末段方向延伸。 */
 class AirwayTest {
@@ -45,5 +46,16 @@ class AirwayTest {
         assertEquals(12, way.project(new Vec3(0, 0, 12), 0), 1.0E-9);
         assertEquals(10, way.length(), 1.0E-9);
         assertEquals(0.5, way.offset(new Vec3(0.5, 0, 4), 4), 1.0E-9);
+    }
+
+    /** 盘旋的线:绕着圆心转,每个点都在圆上,转几圈就是几圈的周长,从身体这一点出发。 */
+    @Test
+    void aCircleLoopsAroundItsCenterFromTheBody() {
+        Vec3 center = new Vec3(10, 20, 0);
+        Airway way = Airway.circle(new Vec3(0, 20, 0), center, 10, 20, 2);
+        assertEquals(new Vec3(0, 20, 0), way.start());
+        Vec3 onCircle = way.at(30);
+        assertEquals(10, Math.hypot(onCircle.x - center.x, onCircle.z - center.z), 0.6);
+        assertTrue(way.length() > 2 * 2 * Math.PI * 10 * 0.95, "两圈的周长:" + way.length());
     }
 }

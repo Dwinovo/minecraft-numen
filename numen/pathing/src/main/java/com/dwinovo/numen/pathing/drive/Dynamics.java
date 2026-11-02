@@ -53,6 +53,9 @@ interface Dynamics {
     /** 从正在按的 {@code held} 换成 {@code next} 的代价(弧长的格数):不在相邻两组之间来回抖。 */
     double change(Action held, Action next);
 
+    /** 推演滑到头的状态本身的代价(弧长的格数):滑翔慢到快失速(像降落伞一样飘)的状态,离落地和转向都远,扣分。 */
+    double endCost(Motion end);
+
     /** 这一组候选本身的代价(弧长的格数):滑翔里放一支烟花是花钱的。 */
     double cost(Action action);
 
@@ -64,6 +67,9 @@ interface Dynamics {
     /** 滑翔里俯仰目标、偏航目标每差一度扣多少分。 */
     double PITCH_CHANGE = 0.02;
     double YAW_CHANGE = 0.01;
+    /** 滑翔的水平速度低于它就算快失速,每低一格每刻扣多少分。 */
+    double STALL_SPEED = 0.6;
+    double STALL_COST = 40.0;
     /** 放一支烟花扣多少分(弧长的格数):烟花是花钱的,只有真有好处才放。 */
     double ROCKET_COST = 4.0;
     /** 看向前方的点时俯仰打的折扣。 */
@@ -155,6 +161,11 @@ interface Dynamics {
             }
 
             @Override
+            public double endCost(Motion end) {
+                return 0;
+            }
+
+            @Override
             public double cost(Action action) {
                 return 0;
             }
@@ -219,7 +230,7 @@ interface Dynamics {
 
             @Override
             public int horizon() {
-                return 30;
+                return 40;
             }
 
             @Override
@@ -244,6 +255,11 @@ interface Dynamics {
             }
 
             @Override
+            public double endCost(Motion end) {
+                return Math.max(0, STALL_SPEED - Math.hypot(end.velocity().x, end.velocity().z)) * STALL_COST;
+            }
+
+            @Override
             public double cost(Action action) {
                 return action.keys().rocket() ? ROCKET_COST : 0;
             }
@@ -258,7 +274,7 @@ interface Dynamics {
     /** 拉起时的目标俯仰。 */
     float PULL_UP = -35.0F;
     /** 落地时竖直速度每比 {@link #SOFT_LANDING} 快一格每刻,扣多少分。 */
-    double IMPACT_COST = 200.0;
+    double IMPACT_COST = 600.0;
     /** 落地时竖直速度高于它,原版滑翔里坠落距离每刻重置,不掉血。 */
     double SOFT_LANDING = -0.5;
 }

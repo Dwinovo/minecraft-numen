@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.Blocks;
 
 /**
  * 鞘翅:穿着鞘翅、背着烟花的身体去很远的地方,用不用滑翔由估计的耗时定(比走路的下界快才飞)。用普通假玩家({@link TestBody})经 {@code Navigator} 真走:
- * 平地起飞到远处降落、烟花不够就走路、飞着烟花用完迫降;另有穿着鞘翅走路(垫柱上升、跳沟)不误展开。前方撞墙推演否决是局部控制器的事,见单测 PilotTest 与 FlightGameTests。
+ * 平地起飞到远处降落、没烟花从高处走出边沿往下滑、烟花不够就走路、飞着烟花用完迫降、前方突然多出一堵墙;另有穿着鞘翅走路(垫柱上升、跳沟)不误展开。
  */
 public class GlideGameTests {
 
@@ -108,6 +108,57 @@ public class GlideGameTests {
                     }
                     if (r.lowestHealth < 20) {
                         throw new GameTestAssertException("迫降掉血了:" + r.lowestHealth);
+                    }
+                })
+                .arrives();
+    }
+
+    /** 没有烟花,站在十五格高的石柱顶上:从边沿走出去展开,只靠高度滑到七十多格外落地,一支烟花也没放,没掉血。脚下没有路下去,只能飞。 */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400)
+    public static void without_rockets_a_body_glides_off_a_height(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(4, 1, 10, 6, 14, 14, Blocks.STONE);
+        TestBody body = t.body(5, 15, 12);
+        body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
+        t.go(body, Goals.at(t.at(120, 1, 12)), RouteSpec.defaults()).within(1000)
+                .then(r -> {
+                    var glides = r.report.ledger().glides();
+                    if (glides.size() != 1 || glides.get(0).rockets() != 0 || glides.get(0).blocks() < 40 || glides.get(0).damage() > 0
+                            || glides.get(0).emergency()) {
+                        throw new GameTestAssertException("该有一段没放烟花、没掉血的滑翔:" + glides);
+                    }
+                })
+                .arrives();
+    }
+
+    /**
+     * 飞到一半前方多出一堵墙(宽二十格,从地面砌到顶,只在正中留一扇三格宽三格高的门洞供人走):推演否决撞墙,滑翔在墙前落地(或从门洞里过去),
+     * 不撞上去(不掉血);落地后走路的段穿过门洞走完。
+     */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800)
+    public static void a_wall_that_appears_ahead_is_vetoed_by_the_rehearsal(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = winged(t, 5, 8);
+        int[] flying = {0};
+        t.go(body, Goals.at(t.at(130, 1, 12)), RouteSpec.defaults()).within(1500)
+                .during(r -> {
+                    if (r.body.isFallFlying() && flying[0]++ == 40) {
+                        int x = (int) (r.body.getX() - t.origin.getX()) + 44;
+                        for (int dy = 1; dy <= 38; dy++) {
+                            for (int z = 2; z <= 21; z++) {
+                                if (dy > 3 || z < 11 || z > 13) {
+                                    t.change(x, dy, z, Blocks.STONE.defaultBlockState());
+                                }
+                            }
+                        }
+                    }
+                })
+                .then(r -> {
+                    if (r.lowestHealth < 20) {
+                        throw new GameTestAssertException("撞上了墙或摔了:最低血量 " + r.lowestHealth);
+                    }
+                    if (r.report.ledger().glides().size() != 1) {
+                        throw new GameTestAssertException("该有一段滑翔:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
