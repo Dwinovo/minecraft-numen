@@ -48,6 +48,11 @@ final class Helm {
                 rig.entity.getEyeHeight());
     }
 
+    /** 这一刻挑中的那一组,松开键滑出去会撞、要靠刹车才停得住:前方有东西,宜早做打算。 */
+    boolean warned() {
+        return pilot.warned();
+    }
+
     /** 这一趟放了几支烟花。 */
     int fired() {
         return fired;

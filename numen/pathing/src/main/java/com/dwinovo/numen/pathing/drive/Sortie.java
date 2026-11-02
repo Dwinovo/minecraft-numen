@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.search.Route;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -32,7 +33,10 @@ final class Sortie implements Segment {
 
     private enum Phase { TAKEOFF, GLIDE }
 
-    /** 起飞最多几刻,展开不了就放弃。 */
+    /** 视线离爬升方向不到这么多度(两个方向)才起跳;转头最多几刻。 */
+    private static final float ALIGNED = 4.0F;
+    private static final int ALIGN_LIMIT = 60;
+    /** 起跳之后最多几刻,展开不了就放弃。 */
     private static final int TAKEOFF_LIMIT = 30;
     /** 展开那一下跳之后几刻还没展开,就再按一次。 */
     private static final int UNFURL_RETRY = 3;
@@ -41,7 +45,7 @@ final class Sortie implements Segment {
     private static final double REACH_MARGIN = 0.8;
     private static final int EMERGENCY_STEP = 3;
     /** 迫降:落点的水平距离至少是下降高度的几倍(再陡就得俯冲,落得重)。 */
-    private static final double MIN_RATIO = 3.0;
+    private static final double MIN_RATIO = 4.0;
     /** 迫降:往下最多找多少格的地面。 */
     private static final int EMERGENCY_DROP = 60;
 
@@ -54,6 +58,8 @@ final class Sortie implements Segment {
     private Halt halt;
     private int ticks;
     private int takeoffTicks;
+    /** 转头对准用了几刻。 */
+    private int aligning;
     private int pressedAt = -1;
     private double s;
     private boolean emergency;
@@ -104,7 +110,10 @@ final class Sortie implements Segment {
 
     // ==================== 起飞 ====================
 
-    /** 起跳、松开、离地后再按一下展开。 */
+    /**
+     * 先把视线转到爬升的方向(颈部转得有速度,烟花是朝视线推的,起飞时脸不朝对就白放),转到了起跳、松开、离地后再按一下展开。
+     * 转头、起跳到展开总共有时限,展不开就放弃。
+     */
     private void takeoff() {
         var body = rig.entity;
         if (body.isFallFlying()) {
@@ -112,7 +121,7 @@ final class Sortie implements Segment {
             phase = Phase.GLIDE;
             return;
         }
-        if (takeoffTicks == 0) {
+        if (aligning == 0) {
             Hotbar.Grip grip = rig.hotbar.grip(Items.FIREWORK_ROCKET);
             rig.act(grip.action());
             if (!grip.ready()) {
@@ -120,14 +129,22 @@ final class Sortie implements Segment {
                 return;
             }
         }
+        Vec3 aim = way.at(Math.min(way.length(), 8));
+        float yaw = Look.yawOf(aim.x - body.getX(), aim.z - body.getZ());
+        rig.look.steer(yaw, Glide.CLIMB_PITCH);
+        rig.keys.release(Key.FORWARD);
+        rig.keys.release(Key.SNEAK);
+        aligning++;
+        if (takeoffTicks == 0 && (Math.abs(Mth.wrapDegrees(yaw - body.getYRot())) > ALIGNED || Math.abs(Glide.CLIMB_PITCH - body.getXRot()) > ALIGNED)) {
+            if (aligning > ALIGN_LIMIT) {
+                abort(plan.takeoff(), "视线转不到爬升的方向");
+            }
+            return;
+        }
         if (takeoffTicks++ > TAKEOFF_LIMIT) {
             abort(plan.takeoff(), "展开不了鞘翅");
             return;
         }
-        Vec3 aim = way.at(Math.min(way.length(), 8));
-        rig.look.steer(Look.yawOf(aim.x - body.getX(), aim.z - body.getZ()), Glide.CLIMB_PITCH);
-        rig.keys.release(Key.FORWARD);
-        rig.keys.release(Key.SNEAK);
         if (takeoffTicks == 1) {
             rig.keys.press(Key.JUMP);
         } else if (takeoffTicks == 2) {
@@ -156,7 +173,10 @@ final class Sortie implements Segment {
             redirect("烟花用完了,够不着降落点");
         }
         Beat beat = helm.steer(way, s);
-        if (beat instanceof Beat.Blocked && !emergency) {
+        if (!emergency && helm.warned()) {
+            // 照这条线飞下去,松开键滑出去就撞:趁还有高度,先挑一处够得着的地面降下去
+            redirect("前方有东西挡着");
+        } else if (beat instanceof Beat.Blocked && !emergency) {
             // 一刻都飞不了:改降到够得着的地面;已经在迫降还被围住,身体已在空中,别无他法,键松着等落地(落地的伤害如实记账)
             redirect("前方推演全被否决");
         }
@@ -168,10 +188,62 @@ final class Sortie implements Segment {
     }
 
     /**
-     * 迫降:往四周挑一处够得着、站得住的地面(离原来的降落点近的优先),改沿从此刻的位置直接下滑到那里的线飞。
-     * 一处也没有为 false(照原来的线飞,或被围住就放弃)。
+     * 迫降:挑一处够得着、站得住的地面,改沿从此刻的位置直接下滑到那里的线飞。先顺着此刻飞的方向找(不转弯,下滑最平:从远到近,偏一点也行),
+     * 没有再往四周找(离原来的降落点近的优先)。一处也没有为 false(照原来的线飞,或被围住就放弃)。
      */
     private boolean redirect(String why) {
+        var body = rig.entity;
+        BlockPos best = ahead();
+        if (best == null) {
+            best = around();
+        }
+        if (best == null) {
+            return false;
+        }
+        Vec3 spot = new Vec3(best.getX() + 0.5, best.getY(), best.getZ() + 0.5);
+        way = Airway.through(List.of(body.position(), spot), spot);
+        s = 0;
+        emergency = true;
+        helm.forget();
+        PathLog.info("{} 迫降({}) 改降在 {} {}", rig.who, why, PathLog.pos(best), PathLog.body(body));
+        return true;
+    }
+
+    /** 够得着(留余量)、直线通得过去、不用俯冲的落点 {@code spot}。 */
+    private boolean landable(Vec3 spot) {
+        var body = rig.entity;
+        return reaches(body.position(), spot)
+                && Math.hypot(spot.x - body.getX(), spot.z - body.getZ()) >= (body.getY() - spot.y) * MIN_RATIO
+                && Airway.sweep(rig.world(), rig.snapshot().stats(), 0).clear(body.position(), spot.add(0, 1, 0));
+    }
+
+    /** 顺着此刻水平飞的方向,从远到近、偏左右各几格找落点;没有为 null。 */
+    private BlockPos ahead() {
+        var body = rig.entity;
+        Vec3 v = body.getDeltaMovement();
+        double speed = Math.hypot(v.x, v.z);
+        double ux = speed > 0.05 ? v.x / speed : -Math.sin(Math.toRadians(body.getYRot()));
+        double uz = speed > 0.05 ? v.z / speed : Math.cos(Math.toRadians(body.getYRot()));
+        BlockPos under = Glide.ground(rig, rig.snapshot().stats(), body.getBlockX(), body.getBlockZ(), body.getBlockY(), body.getBlockY() - EMERGENCY_DROP);
+        if (under == null) {
+            return null;
+        }
+        double altitude = body.getY() - under.getY();
+        for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * MIN_RATIO; d -= 1.0) {
+            for (int side : new int[] {0, -2, 2, -4, 4}) {
+                int x = (int) Math.floor(body.getX() + ux * d - uz * side);
+                int z = (int) Math.floor(body.getZ() + uz * d + ux * side);
+                BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, body.getBlockY(), body.getBlockY() - EMERGENCY_DROP);
+                if (cell != null && landable(new Vec3(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5))) {
+                    return cell;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 往四周找落点,离原来的降落点近的优先;没有为 null。 */
+    private BlockPos around() {
         var body = rig.entity;
         ServerLevel level = body.serverLevel();
         BlockPos at = body.blockPosition();
@@ -190,24 +262,13 @@ final class Sortie implements Segment {
                 }
                 Vec3 spot = new Vec3(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5);
                 double near = Math.hypot(spot.x - plan.way().touchdown().x, spot.z - plan.way().touchdown().z);
-                if (reaches(body.position(), spot) && Math.hypot(spot.x - body.getX(), spot.z - body.getZ()) >= (body.getY() - spot.y) * MIN_RATIO
-                        && near < bestDistance
-                        && Airway.sweep(rig.world(), rig.snapshot().stats(), 0).clear(body.position(), spot.add(0, 1, 0))) {
+                if (near < bestDistance && landable(spot)) {
                     best = cell;
                     bestDistance = near;
                 }
             }
         }
-        if (best == null) {
-            return false;
-        }
-        Vec3 spot = new Vec3(best.getX() + 0.5, best.getY(), best.getZ() + 0.5);
-        way = Airway.through(List.of(body.position(), spot), spot);
-        s = 0;
-        emergency = true;
-        helm.forget();
-        PathLog.info("{} 迫降({}) 改降在 {} {}", rig.who, why, PathLog.pos(best), PathLog.body(body));
-        return true;
+        return best;
     }
 
     // ==================== 收场 ====================

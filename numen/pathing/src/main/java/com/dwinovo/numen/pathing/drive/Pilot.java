@@ -53,6 +53,10 @@ final class Pilot {
     private Action held;
     private int age;
     private BlockPos blocker;
+    /** 挑中的那一组要靠刹车才不撞({@link #warned})。 */
+    private boolean warned;
+    /** 这一次推演用了刹车一程。 */
+    private boolean braked;
     /** 这一次推演里落到地面时的伤害扣分({@link Dynamics#impact})。 */
     private double impact;
 
@@ -66,6 +70,11 @@ final class Pilot {
     void forget() {
         held = null;
         age = 0;
+    }
+
+    /** 这一刻挑中的那一组,松开键滑出去会撞、要靠刹车才停得住(创造飞行)或拉起(滑翔):前方有东西,宜早做打算。 */
+    boolean warned() {
+        return warned;
     }
 
     /** 上一次所有候选都被否决时,被撞的那一格;这一刻没被围住为 null。 */
@@ -121,6 +130,7 @@ final class Pilot {
         if (best == null && !physics.stoppable()) {
             best = survive(now, neck, way, supply);
         }
+        warned = best != null && rollout(now, neck, best, way, s, hold, supply) > Double.NEGATIVE_INFINITY && braked;
         age = best != null && best.equals(held) ? age + 1 : 1;
         held = best;
         return best;
@@ -167,6 +177,7 @@ final class Pilot {
         Neck n = neck;
         Vec3 down = way.touchdown();
         impact = 0;
+        braked = false;
         // 烟花:候选里放,这一刻起推 burn 刻;已经在烧的接着烧
         int burning = action.keys().rocket() ? physics.burn() : supply.burning;
         for (int t = 0; t < hold; t++) {
@@ -189,6 +200,7 @@ final class Pilot {
                 return Double.NEGATIVE_INFINITY;
             }
             penalty = BRAKING;
+            braked = true;
         }
         return score(tail, way, s, action, penalty);
     }

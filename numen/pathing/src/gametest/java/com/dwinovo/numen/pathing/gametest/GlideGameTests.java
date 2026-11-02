@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.Blocks;
 
 /**
  * 鞘翅:穿着鞘翅、背着烟花的身体去很远的地方,用不用滑翔由估计的耗时定(比走路的下界快才飞)。用普通假玩家({@link TestBody})经 {@code Navigator} 真走:
- * 平地起飞到远处降落、烟花不够就走路、飞着烟花用完迫降、前方突然多了堵墙推演否决;另有穿着鞘翅走路(垫柱上升、跳坑)不误展开。
+ * 平地起飞到远处降落、烟花不够就走路、飞着烟花用完迫降;另有穿着鞘翅走路(垫柱上升、跳沟)不误展开。前方撞墙推演否决是局部控制器的事,见单测 PilotTest 与 FlightGameTests。
  */
 public class GlideGameTests {
 
@@ -111,30 +111,6 @@ public class GlideGameTests {
                     }
                 })
                 .arrives();
-    }
-
-    /** 飞着前方突然多出一堵窄墙:推演里撞墙的候选被否决,转向绕过去(或迫降),不撞上去(不掉血)。 */
-    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800)
-    public static void a_wall_that_appears_ahead_is_vetoed_by_the_rehearsal(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        TestBody body = winged(t, 5, 8);
-        int[] flying = {0};
-        t.go(body, Goals.at(t.at(130, 1, 12)), RouteSpec.defaults()).within(1500)
-                .during(r -> {
-                    if (r.body.isFallFlying() && flying[0]++ == 40) {
-                        int x = (int) (r.body.getX() - t.origin.getX());
-                        for (int dy = 1; dy <= 38; dy++) {
-                            for (int z = 10; z <= 13; z++) {
-                                t.change(x + 24, dy, z, Blocks.STONE.defaultBlockState());
-                            }
-                        }
-                    }
-                })
-                .then(r -> {
-                    if (r.lowestHealth < 20) {
-                        throw new GameTestAssertException("撞上了墙或摔了:最低血量 " + r.lowestHealth);
-                    }
-                });
     }
 
     /** 穿着鞘翅垫柱上升:垫柱在空中起跳,不会因为新按一下跳而展开鞘翅。 */
