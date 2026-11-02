@@ -163,12 +163,12 @@ class NavTextTest {
     @Test
     void theFlightOnTheWayIsToldWithWhereItStartedAndEnded() {
         assertEquals("I flew 31 blocks (took off at 120,65,-33; landed at 121,64,-33).", NavText.journey(List.of(), List.of(),
-                List.of(), List.of(), new NavText.Flights(30.6, List.of(A.above()), List.of(C), false)));
+                List.of(), List.of(), new NavText.Flights(30.6, List.of(A.above()), List.of(C), false, List.of())));
         assertEquals("I flew 12 blocks (took off at 120,65,-33). I am still flying, hovering in the air.", NavText.journey(List.of(),
-                List.of(), List.of(), List.of(), new NavText.Flights(12.2, List.of(A.above()), List.of(), true)));
+                List.of(), List.of(), List.of(), new NavText.Flights(12.2, List.of(A.above()), List.of(), true, List.of())));
         assertEquals("I am still flying, hovering in the air.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
-                new NavText.Flights(0, List.of(), List.of(), true)), "起飞前就在飞、一格没飞也要说还在飞");
-        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false)));
+                new NavText.Flights(0, List.of(), List.of(), true, List.of())), "起飞前就在飞、一格没飞也要说还在飞");
+        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false, List.of())));
     }
 
     /** 鞘翅滑翔的细账:烟花用了几支(计划几支)、鞘翅耐久前后、掉血、迫降、还在空中。 */

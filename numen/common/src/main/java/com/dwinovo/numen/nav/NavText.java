@@ -333,17 +333,12 @@ public final class NavText {
     public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides) {
 
         /** 没飞过、也没在飞。 */
-        public static final Flights NONE = new Flights(0, List.of(), List.of(), false);
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of());
 
         public Flights {
             launches = List.copyOf(launches);
             landings = List.copyOf(landings);
             glides = List.copyOf(glides);
-        }
-
-        /** 只有创造飞行的账(没有鞘翅滑翔)。 */
-        public Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying) {
-            this(blocks, launches, landings, flying, List.of());
         }
     }
 
