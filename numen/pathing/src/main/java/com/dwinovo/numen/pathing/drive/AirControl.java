@@ -32,8 +32,7 @@ final class AirControl {
 
     /** 飞着停在一格里,脚离这一格底的高度:放得下身体的范围是 [0, {@link Stance#HOVER_SPAN}),取中间。 */
     static final double HOVER = 0.2;
-    /** 脚离这一格的上下沿至少这么远、水平在这一格的范围里({@link #OVER}:中心离格心不到半格),就算停在了这一格里。 */
-    private static final double MARGIN = 0.02;
+    /** 水平在这一格的范围里(中心离格心不到半格),就算停在了这一格里。 */
     private static final double OVER = 0.5;
     /** 水平速度、竖直速度小于它们算停住了。 */
     private static final double STILL = 0.05;
@@ -189,12 +188,19 @@ final class AirControl {
         return rig.entity.onGround() && !Snapshots.flying(rig.entity);
     }
 
-    /** 悬停:脚落在落点那一格的飞行范围里({@link Stance#HOVER_SPAN})、水平在格子中心附近,速度小到停住了。 */
+    /**
+     * 悬停:脚落在落点那一格的飞行范围里、水平在格子里,速度小到停住了。飞行范围就是规划认的 {@link Stance#HOVER_SPAN}(比飞着升降的最小一步 0.375 宽),
+     * 所以控制器不论停在哪个高度,点按几下总能落进来;判据再收窄一点就有停不进去的高度。
+     */
     private boolean hovering(BlockPos node) {
         var body = rig.entity;
-        Vec3 motion = body.getDeltaMovement();
+        return settled(body.position(), body.getDeltaMovement(), node);
+    }
+
+    /** {@link #hovering} 的判据本身:身体在 {@code pos}、这一刻的速度 {@code motion},算不算停在了 {@code node} 那一格里。 */
+    static boolean settled(Vec3 pos, Vec3 motion, BlockPos node) {
         return Math.hypot(motion.x, motion.z) < STILL && Math.abs(motion.y) < STILL_RISE
-                && Math.hypot(node.getX() + 0.5 - body.getX(), node.getZ() + 0.5 - body.getZ()) < OVER
-                && body.getY() > node.getY() + MARGIN && body.getY() < node.getY() + Stance.HOVER_SPAN - MARGIN;
+                && Math.hypot(node.getX() + 0.5 - pos.x, node.getZ() + 0.5 - pos.z) < OVER
+                && pos.y >= node.getY() && pos.y < node.getY() + Stance.HOVER_SPAN;
     }
 }
