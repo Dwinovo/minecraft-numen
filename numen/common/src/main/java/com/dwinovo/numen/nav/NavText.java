@@ -305,7 +305,27 @@ public final class NavText {
         if (flights.flying()) {
             sb.append(sb.length() > 0 ? " " : "").append("I am still flying, hovering in the air.");
         }
+        if (flights.grounded() != null && flights.glides().isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(grounded(flights.grounded()));
+        }
         return sb.toString();
+    }
+
+    /**
+     * 为什么走过去而没有飞:一句事实,加上有什么就能飞。只在远途里说。例如
+     * {@code I walked instead of gliding: I am not wearing a usable elytra. With an elytra on my chest and firework rockets in my pack I can glide long distances.}
+     */
+    static String grounded(EditLedger.Grounded why) {
+        String fact = switch (why.why()) {
+            case NO_ELYTRA -> "I am not wearing a usable elytra. With an elytra on my chest and firework rockets in my pack I can glide long distances.";
+            case NO_LIFT -> "I have no firework rockets and found no ledge high enough nearby to glide down from. With firework rockets in my pack I can glide long distances.";
+            case TOO_FEW_ROCKETS -> "gliding part of the way needs about " + why.need() + " firework rockets and I have " + why.have() + ".";
+            case WORN_ELYTRA -> "the flight needs about " + why.need() + " durability on my elytra and it has " + why.have() + " left.";
+            case NO_TAKEOFF -> "I found no open spot near me to take off from.";
+            case NO_ROUTE -> "no flight line at any height got past the terrain ahead.";
+            case NO_LANDING -> "I found no standable ground to land on near the target.";
+        };
+        return "I walked instead of gliding: " + fact;
     }
 
     /**
@@ -330,10 +350,11 @@ public final class NavText {
     /**
      * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞;其中鞘翅滑翔的每一段另有细账({@code glides})。
      */
-    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides) {
+    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides,
+                          EditLedger.Grounded grounded) {
 
         /** 没飞过、也没在飞。 */
-        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of());
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of(), null);
 
         public Flights {
             launches = List.copyOf(launches);
