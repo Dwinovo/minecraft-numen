@@ -67,6 +67,11 @@ final class ItemReach implements Goal {
 
     /** 脚在一格里任何高度时捡得到的格:水平、竖直各枚举到判据外一格为止,再逐格问 {@link #touches}。 */
     @Override
+    public Anchor anchor(net.minecraft.world.phys.Vec3 from) {
+        return new Anchor(item.getCenter().x, item.getCenter().z);
+    }
+
+    @Override
     public LongSet endCells() {
         LongSet cells = new LongOpenHashSet();
         for (int x = (int) Math.floor(item.getCenter().x - reachX() - LEAN); x <= Math.ceil(item.getCenter().x + reachX() + LEAN); x++) {
