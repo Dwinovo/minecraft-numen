@@ -21,6 +21,7 @@ public final class PathingGameTestSuite implements GameTestSuite {
                 FlatGameTests.class,
                 FlightGameTests.class,
                 FluidGameTests.class,
+                GlideGameTests.class,
                 GoalGameTests.class,
                 MatrixGameTests.class,
                 MaterialGameTests.class,

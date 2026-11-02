@@ -58,7 +58,7 @@ import net.minecraft.world.phys.Vec3;
  * <h2>规划的结论</h2>
  * 搜索没有交出路线时,段状态机只交出那次搜索的停因与输入({@link Halt.Searched}),为什么没路由门面在同一份快照上诊断。
  */
-public final class Driver {
+public final class Driver implements Segment {
 
     /** 起点身体待不住(卡在方块里、悬在半空)最多等多少刻。 */
     private static final int STRANDED_TICKS = 60;
@@ -82,6 +82,8 @@ public final class Driver {
     private final Trip trip;
     private final Course course;
     private final Tracker tracker = new Tracker();
+    /** 连着的飞行当一整段跟({@link AirControl});走地面的步子走 {@link Step}。 */
+    private final AirControl air;
     private Step step;
 
     private int stranded;
@@ -103,11 +105,17 @@ public final class Driver {
      */
     public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
-        this.rig = new Rig(body, terrain, materials, threats);
+        this(new Rig(body, terrain, materials, threats), goal, spec, budget, seed, passing, clock);
+    }
+
+    /** 一趟行程的一段:家伙({@link Rig},账、日志)由行程交进来,几段共用。 */
+    Driver(Rig rig, Goal goal, RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
+        this.rig = rig;
         this.spec = spec;
         this.trip = new Trip(new Eyes(), rig.who, rig.journal, goal, spec, budget, clock);
         this.course = trip.course();
         this.passing = passing;
+        this.air = new AirControl(rig, watchdog, () -> Lookahead.model(rig, trip.goal(), spec));
         if (seed != null) {
             install(seed, trip.goalHas(seed.end(), seed.endStance()));
         }
@@ -278,7 +286,8 @@ public final class Driver {
             arrive(node);
             return;
         }
-        if (track(node)) {
+        // 飞行的步不按落在哪个节点认:身体沿折线走到了哪,由 AirControl 认
+        if (!course.current().kind().flight() && track(node)) {
             return;
         }
         if (course.finished()) {
@@ -293,6 +302,10 @@ public final class Driver {
         if (alighting) {
             alighting = false;
             rig.keys.release(Key.SNEAK);
+        }
+        if (course.current().kind().flight()) {
+            flyOn();
+            return;
         }
         if (step == null) {
             if (!trip.settled()) {
@@ -314,20 +327,80 @@ public final class Driver {
                         diving.add(course.at(i));
                     }
                     step = new Step(rig, course.cur() > 0 ? course.at(course.cur() - 1) : null, clear.fresh(), clear.model(),
-                            course.ahead(Continuation.TAIL - 1), diving, watchdog, course.flightEnd());
+                            course.ahead(Continuation.TAIL - 1), diving, watchdog);
                 }
             }
         }
         Beat beat = step.tick();
         switch (beat) {
             case Beat.Going going -> trip.continueAhead();
-            case Beat.Blocked blocked -> fail(blocked.blockage().hitch() == Blockage.Hitch.STUCK ? Journal.Replan.TIMEOUT
-                    : Journal.Replan.FAILED, course.current(), blocked.blockage());
+            case Beat.Blocked blocked -> failed(blocked);
             case Beat.Denied denied -> {
                 rig.mouse.release();
                 halt(new Halt.Denied(denied.cell(), denied.reason()));
             }
         }
+    }
+
+    /** 这一步做不下去:超时按 {@link Journal.Replan#TIMEOUT},别的按 {@link Journal.Replan#FAILED}。 */
+    private void failed(Beat.Blocked blocked) {
+        fail(blocked.blockage().hitch() == Blockage.Hitch.STUCK ? Journal.Replan.TIMEOUT : Journal.Replan.FAILED, course.current(),
+                blocked.blockage());
+    }
+
+    /**
+     * 正在走的这一步是飞行:连着的飞行当一整段跟({@link AirControl})。一段开始前往前核一次;后面接什么还没定的飞行不开始。
+     * 走完的步由 {@link AirControl} 按身体沿折线走到了哪认,一刻跨过几步照常算走完。
+     */
+    private void flyOn() {
+        ServerPlayer body = rig.entity;
+        int last = course.flightLast(trip.runnableEnd());
+        if (last < 0) {
+            hold();
+            trip.continueAhead();
+            watchdog.waiting(body.position());
+            return;
+        }
+        if (!air.active() && Lookahead.verify(rig, trip.goal(), spec, course) instanceof Lookahead.Broken broken) {
+            fail(Journal.Replan.AHEAD, broken.step(), broken.blockage());
+            return;
+        }
+        AirControl.Flown flown = air.fly(course, last);
+        watchdog.observe(body.position(), false);
+        if (flown.beat() instanceof Beat.Blocked blocked) {
+            failed(blocked);
+            return;
+        }
+        if (flown.to() > course.cur()) {
+            finishLegs(flown.to(), flown.ticks());
+        } else if (watchdog.overran()) {
+            PathLog.info("{} 卡住 {} 飞了 {} 刻,超过期限 {} 刻 {}", rig.who, PathLog.step(course.current()), watchdog.stepTicks(),
+                    PathLog.num(watchdog.allowance()), PathLog.body(body));
+            failed(new Beat.Blocked(new Blockage(course.current().to(), rig.world().getBlockState(course.current().to()),
+                    course.current().kind(), null, Blockage.Hitch.STUCK)));
+            return;
+        }
+        trip.continueAhead();
+    }
+
+    /**
+     * 路线上前 {@code to} 步走完了:记账,按各步几何最短耗时的比例把 {@code ticks}(这些步共用的刻数,没有计时为 -1)分给每一步,路线往前推。
+     * 冲劲可能把身体带过了几步,一次走完几步的也是这样分。
+     */
+    private void finishLegs(int to, int ticks) {
+        double shortest = 0;
+        for (int k = course.cur(); k < to; k++) {
+            shortest += course.minimumAt(k);
+        }
+        for (int k = course.cur(); k < to; k++) {
+            Maneuver walked = course.at(k);
+            rig.ledger.stepped(walked);
+            rig.journal.walked(course.costAt(k));
+            if (ticks >= 0) {
+                rig.journal.timed(walked.kind(), ticks * course.minimumAt(k) / shortest, course.minimumAt(k));
+            }
+        }
+        trip.advance(to);
     }
 
     // ==================== 人在哪一步 ====================
@@ -382,20 +455,7 @@ public final class Driver {
                 if (step != null) {
                     step.finish(node);
                 }
-                // 冲劲可能把身体带过了几步:这一路的刻数按各步几何最短耗时的比例分给走完的每一步
-                double shortest = 0;
-                for (int k = course.cur(); k < advanced.to(); k++) {
-                    shortest += course.minimumAt(k);
-                }
-                for (int k = course.cur(); k < advanced.to(); k++) {
-                    Maneuver walked = course.at(k);
-                    rig.ledger.stepped(walked);
-                    rig.journal.walked(course.costAt(k));
-                    if (step != null) {
-                        rig.journal.timed(walked.kind(), watchdog.stepTicks() * course.minimumAt(k) / shortest, course.minimumAt(k));
-                    }
-                }
-                trip.advance(advanced.to());
+                finishLegs(advanced.to(), step != null ? watchdog.stepTicks() : -1);
                 step = null;
                 return false;
             }
@@ -454,7 +514,7 @@ public final class Driver {
         boolean still;
         if (endStance.kind() == Stance.Kind.FLYING) {
             // 飞着收场:停在终点那一格的上空;空中没有地面可以靠,键一直管着高度与水平
-            still = Aloft.hold(rig, end);
+            still = air.hold(end);
         } else {
             rig.keys.release(Key.SPRINT);
             rig.keys.release(Key.JUMP);
@@ -534,6 +594,7 @@ public final class Driver {
     private void afterInstall() {
         unsettled = 0;
         step = null;
+        air.reset();
         tracker.reset();
     }
 
@@ -543,6 +604,7 @@ public final class Driver {
         rig.mouse.release();
         tracker.reset();
         step = null;
+        air.reset();
     }
 
     /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */

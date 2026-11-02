@@ -275,6 +275,16 @@ public final class Kinematics {
         public static Keys idle(float yaw, float pitch) {
             return new Keys(0, 0, false, false, false, yaw, pitch, false);
         }
+
+        /** 同样的键,朝 {@code yaw}、{@code pitch}。 */
+        public Keys facing(float yaw, float pitch) {
+            return new Keys(forward, left, jump, sneak, sprint, yaw, pitch, rocket);
+        }
+
+        /** 同样的键,这一刻有没有一支烟花挂在身上推({@code rocket} 的另一个意思:候选里它是"现在放一支",步进时它是"正在推")。 */
+        public Keys burning(boolean on) {
+            return new Keys(forward, left, jump, sneak, sprint, yaw, pitch, on);
+        }
     }
 
     /**

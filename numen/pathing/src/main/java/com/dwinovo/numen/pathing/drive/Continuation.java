@@ -37,7 +37,12 @@ final class Continuation {
      * 路线一开头就攀着(从梯子上重搜)时没处可退,只能等在那儿。
      */
     boolean settled(Course course) {
-        return course.complete() || failed || course.cur() < waitingStep(course);
+        return course.cur() < runnableEnd(course);
+    }
+
+    /** 能走到第几步之前(不含):路线已到目标或后面不会再有路了是全部,否则是等接续的位置。 */
+    int runnableEnd(Course course) {
+        return course.complete() || failed ? course.size() : waitingStep(course);
     }
 
     /**

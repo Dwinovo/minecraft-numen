@@ -176,6 +176,11 @@ public final class Trip {
         return pending != null && (course.finished() || !continuation.settled(course));
     }
 
+    /** 能走到第几步之前(不含):再往后要等接续段({@link Continuation#runnableEnd})。 */
+    public int runnableEnd() {
+        return continuation.runnableEnd(course);
+    }
+
     /** 能开始走第 {@link Course#cur} 步:后面接什么已经定下来({@link Continuation#settled})。 */
     public boolean settled() {
         return continuation.settled(course);

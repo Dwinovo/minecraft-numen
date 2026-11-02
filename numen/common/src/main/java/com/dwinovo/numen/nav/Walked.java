@@ -28,7 +28,8 @@ public record Walked(@Doc("Where you stand now (decimals).") Vec3 pos,
                              + "only walked.") double flown,
                      @Doc("Where it took off from the ground, in order.") List<BlockPos> tookOffAt,
                      @Doc("Where it came down to the ground, in order.") List<BlockPos> landedAt,
-                     @Doc("You are still flying where you ended up: hovering in the air, not on the ground.") boolean flying) {
+                     @Doc("You are still flying where you ended up: hovering in the air, not on the ground.") boolean flying,
+                     @Doc("Each elytra glide it made on the way, in order; empty when it flew no glide.") List<Gliding> glided) {
 
     public Walked {
         dugAt = List.copyOf(dugAt);
@@ -36,5 +37,6 @@ public record Walked(@Doc("Where you stand now (decimals).") Vec3 pos,
         rulings = List.copyOf(rulings);
         tookOffAt = List.copyOf(tookOffAt);
         landedAt = List.copyOf(landedAt);
+        glided = List.copyOf(glided);
     }
 }

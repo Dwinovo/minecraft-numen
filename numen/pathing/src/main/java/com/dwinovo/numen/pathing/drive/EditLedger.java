@@ -35,7 +35,15 @@ public final class EditLedger {
     /** {@code pos} 还是同一种方块,状态从 {@code before} 变成了 {@code after}(开关了门)。 */
     public record Toggled(BlockPos pos, BlockState before, BlockState after) implements Entry {}
 
+    /**
+     * 一段滑翔的账:从哪儿起飞、在哪儿落地、水平飞了多远、放了几支烟花(计划的是几支)、鞘翅耐久前后、落地时掉了几点血、是不是迫降、收场时还在不在空中。
+     * 照实记身体做的,不记意图。
+     */
+    public record Glided(BlockPos takeoff, BlockPos landing, double blocks, int rockets, int wearBefore, int wearAfter, float damage,
+                         boolean emergency, boolean airborne, int plannedRockets, int plannedTicks) {}
+
     private final List<Entry> entries = new ArrayList<>();
+    private final List<Glided> glides = new ArrayList<>();
     private final Map<MoveKind, Integer> walked = new EnumMap<>(MoveKind.class);
     /** 起飞的地方(站着的起点),按先后。 */
     private final List<BlockPos> launches = new ArrayList<>();
@@ -71,6 +79,21 @@ public final class EditLedger {
         if (m.kind().flight()) {
             flown += Math.sqrt(m.from().distSqr(m.to()));
         }
+    }
+
+    /** 记一段滑翔:起飞与降落的地方、飞过的距离也并进创造飞行同一本账。 */
+    void glided(Glided glide) {
+        glides.add(glide);
+        launches.add(glide.takeoff());
+        if (!glide.airborne()) {
+            landings.add(glide.landing());
+        }
+        flown += glide.blocks();
+    }
+
+    /** 滑翔的账,按先后。 */
+    public List<Glided> glides() {
+        return Collections.unmodifiableList(glides);
     }
 
     /** 起飞的地方,按先后。 */

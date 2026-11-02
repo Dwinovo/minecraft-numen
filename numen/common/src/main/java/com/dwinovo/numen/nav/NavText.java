@@ -239,6 +239,7 @@ public final class NavText {
             case DIVERTED -> "the ground changed and the step would land somewhere else";
             case FELL_BACK -> "I kept ending up back where the step before it started";
             case LOST -> "I kept ending up beside the route instead of where the step lands";
+            case BOXED -> "in the air every way I could fly led into a block";
         };
     }
 
@@ -298,6 +299,9 @@ public final class NavText {
             }
             sb.append('.');
         }
+        for (EditLedger.Glided glide : flights.glides()) {
+            sb.append(sb.length() > 0 ? " " : "").append(glide(glide));
+        }
         if (flights.flying()) {
             sb.append(sb.length() > 0 ? " " : "").append("I am still flying, hovering in the air.");
         }
@@ -305,16 +309,36 @@ public final class NavText {
     }
 
     /**
-     * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞。
+     * 一段鞘翅滑翔的细账:用了几支烟花(计划几支)、鞘翅耐久前后、落地掉了几点血、是不是迫降、收场时是不是还在空中。例如
+     * {@code Gliding used 2 firework rockets (planned about 4) and wore the elytra from 0 to 3 damage; I lost no health.}
      */
-    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying) {
+    static String glide(EditLedger.Glided glide) {
+        StringBuilder sb = new StringBuilder("Gliding used ").append(glide.rockets()).append(glide.rockets() == 1 ? " firework rocket" : " firework rockets")
+                .append(" (planned about ").append(glide.plannedRockets()).append(") and wore the elytra from ").append(glide.wearBefore())
+                .append(" to ").append(glide.wearAfter()).append(" damage; ");
+        sb.append(glide.damage() < 0.5F ? "I lost no health" : "I lost " + Math.round(glide.damage()) + " health");
+        if (glide.emergency()) {
+            sb.append(" and had to land early where the ground was within reach");
+        }
+        sb.append('.');
+        if (glide.airborne()) {
+            sb.append(" I am still in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞;其中鞘翅滑翔的每一段另有细账({@code glides})。
+     */
+    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides) {
 
         /** 没飞过、也没在飞。 */
-        public static final Flights NONE = new Flights(0, List.of(), List.of(), false);
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of());
 
         public Flights {
             launches = List.copyOf(launches);
             landings = List.copyOf(landings);
+            glides = List.copyOf(glides);
         }
     }
 

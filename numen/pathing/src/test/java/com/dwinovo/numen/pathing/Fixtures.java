@@ -84,7 +84,7 @@ public final class Fixtures {
     /** 满血、吃饱、背包空着、许飞的创造模式身体;{@code flying} 是此刻在不在飞。 */
     public static BodySnapshot flier(boolean flying) {
         return new BodySnapshot(Vanilla.SURVIVAL, GameType.CREATIVE, 20, 3, 1, 20, 0, List.of(), Fixtures.MINING, Fixtures.BREATH,
-                new Mobility(true, flying, Mobility.VANILLA_FLYING_SPEED, 0, 0));
+                new Mobility(true, flying, Mobility.VANILLA_FLYING_SPEED, 0, 0, 0));
     }
 
     /** 这份规格,原版身体,什么都放行,身上没料,没有生物。 */

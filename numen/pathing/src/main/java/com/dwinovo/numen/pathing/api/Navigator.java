@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.drive.Driver;
+import com.dwinovo.numen.pathing.drive.Voyage;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
@@ -74,7 +74,7 @@ public final class Navigator {
                 PathLog.spec(request.spec()), request.budget(),
                 request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
-        return new Navigation(new Driver(body, ports.terrain(), ports.materials(), ports.threats(),
+        return new Navigation(new Voyage(body, ports.terrain(), ports.materials(), ports.threats(),
                 request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()), entity);
     }
 }
