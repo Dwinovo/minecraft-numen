@@ -32,9 +32,9 @@ final class AirControl {
 
     /** 飞着停在一格里,脚离这一格底的高度:放得下身体的范围是 [0, {@link Stance#HOVER_SPAN}),取中间。 */
     static final double HOVER = 0.2;
-    /** 脚离这一格的上下沿至少这么远、水平不到 {@link #OVER} 远,就算停在了这一格里。 */
+    /** 脚离这一格的上下沿至少这么远、水平在这一格的范围里({@link #OVER}:中心离格心不到半格),就算停在了这一格里。 */
     private static final double MARGIN = 0.02;
-    private static final double OVER = 0.3;
+    private static final double OVER = 0.5;
     /** 水平速度、竖直速度小于它们算停住了。 */
     private static final double STILL = 0.05;
     private static final double STILL_RISE = 0.02;

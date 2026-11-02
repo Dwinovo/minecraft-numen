@@ -83,11 +83,11 @@ interface Dynamics {
     static int difference(Action a, Action b) {
         Keys x = a.keys();
         Keys y = b.keys();
-        return (x.forward() != y.forward() ? 1 : 0) + (x.sprint() != y.sprint() ? 1 : 0) + (x.jump() != y.jump() ? 1 : 0)
+        return (x.forward() != y.forward() ? 1 : 0) + (x.left() != y.left() ? 1 : 0) + (x.sprint() != y.sprint() ? 1 : 0) + (x.jump() != y.jump() ? 1 : 0)
                 + (x.sneak() != y.sneak() ? 1 : 0) + (x.rocket() != y.rocket() ? 1 : 0);
     }
 
-    /** 创造飞行:前后(疾飞、平飞、松开、后退)乘上跳、松开、潜行,朝着路线飞。松开键飞着就慢慢停下,所以滑出去的后半程是松开。 */
+    /** 创造飞行:前后(疾飞、平飞、松开、后退)与左右平移乘上跳、松开、潜行,朝着路线飞。松开键飞着就慢慢停下,所以滑出去的后半程是松开。 */
     static Dynamics flying(float flyingSpeed) {
         return new Dynamics() {
             @Override
@@ -99,11 +99,12 @@ interface Dynamics {
             public List<Action> actions(float yaw, float pitch) {
                 // 创造飞行里俯仰不进物理,只决定看哪儿:朝前方的点看,幅度打折,陡爬时不直视天空
                 pitch *= LOOK_SHARE;
-                int[][] drive = {{0, 0}, {1, 0}, {1, 1}, {-1, 0}};
+                // 前后(疾飞、平飞、后退)、松开,和左右平移:贴着目标做细调时不必先把脸转过去
+                int[][] drive = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}};
                 List<Action> all = new ArrayList<>();
                 for (int lift : new int[] {0, 1, -1}) {
                     for (int[] d : drive) {
-                        all.add(new Action(new Keys(d[0], 0, lift > 0, lift < 0, d[1] > 0, yaw, pitch, false), yaw, pitch));
+                        all.add(new Action(new Keys(d[0], d[2], lift > 0, lift < 0, d[1] > 0, yaw, pitch, false), yaw, pitch));
                     }
                 }
                 return all;

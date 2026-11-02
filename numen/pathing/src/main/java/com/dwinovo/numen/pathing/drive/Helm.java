@@ -110,8 +110,8 @@ final class Helm {
         rig.keys.set(Key.FORWARD, keys.forward() > 0);
         rig.keys.set(Key.BACK, keys.forward() < 0);
         rig.keys.set(Key.SPRINT, keys.sprint());
-        rig.keys.release(Key.LEFT);
-        rig.keys.release(Key.RIGHT);
+        rig.keys.set(Key.LEFT, keys.left() > 0);
+        rig.keys.set(Key.RIGHT, keys.left() < 0);
         rig.keys.set(Key.JUMP, keys.jump());
         rig.keys.set(Key.SNEAK, keys.sneak());
         if (keys.rocket() && rockets > 0) {
