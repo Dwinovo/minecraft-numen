@@ -80,13 +80,16 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.api.task.refl
         return "被地形卡住时会自己挣脱出来";
     }
 
-    /** Face the chosen heading, hold forward, and hop every fifth tick to clear a lip/step. */
+    /**
+     * Face the chosen heading, hold forward, and hop every fifth tick to clear a lip/step. A flying body does not hop:
+     * in creative flight jump is "up", and two presses within seven ticks are the double tap that switches flight off.
+     */
     private void driveWander(NumenPlayer companion) {
         companion.setYRot(wanderYaw);
         companion.setYHeadRot(wanderYaw);
         Controls keys = companion.controls();
         keys.press(Controls.Key.FORWARD);
         keys.release(Controls.Key.SPRINT);
-        keys.set(Controls.Key.JUMP, wanderTicksLeft % 5 == 0);
+        keys.set(Controls.Key.JUMP, !companion.getAbilities().flying && wanderTicksLeft % 5 == 0);
     }
 }

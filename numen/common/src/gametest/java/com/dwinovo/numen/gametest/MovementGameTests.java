@@ -68,6 +68,34 @@ public class MovementGameTests {
     }
 
     /**
+     * 脱困的挣脱不把飞着的身体从飞行里跳下来:创造飞行里跳键是升,七刻内连按两下还会把飞行关掉;挣脱每五刻跳一下,
+     * 对飞着的身体就成了双击,她随即摔下去、整条路线重来。飞着的身体挣脱只转向、往前,不跳。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_smoke")
+    public static void an_unstuck_wander_does_not_hop_a_flying_body_out_of_flight(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(8, 8, 8));
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_unstuck_fly", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        companion.getAbilities().mayfly = true;
+        companion.getAbilities().flying = true;
+        companion.onUpdateAbilities();
+        com.dwinovo.numen.task.chain.UnstuckChain wander = new com.dwinovo.numen.task.chain.UnstuckChain();
+        int[] ticks = {0};
+        helper.onEachTick(() -> {
+            if (ticks[0]++ < 30) {
+                wander.tick(companion);
+            }
+        });
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(companion.getAbilities().flying, "the wander hopped the flying body out of flight");
+            CompanionFactory.despawn(level.getServer(), companion);
+            helper.succeed();
+        });
+    }
+
+    /**
      * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与停止键
      * 同一个入口),收尾的消息以"the owner pressed Stop"开头——模型不用猜是谁、为什么停的。
      */
