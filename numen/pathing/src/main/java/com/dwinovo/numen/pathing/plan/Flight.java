@@ -5,17 +5,19 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 创造飞行的三种走法({@link Takeoff}、{@link Fly}、{@link Land})共用的小事:往哪几个方向飞、飞一步要几刻、沿途挡着身体的格、身体新进入的格。
  * 飞的耗时全来自 {@link Kinematics} 里飞行的稳态速度:水平疾飞每刻 {@link Kinematics#flySpeed}、竖直每刻 {@link Kinematics#flyClimb},
  * 水平与竖直是两套键(前进键与跳、潜行键),同时按,一步的耗时取两者里长的。
  */
-final class Flight {
+public final class Flight {
 
     /** 空中一步的方向:东南西北与四个斜方向平飞,上、下,以及朝东南西北边飞边升或降一格。 */
     static final List<Heading> CRUISE;
@@ -48,6 +50,31 @@ final class Flight {
     }
 
     private Flight() {}
+
+    /** 拉直飞行路线时切的短段长度(格)。 */
+    private static final double PIECE = 0.5;
+
+    /**
+     * 身体脚底中心沿直线从 {@code from} 飞到 {@code to},新进入的格过不过路线规格(排除的种类、禁令、许可、挨着伤身格的加价,{@link Contact#admit}):
+     * 与规划一步飞行时判的是同一条({@link Fly}),按 {@value #PIECE} 格一段切开逐段判。交出第一个不过的格;都过为 null。
+     * 拉直折线时,物理上的净空与这里的规格两条都过才算通。
+     */
+    public static BlockPos refused(CostModel model, WorldView view, Vec3 from, Vec3 to) {
+        BodyStats body = model.body().stats();
+        Draft draft = new Draft(model, view);
+        int pieces = Math.max(1, (int) Math.ceil(from.distanceTo(to) / PIECE));
+        Vec3 a = from;
+        for (int k = 1; k <= pieces; k++) {
+            Vec3 b = from.lerp(to, (double) k / pieces);
+            Contact contact = contact(body, BlockPos.containing(a.x, Footing.cellOf(a.y), a.z), a.y,
+                    BlockPos.containing(b.x, Footing.cellOf(b.y), b.z), b.y);
+            if (!contact.admit(draft, model, null, false)) {
+                return draft.failure().cell();
+            }
+            a = b;
+        }
+        return null;
+    }
 
     /** 这具身体的飞行速度(能力里的)。 */
     static float speed(CostModel model) {

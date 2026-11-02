@@ -46,12 +46,17 @@ final class Lookahead {
 
     private Lookahead() {}
 
+    /** 往前核与拉直飞行路线用的成本模型:此刻的身体与端口,目标格保护并进去。 */
+    static CostModel model(Rig rig, Goal goal, RouteSpec spec) {
+        return Goal.guarded(goal, CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, Threats.NONE));
+    }
+
     /** 从 {@code course} 正在走的那一步起往前核。 */
     static Verdict verify(Rig rig, Goal goal, RouteSpec spec, Course course) {
         long t0 = System.nanoTime();
         int judged = 0;
         try {
-            CostModel model = Goal.guarded(goal, CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, Threats.NONE));
+            CostModel model = model(rig, goal, spec);
             WorldView view = rig.world();
             Maneuver first = null;
             Stance stance = null;

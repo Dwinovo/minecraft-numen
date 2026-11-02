@@ -37,8 +37,6 @@ final class Step {
     /** 这一步之后同一段水下接着的几步(都憋着气),按先后;这一步不在水下或后面换得了气为空。 */
     private final List<Maneuver> diving;
     private final Watchdog watchdog;
-    /** 这一步所在的这一段飞行收在哪一格({@link Course#flightEnd});这一步不在飞为 null。 */
-    private final BlockPos flightEnd;
     private Control control;
     /** 这一步与同一段水下接着的几步,按先后;这一步开始时定下,不憋气为空。 */
     private List<Maneuver> dive = List.of();
@@ -50,7 +48,7 @@ final class Step {
     private int expectedDamage;
 
     Step(Rig rig, Maneuver previous, Maneuver planned, CostModel model, List<Maneuver> ahead, List<Maneuver> diving,
-         Watchdog watchdog, BlockPos flightEnd) {
+         Watchdog watchdog) {
         this.rig = rig;
         this.previous = previous;
         this.planned = planned;
@@ -58,7 +56,6 @@ final class Step {
         this.ahead = List.copyOf(ahead);
         this.diving = List.copyOf(diving);
         this.watchdog = watchdog;
-        this.flightEnd = flightEnd;
     }
 
     Maneuver planned() {
@@ -91,7 +88,7 @@ final class Step {
             List<Maneuver> window = new ArrayList<>(ahead.size() + 1);
             window.add(planned);
             window.addAll(ahead);
-            control = Control.of(rig, planned, Gait.stride(rig.world(), model, previous, window), flightEnd);
+            control = Control.of(rig, planned, Gait.stride(rig.world(), model, previous, window));
             double expected = Moves.of(planned.kind()).ticks(model, planned);
             watchdog.begin(expected, rig.entity.position());
             begun(planned, expected);

@@ -94,23 +94,18 @@ public final class Course {
     }
 
     /**
-     * 从正在走的这一步起,连着飞的这一段收在哪一格:起飞、飞、降落连着的步子里最后一步的落点(降落到地上就收在那里,飞着就收在最后一格)。
-     * 这一步不在飞、或这一段飞到路线末尾而路线还没搜完(后面接着飞多远还不知道)为 null。
+     * 从正在走的这一步起,连着飞的这一段最后一步的下标:起飞、飞、降落连着的步子,降落到地上就收在降落那一步,不过第 {@code limit} 步
+     * (不含;之后的步还要等接续段,{@link Continuation#runnableEnd})。正在走的这一步不在飞为 -1。
      */
-    BlockPos flightEnd() {
-        BlockPos end = null;
-        int i = cur;
-        for (; i < legs.size(); i++) {
-            Maneuver m = at(i);
-            if (!m.kind().flight()) {
+    int flightLast(int limit) {
+        int last = -1;
+        for (int i = cur; i < Math.min(limit, legs.size()) && at(i).kind().flight(); i++) {
+            last = i;
+            if (at(i).kind() == MoveKind.LAND) {
                 break;
             }
-            end = m.to();
-            if (m.kind() == MoveKind.LAND) {
-                return end;
-            }
         }
-        return i == legs.size() && !complete ? null : end;
+        return last;
     }
 
     /** 紧接着正在走的那一步往后的 {@code count} 步(不够就是剩下的),按先后。 */

@@ -275,6 +275,11 @@ public final class Kinematics {
         public static Keys idle(float yaw, float pitch) {
             return new Keys(0, 0, false, false, false, yaw, pitch, false);
         }
+
+        /** 同样的键,朝 {@code yaw}、{@code pitch}。 */
+        public Keys facing(float yaw, float pitch) {
+            return new Keys(forward, left, jump, sneak, sprint, yaw, pitch, rocket);
+        }
     }
 
     /**
