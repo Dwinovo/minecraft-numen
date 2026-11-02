@@ -9,13 +9,14 @@ package com.dwinovo.numen.pathing.plan;
  * @param flyingSpeed 能力里的飞行速度({@code Abilities.getFlyingSpeed},原版 0.05)
  * @param gliderLife  胸甲位的滑翔物还能再用多少点耐久;没有滑翔物或已经坏了为 0(1.21.1 是鞘翅;1.21.2 起看滑翔组件,移植时只改宿主抄这一项的判据)
  * @param fireworks   背包与副手里的烟花火箭一共几支
+ * @param rocketBurn  一支烟花至少推多少刻({@code FireworkRocketEntity} 的寿命是 {@code 10 × 飞行时长} 再加最多 11 刻的随机,取保底);没有烟花为 0
  */
-public record Mobility(boolean mayFly, boolean flying, float flyingSpeed, int gliderLife, int fireworks) {
+public record Mobility(boolean mayFly, boolean flying, float flyingSpeed, int gliderLife, int fireworks, int rocketBurn) {
 
     /** 原版飞行速度。 */
     public static final float VANILLA_FLYING_SPEED = 0.05F;
     /** 只会走、游、挖、搭:没有飞行能力,没有滑翔物,没有烟花。 */
-    public static final Mobility WALKER = new Mobility(false, false, VANILLA_FLYING_SPEED, 0, 0);
+    public static final Mobility WALKER = new Mobility(false, false, VANILLA_FLYING_SPEED, 0, 0, 0);
 
     /** 有可用的滑翔物。 */
     public boolean canGlide() {

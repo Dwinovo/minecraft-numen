@@ -10,6 +10,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffect;
@@ -21,6 +22,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.item.ElytraItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.Fireworks;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -71,16 +73,37 @@ public final class Snapshots {
         int gliderLife = chest.is(Items.ELYTRA) && ElytraItem.isFlyEnabled(chest)
                 ? chest.getMaxDamage() - chest.getDamageValue() - 1 : 0;
         int fireworks = 0;
+        int burn = Integer.MAX_VALUE;
+        for (ItemStack stack : rockets(body)) {
+            fireworks += stack.getCount();
+            burn = Math.min(burn, ROCKET_BURN * flightDuration(stack));
+        }
+        return new Mobility(abilities.mayfly, flying(body), abilities.getFlyingSpeed(), gliderLife, fireworks,
+                fireworks == 0 ? 0 : burn);
+    }
+
+    /** 背包与副手里的烟花火箭,各一叠。 */
+    private static List<ItemStack> rockets(ServerPlayer body) {
+        List<ItemStack> out = new java.util.ArrayList<>();
         for (ItemStack stack : body.getInventory().items) {
             if (stack.is(Items.FIREWORK_ROCKET)) {
-                fireworks += stack.getCount();
+                out.add(stack);
             }
         }
         if (body.getOffhandItem().is(Items.FIREWORK_ROCKET)) {
-            fireworks += body.getOffhandItem().getCount();
+            out.add(body.getOffhandItem());
         }
-        return new Mobility(abilities.mayfly, flying(body), abilities.getFlyingSpeed(), gliderLife, fireworks);
+        return out;
     }
+
+    /** 烟花飞行时长({@code Fireworks.flightDuration}):每多一级多推十刻。 */
+    private static int flightDuration(ItemStack stack) {
+        Fireworks fireworks = stack.get(DataComponents.FIREWORKS);
+        return fireworks == null ? 1 : Math.max(1, fireworks.flightDuration());
+    }
+
+    /** 一级飞行时长的烟花保底推多少刻({@code FireworkRocketEntity} 的寿命:{@code 10 × 时长 + 最多 11 的随机})。 */
+    private static final int ROCKET_BURN = 10;
 
     /** 身体此刻在不在飞(创造飞行):快照里的 {@link Mobility#flying} 与执行时每刻问的是这一处。 */
     public static boolean flying(ServerPlayer body) {

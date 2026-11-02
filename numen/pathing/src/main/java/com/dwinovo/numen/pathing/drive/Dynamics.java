@@ -35,6 +35,9 @@ interface Dynamics {
     /** 往后推演的某一刻真正按的键:{@code doing} 是这一程的候选,{@code state} 是此刻的状态(刹车一程按到停住就松开,不倒着飞走)。 */
     Keys tail(Action doing, Motion state);
 
+    /** 飞着能随时停住(创造飞行)。滑翔停不下来:一组候选都过不去时,要在撞上之前尽量拖久、落得轻({@link Pilot#survive})。 */
+    boolean stoppable();
+
     /** 身体已经停住(往后推演没有意义了)。 */
     boolean rests(Motion state);
 
@@ -44,12 +47,25 @@ interface Dynamics {
     /** 正在按的 {@code held} 是不是一旦按下就得按到底(推刹的承诺锁存):不到这个地步才允许换。 */
     boolean committed(Action held, Motion state);
 
+    /** 一支烟花推多少刻(保底,{@link com.dwinovo.numen.pathing.plan.Mobility#rocketBurn}),候选里放烟花时推演按这么多刻算;不用烟花的方式为 0。 */
+    int burn();
+
+    /** 从正在按的 {@code held} 换成 {@code next} 的代价(弧长的格数):不在相邻两组之间来回抖。 */
+    double change(Action held, Action next);
+
     /** 这一组候选本身的代价(弧长的格数):滑翔里放一支烟花是花钱的。 */
     double cost(Action action);
 
-    /** 以 {@code state} 这样落到地面,身体不伤(原版滑翔里竖直速度高于每刻 -0.5 时坠落距离每刻重置,不掉血)。 */
-    boolean softLanding(Motion state);
+    /** 以 {@code state} 这样落到地面伤身的扣分(弧长的格数,不伤为 0):原版滑翔里竖直速度高于每刻 -0.5 时坠落距离每刻重置,不掉血,再快就掉。 */
+    double impact(Motion state);
 
+    /** 每换一个键扣多少分(弧长的格数)。 */
+    double KEY_CHANGE = 0.1;
+    /** 滑翔里俯仰目标、偏航目标每差一度扣多少分。 */
+    double PITCH_CHANGE = 0.02;
+    double YAW_CHANGE = 0.01;
+    /** 放一支烟花扣多少分(弧长的格数):烟花是花钱的,只有真有好处才放。 */
+    double ROCKET_COST = 4.0;
     /** 看向前方的点时俯仰打的折扣。 */
     float LOOK_SHARE = 0.5F;
     /** 后退刹车按到水平速度降到这么小才松开({@link #committed})。 */
@@ -57,7 +73,7 @@ interface Dynamics {
     /** 推演里刹车一程,水平速度降到这么小就松开后退键。 */
     double BRAKED = 0.01;
 
-    /** 两组候选差几个键(前后、疾跑、跳、潜行、烟花各算一个):换键的代价按它算,不在相邻两组之间来回抖。 */
+    /** 两组候选差几个键(前后、疾跑、跳、潜行、烟花各算一个)。 */
     static int difference(Action a, Action b) {
         Keys x = a.keys();
         Keys y = b.keys();
@@ -119,8 +135,23 @@ interface Dynamics {
             }
 
             @Override
+            public boolean stoppable() {
+                return true;
+            }
+
+            @Override
             public boolean committed(Action held, Motion state) {
                 return held.keys().forward() < 0 && Math.hypot(state.velocity().x, state.velocity().z) > BRAKING;
+            }
+
+            @Override
+            public int burn() {
+                return 0;
+            }
+
+            @Override
+            public double change(Action held, Action next) {
+                return KEY_CHANGE * difference(held, next);
             }
 
             @Override
@@ -129,9 +160,105 @@ interface Dynamics {
             }
 
             @Override
-            public boolean softLanding(Motion state) {
-                return true;
+            public double impact(Motion state) {
+                return 0;
             }
         };
     }
+
+    /**
+     * 鞘翅滑翔加烟花:物理是 {@link Kinematics#glide}(有烟花推着的刻,推力在滑翔之后加上)。俯仰是操纵杆,候选取"目标俯仰"(经颈部逐刻逼近,
+     * 不在离散的俯仰值之间直接跳)乘上偏航的几个小偏移,放不放烟花是另一维。滑翔停不下来,往后"滑"就是照样滑翔(不再放烟花);刹不住时的补救是拉起。
+     *
+     * @param gravity 身体的重力
+     * @param burn    一支烟花保底推多少刻
+     */
+    static Dynamics gliding(double gravity, int burn) {
+        return new Dynamics() {
+            private final float[] pitches = {-45, -25, -8, 10, 35};
+            private final float[] yaws = {0, -25, 25, -50, 50};
+
+            @Override
+            public Motion step(Motion state, Keys keys) {
+                return Kinematics.glide(state, keys, gravity);
+            }
+
+            @Override
+            public List<Action> actions(float yaw, float pitch) {
+                List<Action> all = new ArrayList<>();
+                for (boolean fire : new boolean[] {false, true}) {
+                    for (float turn : yaws) {
+                        for (float target : pitches) {
+                            all.add(new Action(new Keys(0, 0, false, false, false, yaw + turn, target, fire), yaw + turn, target));
+                        }
+                    }
+                }
+                return all;
+            }
+
+            @Override
+            public Action coast(Action last, boolean descend) {
+                return new Action(last.keys().burning(false), last.yaw(), last.pitch());
+            }
+
+            @Override
+            public Action brake(Action last) {
+                // 刹不住的补救:拉起来换成高度
+                return new Action(last.keys().burning(false), last.yaw(), PULL_UP);
+            }
+
+            @Override
+            public Keys tail(Action doing, Motion state) {
+                return doing.keys().burning(false);
+            }
+
+            @Override
+            public boolean rests(Motion state) {
+                return false;
+            }
+
+            @Override
+            public int horizon() {
+                return 30;
+            }
+
+            @Override
+            public boolean stoppable() {
+                return false;
+            }
+
+            @Override
+            public int burn() {
+                return burn;
+            }
+
+            @Override
+            public double change(Action held, Action next) {
+                return KEY_CHANGE * (held.keys().rocket() != next.keys().rocket() ? 1 : 0)
+                        + PITCH_CHANGE * Math.abs(held.pitch() - next.pitch()) + YAW_CHANGE * Math.abs(held.yaw() - next.yaw());
+            }
+
+            @Override
+            public boolean committed(Action held, Motion state) {
+                return false;
+            }
+
+            @Override
+            public double cost(Action action) {
+                return action.keys().rocket() ? ROCKET_COST : 0;
+            }
+
+            @Override
+            public double impact(Motion state) {
+                return Math.max(0, SOFT_LANDING - state.velocity().y) * IMPACT_COST;
+            }
+        };
+    }
+
+    /** 拉起时的目标俯仰。 */
+    float PULL_UP = -35.0F;
+    /** 落地时竖直速度每比 {@link #SOFT_LANDING} 快一格每刻,扣多少分。 */
+    double IMPACT_COST = 200.0;
+    /** 落地时竖直速度高于它,原版滑翔里坠落距离每刻重置,不掉血。 */
+    double SOFT_LANDING = -0.5;
 }

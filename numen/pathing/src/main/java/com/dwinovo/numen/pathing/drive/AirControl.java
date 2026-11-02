@@ -6,15 +6,12 @@ import java.util.function.Supplier;
 
 import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.api.Snapshots;
-import com.dwinovo.numen.pathing.drive.Dynamics.Action;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Flight;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
-import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -41,20 +38,14 @@ final class AirControl {
     /** 水平速度、竖直速度小于它们算停住了。 */
     private static final double STILL = 0.05;
     private static final double STILL_RISE = 0.02;
-    /** 飞行的线往下多留的一层(格),与降落点水平离多近算在降落。 */
-    private static final double SKIN = 0.05;
-    private static final double LANDING = 6.0;
     /** 身体的弧长过了某一步的落点这么多,这一步就算走完(提前一点,身体正往前冲)。 */
     private static final double CROSS = 0.6;
 
     private final Rig rig;
     /** 一段飞行的期限:建折线时按这一段几步的最短耗时定。 */
     private final Watchdog watchdog;
-    private Pilot pilot;
+    private final Helm helm;
     private Airway way;
-    /** 此刻正在跟的那条线:折线,或悬停的一点。局部控制器的扫路读它的降落点。 */
-    private Airway steering;
-    private BodyStats stats;
     /** 折线从路线的第几步起、到第几步止(不含)、建线时路线有多长。 */
     private int base;
     private int end;
@@ -75,6 +66,7 @@ final class AirControl {
         this.rig = rig;
         this.watchdog = watchdog;
         this.model = model;
+        this.helm = new Helm(rig, Dynamics.flying(rig.entity.getAbilities().getFlyingSpeed()));
     }
 
     /** 这一刻的结果:按键的结果;路线上前 {@code to} 步已经走完,{@code ticks} 是自上一次有步走完起用了几刻(没有新走完的步为 0)。 */
@@ -90,9 +82,7 @@ final class AirControl {
         way = null;
         taps = 0;
         ticks = 0;
-        if (pilot != null) {
-            pilot.forget();
-        }
+        helm.forget();
     }
 
     /**
@@ -122,7 +112,7 @@ final class AirControl {
                 return new Flown(Beat.IDLE, last + 1, walked);
             }
         }
-        Beat beat = steer(way, s);
+        Beat beat = helm.steer(way, s);
         int walked = cur > course.cur() ? ticks : 0;
         if (walked > 0) {
             ticks = 0;
@@ -135,7 +125,7 @@ final class AirControl {
      * 收场时的悬停与飞行中是同一个控制器。
      */
     boolean hold(BlockPos node) {
-        steer(Airway.at(new Vec3(node.getX() + 0.5, node.getY() + HOVER, node.getZ() + 0.5)), 0);
+        helm.steer(Airway.at(new Vec3(node.getX() + 0.5, node.getY() + HOVER, node.getZ() + 0.5)), 0);
         return hovering(node);
     }
 
@@ -170,10 +160,9 @@ final class AirControl {
         }
         Maneuver tail = course.at(end - 1);
         Vec3 touchdown = tail.kind() == MoveKind.LAND ? raw.get(raw.size() - 1) : null;
-        stats = rig.snapshot().stats();
         CostModel spec = model.get();
         way = Airway.straighten(raw, touchdown, (from, to) -> {
-            BlockPos hit = sweep(from, to, touchdown);
+            BlockPos hit = helm.sweep(from, to, touchdown);
             return hit != null ? hit : Flight.refused(spec, rig.world(), from, to);
         });
         ends = new double[end - base];
@@ -184,16 +173,6 @@ final class AirControl {
         }
         s = 0;
         watchdog.begin(course.ticksBefore(end), rig.entity.position());
-        if (pilot == null) {
-            pilot = new Pilot(Dynamics.flying(rig.entity.getAbilities().getFlyingSpeed()), (from, to) -> sweep(from, to, steering.touchdown()),
-                    rig.entity.getEyeHeight());
-        }
-    }
-
-    /** 飞过这一段碰不碰方块;离降落点一格半以内允许擦着地面(落地就是要碰到它),别处都往下多留 {@link #SKIN}。 */
-    private BlockPos sweep(Vec3 from, Vec3 to, Vec3 touchdown) {
-        boolean landing = touchdown != null && Math.hypot(to.x - touchdown.x, to.z - touchdown.z) < LANDING;
-        return Airway.sweep(rig.world(), stats, landing ? 0 : SKIN).blocker(from, to);
     }
 
     /** 这一步落点上脚该在哪:飞着停在落点那一格里取 {@link #HOVER},降落是落点上的地面。 */
@@ -201,29 +180,6 @@ final class AirControl {
         BlockPos to = m.to();
         double feet = m.landing().kind() == Stance.Kind.FLYING ? to.getY() + HOVER : m.landing().feetY();
         return new Vec3(to.getX() + 0.5, feet, to.getZ() + 0.5);
-    }
-
-    /** 这一刻按什么、视角转到哪。被围住(每一组都撞方块)时松开所有键,交出被撞的那一格。 */
-    private Beat steer(Airway track, double along) {
-        var body = rig.entity;
-        steering = track;
-        Motion now = new Motion(body.position(), body.getDeltaMovement());
-        Action pick = pilot.choose(now, rig.look.neck(), track, along, rig.keys.jumpWouldToggleFlight());
-        if (pick == null) {
-            rig.keys.releaseAll();
-            BlockPos cell = pilot.blocker() == null ? body.blockPosition() : pilot.blocker();
-            return new Beat.Blocked(new Blockage(cell, rig.world().getBlockState(cell), MoveKind.FLY, null, Blockage.Hitch.BOXED));
-        }
-        rig.look.steer(pick.yaw(), pick.pitch());
-        var keys = pick.keys();
-        rig.keys.set(Key.FORWARD, keys.forward() > 0);
-        rig.keys.set(Key.BACK, keys.forward() < 0);
-        rig.keys.set(Key.SPRINT, keys.sprint());
-        rig.keys.release(Key.LEFT);
-        rig.keys.release(Key.RIGHT);
-        rig.keys.set(Key.JUMP, keys.jump());
-        rig.keys.set(Key.SNEAK, keys.sneak());
-        return Beat.IDLE;
     }
 
     // ==================== 收处 ====================
