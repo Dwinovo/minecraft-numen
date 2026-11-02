@@ -57,7 +57,7 @@ public final class Voyage {
 
     /** 第一刻:问要不要飞,决定这一趟从哪一段开始。 */
     private void begin() {
-        plan = seed == null && !passing ? Glide.plan(rig, goal) : null;
+        plan = seed == null && !passing ? ask() : null;
         if (plan == null) {
             current = new Driver(rig, goal, spec, budget, seed, passing, clock);
             phase = Phase.FINAL;
@@ -87,7 +87,7 @@ public final class Voyage {
         switch (phase) {
             case TO_TAKEOFF -> {
                 if (s == Driver.State.ARRIVED) {
-                    Glide.Plan fresh = Glide.plan(rig, goal);
+                    Glide.Plan fresh = ask();
                     if (fresh != null) {
                         startSortie(fresh);
                         return state;
@@ -105,6 +105,16 @@ public final class Voyage {
             }
         }
         return state;
+    }
+
+    /** 问要不要飞;不飞而值得一提(远途)的原因记进账与日志。 */
+    private Glide.Plan ask() {
+        Glide.Verdict verdict = Glide.plan(rig, goal);
+        if (verdict.grounded() != null) {
+            rig.ledger.grounded(verdict.grounded());
+            PathLog.info("{} 走过去,没有飞:{}", rig.who, Glide.describe(verdict.grounded()));
+        }
+        return verdict.plan();
     }
 
     private void startSortie(Glide.Plan flight) {

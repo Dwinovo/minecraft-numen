@@ -8,6 +8,7 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -75,6 +76,83 @@ public class GlideGameTests {
                 .arrives();
     }
 
+    /** 目标是"离某点三格以内"(范围里有一百多个终点格):照样飞,落在目标这一侧,走完最后一截。 */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400)
+    public static void a_range_goal_is_flown_to_like_a_cell(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = winged(t, 5, 8);
+        t.go(body, Goals.within(Goals.at(t.at(120, 1, 12)), 0, 3), RouteSpec.defaults()).within(1000)
+                .then(r -> {
+                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
+                        throw new GameTestAssertException("范围目标也该飞:" + r.report.ledger().glides());
+                    }
+                })
+                .arrives();
+    }
+
+    /** 目标是一整列(只给 x、z):朝那一列飞,落在近处的地面上,走到那一列上。 */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400)
+    public static void a_column_goal_is_flown_to_like_a_cell(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = winged(t, 5, 8);
+        var cell = t.at(120, 1, 12);
+        t.go(body, Goals.column(cell.getX(), cell.getZ()), RouteSpec.defaults()).within(1000)
+                .then(r -> {
+                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
+                        throw new GameTestAssertException("列目标也该飞:" + r.report.ledger().glides());
+                    }
+                })
+                .arrives();
+    }
+
+    /**
+     * 目标在远处没加载的区块里(沿途也没有加载的:从场地往四个方向、三四百格外起,取第一处从两百格外到目标都没加载的):不因为"沿途有没加载的区块"拒绝飞;
+     * 先朝那个水平位置飞,飞到哪加载到哪,那片加载了再定降落点;账上一段飞了两百多格的滑翔,收场落在地上。
+     */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 3000)
+    public static void a_goal_in_unloaded_chunks_is_flown_and_the_landing_is_found_on_the_way(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        // 站在五十格高的石柱顶上:高过场地四周的屏障和邻居的场地,飞起来不被它们挡
+        t.fill(4, 1, 10, 6, 50, 14, Blocks.STONE);
+        TestBody body = t.body(5, 51, 12);
+        body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
+        Trial.give(body, new ItemStack(Items.FIREWORK_ROCKET, 24));
+        BlockPos start = t.at(5, 51, 12);
+        BlockPos goal = null;
+        for (int distance = 400; distance <= 900 && goal == null; distance += 100) {
+            for (int[] dir : new int[][] {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                if (unloadedFrom(body.serverLevel(), start, dir, 200, distance)) {
+                    goal = start.offset(dir[0] * distance, -50, dir[1] * distance);
+                    break;
+                }
+            }
+        }
+        if (goal == null) {
+            throw new GameTestAssertException("场地四周找不到没加载的远处,测试场地假设不成立");
+        }
+        t.go(body, Goals.column(goal.getX(), goal.getZ()), RouteSpec.defaults()).within(2500)
+                .then(r -> {
+                    var glides = r.report.ledger().glides();
+                    if (glides.size() != 1 || glides.get(0).blocks() < 250 || glides.get(0).airborne()) {
+                        throw new GameTestAssertException("该有一段飞了两百多格的滑翔:" + glides);
+                    }
+                    if (r.body.isFallFlying() || r.body.getAbilities().flying) {
+                        throw new GameTestAssertException("收场了还在飞");
+                    }
+                })
+                .arrives();
+    }
+
+    /** 从 {@code start} 沿 {@code dir} 走 {@code from} 到 {@code to} 格这一段,每隔十六格取点,点上的区块都没加载。 */
+    private static boolean unloadedFrom(ServerLevel level, BlockPos start, int[] dir, int from, int to) {
+        for (int d = from; d <= to; d += 16) {
+            if (level.getChunkSource().getChunkNow((start.getX() + dir[0] * d) >> 4, (start.getZ() + dir[1] * d) >> 4) != null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** 烟花只有一支,飞这么远不够(留余量):不飞,全程走路,账上没有滑翔。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400)
     public static void too_few_rockets_means_walking(GameTestHelper helper) {
@@ -84,6 +162,26 @@ public class GlideGameTests {
                 .then(r -> {
                     if (!r.report.ledger().glides().isEmpty()) {
                         throw new GameTestAssertException("烟花不够不该飞:" + r.report.ledger().glides());
+                    }
+                    var why = r.report.ledger().grounded();
+                    if (why == null || why.why() != com.dwinovo.numen.pathing.drive.EditLedger.Why.TOO_FEW_ROCKETS || why.have() != 1) {
+                        throw new GameTestAssertException("账上该写明没飞是因为烟花不够(有 1 支):" + why);
+                    }
+                })
+                .arrives();
+    }
+
+    /** 没穿鞘翅,走一百多格:全程走路,账上写明是因为没穿可用的鞘翅,模型从回执里能读到。 */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400)
+    public static void a_long_walk_without_an_elytra_says_why(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = t.body(5, 1, 12);
+        Trial.give(body, new ItemStack(Items.FIREWORK_ROCKET, 8));
+        t.go(body, Goals.at(t.at(120, 1, 12)), RouteSpec.defaults()).within(1000)
+                .then(r -> {
+                    var why = r.report.ledger().grounded();
+                    if (why == null || why.why() != com.dwinovo.numen.pathing.drive.EditLedger.Why.NO_ELYTRA) {
+                        throw new GameTestAssertException("账上该写明没飞是因为没穿鞘翅:" + why);
                     }
                 })
                 .arrives();

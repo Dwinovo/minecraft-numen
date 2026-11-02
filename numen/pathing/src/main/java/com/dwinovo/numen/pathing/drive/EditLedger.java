@@ -42,8 +42,18 @@ public final class EditLedger {
     public record Glided(BlockPos takeoff, BlockPos landing, double blocks, int rockets, int wearBefore, int wearAfter, float damage,
                          boolean emergency, boolean airborne, int plannedRockets, int plannedTicks) {}
 
+    /** 这一趟没有飞、走过去的原因。 */
+    public enum Why { NO_ELYTRA, NO_LIFT, TOO_FEW_ROCKETS, WORN_ELYTRA, NO_TAKEOFF, NO_ROUTE, NO_LANDING }
+
+    /**
+     * 走过去而没有飞的原因,和相关的数({@code need}:要多少、{@code have}:有多少,烟花或耐久不够时才有)。只在飞本来值得一提(远途)时记,
+     * 照实说事实;近处走几步不记。
+     */
+    public record Grounded(Why why, int need, int have) {}
+
     private final List<Entry> entries = new ArrayList<>();
     private final List<Glided> glides = new ArrayList<>();
+    private Grounded grounded;
     private final Map<MoveKind, Integer> walked = new EnumMap<>(MoveKind.class);
     /** 起飞的地方(站着的起点),按先后。 */
     private final List<BlockPos> launches = new ArrayList<>();
@@ -89,6 +99,16 @@ public final class EditLedger {
             landings.add(glide.landing());
         }
         flown += glide.blocks();
+    }
+
+    /** 记一笔:没有飞、走过去的原因。 */
+    void grounded(Grounded why) {
+        grounded = why;
+    }
+
+    /** 没有飞、走过去的原因;没记过为 null。 */
+    public Grounded grounded() {
+        return grounded;
     }
 
     /** 滑翔的账,按先后。 */

@@ -54,6 +54,21 @@ public interface Goal {
      */
     Heights heights();
 
+    /**
+     * 水平上要去的地方:到点范围里离 {@code from} 最近的一处。远途滑翔({@link com.dwinovo.numen.pathing.drive.Glide})朝它飞,
+     * 不需要终点格的枚举(一整列、范围无边的目标也有)。没有水平位置(只给高度、远离这些)为 null。同样不给默认值。
+     */
+    Anchor anchor(Vec3 from);
+
+    /** 水平位置 {@code (x, z)}(格心的坐标)。 */
+    record Anchor(double x, double z) {
+
+        /** 离 {@code from} 的水平距离。 */
+        public double distance(Vec3 from) {
+            return Math.hypot(x - from.x, z - from.z);
+        }
+    }
+
     /** 一组终点格({@link #endCells})所在的高度范围:最低与最高的一层;没有终点格(null 或空)为 null。 */
     static Heights heightsOf(LongSet cells) {
         if (cells == null || cells.isEmpty()) {

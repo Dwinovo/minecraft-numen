@@ -378,6 +378,18 @@ public final class Goals {
         return out.append(")").toString();
     }
 
+    /** 成员里有水平位置的,离 {@code from} 最近的那个;都没有为 null。 */
+    private static Goal.Anchor nearestAnchor(List<? extends Goal> members, Vec3 from) {
+        Goal.Anchor best = null;
+        for (Goal g : members) {
+            Goal.Anchor own = g.anchor(from);
+            if (own != null && (best == null || own.distance(from) < best.distance(from))) {
+                best = own;
+            }
+        }
+        return best;
+    }
+
     // ==================== 各个目标 ====================
 
     /**
@@ -389,6 +401,13 @@ public final class Goals {
      * @param z 为 null 时不看 z
      */
     public record Position(Integer x, Integer y, Integer z) implements Goal {
+
+        /** 某一格或某一列的格心;只给高度没有水平位置。 */
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return x != null ? new Anchor(x + 0.5, z + 0.5) : null;
+        }
+
 
         public Position {
             if ((x == null) != (z == null)) {
@@ -469,6 +488,21 @@ public final class Goals {
     private static final int ENUMERABLE = 16;
 
     private record Within(Position center, double min, double max) implements Goal {
+
+        /** 中心的水平位置,离 from 最近的一圈上面向 from 的那一点(在带里就取 from 到中心连线上离中心 d 的那一点)。 */
+        @Override
+        public Anchor anchor(Vec3 from) {
+            Anchor c = center.anchor(from);
+            if (c == null) {
+                return null;
+            }
+            double dx = from.x - c.x();
+            double dz = from.z - c.z();
+            double d = Math.hypot(dx, dz);
+            double r = Math.min(Math.max(d, min), max);
+            return d < 1e-6 ? new Anchor(c.x() + r, c.z()) : new Anchor(c.x() + dx / d * r, c.z() + dz / d * r);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             double d = center.distanceSqr(x, y, z);
@@ -542,6 +576,12 @@ public final class Goals {
     public record Use(BlockPos target, BodyStats body, Map<Long, Set<Direction>> stands, List<Direction> open)
             implements Goal {
 
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return new Anchor(target.getX() + 0.5, target.getZ() + 0.5);
+        }
+
+
         /** 四面封死:没有一面敞开。 */
         public boolean sealed() {
             return open.isEmpty();
@@ -591,6 +631,12 @@ public final class Goals {
     }
 
     private record Dig(BlockPos target, BodyStats body, Clearing clearing) implements Goal {
+
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return new Anchor(target.getX() + 0.5, target.getZ() + 0.5);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             double feet = stance.feetY();
@@ -650,6 +696,12 @@ public final class Goals {
 
     /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats, Clearing)}。 */
     private record DigAny(List<Dig> members, double[] prices) implements Goal {
+
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return nearestAnchor(members, from);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Dig g : members) {
@@ -730,6 +782,12 @@ public final class Goals {
 
     /** 放一格:到没到、估价、终点格与挖那一格同一套几何({@link Dig}),不禁止挖它;停在这里还要手点得着,点不着是办不成。 */
     private record Place(Dig reach) implements Goal {
+
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return reach.anchor(from);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             return reach.contains(x, y, z, stance);
@@ -769,6 +827,12 @@ public final class Goals {
     }
 
     private record Touch(AABB box, BodyStats body, double range) implements Goal {
+
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return new Anchor(box.getCenter().x, box.getCenter().z);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             return Reach.reaches(body.eye(x, stance.feetY(), z), box, range);
@@ -798,6 +862,13 @@ public final class Goals {
     }
 
     private record AwayFrom(List<Threat> threats) implements Goal {
+
+        /** 远离:没有要去的地方。 */
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return null;
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Threat t : threats) {
@@ -846,6 +917,12 @@ public final class Goals {
     }
 
     private record AnyOf(List<Goal> members) implements Goal {
+
+        @Override
+        public Anchor anchor(Vec3 from) {
+            return nearestAnchor(members, from);
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Goal g : members) {
@@ -944,6 +1021,19 @@ public final class Goals {
     }
 
     private record AllOf(List<Goal> members) implements Goal {
+
+        /** 每一个都要到:取第一个有水平位置的成员的。 */
+        @Override
+        public Anchor anchor(Vec3 from) {
+            for (Goal g : members) {
+                Anchor own = g.anchor(from);
+                if (own != null) {
+                    return own;
+                }
+            }
+            return null;
+        }
+
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Goal g : members) {

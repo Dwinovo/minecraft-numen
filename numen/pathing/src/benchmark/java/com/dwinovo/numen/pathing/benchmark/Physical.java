@@ -46,6 +46,11 @@ final class Physical implements Goal {
     }
 
     @Override
+    public Anchor anchor(net.minecraft.world.phys.Vec3 from) {
+        return goal.anchor(from);
+    }
+
+    @Override
     public Heights heights() {
         return goal.heights();
     }
