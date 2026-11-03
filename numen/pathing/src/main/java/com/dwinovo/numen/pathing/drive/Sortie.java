@@ -59,6 +59,8 @@ final class Sortie implements Segment {
     private final Glide.Plan plan;
     private final Helm helm;
     private Airway way;
+    /** 此刻定的降落点(落地面的位置):{@link #way} 换成盘旋的圈、迫降的线之后,这一段原本要去的地方还是它({@link #reached})。 */
+    private Vec3 touchdown;
     private Phase phase = Phase.TAKEOFF;
     private Driver.State state = Driver.State.RUNNING;
     private Halt halt;
@@ -82,6 +84,7 @@ final class Sortie implements Segment {
         this.rig = rig;
         this.plan = plan;
         this.way = plan.way();
+        this.touchdown = plan.way().touchdown();
         this.helm = new Helm(rig, Dynamics.gliding(rig.entity.getGravity(), rig.snapshot().mobility().rocketBurn(), rig.snapshot().safeFallDistance()));
         this.wearBefore = rig.entity.getItemBySlot(EquipmentSlot.CHEST).getDamageValue();
         this.healthBefore = rig.entity.getHealth();
@@ -208,6 +211,7 @@ final class Sortie implements Segment {
             if (next != null) {
                 settled = true;
                 way = next;
+                touchdown = next.touchdown();
                 s = 0;
                 helm.forget();
                 PathLog.info("{} 目标那片加载了,定下降落点 {} 身体 {}", rig.who, PathLog.pos(BlockPos.containing(next.touchdown())), PathLog.body(body));
@@ -239,7 +243,7 @@ final class Sortie implements Segment {
 
     /** 落地处就在计划的降落点那一圈里,不是迫降:这一段飞到了该到的地方。 */
     boolean reached() {
-        return !emergency && Math.hypot(rig.entity.getX() - way.touchdown().x, rig.entity.getZ() - way.touchdown().z) <= Glide.TOLERANCE;
+        return !emergency && Math.hypot(rig.entity.getX() - touchdown.x, rig.entity.getZ() - touchdown.z) <= Glide.TOLERANCE;
     }
 
     /** 这一段从哪个起飞点起的。 */
@@ -247,9 +251,10 @@ final class Sortie implements Segment {
         return plan.takeoff();
     }
 
-    /** 从 {@code from} 不放烟花滑得到 {@code to}(按滑翔比留余量)。 */
+    /** 从 {@code from} 不放烟花落得到 {@code to}:已经在它那一圈({@link Glide#TOLERANCE})之内,或按滑翔比(留余量)滑得到。 */
     private static boolean reaches(Vec3 from, Vec3 to) {
-        return (from.y - to.y) * Glide.GLIDE_RATIO * REACH_MARGIN >= Math.hypot(to.x - from.x, to.z - from.z);
+        double distance = Math.hypot(to.x - from.x, to.z - from.z);
+        return distance <= Glide.TOLERANCE || (from.y - to.y) * Glide.GLIDE_RATIO * REACH_MARGIN >= distance;
     }
 
     /**
