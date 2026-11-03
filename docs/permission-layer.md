@@ -204,7 +204,7 @@ deny place(hazard_item & near(other))
 
 | 内容 | 什么时候送动作 |
 |---|---|
-| `move.walk`、`move.away`、`move.follow` | 规划时只读裁决定价;走到要改的格子那一刻由鼠标问 |
+| `move.walk`、`move.fly`、`move.away`、`move.follow` | 规划时只读裁决定价;走到要改的格子那一刻由鼠标问 |
 | `work.dig` | 挖给它的每一格,动手前问;够不着先走过去,路上要改的格同上 |
 | `build.place` | 施工前把要清的与要放的整批裁决,一张卡;拒绝的格按"主人不让动"跳过并写进回执。她放下的每一格记在她名下(`self`) |
 | `fight` | 开打前送目标,一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
