@@ -51,7 +51,7 @@ public class GlideGameTests {
         return blocks * Kinematics.pace(Snapshots.stats(body)).sprint();
     }
 
-    /** 平地一百一十五格外:起飞、爬升、巡航、下滑,落在目标这一侧,走完最后一截;耗时不超过全程走路的下界的一倍半,账上有一段滑翔、烟花用了几支、没掉血。 */
+    /** 平地一百一十五格外:起飞、爬升、巡航、下滑,落在目标这一侧,走完最后一截;比全程走路的下界快,账上有一段滑翔、烟花用了几支、没掉血。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400, skyAccess = true)
     public static void a_winged_body_takes_off_and_lands_far_away(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -70,9 +70,8 @@ public class GlideGameTests {
                     if (glide.wearAfter() <= glide.wearBefore() && r.ticks > 40) {
                         throw new GameTestAssertException("飞了这么久鞘翅耐久没动:" + glide);
                     }
-                    // 叫了飞就飞,不和走路比价钱(ADR 0043):盘旋下沉要飞完,一趟和疾跑走过去差不多快,这里只守住不是绕圈绕个没完
-                    if (r.ticks >= 1.5 * bound) {
-                        throw new GameTestAssertException("用了 " + r.ticks + " 刻,超过走路的下界 " + (int) bound + " 刻的一倍半");
+                    if (r.ticks >= bound) {
+                        throw new GameTestAssertException("用了 " + r.ticks + " 刻,没有比走路的下界 " + (int) bound + " 刻快");
                     }
                     if (r.body.isFallFlying() || r.body.getAbilities().flying) {
                         throw new GameTestAssertException("收场了还在飞");
