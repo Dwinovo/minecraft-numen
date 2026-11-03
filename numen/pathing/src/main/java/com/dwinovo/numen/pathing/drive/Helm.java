@@ -26,7 +26,7 @@ final class Helm {
     /** 飞行的线往下多留的一层(格):飞着的身体脚一碰到地面原版就停飞。 */
     private static final double SKIN = 0.05;
     /** 离降落点那一圈再往外这么近以内,允许擦着地面(落地就是要碰到它)。 */
-    static final double LANDING = 10.0;
+    private static final double LANDING = 10.0;
     /** 右键放烟花的间隔(刻):原版连续使用的间隔。 */
     static final int COOLDOWN = 4;
 
@@ -83,13 +83,6 @@ final class Helm {
 
     /** 飞过这一段碰不碰方块;离降落点近处允许擦着地面,别处都往下多留 {@link #SKIN}。 */
     BlockPos sweep(Vec3 from, Vec3 to, Vec3 touchdown, double zone) {
-        return sweep(rig, stats, from, to, touchdown, zone);
-    }
-
-    /**
-     * 同一个判据,不带操舵:排线时拿局部控制器在活世界里把线飞一遍({@link Glide#fly})读的也是它,模拟里躲开的和实飞里躲开的是同一堆方块。
-     */
-    static BlockPos sweep(Rig rig, BodyStats stats, Vec3 from, Vec3 to, Vec3 touchdown, double zone) {
         boolean landing = touchdown != null && Math.hypot(to.x - touchdown.x, to.z - touchdown.z) < zone + LANDING;
         return Airway.sweep(rig.world(), stats, landing ? 0 : SKIN).blocker(from, to);
     }

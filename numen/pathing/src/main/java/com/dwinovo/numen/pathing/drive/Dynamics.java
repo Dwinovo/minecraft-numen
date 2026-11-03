@@ -187,7 +187,7 @@ interface Dynamics {
      */
     static Dynamics gliding(double gravity, int burn) {
         return new Dynamics() {
-            private final float[] pitches = {-45, -25, -8, 10, 35};
+            private final float[] pitches = {COLUMN_PITCH, -45, -25, -8, 10, 35};
             private final float[] yaws = {0, -25, 25, -50, 50};
 
             @Override
@@ -272,10 +272,12 @@ interface Dynamics {
         };
     }
 
+    /** 起飞的空柱里爬升用的目标俯仰(纯竖直):柱口径只有两格,斜着爬要偏出柱子。只在爬升段里挑({@link Pilot#choose}),飞起来之后不挑。 */
+    float COLUMN_PITCH = -90.0F;
     /** 拉起时的目标俯仰。 */
     float PULL_UP = -35.0F;
     /** 落地时竖直速度每比 {@link #SOFT_LANDING} 快一格每刻,扣多少分。 */
-    double IMPACT_COST = 600.0;
+    double IMPACT_COST = 3000.0;
     /** 落地时竖直速度高于它,原版滑翔里坠落距离每刻重置,不掉血。 */
     double SOFT_LANDING = -0.5;
 }

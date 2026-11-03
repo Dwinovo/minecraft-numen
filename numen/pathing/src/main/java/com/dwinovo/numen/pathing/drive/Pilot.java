@@ -40,6 +40,8 @@ final class Pilot {
     private static final int WATCH = 10;
     /** 离折线的距离每格平方扣多少分(弧长的格数)。 */
     private static final double LATERAL = 1.0;
+    /** 在爬升的空柱里离柱轴的距离每格平方扣多少分:柱子的口径只有两格,偏出去就是撞柱外的方块,比进度重得多。 */
+    private static final double CLIMB_LATERAL = 10.0;
     /** 离收处不到 {@link #NEAR} 格时,滑停的点离收处每格平方扣多少分。 */
     private static final double NEAR_WEIGHT = 40.0;
     /** 终点滑出折线末尾,每格扣多少倍。 */
@@ -108,6 +110,9 @@ final class Pilot {
         double bestScore = Double.NEGATIVE_INFINITY;
         List<Action> actions = physics.actions(aimYaw, aimPitch);
         for (Action action : actions) {
+            if (s >= way.climb() && action.pitch() <= Dynamics.COLUMN_PITCH) {
+                continue;
+            }
             if (jumpLocked && action.keys().jump() || action.keys().rocket() && (supply.rockets <= 0 || way.length() - s < NO_FIRE)) {
                 continue;
             }
@@ -261,6 +266,12 @@ final class Pilot {
     }
 
     private double score(Motion end, Airway way, double s, Action action, double penalty, boolean landed) {
+        if (s < way.climb()) {
+            // 还在线头的爬升段里(起飞的空柱):只按柱轴算,进度是爬了多高,偏出柱轴的重扣。不然终点投到后面的平飞段上,抄近路飞出去的分数反而高;
+            // 竖直爬升水平速度本来就小,也不按失速扣分
+            double off = way.climbOffset(end.pos());
+            return way.climbAlong(end.pos()) - CLIMB_LATERAL * off * off - physics.cost(action) - penalty - impact;
+        }
         double idle = landed ? 0 : physics.endCost(end);
         double length = way.length();
         if (length - s < NEAR) {

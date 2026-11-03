@@ -11,7 +11,6 @@ public record Gliding(@Doc("The cell it took off from.") BlockPos tookOffAt,
                       @Doc("The cell it came down in.") BlockPos landedAt,
                       @Doc("Horizontal blocks flown.") double blocks,
                       @Doc("Firework rockets it used.") int rockets,
-                      @Doc("Firework rockets it expected to need when it planned the glide.") int plannedRockets,
                       @Doc("The elytra's damage before the glide.") int elytraDamageBefore,
                       @Doc("The elytra's damage after the glide.") int elytraDamageAfter,
                       @Doc("Health it lost to the landing.") double healthLost,
@@ -19,7 +18,7 @@ public record Gliding(@Doc("The cell it took off from.") BlockPos tookOffAt,
                       @Doc("The glide ended with it still in the air.") boolean stillAirborne) {
 
     static Gliding of(EditLedger.Glided glide) {
-        return new Gliding(glide.takeoff(), glide.landing(), glide.blocks(), glide.rockets(), glide.plannedRockets(), glide.wearBefore(),
+        return new Gliding(glide.takeoff(), glide.landing(), glide.blocks(), glide.rockets(), glide.wearBefore(),
                 glide.wearAfter(), glide.damage(), glide.emergency(), glide.airborne());
     }
 }

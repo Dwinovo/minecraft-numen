@@ -344,12 +344,12 @@ public final class NavText {
     }
 
     /**
-     * 一段鞘翅滑翔的细账:用了几支烟花(计划几支)、鞘翅耐久前后、落地掉了几点血、是不是迫降、收场时是不是还在空中。例如
-     * {@code Gliding used 2 firework rockets (planned about 4) and wore the elytra from 0 to 3 damage; I lost no health.}
+     * 一段鞘翅滑翔的细账:用了几支烟花、鞘翅耐久前后、落地掉了几点血、是不是迫降、收场时是不是还在空中。例如
+     * {@code Gliding used 2 firework rockets and wore the elytra from 0 to 3 damage; I lost no health.}
      */
     static String glide(EditLedger.Glided glide) {
         StringBuilder sb = new StringBuilder("Gliding used ").append(glide.rockets()).append(glide.rockets() == 1 ? " firework rocket" : " firework rockets")
-                .append(" (planned about ").append(glide.plannedRockets()).append(") and wore the elytra from ").append(glide.wearBefore())
+                .append(" and wore the elytra from ").append(glide.wearBefore())
                 .append(" to ").append(glide.wearAfter()).append(" damage; ");
         sb.append(glide.damage() < 0.5F ? "I lost no health" : "I lost " + Math.round(glide.damage()) + " health");
         if (glide.emergency()) {

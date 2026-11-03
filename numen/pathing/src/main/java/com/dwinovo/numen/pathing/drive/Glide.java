@@ -5,17 +5,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
-import com.dwinovo.numen.api.entity.Look;
-import com.dwinovo.numen.api.entity.Neck;
-import com.dwinovo.numen.pathing.drive.Dynamics.Action;
-import com.dwinovo.numen.pathing.drive.Pilot.Supply;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,15 +23,14 @@ import net.minecraft.world.phys.Vec3;
  * 飞不起来(缺鞘翅、烟花、耐久、起飞的地方、线、降落的地)在受理时当场拒绝({@link Lack})。
  *
  * <h2>起飞</h2>
- * 一趟飞是:走到起飞点 → 起飞 → 巡航 → 进近降落 → 走完最后一截。起飞点在身体附近铺开找({@link #takeoffs}:每隔 {@link #TAKEOFF_SPACING} 格一列,
- * 站得住的地面,按离身体的远近从近到远试),不是只取脚边几格。一处起飞点能不能用,看实飞的那个局部控制器在<b>活世界</b>里从这里起跳、抬头爬升能不能躲开沿途的方块
- * ({@link #flight}:先只模拟爬升那一段,通了再整条飞一遍),不是一条固定角度的通道;抬头的俯仰从低到高试({@link #PITCHES}),取第一个飞得通的。
- * 模拟的轨迹就是实飞的轨迹(同一个控制器、同一个扫路判据),计划里爬升的那一段线和交给飞行的线是同一条({@code way}),只排一次。有烟花(不少于 {@link #ROCKET_FLOOR} 支)就这样起飞;
- * 烟花不够,或附近排不出这样的起飞点:走到一处落差够大的边沿,从边沿走出去、离地后展开,只靠高度往下滑({@link #dropping}),没有爬升与巡航。
+ * 一趟飞是:走到起飞点 → 起飞 → 巡航 → 进近降落 → 走完最后一截。起飞点照 MovementSync 的做法:身体附近找一根宽口径、直到巡航高度都空着的柱子
+ * ({@link #column}),走过去,在柱子里陡爬升({@link #TAKEOFF_PITCH}),爬到巡航高度再转向目标。候选在附近铺开({@link #takeoffs}:每隔 {@link #TAKEOFF_SPACING} 格一列,
+ * 站得住的地面,按离身体的远近从近到远试)。受理只做这几何的检查,不模拟飞行;柱子里贴着柱子爬是局部控制器({@link Pilot})的事。
+ * 烟花不够(少于 {@link #ROCKET_FLOOR} 支)或排不出这样的起飞点:走到一处落差够大的边沿,从边沿走出去、离地后展开,只靠高度往下滑({@link #dropping}),没有爬升与巡航。
  *
  * <h2>线</h2>
  * 起飞点→爬到巡航高度→平飞→进近降落({@link #approachCorners})。巡航高度:沿起飞点到目标的直线每 {@link #CRUISE_SAMPLE} 格取一列,看这一列最高的碰撞面
- * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格。不要求"爬升加按滑翔比直线下滑放得进水平距离":降下来是目标附近的事,高了就在降落点上空盘旋下沉。
+ * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格;线是柱子里竖直爬到这个高度,再平飞。不要求"爬升加按滑翔比直线下滑放得进水平距离":降下来是目标附近的事,高了就在降落点上空盘旋下沉。
  * 没加载的区块是未知,不是空气也不是墙:排线时先当过得去,{@link Sortie} 每刻接着查前方新加载的那段线({@link Helm#blocked}),被挡就抬高巡航重排({@link #raise})或改降;
  * 目标那片没加载时降落点先按起飞点的高度估,那片加载了再定真正的落点({@link #settle})。
  *
@@ -56,8 +50,8 @@ final class Glide {
     /** 巡航高度:沿线每隔几格看一列的最高碰撞面,取最高的再加几格(MovementSync 的做法)。 */
     private static final int CRUISE_SAMPLE = 16;
     private static final int CRUISE_MARGIN = 16;
-    /** 起飞抬头的俯仰(度),从低到高试:陡抬但不到垂直,能爬上巡航高度的第一个。 */
-    private static final float[] PITCHES = {-45.0F, -60.0F, -75.0F};
+    /** 起飞抬头的俯仰(度):陡抬但不到垂直(REPORT-feel 对起飞的建议),在空柱里爬;爬到巡航高度才转向目标。 */
+    static final float TAKEOFF_PITCH = -75.0F;
     /** 抬高巡航重排({@link #raise})的爬升线按这个俯仰算:一格水平一格高。 */
     static final float CLIMB_PITCH = -45.0F;
     /** 滑翔比:每下降一格水平走几格(鞘翅平滑翔大约八九比一)。 */
@@ -66,6 +60,8 @@ final class Glide {
     private static final int SIDE = 2;
     /** 抬高巡航每次多几格。 */
     private static final int CLIMB_STEP = 6;
+    /** 降落点要离液体多远(格):落地允许差降落点一圈({@link #TOLERANCE}),这一圈里都得是干地,不然贴着水边的点会落进水里。 */
+    private static final int DRY_MARGIN = (int) Glide.TOLERANCE;
     /** 降落点落在目标这一侧多少格处:最后一截落地后走过去。 */
     private static final double APPROACH = 6.0;
     /** 落地离降落点水平不超过这么远就算降到了(演练与实飞同一个判据,飞行线的降落点那一圈就是它)。 */
@@ -73,12 +69,12 @@ final class Glide {
     /** 落地之后离目标不超过这么远,就是"最后一截":一次计划好的降落落在目标这一侧 {@link #APPROACH} 格处、误差 {@link #TOLERANCE} 格内,走过去就是。 */
     static final double FINAL_WALK = APPROACH + TOLERANCE;
     /**
-     * 算力预算(不是物理的判据):起飞点往四周找多少格、每隔几格取一列、最多试几个——每试一个起飞点要做一次爬升的模拟;
+     * 算力预算(不是物理的判据):起飞点往四周找多少格、每隔几格取一列、最多试几个(每个是一根柱子的扫掠检查);
      * 找边沿往四周看几格、最多试几个;找降落点往四周找多少格。
      */
     private static final int TAKEOFF_RADIUS = 24;
     private static final int TAKEOFF_SPACING = 3;
-    private static final int TAKEOFFS_TRIED = 12;
+    private static final int TAKEOFFS_TRIED = 64;
     private static final int EDGE_RADIUS = 16;
     private static final int EDGES_TRIED = 4;
     private static final int LANDING_RADIUS = 24;
@@ -88,17 +84,6 @@ final class Glide {
     /** 没有烟花时下滑线能飞多远(滑翔比的这个比例,留余量)。 */
     private static final double GLIDE_SHARE = 0.65;
     /**
-     * 模拟最多飞几刻(算力预算):爬升那一段 {@link #CLIMB_LIMIT};整条线是 {@link #SIM_BASE} 刻加每格线长 {@link #SIM_PER_BLOCK} 刻,封顶 {@link #REHEARSAL}——
-     * 控制器平均每刻飞不到一格,飞了这么久还没到的线是飞不到的,不必真飞满一千多刻才发现。
-     */
-    private static final int CLIMB_LIMIT = 400;
-    private static final int REHEARSAL = 1200;
-    private static final int SIM_BASE = 100;
-    private static final double SIM_PER_BLOCK = 2.0;
-    /** 模拟时烟花不设限:检查的是线的形状飞不飞得过去,够不够用是飞着看的({@link #ROCKET_FLOOR})。 */
-    private static final int UNLIMITED = 1000;
-
-    /**
      * 一份滑翔计划。
      *
      * @param drop      从边沿走出去起飞(不起跳、不爬升);否则平地起跳
@@ -106,20 +91,11 @@ final class Glide {
      * @param pitch     起跳后抬头的俯仰(度);从边沿走出去时是 0
      * @param landing   降落的格(落地站着的节点);目标那片没加载时是按起飞点高度估的那一格
      * @param way       沿着飞的线,终点是降落点
-     * @param ticks     估计飞行用几刻(模拟)
-     * @param rockets   估计用几支烟花(模拟)
      * @param blocks    起飞点到目标的水平距离
      * @param aim       这一趟飞往的水平位置
      * @param known     降落点是真的地面;否则那片没加载,降落点是估的,{@link Sortie} 之后那片加载了再定({@link #settle})
      */
-    record Plan(boolean drop, BlockPos takeoff, float pitch, BlockPos landing, Airway way, int ticks, int rockets, double blocks,
-                Goal.Anchor aim, boolean known) {
-
-        /** 估计鞘翅耗几点耐久(滑翔每秒耗一点)。 */
-        int wear() {
-            return ticks / 20 + 1;
-        }
-    }
+    record Plan(boolean drop, BlockPos takeoff, float pitch, BlockPos landing, Airway way, double blocks, Goal.Anchor aim, boolean known) {}
 
     /** 一次试排:成了是计划,没成是原因。 */
     private record Attempt(Plan plan, Lack.Why why) {
@@ -167,12 +143,12 @@ final class Glide {
         Plan chosen = null;
         Lack.Why why = Lack.Why.NO_TAKEOFF;
         if (mobility.fireworks() >= ROCKET_FLOOR) {
-            Attempt attempt = climbing(rig, snapshot, stats, target, land, spent);
+            Attempt attempt = climbing(rig, stats, target, land, spent);
             chosen = attempt.plan();
             why = attempt.why() != null ? attempt.why() : why;
         }
         if (chosen == null) {
-            chosen = dropping(rig, snapshot, stats, target, spent);
+            chosen = dropping(rig, stats, target, spent);
         }
         if (chosen == null) {
             return mobility.fireworks() < ROCKET_FLOOR ? lacking(rig, Lack.Why.TOO_FEW_ROCKETS, ROCKET_FLOOR, mobility.fireworks())
@@ -188,20 +164,18 @@ final class Glide {
     }
 
     /**
-     * 有烟花的起飞:附近铺开的起飞点从近到远,每个试几档抬头的俯仰({@link #PITCHES}),取第一个排得成的。算力预算:最多试 {@link #TAKEOFFS_TRIED} 个起飞点。
+     * 有烟花的起飞:附近铺开的起飞点从近到远,取第一个排得成的({@link #flight})。算力预算:最多试 {@link #TAKEOFFS_TRIED} 个起飞点。
      * 没成的原因取最能说明问题的一个:有线过不去({@link Lack.Why#NO_ROUTE})比头顶没开阔({@link Lack.Why#NO_TAKEOFF})更具体。
      */
-    private static Attempt climbing(Rig rig, BodySnapshot snapshot, BodyStats stats, Goal.Anchor target, Landing land, Set<BlockPos> spent) {
+    private static Attempt climbing(Rig rig, BodyStats stats, Goal.Anchor target, Landing land, Set<BlockPos> spent) {
         Lack.Why last = Lack.Why.NO_TAKEOFF;
         for (BlockPos takeoff : takeoffs(rig, stats, spent)) {
-            for (float pitch : PITCHES) {
-                Attempt attempt = flight(rig, snapshot, stats, takeoff, pitch, target, land);
-                if (attempt.plan() != null) {
-                    return attempt;
-                }
-                if (attempt.why() == Lack.Why.NO_ROUTE) {
-                    last = Lack.Why.NO_ROUTE;
-                }
+            Attempt attempt = flight(rig, stats, takeoff, target, land);
+            if (attempt.plan() != null) {
+                return attempt;
+            }
+            if (attempt.why() == Lack.Why.NO_ROUTE) {
+                last = Lack.Why.NO_ROUTE;
             }
         }
         return Attempt.not(last);
@@ -233,11 +207,11 @@ final class Glide {
     }
 
     /**
-     * 从 {@code takeoff} 起飞、以 {@code pitch} 抬头爬升去 {@code target} 的一次试排:
-     * 巡航高度({@link #cruise})定了,爬升线 + 进近的线({@code way})定了,用实飞的那个局部控制器({@link Pilot})在<b>活世界</b>里从起跳之后的空中起模拟:先只飞爬升那一段,
-     * 通了再整条飞一遍,证明躲得开沿途的方块、飞得到降落点(落得轻)。模拟的轨迹就是实飞的轨迹(同一个控制器、同一个扫路判据),检查的线与交给飞行的线是同一条。
+     * 从 {@code takeoff} 起飞去 {@code target} 的一次试排:巡航高度({@link #cruise})定了,起飞点那根柱子要直到巡航高度都空着({@link #column}),
+     * 柱顶之后的线(巡航与进近,{@link #approachCorners})沿途也扫得过去({@link #corridor})。线是 起飞点 → 柱顶 → 进近的拐点 → 降落点,只排这一次,
+     * 检查与飞行读的是同一条。不模拟飞行。
      */
-    private static Attempt flight(Rig rig, BodySnapshot snapshot, BodyStats stats, BlockPos takeoff, float pitch, Goal.Anchor target, Landing land) {
+    private static Attempt flight(Rig rig, BodyStats stats, BlockPos takeoff, Goal.Anchor target, Landing land) {
         Vec3 p0 = new Vec3(takeoff.getX() + 0.5, takeoff.getY(), takeoff.getZ() + 0.5);
         double dx = target.x() - p0.x;
         double dz = target.z() - p0.z;
@@ -248,46 +222,38 @@ final class Glide {
         double ux = dx / range;
         double uz = dz / range;
         double cruise = cruise(rig, p0, ux, uz, range);
-        double run = (cruise - p0.y) / Math.tan(Math.toRadians(-pitch));
-        if (run + APPROACH > range) {
-            // 这个俯仰爬不到巡航高度就已经飞过了目标:换更陡的
-            return Attempt.not(Lack.Why.NO_ROUTE);
+        if (!column(rig, stats, p0, cruise)) {
+            return Attempt.not(Lack.Why.NO_TAKEOFF);
         }
-        Vec3 p1 = new Vec3(p0.x + ux * run, cruise, p0.z + uz * run);
+        // 柱子里一直爬到巡航高度(沿线最高的碰撞面再加一截,附近的障碍都在它之下),再朝目标平飞
+        Vec3 p1 = new Vec3(p0.x, cruise, p0.z);
         Vec3 touchdown = new Vec3(land.x(), land.y(), land.z());
         List<Vec3> tail = approachCorners(p1, touchdown);
-        if (tail == null) {
+        if (tail == null || !corridor(rig, stats, tail, ux, uz)) {
             return Attempt.not(Lack.Why.NO_ROUTE);
         }
         List<Vec3> corners = new ArrayList<>();
         corners.add(p0);
         corners.addAll(tail);
-        Airway way = Airway.through(corners, touchdown).withZone(TOLERANCE).withClimb(p0.distanceTo(p1));
-        Mobility mobility = snapshot.mobility();
-        double gravity = rig.entity.getGravity();
-        double eye = rig.entity.getEyeHeight();
-        Motion launch = new Motion(p0.add(0, 1.3, 0), Vec3.ZERO);
-        Neck facing = Neck.at(Look.yawOf(ux, uz), pitch);
-        Airway.Sweep over = over(rig, stats, way);
-        // 先只模拟爬升那一段(便宜):头顶挡着的起飞点不必把整条线飞一遍。模拟在活世界里飞,局部控制器躲得开的才算飞得过去——它飞出来的轨迹就是实飞的轨迹
-        Result climb = fly(way, gravity, mobility, eye, launch, facing, UNLIMITED, p0.distanceTo(p1), CLIMB_LIMIT, over);
-        if (climb == null) {
-            PathLog.debug("{} 起飞点 {} 俯仰 {} 爬升飞不出去", rig.who, PathLog.pos(takeoff), pitch);
-            return Attempt.not(Lack.Why.NO_TAKEOFF);
-        }
-        // 再把整条线飞一遍:飞得到降落点(落得轻)
-        Result whole = fly(way, gravity, mobility, eye, launch, facing, UNLIMITED, Double.NaN, REHEARSAL, over);
-        if (whole == null) {
-            PathLog.debug("{} 起飞点 {} 俯仰 {} 整条线飞不到降落点", rig.who, PathLog.pos(takeoff), pitch);
-            return Attempt.not(Lack.Why.NO_ROUTE);
-        }
+        Airway way = Airway.through(corners, touchdown).withZone(TOLERANCE).withClimb(cruise - p0.y);
         BlockPos cell = land.cell() != null ? land.cell() : BlockPos.containing(land.x(), land.y(), land.z());
-        return Attempt.of(new Plan(false, takeoff, pitch, cell, way, whole.ticks(), whole.rockets(), range, target, land.known()));
+        return Attempt.of(new Plan(false, takeoff, TAKEOFF_PITCH, cell, way, range, target, land.known()));
     }
 
-    /** 在活世界里飞这条线碰不碰方块:实飞操舵读的同一个判据({@link Helm#sweep}),降落点附近允许擦着地面。 */
-    private static Airway.Sweep over(Rig rig, BodyStats stats, Airway way) {
-        return (from, to) -> Helm.sweep(rig, stats, from, to, way.touchdown(), way.zone());
+    /**
+     * 起飞点是一根宽口径的空柱:从脚底到 {@code top} 高度,身体盒扫过去不碰方块,中心与四角各 {@link #SIDE} 格外的五条竖线都是(口径只在 REPORT 里写"宽",
+     * 取和线两侧同一个 {@link #SIDE})。没加载的区块读出来是空的,先当空着,飞到时再查({@link Helm#blocked})。
+     */
+    private static boolean column(Rig rig, BodyStats stats, Vec3 base, double top) {
+        Airway.Sweep sweep = Airway.sweep(rig.world(), stats, 0);
+        Vec3 up = new Vec3(0, top - base.y, 0);
+        for (int[] at : new int[][] {{0, 0}, {-SIDE, -SIDE}, {-SIDE, SIDE}, {SIDE, -SIDE}, {SIDE, SIDE}}) {
+            Vec3 from = base.add(at[0], 0, at[1]);
+            if (!sweep.clear(from, from.add(up))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -317,7 +283,7 @@ final class Glide {
      * 线是边沿到降落点的直线下滑线,降落点离边沿不超过滑翔比的 {@link #GLIDE_SHARE}。没有烟花时落点够不够得着全靠已知的地面,所以降落点必须是真的
      * (那片没加载的不排)。没有为 null。
      */
-    private static Plan dropping(Rig rig, BodySnapshot snapshot, BodyStats stats, Goal.Anchor target, Set<BlockPos> spent) {
+    private static Plan dropping(Rig rig, BodyStats stats, Goal.Anchor target, Set<BlockPos> spent) {
         BlockPos at = rig.entity.blockPosition();
         double dx = target.x() - rig.entity.getX();
         double dz = target.z() - rig.entity.getZ();
@@ -349,7 +315,7 @@ final class Glide {
         }
         edges.sort(Comparator.comparingInt((Edge e) -> -e.drop()).thenComparingDouble(e -> e.cell().distSqr(at)));
         for (Edge edge : edges.subList(0, Math.min(edges.size(), EDGES_TRIED))) {
-            Plan plan = fromEdge(rig, snapshot, stats, edge.cell(), target);
+            Plan plan = fromEdge(rig, stats, edge.cell(), target);
             if (plan != null) {
                 return plan;
             }
@@ -357,7 +323,7 @@ final class Glide {
         return null;
     }
 
-    private static Plan fromEdge(Rig rig, BodySnapshot snapshot, BodyStats stats, BlockPos edge, Goal.Anchor target) {
+    private static Plan fromEdge(Rig rig, BodyStats stats, BlockPos edge, Goal.Anchor target) {
         double dx = target.x() - (edge.getX() + 0.5);
         double dz = target.z() - (edge.getZ() + 0.5);
         double range = Math.hypot(dx, dz);
@@ -395,16 +361,7 @@ final class Glide {
             return null;
         }
         Airway way = Airway.through(List.of(p0, touchdown), touchdown).withZone(TOLERANCE);
-        Mobility mobility = snapshot.mobility();
-        // 走出边沿:带着一点水平速度、刚离地,朝降落点,平视;没有烟花的模拟,只靠高度往下滑
-        Motion start = new Motion(p0.add(ux * 1.2, 0, uz * 1.2), new Vec3(ux * 0.2, -0.1, uz * 0.2));
-        Result result = fly(way, rig.entity.getGravity(), mobility, rig.entity.getEyeHeight(), start, Neck.at(Look.yawOf(ux, uz), 0), 0, Double.NaN,
-                REHEARSAL, over(rig, stats, way));
-        if (result == null) {
-            PathLog.debug("{} 不排从边沿走出去的滑翔 {}:模拟落不到降落点", rig.who, PathLog.pos(edge));
-            return null;
-        }
-        return new Plan(true, edge, 0, landing, way, result.ticks(), 0, Math.hypot(landing.getX() - edge.getX(), landing.getZ() - edge.getZ()), target, true);
+        return new Plan(true, edge, 0, landing, way, Math.hypot(landing.getX() - edge.getX(), landing.getZ() - edge.getZ()), target, true);
     }
 
     /** 沿 {@code corners} 这条折线飞,线上和线两侧各 {@link #SIDE} 格的平行线都扫得过去(身体盒不碰方块)。没加载的区块读出来是空的:先当过得去,飞到时再查。 */
@@ -443,7 +400,7 @@ final class Glide {
                     }
                     double d = x * x + z * z;
                     BlockPos cell = d < bestDistance ? ground(rig, stats, cx + x, cz + z, top(rig, cx + x, cz + z), world.getMinBuildHeight()) : null;
-                    if (cell != null) {
+                    if (cell != null && dry(rig, cell)) {
                         best = cell;
                         bestDistance = d;
                     }
@@ -454,6 +411,19 @@ final class Glide {
             }
         }
         return null;
+    }
+
+    /** 降落点四周 {@link #DRY_MARGIN} 格内脚下和脚下一层都不是液体:落地允许差降落点一圈,这一圈里不能有水。 */
+    private static boolean dry(Rig rig, BlockPos cell) {
+        for (int dx = -DRY_MARGIN; dx <= DRY_MARGIN; dx++) {
+            for (int dz = -DRY_MARGIN; dz <= DRY_MARGIN; dz++) {
+                BlockPos around = cell.offset(dx, 0, dz);
+                if (!rig.world().getFluidState(around).isEmpty() || !rig.world().getFluidState(around.below()).isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -538,7 +508,8 @@ final class Glide {
         List<Vec3> corners = new ArrayList<>();
         corners.add(pos);
         double y = pos.y;
-        double finalDrop = SPIRAL_RADIUS / (GLIDE_RATIO * SPIRAL_SHARE) + 1;
+        // 圈上最后一点的高度:从这里按滑翔比直接滑,最远也落在降落点那一圈(半径 TOLERANCE)的远边里;再高就得俯冲下去,落得重
+        double finalDrop = (SPIRAL_RADIUS + TOLERANCE) / GLIDE_RATIO;
         double sideDrop = 2 * Math.PI * SPIRAL_RADIUS / SPIRAL_SIDES / (GLIDE_RATIO * SPIRAL_SHARE);
         while (true) {
             corners.add(new Vec3(touchdown.x + SPIRAL_RADIUS * Math.cos(angle), y, touchdown.z + SPIRAL_RADIUS * Math.sin(angle)));
@@ -553,10 +524,10 @@ final class Glide {
     }
 
     /**
-     * 前方被挡:从空中的 {@code pos} 抬高巡航重排一条线(再爬一段,过得去再进近到原来的降落点),飞得完才算;
-     * 烟花少于 {@link #ROCKET_FLOOR}、爬不过去(到了建筑高度的顶)、模拟飞不完为 null。
+     * 前方被挡:从空中的 {@code pos} 抬高巡航重排一条线(再爬一段,过得去再进近到原来的降落点),沿途扫得过去才算;
+     * 烟花少于 {@link #ROCKET_FLOOR}、爬不过去(到了建筑高度的顶)为 null。
      */
-    static Airway raise(Rig rig, Airway current, Vec3 pos, Motion from, Neck facing) {
+    static Airway raise(Rig rig, Airway current, Vec3 pos) {
         Mobility mobility = Snapshots.mobility(rig.entity);
         Vec3 touchdown = current.touchdown();
         if (touchdown == null || mobility.fireworks() < ROCKET_FLOOR) {
@@ -587,68 +558,8 @@ final class Glide {
             List<Vec3> corners = new ArrayList<>();
             corners.add(pos);
             corners.addAll(tail);
-            if (!corridor(rig, stats, corners, ux, uz)) {
-                continue;
-            }
-            Airway way = Airway.through(corners, touchdown).withZone(TOLERANCE);
-            Result result = fly(way, rig.entity.getGravity(), mobility, rig.entity.getEyeHeight(), from, facing, UNLIMITED, Double.NaN, REHEARSAL,
-                    over(rig, stats, way));
-            return result != null ? way : null;
-        }
-        return null;
-    }
-
-    /** 模拟的结果:飞了几刻、放了几支、落在哪,和身体每刻到过的点。 */
-    record Result(int ticks, int rockets, Vec3 landedAt, List<Vec3> path) {}
-
-    /**
-     * 拿同一个局部控制器把线飞一遍:从 {@code from}(起跳之后的空中)起,{@code facing} 是此刻颈部的样子,烟花不超过 {@code supply} 支,
-     * 碰不碰方块读 {@code sweep}(排线时是活世界,单测是空场)。
-     * {@code stopArc} 不是 NaN 时,在线上走到这个弧长就停(爬升的检查:只飞线的头一段,轨迹随结果交出),走不到为 null;是 NaN 时一直飞到落地,
-     * 飞不到降落点附近或落得重为 null。最多飞 {@code limit} 刻。放烟花也守同一套间隔。
-     */
-    static Result fly(Airway way, double gravity, Mobility mobility, double eye, Motion from, Neck facing, int supply, double stopArc, int limit,
-                      Airway.Sweep sweep) {
-        Dynamics glide = Dynamics.gliding(gravity, mobility.rocketBurn());
-        Pilot pilot = new Pilot(glide, sweep, eye);
-        Vec3 touchdown = way.touchdown();
-        Motion m = from;
-        Neck neck = facing;
-        int fired = 0;
-        int burning = 0;
-        int cooldown = 0;
-        double s = 0;
-        List<Vec3> path = new ArrayList<>();
-        path.add(m.pos());
-        int budget = Double.isNaN(stopArc) ? (int) Math.min(limit, SIM_BASE + SIM_PER_BLOCK * way.length()) : limit;
-        for (int tick = 0; tick < budget; tick++) {
-            s = way.project(m.pos(), s);
-            if (burning > 0) {
-                burning--;
-            }
-            if (cooldown > 0) {
-                cooldown--;
-            }
-            Action pick = pilot.choose(m, neck, way, s, false, new Supply(cooldown == 0 && burning == 0 ? supply - fired : 0, burning));
-            if (pick == null) {
-                return null;
-            }
-            neck = neck.toward(pick.yaw(), pick.pitch());
-            if (pick.keys().rocket() && cooldown == 0 && burning == 0 && supply - fired > 0) {
-                fired++;
-                burning = glide.burn();
-                cooldown = Helm.COOLDOWN;
-            }
-            m = glide.step(m, pick.keys().facing(neck.yaw(), neck.pitch()).burning(burning > 0));
-            path.add(m.pos());
-            if (!Double.isNaN(stopArc)) {
-                if (way.project(m.pos(), s) >= stopArc) {
-                    return new Result(tick + 1, fired, m.pos(), path);
-                }
-            } else if (m.pos().y <= touchdown.y) {
-                // 落点要近,落得要轻:模拟里就落重了的不排(实际飞起来照同一个控制器,落得重要扣分)
-                double miss = Math.hypot(m.pos().x - touchdown.x, m.pos().z - touchdown.z);
-                return miss <= TOLERANCE && glide.impact(m) == 0 ? new Result(tick + 1, fired, m.pos(), path) : null;
+            if (corridor(rig, stats, corners, ux, uz)) {
+                return Airway.through(corners, touchdown).withZone(TOLERANCE);
             }
         }
         return null;

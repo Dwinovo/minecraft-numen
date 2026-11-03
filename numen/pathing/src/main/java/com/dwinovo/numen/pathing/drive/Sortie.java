@@ -9,7 +9,6 @@ import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
-import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -53,6 +52,8 @@ final class Sortie implements Segment {
     private static final double LOITER_RADIUS = 14.0;
     private static final int LOITER_RETRY = 10;
     private static final int LOITER_LIMIT = 400;
+    /** 身体在线上的进度一刻往前最多找这么多格({@link Airway#project}):身体一刻飞不到这么远,留余量。 */
+    private static final double PROGRESS_REACH = 8.0;
     /** 目标那片没加载的飞行:每隔几刻看一眼那片加载了没有。 */
     private static final int SETTLE_EVERY = 10;
 
@@ -87,8 +88,8 @@ final class Sortie implements Segment {
         this.wearBefore = rig.entity.getItemBySlot(EquipmentSlot.CHEST).getDamageValue();
         this.healthBefore = rig.entity.getHealth();
         this.launchedAt = rig.entity.position();
-        PathLog.info("{} 滑翔 从 {} 到 {} 水平 {} 格 估 {} 刻 烟花约 {} 支 鞘翅约 {} 点 {}", rig.who, PathLog.pos(plan.takeoff()), PathLog.pos(plan.landing()),
-                PathLog.num(plan.blocks()), plan.ticks(), plan.rockets(), plan.wear(), PathLog.body(rig.entity));
+        PathLog.info("{} 滑翔 从 {} 到 {} 水平 {} 格 {}", rig.who, PathLog.pos(plan.takeoff()), PathLog.pos(plan.landing()),
+                PathLog.num(plan.blocks()), PathLog.body(rig.entity));
     }
 
     @Override
@@ -188,9 +189,9 @@ final class Sortie implements Segment {
             return;
         }
         Mobility mobility = Snapshots.mobility(body);
-        s = way.project(body.position(), s);
+        s = way.project(body.position(), s, PROGRESS_REACH);
         // 烟花少于下限(计划指望着烟花才这么算,不放烟花也飞得到的计划不在此列)或鞘翅耐久低于下限,而够不着降落点:就近降落,先朝目标方向找
-        boolean low = plan.rockets() > 0 && mobility.fireworks() < Glide.ROCKET_FLOOR || mobility.gliderLife() < Glide.WEAR_FLOOR;
+        boolean low = !plan.drop() && mobility.fireworks() < Glide.ROCKET_FLOOR || mobility.gliderLife() < Glide.WEAR_FLOOR;
         if (!emergency && !loitering && low && !reaches(body.position(), way.touchdown())
                 && !redirect("烟花或鞘翅耐久低于下限,够不着降落点")) {
             loiter();
@@ -218,7 +219,7 @@ final class Sortie implements Segment {
         BlockPos hit = !emergency && !loitering ? helm.blocked(way, s) : null;
         if (hit != null) {
             // 照这条线飞下去会撞(前方飞到哪加载到哪,新加载的那段里有东西):先抬高巡航重排,抬不过去再趁还有高度挑一处够得着的地面降下去
-            Airway up = Glide.raise(rig, way, body.position(), new Motion(body.position(), body.getDeltaMovement()), rig.look.neck());
+            Airway up = Glide.raise(rig, way, body.position());
             if (up != null) {
                 way = up;
                 s = 0;
@@ -394,7 +395,7 @@ final class Sortie implements Segment {
         Vec3 now = body.position();
         double blocks = Math.hypot(now.x - launchedAt.x, now.z - launchedAt.z);
         rig.ledger.glided(new EditLedger.Glided(plan.takeoff(), body.blockPosition(), blocks, helm.fired(), wearBefore, chest.getDamageValue(),
-                Math.max(0, healthBefore - body.getHealth()), emergency, airborne, plan.rockets(), plan.ticks()));
+                Math.max(0, healthBefore - body.getHealth()), emergency, airborne));
     }
 
     // ==================== 段的接口 ====================

@@ -75,6 +75,18 @@ final class Airway {
         return climb;
     }
 
+    /** 爬升段上的进度:点 {@code p} 在这一段的轴上的投影,夹在 0 到 {@link #climb} 之间。 */
+    double climbAlong(Vec3 p) {
+        return Math.max(0, Math.min(climb, p.subtract(points[0]).dot(direction(0))));
+    }
+
+    /** 点 {@code p} 离爬升段的轴(过起点、朝这一段方向的直线)多远。 */
+    double climbOffset(Vec3 p) {
+        Vec3 d = direction(0);
+        Vec3 q = p.subtract(points[0]);
+        return q.subtract(d.scale(q.dot(d))).length();
+    }
+
     /**
      * 绕 {@code center} 转圈的折线(盘旋):在高度 {@code y},半径 {@code radius},从离 {@code from} 最近的一点起转 {@code laps} 圈,先从 {@code from} 过去。
      * 没有降落点:盘旋是为了等,不是为了落。
@@ -178,18 +190,26 @@ final class Airway {
      * 把身体错认到前面已经飞过的那一截上。末尾之外按末段的方向延伸。
      */
     double project(Vec3 p, double from) {
+        return project(p, from, Double.POSITIVE_INFINITY);
+    }
+
+    /**
+     * 身体在折线上的进度,一刻往前最多找 {@code reach} 格:{@link #project} 取离得最近的一点,盘旋下降的线绕着降落点转圈,身体飞到圈边,最近的点就是最后那一段,
+     * 进度一下子跳到线尾,盘旋被整个跳过,高度没降下来就朝降落点俯冲,落得重。限了每刻往前找的范围,线上的每一圈都得飞过。
+     */
+    double project(Vec3 p, double from, double reach) {
         if (points.length == 1) {
             return 0;
         }
         double best = Double.POSITIVE_INFINITY;
         double bestS = from;
         for (int i = 0; i < points.length - 1; i++) {
-            if (arc[i + 1] < from - BACK) {
+            if (arc[i + 1] < from - BACK || arc[i] > from + reach) {
                 continue;
             }
             Vec3 d = direction(i);
             double lo = Math.max(0, from - BACK - arc[i]);
-            double hi = i == points.length - 2 ? Double.POSITIVE_INFINITY : arc[i + 1] - arc[i];
+            double hi = Math.min(from + reach - arc[i], i == points.length - 2 ? Double.POSITIVE_INFINITY : arc[i + 1] - arc[i]);
             double t = Math.max(lo, Math.min(hi, p.subtract(points[i]).dot(d)));
             double distance = points[i].add(d.scale(t)).distanceToSqr(p);
             if (distance < best - 1.0E-9) {

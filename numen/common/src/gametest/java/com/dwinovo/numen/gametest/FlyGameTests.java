@@ -35,8 +35,6 @@ public class FlyGameTests {
     private static final String FIELD = "fly_field";
     /** 飞行的中线:场地的正中。 */
     private static final int MID = 32;
-    /** 落地允许擦伤几点血:触地的竖直速度有一点随机(烟花烧的刻数),擦着不掉血的上限落下来偶尔伤一两点。 */
-    private static final double MAX_HURT = 4;
 
     @BeforeBatch(batch = BATCH)
     public static void prepare(ServerLevel level) {
@@ -119,8 +117,8 @@ public class FlyGameTests {
             helper.assertTrue(fly.done(), "the flight has not finished");
             helper.assertTrue(fly.succeeded() && her.blockPosition().distSqr(target) <= 4, "she did not get there: " + fly.outcome());
             JsonArray glided = returned(fly).getAsJsonArray("glided");
-            helper.assertTrue(glided.size() >= 1 && glide(glided, 0, "blocks") > 80 && glide(glided, 0, "health_lost") <= MAX_HURT,
-                    "the account should hold a long glide without more than a scrape: " + glided);
+            helper.assertTrue(glided.size() >= 1 && glide(glided, 0, "blocks") > 80 && glide(glided, 0, "health_lost") == 0,
+                    "the account should hold a long glide without damage: " + glided);
             helper.assertTrue(!her.isFallFlying() && !her.getAbilities().flying, "she should end on the ground");
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -140,8 +138,8 @@ public class FlyGameTests {
             helper.assertTrue(fly.done(), "the flight has not finished");
             helper.assertTrue(fly.succeeded() && her.blockPosition().distSqr(target) <= 4, "she did not get over the ridge: " + fly.outcome());
             JsonArray glided = returned(fly).getAsJsonArray("glided");
-            helper.assertTrue(glided.size() >= 1 && glide(glided, 0, "blocks") > 80 && glide(glided, 0, "health_lost") <= MAX_HURT,
-                    "the account should hold a long glide without more than a scrape: " + glided);
+            helper.assertTrue(glided.size() >= 1 && glide(glided, 0, "blocks") > 80 && glide(glided, 0, "health_lost") == 0,
+                    "the account should hold a long glide without damage: " + glided);
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
