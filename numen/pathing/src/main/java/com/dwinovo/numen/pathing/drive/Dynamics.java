@@ -207,7 +207,14 @@ interface Dynamics {
      */
     static Dynamics gliding(double gravity, int burn, double safeFall) {
         return new Dynamics() {
-            private final float[] pitches = {COLUMN_PITCH, -45, -25, -8, 10, 35};
+            /** 爬升与平飞用的俯仰:起飞的空柱里竖直爬({@link #COLUMN_PITCH},飞起来之后不挑)、陡拉起、平、缓降、陡降。 */
+            private final float[] level = {COLUMN_PITCH, -45, -25, -8, 10, 35};
+            /**
+             * 往下走的线(要朝线上的点低头)用的俯仰:不需要陡拉起,换成中间的一档。量到的滑翔(每刻水平 1.6 到 1.7 格):10 度竖直每刻 -0.3 上下,22 度 -0.6 上下,27 度以上 -0.7。
+             * 线的下滑比夹在 10 度与 35 度两档之间时,控制器在两档之间来回跳,俯仰一圈圈地荡(周期十几刻),荡到低处的一头竖直速度到 -0.7 以上,坠落距离攒到四五格,
+             * 正好撞地就掉血(迫降的直线下滑,37 次落地里量到过 2 到 5 次);中间多一档,荡得小,配合降落点前的拉平与离地太近的否决({@link Pilot}),落地不再掉血。
+             */
+            private final float[] descent = {COLUMN_PITCH, -25, -8, 10, 22, 35};
             private final float[] yaws = {0, -25, 25, -50, 50};
 
             @Override
@@ -218,7 +225,10 @@ interface Dynamics {
             @Override
             public List<Action> actions(float yaw, float pitch) {
                 List<Action> all = new ArrayList<>();
-                for (boolean fire : new boolean[] {false, true}) {
+                boolean descending = pitch > DESCENDING;
+                float[] pitches = descending ? descent : level;
+                // 往下走的线上不放烟花:高度本来就要放掉,放了只是推得更快,白花一支(盘旋下降一趟烧掉十来支);候选也少一半
+                for (boolean fire : descending ? new boolean[] {false} : new boolean[] {false, true}) {
                     for (float turn : yaws) {
                         for (float target : pitches) {
                             all.add(new Action(new Keys(0, 0, false, false, false, yaw + turn, target, fire), yaw + turn, target));
@@ -302,6 +312,8 @@ interface Dynamics {
         };
     }
 
+    /** 线上要朝的点比视线低这么多度(俯仰,向下为正)以上,就是在往下走的线上。 */
+    float DESCENDING = 3.0F;
     /** 起飞的空柱里爬升用的目标俯仰(纯竖直):柱口径只有两格,斜着爬要偏出柱子。只在爬升段里挑({@link Pilot#choose}),飞起来之后不挑。 */
     float COLUMN_PITCH = -90.0F;
     /** 拉起时的目标俯仰。 */
