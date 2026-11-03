@@ -534,6 +534,19 @@ final class Glide {
     }
 
     /**
+     * 迫降的线:从 {@code pos} 直接朝 {@code spot} 下滑,降落点前拉平({@link #FLARE_RUN} 格,线很短就取全程的三分之一)。迫降的落点是哪里够得着、直线通得过去就落哪里,
+     * 俯冲和盘旋的余地没有(见 {@link Sortie});直线下滑到贴着地面才落,控制器在线上下荡一荡,落地正好撞在俯冲的那一头就掉血,所以最后一截一样要拉平。
+     */
+    static Airway emergency(Vec3 pos, Vec3 spot) {
+        double dx = spot.x - pos.x;
+        double dz = spot.z - pos.z;
+        double run = Math.hypot(dx, dz);
+        double flareRun = Math.min(FLARE_RUN, run / 3);
+        Vec3 flare = new Vec3(spot.x - dx / run * flareRun, spot.y + flareRun / GLIDE_RATIO, spot.z - dz / run * flareRun);
+        return Airway.through(List.of(pos, flare, spot), spot);
+    }
+
+    /**
      * 从 {@code pos} 往降落点 {@code touchdown} 去的进近的线({@link #descents} 里沿途扫得过去的第一种,{@link #corridor});都过不去为 null。
      * 盘旋只在俯冲放不下或俯冲那一路有遮挡时才轮到。
      */

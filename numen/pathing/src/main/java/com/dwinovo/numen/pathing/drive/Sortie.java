@@ -258,7 +258,7 @@ final class Sortie implements Segment {
     }
 
     /**
-     * 迫降:挑一处够得着、站得住的地面,改沿从此刻的位置直接下滑到那里的线飞。先顺着此刻飞的方向找(不转弯,下滑最平:从远到近,偏一点也行),
+     * 迫降:挑一处够得着、站得住的地面,改沿从此刻的位置直接下滑、落点前拉平的线飞。先顺着此刻飞的方向找(不转弯,下滑最平:从远到近,偏一点也行),
      * 没有再往四周找(离原来的降落点近的优先)。一处也没有为 false(照原来的线飞,或被围住就放弃)。
      */
     private boolean redirect(String why) {
@@ -272,7 +272,7 @@ final class Sortie implements Segment {
         }
         Vec3 spot = new Vec3(best.getX() + 0.5, best.getY(), best.getZ() + 0.5);
         // 地面只知道落点这一格的高度:以它为准的一圈里落地都算数(迫降不求落在那一格上,落在它前头的平地上同样行)
-        way = Airway.through(List.of(body.position(), spot), spot).withZone(EMERGENCY_ZONE);
+        way = Glide.emergency(body.position(), spot).withZone(EMERGENCY_ZONE);
         s = 0;
         emergency = true;
         loitering = false;

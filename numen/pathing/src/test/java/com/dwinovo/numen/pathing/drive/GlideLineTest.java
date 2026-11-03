@@ -101,4 +101,15 @@ class GlideLineTest {
         }
         assertTrue((spiral.get(spiral.size() - 2).y - touchdown.y) * Glide.GLIDE_RATIO >= 14, "最后一段朝降落点放得下滑翔比");
     }
+
+    /** 迫降的线:直接朝落点下滑,落点前一截拉平(按滑翔比)。 */
+    @Test
+    void theEmergencyLineFlaresOutAtTheEnd() {
+        Vec3 spot = new Vec3(0.5, 0, 90.5);
+        Airway way = Glide.emergency(new Vec3(0.5, 17.5, 0.5), spot);
+        Vec3 flare = way.at(way.length() - Math.hypot(24, 24 / Glide.GLIDE_RATIO));
+        assertEquals(spot.z - 24, flare.z, 1e-6);
+        assertEquals(24 / Glide.GLIDE_RATIO, flare.y, 1e-6);
+        assertEquals(spot, way.end());
+    }
 }
