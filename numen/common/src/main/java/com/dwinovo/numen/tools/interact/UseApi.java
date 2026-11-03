@@ -258,12 +258,14 @@ public final class UseApi {
     public record Glided(@Doc("Where you are.") Vec3 pos) {}
 
     /** 鞘翅起飞:走键盘展开鞘翅的那一条({@link com.dwinovo.numen.api.entity.Controls#unfurl}),条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
-    @Fn("Start gliding with the elytra you wear.")
+    @Fn("Open the elytra you wear in mid-air and start gliding, by hand.")
     @Example("numen.use.glide()")
     @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
             + "(`numen.gear.wear(\"minecraft:elytra\")`); otherwise it fails and says which is missing.")
-    @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you forward in the air.")
-    @SeeAlso({"numen.gear.wear", "numen.use.item"})
+    @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you the way you look.")
+    @Note("To get somewhere, `numen.move.to` glides on its own when the trip is quicker by air: it takes off, steers, "
+            + "fires the rockets and lands. This opens the wings and leaves the rest to you.")
+    @SeeAlso({"numen.move.to", "numen.gear.wear", "numen.use.item"})
     public static Glided glide(ServerCall call) {
         NumenPlayer her = call.her();
         if (!her.controls().unfurl(her)) {

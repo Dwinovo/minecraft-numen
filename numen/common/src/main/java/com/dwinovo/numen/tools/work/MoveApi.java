@@ -22,7 +22,7 @@ import java.util.Optional;
 
 /**
  * {@code numen.move}:移动——去一处({@code to})、离开某物({@code away})、跟着谁走一阵({@code follow})。三个都是同一套走法
- * ({@link com.dwinovo.numen.nav.Walking}):默认可挖可搭,只看价钱;能不能动哪一格由权限层在动手那一刻决定,不在这里判。模型只说去哪、
+ * ({@link com.dwinovo.numen.nav.Walking}):默认可挖可搭,能飞就飞、能滑翔就滑翔,只看价钱;能不能动哪一格由权限层在动手那一刻决定,不在这里判。模型只说去哪、
  * 多近算到,怎么走归寻路。
  */
 public final class MoveApi {
@@ -40,8 +40,10 @@ public final class MoveApi {
 
     public static void install(NumenApi numen) {
         numen.codec(Where.class, Where.CODEC);
-        numen.api("move", "Moving: go to a place, get away from something, follow someone for a while. They all walk "
-                + "the same way: the cheapest, digging and building only when going around costs more.", MoveApi.class);
+        numen.api("move", "Moving: go to a place, get away from something, follow someone for a while. All three travel "
+                + "the same way, by whatever is quickest: walking and swimming, digging and building only when going "
+                + "around costs more, flying when you can fly, gliding on an elytra when a trip is quicker by air.",
+                MoveApi.class);
     }
 
     /** 去哪儿、多近算到。 */
@@ -51,7 +53,7 @@ public final class MoveApi {
                      @Omitted("stand in it; a Block, an Entity or a Cluster you can't stand in, go beside (within "
                              + Arrival.BESIDE + " blocks)") @Positional Optional<Integer> distance) {}
 
-    @Fn("Walk to a place, digging and building on the way when going around costs more.")
+    @Fn("Go to a place by the quickest way: walk, dig and build when going around costs more, fly or glide when you can.")
     @Example("numen.move.to({x = 120, y = 64, z = -35})")
     @Example("numen.move.to(numen.scan.blocks(\"iron_ore\")[1].nearest)")
     @Example("numen.move.to(creeper, 6)")
@@ -69,6 +71,14 @@ public final class MoveApi {
             + "walk: it plans around it, and fails with kind denied when there is no way around. It never digs the block "
             + "under its feet or gravel overhead, never lets liquid in, and takes a drop only as high as your health "
             + "allows.")
+    @Note("Flying and gliding are part of the same trip, chosen by time like every other step. With creative flight "
+            + "it flies wherever that is quicker, and a Pos in mid-air is a place to hover in. Wearing an elytra, a "
+            + "trip that is quicker by air is glided: it takes off nearby, picks the height, fires firework rockets "
+            + "from your pack or offhand to climb and keep speed, lands near the place and walks the rest; with no "
+            + "rockets it can still glide down from a height. The height and the rockets are its to choose; you choose "
+            + "where to go.")
+    @Note("The account says how far you flew or glided, the rockets used and the elytra's wear. A long trip walked "
+            + "instead of glided says what was missing: an elytra, rockets, durability, or room to take off or land.")
     @Note("Sitting in a boat, it sails to the water nearest the place; a place on land ends at the shore, still sitting "
             + "in the boat. Any other vehicle, or a place that is not a Pos or a column, fails at once and names "
             + "`numen.use.dismount()`: a walk never steps off by itself.")
@@ -84,10 +94,10 @@ public final class MoveApi {
                        Where from,
                        @Doc("How far to get, in blocks (1-" + Arrival.MAX_RANGE + ").") int distance) {}
 
-    @Fn("Walk until you are at least a distance away from something.")
+    @Fn("Get at least a distance away from something.")
     @Example("numen.move.away(creeper, 12)")
     @Example("numen.move.away({x = 120, y = 64, z = -35}, 8)")
-    @Note("The same walk as `numen.move.to`, with the same account when it ends: it is done once you are that far from "
+    @Note("The same trip as `numen.move.to`, with the same account when it ends: it is done once you are that far from "
             + "every cell of it, and ends there.")
     @Note("Sitting in a boat or on a mount, it fails at once and names `numen.use.dismount()`.")
     @SeeAlso({"numen.move.to", "numen.task.stop"})
@@ -112,13 +122,14 @@ public final class MoveApi {
     @Example("numen.move.follow()")
     @Example("numen.move.follow(\"player@ab12cd\", {distance = 5, seconds = 30})")
     @Note("Background work with an end: it returns after seconds (default " + DEFAULT_FOLLOW_SECONDS + "), or when "
-            + "your owner stops it, with the same account of the walk as `numen.move.to`. You go quiet while already "
+            + "your owner stops it, with the same account of the trip as `numen.move.to`. You go quiet while already "
             + "beside them.")
     @Note("Following a named entity ends if it dies or leaves the loaded area; following your owner just waits while "
             + "they are offline. When they are already out of reach as you call it, the call is refused with the "
             + "reason and nothing starts.")
-    @Note("It walks the way `numen.move.to` does: it digs, bridges or pillars to keep up when going around costs more, "
-            + "within what your owner's rules allow, and says so in the account.")
+    @Note("It travels the way `numen.move.to` does: it digs, bridges or pillars to keep up when going around costs "
+            + "more, within what your owner's rules allow, flies or glides when that is quicker, and says so in the "
+            + "account.")
     @SeeAlso({"numen.scan.entities", "numen.move.to", "numen.task.stop"})
     public static Job<Walked> follow(ServerCall call, Follow args) {
         int distance = Math.clamp(args.distance().orElse(DEFAULT_DISTANCE), MIN_DISTANCE, MAX_DISTANCE);
