@@ -52,14 +52,14 @@ final class Glide {
     private static final int CRUISE_MARGIN = 16;
     /** 起飞抬头的俯仰(度):陡抬但不到垂直(REPORT-feel 对起飞的建议),在空柱里爬;爬到巡航高度才转向目标。 */
     static final float TAKEOFF_PITCH = -75.0F;
-    /** 抬高巡航重排({@link #raise})的爬升线按这个俯仰算:一格水平一格高。 */
-    static final float CLIMB_PITCH = -45.0F;
     /** 滑翔比:每下降一格水平走几格(鞘翅平滑翔大约八九比一)。 */
     static final double GLIDE_RATIO = 9.0;
     /** 线两侧各留几格也要飞得过去。 */
     private static final int SIDE = 2;
-    /** 抬高巡航每次多几格。 */
+    /** 抬高巡航每次多几格(排线读的高度图每 {@link #CRUISE_SAMPLE} 格取一列,漏掉的细墙,往上一格一格试)。 */
     private static final int CLIMB_STEP = 6;
+    /** 竖直爬升时每刻大约升几格(烟花推着竖直爬,量到每刻一格到一格多):一支烟花推 {@code rocketBurn} 刻,就升这么多乘 {@code rocketBurn} 格。 */
+    private static final double RISE_PER_TICK = 1.0;
     /** 降落点要离液体多远(格):落地允许差降落点一圈({@link #TOLERANCE}),这一圈里都得是干地,不然贴着水边的点会落进水里。 */
     private static final int DRY_MARGIN = (int) Glide.TOLERANCE;
     /** 降落点落在目标这一侧多少格处:最后一截落地后走过去。 */
@@ -568,8 +568,11 @@ final class Glide {
     }
 
     /**
-     * 前方被挡:从空中的 {@code pos} 抬高巡航重排一条线(再爬一段,过得去再进近到原来的降落点),沿途扫得过去才算;
-     * 烟花少于 {@link #ROCKET_FLOOR}、爬不过去(到了建筑高度的顶)为 null。
+     * 前方被挡:从空中的 {@code pos} 就地竖直爬高再重排一条线,和起飞一样(线头是爬升段 {@link Airway#climb},局部控制器在里面只贴着柱轴爬、不往前飞),
+     * 爬到新的巡航高度({@link #cruise} 从此刻的位置往降落点读高度图,至少比此刻高一截)再平飞、进近({@link #approachCorners}),沿途扫得过去才算。
+     * 头顶那根柱子({@link #column})不空、烟花少于 {@link #ROCKET_FLOOR}、要爬的高度烟花撑不住(留下 {@link #ROCKET_FLOOR} 支之外的烟花一支升 {@link #RISE_PER_TICK} × {@code rocketBurn} 格)、
+     * 爬不过去(到了建筑高度的顶)为 null。
+     * 不斜着爬:身体沿斜线爬会落在线的后面一大截(量过:一格水平一格高的线,身体平均只爬到一格水平半格高以下),飞到墙前才发现没爬够。
      */
     static Airway raise(Rig rig, Airway current, Vec3 pos) {
         Mobility mobility = Snapshots.mobility(rig.entity);
@@ -583,28 +586,27 @@ final class Glide {
         if (run < 1) {
             return null;
         }
-        double ux = dx / run;
-        double uz = dz / run;
         BodyStats stats = rig.snapshot().stats();
-        int top = rig.world().getMinBuildHeight() + rig.world().getHeight() - 2;
-        double slope = Math.tan(Math.toRadians(-CLIMB_PITCH));
-        for (int climb = CLIMB_STEP; pos.y + climb <= top; climb += CLIMB_STEP) {
-            double cruise = pos.y + climb;
-            double along = climb / slope;
-            if (along + APPROACH > run) {
-                return null;
+        double limit = Math.min(rig.world().getMinBuildHeight() + rig.world().getHeight() - 2,
+                pos.y + (mobility.fireworks() - ROCKET_FLOOR) * mobility.rocketBurn() * RISE_PER_TICK);
+        Airway.Sweep sweep = Airway.sweep(rig.world(), stats, 0);
+        for (double top = Math.max(cruise(rig, pos, dx / run, dz / run, run), pos.y + CLIMB_STEP); top <= limit; top += CLIMB_STEP) {
+            // 先扫一条中线(这一高度上平飞到降落点上空):过不去就不必细查进近的线
+            if (!sweep.clear(new Vec3(pos.x, top, pos.z), new Vec3(touchdown.x, top, touchdown.z))
+                    || approachCorners(rig, stats, new Vec3(pos.x, top, pos.z), touchdown) == null) {
+                continue;
             }
-            Vec3 p1 = new Vec3(pos.x + ux * along, cruise, pos.z + uz * along);
+            // 刚好擦过去的高度不够:爬到顶身体速度几乎为零,要俯冲一截换回速度,会往下掉;高度图每隔几格才取一列,漏掉的细墙也是这样才发现的。
+            // 和排线一样,在刚好过得去的高度上再加 CRUISE_MARGIN
+            Vec3 p1 = new Vec3(pos.x, Math.min(top + CRUISE_MARGIN, limit), pos.z);
             List<Vec3> tail = approachCorners(rig, stats, p1, touchdown);
-            if (tail == null) {
+            if (tail == null || !column(rig, stats, pos, p1.y)) {
                 return null;
             }
             List<Vec3> corners = new ArrayList<>();
             corners.add(pos);
             corners.addAll(tail);
-            if (corridor(rig, stats, corners, ux, uz)) {
-                return Airway.through(corners, touchdown).withZone(TOLERANCE);
-            }
+            return Airway.through(corners, touchdown).withZone(TOLERANCE).withClimb(p1.y - pos.y);
         }
         return null;
     }
