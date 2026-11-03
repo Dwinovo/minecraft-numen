@@ -1,6 +1,6 @@
 ---
 name: survival_basics
-description: Minecraft 1.21.1 survival mechanics - health and hunger, natural regeneration, the food value table, environmental damage (falls, lava, fire, drowning, suffocation, freezing, the void), when and where hostile mobs spawn, day and night, beds, and what happens to items on death.
+description: Minecraft 1.21.1 survival mechanics - health and hunger, natural regeneration, the food value table, environmental damage (falls, lava, fire, drowning, suffocation, freezing, the void), flying and elytra gliding with firework rockets, when and where hostile mobs spawn, day and night, beds, and what happens to items on death.
 ---
 
 # Survival basics (1.21.1)
@@ -56,6 +56,24 @@ Eating takes 1.6 s (dried kelp 0.8 s). Food cannot be eaten with a full hunger b
 | Lightning | 5 HP and sets on fire |
 
 Armor reduces mob, arrow and explosion damage but not falls (Feather Falling does), drowning, suffocation, starvation or the void.
+
+## Flying and gliding
+
+- **Creative flight**: in creative mode a double tap of jump starts flying; touching the ground ends it.
+- **Elytra**: worn in the chest slot; found on end ships beside End cities. It opens on a second jump while falling, never in water, while riding or under Levitation, and closes on touching the ground.
+- **Wear**: 432 durability, 1 point per second of gliding (Unbreaking slows it). At 1 point left it stops opening but does not break. Phantom membranes repair it on an anvil, and so does Mending.
+- **Gliding** follows where the glider looks: looking down trades height for speed, looking up trades speed for height. Without a boost a glide slowly sinks.
+- **Firework rockets**: used while gliding, a rocket pulls the glider toward 1.5 blocks per tick (30 blocks per second) along the look direction while it burns. Used on the ground it only launches into the sky.
+
+| Rocket | Crafted from | Burns for |
+|---|---|---|
+| Flight duration 1 | 1 paper + 1 gunpowder → 3 rockets | 1.0-1.5 s |
+| Flight duration 2 | 1 paper + 2 gunpowder → 3 rockets | 1.5-2.0 s |
+| Flight duration 3 | 1 paper + 3 gunpowder → 3 rockets | 2.0-2.5 s |
+
+- A rocket crafted with **firework stars** explodes when it burns out and hurts the glider it pulls: 5 HP plus 2 per star.
+- **Flying into a wall** while gliding hurts by the horizontal speed lost: (blocks per tick lost × 10) − 3 HP, about 12 HP for a dead stop at rocket speed.
+- **Landing**: a shallow glide lands without fall damage; a dive sinking faster than 0.5 blocks per tick (10 blocks per second) builds up fall distance like falling.
 
 ## Mob spawning and light
 
