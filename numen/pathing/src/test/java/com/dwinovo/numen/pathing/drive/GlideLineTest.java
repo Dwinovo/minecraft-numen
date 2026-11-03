@@ -58,17 +58,40 @@ class GlideLineTest {
         assertTrue(widest <= 2.0, "爬升偏出了柱子,最远离柱心 " + widest + " 格");
     }
 
-    /** 往降落点去的线:富余的高度够长就先平飞、到按滑翔比下滑的那一点再下滑;高得下不去就绕着降落点盘旋着沉。 */
+    /**
+     * 往降落点去的线:富余的高度够长就先平飞、到按滑翔比下滑的那一点再下滑;高了就平飞、俯冲掉高度、降落点前拉平再滑下去;
+     * 高得连俯冲也放不下,才绕着降落点盘旋着沉(也是俯冲那一路有遮挡时的替补)。
+     */
     @Test
     void theApproachGlidesFromWhereTheRatioReachesTheTouchdown() {
         Vec3 touchdown = new Vec3(0.5, 0, 200.5);
-        List<Vec3> far = Glide.approachCorners(new Vec3(0.5, 10, 0.5), touchdown);
-        assertEquals(3, far.size());
-        assertEquals(200.5 - 10 * Glide.GLIDE_RATIO, far.get(1).z, 1e-9);
-        assertEquals(10, far.get(1).y, 1e-9);
+        List<List<Vec3>> far = Glide.descents(new Vec3(0.5, 10, 0.5), touchdown);
+        assertEquals(1, far.size());
+        assertEquals(3, far.get(0).size());
+        assertEquals(200.5 - 10 * Glide.GLIDE_RATIO, far.get(0).get(1).z, 1e-9);
+        assertEquals(10, far.get(0).get(1).y, 1e-9);
+        // 高了一些:平飞到俯冲的起点,按俯冲的下滑比掉到拉平点,再按滑翔比滑到降落点;盘旋排在后面
+        Vec3 cruise = new Vec3(0.5, 16, 0.5);
+        Vec3 near = new Vec3(0.5, 0, 110.5);
+        List<List<Vec3>> dive = Glide.descents(cruise, near);
+        assertEquals(2, dive.size());
+        List<Vec3> line = dive.get(0);
+        assertEquals(4, line.size());
+        assertEquals(16, line.get(1).y, 1e-9);
+        assertEquals(line.get(1).y - line.get(2).y, (line.get(2).z - line.get(1).z) / 5.0, 1e-9);
+        assertEquals((line.get(3).z - line.get(2).z) / Glide.GLIDE_RATIO, line.get(2).y - line.get(3).y, 1e-9);
+        assertTrue(line.get(1).z > cruise.z && line.get(1).z < line.get(2).z, "先平飞一段再俯冲");
+        // 水平距离放不下平飞的一段:从起点直接俯冲,下滑比夹在最陡与俯冲之间
+        List<List<Vec3>> steep = Glide.descents(new Vec3(0.5, 24, 0.5), new Vec3(0.5, 0, 126.5));
+        List<Vec3> direct = steep.get(0);
+        assertEquals(3, direct.size());
+        double ratio = (direct.get(1).z - direct.get(0).z) / (direct.get(0).y - direct.get(1).y);
+        assertTrue(ratio >= Glide.STEEPEST_RATIO && ratio <= 5.0, "直接俯冲的下滑比 " + ratio);
         // 高得下不去:不朝降落点硬俯冲,绕着它盘旋着往下沉,最后朝降落点下滑
         Vec3 high = new Vec3(0.5, 40, 150.5);
-        List<Vec3> spiral = Glide.approachCorners(high, touchdown);
+        List<List<Vec3>> options = Glide.descents(high, touchdown);
+        assertEquals(1, options.size());
+        List<Vec3> spiral = options.get(0);
         assertEquals(high, spiral.get(0));
         assertEquals(touchdown, spiral.get(spiral.size() - 1));
         assertTrue(spiral.size() > 12, "盘旋至少一圈:" + spiral.size());

@@ -44,8 +44,6 @@ final class Sortie implements Segment {
     private static final int EMERGENCY_RADIUS = 48;
     private static final double REACH_MARGIN = 0.8;
     private static final int EMERGENCY_STEP = 3;
-    /** 迫降:落点的水平距离至少是下降高度的几倍(再陡就得俯冲,落得重)。 */
-    private static final double MIN_RATIO = 4.0;
     /** 迫降的降落点那一圈的半径:地面当作落点那一格的高度。 */
     private static final double EMERGENCY_ZONE = 12.0;
     /** 盘旋:半径、每隔几刻再找一次落点、最多盘旋几刻。 */
@@ -301,7 +299,7 @@ final class Sortie implements Segment {
     private boolean landable(Vec3 spot) {
         var body = rig.entity;
         return reaches(body.position(), spot)
-                && Math.hypot(spot.x - body.getX(), spot.z - body.getZ()) >= (body.getY() - spot.y) * MIN_RATIO
+                && Math.hypot(spot.x - body.getX(), spot.z - body.getZ()) >= (body.getY() - spot.y) * Glide.STEEPEST_RATIO
                 && Airway.sweep(rig.world(), rig.snapshot().stats(), 0).clear(body.position(), spot.add(0, 1, 0));
     }
 
@@ -324,7 +322,7 @@ final class Sortie implements Segment {
             double angle = Math.toRadians(turn);
             double dx = ux * Math.cos(angle) - uz * Math.sin(angle);
             double dz = uz * Math.cos(angle) + ux * Math.sin(angle);
-            for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * MIN_RATIO; d -= 1.0) {
+            for (double d = altitude * Glide.GLIDE_RATIO * REACH_MARGIN; d >= altitude * Glide.STEEPEST_RATIO; d -= 1.0) {
                 int x = (int) Math.floor(body.getX() + dx * d);
                 int z = (int) Math.floor(body.getZ() + dz * d);
                 BlockPos cell = Glide.ground(rig, rig.snapshot().stats(), x, z, body.getBlockY(), rig.world().getMinBuildHeight());

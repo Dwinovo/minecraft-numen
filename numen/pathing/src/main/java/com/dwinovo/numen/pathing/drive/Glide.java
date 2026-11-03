@@ -30,7 +30,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>线</h2>
  * 起飞点→爬到巡航高度→平飞→进近降落({@link #approachCorners})。巡航高度:沿起飞点到目标的直线每 {@link #CRUISE_SAMPLE} 格取一列,看这一列最高的碰撞面
- * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格;线是柱子里竖直爬到这个高度,再平飞。不要求"爬升加按滑翔比直线下滑放得进水平距离":降下来是目标附近的事,高了就在降落点上空盘旋下沉。
+ * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格;线是柱子里竖直爬到这个高度,再平飞。不要求"爬升加按滑翔比直线下滑放得进水平距离":降下来是目标附近的事,在巡航高度飞到够得着的地方就俯冲、降落点前拉平({@link #descents}),俯冲也放不下才在降落点上空盘旋下沉。
  * 没加载的区块是未知,不是空气也不是墙:排线时先当过得去,{@link Sortie} 每刻接着查前方新加载的那段线({@link Helm#blocked}),被挡就抬高巡航重排({@link #raise})或改降;
  * 目标那片没加载时降落点先按起飞点的高度估,那片加载了再定真正的落点({@link #settle})。
  *
@@ -228,8 +228,8 @@ final class Glide {
         // 柱子里一直爬到巡航高度(沿线最高的碰撞面再加一截,附近的障碍都在它之下),再朝目标平飞
         Vec3 p1 = new Vec3(p0.x, cruise, p0.z);
         Vec3 touchdown = new Vec3(land.x(), land.y(), land.z());
-        List<Vec3> tail = approachCorners(p1, touchdown);
-        if (tail == null || !corridor(rig, stats, tail, ux, uz)) {
+        List<Vec3> tail = approachCorners(rig, stats, p1, touchdown);
+        if (tail == null) {
             return Attempt.not(Lack.Why.NO_ROUTE);
         }
         List<Vec3> corners = new ArrayList<>();
@@ -472,13 +472,8 @@ final class Glide {
      * 从空中的 {@code pos} 往降落点 {@code touchdown} 去的线({@link #approachCorners}):线两侧扫不过去为 null。
      */
     static Airway approach(Rig rig, BodyStats stats, Vec3 pos, Vec3 touchdown) {
-        List<Vec3> corners = approachCorners(pos, touchdown);
-        if (corners == null) {
-            return null;
-        }
-        double run = Math.hypot(touchdown.x - pos.x, touchdown.z - pos.z);
-        return corridor(rig, stats, corners, (touchdown.x - pos.x) / run, (touchdown.z - pos.z) / run)
-                ? Airway.through(corners, touchdown).withZone(TOLERANCE) : null;
+        List<Vec3> corners = approachCorners(rig, stats, pos, touchdown);
+        return corners == null ? null : Airway.through(corners, touchdown).withZone(TOLERANCE);
     }
 
     /** 盘旋下降的圈半径(格),和每一圈取几条边。 */
@@ -486,24 +481,74 @@ final class Glide {
     private static final int SPIRAL_SIDES = 12;
     /** 盘旋下降比滑翔比陡一点(只取滑翔比的这个比例):比自然下滑沉得快,不靠烟花也跟得上。 */
     private static final double SPIRAL_SHARE = 0.8;
+    /**
+     * 进近的俯冲:每下降一格水平走几格。量到的滑翔(每刻水平 1.6 到 1.7 格):10 度那一档竖直每刻 -0.3 上下(约 5.5 比 1),22 度 -0.6 上下,27 度以上 -0.7。
+     * 竖直速度在每刻 -0.5 之内,原版的坠落距离才每刻清零({@link Dynamics#SLOW_FALL}),所以俯冲取 5 比 1,正好是 10 度那一档的下滑比;
+     * 控制器追线追过头(22 度以上)的那几刻坠落距离会往上攒,由降落点前的拉平段收回来。
+     */
+    private static final double DIVE_RATIO = 5.0;
+    /** 水平距离不够放下 {@link #DIVE_RATIO} 的俯冲时,从 {@code pos} 起直接俯冲,最陡到这个下滑比(再陡控制器追不上线,落地落得重)。迫降选落点也用它({@link Sortie})。 */
+    static final double STEEPEST_RATIO = 4.0;
+    /** 拉平:降落点前最后这么多格水平,按滑翔比平缓地下滑,到地时竖直速度远在 -0.5 之上。 */
+    private static final double FLARE_RUN = 24.0;
 
     /**
-     * 进近的线上的拐点({@code pos} 是第一个),贴在降落点上为 null。高度够用(按滑翔比下滑刚好落在降落点放得进水平距离里):{@code pos}、平飞到按滑翔比下滑的起点、降落点。
-     * 高得下不去(巡航高度比降落点高得多,或离得太近):不朝降落点硬俯冲,而是平飞到降落点上空,绕着它盘旋着下降
-     * (每圈沉的高度按比滑翔比陡一点的下滑算),降到按滑翔比能直接落到降落点了,再朝它下滑。
+     * 进近的线的几种排法,由简到繁({@code pos} 是每条的第一个拐点,贴在降落点上为空表):
+     * <ol>
+     *   <li>高度刚好按滑翔比放得进水平距离里:{@code pos}、平飞到按滑翔比下滑的起点、降落点;</li>
+     *   <li>高了一些:平飞到俯冲的起点,按 {@link #DIVE_RATIO} 俯冲掉高度,{@link #FLARE_RUN} 格外拉平,再按滑翔比滑到降落点;,水平距离不够这样放,就从 {@code pos} 起直接俯冲,俯冲的下滑比在 {@link #STEEPEST_RATIO} 与 {@link #DIVE_RATIO} 之间;</li>
+     *   <li>最陡的俯冲也放不进水平距离里:平飞到降落点上空,绕着它盘旋着下降(每圈沉的高度按比滑翔比陡一点的下滑算),
+     *       降到按滑翔比能直接落到降落点了,再朝它下滑。排在俯冲之后,是俯冲那一路有遮挡时的替补。</li>
+     * </ol>
      */
-    static List<Vec3> approachCorners(Vec3 pos, Vec3 touchdown) {
+    static List<List<Vec3>> descents(Vec3 pos, Vec3 touchdown) {
         double dx = touchdown.x - pos.x;
         double dz = touchdown.z - pos.z;
         double run = Math.hypot(dx, dz);
         if (run < 1) {
-            return null;
+            return List.of();
         }
-        double descent = (pos.y - touchdown.y) * GLIDE_RATIO;
-        if (descent < run) {
-            return List.of(pos, new Vec3(touchdown.x - dx / run * descent, pos.y, touchdown.z - dz / run * descent), touchdown);
+        double ux = dx / run;
+        double uz = dz / run;
+        double height = pos.y - touchdown.y;
+        if (height * GLIDE_RATIO < run) {
+            return List.of(List.of(pos, new Vec3(touchdown.x - ux * height * GLIDE_RATIO, pos.y, touchdown.z - uz * height * GLIDE_RATIO), touchdown));
         }
-        // 高得下不去:到圈上离身体最近的一点,平飞过去,再一边绕一边沉
+        List<List<Vec3>> options = new ArrayList<>();
+        double flareHeight = FLARE_RUN / GLIDE_RATIO;
+        double diveHeight = height - flareHeight;
+        double room = run - FLARE_RUN;
+        if (diveHeight >= 0 && room >= diveHeight * STEEPEST_RATIO) {
+            Vec3 flare = new Vec3(touchdown.x - ux * FLARE_RUN, touchdown.y + flareHeight, touchdown.z - uz * FLARE_RUN);
+            List<Vec3> line = new ArrayList<>(List.of(pos));
+            double diveRun = diveHeight * DIVE_RATIO;
+            if (diveRun < room) {
+                line.add(new Vec3(flare.x - ux * diveRun, pos.y, flare.z - uz * diveRun));
+            }
+            line.add(flare);
+            line.add(touchdown);
+            options.add(line);
+        }
+        options.add(spiral(pos, touchdown, dx, dz));
+        return options;
+    }
+
+    /**
+     * 从 {@code pos} 往降落点 {@code touchdown} 去的进近的线({@link #descents} 里沿途扫得过去的第一种,{@link #corridor});都过不去为 null。
+     * 盘旋只在俯冲放不下或俯冲那一路有遮挡时才轮到。
+     */
+    static List<Vec3> approachCorners(Rig rig, BodyStats stats, Vec3 pos, Vec3 touchdown) {
+        double run = Math.hypot(touchdown.x - pos.x, touchdown.z - pos.z);
+        for (List<Vec3> corners : descents(pos, touchdown)) {
+            if (corridor(rig, stats, corners, (touchdown.x - pos.x) / run, (touchdown.z - pos.z) / run)) {
+                return corners;
+            }
+        }
+        return null;
+    }
+
+    /** 绕降落点盘旋着下降的拐点:到圈上离身体最近的一点,平飞过去,再一边绕一边沉,最后朝降落点下滑。 */
+    private static List<Vec3> spiral(Vec3 pos, Vec3 touchdown, double dx, double dz) {
         double angle = Math.atan2(-dz, -dx);
         List<Vec3> corners = new ArrayList<>();
         corners.add(pos);
@@ -550,7 +595,7 @@ final class Glide {
                 return null;
             }
             Vec3 p1 = new Vec3(pos.x + ux * along, cruise, pos.z + uz * along);
-            List<Vec3> tail = approachCorners(p1, touchdown);
+            List<Vec3> tail = approachCorners(rig, stats, p1, touchdown);
             if (tail == null) {
                 return null;
             }
