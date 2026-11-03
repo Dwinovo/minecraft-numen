@@ -20,7 +20,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
  * 到达,从入口调:{@code numen.use.block} 够不着时自己走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
- * 悬崖上的工作台),隔着高草时 {@code numen.work.dig} 先清掉再用;四面封死走不到、如实说挖哪一面;{@code numen.move.to} 到柱顶上面那一格、
+ * 悬崖上的工作台),隔着高草时 {@code numen.work.dig} 先清掉再用;四面封死走不到、如实说挖哪一面;{@code numen.move.walk} 到柱顶上面那一格、
  * 梯子上、水里的一格,或停在距离里;{@code numen.build.place} 走到够得着往一格半空里放的地方。
  */
 public class ArriveGameTests {
@@ -148,14 +148,14 @@ public class ArriveGameTests {
         });
     }
 
-    /** 两格高的石柱,旁边一级台阶:move.to 给柱顶上面那一格,站上柱顶。 */
+    /** 两格高的石柱,旁边一级台阶:move.walk 给柱顶上面那一格,站上柱顶。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void at_the_cell_above_a_pillar_stands_on_top_of_it(GameTestHelper helper) {
         fill(helper, 8, 2, 8, 8, 3, 8, Blocks.STONE.defaultBlockState());
         set(helper, 7, 2, 8, Blocks.STONE);
         BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(top.above()) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(top.above()) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -165,12 +165,12 @@ public class ArriveGameTests {
         });
     }
 
-    /** move.to 带距离 3:停在离那一格三格以内,不走到跟前。 */
+    /** move.walk 带距离 3:停在离那一格三格以内,不走到跟前。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void near_stops_within_the_distance(GameTestHelper helper) {
         BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
         NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(spot) + ", 3)");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(spot) + ", 3)");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");

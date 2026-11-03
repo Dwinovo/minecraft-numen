@@ -15,7 +15,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
  * YSM 动作的收尾:她放一个动作之后,动了就停、换模型就停、站着不动不停。都从 Lua 入口调({@code ysm.model.emote} 与
- * {@code ysm.model.switch}、{@code numen.move.to}),断言看联动对 YSM 发出的命令(见 {@link YsmStub}),不读 YSM 的内部状态。
+ * {@code ysm.model.switch}、{@code numen.move.walk}),断言看联动对 YSM 发出的命令(见 {@link YsmStub}),不读 YSM 的内部状态。
  *
  * <p>只在本模块那一次跑批里跑({@code :plugins:ysm:gametest:runGameTestServer}),套件 {@code numen_ysm}(见 {@link YsmGameTestSuite})。
  */
@@ -47,11 +47,11 @@ public class YsmGameTests {
                 .thenIdle(10)
                 .thenExecute(() -> helper.assertTrue(YsmStub.sentTo(name).size() == 1,
                         "she stopped while standing still: " + YsmStub.sentTo(name)))
-                .thenExecute(() -> walks[0] = lua(her, "numen.move.to(" + xyz(far) + ")"))
+                .thenExecute(() -> walks[0] = lua(her, "numen.move.walk(" + xyz(far) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(YsmStub.sentTo(name).contains("play " + name + " stop"),
                         "walking did not stop the emote: " + YsmStub.sentTo(name)))
                 .thenWaitUntil(() -> helper.assertTrue(walks[0].done(), "walk has not finished: " + walks[0].reply()))
-                .thenExecute(() -> walks[1] = lua(her, "numen.move.to(" + xyz(near) + ")"))
+                .thenExecute(() -> walks[1] = lua(her, "numen.move.walk(" + xyz(near) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(walks[1].done(), "walk back has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(YsmStub.sentTo(name).equals(

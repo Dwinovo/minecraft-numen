@@ -98,7 +98,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 第一行当场失败(走去一只不存在的实体):{@code numen.move.to} 受理就拒绝,抛 not_found,脚本接住、不往下走,第二行的那一格还在;
+     * 第一行当场失败(走去一只不存在的实体):{@code numen.move.walk} 受理就拒绝,抛 not_found,脚本接住、不往下走,第二行的那一格还在;
      * 回执说停在哪一行、为什么,失败的那次调用记在 stderr 里。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
@@ -109,7 +109,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                local walked, why = pcall(numen.move.to, %s)
+                local walked, why = pcall(numen.move.walk, %s)
                 if not walked then error("could not get there: " .. why, 0) end
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted("\"pig@999999\"", xyz(kept)));
@@ -119,10 +119,10 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
             helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // numen.move.to 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
+            // numen.move.walk 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
             helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
-                    + "numen.move.to: not_found — "), msg);
-            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.move.to: not_found — "),
+                    + "numen.move.walk: not_found — "), msg);
+            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.move.walk: not_found — "),
                     "the failed call is in stderr: " + msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
@@ -138,7 +138,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                numen.move.to({x = %d, z = %d})
+                numen.move.walk({x = %d, z = %d})
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
@@ -159,7 +159,7 @@ public class ScriptGameTests {
                     helper.assertTrue(round.result(script) == null, "the cut-off turn was handed a result");
                     String msg = JsonParser.parseString(round.programReceipt()).getAsJsonObject().get("message")
                             .getAsString();
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.to\\) after 1 call: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     CompanionFactory.despawn(level.getServer(), her);
@@ -174,8 +174,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall script = programCall("""
-                numen.move.to({x = %d, z = %d})
-                numen.move.to({x = %d, z = %d})
+                numen.move.walk({x = %d, z = %d})
+                numen.move.walk({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
 
@@ -186,10 +186,10 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script did not stop when the owner spoke"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.to\\) after 1 call: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
-                    helper.assertTrue(now != null && now.getToolName().equals("numen.move.to"),
+                    helper.assertTrue(now != null && now.getToolName().equals("numen.move.walk"),
                             "the walk is no longer running: " + now);
                     CompanionFactory.despawn(level.getServer(), her);
                 })
@@ -488,7 +488,7 @@ public class ScriptGameTests {
         });
     }
 
-    /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.to},她走到牛跟前。 */
+    /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.walk},她走到牛跟前。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -501,7 +501,7 @@ public class ScriptGameTests {
         level.addFreshEntity(cow);
         LlmToolCall script = programCall("""
                 local cow = numen.scan.entities("passive", {radius = 20})[1]
-                numen.move.to(cow)
+                numen.move.walk(cow)
                 return cow.id
                 """);
         Round round = round(helper, her, script);

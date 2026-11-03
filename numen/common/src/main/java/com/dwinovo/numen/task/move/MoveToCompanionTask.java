@@ -24,7 +24,7 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * {@code numen.move.to} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走到一个到达目标({@link Arrival})。
+ * {@code numen.move.walk} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走到一个到达目标({@link Arrival})。
  *
  * <p><b>一趟就是一次导航</b>——目标编成寻路的目标({@link Destination}),规格是走路的出厂规格({@link Walking#spec}:可挖可搭,只看
  * 价钱),交给 {@link Trip}。一截一截规划、走、从当时位置按同一份规格接着规划,都在寻路里;这里不留"计划",也不比对路上动了哪些格:

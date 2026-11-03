@@ -208,7 +208,7 @@ public final class RuntimeState {
     /**
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
-     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道坐在船上 {@code numen.move.to} 驾船、别的走路要先下来
+     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道坐在船上 {@code numen.move.walk} 驾船、别的走路要先下来
      * ({@code numen.use.dismount()})。
      */
     private String ridingXml(BodySnapshot snapshot) {
@@ -216,7 +216,7 @@ public final class RuntimeState {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicle())
-                + ". numen.move.to sails a boat over water; any other walk needs numen.use.dismount() to step off "
+                + ". numen.move.walk sails a boat over water; any other walk needs numen.use.dismount() to step off "
                 + "first — no need to click the vehicle again.</riding>";
     }
 

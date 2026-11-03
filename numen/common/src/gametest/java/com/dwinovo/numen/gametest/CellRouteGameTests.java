@@ -18,7 +18,7 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 去一串格:{@code numen.move.to} 给一串格(Cells)走进其中任意一格,给一串方块走到其中之一旁边,给距离停在离它们不远处;玩家放下的方块(放置记号)不用
+ * 去一串格:{@code numen.move.walk} 给一串格(Cells)走进其中任意一格,给一串方块走到其中之一旁边,给距离停在离它们不远处;玩家放下的方块(放置记号)不用
  * 点名也不挖。格子由程序写出来,和她拿扫描结果原样交过去一样;都从脚本入口进。
  */
 public class CellRouteGameTests {
@@ -59,10 +59,10 @@ public class CellRouteGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
         List<BlockPos> pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(12, 2, 12));
-        ToolRun walk = lua(companion, "numen.move.to(" + cells(pen) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + cells(pen) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && walk.outcome().contains("reached"),
                     "she did not walk into the cells: " + walk.outcome());
             helper.assertTrue(pen.contains(companion.blockPosition()),
@@ -83,10 +83,10 @@ public class CellRouteGameTests {
         level.setBlockAndUpdate(near, Blocks.CHEST.defaultBlockState());
         level.setBlockAndUpdate(far, Blocks.CHEST.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_chestuser", new BlockPos(2, 2, 2), false);
-        ToolRun walk = lua(companion, "numen.move.to({" + block(near) + ", " + block(far) + "})");
+        ToolRun walk = lua(companion, "numen.move.walk({" + block(near) + ", " + block(far) + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && walk.outcome().contains("within 2 blocks"),
                     "she did not go beside the near chest: " + walk.outcome());
             helper.assertTrue(Math.sqrt(companion.blockPosition().distSqr(near)) <= 2
@@ -101,10 +101,10 @@ public class CellRouteGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hoverer", new BlockPos(2, 2, 2), false);
         List<BlockPos> pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(13, 2, 13));
-        ToolRun walk = lua(companion, "numen.move.to(" + cells(pen) + ", 3)");
+        ToolRun walk = lua(companion, "numen.move.walk(" + cells(pen) + ", 3)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && walk.outcome().contains("arrived within 3 blocks of 16 cells"),
                     "she did not stop near the cells: " + walk.outcome());
             BlockPos at = companion.blockPosition();
@@ -135,10 +135,10 @@ public class CellRouteGameTests {
             }
         }
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not get out: " + walk.outcome());
             for (BlockPos cell : wall) {
@@ -151,7 +151,7 @@ public class CellRouteGameTests {
     }
 
     /**
-     * 别的玩家放下的一堵墙挡在去路上:{@code numen.move.to} 绕过去,不挖它。墙两格高、七格长,正好横在她和终点之间;
+     * 别的玩家放下的一堵墙挡在去路上:{@code numen.move.walk} 绕过去,不挖它。墙两格高、七格长,正好横在她和终点之间;
      * 创造模式挖一块墙几乎不花时间,路线若把它当地形,一定直接挖穿——绕开靠的是放置记号,不是挖不动。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
@@ -169,10 +169,10 @@ public class CellRouteGameTests {
             }
         }
         BlockPos target = helper.absolutePos(new BlockPos(8, 2, 13));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not get round the wall: " + walk.outcome());
             for (BlockPos cell : wall) {

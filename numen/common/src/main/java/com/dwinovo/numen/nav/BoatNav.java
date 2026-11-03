@@ -28,7 +28,7 @@ import java.util.Set;
  *
  * <h2>目标在岸上是常态</h2>
  * 启发朝目标的水平投影;预算内到不了就取<b>离目标最近的已访问水格</b>当靠岸点({@link Chart#reached} 为假),开到那儿就到了——
- * 下船走路是她的下一步({@code numen.use.dismount}、再 {@code numen.move.to}),这里不越界。
+ * 下船走路是她的下一步({@code numen.use.dismount}、再 {@code numen.move.walk}),这里不越界。
  *
  * <p>驾驶输入走 {@link InputDriver#steerVehicle}(原版桨物理);服务端能动船的前提是原版把她当本机玩家
  * ({@code NumenPlayer.isLocalPlayer})。

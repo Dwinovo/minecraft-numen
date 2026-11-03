@@ -6,7 +6,7 @@ import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 
 /**
- * {@code numen.move.to} 与 {@code numen.move.away} 这件活的记录:走到哪儿({@link Arrival})。动手的活够不着时替自己走过去也用它
+ * {@code numen.move.walk} 与 {@code numen.move.away} 这件活的记录:走到哪儿({@link Arrival})。动手的活够不着时替自己走过去也用它
  * ({@link #errand}),那时只走路、不驾船。基础期限是 30 秒,出发后按路程再往后推(见 {@link MoveToCompanionTask})。
  */
 public final class MoveToTaskRecord extends TaskRecord<Walked> {

@@ -118,7 +118,7 @@ public final class ReviveMaid implements Scenario {
                     break
                   end
                 end
-                numen.move.to(tombstone, 2)
+                numen.move.walk(tombstone, 2)
                 numen.use.entity(tombstone)
                 """);
         List<String> items = new ArrayList<>(List.of(FILM.toString()));

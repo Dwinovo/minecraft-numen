@@ -1,12 +1,12 @@
 -- Picking up and digging out: walk onto the dropped items lying around, dig out a cluster.
 local M = {}
 
----Pick up the dropped items around you, nearest first, walking up to each with numen.move.to(item.id): to where the pickup
+---Pick up the dropped items around you, nearest first, walking up to each with numen.move.walk(item.id): to where the pickup
 ---reaches the item itself (an entity), not into the cell its coordinates round to (an item resting on a ledge's edge rounds
 ---to the empty cell beside it). Given items (the drops
 ---numen.work.dig returned), it goes only after those of them still lying around. A fresh drop cannot be picked up for
 ---a few ticks (its pickup_delay): standing by it, it walks up to it again until it is taken. An item with no way to it
----(numen.move.to fails with no_path) is passed over and the rest are picked up; at the end the ones passed over raise
+---(numen.move.walk fails with no_path) is passed over and the rest are picked up; at the end the ones passed over raise
 ---no_path, with them in err.data.left. An item still there after walking onto it with no delay left (a full pack, or
 ---a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
 ---@param opts? table items = only these (anything with an id: the drops of numen.work.dig, Items of numen.scan.entities); radius = how far to look (default 8, or 64 with items).
@@ -45,7 +45,7 @@ function M.collect(opts)
       end
       if #left > 0 then
         raise("no_path", "picked up " .. picked .. " item(s); no way to the " .. #left .. " left, the nearest "
-            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.to(%q)", left[1].id),
+            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.walk(%q)", left[1].id),
             {picked = picked, left = left})
       end
       return picked
@@ -62,7 +62,7 @@ function M.collect(opts)
       raise("failed", item.item .. " x" .. item.count .. " cannot be picked up for another " .. item.pickup_delay
           .. " ticks", nil, {item = item})
     end
-    local ok, err = pcall(numen.move.to, item.id)
+    local ok, err = pcall(numen.move.walk, item.id)
     if ok then
       walked[item.id] = item.count
     elseif err.kind == "no_path" then

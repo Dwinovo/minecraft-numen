@@ -12,7 +12,7 @@ import java.util.Optional;
  */
 @Doc("Where the nearest one is, or how far the search went without finding one.")
 public record Located(@Doc("Whether one was found.") boolean found,
-                      @Doc("The column it is in: numen.move.to takes it and finds the height on its own.")
+                      @Doc("The column it is in: numen.move.walk takes it and finds the height on its own.")
                       Optional<Place> pos,
                       @Doc("Compass direction from where you stand.") Optional<String> direction,
                       @Doc("Blocks to it, horizontally.") Optional<Integer> horizontalDistance,

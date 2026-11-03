@@ -99,13 +99,13 @@ class NavTextTest {
     }
 
     /**
-     * 不改地形走不到、改了才有路(只有不改地形的活会这样收场):那条路要改的格照实点名,下一步是 numen.move.to;要问主人的格说清走到时才问。
+     * 不改地形走不到、改了才有路(只有不改地形的活会这样收场):那条路要改的格照实点名,下一步是 numen.move.walk;要问主人的格说清走到时才问。
      */
     @Test
     void notEnoughChangesNameTheCellsTheWayWouldChange() {
         RouteSpec none = RouteSpec.defaults();
         String digs = NavText.failure(new Outcome.NeedsChanges(digs(2)), null, A, C, none, List.of());
-        assertTrue(digs.contains("`numen.move.to` takes such a way")
+        assertTrue(digs.contains("`numen.move.walk` takes such a way")
                 && digs.contains("changes 2 block(s) — break 2 oak_planks (120,64,-33; 120,65,-33)"), digs);
         String asks = NavText.failure(new Outcome.NeedsChanges(digs(3, Permit.ask("x"))), null, A, C, none, List.of());
         assertTrue(asks.contains("asks your owner when I get to each"), asks);
@@ -234,7 +234,7 @@ class NavTextTest {
         assertTrue(none.contains("pick another destination"), none);
         assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer place"), budget);
         assertTrue(unloaded.contains("not loaded") && unloaded.contains("walk toward it and try again"), unloaded);
-        assertTrue(alter.contains("`numen.move.to` takes such a way"), alter);
+        assertTrue(alter.contains("`numen.move.walk` takes such a way"), alter);
         assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner")
                 && denied.contains("no way around it was found"), denied);
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
@@ -255,7 +255,7 @@ class NavTextTest {
         String checkIn = NavText.timedOut(6000, 20.7, "1,2,3", nearest, true);
         assertTrue(checkIn.startsWith("timed out after 300 s of walking, 20.7 blocks from target (now at 1,2,3)")
                 && checkIn.contains("nearest to the target, pillaring up at 120,65,-33 (stone) was ruled out: ")
-                && checkIn.contains("call `numen.move.to` again") && !checkIn.contains("progress had stopped"), checkIn);
+                && checkIn.contains("call `numen.move.walk` again") && !checkIn.contains("progress had stopped"), checkIn);
         String stalled = NavText.timedOut(900, 5, "1,2,3", null, false);
         assertTrue(stalled.contains("made no progress") && !stalled.contains("nearest to the target"), stalled);
     }

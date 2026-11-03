@@ -138,7 +138,7 @@ public final class ApiTester {
 
     /** 反引号里的一段。 */
     private static final Pattern SPAN = Pattern.compile("`([^`\n]+)`");
-    /** 以一个组的函数(或模块函数)打头:{@code numen.work.dig(...)}、{@code local r = numen.scan.blocks(...)}、{@code numen.move.to}。 */
+    /** 以一个组的函数(或模块函数)打头:{@code numen.work.dig(...)}、{@code local r = numen.scan.blocks(...)}、{@code numen.move.walk}。 */
     private static final Pattern CALL = Pattern.compile("^(?:local\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?"
             + "([a-z][a-z0-9_]*)\\.([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)");
     /** 只点名一个函数或一组:{@code numen.inv.recipes}、{@code numen.inv}。 */

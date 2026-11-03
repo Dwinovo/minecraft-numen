@@ -132,7 +132,7 @@ public final class ServerCall {
             throw new ApiError(ErrorKind.OUT_OF_REACH, target.getName().getString() + " is "
                     + String.format(java.util.Locale.ROOT, "%.1f", her.distanceTo(target))
                     + " blocks away — out of reach from where you stand; walk to it first, then call this again",
-                    Call.of("numen.move.to", target.blockPosition(), 2),
+                    Call.of("numen.move.walk", target.blockPosition(), 2),
                     Map.of("pos", target.blockPosition()));
         }
     }

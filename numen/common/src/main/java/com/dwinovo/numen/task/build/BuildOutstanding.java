@@ -157,7 +157,7 @@ public final class BuildOutstanding {
         return switch (cause) {
             case DIG_FIRST -> Optional.of(Call.of("numen.work.dig",
                     at.subList(0, Math.min(8, at.size())).toArray()));
-            case OUT_OF_REACH, NOT_LOADED -> Optional.of(Call.of("numen.move.to", at.get(0)));
+            case OUT_OF_REACH, NOT_LOADED -> Optional.of(Call.of("numen.move.walk", at.get(0)));
             case SHORT_OF_MATERIAL -> Optional.of("get those items, then call numen.build.place again with the same "
                     + "design: what already stands is skipped");
             case NOTHING_HOLDS_IT, DID_NOT_STAY -> Optional.of("build what should hold them first (the block below "

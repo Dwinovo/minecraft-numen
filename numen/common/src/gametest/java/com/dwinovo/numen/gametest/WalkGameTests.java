@@ -18,7 +18,7 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 走路:{@code numen.move.to} 与 {@code numen.move.away} 默认可挖可搭、只看价钱——能走就不挖,绕太远才挖;路上世界变了接着从当时的位置走,不比对
+ * 走路:{@code numen.move.walk} 与 {@code numen.move.away} 默认可挖可搭、只看价钱——能走就不挖,绕太远才挖;路上世界变了接着从当时的位置走,不比对
  * 什么承诺;回执交代这一路(停在哪、还差多远、挖了放了几格);{@code numen.use.dismount} 从船上下来;坐着驾驭不了的东西当场拒绝。都从脚本的入口进。
  */
 public class WalkGameTests {
@@ -49,7 +49,7 @@ public class WalkGameTests {
         int wallBefore = roomCount(helper, 7, 7, Blocks.STONE);
         NumenPlayer companion = spawnBare(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(OUTSIDE);
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move to has not finished");
@@ -96,7 +96,7 @@ public class WalkGameTests {
         NumenPlayer companion = spawnBare(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
         BlockPos goal = helper.absolutePos(new BlockPos(12, 2, 7));
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(goal) + ")");
+        ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(goal) + ")");
         BlockPos low = helper.absolutePos(new BlockPos(7, 2, 7));
         boolean[] walled = new boolean[1];
         helper.onEachTick(() -> {
@@ -134,7 +134,7 @@ public class WalkGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_detour", new BlockPos(2, 2, 2), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 2));
-        ToolRun around = lua(companion, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun around = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
         ToolRun[] through = new ToolRun[1];
 
         steps(helper)
@@ -147,7 +147,7 @@ public class WalkGameTests {
                     for (int y = 2; y <= 3; y++) {
                         level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, 4)), Blocks.DIRT.defaultBlockState());
                     }
-                    through[0] = lua(companion, "return numen.move.to(" + at(helper, new BlockPos(2, 2, 2)) + ")");
+                    through[0] = lua(companion, "return numen.move.walk(" + at(helper, new BlockPos(2, 2, 2)) + ")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(through[0].done(), "the walk back has not finished"))
                 .thenExecute(() -> {
@@ -228,13 +228,13 @@ public class WalkGameTests {
         cart.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         level.addFreshEntity(cart);
         companion.startRiding(cart, true);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(helper.absolutePos(new BlockPos(12, 2, 12))) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(helper.absolutePos(new BlockPos(12, 2, 12))) + ")");
         ToolRun away = lua(companion, "numen.move.away(" + xyz(helper.absolutePos(new BlockPos(9, 2, 9))) + ", 5)");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done() && away.done(), "the refusals have not replied");
             for (ToolRun refused : new ToolRun[] {walk, away}) {
-                helper.assertTrue(!refused.ranToTheEnd() && refused.tasks("numen.move.to").isEmpty()
+                helper.assertTrue(!refused.ranToTheEnd() && refused.tasks("numen.move.walk").isEmpty()
                                 && refused.receipt().contains("numen.use.dismount()"),
                         "riding should refuse the walk and name numen.use.dismount(): " + refused.receipt());
             }
@@ -273,7 +273,7 @@ public class WalkGameTests {
         longFloor(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer2", new BlockPos(2, 1, 12), false);
         BlockPos far = helper.absolutePos(new BlockPos(210, 1, 12));
-        ToolRun walk = lua(companion, "return numen.move.to({x = " + far.getX() + ", z = " + far.getZ() + "})");
+        ToolRun walk = lua(companion, "return numen.move.walk({x = " + far.getX() + ", z = " + far.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "the walk has not finished");
@@ -298,7 +298,7 @@ public class WalkGameTests {
         wallAcross(helper, 150, Blocks.STONE);
         NumenPlayer companion = spawnBare(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
         BlockPos goal = helper.absolutePos(new BlockPos(210, 1, 12));
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(goal) + ")");
+        ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(goal) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "the walk has not finished");
@@ -332,14 +332,14 @@ public class WalkGameTests {
         ToolRun[] runs = {null, null};
         int[] marked = {0};
         steps(helper)
-                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.to(" + xyz(perch) + ")"))
+                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.walk(" + xyz(perch) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
                             "she did not get up: " + runs[0].outcome());
                     marked[0] = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).size();
                     helper.assertTrue(marked[0] > 0, "the pillar blocks she placed carry no placement marks");
-                    runs[1] = lua(companion, "return numen.move.to(" + xyz(home) + ")");
+                    runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished (the cell at home carries a mark: "
                         + marked[0] + ")"))
@@ -374,7 +374,7 @@ public class WalkGameTests {
         BlockPos outside = helper.absolutePos(new BlockPos(13, 2, 8));
         ToolRun[] runs = {null, null};
         steps(helper)
-                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.to(" + xyz(outside) + ")"))
+                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.walk(" + xyz(outside) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb out has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(outside) <= 2,
@@ -382,7 +382,7 @@ public class WalkGameTests {
                     var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
                     helper.assertTrue(placed.isPlaced(home, level.getBlockState(home)) && !placed.isBuilt(home.asLong()),
                             "the pillar block she laid at home is not marked as laid path");
-                    runs[1] = lua(companion, "return numen.move.to(" + xyz(home) + ")");
+                    runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished"))
                 .thenExecute(() -> {

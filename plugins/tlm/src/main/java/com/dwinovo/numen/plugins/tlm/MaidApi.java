@@ -67,7 +67,7 @@ public final class MaidApi {
 
     /** 一只加载着的女仆。 */
     @Doc("A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as she "
-            + "is: tlm.maid.info(m), numen.use.entity(m), numen.move.to(m).")
+            + "is: tlm.maid.info(m), numen.use.entity(m), numen.move.walk(m).")
     public record Maid(@Flatten EntityInfo entity,
                        @Doc("The model she wears.") String model,
                        @Doc("Her work mode, touhou_little_maid:farm.") String task,
@@ -176,7 +176,7 @@ public final class MaidApi {
     @Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = \"maid@3f9a1c\"})")
     @Example("tlm.maid.task(\"touhou_little_maid:idle\")")
     @Note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays open. Farther "
-            + "away it fails with out_of_reach, and its hint is the numen.move.to call to copy.")
+            + "away it fails with out_of_reach, and its hint is the numen.move.walk call to copy.")
     @Note("TLM decides: only the owner may switch, and a mode may wait for something first (see can_switch in "
             + "tlm.maid.info). It reads her task back; when TLM did not take it, it fails and says what TLM's rules show.")
     @Note("It is using your maid, so your owner's rules may ask them first; the call waits for the answer.")

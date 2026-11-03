@@ -112,7 +112,7 @@ public final class ScanApi {
     @Example("numen.scan.blocks(\"#minecraft:beds\")")
     @Note("Read-only; it returns when the search is done. Name every variant you want.")
     @Note("A cluster is matching blocks that touch (diagonals count): every block of it nearest first (a Block: name "
-            + "and pos), the nearest one, and how many. Hand a cluster on as it is: `numen.move.to` "
+            + "and pos), the nearest one, and how many. Hand a cluster on as it is: `numen.move.walk` "
             + "goes beside it, `numen.work.dig` walks up to it and digs it, `numen.work.mine` digs and picks up until "
             + "it is gone.")
     @Note("Nothing is kept: to use what it found again, keep the result in the program, or scan again.")
@@ -148,13 +148,13 @@ public final class ScanApi {
     @Example("numen.scan.entities(\"hostile\")")
     @Example("numen.scan.entities({radius = 12})")
     @Example("numen.scan.entities(\"item\", {radius = 8})")
-    @Note("Going through them: `for _, e in ipairs(numen.scan.entities(\"item\", {radius = 8})) do numen.move.to(e.pos) "
+    @Note("Going through them: `for _, e in ipairs(numen.scan.entities(\"item\", {radius = 8})) do numen.move.walk(e.pos) "
             + "end`.")
     @Note("Instant and read-only. All of them, nearest first: each is an Entity (id, type, category, pos, distance, "
             + "hp); a dropped item is an Item (also item, count and pickup_delay, ticks before anyone can pick it up); "
             + "a tamed one has owner: you, your owner, or the other player's id (name).")
     @Note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
-            + "with numen.use.entity(e) or numen.move.to(e.pos). An id is kind@code, like zombie@3f9a1c "
+            + "with numen.use.entity(e) or numen.move.walk(e.pos). An id is kind@code, like zombie@3f9a1c "
             + "(player@ab12cd for a player, with its name in name): the code is the start of the entity's UUID, so it is the same "
             + "after a restart.")
     @SeeAlso({"numen.scan.map", "numen.fight.attack", "numen.use.entity"})

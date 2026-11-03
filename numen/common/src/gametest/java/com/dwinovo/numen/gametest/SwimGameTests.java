@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 水下的路,从 {@code numen.move.to} 的入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
+ * 水下的路,从 {@code numen.move.walk} 的入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
  * 拽上去,回执说潜过一段水、憋了多久;长到憋不住的不下水,回执说出那一段水下在哪、要憋多久。
  */
 public class SwimGameTests {
@@ -55,7 +55,7 @@ public class SwimGameTests {
     }
 
     /**
-     * 8 格长的封顶水道(一口气约 110 刻):{@code numen.move.to} 到对岸,她游过去,一口气到头——换气本能没有在计划内的水下把她拽上去;
+     * 8 格长的封顶水道(一口气约 110 刻):{@code numen.move.walk} 到对岸,她游过去,一口气到头——换气本能没有在计划内的水下把她拽上去;
      * 回执说潜过一段水、憋了多久、氧气最低到多少;一点血不掉。
      */
     @GameTest(template = "floor52", timeoutTicks = 453, batch = BATCH)
@@ -64,12 +64,12 @@ public class SwimGameTests {
         sealedChannel(helper, 10, 18);
         NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(21, 2, Z));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
         float[] lowest = {Float.MAX_VALUE};
         helper.onEachTick(() -> lowest[0] = Math.min(lowest[0], companion.getHealth()));
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(there),
                     "she did not get through the channel: " + walk.outcome());
             helper.assertTrue(walk.outcome().contains("I went under water once:")
@@ -87,7 +87,7 @@ public class SwimGameTests {
      *   <li>导航说这一段是计划内的每一刻,她的氧气都还够游完剩下的水下再留出余量({@link Breath#RESERVE})——撑不到的那一刻导航
      *       就停下那一步,不等这一步的期限(期限按一步的估价给,够她把余量憋光);</li>
      *   <li>换气本能接手,把她带进气室换气,事件说她差点淹着、游上去换了气;一点血不掉;</li>
-     *   <li>唯一的路被挡死,{@code numen.move.to} 没走到,回执说潜过一段水、憋了多久。</li>
+     *   <li>唯一的路被挡死,{@code numen.move.walk} 没走到,回执说潜过一段水、憋了多久。</li>
      * </ul>
      */
     @GameTest(template = "floor52", timeoutTicks = 1104, batch = BATCH)
@@ -100,7 +100,7 @@ public class SwimGameTests {
         fill(helper, 25, 2, Z, 25, 2, Z, Blocks.AIR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(30, 2, Z));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
         double wallX = helper.absolutePos(new BlockPos(25, 0, Z)).getX() + 0.5;
         boolean[] walled = {false};
         int[] plannedAir = {Integer.MAX_VALUE};
@@ -120,7 +120,7 @@ public class SwimGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walled[0], "she never reached the air pocket under water");
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(plannedAir[0] >= Breath.RESERVE,
                     "the navigation still called the dive planned with only " + plannedAir[0] + " air left");
             helper.assertTrue(lowest[0] >= companion.getMaxHealth(), "she drowned a little: lowest health " + lowest[0]);
@@ -136,7 +136,7 @@ public class SwimGameTests {
     }
 
     /**
-     * 28 格长的封顶水道(一口气约 290 刻,满氧气安全地只憋得住 240 刻),是两边唯一的路:{@code numen.move.to} 不下水,回执说那一段
+     * 28 格长的封顶水道(一口气约 290 刻,满氧气安全地只憋得住 240 刻),是两边唯一的路:{@code numen.move.walk} 不下水,回执说那一段
      * 水下从哪儿到哪儿、要憋多久、能憋多久,有水下呼吸才走得了;她没进过水,一点血不掉。
      */
     @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
@@ -145,12 +145,12 @@ public class SwimGameTests {
         sealedChannel(helper, 8, 36);
         NumenPlayer companion = spawnAt(helper, "gametest_breathless", new BlockPos(5, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(39, 2, Z));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
         boolean[] wet = {false};
         helper.onEachTick(() -> wet[0] |= companion.isInWater());
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.to has not finished");
+            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("swims under water from")
                             && walk.outcome().contains("without a breath") && walk.outcome().contains("water breathing"),
                     "the reply does not say the way is too long under water: " + walk.outcome());

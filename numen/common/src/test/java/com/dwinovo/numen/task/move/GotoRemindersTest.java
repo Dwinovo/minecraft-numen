@@ -9,7 +9,7 @@ import net.minecraft.core.BlockPos;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 去处写错时的提醒怎么组成:说事实,再给能照抄的写法;每一句里的 {@code numen.move.to} 都是完整的一次调用,坐标加距离。
+ * 去处写错时的提醒怎么组成:说事实,再给能照抄的写法;每一句里的 {@code numen.move.walk} 都是完整的一次调用,坐标加距离。
  */
 class GotoRemindersTest {
 
@@ -32,7 +32,7 @@ class GotoRemindersTest {
     void nothingToClickAndNowhereToStandSayWhy() {
         String air = GotoReminders.nothingToUse(FURNACE, "air");
         assertTrue(air.startsWith("120,64,-35 is air — nothing there to click"), air);
-        assertTrue(air.contains("`numen.move.to({x = 120, y = 64, z = -35}, 2)`"), air);
+        assertTrue(air.contains("`numen.move.walk({x = 120, y = 64, z = -35}, 2)`"), air);
         String nowhere = GotoReminders.nowhereToStand(FURNACE, "chest", List.of("up", "north"));
         assertTrue(nowhere.contains("is open on up, north, but there is nowhere within reach"), nowhere);
     }

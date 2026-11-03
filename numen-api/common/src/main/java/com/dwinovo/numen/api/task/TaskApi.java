@@ -41,7 +41,7 @@ public final class TaskApi {
 
     /** 她有什么在跑。 */
     public record Status(@Doc("The background task, when there is one.") Optional<String> taskId,
-                         @Doc("Its function, numen.move.to.") Optional<String> task,
+                         @Doc("Its function, numen.move.walk.") Optional<String> task,
                          Optional<State> state,
                          Optional<Long> elapsedS,
                          Optional<Long> budgetLeftS,

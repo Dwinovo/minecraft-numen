@@ -119,7 +119,7 @@ public class RespawnGameTests {
                                     && told.get(0).text().contains("主人在你") && told.get(0).text().contains("格处"),
                             "she was not told where she landed and where her owner is: " + told);
                 })
-                .thenExecute(() -> lua(NumenPlayer.findByUuid(server, uuid), "numen.move.to(" + xyz(goal) + ")"))
+                .thenExecute(() -> lua(NumenPlayer.findByUuid(server, uuid), "numen.move.walk(" + xyz(goal) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(
                         NumenPlayer.findByUuid(server, uuid).blockPosition().distSqr(goal) <= 2 * 2,
                         "she has not walked on after respawning"))

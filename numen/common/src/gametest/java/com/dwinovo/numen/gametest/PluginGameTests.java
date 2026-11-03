@@ -38,7 +38,7 @@ public class PluginGameTests {
                     }
                 }));
         BlockPos target = helper.absolutePos(new BlockPos(8, 2, 4));
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done() && walk.succeeded(), "move to has not finished: " + walk.outcome());

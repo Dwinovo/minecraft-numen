@@ -192,7 +192,7 @@ public class CollectGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
-            helper.assertTrue(!collect.ranToTheEnd() && collect.receipt().contains("numen.move.to: "),
+            helper.assertTrue(!collect.ranToTheEnd() && collect.receipt().contains("numen.move.walk: "),
                     "a sweep that can reach nothing did not stop at the walk: " + collect.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,

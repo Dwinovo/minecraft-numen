@@ -47,18 +47,18 @@ public final class MoveApi {
     }
 
     /** 去哪儿、多近算到。 */
-    public record To(@Doc("Where: a Pos, a Block, an Entity (where it is now), a Cluster or Cells from a scan (any of its "
+    public record Walk(@Doc("Where: a Pos, a Block, an Entity (where it is now), a Cluster or Cells from a scan (any of its "
             + "cells), a column {x = …, z = …} or a height {y = …}.") Where where,
                      @Doc("How close counts as there, in blocks (1-" + Arrival.MAX_RANGE + ").")
                      @Omitted("stand in it; a Block, an Entity or a Cluster you can't stand in, go beside (within "
                              + Arrival.BESIDE + " blocks)") @Positional Optional<Integer> distance) {}
 
     @Fn("Go to a place by the quickest way: walk, dig and build when going around costs more, fly or glide when you can.")
-    @Example("numen.move.to({x = 120, y = 64, z = -35})")
-    @Example("numen.move.to(numen.scan.blocks(\"iron_ore\")[1].nearest)")
-    @Example("numen.move.to(creeper, 6)")
-    @Example("numen.move.to({x = 120, z = -35})")
-    @Example("numen.move.to({y = 12})")
+    @Example("numen.move.walk({x = 120, y = 64, z = -35})")
+    @Example("numen.move.walk(numen.scan.blocks(\"iron_ore\")[1].nearest)")
+    @Example("numen.move.walk(creeper, 6)")
+    @Example("numen.move.walk({x = 120, z = -35})")
+    @Example("numen.move.walk({y = 12})")
     @Note("Background work with an end: it returns when you are there or can't get further, and says how it went: where you "
             + "stand, how far you still were from where you were heading, how many blocks it broke and placed, what your "
             + "owner and the rules ruled about the cells it wanted to change. A walk that stops short fails with its "
@@ -85,7 +85,7 @@ public final class MoveApi {
     @Note("A Pos, Block or Cluster that can't be stood in, used or reached as asked, or an Entity that is gone, fails "
             + "at once with the reason and nothing starts.")
     @SeeAlso({"numen.move.away", "numen.move.follow", "numen.use.dismount", "numen.task.stop"})
-    public static Job<Walked> to(ServerCall call, To args) {
+    public static Job<Walked> walk(ServerCall call, Walk args) {
         return Job.of(new MoveToTaskRecord(call, Arrival.to(args.where(), args.distance().orElse(null))));
     }
 
@@ -97,10 +97,10 @@ public final class MoveApi {
     @Fn("Get at least a distance away from something.")
     @Example("numen.move.away(creeper, 12)")
     @Example("numen.move.away({x = 120, y = 64, z = -35}, 8)")
-    @Note("The same trip as `numen.move.to`, with the same account when it ends: it is done once you are that far from "
+    @Note("The same trip as `numen.move.walk`, with the same account when it ends: it is done once you are that far from "
             + "every cell of it, and ends there.")
     @Note("Sitting in a boat or on a mount, it fails at once and names `numen.use.dismount()`.")
-    @SeeAlso({"numen.move.to", "numen.task.stop"})
+    @SeeAlso({"numen.move.walk", "numen.task.stop"})
     public static Job<Walked> away(ServerCall call, Away args) {
         return Job.of(new MoveToTaskRecord(call, Arrival.away(args.from(), args.distance())));
     }
@@ -122,15 +122,15 @@ public final class MoveApi {
     @Example("numen.move.follow()")
     @Example("numen.move.follow(\"player@ab12cd\", {distance = 5, seconds = 30})")
     @Note("Background work with an end: it returns after seconds (default " + DEFAULT_FOLLOW_SECONDS + "), or when "
-            + "your owner stops it, with the same account of the trip as `numen.move.to`. You go quiet while already "
+            + "your owner stops it, with the same account of the trip as `numen.move.walk`. You go quiet while already "
             + "beside them.")
     @Note("Following a named entity ends if it dies or leaves the loaded area; following your owner just waits while "
             + "they are offline. When they are already out of reach as you call it, the call is refused with the "
             + "reason and nothing starts.")
-    @Note("It travels the way `numen.move.to` does: it digs, bridges or pillars to keep up when going around costs "
+    @Note("It travels the way `numen.move.walk` does: it digs, bridges or pillars to keep up when going around costs "
             + "more, within what your owner's rules allow, flies or glides when that is quicker, and says so in the "
             + "account.")
-    @SeeAlso({"numen.scan.entities", "numen.move.to", "numen.task.stop"})
+    @SeeAlso({"numen.scan.entities", "numen.move.walk", "numen.task.stop"})
     public static Job<Walked> follow(ServerCall call, Follow args) {
         int distance = Math.clamp(args.distance().orElse(DEFAULT_DISTANCE), MIN_DISTANCE, MAX_DISTANCE);
         long ticks = Math.clamp(args.seconds().orElse(DEFAULT_FOLLOW_SECONDS), 1, MAX_FOLLOW_SECONDS) * 20L;

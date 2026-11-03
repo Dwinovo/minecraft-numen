@@ -181,13 +181,13 @@ function M.smelt(furnace, item, count, opts)
 end
 
 ---Give count of item (all you carry by default) to a player or another entity: walk within 2 blocks of them
----(numen.move.to with a distance of 2) and drop it there for them to pick up.
+---(numen.move.walk with a distance of 2) and drop it there for them to pick up.
 ---@param target Entity|Pos Who gets it (an Entity from numen.scan.entities, or where they stand).
 ---@param item string
 ---@param count? integer
 ---@return integer dropped How many it dropped.
 function M.give(target, item, count)
-  numen.move.to(target.pos or target, 2)
+  numen.move.walk(target.pos or target, 2)
   if count then
     return numen.inv.drop(id(item), {count = count}).dropped
   end

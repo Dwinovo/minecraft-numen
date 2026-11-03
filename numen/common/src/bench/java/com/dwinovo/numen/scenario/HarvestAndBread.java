@@ -120,12 +120,12 @@ public final class HarvestAndBread implements Scenario {
         BlockPos hi = scene.pos(X_HI, 1, RIPE_HI);
         return """
                 local S = numen.shape
-                numen.move.to(%1$s)
+                numen.move.walk(%1$s)
                 numen.work.dig(S.cuboid(%2$s, %3$s):cells())
                 pcall(numen.work.collect)
                 numen.inv.make("bread", %4$d)
                 local plots = S.cuboid(%5$s, %6$s):cells()
-                numen.move.to(%1$s)
+                numen.move.walk(%1$s)
                 numen.gear.hold("wheat_seeds")
                 for _, plot in ipairs(plots) do
                   numen.use.block(plot)

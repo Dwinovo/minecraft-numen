@@ -414,7 +414,7 @@ public class TlmGameTests {
         succeedWhen(helper, () -> {
             String hint = task.hint();
             helper.assertTrue(task.refused() && "out_of_reach".equals(task.kind())
-                            && hint != null && hint.startsWith("numen.move.to({x = ")
+                            && hint != null && hint.startsWith("numen.move.walk({x = ")
                             && hint.endsWith("}, 2)"),
                     "far away, tlm task did not fail out of reach with the walk to copy: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");

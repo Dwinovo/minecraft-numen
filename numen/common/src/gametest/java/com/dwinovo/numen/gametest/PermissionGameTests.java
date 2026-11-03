@@ -125,7 +125,7 @@ public class PermissionGameTests {
         NumenPlayer companion = adopted(spawnBare(helper, "gametest_tenant", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
         boolean[] answered = new boolean[1];
         int[] listed = new int[1];
         int[] requests = new int[1];
@@ -183,7 +183,7 @@ public class PermissionGameTests {
         NumenPlayer companion = adopted(spawnBare(helper, "gametest_squatter", WEST_INSIDE, false), owner);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
         boolean[] answered = new boolean[1];
         int[] cards = new int[1];
 
@@ -229,7 +229,7 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_polite", new BlockPos(2, 2, 2), false), owner);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 2));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 

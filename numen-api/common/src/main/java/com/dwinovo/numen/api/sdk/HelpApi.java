@@ -17,7 +17,7 @@ public final class HelpApi {
     private HelpApi() {}
 
     /** 要谁的帮助。 */
-    public record Help(@Doc("A function as the <api> index writes it (numen.work.dig, numen.move.to), a group "
+    public record Help(@Doc("A function as the <api> index writes it (numen.work.dig, numen.move.walk), a group "
             + "(numen.work), a namespace (numen) or a module.") String name) {}
 
     @Fn("The help of a function (its signature, every argument, what it returns, examples, notes) or of a group or "

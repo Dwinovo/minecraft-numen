@@ -224,7 +224,7 @@ public class SurvivalGameTests {
                 .thenExecute(() -> helper.assertTrue(companion.tickCount - ticksAtStart[0] >= 295,
                         "alone in her dimension she stopped ticking: " + (companion.tickCount - ticksAtStart[0])
                                 + " ticks in 300"))
-                .thenExecute(() -> walk[0] = lua(companion, "return numen.move.to(" + xyz(
+                .thenExecute(() -> walk[0] = lua(companion, "return numen.move.walk(" + xyz(
                         new BlockPos(floor.getX() + 5, floor.getY() + 1, floor.getZ())) + ")"))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(walk[0].done() && walk[0].succeeded(), "her own walk did not finish: " + walk[0].outcome());

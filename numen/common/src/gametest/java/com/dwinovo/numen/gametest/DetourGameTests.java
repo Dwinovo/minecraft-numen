@@ -30,7 +30,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 绕路的代价,从入口量(套件 {@code numen_detour},只用 {@code -Pgametest=numen_detour} 手动选跑,不在日常批里):{@code numen.move.to}
+ * 绕路的代价,从入口量(套件 {@code numen_detour},只用 {@code -Pgametest=numen_detour} 手动选跑,不在日常批里):{@code numen.move.walk}
  * 走一趟,每一次搜索交出的结论(停因、展开数、离目标最近处被拒的原因)一段一段记进日志({@code [detour-probe]} 开头的行),
  * 收场时再记一行总账和模型读到的回执。每段两个比值,分母都是第一段起点的估价(还没抬高过,就是直线估价):
  * <ul>
@@ -136,7 +136,7 @@ public class DetourGameTests {
         }
     }
 
-    /** 她:钻石镐(挖一路不坏)、一百二十八块圆石(垫路料),dig 和 place 都许(出厂的 {@code numen.move.to} 就是),在 rel 那一格。 */
+    /** 她:钻石镐(挖一路不坏)、一百二十八块圆石(垫路料),dig 和 place 都许(出厂的 {@code numen.move.walk} 就是),在 rel 那一格。 */
     private static NumenPlayer miner(GameTestHelper helper, String name, BlockPos rel, boolean stocked, int efficiency) {
         NumenPlayer her = spawnAt(helper, name, rel, false);
         if (stocked) {
@@ -243,11 +243,11 @@ public class DetourGameTests {
 
     // ==================== 量 ====================
 
-    /** 从入口 {@code numen.move.to} 开走,每刻看一眼段状态机,收场时记总账。 */
+    /** 从入口 {@code numen.move.walk} 开走,每刻看一眼段状态机,收场时记总账。 */
     private static void probe(GameTestHelper helper, String label, NumenPlayer her, BlockPos target, boolean mustArrive) {
         BlockPos origin = helper.absolutePos(BlockPos.ZERO);
         Probe probe = new Probe(label, her, origin);
-        ToolRun walk = lua(her, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(her, "return numen.move.walk(" + xyz(target) + ")");
         probe.walk = walk;
         helper.onEachTick(probe::sample);
         succeedWhen(helper, () -> {

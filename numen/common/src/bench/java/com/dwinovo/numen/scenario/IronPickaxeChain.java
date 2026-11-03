@@ -114,7 +114,7 @@ public final class IronPickaxeChain implements Scenario {
                 numen.work.mine(numen.scan.blocks("coal_ore", {radius = 16})[1])
                 numen.work.mine(numen.scan.blocks("iron_ore", {radius = 16})[1])
                 numen.inv.make("furnace")
-                numen.move.to(%3$s)
+                numen.move.walk(%3$s)
                 numen.build.place({{name = "furnace", pos = %4$s}})
                 numen.inv.smelt(%4$s, "raw_iron", 3)
                 numen.inv.make("iron_pickaxe")""".formatted(Positions.literal(stoneLo), Positions.literal(stoneHi),

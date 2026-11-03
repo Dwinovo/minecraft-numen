@@ -109,13 +109,13 @@ public final class NavText {
     }
 
     /**
-     * 这一趟不改地形走不到,改了才有路:那条路要改什么。不改地形的只有少数几件活(逃跑、追打),模型自己走的 {@code numen.move.to}
+     * 这一趟不改地形走不到,改了才有路:那条路要改什么。不改地形的只有少数几件活(逃跑、追打),模型自己走的 {@code numen.move.walk}
      * 可挖可搭;要问主人的格走到跟前才问。
      */
     private static String needsChanges(Outcome.NeedsChanges needs, String where) {
         return "found no path to target without changing terrain (" + where + "; a way exists that changes "
                 + needs.alterations() + " block(s) — " + planned(needs.changes()) + "): this job walks without "
-                + "changing terrain, `numen.move.to` takes such a way" + (needs.asks()
+                + "changing terrain, `numen.move.walk` takes such a way" + (needs.asks()
                 ? " and asks your owner when I get to each of the cells that need consent" : "");
     }
 
@@ -158,9 +158,9 @@ public final class NavText {
         return "timed out after " + seconds(workTicks) + " of walking, " + String.format("%.1f", distance)
                 + " blocks from target (now at " + here + ")" + heldUp(nearest) + "; "
                 + (checkIn
-                        ? "the walk was still going and reached the longest a single walk runs; call `numen.move.to` again to"
+                        ? "the walk was still going and reached the longest a single walk runs; call `numen.move.walk` again to"
                         + " go on from here, or pick a destination closer to the way it was taking."
-                        : "it made no progress for the last stretch; `numen.move.to` again plans from here, or go to a point"
+                        : "it made no progress for the last stretch; `numen.move.walk` again plans from here, or go to a point"
                         + " on the way first.");
     }
 
@@ -588,14 +588,14 @@ public final class NavText {
         return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
     }
 
-    /** 一句能照抄的去一处,带反引号:{@code `numen.move.to({x = 1, y = 2, z = 3})`}。 */
+    /** 一句能照抄的去一处,带反引号:{@code `numen.move.walk({x = 1, y = 2, z = 3})`}。 */
     public static String gotoCall(Place to) {
-        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.to", to) + "`";
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to) + "`";
     }
 
-    /** 一句能照抄的走到离一处不超过 {@code distance} 格:{@code `numen.move.to({x = 1, y = 2, z = 3}, 2)`}。 */
+    /** 一句能照抄的走到离一处不超过 {@code distance} 格:{@code `numen.move.walk({x = 1, y = 2, z = 3}, 2)`}。 */
     public static String gotoCall(Place to, int distance) {
-        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.to", to, distance) + "`";
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to, distance) + "`";
     }
 
     public static String name(BlockState state) {

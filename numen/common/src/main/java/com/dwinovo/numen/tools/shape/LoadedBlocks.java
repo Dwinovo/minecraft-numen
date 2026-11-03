@@ -134,6 +134,6 @@ class LoadedBlocks {
         BlockPos middle = new BlockPos(first[0] * 16 + 8, her.getY(), first[1] * 16 + 8);
         return new ApiError(ErrorKind.NOT_FOUND, "the world there is not loaded, so it cannot be read: " + where
                 + (count > chunks.size() ? " and " + (count - chunks.size()) + " more chunk(s)" : ""),
-                Call.of("numen.move.to", middle));
+                Call.of("numen.move.walk", middle));
     }
 }

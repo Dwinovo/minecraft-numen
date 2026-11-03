@@ -88,7 +88,7 @@ public final class UseApi {
     @Note("With sneak = true and something in hand, a right click skips what the aimed block itself does: a block "
             + "goes onto a chest instead of opening it.")
     @Note("Out of working reach (~4.5 blocks) of the aim point, it first walks to where one of its faces is in sight and in "
-            + "reach, then clicks; the walk digs and builds its own way like `numen.move.to` and is told in the result. "
+            + "reach, then clicks; the walk digs and builds its own way like `numen.move.walk` and is told in the result. "
             + "A walk that can't get there fails with its reason and nothing is clicked.")
     @Note("It is a bare key press: whatever you hold is what is used, and the block the crosshair lands on is the one "
             + "clicked — if something else is in the way (tall grass in front of a chest, a leaf), that is what gets "
@@ -139,7 +139,7 @@ public final class UseApi {
     @Example("numen.use.entity(\"armor_stand@3f9a1c\", {item = \"minecraft:iron_helmet\", at = \"head\"})")
     @Note("An entity farther than your reach, or behind a wall, is walked up to first, then clicked; the walk is told in "
             + "the result and a walk that can't get there fails with its reason.")
-    @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.to` sails a boat "
+    @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.walk` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
     @Note("An armor stand takes its gear by where you click (`at`), like a real client's click on that spot: the click on the "
             + "spot goes first, a plain click after it. Minecraft decides what fits where; the result lists what changed on the "
@@ -199,9 +199,9 @@ public final class UseApi {
     @Example("numen.use.sleep()")
     @Example("numen.use.sleep({at = {x = 120, y = 64, z = -35}})")
     @Note("It does NOT travel: find a bed with `numen.scan.blocks(\"#minecraft:beds\")` (that one tag covers every "
-            + "colour), `numen.move.to({x = 120, y = 64, z = -35}, 2)` with its coordinates, then call this.")
+            + "colour), `numen.move.walk({x = 120, y = 64, z = -35}, 2)` with its coordinates, then call this.")
     @Note("Succeeds only when the server confirms you are sleeping; otherwise it hands back Minecraft's own reason. "
-            + "\"Only at night\" means wait (`numen.task.timer`), not retry; \"too far away\" means numen.move.to.")
+            + "\"Only at night\" means wait (`numen.task.timer`), not retry; \"too far away\" means numen.move.walk.")
     @Note("Returns the moment you lie down; night passes on its own.")
     @SeeAlso("numen.task.timer")
     public static SleepOps.Slept sleep(ServerCall call, Sleep args) {
@@ -263,9 +263,9 @@ public final class UseApi {
     @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
             + "(`numen.gear.wear(\"minecraft:elytra\")`); otherwise it fails and says which is missing.")
     @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you the way you look.")
-    @Note("To get somewhere, `numen.move.to` glides on its own when the trip is quicker by air: it takes off, steers, "
+    @Note("To get somewhere, `numen.move.walk` glides on its own when the trip is quicker by air: it takes off, steers, "
             + "fires the rockets and lands. This opens the wings and leaves the rest to you.")
-    @SeeAlso({"numen.move.to", "numen.gear.wear", "numen.use.item"})
+    @SeeAlso({"numen.move.walk", "numen.gear.wear", "numen.use.item"})
     public static Glided glide(ServerCall call) {
         NumenPlayer her = call.her();
         if (!her.controls().unfurl(her)) {
