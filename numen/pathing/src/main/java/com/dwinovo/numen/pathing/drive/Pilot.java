@@ -192,9 +192,11 @@ final class Pilot {
             }
             m = step.motion();
             dropped = step.fall();
+            if (step.hurt() > 0) {
+                return Double.NEGATIVE_INFINITY;
+            }
             if (step.touched()) {
-                // 按原版的坠落规则推算,这一落会伤身的,不要
-                return step.hurt() > 0 ? Double.NEGATIVE_INFINITY : score(m, way, s, action, 0, true);
+                return score(m, way, s, action, 0, true);
             }
         }
         boolean landing = down != null && m.pos().y >= down.y && Math.hypot(m.pos().x - down.x, m.pos().z - down.z) < DESCEND;
@@ -224,6 +226,8 @@ final class Pilot {
 
     /** 离降落点那一圈再往外这么近以内,算在落地的范围里。 */
     private static final double APPROACH_RANGE = 25.0;
+    /** 带着会伤身的坠落距离,离降落点的地面不到这么高(格),拉平来不及了:从每刻 -0.8 拉回 -0.5 之上,转头加上升力,身体还要往下掉两三格。 */
+    private static final double RECOVER = 5.0;
 
     /** 往后滑的结果:滑到头的状态、颈部,是不是落了地,滑到头时的坠落距离,和落地要伤几点血(没落地为 0)。 */
     private record Tail(Motion end, Neck neck, boolean touched, double fall, double hurt) {}
@@ -233,10 +237,14 @@ final class Pilot {
         static final Supply NONE = new Supply(0, 0);
     }
 
-    /** 一刻的结果:身体的新状态,有没有落到降落点的地面上,这一刻攒下的坠落距离,和落地要伤几点血(没落地为 0)。 */
+    /** 一刻的结果:身体的新状态,有没有落到降落点的地面上,这一刻攒下的坠落距离,和这一刻让身体落进的险境(0 为没有,见 {@link #advance})。 */
     private record Step(Motion motion, boolean touched, double fall, double hurt) {}
 
-    /** 走一刻,{@code fall} 是这一刻开始时身体的坠落距离:坠落距离照原版的顺序推({@link Dynamics#settle} 先压,落地按压过的算伤害,没落地才往上攒)。 */
+    /**
+     * 走一刻,{@code fall} 是这一刻开始时身体的坠落距离:坠落距离照原版的顺序推({@link Dynamics#settle} 先压,落地按压过的算伤害,没落地才往上攒)。
+     * 险境({@code hurt} 大于 0):落到降落点的地面上、按原版会伤身(伤几点血);或者没落地,但在降落点附近离地不到 {@link #RECOVER} 格,
+     * 这一刻飞完竖直速度还没拉回每刻 -0.5 之上、带着的坠落距离压不掉,下一刻落下去就会伤身——拉回来的这几刻身体还要往下掉,到地面再拉就来不及了。
+     */
     private Step advance(Motion m, Neck n, Keys keys, Vec3 down, double fall) {
         Motion next = physics.step(m, keys.facing(n.yaw(), n.pitch()));
         double settled = physics.settle(fall, m);
@@ -246,7 +254,9 @@ final class Pilot {
             Vec3 on = new Vec3(next.pos().x, down.y, next.pos().z);
             return new Step(new Motion(on.add(next.velocity().x * SLIDE, 0, next.velocity().z * SLIDE), Vec3.ZERO), true, 0, physics.hurt(settled));
         }
-        return new Step(next, false, physics.accrue(settled, m, next), 0);
+        double accrued = physics.accrue(settled, m, next);
+        boolean low = down != null && next.pos().y - down.y < RECOVER && nearTouchdown(next, down);
+        return new Step(next, false, accrued, low ? physics.hurt(physics.settle(accrued, next)) : 0);
     }
 
     /** 从 {@code m} 起一直按 {@code doing} 往后滑到停住或推演够长;沿途碰了方块为 null。 */
@@ -271,9 +281,9 @@ final class Pilot {
             }
             m = step.motion();
             fall = step.fall();
-            if (step.touched()) {
-                touched = true;
-                hurt = step.hurt();
+            hurt = step.hurt();
+            if (step.touched() || hurt > 0) {
+                touched = step.touched();
                 break;
             }
         }

@@ -58,4 +58,20 @@ class PilotTest {
         assertNotNull(pick);
         assertNotNull(pilot.blocker());
     }
+
+    /**
+     * 滑翔带着会伤身的坠落距离(竖直速度每刻 -0.8,已攒了四格)飞到降落点附近、离地七格半:不接着俯冲,拉平——
+     * 竖直速度要拉回每刻 -0.5 之上坠落距离才清零,等到离地不到五格再拉,拉回来的这几刻身体还要往下掉。
+     */
+    @Test
+    void aGliderCarryingAHurtingFallPullsUpBeforeItIsTooCloseToTheGround() {
+        Pilot pilot = new Pilot(Dynamics.gliding(0.08, 10, 3), (a, b) -> null, EYE);
+        Vec3 down = new Vec3(0, 0, 60);
+        Airway way = Airway.through(List.of(new Vec3(0, 7.5, 0), down), down).withZone(12);
+        pilot.fallen(4.0);
+        Motion now = new Motion(new Vec3(0, 7.5, 25), new Vec3(0, -0.8, 1.5));
+        Action pick = pilot.choose(now, Neck.at(0, 28), way, 25, false, new Supply(0, 0));
+        assertNotNull(pick);
+        assertTrue(pick.pitch() < 0, "该拉平,却挑了俯仰 " + pick.pitch());
+    }
 }
