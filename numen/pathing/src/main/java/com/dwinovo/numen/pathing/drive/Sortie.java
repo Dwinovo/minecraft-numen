@@ -84,7 +84,7 @@ final class Sortie implements Segment {
         this.rig = rig;
         this.plan = plan;
         this.way = plan.way();
-        this.helm = new Helm(rig, Dynamics.gliding(rig.entity.getGravity(), rig.snapshot().mobility().rocketBurn()));
+        this.helm = new Helm(rig, Dynamics.gliding(rig.entity.getGravity(), rig.snapshot().mobility().rocketBurn(), rig.snapshot().safeFallDistance()));
         this.wearBefore = rig.entity.getItemBySlot(EquipmentSlot.CHEST).getDamageValue();
         this.healthBefore = rig.entity.getHealth();
         this.launchedAt = rig.entity.position();

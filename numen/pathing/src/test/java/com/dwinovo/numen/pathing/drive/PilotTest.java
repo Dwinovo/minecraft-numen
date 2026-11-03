@@ -52,7 +52,7 @@ class PilotTest {
     /** 滑翔挡在整个前方(哪个方向都撞)时不放弃:还是交出一组(撞上之前飞得最久的),并说得出撞的是哪一格。 */
     @Test
     void aGliderBoxedInStillPicksTheLongestFlight() {
-        Pilot pilot = new Pilot(Dynamics.gliding(0.08, 10), wallAt(20), EYE);
+        Pilot pilot = new Pilot(Dynamics.gliding(0.08, 10, 3), wallAt(20), EYE);
         Motion now = new Motion(new Vec3(0, 10, 10), new Vec3(0, 0, 1.5));
         Action pick = pilot.choose(now, Neck.at(0, 0), line(), 10, false, new Supply(3, 0));
         assertNotNull(pick);

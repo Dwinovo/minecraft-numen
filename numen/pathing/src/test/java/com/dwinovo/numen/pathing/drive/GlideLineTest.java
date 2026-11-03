@@ -32,7 +32,7 @@ class GlideLineTest {
         Vec3 base = new Vec3(0.5, 0, 0.5);
         Vec3 top = new Vec3(0.5, rise, 0.5);
         Airway way = Airway.through(List.of(base, top, new Vec3(0.5, rise, 120.5)), new Vec3(0.5, 0, 160.5)).withClimb(rise);
-        Dynamics glide = Dynamics.gliding(GRAVITY, BURN);
+        Dynamics glide = Dynamics.gliding(GRAVITY, BURN, 3);
         Pilot pilot = new Pilot(glide, (a, b) -> null, EYE);
         Motion m = new Motion(base.add(0, 1.3, 0), Vec3.ZERO);
         Neck neck = Neck.at(0, Glide.TAKEOFF_PITCH);
@@ -76,7 +76,6 @@ class GlideLineTest {
             assertTrue(spiral.get(i).y <= spiral.get(i - 1).y + 1e-9, "只往下沉");
             assertEquals(14.0, Math.hypot(spiral.get(i).x - touchdown.x, spiral.get(i).z - touchdown.z), 1e-6);
         }
-        double lastGlide = (spiral.get(spiral.size() - 2).y - touchdown.y) * Glide.GLIDE_RATIO;
-        assertTrue(lastGlide >= 14 - Glide.TOLERANCE && lastGlide <= 14 + Glide.TOLERANCE, "从圈上最后一点按滑翔比滑,落在降落点那一圈里:" + lastGlide);
+        assertTrue((spiral.get(spiral.size() - 2).y - touchdown.y) * Glide.GLIDE_RATIO >= 14, "最后一段朝降落点放得下滑翔比");
     }
 }

@@ -59,8 +59,17 @@ interface Dynamics {
     /** 这一组候选本身的代价(弧长的格数):滑翔里放一支烟花是花钱的。 */
     double cost(Action action);
 
-    /** 以 {@code state} 这样落到地面伤身的扣分(弧长的格数,不伤为 0):原版滑翔里竖直速度高于每刻 -0.5 时坠落距离每刻重置,不掉血,再快就掉。 */
-    double impact(Motion state);
+    /**
+     * 这一刻开始时的坠落距离(原版 {@code Entity.checkSlowFallDistance}):滑翔里竖直速度高于每刻 {@link #SLOW_FALL} 时坠落距离压回 1,再快就接着攒。
+     * 不会摔的方式(创造飞行)恒为 0。{@code before} 是这一刻开始时的状态。
+     */
+    double settle(double fall, Motion before);
+
+    /** 这一刻飞完攒下的坠落距离(原版 {@code Entity.checkFallDamage}):在空中往下落了多少攒多少;落到地面的那一刻不攒,按落地前的算伤害。 */
+    double accrue(double fall, Motion before, Motion after);
+
+    /** 以 {@code fall} 这样的坠落距离落到地面,伤几点血(原版 {@code LivingEntity.calculateFallDamage}:坠落距离减安全摔落高度,向上取整);不伤为 0。 */
+    double hurt(double fall);
 
     /** 每换一个键扣多少分(弧长的格数)。 */
     double KEY_CHANGE = 0.1;
@@ -172,7 +181,17 @@ interface Dynamics {
             }
 
             @Override
-            public double impact(Motion state) {
+            public double settle(double fall, Motion before) {
+                return 0;
+            }
+
+            @Override
+            public double accrue(double fall, Motion before, Motion after) {
+                return 0;
+            }
+
+            @Override
+            public double hurt(double fall) {
                 return 0;
             }
         };
@@ -184,8 +203,9 @@ interface Dynamics {
      *
      * @param gravity 身体的重力
      * @param burn    一支烟花保底推多少刻
+     * @param safeFall 安全摔落高度(属性 {@code safe_fall_distance},原版 3):坠落距离不超过它落地不掉血
      */
-    static Dynamics gliding(double gravity, int burn) {
+    static Dynamics gliding(double gravity, int burn, double safeFall) {
         return new Dynamics() {
             private final float[] pitches = {COLUMN_PITCH, -45, -25, -8, 10, 35};
             private final float[] yaws = {0, -25, 25, -50, 50};
@@ -266,8 +286,18 @@ interface Dynamics {
             }
 
             @Override
-            public double impact(Motion state) {
-                return Math.max(0, SOFT_LANDING - state.velocity().y) * IMPACT_COST;
+            public double settle(double fall, Motion before) {
+                return before.velocity().y > SLOW_FALL && fall > 1 ? 1 : fall;
+            }
+
+            @Override
+            public double accrue(double fall, Motion before, Motion after) {
+                return fall + Math.max(0, before.pos().y - after.pos().y);
+            }
+
+            @Override
+            public double hurt(double fall) {
+                return Math.max(0, Math.ceil(fall - safeFall));
             }
         };
     }
@@ -276,8 +306,6 @@ interface Dynamics {
     float COLUMN_PITCH = -90.0F;
     /** 拉起时的目标俯仰。 */
     float PULL_UP = -35.0F;
-    /** 落地时竖直速度每比 {@link #SOFT_LANDING} 快一格每刻,扣多少分。 */
-    double IMPACT_COST = 3000.0;
     /** 落地时竖直速度高于它,原版滑翔里坠落距离每刻重置,不掉血。 */
-    double SOFT_LANDING = -0.5;
+    double SLOW_FALL = -0.5;
 }

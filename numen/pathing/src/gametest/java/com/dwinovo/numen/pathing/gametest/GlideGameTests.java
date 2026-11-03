@@ -275,7 +275,7 @@ public class GlideGameTests {
      * 抬不过去就在墙前迫降、落地时离目标还远烟花还够就再起飞;不撞上去(不掉血),到了目标。
      */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800, skyAccess = true)
-    public static void a_wall_that_appears_ahead_is_vetoed_by_the_rehearsal(GameTestHelper helper) {
+    public static void a_wall_that_appears_ahead_is_flown_over(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         int[] flying = {0};

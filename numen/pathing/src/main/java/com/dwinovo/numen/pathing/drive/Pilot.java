@@ -59,13 +59,18 @@ final class Pilot {
     private BlockPos blocker;
     /** 这一次在跟的线的降落点那一圈({@link Airway#zone})。 */
     private double zone = Airway.SPOT;
-    /** 这一次推演里落到地面时的伤害扣分({@link Dynamics#impact})。 */
-    private double impact;
+    /** 身体此刻的坠落距离(原版 {@code fallDistance}):推演从它起接着攒({@link Dynamics#accrue})。每刻挑之前由操舵告诉控制器。 */
+    private double fall;
 
     Pilot(Dynamics physics, Airway.Sweep sweep, double eye) {
         this.physics = physics;
         this.sweep = sweep;
         this.eye = eye;
+    }
+
+    /** 身体此刻的坠落距离。 */
+    void fallen(double fall) {
+        this.fall = fall;
     }
 
     /** 换了一段路线或收场:正在按的忘掉。 */
@@ -153,7 +158,7 @@ final class Pilot {
             int t = 0;
             for (; t < physics.horizon(); t++) {
                 n = n.toward(action.yaw(), action.pitch());
-                Step step = advance(m, n, action.keys().burning(burning-- > 0), way.touchdown());
+                Step step = advance(m, n, action.keys().burning(burning-- > 0), way.touchdown(), 0);
                 if (sweepBlocked(m.pos(), step.motion().pos())) {
                     break;
                 }
@@ -176,32 +181,37 @@ final class Pilot {
         Motion m = now;
         Neck n = neck;
         Vec3 down = way.touchdown();
-        impact = 0;
+        double dropped = fall;
         // 烟花:候选里放,这一刻起推 burn 刻;已经在烧的接着烧
         int burning = action.keys().rocket() ? physics.burn() : supply.burning;
         for (int t = 0; t < hold; t++) {
             n = n.toward(action.yaw(), action.pitch());
-            Step step = advance(m, n, action.keys().burning(burning-- > 0), down);
+            Step step = advance(m, n, action.keys().burning(burning-- > 0), down, dropped);
             if (step == null || sweepBlocked(m.pos(), step.motion().pos())) {
                 return Double.NEGATIVE_INFINITY;
             }
             m = step.motion();
+            dropped = step.fall();
             if (step.touched()) {
-                return score(m, way, s, action, 0, true);
+                // 按原版的坠落规则推算,这一落会伤身的,不要
+                return step.hurt() > 0 ? Double.NEGATIVE_INFINITY : score(m, way, s, action, 0, true);
             }
         }
         boolean landing = down != null && m.pos().y >= down.y && Math.hypot(m.pos().x - down.x, m.pos().z - down.z) < DESCEND;
-        Tail tail = coast(m, n, physics.coast(action, landing), down, Math.max(0, burning));
+        Tail tail = coast(m, n, physics.coast(action, landing), down, Math.max(0, burning), dropped);
         double penalty = 0;
         if (tail == null) {
-            tail = coast(m, n, physics.brake(action), down, Math.max(0, burning));
+            tail = coast(m, n, physics.brake(action), down, Math.max(0, burning), dropped);
             if (tail == null) {
                 return Double.NEGATIVE_INFINITY;
             }
             penalty = BRAKING;
         } else if (!physics.stoppable() && !tail.touched() && !nearTouchdown(tail.end(), down)
-                && coast(tail.end(), tail.neck(), physics.brake(action), down, 0) == null) {
+                && coast(tail.end(), tail.neck(), physics.brake(action), down, 0, tail.fall()) == null) {
             // 可恢复的尾巴:停不下来的(滑翔)滑到头的那一点,还得有一程拉起来是通的——否则这一组是往死胡同里钻,现在就不要
+            return Double.NEGATIVE_INFINITY;
+        }
+        if (tail.hurt() > 0) {
             return Double.NEGATIVE_INFINITY;
         }
         return score(tail.end(), way, s, action, penalty, tail.touched());
@@ -215,41 +225,44 @@ final class Pilot {
     /** 离降落点那一圈再往外这么近以内,算在落地的范围里。 */
     private static final double APPROACH_RANGE = 25.0;
 
-    /** 往后滑的结果:滑到头的状态、颈部,和是不是落了地。 */
-    private record Tail(Motion end, Neck neck, boolean touched) {}
+    /** 往后滑的结果:滑到头的状态、颈部,是不是落了地,滑到头时的坠落距离,和落地要伤几点血(没落地为 0)。 */
+    private record Tail(Motion end, Neck neck, boolean touched, double fall, double hurt) {}
 
     /** 烟花的存量:还能放几支,和正烧着的这一支还推几刻。 */
     record Supply(int rockets, int burning) {
         static final Supply NONE = new Supply(0, 0);
     }
 
-    /** 一刻的结果:身体的新状态,和这一刻有没有落到降落点的地面上。 */
-    private record Step(Motion motion, boolean touched) {}
+    /** 一刻的结果:身体的新状态,有没有落到降落点的地面上,这一刻攒下的坠落距离,和落地要伤几点血(没落地为 0)。 */
+    private record Step(Motion motion, boolean touched, double fall, double hurt) {}
 
-    private Step advance(Motion m, Neck n, Keys keys, Vec3 down) {
+    /** 走一刻,{@code fall} 是这一刻开始时身体的坠落距离:坠落距离照原版的顺序推({@link Dynamics#settle} 先压,落地按压过的算伤害,没落地才往上攒)。 */
+    private Step advance(Motion m, Neck n, Keys keys, Vec3 down, double fall) {
         Motion next = physics.step(m, keys.facing(n.yaw(), n.pitch()));
+        double settled = physics.settle(fall, m);
         if (down != null && m.pos().y >= down.y && next.pos().y < down.y
                 && Math.hypot(next.pos().x - down.x, next.pos().z - down.z) <= zone) {
-            // 落到降落点的地面上:原版落地就停飞(滑翔也一样),身体在地上再滑一小段;落得重要扣分(伤身),别无选择时伤害最小的那一组胜出
-            impact = physics.impact(next);
+            // 落到降落点的地面上:原版落地就停飞(滑翔也一样),身体在地上再滑一小段;伤身的落地由调用方否决
             Vec3 on = new Vec3(next.pos().x, down.y, next.pos().z);
-            return new Step(new Motion(on.add(next.velocity().x * SLIDE, 0, next.velocity().z * SLIDE), Vec3.ZERO), true);
+            return new Step(new Motion(on.add(next.velocity().x * SLIDE, 0, next.velocity().z * SLIDE), Vec3.ZERO), true, 0, physics.hurt(settled));
         }
-        return new Step(next, false);
+        return new Step(next, false, physics.accrue(settled, m, next), 0);
     }
 
     /** 从 {@code m} 起一直按 {@code doing} 往后滑到停住或推演够长;沿途碰了方块为 null。 */
-    private Tail coast(Motion from, Neck neck, Action doing, Vec3 down, int burning) {
+    private Tail coast(Motion from, Neck neck, Action doing, Vec3 down, int burning, double dropped) {
         Motion m = from;
         Neck n = neck;
         Vec3 mark = m.pos();
         boolean touched = false;
+        double fall = dropped;
+        double hurt = 0;
         for (int t = 0; t < physics.horizon(); t++) {
             if (physics.rests(m)) {
                 break;
             }
             n = n.toward(doing.yaw(), doing.pitch());
-            Step step = advance(m, n, physics.tail(doing, m).burning(burning-- > 0), down);
+            Step step = advance(m, n, physics.tail(doing, m).burning(burning-- > 0), down, fall);
             if (step == null || t < WATCH && sweepBlocked(m.pos(), step.motion().pos())) {
                 return null;
             }
@@ -257,12 +270,14 @@ final class Pilot {
                 mark = m.pos();
             }
             m = step.motion();
+            fall = step.fall();
             if (step.touched()) {
                 touched = true;
+                hurt = step.hurt();
                 break;
             }
         }
-        return sweepBlocked(mark, m.pos()) ? null : new Tail(m, n, touched);
+        return sweepBlocked(mark, m.pos()) ? null : new Tail(m, n, touched, fall, hurt);
     }
 
     private double score(Motion end, Airway way, double s, Action action, double penalty, boolean landed) {
@@ -270,7 +285,7 @@ final class Pilot {
             // 还在线头的爬升段里(起飞的空柱):只按柱轴算,进度是爬了多高,偏出柱轴的重扣。不然终点投到后面的平飞段上,抄近路飞出去的分数反而高;
             // 竖直爬升水平速度本来就小,也不按失速扣分
             double off = way.climbOffset(end.pos());
-            return way.climbAlong(end.pos()) - CLIMB_LATERAL * off * off - physics.cost(action) - penalty - impact;
+            return way.climbAlong(end.pos()) - CLIMB_LATERAL * off * off - physics.cost(action) - penalty;
         }
         double idle = landed ? 0 : physics.endCost(end);
         double length = way.length();
@@ -278,12 +293,12 @@ final class Pilot {
             // 收处就在眼前:滑停的点离收处那一点多远,就是全部的分——悬停与落点要停在一个点上,沿线与离线不再分开算
             // 迫降的降落点那一圈里落在哪儿都一样,只有圈外才扣分
             double off = Math.max(0, end.pos().distanceTo(way.end()) - (zone - Airway.SPOT));
-            return -NEAR_WEIGHT * off * off - physics.cost(action) - penalty - impact - idle;
+            return -NEAR_WEIGHT * off * off - physics.cost(action) - penalty - idle;
         }
         double along = way.project(end.pos(), s);
         double offset = way.offset(end.pos(), along);
         double reach = along <= length ? along : length - OVERSHOOT * (along - length);
-        return reach - LATERAL * offset * offset - physics.cost(action) - penalty - impact - idle;
+        return reach - LATERAL * offset * offset - physics.cost(action) - penalty - idle;
     }
 
     /** 松开键滑出去会撞、要靠刹车才停得住的那一组,扣多少分(弧长的格数):能选别的就别选它。 */

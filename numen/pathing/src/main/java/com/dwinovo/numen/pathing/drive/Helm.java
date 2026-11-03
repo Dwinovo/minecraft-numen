@@ -100,6 +100,7 @@ final class Helm {
         }
         int rockets = cooldown == 0 && burning == 0 ? Snapshots.mobility(body).fireworks() : 0;
         Motion now = new Motion(body.position(), body.getDeltaMovement());
+        pilot.fallen(body.fallDistance);
         Action pick = pilot.choose(now, rig.look.neck(), track, along, rig.keys.jumpWouldToggleFlight(), new Supply(rockets, burning));
         if (pick == null) {
             rig.keys.releaseAll();

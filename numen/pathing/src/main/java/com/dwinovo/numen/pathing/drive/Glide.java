@@ -508,8 +508,7 @@ final class Glide {
         List<Vec3> corners = new ArrayList<>();
         corners.add(pos);
         double y = pos.y;
-        // 圈上最后一点的高度:从这里按滑翔比直接滑,最远也落在降落点那一圈(半径 TOLERANCE)的远边里;再高就得俯冲下去,落得重
-        double finalDrop = (SPIRAL_RADIUS + TOLERANCE) / GLIDE_RATIO;
+        double finalDrop = SPIRAL_RADIUS / (GLIDE_RATIO * SPIRAL_SHARE) + 1;
         double sideDrop = 2 * Math.PI * SPIRAL_RADIUS / SPIRAL_SIDES / (GLIDE_RATIO * SPIRAL_SHARE);
         while (true) {
             corners.add(new Vec3(touchdown.x + SPIRAL_RADIUS * Math.cos(angle), y, touchdown.z + SPIRAL_RADIUS * Math.sin(angle)));
