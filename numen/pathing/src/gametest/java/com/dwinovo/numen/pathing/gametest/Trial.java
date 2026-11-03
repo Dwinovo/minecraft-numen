@@ -177,6 +177,11 @@ final class Trial {
         return go(body, NavRequest.to(goal, spec));
     }
 
+    /** 开飞:许飞的身体走创造飞行,否则穿着鞘翅滑翔(受理在开出去时问)。 */
+    Run fly(TestBody body, Goal goal, RouteSpec spec) {
+        return go(body, NavRequest.to(goal, spec).flying(null));
+    }
+
     Run go(TestBody body, NavRequest request) {
         Navigator navigator = navigator(body);
         Run run = new Run(this, body, navigator, navigator.drive(request), request.spec());
@@ -231,7 +236,7 @@ final class Trial {
 
     /** 同一个请求,这一趟总共最多展开 {@code budget} 个节点(用例要用小预算逼出"预算用完")。 */
     static NavRequest budgeted(NavRequest request, int budget) {
-        return new NavRequest(request.goal(), request.spec(), budget, request.route(), request.through());
+        return new NavRequest(request.goal(), request.spec(), budget, request.route(), request.through(), request.travel(), request.admission());
     }
 
     /** 这具身体加这条用例的端口组成的门面。 */

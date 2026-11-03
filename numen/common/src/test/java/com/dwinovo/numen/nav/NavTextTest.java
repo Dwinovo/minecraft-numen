@@ -4,10 +4,12 @@ import java.util.List;
 
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Permit;
@@ -163,12 +165,12 @@ class NavTextTest {
     @Test
     void theFlightOnTheWayIsToldWithWhereItStartedAndEnded() {
         assertEquals("I flew 31 blocks (took off at 120,65,-33; landed at 121,64,-33).", NavText.journey(List.of(), List.of(),
-                List.of(), List.of(), new NavText.Flights(30.6, List.of(A.above()), List.of(C), false, List.of(), null)));
+                List.of(), List.of(), new NavText.Flights(30.6, List.of(A.above()), List.of(C), false, List.of(), List.of())));
         assertEquals("I flew 12 blocks (took off at 120,65,-33). I am still flying, hovering in the air.", NavText.journey(List.of(),
-                List.of(), List.of(), List.of(), new NavText.Flights(12.2, List.of(A.above()), List.of(), true, List.of(), null)));
+                List.of(), List.of(), List.of(), new NavText.Flights(12.2, List.of(A.above()), List.of(), true, List.of(), List.of())));
         assertEquals("I am still flying, hovering in the air.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
-                new NavText.Flights(0, List.of(), List.of(), true, List.of(), null)), "起飞前就在飞、一格没飞也要说还在飞");
-        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false, List.of(), null)));
+                new NavText.Flights(0, List.of(), List.of(), true, List.of(), List.of())), "起飞前就在飞、一格没飞也要说还在飞");
+        assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), new NavText.Flights(0.2, List.of(), List.of(), false, List.of(), List.of())));
     }
 
     /** 鞘翅滑翔的细账:烟花用了几支(计划几支)、鞘翅耐久前后、掉血、迫降、还在空中。 */
@@ -177,24 +179,32 @@ class NavTextTest {
         EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, 4, 90);
         assertEquals("I flew 109 blocks (took off at 120,65,-33; landed at 121,64,-33). Gliding used 2 firework rockets (planned about 4)"
                 + " and wore the elytra from 0 to 3 damage; I lost no health.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
-                new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed), null)));
+                new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed), List.of())));
         EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true, 4, 90);
         assertEquals("Gliding used 1 firework rocket (planned about 4) and wore the elytra from 3 to 4 damage; I lost 3 health and had to"
                 + " land early where the ground was within reach. I am still in the air.", NavText.glide(forced));
     }
 
-    /** 远途里走过去而没有飞:一句事实,加上有什么就能飞;飞过了就不说。 */
+    /** 飞不起来:缺什么、怎么补,各说各的;缺的是身上的东西归"缺料",别的归"没路"。 */
     @Test
-    void aLongWalkSaysWhyItDidNotGlide() {
-        EditLedger.Grounded noElytra = new EditLedger.Grounded(EditLedger.Why.NO_ELYTRA, 0, 0);
-        assertEquals("I walked instead of gliding: I am not wearing a usable elytra. With an elytra on my chest and firework rockets in my pack"
-                + " I can glide long distances.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
-                new NavText.Flights(0, List.of(), List.of(), false, List.of(), noElytra)));
-        assertEquals("I walked instead of gliding: gliding part of the way needs about 5 firework rockets and I have 1.",
-                NavText.grounded(new EditLedger.Grounded(EditLedger.Why.TOO_FEW_ROCKETS, 5, 1)));
-        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, 4, 90);
-        assertTrue(!NavText.journey(List.of(), List.of(), List.of(), List.of(),
-                new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed), noElytra)).contains("walked instead"));
+    void aFlightThatCannotStartSaysWhatIsMissingAndHowToGetIt() {
+        Lack few = new Lack(Lack.Why.TOO_FEW_ROCKETS, 5, 1);
+        assertEquals("I have 1 firework rocket and taking off needs at least 5, and there is no ledge near me to glide down from: bring more"
+                + " rockets, stand on a ledge, or go on foot with `numen.move.walk`", NavText.lack(few));
+        assertTrue(NavText.lack(new Lack(Lack.Why.NO_WINGS, 0, 0)).contains("`numen.gear.wear`"));
+        assertTrue(NavText.lack(new Lack(Lack.Why.NO_TAKEOFF, 24, 0)).contains("within 24 blocks"));
+        assertEquals(FailureType.NO_MATERIAL, NavText.type(few));
+        assertEquals(FailureType.NO_PATH, NavText.type(new Lack(Lack.Why.NO_LANDING, 24, 0)));
+        assertEquals("stopped flying from 120, 64, -33 toward 121, 64, -33, about 1 blocks away: " + NavText.lack(few),
+                NavText.failure(new Outcome.Grounded(few), null, A, C, RouteSpec.defaults(), List.of()));
+    }
+
+    /** 走路开始时身体在飞:回执说先落了地。 */
+    @Test
+    void aWalkThatBeganInTheAirSaysItCameDownFirst() {
+        assertEquals("I was flying when the walk began, so I came down to the ground first (at 121,64,-33).",
+                NavText.journey(List.of(), List.of(), List.of(), List.of(),
+                        new NavText.Flights(0, List.of(), List.of(C), false, List.of(), List.of(C))));
     }
 
     /** 憋不住气的结局:说出那一段水下在哪、要憋多久、此刻能安全憋多久,以及换成有水下呼吸就走得了;归到危险一类。 */
@@ -252,11 +262,11 @@ class NavTextTest {
     @Test
     void aWalkThatRanOutOfTimeSaysHowLongHowFarAndWhatBlockedTheNearestApproach() {
         Blockage nearest = new Blockage(B, Blocks.STONE.defaultBlockState(), MoveKind.PILLAR, Reason.WOULD_COLLAPSE, null);
-        String checkIn = NavText.timedOut(6000, 20.7, "1,2,3", nearest, true);
+        String checkIn = NavText.timedOut(Travel.WALK, "numen.move.walk", 6000, 20.7, "1,2,3", nearest, true);
         assertTrue(checkIn.startsWith("timed out after 300 s of walking, 20.7 blocks from target (now at 1,2,3)")
                 && checkIn.contains("nearest to the target, pillaring up at 120,65,-33 (stone) was ruled out: ")
                 && checkIn.contains("call `numen.move.walk` again") && !checkIn.contains("progress had stopped"), checkIn);
-        String stalled = NavText.timedOut(900, 5, "1,2,3", null, false);
+        String stalled = NavText.timedOut(Travel.WALK, "numen.move.walk", 900, 5, "1,2,3", null, false);
         assertTrue(stalled.contains("made no progress") && !stalled.contains("nearest to the target"), stalled);
     }
 }

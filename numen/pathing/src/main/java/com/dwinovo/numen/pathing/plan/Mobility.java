@@ -18,6 +18,11 @@ public record Mobility(boolean mayFly, boolean flying, float flyingSpeed, int gl
     /** 只会走、游、挖、搭:没有飞行能力,没有滑翔物,没有烟花。 */
     public static final Mobility WALKER = new Mobility(false, false, VANILLA_FLYING_SPEED, 0, 0, 0);
 
+    /** 同一具身体这一趟只走:不许飞、不在飞(滑翔物与烟花是身上的东西,照旧)。走的那一趟读它,创造飞行的走法与起点的飞行站姿都不出现。 */
+    public Mobility afoot() {
+        return new Mobility(false, false, flyingSpeed, gliderLife, fireworks, rocketBurn);
+    }
+
     /** 有可用的滑翔物。 */
     public boolean canGlide() {
         return gliderLife > 0;

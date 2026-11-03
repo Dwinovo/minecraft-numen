@@ -38,8 +38,13 @@ final class Airway {
     private final Vec3 touchdown;
     /** 降落点这一圈(水平半径,格):圈里把地面当成降落点那一格的高度,脚落到它就算落地。迫降时地面只知道一点,圈大一些。 */
     private final double zone;
+    /**
+     * 线头这一段(起飞后的爬升)的弧长:排线时局部控制器在活世界里把它飞通了(躲得开沿途的方块),飞着往前查线通不通({@code Helm#blocked})从这之后起查,
+     * 理想的直线爬升线不是控制器真会飞的轨迹。没有爬升段为 0。
+     */
+    private final double climb;
 
-    private Airway(List<Vec3> points, Vec3 touchdown, double zone) {
+    private Airway(List<Vec3> points, Vec3 touchdown, double zone, double climb) {
         this.points = points.toArray(Vec3[]::new);
         this.arc = new double[this.points.length];
         for (int i = 1; i < this.points.length; i++) {
@@ -47,16 +52,27 @@ final class Airway {
         }
         this.touchdown = touchdown;
         this.zone = zone;
+        this.climb = climb;
     }
 
     /** 直接用这几个点,不拉直。{@code touchdown} 是降落点(脚落在地面上的位置),没有为 null。 */
     static Airway through(List<Vec3> points, Vec3 touchdown) {
-        return new Airway(points, touchdown, SPOT);
+        return new Airway(points, touchdown, SPOT, 0);
     }
 
     /** 同样的点,降落点那一圈换成 {@code zone} 格(迫降用)。 */
     Airway withZone(double zone) {
-        return new Airway(List.of(points), touchdown, zone);
+        return new Airway(List.of(points), touchdown, zone, climb);
+    }
+
+    /** 同样的点,线头 {@code arc} 格是模拟里飞通了的爬升段。 */
+    Airway withClimb(double arc) {
+        return new Airway(List.of(points), touchdown, zone, arc);
+    }
+
+    /** 线头的爬升段有多长(弧长)。 */
+    double climb() {
+        return climb;
     }
 
     /**
@@ -72,7 +88,7 @@ final class Airway {
             double angle = start + 2 * Math.PI * i / sides;
             out.add(new Vec3(center.x + radius * Math.cos(angle), y, center.z + radius * Math.sin(angle)));
         }
-        return new Airway(out, null, SPOT);
+        return new Airway(out, null, SPOT, 0);
     }
 
     /** 盘旋的一圈用几条边。 */
@@ -82,7 +98,7 @@ final class Airway {
 
     /** 停在一点上(悬停):只有一个点的折线。 */
     static Airway at(Vec3 point) {
-        return new Airway(List.of(point), null, SPOT);
+        return new Airway(List.of(point), null, SPOT, 0);
     }
 
     /**
@@ -102,7 +118,7 @@ final class Airway {
             kept.add(raw.get(j));
             i = j;
         }
-        return new Airway(kept, touchdown, SPOT);
+        return new Airway(kept, touchdown, SPOT, 0);
     }
 
     /**

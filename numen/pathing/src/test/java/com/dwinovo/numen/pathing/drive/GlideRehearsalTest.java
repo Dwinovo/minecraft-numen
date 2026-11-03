@@ -4,7 +4,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import com.dwinovo.numen.api.entity.Look;
+import com.dwinovo.numen.api.entity.Neck;
 import com.dwinovo.numen.pathing.plan.Mobility;
+import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.world.phys.Vec3;
 
@@ -30,14 +33,21 @@ class GlideRehearsalTest {
         return Airway.through(List.of(p0, p1, p2, touchdown), touchdown);
     }
 
-    private static Mobility mobility(int rockets) {
-        return new Mobility(false, false, Mobility.VANILLA_FLYING_SPEED, 400, rockets, 10);
+    private static final Mobility MOBILITY = new Mobility(false, false, Mobility.VANILLA_FLYING_SPEED, 400, 8, 10);
+    private static final int LIMIT = 1200;
+
+    /** 从起飞点起跳之后的空中(高 1.3 格、静止、抬头爬升)起,最多放 {@code rockets} 支烟花,飞到 {@code stopAt} 高度(NaN 是一直飞到落地)。 */
+    private static Glide.Result fly(Airway way, int rockets, double stopAt) {
+        Vec3 start = way.start();
+        Vec3 aim = way.at(Math.min(way.length(), 8));
+        return Glide.fly(way, GRAVITY, MOBILITY, EYE, new Motion(start.add(0, 1.3, 0), Vec3.ZERO),
+                Neck.at(Look.yawOf(aim.x - start.x, aim.z - start.z), Glide.CLIMB_PITCH), rockets, stopAt, LIMIT, (a, b) -> null);
     }
 
     /** 一百一十五格的线:有烟花,飞得到降落点,用不了很多支,耗时远低于走路(疾跑一格不到四刻)。 */
     @Test
     void aLongLineIsFlownToTheTouchdownWithFewRockets() {
-        Glide.Result result = Glide.rehearse(line(115), GRAVITY, mobility(8), EYE);
+        Glide.Result result = fly(line(115), 8, Double.NaN);
         assertNotNull(result);
         assertTrue(result.rockets() >= 1 && result.rockets() <= 6, "烟花 " + result.rockets());
         assertTrue(result.ticks() < 115 * 3.5, "耗时 " + result.ticks());
@@ -47,16 +57,29 @@ class GlideRehearsalTest {
     /** 一支烟花也没有:从地面起跳爬不到巡航高度,演练不成。 */
     @Test
     void withoutRocketsTheClimbCannotBeFlown() {
-        assertNull(Glide.rehearse(line(115), GRAVITY, mobility(0), EYE));
+        assertNull(fly(line(115), 0, Double.NaN));
     }
 
     /** 三百五十格的线(远途):演练飞得完,烟花按比例多用,耗时仍远低于走路。 */
     @Test
     void aFarLineIsStillFlownWithinTheRehearsalBudget() {
-        Glide.Result result = Glide.rehearse(line(350), GRAVITY, mobility(16), EYE);
+        Glide.Result result = fly(line(350), 16, Double.NaN);
         assertNotNull(result);
         assertTrue(result.ticks() < 350 * 3.5, "耗时 " + result.ticks());
         assertEquals(350.5, result.landedAt().z, 6.0);
+    }
+
+    /** 只飞线的头一段(爬升):走到那个弧长就停,轨迹随结果交出——从起跳的空中一路往上。 */
+    @Test
+    void theClimbLegIsFlownAloneAndItsTrajectoryHandedOver() {
+        Airway way = line(115);
+        double leg = Math.hypot(10, 10);
+        Glide.Result climb = fly(way, 8, leg);
+        assertNotNull(climb);
+        assertEquals(1.3, climb.path().get(0).y, 1e-9);
+        assertTrue(climb.landedAt().y > 3, "爬了 " + climb.landedAt());
+        assertTrue(climb.ticks() < 200, "爬升 " + climb.ticks() + " 刻");
+        assertTrue(climb.path().size() == climb.ticks() + 1, "每刻一点");
     }
 
     /** 往降落点去的线:富余的高度够长就先平飞、到按滑翔比下滑的那一点再下滑;高得下不去就绕着降落点盘旋着沉。 */

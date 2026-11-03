@@ -4,15 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.api.Snapshots;
-import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls.Key;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Maneuver;
-import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.plan.TerrainPolicy;
-import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Origin;
 import com.dwinovo.numen.pathing.search.Route;
@@ -98,17 +94,13 @@ public final class Driver implements Segment {
     private boolean moving = true;
 
     /**
+     * 一趟行程的一段:家伙({@link Rig},账、日志)由行程交进来,几段共用。
+     *
      * @param budget 这一趟总共最多展开几个节点;0 是按起点到终点的估价定({@link Allowance})
      * @param seed    先照这条路走(调用方给的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
      * @param passing 路过这个目标:走进去就算到了,不停稳
      * @param clock   搜索看的表(宿主的端口):只定每次想多久
      */
-    public Driver(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
-                  RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
-        this(new Rig(body, terrain, materials, threats), goal, spec, budget, seed, passing, clock);
-    }
-
-    /** 一趟行程的一段:家伙({@link Rig},账、日志)由行程交进来,几段共用。 */
     Driver(Rig rig, Goal goal, RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
         this.rig = rig;
         this.spec = spec;

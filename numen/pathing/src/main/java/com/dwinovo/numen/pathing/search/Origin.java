@@ -54,4 +54,18 @@ public final class Origin {
         }
         return Optional.ofNullable(best);
     }
+
+    /**
+     * 飞着的身体要走路:先垂直降下去({@code Alight}),降下去会落在的那一格是只走的搜索的起点——脚下往下第一个站得住的格;下面没有地面为空。
+     */
+    public static Optional<BlockPos> alighting(BlockGetter level, BodyStats body, double x, double feetY, double z) {
+        for (int y = Footing.cellOf(feetY); y >= level.getMinBuildHeight(); y--) {
+            BlockPos cell = BlockPos.containing(x, y, z);
+            Stance stance = Stance.at(level, body, cell);
+            if (stance != null && stance.grounded()) {
+                return Optional.of(cell);
+            }
+        }
+        return Optional.empty();
+    }
 }

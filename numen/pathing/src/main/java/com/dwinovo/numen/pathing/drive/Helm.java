@@ -26,7 +26,7 @@ final class Helm {
     /** 飞行的线往下多留的一层(格):飞着的身体脚一碰到地面原版就停飞。 */
     private static final double SKIN = 0.05;
     /** 离降落点那一圈再往外这么近以内,允许擦着地面(落地就是要碰到它)。 */
-    private static final double LANDING = 10.0;
+    static final double LANDING = 10.0;
     /** 右键放烟花的间隔(刻):原版连续使用的间隔。 */
     static final int COOLDOWN = 4;
 
@@ -50,12 +50,13 @@ final class Helm {
     }
 
     /**
-     * 照 {@code track} 从 {@code along} 起一直飞下去,第一个挡路的方块;没有为 null。线上每隔 {@link #LOOK_STEP} 格取一点,相邻两点之间按飞行的扫掠查
+     * 照 {@code track} 从 {@code along}(线头的爬升段 {@link Airway#climb} 之后)起一直飞下去,第一个挡路的方块;没有为 null。线上每隔 {@link #LOOK_STEP} 格取一点,相邻两点之间按飞行的扫掠查
      * (降落点附近允许擦着地面)。控制器只看近处的推演,绕得开就绕,线本身通不通是这里问的:线被堵了(飞到一半前面多了一堵墙),就该改降,不是在墙前打转。
      */
     BlockPos blocked(Airway track, double along) {
-        Vec3 from = track.at(along);
-        for (double s = along; s < track.length(); ) {
+        double start = Math.max(along, track.climb());
+        Vec3 from = track.at(start);
+        for (double s = start; s < track.length(); ) {
             s = Math.min(track.length(), s + LOOK_STEP);
             Vec3 to = track.at(s);
             BlockPos hit = sweep(from, to, track.touchdown(), track.zone());
@@ -82,6 +83,13 @@ final class Helm {
 
     /** 飞过这一段碰不碰方块;离降落点近处允许擦着地面,别处都往下多留 {@link #SKIN}。 */
     BlockPos sweep(Vec3 from, Vec3 to, Vec3 touchdown, double zone) {
+        return sweep(rig, stats, from, to, touchdown, zone);
+    }
+
+    /**
+     * 同一个判据,不带操舵:排线时拿局部控制器在活世界里把线飞一遍({@link Glide#fly})读的也是它,模拟里躲开的和实飞里躲开的是同一堆方块。
+     */
+    static BlockPos sweep(Rig rig, BodyStats stats, Vec3 from, Vec3 to, Vec3 touchdown, double zone) {
         boolean landing = touchdown != null && Math.hypot(to.x - touchdown.x, to.z - touchdown.z) < zone + LANDING;
         return Airway.sweep(rig.world(), stats, landing ? 0 : SKIN).blocker(from, to);
     }

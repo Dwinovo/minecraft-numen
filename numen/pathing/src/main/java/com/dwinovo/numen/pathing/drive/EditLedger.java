@@ -42,23 +42,15 @@ public final class EditLedger {
     public record Glided(BlockPos takeoff, BlockPos landing, double blocks, int rockets, int wearBefore, int wearAfter, float damage,
                          boolean emergency, boolean airborne, int plannedRockets, int plannedTicks) {}
 
-    /** 这一趟没有飞、走过去的原因。 */
-    public enum Why { NO_ELYTRA, NO_LIFT, TOO_FEW_ROCKETS, WORN_ELYTRA, NO_TAKEOFF, NO_ROUTE, NO_LANDING }
-
-    /**
-     * 走过去而没有飞的原因,和相关的数({@code need}:要多少、{@code have}:有多少,烟花或耐久不够时才有)。只在飞本来值得一提(远途)时记,
-     * 照实说事实;近处走几步不记。
-     */
-    public record Grounded(Why why, int need, int have) {}
-
     private final List<Entry> entries = new ArrayList<>();
     private final List<Glided> glides = new ArrayList<>();
-    private Grounded grounded;
     private final Map<MoveKind, Integer> walked = new EnumMap<>(MoveKind.class);
     /** 起飞的地方(站着的起点),按先后。 */
     private final List<BlockPos> launches = new ArrayList<>();
     /** 降落的地方(落地的那一格),按先后。 */
     private final List<BlockPos> landings = new ArrayList<>();
+    /** 走路开始时身体在飞,先垂直落到地上的那几格(也在 {@link #landings} 里),按先后。 */
+    private final List<BlockPos> alighted = new ArrayList<>();
     /** 飞过的距离(格):每一步起点到落点的直线距离合起来。 */
     private double flown;
 
@@ -101,14 +93,15 @@ public final class EditLedger {
         flown += glide.blocks();
     }
 
-    /** 记一笔:没有飞、走过去的原因。 */
-    void grounded(Grounded why) {
-        grounded = why;
+    /** 记一笔:走路开始时身体在飞,先垂直降到了地上的 {@code at}(降落的地方里也有它,飞过的距离不算:那不是路线上的飞行)。 */
+    void alighted(BlockPos at) {
+        alighted.add(at.immutable());
+        landings.add(at.immutable());
     }
 
-    /** 没有飞、走过去的原因;没记过为 null。 */
-    public Grounded grounded() {
-        return grounded;
+    /** 走路开始时先落到地上的那几格,按先后。 */
+    public List<BlockPos> alighted() {
+        return Collections.unmodifiableList(alighted);
     }
 
     /** 滑翔的账,按先后。 */

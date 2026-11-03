@@ -4,12 +4,14 @@ import java.util.List;
 import java.util.Optional;
 
 import com.dwinovo.numen.pathing.body.Body;
+import com.dwinovo.numen.pathing.drive.Admission;
 import com.dwinovo.numen.pathing.drive.Voyage;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.search.Favoring;
+import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Origin;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.Search;
@@ -40,17 +42,22 @@ public final class Navigator {
         return new Navigator(body, ports);
     }
 
-    /** 只搜不走:从身体脚下(或接在 {@link PlanQuery#after} 那条路线后面)出路线。 */
+    /**
+     * 只搜不走:从身体脚下(或接在 {@link PlanQuery#after} 那条路线后面)出路线。规划的是走({@link Travel#WALK}):快照按没有飞行能力算;
+     * 身体正在飞的话,起点是它垂直落下去会落在的那一格({@link Origin#alighting},开出去时先落地)。
+     */
     public Planning plan(PlanQuery query) {
         ServerPlayer entity = body.entity();
-        BodySnapshot snapshot = body.snapshot();
+        BodySnapshot snapshot = body.snapshot().afoot();
         String who = PathLog.who(entity);
         BlockPos from;
         if (query.after() != null) {
             from = query.after().end();
         } else {
-            Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
-                    entity.getX(), entity.getY(), entity.getZ(), snapshot.mobility().flying());
+            LiveWorld world = new LiveWorld(entity.serverLevel());
+            Optional<BlockPos> start = Snapshots.flying(entity)
+                    ? Origin.alighting(world, snapshot.stats(), entity.getX(), entity.getY(), entity.getZ())
+                    : Origin.of(world, snapshot.stats(), entity.getX(), entity.getY(), entity.getZ());
             if (start.isEmpty()) {
                 BlockPos at = entity.blockPosition();
                 PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
@@ -67,6 +74,14 @@ public final class Navigator {
         return new Planning(Searches.submit(search, Searches.Urgency.NOW), search, who);
     }
 
+    /**
+     * 受理一次飞({@link Travel#FLY}):许飞的身体走创造飞行;否则要穿着可用的鞘翅、排得出一份滑翔计划。缺什么({@link com.dwinovo.numen.pathing.drive.Lack})
+     * 当场交回,宿主据此拒绝;受理了的结论交给 {@link NavRequest#flying},开出去的导航直接用它的计划。
+     */
+    public Admission admit(Goal goal) {
+        return Voyage.admit(body, ports.terrain(), ports.materials(), ports.threats(), goal);
+    }
+
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
     public Navigation drive(NavRequest request) {
         ServerPlayer entity = body.entity();
@@ -74,7 +89,7 @@ public final class Navigator {
                 PathLog.spec(request.spec()), request.budget(),
                 request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
-        return new Navigation(new Voyage(body, ports.terrain(), ports.materials(), ports.threats(),
+        return new Navigation(new Voyage(body, request.travel(), request.admission(), ports.terrain(), ports.materials(), ports.threats(),
                 request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()), entity);
     }
 }

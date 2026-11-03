@@ -1,4 +1,4 @@
--- Going places: head out in a direction until something turns up. (numen.move.walk, away and follow are API functions.)
+-- Going places: head out in a direction until something turns up. (numen.move.walk, fly, away and follow are API functions.)
 local M = {}
 
 local COMPASS = {north = {0, -1}, south = {0, 1}, east = {1, 0}, west = {-1, 0}}

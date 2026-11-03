@@ -53,7 +53,7 @@ public class FlightGameTests {
         Trial t = canyon(helper);
         TestBody body = creative(t, 5, 1, 20);
         BlockPos far = t.at(28, 1, 20);
-        t.go(body, Goals.at(far), RouteSpec.defaults())
+        t.fly(body, Goals.at(far), RouteSpec.defaults())
                 .during(r -> {
                     if (r.body.getY() < t.origin.getY() - 0.5) {
                         throw new GameTestAssertException("掉进了峡谷:脚在 " + (r.body.getY() - t.origin.getY()));
@@ -80,7 +80,7 @@ public class FlightGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = creative(t, 5, 1, 20);
         BlockPos air = t.at(20, 8, 20);
-        t.go(body, Goals.at(air), RouteSpec.defaults())
+        t.fly(body, Goals.at(air), RouteSpec.defaults())
                 .then(r -> {
                     if (!r.body.getAbilities().flying) {
                         throw new GameTestAssertException("半空的目标,到了应当还在飞");
@@ -102,7 +102,7 @@ public class FlightGameTests {
         t.fill(12, 1, 0, 13, 10, 39, Blocks.STONE);
         TestBody body = creative(t, 5, 1, 20);
         BlockPos top = t.at(13, 11, 20);
-        t.go(body, Goals.at(top), RouteSpec.defaults())
+        t.fly(body, Goals.at(top), RouteSpec.defaults())
                 .then(r -> {
                     if (!r.body.onGround() || r.body.getAbilities().flying) {
                         throw new GameTestAssertException("该落在墙顶上:onGround=" + r.body.onGround() + " flying=" + r.body.getAbilities().flying);
@@ -116,7 +116,7 @@ public class FlightGameTests {
     public static void a_short_trip_on_flat_ground_is_walked_not_flown(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = creative(t, 5, 1, 20);
-        t.go(body, Goals.at(t.at(11, 1, 20)), RouteSpec.defaults())
+        t.fly(body, Goals.at(t.at(11, 1, 20)), RouteSpec.defaults())
                 .during(r -> {
                     if (r.body.getAbilities().flying) {
                         throw new GameTestAssertException("近处该走过去,却飞起来了");
@@ -199,7 +199,7 @@ public class FlightGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = creative(t, 8, 1, 8);
         int ideal = Kinematics.TAKEOFF_TAPS + climbTicks(body.getAbilities().getFlyingSpeed(), 40);
-        fliesNearTheIdeal(t.go(body, Goals.at(t.at(8, 41, 8)), RouteSpec.defaults()), ideal, true);
+        fliesNearTheIdeal(t.fly(body, Goals.at(t.at(8, 41, 8)), RouteSpec.defaults()), ideal, true);
     }
 
     /** 平飞六十四格过一道深沟,落在对岸:疾飞一路,近了松开滑过去再落地。 */
@@ -209,7 +209,7 @@ public class FlightGameTests {
         t.fill(6, 0, 0, 68, 0, 23, Blocks.AIR);
         TestBody body = creative(t, 5, 1, 12);
         int ideal = Kinematics.TAKEOFF_TAPS + cruiseTicks(body.getAbilities().getFlyingSpeed(), 64);
-        fliesNearTheIdeal(t.go(body, Goals.at(t.at(69, 1, 12)), RouteSpec.defaults()), ideal, false);
+        fliesNearTheIdeal(t.fly(body, Goals.at(t.at(69, 1, 12)), RouteSpec.defaults()), ideal, false);
     }
 
     /** 斜着爬升:水平十二格、竖直二十四格,水平与竖直同时进行,慢的是竖直。脚下只有一小块地,不起飞没有路。 */
@@ -221,6 +221,6 @@ public class FlightGameTests {
         TestBody body = creative(t, 2, 1, 2);
         float speed = body.getAbilities().getFlyingSpeed();
         int ideal = Kinematics.TAKEOFF_TAPS + Math.max(climbTicks(speed, 24), cruiseTicks(speed, Math.sqrt(2) * 12));
-        fliesNearTheIdeal(t.go(body, Goals.at(t.at(14, 25, 14)), RouteSpec.defaults()), ideal, true);
+        fliesNearTheIdeal(t.fly(body, Goals.at(t.at(14, 25, 14)), RouteSpec.defaults()), ideal, true);
     }
 }

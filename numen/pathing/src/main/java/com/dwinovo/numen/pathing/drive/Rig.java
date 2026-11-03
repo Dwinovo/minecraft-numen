@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Controls;
@@ -24,6 +25,8 @@ import net.minecraft.server.level.ServerPlayer;
 final class Rig {
 
     final Body body;
+    /** 这一趟走还是飞:走的一趟里身体的快照按没有飞行能力算({@link BodySnapshot#afoot})。 */
+    final Travel travel;
     final ServerPlayer entity;
     /** 身体的键盘(一具身体一副,宿主每刻在身体的物理步进里落一次)。 */
     final Controls keys;
@@ -48,8 +51,9 @@ final class Rig {
     private final List<BodyAction> actions = new ArrayList<>();
     private LiveWorld world;
 
-    Rig(Body body, TerrainPolicy terrain, Materials materials, Threats threats) {
+    Rig(Body body, Travel travel, TerrainPolicy terrain, Materials materials, Threats threats) {
         this.body = body;
+        this.travel = travel;
         this.entity = body.entity();
         this.keys = body.controls();
         this.look = body.look();
@@ -90,7 +94,7 @@ final class Rig {
     }
 
     BodySnapshot snapshot() {
-        return body.snapshot();
+        return travel == Travel.WALK ? body.snapshot().afoot() : body.snapshot();
     }
 
     /** 记下身体做的一个动作;null 是什么也没做。 */

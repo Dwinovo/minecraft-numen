@@ -27,8 +27,8 @@ public final class Journey {
     private final List<BlockPos> launches = new ArrayList<>();
     private final List<BlockPos> landings = new ArrayList<>();
     private final List<EditLedger.Glided> glides = new ArrayList<>();
+    private final List<BlockPos> alighted = new ArrayList<>();
     private double flown;
-    private EditLedger.Grounded grounded;
 
     /** 并进一趟路的实际账。 */
     public void add(Report report) {
@@ -38,10 +38,8 @@ public final class Journey {
         launches.addAll(report.ledger().launches());
         landings.addAll(report.ledger().landings());
         glides.addAll(report.ledger().glides());
+        alighted.addAll(report.ledger().alighted());
         flown += report.ledger().flown();
-        if (report.ledger().grounded() != null) {
-            grounded = report.ledger().grounded();
-        }
     }
 
     /** 并进另一本账:一件活派下的子活收场时,它的账归这件活。 */
@@ -53,10 +51,8 @@ public final class Journey {
         launches.addAll(other.launches);
         landings.addAll(other.landings);
         glides.addAll(other.glides);
+        alighted.addAll(other.alighted);
         flown += other.flown;
-        if (other.grounded != null) {
-            grounded = other.grounded;
-        }
     }
 
     /** 并进路上权限层与主人的裁定。 */
@@ -107,7 +103,7 @@ public final class Journey {
      * 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、没飞过、也没被拒过时是空串。{@code flying}:此刻身体还在飞。
      */
     public String describe(boolean flying) {
-        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides, grounded));
+        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides, alighted));
     }
 
     /**

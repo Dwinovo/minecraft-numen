@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.api;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Permit;
 
@@ -82,6 +83,9 @@ public sealed interface Outcome {
 
     /** 到了,但要看的 {@code target} 这一格看不见。 */
     record NoLineOfSight(BlockPos target) implements Outcome {}
+
+    /** 飞的一趟没到:落了地,离目标还远,此刻从这里飞不起来——缺什么({@link Lack})。 */
+    record Grounded(Lack lack) implements Outcome {}
 
     Outcome ARRIVED = new Arrived();
 }

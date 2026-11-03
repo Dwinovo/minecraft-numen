@@ -54,6 +54,12 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
         inventory = inventory.stream().map(ItemStack::copy).toList();
     }
 
+    /** 同一份快照,这一趟只走({@link Mobility#afoot}):走法集与起点都按没有飞行能力的身体算。 */
+    public BodySnapshot afoot() {
+        return new BodySnapshot(stats, gameMode, health, safeFallDistance, fallDamageMultiplier, foodLevel,
+                waterMovementEfficiency, inventory, mining, breath, mobility.afoot());
+    }
+
     public boolean creative() {
         return gameMode.isCreative();
     }

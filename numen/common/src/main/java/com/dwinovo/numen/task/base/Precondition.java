@@ -47,7 +47,7 @@ public interface Precondition {
     static Failure sitting(NumenPlayer player, String why) {
         String what = BuiltInRegistries.ENTITY_TYPE.getKey(player.getVehicle().getType()).getPath();
         return new Failure("I am sitting in the " + what + (why == null ? ", which a walk can't steer" : ", " + why)
-                + ": `numen.use.dismount()` steps off, then the walk goes on foot", FailureType.UNKNOWN,
+                + ": `numen.use.dismount()` steps off, then I go on from the ground", FailureType.UNKNOWN,
                 "numen.use.dismount()");
     }
 

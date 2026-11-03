@@ -15,6 +15,9 @@ import com.dwinovo.numen.nav.NavText;
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.nav.Walked;
 import com.dwinovo.numen.nav.Walking;
+import com.dwinovo.numen.pathing.api.Travel;
+import com.dwinovo.numen.pathing.drive.Admission;
+import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 
@@ -24,7 +27,8 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * {@code numen.move.walk} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走到一个到达目标({@link Arrival})。
+ * {@code numen.move.walk}、{@code numen.move.fly} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走(或飞)到一个到达目标({@link Arrival})。
+ * 走从不飞,飞只飞({@link MoveToTaskRecord#travel}):许飞的身体走创造飞行,否则穿着鞘翅滑翔,受理时缺什么当场拒绝({@link Trip#admit})。
  *
  * <p><b>一趟就是一次导航</b>——目标编成寻路的目标({@link Destination}),规格是走路的出厂规格({@link Walking#spec}:可挖可搭,只看
  * 价钱),交给 {@link Trip}。一截一截规划、走、从当时位置按同一份规格接着规划,都在寻路里;这里不留"计划",也不比对路上动了哪些格:
@@ -59,6 +63,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     /** 编好的去处:受理之前编过就用那一份,动手的活派下来的子活开工时现编。 */
     private Destination destination;
+    /** 飞的一趟受理时问过的结论(带着排好的滑翔计划);走的一趟为 null。 */
+    private Admission admission;
     /** 这一趟驾船:航线的船腿;走路的一趟为 null。 */
     private BoatNav boat;
     /** 驾船画出的航线到不了目标所在的水域(目标在岸上):开到岸边就算这一趟走完。 */
@@ -82,8 +88,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected List<Precondition> preconditions() {
         return List.of(() -> {
             Entity vehicle = player.getVehicle();
-            if (vehicle == null || vehicle instanceof Boat && r.sailing && sails()) {
+            if (vehicle == null || vehicle instanceof Boat && r.sailing && r.travel == Travel.WALK && sails()) {
                 return null;
+            }
+            if (r.travel == Travel.FLY) {
+                return Precondition.sitting(player, "and a flight starts from the ground");
             }
             return Precondition.sitting(player, vehicle instanceof Boat && r.sailing
                     ? "which can only be sailed to a place (a Pos or a column {x = …, z = …}), not " + r.arrival.words()
@@ -108,6 +117,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         } catch (IllegalArgumentException refused) {
             return Preparation.refused(TaskResult.fail(ErrorKind.NO_PATH, refused.getMessage(), null, value()));
         }
+        if (r.travel == Travel.FLY) {
+            admission = Trip.admit(player, destination.goal());
+            Lack lack = admission.lack();
+            if (lack != null) {
+                return Preparation.refused(TaskResult.fail(NavText.type(lack) == FailureType.NO_MATERIAL ? ErrorKind.NO_MATERIAL : ErrorKind.NO_PATH,
+                        "can't fly there: " + NavText.lack(lack), lack.why() == Lack.Why.TOO_NEAR
+                        ? com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", destination.toward()) : null, value()));
+            }
+        }
         return Preparation.READY;
     }
 
@@ -127,6 +145,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return;
         }
         nav = Trip.to(player, destination.goal(), Walking.spec(player.serverLevel()), destination.toward());
+        if (r.travel == Travel.FLY) {
+            nav.flying(admission);
+        }
         com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 去 {}", r.getToolName(), r.arrival.words());
     }
 
@@ -173,8 +194,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 String why = nav.failReason();
                 FailureType type = nav.failType();
                 stopNav();
-                fail("blocked: got within " + String.format("%.1f", distance()) + " blocks of " + r.arrival.to().words()
-                        + " (now on the ground at y=" + player.blockPosition().getY() + "). " + why + ".", type);
+                fail((r.travel == Travel.FLY ? "stopped: got within " : "blocked: got within ") + String.format("%.1f", distance())
+                        + " blocks of " + r.arrival.to().words() + " (now on the ground at y=" + player.blockPosition().getY() + "). " + why + ".",
+                        type);
                 yield TaskState.FAILED;
             }
         };
@@ -302,7 +324,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected String timeoutMessage() {
         // 到期是一趟最长的时间到了(一直在推进),还是租约到期前没有进展:看干活的刻数有没有用满,不看到期那一刻的瞬时信号
         boolean checkIn = workTicks() >= leaseCapWork;
-        return NavText.timedOut((int) workTicks(), distance(), here(player.blockPosition().getY()),
+        return NavText.timedOut(r.travel, r.getToolName(), (int) workTicks(), distance(), here(player.blockPosition().getY()),
                 nav == null ? null : nav.nearestRefusal(), checkIn);
     }
 

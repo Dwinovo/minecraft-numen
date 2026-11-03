@@ -1,7 +1,11 @@
 package com.dwinovo.numen.pathing.drive;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import com.dwinovo.numen.pathing.api.Snapshots;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.plan.Materials;
@@ -13,19 +17,24 @@ import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
+import net.minecraft.core.BlockPos;
+
 /**
  * 一趟行程:由几段组成({@link Segment}),每段一种移动方式,共用一本账、一份行程日志和同一套重规划原因({@link Rig})。
- * 走路的一段({@link Driver})自己搜、自己重搜;滑翔的一段({@link Sortie})飞一次。段与段只通过"这一段到了没有"相连:
+ * 走路的一段({@link Driver})自己搜、自己重搜;滑翔的一段({@link Sortie})飞一次;身体在飞而要走路时先落地({@link Alight})。
+ * 段与段只通过"这一段到了没有"相连。走还是飞由调用方说({@link Travel}),寻路不比价钱:
  * <ul>
- *   <li>出发时问一次要不要飞({@link Glide#plan}):不飞,整趟就是一个走路的段;飞,是 走到起飞点 → 滑翔 → 走到目标;</li>
- *   <li>走到起飞点的段走不通,或滑翔中止,都不是整趟的失败:从身体此刻的位置照原目标走(走路的段),原因记进日志与账;</li>
- *   <li>整趟的结局只由最后一个走路的段定。</li>
+ *   <li><b>走</b>({@link Travel#WALK}):从不飞,身体许飞也一样(快照按没有飞行能力算)。身体在飞,先落到地上,再走;</li>
+ *   <li><b>飞,许飞的身体</b>:创造飞行进走路的搜索本身({@link Driver},走法集由身体给);</li>
+ *   <li><b>飞,穿着鞘翅</b>:走到起飞点 → 起飞 → 巡航 → 进近降落({@link Glide})→ 走完最后一截({@link Glide#FINAL_WALK} 以内)。
+ *       落地时离目标还远(中途迫降),够用就从此刻的位置再起飞,这一趟里失败过的起飞点不再用;不够用就收工({@link Halt.Grounded}),
+ *       不悄悄改成长途步行。走不到起飞点、起飞没成,也是换一个起飞点。</li>
  * </ul>
  * 寻路从不替她穿脱装备、去箱子里拿烟花:身上有什么就用什么。
  */
 public final class Voyage {
 
-    private enum Phase { TO_TAKEOFF, SORTIE, FINAL }
+    private enum Phase { ALIGHT, TO_TAKEOFF, SORTIE, FINAL }
 
     private final Rig rig;
     private final RouteSpec spec;
@@ -38,15 +47,22 @@ public final class Voyage {
     private Halt halt;
     private final Route seed;
     private final boolean passing;
+    /** 受理时问过的结论;没问过为 null,飞的一趟第一刻再问。 */
+    private final Admission admission;
     private Glide.Plan plan;
+    /** 这一趟里失败过的起飞点:走不到、起不了飞、飞到半路就落了地。不再用。 */
+    private final Set<BlockPos> spent = new HashSet<>();
+    /** 滑翔的一段收了场,身体还在空中(起飞没成、半空中被打断):等落到地上再决定下一步。 */
+    private boolean settling;
 
     /**
-     * 参数同 {@link Driver}。路线是调用方交进来的({@code seed})或路过({@code passing})的,不排滑翔。
-     * 要不要飞到第一刻才问:那时身体才真站在起点上(世界与身体都是第一刻的样子)。
+     * 参数同 {@link Driver}。路线是调用方交进来的({@code seed})或路过({@code passing})的,走路的段照它走。
+     * 飞的一趟要不要、能不能飞到第一刻才定(那时身体才真站在起点上),受理时问过的({@code admission})直接用。
      */
-    public Voyage(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal, RouteSpec spec, int budget,
-                  Route seed, boolean passing, SearchClock clock) {
-        this.rig = new Rig(body, terrain, materials, threats);
+    public Voyage(Body body, Travel travel, Admission admission, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
+                  RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
+        this.rig = new Rig(body, travel, terrain, materials, threats);
+        this.admission = admission;
         this.goal = goal;
         this.spec = spec;
         this.budget = budget;
@@ -55,20 +71,36 @@ public final class Voyage {
         this.passing = passing;
     }
 
-    /** 第一刻:问要不要飞,决定这一趟从哪一段开始。 */
+    /**
+     * 受理一次飞:许飞的身体走创造飞行;否则要穿着可用的鞘翅,排得出一份滑翔计划。缺什么({@link Lack})当场交回,不占身体。
+     * 只在世界所在的线程上调用。
+     */
+    public static Admission admit(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal) {
+        Rig rig = new Rig(body, Travel.FLY, terrain, materials, threats);
+        return rig.snapshot().mobility().mayFly() ? Admission.creative() : Glide.admit(rig, goal, Set.of());
+    }
+
+    /** 第一刻:决定这一趟从哪一段开始。 */
     private void begin() {
-        plan = seed == null && !passing ? ask() : null;
-        if (plan == null) {
-            current = new Driver(rig, goal, spec, budget, seed, passing, clock);
-            phase = Phase.FINAL;
-        } else if (rig.entity.blockPosition().equals(plan.takeoff())) {
-            startSortie(plan);
-        } else {
-            PathLog.info("{} 排滑翔 先走到起飞点 {},水平 {} 格,估 {} 刻(走路下界 {} 刻)", rig.who, PathLog.pos(plan.takeoff()), PathLog.num(plan.blocks()),
-                    PathLog.num(plan.estimate()), PathLog.num(plan.walkBound()));
-            current = new Driver(rig, Goals.at(plan.takeoff()), spec, 0, null, false, clock);
-            phase = Phase.TO_TAKEOFF;
+        if (rig.travel == Travel.WALK) {
+            if (Snapshots.flying(rig.entity)) {
+                current = new Alight(rig);
+                phase = Phase.ALIGHT;
+            } else {
+                walkOn(seed, passing);
+            }
+            return;
         }
+        if (rig.snapshot().mobility().mayFly()) {
+            walkOn(seed, passing);
+            return;
+        }
+        Admission asked = admission != null ? admission : Glide.admit(rig, goal, spent);
+        if (asked.lack() != null) {
+            grounded(asked.lack());
+            return;
+        }
+        start(asked.plan());
     }
 
     // ==================== 推进 ====================
@@ -79,26 +111,56 @@ public final class Voyage {
         }
         if (current == null) {
             begin();
+            if (state != Driver.State.RUNNING) {
+                return state;
+            }
+        }
+        if (settling) {
+            if (rig.entity.onGround()) {
+                settling = false;
+                afterSortie();
+            }
+            return state;
         }
         Driver.State s = current.tick();
         if (s == Driver.State.RUNNING) {
             return state;
         }
         switch (phase) {
+            case ALIGHT -> walkOn(seed, passing);
             case TO_TAKEOFF -> {
                 if (s == Driver.State.ARRIVED) {
-                    Glide.Plan fresh = ask();
-                    if (fresh != null) {
-                        startSortie(fresh);
-                        return state;
+                    // 到了起飞点:按此刻的身体与世界再问一遍,起飞点还能用就起飞
+                    Admission asked = Glide.admit(rig, goal, spent);
+                    if (asked.lack() != null) {
+                        grounded(asked.lack());
+                    } else {
+                        if (!asked.plan().takeoff().equals(plan.takeoff())) {
+                            // 走到了才发现这个起飞点不行:它这一趟不再用,别在两个起飞点之间来回走
+                            spent.add(plan.takeoff());
+                        }
+                        start(asked.plan());
                     }
-                    PathLog.info("{} 到了起飞点,滑翔不排了,照原目标走", rig.who);
                 } else {
-                    PathLog.info("{} 走不到起飞点 {},照原目标走", rig.who, PathLog.pos(plan.takeoff()));
+                    PathLog.info("{} 走不到起飞点 {},换一个", rig.who, PathLog.pos(plan.takeoff()));
+                    spent.add(plan.takeoff());
+                    again();
                 }
-                walkOn();
             }
-            case SORTIE -> walkOn();
+            case SORTIE -> {
+                Sortie sortie = (Sortie) current;
+                if (s == Driver.State.ARRIVED && sortie.reached()) {
+                    // 落在了计划的降落点:剩下的是最后一截(目标在水里时,最近的岸也在这一截里)
+                    walkOn(null, false);
+                    return state;
+                }
+                spent.add(sortie.takeoffCell());
+                if (rig.entity.onGround()) {
+                    afterSortie();
+                } else {
+                    settling = true;
+                }
+            }
             case FINAL -> {
                 state = s;
                 halt = current.halt();
@@ -107,24 +169,51 @@ public final class Voyage {
         return state;
     }
 
-    /** 问要不要飞;不飞而值得一提(远途)的原因记进账与日志。 */
-    private Glide.Plan ask() {
-        Glide.Verdict verdict = Glide.plan(rig, goal);
-        if (verdict.grounded() != null) {
-            rig.ledger.grounded(verdict.grounded());
-            PathLog.info("{} 走过去,没有飞:{}", rig.who, Glide.describe(verdict.grounded()));
+    /**
+     * 滑翔的一段没飞到计划的降落点(起飞没成、迫降、中途被打断),身体落在了地上:离目标不超过 {@link Glide#FINAL_WALK}(一次计划好的降落留下的最后一截)
+     * 就走过去;还远就从这里再飞,缺什么就收工。
+     */
+    private void afterSortie() {
+        Goal.Anchor target = goal.anchor(rig.entity.position());
+        if (target == null || target.distance(rig.entity.position()) <= Glide.FINAL_WALK) {
+            walkOn(null, false);
+            return;
         }
-        return verdict.plan();
+        again();
     }
 
-    private void startSortie(Glide.Plan flight) {
-        current = new Sortie(rig, flight);
-        phase = Phase.SORTIE;
+    /** 再排一次起飞:没用过的起飞点里排得成就去,排不成(缺烟花、耐久、起飞的地方……)收工。 */
+    private void again() {
+        Admission next = Glide.admit(rig, goal, spent);
+        if (next.lack() != null) {
+            grounded(next.lack());
+        } else {
+            start(next.plan());
+        }
+    }
+
+    private void start(Glide.Plan flight) {
+        plan = flight;
+        if (rig.entity.blockPosition().equals(flight.takeoff())) {
+            current = new Sortie(rig, flight);
+            phase = Phase.SORTIE;
+        } else {
+            PathLog.info("{} 飞 先走到起飞点 {},水平 {} 格", rig.who, PathLog.pos(flight.takeoff()), PathLog.num(flight.blocks()));
+            current = new Driver(rig, Goals.at(flight.takeoff()), spec, 0, null, false, clock);
+            phase = Phase.TO_TAKEOFF;
+        }
+    }
+
+    /** 收工:飞不下去了,原因是 {@code lack}。 */
+    private void grounded(Lack lack) {
+        PathLog.info("{} 飞不下去了:{} {}", rig.who, lack, PathLog.body(rig.entity));
+        halt = new Halt.Grounded(lack);
+        state = Driver.State.HALTED;
     }
 
     /** 从身体此刻的位置照目标走到底:最后一个走路的段。 */
-    private void walkOn() {
-        current = new Driver(rig, goal, spec, budget, null, false, clock);
+    private void walkOn(Route route, boolean through) {
+        current = new Driver(rig, goal, spec, budget, route, through, clock);
         phase = Phase.FINAL;
     }
 

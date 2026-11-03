@@ -68,35 +68,33 @@ public class MovementGameTests {
     }
 
     /**
-     * 飞着跟一个悬在半空的主人,到了之后在旁边等:路线走完了、停稳在终点是收场的事,不是"卡住"——脱困的挣脱不醒,她停在那儿不漂。
-     * 守的是"在推进"只问有路该走而没动:走路与飞行同一个口径,到点悬停不算没进展。
+     * 许飞的身体飞到半空的一格悬停,到了之后停在那儿:路线走完了、停稳在终点是收场的事,不是"卡住"——脱困的挣脱不醒,她不漂。
+     * 守的是"在推进"只问有路该走而没动:飞行与走路同一个口径,到点悬停不算没进展。入口是 {@code numen.move.fly};GameTest 默认给场地盖一层屏障的屋顶,悬停的一格在它里面,所以开 {@code skyAccess}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
-    public static void a_flying_follower_waiting_by_a_hovering_owner_is_not_stuck(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain", skyAccess = true)
+    public static void a_flying_body_hovering_at_its_destination_is_not_stuck(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos hover = helper.absolutePos(new BlockPos(10, 7, 8));
-        var owner = new net.minecraft.world.entity.decoration.ArmorStand(level, hover.getX() + 0.5, hover.getY(), hover.getZ() + 0.5);
-        owner.setNoGravity(true);
-        level.addFreshEntity(owner);
         NumenPlayer companion = spawnBare(helper, "gametest_hoverer", new BlockPos(3, 7, 8), true);
         companion.getAbilities().mayfly = true;
         companion.getAbilities().flying = true;
         companion.onUpdateAbilities();
-        lua(companion, "numen.move.follow(" + ref(owner) + ", {distance = 3, seconds = 60})");
+        ToolRun fly = lua(companion, "numen.move.fly(" + xyz(hover) + ")");
         Vec3[] settled = {null};
         int[] ticks = {0};
         helper.onEachTick(() -> {
             ticks[0]++;
             var trip = com.dwinovo.numen.nav.Trip.current(companion);
-            helper.assertTrue(trip == null || trip.progressing(), "the follower was judged stuck while waiting beside the hovering owner, tick " + ticks[0]);
+            helper.assertTrue(trip == null || trip.progressing(), "the flier was judged stuck on the way to or at the hover point, tick " + ticks[0]);
             if (ticks[0] == 150) {
                 settled[0] = companion.position();
             }
             if (ticks[0] == 350) {
                 helper.assertTrue(settled[0] != null && companion.position().distanceTo(settled[0]) < 0.7,
-                        "the follower drifted from " + settled[0] + " to " + companion.position());
+                        "the flier drifted from " + settled[0] + " to " + companion.position());
+                helper.assertTrue(companion.getAbilities().flying && companion.blockPosition().equals(hover),
+                        "the flier should hover in " + hover + ", it is at " + companion.blockPosition() + ": " + fly.outcome());
                 CompanionFactory.despawn(level.getServer(), companion);
-                owner.discard();
                 helper.succeed();
             }
         });

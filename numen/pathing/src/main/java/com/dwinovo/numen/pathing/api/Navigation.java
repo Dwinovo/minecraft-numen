@@ -82,6 +82,7 @@ public final class Navigation {
             case Halt.Blocked blocked -> status = NavStatus.failed(new Outcome.Blocked(blocked.blockage()));
             case Halt.Denied denied -> status = NavStatus.failed(new Outcome.Denied(denied.cell(), denied.reason()));
             case Halt.NoSight sight -> status = NavStatus.failed(new Outcome.NoLineOfSight(sight.target()));
+            case Halt.Grounded grounded -> status = NavStatus.failed(new Outcome.Grounded(grounded.lack()));
             case Halt.Stranded stranded -> status = NavStatus.failed(
                     new Outcome.Stranded(stranded.cell(), stranded.block()));
         }

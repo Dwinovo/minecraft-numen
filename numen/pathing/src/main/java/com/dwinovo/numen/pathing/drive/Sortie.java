@@ -143,7 +143,7 @@ final class Sortie implements Segment {
         }
         Vec3 aim = way.at(Math.min(way.length(), 8));
         float yaw = Look.yawOf(aim.x - body.getX(), aim.z - body.getZ());
-        float pitch = drop ? 0 : Glide.CLIMB_PITCH;
+        float pitch = plan.pitch();
         rig.look.steer(yaw, pitch);
         rig.keys.release(Key.SNEAK);
         aligning++;
@@ -189,9 +189,10 @@ final class Sortie implements Segment {
         }
         Mobility mobility = Snapshots.mobility(body);
         s = way.project(body.position(), s);
-        // 计划指望着烟花、烟花却用完了(演练已经证明过不放烟花也飞得到的计划不在此列):够不着降落点就改降
-        if (!emergency && !loitering && plan.rockets() > 0 && mobility.fireworks() == 0 && !reaches(body.position(), way.touchdown())
-                && !redirect("烟花用完了,够不着降落点")) {
+        // 烟花少于下限(计划指望着烟花才这么算,不放烟花也飞得到的计划不在此列)或鞘翅耐久低于下限,而够不着降落点:就近降落,先朝目标方向找
+        boolean low = plan.rockets() > 0 && mobility.fireworks() < Glide.ROCKET_FLOOR || mobility.gliderLife() < Glide.WEAR_FLOOR;
+        if (!emergency && !loitering && low && !reaches(body.position(), way.touchdown())
+                && !redirect("烟花或鞘翅耐久低于下限,够不着降落点")) {
             loiter();
         }
         if (loitering && ticks - loiterSince > LOITER_LIMIT) {
@@ -214,21 +215,37 @@ final class Sortie implements Segment {
             }
         }
         Beat beat = helm.steer(way, s);
-        if (!emergency && !loitering && helm.blocked(way, s) != null) {
+        BlockPos hit = !emergency && !loitering ? helm.blocked(way, s) : null;
+        if (hit != null) {
             // 照这条线飞下去会撞(前方飞到哪加载到哪,新加载的那段里有东西):先抬高巡航重排,抬不过去再趁还有高度挑一处够得着的地面降下去
             Airway up = Glide.raise(rig, way, body.position(), new Motion(body.position(), body.getDeltaMovement()), rig.look.neck());
             if (up != null) {
                 way = up;
                 s = 0;
                 helm.forget();
-                PathLog.info("{} 前方有东西挡着,抬高巡航重排 {}", rig.who, PathLog.body(body));
+                PathLog.info("{} 前方有东西挡着({}),抬高巡航重排 {}", rig.who, blocker(hit), PathLog.body(body));
             } else {
-                redirect("前方有东西挡着");
+                redirect("前方有东西挡着:" + blocker(hit));
             }
-        } else if (beat instanceof Beat.Blocked && !emergency && !loitering) {
+        } else if (beat instanceof Beat.Blocked blocked && !emergency && !loitering) {
             // 一刻都飞不了:改降到够得着的地面;已经在迫降还被围住,身体已在空中,别无他法,键松着等落地(落地的伤害如实记账)
-            redirect("前方推演全被否决");
+            redirect("前方推演全被否决,挡路的是 " + blocker(blocked.blockage().cell()));
         }
+    }
+
+    /** 日志里挡路的那一格:坐标与方块。 */
+    private String blocker(BlockPos cell) {
+        return PathLog.pos(cell) + " " + PathLog.block(rig.world().getBlockState(cell));
+    }
+
+    /** 落地处就在计划的降落点那一圈里,不是迫降:这一段飞到了该到的地方。 */
+    boolean reached() {
+        return !emergency && Math.hypot(rig.entity.getX() - way.touchdown().x, rig.entity.getZ() - way.touchdown().z) <= Glide.TOLERANCE;
+    }
+
+    /** 这一段从哪个起飞点起的。 */
+    BlockPos takeoffCell() {
+        return plan.takeoff();
     }
 
     /** 从 {@code from} 不放烟花滑得到 {@code to}(按滑翔比留余量)。 */
