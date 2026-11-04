@@ -46,6 +46,6 @@ final class TestTicks implements TestReporter {
     private static void record(String outcome, GameTestInfo info) {
         Long start = STARTS.remove(info.getTestName());
         long ticks = start == null ? -1 : info.getLevel().getGameTime() - start;
-        LOG.info("[numen-gametest-ticks] {} {}/{} {}", outcome, ticks, info.getTimeoutTicks(), info.getTestName());
+        LOG.info("[numen-gametest-ticks] {} {}/{} {}ms {}", outcome, ticks, info.getTimeoutTicks(), info.getRunTime(), info.getTestName());
     }
 }
