@@ -199,7 +199,8 @@ public class SurvivalGameTests {
         ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
         helper.assertTrue(nether != null, "this server has no nether to travel to");
         BlockPos arena = helper.absolutePos(BlockPos.ZERO);
-        BlockPos floor = new BlockPos(arena.getX() * 16, 100, arena.getZ() * 8);
+        // 场地坐标取模再放大:各份的落点互相隔开三百格以上,又总在世界边界之内
+        BlockPos floor = new BlockPos(20000 + Math.floorMod(arena.getX(), 8192) * 16, 100, 20000 + Math.floorMod(arena.getZ(), 8192) * 16);
         generateChunks(nether, floor, 2);
         // 下界的地形在这一带是实心的:先掏出一间空房,再铺地板
         for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {

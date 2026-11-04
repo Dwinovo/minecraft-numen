@@ -357,9 +357,10 @@ public class CombatGameTests {
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(BlockPos.ZERO);
-        // 石台在场地坐标的两倍处:远在真玩家之外,相邻场地的石台也隔着四十格以上(她要的是三十二格内没有别的落点,同一用例铺几份并行时也一样)
-        int cx = (near.getX() * 2) >> 4;
-        int cz = (near.getZ() * 2) >> 4;
+        // 石台在场地东面两千多格外,远在真玩家之外;再按场地在批里的位置拉开,相邻场地的石台隔着六十格以上(她要的是三十二格内没有别的落点,
+        // 同一用例铺几份并行时也一样),不靠坐标的绝对大小,总在世界边界之内
+        int cx = (near.getX() + 2560 + Math.floorMod(near.getX(), 8192) * 2) >> 4;
+        int cz = (near.getZ() + Math.floorMod(near.getZ(), 8192) * 2) >> 4;
         int y = 200;
         int x0 = cx * 16 + 6;
         int z0 = cz * 16 + 6;
