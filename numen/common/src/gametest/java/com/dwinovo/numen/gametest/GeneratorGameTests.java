@@ -113,14 +113,18 @@ public class GeneratorGameTests {
     }
 
     /**
-     * 放下的不透光整块的光照都算过了。放方块只把这一格的光照更新排给光照线程,这一刻不算;一次更新算完的几格是一起换上去的,
-     * 不透光整块里的光照算完是 0。拍"前"的快照要等到这一刻,不然更新落在两次快照之间,快照里的光照不一样。
+     * 放下的不透光整块的光照都算过了(阻塞着等,见 {@link GameTestKit#awaitLight})。放方块只把这一格的光照更新排给光照线程;
+     * 一次更新算完的几格是一起换上去的,不透光整块里的光照算完是 0。拍"前"的快照要等到这一刻,不然更新落在两次快照之间,快照里的光照不一样。
      */
-    private static void assertLit(GameTestHelper helper, ServerLevel level, Iterable<BlockPos> placed) {
-        for (BlockPos p : placed) {
-            helper.assertTrue(level.getBrightness(LightLayer.SKY, p) == 0 && level.getBrightness(LightLayer.BLOCK, p) == 0,
-                    "the light engine has not taken in the block at " + p.toShortString() + " yet");
-        }
+    private static void awaitLit(ServerLevel level, Iterable<BlockPos> placed) {
+        GameTestKit.awaitLight(level, () -> {
+            for (BlockPos p : placed) {
+                if (level.getBrightness(LightLayer.SKY, p) != 0 || level.getBrightness(LightLayer.BLOCK, p) != 0) {
+                    return false;
+                }
+            }
+            return true;
+        });
     }
 
     /**
@@ -134,7 +138,8 @@ public class GeneratorGameTests {
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
         AtomicReference<ToolRun> build = new AtomicReference<>();
-        steps(helper).thenWaitUntil(() -> assertLit(helper, level, List.of(dirt))).thenExecute(() -> {
+        awaitLit(level, List.of(dirt));
+        steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")");
             helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
@@ -227,7 +232,8 @@ public class GeneratorGameTests {
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
         AtomicReference<ToolRun> build = new AtomicReference<>();
-        steps(helper).thenWaitUntil(() -> assertLit(helper, level, List.of(dirt))).thenExecute(() -> {
+        awaitLit(level, List.of(dirt));
+        steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0)) + ", " + xyz(dirt.offset(0, 4, 0))
                     + "):forest(\"minecraft:oak_checked\", 100)");
@@ -261,7 +267,8 @@ public class GeneratorGameTests {
         }
         AtomicReference<JsonArray> cells = new AtomicReference<>();
         AtomicReference<ToolRun> build = new AtomicReference<>();
-        steps(helper).thenWaitUntil(() -> assertLit(helper, level, grass)).thenExecute(() -> {
+        awaitLit(level, grass);
+        steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4));
             ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(from) + ", " + xyz(from.offset(3, 3, 3)) + "):flora(100)");
             helper.assertTrue(run.ranToTheEnd(), "flora failed: " + run.receipt());

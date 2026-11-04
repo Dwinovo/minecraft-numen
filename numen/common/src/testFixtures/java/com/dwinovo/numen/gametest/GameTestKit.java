@@ -173,6 +173,22 @@ public final class GameTestKit {
         }
     }
 
+    /**
+     * 阻塞到 {@code lit} 为真。光照由独立的线程算,放方块只把更新排给它,什么时候算完看墙钟;按刻数等的话负载一高就先超时。
+     * 这里一边催光照线程开工(平时由每刻的区块更新催)一边等,等多久都不占刻数。
+     */
+    static void awaitLight(ServerLevel level, java.util.function.BooleanSupplier lit) {
+        var engine = level.getChunkSource().getLightEngine();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(60);
+        while (!lit.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new net.minecraft.gametest.framework.GameTestAssertException("the light engine did not settle within 60 s");
+            }
+            engine.tryScheduleUpdate();
+            java.util.concurrent.locks.LockSupport.parkNanos(200_000);
+        }
+    }
+
     /** rel 起点 + 尺寸圈出的长方体格集;hollow = 只留外壳。 */
     static List<BlockPos> boxCells(BlockPos origin, int sx, int sy, int sz, boolean hollow) {
         List<BlockPos> cells = new ArrayList<>();
