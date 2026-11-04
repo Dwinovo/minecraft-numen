@@ -312,7 +312,7 @@ final class Sortie implements Segment {
         if (next == null) {
             spot = null;
             if (!loitering && body.position().y - craft.world().top(body.cell().getX(), body.cell().getZ()) >= LOITER_FLOOR) {
-                loiter();
+                loiter(why);
             }
             return;
         }
@@ -325,7 +325,7 @@ final class Sortie implements Segment {
     }
 
     /** 找不到安全的落点:绕着前方的一点盘旋,隔一阵再找一次。盘旋只是等,不是办法:到了时限就收场。 */
-    private void loiter() {
+    private void loiter(String why) {
         var body = craft;
         Vec3 center = body.position().add(Glide.heading(body).scale(LOITER_RADIUS));
         way = Airway.circle(body.position(), center, LOITER_RADIUS, body.position().y, 3);
@@ -333,7 +333,7 @@ final class Sortie implements Segment {
         loitering = true;
         loiterSince = ticks;
         helm.forget();
-        PathLog.info("{} 找不到安全的落点,盘旋等 {}", craft.who(), craft.describe());
+        PathLog.info("{} 找不到安全的落点({}),盘旋等 {}", craft.who(), why, craft.describe());
     }
 
     // ==================== 收场 ====================
