@@ -21,6 +21,8 @@ class GlideLineTest {
     private static final double GRAVITY = 0.08;
     private static final double EYE = 1.62;
     private static final int BURN = 10;
+    /** 身体水平飞的方向:朝 +z。 */
+    private static final Vec3 AHEAD = new Vec3(0, 0, 1);
 
     /**
      * 起飞点的空柱:线头是竖直的一段,爬到柱顶(巡航高度)再平飞。受理时只查这根柱子空不空({@code Glide.column}),不模拟,
@@ -65,7 +67,7 @@ class GlideLineTest {
     @Test
     void theApproachGlidesFromWhereTheRatioReachesTheTouchdown() {
         Vec3 touchdown = new Vec3(0.5, 0, 200.5);
-        List<List<Vec3>> far = Glide.descents(new Vec3(0.5, 10, 0.5), touchdown);
+        List<List<Vec3>> far = Glide.descents(new Vec3(0.5, 10, 0.5), touchdown, AHEAD);
         assertEquals(1, far.size());
         assertEquals(3, far.get(0).size());
         assertEquals(200.5 - 10 * Glide.GLIDE_RATIO, far.get(0).get(1).z, 1e-9);
@@ -73,8 +75,8 @@ class GlideLineTest {
         // 高了一些:平飞到俯冲的起点,按俯冲的下滑比掉到拉平点,再按滑翔比滑到降落点;盘旋排在后面
         Vec3 cruise = new Vec3(0.5, 16, 0.5);
         Vec3 near = new Vec3(0.5, 0, 110.5);
-        List<List<Vec3>> dive = Glide.descents(cruise, near);
-        assertEquals(2, dive.size());
+        List<List<Vec3>> dive = Glide.descents(cruise, near, AHEAD);
+        assertEquals(3, dive.size(), "俯冲一种,盘旋大小两圈各一种");
         List<Vec3> line = dive.get(0);
         assertEquals(4, line.size());
         assertEquals(16, line.get(1).y, 1e-9);
@@ -82,15 +84,16 @@ class GlideLineTest {
         assertEquals((line.get(3).z - line.get(2).z) / Glide.GLIDE_RATIO, line.get(2).y - line.get(3).y, 1e-9);
         assertTrue(line.get(1).z > cruise.z && line.get(1).z < line.get(2).z, "先平飞一段再俯冲");
         // 水平距离放不下平飞的一段:从起点直接俯冲,下滑比夹在最陡与俯冲之间
-        List<List<Vec3>> steep = Glide.descents(new Vec3(0.5, 24, 0.5), new Vec3(0.5, 0, 126.5));
+        List<List<Vec3>> steep = Glide.descents(new Vec3(0.5, 24, 0.5), new Vec3(0.5, 0, 126.5), AHEAD);
         List<Vec3> direct = steep.get(0);
         assertEquals(3, direct.size());
         double ratio = (direct.get(1).z - direct.get(0).z) / (direct.get(0).y - direct.get(1).y);
         assertTrue(ratio >= Glide.STEEPEST_RATIO && ratio <= 5.0, "直接俯冲的下滑比 " + ratio);
         // 高得下不去:不朝降落点硬俯冲,绕着它盘旋着往下沉,最后朝降落点下滑
         Vec3 high = new Vec3(0.5, 40, 150.5);
-        List<List<Vec3>> options = Glide.descents(high, touchdown);
-        assertEquals(1, options.size());
+        List<List<Vec3>> options = Glide.descents(high, touchdown, AHEAD);
+        assertEquals(2, options.size(), "盘旋大圈在前、小圈在后");
+        assertEquals(8.0, Math.hypot(options.get(1).get(2).x - touchdown.x, options.get(1).get(2).z - touchdown.z), 1e-6);
         List<Vec3> spiral = options.get(0);
         assertEquals(high, spiral.get(0));
         assertEquals(touchdown, spiral.get(spiral.size() - 1));
@@ -102,14 +105,26 @@ class GlideLineTest {
         assertTrue((spiral.get(spiral.size() - 2).y - touchdown.y) * Glide.GLIDE_RATIO >= 14, "最后一段朝降落点放得下滑翔比");
     }
 
-    /** 迫降的线:直接朝落点下滑,落点前一截拉平(按滑翔比)。 */
+    /** 落点就在正下方(先看正下方那一列):没有水平距离可滑,绕着它盘旋着沉,最后一段朝落点下滑。 */
     @Test
-    void theEmergencyLineFlaresOutAtTheEnd() {
-        Vec3 spot = new Vec3(0.5, 0, 90.5);
-        Airway way = Glide.emergency(new Vec3(0.5, 17.5, 0.5), spot);
-        Vec3 flare = way.at(way.length() - Math.hypot(24, 24 / Glide.GLIDE_RATIO));
-        assertEquals(spot.z - 24, flare.z, 1e-6);
-        assertEquals(24 / Glide.GLIDE_RATIO, flare.y, 1e-6);
-        assertEquals(spot, way.end());
+    void aSpotRightBelowIsDescendedBySpiral() {
+        Vec3 touchdown = new Vec3(0.5, 0, 0.5);
+        List<List<Vec3>> options = Glide.descents(new Vec3(0.5, 30, 0.5), touchdown, AHEAD);
+        assertEquals(2, options.size());
+        List<Vec3> spiral = options.get(0);
+        assertEquals(touchdown, spiral.get(spiral.size() - 1));
+        assertTrue(spiral.size() > 12, "盘旋至少一圈:" + spiral.size());
+        assertEquals(14.0, Math.hypot(spiral.get(1).x - touchdown.x, spiral.get(1).z - touchdown.z), 1e-6);
+        assertEquals(touchdown.z + 14.0, spiral.get(1).z, 1e-6, "从身体飞行方向那一侧的点转起,不掉头");
+    }
+
+    /** 够得着:在落点那一圈里就行,不然按滑翔比(留余量)加上烟花换来的高度算射程。 */
+    @Test
+    void reachCountsTheRatioAndTheRocketsLift() {
+        Vec3 from = new Vec3(0.5, 20, 0.5);
+        assertTrue(Glide.reaches(from, new Vec3(0.5, 0, 100.5), 0), "20 格高、100 格远:20 × 9 × 0.8 = 144");
+        assertTrue(!Glide.reaches(from, new Vec3(0.5, 0, 160.5), 0));
+        assertTrue(Glide.reaches(from, new Vec3(0.5, 0, 160.5), 10), "烟花换来 10 格高度就够得着");
+        assertTrue(Glide.reaches(new Vec3(0.5, 0, 0.5), new Vec3(3.5, 0, 0.5), 0), "已经在落点那一圈里");
     }
 }

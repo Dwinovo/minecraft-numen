@@ -91,4 +91,31 @@ class WatchdogTest {
         assertFalse(dog.overran(), "挖一块硬方块的一步期限跟着挖掘的刻数长");
         assertTrue(dog.progressing());
     }
+
+    /** 滑翔的尺子:被顶在方块上一上一下地抖(每一下都不止一格十分之一),走路的尺子永远算在推进,滑翔的尺子一秒之后就不算。 */
+    @Test
+    void aGlideShakingInASmallCircleStopsProgressingOnTheGlidingRuler() {
+        Watchdog walking = new Watchdog();
+        Watchdog gliding = Watchdog.gliding();
+        walking.begin(10, HERE);
+        gliding.begin(10, HERE);
+        for (int i = 0; i < 40; i++) {
+            Vec3 shaken = HERE.add(0, (i % 2) * 0.8, 0);
+            walking.observe(shaken, false);
+            gliding.observe(shaken, false);
+        }
+        assertTrue(walking.progressing(), "走路的尺子看着每一下都挪了");
+        assertFalse(gliding.progressing());
+    }
+
+    /** 滑翔着正常飞(每刻好几格)一直在推进。 */
+    @Test
+    void aGlideFlyingOnIsProgressing() {
+        Watchdog gliding = Watchdog.gliding();
+        gliding.begin(10, HERE);
+        for (int i = 0; i < 100; i++) {
+            gliding.observe(HERE.add(i * 0.6, -i * 0.1, 0), false);
+        }
+        assertTrue(gliding.progressing());
+    }
 }

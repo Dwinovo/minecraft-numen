@@ -23,8 +23,9 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 鞘翅:穿着鞘翅的身体叫了飞({@code Travel.FLY})就滑翔,不和走路比价钱。用普通假玩家({@link TestBody})经 {@code Navigator} 真走:
- * 平地起飞到远处降落、没烟花从高处走出边沿往下滑、没鞘翅或烟花不够当场拒绝、飞着烟花用完迫降后收工、前方突然多出一堵墙;另有穿着鞘翅走路(垫柱上升、跳沟)不误展开。
+ * 鞘翅:穿着鞘翅的身体叫了滑翔({@code Travel.GLIDE})就滑翔,不和走路比价钱。用普通假玩家({@link TestBody})经 {@code Navigator} 真走:
+ * 平地起飞、进目标 16 格降落、落地就到了;没烟花从高处走出边沿往下滑、没鞘翅或烟花不够当场拒绝、飞着烟花用完迫降后收工、前方突然多出一堵墙(飞得过去就飞过去,
+ * 拉不上去就在墙前迫降);另有穿着鞘翅走路(垫柱上升、跳沟)不误展开。
  */
 public class GlideGameTests {
 
@@ -47,19 +48,34 @@ public class GlideGameTests {
         return body;
     }
 
+    /** 进入目标 16 格才降,降下来落在哪由地面定:落地点离目标水平不超过 16 格再加这么多(盘旋的圈半径 14 加落点那一圈 6 再留余量)。 */
+    private static final double GLIDE_ERROR = 24;
+    /** 进入目标这么多格才降。 */
+    private static final double DESCENT = 16;
+
+    /** 落地(账上最后一段滑翔落地的那一格)离目标那一列的水平距离。 */
+    private static double landedFrom(Trial t, Trial.Run r, BlockPos target) {
+        BlockPos landed = r.report.ledger().glides().get(r.report.ledger().glides().size() - 1).landing();
+        return Math.hypot(landed.getX() - target.getX(), landed.getZ() - target.getZ());
+    }
+
     /** 全程走路的下界(刻):水平距离乘疾跑一格的耗时。 */
     private static double walkBound(TestBody body, double blocks) {
         return blocks * Kinematics.pace(Snapshots.stats(body)).sprint();
     }
 
-    /** 平地一百一十五格外:起飞、爬升、巡航、下滑,落在目标这一侧,走完最后一截;比全程走路的下界快,账上有一段滑翔、烟花用了几支、没掉血。 */
+    /** 平地一百一十五格外:起飞、爬升、巡航,进目标 16 格降落,落地就到了(不走最后一截);比全程走路的下界快,账上有一段滑翔、烟花用了几支、没掉血,落点离目标不超过 16 格加滑翔误差。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400, skyAccess = true)
     public static void a_winged_body_takes_off_and_lands_far_away(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         double bound = walkBound(body, 115);
-        t.glide(body, Goals.at(t.at(120, 1, MID)), RouteSpec.defaults()).within(1000)
+        BlockPos target = t.at(120, 1, MID);
+        t.glide(body, Goals.at(target), RouteSpec.defaults()).within(1000)
                 .then(r -> {
+                    if (landedFrom(t, r, target) > DESCENT + GLIDE_ERROR) {
+                        throw new GameTestAssertException("落点离目标 " + landedFrom(t, r, target) + " 格,超过 " + DESCENT + " + " + GLIDE_ERROR);
+                    }
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1) {
                         throw new GameTestAssertException("账上该有一段滑翔,实际 " + glides);
@@ -81,21 +97,23 @@ public class GlideGameTests {
                 .arrives();
     }
 
-    /** 目标是"离某点三格以内"(范围里有一百多个终点格):照样飞,落在目标这一侧,走完最后一截。 */
+    /** 目标是"离某点三格以内"(范围里有一百多个终点格):照样飞,进目标 16 格降落,落地就到了。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400, skyAccess = true)
     public static void a_range_goal_is_flown_to_like_a_cell(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
-        t.glide(body, Goals.within(Goals.at(t.at(120, 1, MID)), 0, 3), RouteSpec.defaults()).within(1000)
+        BlockPos target = t.at(120, 1, MID);
+        t.glide(body, Goals.within(Goals.at(target), 0, 3), RouteSpec.defaults()).within(1000)
                 .then(r -> {
-                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
-                        throw new GameTestAssertException("范围目标也该飞:" + r.report.ledger().glides());
+                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80
+                            || landedFrom(t, r, target) > DESCENT + GLIDE_ERROR) {
+                        throw new GameTestAssertException("范围目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
     }
 
-    /** 目标是一整列(只给 x、z):朝那一列飞,落在近处的地面上,走到那一列上。 */
+    /** 目标是一整列(只给 x、z):朝那一列飞,进 16 格降落,落在近处的地面上。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400, skyAccess = true)
     public static void a_column_goal_is_flown_to_like_a_cell(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -103,8 +121,9 @@ public class GlideGameTests {
         var cell = t.at(120, 1, MID);
         t.glide(body, Goals.column(cell.getX(), cell.getZ()), RouteSpec.defaults()).within(1000)
                 .then(r -> {
-                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
-                        throw new GameTestAssertException("列目标也该飞:" + r.report.ledger().glides());
+                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80
+                            || landedFrom(t, r, cell) > DESCENT + GLIDE_ERROR) {
+                        throw new GameTestAssertException("列目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
@@ -112,7 +131,7 @@ public class GlideGameTests {
 
     /**
      * 目标在远处没加载的区块里(沿途也没有加载的:从场地往四个方向、三四百格外起,取第一处从两百格外到目标都没加载的):不因为"沿途有没加载的区块"拒绝飞;
-     * 先朝那个水平位置飞,飞到哪加载到哪,那片加载了再定降落点;账上一段飞了两百多格的滑翔,收场落在地上。
+     * 先朝那个水平位置飞,飞到哪加载到哪,进了目标 16 格才选降落点(那片加载了才选得出);账上一段飞了两百多格的滑翔,收场落在地上。
      */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 3000, skyAccess = true)
     public static void a_goal_in_unloaded_chunks_is_flown_and_the_landing_is_found_on_the_way(GameTestHelper helper) {
@@ -272,8 +291,8 @@ public class GlideGameTests {
     }
 
     /**
-     * 飞到一半前方多出一堵墙(整宽,三十八格高,只在正中留一扇三格宽三格高的门洞供人走):线通不通每刻查,被挡就抬高巡航飞过去(烟花够),
-     * 抬不过去就在墙前迫降、落地时离目标还远烟花还够就再起飞;不撞上去(不掉血),到了目标。
+     * 飞到一半前方多出一堵墙(整宽,二十二格高):线通不通每刻查,被挡就沿航线往前拉升(烟花够),飞过去;不撞上去(不掉血),进目标 16 格降落,到了。
+     * 拉升是边往前飞边升,不是停下来原地竖直爬。
      */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800, skyAccess = true)
     public static void a_wall_that_appears_ahead_is_flown_over(GameTestHelper helper) {
@@ -283,12 +302,10 @@ public class GlideGameTests {
         t.glide(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
                 .during(r -> {
                     if (r.body.isFallFlying() && flying[0]++ == 40) {
-                        int x = (int) (r.body.getX() - t.origin.getX()) + 44;
-                        for (int dy = 1; dy <= 38; dy++) {
+                        int x = (int) (r.body.getX() - t.origin.getX()) + 60;
+                        for (int dy = 1; dy <= 22; dy++) {
                             for (int z = 2; z <= 61; z++) {
-                                if (dy > 3 || z < MID - 1 || z > MID + 1) {
-                                    t.change(x, dy, z, Blocks.STONE.defaultBlockState());
-                                }
+                                t.change(x, dy, z, Blocks.STONE.defaultBlockState());
                             }
                         }
                     }
@@ -297,11 +314,43 @@ public class GlideGameTests {
                     if (r.lowestHealth < 20) {
                         throw new GameTestAssertException("撞上了墙或摔了:最低血量 " + r.lowestHealth);
                     }
-                    if (r.report.ledger().glides().isEmpty()) {
-                        throw new GameTestAssertException("该有滑翔:" + r.report.ledger().glides());
+                    if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).emergency()) {
+                        throw new GameTestAssertException("该有一段飞过墙、不是迫降的滑翔:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
+    }
+
+    /**
+     * 飞到一半前方多出一堵拉不上去的墙(整宽,一百二十格高,烟花撑不到那么高):就近迫降在墙前,不撞上去(不掉血);落地时离目标不到 96 格,收工,结局说离目标还有多远。
+     */
+    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800, skyAccess = true)
+    public static void a_wall_that_cannot_be_climbed_ends_in_an_emergency_landing_before_it(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = winged(t, 5, 16);
+        int[] flying = {0};
+        t.glide(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
+                .during(r -> {
+                    if (r.body.isFallFlying() && flying[0]++ == 40) {
+                        int x = (int) (r.body.getX() - t.origin.getX()) + 44;
+                        for (int dy = 1; dy <= 120; dy++) {
+                            for (int z = 2; z <= 61; z++) {
+                                t.change(x, dy, z, Blocks.STONE.defaultBlockState());
+                            }
+                        }
+                    }
+                })
+                .fails(Outcome.Grounded.class, g -> {
+                    if (g.lack().why() != Lack.Why.SHORT || g.lack().have() <= 0 || g.lack().have() >= 96) {
+                        throw new GameTestAssertException("收工的原因该是没进目标范围就落了地、离目标不到 96 格:" + g.lack());
+                    }
+                })
+                .then(r -> {
+                    var glides = r.report.ledger().glides();
+                    if (glides.size() != 1 || !glides.get(0).emergency() || glides.get(0).damage() > 0 || r.lowestHealth < 20) {
+                        throw new GameTestAssertException("该有一段迫降且没掉血的滑翔:" + glides + " 最低血量 " + r.lowestHealth);
+                    }
+                });
     }
 
     /** 穿着鞘翅垫柱上升:垫柱在空中起跳,不会因为新按一下跳而展开鞘翅。 */

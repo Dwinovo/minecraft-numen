@@ -7,7 +7,7 @@ import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 
 /**
- * {@code numen.move.walk}、{@code numen.move.fly} 与 {@code numen.move.away} 这件活的记录:走或飞({@link Travel})到哪儿({@link Arrival})。
+ * {@code numen.move.walk}、{@code numen.move.fly}、{@code numen.move.glide} 与 {@code numen.move.away} 这件活的记录:走、创造飞行或滑翔({@link Travel})到哪儿({@link Arrival})。
  * 动手的活够不着时替自己走过去也用它({@link #errand}),那时只走路、不驾船。基础期限是 30 秒,出发后按路程再往后推(见 {@link MoveToCompanionTask})。
  */
 public final class MoveToTaskRecord extends TaskRecord<Walked> {
@@ -17,7 +17,7 @@ public final class MoveToTaskRecord extends TaskRecord<Walked> {
 
     /** 怎样算到了。 */
     public final Arrival arrival;
-    /** 走还是飞:{@code move.walk}、{@code move.away}、替自己走过去是走,{@code move.fly} 是飞。 */
+    /** 怎么去:{@code move.walk}、{@code move.away}、替自己走过去是走,{@code move.fly} 是创造飞行,{@code move.glide} 是鞘翅滑翔。 */
     public final Travel travel;
     /** 坐在船上可以驾船过去;不可以(动手的活替自己走路)就只走路,坐着任何载具都要先下来。 */
     public final boolean sailing;

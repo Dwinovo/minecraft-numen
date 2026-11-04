@@ -22,14 +22,14 @@ import net.minecraft.core.BlockPos;
 
 /**
  * 一趟行程:由几段组成({@link Segment}),每段一种移动方式,共用一本账、一份行程日志和同一套重规划原因({@link Rig})。
- * 走路的一段({@link Driver})自己搜、自己重搜;滑翔的一段({@link Sortie})飞一次;身体在飞而要走路时先落地({@link Alight})。
- * 段与段只通过"这一段到了没有"相连。走还是飞由调用方说({@link Travel}),寻路不比价钱:
+ * 走路的一段({@link Driver})自己搜、自己重搜;滑翔的一段({@link Sortie})飞一次;身体在飞而要走路或滑翔时先落地({@link Alight})。
+ * 段与段只通过"这一段到了没有"相连。用哪一类移动方式由调用方说({@link Travel}),寻路不比价钱:
  * <ul>
  *   <li><b>走</b>({@link Travel#WALK}):从不飞,身体许飞也一样(快照按没有飞行能力算)。身体在飞,先落到地上,再走;</li>
- *   <li><b>飞,许飞的身体</b>:创造飞行进走路的搜索本身({@link Driver},走法集由身体给);</li>
- *   <li><b>飞,穿着鞘翅</b>:走到起飞点 → 起飞 → 巡航 → 进近降落({@link Glide})→ 走完最后一截({@link Glide#FINAL_WALK} 以内)。
- *       落地时离目标还远(中途迫降),够用就从此刻的位置再起飞,这一趟里失败过的起飞点不再用;不够用就收工({@link Halt.Grounded}),
- *       不悄悄改成长途步行。走不到起飞点、起飞没成,也是换一个起飞点。</li>
+ *   <li><b>创造飞行</b>({@link Travel#FLY}):身体许飞才行(受理时就拒绝不许飞的),创造飞行进走路的搜索本身({@link Driver},走法集由身体给);</li>
+ *   <li><b>滑翔</b>({@link Travel#GLIDE}):走到起飞点 → 起飞 → 巡航 → 进入目标 {@link Glide#DESCENT_RANGE} 格就降落({@link Glide}),落地就是这一趟的结束,
+ *       不再走最后一截。没进目标范围就落了地(中途迫降):离目标超过 {@link Glide#REFLY_RANGE} 格、够用就从此刻的位置再起飞,这一趟里失败过的起飞点不再用;
+ *       不超过或不够用就收工({@link Halt.Grounded}),不悄悄改成走路。走不到起飞点、起飞没成,也是换一个起飞点。被方块顶住({@link Sortie#trapped})收场,不再起飞。</li>
  * </ul>
  * 寻路从不替她穿脱装备、去箱子里拿烟花:身上有什么就用什么。
  */
@@ -98,7 +98,7 @@ public final class Voyage {
             if (asked.lack() != null) {
                 grounded(asked.lack());
             } else {
-                walkOn(seed, passing);
+                walkOn();
             }
             return;
         }
@@ -113,7 +113,7 @@ public final class Voyage {
     /** 身体在地上:走的一趟照路线走,滑翔的一趟排起飞。 */
     private void afoot() {
         if (rig.travel == Travel.WALK) {
-            walkOn(seed, passing);
+            walkOn();
             return;
         }
         Admission asked = admission != null ? admission : Glide.admit(rig, goal, spent);
@@ -170,9 +170,15 @@ public final class Voyage {
             }
             case SORTIE -> {
                 Sortie sortie = (Sortie) current;
-                if (s == Driver.State.ARRIVED && sortie.reached()) {
-                    // 落在了计划的降落点:剩下的是最后一截(目标在水里时,最近的岸也在这一截里)
-                    walkOn(null, false);
+                if (s == Driver.State.ARRIVED && sortie.descended()) {
+                    // 进了目标范围、降到落地:这一趟到了,落在哪里、离目标多远交给回执
+                    state = s;
+                    return state;
+                }
+                if (sortie.trapped()) {
+                    // 被方块顶住:收工,接下来怎么办(挖开、换个方向)由她定
+                    state = s;
+                    halt = sortie.halt();
                     return state;
                 }
                 spent.add(sortie.takeoffCell());
@@ -191,16 +197,17 @@ public final class Voyage {
     }
 
     /**
-     * 滑翔的一段没飞到计划的降落点(起飞没成、迫降、中途被打断),身体落在了地上:离目标不超过 {@link Glide#FINAL_WALK}(一次计划好的降落留下的最后一截)
-     * 就走过去;还远就从这里再飞,缺什么就收工。
+     * 滑翔的一段没进目标范围就落了地(起飞没成、迫降、中途被打断):离目标超过 {@link Glide#REFLY_RANGE} 格就从这里再排起飞(缺什么就收工,说缺什么);
+     * 不超过就收工,说离目标还有多远。
      */
     private void afterSortie() {
         Goal.Anchor target = goal.anchor(rig.entity.position());
-        if (target == null || target.distance(rig.entity.position()) <= Glide.FINAL_WALK) {
-            walkOn(null, false);
-            return;
+        double left = target == null ? 0 : target.distance(rig.entity.position());
+        if (left > Glide.REFLY_RANGE) {
+            again();
+        } else {
+            grounded(new Lack(Lack.Why.SHORT, (int) Glide.REFLY_RANGE, (int) Math.round(left)));
         }
-        again();
     }
 
     /** 再排一次起飞:没用过的起飞点里排得成就去,排不成(缺烟花、耐久、起飞的地方……)收工。 */
@@ -232,9 +239,9 @@ public final class Voyage {
         state = Driver.State.HALTED;
     }
 
-    /** 从身体此刻的位置照目标走到底:最后一个走路的段。 */
-    private void walkOn(Route route, boolean through) {
-        current = new Driver(rig, goal, spec, budget, route, through, clock);
+    /** 从身体此刻的位置照目标走(创造飞行进同一个搜索)到底:照调用方交进来的路线,没有就搜。 */
+    private void walkOn() {
+        current = new Driver(rig, goal, spec, budget, seed, passing, clock);
         phase = Phase.FINAL;
     }
 

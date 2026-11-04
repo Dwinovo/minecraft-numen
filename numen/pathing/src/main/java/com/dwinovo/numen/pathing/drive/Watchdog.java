@@ -20,13 +20,33 @@ public final class Watchdog {
     private static final int SLACK_TICKS = 60;
     /** 连续这么多刻没推进,就不算在推进。 */
     private static final int STALL = 20;
-    /** 身体离上一个推进点这么远,就算挪动过。 */
+    /** 走路:身体离上一个推进点这么远,就算挪动过。 */
     private static final double MOVED = 0.1;
+    /**
+     * 滑翔:身体被顶在方块上会在原地一上一下地抖(烟花往上推、碰到头顶、落回来再推),每一下都不止 {@link #MOVED},按走路的尺子永远算在推进。
+     * 滑翔的身体正常每刻飞好几格,所以尺子放大:离上一个推进点不到这么远的来回,不算挪动。
+     */
+    private static final double GLIDING_MOVED = 2.0;
 
+    private final double moved;
     private int stepTicks;
     private double allowance = Double.POSITIVE_INFINITY;
     private Vec3 anchor;
     private int idle;
+
+    /** 走路的尺子:挪动过 {@value #MOVED} 格就算。 */
+    public Watchdog() {
+        this(MOVED);
+    }
+
+    private Watchdog(double moved) {
+        this.moved = moved;
+    }
+
+    /** 滑翔的尺子({@link #GLIDING_MOVED}):在一个小圈里来回抖不算挪动。 */
+    static Watchdog gliding() {
+        return new Watchdog(GLIDING_MOVED);
+    }
 
     /** 一步开始:按它的最短耗时 {@code minimumTicks} 定期限。 */
     void begin(double minimumTicks, Vec3 body) {
@@ -38,7 +58,7 @@ public final class Watchdog {
     /** 这一刻身体在 {@code body};{@code worked} 是这一刻真的干了活。 */
     void observe(Vec3 body, boolean worked) {
         stepTicks++;
-        if (anchor == null || worked || body.distanceToSqr(anchor) > MOVED * MOVED) {
+        if (anchor == null || worked || body.distanceToSqr(anchor) > moved * moved) {
             anchor = body;
             idle = 0;
         } else {

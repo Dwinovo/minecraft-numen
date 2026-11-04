@@ -176,13 +176,30 @@ class NavTextTest {
     /** 鞘翅滑翔的细账:烟花用了几支(计划几支)、鞘翅耐久前后、掉血、迫降、还在空中。 */
     @Test
     void aGlideIsTold() {
-        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false);
+        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, false);
         assertEquals("I flew 109 blocks (took off at 120,65,-33; landed at 121,64,-33). Gliding used 2 firework rockets"
                 + " and wore the elytra from 0 to 3 damage; I lost no health.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
                 new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed), List.of())));
-        EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true);
+        EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true, false);
         assertEquals("Gliding used 1 firework rocket and wore the elytra from 3 to 4 damage; I lost 3 health and had to"
                 + " land early where the ground was within reach. I am still in the air.", NavText.glide(forced));
+        EditLedger.Glided pinned = new EditLedger.Glided(A.above(), C, 12, 4, 0, 1, 0F, false, true, true);
+        assertEquals("Gliding used 4 firework rockets and wore the elytra from 0 to 1 damage; I lost no health. I got stuck against blocks"
+                + " in the air and let go of the controls there. I am still in the air.", NavText.glide(pinned));
+    }
+
+    /** 创造飞行不许飞:说不许飞,下一步走;穿着鞘翅(耐久大于 0)的再给滑翔。早落了地离目标不到再起飞的门槛:说离多远、门槛多少。 */
+    @Test
+    void flyingWithoutPermissionAndLandingShortAreTold() {
+        String bare = NavText.lack(new Lack(Lack.Why.NO_FLIGHT, 0, 0));
+        assertTrue(bare.contains("not allowed to fly") && bare.contains("`numen.move.walk`") && !bare.contains("`numen.move.glide`"), bare);
+        assertTrue(NavText.lack(new Lack(Lack.Why.NO_FLIGHT, 0, 300)).contains("`numen.move.glide`"));
+        assertEquals(FailureType.NO_PATH, NavText.type(new Lack(Lack.Why.NO_FLIGHT, 0, 0)));
+        Lack short_ = new Lack(Lack.Why.SHORT, 96, 40);
+        assertEquals("I had to come down early, 40 blocks short of there (horizontally); I take off again only when it is more than 96 blocks away:"
+                + " `numen.move.walk` goes the rest, or `numen.move.glide` again from here", NavText.lack(short_));
+        assertEquals(FailureType.NO_PATH, NavText.type(short_));
+        assertTrue(NavText.lack(new Lack(Lack.Why.TOO_NEAR, 16, 9)).contains("already inside the 16 blocks"));
     }
 
     /** 飞不起来:缺什么、怎么补,各说各的;缺的是身上的东西归"缺料",别的归"没路"。 */
@@ -195,7 +212,7 @@ class NavTextTest {
         assertTrue(NavText.lack(new Lack(Lack.Why.NO_TAKEOFF, 24, 0)).contains("within 24 blocks"));
         assertEquals(FailureType.NO_MATERIAL, NavText.type(few));
         assertEquals(FailureType.NO_PATH, NavText.type(new Lack(Lack.Why.NO_LANDING, 24, 0)));
-        assertEquals("stopped flying from 120, 64, -33 toward 121, 64, -33, about 1 blocks away: " + NavText.lack(few),
+        assertEquals("stopped gliding from 120, 64, -33 toward 121, 64, -33, about 1 blocks away: " + NavText.lack(few),
                 NavText.failure(new Outcome.Grounded(few), null, A, C, RouteSpec.defaults(), List.of()));
     }
 

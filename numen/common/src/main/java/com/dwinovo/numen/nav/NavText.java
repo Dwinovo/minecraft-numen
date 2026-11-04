@@ -68,7 +68,7 @@ public final class NavText {
     public static FailureType type(Lack lack) {
         return switch (lack.why()) {
             case NO_WINGS, WORN, TOO_FEW_ROCKETS -> FailureType.NO_MATERIAL;
-            case NO_FLIGHT, NO_PLACE, TOO_NEAR, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
+            case NO_FLIGHT, NO_PLACE, TOO_NEAR, SHORT, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
         };
     }
 
@@ -146,7 +146,9 @@ public final class NavText {
             case TOO_FEW_ROCKETS -> "I have " + lack.have() + (lack.have() == 1 ? " firework rocket" : " firework rockets") + " and taking off needs at least " + lack.need()
                     + ", and there is no ledge near me to glide down from: bring more rockets, stand on a ledge, or go on foot with `numen.move.walk`";
             case NO_PLACE -> "gliding goes to a column: give `numen.move.glide` a column {x = …, z = …}, a Pos, a Block or an Entity";
-            case TOO_NEAR -> "it is only " + lack.have() + " blocks away, closer than a glide lands (about " + lack.need() + "): `numen.move.walk` goes there";
+            case TOO_NEAR -> "it is only " + lack.have() + " blocks away, already inside the " + lack.need() + " blocks where a glide starts to come down: `numen.move.walk` goes there";
+            case SHORT -> "I had to come down early, " + lack.have() + " blocks short of there (horizontally); I take off again only when it is more than "
+                    + lack.need() + " blocks away: `numen.move.walk` goes the rest, or `numen.move.glide` again from here";
             case NO_TAKEOFF -> "there is no spot with open sky within " + lack.need() + " blocks of me to take off from: `numen.move.walk` to an open"
                     + " place, then `numen.move.glide`";
             case NO_ROUTE -> "no flight line from the spots around me got past the terrain on the way there";
@@ -279,6 +281,7 @@ public final class NavText {
             case FELL_BACK -> "I kept ending up back where the step before it started";
             case LOST -> "I kept ending up beside the route instead of where the step lands";
             case BOXED -> "in the air every way I could fly led into a block";
+            case PINNED -> "I was gliding and a block held me: for a second I did not get away from the spot, so I let go of the controls (`numen.work.dig` clears it)";
         };
     }
 
@@ -351,7 +354,7 @@ public final class NavText {
     }
 
     /**
-     * 一段鞘翅滑翔的细账:用了几支烟花、鞘翅耐久前后、落地掉了几点血、是不是迫降、收场时是不是还在空中。例如
+     * 一段鞘翅滑翔的细账:用了几支烟花、鞘翅耐久前后、落地掉了几点血、是不是迫降、是不是被方块顶住、收场时是不是还在空中。例如
      * {@code Gliding used 2 firework rockets and wore the elytra from 0 to 3 damage; I lost no health.}
      */
     static String glide(EditLedger.Glided glide) {
@@ -363,6 +366,9 @@ public final class NavText {
             sb.append(" and had to land early where the ground was within reach");
         }
         sb.append('.');
+        if (glide.trapped()) {
+            sb.append(" I got stuck against blocks in the air and let go of the controls there.");
+        }
         if (glide.airborne()) {
             sb.append(" I am still in the air.");
         }

@@ -36,11 +36,11 @@ public final class EditLedger {
     public record Toggled(BlockPos pos, BlockState before, BlockState after) implements Entry {}
 
     /**
-     * 一段滑翔的账:从哪儿起飞、在哪儿落地、水平飞了多远、放了几支烟花(计划的是几支)、鞘翅耐久前后、落地时掉了几点血、是不是迫降、收场时还在不在空中。
+     * 一段滑翔的账:从哪儿起飞、在哪儿落地、水平飞了多远、放了几支烟花(计划的是几支)、鞘翅耐久前后、落地时掉了几点血、是不是迫降、收场时还在不在空中、是不是被方块顶住收的场。
      * 照实记身体做的,不记意图。
      */
     public record Glided(BlockPos takeoff, BlockPos landing, double blocks, int rockets, int wearBefore, int wearAfter, float damage,
-                         boolean emergency, boolean airborne) {}
+                         boolean emergency, boolean airborne, boolean trapped) {}
 
     private final List<Entry> entries = new ArrayList<>();
     private final List<Glided> glides = new ArrayList<>();

@@ -305,6 +305,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + " blocks from " + where + ", still sitting in the boat; `numen.use.dismount()` steps off to go on "
                     + "on foot.";
         }
+        if (r.travel == Travel.GLIDE) {
+            // 滑翔落在哪一层、离那一列多远由地面定:如实交代,走完剩下的由她决定
+            return "glided and landed at " + here(gy) + ", " + String.format("%.1f", distance()) + " blocks (horizontally) from " + where
+                    + "; `numen.move.walk` goes the rest.";
+        }
         String reached = switch (a.how()) {
             case AT -> switch (a.to()) {
                 case Where.Height h -> "reached elevation y=" + gy;
