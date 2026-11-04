@@ -1,6 +1,6 @@
 # 0043 走与飞分成两个动词:move.walk 只走,move.fly 只飞,飞的条件照参考项目
 
-- 状态:已接受(取代 [0042](0042-flight-and-gliding.md) 的"一、接口"与"五、鞘翅"里"用不用、起飞点、巡航高度、交账"几条;0042 的身体层、步进器、颈部、`Pilot`、`Airway`、迫降与盘旋照旧)
+- 状态:已接受,接口里 `move.fly` 一条与鞘翅的降落、落地之后两条被 [0044](0044-fly-and-glide-verbs.md) 取代(取代 [0042](0042-flight-and-gliding.md) 的"一、接口"与"五、鞘翅"里"用不用、起飞点、巡航高度、交账"几条;0042 的身体层、步进器、颈部、`Pilot`、`Airway`、迫降与盘旋照旧)
 - 日期:11-03(与用户定)
 - 相关:[0042](0042-flight-and-gliding.md)、[0016](0016-model-says-where-only.md)、`D:\01_Projects\flight-research\REPORT.md` 与 `REPORT-feel.md`
 
