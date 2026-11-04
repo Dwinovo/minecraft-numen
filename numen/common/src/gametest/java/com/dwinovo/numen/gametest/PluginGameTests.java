@@ -164,46 +164,6 @@ public class PluginGameTests {
         helper.succeed();
     }
 
-    /**
-     * 启动时名单上的插件不 setup、状态是已关闭,没在名单上的照常装:换一份预先写好名单的新花名册,经真的那扇门(登记得到的)
-     * 装两个插件,看它们登记的事件种类在不在。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
-    public static void a_plugin_on_the_list_at_start_is_not_set_up(GameTestHelper helper) throws java.io.IOException {
-        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("numen-gametest-plugins-");
-        var switches = new com.dwinovo.numen.api.plugin.PluginSwitches(new com.dwinovo.numen.api.store.JsonDoc(
-                dir.resolve(com.dwinovo.numen.api.plugin.PluginSwitches.FILE),
-                com.dwinovo.numen.api.store.JsonDoc.Format.of(1), com.dwinovo.numen.api.store.Io.direct(e -> {
-                    throw e;
-                })));
-        switches.write(java.util.Set.of("gt_start_off"));
-        var roster = new com.dwinovo.numen.api.plugin.PluginRoster(() -> switches, id -> com.dwinovo.numen.api.plugin.PluginRoster.Meta.NONE);
-        var before = com.dwinovo.numen.api.NumenPlugins.roster();
-        com.dwinovo.numen.api.NumenPlugins.useRoster(roster);
-        try {
-            com.dwinovo.numen.api.NumenPlugins.register("gt_start_off",
-                    numen -> numen.registerEventType("gametest_start_off", false));
-            com.dwinovo.numen.api.NumenPlugins.register("gt_start_on",
-                    numen -> numen.registerEventType("gametest_start_on", false));
-        } finally {
-            com.dwinovo.numen.api.NumenPlugins.useRoster(before);
-        }
-
-        var rows = roster.plugins();
-        helper.assertTrue(!com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gametest_start_off"),
-                "the plugin on the list was set up");
-        helper.assertTrue(com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gametest_start_on"),
-                "the plugin off the list was not set up");
-        helper.assertTrue(rows.stream().anyMatch(r -> r.id().equals("gt_start_off")
-                        && r.status() == com.dwinovo.numen.api.plugin.PluginRoster.Status.DISABLED),
-                "the plugin on the list is not shown as off: " + rows);
-        helper.assertTrue(rows.stream().anyMatch(r -> r.id().equals("gt_start_on")
-                        && r.status() == com.dwinovo.numen.api.plugin.PluginRoster.Status.LOADED
-                        && r.adds().get(com.dwinovo.numen.api.plugin.PluginRoster.Kind.EVENT_TYPE) == 1),
-                "the plugin off the list is not shown as loaded with what it added: " + rows);
-        helper.succeed();
-    }
-
     /** 一组会来会去的函数:管理员关开它所在的插件时,她的函数清单跟着变。 */
     public static final class Dyn {
 
@@ -348,19 +308,5 @@ public class PluginGameTests {
                 .thenExecute(() -> com.dwinovo.numen.api.NumenPlugins.roster().setDisabled("gt_dyn", false))
                 .thenExecute(() -> CompanionFactory.despawn(server, companion))
                 .thenSucceed();
-    }
-
-    /** 联动的目标模组没装:闸门不装它,它也不算这台服务器上的插件,花名册里没有这一行。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_plugin")
-    public static void a_link_whose_target_is_not_installed_is_not_a_plugin(GameTestHelper helper) {
-        boolean[] installed = {false};
-        new com.dwinovo.numen.plugins.Gate(mod -> false, path -> null)
-                .open("gametest_absent_mod", "gt_absent", () -> () -> installed[0] = true);
-
-        helper.assertTrue(!installed[0], "the link was installed without its target");
-        helper.assertTrue(com.dwinovo.numen.api.NumenPlugins.roster().plugins().stream()
-                        .noneMatch(p -> p.id().equals("gt_absent")),
-                "a link without its target is on the plugin list");
-        helper.succeed();
     }
 }

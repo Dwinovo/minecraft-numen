@@ -126,6 +126,30 @@ class PluginRosterTest {
         assertEquals(java.util.Set.of("on"), switches(dir).disabled(), "改动落了盘");
     }
 
+    /**
+     * 启动时名单上的插件不 setup、状态是已关闭,没在名单上的照常装:换一份预先写好名单的新花名册,经真的那扇门
+     * ({@link NumenPlugins#register})装两个插件,看它们登记的事件种类在不在,花名册里各是哪一行、加了什么。
+     */
+    @Test
+    void aPluginOnTheListAtStartIsNotSetUpThroughTheRealDoor(@TempDir Path dir) {
+        switches(dir).write(java.util.Set.of("gt_start_off"));
+        PluginRoster roster = roster(dir);
+        PluginRoster before = NumenPlugins.roster();
+        NumenPlugins.useRoster(roster);
+        try {
+            NumenPlugins.register("gt_start_off", numen -> numen.registerEventType("gametest_start_off", false));
+            NumenPlugins.register("gt_start_on", numen -> numen.registerEventType("gametest_start_on", false));
+        } finally {
+            NumenPlugins.useRoster(before);
+        }
+
+        assertFalse(com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gametest_start_off"), "名单上的插件被装上了");
+        assertTrue(com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gametest_start_on"), "不在名单上的插件没装");
+        assertEquals(Status.DISABLED, row(roster, "gt_start_off").status());
+        assertEquals(Status.LOADED, row(roster, "gt_start_on").status());
+        assertEquals(1, row(roster, "gt_start_on").adds().get(Kind.EVENT_TYPE), "装上的插件没记下它加了什么");
+    }
+
     /** 关了再开:setup 再跑一遍,登记回来,记数从头记。 */
     @Test
     void switchingOffAndOnAgainRegistersItAgain(@TempDir Path dir) {
