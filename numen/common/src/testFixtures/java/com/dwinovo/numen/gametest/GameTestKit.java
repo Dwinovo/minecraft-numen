@@ -76,6 +76,11 @@ public final class GameTestKit {
     static final long NOON = 6000;
     /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
     static final long MIDNIGHT = 18000;
+    /**
+     * 走路、挖掘、游泳、到达的用例共用的一批:都是和平难度 + 正午,各占自己的场地;一批里长短不一,慢的几条在同一批里叠着跑,
+     * 批与批之间清场地的固定开销也只付一次。一批最多 50 条({@code GameTestBatchFactory}),超出的原版自动续一批。
+     */
+    static final String ON_FOOT = "numen_on_foot";
     /** 批次开场定下的晴天维持多久(刻):一整天,够一批跑完。 */
     private static final int CLEAR_WEATHER_TICKS = 24000;
     /** 测试服的模拟距离(区块):端到端与 Paper 测试服也是这个值。 */

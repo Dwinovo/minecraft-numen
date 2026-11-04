@@ -9,11 +9,9 @@ import com.dwinovo.numen.pathing.plan.Breath;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
-import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -23,14 +21,8 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public class SwimGameTests {
 
-    private static final String BATCH = "numen_swim";
     /** 水道所在的那一行。 */
     private static final int Z = 20;
-
-    @BeforeBatch(batch = BATCH)
-    public static void prepare(ServerLevel level) {
-        settleWorld(level, Difficulty.PEACEFUL, NOON);
-    }
 
     private static void fill(GameTestHelper helper, int x0, int y0, int z0, int x1, int y1, int z1, BlockState state) {
         for (int x = x0; x <= x1; x++) {
@@ -58,7 +50,7 @@ public class SwimGameTests {
      * 8 格长的封顶水道(一口气约 110 刻):{@code numen.move.walk} 到对岸,她游过去,一口气到头——换气本能没有在计划内的水下把她拽上去;
      * 回执说潜过一段水、憋了多久、氧气最低到多少;一点血不掉。
      */
-    @GameTest(template = "floor52", timeoutTicks = 453, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 453, batch = ON_FOOT)
     public static void goto_swims_a_short_sealed_channel_and_says_so(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 18);
@@ -90,7 +82,7 @@ public class SwimGameTests {
      *   <li>唯一的路被挡死,{@code numen.move.walk} 没走到,回执说潜过一段水、憋了多久。</li>
      * </ul>
      */
-    @GameTest(template = "floor52", timeoutTicks = 600, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
     public static void a_planned_dive_held_up_under_water_lets_go_before_the_air_runs_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 27);
@@ -139,7 +131,7 @@ public class SwimGameTests {
      * 28 格长的封顶水道(一口气约 290 刻,满氧气安全地只憋得住 240 刻),是两边唯一的路:{@code numen.move.walk} 不下水,回执说那一段
      * 水下从哪儿到哪儿、要憋多久、能憋多久,有水下呼吸才走得了;她没进过水,一点血不掉。
      */
-    @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 200, batch = ON_FOOT)
     public static void goto_will_not_dive_a_sealed_channel_too_long_to_hold(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 8, 36);

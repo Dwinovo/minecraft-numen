@@ -10,11 +10,9 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 
 /**
@@ -22,13 +20,6 @@ import net.minecraft.world.level.block.Blocks;
  * 点名也不挖。格子由程序写出来,和她拿扫描结果原样交过去一样;都从脚本入口进。
  */
 public class CellRouteGameTests {
-
-    private static final String BATCH = "numen_cell_route";
-
-    @BeforeBatch(batch = BATCH)
-    public static void prepare(ServerLevel level) {
-        settleWorld(level, Difficulty.PEACEFUL, NOON);
-    }
 
     /** 两个对角(相对坐标)之间的每一格,绝对坐标。 */
     private static List<BlockPos> box(GameTestHelper helper, BlockPos from, BlockPos to) {
@@ -54,7 +45,7 @@ public class CellRouteGameTests {
     }
 
     /** 走进几格之一:场地一角的一片空地(脚所在的那一层),她从另一角出发,停在其中某一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void goto_several_cells_walks_into_any_of_them(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
@@ -75,7 +66,7 @@ public class CellRouteGameTests {
      * 几个方块走到其中之一旁边:两格各是一口箱子(写成带 name 的 Block),一口在她跟前、一口在场地对角。没说距离,她走到近的那一口旁边,
      * 不走进去。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void goto_several_blocks_goes_beside_the_nearest(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(new BlockPos(7, 2, 2));
@@ -96,7 +87,7 @@ public class CellRouteGameTests {
     }
 
     /** 停在几格附近:离其中某一格不超过 3 格就算到,回执照说;不走进去。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void goto_near_several_cells_stops_within_range_of_them(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hoverer", new BlockPos(2, 2, 2), false);
@@ -119,7 +110,7 @@ public class CellRouteGameTests {
      * 路上不挖放置记号的格:关在石屋里,终点在屋东边;东墙带着放置记号(她自己放的,和日式小屋卡在底层来回挖自己刚放下的格同一件事),
      * 别的墙没有(石头是地形,她许挖)。不点名任何禁区,她挖开别的墙绕出去,东墙一块不少。
      */
-    @GameTest(template = "floor16", timeoutTicks = 528, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 528, batch = ON_FOOT)
     public static void a_walk_never_digs_what_a_player_placed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         roomAround(helper, 7, 7, Blocks.STONE);
@@ -154,7 +145,7 @@ public class CellRouteGameTests {
      * 别的玩家放下的一堵墙挡在去路上:{@code numen.move.walk} 绕过去,不挖它。墙两格高、七格长,正好横在她和终点之间;
      * 创造模式挖一块墙几乎不花时间,路线若把它当地形,一定直接挖穿——绕开靠的是放置记号,不是挖不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = ON_FOOT)
     public static void a_walk_goes_round_a_wall_another_player_placed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnBare(helper, "gametest_goer", new BlockPos(8, 2, 3), true);
