@@ -1,6 +1,6 @@
 # 0044 创造飞行与鞘翅分成两个动词:move.fly 只用创造飞行,move.glide 只用鞘翅,降落照参考项目
 
-- 状态:已接受(取代 [0043](0043-walk-and-fly-verbs.md) 的"一、接口"里 `move.fly` 一条与"二、鞘翅"里降落、落地之后两条;0043 的 `move.walk`、起飞空柱、巡航高度、烟花耐久下限、受理的几何判据照旧)
+- 状态:已接受;"验证"一节被 testing [0001](../testing/0001-gametest-short-deterministic-fixed.md) 修订(长趟与真实地形改纯 JVM 场景,GameTest 只留短用例)(取代 [0043](0043-walk-and-fly-verbs.md) 的"一、接口"里 `move.fly` 一条与"二、鞘翅"里降落、落地之后两条;0043 的 `move.walk`、起飞空柱、巡航高度、烟花耐久下限、受理的几何判据照旧)
 - 日期:11-04(与用户定)
 - 相关:[0042](0042-flight-and-gliding.md)、[0043](0043-walk-and-fly-verbs.md)、`D:\01_Projects\flight-research\REPORT.md` 与 `REPORT-feel.md`(第四节"降落进场"、第五节"迫降")
 

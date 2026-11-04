@@ -16,4 +16,5 @@
 | 操控 | [control/](control/README.md) | AI 怎么操控她:从注册工具、命令行到 Lua | `agent`、`lua`、`numen-api`(程序、外部大脑) |
 | 运行形态 | [runtime/](runtime/README.md) | 她在哪一端跑、数据存哪、两端怎么传 | `store`、`agent`、`numen-api`(网络、归属) |
 | 寻路 | [pathing/](pathing/README.md) | 从第一版 A* 到 0.1.5 | `numen:pathing` |
+| 测试 | [testing/](testing/README.md) | 各层测试测什么,GameTest 怎么写、不稳定怎么办 | 全部模块的 `test`、`gametest`、`e2e` |
 | 模型接入 | [llm/](llm/README.md) | 怎么接各家模型:零依赖自写、线格式适配、三种协议、思考方言、档案 | `ai` |
