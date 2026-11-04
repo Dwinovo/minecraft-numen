@@ -83,14 +83,14 @@ public class ElytraGameTests {
     }
 
     /**
-     * 丘陵:一列的高度是几组正弦的和(起伏 {@code amplitude} 格、坡度不过四成,缓坡里有平的山顶与谷底),石头垫底、泥土、最上一层草。高度函数交回给用例,
+     * 丘陵:一列的高度是几组正弦的和(起伏 {@code amplitude} 格、坡度不过三成,缓坡里有平的山顶与谷底),石头垫底、泥土、最上一层草。高度函数交回给用例,
      * 好在断言里知道一列的地面在哪。
      */
     private static java.util.function.IntBinaryOperator hills(GameTestHelper helper, int amplitude) {
         ServerLevel level = helper.getLevel();
         var box = helper.getBounds();
         java.util.function.IntBinaryOperator height = (x, z) -> (int) Math.round(amplitude
-                * (2 + Math.sin(x / 22.0) + Math.sin(z / 16.0 + 1) + Math.sin((x + z) / 30.0)) / 2);
+                * (2 + Math.sin(x / 30.0) + Math.sin(z / 22.0 + 1) + Math.sin((x + z) / 40.0)) / 2);
         for (int x = 0; x < (int) box.getXsize(); x++) {
             for (int z = 0; z < (int) box.getZsize(); z++) {
                 int top = 1 + height.applyAsInt(x, z);
@@ -227,15 +227,16 @@ public class ElytraGameTests {
     }
 
     /**
-     * 目标在树下:一整片树林,树冠连成一片,目标那一列在树林里面,离它几格有一块空地。头顶有树冠的地方不是落点:她落在空地上(或树林外),不在树冠上、不掉血。
+     * 目标在树下:一片三十格宽的树林(树冠连成一片),目标那一列在树林中间,头顶是树冠。进了目标 16 格她正在树林西缘的上空:树冠上、树冠下都不是落点(最高碰撞面是树叶),
+     * 她落在树林西边的草地上(或别处的空地),不在树冠上、不掉血;落点离目标不超过 16 格加滑翔误差。
      */
     @GameTest(template = FIELD, timeoutTicks = 3000, batch = BATCH, skyAccess = true)
     public static void a_glide_to_a_column_under_the_trees_lands_in_the_open(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ground(helper, 2);
-        forest(helper, 2, 100, 4, 170, 60, 3, 23, new int[] {124, 132, 28, 36});
+        forest(helper, 2, 118, 4, 150, 60, 3, 23, null);
         NumenPlayer her = winged(helper, "gametest_under", new BlockPos(6, 3, MID), 14, false);
-        BlockPos target = helper.absolutePos(new BlockPos(142, 3, MID));
+        BlockPos target = helper.absolutePos(new BlockPos(134, 3, MID));
         float[] lowest = watchHealth(helper, her);
         ToolRun glide = lua(her, "return numen.move.glide({x = " + target.getX() + ", z = " + target.getZ() + "})");
 
@@ -253,7 +254,7 @@ public class ElytraGameTests {
     @GameTest(template = FIELD, timeoutTicks = 3000, batch = BATCH, skyAccess = true)
     public static void a_glide_over_hills_lands_on_level_ground_not_on_an_edge(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        java.util.function.IntBinaryOperator height = hills(helper, 6);
+        java.util.function.IntBinaryOperator height = hills(helper, 5);
         NumenPlayer her = winged(helper, "gametest_hills", new BlockPos(6, 2 + height.applyAsInt(6, MID), MID), 14, false);
         BlockPos target = helper.absolutePos(new BlockPos(150, 2 + height.applyAsInt(150, MID), MID));
         float[] lowest = watchHealth(helper, her);

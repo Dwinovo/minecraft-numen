@@ -64,6 +64,8 @@ final class Glide {
     private static final int CLIMB_STEP = 6;
     /** 飞着遇到障碍沿航线往前拉升:每升一格往前走几格(约 27 度,控制器贴得住;更陡的线它追不上,落在线后面一大截)。 */
     private static final double CLIMB_RUN = 2.0;
+    /** 拉升时身体落在线后面的高度(格):量到过的拉升,身体比线低几格。 */
+    private static final double CLIMB_LAG = 4.0;
     /** 拉升时每刻大约升几格(烟花推着往上爬,量到每刻一格到一格多):一支烟花推 {@code rocketBurn} 刻,就升这么多乘 {@code rocketBurn} 格。 */
     private static final double RISE_PER_TICK = 1.0;
     /** 落地离降落点水平不超过这么远就算降到了(演练与实飞同一个判据,飞行线的降落点那一圈就是它)。 */
@@ -579,7 +581,9 @@ final class Glide {
             }
             List<Vec3> corners = List.of(pos, new Vec3(pos.x + ux * climbRun, height, pos.z + uz * climbRun),
                     new Vec3(plan.aim().x(), height, plan.aim().z()));
-            if (corridor(rig, stats, corners, ux, uz)) {
+            // 控制器追不上拉升的线,身体落在线后面一截:扫线时把线往下压 CLIMB_LAG 格,身体落在线下面这么多也过得去
+            List<Vec3> lagging = List.of(pos, corners.get(1).subtract(0, CLIMB_LAG, 0), corners.get(2).subtract(0, CLIMB_LAG, 0));
+            if (corridor(rig, stats, lagging, ux, uz)) {
                 return Airway.through(corners, null);
             }
         }

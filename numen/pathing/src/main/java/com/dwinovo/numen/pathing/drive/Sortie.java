@@ -212,7 +212,7 @@ final class Sortie implements Segment {
             return;
         }
         watchdog.observe(body.position(), false);
-        if (!watchdog.progressing()) {
+        if (!progressing()) {
             trap();
             return;
         }
@@ -380,7 +380,7 @@ final class Sortie implements Segment {
         state = Driver.State.HALTED;
     }
 
-    /** 顶着身体的方块:身体盒往外 {@link #TOUCH} 格内离身体最近的有碰撞的一格;没有就是身体所在的格。 */
+    /** 顶着身体的方块:身体盒往外 {@link #TOUCH} 格内离身体最近的有碰撞的一格;没有为 null。 */
     private BlockPos touching() {
         var body = rig.entity;
         AABB box = body.getBoundingBox().inflate(TOUCH);
@@ -396,7 +396,7 @@ final class Sortie implements Segment {
                 nearest = pos.immutable();
             }
         }
-        return nearest != null ? nearest : body.blockPosition();
+        return nearest;
     }
 
     private void abort(BlockPos cell, String why) {
@@ -420,10 +420,13 @@ final class Sortie implements Segment {
 
     // ==================== 段的接口 ====================
 
-    /** 在推进:滑翔着身体在离开原地({@link Watchdog},与走路同一个判据);起飞的几刻另有时限。 */
+    /**
+     * 在推进:滑翔着身体在离开原地({@link Watchdog},与走路同一个判据);起飞的几刻另有时限。没离开原地、身边又没有顶着它的方块,不算卡住:那是在空中慢下来盘旋,
+     * 控制器自己会改,身体也会落下去。
+     */
     @Override
     public boolean progressing() {
-        return watchdog.progressing();
+        return phase != Phase.GLIDE || watchdog.progressing() || touching() == null;
     }
 
     @Override

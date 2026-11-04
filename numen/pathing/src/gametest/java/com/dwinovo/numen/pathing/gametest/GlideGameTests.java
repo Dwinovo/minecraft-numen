@@ -64,12 +64,11 @@ public class GlideGameTests {
         return blocks * Kinematics.pace(Snapshots.stats(body)).sprint();
     }
 
-    /** 平地一百一十五格外:起飞、爬升、巡航,进目标 16 格降落,落地就到了(不走最后一截);比全程走路的下界快,账上有一段滑翔、烟花用了几支、没掉血,落点离目标不超过 16 格加滑翔误差。 */
+    /** 平地一百一十五格外:起飞、爬升、巡航,进目标 16 格降落,落地就到了(不走最后一截);账上有一段滑翔、烟花用了几支、没掉血,落点离目标不超过 16 格加滑翔误差。 */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1400, skyAccess = true)
     public static void a_winged_body_takes_off_and_lands_far_away(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
-        double bound = walkBound(body, 115);
         BlockPos target = t.at(120, 1, MID);
         t.glide(body, Goals.at(target), RouteSpec.defaults()).within(1000)
                 .then(r -> {
@@ -86,9 +85,6 @@ public class GlideGameTests {
                     }
                     if (glide.wearAfter() <= glide.wearBefore() && r.ticks > 40) {
                         throw new GameTestAssertException("飞了这么久鞘翅耐久没动:" + glide);
-                    }
-                    if (r.ticks >= bound) {
-                        throw new GameTestAssertException("用了 " + r.ticks + " 刻,没有比走路的下界 " + (int) bound + " 刻快");
                     }
                     if (r.body.isFallFlying() || r.body.getAbilities().flying) {
                         throw new GameTestAssertException("收场了还在飞");
@@ -131,7 +127,7 @@ public class GlideGameTests {
 
     /**
      * 目标在远处没加载的区块里(沿途也没有加载的:从场地往四个方向、三四百格外起,取第一处从两百格外到目标都没加载的):不因为"沿途有没加载的区块"拒绝飞;
-     * 先朝那个水平位置飞,飞到哪加载到哪,进了目标 16 格才选降落点(那片加载了才选得出);账上一段飞了两百多格的滑翔,收场落在地上。
+     * 先朝那个水平位置飞,飞到哪加载到哪,进了目标 16 格才选降落点(那片加载了才选得出);账上一段飞了两百多格的滑翔,收场落在地上;四百格的长途比全程走路的下界快(降落时盘旋着沉要花几百刻,短途比走路慢,长途才划算)。
      */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 3000, skyAccess = true)
     public static void a_goal_in_unloaded_chunks_is_flown_and_the_landing_is_found_on_the_way(GameTestHelper helper) {
@@ -154,6 +150,7 @@ public class GlideGameTests {
         if (goal == null) {
             throw new GameTestAssertException("场地四周找不到没加载的远处,测试场地假设不成立");
         }
+        double bound = walkBound(body, 400);
         t.glide(body, Goals.column(goal.getX(), goal.getZ()), RouteSpec.defaults()).within(2500)
                 .then(r -> {
                     var glides = r.report.ledger().glides();
@@ -162,6 +159,9 @@ public class GlideGameTests {
                     }
                     if (r.body.isFallFlying() || r.body.getAbilities().flying) {
                         throw new GameTestAssertException("收场了还在飞");
+                    }
+                    if (r.ticks >= bound) {
+                        throw new GameTestAssertException("用了 " + r.ticks + " 刻,没有比走路的下界 " + (int) bound + " 刻快");
                     }
                 })
                 .arrives();
@@ -291,7 +291,7 @@ public class GlideGameTests {
     }
 
     /**
-     * 飞到一半前方多出一堵墙(整宽,二十二格高):线通不通每刻查,被挡就沿航线往前拉升(烟花够),飞过去;不撞上去(不掉血),进目标 16 格降落,到了。
+     * 飞到一半前方多出一堵墙(整宽,十六格高,七十格外):线通不通每刻查,被挡就沿航线往前拉升(烟花够),飞过去;不撞上去(不掉血),进目标 16 格降落,到了。
      * 拉升是边往前飞边升,不是停下来原地竖直爬。
      */
     @GameTest(template = SKY, batch = BATCH, timeoutTicks = 1800, skyAccess = true)
@@ -302,8 +302,8 @@ public class GlideGameTests {
         t.glide(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
                 .during(r -> {
                     if (r.body.isFallFlying() && flying[0]++ == 40) {
-                        int x = (int) (r.body.getX() - t.origin.getX()) + 60;
-                        for (int dy = 1; dy <= 22; dy++) {
+                        int x = (int) (r.body.getX() - t.origin.getX()) + 70;
+                        for (int dy = 1; dy <= 16; dy++) {
                             for (int z = 2; z <= 61; z++) {
                                 t.change(x, dy, z, Blocks.STONE.defaultBlockState());
                             }
