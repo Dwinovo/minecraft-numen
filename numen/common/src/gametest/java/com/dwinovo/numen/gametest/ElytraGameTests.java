@@ -387,15 +387,18 @@ public class ElytraGameTests {
         float[] lowest = watchHealth(helper, her);
         ToolRun glide = lua(her, "return numen.move.glide(" + xyz(target) + ")");
         int[] flying = {0};
+        int[] wallX = {-1};
 
         helper.onEachTick(() -> {
             if (her.isFallFlying() && flying[0]++ == 20) {
-                int x = (int) (her.getX() - helper.absolutePos(BlockPos.ZERO).getX()) + 40;
-                fill(helper, x, 3, 0, x + 1, 250, 63, Blocks.STONE);
+                wallX[0] = (int) (her.getX() - helper.absolutePos(BlockPos.ZERO).getX()) + 40;
+                fill(helper, wallX[0], 3, 0, wallX[0] + 1, 250, 63, Blocks.STONE);
             }
         });
         succeedWhen(helper, () -> {
             helper.assertTrue(glide.done(), "the glide has not finished");
+            // 墙高过场地:场地收拾时清不到的那一截不留在世界里,免得后面的用例撞上
+            fill(helper, wallX[0], 3, 0, wallX[0] + 1, 250, 63, Blocks.AIR);
             helper.assertTrue(!glide.succeeded() && "no_path".equals(glide.kind()), "should stop short: " + glide.outcome());
             helper.assertTrue(glide.outcome().contains("come down early") && glide.outcome().contains("blocks short")
                     && glide.outcome().contains("numen.move.walk"), glide.outcome());
