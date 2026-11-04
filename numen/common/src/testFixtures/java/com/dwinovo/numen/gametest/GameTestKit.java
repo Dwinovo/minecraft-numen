@@ -158,6 +158,21 @@ public final class GameTestKit {
         return companion;
     }
 
+    /**
+     * 阻塞着把 center 所在区块周围 radius 圈的区块都生成到完整。一个区块要进实体刻,周围两圈区块得先是完整的,它们由工作线程
+     * 异步生成;GameTest 服务器的刻不跟着墙钟走,只按刻数等,生成慢一点就超时。这里阻塞到生成完,等多久都不占刻数,
+     * 结果就和机器快慢、负载无关。要搭在没人钉的远处的用例(区块由她这个玩家自己带起来)在拉起她之前先调它。
+     */
+    static void generateChunks(ServerLevel level, BlockPos center, int radius) {
+        int cx = center.getX() >> 4;
+        int cz = center.getZ() >> 4;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                level.getChunk(cx + dx, cz + dz);
+            }
+        }
+    }
+
     /** rel 起点 + 尺寸圈出的长方体格集;hollow = 只留外壳。 */
     static List<BlockPos> boxCells(BlockPos origin, int sx, int sy, int sz, boolean hollow) {
         List<BlockPos> cells = new ArrayList<>();

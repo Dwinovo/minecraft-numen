@@ -172,8 +172,9 @@ public class CombatGameTests {
         int cz = near.getZ() >> 4;
         int y = 200;
         int z = cz * 16 + 7;
-        level.getChunk(cx, cz);
-        level.getChunk(cx + 1, cz);
+        // 两块和它们周围的区块先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(cx * 16, y, z), 2);
+        GameTestKit.generateChunks(level, new BlockPos((cx + 1) * 16, y, z), 2);
         for (int x = cx * 16 + 10; x <= cx * 16 + 20; x++) {
             level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         }
@@ -361,6 +362,8 @@ public class CombatGameTests {
         int y = 200;
         int x0 = cx * 16 + 6;
         int z0 = cz * 16 + 6;
+        // 她脚下的区块和周围先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(x0, y, z0), 2);
         for (int x = x0; x < x0 + 5; x++) {
             for (int z = z0; z < z0 + 5; z++) {
                 level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());

@@ -191,13 +191,16 @@ public class SurvivalGameTests {
      * 一维里只有她:没有真玩家、没有任何区块被钉住,她照样一直在 tick、自己的驱动照样能动身子。
      * 区块加载照真玩家走(她经 placeNewPlayer 进玩家名单,原版给她的票据就是玩家的那一套,包括让整个维度保持活动的那一条);
      * 她的 tickCount 只在她所在维度还在走刻时推进,所以它持续推进就是"这个维度没被停"的直接证据。落点在两万格外,
-     * 邻居场地与别的用例的区块都碰不到。
+     * 邻居场地与别的用例的区块都碰不到。落点跟着自己的场地走,同一用例铺几份并行时各占各的一块下界。
+     * 周围的区块先阻塞着生成完(见 {@link GameTestKit#generateChunks}):下界的地形生成慢,只按刻数等的话负载一高就先超时。
      */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_survival")
     public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
         ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
         helper.assertTrue(nether != null, "this server has no nether to travel to");
-        BlockPos floor = new BlockPos(20000, 100, 20000);
+        BlockPos arena = helper.absolutePos(BlockPos.ZERO);
+        BlockPos floor = new BlockPos(arena.getX() * 16, 100, arena.getZ() * 8);
+        generateChunks(nether, floor, 2);
         // 下界的地形在这一带是实心的:先掏出一间空房,再铺地板
         for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {
             nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
