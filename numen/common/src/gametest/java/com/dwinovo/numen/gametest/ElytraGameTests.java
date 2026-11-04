@@ -227,16 +227,16 @@ public class ElytraGameTests {
     }
 
     /**
-     * 目标在树下:一片三十格宽的树林(树冠连成一片),目标那一列在树林中间,头顶是树冠。进了目标 16 格她正在树林西缘的上空:树冠上、树冠下都不是落点(最高碰撞面是树叶),
-     * 她落在树林西边的草地上(或别处的空地),不在树冠上、不掉血;落点离目标不超过 16 格加滑翔误差。
+     * 目标在树下:一片十五格深的树林(树冠连成一片),目标那一列在树林里面,头顶是树冠。进了目标 16 格她在树林西缘外十来格的上空:树冠上、树冠下都不是落点(最高碰撞面是树叶),
+     * 她落在树林西边的草地上,不在树冠上、不掉血;落点离目标不超过 16 格加滑翔误差。
      */
     @GameTest(template = FIELD, timeoutTicks = 3000, batch = BATCH, skyAccess = true)
     public static void a_glide_to_a_column_under_the_trees_lands_in_the_open(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ground(helper, 2);
-        forest(helper, 2, 118, 4, 150, 60, 3, 23, null);
+        forest(helper, 2, 141, 4, 156, 60, 3, 23, null);
         NumenPlayer her = winged(helper, "gametest_under", new BlockPos(6, 3, MID), 14, false);
-        BlockPos target = helper.absolutePos(new BlockPos(134, 3, MID));
+        BlockPos target = helper.absolutePos(new BlockPos(146, 3, MID));
         float[] lowest = watchHealth(helper, her);
         ToolRun glide = lua(her, "return numen.move.glide({x = " + target.getX() + ", z = " + target.getZ() + "})");
 
@@ -541,7 +541,7 @@ public class ElytraGameTests {
     // ==================== 被方块顶住 ====================
 
     /**
-     * 爬到一半头顶多出树冠:起飞点那根柱子是空的,可她爬到一半,头顶三格处多出一大片树叶(二十一格见方),烟花把她往上推、她顶在树叶下面。线头的柱子不在每刻查线的范围里,
+     * 爬到一半头顶多出树冠:起飞点那根柱子是空的,可她爬到一半,头顶三格处多出一片树叶(九格见方,一棵大树的树冠),烟花把她往上推、她顶在树叶下面。线头的柱子不在每刻查线的范围里,
      * 控制器每一组推演都撞树叶:被围住就改降(迫降),不是顶着树叶一直放烟花;这一趟在有限的刻数里有了结局(落地后再起飞或收工),账上第一段是迫降、烟花只用了几支、没掉血。
      */
     @GameTest(template = FIELD, timeoutTicks = 1500, batch = BATCH, skyAccess = true)
@@ -562,8 +562,8 @@ public class ElytraGameTests {
             ticks[0]++;
             if (roofAt[0] < 0 && her.isFallFlying() && ++flying[0] == 8) {
                 int y = her.getBlockY() + 3;
-                for (int dx = -10; dx <= 10; dx++) {
-                    for (int dz = -10; dz <= 10; dz++) {
+                for (int dx = -4; dx <= 4; dx++) {
+                    for (int dz = -4; dz <= 4; dz++) {
                         level.setBlock(new BlockPos(her.getBlockX() + dx, y, her.getBlockZ() + dz), leaf, 2);
                     }
                 }

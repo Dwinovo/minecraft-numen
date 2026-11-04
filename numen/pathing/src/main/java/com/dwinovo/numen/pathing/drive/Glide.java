@@ -448,6 +448,8 @@ final class Glide {
     /** 盘旋下降的圈半径(格),大圈在前、小圈在后(落点四周挤着树冠、山坡,大圈放不下才换小圈);和每一圈取几条边。 */
     private static final double[] SPIRAL_RADII = {14.0, 8.0};
     private static final int SPIRAL_SIDES = 12;
+    /** 盘旋的圈内外各留几格(身体转弯时落在圈外一截)。 */
+    private static final double SPIRAL_MARGIN = 3.0;
     /** 盘旋下降比滑翔比陡一点(只取滑翔比的这个比例):比自然下滑沉得快,不靠烟花也跟得上。 */
     private static final double SPIRAL_SHARE = 0.8;
     /**
@@ -512,11 +514,45 @@ final class Glide {
         double ux = run < 1 ? heading.x : (touchdown.x - pos.x) / run;
         double uz = run < 1 ? heading.z : (touchdown.z - pos.z) / run;
         for (List<Vec3> corners : descents(pos, touchdown, heading)) {
-            if (corridor(rig, stats, corners, ux, uz)) {
+            if (corridor(rig, stats, corners, ux, uz) && roomAround(rig, stats, corners, touchdown, ux, uz)) {
                 return corners;
             }
         }
         return null;
+    }
+
+    /**
+     * 盘旋的圈除了线上、线两侧扫得过去,圈的内外各 {@link #SPIRAL_MARGIN} 格也要过得去:盘旋转弯时身体落在圈外一截、擦着圈边的树冠与山坡就是撞上去掉血。
+     * 别的线(平飞、俯冲)不看。圈上的拐点离降落点的水平距离都等于圈半径({@link #SPIRAL_RADII}),靠这个认出盘旋。
+     */
+    private static boolean roomAround(Rig rig, BodyStats stats, List<Vec3> corners, Vec3 touchdown, double ux, double uz) {
+        if (corners.size() < 3 || !isSpiral(corners.get(1), touchdown)) {
+            return true;
+        }
+        for (double margin : new double[] {SPIRAL_MARGIN, -SPIRAL_MARGIN}) {
+            List<Vec3> wide = new ArrayList<>(corners);
+            for (int i = 1; i < wide.size() - 1; i++) {
+                Vec3 c = wide.get(i);
+                double dx = c.x - touchdown.x;
+                double dz = c.z - touchdown.z;
+                double r = Math.hypot(dx, dz);
+                wide.set(i, new Vec3(touchdown.x + dx * (r + margin) / r, c.y, touchdown.z + dz * (r + margin) / r));
+            }
+            if (!corridor(rig, stats, wide, ux, uz)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isSpiral(Vec3 ringPoint, Vec3 touchdown) {
+        double r = Math.hypot(ringPoint.x - touchdown.x, ringPoint.z - touchdown.z);
+        for (double radius : SPIRAL_RADII) {
+            if (Math.abs(r - radius) < 1.0E-6) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 绕降落点盘旋着下降的几种圈(大的在前)。 */
