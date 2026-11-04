@@ -23,6 +23,8 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestGenerator;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestRegistry;
+import net.minecraft.gametest.framework.GlobalTestReporter;
+import net.minecraft.gametest.framework.LogTestReporter;
 import net.minecraft.gametest.framework.StructureUtils;
 import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.world.level.block.Blocks;
@@ -42,11 +44,20 @@ import org.slf4j.Logger;
  * <h2>用例的名字</h2>
  * 测试名 {@code 套件名.小写类名.小写方法名};结构模板写了 {@code template} 就是 {@code 套件名:模板}(已带冒号的原样),没写就是
  * {@code 套件名:小写类名.小写方法名}。
+ *
+ * <h2>排查与证明稳定</h2>
+ * 系统属性 {@value #ONLY} 是正则,只留全名整个匹配的用例;{@value #COPIES} 是份数 N,每条留下的用例在同一次开服里铺 N 份并行跑
+ * (第 2 份起的名字加 {@code #份号}),用来证明稳定:被怀疑的用例铺开跑,一次开服看全部结果,不重启服务器连跑。
+ * 每条用例收场时在日志里记一行实际用了多少刻({@link TestTicks}),超时设多少有据可依。
  */
 public final class GameTestSuites {
 
     /** 选套件的系统属性。 */
     public static final String SELECTION = "numen.gametest.suites";
+    /** 只跑全名匹配的用例:正则,要整个匹配 {@code 套件名.小写类名.小写方法名}。 */
+    public static final String ONLY = "numen.gametest.only";
+    /** 每条用例铺几份并行跑(默认 1)。 */
+    public static final String COPIES = "numen.gametest.copies";
     /** 结构模板目录的系统属性:各模块的 SNBT 模板拷进同一个目录,运行配置经它指给原版。 */
     public static final String STRUCTURES = "numen.gametest.structures";
 
@@ -92,7 +103,33 @@ public final class GameTestSuites {
             }
         }
         BackgroundSettle.install(background);
+        GlobalTestReporter.replaceWith(new TestTicks(new LogTestReporter()));
+        return spread(out);
+    }
+
+    /** 按 {@value #ONLY} 筛、按 {@value #COPIES} 铺份;每份的函数体前记下起始刻,收场时 {@link TestTicks} 用它算用了多少刻。 */
+    private static List<TestFunction> spread(List<TestFunction> functions) {
+        String only = System.getProperty(ONLY);
+        int copies = Integer.getInteger(COPIES, 1);
+        List<TestFunction> out = new ArrayList<>();
+        for (TestFunction function : functions) {
+            if (only != null && !function.testName().matches(only)) {
+                continue;
+            }
+            for (int copy = 1; copy <= copies; copy++) {
+                out.add(timed(function, copy == 1 ? function.testName() : function.testName() + "#" + copy));
+            }
+        }
         return out;
+    }
+
+    private static TestFunction timed(TestFunction f, String name) {
+        Consumer<GameTestHelper> body = helper -> {
+            TestTicks.started(name, helper.getLevel().getGameTime());
+            f.function().accept(helper);
+        };
+        return new TestFunction(f.batchName(), name, f.structureName(), f.rotation(), f.maxTicks(), f.setupTicks(),
+                f.required(), f.manualOnly(), f.maxAttempts(), f.requiredSuccesses(), f.skyAccess(), body);
     }
 
     /** 名字对应的套件:资源 {@code META-INF/numen/gametest/名字} 里写着套件类的全名;没有这个资源是 null。 */
