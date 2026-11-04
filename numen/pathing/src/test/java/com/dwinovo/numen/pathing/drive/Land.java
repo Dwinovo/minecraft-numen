@@ -47,6 +47,13 @@ final class Land implements Terrain {
         return new Land(width, depth, (x, z) -> ground);
     }
 
+    /**
+     * 丘陵:一列的地面高度是几组正弦的和(起伏 {@code amplitude} 格,缓坡里有平的山顶与谷底)再加 {@code ground}。
+     */
+    static Land hills(int width, int depth, int ground, int amplitude) {
+        return new Land(width, depth, (x, z) -> ground + (int) Math.round(amplitude * (2 + Math.sin(x / 22.0) + Math.sin(z / 16.0 + 1) + Math.sin((x + z) / 30.0)) / 2));
+    }
+
     private Land(int fieldWidth, int fieldDepth, IntBinaryOperator height) {
         this.width = fieldWidth + 2 * MARGIN;
         this.depth = fieldDepth + 2 * MARGIN;

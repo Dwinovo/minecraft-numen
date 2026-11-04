@@ -145,6 +145,17 @@ class GlideScenarioTest {
         assertTrue(apart <= DESCENT + GLIDE_ERROR, "落点离目标 " + apart + " 格,超过 " + DESCENT + " + " + GLIDE_ERROR);
     }
 
+    /** 落点站得住:周围八列的地面与它差不到两格(不在边沿上)。 */
+    private static void assertNotOnAnEdge(Trip t) {
+        BlockPos landed = t.last().landing();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int top = t.land.top(landed.getX() + dx, landed.getZ() + dz);
+                assertTrue(Math.abs(top - landed.getY()) <= 1, "落在边沿上 " + landed + ",旁边 " + dx + "," + dz + " 的地面在 " + top);
+            }
+        }
+    }
+
     /** 进了目标范围、降到落地:这一趟到了,账上就这一段滑翔、不是迫降、没悬在空中。 */
     private static void assertArrived(Trip t) {
         assertEquals(Driver.State.ARRIVED, t.sortie.state());
@@ -178,6 +189,18 @@ class GlideScenarioTest {
         Trip t = trip(land, 14, seed).launch(Goals.column(142, MID)).fly();
         assertArrived(t);
         assertSafeLanding(t, 142, MID);
+    }
+
+    /** 丘陵:起伏六格、坡度四成,目标在远处的坡上。落点站得住:脚下天然、周围八列差不到两格(不在边沿上),落地不掉血。 */
+    @ParameterizedTest(name = "烟花随机种子 {0}")
+    @ValueSource(longs = {0, 1, 2, 3, 4, 5})
+    void aGlideOverHillsLandsOnLevelGroundNotOnAnEdge(long seed) {
+        Land land = Land.hills(208, 64, 1, 6);
+        Glider body = new Glider(land, new Vec3(6.5, land.ground(6, MID) + 1, MID + 0.5), 0, 14, seed);
+        Trip t = new Trip(land, body).launch(Goals.column(150, MID)).fly();
+        assertArrived(t);
+        assertSafeLanding(t, 150, MID);
+        assertNotOnAnEdge(t);
     }
 
     /** 起飞点在树林边:树林在身后不远处,树冠比头顶高;起飞、飞到目标附近落在空地上,一段飞了八十多格的滑翔,没掉血。 */
