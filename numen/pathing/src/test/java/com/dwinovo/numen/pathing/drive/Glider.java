@@ -77,6 +77,8 @@ final class Glider implements Craft {
     private boolean pinned;
     /** 伤过血的每一次:第几刻、怎么伤的。 */
     private final StringBuilder hurts = new StringBuilder();
+    /** 最近十几刻的位置、速度、俯仰,伤血时附在 {@link #hurts} 里,好看是怎么撞上去的。 */
+    private final java.util.ArrayDeque<String> recent = new java.util.ArrayDeque<>();
     private int ticks;
 
     /** 站在 {@code at}(脚底中心)、朝 {@code yaw}、背着 {@code rockets} 支烟花的身体;{@code seed} 定每支烟花多推几刻。 */
@@ -122,6 +124,10 @@ final class Glider implements Craft {
     /** 把这一刻按着的键落到物理上:控制器每刻先 {@code tick},身体再 {@code step}。 */
     void step() {
         ticks++;
+        recent.addLast(String.format("(%.1f,%.2f,%.1f v %.2f,%.2f,%.2f p %.0f)", pos.x, pos.y, pos.z, velocity.x, velocity.y, velocity.z, neck.pitch()));
+        if (recent.size() > 10) {
+            recent.removeFirst();
+        }
         boolean jump = keys.held(Key.JUMP);
         boolean pressed = jump && !jumpedBefore;
         jumpedBefore = jump;
@@ -184,7 +190,7 @@ final class Glider implements Craft {
             double damage = (speedBefore - speedAfter) * KINETIC - KINETIC_FREE;
             if (damage > 0) {
                 health -= damage;
-                hurts.append(String.format(" 第%d刻撞上方块 -%.1f(撞前水平速度 %.2f)", ticks, damage, speedBefore));
+                hurts.append(String.format(" 第%d刻撞上方块 -%.1f(撞前水平速度 %.2f)%s", ticks, damage, speedBefore, hurts.isEmpty() ? " 近况 " + String.join(" ", recent) : ""));
             }
         }
         if (++glidingTicks % 20 == 0) {
