@@ -75,7 +75,7 @@ public class FluidGameTests {
      * 三格深的水接着一溜一格深的浅水:游过深水,到了浅水里脚下是水底。规划认为浅水格是踩在水底上(站着),原版水里不按键每刻只沉
      * 0.005 格,身子浮在水底之上老远,落不到水底上——游的控制器要到了列中心就按住潜行沉下去,段状态机才认得站在了落点上。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 813)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void swims_from_deep_water_onto_a_shallow_bed(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, -4, 0, 23, -1, 39, Blocks.STONE);

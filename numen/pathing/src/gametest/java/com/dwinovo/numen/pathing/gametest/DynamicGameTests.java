@@ -42,7 +42,7 @@ public class DynamicGameTests {
     }
 
     /** 走到一半,前方横着砌起一道墙,只在远处留口:重新规划,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 621)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void replans_when_a_wall_goes_up_ahead(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);

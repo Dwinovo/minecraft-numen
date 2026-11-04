@@ -90,7 +90,7 @@ public class SwimGameTests {
      *   <li>唯一的路被挡死,{@code numen.move.walk} 没走到,回执说潜过一段水、憋了多久。</li>
      * </ul>
      */
-    @GameTest(template = "floor52", timeoutTicks = 1104, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 600, batch = BATCH)
     public static void a_planned_dive_held_up_under_water_lets_go_before_the_air_runs_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 27);

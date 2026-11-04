@@ -143,7 +143,7 @@ public class ShapeGameTests {
      * copy → rotate → paste → place:一排朝向不同的方块抄下来、转 90°、对到另一处放下,每格的方块状态等于原物经原版 {@code rotate} 转出来的那一个,
      * 位置是原位置绕她站的那一格转过去的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1749, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void a_copied_row_rotated_and_pasted_is_built_as_the_original_turned(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_cloner", new BlockPos(2, 2, 2), true);

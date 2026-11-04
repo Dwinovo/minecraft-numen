@@ -427,14 +427,14 @@ public class BuildGameTests {
     }
 
     /** 2x2x8 高塔(32 格):细高结构,上面的格要垫块爬上去够。 */
-    @GameTest(template = "floor20", timeoutTicks = 1758, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 1400, batch = "numen_build")
     public static void build_pillar(GameTestHelper helper) {
         placeCase(helper, "gametest_towerer", new BlockPos(9, 2, 9), cobbleBox(2, 8, 2),
                 boxCells(new BlockPos(9, 2, 9), 2, 8, 2, false), 2);
     }
 
     /** 9x9 平台(81 格):纯水平铺面,不触发分层,考横向站位与边铺边退。 */
-    @GameTest(template = "floor20", timeoutTicks = 4893, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 3300, batch = "numen_build")
     public static void build_platform(GameTestHelper helper) {
         placeCase(helper, "gametest_paver", new BlockPos(5, 2, 5), cobbleBox(9, 1, 9),
                 boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false), 3);
@@ -444,7 +444,7 @@ public class BuildGameTests {
      * 被外力挪进要盖的格里也得盖完:她被推进、挤进、掉进还没砌的格子里时,那一遍放不了那格、如实留在回执里;再放一遍(她先从那格里
      * 走出来,到达方式 reach 不站进要放的格),把它补上。
      */
-    @GameTest(template = "floor20", timeoutTicks = 1203, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 600, batch = "numen_build")
     public static void build_finishes_the_cells_she_was_pushed_into(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         Raised build = placeCells(helper, "gametest_shoved", new BlockPos(2, 2, 2), new BlockPos(8, 2, 8),
@@ -832,7 +832,7 @@ public class BuildGameTests {
      * 要盖的格离她有点远、一格都够不着:{@code numen.build.diff} 如实说还差几格、够得着的零格、够不着的几格和最低最近的那一格,不动;
      * {@code numen.build.place} 自己走到够得着的地方,把九格圆石放齐,圆石按格扣。
      */
-    @GameTest(template = "floor16", timeoutTicks = 690, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_build")
     public static void build_diff_says_where_and_place_walks_there_and_builds(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_far_builder", new BlockPos(1, 2, 1), false);
@@ -873,7 +873,7 @@ public class BuildGameTests {
     /**
      * {@code numen.build.place} 一遍:一圈两格高的圆石墙落在她够不着的地方,它自己走到够得着的地方放;墙一格不缺,圆石按格扣。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1749, batch = "numen_build")
+    @GameTest(template = "floor16", timeoutTicks = 1500, batch = "numen_build")
     public static void build_place_walks_the_site_and_builds_all_of_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_raiser", new BlockPos(1, 2, 1), false);

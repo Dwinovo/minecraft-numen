@@ -486,7 +486,7 @@ public class UpDownGameTests {
      * 陡坡一级一级往下,坡脚是悬崖:疾跑的冲劲带着身子飘出去,只擦着下一级的边沿落下,下一刻就滑出去,认步认不出落在了哪一步,
      * 冲劲又没人收,一路冲下去掉进悬崖摔死。步态只在身体压着落点那一列的支撑时才带着冲劲接下一步,擦边的疾跑改平走。
      */
-    @GameTest(template = Trial.TALL, batch = BATCH, timeoutTicks = 786)
+    @GameTest(template = Trial.TALL, batch = BATCH, timeoutTicks = 600)
     public static void does_not_run_down_a_stepped_slope_off_the_cliff_at_its_foot(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int column = 0; column < SLOPE.length; column++) {
@@ -543,7 +543,7 @@ public class UpDownGameTests {
      * 之外。每段搜索搜到"估价比起点低一段"的节点就交出这一段,她先走这一段,快走完时从桥头(快照里还没有那块桥)接着搜下一段;一段段搭过去,
      * 到对岸。这一条要真身体:一块块真的搭,看护每刻看着在不在推进。
      */
-    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 7000)
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 4400)
     public static void bridges_a_wide_chasm_in_segments(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 9, 4, 23, Blocks.BEDROCK);

@@ -147,7 +147,7 @@ public class TerminationGameTests {
      * 方块不够过沟:六格宽的沟(两边是四格高的基岩台子,沟里落下去摔不起),身上只有三块圆石——搭了三块用完,结局是"缺料",
      * 说出这条路还要放几块。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 350)
     public static void a_gap_wider_than_the_blocks_carried_ends_without_materials(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 13, 4, 39, Blocks.BEDROCK);

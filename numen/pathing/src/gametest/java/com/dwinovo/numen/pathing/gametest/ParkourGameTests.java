@@ -128,7 +128,7 @@ public class ParkourGameTests {
      * 两格宽的沟,这一岸沿沟一排是土径、对岸沿沟一排是耕地(规格许走耕地),两排顶面一样高:从土径跳到耕地上会把耕地踩坏,
      * 不跳,绕远处的桥走过去,耕地一块没坏。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void does_not_jump_onto_farmland(GameTestHelper helper) {
         Trial t = gap(helper, 10, 11);
         t.fill(9, 4, 0, 9, 4, 39, Blocks.DIRT_PATH);
@@ -141,7 +141,7 @@ public class ParkourGameTests {
     }
 
     /** 饱食度一直只有 6(原版疾跑要高于 6;和平模式会自己回饱食度,用例每刻压回去):三格宽的沟要疾跑才跳得过,不规划这一跳,绕远处的桥。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void does_not_plan_sprint_jumps_when_hungry(GameTestHelper helper) {
         Trial t = gap(helper, 10, 12);
         bridge(t, 10, 12);

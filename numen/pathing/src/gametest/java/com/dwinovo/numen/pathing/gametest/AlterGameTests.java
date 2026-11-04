@@ -134,7 +134,7 @@ public class AlterGameTests {
      * 踩上基岩圈、再搭桥朝去处过去,可搭到去处正上方也还是下不来。垫柱把脚刚离开的那一格填上,不改地形退不回来,半程不交这样的一截——
      * 身体原地不动,世界一格不改,不往上搭。总预算收小,搜索走到预算才停、交半程(不是搜完),半程才是要看的。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
     public static void does_not_pillar_up_from_a_pillar_top_it_cannot_climb_down(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 1, 6, 6, 8, 6, Blocks.STONE);
@@ -193,7 +193,7 @@ public class AlterGameTests {
     }
 
     /** 站在四格厚的泥土上,去处在正下方的地面:向下挖下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 639)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 450)
     public static void digs_down_to_a_lower_goal(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
@@ -209,7 +209,7 @@ public class AlterGameTests {
      * 站着的那一格里长着一株草(没有碰撞、有轮廓):准星从眼睛往下看先碰上它,要挖的脚下那一格点不中。向下挖之前先把这株草打掉,
      * 再挖下面的泥土,一路落到底。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 642)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 450)
     public static void digs_down_through_the_grass_underfoot(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
@@ -229,7 +229,7 @@ public class AlterGameTests {
      * 两座高台隔着一道深坑(深到跳不下去),身上只有圆石,快捷栏塞满、主手拿着圆石:先在坑上垫一块走过去,紧接着在对面往下挖三格,
      * 落进藏在泥土里的空腔。没有空手可换,就握着圆石挖泥土;往下挖的头一格不为此卡住。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 669)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void digs_down_right_after_bridging_a_gap(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 3, 4, 7, 7, Blocks.STONE);
@@ -435,7 +435,7 @@ public class AlterGameTests {
     }
 
     /** 泥土墙横贯场地,正对着的一段禁挖泥土(建造规格的按种类禁挖),远处一段是木板:去挖木板那一段,一块泥土不挖。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void keeps_the_block_bans_of_the_spec(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, -1);

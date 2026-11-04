@@ -102,7 +102,7 @@ public class BreathGameTests {
     }
 
     /** 同样的封顶水道只有 8 格长(一口气约 110 刻):游过去,一口气到头,账上一段水下,没掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 621)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void swims_a_sealed_channel_short_enough_to_hold(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         channel(t, 10, 18, true);
@@ -112,7 +112,7 @@ public class BreathGameTests {
     }
 
     /** 28 格长、上面敞开的水道:浮在水面上换着气游过去,没掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1134)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void swims_a_long_channel_open_above(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         channel(t, 5, 33, false);

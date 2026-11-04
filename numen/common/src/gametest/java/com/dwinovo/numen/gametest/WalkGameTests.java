@@ -78,7 +78,7 @@ public class WalkGameTests {
      * 一条全封死的基岩走廊,中段一道两格高的泥土墙。她走起来之后,前面又被人砌了一道两格高的石墙:没有承诺要守,她从当时的位置接着走,
      * 把石墙也挖穿,到达。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1182, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = BATCH)
     public static void a_wall_put_in_her_way_mid_walk_is_dug_like_any_other(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 1; x <= 14; x++) {
@@ -321,7 +321,7 @@ public class WalkGameTests {
      * 垫高上去再回到原处:够不着的高处靠一根垫柱上去(垫的料经 useItemOn 放下,放置记号照记),走到之后要回出发的地方。
      * 记号让路线不挖自己垫的柱子——回程是不是还有路,看这条用例。
      */
-    @GameTest(template = "floor16", timeoutTicks = 900, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
     public static void a_walk_can_come_back_down_from_a_pillar_she_built(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos perch = helper.absolutePos(new BlockPos(8, 5, 8));

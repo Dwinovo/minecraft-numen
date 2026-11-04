@@ -172,7 +172,7 @@ public class DigGameTests {
     }
 
     /** 墙的一段是冰(挖了会化成水),一段是泥土:去挖泥土那一段。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 639)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void does_not_dig_ice(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT);
@@ -208,7 +208,7 @@ public class DigGameTests {
     // ==================== 挖掘补充 ====================
 
     /** 原木墙,手上空着:每一块从开挖到碎的刻数与原版空手挖原木一样,规划的定价也一样。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 675)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void digs_a_log_bare_handed_in_vanilla_time(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.OAK_LOG);
@@ -515,7 +515,7 @@ public class DigGameTests {
      * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许挖许放。挖一格的价钱是估价里落一格的十几倍,
      * 估价加上埋深(绕不开的挖掘)之后,出厂预算的一次规划就搜到头,路线从脚下直直往下挖;照着这条路走,挖到够得着它。
      */
-    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1188)
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 600)
     public static void plans_straight_down_to_an_ore_buried_deep(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(0, 1, 0, 15, 40, 15, Blocks.STONE);
