@@ -118,6 +118,10 @@ final class Pilot {
             if (s >= way.climb() && action.pitch() <= Dynamics.COLUMN_PITCH) {
                 continue;
             }
+            if (s < way.climb() && action.pitch() > Dynamics.COLUMN_PITCH) {
+                // 起飞的空柱里只竖直往上:烟花朝视线推,一放斜的水平速度就有了,滑翔里水平速度几乎不衰减,只能转头反推才压得住,身体就绕着柱轴打转、漂出柱子
+                continue;
+            }
             if (jumpLocked && action.keys().jump() || action.keys().rocket() && (supply.rockets <= 0 || way.length() - s < NO_FIRE)) {
                 continue;
             }

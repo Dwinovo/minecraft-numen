@@ -39,6 +39,8 @@ class GlideScenarioTest {
     /** 飞行的中线。 */
     private static final int MID = 32;
     private static final int LIMIT = 4000;
+    /** 爬升最后这几格高度里控制器开始转向目标,不算在柱子里爬。 */
+    private static final double CLIMB_TURN = 8;
 
     /** 墙与山脊"整宽":场地的宽(0 到 63)再加四周铺的地,绕不过去。 */
     private static final int WEST = -Land.MARGIN;
@@ -251,6 +253,32 @@ class GlideScenarioTest {
         assertTrue(glide.wearAfter() >= glide.wearBefore(), "鞘翅耐久倒着走:" + glide);
         double bound = walkBound(115);
         assertTrue(t.ticks < bound, "用了 " + t.ticks + " 刻,没有比走路的下界 " + (int) bound + " 刻快");
+    }
+
+    /** 目标是"离某点三格以内"的范围、只有四十几格:照样飞,进目标 16 格降落,落地就到了。 */
+    @ParameterizedTest(name = "烟花随机种子 {0}")
+    @ValueSource(longs = {0, 1, 2, 3, 4, 5})
+    void aShortFlightToARangeGoalLandsNearIt(long seed) {
+        Trip t = trip(flat(160), 16, seed).launch(Goals.within(Goals.at(new BlockPos(50, 3, MID)), 0, 3)).fly();
+        assertArrived(t);
+        assertSafeLanding(t, 50, MID);
+    }
+
+    /** 爬升在起飞的空柱里:受理只查了这根柱子(口径两格),身体爬到巡航高度之前(最后转向的几格除外)偏出柱轴不能超过口径。 */
+    @ParameterizedTest(name = "烟花随机种子 {0}")
+    @ValueSource(longs = {0, 1, 2, 3, 4, 5})
+    void theClimbStaysInsideTheTakeoffColumn(long seed) {
+        Trip t = trip(flat(160), 16, seed).launch(Goals.within(Goals.at(new BlockPos(50, 3, MID)), 0, 3));
+        Vec3 axis = Vec3.atBottomCenterOf(t.plan.takeoff());
+        double[] widest = {0};
+        boolean[] turned = {false};
+        t.fly((tick, body) -> {
+            turned[0] |= body.position().y >= axis.y + t.plan.way().climb() - CLIMB_TURN;
+            if (body.gliding() && !turned[0]) {
+                widest[0] = Math.max(widest[0], Math.hypot(body.position().x - axis.x, body.position().z - axis.z));
+            }
+        }, LIMIT);
+        assertTrue(widest[0] <= 2.0, "爬升偏出柱轴 " + widest[0] + " 格");
     }
 
     /**
