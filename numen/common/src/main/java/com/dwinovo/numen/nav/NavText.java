@@ -68,7 +68,7 @@ public final class NavText {
     public static FailureType type(Lack lack) {
         return switch (lack.why()) {
             case NO_WINGS, WORN, TOO_FEW_ROCKETS -> FailureType.NO_MATERIAL;
-            case NO_PLACE, TOO_NEAR, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
+            case NO_FLIGHT, NO_PLACE, TOO_NEAR, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
         };
     }
 
@@ -111,7 +111,7 @@ public final class NavText {
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
                     + " went out of sight after the walk was planned (something now stands in between): dig what is in"
                     + " the way with `numen.work.dig`, or use it from another side";
-            case Outcome.Grounded grounded -> "stopped flying " + where + ": " + lack(grounded.lack());
+            case Outcome.Grounded grounded -> "stopped gliding " + where + ": " + lack(grounded.lack());
             case Outcome.Breathless b -> "found no path to target (" + where + "; the way there swims under water"
                     + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
                     + " about " + seconds(b.held()) + " without a breath, longer than I can safely hold mine now (about "
@@ -133,19 +133,22 @@ public final class NavText {
 
     /**
      * 飞不起来(受理时当场拒绝)或飞到一半不能再飞了的缘由:缺什么、怎么补。受理时说的和飞到一半收工说的是同一句,都是"此刻从这里飞不起来"的事实。
+     * 创造飞行的缺是 {@code NO_FLIGHT},别的都是鞘翅滑翔的。
      */
     public static String lack(Lack lack) {
         return switch (lack.why()) {
-            case NO_WINGS -> "I cannot fly on my own and I am not wearing a usable elytra. With an elytra on my chest (`numen.gear.wear`) and"
+            case NO_FLIGHT -> "I am not allowed to fly (creative flight is not available to me): `numen.move.walk` goes on foot"
+                    + (lack.have() > 0 ? ", and `numen.move.glide` crosses a long way on the elytra I wear" : "");
+            case NO_WINGS -> "I am not wearing a usable elytra. With an elytra on my chest (`numen.gear.wear`) and"
                     + " firework rockets in my pack I can glide; `numen.move.walk` goes on foot";
-            case WORN -> "my elytra has " + lack.have() + " durability left and flying needs at least " + lack.need()
+            case WORN -> "my elytra has " + lack.have() + " durability left and gliding needs at least " + lack.need()
                     + ": wear another elytra (`numen.gear.wear`), or go on foot with `numen.move.walk`";
             case TOO_FEW_ROCKETS -> "I have " + lack.have() + (lack.have() == 1 ? " firework rocket" : " firework rockets") + " and taking off needs at least " + lack.need()
                     + ", and there is no ledge near me to glide down from: bring more rockets, stand on a ledge, or go on foot with `numen.move.walk`";
-            case NO_PLACE -> "gliding goes to a place with x and z: give `numen.move.fly` a Pos, a Block, an Entity or a column {x = …, z = …}";
+            case NO_PLACE -> "gliding goes to a column: give `numen.move.glide` a column {x = …, z = …}, a Pos, a Block or an Entity";
             case TOO_NEAR -> "it is only " + lack.have() + " blocks away, closer than a glide lands (about " + lack.need() + "): `numen.move.walk` goes there";
             case NO_TAKEOFF -> "there is no spot with open sky within " + lack.need() + " blocks of me to take off from: `numen.move.walk` to an open"
-                    + " place, then `numen.move.fly`";
+                    + " place, then `numen.move.glide`";
             case NO_ROUTE -> "no flight line from the spots around me got past the terrain on the way there";
             case NO_LANDING -> "I found no dry standable ground within " + lack.need() + " blocks of there to land on: pick a place on or near the ground";
         };
@@ -187,7 +190,11 @@ public final class NavText {
      * 同一种说法),接下来能做什么。{@code checkIn} 是这一趟一直在推进、只是超过了一趟能走的最长时间;否则是租约到期前没有进展。
      */
     public static String timedOut(Travel travel, String tool, int workTicks, double distance, String here, Blockage nearest, boolean checkIn) {
-        return "timed out after " + seconds(workTicks) + " of " + (travel == Travel.FLY ? "flying" : "walking") + ", " + String.format("%.1f", distance)
+        return "timed out after " + seconds(workTicks) + " of " + (switch (travel) {
+            case WALK -> "walking";
+            case FLY -> "flying";
+            case GLIDE -> "gliding";
+        }) + ", " + String.format("%.1f", distance)
                 + " blocks from target (now at " + here + ")" + heldUp(nearest) + "; "
                 + (checkIn
                         ? "the trip was still going and reached the longest a single trip runs; call `" + tool + "` again to"

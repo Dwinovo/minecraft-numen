@@ -14,7 +14,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
  * @param budget  这一趟总共最多展开几个节点,用完还没到就收场;{@link #AUTO_BUDGET} 按起点到终点的估价定(远的路预算多)
  * @param route   先照这条走;没有为 null
  * @param through 路过:身体走进目标就算到了,不停稳、不复核视线,宿主接着开下一次导航,身体的冲劲不断
- * @param travel  走还是飞({@link Travel}):默认走
+ * @param travel  走、创造飞行还是滑翔({@link Travel}):默认走
  * @param admission 飞的一趟受理时问过的结论({@link Navigator#admit});没问过为 null,开出去时问一次
  */
 public record NavRequest(Goal goal, RouteSpec spec, int budget, Route route, boolean through, Travel travel, Admission admission) {
@@ -47,8 +47,8 @@ public record NavRequest(Goal goal, RouteSpec spec, int budget, Route route, boo
         return new NavRequest(goal, spec, budget, route, true, travel, admission);
     }
 
-    /** 同一个请求,只飞({@link Travel#FLY});{@code admitted} 是受理时问过的结论,没问过传 null。 */
-    public NavRequest flying(Admission admitted) {
-        return new NavRequest(goal, spec, budget, route, through, Travel.FLY, admitted);
+    /** 同一个请求,按 {@code how} 去({@link Travel#FLY}、{@link Travel#GLIDE});{@code admitted} 是受理时问过的结论,没问过传 null。 */
+    public NavRequest travelling(Travel how, Admission admitted) {
+        return new NavRequest(goal, spec, budget, route, through, how, admitted);
     }
 }

@@ -27,8 +27,8 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * {@code numen.move.walk}、{@code numen.move.fly} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走(或飞)到一个到达目标({@link Arrival})。
- * 走从不飞,飞只飞({@link MoveToTaskRecord#travel}):许飞的身体走创造飞行,否则穿着鞘翅滑翔,受理时缺什么当场拒绝({@link Trip#admit})。
+ * {@code numen.move.walk}、{@code numen.move.fly}、{@code numen.move.glide} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走(或飞、滑翔)到一个到达目标({@link Arrival})。
+ * 走从不飞;{@code fly} 只用创造飞行,{@code glide} 只用鞘翅({@link MoveToTaskRecord#travel});受理时缺什么当场拒绝({@link Trip#admit})。
  *
  * <p><b>一趟就是一次导航</b>——目标编成寻路的目标({@link Destination}),规格是走路的出厂规格({@link Walking#spec}:可挖可搭,只看
  * 价钱),交给 {@link Trip}。一截一截规划、走、从当时位置按同一份规格接着规划,都在寻路里;这里不留"计划",也不比对路上动了哪些格:
@@ -91,7 +91,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             if (vehicle == null || vehicle instanceof Boat && r.sailing && r.travel == Travel.WALK && sails()) {
                 return null;
             }
-            if (r.travel == Travel.FLY) {
+            if (r.travel != Travel.WALK) {
                 return Precondition.sitting(player, "and a flight starts from the ground");
             }
             return Precondition.sitting(player, vehicle instanceof Boat && r.sailing
@@ -117,13 +117,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         } catch (IllegalArgumentException refused) {
             return Preparation.refused(TaskResult.fail(ErrorKind.NO_PATH, refused.getMessage(), null, value()));
         }
-        if (r.travel == Travel.FLY) {
-            admission = Trip.admit(player, destination.goal());
+        if (r.travel != Travel.WALK) {
+            admission = Trip.admit(player, r.travel, destination.goal());
             Lack lack = admission.lack();
             if (lack != null) {
+                boolean onFoot = lack.why() == Lack.Why.TOO_NEAR || lack.why() == Lack.Why.NO_FLIGHT;
                 return Preparation.refused(TaskResult.fail(NavText.type(lack) == FailureType.NO_MATERIAL ? ErrorKind.NO_MATERIAL : ErrorKind.NO_PATH,
-                        "can't fly there: " + NavText.lack(lack), lack.why() == Lack.Why.TOO_NEAR
-                        ? com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", destination.toward()) : null, value()));
+                        "can't " + (r.travel == Travel.FLY ? "fly" : "glide") + " there: " + NavText.lack(lack),
+                        onFoot ? com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", destination.toward()) : null, value()));
             }
         }
         return Preparation.READY;
@@ -145,8 +146,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return;
         }
         nav = Trip.to(player, destination.goal(), Walking.spec(player.serverLevel()), destination.toward());
-        if (r.travel == Travel.FLY) {
-            nav.flying(admission);
+        if (r.travel != Travel.WALK) {
+            nav.travelling(r.travel, admission);
         }
         com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 去 {}", r.getToolName(), r.arrival.words());
     }
@@ -194,7 +195,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 String why = nav.failReason();
                 FailureType type = nav.failType();
                 stopNav();
-                fail((r.travel == Travel.FLY ? "stopped: got within " : "blocked: got within ") + String.format("%.1f", distance())
+                fail((r.travel != Travel.WALK ? "stopped: got within " : "blocked: got within ") + String.format("%.1f", distance())
                         + " blocks of " + r.arrival.to().words() + " (now on the ground at y=" + player.blockPosition().getY() + "). " + why + ".",
                         type);
                 yield TaskState.FAILED;

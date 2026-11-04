@@ -16,7 +16,7 @@ public final class Admission {
         this.lack = lack;
     }
 
-    /** 许飞的身体:创造飞行进寻路本身,没有滑翔计划。 */
+    /** 创造飞行:进寻路本身,没有滑翔计划。 */
     static Admission creative() {
         return CREATIVE;
     }

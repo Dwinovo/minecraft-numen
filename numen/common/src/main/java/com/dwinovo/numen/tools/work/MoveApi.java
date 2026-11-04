@@ -17,14 +17,16 @@ import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 
+import java.util.Comparator;
 import java.util.Optional;
 
 /**
- * {@code numen.move}:移动——走到一处({@code walk})、飞到一处({@code fly})、离开某物({@code away})、跟着谁走一阵({@code follow})。
- * 走只走(默认可挖可搭,只看价钱),从不飞,{@code away}、{@code follow} 同样;飞只飞(许飞的创造飞行,否则穿着鞘翅滑翔)。走还是飞由调用方说,
- * 寻路不比价钱;能不能动哪一格由权限层在动手那一刻决定,不在这里判。模型只说去哪、多近算到,怎么走(怎么飞)归寻路。
+ * {@code numen.move}:移动——走到一处({@code walk})、用创造飞行飞到一处({@code fly})、用鞘翅滑翔到一列附近({@code glide})、离开某物({@code away})、
+ * 跟着谁走一阵({@code follow})。走只走(默认可挖可搭,只看价钱),从不飞,{@code away}、{@code follow} 同样;{@code fly} 只用创造飞行,{@code glide} 只用鞘翅。
+ * 用哪种由调用方说,寻路不比价钱;能不能动哪一格由权限层在动手那一刻决定,不在这里判。模型只说去哪、多近算到,怎么走(怎么飞)归寻路。
  */
 public final class MoveApi {
 
@@ -42,8 +44,9 @@ public final class MoveApi {
     public static void install(NumenApi numen) {
         numen.codec(Where.class, Where.CODEC);
         numen.api("move", "Moving, one verb for each way of going. `walk` goes to a place on foot: walking and swimming, digging and "
-                + "building only when going around costs more. `fly` goes by air: creative flight when you may fly, otherwise "
-                + "gliding on the elytra you wear. `away` and `follow` go on foot. A trip ends with the account of how it went.",
+                + "building only when going around costs more. `fly` goes to a place with creative flight, when you may fly, and "
+                + "hovers there. `glide` crosses a long way on the elytra you wear and lands near a column. `away` and `follow` "
+                + "go on foot. A trip ends with the account of how it went.",
                 MoveApi.class);
     }
 
@@ -60,7 +63,8 @@ public final class MoveApi {
     @Example("numen.move.walk(creeper, 6)")
     @Example("numen.move.walk({x = 120, z = -35})")
     @Example("numen.move.walk({y = 12})")
-    @Note("Use it for ordinary trips over ground you can reach; `numen.move.fly` crosses what can't be walked and long open distances.")
+    @Note("Use it for ordinary trips over ground you can reach. `numen.move.fly` (when you may fly) crosses what can't be "
+            + "walked; `numen.move.glide` crosses long open distances on an elytra.")
     @Note("Background work with an end: it returns when you are there or can't get further, and says how it went: where you "
             + "stand, how far you still were from where you were heading, how many blocks it broke and placed, what your "
             + "owner and the rules ruled about the cells it wanted to change. A trip that stops short fails with its "
@@ -80,36 +84,76 @@ public final class MoveApi {
             + "`numen.use.dismount()`: a trip never steps off by itself.")
     @Note("A Pos, Block or Cluster that can't be stood in, used or reached as asked, or an Entity that is gone, fails "
             + "at once with the reason and nothing starts.")
-    @SeeAlso({"numen.move.fly", "numen.move.away", "numen.move.follow", "numen.use.dismount", "numen.task.stop"})
+    @SeeAlso({"numen.move.fly", "numen.move.glide", "numen.move.away", "numen.move.follow", "numen.use.dismount", "numen.task.stop"})
     public static Job<Walked> walk(ServerCall call, Walk args) {
         return Job.of(new MoveToTaskRecord(call, Arrival.to(args.where(), args.distance().orElse(null)), Travel.WALK));
     }
 
-    @Fn("Go to a place by air: creative flight when you may fly, otherwise gliding on the elytra you wear.")
+    @Fn("Fly to a place with creative flight and hover there. Only when you may fly (creative); it never uses an elytra.")
     @Example("numen.move.fly({x = 120, y = 64, z = -35})")
-    @Example("numen.move.fly({x = 400, z = -200})")
     @Example("numen.move.fly(numen.scan.blocks(\"iron_ore\")[1].nearest, 4)")
-    @Note("The same place and distance as `numen.move.walk`. Use it to cross gaps, water and mountains, and long open "
-            + "distances; a place close by is `numen.move.walk`.")
-    @Note("Background work with an end, with the same account as `numen.move.walk`, plus how far you flew or glided, where "
-            + "you took off and came down, the rockets used and the elytra's wear. A trip that stops short fails with its reason "
-            + "and the same account in the error's data.")
-    @Note("If you may fly (creative), it flies there and lands, or hovers when the place is a Pos in mid-air.")
-    @Note("Otherwise it glides: it walks to a spot nearby with open sky, takes off, climbs on firework rockets from your pack "
-            + "or offhand to a height above the terrain on the way, glides to the place and lands about 6 blocks short of "
-            + "it, and walks the rest. Gliding needs a place with x and z (a height alone has none).")
-    @Note("Gliding needs an unbroken elytra worn (`numen.gear.wear`), at least 5 firework rockets in your pack or offhand (with "
-            + "fewer it can still step off a ledge nearby and glide down, using none) and at least 5 durability left on "
-            + "the elytra. When one of these is missing, or there is no open spot to take off, no way past the terrain, or no "
-            + "dry ground to land on near the place, the call is refused at once and says what is missing and what to do.")
-    @Note("In the air it comes down early where the ground is near when the rockets fall below 5 or the elytra's durability "
-            + "below 5, or something blocks the way. If it lands far from the place and it can fly again it takes off again "
-            + "from there; if it can't, the call ends there and fails with the reason and the account. It does not walk the "
-            + "rest of a trip it can't fly: `numen.move.walk` or `numen.move.fly` again goes on from where you stand.")
+    @Note("The same place and distance as `numen.move.walk`, and it may be at a height in mid-air. Use it to cross gaps, "
+            + "lava, water and mountains when you may fly; a place close by over open ground is `numen.move.walk`.")
+    @Note("Background work with an end, with the same account as `numen.move.walk`, plus how far you flew and where you "
+            + "took off and landed. A trip that stops short fails with its reason and the same account in the error's data.")
+    @Note("It flies there and lands, or hovers when the place is a Pos in mid-air. It stays on the ground when going on "
+            + "foot costs less, and flies where walking can't go.")
+    @Note("When you may not fly, the call is refused at once, and says so: `numen.move.walk` goes on foot, and "
+            + "`numen.move.glide` crosses a long way if you wear an elytra.")
     @Note("Sitting in a boat or on a mount, it fails at once and names `numen.use.dismount()`.")
-    @SeeAlso({"numen.move.walk", "numen.gear.wear", "numen.use.glide", "numen.use.dismount", "numen.task.stop"})
+    @SeeAlso({"numen.move.walk", "numen.move.glide", "numen.use.dismount", "numen.task.stop"})
     public static Job<Walked> fly(ServerCall call, Walk args) {
         return Job.of(new MoveToTaskRecord(call, Arrival.to(args.where(), args.distance().orElse(null)), Travel.FLY));
+    }
+
+    /** 滑翔去哪:一列。 */
+    public record Glide(@Doc("Where to glide to: a column {x = …, z = …}. A Pos, a Block or an Entity is taken as the column "
+            + "it is in (an Entity: the column it stands in now); its y is ignored, because the height you land at is "
+            + "the ground's. A height {y = …} alone has no column and is refused.") Where where) {}
+
+    @Fn("Cross a long way by gliding on the elytra you wear, and land near a column. It never uses creative flight.")
+    @Example("numen.move.glide({x = 400, z = -200})")
+    @Example("numen.move.glide(numen.scan.entities()[1])")
+    @Note("Use it for long open distances (a hundred blocks or more); within 16 blocks of the column it is refused, and "
+            + "`numen.move.walk` goes there.")
+    @Note("It walks to a spot nearby with open sky, takes off, climbs on firework rockets from your pack or offhand to a "
+            + "height above the terrain on the way, glides toward the column, and starts coming down when it is within 16 "
+            + "blocks of it. It lands on the nearest safe ground, not on the exact spot: natural solid ground with open "
+            + "sky above, not at a ledge's edge, not in liquid. The ground decides which level you land on and how far "
+            + "from the column, and the trip ends at touchdown: it does not walk the rest.")
+    @Note("Background work with an end, with the same account as `numen.move.walk`, plus the cell you landed on, how far "
+            + "that is from the column (horizontally), the rockets used and the elytra's wear. `numen.move.walk` goes the rest.")
+    @Note("It needs an unbroken elytra worn (`numen.gear.wear`), at least 5 firework rockets in your pack or offhand (with "
+            + "fewer it can still step off a ledge nearby and glide down, using none) and at least 5 durability left on "
+            + "the elytra. When one of these is missing, or there is no open spot to take off, no way past the terrain, or "
+            + "no safe ground to land on near the column, the call is refused at once and says what is missing and what to do.")
+    @Note("If it has to come down early, before it is within 16 blocks of the column (the rockets or the elytra's "
+            + "durability fall below 5, or something blocks the way), it takes off again from where it landed when the "
+            + "column is still more than 96 blocks away and rockets and durability allow; otherwise the call ends there "
+            + "and fails with the reason and how far from the column you are. It does not turn into a walk.")
+    @Note("It glides in creative mode too. Sitting in a boat or on a mount, it fails at once and names `numen.use.dismount()`.")
+    @SeeAlso({"numen.move.walk", "numen.move.fly", "numen.gear.wear", "numen.use.glide", "numen.use.dismount", "numen.task.stop"})
+    public static Job<Walked> glide(ServerCall call, Glide args) {
+        return Job.of(new MoveToTaskRecord(call, Arrival.to(column(call, args.where()), null), Travel.GLIDE));
+    }
+
+    /** 滑翔去的那一列:一列就是它;格、方块、实体取它所在的那一列;一堆格子取离她最近的那一格所在的列;只有高度没有列,拒绝。 */
+    private static Where.Column column(ServerCall call, Where where) {
+        return switch (where) {
+            case Where.Column column -> column;
+            case Where.Cell cell -> new Where.Column(cell.pos().getX(), cell.pos().getZ());
+            case Where.Mob mob -> {
+                Entity entity = call.entity(mob.ref());
+                yield new Where.Column(entity.getBlockX(), entity.getBlockZ());
+            }
+            case Where.Cells cells -> {
+                BlockPos nearest = cells.cells().stream()
+                        .min(Comparator.comparingDouble(cell -> cell.distSqr(call.her().blockPosition()))).orElseThrow();
+                yield new Where.Column(nearest.getX(), nearest.getZ());
+            }
+            case Where.Height height -> throw new IllegalArgumentException("gliding goes to a column: a height {y = …} alone has "
+                    + "no x and z; give a column {x = …, z = …}, a Pos, a Block or an Entity");
+        };
     }
 
     /** 离开什么、多远。 */

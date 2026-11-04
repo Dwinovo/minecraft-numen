@@ -111,7 +111,7 @@ public class FlyGameTests {
         }
         NumenPlayer her = winged(helper, "gametest_grove", new BlockPos(6, 2, MID), 12);
         BlockPos target = helper.absolutePos(new BlockPos(135, 2, MID));
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(target) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fly.done(), "the flight has not finished");
@@ -132,7 +132,7 @@ public class FlyGameTests {
         fill(helper, 50, 2, 0, 60, 23, 63, Blocks.STONE);
         NumenPlayer her = winged(helper, "gametest_ridge", new BlockPos(5, 2, MID), 16);
         BlockPos target = helper.absolutePos(new BlockPos(125, 2, MID));
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(target) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fly.done(), "the flight has not finished");
@@ -154,7 +154,7 @@ public class FlyGameTests {
         floor(helper, 1);
         NumenPlayer her = winged(helper, "gametest_again", new BlockPos(5, 2, MID), 24);
         BlockPos target = helper.absolutePos(new BlockPos(185, 2, MID));
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(target) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(target) + ")");
         int[] flying = {0};
         int[] built = {-1};
         int[] ticks = {0};
@@ -192,7 +192,7 @@ public class FlyGameTests {
         fill(helper, 110, 2, 24, 128, 3, 40, Blocks.WATER);
         NumenPlayer her = winged(helper, "gametest_pond", new BlockPos(5, 4, MID), 12);
         BlockPos target = helper.absolutePos(new BlockPos(119, 3, MID));
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(target) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fly.done(), "the flight has not finished");
@@ -216,7 +216,7 @@ public class FlyGameTests {
         floor(helper, 1);
         NumenPlayer her = winged(helper, "gametest_few", new BlockPos(5, 2, MID), 4);
         BlockPos start = her.blockPosition();
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(helper.absolutePos(new BlockPos(120, 2, MID))) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(120, 2, MID))) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fly.done(), "the call has not come back");
@@ -235,7 +235,7 @@ public class FlyGameTests {
         floor(helper, 1);
         NumenPlayer her = spawnBare(helper, "gametest_bare", new BlockPos(5, 2, MID), false);
         her.getInventory().add(new ItemStack(Items.FIREWORK_ROCKET, 8));
-        ToolRun fly = lua(her, "return numen.move.fly(" + xyz(helper.absolutePos(new BlockPos(120, 2, MID))) + ")");
+        ToolRun fly = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(120, 2, MID))) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fly.done(), "the call has not come back");

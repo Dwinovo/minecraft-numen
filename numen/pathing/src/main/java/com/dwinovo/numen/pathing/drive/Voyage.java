@@ -9,6 +9,7 @@ import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.plan.Materials;
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -72,35 +73,55 @@ public final class Voyage {
     }
 
     /**
-     * 受理一次飞:许飞的身体走创造飞行;否则要穿着可用的鞘翅,排得出一份滑翔计划。缺什么({@link Lack})当场交回,不占身体。
-     * 只在世界所在的线程上调用。
+     * 受理一次飞({@link Travel#FLY} 或 {@link Travel#GLIDE}):创造飞行要身体许飞;滑翔要穿着可用的鞘翅,排得出一份滑翔计划。
+     * 缺什么({@link Lack})当场交回,不占身体。只在世界所在的线程上调用。
      */
-    public static Admission admit(Body body, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal) {
-        Rig rig = new Rig(body, Travel.FLY, terrain, materials, threats);
-        return rig.snapshot().mobility().mayFly() ? Admission.creative() : Glide.admit(rig, goal, Set.of());
+    public static Admission admit(Body body, Travel travel, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal) {
+        Rig rig = new Rig(body, travel, terrain, materials, threats);
+        return switch (travel) {
+            case FLY -> flightAdmission(rig);
+            case GLIDE -> Glide.admit(rig, goal, Set.of());
+            case WALK -> throw new IllegalArgumentException("走不需要受理");
+        };
+    }
+
+    /** 创造飞行的受理:许飞就行;不许飞,{@code have} 带上鞘翅还剩的耐久,宿主据此在提示里加上滑翔。 */
+    private static Admission flightAdmission(Rig rig) {
+        Mobility mobility = rig.snapshot().mobility();
+        return mobility.mayFly() ? Admission.creative() : Admission.lacking(new Lack(Lack.Why.NO_FLIGHT, 0, mobility.gliderLife()));
     }
 
     /** 第一刻:决定这一趟从哪一段开始。 */
     private void begin() {
-        if (rig.travel == Travel.WALK) {
-            if (Snapshots.flying(rig.entity)) {
-                current = new Alight(rig);
-                phase = Phase.ALIGHT;
+        if (rig.travel == Travel.FLY) {
+            Admission asked = flightAdmission(rig);
+            if (asked.lack() != null) {
+                grounded(asked.lack());
             } else {
                 walkOn(seed, passing);
             }
             return;
         }
-        if (rig.snapshot().mobility().mayFly()) {
+        if (Snapshots.flying(rig.entity)) {
+            current = new Alight(rig);
+            phase = Phase.ALIGHT;
+        } else {
+            afoot();
+        }
+    }
+
+    /** 身体在地上:走的一趟照路线走,滑翔的一趟排起飞。 */
+    private void afoot() {
+        if (rig.travel == Travel.WALK) {
             walkOn(seed, passing);
             return;
         }
         Admission asked = admission != null ? admission : Glide.admit(rig, goal, spent);
         if (asked.lack() != null) {
             grounded(asked.lack());
-            return;
+        } else {
+            start(asked.plan());
         }
-        start(asked.plan());
     }
 
     // ==================== 推进 ====================
@@ -127,7 +148,7 @@ public final class Voyage {
             return state;
         }
         switch (phase) {
-            case ALIGHT -> walkOn(seed, passing);
+            case ALIGHT -> afoot();
             case TO_TAKEOFF -> {
                 if (s == Driver.State.ARRIVED) {
                     // 到了起飞点:按此刻的身体与世界再问一遍,起飞点还能用就起飞

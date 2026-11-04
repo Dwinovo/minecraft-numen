@@ -1,7 +1,7 @@
 package com.dwinovo.numen.pathing.drive;
 
 /**
- * 滑翔缺什么、没法(再)飞的原因,和相关的数。受理时当场拒绝与一趟中途收工用的是同一份:都是"此刻从这里飞不起来"的事实,
+ * 飞缺什么、没法(再)飞的原因,和相关的数。受理时当场拒绝与一趟中途收工用的是同一份:都是"此刻从这里飞不起来"的事实,
  * 怎么对模型说在宿主({@code NavText})。
  *
  * @param why  缺什么
@@ -12,7 +12,9 @@ public record Lack(Why why, int need, int have) {
 
     /** 缺什么。 */
     public enum Why {
-        /** 不许飞,也没穿可用的鞘翅。 */
+        /** 创造飞行:身体不许飞({@code have} 是它穿着的鞘翅还剩的耐久,0 是没有)。 */
+        NO_FLIGHT,
+        /** 滑翔:没穿可用的鞘翅。 */
         NO_WINGS,
         /** 鞘翅耐久低于下限。 */
         WORN,

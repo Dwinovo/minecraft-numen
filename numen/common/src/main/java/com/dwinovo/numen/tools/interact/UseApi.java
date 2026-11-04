@@ -263,9 +263,9 @@ public final class UseApi {
     @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
             + "(`numen.gear.wear(\"minecraft:elytra\")`); otherwise it fails and says which is missing.")
     @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you the way you look.")
-    @Note("To get somewhere by air, `numen.move.fly` glides the whole trip: it takes off, steers, fires the rockets and "
-            + "lands. This opens the wings and leaves the rest to you.")
-    @SeeAlso({"numen.move.fly", "numen.gear.wear", "numen.use.item"})
+    @Note("To cross a long way on the elytra, `numen.move.glide` does the whole trip: it takes off, steers, fires the "
+            + "rockets and lands. This opens the wings and leaves the rest to you.")
+    @SeeAlso({"numen.move.glide", "numen.gear.wear", "numen.use.item"})
     public static Glided glide(ServerCall call) {
         NumenPlayer her = call.her();
         if (!her.controls().unfurl(her)) {

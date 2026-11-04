@@ -75,11 +75,11 @@ public final class Navigator {
     }
 
     /**
-     * 受理一次飞({@link Travel#FLY}):许飞的身体走创造飞行;否则要穿着可用的鞘翅、排得出一份滑翔计划。缺什么({@link com.dwinovo.numen.pathing.drive.Lack})
-     * 当场交回,宿主据此拒绝;受理了的结论交给 {@link NavRequest#flying},开出去的导航直接用它的计划。
+     * 受理一次飞({@link Travel#FLY} 创造飞行、{@link Travel#GLIDE} 鞘翅滑翔):创造飞行要身体许飞,滑翔要穿着可用的鞘翅、排得出一份滑翔计划。
+     * 缺什么({@link com.dwinovo.numen.pathing.drive.Lack})当场交回,宿主据此拒绝;受理了的结论交给 {@link NavRequest#travelling},开出去的导航直接用它的计划。
      */
-    public Admission admit(Goal goal) {
-        return Voyage.admit(body, ports.terrain(), ports.materials(), ports.threats(), goal);
+    public Admission admit(Travel travel, Goal goal) {
+        return Voyage.admit(body, travel, ports.terrain(), ports.materials(), ports.threats(), goal);
     }
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */

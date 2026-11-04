@@ -4,6 +4,7 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.SKY;
 
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -57,7 +58,7 @@ public class GlideGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         double bound = walkBound(body, 115);
-        t.fly(body, Goals.at(t.at(120, 1, MID)), RouteSpec.defaults()).within(1000)
+        t.glide(body, Goals.at(t.at(120, 1, MID)), RouteSpec.defaults()).within(1000)
                 .then(r -> {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1) {
@@ -85,7 +86,7 @@ public class GlideGameTests {
     public static void a_range_goal_is_flown_to_like_a_cell(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
-        t.fly(body, Goals.within(Goals.at(t.at(120, 1, MID)), 0, 3), RouteSpec.defaults()).within(1000)
+        t.glide(body, Goals.within(Goals.at(t.at(120, 1, MID)), 0, 3), RouteSpec.defaults()).within(1000)
                 .then(r -> {
                     if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
                         throw new GameTestAssertException("范围目标也该飞:" + r.report.ledger().glides());
@@ -100,7 +101,7 @@ public class GlideGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         var cell = t.at(120, 1, MID);
-        t.fly(body, Goals.column(cell.getX(), cell.getZ()), RouteSpec.defaults()).within(1000)
+        t.glide(body, Goals.column(cell.getX(), cell.getZ()), RouteSpec.defaults()).within(1000)
                 .then(r -> {
                     if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 80) {
                         throw new GameTestAssertException("列目标也该飞:" + r.report.ledger().glides());
@@ -134,7 +135,7 @@ public class GlideGameTests {
         if (goal == null) {
             throw new GameTestAssertException("场地四周找不到没加载的远处,测试场地假设不成立");
         }
-        t.fly(body, Goals.column(goal.getX(), goal.getZ()), RouteSpec.defaults()).within(2500)
+        t.glide(body, Goals.column(goal.getX(), goal.getZ()), RouteSpec.defaults()).within(2500)
                 .then(r -> {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1 || glides.get(0).blocks() < 250 || glides.get(0).airborne()) {
@@ -163,11 +164,11 @@ public class GlideGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 1);
         var goal = Goals.at(t.at(120, 1, MID));
-        Lack lack = t.navigator(body).admit(goal).lack();
+        Lack lack = t.navigator(body).admit(Travel.GLIDE, goal).lack();
         if (lack == null || lack.why() != Lack.Why.TOO_FEW_ROCKETS || lack.have() != 1 || lack.need() != 5) {
             throw new GameTestAssertException("受理时该说烟花不够(有 1 支,要 5 支):" + lack);
         }
-        t.fly(body, goal, RouteSpec.defaults()).within(100)
+        t.glide(body, goal, RouteSpec.defaults()).within(100)
                 .fails(Outcome.Grounded.class, g -> {
                     if (g.lack().why() != Lack.Why.TOO_FEW_ROCKETS) {
                         throw new GameTestAssertException("结局该是烟花不够:" + g.lack());
@@ -187,11 +188,11 @@ public class GlideGameTests {
         TestBody body = t.body(5, 1, MID);
         Trial.give(body, new ItemStack(Items.FIREWORK_ROCKET, 8));
         var goal = Goals.at(t.at(120, 1, MID));
-        Lack lack = t.navigator(body).admit(goal).lack();
+        Lack lack = t.navigator(body).admit(Travel.GLIDE, goal).lack();
         if (lack == null || lack.why() != Lack.Why.NO_WINGS) {
             throw new GameTestAssertException("受理时该说没有可用的鞘翅:" + lack);
         }
-        t.fly(body, goal, RouteSpec.defaults()).within(100)
+        t.glide(body, goal, RouteSpec.defaults()).within(100)
                 .fails(Outcome.Grounded.class, g -> {
                     if (g.lack().why() != Lack.Why.NO_WINGS) {
                         throw new GameTestAssertException("结局该是没有可用的鞘翅:" + g.lack());
@@ -207,7 +208,7 @@ public class GlideGameTests {
         TestBody body = t.body(5, 15, MID);
         body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
         Trial.give(body, new ItemStack(Items.FIREWORK_ROCKET, 4));
-        t.fly(body, Goals.at(t.at(85, 1, MID)), RouteSpec.defaults()).within(1000)
+        t.glide(body, Goals.at(t.at(85, 1, MID)), RouteSpec.defaults()).within(1000)
                 .then(r -> {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1 || glides.get(0).emergency() || glides.get(0).damage() > 0
@@ -227,7 +228,7 @@ public class GlideGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         int[] flying = {0};
-        t.fly(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
+        t.glide(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
                 .during(r -> {
                     if (r.body.isFallFlying() && flying[0]++ == 3) {
                         r.body.getInventory().items.replaceAll(stack -> stack.is(Items.FIREWORK_ROCKET) ? ItemStack.EMPTY : stack);
@@ -259,7 +260,7 @@ public class GlideGameTests {
         t.fill(4, 1, MID - 2, 6, 14, MID + 2, Blocks.STONE);
         TestBody body = t.body(5, 15, MID);
         body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
-        t.fly(body, Goals.at(t.at(85, 1, MID)), RouteSpec.defaults()).within(1000)
+        t.glide(body, Goals.at(t.at(85, 1, MID)), RouteSpec.defaults()).within(1000)
                 .then(r -> {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1 || glides.get(0).rockets() != 0 || glides.get(0).blocks() < 40 || glides.get(0).damage() > 0
@@ -279,7 +280,7 @@ public class GlideGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = winged(t, 5, 16);
         int[] flying = {0};
-        t.fly(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
+        t.glide(body, Goals.at(t.at(130, 1, MID)), RouteSpec.defaults()).within(1500)
                 .during(r -> {
                     if (r.body.isFallFlying() && flying[0]++ == 40) {
                         int x = (int) (r.body.getX() - t.origin.getX()) + 44;

@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.NavStatus;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.api.PlanResult;
@@ -177,9 +178,14 @@ final class Trial {
         return go(body, NavRequest.to(goal, spec));
     }
 
-    /** 开飞:许飞的身体走创造飞行,否则穿着鞘翅滑翔(受理在开出去时问)。 */
+    /** 开飞:创造飞行(受理在开出去时问)。 */
     Run fly(TestBody body, Goal goal, RouteSpec spec) {
-        return go(body, NavRequest.to(goal, spec).flying(null));
+        return go(body, NavRequest.to(goal, spec).travelling(Travel.FLY, null));
+    }
+
+    /** 开滑翔:穿着鞘翅滑翔(受理在开出去时问)。 */
+    Run glide(TestBody body, Goal goal, RouteSpec spec) {
+        return go(body, NavRequest.to(goal, spec).travelling(Travel.GLIDE, null));
     }
 
     Run go(TestBody body, NavRequest request) {

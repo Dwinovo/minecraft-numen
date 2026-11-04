@@ -25,7 +25,7 @@ import net.minecraft.server.level.ServerPlayer;
 final class Rig {
 
     final Body body;
-    /** 这一趟走还是飞:走的一趟里身体的快照按没有飞行能力算({@link BodySnapshot#afoot})。 */
+    /** 这一趟怎么走:只有创造飞行的一趟读完整的快照,走与滑翔的一趟身体的快照按没有飞行能力算({@link BodySnapshot#afoot})。 */
     final Travel travel;
     final ServerPlayer entity;
     /** 身体的键盘(一具身体一副,宿主每刻在身体的物理步进里落一次)。 */
@@ -94,7 +94,7 @@ final class Rig {
     }
 
     BodySnapshot snapshot() {
-        return travel == Travel.WALK ? body.snapshot().afoot() : body.snapshot();
+        return travel == Travel.FLY ? body.snapshot() : body.snapshot().afoot();
     }
 
     /** 记下身体做的一个动作;null 是什么也没做。 */
