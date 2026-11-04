@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * 滑翔的落点:只求安全,不求精确。什么样的地方算安全的落点,全模块只在这里判;降落与迫降选点同一个判据({@link Glide#descent})。
  *
- * <p>一个落点是一列的<b>最高碰撞面</b>({@link Glide#top} 读高度图,第一个挡动作或有流体的方块之上),而且:
+ * <p>一个落点是一列的<b>最高碰撞面</b>({@link Terrain#top} 读高度图,第一个挡动作或有流体的方块之上),而且:
  * <ul>
  *   <li>脚下是天然实心方块({@link #natural}:土、石、沙、陶瓦、砾石、黏土、雪块、末地石;树叶、玻璃、半砖、人造方块都不算);</li>
  *   <li>最高碰撞面本身就意味着头顶是空柱:这一列上面再没有任何碰撞方块,树冠下、屋顶下都不是落点;</li>
@@ -52,8 +52,8 @@ final class Landings {
     /**
      * 这一列的落点格(脚所在的格);不是安全的落点为 null。{@code x}、{@code z} 周围一圈的区块没加载也是 null:没加载的读出来是空的,不能当地面。
      */
-    static BlockPos safe(Rig rig, BodyStats stats, int x, int z) {
-        BlockPos cell = standing(rig, stats, x, z);
+    static BlockPos safe(Craft craft, BodyStats stats, int x, int z) {
+        BlockPos cell = standing(craft, stats, x, z);
         if (cell == null) {
             return null;
         }
@@ -62,7 +62,7 @@ final class Landings {
                 if (dx == 0 && dz == 0) {
                     continue;
                 }
-                BlockPos beside = held(rig, stats, x + dx, z + dz);
+                BlockPos beside = held(craft, stats, x + dx, z + dz);
                 if (beside == null || Math.abs(beside.getY() - cell.getY()) > RIM) {
                     return null;
                 }
@@ -75,9 +75,9 @@ final class Landings {
      * 一路飞过来冲过落点之后还有一段地面:从落点起朝 {@code (ux, uz)} 方向 {@link #RUNWAY} 格,每一列都站得住、高差不超过一格(不是水、不是悬崖)。
      * 俯冲加拉平落地不会正好停在落点上,会往前冲一段,那一段上是水或断崖就落水、摔下去。
      */
-    static boolean runway(Rig rig, BodyStats stats, BlockPos spot, double ux, double uz) {
+    static boolean runway(Craft craft, BodyStats stats, BlockPos spot, double ux, double uz) {
         for (int k = 1; k <= RUNWAY; k++) {
-            BlockPos beyond = held(rig, stats, (int) Math.floor(spot.getX() + 0.5 + ux * k), (int) Math.floor(spot.getZ() + 0.5 + uz * k));
+            BlockPos beyond = held(craft, stats, (int) Math.floor(spot.getX() + 0.5 + ux * k), (int) Math.floor(spot.getZ() + 0.5 + uz * k));
             if (beyond == null || Math.abs(beyond.getY() - spot.getY()) > RIM) {
                 return false;
             }
@@ -86,55 +86,55 @@ final class Landings {
     }
 
     /** 这一列最高碰撞面上站得住、脚下是天然实心方块、不伤身的那一格。 */
-    private static BlockPos standing(Rig rig, BodyStats stats, int x, int z) {
+    private static BlockPos standing(Craft craft, BodyStats stats, int x, int z) {
         // 先看脚下是不是天然方块(读一个方块),再做站不站得住的判断(贵得多):树林里绝大多数列在第一步就筛掉了
-        if (!rig.world().isLoaded(x, z) || !natural(rig.world().getBlockState(new BlockPos(x, Glide.top(rig, x, z) - 1, z)))) {
+        if (!craft.world().isLoaded(x, z) || !natural(craft.world().getBlockState(new BlockPos(x, craft.world().top(x, z) - 1, z)))) {
             return null;
         }
-        return held(rig, stats, x, z);
+        return held(craft, stats, x, z);
     }
 
     /** 这一列最高碰撞面上站得住、不是液体、不伤身的那一格(周围一圈只要求站得住,不要求天然)。 */
-    private static BlockPos held(Rig rig, BodyStats stats, int x, int z) {
-        if (!rig.world().isLoaded(x, z)) {
+    private static BlockPos held(Craft craft, BodyStats stats, int x, int z) {
+        if (!craft.world().isLoaded(x, z)) {
             return null;
         }
-        BlockPos cell = new BlockPos(x, Glide.top(rig, x, z), z);
-        Stance stance = Stance.at(rig.world(), stats, cell);
-        if (stance == null || !stance.grounded() || !harmless(rig, cell)) {
+        BlockPos cell = new BlockPos(x, craft.world().top(x, z), z);
+        Stance stance = Stance.at(craft.world(), stats, cell);
+        if (stance == null || !stance.grounded() || !harmless(craft, cell)) {
             return null;
         }
         return cell;
     }
 
     /** 脚、头、脚下一格都不是液体,脚与头的格子不会伤身。 */
-    private static boolean harmless(Rig rig, BlockPos cell) {
+    private static boolean harmless(Craft craft, BlockPos cell) {
         for (BlockPos at : new BlockPos[] {cell, cell.above(), cell.below()}) {
-            if (!rig.world().getFluidState(at).isEmpty()) {
+            if (!craft.world().getFluidState(at).isEmpty()) {
                 return false;
             }
         }
         for (BlockPos at : new BlockPos[] {cell, cell.above()}) {
-            Block block = rig.world().getBlockState(at).getBlock();
+            Block block = craft.world().getBlockState(at).getBlock();
             if (block == Blocks.FIRE || block == Blocks.SOUL_FIRE || block == Blocks.CAMPFIRE || block == Blocks.SOUL_CAMPFIRE
                     || block == Blocks.CACTUS || block == Blocks.SWEET_BERRY_BUSH || block == Blocks.WITHER_ROSE
                     || block == Blocks.POWDER_SNOW || block == Blocks.COBWEB || block == Blocks.MAGMA_BLOCK) {
                 return false;
             }
         }
-        return rig.world().getBlockState(cell.below()).getBlock() != Blocks.MAGMA_BLOCK;
+        return craft.world().getBlockState(cell.below()).getBlock() != Blocks.MAGMA_BLOCK;
     }
 
     /**
      * 从 {@code (cx, cz)} 这一列起由近到远(先正下方,再一圈一圈往外,每一圈绕一周)找安全的落点,把每个交给 {@code trial},取第一个有结果的。
      * 算力预算:最多查 {@link #RADIUS} 圈,最多交给 {@code trial} {@code limit} 个落点(它们要做的事比判落点贵:扫线),交出去的落点之间隔 {@link #SPACING} 格以上。没有为 null。
      */
-    static <T> T nearest(Rig rig, BodyStats stats, int cx, int cz, int limit, Function<BlockPos, T> trial) {
+    static <T> T nearest(Craft craft, BodyStats stats, int cx, int cz, int limit, Function<BlockPos, T> trial) {
         List<BlockPos> tried = new ArrayList<>();
         for (int r = 0; r <= RADIUS; r++) {
             for (int step = 0; step < Math.max(1, 8 * r); step++) {
                 int[] at = ring(r, step);
-                BlockPos spot = safe(rig, stats, cx + at[0], cz + at[1]);
+                BlockPos spot = safe(craft, stats, cx + at[0], cz + at[1]);
                 if (spot == null || tried.stream().anyMatch(t -> Math.max(Math.abs(t.getX() - spot.getX()), Math.abs(t.getZ() - spot.getZ())) < SPACING)) {
                     continue;
                 }
