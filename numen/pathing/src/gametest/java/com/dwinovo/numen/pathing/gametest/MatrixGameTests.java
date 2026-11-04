@@ -1,7 +1,5 @@
 package com.dwinovo.numen.pathing.gametest;
 
-import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,6 +24,8 @@ import net.minecraft.world.level.block.Blocks;
 public class MatrixGameTests {
 
     private static final String BATCH = "pathing_matrix";
+    /** 套件是 numen_pathing_matrix,场地的模板在 numen_pathing 的命名空间里,写全。 */
+    private static final String ARENA = "numen_pathing:" + Trial.ARENA;
     /** 一条用例最多跑这么多刻(场景并行铺在 16 格上,按批铺满);最慢的 matrix_rotated 实测 7098 刻,留三倍。 */
     private static final int LIMIT = 21500;
 
