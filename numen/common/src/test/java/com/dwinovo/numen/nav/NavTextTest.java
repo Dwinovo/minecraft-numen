@@ -176,16 +176,19 @@ class NavTextTest {
     /** 鞘翅滑翔的细账:烟花用了几支(计划几支)、鞘翅耐久前后、掉血、迫降、还在空中。 */
     @Test
     void aGlideIsTold() {
-        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, false);
+        EditLedger.Glided landed = new EditLedger.Glided(A.above(), C, 109.2, 2, 0, 3, 0F, false, false, false, 0);
         assertEquals("I flew 109 blocks (took off at 120,65,-33; landed at 121,64,-33). Gliding used 2 firework rockets"
                 + " and wore the elytra from 0 to 3 damage; I lost no health.", NavText.journey(List.of(), List.of(), List.of(), List.of(),
                 new NavText.Flights(109.2, List.of(A.above()), List.of(C), false, List.of(landed), List.of())));
-        EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true, false);
+        EditLedger.Glided forced = new EditLedger.Glided(A.above(), C, 40, 1, 3, 4, 3F, true, true, false, 0);
         assertEquals("Gliding used 1 firework rocket and wore the elytra from 3 to 4 damage; I lost 3 health and had to"
                 + " land early where the ground was within reach. I am still in the air.", NavText.glide(forced));
-        EditLedger.Glided pinned = new EditLedger.Glided(A.above(), C, 12, 4, 0, 1, 0F, false, true, true);
+        EditLedger.Glided pinned = new EditLedger.Glided(A.above(), C, 12, 4, 0, 1, 0F, false, true, true, 0);
         assertEquals("Gliding used 4 firework rockets and wore the elytra from 0 to 1 damage; I lost no health. I got stuck against blocks"
                 + " in the air and let go of the controls there. I am still in the air.", NavText.glide(pinned));
+        EditLedger.Glided fell = new EditLedger.Glided(A.above(), C, 60, 3, 0, 2, 0F, false, false, false, 2);
+        assertEquals("Gliding used 3 firework rockets and wore the elytra from 0 to 2 damage; I lost no health. I dropped below the ground of"
+                + " 2 landing spots before touching down and picked another.", NavText.glide(fell));
     }
 
     /** 创造飞行不许飞:说不许飞,下一步走;穿着鞘翅(耐久大于 0)的再给滑翔。早落了地离目标不到再起飞的门槛:说离多远、门槛多少。 */

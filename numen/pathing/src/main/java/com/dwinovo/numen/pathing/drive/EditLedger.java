@@ -40,7 +40,7 @@ public final class EditLedger {
      * 照实记身体做的,不记意图。
      */
     public record Glided(BlockPos takeoff, BlockPos landing, double blocks, int rockets, int wearBefore, int wearAfter, float damage,
-                         boolean emergency, boolean airborne, boolean trapped) {}
+                         boolean emergency, boolean airborne, boolean trapped, int fellOut) {}
 
     private final List<Entry> entries = new ArrayList<>();
     private final List<Glided> glides = new ArrayList<>();

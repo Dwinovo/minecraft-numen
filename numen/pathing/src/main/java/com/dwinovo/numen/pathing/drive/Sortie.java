@@ -22,8 +22,9 @@ import net.minecraft.world.phys.Vec3;
  * <ul>
  *   <li><b>起飞</b>:先把烟花拿到手上(换手记进身体动作),抬头朝巡航方向,起跳,松开,离地之后再按一下跳(新的按下沿)展开;展开了就是滑翔;</li>
  *   <li><b>飞</b>:局部控制器({@link Pilot},物理 {@link Dynamics#gliding})沿线飞({@link Helm}),烟花够用才放;撞墙的推演被否决;前方被挡就沿航线往前拉升({@link Glide#raise});</li>
- *   <li><b>降落</b>:水平进入目标 {@link Glide#DESCENT_RANGE} 格就挑落点({@link Glide#descent}:只求安全,先正下方再由近到远),一直降到落地为止;
- *       降的途中落点落不下了(被占、被挡、够不着),拉黑它换下一个。一个安全的落点也没有,就绕着盘旋等,盘旋有时限,到了时限收场;</li>
+ *   <li><b>降落</b>(照 Baritone):水平进入目标 {@link Glide#DESCENT_RANGE} 格就挑落点({@link Glide#descent}:只求安全,先正下方再由近到远),保持高度飞到落点正上方的柱口,
+ *       再沿柱下降({@link Glide#shaft}:控制器的打分是到确切落点的距离);掉到柱底(落点那一格的地面)以下还没落地,就是出了柱子,拉黑这个落点换下一个,日志与回执都写;
+ *       降的途中落点落不下了(被占、被挡、够不着)同样拉黑换下一个。一个安全的落点也没有,就在高处绕着盘旋等,盘旋有时限,到了时限收场;</li>
  *   <li><b>迫降</b>:没进目标范围就得落地(烟花或耐久低于下限、前方被挡拉不高),同一套选点,照实记一笔(迫降);</li>
  *   <li><b>卡住</b>:滑翔着身体一秒没离开原地({@link Watchdog},走路判卡住的同一个,滑翔用大一点的尺子),就是被方块顶住了:松开所有键收场,交出顶着身体的那一格,不替她挖;</li>
  *   <li><b>落地</b>:脚着地、滑翔停了,按住潜行直到水平速度消失。落地就是这一段的结束,不再走最后一截。收场记一笔账({@link EditLedger.Glided}):起降的位置、飞了多远、
@@ -81,6 +82,10 @@ final class Sortie implements Segment {
     private final Set<BlockPos> barred = new HashSet<>();
     /** 在盘旋等落点:从第几刻起。 */
     private boolean loitering;
+    /** 已经到了落点正上方的柱口、在沿柱下降。 */
+    private boolean inShaft;
+    /** 这一段里因为掉到柱底以下还没落地而拉黑的落点数。 */
+    private int fellOut;
     private int loiterSince;
     /** 被方块顶住,收了场。 */
     private boolean trapped;
@@ -231,6 +236,13 @@ final class Sortie implements Segment {
             bar();
             descend("选好的落点落不下了");
         }
+        if (descending && !loitering && spot != null) {
+            if (!inShaft && Math.hypot(body.position().x - spot.getX() - 0.5, body.position().z - spot.getZ() - 0.5) <= Glide.TOLERANCE) {
+                enterShaft();
+            } else if (inShaft && !body.onGround() && body.position().y < spot.getY()) {
+                leaveShaft();
+            }
+        }
         Beat beat = helm.steer(way, s);
         if (loitering) {
             return;
@@ -317,11 +329,29 @@ final class Sortie implements Segment {
             return;
         }
         spot = next.spot();
-        way = next.way();
+        way = next.approach();
         s = 0;
         loitering = false;
+        inShaft = false;
         helm.forget();
         PathLog.info("{} {}({}) 落点 {} {}", craft.who(), descended ? "降落" : "迫降", why, PathLog.pos(spot), craft.describe());
+    }
+
+    /** 到了柱口:线换成只有落点这一个点,控制器的打分是到这一点的距离,沿柱下降。 */
+    private void enterShaft() {
+        way = Glide.shaft(spot);
+        s = 0;
+        inShaft = true;
+        helm.forget();
+        PathLog.info("{} 到了落点 {} 的柱口,沿柱下降 {}", craft.who(), PathLog.pos(spot), craft.describe());
+    }
+
+    /** 掉到柱底(落点那一格的地面)以下还没落地:出了柱子,这个落点拉黑换下一个,日志与回执都写。 */
+    private void leaveShaft() {
+        fellOut++;
+        PathLog.info("{} 掉到柱底以下还没落地,拉黑落点 {} {}", craft.who(), PathLog.pos(spot), craft.describe());
+        bar();
+        descend("掉到柱底以下");
     }
 
     /** 找不到安全的落点:绕着前方的一点盘旋,隔一阵再找一次。盘旋只是等,不是办法:到了时限就收场。 */
@@ -407,7 +437,7 @@ final class Sortie implements Segment {
         Vec3 now = body.position();
         double blocks = Math.hypot(now.x - launchedAt.x, now.z - launchedAt.z);
         craft.ledger().glided(new EditLedger.Glided(plan.takeoff(), body.cell(), blocks, helm.fired(), wearBefore, body.wear(),
-                Math.max(0, healthBefore - body.health()), descending && !descended, airborne, trapped));
+                Math.max(0, healthBefore - body.health()), descending && !descended, airborne, trapped, fellOut));
     }
 
     // ==================== 段的接口 ====================

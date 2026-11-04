@@ -366,6 +366,10 @@ public final class NavText {
             sb.append(" and had to land early where the ground was within reach");
         }
         sb.append('.');
+        if (glide.fellOut() > 0) {
+            sb.append(" I dropped below the ground of ").append(glide.fellOut() == 1 ? "a landing spot" : glide.fellOut() + " landing spots")
+                    .append(" before touching down and picked another.");
+        }
         if (glide.trapped()) {
             sb.append(" I got stuck against blocks in the air and let go of the controls there.");
         }

@@ -21,15 +21,18 @@ import net.minecraft.world.level.block.state.BlockState;
  *   <li>脚下是天然实心方块({@link #natural}:土、石、沙、陶瓦、砾石、黏土、雪块、末地石;树叶、玻璃、半砖、人造方块都不算);</li>
  *   <li>最高碰撞面本身就意味着头顶是空柱:这一列上面再没有任何碰撞方块,树冠下、屋顶下都不是落点;</li>
  *   <li>这一格站得住({@link Stance}),脚、头、脚下一格都不是液体,不是会伤身的方块({@link #harmless});</li>
- *   <li>周围八列也站得住、高差不超过一格({@link #RIM}):不在边沿上;周围的区块已加载。</li>
+ *   <li>周围八列也站得住、高差不超过一格({@link #RIM}):不在边沿上;周围的区块已加载;</li>
+ *   <li>落点上方的空柱({@link #SHAFT}):半径内没有比落点高的地面,控制器在柱里绕着沉下来。</li>
  * </ul>
  */
 final class Landings {
 
-    /** 直线进近冲过落点之后要有这么多格地面。 */
-    private static final int RUNWAY = 8;
-    /** 进近最后一段落点前要有这么多格同高的地面。 */
-    private static final int RUN_IN = 5;
+    /**
+     * 落点上方的空柱:以落点为中心、这么多格半径的圆柱里,地面都不比落点高,所以柱里从落点往上是空的(树冠、山坡、台阶都不在柱里)。
+     * 控制器在柱里一边绕一边沉,转弯半径量得十格上下(水平速度每刻 1.5 格、转角每刻不到 6 度),取身体盒半宽(0.3)加八格留出圈上身体落在线外的一截;
+     * 柱底是落点那一格的地面,身体掉到它的高度以下还没落地,就是出了柱子({@link Sortie}),这个落点拉黑。
+     */
+    private static final int SHAFT = 4;
     /** 周围八列与这一列的高差最多几格。 */
     private static final int RIM = 1;
     /** 找落点往四周找多少圈(算力预算:一次选点最多查 (2 × 半径 + 1)² 列,有结果就停)。 */
@@ -70,35 +73,14 @@ final class Landings {
                 }
             }
         }
+        for (int dx = -SHAFT; dx <= SHAFT; dx++) {
+            for (int dz = -SHAFT; dz <= SHAFT; dz++) {
+                if (dx * dx + dz * dz <= SHAFT * SHAFT && craft.world().top(x + dx, z + dz) > cell.getY()) {
+                    return null;
+                }
+            }
+        }
         return cell;
-    }
-
-    /**
-     * 一路飞过来冲过落点之后还有一段地面:从落点起朝 {@code (ux, uz)} 方向 {@link #RUNWAY} 格,每一列都站得住、高差不超过一格(不是水、不是悬崖)。
-     * 俯冲加拉平落地不会正好停在落点上,会往前冲一段,那一段上是水或断崖就落水、摔下去。
-     */
-    static boolean runway(Craft craft, BodyStats stats, BlockPos spot, double ux, double uz) {
-        for (int k = 1; k <= RUNWAY; k++) {
-            BlockPos beyond = held(craft, stats, (int) Math.floor(spot.getX() + 0.5 + ux * k), (int) Math.floor(spot.getZ() + 0.5 + uz * k));
-            if (beyond == null || Math.abs(beyond.getY() - spot.getY()) > RIM) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * 进近的最后一段从 {@code (-ux, -uz)} 方向飞来,落点前 {@link #RUN_IN} 格每一列的落脚处都和落点同高:线收在落点的地面上,控制器追线总落在线下面一截(量到过零点几格),
-     * 落点前一两格有一级台阶(落点是台地的边,从低的一侧飞来),身体擦着低处的地面飞过去,就一头撞在台阶的立面上,水平速度还是每刻一格多,掉近十点血。
-     */
-    static boolean runIn(Craft craft, BodyStats stats, BlockPos spot, double ux, double uz) {
-        for (int k = 1; k <= RUN_IN; k++) {
-            BlockPos before = held(craft, stats, (int) Math.floor(spot.getX() + 0.5 - ux * k), (int) Math.floor(spot.getZ() + 0.5 - uz * k));
-            if (before == null || before.getY() != spot.getY()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** 这一列最高碰撞面上站得住、脚下是天然实心方块、不伤身的那一格。 */
