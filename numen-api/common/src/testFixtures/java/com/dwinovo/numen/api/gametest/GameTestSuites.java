@@ -65,6 +65,8 @@ public final class GameTestSuites {
     private static final String REGISTRY = "META-INF/numen/gametest/";
 
     private static final Logger LOG = LogUtils.getLogger();
+    /** 已经登记给原版的批前批后方法。 */
+    private static final java.util.Set<Method> HOOKS = new java.util.HashSet<>();
 
     /** 公开的无参构造:原版调生成器方法前先实例化声明它的类,各加载器登记入口也要实例化它。 */
     public GameTestSuites() {}
@@ -183,7 +185,8 @@ public final class GameTestSuites {
             if (method.isAnnotationPresent(GameTestGenerator.class)) {
                 out.addAll(generated(method));
             }
-            if (method.isAnnotationPresent(BeforeBatch.class) || method.isAnnotationPresent(AfterBatch.class)) {
+            // 日常批与慢批共用一份用例类,批前批后的方法只登记一次(原版一个批只许一个)
+            if ((method.isAnnotationPresent(BeforeBatch.class) || method.isAnnotationPresent(AfterBatch.class)) && HOOKS.add(method)) {
                 GameTestRegistry.register(method);
             }
         }
