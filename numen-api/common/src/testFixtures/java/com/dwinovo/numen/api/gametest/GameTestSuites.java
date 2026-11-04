@@ -69,9 +69,9 @@ public final class GameTestSuites {
     /** 公开的无参构造:原版调生成器方法前先实例化声明它的类,各加载器登记入口也要实例化它。 */
     public GameTestSuites() {}
 
-    /** 套件 {@code suite} 这一次被明确选中了;夹具在类加载时用它判断要不要登记只给这个套件用的东西。 */
+    /** 套件 {@code suite}(或它的慢批)这一次被明确选中了;夹具在类加载时用它判断要不要登记只给这个套件用的东西。 */
     public static boolean selected(String suite) {
-        return selection().contains(suite);
+        return selection().stream().anyMatch(name -> base(name).equals(suite));
     }
 
     private static List<String> selection() {
@@ -98,13 +98,33 @@ public final class GameTestSuites {
                 continue;
             }
             background.addAll(suite.background());
+            List<TestFunction> own = new ArrayList<>();
             for (Class<?> type : suite.classes()) {
-                collect(name, type, out);
+                collect(base(name), type, own);
             }
+            own.stream().filter(f -> admits(suite.pace(), f)).forEach(out::add);
         }
         BackgroundSettle.install(background);
         GlobalTestReporter.replaceWith(new TestTicks(new LogTestReporter()));
         return spread(out);
+    }
+
+    /** 快用例的时限上限(刻):日常批只收不超过它的,超过的归慢批。 */
+    public static final int FAST_TICKS = 600;
+    /** 慢批的套件名是日常批的名字加这个后缀;用例名、结构模板的命名空间与夹具的开关都认日常批的名字({@link #base})。 */
+    public static final String SLOW_SUFFIX = "_slow";
+
+    /** 套件名去掉慢批后缀:用例名与结构模板的命名空间。 */
+    private static String base(String name) {
+        return name.endsWith(SLOW_SUFFIX) ? name.substring(0, name.length() - SLOW_SUFFIX.length()) : name;
+    }
+
+    private static boolean admits(GameTestSuite.Pace pace, TestFunction f) {
+        return switch (pace) {
+            case ANY -> true;
+            case FAST -> f.maxTicks() <= FAST_TICKS;
+            case SLOW -> f.maxTicks() > FAST_TICKS;
+        };
     }
 
     /** 按 {@value #ONLY} 筛、按 {@value #COPIES} 铺份;每份的函数体前记下起始刻,收场时 {@link TestTicks} 用它算用了多少刻。 */

@@ -1,10 +1,27 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.gametest.GameTestSuite;
+import com.dwinovo.numen.api.gametest.GameTestSuites;
 import java.util.List;
 
-/** Numen 的 GameTest 套件:命名空间就是模组 id {@code numen}。 */
-public final class NumenGameTestSuite implements GameTestSuite {
+/**
+ * Numen 的 GameTest 套件:命名空间就是模组 id {@code numen}。日常批({@code numen})收时限不超过 {@link GameTestSuites#FAST_TICKS} 的,
+ * 慢批({@link Slow},{@code numen_slow})收超过的;同一份用例类,用例名与结构模板都不因分批而变。
+ */
+public class NumenGameTestSuite implements GameTestSuite {
+
+    /** 慢批:{@code -Pgametest=numen_slow}。 */
+    public static final class Slow extends NumenGameTestSuite {
+        @Override
+        public Pace pace() {
+            return Pace.SLOW;
+        }
+    }
+
+    @Override
+    public Pace pace() {
+        return Pace.FAST;
+    }
 
     /** 用例里同伴的寻路按做了多少活折算想多久:结论与机器快慢无关,与寻路模块自己的用例、靶场同一块表。 */
     public NumenGameTestSuite() {
