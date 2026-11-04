@@ -23,8 +23,11 @@ public class FishGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。 */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_fish")
+    /**
+     * 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。
+     * 原版咬钩前的等待随机在 100–600 刻、鱼游过来再 20–80 刻,加上抛竿与收竿,最坏要七百来刻;时限按这个上界留,所以在慢批。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 924, batch = "numen_fish")
     public static void fish_reels_in_from_a_pool(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_angler", new BlockPos(4, 3, 7), false);
