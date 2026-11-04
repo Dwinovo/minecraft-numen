@@ -28,6 +28,8 @@ final class Landings {
 
     /** 直线进近冲过落点之后要有这么多格地面。 */
     private static final int RUNWAY = 8;
+    /** 进近最后一段落点前要有这么多格同高的地面。 */
+    private static final int RUN_IN = 5;
     /** 周围八列与这一列的高差最多几格。 */
     private static final int RIM = 1;
     /** 找落点往四周找多少圈(算力预算:一次选点最多查 (2 × 半径 + 1)² 列,有结果就停)。 */
@@ -79,6 +81,20 @@ final class Landings {
         for (int k = 1; k <= RUNWAY; k++) {
             BlockPos beyond = held(craft, stats, (int) Math.floor(spot.getX() + 0.5 + ux * k), (int) Math.floor(spot.getZ() + 0.5 + uz * k));
             if (beyond == null || Math.abs(beyond.getY() - spot.getY()) > RIM) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 进近的最后一段从 {@code (-ux, -uz)} 方向飞来,落点前 {@link #RUN_IN} 格每一列的落脚处都和落点同高:线收在落点的地面上,控制器追线总落在线下面一截(量到过零点几格),
+     * 落点前一两格有一级台阶(落点是台地的边,从低的一侧飞来),身体擦着低处的地面飞过去,就一头撞在台阶的立面上,水平速度还是每刻一格多,掉近十点血。
+     */
+    static boolean runIn(Craft craft, BodyStats stats, BlockPos spot, double ux, double uz) {
+        for (int k = 1; k <= RUN_IN; k++) {
+            BlockPos before = held(craft, stats, (int) Math.floor(spot.getX() + 0.5 - ux * k), (int) Math.floor(spot.getZ() + 0.5 - uz * k));
+            if (before == null || before.getY() != spot.getY()) {
                 return false;
             }
         }

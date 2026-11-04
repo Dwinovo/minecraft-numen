@@ -579,11 +579,20 @@ final class Glide {
             if (!circling && corners.size() >= 3 && isSpiral(corners.get(1), touchdown)) {
                 continue;
             }
-            if (corridor(craft, stats, corners, ux, uz) && roomAround(craft, stats, corners, touchdown, ux, uz)) {
+            if (corridor(craft, stats, corners, ux, uz) && roomAround(craft, stats, corners, touchdown, ux, uz) && levelRunIn(craft, stats, corners, touchdown, heading)) {
                 return corners;
             }
         }
         return null;
+    }
+
+    /** 进近最后一段(最后一个拐点到降落点)飞来的方向上,落点前有一段同高的地面({@link Landings#runIn});最后一段几乎没有水平长度就取身体飞行的方向。 */
+    private static boolean levelRunIn(Craft craft, BodyStats stats, List<Vec3> corners, Vec3 touchdown, Vec3 heading) {
+        Vec3 last = corners.get(corners.size() - 2);
+        double run = Math.hypot(touchdown.x - last.x, touchdown.z - last.z);
+        double ux = run < 1 ? heading.x : (touchdown.x - last.x) / run;
+        double uz = run < 1 ? heading.z : (touchdown.z - last.z) / run;
+        return Landings.runIn(craft, stats, BlockPos.containing(touchdown), ux, uz);
     }
 
     /**
