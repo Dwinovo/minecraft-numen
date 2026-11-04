@@ -29,7 +29,13 @@ Numen is a Minecraft mod: an AI companion that is a server-side fake player (`Se
 
 ## Verify
 
-Run the commands in `CONTRIBUTING.md` with `--no-daemon`, one at a time. The GameTest run ends with `All N required tests passed`; log lines like `[numen-task] ... FAILED(...)` are scenarios the tests set up, not failures. Report failing tests as they are. Never weaken, skip or delete a test to make it pass.
+Commands are in `CONTRIBUTING.md`; run them with `--no-daemon`, one at a time. The cadence is the one in "Verification cadence" there:
+
+- While working, run only the relevant GameTest batch (`-Pgametest=<suite>`, narrowed with `-PgametestOnly`) and the unit tests that cover your change. No clean, no datagen (unless language files changed).
+- Before handing in, run the default GameTest suite once, NeoForge and Fabric in parallel. It ends with `All N required tests passed`; log lines like `[numen-task] ... FAILED(...)` are scenarios the tests set up, not failures.
+- The slow batch (`numen_slow`, `numen_pathing_slow`) and `pathingBench` run only when you changed pathing execution or planning. A GameTest case with a time limit over 600 ticks belongs to the slow batch.
+- Do not retry a failing case and do not add retries (`attempts`, `requiredSuccesses`). Find the cause; a result that varies with load or machine speed is a defect in the code under test or in the case. To prove a case stable, spread copies of it inside one server start (`-PgametestCopies=N`), never a loop of restarts.
+- Report failing tests as they are. Never weaken, skip or delete a test to make it pass.
 
 ## Commits
 
