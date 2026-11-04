@@ -29,13 +29,16 @@ import net.minecraft.world.phys.Vec3;
  * 烟花不够(少于 {@link #ROCKET_FLOOR} 支)或排不出这样的起飞点:走到一处落差够大的边沿,从边沿走出去、离地后展开,只靠高度往下滑({@link #dropping}),没有爬升与巡航。
  *
  * <h2>线</h2>
- * 起飞点→爬到巡航高度→朝目标平飞。巡航高度:沿起飞点到目标的直线每 {@link #CRUISE_SAMPLE} 格取一列,看这一列最高的碰撞面
- * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格;线是柱子里竖直爬到这个高度,再平飞到目标上空。
+ * 起飞点→爬到巡航高度→朝目标飞。巡航高度:沿起飞点到目标的直线每 {@link #CRUISE_SAMPLE} 格取一列,看这一列最高的碰撞面
+ * ({@link #top}),取其中最高的再加 {@link #CRUISE_MARGIN} 格;线是柱子里竖直爬到这个高度,再朝目标飞,进入目标 {@link #DESCENT_RANGE} 格之前把多余的高度放掉({@link #finale}),
+ * 进去时身体离地只剩盘旋不到一圈沉得掉的高度。
  * 没加载的区块是未知,不是空气也不是墙:排线时先当过得去,{@link Sortie} 每刻接着查前方新加载的那段线({@link Helm#blocked}),被挡就沿航线往前拉升重排({@link #raise})或改降。
  *
  * <h2>降落</h2>
  * 水平进入目标 {@link #DESCENT_RANGE} 格({@link Sortie})才选落点,落点只求安全({@link Landings}),不对准确切的格、不为离目标近而挑点:
- * 先看正下方那一列,再由近到远,取第一个滑得到的({@link #descent});高了就盘旋下沉({@link #descents})。降落途中落点落不下了,换下一个安全的。
+ * 先找飞行方向前面一路飞得过去的(俯冲、拉平、下滑,不转圈),由近到远取第一个滑得到的({@link #descent});这样的一个也没有才绕着落点盘旋下沉({@link #descents}),
+ * 进入目标范围时的高度不到盘旋一圈({@link #finale})。
+ * 降落途中落点落不下了,换下一个安全的。
  * 迫降(没进目标范围就得落地:烟花、耐久到了下限,或前方被挡)选点同一套。
  *
  * <h2>烟花与耐久</h2>
@@ -58,6 +61,9 @@ final class Glide {
     static final float TAKEOFF_PITCH = -75.0F;
     /** 滑翔比:每下降一格水平走几格(鞘翅平滑翔大约八九比一)。 */
     static final double GLIDE_RATIO = 9.0;
+    /** 进目标范围前放掉巡航高度:每下降一格水平走几格(比滑翔比陡一点,不靠烟花也跟得上);沿最后这一程取地面高度的间距。 */
+    private static final double CRUISE_SINK = GLIDE_RATIO * 0.8;
+    private static final int FINALE_SAMPLE = 4;
     /** 线两侧各留几格也要飞得过去。 */
     private static final int SIDE = 2;
     /** 抬高巡航每次多几格(排线读的高度图每 {@link #CRUISE_SAMPLE} 格取一列,漏掉的细墙,往上一格一格试)。 */
@@ -238,14 +244,56 @@ final class Glide {
         if (!column(rig, stats, p0, cruise)) {
             return Attempt.not(Lack.Why.NO_TAKEOFF);
         }
-        // 柱子里一直爬到巡航高度(沿线最高的碰撞面再加一截,附近的障碍都在它之下),再朝目标平飞
+        // 柱子里一直爬到巡航高度(沿线最高的碰撞面再加一截,附近的障碍都在它之下),再朝目标飞;最后一程把多余的高度放掉({@link #finale})
         Vec3 p1 = new Vec3(p0.x, cruise, p0.z);
-        Vec3 over = new Vec3(target.x(), cruise, target.z());
-        if (!corridor(rig, stats, List.of(p1, over), ux, uz)) {
-            return Attempt.not(Lack.Why.NO_ROUTE);
+        // 先试把高度提前放掉的线({@link #finale}),沿途有山脊、树冠挡着(它们高过下滑线)就试平飞到目标上空的线
+        List<Vec3> level = List.of(p1, new Vec3(target.x(), cruise, target.z()));
+        List<Vec3> corners = finale(rig, p1, target, ux, uz, range);
+        if (!corridor(rig, stats, corners, ux, uz)) {
+            corners = level;
+            if (!corridor(rig, stats, corners, ux, uz)) {
+                return Attempt.not(Lack.Why.NO_ROUTE);
+            }
         }
-        Airway way = Airway.through(List.of(p0, p1, over), null).withClimb(cruise - p0.y);
+        List<Vec3> line = new ArrayList<>(corners);
+        line.add(0, p0);
+        Airway way = Airway.through(line, null).withClimb(cruise - p0.y);
         return Attempt.of(new Plan(false, takeoff, TAKEOFF_PITCH, null, way, range, target));
+    }
+
+    /**
+     * 从柱顶 {@code p1}(巡航高度)朝目标的折线({@code p1} 是第一个点)。进目标 {@link #DESCENT_RANGE} 格才选落点,进去时身体要已经够低,不然只能原地盘旋着沉:
+     * 在这之前就按下滑比({@link #CRUISE_SINK})把巡航高度放掉,到进入点({@code E},目标这一侧 {@link #DESCENT_RANGE} 格)时只比最后这一程地面的最高处高 {@link #APPROACH_HEIGHT} 格
+     * (大圈盘旋四分之三圈沉的高度加最后下滑的那一截,{@link #spiral}),再平飞到目标上空。柱顶到 {@code E} 不够放这么多高度(水平距离不到下滑比要的)就从柱顶直接往下滑,线的坡度不陡过 {@link #DIVE_RATIO}。
+     * 进入点那一带没加载(看不到地面)就不预先放高度,线照旧平飞到目标上空。
+     */
+    private static List<Vec3> finale(Rig rig, Vec3 p1, Goal.Anchor target, double ux, double uz, double range) {
+        Vec3 over = new Vec3(target.x(), p1.y, target.z());
+        double toEntry = range - DESCENT_RANGE;
+        double ex = target.x() - ux * DESCENT_RANGE;
+        double ez = target.z() - uz * DESCENT_RANGE;
+        if (toEntry < 1 || !rig.world().isLoaded((int) Math.floor(ex), (int) Math.floor(ez)) || !rig.world().isLoaded((int) Math.floor(target.x()), (int) Math.floor(target.z()))) {
+            return List.of(p1, over);
+        }
+        double ground = Double.NEGATIVE_INFINITY;
+        for (double along = 0; ; along += FINALE_SAMPLE) {
+            double s = Math.min(along, DESCENT_RANGE);
+            ground = Math.max(ground, top(rig, (int) Math.floor(ex + ux * s), (int) Math.floor(ez + uz * s)));
+            if (s >= DESCENT_RANGE) {
+                break;
+            }
+        }
+        double high = Math.max(ground + APPROACH_HEIGHT, p1.y - toEntry / DIVE_RATIO);
+        if (high >= p1.y) {
+            return List.of(p1, over);
+        }
+        Vec3 entry = new Vec3(ex, high, ez);
+        Vec3 end = new Vec3(target.x(), high, target.z());
+        double sink = (p1.y - high) * CRUISE_SINK;
+        if (sink < toEntry) {
+            return List.of(p1, new Vec3(ex - ux * sink, p1.y, ez - uz * sink), entry, end);
+        }
+        return List.of(p1, entry, end);
     }
 
     /**
@@ -413,18 +461,40 @@ final class Glide {
     static Descent descent(Rig rig, Vec3 pos, Mobility mobility, Set<BlockPos> barred) {
         BodyStats stats = rig.snapshot().stats();
         double lift = lift(mobility);
-        return Landings.nearest(rig, stats, (int) Math.floor(pos.x), (int) Math.floor(pos.z), LINES_TRIED, spot -> {
-            if (barred.contains(spot)) {
-                return null;
+        Vec3 heading = heading(rig.entity);
+        int x = (int) Math.floor(pos.x);
+        int z = (int) Math.floor(pos.z);
+        // 先找一路飞过去、不用转圈的(飞行方向前面的落点,俯冲加拉平或直接下滑,冲过落点的一段也是地面);没有才轮到绕着落点盘旋
+        for (boolean circling : new boolean[] {false, true}) {
+            Descent found = Landings.nearest(rig, stats, x, z, LINES_TRIED, spot -> {
+                if (barred.contains(spot)) {
+                    return null;
+                }
+                Vec3 touchdown = new Vec3(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+                if (!reaches(pos, touchdown, lift) || !circling && !straight(rig, stats, pos, spot, heading)) {
+                    return null;
+                }
+                List<Vec3> corners = approachCorners(rig, stats, pos, touchdown, heading, circling);
+                return corners == null ? null : new Descent(spot, Airway.through(corners, touchdown).withZone(TOLERANCE));
+            });
+            if (found != null) {
+                return found;
             }
-            Vec3 touchdown = new Vec3(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
-            if (!reaches(pos, touchdown, lift)) {
-                return null;
-            }
-            List<Vec3> corners = approachCorners(rig, stats, pos, touchdown, heading(rig.entity));
-            return corners == null ? null : new Descent(spot, Airway.through(corners, touchdown).withZone(TOLERANCE));
-        });
+        }
+        return null;
     }
+
+    /** 落点在身体飞行方向的前面({@link #AHEAD} 度之内),冲过落点之后还有一段安全的地面({@link Landings#runway}):一路飞过去、不用掉头。 */
+    private static boolean straight(Rig rig, BodyStats stats, Vec3 pos, BlockPos spot, Vec3 heading) {
+        double dx = spot.getX() + 0.5 - pos.x;
+        double dz = spot.getZ() + 0.5 - pos.z;
+        double run = Math.hypot(dx, dz);
+        return run >= 1 && (dx * heading.x + dz * heading.z) / run >= Math.cos(Math.toRadians(AHEAD))
+                && Landings.runway(rig, stats, spot, dx / run, dz / run);
+    }
+
+    /** 不转圈的落点要在飞行方向左右各多少度之内。 */
+    private static final double AHEAD = 40.0;
 
     /** 身体此刻水平飞的方向(单位向量);几乎没有水平速度就取视线的朝向。 */
     static Vec3 heading(ServerPlayer body) {
@@ -452,6 +522,8 @@ final class Glide {
     private static final double SPIRAL_MARGIN = 3.0;
     /** 盘旋下降比滑翔比陡一点(只取滑翔比的这个比例):比自然下滑沉得快,不靠烟花也跟得上。 */
     private static final double SPIRAL_SHARE = 0.8;
+    /** 进目标范围时离地多高(格):大圈盘旋四分之三圈沉的高度加最后朝落点下滑的那一截({@link #spiral} 的算法)。不到一整圈,盘旋的圈数才少。 */
+    private static final double APPROACH_HEIGHT = 0.75 * 2 * Math.PI * SPIRAL_RADII[0] / (GLIDE_RATIO * SPIRAL_SHARE) + SPIRAL_RADII[0] / (GLIDE_RATIO * SPIRAL_SHARE) + 1;
     /**
      * 进近的俯冲:每下降一格水平走几格。量到的滑翔(每刻水平 1.6 到 1.7 格):10 度那一档竖直每刻 -0.3 上下(约 5.5 比 1),22 度 -0.6 上下,27 度以上 -0.7。
      * 竖直速度在每刻 -0.5 之内,原版的坠落距离才每刻清零({@link Dynamics#SLOW_FALL}),所以俯冲取 5 比 1,正好是 10 度那一档的下滑比;
@@ -507,13 +579,16 @@ final class Glide {
 
     /**
      * 从 {@code pos} 往降落点 {@code touchdown} 去的进近的线({@link #descents} 里沿途扫得过去的第一种,{@link #corridor});都过不去为 null。{@code heading} 是身体水平飞的方向。
-     * 盘旋只在俯冲放不下或俯冲那一路有遮挡时才轮到。
+     * 盘旋只在俯冲放不下或俯冲那一路有遮挡时才轮到;{@code circling} 为假时不排盘旋。
      */
-    static List<Vec3> approachCorners(Rig rig, BodyStats stats, Vec3 pos, Vec3 touchdown, Vec3 heading) {
+    static List<Vec3> approachCorners(Rig rig, BodyStats stats, Vec3 pos, Vec3 touchdown, Vec3 heading, boolean circling) {
         double run = Math.hypot(touchdown.x - pos.x, touchdown.z - pos.z);
         double ux = run < 1 ? heading.x : (touchdown.x - pos.x) / run;
         double uz = run < 1 ? heading.z : (touchdown.z - pos.z) / run;
         for (List<Vec3> corners : descents(pos, touchdown, heading)) {
+            if (!circling && corners.size() >= 3 && isSpiral(corners.get(1), touchdown)) {
+                continue;
+            }
             if (corridor(rig, stats, corners, ux, uz) && roomAround(rig, stats, corners, touchdown, ux, uz)) {
                 return corners;
             }

@@ -26,10 +26,12 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 final class Landings {
 
+    /** 直线进近冲过落点之后要有这么多格地面。 */
+    private static final int RUNWAY = 8;
     /** 周围八列与这一列的高差最多几格。 */
     private static final int RIM = 1;
     /** 找落点往四周找多少圈(算力预算:一次选点最多查 (2 × 半径 + 1)² 列,有结果就停)。 */
-    static final int RADIUS = 32;
+    static final int RADIUS = 64;
     /**
      * 交给 {@code trial} 的落点之间至少隔这么远(方框距离):挨着的落点周围的地形一样,线多半同样过不去(同一片树冠、同一道坡),
      * 一个个试只会把试线的预算花在同一处;隔开了,预算才够到别处。
@@ -69,10 +71,27 @@ final class Landings {
         return cell;
     }
 
+    /**
+     * 一路飞过来冲过落点之后还有一段地面:从落点起朝 {@code (ux, uz)} 方向 {@link #RUNWAY} 格,每一列都站得住、高差不超过一格(不是水、不是悬崖)。
+     * 俯冲加拉平落地不会正好停在落点上,会往前冲一段,那一段上是水或断崖就落水、摔下去。
+     */
+    static boolean runway(Rig rig, BodyStats stats, BlockPos spot, double ux, double uz) {
+        for (int k = 1; k <= RUNWAY; k++) {
+            BlockPos beyond = held(rig, stats, (int) Math.floor(spot.getX() + 0.5 + ux * k), (int) Math.floor(spot.getZ() + 0.5 + uz * k));
+            if (beyond == null || Math.abs(beyond.getY() - spot.getY()) > RIM) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** 这一列最高碰撞面上站得住、脚下是天然实心方块、不伤身的那一格。 */
     private static BlockPos standing(Rig rig, BodyStats stats, int x, int z) {
-        BlockPos cell = held(rig, stats, x, z);
-        return cell != null && natural(rig.world().getBlockState(cell.below())) ? cell : null;
+        // 先看脚下是不是天然方块(读一个方块),再做站不站得住的判断(贵得多):树林里绝大多数列在第一步就筛掉了
+        if (!rig.world().isLoaded(x, z) || !natural(rig.world().getBlockState(new BlockPos(x, Glide.top(rig, x, z) - 1, z)))) {
+            return null;
+        }
+        return held(rig, stats, x, z);
     }
 
     /** 这一列最高碰撞面上站得住、不是液体、不伤身的那一格(周围一圈只要求站得住,不要求天然)。 */
