@@ -194,7 +194,7 @@ public class SurvivalGameTests {
      * 邻居场地与别的用例的区块都碰不到。落点跟着自己的场地走,同一用例铺几份并行时各占各的一块下界。
      * 周围的区块先阻塞着生成完(见 {@link GameTestKit#generateChunks}):下界的地形生成慢,只按刻数等的话负载一高就先超时。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_survival")
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_survival")
     public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
         ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
         helper.assertTrue(nether != null, "this server has no nether to travel to");
