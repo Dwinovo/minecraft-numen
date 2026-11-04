@@ -104,7 +104,7 @@ public class KubeJsGameTests {
         return NumenPlugins.roster().plugins().stream().filter(p -> p.id().equals(id)).findFirst().orElse(null);
     }
 
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void a_script_declares_a_plugin_and_a_reload_replaces_it(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         NumenPlayer her = spawnAt(helper, "gametest_kubejs_user", new BlockPos(3, 2, 3), false);
@@ -185,7 +185,7 @@ public class KubeJsGameTests {
      * 脚本里声明的远程武器:没有脚本时一根烈焰棒什么也不是(她挑不到远程武器);脚本声明了、{@code /reload} 之后,攻击任务挑它、站进它
      * 的环、用它的命中扫描瞄准,调脚本写的 fire 把目标放倒;删掉脚本再 {@code /reload},它又不在了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 800, batch = BATCH_RANGED)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH_RANGED)
     public static void a_script_declared_ranged_weapon_is_used_by_the_attack_task(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerLevel level = helper.getLevel();
@@ -257,7 +257,7 @@ public class KubeJsGameTests {
      * 整合包作者在脚本里登记知识来源(control 0016):她问 {@code numen.inv.info}、{@code numen.inv.recipes} 时,脚本写的说明与配方和原版的合在
      * 一起,注明出自这个插件;删了脚本、重载,来源撤回。从入口调(她的 Lua 程序、真的 {@code /reload})。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = KNOWLEDGE_BATCH)
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = KNOWLEDGE_BATCH)
     public static void a_script_registers_knowledge_sources_she_reads_through_the_verbs(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         NumenPlayer her = spawnAt(helper, "gametest_kubejs_reader", new BlockPos(3, 2, 3), false);
