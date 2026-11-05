@@ -36,4 +36,12 @@ class GotoRemindersTest {
         String nowhere = GotoReminders.nowhereToStand(FURNACE, "chest", List.of("up", "north"));
         assertTrue(nowhere.contains("is open on up, north, but there is nowhere within reach"), nowhere);
     }
+
+    /** 点名的那一格站到哪儿都挖不成(基岩挖不动):说它是什么、在哪、为什么。 */
+    @Test
+    void aBlockNothingCanBreakSaysItCantBeDugAndWhy() {
+        String said = GotoReminders.cantDig(FURNACE, "bedrock",
+                com.dwinovo.numen.nav.NavText.refused(com.dwinovo.numen.pathing.plan.Reason.UNBREAKABLE, null));
+        assertTrue(said.startsWith("bedrock at 120,64,-35") && said.contains("can't be dug: it can't be broken"), said);
+    }
 }

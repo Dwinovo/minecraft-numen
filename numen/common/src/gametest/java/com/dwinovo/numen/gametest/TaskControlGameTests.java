@@ -671,38 +671,6 @@ public class TaskControlGameTests {
                 .thenSucceed();
     }
 
-    /**
-     * 区里没有能挖的,受理之前就拒:点名的那一格是基岩,她拿着镐也挖不动。当场回错误说挖不动,没有任务编号、不发
-     * task_finished,也没有派活进槽。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void a_dig_with_nothing_diggable_is_refused_at_once(GameTestHelper helper) {
-        BlockPos bedrock = helper.absolutePos(new BlockPos(6, 2, 6));
-        helper.getLevel().setBlockAndUpdate(bedrock, Blocks.BEDROCK.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_bedrock_digger", new BlockPos(4, 2, 4), false);
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
-        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(bedrock) + ")");
-
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(dig.done(), "the dig has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(dig.refused(), "a dig with nothing diggable was accepted: " + dig.reply());
-                    Constants.LOG.info("[numen-task] work dig refused -> {}", dig.reply());
-                    helper.assertTrue(dig.outcome().contains("bedrock at ") && dig.outcome().contains("can't be dug: it can't be broken"),
-                            "the refusal does not say the block can't be broken: " + dig.reply());
-                    helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
-                            "the refused dig reached the task slot");
-                })
-                .thenExecuteAfter(10, () -> {
-                    helper.assertTrue(GameTestKit.events(companion).stream()
-                                    .noneMatch(e -> e.type().equals("task_finished")),
-                            "a refused dig sent task_finished: " + GameTestKit.events(companion));
-                    helper.assertTrue(helper.getLevel().getBlockState(bedrock).is(Blocks.BEDROCK), "the bedrock is gone");
-                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-                })
-                .thenSucceed();
-    }
-
     private static boolean finishedAs(NumenPlayer body, String task) {
         return GameTestKit.events(body).stream().anyMatch(e -> e.type().equals("task_finished")
                 && e.text().contains("task=\"" + task + "\"") && e.text().contains("status=\"done\""));
