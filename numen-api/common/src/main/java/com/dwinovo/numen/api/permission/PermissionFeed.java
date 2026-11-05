@@ -38,13 +38,18 @@ public final class PermissionFeed {
 
     /** 每个服务端刻调一次。 */
     public static void tick(MinecraftServer server) {
-        if (CHANGED.isEmpty() || server.getTickCount() % EVERY_TICKS != 0) {
-            return;
+        for (UUID owner : due(server.getTickCount())) {
+            Replies.pushTo(server, owner, Libraries.PERMISSION);
+        }
+    }
+
+    /** 第 {@code tickCount} 刻该推的主人:到了合并的那一刻才把攒下的一次取走,每人一包;别的刻是空表,攒着的不动。 */
+    static List<UUID> due(int tickCount) {
+        if (CHANGED.isEmpty() || tickCount % EVERY_TICKS != 0) {
+            return List.of();
         }
         List<UUID> owners = new ArrayList<>(CHANGED);
         owners.forEach(CHANGED::remove);
-        for (UUID owner : owners) {
-            Replies.pushTo(server, owner, Libraries.PERMISSION);
-        }
+        return owners;
     }
 }

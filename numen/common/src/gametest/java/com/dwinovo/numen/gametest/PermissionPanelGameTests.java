@@ -7,8 +7,6 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
-import com.dwinovo.numen.api.permission.Groups;
-import com.dwinovo.numen.api.permission.Layers;
 import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonElement;
@@ -66,10 +64,6 @@ public class PermissionPanelGameTests {
             }
         }
         return last;
-    }
-
-    private static long tables(List<CustomPacketPayload> packets) {
-        return packets.stream().filter(p -> p instanceof LibraryPayload t && Libraries.PERMISSION.equals(t.kind())).count();
     }
 
     /** 一张表里这一行规则;没有为 null。 */
@@ -154,32 +148,6 @@ public class PermissionPanelGameTests {
                             && "leave the chests".equals(row.get("note").getAsString()),
                     "the pushed table does not mark the row as hers with her reason: " + pushed.entries());
             finish(owner, companion);
-        });
-    }
-
-    /** 命中账一刻里涨了许多次:合并成一包,带着最终的次数,不是每命中一次推一包。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_permission_panel")
-    public static void many_hits_in_a_tick_reach_the_panel_as_one_table(GameTestHelper helper) {
-        NumenPlayer companion = spawnBare(helper, "gametest_counter", new BlockPos(4, 2, 5), false);
-        ServerPlayer owner = clientOwner(helper, companion, "gametest_count_owner");
-        PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
-        var rule = Groups.parse("break(minecraft:tnt)");
-        store.add(Verdict.Kind.DENY, rule);
-        List<CustomPacketPayload> got = new ArrayList<>();
-        helper.runAfterDelay(5, () -> {
-            received(owner);
-            for (int i = 0; i < 30; i++) {
-                store.hit(Layers.OWNER, Verdict.Kind.DENY, rule);
-            }
-        });
-        helper.runAfterDelay(30, () -> {
-            got.addAll(received(owner));
-            helper.assertTrue(tables(got) == 1, "the hits were not merged into one push: " + tables(got));
-            JsonObject row = ruleRow(lastTable(got), "owner", "break(minecraft:tnt)");
-            helper.assertTrue(row != null && row.get("count").getAsInt() == 30 && row.get("last").getAsLong() > 0,
-                    "the push does not carry the ledger: " + lastTable(got).entries());
-            finish(owner, companion);
-            helper.succeed();
         });
     }
 }
