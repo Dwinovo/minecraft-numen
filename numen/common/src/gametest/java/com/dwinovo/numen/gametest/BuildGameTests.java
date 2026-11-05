@@ -325,7 +325,7 @@ public class BuildGameTests {
 
     /**
      * 创造模式直接替换:原版创造一下就碎。一行三块泥土上放一行石头,另一行三块泥土上放一行空气({@code numen.shape.line})——
-     * 她站在两行中间,几刻之内一行成了石头、一行成了空气,地上没有掉落物;回执说换了三格、清了三格。
+     * 她站在两行中间,几刻之内一行成了石头、一行成了空气,地上没有掉落物;回执说换了三格、清了三格。创造免耗材:背包从头到尾是空的。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void creative_build_replaces_what_stands_there_at_once(GameTestHelper helper) {
@@ -365,6 +365,8 @@ public class BuildGameTests {
                     long drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             new net.minecraft.world.phys.AABB(helper.absolutePos(new BlockPos(9, 2, 8))).inflate(6)).size();
                     helper.assertTrue(drops == 0, drops + " drop(s) lie around after a creative build");
+                    helper.assertTrue(companion.getInventory().isEmpty(),
+                            "a free-material build touched her empty inventory");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
