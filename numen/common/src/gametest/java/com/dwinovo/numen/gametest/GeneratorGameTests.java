@@ -35,6 +35,10 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 public class GeneratorGameTests {
 
     private static final String BATCH = "numen_shape";
+    /**
+     * 树的两条用例长树用的种子:原版的树形随种子变,长成什么样、随后 {@code place} 怎么垫脚怎么走都跟着变,定下种子一次失败才能原样重放。
+     */
+    private static final long TREE_SEED = 0;
 
     /** 一片世界此刻的样子:方块、有没有方块实体、两种高度图、两种光照、里面的实体数。 */
     private record Snapshot(List<BlockState> states, List<Boolean> blockEntities, List<Integer> heights, List<Integer> light,
@@ -141,7 +145,8 @@ public class GeneratorGameTests {
         awaitLit(level, List.of(dirt));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-            ToolRun run = lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")");
+            ToolRun run = GameTestKit.shapeSeed(TREE_SEED,
+                    () -> lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")"));
             helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
             JsonArray tree = returned(run).getAsJsonArray("cells");
             long logs = tree.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")).count();
@@ -239,8 +244,8 @@ public class GeneratorGameTests {
         awaitLit(level, List.of(dirt));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-            ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0)) + ", " + xyz(dirt.offset(0, 4, 0))
-                    + "):forest(\"minecraft:oak_checked\", 100)");
+            ToolRun run = GameTestKit.shapeSeed(TREE_SEED, () -> lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0))
+                    + ", " + xyz(dirt.offset(0, 4, 0)) + "):forest(\"minecraft:oak_checked\", 100)"));
             helper.assertTrue(run.ranToTheEnd(), "forest failed: " + run.receipt());
             JsonArray forest = returned(run).getAsJsonArray("cells");
             helper.assertTrue(forest.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())

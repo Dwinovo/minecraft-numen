@@ -6,9 +6,11 @@ import com.dwinovo.numen.nav.NavClock;
 import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.scan.SearchBudget;
+import com.dwinovo.numen.tools.shape.ShapeRandom;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import net.minecraft.util.RandomSource;
 
 /**
  * 用例里有同伴的套件(Numen 的日常批与慢批、手动的绕路套件、各联动的套件)都从这里继承测试服的表与等待,写在一处,
@@ -16,9 +18,10 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>同伴的寻路按做了多少活折算想多久({@link NavClock} 换成 {@link SearchClock#STEADY}),与寻路模块自己的用例、靶场同一块表;</li>
  *   <li>扫描与定位每刻做到哪按活量算({@link SearchBudget#use}):每查一次额度记 {@link #SCAN_NANOS_PER_CHECK} 纳秒;</li>
+ *   <li>造形掷骰子用定了种子的随机数({@link ShapeRandom#use}):每次调用都从 {@link #SHAPE_SEED} 开始,用例要别的种子见 {@code GameTestKit.shapeSeed};</li>
  *   <li>每刻开头等寻路的搜索全收场({@link Searches#busy})。Numen API 自己的后台(程序等)由 {@code GameTestSuites} 登记。</li>
  * </ul>
- * 这几样都只换"多久"的量法,不改结论:正式运行是墙钟,测试服里与机器快慢、负载无关。
+ * 前几样只换"多久"的量法,不改结论:正式运行是墙钟,测试服里与机器快慢、负载无关;随机数定了种子,同一次调用每次结果相同。
  */
 public abstract class CompanionGameTestSuite implements GameTestSuite {
 
@@ -31,9 +34,15 @@ public abstract class CompanionGameTestSuite implements GameTestSuite {
 
     private static final AtomicLong SCAN_WORK = new AtomicLong();
 
+    /** 测试服里造形默认的种子。 */
+    static final long SHAPE_SEED = 0;
+    /** 测试服里造形默认的随机数:每次调用一个从 {@link #SHAPE_SEED} 开始的。 */
+    static final Supplier<RandomSource> SHAPE_RANDOM = () -> RandomSource.create(SHAPE_SEED);
+
     protected CompanionGameTestSuite() {
         ServerLifecycle.afterStarted(server -> NavClock.use(server, SearchClock.STEADY));
         SearchBudget.use(() -> SCAN_WORK.addAndGet(SCAN_NANOS_PER_CHECK));
+        ShapeRandom.use(SHAPE_RANDOM);
     }
 
     @Override

@@ -130,6 +130,19 @@ public final class GameTestKit {
                         code + " did not succeed: " + run.get().outcome()));
     }
 
+    /**
+     * 造形掷骰子换成从 {@code seed} 开始的随机数跑 {@code call}(一段经 {@link #lua} 当场跑完的程序),跑完换回测试服默认的
+     * ({@link CompanionGameTestSuite#SHAPE_SEED})。用例的主线程上一次只跑一条用例的这一步,别的用例碰不到这个种子。
+     */
+    static <T> T shapeSeed(long seed, java.util.function.Supplier<T> call) {
+        com.dwinovo.numen.tools.shape.ShapeRandom.use(() -> net.minecraft.util.RandomSource.create(seed));
+        try {
+            return call.get();
+        } finally {
+            com.dwinovo.numen.tools.shape.ShapeRandom.use(CompanionGameTestSuite.SHAPE_RANDOM);
+        }
+    }
+
     /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
     static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
         BlockPos at = helper.absolutePos(rel);

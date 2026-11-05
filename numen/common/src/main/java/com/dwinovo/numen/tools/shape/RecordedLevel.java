@@ -43,7 +43,7 @@ final class RecordedLevel implements InvocationHandler {
     }
 
     private final LoadedBlocks real;
-    private final RandomSource random = RandomSource.create();
+    private final RandomSource random = ShapeRandom.next();
     private final Map<BlockPos, BlockState> written = new LinkedHashMap<>();
     private final Map<BlockPos, BlockEntity> blockEntities = new HashMap<>();
     private final List<Lost> entities = new ArrayList<>();
