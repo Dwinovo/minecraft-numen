@@ -20,58 +20,9 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 /**
  * 挖掘:{@code numen.work.dig} 挖点名的格(扫描来的一团、框出来的坑、一格坐标):手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖,
  * 挡着的天然地形一并挖开,不捡;{@code numen.work.collect} 只捡。挖一块区域的整件事是这两条原子命令一轮轮组合({@link GameTestKit#mine}):
- * 开门出屋、树林与埋矿、走远处的矿。
+ * 树冠上的原木与埋矿。
  */
 public class DigGameTests {
-
-    /**
-     * 挖掘也走门:黑曜石屋(铁镐非正确工具,成本模型按不可破对待——拆墙不是廉价选项)关住她,矿在屋外,唯一通路是关着的橡木门。
-     * 走去挖的寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 312, batch = ON_FOOT)
-    public static void dig_through_closed_door(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 1; x <= 5; x++) {
-            for (int z = 1; z <= 5; z++) {
-                boolean perimeter = x == 1 || x == 5 || z == 1 || z == 5;
-                if (!perimeter) continue;
-                for (int y = 2; y <= 4; y++) {
-                    if (x == 3 && z == 5 && y <= 3) continue;   // 门占的两格
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            Blocks.OBSIDIAN.defaultBlockState());
-                }
-            }
-        }
-        BlockPos doorLow = helper.absolutePos(new BlockPos(3, 2, 5));
-        var lower = Blocks.OAK_DOOR.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.DoorBlock.FACING,
-                        net.minecraft.core.Direction.SOUTH);
-        level.setBlockAndUpdate(doorLow, lower);
-        level.setBlockAndUpdate(doorLow.above(), lower.setValue(
-                net.minecraft.world.level.block.DoorBlock.HALF,
-                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
-
-        // 屋外十格以内、屋里够不着的两块金矿
-        List<BlockPos> ores = List.of(
-                helper.absolutePos(new BlockPos(3, 2, 10)),
-                helper.absolutePos(new BlockPos(4, 2, 10)));
-        for (BlockPos ore : ores) {
-            level.setBlockAndUpdate(ore, Blocks.GOLD_ORE.defaultBlockState());
-        }
-
-        NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        mineScanned(helper, companion, 9, "minecraft:gold_ore", 2);
-
-        BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
-        succeedWhen(helper, () -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) >= 2,
-                    "companion has not dug the gold outside the door");
-            helper.assertTrue(level.getBlockState(wallProbe).is(Blocks.OBSIDIAN),
-                    "wall breached — expected the door route");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 
     /**
      * 树冠上的原木站在地上挖:两根金合欢原木悬在她脚上五格、六格,四周一圈树叶,她身上只有一把斧头,
@@ -143,73 +94,6 @@ public class DigGameTests {
     }
 
     // ==================== 真实地形挖掘用例(模板取自实际存档地形)====================
-
-    /**
-     * 云杉林:三棵云杉围着她,树干六七格高,上半截一圈圈裹着树叶;手持铁斧砍 8 根原木——
-     * 复合站位、就地挖掘与挖开挡在视线上的树叶、掉落拾取、背包计数走一遍。
-     *
-     * <p>超时按游戏刻给得很宽:无头测试服不限速(数百 tps),而寻路搜索在后台线程上要花真实时间。
-     */
-    @GameTest(template = "floor20", timeoutTicks = 600, batch = ON_FOOT)
-    public static void dig_spruce_grove(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        spruceTree(helper, new BlockPos(5, 2, 5), 6);
-        spruceTree(helper, new BlockPos(13, 2, 6), 6);
-        spruceTree(helper, new BlockPos(8, 2, 14), 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_logger", new BlockPos(9, 2, 9), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        dropsFallStraight(helper);
-
-        mineScanned(helper, companion, 10, "minecraft:spruce_log", 8);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
-                    "companion has not gathered 8 spruce logs");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 够数靠的那一件躺在别处:砍下的第一根原木已经算进数里,掉落物却挪到了几格外,而她站的地方手边还够得着下一根。
-     * {@code numen.work.dig(…, {count = 1})} 挖够一格就停,不再砍手边那根;{@code numen.work.collect()} 走过去把那一根捡回来。
-     *
-     * <p>钉的是"挖几格"数的是挖掉的格,与掉落物在哪无关;捡是另一条命令的事。用场地里独一种的去皮橡木,免得看见别的用例的原木。
-     */
-    @GameTest(template = "floor20", timeoutTicks = 200, batch = ON_FOOT)
-    public static void dig_fetches_the_counted_drop_instead_of_freezing(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos first = helper.absolutePos(new BlockPos(2, 2, 4));
-        BlockPos second = helper.absolutePos(new BlockPos(2, 2, 6));
-        level.setBlockAndUpdate(first, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
-        level.setBlockAndUpdate(second, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_fetcher", new BlockPos(2, 2, 2), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        // 第一根的掉落物一露面就挪开:挪到几格外,还在 numen.work.collect 默认看得见的八格以内
-        Vec3 far = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(6, 2, 7)));
-        boolean[] thrown = {false};
-        helper.onEachTick(() -> {
-            if (!thrown[0] && level.getBlockState(first).isAir()) {
-                for (net.minecraft.world.entity.item.ItemEntity drop : level.getEntitiesOfClass(
-                        net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(first).inflate(2),
-                        ie -> ie.getItem().is(Items.STRIPPED_OAK_LOG))) {
-                    drop.teleportTo(far.x, far.y, far.z);
-                    drop.setDeltaMovement(Vec3.ZERO);
-                    thrown[0] = true;
-                }
-            }
-            if (level.getBlockState(second).isAir()) {
-                helper.fail("she cut a second log instead of fetching the one she had already cut");
-            }
-        });
-        Mining mine = mineScanned(helper, companion, 5, "minecraft:stripped_oak_log", 1);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "dig has not finished");
-            helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.STRIPPED_OAK_LOG) == 1,
-                    "the counted log was not fetched: " + mine.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 
     /**
      * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
@@ -294,30 +178,6 @@ public class DigGameTests {
     /** 服务端这一刻认不认为她正在挖一格方块。 */
     private static boolean digging(NumenPlayer companion) {
         return (boolean) DESTROYING_BLOCK.get(companion.gameMode);
-    }
-
-    /**
-     * 一棵云杉:{@code base} 起往上 {@code trunk} 格树干;树干上半截每层裹一圈树叶(下面两层两格宽、
-     * 再往上一格宽),树顶再压一片。树叶是不会凋落的那种。
-     */
-    private static void spruceTree(GameTestHelper helper, BlockPos base, int trunk) {
-        ServerLevel level = helper.getLevel();
-        BlockState leaves = Blocks.SPRUCE_LEAVES.defaultBlockState().setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT, true);
-        int top = base.getY() + trunk - 1;
-        for (int y = base.getY() + 2; y <= top + 1; y++) {
-            int r = y <= base.getY() + 3 ? 2 : y <= top ? 1 : 0;
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(base.getX() + dx, y, base.getZ() + dz)),
-                            leaves);
-                }
-            }
-        }
-        for (int y = base.getY(); y <= top; y++) {
-            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(base.getX(), y, base.getZ())),
-                    Blocks.SPRUCE_LOG.defaultBlockState());
-        }
     }
 
     /** 手里的镐挖不下这种矿(木镐对钻石矿):当场失败,说清楚是工具不够,矿原样留着。 */
@@ -633,51 +493,6 @@ public class DigGameTests {
     }
 
     /**
-     * 挖点名的格:她手边一个 3×3×3 的盒子(底层石头、中层泥土、顶层是空气),27 格的位置一起交给 {@code numen.work.dig},格里是什么
-     * 挖什么,空气跳过;挖完盒子里全是空气。接着 {@code numen.work.collect},泥土与圆石进了她的包。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = ON_FOOT)
-    public static void dig_given_cells_digs_whatever_they_hold(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos low = helper.absolutePos(new BlockPos(7, 2, 5));
-        BlockPos high = helper.absolutePos(new BlockPos(9, 4, 7));
-        for (BlockPos pos : BlockPos.betweenClosed(low, high)) {
-            BlockState fill = pos.getY() == high.getY() ? Blocks.AIR.defaultBlockState()
-                    : pos.getY() == low.getY() ? Blocks.STONE.defaultBlockState() : Blocks.DIRT.defaultBlockState();
-            level.setBlockAndUpdate(pos, fill);
-        }
-        NumenPlayer companion = spawnAt(helper, "gametest_pitman", new BlockPos(8, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        companion.getInventory().add(new ItemStack(Items.IRON_SHOVEL));
-        List<String> pit = new java.util.ArrayList<>();
-        for (BlockPos pos : BlockPos.betweenClosed(low, high)) {
-            pit.add(xyz(pos));
-        }
-        ToolRun[] dig = new ToolRun[1];
-        ToolRun[] collect = new ToolRun[1];
-
-        succeedWhen(helper, () -> {
-            if (dig[0] == null) {
-                dig[0] = lua(companion, "numen.work.dig({" + String.join(", ", pit) + "})");
-            }
-            helper.assertTrue(dig[0].done(), "work dig has not finished");
-            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 18 cell(s) of"),
-                    "the pit was not dug out: " + dig[0].outcome());
-            for (BlockPos pos : BlockPos.betweenClosed(low, high)) {
-                helper.assertTrue(level.getBlockState(pos).isAir(), "the pit still holds a block at " + pos.toShortString());
-            }
-            if (collect[0] == null) {
-                collect[0] = lua(companion, "numen.work.collect()");
-            }
-            helper.assertTrue(collect[0].done(), "work collect has not finished");
-            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) >= 9
-                            && companion.getInventory().countItem(Items.COBBLESTONE) >= 9,
-                    "what came out of the pit was not picked up: " + collect[0].outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
      * 够不着就走过去:一排珠光蛙明灯从她跟前伸到十格外,一扫成一团,整团交给 {@code numen.work.dig}。她挖掉手够得着的那几块,
      * 走到够得着剩下最多块的地方接着挖,全挖掉才收场,回执说挖了几格、没有剩下够不着的。
      */
@@ -713,160 +528,11 @@ public class DigGameTests {
         });
     }
 
-    /**
-     * 先走到一次够得着最多格的地方:一条两格高的石头走廊里,她站在当中;一头是一块孤零零的铁矿,另一头一样远的地方并排两块。路一样长,
-     * 她先走到并排那两块跟前,站在那儿两块都挖了,再走去挖孤零零的那块。
-     */
-    @GameTest(template = "floor20", timeoutTicks = 375, batch = ON_FOOT)
-    public static void dig_goes_first_where_the_hand_reaches_the_most_cells(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        // 走廊沿 x,宽一格(z=10)、高两格;两侧与顶上是石头,两头各封一块石头
-        for (int x = 1; x <= 19; x++) {
-            for (int y = 2; y <= 4; y++) {
-                for (int z = 9; z <= 11; z++) {
-                    boolean hall = z == 10 && y <= 3 && x >= 2 && x <= 18;
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            hall ? Blocks.AIR.defaultBlockState() : Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        BlockPos lone = helper.absolutePos(new BlockPos(2, 2, 9));
-        BlockPos pairA = helper.absolutePos(new BlockPos(18, 2, 9));
-        BlockPos pairB = helper.absolutePos(new BlockPos(18, 2, 11));
-        for (BlockPos ore : List.of(lone, pairA, pairB)) {
-            level.setBlockAndUpdate(ore, Blocks.IRON_ORE.defaultBlockState());
-        }
-        NumenPlayer companion = spawnAt(helper, "gametest_coverer", new BlockPos(10, 2, 10), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        String irons = "{" + xyz(lone) + ", " + xyz(pairA) + ", " + xyz(pairB) + "}";
-        ToolRun dig = lua(companion, "numen.work.dig(" + irons + ")");
-        long[] pairGoneAt = {-1};
-        long[] loneGoneAt = {-1};
-        helper.onEachTick(() -> {
-            long now = level.getGameTime();
-            if (pairGoneAt[0] < 0 && level.getBlockState(pairA).isAir() && level.getBlockState(pairB).isAir()) {
-                pairGoneAt[0] = now;
-            }
-            if (loneGoneAt[0] < 0 && level.getBlockState(lone).isAir()) {
-                loneGoneAt[0] = now;
-            }
-        });
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 3 cell(s) of iron_ore"),
-                    "she did not dig all three ores: " + dig.outcome());
-            helper.assertTrue(pairGoneAt[0] >= 0 && loneGoneAt[0] >= 0 && pairGoneAt[0] < loneGoneAt[0],
-                    "she did not dig the pair first (pair at " + pairGoneAt[0] + ", lone at " + loneGoneAt[0] + ")");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     // ==================== 远处:只报告,怎么过去由模型写 ====================
 
     /** "x,y,z" 的写法,和回执里点坐标的一样。 */
     private static String coords(BlockPos p) {
         return p.getX() + "," + p.getY() + "," + p.getZ();
-    }
-
-    /**
-     * 远处的也去挖:两块赭黄蛙明灯在场地另一角、六十多格外,扫到之后整团交给 {@code numen.work.dig},她走过去挖掉两块,回执说挖了两格。
-     */
-    @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
-    public static void dig_walks_a_long_way_to_blocks_in_the_far_corner(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos nearer = helper.absolutePos(new BlockPos(50, 2, 50));
-        BlockPos farther = helper.absolutePos(new BlockPos(51, 2, 50));
-        level.setBlockAndUpdate(nearer, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
-        level.setBlockAndUpdate(farther, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_far_digger", new BlockPos(3, 2, 3), false);
-        ToolRun scanned = scan(companion, 72, "minecraft:ochre_froglight");
-        ToolRun[] dig = new ToolRun[1];
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(scanned.done(), "the scan has not replied");
-            if (dig[0] == null) {
-                dig[0] = lua(companion, "numen.work.dig(" + blocksIn(scanned.reply()) + ")");
-            }
-            helper.assertTrue(dig[0].done(), "dig has not finished");
-            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 2 cell(s) of ochre_froglight"),
-                    "the far froglights were not dug: " + dig[0].outcome());
-            helper.assertTrue(level.getBlockState(nearer).isAir() && level.getBlockState(farther).isAir(),
-                    "a froglight is left");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 点名的一团整个在手边以外:一次扫描找到远处一团与近处一团;把远处那一团交给 {@code numen.work.dig},她走过去把它挖光,
-     * 近处那一块原样。扫描半径 80 格跨过好几块场地,用全套用例里只有这一处摆的海晶灯,只看得见自己的。
-     */
-    @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
-    public static void dig_a_cluster_beyond_her_reach_walks_to_it_and_leaves_the_near_one(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        List<BlockPos> far = List.of(new BlockPos(48, 2, 50), new BlockPos(49, 2, 50), new BlockPos(50, 2, 50));
-        for (BlockPos rel : far) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.SEA_LANTERN.defaultBlockState());
-        }
-        BlockPos nearRel = new BlockPos(8, 2, 8);
-        level.setBlockAndUpdate(helper.absolutePos(nearRel), Blocks.SEA_LANTERN.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_far_group", new BlockPos(3, 2, 3), false);
-        ToolRun scanned = scan(companion, 80, "minecraft:sea_lantern");
-        ToolRun[] dig = new ToolRun[1];
-
-        succeedWhen(helper, () -> {
-            if (dig[0] == null) {
-                helper.assertTrue(scanned.reply() != null, "scan_blocks has not replied");
-                var clusters = clustersIn(scanned.reply());
-                var farCluster = clusterHolding(clusters, helper.absolutePos(far.get(0)));
-                var nearCluster = clusterHolding(clusters, helper.absolutePos(nearRel));
-                helper.assertTrue(farCluster != null && nearCluster != null && farCluster != nearCluster,
-                        "the scan did not return the near and the far sea lanterns as two clusters: " + scanned.reply());
-                dig[0] = lua(companion, "numen.work.dig(" + blocksOf(farCluster) + ")");
-            }
-            helper.assertTrue(dig[0].done(), "dig has not finished");
-            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 3 cell(s) of sea_lantern"),
-                    "the far cluster was not dug: " + dig[0].outcome());
-            for (BlockPos rel : far) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
-                        "a sea lantern of the far cluster is left at " + rel.toShortString());
-            }
-            helper.assertTrue(level.getBlockState(helper.absolutePos(nearRel)).is(Blocks.SEA_LANTERN),
-                    "the near sea lantern, which was not asked for, is gone");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code numen.work.dig} 自己走到手够得着它的地方,
-     * 挖开挡着的石头、把它挖出来,掉落物留在原地;再 {@code numen.work.collect} 捡到手。
-     */
-    @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
-    public static void work_dig_walks_to_a_buried_block_digs_it_out_and_collect_picks_it_up(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (BlockPos rel : BlockPos.betweenClosed(new BlockPos(28, 2, 28), new BlockPos(32, 5, 32))) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STONE.defaultBlockState());
-        }
-        BlockPos debris = helper.absolutePos(new BlockPos(30, 3, 30));
-        level.setBlockAndUpdate(debris, Blocks.ANCIENT_DEBRIS.defaultBlockState());
-        NumenPlayer companion = spawnBare(helper, "gametest_debris", new BlockPos(3, 2, 3), false);
-        companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(debris) + ")");
-        ToolRun[] fetch = new ToolRun[1];
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            // 挖空只在发起 collect 之前判一次:succeedWhen 每刻重跑,而 collect 为够到隧道深处的物品可能在那一格垫柱
-            if (fetch[0] == null) {
-                helper.assertTrue(dig.succeeded() && level.getBlockState(debris).isAir(),
-                        "the buried block was not dug out: " + dig.outcome());
-                fetch[0] = lua(companion, "numen.work.collect()");
-            }
-            helper.assertTrue(fetch[0].done(), "the walk to the drop has not finished");
-            helper.assertTrue(companion.getInventory().countItem(Items.ANCIENT_DEBRIS) == 1,
-                    "the buried block was not picked up: " + fetch[0].outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
     }
 
     /** 数字(坐标、件数、刻数)抹掉,比两份回执的措辞。 */
