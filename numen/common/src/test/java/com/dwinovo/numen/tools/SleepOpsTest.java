@@ -68,4 +68,24 @@ class SleepOpsTest {
         assertTrue(checked > 0, "原版不再有无文案的拒绝了?那这条守卫可以退役");
     }
 
+    /** 手边没床、身上却带着一张:叫她先把带着的那张放下,不叫她满世界去找。 */
+    @Test
+    void noBedWhileCarryingOneSaysPlaceIt() {
+        assumeTrue(booted);
+        net.minecraft.world.entity.player.Inventory pack = new net.minecraft.world.entity.player.Inventory(null);
+        pack.setItem(3, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.RED_BED));
+        String said = SleepOps.noBed(pack, false).getMessage();
+        assertTrue(said.startsWith("there is no bed within reach") && said.contains("You are carrying minecraft:red_bed x1")
+                && said.contains("place it on flat ground"), said);
+    }
+
+    /** 给的坐标上不是床,身上也没带:如实说那儿没床,并指路怎么找床。 */
+    @Test
+    void noBedAtTheCoordinatesSaysSoAndHowToFindOne() {
+        assumeTrue(booted);
+        String said = SleepOps.noBed(new net.minecraft.world.entity.player.Inventory(null), true).getMessage();
+        assertTrue(said.startsWith("there is no bed at those coordinates")
+                && said.contains("`numen.scan.blocks(\"#minecraft:beds\")`"), said);
+    }
+
 }

@@ -50,7 +50,7 @@ public final class SleepOps {
         boolean given = at != null;
         BlockPos bedHead = given ? headOf(self.level(), at) : nearestBedHeadInReach(self);
         if (bedHead == null) {
-            throw noBed(self, given);
+            throw noBed(self.getInventory(), given);
         }
 
         Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
@@ -125,9 +125,9 @@ public final class SleepOps {
                 : pos.relative(state.getValue(BedBlock.FACING)).immutable();
     }
 
-    /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"。 */
-    private static ApiError noBed(NumenPlayer self, boolean coordsGiven) {
-        String carried = carriedBed(self);
+    /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"({@code inventory} 是她的背包)。 */
+    static ApiError noBed(net.minecraft.world.Container inventory, boolean coordsGiven) {
+        String carried = carriedBed(inventory);
         String base = coordsGiven
                 ? "there is no bed at those coordinates"
                 : "there is no bed within reach (you must be standing next to one)";
@@ -139,8 +139,7 @@ public final class SleepOps {
     }
 
     /** 背包里的第一张床;没有则 null。 */
-    private static String carriedBed(NumenPlayer self) {
-        var inv = self.getInventory();
+    private static String carriedBed(net.minecraft.world.Container inv) {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && stack.getItem() instanceof BlockItem block

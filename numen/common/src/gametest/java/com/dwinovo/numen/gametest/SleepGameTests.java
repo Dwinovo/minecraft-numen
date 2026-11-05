@@ -49,45 +49,12 @@ public class SleepGameTests {
         });
     }
 
-    /** 手边没有床、身上却带着一张:回执让她先把带着的那张放下,不叫她满世界去找。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
-    public static void sleep_without_a_bed_but_carrying_one_says_place_it(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_camper", new BlockPos(4, 2, 5), false);
-        companion.getInventory().add(new ItemStack(Items.WHITE_BED));
-        ToolRun sleep = lua(companion, "numen.use.sleep()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("You are carrying")
-                            && sleep.outcome().contains("place it"),
-                    "the reply does not point at the bed she carries: " + sleep.outcome());
-            helper.assertTrue(!companion.isSleeping(), "she is asleep without a bed");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 一张朝东的红床:床脚在 rel,床头在它东边一格。 */
     private static void placeBed(GameTestHelper helper, BlockPos footRel) {
         BlockState foot = Blocks.RED_BED.defaultBlockState()
                 .setValue(BedBlock.FACING, Direction.EAST).setValue(BedBlock.PART, BedPart.FOOT);
         helper.getLevel().setBlock(helper.absolutePos(footRel), foot, 3);
         helper.getLevel().setBlock(helper.absolutePos(footRel.east()), foot.setValue(BedBlock.PART, BedPart.HEAD), 3);
-    }
-
-    /** 给的坐标上不是床:如实说那儿没床,并指路怎么找床。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
-    public static void sleep_at_coordinates_without_a_bed_says_so(GameTestHelper helper) {
-        BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
-        NumenPlayer companion = spawnAt(helper, "gametest_misled", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = lua(companion, "numen.use.sleep({at = {x = " + floor.getX() + ", y = " + floor.getY() + ", z = " + floor.getZ() + "}})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("no bed at those coordinates")
-                            && sleep.outcome().contains("`numen.scan.blocks(\"#minecraft:beds\")`"),
-                    "the reply does not say there is no bed there: " + sleep.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 
     /** 半夜、床在手边,但三格外站着一只僵尸:原版不让睡,回执用原版的话说附近有怪、带着那张床的位置,她没躺下,也没走开。 */
