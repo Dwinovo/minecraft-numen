@@ -189,7 +189,7 @@ public class UpDownGameTests {
             TestBody body = up ? t.body(3, 9, z) : t.body(4, 15, z);
             double[] lateral = {0};
             int[] sprinting = {0};
-            t.go(body, Goals.at(up ? t.at(15, 15, z) : t.at(16, 9, z)), RouteSpec.defaults()).within(700)
+            t.go(body, Goals.at(up ? t.at(15, 15, z) : t.at(16, 9, z)), RouteSpec.defaults()).within(341)
                     .during(r -> {
                         lateral[0] = Math.max(lateral[0], Math.abs(r.body.getZ() - (t.at(0, 0, z).getZ() + 0.5)));
                         sprinting[0] += r.body.isSprinting() ? 1 : 0;
@@ -259,13 +259,13 @@ public class UpDownGameTests {
         TestBody hay = t.body(24, 9, 4);
         stone.setHealth(8);
         hay.setHealth(8);
-        t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(600)
+        t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(266)
                 .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(r -> {
                     if (r.lowestHealth < 8) {
                         throw new GameTestAssertException("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
                     }
                 });
-        t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(600).arrives().then(r -> {
+        t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(266).arrives().then(r -> {
             if (r.lowestHealth != 7) {
                 throw new GameTestAssertException("落在干草块上应当只掉 1 点血:最低 " + r.lowestHealth);
             }
@@ -284,7 +284,7 @@ public class UpDownGameTests {
         TestBody body = t.body(4, 16, 4);
         body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
         RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(500).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(344).arrives().then(r -> {
             unhurt(r);
             var entries = r.report.ledger().entries();
             boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
@@ -392,7 +392,7 @@ public class UpDownGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
         int level = t.origin.getY() + 51;
-        t.go(body, Goals.level(level), natural).within(2800)
+        t.go(body, Goals.level(level), natural).within(1529)
                 .during(r -> {
                     if (r.ticks > 1 && !r.navigation.progressing()) {
                         throw new GameTestAssertException("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
@@ -421,6 +421,6 @@ public class UpDownGameTests {
         }
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        t.go(body, Goals.at(t.at(164, 5, 12)), natural).within(6800).arrives();
+        t.go(body, Goals.at(t.at(164, 5, 12)), natural).within(4390).arrives();
     }
 }

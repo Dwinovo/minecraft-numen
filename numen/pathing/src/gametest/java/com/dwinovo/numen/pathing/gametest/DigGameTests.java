@@ -88,7 +88,7 @@ public class DigGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.WOODEN_SHOVEL));
         DigWatch watch = new DigWatch(body);
         watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(347).arrives().then(r -> {
             List<DigWatch.Dig> broken = new ArrayList<>(watch.broken());
             broken.sort(java.util.Comparator.comparingLong(d -> d.startedAt));
             if (broken.size() < 2) {
@@ -125,7 +125,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 8);
         DigWatch watch = new DigWatch(body);
         watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 8)), NATURAL).within(800).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 8)), NATURAL).within(410).arrives().then(r -> {
             for (DigWatch.Dig d : watch.broken()) {
                 if (d.above.getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
                     throw new GameTestAssertException("挖的格正上方压着会掉的方块:" + d + " 上面 " + d.above);
@@ -147,7 +147,7 @@ public class DigGameTests {
         TestBody body = t.body(4, 1, 13);
         DigWatch watch = new DigWatch(body);
         watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 13)), NATURAL).within(1100).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 13)), NATURAL).within(557).arrives().then(r -> {
             if (watch.broken().isEmpty()) {
                 throw new GameTestAssertException("一格也没挖");
             }
@@ -192,7 +192,7 @@ public class DigGameTests {
             if (planned.isEmpty()) {
                 throw new GameTestAssertException("规划的路不挖岸边:" + route);
             }
-            t.go(body, request.following(route)).within(1000).arrives().then(r -> {
+            t.go(body, request.following(route)).within(467).arrives().then(r -> {
                 vanillaTimed(watch, body);
                 for (Edit.Dig p : planned) {
                     DigWatch.Dig d = watch.broken().stream().filter(b -> b.pos.equals(p.pos())).findFirst()
@@ -215,7 +215,7 @@ public class DigGameTests {
         t.fill(8, 1, 0, 8, 3, 30, Blocks.STONE);
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(20, new ItemStack(Items.IRON_PICKAXE));
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(347).arrives().then(r -> {
             if (dug(r).isEmpty()) {
                 throw new GameTestAssertException("绕路去了,铁镐没算进价钱");
             }
@@ -237,7 +237,7 @@ public class DigGameTests {
         wall(t, 8, 3, Blocks.DIRT);
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(3, new ItemStack(Items.IRON_PICKAXE));
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(389).arrives().then(r -> {
             if (dug(r).isEmpty()) {
                 throw new GameTestAssertException("一格也没挖");
             }
@@ -256,7 +256,7 @@ public class DigGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         DigWatch watch = new DigWatch(body);
         watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(389).arrives().then(r -> {
             vanillaTimed(watch, body);
             watch.eachStartedOnce();
         });
@@ -322,7 +322,7 @@ public class DigGameTests {
         watch.install();
         Chicken[] mob = {null};
         int[] shownAt = {-1};
-        t.go(body, Goals.at(t.at(14, 1, 5)), NATURAL).within(1000)
+        t.go(body, Goals.at(t.at(14, 1, 5)), NATURAL).within(554)
                 .during(r -> {
                     if (mob[0] == null && watch.digging()) {
                         Vec3 eye = r.body.getEyePosition();
@@ -360,7 +360,7 @@ public class DigGameTests {
         for (int slot = 0; slot < 9; slot++) {
             body.getInventory().setItem(slot, new ItemStack(Items.DEBUG_STICK));
         }
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(300)
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(215)
                 .fails(Outcome.Denied.class, o -> {
                     if (!(o.reason() instanceof Mouse.Refusal.Server) || o.cell().getX() - t.origin.getX() != 8) {
                         throw new GameTestAssertException("应当以服务端不让挖收场、点出墙上那一格:" + o);
@@ -378,7 +378,7 @@ public class DigGameTests {
         body.setGameMode(GameType.CREATIVE);
         BlockPos target = t.at(10, 1, 5);
         t.later(2, () -> t.go(body, Goals.dig(target, Snapshots.of(body).stats(), Goals.Clearing.ANY), RouteSpec.defaults())
-                .within(300).arrives().then(r -> {
+                .within(227).arrives().then(r -> {
                     double distance = Math.sqrt(new AABB(target).distanceToSqr(r.body.getEyePosition()));
                     if (distance <= 4.5 || distance >= 5) {
                         throw new GameTestAssertException("应当停在四格半到五格之间:" + distance);

@@ -76,7 +76,7 @@ public class BreathGameTests {
         Trial t = new Trial(helper).floor();
         channel(t, 10, 18, true);
         TestBody body = t.body(7, 1, Z);
-        t.go(body, Goals.at(t.at(21, 1, Z)), RouteSpec.defaults()).within(800).arrives()
+        t.go(body, Goals.at(t.at(21, 1, Z)), RouteSpec.defaults()).within(590).arrives()
                 .then(BreathGameTests::heldEveryBreath);
     }
 
@@ -86,7 +86,7 @@ public class BreathGameTests {
         Trial t = new Trial(helper).floor();
         channel(t, 5, 33, false);
         TestBody body = t.body(2, 1, Z);
-        t.go(body, Goals.at(t.at(36, 1, Z)), RouteSpec.defaults()).within(1400).arrives()
+        t.go(body, Goals.at(t.at(36, 1, Z)), RouteSpec.defaults()).within(590).arrives()
                 .then(BreathGameTests::neverOutOfAir);
     }
 

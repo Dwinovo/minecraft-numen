@@ -170,7 +170,7 @@ public class ClimbGameTests {
         TestBody body = t.body(5, 1, 5);
         Trial.give(body, new ItemStack(Items.IRON_SHOVEL));
         t.go(body, Goals.at(t.at(11, 5, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
-                .within(700).arrives().then(r -> {
+                .within(590).arrives().then(r -> {
                     if (r.report.ledger().entries().stream().noneMatch(e -> e instanceof EditLedger.Dug)) {
                         throw new GameTestAssertException("没挖就出去了?" + r.report.ledger().entries());
                     }

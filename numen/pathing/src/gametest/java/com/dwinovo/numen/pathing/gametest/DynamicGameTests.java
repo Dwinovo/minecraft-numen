@@ -70,7 +70,7 @@ public class DynamicGameTests {
         TestBody body = t.body(4, 1, 5);
         BlockPos[] aim = {from};
         int[] retargets = {0};
-        t.go(body, Goals.within(Goals.at(from), 0, 2.5), RouteSpec.defaults()).within(600)
+        t.go(body, Goals.within(Goals.at(from), 0, 2.5), RouteSpec.defaults()).within(566)
                 .during(r -> {
                     if (r.ticks % 5 == 0 && pig.getX() - t.origin.getX() < 34) {
                         pig.moveTo(pig.getX() + 1, pig.getY(), pig.getZ(), 0, 0);

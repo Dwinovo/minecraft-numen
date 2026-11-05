@@ -59,7 +59,7 @@ public class AlterGameTests {
         TestBody body = t.body(5, 1, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(14, 5, 5)), NATURAL).within(600).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(14, 5, 5)), NATURAL).within(380).arrives().then(r -> {
             if (!dug(r).isEmpty() || placed(r).size() < 3) {
                 throw new GameTestAssertException("应当垫柱上去、不挖:" + r.report.ledger().entries());
             }
@@ -74,7 +74,7 @@ public class AlterGameTests {
         TestBody body = t.body(6, 5, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(413).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 4 || placed.stream().anyMatch(p -> p.pos().getY() - t.origin.getY() != 4)) {
                 throw new GameTestAssertException("应当在台面那一层搭四格桥:" + placed);
@@ -98,7 +98,7 @@ public class AlterGameTests {
         TestBody body = t.body(5, 5, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(5, 5, 4)), NATURAL).within(700).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(5, 5, 4)), NATURAL).within(203).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 1 || !placed.get(0).pos().equals(t.at(5, 4, 4))) {
                 throw new GameTestAssertException("应当只在桥位放一块:" + placed);
@@ -112,7 +112,7 @@ public class AlterGameTests {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
         TestBody body = t.body(5, 5, 5);
-        t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(600).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(440).arrives().then(r -> {
             if (dug(r).size() < 4) {
                 throw new GameTestAssertException("应当挖下去四格:" + dug(r));
             }
@@ -129,7 +129,7 @@ public class AlterGameTests {
         t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
         t.set(5, 5, 5, Blocks.SHORT_GRASS);
         TestBody body = t.body(5, 5, 5);
-        t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(600).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(440).arrives().then(r -> {
             if (dug(r).size() < 5 || !dug(r).get(0).pos().equals(t.at(5, 5, 5))) {
                 throw new GameTestAssertException("应当先打掉脚下那株草再往下挖四格:" + dug(r));
             }
@@ -154,7 +154,7 @@ public class AlterGameTests {
                 new ItemStack(Items.BREAD), new ItemStack(Items.COAL), new ItemStack(Items.CLAY_BALL), new ItemStack(Items.FEATHER),
                 new ItemStack(Items.FLINT), new ItemStack(Items.STRING));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(8, 3, 5)), NATURAL).within(800).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(8, 3, 5)), NATURAL).within(590).arrives().then(r -> {
             if (placed(r).isEmpty() || dug(r).size() < 3) {
                 throw new GameTestAssertException("应当先垫后挖:放 " + placed(r) + ",挖 " + dug(r));
             }
@@ -190,7 +190,7 @@ public class AlterGameTests {
         TestBody body = t.body(4, 1, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(278).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 1 || placed.get(0).pos().getY() != snowRow.getY() || !placed.get(0).before().is(Blocks.SNOW)) {
                 throw new GameTestAssertException("应当把块放进薄雪那一格:" + placed);

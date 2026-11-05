@@ -69,7 +69,7 @@ public class MaterialGameTests {
         // 这条量的是凭空取料搭桥,不是飞过去:创造模式的身体许飞,飞比搭桥便宜,所以关掉飞行的能力
         body.getAbilities().mayfly = false;
         t.materials = Trial.carried(body, Blocks.OAK_PLANKS, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(413).arrives().then(r -> {
             placedAre(r, Blocks.OAK_PLANKS);
             boolean conjured = r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Conjured c
                     && c.item() == Items.OAK_PLANKS);
@@ -87,7 +87,7 @@ public class MaterialGameTests {
         body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
         body.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(413).arrives().then(r -> {
             placedAre(r, Blocks.COBBLESTONE);
             stillHasSword(r);
         });
@@ -103,7 +103,7 @@ public class MaterialGameTests {
         }
         body.getInventory().setItem(20, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(413).arrives().then(r -> {
             placedAre(r, Blocks.COBBLESTONE);
             int swords = 0;
             for (int i = 0; i < body.getInventory().getContainerSize(); i++) {

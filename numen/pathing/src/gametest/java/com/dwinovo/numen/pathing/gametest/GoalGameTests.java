@@ -97,7 +97,7 @@ public class GoalGameTests {
         if (!use.open().equals(List.of(Direction.SOUTH))) {
             throw new GameTestAssertException("只该有南面敞开:" + use.open());
         }
-        t.go(body, use, RouteSpec.defaults()).within(500).arrives().then(r -> {
+        t.go(body, use, RouteSpec.defaults()).within(305).arrives().then(r -> {
             if (feet(t, r).getZ() != 5) {
                 throw new GameTestAssertException("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
             }
@@ -141,7 +141,7 @@ public class GoalGameTests {
             t.set(8, y, 5, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST));
         }
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(8, 4, 5)), RouteSpec.defaults()).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(8, 4, 5)), RouteSpec.defaults()).within(284).arrives().then(r -> {
             at(t, r, 8, 4, 5);
             if (!r.body.onClimbable()) {
                 throw new GameTestAssertException("应当挂在梯子上");
@@ -155,7 +155,7 @@ public class GoalGameTests {
         Trial t = new Trial(helper).floor();
         UpDownGameTests.pool(t, 8, 3, 13, 8, 3);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(10, 0, 5)), RouteSpec.defaults()).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(10, 0, 5)), RouteSpec.defaults()).within(293).arrives().then(r -> {
             if (!r.body.isInWater()) {
                 throw new GameTestAssertException("应当在水里:" + t.rel(r.body.blockPosition()));
             }

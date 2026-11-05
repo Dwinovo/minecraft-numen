@@ -51,7 +51,7 @@ public class FacadeGameTests {
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         Report[] handed = {null};
-        t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(700)
+        t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(275)
                 .during(r -> {
                     if (handed[0] == null && r.body.isShiftKeyDown()
                             && r.navigation.report().ledger().entries().size() >= 2) {
@@ -99,7 +99,7 @@ public class FacadeGameTests {
             t.untouched();
             t.plan(body, PlanQuery.of(Goals.at(far), request.spec()), toGap -> {
                 int[] crossedAt = {Integer.MIN_VALUE};
-                t.go(body, request.following(toGap.route())).within(700)
+                t.go(body, request.following(toGap.route())).within(461)
                         .during(r -> {
                             BlockPos at = r.body.blockPosition();
                             if (at.getX() == far.getX() && crossedAt[0] == Integer.MIN_VALUE) {

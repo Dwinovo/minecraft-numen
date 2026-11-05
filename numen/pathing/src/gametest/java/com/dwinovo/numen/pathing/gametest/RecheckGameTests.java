@@ -64,7 +64,7 @@ public class RecheckGameTests {
                 throw new GameTestAssertException("没规划出路:" + plan.outcome());
             }
             t.change(12, 1, 5, Blocks.STONE.defaultBlockState());
-            t.go(body, request.following(plan.route())).within(400)
+            t.go(body, request.following(plan.route())).within(251)
                     .fails(Outcome.NeedsChanges.class, o -> {
                         if (o.changes().size() != 1 || !o.changes().get(0).pos().equals(stone)
                                 || !(o.changes().get(0) instanceof Edit.Dig dig) || !dig.state().is(Blocks.STONE)) {
@@ -89,7 +89,7 @@ public class RecheckGameTests {
         boat.moveTo(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5, 90, 0);
         t.level.addFreshEntity(boat);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(19, 1, 5)), RouteSpec.defaults()).within(800)
+        t.go(body, Goals.at(t.at(19, 1, 5)), RouteSpec.defaults()).within(479)
                 .fails(Outcome.Blocked.class, o -> {
                     Blockage b = o.blockage();
                     if (!b.cell().equals(boat.blockPosition()) || b.move() != MoveKind.WALK || b.hitch() != Blockage.Hitch.STUCK) {
@@ -108,7 +108,7 @@ public class RecheckGameTests {
         TestBody body = t.body(4, 1, 5);
         Maneuver[] changed = {null};
         boolean[] noticed = {false};
-        return t.go(body, Goals.at(t.at(30, 1, 5)), RouteSpec.defaults()).within(600)
+        return t.go(body, Goals.at(t.at(30, 1, 5)), RouteSpec.defaults()).within(479)
                 .during(r -> {
                     if (changed[0] == null) {
                         List<Route.Leg> legs = r.navigation.remaining();

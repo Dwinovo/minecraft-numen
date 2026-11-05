@@ -59,7 +59,7 @@ public class TerminationGameTests {
         t.fill(0, 4, 4, 20, 4, 6, Blocks.STONE);
         shulker(t, 10, 1, 5);
         TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(17, 1, 5)), RouteSpec.defaults()).within(600)
+        t.go(body, Goals.at(t.at(17, 1, 5)), RouteSpec.defaults()).within(437)
                 .fails(Outcome.Blocked.class, blocked -> {
                     if (blocked.blockage().hitch() == null) {
                         throw new GameTestAssertException("该是执行里卡住,却是前提不成立:" + blocked.blockage());
@@ -119,7 +119,7 @@ public class TerminationGameTests {
         TestBody body = t.body(10, 5, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 3));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(24, 5, 5)), CHANGES).within(800)
+        t.go(body, Goals.at(t.at(24, 5, 5)), CHANGES).within(340)
                 .fails(Outcome.NoMaterials.class, n -> {
                     if (n.needed() <= 0) {
                         throw new GameTestAssertException("该说还缺几块,却是 " + n.needed());

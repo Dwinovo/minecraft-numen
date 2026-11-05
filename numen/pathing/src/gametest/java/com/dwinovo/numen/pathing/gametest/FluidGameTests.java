@@ -41,7 +41,7 @@ public class FluidGameTests {
         Trial t = new Trial(helper).floor();
         pool(t, 6, 0, 13, 39, 3);
         TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(16, 1, 5)), RouteSpec.defaults()).within(700).arrives();
+        t.go(body, Goals.at(t.at(16, 1, 5)), RouteSpec.defaults()).within(497).arrives();
     }
 
     /**
@@ -55,7 +55,7 @@ public class FluidGameTests {
         t.fill(6, -2, 0, 13, 0, 39, Blocks.WATER);
         t.fill(14, 0, 0, 22, 0, 39, Blocks.WATER);
         TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(25, 1, 5)), RouteSpec.defaults()).within(800).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(25, 1, 5)), RouteSpec.defaults()).within(590).arrives().then(r -> {
             if (r.report.journal().blockages() > 0) {
                 throw new GameTestAssertException("游过去的路上走不通过:" + r.report.journal().replans());
             }

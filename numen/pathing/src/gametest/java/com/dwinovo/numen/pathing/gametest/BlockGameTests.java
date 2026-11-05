@@ -85,7 +85,7 @@ public class BlockGameTests {
                         throw new GameTestAssertException("进了顶上是倒扣楼梯的那条");
                     }
                 })
-                .within(600).arrives().then(r -> {
+                .within(338).arrives().then(r -> {
                     if (!r.report.ledger().entries().isEmpty()) {
                         throw new GameTestAssertException("动了活板门:" + r.report.ledger().entries());
                     }

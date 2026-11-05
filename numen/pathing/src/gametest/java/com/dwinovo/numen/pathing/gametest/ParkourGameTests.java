@@ -75,7 +75,7 @@ public class ParkourGameTests {
         Trial t = gap(helper, 10, 11);
         t.fill(12, 5, 0, 39, 5, 39, Blocks.BEDROCK);
         TestBody body = t.body(5, 5, 5);
-        t.go(body, Goals.at(t.at(14, 6, 5)), PARKOUR).within(300).during(Scenes.noTurnInMidAir()).arrives()
+        t.go(body, Goals.at(t.at(14, 6, 5)), PARKOUR).within(269).during(Scenes.noTurnInMidAir()).arrives()
                 .then(Scenes::unaltered);
     }
 
@@ -89,10 +89,10 @@ public class ParkourGameTests {
         t.set(9, 5, 15, stair(Direction.EAST));
         t.set(12, 5, 25, slab(SlabType.BOTTOM));
         TestBody fromSlab = t.body(6, 5, 5);
-        t.go(fromSlab, Goals.at(t.at(14, 5, 5)), PARKOUR).within(400).during(Scenes.noTurnInMidAir()).arrives();
+        t.go(fromSlab, Goals.at(t.at(14, 5, 5)), PARKOUR).within(296).during(Scenes.noTurnInMidAir()).arrives();
         TestBody fromStair = t.body(6, 5, 15);
-        t.go(fromStair, Goals.at(t.at(14, 5, 15)), PARKOUR).within(400).during(Scenes.noTurnInMidAir()).arrives();
+        t.go(fromStair, Goals.at(t.at(14, 5, 15)), PARKOUR).within(296).during(Scenes.noTurnInMidAir()).arrives();
         TestBody ontoSlab = t.body(6, 5, 25);
-        t.go(ontoSlab, Goals.at(t.at(14, 5, 25)), PARKOUR).within(400).during(Scenes.noTurnInMidAir()).arrives();
+        t.go(ontoSlab, Goals.at(t.at(14, 5, 25)), PARKOUR).within(296).during(Scenes.noTurnInMidAir()).arrives();
     }
 }
