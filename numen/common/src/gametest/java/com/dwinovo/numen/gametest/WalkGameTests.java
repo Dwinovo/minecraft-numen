@@ -336,7 +336,15 @@ public class WalkGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
                             "she did not get up: " + runs[0].outcome());
-                    marked[0] = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).size();
+                    // 只数这块场地里记在她名下的格:记号表是全世界一张,别的用例留下的记号不算
+                    var marks = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+                    for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(helper.getBounds().getMinPosition()),
+                            BlockPos.containing(helper.getBounds().getMaxPosition()))) {
+                        var placer = marks.placerAt(pos, level.getBlockState(pos));
+                        if (placer != null && placer.id().equals(companion.getUUID())) {
+                            marked[0]++;
+                        }
+                    }
                     helper.assertTrue(marked[0] > 0, "the pillar blocks she placed carry no placement marks");
                     runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
                 })
