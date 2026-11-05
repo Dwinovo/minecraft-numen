@@ -38,7 +38,8 @@ public class FishGameTests {
             helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(fish.succeeded(), "fishing failed: " + fish.outcome());
             var inv = companion.getInventory();
-            boolean caught = inv.items.stream().anyMatch(s -> !s.isEmpty() && !s.is(Items.FISHING_ROD));
+            // 背包里比开钓时多了东西:她只带了一根竿,钓上来的可能也是一根竿(原版杂物表里有,权重 2),所以按件数比,不按"竿以外的东西"
+            boolean caught = inv.items.stream().mapToInt(ItemStack::getCount).sum() >= 2;
             boolean worn = inv.items.stream().anyMatch(s -> s.is(Items.FISHING_ROD) && s.getDamageValue() > 0);
             helper.assertTrue(caught && worn, "nothing was reeled in, or the rod took no wear: " + fish.outcome());
             helper.assertTrue(fish.outcome().startsWith("reeled in minecraft:"),
