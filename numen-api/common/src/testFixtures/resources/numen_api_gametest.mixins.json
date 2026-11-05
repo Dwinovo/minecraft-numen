@@ -7,6 +7,7 @@
     "GameTestServerOriginMixin",
     "GameTestServerTickMixin",
     "GameTestServerWorldMixin",
+    "StructureChunksMixin",
     "StructureClearMixin"
   ],
   "injectors": {
