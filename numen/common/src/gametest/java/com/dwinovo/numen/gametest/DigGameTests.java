@@ -797,19 +797,19 @@ public class DigGameTests {
 
     /**
      * 点名的一团整个在手边以外:一次扫描找到远处一团与近处一团;把远处那一团交给 {@code numen.work.dig},她走过去把它挖光,
-     * 近处那一块原样。
+     * 近处那一块原样。扫描半径 80 格跨过好几块场地,用全套用例里只有这一处摆的海晶灯,只看得见自己的。
      */
     @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
     public static void dig_a_cluster_beyond_her_reach_walks_to_it_and_leaves_the_near_one(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> far = List.of(new BlockPos(48, 2, 50), new BlockPos(49, 2, 50), new BlockPos(50, 2, 50));
         for (BlockPos rel : far) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.SEA_LANTERN.defaultBlockState());
         }
         BlockPos nearRel = new BlockPos(8, 2, 8);
-        level.setBlockAndUpdate(helper.absolutePos(nearRel), Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(nearRel), Blocks.SEA_LANTERN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_far_group", new BlockPos(3, 2, 3), false);
-        ToolRun scanned = scan(companion, 80, "minecraft:verdant_froglight");
+        ToolRun scanned = scan(companion, 80, "minecraft:sea_lantern");
         ToolRun[] dig = new ToolRun[1];
 
         succeedWhen(helper, () -> {
@@ -819,18 +819,18 @@ public class DigGameTests {
                 var farCluster = clusterHolding(clusters, helper.absolutePos(far.get(0)));
                 var nearCluster = clusterHolding(clusters, helper.absolutePos(nearRel));
                 helper.assertTrue(farCluster != null && nearCluster != null && farCluster != nearCluster,
-                        "the scan did not return the near and the far froglights as two clusters: " + scanned.reply());
+                        "the scan did not return the near and the far sea lanterns as two clusters: " + scanned.reply());
                 dig[0] = lua(companion, "numen.work.dig(" + blocksOf(farCluster) + ")");
             }
             helper.assertTrue(dig[0].done(), "dig has not finished");
-            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 3 cell(s) of verdant_froglight"),
+            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 3 cell(s) of sea_lantern"),
                     "the far cluster was not dug: " + dig[0].outcome());
             for (BlockPos rel : far) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
-                        "a froglight of the far cluster is left at " + rel.toShortString());
+                        "a sea lantern of the far cluster is left at " + rel.toShortString());
             }
-            helper.assertTrue(level.getBlockState(helper.absolutePos(nearRel)).is(Blocks.VERDANT_FROGLIGHT),
-                    "the near froglight, which was not asked for, is gone");
+            helper.assertTrue(level.getBlockState(helper.absolutePos(nearRel)).is(Blocks.SEA_LANTERN),
+                    "the near sea lantern, which was not asked for, is gone");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -873,7 +873,7 @@ public class DigGameTests {
     }
 
     /**
-     * 上千格的一团交给服务端的函数:一层 32 x 32 的蛙明灯,{@code numen.scan.blocks} 交回的几团(每团一百多格,合起来上千)先摊成一串格,
+     * 上千格的一团交给服务端的函数:一层 32 x 32 的粗金块(扫描半径 60 格跨过好几块场地,全套用例里只有这一处摆它),{@code numen.scan.blocks} 交回的几团(每团一百多格,合起来上千)先摊成一串格,
      * 再整串作为要离开的东西交给 {@code numen.move.away}。程序跑在服务端,团不经网线,不受一个上行包的大小管(从前的 32 KB 上限
      * 一团就装不下)。
      */
@@ -884,14 +884,14 @@ public class DigGameTests {
         for (int x = 10; x < 42; x++) {
             for (int z = 10; z < 42; z++) {
                 level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)),
-                        Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+                        Blocks.RAW_GOLD_BLOCK.defaultBlockState());
                 cells++;
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_thousand", new BlockPos(3, 2, 3), false);
         ToolRun run = lua(companion, """
                 local all = {}
-                for _, group in ipairs(numen.scan.blocks("minecraft:verdant_froglight", {radius = 60})) do
+                for _, group in ipairs(numen.scan.blocks("minecraft:raw_gold_block", {radius = 60})) do
                   for _, block in ipairs(group.blocks) do
                     all[#all + 1] = block.pos
                   end
