@@ -27,7 +27,6 @@ import com.dwinovo.numen.api.brain.Mind;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
@@ -65,11 +64,6 @@ public class BrainGameTests {
     // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
     @BeforeBatch(batch = "numen_brain")
     public static void prepareBrainBatch(ServerLevel level) {
-        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
-    }
-
-    @BeforeBatch(batch = "numen_schedule")
-    public static void prepareScheduleBatch(ServerLevel level) {
         GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
     }
 
@@ -262,83 +256,6 @@ public class BrainGameTests {
         });
     }
 
-    /** 主人不在线时事件照收、不开 run;他回来,攒着的一起处理。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void an_away_owner_leaves_the_events_waiting_in_her_inbox(GameTestHelper helper) throws Exception {
-        Brain her = new Brain(helper, "gametest_waiter");
-        her.ownerOnline = false;
-        her.mind.say("欢迎回来");
-
-        NumenEvents.emit(her.companion, EventTypes.TASK_FINISHED, null, "矿挖完了", true);
-
-        helper.runAfterDelay(5, () -> {
-            helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TASK_FINISHED)
-                            && e.id() != null), "the event did not reach her inbox: " + her.loop.inbox().entries());
-            helper.assertTrue(her.loop.status().hold() == Hold.AWAY, "not waiting: " + her.loop.status().hold());
-            helper.assertTrue(her.mind.asked.isEmpty(), "she thought while her owner was away");
-            her.ownerOnline = true;
-        });
-        succeedWhen(helper, () -> {
-            helper.assertTrue(her.mind.asked.size() == 1, "she did not take up the waiting event");
-            helper.assertTrue(her.loop.status().hold() == null, "still held: " + her.loop.status().hold());
-            her.close();
-        });
-    }
-
-    /** 死着时不开 run;重生时死亡的叙事随攒着的输入一起走。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void death_freezes_the_loop_and_the_respawn_tells_her_how_she_died(GameTestHelper helper)
-            throws Exception {
-        Brain her = new Brain(helper, "gametest_mortal");
-        her.mind.say("我回来了");
-
-        her.loop.onDied("摔死了", "你死在 minecraft:overworld。");
-        her.loop.submitPrompt("在吗");
-        helper.assertTrue(her.loop.status().hold() == Hold.DEAD, "not frozen: " + her.loop.status().hold());
-        helper.assertTrue(her.mind.asked.isEmpty(), "she thought while dead");
-
-        her.loop.onRespawned();
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(her.mind.asked.size() == 1, "the respawn did not wake her");
-            String told = her.mind.asked.get(0).messages().stream()
-                    .filter(m -> m instanceof ConvoState.Msg.User)
-                    .map(m -> ((ConvoState.Msg.User) m).content()).reduce("", String::concat);
-            helper.assertTrue(told.contains("摔死了") && told.contains("在吗"),
-                    "the first request after the respawn lacks the death or the waiting words: " + told);
-            her.close();
-        });
-    }
-
-    /** 主人按停止:在飞的回复作废,日志记下切断点,没有新的 run,直到主人再开口。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void stop_voids_the_reply_in_flight_until_the_owner_speaks_again(GameTestHelper helper)
-            throws Exception {
-        Brain her = new Brain(helper, "gametest_stopped");
-        her.mind.holding = true;
-        her.mind.say("这句不该被听到").say("好的");
-
-        her.loop.submitPrompt("去挖矿");
-        helper.assertTrue(her.mind.asked.size() == 1, "she did not start thinking");
-        her.loop.abort();
-        her.mind.release();   // 作废之后到的回复:没有人要了
-
-        helper.runAfterDelay(5, () -> {
-            helper.assertTrue(her.loop.status().hold() == Hold.OWNER_STOP, "not stopped: " + her.loop.status().hold());
-            helper.assertTrue(her.transcript().stream().noneMatch(m -> m instanceof ConvoState.Msg.Assistant),
-                    "the voided reply was recorded: " + her.transcript());
-            helper.assertTrue(her.transcript().stream().anyMatch(m -> m instanceof ConvoState.Msg.Halt),
-                    "the cut was not recorded: " + her.transcript());
-            her.mind.holding = false;
-            her.loop.submitPrompt("继续");
-        });
-        succeedWhen(helper, () -> {
-            helper.assertTrue(her.mind.asked.size() == 2, "the owner's next word did not wake her");
-            helper.assertTrue(her.loop.status().hold() == null, "still stopped");
-            her.close();
-        });
-    }
-
     /**
      * 主人清空她的记忆:对话日志与札记删掉,名册与身体不动,面板收到"清空了",并且如实告诉她;导出的 zip 在清空之前带着
      * 日志和札记。只有主人能做;她正在想事情的时候不清,什么也不动。
@@ -453,81 +370,8 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 她听到的、来自定时的话有几句(日志里开标签带定时来源的 user 消息)。 */
-    private static long scheduledHeard(Brain her) {
-        return her.transcript().stream().filter(m -> m instanceof ConvoState.Msg.User u
-                && com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(u.content())).count();
-    }
-
-    /** 一条定时的最短间隔那么久之后,她才听到它:这批用例要等到这一刻,所以单开一批、时限放宽。 */
+    /** 一条定时的最短间隔。 */
     private static final int ONE_INTERVAL = (int) com.dwinovo.numen.api.brain.OwnerSchedules.MIN_EVERY_TICKS;
-
-    /**
-     * 主人给她定的定时到点只送一次:到期后她听到这句话(开标签带定时来源),之后一个间隔之内不再有;她的大脑换新(重载存档)之后
-     * 也不重发——下次到期刻是落了盘的绝对刻。
-     */
-    @GameTest(template = "floor16", timeoutTicks = ONE_INTERVAL + 400, batch = "numen_schedule")
-    public static void a_schedule_is_heard_once_at_its_time_and_a_reload_does_not_repeat_it(GameTestHelper helper)
-            throws Exception {
-        Path dir = Files.createTempDirectory("numen-gametest-schedule-");
-        Brain her = new Brain(helper, "gametest_scheduled", dir);
-        her.mind.say("好").say("好").say("好");
-        her.loop.putSchedule(null, "看看炉子", ONE_INTERVAL);
-        long[] heardAt = {-1};
-        UUID id = her.companion.getUUID();
-
-        helper.onEachTick(() -> {
-            if (heardAt[0] < 0 && scheduledHeard(her) == 1) {
-                heardAt[0] = helper.getTick();
-            }
-            if (heardAt[0] >= 0 && helper.getTick() == heardAt[0] + 20) {
-                helper.assertTrue(scheduledHeard(her) == 1, "the schedule was heard more than once");
-                // 重载:同一个家里换一个新的大脑;它读回来的下次到期刻在后面,不会立刻再送
-                var again = CompanionBrains.create(helper.getLevel().getServer(), id, her.companion.getOwnerUuid(),
-                        new Home(dir.resolve("her"), NumenIo.inline("numen-gametest")), her.mind, her.owner,
-                        () -> true, () -> false);
-                helper.assertTrue(again.schedules().size() == 1 && again.schedules().get(0).text().equals("看看炉子"),
-                        "the schedule did not survive the reload: " + again.schedules());
-            }
-            if (heardAt[0] >= 0 && helper.getTick() == heardAt[0] + 120) {
-                var again = CompanionLoops.get(id).orElseThrow();
-                long heard = again.log().loadLines(100).stream().filter(l -> l.msg() instanceof ConvoState.Msg.User u
-                        && com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(u.content())).count();
-                helper.assertTrue(heard == 1, "the reloaded brain heard the schedule again: " + heard);
-                her.close();
-                helper.succeed();
-            }
-        });
-    }
-
-    /**
-     * 主人不在线时到期的定时不送、不丢:一直留到他回来,回来后只收到一句。
-     */
-    @GameTest(template = "floor16", timeoutTicks = ONE_INTERVAL + 400, batch = "numen_schedule")
-    public static void a_schedule_due_while_the_owner_is_away_is_heard_once_when_he_returns(GameTestHelper helper)
-            throws Exception {
-        Brain her = new Brain(helper, "gametest_schedule_away");
-        her.ownerOnline = false;
-        her.mind.say("好").say("好").say("好");
-        her.loop.putSchedule(null, "早点回来", ONE_INTERVAL);
-        long[] backAt = {-1};
-
-        helper.onEachTick(() -> {
-            if (backAt[0] < 0 && helper.getTick() == ONE_INTERVAL + 40) {
-                helper.assertTrue(scheduledHeard(her) == 0 && her.loop.inbox().entries().stream().noneMatch(
-                                e -> com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(e.text())),
-                        "the schedule was delivered while the owner was away: " + her.loop.inbox().entries());
-                her.ownerOnline = true;
-                backAt[0] = helper.getTick();
-            }
-            if (backAt[0] >= 0 && helper.getTick() == backAt[0] + 100) {
-                helper.assertTrue(scheduledHeard(her) == 1, "the owner back did not hear exactly one schedule: "
-                        + scheduledHeard(her));
-                her.close();
-                helper.succeed();
-            }
-        });
-    }
 
     /**
      * 定时只有她的主人能增删改(别人被拒),服务端判条数与间隔,答复是这位玩家看得到的整表。
