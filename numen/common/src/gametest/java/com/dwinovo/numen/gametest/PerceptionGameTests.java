@@ -314,6 +314,8 @@ public class PerceptionGameTests {
         BlockPos log = helper.absolutePos(new BlockPos(3, 2, 7));
         level.setBlockAndUpdate(gold, Blocks.GOLD_BLOCK.defaultBlockState());
         level.setBlockAndUpdate(log, Blocks.OAK_LOG.defaultBlockState());
+        // 扫描球伸出场地、到了缝里的区块;那几块先阻塞着生成完,两次扫描读到的"有几列没加载"才不看区块按墙钟什么时候到
+        generateChunks(level, helper.absolutePos(new BlockPos(3, 2, 3)), 1);
         NumenPlayer companion = spawnAt(helper, "gametest_twin_eyes", new BlockPos(3, 2, 3), false);
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaTool = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
