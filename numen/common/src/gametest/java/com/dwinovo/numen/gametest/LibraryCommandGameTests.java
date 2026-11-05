@@ -184,6 +184,15 @@ public class LibraryCommandGameTests {
         java.nio.file.Path file = SkinFolder.here().dir().resolve("gametest_dress.png");
         Files.createDirectories(file.getParent());
         Files.write(file, skinPng(true));
+        // 签名队与皮肤文件夹整个服务器只有一份:不论这条成败都换回联网的签名、删掉放进去的图
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> {
+            try {
+                Files.deleteIfExists(file);
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            ServerSkins.start(server, SkinSigning.Backend.NETWORK);
+        });
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
         UUID id = her.companion.getUUID();
         List<Component> heard = new ArrayList<>();
@@ -222,12 +231,6 @@ public class LibraryCommandGameTests {
                     run(owner, "numen companion gametest_dressed skin server no_such_skin", heard);
                     helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),
                             "a missing file was not said: " + heard);
-                    try {
-                        Files.deleteIfExists(file);
-                    } catch (java.io.IOException e) {
-                        throw new IllegalStateException(e);
-                    }
-                    ServerSkins.start(server, SkinSigning.Backend.NETWORK);
                     CompanionLoops.dismissed(server, id);
                     var live = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(server, id);
                     if (live != null) {

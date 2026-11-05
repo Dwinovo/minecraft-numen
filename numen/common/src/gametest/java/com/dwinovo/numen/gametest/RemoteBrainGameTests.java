@@ -128,6 +128,8 @@ public class RemoteBrainGameTests {
             }
             this.brain = new McpTestClient(port, mcp.tokens().issue(owner, role,
                     McpToken.Scope.ALL, "gametest", 0).secret());
+            // 端点整个服务器只有一份:不论这条成败都关掉,她的大脑与名册一起收
+            com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, this::close);
         }
 
         Hold hold() {

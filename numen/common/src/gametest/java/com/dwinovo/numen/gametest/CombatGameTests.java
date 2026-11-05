@@ -431,6 +431,8 @@ public class CombatGameTests {
         // 测试服务器默认不许玩家互相伤害(专用服务器读 server.properties 的 pvp)
         boolean pvp = level.getServer().isPvpAllowed();
         level.getServer().setPvpAllowed(true);
+        // 全服的开关:不论这条成败都放回去,后面的用例不继承
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> level.getServer().setPvpAllowed(pvp));
         boolean[] hit = {false};
         long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
         succeedWhen(helper, () -> {
@@ -441,7 +443,6 @@ public class CombatGameTests {
             }
             helper.assertTrue(companion.getX() - start.x > 0.3,
                     "the hit did not move her: dx=" + (companion.getX() - start.x));
-            level.getServer().setPvpAllowed(pvp);
             leave(attacker);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -822,6 +823,9 @@ public class CombatGameTests {
                 "she found a ranged weapon in a blaze rod before any plugin provided one");
         TestGun gun = new TestGun();
         com.dwinovo.numen.api.NumenPlugins.register("gt_gun", numen -> numen.rangedWeapon(gun));
+        // 插件给的武器全服的同伴都看得见:不论这条成败都撤掉
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun"));
         helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
                 "she did not pick the plugin's weapon once it was provided");
         lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
@@ -829,7 +833,6 @@ public class CombatGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
                     "the plugin's weapon did not bring the zombie down (shots " + gun.shots.get() + ")");
-            com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
