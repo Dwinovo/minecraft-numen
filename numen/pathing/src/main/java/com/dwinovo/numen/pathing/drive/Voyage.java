@@ -87,7 +87,11 @@ public final class Voyage {
 
     /** 创造飞行的受理:许飞就行;不许飞,{@code have} 带上鞘翅还剩的耐久,宿主据此在提示里加上滑翔。 */
     private static Admission flightAdmission(Rig rig) {
-        Mobility mobility = rig.snapshot().mobility();
+        return flightAdmission(rig.snapshot().mobility());
+    }
+
+    /** 同上,对着这一刻的行动能力问。 */
+    static Admission flightAdmission(Mobility mobility) {
         return mobility.mayFly() ? Admission.creative() : Admission.lacking(new Lack(Lack.Why.NO_FLIGHT, 0, mobility.gliderLife()));
     }
 
