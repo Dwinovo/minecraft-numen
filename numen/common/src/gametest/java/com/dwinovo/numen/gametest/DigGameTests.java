@@ -308,12 +308,15 @@ public class DigGameTests {
     /**
      * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig(pos)} 当场挖掉;收场说挖了 1 格、掉下来的那一捆落在了哪一格
      * ——那段账与交回的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、还躺在那儿的那一件的编号。她一步没动。
+     * 只挖点名的那一格:旁边另一捆没点名的干草原样立着。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos hay = helper.absolutePos(new BlockPos(9, 2, 5));
         level.setBlockAndUpdate(hay, Blocks.HAY_BLOCK.defaultBlockState());
+        BlockPos spare = helper.absolutePos(new BlockPos(9, 2, 8));
+        level.setBlockAndUpdate(spare, Blocks.HAY_BLOCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_one_cell", new BlockPos(6, 2, 5), false);
         BlockPos stand = companion.blockPosition();
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(hay) + ")");
@@ -334,6 +337,7 @@ public class DigGameTests {
                             instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
                     "the id given is not the hay lying there: " + drop);
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
+            helper.assertTrue(level.getBlockState(spare).is(Blocks.HAY_BLOCK), "the hay that was not named was dug");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
             CompanionFactory.despawn(level.getServer(), companion);
         });
