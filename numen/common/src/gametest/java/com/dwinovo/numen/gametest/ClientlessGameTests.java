@@ -3,6 +3,9 @@ package com.dwinovo.numen.gametest;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.BlockPos;
@@ -41,6 +44,12 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
  * 玩家是 {@link GameTestKit#presentVanillaPlayer}:连接上没有我们的频道,下行的聊天记在连接上。
  */
 public class ClientlessGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_clientless")
+    public static void prepareClientlessBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     /** 这位玩家敲一条指令,指令回给他的话收进 {@code heard}(在送上线之前,还是带着语言键的 Component)。 */
     static void run(ServerPlayer player, String command, List<Component> heard) {

@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,6 +24,12 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * (fill、drain、snow、naturalize、gravity),和读不到没加载的区块时整个调用失败。判据是交回的格:读不写,世界在这些调用之后原样。
  */
 public class ShapeGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = BATCH)
+    public static void prepareShapeBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     private static final String BATCH = "numen_shape";
 

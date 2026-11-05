@@ -26,6 +26,12 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  */
 public class MovementGameTests {
 
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_follow_budget")
+    public static void prepareFollowBudgetBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
     /** 冒烟批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_smoke")
     public static void prepareSmokeBatch(ServerLevel level) {

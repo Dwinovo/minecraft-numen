@@ -35,6 +35,9 @@ import com.dwinovo.numen.mcp.server.McpToken;
 
 import com.dwinovo.numen.api.store.Io;
 import com.google.gson.JsonObject;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -58,6 +61,17 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
  * 服务端跑完、回执回到模型、最终回复进日志。模型是脚本化的({@link Scripted}),其余全是产品里的部件。
  */
 public class BrainGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_brain")
+    public static void prepareBrainBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_schedule")
+    public static void prepareScheduleBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     /** 按事先排好的回复答的"模型";记下每次收到的请求。{@code holding} 时回复先扣着,等 {@link #release}。 */
     static final class Scripted implements Mind {

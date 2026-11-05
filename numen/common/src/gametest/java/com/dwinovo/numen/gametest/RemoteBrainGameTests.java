@@ -16,6 +16,9 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.server.McpToken;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -38,6 +41,42 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
  * (不是用例手填的"主人在不在"),所以驾驶席与待命都是产品里真实算出来的。
  */
 public class RemoteBrainGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_remote_1")
+    public static void prepareRemote1Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_2")
+    public static void prepareRemote2Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_3")
+    public static void prepareRemote3Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_4")
+    public static void prepareRemote4Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_5")
+    public static void prepareRemote5Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_6")
+    public static void prepareRemote6Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_7")
+    public static void prepareRemote7Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     /** 一只带产品线路大脑的同伴,和一个扮外部大脑的客户端。 */
     private static final class Rig {

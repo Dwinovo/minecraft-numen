@@ -27,6 +27,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -50,6 +52,12 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * numen.work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
  */
 public class ScriptGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_scripts")
+    public static void prepareScriptsBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     private static JsonObject receipt(Round round, LlmToolCall call) {
         return JsonParser.parseString(round.result(call)).getAsJsonObject();
