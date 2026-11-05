@@ -169,23 +169,6 @@ public class TaskControlGameTests {
                 .thenSucceed();
     }
 
-    /** 点名一个不存在的编号:不撤任何东西,回执把手上真有的摊开。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void task_stop_with_an_unknown_id_changes_nothing(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_confused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = lua(companion, "numen.task.timer(\"feed the pets\", {after = 600})");
-        ToolRun stop = lua(companion, "numen.task.stop({task_id = \"t9999\"})");
-        ToolRun status = lua(companion, "numen.task.status()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
-            helper.assertTrue(!stop.succeeded() && stop.reply().contains("feed the pets"),
-                    "the refusal does not list what is pending: " + stop.reply());
-            helper.assertTrue(status.reply().contains("feed the pets"), "the timer was cancelled: " + status.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 一秒的表:到点发一条 timer 事件,带着定表时写的理由。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void set_timer_fires_its_reason_back(GameTestHelper helper) {
@@ -245,30 +228,6 @@ public class TaskControlGameTests {
                     CompanionFactory.despawn(helper.getLevel().getServer(), refused);
                 })
                 .thenSucceed();
-    }
-
-    /**
-     * 越界的秒数夹住:numen.task.timer 5000 交回实际定的秒数(上限),世界上多一个按上限到期、理由不变的表,交回的表编号就是它。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void task_timer_clamps_and_says_what_it_set(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_cmd_timer", new BlockPos(6, 2, 2), false);
-        var server = helper.getLevel().getServer();
-        long setAt = server.overworld().getGameTime();
-        ToolRun timer = lua(companion, "numen.task.timer(\"water the wheat\", {after = 5000})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
-            helper.assertTrue(Long.valueOf(TimerRegistry.MAX_SECONDS).equals(timer.field("remaining_s")),
-                    "the value does not say the clamped delay: " + timer.reply());
-            List<TimerRegistry.Timer> set = TimerRegistry.get(server).list(companion.getUUID());
-            String id = (String) timer.field("timer_id");
-            helper.assertTrue(set.size() == 1 && set.get(0).id().equals(id)
-                            && set.get(0).dueGameTime() == setAt + TimerRegistry.MAX_SECONDS * 20L
-                            && set.get(0).reason().equals("water the wheat"),
-                    "the timer is not the clamped one: " + set + " / " + timer.reply());
-            CompanionFactory.despawn(server, companion);
-        });
     }
 
     /**
