@@ -83,6 +83,11 @@ public final class GameTestKit {
     static final String ON_FOOT = "numen_on_foot";
     /** 批次开场定下的晴天维持多久(刻):一整天,够一批跑完。 */
     private static final int CLEAR_WEATHER_TICKS = 24000;
+    /**
+     * 用例造的同伴与怪的随机数种子({@code getRandom().setSeed}):原版给每个实体一个不定种子的随机数,她的逃跑落点、怪的出手间隔都从它取;
+     * 定下种子,同样的场景每次走出同样的结果。
+     */
+    static final long ENTITY_SEED = 0;
     /** 测试服的模拟距离(区块):端到端与 Paper 测试服也是这个值。 */
     private static final int SIMULATION_DISTANCE = 4;
 
@@ -171,6 +176,7 @@ public final class GameTestKit {
         NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_fighter", UUID.randomUUID(), level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        companion.getRandom().setSeed(ENTITY_SEED);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
         return companion;
@@ -261,6 +267,7 @@ public final class GameTestKit {
         NumenPlayer companion = withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5)));
+        companion.getRandom().setSeed(ENTITY_SEED);
         if (creative) {
             companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         }

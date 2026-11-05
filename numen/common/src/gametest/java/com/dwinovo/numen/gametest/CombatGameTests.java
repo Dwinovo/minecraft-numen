@@ -570,6 +570,7 @@ public class CombatGameTests {
         Zombie zombie = EntityType.ZOMBIE.create(level);
         helper.assertTrue(zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
+        zombie.getRandom().setSeed(ENTITY_SEED);
         zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setTarget(target);
         level.addFreshEntity(zombie);
