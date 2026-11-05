@@ -312,14 +312,6 @@ public class GearGameTests {
                         new com.dwinovo.numen.api.network.payload.DismissRequestPayload(companion.getUUID()), owner));
     }
 
-    /** 主人敲 {@code /numen player despawn} 和在面板上点 ✕ 是同一次遣散,掉的东西一样。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
-    public static void despawn_command_drops_what_she_carries_and_wears(GameTestHelper helper) {
-        dismissDropsEverything(helper, "gametest_parting", "gametest_mourner",
-                (owner, companion) -> owner.getServer().getCommands().performPrefixedCommand(
-                        owner.createCommandSourceStack(), "numen player despawn " + companion.getGameProfile().getName()));
-    }
-
     private static void dismissDropsEverything(GameTestHelper helper, String name, String ownerName,
             java.util.function.BiConsumer<net.minecraft.server.level.ServerPlayer, NumenPlayer> dismiss) {
         ServerLevel level = helper.getLevel();

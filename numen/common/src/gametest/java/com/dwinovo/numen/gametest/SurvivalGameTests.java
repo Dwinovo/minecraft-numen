@@ -86,6 +86,9 @@ public class SurvivalGameTests {
      * 摔落自救:铺水接住自己,<b>而且把水收回来</b>。
      *
      * <p>收水是这条的重点 —— 桶是消耗品,放完不收就只能救一次,第二次直接摔死。
+     *
+     * <p>本能替身体做了事,她要听到的是一条 {@code reflex} 事件,带着是哪个本能:这件事以 {@code reflex} 类型进她的收件箱,
+     * 文本里写着本能名册里的登记名 {@code mlg}。
      */
     @GameTest(template = "floor16", timeoutTicks = 210, batch = "numen_survival")
     public static void mlg_breaks_the_fall_and_takes_the_water_back(GameTestHelper helper) {
@@ -104,22 +107,6 @@ public class SurvivalGameTests {
                     helper.assertTrue(carries(companion, Items.WATER_BUCKET),
                             "the water was placed but never picked back up");
                 })
-                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
-                .thenSucceed();
-    }
-
-    /**
-     * 本能替身体做了事,她要听到的是一条 {@code reflex} 事件,带着是哪个本能:摔落时铺水接住自己,
-     * 这件事以 {@code reflex} 类型进她的收件箱,文本里写着本能名册里的登记名 {@code mlg}。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 255, batch = "numen_survival")
-    public static void a_reflex_tells_her_which_instinct_acted(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
-        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
-        steps(helper)
-                .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
-                        () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
                 .thenWaitUntil(() -> {
                     var reflexes = GameTestKit.events(companion).stream()
                             .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
@@ -130,9 +117,7 @@ public class SurvivalGameTests {
                                     && reflexes.get(0).text().contains("reflex=\"mlg\""),
                             "the reflex event does not name its instinct: " + reflexes.get(0).text());
                 })
-                .thenExecute(() -> {
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
 

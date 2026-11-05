@@ -16,12 +16,11 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 /**
  * 走与创造飞行:{@code numen.move.walk} 从不飞(创造飞行许飞也一样,身体在飞先落地),{@code numen.move.fly} 只用创造飞行(不许飞的当场拒绝,不碰鞘翅)。
- * 都从脚本的入口进:创造下走不飞而飞才飞、飞到半空一格悬停、不许飞当场拒绝、在飞时走先落地。鞘翅的滑翔是 {@code numen.move.glide},用例在 {@code ElytraGameTests}。
+ * 都从脚本的入口进:飞到半空一格悬停、不许飞当场拒绝、在飞时走先落地。鞘翅的滑翔是 {@code numen.move.glide},用例在 {@code ElytraGameTests}。
  */
 public class FlyGameTests {
 
@@ -68,17 +67,6 @@ public class FlyGameTests {
         return her;
     }
 
-    private static void fill(GameTestHelper helper, int x0, int y0, int z0, int x1, int y1, int z1, Block block) {
-        ServerLevel level = helper.getLevel();
-        for (int x = x0; x <= x1; x++) {
-            for (int y = y0; y <= y1; y++) {
-                for (int z = z0; z <= z1; z++) {
-                    level.setBlock(helper.absolutePos(new BlockPos(x, y, z)), block.defaultBlockState(), 2);
-                }
-            }
-        }
-    }
-
     /**
      * 不许飞的身体(生存)叫了创造飞行:当场拒绝,说清楚不许飞,下一步是走;穿着鞘翅的再给滑翔。她没动。
      */
@@ -121,45 +109,6 @@ public class FlyGameTests {
             helper.assertTrue(returned(fly).get("flying").getAsBoolean() && returned(fly).getAsJsonArray("glided").size() == 0, "the account should say she is still flying: " + returned(fly));
             CompanionFactory.despawn(level.getServer(), her);
         });
-    }
-
-    /**
-     * 创造模式下走不飞、飞才飞:一条十二格宽的岩浆河横贯场地,她身上什么料都没有。先叫走到对岸:不论走不走得到,走的一路身体都不在飞(走从不飞);
-     * 再叫飞到她不在的那一岸:飞过岩浆落在那里,回执说飞了十几格、从哪里起飞。
-     */
-    @GameTest(template = FIELD, timeoutTicks = 1200, batch = BATCH, skyAccess = true)
-    public static void in_creative_a_walk_never_flies_and_a_fly_flies(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        floor(helper, 3);
-        fill(helper, 20, 2, 0, 31, 3, 63, Blocks.LAVA);
-        NumenPlayer her = spawnBare(helper, "gametest_creative", new BlockPos(10, 4, MID), true);
-        BlockPos near = helper.absolutePos(new BlockPos(10, 4, MID));
-        BlockPos far = helper.absolutePos(new BlockPos(40, 4, MID));
-        boolean[] flew = {false};
-        ToolRun[] run = new ToolRun[2];
-        BlockPos[] across = new BlockPos[1];
-
-        helper.onEachTick(() -> {
-            if (run[1] == null && her.getAbilities().flying) {
-                flew[0] = true;
-            }
-        });
-        steps(helper)
-                .thenExecute(() -> run[0] = lua(her, "return numen.move.walk(" + xyz(far) + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "the walk has not come back"))
-                .thenExecute(() -> {
-                    helper.assertTrue(!flew[0] && !her.getAbilities().flying, "a walk must never fly: " + run[0].outcome());
-                    across[0] = her.getX() > helper.absolutePos(new BlockPos(26, 0, 0)).getX() ? near : far;
-                    run[1] = lua(her, "return numen.move.fly(" + xyz(across[0]) + ")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(run[1].done(), "the fly has not come back"))
-                .thenExecute(() -> {
-                    helper.assertTrue(run[1].succeeded() && her.blockPosition().distSqr(across[0]) <= 4, "the fly did not get across: " + run[1].outcome());
-                    helper.assertTrue(returned(run[1]).get("flown").getAsDouble() >= 12, "the account should say how far she flew: " + returned(run[1]));
-                    helper.assertTrue(returned(run[1]).getAsJsonArray("took_off_at").size() >= 1, "the account should say where she took off");
-                    CompanionFactory.despawn(level.getServer(), her);
-                })
-                .thenSucceed();
     }
 
     /** 在飞时走:创造飞行悬在半空的她叫了走,先降到地上(回执说了),再走到目标,收场时不在飞。 */

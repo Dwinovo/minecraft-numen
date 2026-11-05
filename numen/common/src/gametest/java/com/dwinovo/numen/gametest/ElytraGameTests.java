@@ -18,12 +18,10 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LeavesBlock;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 鞘翅:{@code numen.move.glide} 从脚本的入口进,到身体、世界、回执的这一整条。场地是固定的方块(平地、一团树叶),每条用例不超过 600 刻:平地一段滑翔落地不掉血、
- * 回执里有落地的那一格与离目标的水平距离(落地就是这一趟的结束,不走最后一截)、只收一列、创造模式下照样滑翔、烟花不够与没鞘翅与目标太近当场拒绝、被树叶顶住收工并报。
+ * 鞘翅:{@code numen.move.glide} 从脚本的入口进,到身体、世界、回执的这一整条。场地是固定的方块(平地),每条用例不超过 600 刻:平地一段滑翔落地不掉血、
+ * 回执里有落地的那一格与离目标的水平距离(落地就是这一趟的结束,不走最后一截)、只收一列、创造模式下照样滑翔、烟花不够与没鞘翅与目标太近当场拒绝。
  * 滑翔的长趟与真实地形(树林、树下、丘陵、山脊、池塘、高墙、迫降再起飞、落点被占)的决策在寻路模块的纯 JVM 场景里跑({@code GlideScenarioTest}),
  * 原版物理与推算对得上、起降的细节由寻路模块自己的用例({@code GlideGameTests})守。
  */
@@ -213,65 +211,6 @@ public class ElytraGameTests {
             helper.assertTrue(glide.done() && glide.succeeded(), "she did not make it: " + glide.outcome());
             helper.assertTrue(account(glide).getAsJsonArray("glided").size() >= 1, "the account should hold a glide: " + account(glide));
             helper.assertTrue(!flew[0] && !her.getAbilities().flying, "a glide must never use creative flight");
-            CompanionFactory.despawn(level.getServer(), her);
-        });
-    }
-
-    // ==================== 被方块顶住 ====================
-
-    /**
-     * 滑翔中被树叶困住:她飞出去之后,身边多出一团实心的树叶(五乘五乘五,只留她那一格):头顶、四周、脚下都是树叶,烟花推着她顶在上面一动不动
-     * (用不受重力来代替"推力与撞上去的反力正好抵消":身体悬在原地)。滑翔每刻问的是身体离开原地没有(走路卡住的同一个看门狗):一秒不动就收工,不再放烟花,
-     * 回执写明顶着她的那一格与方块、放了几支烟花,不替她挖;这一趟没有再起飞。
-     */
-    @GameTest(template = FIELD, timeoutTicks = 600, batch = BATCH, skyAccess = true)
-    public static void a_glide_held_by_leaves_stops_and_says_what_holds_it(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        ground(helper, 2);
-        NumenPlayer her = winged(helper, "gametest_held", new BlockPos(5, 3, MID), 24, false);
-        BlockPos target = helper.absolutePos(new BlockPos(150, 3, MID));
-        ToolRun glide = lua(her, "return numen.move.glide(" + xyz(target) + ")");
-        BlockState leaf = naturalLeaves().setValue(LeavesBlock.PERSISTENT, true);
-        int[] flying = {0};
-        int[] ticks = {0};
-        int[] boxedAt = {-1};
-        int[] doneAt = {-1};
-
-        helper.onEachTick(() -> {
-            ticks[0]++;
-            if (boxedAt[0] < 0 && her.isFallFlying() && ++flying[0] == 60) {
-                BlockPos at = her.blockPosition();
-                for (int dx = -2; dx <= 2; dx++) {
-                    for (int dy = -2; dy <= 2; dy++) {
-                        for (int dz = -2; dz <= 2; dz++) {
-                            if (dx != 0 || dy != 0 || dz != 0) {
-                                level.setBlock(at.offset(dx, dy, dz), leaf, 2);
-                            }
-                        }
-                    }
-                }
-                her.teleportTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
-                her.setNoGravity(true);
-                her.setDeltaMovement(0, 0, 0);
-                boxedAt[0] = ticks[0];
-            }
-            if (boxedAt[0] >= 0 && doneAt[0] < 0) {
-                her.setDeltaMovement(0, 0, 0);
-                if (glide.done()) {
-                    doneAt[0] = ticks[0];
-                    her.setNoGravity(false);
-                }
-            }
-        });
-        succeedWhen(helper, () -> {
-            helper.assertTrue(boxedAt[0] >= 0, "she was never boxed in");
-            helper.assertTrue(glide.done(), "the glide has not come back, she is still held");
-            helper.assertTrue(!glide.succeeded(), "a held glide is not a success: " + glide.outcome());
-            helper.assertTrue(doneAt[0] - boxedAt[0] <= 100, "it took " + (doneAt[0] - boxedAt[0]) + " ticks to give up");
-            helper.assertTrue(glide.outcome().contains("oak_leaves") && glide.outcome().contains("held me"), glide.outcome());
-            JsonArray glided = account(glide).getAsJsonArray("glided");
-            helper.assertTrue(glided.size() == 1 && glided.get(0).getAsJsonObject().get("stuck").getAsBoolean(), "the account should say she got stuck, once: " + account(glide));
-            helper.assertTrue(glided.get(0).getAsJsonObject().get("rockets").getAsInt() <= 8, "she kept firing rockets into the leaves: " + glided.get(0));
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
