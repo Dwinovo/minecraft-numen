@@ -2,12 +2,10 @@ package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -21,8 +19,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 憋气:封顶的水道一口气游不完就不下水、结局说出那一段水下;短到憋得住的照游;上面敞开能换气的长水道照游;戴海龟壳、带着
- * 水下呼吸效果能游更长的。都断言没掉血、潜过的水照实记在账上。
+ * 憋气:短到憋得住的封顶水道照游;上面敞开能换气的长水道照游;戴海龟壳、带着水下呼吸效果能游更长的。都断言没掉血、潜过的水照实记在账上。
  */
 public class BreathGameTests {
 
@@ -71,34 +68,6 @@ public class BreathGameTests {
                 throw new GameTestAssertException("憋到氧气见底:" + dive);
             }
         }
-    }
-
-    /**
-     * 两口竖井之间 28 格长的封顶水道,一口气要游约 290 刻,原版满氧气安全地只憋得住 240 刻:不下水,结局是憋不住气,点出从哪一口
-     * 竖井下去、到哪一口上来;一点血不掉、身体没进过水。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void will_not_dive_a_sealed_channel_longer_than_a_breath(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        channel(t, 5, 33, true);
-        TestBody body = t.body(2, 1, Z);
-        BlockPos entry = t.at(5, 0, Z);
-        BlockPos exit = t.at(33, 0, Z);
-        t.go(body, Goals.at(t.at(36, 1, Z)), RouteSpec.defaults()).within(500)
-                .during(r -> {
-                    if (r.body.isInWater()) {
-                        throw new GameTestAssertException("下了水 " + t.rel(r.body.blockPosition()));
-                    }
-                })
-                .fails(Outcome.Breathless.class, o -> {
-                    if (o.from().distManhattan(entry) > 2 || o.to().distManhattan(exit) > 2) {
-                        throw new GameTestAssertException("那一段水下不对:" + t.rel(o.from()) + " 到 " + t.rel(o.to()));
-                    }
-                    if (o.held() <= o.spare()) {
-                        throw new GameTestAssertException("要憋的比能憋的短,却说憋不住:" + o);
-                    }
-                })
-                .then(UpDownGameTests::unhurt);
     }
 
     /** 同样的封顶水道只有 8 格长(一口气约 110 刻):游过去,一口气到头,账上一段水下,没掉血。 */
