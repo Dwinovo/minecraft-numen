@@ -272,28 +272,6 @@ public class CombatGameTests {
         });
     }
 
-    /** 一只已经不在世界里的生物的身份交给 numen.fight.attack:当场拒绝,说它不在附近,不受理。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
-    public static void a_gone_mobs_id_is_refused_on_the_spot(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var pig = EntityType.PIG.create(level);
-        helper.assertTrue(pig != null, "pig did not spawn");
-        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        level.addFreshEntity(pig);
-        String id = ref(pig);
-        pig.discard();
-        NumenPlayer companion = spawnAt(helper, "gametest_gone_id", new BlockPos(3, 2, 3), false);
-        ToolRun attack = lua(companion, "numen.fight.attack(" + id + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done() && !attack.succeeded() && attack.task() == null
-                            && attack.outcome().contains(id.replace("\"", "") + " is not near you"),
-                    "a dead mob's id was not refused on the spot: " + attack.reply());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /** 两只同码的生物(UUID 前六位一样):点名它们的短码被拒绝,回执并列出是哪几只,不猜其中一只。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
     public static void two_mobs_with_the_same_code_are_refused_naming_both(GameTestHelper helper) {

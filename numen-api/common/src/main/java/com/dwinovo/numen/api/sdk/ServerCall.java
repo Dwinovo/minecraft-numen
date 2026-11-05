@@ -116,11 +116,15 @@ public final class ServerCall {
     public Entity entity(EntityRef ref) {
         Entity e = ref.in(her.serverLevel());
         if (e == null || e == her) {
-            throw new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
-                    + "chunk or another dimension",
-                    Call.of("numen.scan.entities"));
+            throw notNear(ref);
         }
         return e;
+    }
+
+    /** 点名的实体此刻不在这一层世界里:当场失败,说它可能怎么了,下一步是重新看一眼附近。 */
+    static ApiError notNear(EntityRef ref) {
+        return new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
+                + "chunk or another dimension", Call.of("numen.scan.entities"));
     }
 
     /**

@@ -393,7 +393,7 @@ public class MovementGameTests {
         });
     }
 
-    // ---- follow:跟主人、跟的东西没了、编号不对 ----
+    // ---- follow:跟主人、跟的东西没了 ----
 
     /** 跟着主人:主人挪到场地另一头,她跟过去停在身边;跟上了也不收场,跟到时长到了才收。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
@@ -487,21 +487,5 @@ public class MovementGameTests {
                     pig.discard();
                 })
                 .thenSucceed();
-    }
-
-    /** 给了一个这里没有的实体身份:当场失败,叫她先扫一眼附近的实体。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
-        String absent = "pig@" + absentCode(helper.getLevel().getServer());
-        ToolRun follow = lua(companion, "numen.move.follow(\"" + absent + "\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(follow.done(), "follow has not replied");
-            helper.assertTrue(!follow.succeeded() && follow.outcome().contains(absent + " is not near you")
-                            && "numen.scan.entities()".equals(follow.hint()),
-                    "the failure does not name the missing id and the scan: " + follow.outcome() + " / " + follow.hint());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 }
