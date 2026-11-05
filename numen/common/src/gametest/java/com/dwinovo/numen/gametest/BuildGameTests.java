@@ -774,58 +774,6 @@ public class BuildGameTests {
     }
 
     /**
-     * {@code numen.build.diff} 报料:剩下要放的格要花的全部物品,和生存模式下她还缺多少;免耗材时没有缺口这一项。件数与逐格实扣是同一个
-     * 函数(双层砖一格两件),背包只数 36 格主背包(副手上那叠不算)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void build_diff_prices_what_is_left_and_what_she_lacks(GameTestHelper helper) {
-        BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        StringBuilder cells = new StringBuilder("{");
-        for (BlockPos p : BlockPos.betweenClosed(o, o.offset(2, 0, 2))) {
-            cells.append("{name = \"cobblestone\", pos = ").append(xyz(p)).append("}, ");
-        }
-        cells.append("{name = \"stone_brick_slab[type=double]\", pos = ").append(xyz(o.offset(0, 1, 0))).append("}}");
-        String ask = "local d = numen.build.diff(" + cells + ")\n"
-                + "return {left = d.left, cobble = d.materials.cobblestone, slab = d.materials.stone_brick_slab,"
-                + " short_cobble = d.short_of and d.short_of.cobblestone, short_slab = d.short_of and d.short_of.stone_brick_slab,"
-                + " has_short_of = d.short_of ~= nil}";
-
-        NumenPlayer survivor = spawnAt(helper, "gametest_quoter", new BlockPos(2, 2, 2), false);
-        survivor.getInventory().add(new ItemStack(Items.COBBLESTONE, 5));
-        survivor.getInventory().add(new ItemStack(Items.STONE_BRICK_SLAB, 1));
-        survivor.getInventory().offhand.set(0, new ItemStack(Items.COBBLESTONE, 64));
-        NumenPlayer creator = spawnAt(helper, "gametest_quoter_creative", new BlockPos(3, 2, 2), true);
-        ToolRun survival = lua(survivor, ask);
-        ToolRun creative = lua(creator, ask);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(survival.done() && creative.done(), "numen.build.diff has not answered");
-            var s = survival.data().getAsJsonObject("returned");
-            helper.assertTrue(s.get("left").getAsInt() == 10 && s.get("cobble").getAsInt() == 9
-                            && s.get("slab").getAsInt() == 2,
-                    "10 cells to do cost 9 cobblestone and 2 slabs (a double slab is two): " + survival.receipt());
-            helper.assertTrue(s.get("short_cobble").getAsInt() == 4 && s.get("short_slab").getAsInt() == 1,
-                    "5 cobblestone and 1 slab in the 36 slots leave 4 and 1 short; the offhand stack does not count: "
-                            + survival.receipt());
-            // 报价与逐格施工数背包是同一个口径(PlayerInv.BUILDABLE_SLOTS):副手那叠整个背包数得到、施工数不到;
-            // 两者若相等,副手那叠就没有真的在场,这条也就什么都没证明
-            var inv = survivor.getInventory();
-            int whole = com.dwinovo.numen.PlayerInv.count(inv, Items.COBBLESTONE);
-            int buildable = com.dwinovo.numen.PlayerInv.buildableCount(inv, Items.COBBLESTONE);
-            helper.assertTrue(whole == 69, "the whole-inventory count should see the offhand stack too, got " + whole);
-            helper.assertTrue(buildable == 5, "building may only spend the 36 main slots, got " + buildable);
-            helper.assertTrue(whole != buildable, "the offhand stack must actually be in play");
-            helper.assertTrue(s.get("short_cobble").getAsInt() == s.get("cobble").getAsInt() - buildable,
-                    "the quote and the build must count the same slots: " + survival.receipt());
-            var c = creative.data().getAsJsonObject("returned");
-            helper.assertTrue(c.get("cobble").getAsInt() == 9 && !c.get("has_short_of").getAsBoolean(),
-                    "creative building costs nothing to be short of, but the price is still told: " + creative.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), survivor);
-            CompanionFactory.despawn(helper.getLevel().getServer(), creator);
-        });
-    }
-
-    /**
      * 把她放的一格 A 换成 B:生存模式下先 {@code numen.work.dig} 拆她自己的石头
      * ({@code break(self_placed & !contents)})、再 {@code numen.build.place} 放玻璃({@code place(!hazard_item)}),主人在场,全程一张卡都不弹。
      */

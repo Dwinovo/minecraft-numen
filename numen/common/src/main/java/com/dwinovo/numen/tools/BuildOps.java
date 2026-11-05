@@ -19,6 +19,7 @@ import com.dwinovo.numen.api.sdk.ServerCall;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -96,8 +97,12 @@ public final class BuildOps {
 
     /** 她还缺多少:生存模式下按 {@code cost} 数,免耗材时没有这一项。 */
     private static Optional<Map<String, Integer>> shortOf(NumenPlayer her, Map<Item, Integer> cost) {
-        return WorkProfile.of(her).freeMaterials() ? Optional.empty()
-                : Optional.of(BuildBill.items(BuildBill.shortOf(her, cost)));
+        return shortOf(WorkProfile.of(her).freeMaterials(), her.getInventory(), cost);
+    }
+
+    /** 同上,对着免不免耗材与她的背包数。 */
+    static Optional<Map<String, Integer>> shortOf(boolean freeMaterials, Inventory carried, Map<Item, Integer> cost) {
+        return freeMaterials ? Optional.empty() : Optional.of(BuildBill.items(BuildBill.shortOf(carried, cost)));
     }
 
     /** 摆出这串格:每一格读成方块,后写覆盖先写。 */
