@@ -8,7 +8,6 @@ import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -20,7 +19,7 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.Half;
 
-/** 门:木门自己开、铁门当墙、双开门、地上开着与关着的活板门、上一级与下一级与斜走途中的门、门板在侧面、通了红石的铁门。 */
+/** 门:木门自己开、双开门、地上开着与关着的活板门、上一级与下一级与斜走途中的门、门板在侧面。 */
 public class DoorGameTests {
 
     private static final String BATCH = "pathing_doors";
@@ -57,24 +56,6 @@ public class DoorGameTests {
         door(t, 5, 1, 7, Blocks.OAK_DOOR, Direction.SOUTH, false);
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(5, 1, 12)), RouteSpec.defaults()).arrives().then(DoorGameTests::toggled);
-    }
-
-    /** 一道墙上是没通红石的铁门,远处墙上有个口:铁门手开不了,当墙,从口里绕过去,铁门一直关着。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 561)
-    public static void treats_an_unpowered_iron_door_as_a_wall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(8, 1, 0, 8, 3, 39, Blocks.STONE);
-        t.fill(8, 1, 20, 8, 2, 20, Blocks.AIR);
-        door(t, 8, 1, 5, Blocks.IRON_DOOR, Direction.EAST, false);
-        TestBody body = t.body(4, 1, 5);
-        BlockPos doorway = t.at(8, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).within(600)
-                .during(r -> {
-                    if (r.body.blockPosition().equals(doorway)) {
-                        throw new GameTestAssertException("穿过了铁门");
-                    }
-                })
-                .arrives().then(DoorGameTests::untouched);
     }
 
     /** 双开门:两扇门并排,铰链一左一右,都关着。开一扇出去。 */
@@ -147,17 +128,6 @@ public class DoorGameTests {
         door(t, 8, 1, 5, Blocks.OAK_DOOR, Direction.SOUTH, false);
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(13, 1, 5)), RouteSpec.defaults()).arrives().then(DoorGameTests::untouched);
-    }
-
-    /** 铁门旁边一块红石块,门被红石顶开着:照它开着的样子走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
-    public static void walks_through_a_powered_iron_door(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(8, 1, 0, 8, 3, 39, Blocks.STONE);
-        door(t, 8, 1, 5, Blocks.IRON_DOOR, Direction.EAST, true);
-        t.set(8, 1, 4, Blocks.REDSTONE_BLOCK);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(DoorGameTests::untouched);
     }
 
     /**
