@@ -64,6 +64,7 @@ class ApiDocsTest {
     @Test
     void aGroupIsOneTypedLinePerFunction() {
         String help = ApiDocs.help("gt.gt_pantry", Modules.factory());
+        assertTrue(help.contains("\n---@class gt.gt_pantry\n"), "the group is its own class: " + help);
         for (ApiFunction fn : pantry().functions()) {
             String line = help.lines().filter(l -> l.startsWith("---@field " + fn.name() + " ")).findFirst()
                     .orElseThrow(() -> new AssertionError(fn.name() + " is not in the group help:\n" + help));

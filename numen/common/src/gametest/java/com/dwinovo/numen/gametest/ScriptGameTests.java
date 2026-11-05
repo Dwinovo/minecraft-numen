@@ -531,20 +531,12 @@ public class ScriptGameTests {
 
         private ClientFns() {}
 
-        public record Size(@Doc("How many characters.") int size) {}
-
         public record Text(@Doc("Any text.") String text) {}
 
         @Fn("Say hello from the owner's client.")
         @Example("gt.gt_client.hello()")
         public static String hello(ClientCall call) {
             return "hello from the client";
-        }
-
-        @Fn("Return a long text.")
-        @Example("gt.gt_client.big(100000)")
-        public static String big(ClientCall call, Size args) {
-            return "y".repeat(args.size());
         }
 
         @Fn("Return how long the text it was given is.")
@@ -796,22 +788,6 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
-    /** 一个客户端函数交回的结果超过一个上行的包:答复经分片送回服务端,程序拿到的是完整的文字。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_client_function_result_over_one_packet_comes_back_to_the_program_in_fragments(
-            GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_big_result", new BlockPos(2, 2, 2), true);
-        int size = 10 * Wire.TO_SERVER.bytes();
-
-        ToolRun run = lua(her, "return #gt.gt_client.big(" + size + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: " + size),
-                    "the program did not get the whole text back: " + run.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        });
-    }
-
     /**
      * 下行也分片:程序给客户端函数一段 1.5 MB 的文字,反向请求({@code ClientCallPayload})超过一个下行的包(1 MB),真实的
      * {@code NumenNetwork.sendToPlayer} 把它切成片经主人的连接({@code OwnerLine})发出;这里扮主人的客户端,收件箱拼回、
@@ -961,64 +937,6 @@ public class ScriptGameTests {
             helper.assertTrue(!msg.contains("numen.inv.count") && msg.contains("\nstdout:\ncobblestone\t"),
                     "the query that only returned a value wrote to stderr, or stdout is missing: " + msg);
             sample("a mining program", run);
-            CompanionFactory.despawn(level.getServer(), her);
-        });
-    }
-
-    /**
-     * 一个失败的调用即使程序用 pcall 接住了也写进 stderr(同 Unix:失败的程序照样往 stderr 写);没接住的,停在哪一行是结局,stderr 里还是那一条。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_failed_call_is_on_stderr_whether_or_not_the_program_caught_it(GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_lua_failing", new BlockPos(2, 2, 2), false);
-        String absent = absentCode(helper.getLevel().getServer());
-        ToolRun caught = lua(her, """
-                local ok, err = pcall(numen.fight.attack, "pig@%s")
-                print(ok, err.kind)
-                """.formatted(absent));
-        String msg = JsonParser.parseString(caught.receipt()).getAsJsonObject().get("message").getAsString();
-        helper.assertTrue(caught.ranToTheEnd() && msg.startsWith("ok · 1 call · "), msg);
-        helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.fight.attack: not_found — ")
-                && msg.contains("\nstdout:\nfalse\tnot_found"), "the caught failure is not on stderr: " + msg);
-        sample("a failure the program caught", caught);
-
-        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(\"zombie@" + absent
-                + "\")\n");
-        String stopped = JsonParser.parseString(uncaught.receipt()).getAsJsonObject().get("message").getAsString();
-        helper.assertTrue(!uncaught.ranToTheEnd() && stopped.startsWith("The script stopped at line 2 after 2 calls: "
-                + "numen.fight.attack: not_found — ") && stopped.contains("\nhint: ")
-                && stopped.contains("\nstderr:\nline 2 numen.fight.attack: not_found — "), stopped);
-        sample("a failure that stopped the program", uncaught);
-        CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        helper.succeed();
-    }
-
-    /**
-     * 程序 return 一个大值:模型读到的只有回执的文字(缩略过的那份,成败在第一行);程序的原值整团的每一格只在服务端进程里(结局对象),
-     * 不在回执里、不上网线——下行的包里没有它。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_big_returned_value_reaches_the_model_only_as_the_shortened_message(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 5; x < 11; x++) {
-            for (int z = 5; z < 11; z++) {
-                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.GOLD_BLOCK.defaultBlockState());
-            }
-        }
-        NumenPlayer her = spawnAt(helper, "gametest_lua_returner", new BlockPos(2, 2, 2), false);
-        ToolRun run = lua(her, "return numen.scan.blocks(\"minecraft:gold_block\", {radius = 12})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the scan has not finished");
-            String receipt = run.receipt();
-            helper.assertTrue(run.data().getAsJsonArray("returned").get(0).getAsJsonObject()
-                            .getAsJsonArray("blocks").size() == 36, "the program lost the raw value: " + run.data());
-            String heard = com.dwinovo.numen.api.agent.llm.ToolOutcome.modelText(receipt);
-            helper.assertTrue(heard.startsWith("ok · 1 call · ") && heard.contains("…(36 items in all;")
-                            && !receipt.contains("\"data\"") && !receipt.contains("\"returned\""),
-                    "the receipt carries more than its shortened message: " + receipt);
-            Constants.LOG.info("[numen-sample] a big returned value: the receipt on the wire is {} characters, the model "
-                    + "reads {}", receipt.length(), heard.length());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }

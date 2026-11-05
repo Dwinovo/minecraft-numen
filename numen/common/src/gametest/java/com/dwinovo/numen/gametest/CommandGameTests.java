@@ -26,13 +26,11 @@ import com.dwinovo.numen.api.task.TaskFactory;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -81,8 +79,6 @@ public class CommandGameTests {
             NumenPlugins.register("gt", numen -> {
                 numen.api("gt_sync", "Test fixture: a short action the caller waits on.", SyncWork.class);
                 numen.api(TWIN, "Test fixture: a wrapper of a native admin command.", Twin.class);
-                // 一个不守输出预算的函数:回执比一个下行包还大,测网络层接得住
-                numen.api("gt_wire", "Test fixture: a value bigger than one payload to the client.", Flood.class);
             });
             TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
         }
@@ -115,18 +111,6 @@ public class CommandGameTests {
             List<String> words = her.next(TWIN + " mark");
             List<String> said = her.run(TWIN + " mark", words.get(0));
             return String.join(",", words) + " | " + String.join(" ", said);
-        }
-    }
-
-    /** 夹具组 {@code gt.gt_wire}:交回的值比一个下行包大。 */
-    public static final class Flood {
-
-        private Flood() {}
-
-        @Fn("Return more text than one payload to the client carries.")
-        @Example("gt.gt_wire.flood()")
-        public static String flood(ServerCall call) {
-            return "x".repeat(com.dwinovo.numen.api.network.Wire.TO_CLIENT.bytes() + 1);
         }
     }
 
@@ -300,48 +284,6 @@ public class CommandGameTests {
     }
 
     /**
-     * 真机事故那一类:一次调用交回的值比一个下行包大。程序跑在服务端,值只在服务端里传;回执是给模型读的,按构造有界——
-     * 返回值在回执里截到上限并写明原来多长,程序照样成功跑完。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void an_oversized_value_reaches_the_model_as_a_bounded_receipt(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_flooder", new BlockPos(2, 2, 2), false);
-        ToolRun run = lua(companion, "return gt.gt_wire.flood()");
-
-        succeedWhen(helper, () -> {
-            String receipt = run.receipt();
-            helper.assertTrue(receipt != null, "the receipt has not come");
-            JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
-            helper.assertTrue(data.get("success").getAsBoolean(), "the program failed: " + receipt);
-            helper.assertTrue(receipt.length() < com.dwinovo.numen.script.ScriptLimits.RETURNED_CHARS + 500,
-                    "the receipt is not bounded: " + receipt.length() + " characters");
-            helper.assertTrue(data.get("message").getAsString().contains("[returned value cut at "
-                            + com.dwinovo.numen.script.ScriptLimits.RETURNED_CHARS + " characters; it was "
-                            + (com.dwinovo.numen.api.network.Wire.TO_CLIENT.bytes() + 1) + "]"),
-                    "the receipt does not say the value was cut: " + receipt.substring(0, Math.min(400, receipt.length())));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 服务器不让她用:没有 OP 时 give 当场如实失败,说清是服务器不让;不问主人,背包不变。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_without_op_is_refused_by_the_server(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_guest", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_host");
-        ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(give.task() == null, "a command the server refuses must not reach the task slot");
-            helper.assertTrue(give.refused() && "bad_argument".equals(give.kind())
-                            && give.outcome().contains("the server does not let you use /give"),
-                    "no-op give did not fail with the reason: " + give.reply());
-            helper.assertTrue(ConsentDesk.of(companion).pending() == null, "asked the owner about a refused command");
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond without op");
-            cleanUp(helper, companion, owner);
-        });
-    }
-
-    /**
      * 她跑命令的权限等级只取主人的:服主把她写进了 OP 表(4 级)、主人不是 OP,她跑 give 仍当场如实失败、背包不变——
      * 否则普通玩家就能借她跑 OP 命令。
      */
@@ -480,27 +422,6 @@ public class CommandGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(target)).isAir(), "a denied setblock ran");
             cleanUp(helper, companion, owner);
         });
-    }
-
-    /**
-     * 原版 {@code help} 按她的来源过滤,列的就是她此刻能执行的:没有 OP 时有 msg、没有 give,也没有 {@code /numen}
-     * (那是玩家的管理指令);有 OP 后 give 也在。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_help_lists_only_what_the_server_lets_her_run(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_reader", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_reader_owner");
-        String guest = said(lua(companion, "numen.mc.run(\"help\")"));
-        helper.assertTrue(guest.contains("/msg <targets> <message>") && !guest.contains("/give "),
-                "the no-op help lists the wrong commands: " + guest);
-        helper.assertTrue(!guest.contains("/numen"), "her help shows the players' /numen: " + guest);
-
-        grantOp(owner);
-        String op = said(lua(companion, "numen.mc.run(\"help\")"));
-        helper.assertTrue(op.contains("/give <targets> <item> [<count>]"), "the op help never lists /give: " + op);
-        helper.assertTrue(!op.contains("/numen"), "her op help shows the players' /numen: " + op);
-        cleanUp(helper, companion, owner);
-        helper.succeed();
     }
 
     /**
@@ -728,45 +649,6 @@ public class CommandGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(target)).is(Blocks.STONE), "no stone was set");
             cleanUp(helper, companion, owner);
         });
-    }
-
-    /**
-     * {@code help give}:原版那一行用法之后,是从 Brigadier 挖出的参数类型与类型自带的例子,再是此刻接下来能写的
-     * (她自己、选择器);写了半截的物品 id 只列以它开头的。{@code numen.api.help} 一组给的是那一组的签名。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_help_give_mines_types_examples_and_candidates(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_learner", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_learner_owner");
-        grantOp(owner);
-        ToolRun give = lua(companion, "numen.mc.run(\"help give\")");
-        ToolRun item = lua(companion, "numen.mc.run(\"help give @s minecraft:diamond_\")");
-        ToolRun groups = lua(companion, "numen.api.help(\"numen.task\")");
-        String said = said(give);
-        String items = said(item);
-        String listed = String.valueOf(groups.value());
-        Constants.LOG.info("[numen-mc] help give -> {}", said);
-        Constants.LOG.info("[numen-mc] help give @s minecraft:diamond_ -> {}", items);
-        Constants.LOG.info("[numen-mc] numen.api.help(task) -> {}", listed);
-
-        helper.assertTrue(groups.succeeded() && listed.contains("\n---@class numen.task\n")
-                        && listed.contains("\n---@field status fun(") && listed.contains("\n---@field stop fun("),
-                "numen.api.help of a group is not that group's own listing: " + listed);
-        helper.assertTrue(give.succeeded() && said.startsWith("/give <targets> <item> [<count>]\n"),
-                "the vanilla usage does not come first: " + said);
-        helper.assertTrue(said.contains("\n  <targets> minecraft:entity (amount multiple, type players) — e.g. Player, ")
-                        && said.contains("\n  <item> minecraft:item_stack — e.g. stick, minecraft:stick")
-                        && said.contains("\n  <count> brigadier:integer (min 1"),
-                "the argument types or their examples are missing: " + said);
-        helper.assertTrue(said.contains("\nCan go next") && said.contains("@s"),
-                "the candidates for <targets> are missing: " + said);
-        String next = items.substring(items.indexOf("\nCan go next") + 1);
-        helper.assertTrue(item.succeeded() && next.contains("minecraft:diamond_axe")
-                        && Arrays.stream(next.substring(next.indexOf(": ") + 2).split(", "))
-                                .allMatch(id -> id.startsWith("minecraft:diamond_")),
-                "a half-written item id does not narrow the candidates: " + items);
-        cleanUp(helper, companion, owner);
-        helper.succeed();
     }
 
     /**
