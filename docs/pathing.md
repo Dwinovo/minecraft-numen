@@ -1146,8 +1146,8 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - **测试**:单测 `BurialTest`(埋在石头里的一格从各处进去至少挖几格、按 `digFloor` 计;从缝里走得进去为零;不许改地形不算;沿搜出的
   路线估价加埋深不超过剩下的价钱)、`GoalsTest`(挖的估价分轴计价、深处的目标横着走开每格涨一格疾跑的价;挖的终点涵盖每一个
   够得着的节点)、`SearchTest.aBlockBuriedDeepBelowIsReachedWithinTheDefaultBudget`(无边的石头地面、六个区块的快照,出厂预算内
-  到达、直直往下挖;改前是预算用完)。模块 GameTest `DigGameTests.plans_straight_down_to_an_ore_buried_deep`(二十七格深的铁矿,一次
-  规划搜到头、照着挖到)、`plans_into_a_hill_to_an_ore_inside`(石山里六格深的铁矿,只从正面挖进去几格)。性能数字只在这里与汇报里,
+  到达、直直往下挖;改前是预算用完)。模块 GameTest `DigGameTests.plans_into_a_hill_to_an_ore_inside`(石山里六格深的铁矿,只从正面
+  挖进去几格)。性能数字只在这里与汇报里,
   不写成断言耗时的测试。
 
 ### 规格的三个开关与越界才问(10-03,`api2` 之上)

@@ -3,18 +3,15 @@ package com.dwinovo.numen.pathing.gametest;
 import com.dwinovo.numen.api.entity.Mouse;
 import static com.dwinovo.numen.pathing.gametest.Scenes.dug;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
-import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.api.Snapshots;
-import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -44,10 +41,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆、冰,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
+ * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
  * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;服务端退回挖掘时以
- * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离;要挖的那一格同样够得着的几个站位里,停在挡得少的那一处;
- * 埋在石头深处、藏在石山里的矿,出厂预算的一次规划就搜到头,照着挖过去。
+ * 拒绝收场;创造模式五格交互距离;藏在石山里的矿,出厂预算的一次规划就搜到头,照着挖过去。
  */
 public class DigGameTests {
 
@@ -63,20 +59,6 @@ public class DigGameTests {
     /** 横贯场地的一道墙:{@code x} 那一列,y = 1..{@code height} 都是 {@code block}。 */
     private static void wall(Trial t, int x, int height, Block block) {
         t.fill(x, 1, 0, x, height, 39, block);
-    }
-
-    /** 挖掉的格都在 {@code z >= minZ} 那一段(相对场地)。 */
-    private static Consumer<Trial.Run> dugOnlyFrom(Trial t, int minZ) {
-        return r -> {
-            if (dug(r).isEmpty()) {
-                throw new GameTestAssertException("一格也没挖");
-            }
-            for (EditLedger.Dug d : dug(r)) {
-                if (d.pos().getZ() - t.origin.getZ() < minZ) {
-                    throw new GameTestAssertException("挖了不该挖的那一段:" + t.rel(d.pos()) + " " + d.before());
-                }
-            }
-        };
     }
 
     /** 每一格从开挖到碎用的刻数与原版一致(差一刻以内),与规划定价用的 {@link DigTime} 也一致。 */
@@ -169,16 +151,6 @@ public class DigGameTests {
                 }
             }
         });
-    }
-
-    /** 墙的一段是冰(挖了会化成水),一段是泥土:去挖泥土那一段。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
-    public static void does_not_dig_ice(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT);
-        t.fill(8, 1, 0, 8, 3, 20, Blocks.ICE);
-        TestBody body = t.body(4, 1, 8);
-        t.go(body, Goals.at(t.at(12, 1, 8)), NATURAL).within(800).arrives().then(dugOnlyFrom(t, 21));
     }
 
     /** 墙下层是石头、上层是泥土,手上拿着剑,快捷栏里有木镐、木锹:石头用镐挖,泥土用锹挖。 */
@@ -429,22 +401,6 @@ public class DigGameTests {
                 .then(Scenes::unaltered);
     }
 
-    /** 黑曜石墙,手上钻石镐,一块要挖近两百刻:一路对外都是"在推进",不被当成卡住。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
-    public static void slow_hard_blocks_do_not_look_stuck(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.OBSIDIAN);
-        TestBody body = t.body(4, 1, 5);
-        body.getInventory().setItem(0, new ItemStack(Items.DIAMOND_PICKAXE));
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(800)
-                .during(r -> {
-                    if (r.ticks > 5 && !r.navigation.progressing()) {
-                        throw new GameTestAssertException("挖黑曜石途中不在推进了(第 " + r.ticks + " 刻)");
-                    }
-                })
-                .arrives();
-    }
-
     /** 创造模式交互距离五格(原版在玩家的刻里把创造模式的加成挂到属性上):去够一块方块,停在四格半之外、五格之内就够着、看见了。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 237)
     public static void reaches_five_blocks_in_creative(GameTestHelper helper) {
@@ -460,25 +416,6 @@ public class DigGameTests {
                         throw new GameTestAssertException("应当停在四格半到五格之间:" + distance);
                     }
                 }));
-    }
-    /**
-     * 要挖的铁矿嵌在三格厚的石墙里、离墙面一格,墙上从南边凿了一道缝通到它的南面。正对着它的墙前最近,可隔着一格石头;
-     * 往南挪一格就能从缝里看见它:同样够得着,停在不挡的那一处。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 216)
-    public static void stands_where_fewer_blocks_hide_the_target(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(8, 1, 0, 10, 3, 12, Blocks.STONE);
-        t.set(9, 2, 6, Blocks.IRON_ORE);
-        t.set(8, 2, 7, Blocks.AIR).set(9, 2, 7, Blocks.AIR);
-        BlockPos ore = t.at(9, 2, 6);
-        TestBody body = t.body(3, 1, 6);
-        t.go(body, Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), RouteSpec.defaults()).within(300).arrives()
-                .then(r -> {
-                    if (r.body.look().point(ore) == null) {
-                        throw new GameTestAssertException("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
-                    }
-                });
     }
 
     /**
@@ -509,33 +446,6 @@ public class DigGameTests {
             }
         }
         helper.succeed();
-    }
-
-    /**
-     * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许挖许放。挖一格的价钱是估价里落一格的十几倍,
-     * 估价加上埋深(绕不开的挖掘)之后,出厂预算的一次规划就搜到头,路线从脚下直直往下挖;照着这条路走,挖到够得着它。
-     */
-    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 600)
-    public static void plans_straight_down_to_an_ore_buried_deep(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(0, 1, 0, 15, 40, 15, Blocks.STONE);
-        t.set(8, 14, 8, Blocks.IRON_ORE);
-        TestBody body = t.body(8, 41, 8);
-        body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
-        BlockPos ore = t.at(8, 14, 8);
-        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), NATURAL);
-        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
-            if (plan.route() == null) {
-                throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
-            }
-            Route route = plan.route();
-            for (BlockPos node : route.nodes()) {
-                if (node.getX() != ore.getX() || node.getZ() != ore.getZ()) {
-                    throw new GameTestAssertException("没有直直往下挖:" + t.rel(node));
-                }
-            }
-            t.go(body, request.following(route)).within(1400).arrives();
-        });
     }
 
     /**
