@@ -208,8 +208,13 @@ public final class NumenPlugins {
      * 字符串比,耐久一掉就推包是噪声。一个位置都没有时不出这一段。
      */
     private static String worn(NumenPlayer body) {
+        return worn(gearSlots(body));
+    }
+
+    /** 同上,对着一串已经取出来的位置(原版的四件甲在前,别的来源的接着)写。 */
+    static String worn(List<GearSlot> slots) {
         Map<String, List<String>> byName = new LinkedHashMap<>();
-        for (GearSlot slot : gearSlots(body)) {
+        for (GearSlot slot : slots) {
             ItemStack stack = slot.worn();
             byName.computeIfAbsent(slot.name(), ignored -> new ArrayList<>()).add(stack.isEmpty() ? "empty"
                     : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());

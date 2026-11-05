@@ -194,7 +194,10 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。 */
+    /**
+     * 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),两只手那一栏
+     * 只有手。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_self_status_reports_what_she_carries(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
@@ -210,6 +213,10 @@ public class PerceptionGameTests {
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            helper.assertTrue(s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
+                    "body_state does not open with the worn slots: " + status.reply());
+            helper.assertTrue(!s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
+                    + status.reply());
             helper.assertTrue(status.reply().equals(viaCommand.reply()),
                     "status_self and status self read differently: " + status.reply() + " / "
                             + viaCommand.reply());
