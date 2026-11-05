@@ -80,6 +80,8 @@ def gameTestSeed = providers.gradleProperty('gametestSeed')
 // 排查与证明稳定(见 GameTestSuites):-PgametestOnly=<全名正则> 只跑匹配的用例,-PgametestCopies=N 每条铺 N 份并行
 def gameTestOnly = providers.gradleProperty('gametestOnly')
 def gameTestCopies = providers.gradleProperty('gametestCopies')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是固定的默认一处(见 GameTestOrigin),失败日志里写着这次用的哪一处
+def gameTestOrigin = providers.gradleProperty('gametestOrigin')
 def gameTestSelection = providers.gradleProperty('gametest')
         .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
 
@@ -130,6 +132,9 @@ loom {
             }
             if (gameTestCopies.present) {
                 vmArg("-Dnumen.gametest.copies=${gameTestCopies.get()}")
+            }
+            if (gameTestOrigin.present) {
+                vmArg("-Dnumen.gametest.origin=${gameTestOrigin.get()}")
             }
             rootProject.ext.numenTerrainProperties().each { key, value -> vmArg("-D${key}=${value}") }
         }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.paper.gametest;
 
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.dwinovo.numen.api.gametest.GameTestOrigin;
 import com.dwinovo.numen.api.gametest.GameTestSuites;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -59,12 +60,12 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     /** 结果文件的系统属性。 */
     public static final String RESULT = "numen.gametest.result";
 
-    /** 场地铺在世界里的起点:离出生点远,不碰默认的出生区块;和 GameTestServer 一样贴着超平坦的地面。 */
     /** 刻与墙钟的差在这么多刻的窗口里漂移不超过 {@link #STEADY_DRIFT},就算服务端追上了墙钟。 */
     private static final int STEADY_TICKS = 100;
     private static final int STEADY_DRIFT = 2;
 
-    private static final BlockPos ORIGIN = new BlockPos(4096, -59, 4096);
+    /** 场地铺在世界里的起点:与模组加载器的测试服同一处,{@code -PgametestOrigin} 换一处({@link GameTestOrigin})。 */
+    private static final BlockPos ORIGIN = GameTestOrigin.get();
 
     /**
      * 排查用:给了系统属性 {@code numen.gametest.maxTicks}({@code -PgametestMaxTicks=…}),每条用例最多等这么多刻(见 {@link #capped}),

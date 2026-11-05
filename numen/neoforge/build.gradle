@@ -48,6 +48,8 @@ def gameTestSeed = providers.gradleProperty('gametestSeed')
 // 排查与证明稳定(见 GameTestSuites):-PgametestOnly=<全名正则> 只跑匹配的用例,-PgametestCopies=N 每条铺 N 份并行
 def gameTestOnly = providers.gradleProperty('gametestOnly')
 def gameTestCopies = providers.gradleProperty('gametestCopies')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是固定的默认一处(见 GameTestOrigin),失败日志里写着这次用的哪一处
+def gameTestOrigin = providers.gradleProperty('gametestOrigin')
 
 // GameTest 的结构模板:同步进 numen/common 的构建目录里的一处(见那边的 syncGameTestStructures),运行配置指向它。
 def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
@@ -95,6 +97,9 @@ neoForge {
             }
             if (gameTestCopies.present) {
                 systemProperties.put('numen.gametest.copies', gameTestCopies.get())
+            }
+            if (gameTestOrigin.present) {
+                systemProperties.put('numen.gametest.origin', gameTestOrigin.get())
             }
             rootProject.ext.numenTerrainProperties().each { key, value -> systemProperties.put(key, value) }
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))

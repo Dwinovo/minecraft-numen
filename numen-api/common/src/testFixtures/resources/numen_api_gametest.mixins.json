@@ -4,6 +4,7 @@
   "package": "com.dwinovo.numen.api.gametest.mixin.inject",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "GameTestServerOriginMixin",
     "GameTestServerWorldMixin",
     "StructureClearMixin"
   ],

@@ -24,6 +24,8 @@ def seed = providers.gradleProperty('gametestSeed')
 def only = providers.gradleProperty('gametestOnly')
 // 排查用:给了就把每条用例的时限收短到这么多刻(默认用每条用例自己写的,整套要一个多小时的话就是有没做成的在等满)
 def maxTicks = providers.gradleProperty('gametestMaxTicks')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是与模组加载器同一处固定的默认(见 GameTestOrigin)
+def origin = providers.gradleProperty('gametestOrigin')
 def structures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
 // 整套用例最长跑多久:超过就当没收场,杀掉服务端
 def limitMinutes = 180
@@ -71,6 +73,9 @@ tasks.register('runGameTestServer') {
         }
         if (only.present) {
             jvmArgs.add("-Dnumen.gametest.only=${only.get()}".toString())
+        }
+        if (origin.present) {
+            jvmArgs.add("-Dnumen.gametest.origin=${origin.get()}".toString())
         }
         def command = PaperServer.command(game.get(), jvmArgs, [tasks.named('gametestJar').get().archiveFile.get().asFile])
         server.get().start(command, gameDir, new HashMap<String, String>(System.getenv()), logFile)
