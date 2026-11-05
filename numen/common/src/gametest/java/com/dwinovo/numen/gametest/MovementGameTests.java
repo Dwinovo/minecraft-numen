@@ -69,34 +69,6 @@ public class MovementGameTests {
     }
 
     /**
-     * 脱困的挣脱不把飞着的身体从飞行里跳下来:创造飞行里跳键是升,七刻内连按两下还会把飞行关掉;挣脱每五刻跳一下,
-     * 对飞着的身体就成了双击,她随即摔下去、整条路线重来。飞着的身体挣脱只转向、往前,不跳。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_smoke")
-    public static void an_unstuck_wander_does_not_hop_a_flying_body_out_of_flight(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos spawn = helper.absolutePos(new BlockPos(8, 8, 8));
-        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
-                "gametest_unstuck_fly", UUID.randomUUID(), level,
-                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        companion.getAbilities().mayfly = true;
-        companion.getAbilities().flying = true;
-        companion.onUpdateAbilities();
-        com.dwinovo.numen.task.chain.UnstuckChain wander = new com.dwinovo.numen.task.chain.UnstuckChain();
-        int[] ticks = {0};
-        helper.onEachTick(() -> {
-            if (ticks[0]++ < 30) {
-                wander.tick(companion);
-            }
-        });
-        helper.runAfterDelay(40, () -> {
-            helper.assertTrue(companion.getAbilities().flying, "the wander hopped the flying body out of flight");
-            CompanionFactory.despawn(level.getServer(), companion);
-            helper.succeed();
-        });
-    }
-
-    /**
      * 开门出屋:同伴被关在四面石墙(3 高、无顶但空背包无从垫高、徒手拆墙
      * 代价高昂)的屋里,唯一出口是一扇关着的橡木门——goto 屋外目标必须
      * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的

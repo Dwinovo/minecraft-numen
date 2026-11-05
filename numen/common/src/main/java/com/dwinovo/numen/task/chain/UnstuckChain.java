@@ -90,6 +90,11 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.api.task.refl
         Controls keys = companion.controls();
         keys.press(Controls.Key.FORWARD);
         keys.release(Controls.Key.SPRINT);
-        keys.set(Controls.Key.JUMP, !companion.getAbilities().flying && wanderTicksLeft % 5 == 0);
+        keys.set(Controls.Key.JUMP, hops(companion.getAbilities().flying, wanderTicksLeft));
+    }
+
+    /** 挣脱的这一刻按不按跳:走着的身体每五刻跳一下翻过台沿;飞着的身体从不按(两下就是关掉飞行的双击)。 */
+    static boolean hops(boolean flying, int wanderTicksLeft) {
+        return !flying && wanderTicksLeft % 5 == 0;
     }
 }
