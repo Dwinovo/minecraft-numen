@@ -555,7 +555,7 @@ class SearchTest {
         assertEquals(3, column.getZ());
         BlockPos center = new BlockPos(12, Y, 0);
         BlockPos near = search(field(), defaults(), START, Goals.within(Goals.at(center), 0, 2)).route().end();
-        assertTrue(near.distSqr(center) <= 4);
+        assertTrue(near.distSqr(center) <= 4 && near.distSqr(center) > 1, "一进范围就停,不走到跟前:" + near);
         BlockPos ring = search(field(), defaults(), START, Goals.within(Goals.column(12, 0), 3, 4)).route().end();
         double d = Math.sqrt(Math.pow(ring.getX() - center.getX(), 2) + Math.pow(ring.getZ() - center.getZ(), 2));
         assertTrue(d >= 3 && d <= 4, "停在环带上,不走到中心:" + d);
