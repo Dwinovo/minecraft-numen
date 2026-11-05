@@ -123,6 +123,14 @@ class CostModelTest {
         BlockPos pond = new BlockPos(0, 60, 0);
         world.set(pond, Blocks.WATER.defaultBlockState()).set(pond.below(), STONE);
         assertEquals(Reason.FORBIDDEN, model.admitPlace(world, pond, Blocks.WATER.defaultBlockState()).refused());
+
+        // 按种类禁挖:禁的那一种不准入,别的种类照常
+        CostModel noDirt = CostModel.of(RouteSpec.defaults().edit().changes(true).consent(false)
+                .bans(new BlockBans(Set.of(Blocks.DIRT), Set.of(), Set.of())).build(), Fixtures.body(), Fixtures.ALLOW_ALL,
+                Fixtures.COBBLE, Threats.NONE);
+        BlockState dirt = Blocks.DIRT.defaultBlockState();
+        assertEquals(Reason.FORBIDDEN, noDirt.admitDig(world.set(ASK, dirt), ASK, dirt).refused());
+        assertNull(noDirt.admitDig(world, DENY, STONE).refused());
     }
 
     /** 规格按位置禁放的一格,往里放垫路料不准入,原因是"规格禁止";同一格不禁时放得进去。 */

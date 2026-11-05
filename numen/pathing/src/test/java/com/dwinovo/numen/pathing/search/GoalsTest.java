@@ -498,6 +498,11 @@ class GoalsTest {
             assertTrue(BlockPos.of(cell).getX() < 0, "站位都在西面:" + BlockPos.of(cell));
             assertEquals(Set.of(Direction.WEST), use.stands().get(cell));
         }
+        // 嵌在墙里要用的那一格,路上不挖它、不往里放,敞开的那一面前面也不放方块
+        com.dwinovo.numen.pathing.spec.PositionCosts keep = use.protection();
+        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.DIG, chest.asLong()));
+        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.PLACE, chest.asLong()));
+        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.PLACE, chest.west().asLong()));
     }
 
     /** 四面封死:没有一面敞开,也就没有站位。 */

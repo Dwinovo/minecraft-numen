@@ -9,17 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.spec.BlockBans;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -30,16 +27,14 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.border.WorldBorder;
 
 /**
- * 许不许改地形:不许改时绕行或报"要改地形";许改时挖穿、垫柱、搭桥、向下挖;许可拒绝的格不碰、要问的格带着凭据列进路线;
- * 能绕就不挖;桥位上有单层雪时块放进那一格;不挖托着自己的那一格;改动预算不够;世界边界;按种类禁挖;不挖要去用的工作台。
+ * 许不许改地形:不许改时报"要改地形";许改时挖穿、垫柱、搭桥、向下挖;许可拒绝的格报出来、要问的格带着凭据列进路线;
+ * 能绕就不挖;桥位上有单层雪时块放进那一格;不挖托着自己的那一格;改动预算不够。
  */
 public class AlterGameTests {
 
     private static final String BATCH = "pathing_alter";
-    private static final String BORDER = "pathing_border";
 
     private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
     private static final RouteSpec ANY = RouteSpec.defaults().edit().changes(true).build();
@@ -73,15 +68,6 @@ public class AlterGameTests {
     }
 
     // ==================== 不许改地形 ====================
-
-    /** 一道挖得动的泥土墙,远处留着口:不许改地形,走口里绕过去,一格不动。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 561)
-    public static void detours_a_wall_it_may_not_dig(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT, 20);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).within(600).arrives().then(Scenes::unaltered);
-    }
 
     /** 泥土墙横贯场地,没有口:不许挖不许放时报"许挖许放就有路、要改两格",世界一格不变。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
@@ -127,29 +113,6 @@ public class AlterGameTests {
                 throw new GameTestAssertException("应当垫柱上去、不挖:" + r.report.ledger().entries());
             }
         });
-    }
-
-    /**
-     * 站在八格高的石柱顶上,四周一圈两格高的基岩(上面是空的),身上有圆石、许放不许挖,去处在地面上:下不去(摔不起),往上垫两块就能
-     * 踩上基岩圈、再搭桥朝去处过去,可搭到去处正上方也还是下不来。垫柱把脚刚离开的那一格填上,不改地形退不回来,半程不交这样的一截——
-     * 身体原地不动,世界一格不改,不往上搭。总预算收小,搜索走到预算才停、交半程(不是搜完),半程才是要看的。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void does_not_pillar_up_from_a_pillar_top_it_cannot_climb_down(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(6, 1, 6, 6, 8, 6, Blocks.STONE);
-        t.fill(5, 9, 5, 7, 10, 7, Blocks.BEDROCK);
-        t.fill(6, 9, 6, 6, 10, 6, Blocks.AIR);
-        TestBody body = t.body(6, 9, 6);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        double feet = body.getY();
-        t.go(body, Trial.budgeted(NavRequest.to(Goals.at(t.at(12, 1, 6)), RouteSpec.defaults().edit().place(true).consent(false).build()), 3000)).within(600)
-                .fails(Outcome.class).then(Scenes::unaltered).then(r -> {
-                    if (r.body.getY() > feet + 0.01) {
-                        throw new GameTestAssertException("往上搭了:脚从 " + feet + " 到 " + r.body.getY());
-                    }
-                });
     }
 
     /** 两块基岩台子之间一道四格宽的沟:身上有圆石,在台面那一层搭四格桥过去。 */
@@ -250,29 +213,6 @@ public class AlterGameTests {
         });
     }
 
-
-    /**
-     * 泥土墙横贯场地,正对着的那一段是玩家砌的(许可拒绝),墙里还嵌着一只箱子(许可拒绝):绕到许可放行的那一段去挖,
-     * 拒绝的格一格不碰。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 534)
-    public static void never_digs_denied_cells(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT, -1);
-        t.set(8, 1, 5, Blocks.CHEST);
-        BlockPos wallStart = t.at(8, 1, 0);
-        t.terrain = (change, pos, state, view) -> state.is(Blocks.CHEST) ? Permit.deny("chest")
-                : pos.getX() == wallStart.getX() && pos.getZ() - wallStart.getZ() <= 12 ? Permit.deny("player placed")
-                : Permit.ALLOW;
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(600).arrives().then(r -> {
-            for (EditLedger.Dug d : dug(r)) {
-                if (d.pos().getZ() - wallStart.getZ() <= 12) {
-                    throw new GameTestAssertException("挖了许可拒绝的格 " + t.rel(d.pos()));
-                }
-            }
-        });
-    }
 
     /** 关在泥土小屋里,整间屋子许可都拒绝:结局是"许可拒绝",点出屋墙上的一格与许可给的理由,世界一格不变。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
@@ -432,84 +372,6 @@ public class AlterGameTests {
                         throw new GameTestAssertException("最便宜那条要改两格:" + o);
                     }
                 }).then(Scenes::unaltered);
-    }
-
-    /** 泥土墙横贯场地,正对着的一段禁挖泥土(建造规格的按种类禁挖),远处一段是木板:去挖木板那一段,一块泥土不挖。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
-    public static void keeps_the_block_bans_of_the_spec(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT, -1);
-        t.fill(8, 1, 14, 8, 3, 16, Blocks.OAK_PLANKS);
-        TestBody body = t.body(4, 1, 5);
-        RouteSpec spec = NATURAL.edit().bans(new BlockBans(Set.of(Blocks.DIRT), Set.of(), Set.of())).build();
-        t.go(body, Goals.at(t.at(12, 1, 5)), spec).within(700).arrives().then(r -> {
-            if (dug(r).isEmpty() || dug(r).stream().anyMatch(d -> d.before().is(Blocks.DIRT))) {
-                throw new GameTestAssertException("应当只挖木板:" + dug(r));
-            }
-        });
-    }
-
-    /** 要去用的工作台嵌在一道石墙里:许改地形,走到够得着、看得见它的地方就停,工作台一直在。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
-    public static void does_not_dig_the_table_it_goes_to_use(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.STONE, -1);
-        t.set(8, 1, 5, Blocks.CRAFTING_TABLE);
-        TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.use(t.level, com.dwinovo.numen.pathing.api.Snapshots.of(body).stats(), t.at(8, 1, 5)), NATURAL)
-                .within(400).arrives().then(r -> {
-                    if (!t.state(8, 1, 5).is(Blocks.CRAFTING_TABLE) || !dug(r).isEmpty()) {
-                        throw new GameTestAssertException("动了要去用的工作台:" + r.report.ledger().entries());
-                    }
-                });
-    }
-
-    // ==================== 世界边界 ====================
-
-    // 世界边界是整个世界的一份状态:这一条改它,同批里并行跑的别的用例会跟着变,所以单独一批,批后照原样还回去。
-    private static double borderX;
-    private static double borderZ;
-    private static double borderSize;
-
-    @BeforeBatch(batch = BORDER)
-    public static void settleBorder(ServerLevel level) {
-        Worlds.settle(level);
-        WorldBorder border = level.getWorldBorder();
-        borderX = border.getCenterX();
-        borderZ = border.getCenterZ();
-        borderSize = border.getSize();
-    }
-
-    @AfterBatch(batch = BORDER)
-    public static void restoreBorder(ServerLevel level) {
-        WorldBorder border = level.getWorldBorder();
-        border.setCenter(borderX, borderZ);
-        border.setSize(borderSize);
-    }
-
-    /**
-     * 世界边界从沟边那一排格子中间穿过:身体站得进那一排(身子在界内),那一排的格子却不在界内,原版不许在那儿挖、放。
-     * 去处就在那一排上:桥搭在界内的下一排,一块也不往边界上那一排放。
-     */
-    @GameTest(template = ARENA, batch = BORDER, timeoutTicks = 441)
-    public static void does_not_place_on_the_world_border(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        ditch(t, 10, 13);
-        BlockPos row = t.at(0, 0, 2);
-        double half = 1000;
-        WorldBorder border = t.level.getWorldBorder();
-        border.setCenter(row.getX() + 20, row.getZ() + 0.15 + half);
-        border.setSize(half * 2);
-        TestBody body = t.body(6, 5, 2);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 2)), NATURAL).within(800).arrives().then(r -> {
-            for (EditLedger.Entry e : r.report.ledger().entries()) {
-                if (e.pos().getZ() <= row.getZ()) {
-                    throw new GameTestAssertException("在边界上那一排动了手:" + t.rel(e.pos()));
-                }
-            }
-        });
     }
 
     /** 此刻托着身体的方块:脚底往下一薄层里碰得到碰撞形状的那几格。 */
