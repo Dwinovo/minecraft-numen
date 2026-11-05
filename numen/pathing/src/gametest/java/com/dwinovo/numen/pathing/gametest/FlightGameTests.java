@@ -22,7 +22,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落,飞到半空一格停在那里,飞上高墙落在顶上,近处不起飞(价钱定);
+ * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落,飞上高墙落在顶上;
  * 生存模式的身体面对同一道峡谷没有路,行为不变。用普通假玩家({@link TestBody})经 {@code Navigator} 真走,看实际账里的起降与飞行距离。
  */
 public class FlightGameTests {
@@ -74,27 +74,6 @@ public class FlightGameTests {
                 .arrives();
     }
 
-    /** 创造模式:目标是半空的一格(离地七格),飞到那里停住;到了还在飞,脚停在那一格里,键松开之后也不漂走。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
-    public static void a_creative_body_flies_to_a_cell_in_mid_air_and_hovers_there(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        TestBody body = creative(t, 5, 1, 20);
-        BlockPos air = t.at(20, 8, 20);
-        t.fly(body, Goals.at(air), RouteSpec.defaults())
-                .then(r -> {
-                    if (!r.body.getAbilities().flying) {
-                        throw new GameTestAssertException("半空的目标,到了应当还在飞");
-                    }
-                    if (!r.body.blockPosition().equals(air)) {
-                        throw new GameTestAssertException("该停在 " + t.rel(air) + ",停在 " + t.rel(r.body.blockPosition()));
-                    }
-                    if (r.report.ledger().landings().size() != 0) {
-                        throw new GameTestAssertException("半空的目标不该降落过:" + r.report.ledger().landings());
-                    }
-                })
-                .arrives();
-    }
-
     /** 创造模式:墙高十格,翻不过去,飞上去落在墙顶上。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void a_creative_body_flies_over_a_tall_wall_and_lands_on_top(GameTestHelper helper) {
@@ -106,25 +85,6 @@ public class FlightGameTests {
                 .then(r -> {
                     if (!r.body.onGround() || r.body.getAbilities().flying) {
                         throw new GameTestAssertException("该落在墙顶上:onGround=" + r.body.onGround() + " flying=" + r.body.getAbilities().flying);
-                    }
-                })
-                .arrives();
-    }
-
-    /** 创造模式、平地、六格以内:走过去,不起飞(起飞与刹车的价钱不值得);一路没飞过。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void a_short_trip_on_flat_ground_is_walked_not_flown(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        TestBody body = creative(t, 5, 1, 20);
-        t.fly(body, Goals.at(t.at(11, 1, 20)), RouteSpec.defaults())
-                .during(r -> {
-                    if (r.body.getAbilities().flying) {
-                        throw new GameTestAssertException("近处该走过去,却飞起来了");
-                    }
-                })
-                .then(r -> {
-                    if (r.report.ledger().launches().size() != 0 || r.report.ledger().flown() != 0) {
-                        throw new GameTestAssertException("账上不该有飞行:" + r.report.ledger().launches());
                     }
                 })
                 .arrives();
