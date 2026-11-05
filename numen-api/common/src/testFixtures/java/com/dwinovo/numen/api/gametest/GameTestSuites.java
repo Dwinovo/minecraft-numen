@@ -97,6 +97,7 @@ public final class GameTestSuites {
         List<TestFunction> out = new ArrayList<>();
         List<Supplier<String>> background = new ArrayList<>();
         background.add(ServerPrograms::busy);
+        background.add(com.dwinovo.numen.api.brain.ServerSkins::busy);
         ServerPrograms.meter(task -> {
             task.run();
             return PROGRAM_CALL_NANOS;

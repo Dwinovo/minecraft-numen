@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -144,6 +145,8 @@ public final class SkinSigning implements AutoCloseable {
     private final SkinCache cache;
     private final Sleeper sleeper;
     private final AtomicLong ids = new AtomicLong();
+    /** 排上了、结局还没交给主线程的张数:排上时加一,结局交出去(或排着时被撤)时减一。 */
+    private final AtomicInteger unfinished = new AtomicInteger();
     private final LinkedList<Job> queue = new LinkedList<>();
     private final Map<UUID, List<Pending>> failures = new LinkedHashMap<>();
     private final Thread worker;
@@ -187,6 +190,7 @@ public final class SkinSigning implements AutoCloseable {
             }
             job = new Job(ids.incrementAndGet(), request, listener);
             queue.add(job);
+            unfinished.incrementAndGet();
             position = queue.size();
             notifyAll();
         }
@@ -225,6 +229,7 @@ public final class SkinSigning implements AutoCloseable {
                     job.cancelled = true;
                     if (job.state == State.QUEUED) {
                         jobs.remove();
+                        unfinished.decrementAndGet();
                     }
                     announce(owner);
                     return true;
@@ -306,6 +311,16 @@ public final class SkinSigning implements AutoCloseable {
                     : new Outcome(signed.ref(), signed.skin(), null));
             changed.accept(job.request.owner());
         });
+        unfinished.decrementAndGet();
+    }
+
+    /**
+     * 有没有排上了、结局还没交给主线程的:有就是一句说明,没有是 {@code null}。只读。GameTest 服务器每刻据此等签名线程停下,
+     * 结局总在同一刻交到主线程。
+     */
+    public String busy() {
+        int left = unfinished.get();
+        return left == 0 ? null : left + " skin(s) queued or signing";
     }
 
     private Signed sign(Job job) {

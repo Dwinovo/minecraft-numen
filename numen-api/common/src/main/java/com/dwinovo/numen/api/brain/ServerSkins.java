@@ -80,6 +80,11 @@ public final class ServerSkins {
         return current;
     }
 
+    /** 这台服务器的签名队有没有没收场的({@link SkinSigning#busy}):没起过是 {@code null}。 */
+    public static synchronized String busy() {
+        return current == null ? null : current.signer.busy();
+    }
+
     public SkinSigning signer() {
         return signer;
     }
