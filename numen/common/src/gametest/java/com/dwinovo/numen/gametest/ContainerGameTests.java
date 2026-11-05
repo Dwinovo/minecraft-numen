@@ -28,7 +28,7 @@ public class ContainerGameTests {
     }
 
     /**
-     * 模型取箱子里的东西就是这四步:右键打开箱子,看一眼格子,把第 0 格整叠拿进背包,合上。每一步都照模型的
+     * 模型取箱子里的东西就是这四步:右键打开箱子,看一眼格子,把第 0 格整叠拿进背包,合上(还没开界面时关界面交回 false)。每一步都照模型的
      * 样子从工具入口调;五颗钻石到了她身上,箱子空了,界面合上。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
@@ -40,6 +40,10 @@ public class ContainerGameTests {
         // 动作放 thenExecute、断言放 thenWaitUntil:原版序列里 thenExecute 的断言失败后,后面的步骤照样在同一刻
         // 跑下去,报出来的是最后一个失败;等在 thenWaitUntil 里,哪一步没过就停在哪一步、报哪一步
         steps(helper)
+                // 还没开任何界面时关界面:不算错,交回 false
+                .thenExecute(() -> step.set(lua(companion, "numen.gui.close()")))
+                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && Boolean.FALSE.equals(step.get().value()),
+                        "closing with nothing open does not say so: " + step.get().reply()))
                 .thenExecute(() -> step.set(lua(companion, "numen.use.block(" + xyz(chest) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
@@ -73,19 +77,6 @@ public class ContainerGameTests {
             helper.assertTrue(transfer.outcome().contains("OUT OF RANGE"),
                     "the reply does not say the slot is out of range: " + transfer.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 5, "the diamonds moved");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 没开着任何方块界面时关界面:不算错,交回 false——没有开着的界面可关。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
-    public static void close_gui_with_nothing_open_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
-        ToolRun close = lua(companion, "numen.gui.close()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(close.succeeded() && Boolean.FALSE.equals(close.value()),
-                    "the reply does not say nothing was open: " + close.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

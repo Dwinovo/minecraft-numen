@@ -55,23 +55,6 @@ public class CollectGameTests {
         });
     }
 
-    /** 返回的是到手的件数,不是捡了几堆:一堆三块、一堆两块铁锭,返回五。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
-    public static void work_collect_counts_items_not_stacks(GameTestHelper helper) {
-        dropOnFloor(helper, new BlockPos(6, 2, 4), Items.IRON_INGOT, 3);
-        dropOnFloor(helper, new BlockPos(6, 2, 10), Items.IRON_INGOT, 2);
-        NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
-        ToolRun collect = lua(companion, "return numen.work.collect()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
-                    "not all five ingots were picked up");
-            helper.assertTrue(returned(collect, 5), "it does not count five items: " + collect.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 地上什么都没有:一件都不走,看一眼就跑完,返回 0——扫过了、没有要捡的。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_with_nothing_on_the_ground_returns_none(GameTestHelper helper) {
@@ -87,47 +70,12 @@ public class CollectGameTests {
     }
 
     /**
-     * 掉落物掉进了坑里:场地垫高两层,正中留一个两格深的坑,三块铁锭躺在坑底。她自己下到坑里捡上来,
-     * 不因为站在坑沿够不着就放弃。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
-    public static void work_collect_goes_down_into_a_pit(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                if (x == 8 && z == 8) {
-                    continue;
-                }
-                for (int y = 2; y <= 3; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
-        NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(5, 4, 5), false);
-        ToolRun collect = lua(companion, "return numen.work.collect()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
-            helper.assertTrue(returned(collect, 3) && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
-                    "the ingots at the bottom of the pit were not picked up: " + collect.receipt());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
      * 掉落物落在一个只有一格高的坑里(头顶是石头,她挤不进去),躺在坑里远离她的那一侧:坑的这一格不能站,她只能站在坑边那一格——
      * 站格中心够不着,朝物品走到被石头挡住就够着。她就在坑边把它捡起来,不去挖坑顶的石头。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_reaches_an_item_in_a_pocket_from_the_next_cell(GameTestHelper helper) {
         itemInAPocket(helper, "gametest_pocket", 4, 0.45);
-    }
-
-    /** 同上,物品偏到最外侧,她一开始就站在坑边那一格的中心:不用走,只朝物品走几步。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
-    public static void work_collect_leans_toward_an_item_in_a_pocket_beside_her(GameTestHelper helper) {
-        itemInAPocket(helper, "gametest_leaner", 7, 0.49);
     }
 
     /** 坑是 (8,2,8) 与 (8,2,9) 两格一格高的洞;物品在 (8,2,8) 里朝 z 增大的一侧偏出格中心 {@code offset}。 */

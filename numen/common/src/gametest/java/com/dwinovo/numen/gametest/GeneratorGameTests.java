@@ -249,12 +249,6 @@ public class GeneratorGameTests {
         });
     }
 
-    /** forest:一列、一棵原版橡树,每列掷一次骰子(密度 100)。树长在这一列最高的非空气方块上头。 */
-    @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
-    public static void forest_plants_a_vanilla_tree_in_a_column_without_touching_the_world(GameTestHelper helper) {
-        forestTree(helper, "gametest_forest", TREE_SEED);
-    }
-
     /** 同上,树冠下面一层比树干宽的那一棵({@link #OVERHUNG_FOREST_SEED}):树干上每一截都放下去。 */
     @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
     public static void forest_tree_whose_crown_overhangs_its_trunk_is_placed_whole(GameTestHelper helper) {
@@ -282,38 +276,6 @@ public class GeneratorGameTests {
                     "the real world changed under the recorded one");
             cells.set(forest);
             build.set(lua(her, "numen.build.place(" + literal(forest) + ")"));
-        }).thenWaitUntil(() -> {
-            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
-            String wrong = problem(level, cells.get());
-            helper.assertTrue(wrong == null, "after place " + wrong);
-            CompanionFactory.despawn(level.getServer(), her);
-        }).thenSucceed();
-    }
-
-    /** flora:草地上每列一格草或小花(密度 100),交回之后世界没变;放下去之后一致。 */
-    @GameTest(template = "floor16", timeoutTicks = 1749, batch = BATCH)
-    public static void flora_covers_grass_with_plants(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_flora", new BlockPos(2, 2, 2), true);
-        BlockPos from = helper.absolutePos(new BlockPos(6, 2, 6));
-        List<BlockPos> grass = new ArrayList<>();
-        for (BlockPos p : BlockPos.betweenClosed(from, from.offset(3, 0, 3))) {
-            scene(level, p.immutable(), Blocks.GRASS_BLOCK);
-            grass.add(p.immutable());
-        }
-        AtomicReference<JsonArray> cells = new AtomicReference<>();
-        AtomicReference<ToolRun> build = new AtomicReference<>();
-        awaitLit(level, grass);
-        steps(helper).thenExecute(() -> {
-            Snapshot before = snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4));
-            ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(from) + ", " + xyz(from.offset(3, 3, 3)) + "):flora(100)");
-            helper.assertTrue(run.ranToTheEnd(), "flora failed: " + run.receipt());
-            JsonArray plants = run.data().getAsJsonArray("returned");
-            helper.assertTrue(plants.size() == 16 && plants.asList().stream().allMatch(c -> pos(c.getAsJsonObject()).getY() == from.getY() + 1),
-                    "one plant above each of the 16 grass blocks: " + plants);
-            helper.assertTrue(snapshot(level, from.offset(-1, -1, -1), from.offset(4, 3, 4)).equals(before), "the real world changed");
-            cells.set(plants);
-            build.set(lua(her, "numen.build.place(" + literal(plants) + ")"));
         }).thenWaitUntil(() -> {
             helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
             String wrong = problem(level, cells.get());

@@ -253,7 +253,7 @@ public class InteractGameTests {
 
     // ---- numen.use.entity:挤奶、喂食;numen.use.block:门、拉杆、放方块 ----
 
-    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶。 */
+    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶,回执写明少了一个桶、多了一桶奶。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
@@ -270,6 +270,8 @@ public class InteractGameTests {
             helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
                     "the bucket was not filled with milk: " + milk.outcome());
+            helper.assertTrue(milk.outcome().contains("-1 minecraft:bucket") && milk.outcome().contains("+1 minecraft:milk_bucket"),
+                    "the reply does not say the bucket became milk: " + milk.outcome());
             cow.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

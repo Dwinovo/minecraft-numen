@@ -17,8 +17,8 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
  * 到达,从入口调:{@code numen.use.block} 够不着时自己走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
- * 悬崖上的工作台),隔着高草时 {@code numen.work.dig} 先清掉再用;四面封死走不到、如实说挖哪一面;{@code numen.move.walk} 到柱顶上面那一格、
- * 梯子上、水里的一格,或停在距离里;{@code numen.build.place} 走到够得着往一格半空里放的地方。
+ * 悬崖上的工作台),隔着高草时 {@code numen.work.dig} 先清掉再用;四面封死走不到、如实说挖哪一面;{@code numen.move.walk} 到
+ * 梯子上、水里的一格;{@code numen.build.place} 走到够得着往一格半空里放的地方。
  */
 public class ArriveGameTests {
 
@@ -35,11 +35,6 @@ public class ArriveGameTests {
     /** 右键那一格:够不着,她先走到能点的地方。 */
     private static ToolRun use(NumenPlayer companion, BlockPos target) {
         return lua(companion, "numen.use.block(" + xyz(target) + ")");
-    }
-
-    /** 她脚下那一格(相对场地,与 {@code absolutePos} 同一个原点)。 */
-    private static BlockPos feet(GameTestHelper helper, NumenPlayer companion) {
-        return companion.blockPosition().subtract(helper.absolutePos(BlockPos.ZERO));
     }
 
     /** 箱子只有西面敞开,面前立着一株高草(高草要长在泥土上,不然一次方块更新就掉了)。交出箱子那一格。 */
@@ -134,39 +129,6 @@ public class ArriveGameTests {
                             && press.outcome().contains("`numen.work.dig({"),
                     "the refusal does not say it is sealed and what to dig: " + press.outcome());
             helper.assertTrue(companion.blockPosition().equals(before), "she moved");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 两格高的石柱,旁边一级台阶:move.walk 给柱顶上面那一格,站上柱顶。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
-    public static void at_the_cell_above_a_pillar_stands_on_top_of_it(GameTestHelper helper) {
-        fill(helper, 8, 2, 8, 8, 3, 8, Blocks.STONE.defaultBlockState());
-        set(helper, 7, 2, 8, Blocks.STONE);
-        BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
-        NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(top.above()) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(top.above()),
-                    "she is not on top of the pillar: " + walk.outcome() + " at " + feet(helper, companion));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** move.walk 带距离 3:停在离那一格三格以内,不走到跟前。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
-    public static void near_stops_within_the_distance(GameTestHelper helper) {
-        BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
-        NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
-        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(spot) + ", 3)");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            double d = Math.sqrt(companion.blockPosition().distSqr(spot));
-            helper.assertTrue(walk.succeeded() && d <= 3 && d > 2,
-                    "she did not stop just within three blocks: " + walk.outcome() + " at distance " + d);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

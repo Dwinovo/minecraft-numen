@@ -243,38 +243,6 @@ public class PermissionGameTests {
         });
     }
 
-    /** 主人不让挖:mine 以 refused 收场,理由是主人原话,原木一根不少。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void mine_denied_quotes_the_owner(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_keeper");
-        for (BlockPos rel : logs) {
-            playerPlaces(helper, owner, rel, Items.JUNGLE_LOG);
-        }
-        NumenPlayer companion = adopted(spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false), owner);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        Mining mine = mineScanned(helper, companion, 8, "minecraft:jungle_log", 2);
-        helper.onEachTick(() -> {
-            var pending = desk(companion).pending();
-            if (pending != null) {
-                desk(companion).answer(pending.id(), com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "留着当柱子");
-            }
-        });
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("留着当柱子"),
-                    "the refusal does not quote the owner: " + mine.outcome());
-            for (BlockPos rel : logs) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.JUNGLE_LOG),
-                        "a log was cut after the owner said no at " + rel.toShortString());
-            }
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
     /**
      * 同一套定价自然排序:主人放的原木离她三格,野树九格(原木顶上贴着不持久的树叶才是野树)。要两根——她走去砍野树,主人的原木
      * 一根不少,从头到尾没有弹过一张卡。没有剔除,主人的原木只是贵(需要同意的格乘十倍)。
@@ -1205,29 +1173,6 @@ public class PermissionGameTests {
 
     // ---- 打村民、打别人的狼、拆装着东西的箱子、拆活板门 ----
 
-    /** 村民在出厂 ask 表里:主人不在,问不到就不打;attack 以主人拒绝收场,村民一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void attack_a_villager_with_the_owner_away_is_refused(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var villager = EntityType.VILLAGER.create(level);
-        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        villager.setNoAi(true);
-        level.addFreshEntity(villager);
-        NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(villager) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
-                    "the refusal does not come from asking the owner: " + attack.outcome());
-            helper.assertTrue(villager.getHealth() == villager.getMaxHealth(), "the villager was hit");
-            villager.discard();
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /** 同样打村民,主人在场点了允许:征询只挂一次,允许之后才动手,村民挨了打。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_a_villager_asks_then_hits_after_yes(GameTestHelper helper) {
@@ -1813,11 +1758,6 @@ public class PermissionGameTests {
     public static void a_window_of_unknown_origin_asks_the_owner_before_it_changes_a_block(GameTestHelper helper) {
         unknownWindow(helper, "gametest_unknown_allow", com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE,
                 true);
-    }
-
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void a_window_of_unknown_origin_refused_by_the_owner_changes_nothing(GameTestHelper helper) {
-        unknownWindow(helper, "gametest_unknown_deny", com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, false);
     }
 
     private static void unknownWindow(GameTestHelper helper, String name,

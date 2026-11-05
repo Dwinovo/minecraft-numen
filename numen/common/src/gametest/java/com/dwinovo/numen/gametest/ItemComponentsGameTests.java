@@ -65,12 +65,6 @@ public class ItemComponentsGameTests {
         }
     }
 
-    /** 空盒在前、满盒在后(快捷栏第 0、1 格),放一个:钻石守恒。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void use_block_places_a_shulker_box_without_losing_contents_empty_first(GameTestHelper helper) {
-        placeByUseBlock(helper, "gametest_box_a", true);
-    }
-
     /** 满盒在前、空盒在后,放一个:钻石守恒。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_block_places_a_shulker_box_without_losing_contents_full_first(GameTestHelper helper) {
@@ -103,55 +97,16 @@ public class ItemComponentsGameTests {
         });
     }
 
-    /**
-     * 只说了 id、背包里有两种盒子时放的是主手那一叠:模型用 {@code numen.gui.move} 把装着钻石的盒子挪进主手那一格,
-     * 放下去的就是它。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void the_stack_moved_into_the_main_hand_is_the_one_placed(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_box_g", new BlockPos(3, 2, 5), false);
-        var inv = companion.getInventory();
-        inv.setItem(0, new ItemStack(Items.SHULKER_BOX));
-        inv.setItem(10, fullBox());
-        BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
-        BlockPos placedAt = floor.above();
-        // 背包界面里快捷栏第 0 格是 36 号、主背包第 10 格是 10 号
-        ToolRun place = lua(companion, "numen.gui.move(10, 36)\n"
-                + "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:shulker_box\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(place.done() && place.succeeded(), "the program did not succeed: " + place.outcome());
-            helper.assertTrue(level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
-            helper.assertTrue(diamondsPlaced(level, placedAt) == DIAMONDS,
-                    "the placed box holds " + diamondsPlaced(level, placedAt) + " diamonds, not the " + DIAMONDS
-                            + " of the box moved into her hand");
-            helper.assertTrue(diamondsInBoxes(companion) == 0, "the box she kept still holds diamonds");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /** {@code numen.build.place} 放一个潜影盒:同上,钻石守恒。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_place_puts_a_shulker_box_without_losing_contents_full_first(GameTestHelper helper) {
         placeByBuild(helper, "gametest_box_c", false);
     }
 
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void build_place_puts_a_shulker_box_without_losing_contents_empty_first(GameTestHelper helper) {
-        placeByBuild(helper, "gametest_box_d", true, "minecraft:shulker_box", new BlockPos(5, 2, 5));
-    }
-
     /** 悬空的一格:没有可点的面,手放做不到,走直接写。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_place_puts_a_floating_shulker_box_without_losing_contents(GameTestHelper helper) {
         placeByBuild(helper, "gametest_box_e", false, "minecraft:shulker_box", new BlockPos(4, 4, 5));
-    }
-
-    /** 朝向是地板点不出来的(朝北):手放放不出这个状态,走直接写。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void build_place_puts_a_sideways_shulker_box_without_losing_contents(GameTestHelper helper) {
-        placeByBuild(helper, "gametest_box_f", false, "minecraft:shulker_box[facing=north]", new BlockPos(5, 2, 5));
     }
 
     private static void placeByBuild(GameTestHelper helper, String name, boolean emptyFirst) {

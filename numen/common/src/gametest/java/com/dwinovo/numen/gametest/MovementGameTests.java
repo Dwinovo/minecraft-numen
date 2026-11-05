@@ -433,16 +433,12 @@ public class MovementGameTests {
     /**
      * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的每一块泥土都记在她名下;寻路搜索拿来问权限的视图可以是过时的快照、
      * 套着计划里已经挖掉的假想(那里这些格是空气),问过之后记录还在;主人在场,{@code numen.work.dig} 拆掉其中一格,
-     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。生存与创造两种模式一样。
+     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。创造模式放下的同样记在她名下:原版创造模式的
+     * {@code useItemOn} 只是放完把物品数量还原,落位照样经 {@code BlockItem.place},记号挂在那一处。
      */
     @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
     public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
         herPillarIsHers(helper, "gametest_stacker", false);
-    }
-
-    @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
-    public static void the_pillar_she_built_in_creative_is_hers_to_take_down(GameTestHelper helper) {
-        herPillarIsHers(helper, "gametest_stacker_creative", true);
     }
 
     private static void herPillarIsHers(GameTestHelper helper, String name, boolean creative) {

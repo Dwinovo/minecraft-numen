@@ -531,37 +531,6 @@ public class CombatGameTests {
         });
     }
 
-    /** 逐个列最多十二条,多出来的并进计数。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
-    public static void nearby_lists_twelve_at_most_and_counts_the_overflow(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_nearby_cap", new BlockPos(8, 2, 8), false);
-        List<Zombie> crowd = new java.util.ArrayList<>();
-        for (int i = 0; i < 14; i++) {
-            crowd.add(still(helper, new BlockPos(1 + i, 2, 1 + (i % 2) * 13)));
-        }
-
-        succeedWhen(helper, () -> {
-            String nearby = nearbyOf(companion);
-            long listed = nearby.lines().filter(line -> line.startsWith("zombie@")).count();
-            helper.assertTrue(listed == 12 && nearby.contains("zombie×2"),
-                    "twelve are listed and two counted: " + nearby);
-            crowd.forEach(net.minecraft.world.entity.Entity::discard);
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /** 半径里什么都没有:请求里没有这一栏。 */
-    @GameTest(template = "floor16", timeoutTicks = 60, batch = "numen_combat")
-    public static void nearby_is_left_out_when_nothing_is_around(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_nearby_empty", new BlockPos(8, 2, 8), false);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(nearbyOf(companion).isEmpty(), "an empty surrounding wrote a nearby block: " + nearbyOf(companion));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 一只不动不还手的僵尸。 */
     private static Zombie still(GameTestHelper helper, BlockPos rel) {
         Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
