@@ -97,6 +97,10 @@ public final class GameTestSuites {
         List<TestFunction> out = new ArrayList<>();
         List<Supplier<String>> background = new ArrayList<>();
         background.add(ServerPrograms::busy);
+        ServerPrograms.meter(task -> {
+            task.run();
+            return PROGRAM_CALL_NANOS;
+        });
         for (String name : selection()) {
             GameTestSuite suite = find(name);
             if (suite == null) {
@@ -114,6 +118,12 @@ public final class GameTestSuites {
         GlobalTestReporter.replaceWith(new TestTicks(new LogTestReporter()));
         return spread(out);
     }
+
+    /**
+     * 测试服里程序的一次服务端调用记多少纳秒预算(正式运行按墙钟量):一刻的总预算 10 毫秒够两百次,一段程序的 5 毫秒够一百次。
+     * 一刻里一段程序只执行这一刻开始时排着的调用(一般一个),这个数让预算在任何并发份数下都不起作用,一刻做到哪只看调用的先后。
+     */
+    static final long PROGRAM_CALL_NANOS = 50_000;
 
     /** 快用例的时限上限(刻):日常批只收不超过它的,超过的归慢批。 */
     public static final int FAST_TICKS = 600;

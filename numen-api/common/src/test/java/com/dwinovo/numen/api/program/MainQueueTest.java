@@ -107,6 +107,52 @@ class MainQueueTest {
         assertEquals(List.of("first", "posted by first"), ran);
     }
 
+    /** 执行当中放进来的(程序被上一个调用的结果叫醒、赶在这一刻里又放了一个)留到下一刻:落在哪一刻不看程序线程赶不赶得上。 */
+    @Test
+    void aTaskPostedWhileTheTickDrainsWaitsForTheNextTick() {
+        MainQueue queue = queue();
+        MainQueue.Lane lane = queue.lane();
+        List<String> ran = new ArrayList<>();
+        lane.post(() -> {
+            ran.add("first");
+            lane.post(() -> ran.add("posted by first"));
+        });
+        queue.drain(Long.MAX_VALUE, Long.MAX_VALUE);
+        assertEquals(List.of("first"), ran);
+        queue.drain(Long.MAX_VALUE, Long.MAX_VALUE);
+        assertEquals(List.of("first", "posted by first"), ran);
+    }
+
+    /** 量法换成按次数计的,预算按它算:与执行真花了多久无关。 */
+    @Test
+    void theMeterDecidesWhatATaskCosts() {
+        MainQueue queue = queue();
+        queue.meter(task -> {
+            task.run();
+            return 1_000_000L;
+        });
+        MainQueue.Lane lane = queue.lane();
+        List<String> ran = new ArrayList<>();
+        for (String name : List.of("a", "b", "c")) {
+            lane.post(takes(0, ran, name));
+        }
+        queue.drain(Long.MAX_VALUE, 2_000_000L);
+        assertEquals(List.of("a", "b"), ran);
+    }
+
+    /** 替一段程序推进只碰它的车道。 */
+    @Test
+    void drainingOneLaneLeavesTheOthersAlone() {
+        MainQueue queue = queue();
+        MainQueue.Lane mine = queue.lane();
+        MainQueue.Lane other = queue.lane();
+        List<String> ran = new ArrayList<>();
+        mine.post(() -> ran.add("mine"));
+        other.post(() -> ran.add("other"));
+        assertEquals(1, queue.drain(mine));
+        assertEquals(List.of("mine"), ran);
+    }
+
     /** 主线程取任务,不等程序放任务:空队列一刻也不耽误。 */
     @Test
     void drainingAnEmptyQueueReturnsAtOnce() {

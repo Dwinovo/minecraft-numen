@@ -837,13 +837,14 @@ public final class GameTestKit {
     }
 
     /**
-     * 用例所在的线程就是服务端主线程:替服务端推进程序排着的调用,直到 {@code run} 的程序跑完、或停稳在等外面的事上(她派的活收尾、
-     * 主人点头)。先看程序闲不闲、再推:闲着又没有调用可执行,才没有谁还会放新的调用进来。
+     * 用例所在的线程就是服务端主线程:替服务端推进这一段程序排着的调用,直到 {@code run} 的程序跑完、或停稳在等外面的事上(她派的活收尾、
+     * 主人点头)。先看程序闲不闲、再推:闲着又没有调用可执行,才没有谁还会放新的调用进来。只推她自己的车道,同一批里别的用例的程序
+     * 照常等服务器刻,它们走到哪不随这条用例什么时候推而变。
      */
     private static void settle(NumenPlayer body, ToolRun run) {
         while (run.receipt.get() == null) {
             boolean idle = com.dwinovo.numen.api.program.ServerPrograms.idle(body.getUUID());
-            int ran = com.dwinovo.numen.api.program.ServerPrograms.pump();
+            int ran = com.dwinovo.numen.api.program.ServerPrograms.pump(body.getUUID());
             if (idle && ran == 0) {
                 return;
             }
