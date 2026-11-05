@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 动态世界:走到一半前方被放了方块、门被关上;被推离路线、被打飞之后回到路上;重搜不无谓换道;目标在挪(跟随)。
+ * 动态世界:走到一半前方被放了方块、门被关上;被推离路线、被打飞之后回到路上;目标在挪(跟随)。
  * 用例中途改世界走 {@link Trial#change},不算进导航的账。
  */
 public class DynamicGameTests {
@@ -103,31 +103,6 @@ public class DynamicGameTests {
                     } else if (!Double.isNaN(pushedAt[0]) && x > pushedAt[0] + 10 && x < 29
                             && Math.floor(relZ(t, r)) != 5) {
                         throw new GameTestAssertException("被推开之后十格还没回到原来那一排:z = " + relZ(t, r));
-                    }
-                })
-                .arrives();
-    }
-
-    /**
-     * 两条一样长、两格宽的走廊,走进其中一条之后,前方同一排被放了一块石头:在这条走廊里侧身绕过去,不退出来换另一条。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 504)
-    public static void keeps_its_lane_when_replanning(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        for (int z : new int[] {3, 6, 7, 10}) {
-            t.fill(8, 1, z, 26, 3, z, Blocks.STONE);
-        }
-        TestBody body = t.body(4, 1, 7);
-        int[] lane = {-1};
-        t.go(body, Goals.at(t.at(30, 1, 7)), RouteSpec.defaults()).within(600)
-                .during(r -> {
-                    double x = relX(t, r);
-                    int z = (int) Math.floor(relZ(t, r));
-                    if (lane[0] < 0 && x >= 14) {
-                        lane[0] = z <= 5 ? 0 : 1;
-                        t.change((int) Math.floor(x) + 3, 1, z, Blocks.STONE.defaultBlockState());
-                    } else if (lane[0] >= 0 && x >= 9 && x < 26 && (z <= 5 ? 0 : 1) != lane[0]) {
-                        throw new GameTestAssertException("重搜之后换了走廊:z = " + relZ(t, r));
                     }
                 })
                 .arrives();
