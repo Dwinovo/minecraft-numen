@@ -393,6 +393,11 @@ class MovesTest {
         TestWorld world = ledge(2);
         world.set(1, Y - 3, 0, Blocks.FARMLAND.defaultBlockState());
         assertEquals(Reason.TRAMPLES, fails(MoveKind.FALL, Fixtures.model(farm), world, AT, EAST).reason());
+        // 跳过沟落在对岸的耕地上也踩坏:跳跃的落地都算从高处落下。对岸一整片耕地,哪个落点都踩坏它,这一跳不成立
+        // (对岸是石头时同一跳成立,见 parkourIsOffByDefaultAndOnlyJumpsRealGaps)
+        CostModel leap = Fixtures.model(farm.edit().parkour(true).build());
+        holds(MoveKind.PARKOUR, leap, gap(2), AT, EAST);
+        fails(MoveKind.PARKOUR, leap, gap(2).fill(3, Y - 1, -4, 8, Y - 1, 4, Blocks.FARMLAND.defaultBlockState()), AT, EAST);
     }
 
     // ==================== 跑酷 ====================
