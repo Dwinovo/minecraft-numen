@@ -36,9 +36,16 @@ public class GeneratorGameTests {
 
     private static final String BATCH = "numen_shape";
     /**
-     * 树的两条用例长树用的种子:原版的树形随种子变,长成什么样、随后 {@code place} 怎么垫脚怎么走都跟着变,定下种子一次失败才能原样重放。
+     * 树的用例长树用的种子:原版的树形随种子变,长成什么样、随后 {@code place} 怎么垫脚怎么走都跟着变,定下种子一次失败才能原样重放。
      */
     private static final long TREE_SEED = 0;
+    /**
+     * {@code numen.shape.feature(…, "minecraft:oak")} 用这个种子长出的树,树冠下面一层比树干宽:站在地上够不着树冠里那一截树干,
+     * 而它上面一层悬空的树叶哪儿都算够得着。施工要先走去放那一截,不能先把上面一层盖上把它封死。
+     */
+    private static final long OVERHUNG_FEATURE_SEED = 1;
+    /** {@code forest("minecraft:oak_checked", 100)} 用这个种子长出的树,情形同 {@link #OVERHUNG_FEATURE_SEED}。 */
+    private static final long OVERHUNG_FOREST_SEED = 3;
 
     /** 一片世界此刻的样子:方块、有没有方块实体、两种高度图、两种光照、里面的实体数。 */
     private record Snapshot(List<BlockState> states, List<Boolean> blockEntities, List<Integer> heights, List<Integer> light,
@@ -136,8 +143,18 @@ public class GeneratorGameTests {
      */
     @GameTest(template = "floor52", timeoutTicks = 2800, batch = BATCH)
     public static void feature_grows_a_vanilla_tree_on_the_recorded_level_and_leaves_the_world_alone(GameTestHelper helper) {
+        featureTree(helper, "gametest_tree", TREE_SEED);
+    }
+
+    /** 同上,树冠下面一层比树干宽的那一棵({@link #OVERHUNG_FEATURE_SEED}):树干上每一截都放下去。 */
+    @GameTest(template = "floor52", timeoutTicks = 2800, batch = BATCH)
+    public static void feature_tree_whose_crown_overhangs_its_trunk_is_placed_whole(GameTestHelper helper) {
+        featureTree(helper, "gametest_tree_overhung", OVERHUNG_FEATURE_SEED);
+    }
+
+    private static void featureTree(GameTestHelper helper, String name, long seed) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_tree", new BlockPos(2, 2, 2), true);
+        NumenPlayer her = spawnAt(helper, name, new BlockPos(2, 2, 2), true);
         BlockPos dirt = helper.absolutePos(new BlockPos(10, 2, 10));
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
@@ -145,7 +162,7 @@ public class GeneratorGameTests {
         awaitLit(level, List.of(dirt));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-            ToolRun run = GameTestKit.shapeSeed(TREE_SEED,
+            ToolRun run = GameTestKit.shapeSeed(seed,
                     () -> lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")"));
             helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
             JsonArray tree = returned(run).getAsJsonArray("cells");
@@ -235,8 +252,18 @@ public class GeneratorGameTests {
     /** forest:一列、一棵原版橡树,每列掷一次骰子(密度 100)。树长在这一列最高的非空气方块上头。 */
     @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
     public static void forest_plants_a_vanilla_tree_in_a_column_without_touching_the_world(GameTestHelper helper) {
+        forestTree(helper, "gametest_forest", TREE_SEED);
+    }
+
+    /** 同上,树冠下面一层比树干宽的那一棵({@link #OVERHUNG_FOREST_SEED}):树干上每一截都放下去。 */
+    @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
+    public static void forest_tree_whose_crown_overhangs_its_trunk_is_placed_whole(GameTestHelper helper) {
+        forestTree(helper, "gametest_forest_overhung", OVERHUNG_FOREST_SEED);
+    }
+
+    private static void forestTree(GameTestHelper helper, String name, long seed) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_forest", new BlockPos(2, 2, 2), true);
+        NumenPlayer her = spawnAt(helper, name, new BlockPos(2, 2, 2), true);
         BlockPos dirt = helper.absolutePos(new BlockPos(10, 2, 10));
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
@@ -244,7 +271,7 @@ public class GeneratorGameTests {
         awaitLit(level, List.of(dirt));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
-            ToolRun run = GameTestKit.shapeSeed(TREE_SEED, () -> lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0))
+            ToolRun run = GameTestKit.shapeSeed(seed, () -> lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0))
                     + ", " + xyz(dirt.offset(0, 4, 0)) + "):forest(\"minecraft:oak_checked\", 100)"));
             helper.assertTrue(run.ranToTheEnd(), "forest failed: " + run.receipt());
             JsonArray forest = returned(run).getAsJsonArray("cells");

@@ -364,8 +364,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         while (budget > 0) {
             BuildTaskRecord.Target target = farthestPendingInLayer();
             if (target == null) {
-                // 这一层还有没轮到的格(站在里面的、够不着的):先收站、走去放了再往上走,不然她在坑里,墙一层层盖过头顶
-                if (layerHasUntried() || !advanceLayer()) {
+                // 这一层、或翻到下一层要跨过去的那几层还有没轮到的格(站在里面的、够不着的):先收站、走去放了再往上走,不然她在坑里,
+                // 墙一层层盖过头顶;上面悬空的格(哪儿都算够得着,直接写)也会先把下面够不着的格封死
+                if (untriedBeforeNextLayer() || !advanceLayer()) {
                     passOver = true;
                     break;
                 }
@@ -425,14 +426,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return best;
     }
 
-    /** 当前层所在的那一层高度上,有没有还没轮到过、也没对上、也不是主动不去动的格。 */
-    private boolean layerHasUntried() {
+    /**
+     * 从当前层到本遍排着的下一层之间(含当前层,不含下一层)的高度上,有没有还没轮到过、也没对上、也不是主动不去动的格。本遍只排
+     * 站在这里够得着的格,中间一整层都够不着时下一层会比当前层高出不止一格,跨过去的那几层也要算上。
+     */
+    private boolean untriedBeforeNextLayer() {
         if (layerStart >= order.size()) {
             return false;
         }
-        int y = order.get(layerStart).pos().getY();
+        int from = order.get(layerStart).pos().getY();
+        int next = layerEnd < order.size() ? order.get(layerEnd).pos().getY() : from + 1;
         for (BuildTaskRecord.Target t : r.targets) {
-            if (t.pos().getY() == y && !tried.contains(t.pos().asLong()) && !unwalkable.contains(t.pos().asLong())
+            int y = t.pos().getY();
+            if (y >= from && y < next && !tried.contains(t.pos().asLong()) && !unwalkable.contains(t.pos().asLong())
                     && !t.matches(rules.peek(t.pos())) && !rules.refused(t) && !rules.hopeless(t)) {
                 return true;
             }
