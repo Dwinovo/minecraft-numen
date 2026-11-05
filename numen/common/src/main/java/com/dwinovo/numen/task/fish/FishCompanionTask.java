@@ -66,9 +66,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(() -> findRodSlot() >= 0 ? null
-                : new Precondition.Failure("fish needs a fishing rod in inventory",
-                        FailureType.WRONG_TOOL));
+        return List.of(() -> noRod(player.getInventory()));
     }
 
     @Override
@@ -77,7 +75,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
         player.controls().stop();
 
-        int rodSlot = findRodSlot();
+        int rodSlot = findRodSlot(player.getInventory());
         if (rodSlot < 0) {
             discardHook();
             fail("fishing stopped because there is no fishing rod left", FailureType.WRONG_TOOL);
@@ -227,8 +225,14 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         }
     }
 
-    private int findRodSlot() {
-        var inventory = player.getInventory();
+    /** 背包里没有鱼竿时,开钓之前就办不成的理由;有就是 {@code null}。 */
+    static Precondition.Failure noRod(net.minecraft.world.Container inventory) {
+        return findRodSlot(inventory) >= 0 ? null
+                : new Precondition.Failure("fish needs a fishing rod in inventory", FailureType.WRONG_TOOL);
+    }
+
+    /** 背包里第一根鱼竿在哪一格;没有是 -1。 */
+    static int findRodSlot(net.minecraft.world.Container inventory) {
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);
             if (stack.is(Items.FISHING_ROD)) return i;

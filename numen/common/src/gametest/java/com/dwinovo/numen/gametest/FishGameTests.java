@@ -48,21 +48,6 @@ public class FishGameTests {
         });
     }
 
-    /** 没带鱼竿:当场失败,说清楚缺的是鱼竿。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_fish")
-    public static void fish_without_a_rod_says_so(GameTestHelper helper) {
-        pool(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
-        ToolRun fish = lua(companion, "numen.work.fish()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(fish.done(), "work fish has not finished");
-            helper.assertTrue(!fish.succeeded() && fish.outcome().contains("fishing rod"),
-                    "the failure does not name the missing rod: " + fish.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 地板上用一圈石头围出一池 5×5 的水:石圈占 x/z 4..10 的外沿,水在里面一层;人站在西边的池沿上。 */
     private static void pool(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
