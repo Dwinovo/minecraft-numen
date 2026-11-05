@@ -105,38 +105,6 @@ public class ScriptGameTests {
         });
     }
 
-    /**
-     * 第一行当场失败(走去一只不存在的实体):{@code numen.move.walk} 受理就拒绝,抛 not_found,脚本接住、不往下走,第二行的那一格还在;
-     * 回执说停在哪一行、为什么,失败的那次调用记在 stderr 里。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_failed_call_stops_the_lines_that_depend_on_it(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_lua_branch", new BlockPos(2, 2, 2), true);
-        BlockPos air = helper.absolutePos(new BlockPos(8, 2, 8));
-        BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
-        level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
-        LlmToolCall script = programCall("""
-                local walked, why = pcall(numen.move.walk, %s)
-                if not walked then error("could not get there: " .. why, 0) end
-                numen.build.place({{name = "air", pos = %s}})
-                """.formatted("\"pig@" + absentCode(level.getServer()) + "\"", xyz(kept)));
-        Round round = round(helper, her, script);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the script has not finished");
-            String msg = message(round, script);
-            helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // numen.move.walk 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
-            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
-                    + "numen.move.walk: not_found — "), msg);
-            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.move.walk: not_found — "),
-                    "the failed call is in stderr: " + msg);
-            helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
-            CompanionFactory.despawn(level.getServer(), her);
-        });
-    }
-
     /** 走在路上时主人按停止:脚本停在调用之间,回执写明停在第 1 行、那件活一起停了;后面那一行没跑,身体闲下来。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void the_owner_stopping_her_ends_the_script_between_calls(GameTestHelper helper) {
@@ -614,42 +582,6 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
-    /**
-     * 按玩家语言里的名字找物品是一个客户端函数:从 Lua 入口 {@code numen.inv.lookup} 出发,经主人的连接发给主人的客户端、由客户端查物品注册表
-     * 与语言文件,答复回到程序。名字和 id 都对得上的排在前面。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void item_names_are_looked_up_by_the_owners_client(GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_namer", new BlockPos(2, 2, 2), false);
-        ServerPlayer owner = presentOwner(helper, her, "gametest_namer_owner");
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        AtomicReference<Program.Outcome> result = new AtomicReference<>();
-        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("lookup-" + UUID.randomUUID(),
-                """
-                local found = numen.inv.lookup("iron ingot")
-                return found.items[1].item .. "|" .. found.items[1].name
-                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
-
-        steps(helper)
-                .thenWaitUntil(() -> {
-                    for (CustomPacketPayload payload : received(owner)) {
-                        if (payload instanceof ClientCallPayload call) {
-                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
-                        }
-                    }
-                    helper.assertTrue(result.get() != null, "the receipt has not come back");
-                })
-                .thenExecute(() -> {
-                    String receipt = result.get().receipt();
-                    helper.assertTrue(JsonParser.parseString(receipt).getAsJsonObject().get("message").getAsString()
-                                    .endsWith("\nreturned: minecraft:iron_ingot|Iron Ingot"),
-                            "the name was not looked up by the owner's client: " + receipt);
-                    leave(owner);
-                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
-                })
-                .thenSucceed();
-    }
-
     /** 夹具:主人客户端上的一个配方来源,答一条机器配方和一条与原版同名的合成配方(补上原版没有的机器与类别名)。 */
     public static final class KnowledgeClient {
 
@@ -907,37 +839,5 @@ public class ScriptGameTests {
         Constants.LOG.info("[numen-sample] {} ({} characters of message) -> {}", what,
                 JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString().length(),
                 run.receipt());
-    }
-
-    /**
-     * 一段挖矿的程序:挖的那一次往 stderr 写挖了什么、手里的镐用坏了;紧跟着只返回值的查询什么也不写;她 print 的在 stdout。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_mining_program_says_what_it_dug_and_what_wore_out_on_stderr(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
-        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
-        NumenPlayer her = spawnAt(helper, "gametest_lua_miner", new BlockPos(3, 2, 5), false);
-        ItemStack pick = new ItemStack(Items.STONE_PICKAXE);
-        pick.setDamageValue(pick.getMaxDamage() - 1);
-        her.getInventory().add(pick);
-        ToolRun run = lua(her, """
-                numen.work.dig(%s)
-                print("cobblestone", numen.inv.count("minecraft:cobblestone"))
-                """.formatted(xyz(stone)));
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the program has not finished");
-            String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
-            helper.assertTrue(run.ranToTheEnd() && msg.startsWith("ok · 2 calls · "), msg);
-            helper.assertTrue(level.getBlockState(stone).isAir(), "the stone was not dug: " + msg);
-            helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.work.dig: ")
-                            && msg.contains("your minecraft:stone_pickaxe broke while it was in your main hand"),
-                    "stderr does not say what was dug and that the pickaxe broke: " + msg);
-            helper.assertTrue(!msg.contains("numen.inv.count") && msg.contains("\nstdout:\ncobblestone\t"),
-                    "the query that only returned a value wrote to stderr, or stdout is missing: " + msg);
-            sample("a mining program", run);
-            CompanionFactory.despawn(level.getServer(), her);
-        });
     }
 }

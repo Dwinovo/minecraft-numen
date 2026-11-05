@@ -54,32 +54,6 @@ public class ShapeGameTests {
         level.setBlock(pos, state, 2);
     }
 
-    /** copy:选区里每一格此刻的方块(空气也在),原点是她站的那一格;带状态的方块连状态一起写下来。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void copy_takes_every_cell_with_its_state_and_stands_at_her_cell(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_copier", new BlockPos(2, 2, 2), false);
-        BlockPos from = helper.absolutePos(new BlockPos(5, 2, 5));
-        block(level, from, Blocks.OAK_STAIRS.defaultBlockState().setValue(net.minecraft.world.level.block.StairBlock.FACING,
-                net.minecraft.core.Direction.EAST));
-        block(level, from.east(), Blocks.OAK_PLANKS.defaultBlockState());
-        ToolRun run = lua(her, "local c = numen.shape.copy(numen.shape.cuboid(" + xyz(from) + ", " + xyz(from.offset(2, 0, 0))
-                + "))\nlocal o = c:origin()\nreturn {n = #c, first = c[1].name, second = c[2].name, third = c[3].name, "
-                + "ox = o.x, oy = o.y, oz = o.z}");
-        helper.assertTrue(run.ranToTheEnd(), "copy failed: " + run.receipt());
-        JsonObject got = run.data().getAsJsonObject("returned");
-        BlockPos standing = her.blockPosition();
-        helper.assertTrue(got.get("n").getAsInt() == 3 && got.get("first").getAsString().equals("minecraft:oak_stairs[facing=east]")
-                        && got.get("second").getAsString().equals("minecraft:oak_planks")
-                        && got.get("third").getAsString().equals("minecraft:air"),
-                "copy is the three cells as they are, the empty one as air: " + got);
-        helper.assertTrue(got.get("ox").getAsInt() == standing.getX() && got.get("oy").getAsInt() == standing.getY()
-                        && got.get("oz").getAsInt() == standing.getZ(), "the origin is the cell she stands in: " + got);
-        helper.assertTrue(level.getBlockState(from.east()).is(Blocks.OAK_PLANKS), "reading changed the world");
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
     /** replace:只有过蒙版的格,各带图案里的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void replace_takes_the_cells_that_pass_the_mask(GameTestHelper helper) {

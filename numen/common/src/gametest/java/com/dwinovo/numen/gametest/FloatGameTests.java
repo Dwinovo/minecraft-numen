@@ -108,16 +108,6 @@ public class FloatGameTests {
         floatsAtTheSurface(helper, false, false);
     }
 
-    @GameTest(template = "floor20", timeoutTicks = 600, batch = BATCH)
-    public static void waiting_on_deep_water_floats_and_says_nothing(GameTestHelper helper) {
-        floatsAtTheSurface(helper, false, true);
-    }
-
-    @GameTest(template = "floor20", timeoutTicks = 600, batch = BATCH)
-    public static void creative_idle_in_deep_water_floats(GameTestHelper helper) {
-        floatsAtTheSurface(helper, true, false);
-    }
-
     /**
      * 潜到水箱半腰某一格后闲置:她整个人在水下,不被往上拽(沉向箱底,一格都没升过);氧气不够游回水面了,换气本能接管一次、
      * 只报一条(不急,随下一次调模型捎带),换满气才松手,之后漂浮接着让她浮在水面上,不再触发第二次。

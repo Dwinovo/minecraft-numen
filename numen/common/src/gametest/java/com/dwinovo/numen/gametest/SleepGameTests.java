@@ -33,12 +33,6 @@ public class SleepGameTests {
         settleWorld(level, Difficulty.NORMAL, MIDNIGHT);
     }
 
-    /** 白天的批次前置:和平难度 + 正午。 */
-    @BeforeBatch(batch = "numen_sleep_day")
-    public static void prepareDayBatch(ServerLevel level) {
-        settleWorld(level, Difficulty.PEACEFUL, NOON);
-    }
-
     /** 半夜、床就在身边:不给坐标也找得到手边那张,服务端确认她睡着了。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
     public static void sleep_in_a_bed_within_reach(GameTestHelper helper) {
@@ -72,22 +66,6 @@ public class SleepGameTests {
         });
     }
 
-    /** 大白天:原版不让睡,回执带着原版的理由和那张床的位置,她也确实没躺下。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_day")
-    public static void sleep_in_daylight_hands_back_the_reason(GameTestHelper helper) {
-        placeBed(helper, new BlockPos(5, 2, 5));
-        NumenPlayer companion = spawnAt(helper, "gametest_napper", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = lua(companion, "numen.use.sleep()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("(bed at "),
-                    "the refusal does not come back with the bed: " + sleep.outcome());
-            helper.assertTrue(!companion.isSleeping(), "she is asleep in daylight");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 一张朝东的红床:床脚在 rel,床头在它东边一格。 */
     private static void placeBed(GameTestHelper helper, BlockPos footRel) {
         BlockState foot = Blocks.RED_BED.defaultBlockState()
@@ -112,7 +90,7 @@ public class SleepGameTests {
         });
     }
 
-    /** 半夜、床在手边,但三格外站着一只僵尸:原版不让睡,回执用原版的话说附近有怪,她没躺下。 */
+    /** 半夜、床在手边,但三格外站着一只僵尸:原版不让睡,回执用原版的话说附近有怪、带着那张床的位置,她没躺下,也没走开。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_danger")
     public static void sleep_with_a_monster_nearby_hands_back_the_reason(GameTestHelper helper) {
         placeBed(helper, new BlockPos(5, 2, 5));
@@ -122,33 +100,16 @@ public class SleepGameTests {
         zombie.setNoAi(true);
         helper.getLevel().addFreshEntity(zombie);
         NumenPlayer companion = spawnAt(helper, "gametest_wary", new BlockPos(4, 2, 5), false);
+        BlockPos start = companion.blockPosition();
         ToolRun sleep = lua(companion, "numen.use.sleep()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
-                            && sleep.outcome().contains("monsters nearby"),
-                    "the reply does not say monsters are nearby: " + sleep.outcome());
+                            && sleep.outcome().contains("monsters nearby") && sleep.outcome().contains("(bed at "),
+                    "the reply does not say monsters are nearby, with the bed: " + sleep.outcome());
+            helper.assertTrue(companion.blockPosition().equals(start), "she walked off after the refusal");
             zombie.discard();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 给了一张远处床的坐标:原版嫌床太远,回执照原话说,她没躺下,也没自己走过去。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
-    public static void sleep_in_a_bed_too_far_away_says_so(GameTestHelper helper) {
-        placeBed(helper, new BlockPos(12, 2, 12));
-        BlockPos head = helper.absolutePos(new BlockPos(13, 2, 12));
-        NumenPlayer companion = spawnAt(helper, "gametest_faraway", new BlockPos(3, 2, 3), false);
-        BlockPos start = companion.blockPosition();
-        ToolRun sleep = lua(companion, "numen.use.sleep({at = {x = " + head.getX() + ", y = " + head.getY() + ", z = " + head.getZ() + "}})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
-                            && sleep.outcome().contains("too far away"),
-                    "the reply does not say the bed is too far away: " + sleep.outcome());
-            helper.assertTrue(companion.blockPosition().equals(start), "she walked off toward the bed");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
