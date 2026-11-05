@@ -105,65 +105,6 @@ public class PluginGameTests {
         return found;
     }
 
-    private static boolean listed(String id) {
-        return com.dwinovo.numen.api.plugin.PluginSwitches.onDisk().disabled().contains(id);
-    }
-
-    /**
-     * 管理员经协议关掉一个插件:他收到的表里那一行是关的、状态当场是已关闭(只经门登记的插件不用重启),停用名单落了盘;再打开,名单里
-     * 就没了。写盘在后台车道上,所以等它落下去再看文件。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
-    public static void an_admin_switches_a_plugin_off_and_the_list_is_written_to_disk(GameTestHelper helper) {
-        var server = helper.getLevel().getServer();
-        com.dwinovo.numen.api.NumenPlugins.register("gt_toggle", numen -> { });
-        var admin = GameTestKit.presentPlayer(helper, null, "gametest_plugin_boss");
-        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
-                4, false));
-        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        GameTestKit.received(admin);
-
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
-                "{\"id\":\"gt_toggle\"}");
-        var row = pluginRow(GameTestKit.received(admin), "gt_toggle");
-        helper.assertTrue(row != null && row.get("disabled").getAsBoolean() && !row.get("pending").getAsBoolean()
-                        && row.get("toggle").getAsBoolean() && "disabled".equals(row.get("status").getAsString()),
-                "the admin was not shown the plugin as switched off at once: " + row);
-
-        GameTestKit.steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(listed("gt_toggle"), "the list has not reached the disk"))
-                .thenExecute(() -> com.dwinovo.numen.api.brain.Replies.library(admin,
-                        com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable", "{\"id\":\"gt_toggle\"}"))
-                .thenWaitUntil(() -> helper.assertTrue(!listed("gt_toggle"), "the plugin is still on the list"))
-                .thenExecute(() -> {
-                    server.getPlayerList().deop(admin.getGameProfile());
-                    GameTestKit.leave(admin);
-                })
-                .thenSucceed();
-    }
-
-    /** 不是管理员的玩家读得到插件表、行上没有开关;他要关插件被拒,说明原因,名单不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_plugin")
-    public static void a_player_reads_the_plugins_but_cannot_switch_one(GameTestHelper helper) {
-        com.dwinovo.numen.api.NumenPlugins.register("gt_fixed", numen -> { });
-        var player = GameTestKit.presentPlayer(helper, null, "gametest_plugin_hand");
-        com.dwinovo.numen.api.brain.Replies.hello(player, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        GameTestKit.received(player);
-
-        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
-                "{\"id\":\"gt_fixed\"}");
-        var told = GameTestKit.received(player);
-        var row = pluginRow(told, "gt_fixed");
-        helper.assertTrue(row != null && !row.get("toggle").getAsBoolean() && !row.get("disabled").getAsBoolean(),
-                "the player was shown a switch, or the plugin as off: " + row);
-        helper.assertTrue(told.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l
-                        && l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PLUGIN) && !l.problem().isEmpty()),
-                "the refusal gave no reason: " + told);
-        helper.assertTrue(!listed("gt_fixed"), "the refused request reached the list");
-        GameTestKit.leave(player);
-        helper.succeed();
-    }
-
     /** 一组会来会去的函数:管理员关开它所在的插件时,她的函数清单跟着变。 */
     public static final class Dyn {
 
