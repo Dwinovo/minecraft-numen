@@ -98,6 +98,7 @@ public final class GameTestSuites {
         List<Supplier<String>> background = new ArrayList<>();
         background.add(ServerPrograms::busy);
         background.add(com.dwinovo.numen.api.brain.ServerSkins::busy);
+        background.add(() -> com.dwinovo.numen.api.mcp.server.McpMode.instance().closing());
         ServerPrograms.meter(task -> {
             task.run();
             return PROGRAM_CALL_NANOS;

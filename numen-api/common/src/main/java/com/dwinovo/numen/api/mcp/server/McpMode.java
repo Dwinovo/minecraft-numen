@@ -286,6 +286,12 @@ public final class McpMode {
         return enabled && p != null && p.brainConnected(owner);
     }
 
+    /** 有客户端结束了会话、请求还没收场({@link McpPresence#closing}):有就是一句说明,没有(或端点没装载)是 {@code null}。 */
+    public String closing() {
+        McpPresence p = presence;
+        return p == null ? null : p.closing();
+    }
+
     /**
      * 每刻一次(大脑所在的那一端驱动):令牌作废、过期的会话结束,外部大脑连上、断开的边沿。
      * 主人有知情权——外部大脑没了得说一声,不能让她无声变成"已读不回"。

@@ -23,6 +23,14 @@ public class NumenGameTestSuite extends CompanionGameTestSuite {
         return Pace.FAST;
     }
 
+    /** 加上用例里扮外部大脑的 MCP 客户端:它在别的线程上接入。 */
+    @Override
+    public List<java.util.function.Supplier<String>> background() {
+        List<java.util.function.Supplier<String>> background = new java.util.ArrayList<>(super.background());
+        background.add(McpTestClient::busy);
+        return background;
+    }
+
     @Override
     public List<Class<?>> classes() {
         return List.of(

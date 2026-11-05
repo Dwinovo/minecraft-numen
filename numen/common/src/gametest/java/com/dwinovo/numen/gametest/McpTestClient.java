@@ -20,6 +20,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 final class McpTestClient {
 
+    /** 在别的线程上还没做完的接入:测试服每刻等它们做完({@link #busy}),接入总在发起的那一刻收尾落定。 */
+    private static final java.util.concurrent.atomic.AtomicInteger CONNECTING = new java.util.concurrent.atomic.AtomicInteger();
+
     private final int port;
     private final String secret;
     private volatile McpSyncClient client;
@@ -77,15 +80,24 @@ final class McpTestClient {
     }
 
     private void later(Runnable connecting) {
+        CONNECTING.incrementAndGet();
         Thread handshake = new Thread(() -> {
             try {
                 connecting.run();
             } catch (Throwable t) {
                 failure = t;
+            } finally {
+                CONNECTING.decrementAndGet();
             }
         }, "gametest-mcp-connect");
         handshake.setDaemon(true);
         handshake.start();
+    }
+
+    /** 有没有还没做完的接入:有就是一句说明,没有是 {@code null}。登记进测试服每刻的等待。 */
+    static String busy() {
+        int connecting = CONNECTING.get();
+        return connecting == 0 ? null : connecting + " gametest mcp client(s) still connecting";
     }
 
     /** 接入做完(或失败)后再过 {@code delay} 刻,在主线程上跑 {@code next}。 */
