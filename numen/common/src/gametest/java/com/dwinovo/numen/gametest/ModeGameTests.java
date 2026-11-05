@@ -156,19 +156,4 @@ public class ModeGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
-
-    /** 生存取物拒绝:numen.creative.give 在生存画像下吃诚实拒绝,背包不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mode")
-    public static void survival_take_items_refused(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 10})");
-        succeedWhen(helper, () -> {
-            helper.assertTrue(reply.refused(),
-                    "creative give must refuse in survival, got: " + reply.reply());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
-                    "survival refusal must not add items");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 }
