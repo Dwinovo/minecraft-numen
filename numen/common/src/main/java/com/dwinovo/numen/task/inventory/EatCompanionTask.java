@@ -37,20 +37,31 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(
-                // 无饥饿画像(创造)下:吃的动作会执行但食物不扣、饥饿不涨,
-                // 事后一切判定都失真——直接如实拒绝,别让模型收到"already full"的假诊断。
-                () -> WorkProfile.of(player).hasHunger() ? null
-                        : new Precondition.Failure(
-                                "creative mode has no hunger — eating is unnecessary; kept the "
-                                        + r.label, FailureType.UNKNOWN),
-                () -> PlayerInv.count(player.getInventory(), r.item) > 0 ? null
-                        : new Precondition.Failure("no " + r.label + " in inventory to eat",
-                                FailureType.NO_MATERIAL),
-                // Native "is this consumable?" — covers food, potions, milk, and modded consumables alike.
-                () -> new ItemStack(r.item).get(DataComponents.FOOD) != null ? null
-                        : new Precondition.Failure(r.label + " can't be eaten or drunk",
-                                FailureType.UNKNOWN));
+        return List.of(() -> refusal(WorkProfile.of(player).hasHunger(), PlayerInv.count(player.getInventory(), r.item),
+                r.item, r.label));
+    }
+
+    /**
+     * 吃之前就办不成的理由,按次序第一条;都不成立为 {@code null}。
+     *
+     * @param hasHunger 她有没有饥饿(创造模式没有)
+     * @param carried   背包里这种东西有几件
+     */
+    static Precondition.Failure refusal(boolean hasHunger, int carried, net.minecraft.world.item.Item item, String label) {
+        // 无饥饿画像(创造)下:吃的动作会执行但食物不扣、饥饿不涨,
+        // 事后一切判定都失真——直接如实拒绝,别让模型收到"already full"的假诊断。
+        if (!hasHunger) {
+            return new Precondition.Failure("creative mode has no hunger — eating is unnecessary; kept the " + label,
+                    FailureType.UNKNOWN);
+        }
+        if (carried <= 0) {
+            return new Precondition.Failure("no " + label + " in inventory to eat", FailureType.NO_MATERIAL);
+        }
+        // Native "is this consumable?" — covers food, potions, milk, and modded consumables alike.
+        if (new ItemStack(item).get(DataComponents.FOOD) == null) {
+            return new Precondition.Failure(label + " can't be eaten or drunk", FailureType.UNKNOWN);
+        }
+        return null;
     }
 
     @Override

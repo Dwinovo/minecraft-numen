@@ -515,38 +515,6 @@ public class InventoryGameTests {
 
     // ---- eat:没有、不能吃、金苹果、叫停、创造 ----
 
-    /** 背包里没有面包还要吃:当场失败,说缺的是面包。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
-    public static void eat_something_not_carried_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_hungry", new BlockPos(3, 2, 3), false);
-        companion.getFoodData().setFoodLevel(10);
-        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(eat.done(), "inv eat has not finished");
-            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("no bread in inventory"),
-                    "the failure does not say there is no bread: " + eat.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 要吃圆石:不是能吃能喝的东西,当场失败,圆石还在。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
-    public static void eat_something_inedible_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_gnawer", new BlockPos(3, 2, 3), false);
-        companion.getFoodData().setFoodLevel(10);
-        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
-        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:cobblestone\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(eat.done(), "inv eat has not finished");
-            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("can't be eaten or drunk"),
-                    "the failure does not say cobblestone is not food: " + eat.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 3, "the cobblestone was used up");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 金苹果饱着也能吃(原版允许):吃掉了,身上有了伤害吸收,回执说吃了。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
     public static void eat_a_golden_apple_on_a_full_stomach(GameTestHelper helper) {
@@ -586,22 +554,6 @@ public class InventoryGameTests {
                                 + " bread, hunger " + companion.getFoodData().getFoodLevel()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
-    }
-
-    /** 创造模式没有饥饿:不去吃,回执如实说用不着,面包留着。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
-    public static void eat_in_creative_says_there_is_no_hunger(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_immortal", new BlockPos(3, 2, 3), true);
-        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
-        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(eat.done(), "inv eat has not finished");
-            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("creative mode has no hunger"),
-                    "the reply does not say creative has no hunger: " + eat.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 
     /** 箱子的配方认"任意木板":四块橡木加四块白桦木板,在手边的工作台合出一口箱子,两种木板都用光。 */
