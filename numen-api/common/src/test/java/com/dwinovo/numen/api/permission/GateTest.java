@@ -159,6 +159,8 @@ class GateTest {
                 .asks(), "贴着主人的东西放岩浆要问");
         assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
                 .allowed(), "远处放岩浆随便");
+        assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.TNT), world)
+                .allowed(), "远处放 TNT 也随便");
         assertTrue(gate.judge(Action.place(cobble.above(), Blocks.AIR.defaultBlockState(), null), world).allowed(),
                 "规划期还不知道放什么:不危险那一行放行");
     }
@@ -276,7 +278,8 @@ class GateTest {
     @Test
     void theWildAndTheCabinAreToldApartByTheirLeaves() {
         FakeWorld world = new FakeWorld();
-        Gate gate = gate(new PlacedBlocks());
+        PlacedBlocks placed = new PlacedBlocks();
+        Gate gate = gate(placed);
 
         // 野树:原木贴着不持久的树叶
         world.set(POS, Blocks.OAK_LOG.defaultBlockState());
@@ -298,6 +301,12 @@ class GateTest {
         BlockPos bare = POS.offset(0, 0, 8);
         world.set(bare, Blocks.OAK_LOG.defaultBlockState());
         assertTrue(gate.judge(dig(world, bare), world).asks());
+
+        // 主人放下的树叶是主人的
+        BlockPos hedge = POS.offset(8, 0, 8);
+        world.set(hedge, Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.PERSISTENT, true));
+        placed.record(hedge, OWNERS);
+        assertEquals("break(owner)", gate.judge(dig(world, hedge), world).rule().toString());
     }
 
     @Test
