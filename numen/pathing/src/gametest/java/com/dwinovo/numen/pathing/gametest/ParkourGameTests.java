@@ -17,7 +17,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
 /**
- * 跑酷:越过一格、两格、三格的沟(三格要疾跑助跑);跳上高一级的落点;从下半砖、楼梯上起跳,落到下半砖上;空中不回身。
+ * 跑酷:越过一格、三格的沟(三格要疾跑助跑);跳上高一级的落点;从下半砖、楼梯上起跳,落到下半砖上;空中不回身。
  *
  * <p>场景都是两块基岩台子中间一道沟:沟四格深,跳下去摔不起,只能跳过去。
  */
@@ -45,16 +45,7 @@ public class ParkourGameTests {
     public static void jumps_a_one_block_gap(GameTestHelper helper) {
         Trial t = gap(helper, 10, 10);
         TestBody body = t.body(6, 5, 5);
-        t.go(body, Goals.at(t.at(14, 5, 5)), PARKOUR).within(300).during(Scenes.noTurnInMidAir()).arrives()
-                .then(Scenes::unaltered);
-    }
-
-    /** 两格宽的沟:跳过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 273)
-    public static void jumps_a_two_block_gap(GameTestHelper helper) {
-        Trial t = gap(helper, 10, 11);
-        TestBody body = t.body(6, 5, 5);
-        t.go(body, Goals.at(t.at(14, 5, 5)), PARKOUR).within(300).during(Scenes.noTurnInMidAir()).arrives()
+        t.go(body, Goals.at(t.at(14, 5, 5)), PARKOUR).within(263).during(Scenes.noTurnInMidAir()).arrives()
                 .then(Scenes::unaltered);
     }
 

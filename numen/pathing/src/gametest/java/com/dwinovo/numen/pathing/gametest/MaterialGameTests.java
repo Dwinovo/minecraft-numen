@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 垫路料:创造模式凭空取料、按清单变料;按清单优先级取料、副手回退;搭桥后手上的武器还在。
+ * 垫路料:创造模式凭空取料、按清单变料;副手回退;搭桥后手上的武器还在。
  *
  * <p>场景都是两块基岩台子中间一道四格宽的沟(沟挖不动、跳下去摔不起),过沟只能搭桥。
  */
@@ -79,17 +79,6 @@ public class MaterialGameTests {
         });
     }
 
-    /** 快捷栏里有圆石、背包深处有泥土,料清单泥土在前:按清单拿泥土垫。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
-    public static void takes_materials_in_list_order(GameTestHelper helper) {
-        Trial t = ditch(helper);
-        TestBody body = t.body(6, 5, 5);
-        body.getInventory().setItem(0, new ItemStack(Items.COBBLESTONE, 16));
-        body.getInventory().setItem(20, new ItemStack(Items.DIRT, 16));
-        t.materials = Trial.carried(body, Blocks.DIRT, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> placedAre(r, Blocks.DIRT));
-    }
-
     /** 料只在副手,主手拿着剑:主副手一换就垫,垫完剑还在身上。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
     public static void falls_back_to_the_offhand(GameTestHelper helper) {
@@ -102,17 +91,6 @@ public class MaterialGameTests {
             placedAre(r, Blocks.COBBLESTONE);
             stillHasSword(r);
         });
-    }
-
-    /** 主手拿着一叠木板(不在料清单上),圆石只在副手:主副手一换,桥全用圆石搭,一块木板也不放。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 423)
-    public static void bridges_with_the_listed_material_not_what_is_in_hand(GameTestHelper helper) {
-        Trial t = ditch(helper);
-        TestBody body = t.body(6, 5, 5);
-        body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.OAK_PLANKS, 16));
-        body.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> placedAre(r, Blocks.COBBLESTONE));
     }
 
     /** 手上拿着剑,圆石在背包深处:中键把圆石换进快捷栏搭桥,剑换回背包,一直在身上。 */

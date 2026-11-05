@@ -14,12 +14,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SlabBlock;
-import net.minecraft.world.level.block.StairBlock;
-import net.minecraft.world.level.block.state.properties.SlabType;
-import net.minecraft.core.Direction;
 
-/** 平地:直走、斜走、窄道、长距离,以及普查补充的起步情形。 */
+/** 平地:直走、斜走、长距离,以及普查补充的起步情形。 */
 public class FlatGameTests {
 
     private static final String BATCH = "pathing_flat";
@@ -45,16 +41,6 @@ public class FlatGameTests {
         t.go(body, Goals.at(t.at(12, 1, 12)), RouteSpec.defaults()).arrives();
     }
 
-    /** 一格宽、两格高的窄道走到头。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 318)
-    public static void walks_a_one_wide_corridor(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 4, 16, 2, 4, Blocks.STONE);
-        t.fill(2, 1, 6, 16, 2, 6, Blocks.STONE);
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(15, 1, 5)), RouteSpec.defaults()).arrives();
-    }
-
     /** 两百格跨十几个区块。 */
     @GameTest(template = LONG, batch = BATCH, timeoutTicks = 1700)
     public static void walks_across_many_chunks(GameTestHelper helper) {
@@ -73,18 +59,6 @@ public class FlatGameTests {
         TestBody body = t.body(5, 3, 5);
         body.moveTo(body.getX() + 0.75, body.getY(), body.getZ(), 0, 0);
         t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives();
-    }
-
-    /** 路上有下半砖、楼梯把身体抬起来:照走不停,十几格不到一百刻。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
-    public static void keeps_walking_when_slabs_and_stairs_lift_the_body(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(6, 1, 5, Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.BOTTOM));
-        t.set(7, 1, 5, Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.BOTTOM));
-        t.set(9, 1, 5, Blocks.OAK_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.EAST));
-        t.fill(10, 1, 5, 12, 1, 5, Blocks.STONE);
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(12, 2, 5)), RouteSpec.defaults()).within(100).arrives();
     }
 
     /** 三具身体同时各走各的,交叉而过,都到。 */

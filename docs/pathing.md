@@ -779,7 +779,7 @@ JVM 里成对交替跑、取每对耗时之比的中位数。这台机器上别�
 - **倒水接坠落与目标格保护**:按位置的"放"(`PositionCosts.Use.PLACE`)管的是放下之后留在世界上的方块;倒下的水在同一步里就
   收回,`CostModel.admitCatch` 不问它,也不加它的按位置加价;按种类禁往哪种方块里放的照问(水冲掉那一格原来的方块)。
   `SearchTest.standingOnACellNeverFillsItsOwnTwoCellsOnTheWay` 改为:有没有保护都倒水接在要站的那一格里,路上都不拿方块垫
-  那两格(身上带着圆石)。GameTest `catches_a_high_fall_right_in_the_goal_cell`:去处就是高落差的落点,水倒在那一格再收回。
+  那两格(身上带着圆石)。GameTest `catches_a_high_fall_with_a_water_bucket` 里的一具身体:去处就是高落差的落点,水倒在那一格再收回。
 - **破块冷却**:原版客户端挖碎一格之后缓 5 刻(`destroyDelay`;累着进度挖碎的与创造模式缓,秒破的不缓)。`PlayerHands` 原本就
   按第 6 刻才挖下一格,只是常数写在它自己里面,定价没算。现在规则只在 `DigTime.cooldown`,身体的手照它缓,挖一格的定价
   (`ToolChoice.handTicks`:挖到碎加缓手)按它算。GameTest `waits_out_the_vanilla_cooldown_between_two_digs` 看两格之间真缓够了。

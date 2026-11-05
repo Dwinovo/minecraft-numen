@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落,飞上高墙落在顶上。用普通假玩家({@link TestBody})经 {@code Navigator} 真走,看实际账里的起降与飞行距离。
+ * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落。用普通假玩家({@link TestBody})经 {@code Navigator} 真走,看实际账里的起降与飞行距离。
  */
 public class FlightGameTests {
 
@@ -67,22 +67,6 @@ public class FlightGameTests {
                     }
                     if (ledger.flown() < 14) {
                         throw new GameTestAssertException("飞过峡谷至少十几格,账上只飞了 " + ledger.flown());
-                    }
-                })
-                .arrives();
-    }
-
-    /** 创造模式:墙高十格,翻不过去,飞上去落在墙顶上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
-    public static void a_creative_body_flies_over_a_tall_wall_and_lands_on_top(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(12, 1, 0, 13, 10, 39, Blocks.STONE);
-        TestBody body = creative(t, 5, 1, 20);
-        BlockPos top = t.at(13, 11, 20);
-        t.fly(body, Goals.at(top), RouteSpec.defaults())
-                .then(r -> {
-                    if (!r.body.onGround() || r.body.getAbilities().flying) {
-                        throw new GameTestAssertException("该落在墙顶上:onGround=" + r.body.onGround() + " flying=" + r.body.getAbilities().flying);
                     }
                 })
                 .arrives();

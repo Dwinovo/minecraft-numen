@@ -23,7 +23,6 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -42,15 +41,6 @@ public class AlterGameTests {
         Worlds.settle(level);
     }
 
-    /** 一道横贯场地的墙,{@code height} 格高,{@code gapZ} 处留口(为负不留)。 */
-    private static void wall(Trial t, int x, int height, Block block, int gapZ) {
-        for (int z = 0; z <= 39; z++) {
-            if (z != gapZ) {
-                t.fill(x, 1, z, x, height, z, block);
-            }
-        }
-    }
-
     /** 高出地面四格、中间隔着 {@code x0..x1} 一道沟的两块基岩台子:沟挖不动,跳下去也摔不起,只能搭桥。 */
     private static void ditch(Trial t, int x0, int x1) {
         t.fill(0, 1, 0, x0 - 1, 4, 39, Blocks.BEDROCK);
@@ -60,21 +50,6 @@ public class AlterGameTests {
     // ==================== 不许改地形 ====================
 
     // ==================== 改地形 ====================
-
-    /** 泥土墙横贯场地:许挖许放,挖开身体高的两格穿过去,挖掉的正是墙上那两格。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 399)
-    public static void digs_through_a_dirt_wall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT, -1);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
-            List<EditLedger.Dug> dug = dug(r);
-            if (dug.size() != 2 || dug.stream().anyMatch(d -> d.pos().getX() - t.origin.getX() != 8
-                    || !d.before().is(Blocks.DIRT))) {
-                throw new GameTestAssertException("应当挖开墙上身体高的两格:" + dug);
-            }
-        });
-    }
 
     /** 四格高的石崖,身上有圆石:垫块上去(上四格要垫三块,最后一下跳上崖),不去空手刨石头。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 390)

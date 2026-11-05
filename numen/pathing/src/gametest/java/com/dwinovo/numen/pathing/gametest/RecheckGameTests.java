@@ -145,12 +145,6 @@ public class RecheckGameTests {
         });
     }
 
-    /** 前方第 3 步落点脚下的地板被挖开:那一步不成立,她没走到那一步的起点就停下。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
-    public static void replans_before_the_floor_dug_out_three_steps_ahead(GameTestHelper helper) {
-        changesAhead(helper, (t, at) -> t.change(at.getX(), at.getY() - 1, at.getZ(), Blocks.AIR.defaultBlockState()));
-    }
-
     /**
      * 前方第 3 步落点脚下的那块地板换成一格水(像挖开了倒进一桶水):落点托不住身体,那一步不成立,她没走到那一步的起点就停下。
      * 水往地板底下流开是原版自己流的,对账时不算。

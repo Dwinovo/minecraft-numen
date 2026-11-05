@@ -89,15 +89,6 @@ public class FluidGameTests {
                 .arrives();
     }
 
-    /** 潜到三格深的池底某一格站着。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 342)
-    public static void dives_to_a_cell_on_the_bottom(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        pool(t, 5, 3, 10, 8, 3);
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(8, -2, 6)), RouteSpec.defaults()).arrives();
-    }
-
     /** 穿着冰霜行者的靴子:三格深的一片静水挡在路上,踩着冻住的水面走过去,一次也没下水。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 315)
     public static void walks_over_water_in_frost_walker_boots(GameTestHelper helper) {

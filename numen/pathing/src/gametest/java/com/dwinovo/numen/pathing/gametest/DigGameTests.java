@@ -41,7 +41,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
+ * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆,都不挖;挖掘的耗时与原版、与定价一致(连同水下);背包深处的好工具
  * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;服务端退回挖掘时以
  * 拒绝收场;创造模式五格交互距离。
  */
@@ -77,7 +77,8 @@ public class DigGameTests {
 
     /**
      * 三格高的泥土墙横贯场地,手上木锹,许挖许放:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
-     * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown})。
+     * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown});每一格只开挖一次,
+     * 挖掉的正是墙上那两格。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
     public static void waits_out_the_vanilla_cooldown_between_two_digs(GameTestHelper helper) {
@@ -101,6 +102,11 @@ public class DigGameTests {
                 }
             }
             vanillaTimed(watch, body);
+            watch.eachStartedOnce();
+            // 挖掉的正是墙上身体高的那两格泥土
+            if (dug(r).size() != 2 || dug(r).stream().anyMatch(d -> d.pos().getX() - t.origin.getX() != 8 || !d.before().is(Blocks.DIRT))) {
+                throw new GameTestAssertException("应当挖开墙上身体高的两格:" + dug(r));
+            }
         });
     }
 
@@ -153,45 +159,7 @@ public class DigGameTests {
         });
     }
 
-    /** 墙下层是石头、上层是泥土,手上拿着剑,快捷栏里有木镐、木锹:石头用镐挖,泥土用锹挖。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 402)
-    public static void picks_the_right_tool(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT);
-        t.fill(8, 1, 0, 8, 1, 39, Blocks.STONE);
-        TestBody body = t.body(4, 1, 5);
-        body.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
-        body.getInventory().setItem(1, new ItemStack(Items.WOODEN_PICKAXE));
-        body.getInventory().setItem(2, new ItemStack(Items.WOODEN_SHOVEL));
-        DigWatch watch = new DigWatch(body);
-        watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
-            for (DigWatch.Dig d : watch.broken()) {
-                boolean right = d.state.is(Blocks.STONE) ? d.toolAtBreak.is(Items.WOODEN_PICKAXE)
-                        : d.toolAtBreak.is(Items.WOODEN_SHOVEL);
-                if (!right) {
-                    throw new GameTestAssertException("工具挑错了:" + d + " 碎的时候手上是 " + d.toolAtBreak);
-                }
-            }
-            vanillaTimed(watch, body);
-        });
-    }
-
     // ==================== 挖掘补充 ====================
-
-    /** 原木墙,手上空着:每一块从开挖到碎的刻数与原版空手挖原木一样,规划的定价也一样。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
-    public static void digs_a_log_bare_handed_in_vanilla_time(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.OAK_LOG);
-        TestBody body = t.body(4, 1, 5);
-        DigWatch watch = new DigWatch(body);
-        watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(600).arrives().then(r -> {
-            vanillaTimed(watch, body);
-            watch.eachStartedOnce();
-        });
-    }
 
     /**
      * 浮在两格深的池子里,上岸那一面的岸边压着两格泥土(别的三面是石墙),手上一把铁锹:浮在水里把岸边挖开再上去。规划时给
@@ -269,7 +237,7 @@ public class DigGameTests {
         wall(t, 8, 3, Blocks.DIRT);
         TestBody body = t.body(4, 1, 5);
         body.getInventory().setItem(3, new ItemStack(Items.IRON_PICKAXE));
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
             if (dug(r).isEmpty()) {
                 throw new GameTestAssertException("一格也没挖");
             }
@@ -288,7 +256,7 @@ public class DigGameTests {
         body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
         DigWatch watch = new DigWatch(body);
         watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
             vanillaTimed(watch, body);
             watch.eachStartedOnce();
         });

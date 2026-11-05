@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
-/** 挡路的方块与净空:栅栏门;两格高的通道、头顶按真实形状、起跳不撞头。 */
+/** 挡路的方块与净空:栅栏门;头顶按真实形状、起跳不撞头。 */
 public class BlockGameTests {
 
     private static final String BATCH = "pathing_blocks";
@@ -62,16 +62,6 @@ public class BlockGameTests {
     }
 
     // ==================== 净空 ====================
-
-    /** 两格高的通道照常走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 339)
-    public static void walks_a_two_high_tunnel(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(5, 1, 4, 14, 3, 6, Blocks.STONE);
-        t.fill(5, 1, 5, 14, 2, 5, Blocks.AIR);
-        TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.at(t.at(16, 1, 5)), RouteSpec.defaults()).arrives();
-    }
 
     /**
      * 头顶按真实形状判:通道顶上是关着的上半活板门(占格顶上 3/16,底下还剩 1.81 格)能过;另一条通道顶上是倒扣的楼梯

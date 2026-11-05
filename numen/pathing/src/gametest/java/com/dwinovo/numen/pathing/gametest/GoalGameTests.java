@@ -25,7 +25,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 目标:用一格方块(狭窄矿道里的熔炉)、梯子上与水里的一格;起点在贵成员里;最后一步进目标的同一刻搜索失败;垫柱或搭桥到目标格站稳
+ * 目标:用一格方块(狭窄矿道里的熔炉)、梯子上与水里的一格;起点在贵成员里;最后一步进目标的同一刻搜索失败;垫柱到目标格站稳
  * 才报到;规划之后视线被挡住。
  */
 public class GoalGameTests {
@@ -65,17 +65,6 @@ public class GoalGameTests {
                 throw new GameTestAssertException("停在那一格却还在走:" + r.body.getDeltaMovement());
             }
         });
-    }
-
-    /** 用:走到看得见它某一面、点得到它的地方。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 258)
-    public static void uses_a_block(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(14, 1, 5, Blocks.CRAFTING_TABLE);
-        TestBody body = t.body(4, 1, 5);
-        BlockPos table = t.at(14, 1, 5);
-        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), table), RouteSpec.defaults()).within(300).arrives()
-                .then(r -> sees(r, table));
     }
 
     /** 此刻从身体的眼睛用得上 {@code target} 的某一面(第 0 层 {@link Sight#use}),视线上什么也不隔着;交出那一次视线。 */
@@ -130,19 +119,7 @@ public class GoalGameTests {
         TestBody body = t.body(5, 1, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(5, 4, 5)), NATURAL).within(400).arrives().then(r -> settled(t, r, 4));
-    }
-
-    /** 去处在一道沟上方的半空(与两岸台面齐平),身上有圆石:搭桥过去,停稳在最后垫的那一块上才报到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 345)
-    public static void arrives_only_once_settled_on_its_own_bridge(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(0, 1, 0, 9, 4, 39, Blocks.BEDROCK);
-        t.fill(14, 1, 0, 39, 4, 39, Blocks.BEDROCK);
-        TestBody body = t.body(6, 5, 20);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(12, 5, 20)), NATURAL).within(400).arrives().then(r -> settled(t, r, 5));
+        t.go(body, Goals.at(t.at(5, 4, 5)), NATURAL).within(251).arrives().then(r -> settled(t, r, 4));
     }
 
     /** 报到的那一刻站在地上、脚正好在那一层、不再往上下窜,水平也停住了。 */

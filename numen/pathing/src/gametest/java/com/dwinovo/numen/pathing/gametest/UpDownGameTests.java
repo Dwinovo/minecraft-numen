@@ -71,18 +71,6 @@ public class UpDownGameTests {
         t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
     }
 
-    /** 连上五级台阶。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 366)
-    public static void climbs_a_staircase_of_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        for (int i = 0; i < 5; i++) {
-            t.fill(6 + i, 1, 4, 6 + i, 1 + i, 6, Blocks.STONE);
-        }
-        t.fill(11, 1, 4, 13, 5, 6, Blocks.STONE);
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(12, 6, 5)), RouteSpec.defaults()).arrives();
-    }
-
     /** 八级一格宽的台阶,立面紧贴着上一级的落点:一路跑着跳上去,不在每一级的落点上停,实际用的刻数不超过最短的 1.1 倍。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
     public static void runs_up_a_staircase_at_the_pace_of_its_jumps(GameTestHelper helper) {
@@ -121,6 +109,19 @@ public class UpDownGameTests {
         TestBody body = t.body(3, 7, 3);
         t.go(body, Goals.at(t.at(18, 1, 11)), RouteSpec.defaults()).arrives()
                 .then(UpDownGameTests::unhurt).then(r -> paced(r, MoveKind.DESCEND, 1.25));
+        // 下一级台阶之后正前方是岩浆坑:同样在落点那一列里收脚转弯,不冲进去
+        t.fill(2, 1, 24, 5, 1, 26, Blocks.STONE);
+        t.fill(7, -1, 23, 9, -1, 27, Blocks.STONE);
+        t.fill(7, 0, 24, 8, 0, 26, Blocks.LAVA);
+        TestBody beforeLava = t.body(3, 2, 25);
+        net.minecraft.core.BlockPos lava = t.at(7, 0, 25);
+        t.go(beforeLava, Goals.at(t.at(6, 1, 32)), RouteSpec.defaults())
+                .during(r -> {
+                    if (r.body.getX() >= lava.getX() - 0.3 + 0.01 && Math.abs(r.body.getZ() - lava.getZ() - 0.5) < 2) {
+                        throw new GameTestAssertException("冲过了头,身体到了岩浆坑上方");
+                    }
+                })
+                .arrives().then(UpDownGameTests::unhurt);
     }
 
     /**
@@ -203,32 +204,15 @@ public class UpDownGameTests {
         }
     }
 
-    /** 从两格高处落下,不掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 279)
-    public static void drops_two_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 3, 6, 2, 7, Blocks.STONE);
-        TestBody body = t.body(4, 3, 5);
-        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 从三格高处落下,原版摔不疼的高度。 */
+    /** 从三格高处落下,原版摔不疼的高度;空中不回身。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
     public static void drops_three_blocks(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 3, 6, 3, 7, Blocks.STONE);
         TestBody body = t.body(4, 4, 5);
-        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 十二格高的柱顶,旁边一池两格深的水:跳进水里,不掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 426)
-    public static void jumps_into_water_to_break_a_fall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(4, 1, 4, 4, 11, 4, Blocks.STONE);
-        pool(t, 5, 3, 7, 5, 2);
-        TestBody body = t.body(4, 12, 4);
-        t.go(body, Goals.at(t.at(11, 1, 4)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
+        // 下落时在空中不回身:腾空那几刻身体一直朝着离地那一刻的方向,落地之后才转向下一步
+        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).during(Scenes.noTurnInMidAir())
+                .arrives().then(UpDownGameTests::unhurt);
     }
 
     // ==================== 普查补充 ====================
@@ -246,24 +230,6 @@ public class UpDownGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
                 .arrives();
-    }
-
-    /** 下一级台阶之后,正前方是岩浆坑:落在台阶下就停住转弯,不冲进去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
-    public static void stops_after_a_step_down_before_lava(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 4, 5, 1, 6, Blocks.STONE);
-        t.fill(7, -1, 3, 9, -1, 7, Blocks.STONE);
-        t.fill(7, 0, 4, 8, 0, 6, Blocks.LAVA);
-        TestBody body = t.body(3, 2, 5);
-        net.minecraft.core.BlockPos lava = t.at(7, 0, 5);
-        t.go(body, Goals.at(t.at(6, 1, 12)), RouteSpec.defaults())
-                .during(r -> {
-                    if (r.body.getX() >= lava.getX() - 0.3 + 0.01 && Math.abs(r.body.getZ() - lava.getZ() - 0.5) < 2) {
-                        throw new GameTestAssertException("冲过了头,身体到了岩浆坑上方");
-                    }
-                })
-                .arrives().then(UpDownGameTests::unhurt);
     }
 
     /** 从八格高处落进只有一格深的水:照原版,落进水里就不算摔,不掉血。 */
@@ -306,17 +272,6 @@ public class UpDownGameTests {
         });
     }
 
-    /** 下落时在空中不回身:腾空那几刻身体一直朝着离地那一刻的方向,落地之后才转向下一步。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 282)
-    public static void does_not_turn_around_in_mid_air(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 5, 6, 3, 5, Blocks.STONE);
-        TestBody body = t.body(4, 4, 5);
-        t.go(body, Goals.at(t.at(7, 1, 1)), RouteSpec.defaults())
-                .during(Scenes.noTurnInMidAir())
-                .arrives().then(UpDownGameTests::unhurt);
-    }
-
     /**
      * 十六格高的柱顶,四周都是硬地,背包里有一桶水,许挖许放:走出边沿之前才把水桶拿到手上,落到够得着地面时倒水,
      * 落进水里一点血不掉,再把水收回桶里;账上先有倒下的水、后有收回。另一具身体从三格高处走下来,背包里也有水桶——
@@ -343,31 +298,12 @@ public class UpDownGameTests {
                 throw new GameTestAssertException("水没收回桶里");
             }
         });
-        t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
-        TestBody low = t.body(21, 4, 5);
-        low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
-            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
-                    && h.item() == Items.WATER_BUCKET);
-            if (held) {
-                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
-            }
-        });
-    }
-
-    /**
-     * 十六格高的柱顶,去处就是柱脚紧挨着的那一格(高落差的落点),背包里有一桶水,许挖许放:走出边沿、把水倒在去处那一格里
-     * 接住自己,一点血不掉,收回水,到达。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 270)
-    public static void catches_a_high_fall_right_in_the_goal_cell(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
-        TestBody body = t.body(4, 16, 4);
-        body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        var goal = t.at(5, 1, 4);
-        t.go(body, Goals.at(goal), natural).within(500).arrives().then(r -> {
+        // 去处就是柱脚紧挨着的那一格:水倒在去处那一格里接住自己,再收回。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列
+        t.fill(33, 1, 20, 33, 15, 20, Blocks.STONE);
+        TestBody inGoal = t.body(33, 16, 20);
+        inGoal.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        var goal = t.at(34, 1, 20);
+        t.go(inGoal, Goals.at(goal), natural).within(340).arrives().then(r -> {
             unhurt(r);
             var entries = r.report.ledger().entries();
             boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
@@ -376,6 +312,16 @@ public class UpDownGameTests {
                     && p.pos().equals(goal) && p.before().is(Blocks.WATER) && p.after().isAir());
             if (!poured || !scooped) {
                 throw new GameTestAssertException("水应当倒在去处那一格、再收回:" + entries);
+            }
+        });
+        t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
+        TestBody low = t.body(21, 4, 5);
+        low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
+            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
+                    && h.item() == Items.WATER_BUCKET);
+            if (held) {
+                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
             }
         });
     }

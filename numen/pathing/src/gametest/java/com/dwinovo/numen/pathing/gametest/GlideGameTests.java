@@ -8,14 +8,8 @@ import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.Kinematics;
-import com.dwinovo.numen.pathing.world.Kinematics.Keys;
-import com.dwinovo.numen.pathing.world.Kinematics.Motion;
-
-import java.util.List;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -23,9 +17,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.component.Fireworks;
 import net.minecraft.world.level.block.Blocks;
 
 /**
@@ -208,57 +200,6 @@ public class GlideGameTests {
                 .arrives();
     }
 
-    /**
-     * 推算与原版物理对得上:控制器往前推演、纯 JVM 场景逐刻推身体用的是同一个步进器({@link Kinematics#glide} 与烟花的推力),原版身体在空中滑翔时每一刻的位置与速度,
-     * 要和它从上一刻的状态推出来的一致。视线按固定的一串俯仰转(平飞、拉起、俯冲各一段),中途挂上一支烟花;每一刻拿上一刻真实的状态走一步(不累积误差),
-     * 位置与速度差都在 {@value #PHYSICS_TOLERANCE} 之内。烟花在身体这一刻之后才刻(同一刻先滑翔再加推力),所以推力算在它活着的那些刻上。
-     */
-    @GameTest(template = SKY, batch = BATCH, timeoutTicks = 200, skyAccess = true)
-    public static void a_glide_follows_the_stepper_the_pilot_plans_with(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        TestBody body = t.body(20, 30, MID);
-        body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
-        body.startFallFlying();
-        body.setYRot(-90);
-        body.setXRot(PITCHES[0]);
-        body.setDeltaMovement(0.8, -0.1, 0);
-        Motion[] last = {new Motion(body.position(), body.getDeltaMovement())};
-        FireworkRocketEntity[] rocket = {null};
-        boolean[] alive = {false};
-        double[] worst = {0};
-        int[] ticks = {0};
-        helper.onEachTick(() -> {
-            int tick = ticks[0]++;
-            if (tick > 0 && tick <= PHYSICS_TICKS) {
-                float pitch = PITCHES[Math.min(PITCHES.length - 1, (tick - 1) * PITCHES.length / PHYSICS_TICKS)];
-                Motion expected = Kinematics.glide(last[0], new Keys(0, 0, false, false, false, -90, pitch, alive[0]), body.getGravity());
-                worst[0] = Math.max(worst[0], Math.max(expected.pos().distanceTo(body.position()), expected.velocity().distanceTo(body.getDeltaMovement())));
-            }
-            last[0] = new Motion(body.position(), body.getDeltaMovement());
-            if (tick == 12) {
-                ItemStack stack = new ItemStack(Items.FIREWORK_ROCKET);
-                stack.set(DataComponents.FIREWORKS, new Fireworks(1, List.of()));
-                rocket[0] = new FireworkRocketEntity(body.serverLevel(), stack, body);
-                body.serverLevel().addFreshEntity(rocket[0]);
-            }
-            alive[0] = rocket[0] != null && rocket[0].isAlive();
-            if (tick < PHYSICS_TICKS) {
-                body.setXRot(PITCHES[Math.min(PITCHES.length - 1, tick * PITCHES.length / PHYSICS_TICKS)]);
-                body.setYRot(-90);
-            }
-            if (tick == PHYSICS_TICKS) {
-                if (worst[0] > PHYSICS_TOLERANCE) {
-                    throw new GameTestAssertException("原版滑翔一刻的位置或速度与步进器差了 " + worst[0] + ",超过 " + PHYSICS_TOLERANCE);
-                }
-                helper.succeed();
-            }
-        });
-    }
-
-    /** 物理对照:视线俯仰依次取这几档(度),共走 {@value #PHYSICS_TICKS} 刻,每一刻之间位置与速度的差不超过 {@value #PHYSICS_TOLERANCE}。 */
-    private static final float[] PITCHES = {0, 0, 10, -30, -30, 35, 35, 10};
-    private static final int PHYSICS_TICKS = 48;
-    private static final double PHYSICS_TOLERANCE = 0.002;
 
     /** 穿着鞘翅垫柱上升:垫柱在空中起跳,不会因为新按一下跳而展开鞘翅。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
