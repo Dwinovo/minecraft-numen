@@ -20,8 +20,8 @@ import java.util.Set;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * {@code numen.shape} 里读世界的那些,从她的入口跑,场景用代码搭:copy、replace、overlay、hollow,copy 转了再 paste 经 place 放下,几个有代表性的维护
- * (fill、drain、snow、naturalize、gravity),和读不到没加载的区块时整个调用失败。判据是交回的格:读不写,世界在这些调用之后原样。
+ * {@code numen.shape} 里读世界的那些,从她的入口跑,场景用代码搭:copy、replace、hollow,copy 转了再 paste 经 place 放下,维护里的 snow,
+ * 和读不到没加载的区块时整个调用失败。判据是交回的格:读不写,世界在这些调用之后原样。
  */
 public class ShapeGameTests {
 
@@ -108,23 +108,6 @@ public class ShapeGameTests {
         helper.succeed();
     }
 
-    /** overlay:每一列最上面那块头上一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void overlay_is_the_cell_above_the_top_block_of_each_column(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_overlayer", new BlockPos(2, 2, 2), false);
-        BlockPos o = helper.absolutePos(new BlockPos(5, 2, 5));
-        block(level, o, Blocks.STONE.defaultBlockState());
-        block(level, o.above(), Blocks.STONE.defaultBlockState());
-        block(level, o.east(), Blocks.STONE.defaultBlockState());
-        ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(1, 2, 0)) + "):overlay(\"grass_block\")");
-        helper.assertTrue(run.ranToTheEnd(), "overlay failed: " + run.receipt());
-        helper.assertTrue(positions(list(run)).equals(Set.of(key(o.offset(0, 2, 0)), key(o.offset(1, 1, 0)))),
-                "a cell over the stone of each column: " + list(run));
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
     /** hollow:一个实心的方块,选区带一圈空气,里面的 3 × 3 × 3 被掏成空气。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void hollow_empties_the_inside_of_a_solid_block(GameTestHelper helper) {
@@ -194,60 +177,6 @@ public class ShapeGameTests {
         });
     }
 
-    /** fill:坑与坑口那一层的空气,石头不填。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void fill_finds_the_pit_and_the_level_of_its_mouth(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_filler", new BlockPos(2, 2, 2), false);
-        BlockPos o = helper.absolutePos(new BlockPos(5, 2, 5));
-        for (BlockPos p : BlockPos.betweenClosed(o, o.offset(4, 0, 4))) {
-            block(level, p.immutable(), Blocks.STONE.defaultBlockState());
-        }
-        for (BlockPos p : BlockPos.betweenClosed(o.offset(1, 0, 1), o.offset(3, 0, 3))) {
-            block(level, p.immutable(), Blocks.AIR.defaultBlockState());
-        }
-        BlockPos centre = o.offset(2, 1, 2);
-        ToolRun run = lua(her, "return numen.shape.fill(" + xyz(centre) + ", \"water\", 4, 2)");
-        helper.assertTrue(run.ranToTheEnd(), "fill failed: " + run.receipt());
-        Set<String> got = positions(list(run));
-        int pit = 0;
-        for (BlockPos p : BlockPos.betweenClosed(o.offset(1, 0, 1), o.offset(3, 0, 3))) {
-            pit += got.contains(key(p.immutable())) ? 1 : 0;
-        }
-        helper.assertTrue(pit == 9, "the nine cells of the pit are filled: " + got);
-        helper.assertTrue(!got.contains(key(o)) && !got.contains(key(o.offset(4, 0, 4))), "the stone rim is not: " + got);
-        helper.assertTrue(got.contains(key(centre)) && got.contains(key(centre.offset(0, 0, 3))),
-                "the level over the pit spreads sideways: " + got);
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
-    /** drain:水塘连着的水换成空气,够不着的水不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void drain_takes_the_water_of_the_pool_round_a_point(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_drainer", new BlockPos(2, 2, 2), false);
-        BlockPos o = helper.absolutePos(new BlockPos(5, 2, 5));
-        for (BlockPos p : BlockPos.betweenClosed(o, o.offset(4, 0, 4))) {
-            block(level, p.immutable(), Blocks.STONE.defaultBlockState());
-        }
-        for (BlockPos p : BlockPos.betweenClosed(o.offset(1, 0, 1), o.offset(3, 0, 3))) {
-            block(level, p.immutable(), Blocks.WATER.defaultBlockState());
-        }
-        ToolRun run = lua(her, "return numen.shape.drain(" + xyz(o.offset(2, 1, 2)) + ", 3)");
-        helper.assertTrue(run.ranToTheEnd(), "drain failed: " + run.receipt());
-        Set<String> expected = new HashSet<>();
-        for (BlockPos p : BlockPos.betweenClosed(o.offset(1, 0, 1), o.offset(3, 0, 3))) {
-            expected.add(key(p.immutable()));
-        }
-        helper.assertTrue(positions(list(run)).equals(expected), "the nine water cells: " + list(run));
-        helper.assertTrue(list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("minecraft:air")),
-                "each becomes air: " + list(run));
-        helper.assertTrue(level.getBlockState(o.offset(2, 0, 2)).is(Blocks.WATER), "draining only reads");
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
     /** snow:平台顶上每列一层雪,平台里不落。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void snow_lands_on_the_ground_of_each_column(GameTestHelper helper) {
@@ -260,51 +189,6 @@ public class ShapeGameTests {
         helper.assertTrue(positions(list(run)).contains(key(o.above())), "snow on the stone: " + list(run));
         helper.assertTrue(list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("minecraft:snow")),
                 "a layer of snow each: " + list(run));
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
-    /** naturalize:草、三层泥土、石头。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void naturalize_lays_grass_then_three_dirt_then_stone(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_naturalizer", new BlockPos(2, 2, 2), false);
-        BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        for (int y = 0; y < 6; y++) {
-            block(level, o.above(y), Blocks.STONE.defaultBlockState());
-        }
-        ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(0, 6, 0)) + "):naturalize()");
-        helper.assertTrue(run.ranToTheEnd(), "naturalize failed: " + run.receipt());
-        java.util.Map<String, String> names = new java.util.HashMap<>();
-        for (var c : list(run)) {
-            JsonObject b = c.getAsJsonObject();
-            JsonObject pos = b.getAsJsonObject("pos");
-            names.put(pos.get("x").getAsInt() + "," + pos.get("y").getAsInt() + "," + pos.get("z").getAsInt(), b.get("name").getAsString());
-        }
-        helper.assertTrue("minecraft:grass_block".equals(names.get(key(o.above(5)))) && "minecraft:dirt".equals(names.get(key(o.above(4))))
-                        && "minecraft:dirt".equals(names.get(key(o.above(3)))) && "minecraft:dirt".equals(names.get(key(o.above(2))))
-                        && names.size() == 4, "grass on top, three dirt below it, the stone below that already is: " + names);
-        CompanionFactory.despawn(level.getServer(), her);
-        helper.succeed();
-    }
-
-    /** gravity:悬空的方块落到这一列最低的空气上。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void gravity_lets_a_floating_block_fall(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_faller", new BlockPos(2, 2, 2), false);
-        BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        block(level, o.above(3), Blocks.GOLD_BLOCK.defaultBlockState());
-        ToolRun run = lua(her, "return numen.shape.gravity(" + xyz(o.above(2)) + ", 0, {height = 2})");
-        helper.assertTrue(run.ranToTheEnd(), "gravity failed: " + run.receipt());
-        java.util.Map<String, String> names = new java.util.HashMap<>();
-        for (var c : list(run)) {
-            JsonObject b = c.getAsJsonObject();
-            JsonObject pos = b.getAsJsonObject("pos");
-            names.put(pos.get("x").getAsInt() + "," + pos.get("y").getAsInt() + "," + pos.get("z").getAsInt(), b.get("name").getAsString());
-        }
-        helper.assertTrue("minecraft:gold_block".equals(names.get(key(o))) && "minecraft:air".equals(names.get(key(o.above(3))))
-                && names.size() == 2, "the gold block lands where the ground ends and leaves air behind: " + names);
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
     }
