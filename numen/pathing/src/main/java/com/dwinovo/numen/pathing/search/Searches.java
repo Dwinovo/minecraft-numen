@@ -26,6 +26,8 @@ public final class Searches {
     private static final AtomicInteger THREADS = new AtomicInteger();
     /** 派发的先后:同一级里先来先跑。 */
     private static final AtomicLong ORDER = new AtomicLong();
+    /** 派发了、还没收场的活:排着的与在算的。派发前加一,活跑完或从队里拿走时减一。 */
+    private static final AtomicInteger IN_FLIGHT = new AtomicInteger();
     private static final ThreadPoolExecutor POOL = pool();
 
     private Searches() {}
@@ -43,11 +45,13 @@ public final class Searches {
         return POOL_SIZE;
     }
 
-    /** 池里此刻有没有搜索在算或排着队:有就是一句说明,没有是 {@code null}。只读,不改任何状态。 */
+    /**
+     * 此刻有没有派发了还没收场的搜索(在算或排着队):有就是一句说明,没有是 {@code null}。只读,不改任何状态。
+     * 按自己记的在飞数判,不看线程池的瞬时状态:活交给线程到线程开始跑之间,池子的在算数与队长都是零。
+     */
     public static String busy() {
-        int running = POOL.getActiveCount();
-        int queued = POOL.getQueue().size();
-        return running == 0 && queued == 0 ? null : running + " pathing search(es) running, " + queued + " queued";
+        int inFlight = IN_FLIGHT.get();
+        return inFlight == 0 ? null : inFlight + " pathing search(es) running or queued";
     }
 
     private static ThreadPoolExecutor pool() {
@@ -87,11 +91,18 @@ public final class Searches {
                 future.complete(clock.time(() -> job.apply(cancelled::get)));
             } catch (Throwable e) {
                 future.completeExceptionally(e);
+            } finally {
+                IN_FLIGHT.decrementAndGet();
             }
         });
+        IN_FLIGHT.incrementAndGet();
         POOL.execute(task);
         // 叫停时还在队里排着的,直接从队里拿走:它握着的快照与成本模型不必等到有线程空出来、跑到它、发现被叫停才放掉
-        return new Pending<>(future, cancelled, clock, () -> POOL.remove(task));
+        return new Pending<>(future, cancelled, clock, () -> {
+            if (POOL.remove(task)) {
+                IN_FLIGHT.decrementAndGet();
+            }
+        });
     }
 
     /** 队里的一件活:先比级别,再比派发的先后。 */
