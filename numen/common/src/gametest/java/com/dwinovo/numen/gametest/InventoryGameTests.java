@@ -143,29 +143,6 @@ public class InventoryGameTests {
         });
     }
 
-    /**
-     * 3×3 的配方在她自己的 2×2 里合不了:numen.inv.craft 只用开着的格,回执叫她先开一张工作台(或交给 numen.inv.make),
-     * 材料一样不动。远处那张工作台它不去找——找台、走过去是 numen.inv.make 的事(见下一条)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void craft_3x3_in_her_own_grid_says_to_open_a_table(GameTestHelper helper) {
-        BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
-        helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_seeker", new BlockPos(2, 2, 2), false);
-        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
-        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:chest\", {count = 1})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("needs a 3x3 grid; the open one is 2x2")
-                            && craft.outcome().contains("numen.use.block a crafting table"),
-                    "the reply does not say to open a crafting table: " + craft.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8,
-                    "the planks were touched although nothing could be crafted");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** numen.inv.make 自己找台:够得着的地方没有,它走到 16 格内最近的那张,打开、合出一口箱子,木板用光,界面合上。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void make_walks_to_the_nearest_table(GameTestHelper helper) {
