@@ -20,7 +20,7 @@ import net.minecraft.world.entity.Entity;
  *
  * <p>所以每一批都等到服务器刻数是 {@value #PERIOD} 的整数倍的那一刻开头才开始(上面几种周期的公倍数),开始前把实体编号推到
  * {@value #ID_STRIDE} 的整数倍、把每个维度的世界随机数按世界种子与维度重新定种子:这一批里造的实体编号对这些余数而言、
- * 这一批掷出的点数,都与前面无关。模组加载器经 {@code GameTestBatchStartMixin} 接管
+ * 这一批掷出的点数,都与前面无关;每个实体自带的随机数(烟花的寿命)也按它在这一批里的编号定种子({@link #entitySeed})。模组加载器经 {@code GameTestBatchStartMixin} 接管
  * 原版的开批({@code GameTestRunner.runBatch});Paper 的测试服按墙钟走,不在此列。
  */
 public final class BatchStart {
@@ -52,6 +52,14 @@ public final class BatchStart {
                 }
             }
         });
+    }
+
+    /**
+     * 编号为 {@code id} 的实体的随机数种子(经 {@code EntityRandomMixin}):只看它在这一批里的编号(对 {@value #ID_STRIDE} 的余数),
+     * 每一批开始时编号对齐,种子也就跟着从头排,与前面几批造过多少实体无关。
+     */
+    public static long entitySeed(int id) {
+        return 0x9E3779B97F4A7C15L * ((id & (ID_STRIDE - 1)) + 1);
     }
 
     /** 原版要开一批了:正在按时开的放行({@code true}),否则记下来等下一个整数倍的刻开头再开。 */

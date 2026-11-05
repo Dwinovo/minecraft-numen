@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ChunkTickShuffleMixin",
+    "EntityRandomMixin",
     "GameTestBatchStartMixin",
     "GameTestServerOriginMixin",
     "GameTestServerTickMixin",
