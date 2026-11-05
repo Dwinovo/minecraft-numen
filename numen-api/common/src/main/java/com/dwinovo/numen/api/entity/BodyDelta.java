@@ -49,8 +49,9 @@ public final class BodyDelta {
         if (!xp.isEmpty()) {
             facts.add(xp);
         }
-        if (Math.abs(her.getHealth() - health) >= HEALTH_EPSILON) {
-            facts.add("health: " + number(health) + " -> " + number(her.getHealth()));
+        String hp = healthChange(health, her.getHealth());
+        if (!hp.isEmpty()) {
+            facts.add(hp);
         }
         Entity now = her.getVehicle();
         if (now != vehicle) {
@@ -62,6 +63,11 @@ public final class BodyDelta {
             }
         }
         return facts;
+    }
+
+    /** 血量从 {@code before} 到 {@code after} 的那一条事实;差在浮点误差以内算没变,是空串。 */
+    static String healthChange(float before, float after) {
+        return Math.abs(after - before) >= HEALTH_EPSILON ? "health: " + number(before) + " -> " + number(after) : "";
     }
 
     /**

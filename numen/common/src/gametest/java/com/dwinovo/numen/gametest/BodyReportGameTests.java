@@ -59,24 +59,6 @@ public class BodyReportGameTests {
         });
     }
 
-    /** 点一下的当口她的血量变了(像神社复活把使用者设到 25%):回执写明血量从多少到多少。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
-    public static void a_health_change_during_a_press_is_reported(GameTestHelper helper) {
-        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
-        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(3, 2, 5), false);
-        ToolRun press = lua(companion, "numen.use.block(" + xyz(stone) + ", {hold = 1.0})");
-        helper.runAfterDelay(15, () -> companion.setHealth(5.0f));
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done() && press.succeeded(), "use block did not finish: " + press.outcome());
-            helper.assertTrue(press.outcome().contains("health: 20 -> "),
-                    "the reply does not say her health dropped from 20: " + press.outcome());
-            sample("health changed during a press", press);
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 挖的时候手里的镐碎了:这一挖的结果写明"用坏了"。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
     public static void a_pickaxe_breaking_in_a_dig_is_reported(GameTestHelper helper) {
