@@ -63,6 +63,15 @@ class DiagnosisTest {
         SearchResult failed = AStar.run(search, () -> false);
         assertEquals(SearchResult.Stop.BUDGET, failed.stop());
         assertInstanceOf(Outcome.OutOfBudget.class, Diagnosis.of(failed.stop(), failed.breathless(), search, failed.blocking(), () -> false));
+
+        // 四面与头顶都是基岩的小屋:搜完了才停,诊断说无路
+        TestWorld box = new TestWorld().floor(0, 0, 20, 20, Y - 1).fill(4, Y - 1, 4, 8, Y + 3, 8, Blocks.BEDROCK.defaultBlockState())
+                .fill(5, Y, 5, 7, Y + 2, 7, Blocks.AIR.defaultBlockState());
+        Search sealed = new Search(box, Fixtures.model(RouteSpec.defaults()), new BlockPos(6, Y, 6), Goals.at(new BlockPos(15, Y, 15)),
+                Fixtures.BUDGET, Favoring.NONE);
+        SearchResult none = AStar.run(sealed, () -> false);
+        assertEquals(SearchResult.Stop.EXHAUSTED, none.stop());
+        assertInstanceOf(Outcome.NoRoute.class, Diagnosis.of(none.stop(), none.breathless(), sealed, none.blocking(), () -> false));
     }
 
     /** 去处在加载区块之外:走得到的都搜过了,路却伸出了快照、那边是什么不知道——诊断说"未加载",不说无路或预算用完。 */

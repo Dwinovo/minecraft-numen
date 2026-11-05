@@ -86,6 +86,12 @@ class SearchTest {
         SearchResult result = search(field(), defaults(), START, Goals.at(goal));
         assertTrue(result.arrived());
         assertEquals(goal, result.route().end());
+
+        // 中间横着一堵墙、两头留着路:不许改地形,绕过去,一格不改
+        SearchResult around = search(field().fill(6, Y, -4, 6, Y + 1, 6, STONE), defaults(), START, Goals.at(goal));
+        assertTrue(around.arrived());
+        assertEquals(goal, around.route().end());
+        assertTrue(around.route().edits().isEmpty(), around.route().edits().toString());
     }
 
     /**
