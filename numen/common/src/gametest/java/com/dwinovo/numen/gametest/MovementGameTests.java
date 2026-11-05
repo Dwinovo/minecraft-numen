@@ -27,11 +27,6 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 public class MovementGameTests {
 
     // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
-    @BeforeBatch(batch = "numen_follow_budget")
-    public static void prepareFollowBudgetBatch(ServerLevel level) {
-        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
-    }
-
     /** 冒烟批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_smoke")
     public static void prepareSmokeBatch(ServerLevel level) {
@@ -331,52 +326,6 @@ public class MovementGameTests {
                     "the reason must say she has no blocks to build with: " + follow.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
-    }
-
-    /**
-     * 跟的人封在一间基岩小屋里,小屋嵌在一大块实心的石头中间(挖得动,足够大):受理前的试搜在石头里一格一格往里挖,搜到预算用完也
-     * 没搜完——这只是没搜完,不能证明到不了。受理,开始走;不当场回一句"跟不上"。石头铺得比场地大,伸进邻居的场地里,所以自成一批,
-     * 收场时还成空气。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_follow_budget")
-    public static void follow_is_accepted_when_the_probe_search_runs_out_of_budget(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos low = helper.absolutePos(new BlockPos(16, 1, -12));
-        BlockPos high = helper.absolutePos(new BlockPos(55, 40, 27));
-        for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
-            level.setBlock(cell, Blocks.STONE.defaultBlockState(), 2);
-        }
-        BlockPos room = helper.absolutePos(new BlockPos(36, 20, 8));
-        for (BlockPos cell : BlockPos.betweenClosed(room.offset(-4, -4, -4), room.offset(4, 4, 4))) {
-            level.setBlock(cell, Blocks.BEDROCK.defaultBlockState(), 2);
-        }
-        level.setBlock(room, Blocks.AIR.defaultBlockState(), 2);
-        var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, room.getX() + 0.5, room.getY(), room.getZ() + 0.5);
-        level.addFreshEntity(stand);
-        NumenPlayer companion = spawnBare(helper, "gametest_tailing", new BlockPos(3, 2, 8), false);
-        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
-
-        steps(helper)
-                .thenWaitUntil(() -> {
-                    // 试搜在工作线程上按墙钟跑,测试服务器的刻不等它:每刻让出一点墙钟
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    helper.assertTrue(follow.reply() != null, "follow has not replied");
-                    helper.assertTrue(!follow.refused(),
-                            "follow was refused although the search only ran out of budget: " + follow.reply());
-                    helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
-                })
-                .thenExecute(() -> {
-                    CompanionFactory.despawn(level.getServer(), companion);
-                    stand.discard();
-                    for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
-                        level.setBlock(cell, Blocks.AIR.defaultBlockState(), 2);
-                    }
-                })
-                .thenSucceed();
     }
 
     /**

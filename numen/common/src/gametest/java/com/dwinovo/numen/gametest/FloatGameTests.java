@@ -72,6 +72,9 @@ public class FloatGameTests {
     /**
      * 深水水面上 30 秒不按键(闲着,或手上的活是站着等):漂浮让她一直浮着,头没进过水,没往下沉;身体没有做什么值得说的事,
      * 一条事件都没有。创造模式同样(不扣氧气,浮着不靠换气)。{@code waiting} 时她手上是 {@code numen.time.wait},占着任务槽。
+     *
+     * <p>时限 600 刻:浮够 580 刻就判,{@code numen.time.wait(30)} 到第 600 刻才收,判在两者之间;沉不沉、头进没进水在头 580 刻里
+     * 早该看出来——原版不按键时身体在水里每刻往下 0.005 格,580 刻会沉近三格,漂浮不管就过不了"没沉"那一条。
      */
     private static void floatsAtTheSurface(GameTestHelper helper, boolean creative, boolean waiting) {
         ServerLevel level = helper.getLevel();
@@ -100,17 +103,17 @@ public class FloatGameTests {
         });
     }
 
-    @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
+    @GameTest(template = "floor20", timeoutTicks = 600, batch = BATCH)
     public static void idle_at_the_surface_of_deep_water_floats_and_says_nothing(GameTestHelper helper) {
         floatsAtTheSurface(helper, false, false);
     }
 
-    @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
+    @GameTest(template = "floor20", timeoutTicks = 600, batch = BATCH)
     public static void waiting_on_deep_water_floats_and_says_nothing(GameTestHelper helper) {
         floatsAtTheSurface(helper, false, true);
     }
 
-    @GameTest(template = "floor20", timeoutTicks = 1000, batch = BATCH)
+    @GameTest(template = "floor20", timeoutTicks = 600, batch = BATCH)
     public static void creative_idle_in_deep_water_floats(GameTestHelper helper) {
         floatsAtTheSurface(helper, true, false);
     }

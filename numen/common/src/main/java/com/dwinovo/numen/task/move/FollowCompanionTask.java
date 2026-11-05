@@ -142,7 +142,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     }
 
     /** 这次规划没搜完:预算用完、路伸进了没加载的区块,没有证据说走不到。 */
-    private static boolean unfinished(Outcome outcome) {
+    static boolean unfinished(Outcome outcome) {
         return outcome instanceof Outcome.OutOfBudget || outcome instanceof Outcome.Unloaded;
     }
 
