@@ -93,4 +93,9 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     doFirst {
         delete fileTree(dir: project.file('runs/gametestserver/kubejs/server_scripts'))
     }
+    // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
+    // 发过的令牌、存下的档案不带进这一次。Paper 的 GameTest 每次整个运行目录都是新的
+    doFirst {
+        delete project.file('runs/gametestserver/config')
+    }
 }
