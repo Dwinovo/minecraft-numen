@@ -148,6 +148,25 @@ public final class GameTestKit {
         }
     }
 
+    /**
+     * 场地里新出现的掉落物不带原版给的随机初速,摆回它出生那一格的正中、竖直往下落(照主流:清零速度,由用例摆)。原版掉落物的初速与
+     * 出生点的偏移取自世界的随机数,挖开树冠时它可能斜着落到没挖的树叶顶上停住,她就捡不到;砍下的东西落回原木所在那一列,结论才不看骰子。
+     */
+    static void dropsFallStraight(GameTestHelper helper) {
+        java.util.Set<net.minecraft.world.entity.Entity> placed =
+                java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+        helper.onEachTick(() -> {
+            for (var drop : helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    helper.getBounds())) {
+                if (placed.add(drop)) {
+                    BlockPos cell = drop.blockPosition();
+                    drop.setPos(cell.getX() + 0.5, drop.getY(), cell.getZ() + 0.5);
+                    drop.setDeltaMovement(0, Math.min(0, drop.getDeltaMovement().y), 0);
+                }
+            }
+        });
+    }
+
     /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
     static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
         BlockPos at = helper.absolutePos(rel);

@@ -99,6 +99,7 @@ public class DigGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        dropsFallStraight(helper);
         Mining mine = mineScanned(helper, companion, 9, "minecraft:acacia_log", 2);
 
         succeedWhen(helper, () -> {
@@ -157,6 +158,7 @@ public class DigGameTests {
         spruceTree(helper, new BlockPos(8, 2, 14), 7);
         NumenPlayer companion = spawnAt(helper, "gametest_logger", new BlockPos(9, 2, 9), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        dropsFallStraight(helper);
 
         mineScanned(helper, companion, 10, "minecraft:spruce_log", 8);
 
