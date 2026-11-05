@@ -200,6 +200,8 @@ class ConsentDeskTest {
         line.ownerOnline = false;
         ConsentDesk.Ticket offline = desk.ask(new Task(), List.of(log(1)));
         assertEquals(ConsentDesk.OWNER_ABSENT, offline.poll().words(), "主人不在线:当场按拒绝");
+        assertTrue(offline.poll().refusal(List.of(log(1))).startsWith("refused by the owner: " + ConsentDesk.OWNER_ABSENT),
+                "回执正文说是主人拒的,带着原因");
         assertTrue(line.shown.isEmpty(), "不推卡");
 
         line.ownerOnline = true;

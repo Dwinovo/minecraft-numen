@@ -68,7 +68,9 @@ class RuleTest {
         assertEquals("syntax", assertThrows(Rule.Mistake.class, () -> rule("break(mine hollow)")).code(), "漏了运算符");
         assertEquals("shape", assertThrows(Rule.Mistake.class, () -> rule("break((mine)")).code(), "括号没配上");
         assertEquals("subject", assertThrows(Rule.Mistake.class, () -> rule("break(mine) extra")).code());
-        assertEquals("subject", assertThrows(Rule.Mistake.class, () -> rule("break(mine) @")).code());
+        Rule.Mistake nameless = assertThrows(Rule.Mistake.class, () -> rule("break(mine) @"));
+        assertEquals("subject", nameless.code());
+        assertTrue(nameless.getMessage().contains("may only name one companion"), nameless.getMessage());
     }
 
     @Test

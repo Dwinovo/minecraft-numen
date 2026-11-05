@@ -262,6 +262,9 @@ class GateTest {
         PlacedBlocks placed = new PlacedBlocks();
         world.set(POS, Blocks.OAK_PLANKS.defaultBlockState());
         assertTrue(gate(placed).judge(dig(world, POS), world).asks());
+        // 没有谁放过的活板门(门、床、栅栏门同理)也说不清是谁的
+        world.set(POS.north(), Blocks.OAK_TRAPDOOR.defaultBlockState());
+        assertEquals("break(unknown)", gate(placed).judge(dig(world, POS.north()), world).rule().toString());
         Gate dedicated = gate(Mode.ASK, RuleSet.EMPTY, FactoryRules.layer(), placed, Structures.NONE, true);
         Verdict v = dedicated.judge(dig(world, POS), world);
         assertEquals(Verdict.Kind.DENY, v.kind(), "专用服上说不清的按别人的算");
@@ -379,6 +382,20 @@ class GateTest {
         Gate allowed = gate(Mode.ASK, rules(List.of(), List.of(), List.of("break(owner)")),
                 FactoryRules.layer(), placed, Structures.NONE, false);
         assertTrue(allowed.judge(dig(world, POS), world).allowed(), "主人的 allow 行压过出厂 ask 行");
+    }
+
+    @Test
+    void aRowThatNamesOneCompanionHoldsHerAndLeavesHerSistersAlone() {
+        FakeWorld world = new FakeWorld();
+        world.set(POS, Blocks.STONE.defaultBlockState());
+        var policy = Layers.policy(Mode.ASK, FactoryRules.hard(), rules(List.of("break(nature) @Aria"), List.of(), List.of()),
+                FactoryRules.layer());
+        Verdict aria = new Gate(HER, policy, new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE)
+                .judge(dig(world, POS), world);
+        assertEquals(Verdict.Kind.DENY, aria.kind());
+        assertTrue(aria.reason().contains("denied by rule break(nature) @Aria"), aria.reason());
+        assertTrue(new Gate(new Actor(SISTER_ID, "Bea", OWNER_ID), policy, new PlacedBlocks(), Structures.NONE, false, List.of(),
+                Hits.NONE).judge(dig(world, POS), world).allowed(), "点名 Aria 的行管不到 Bea");
     }
 
     @Test

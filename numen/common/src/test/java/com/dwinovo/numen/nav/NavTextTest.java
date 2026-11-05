@@ -267,6 +267,12 @@ class NavTextTest {
         assertTrue(alter.contains("`numen.move.walk` takes such a way"), alter);
         assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner")
                 && denied.contains("no way around it was found"), denied);
+        String byRule = NavText.failure(new Outcome.Denied(B, com.dwinovo.numen.permission.Verdict.deny(
+                "denied by rule break(minecraft:white_wool)")), null, A, C, spec, List.of());
+        assertTrue(byRule.contains("had to stop: changing") &&byRule.contains("denied by rule break(minecraft:white_wool)")
+                && !byRule.contains("without changing terrain"), "拒绝的那一行规则原样说出来:" + byRule);
+        assertEquals(com.dwinovo.numen.script.ErrorKind.DENIED, NavText.type(new Outcome.Denied(B, "no")).kind(),
+                "交给脚本是 denied");
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
         assertTrue(sight.contains("went out of sight") && sight.contains("numen.work.dig"), sight);
