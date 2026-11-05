@@ -164,6 +164,7 @@ public final class GameTestSuites {
     private static TestFunction timed(TestFunction f, String name) {
         Consumer<GameTestHelper> body = helper -> {
             TestTicks.started(name, helper.getLevel().getGameTime());
+            TestCleanup.started(helper, name);
             f.function().accept(helper);
         };
         return new TestFunction(f.batchName(), name, f.structureName(), f.rotation(), f.maxTicks(), f.setupTicks(),

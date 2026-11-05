@@ -691,6 +691,12 @@ public final class GameTestKit {
         if (companion != null) {
             companion.setOwnerUuid(player.getUUID());
         }
+        // 用例失败也让他走:扮主人的玩家不在场地里,收场清场地时清不到他
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> {
+            if (server.getPlayerList().getPlayer(player.getUUID()) == player) {
+                leave(player);
+            }
+        });
         return player;
     }
 
