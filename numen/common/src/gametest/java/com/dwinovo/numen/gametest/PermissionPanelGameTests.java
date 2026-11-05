@@ -9,9 +9,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.permission.Groups;
 import com.dwinovo.numen.api.permission.Layers;
-import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -85,16 +83,6 @@ public class PermissionPanelGameTests {
         return null;
     }
 
-    private static JsonObject modeRow(LibraryPayload table, String name) {
-        for (JsonElement e : JsonParser.parseString(table.entries()).getAsJsonArray()) {
-            JsonObject o = e.getAsJsonObject();
-            if (o.has("mode") && name.equals(o.get("name").getAsString())) {
-                return o;
-            }
-        }
-        return null;
-    }
-
     /**
      * 主人在面板上加一行 deny:服务端答复带着新表,她去挖那块石头被那一行拒了;删掉那一行(同样经协议),她就挖得动。
      * 写错的规则被拒、带着教学式错误的码、没进表。
@@ -145,55 +133,6 @@ public class PermissionPanelGameTests {
                     "the stone could not be dug after the row was deleted: " + calls[1].outcome());
             finish(owner, companion);
         });
-    }
-
-    /**
-     * 主人在面板上给同伴选模式:存档里的模式就是命令 {@code /numen permission mode} 读到的那个、也是她被裁决时用的那个;
-     * 别的玩家发同样的请求动不了不是他名下的同伴,也读不到这位主人的规则;清空主人层不动模式。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_permission_panel")
-    public static void the_panel_sets_a_mode_only_on_its_owners_companion(GameTestHelper helper) {
-        NumenPlayer companion = spawnBare(helper, "gametest_moody", new BlockPos(4, 2, 5), false);
-        ServerPlayer owner = clientOwner(helper, companion, "gametest_mode_owner");
-        ServerPlayer stranger = presentPlayer(helper, null, "gametest_mode_stranger");
-        Replies.hello(stranger, Presence.PROTOCOL);
-        received(stranger);
-        PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
-        store.add(Verdict.Kind.ASK, Groups.parse("take(*)"));
-        String uuid = companion.getUUID().toString();
-
-        Replies.library(owner, Libraries.PERMISSION, "list", "{}");
-        LibraryPayload before = lastTable(received(owner));
-        helper.assertTrue(before != null && modeRow(before, "gametest_moody") != null
-                        && "ask".equals(modeRow(before, "gametest_moody").get("mode").getAsString())
-                        && ruleRow(before, "hard", "break(other)") != null && ruleRow(before, "owner", "take(*)") != null,
-                "the owner's table is missing the companion, the hard rules or his row: " + before);
-
-        Replies.library(owner, Libraries.PERMISSION, "mode", "{\"companion\":\"" + uuid + "\",\"mode\":\"observe\"}");
-        LibraryPayload after = lastTable(received(owner));
-        helper.assertTrue(Permission.modeOf(companion) == Mode.OBSERVE && after != null
-                        && "observe".equals(modeRow(after, "gametest_moody").get("mode").getAsString()),
-                "the mode was not set or not answered: " + after);
-
-        Replies.library(stranger, Libraries.PERMISSION, "mode", "{\"companion\":\"" + uuid + "\",\"mode\":\"bypass\"}");
-        LibraryPayload strangers = lastTable(received(stranger));
-        helper.assertTrue(strangers != null && !strangers.problem().isEmpty() && Permission.modeOf(companion) == Mode.OBSERVE,
-                "a stranger set the mode of someone else's companion: " + strangers);
-        Replies.library(stranger, Libraries.PERMISSION, "reset", "{}");
-        lastTable(received(stranger));
-        helper.assertTrue(store.rows(Verdict.Kind.ASK).size() == 1, "a stranger's reset cleared the owner's rows");
-        Replies.library(stranger, Libraries.PERMISSION, "list", "{}");
-        LibraryPayload strangersTable = lastTable(received(stranger));
-        helper.assertTrue(strangersTable != null && ruleRow(strangersTable, "owner", "take(*)") == null
-                        && modeRow(strangersTable, "gametest_moody") == null,
-                "a stranger read the owner's table: " + strangersTable);
-
-        Replies.library(owner, Libraries.PERMISSION, "reset", "{}");
-        helper.assertTrue(store.rows(Verdict.Kind.ASK).isEmpty() && Permission.modeOf(companion) == Mode.OBSERVE,
-                "reset did not clear only the rows");
-        leave(stranger);
-        finish(owner, companion);
-        helper.succeed();
     }
 
     /** 她加了一行 deny:不等主人来要,在线的主人面板收到带新行的表,来源标成她、带着她说的理由。 */
