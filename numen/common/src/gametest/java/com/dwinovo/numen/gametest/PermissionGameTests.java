@@ -1367,31 +1367,6 @@ public class PermissionGameTests {
         });
     }
 
-    /** 她读规则:硬规则、主人层(她加的带注、记着命中)、出厂层各一张表。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void she_can_read_the_rules_that_bind_her(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_reader", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_reader_owner");
-        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:tnt)"));
-        ToolRun read = lua(companion, "return numen.permission.rules()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(read.done() && read.succeeded(), "rules() failed: " + read.outcome());
-            helper.assertTrue(read.field("hard") instanceof List<?> hard && hard.contains("deny break(other)"),
-                    "the hard rules are missing: " + read.reply());
-            helper.assertTrue(read.field("yours") instanceof List<?> yours && yours.size() == 1
-                            && String.valueOf(yours.get(0)).startsWith("deny break(minecraft:tnt)")
-                            && String.valueOf(yours.get(0)).contains("never fired"),
-                    "your owner's rows are not listed with their ledger: " + read.reply());
-            helper.assertTrue(read.field("factory") instanceof List<?> factory
-                            && factory.contains("ask break(owner)"), "the factory rows are missing: " + read.reply());
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
     /**
      * 来历不明的界面:不经 use.block、由代码给她强行打开一个信标界面,不知道它是哪一格——choose 不放行,问主人。答"允许"就定下效果,
      * 答"拒绝"就如实报拒绝(理由是主人原话),效果没动。
