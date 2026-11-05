@@ -141,6 +141,7 @@ public class RemoteBrainGameTests {
         }
 
         void close() {
+            brain.close();
             McpMode.instance().setEnabled(false);
             CompanionLoops.dismissed(server, companion.getUUID());
             CompanionRegistry.get(server).remove(companion.getUUID());
@@ -250,14 +251,14 @@ public class RemoteBrainGameTests {
         com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
         her.brain.afterConnected(helper, 0, () -> {
             // 外部大脑空闲时停在 get_events 的长等待里:端点借这次进行中的调用把问题弹给人
-            Thread waiting = new Thread(() -> {
+            McpTestClient.drive("gametest-external-waiting", () -> {
                 com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
                 wait.addProperty("companion", "gt_remote_asks");
                 wait.addProperty("wait_seconds", 30);
                 her.brain.call("get_events", wait);
-            }, "gametest-external-waiting");
-            waiting.setDaemon(true);
-            waiting.start();
+            }, failed -> {
+                // 用例收场关掉端点时这次长等待随之断开;问没问到人由下面的断言说
+            });
             helper.runAfterDelay(20, () -> {   // 长等待已经在飞
                 ticket[0] = desk.ask(scope, List.of(oakLog()));
                 helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
@@ -319,22 +320,16 @@ public class RemoteBrainGameTests {
         java.util.concurrent.atomic.AtomicReference<String> replies = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
         // 工具调用要等服务端主线程办事,所以另起一条线程扮渠道桥
-        Thread bridge = new Thread(() -> {
-            try {
-                her.brain.connect();
-                com.google.gson.JsonObject words = new com.google.gson.JsonObject();
-                words.addProperty("companion", "gametest_remote_chat");
-                words.addProperty("text", "在吗");
-                sent.set(her.brain.call("send", words));
-                com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
-                wait.addProperty("wait_seconds", 20);
-                replies.set(her.brain.call("get_replies", wait));
-            } catch (Throwable t) {
-                failure.set(t);
-            }
-        }, "gametest-channel-bridge");
-        bridge.setDaemon(true);
-        bridge.start();
+        McpTestClient.drive("gametest-channel-bridge", () -> {
+            her.brain.connect();
+            com.google.gson.JsonObject words = new com.google.gson.JsonObject();
+            words.addProperty("companion", "gametest_remote_chat");
+            words.addProperty("text", "在吗");
+            sent.set(her.brain.call("send", words));
+            com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
+            wait.addProperty("wait_seconds", 20);
+            replies.set(her.brain.call("get_replies", wait));
+        }, failure::set);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(failure.get() == null, "the bridge failed: " + failure.get());

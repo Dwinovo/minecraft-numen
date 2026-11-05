@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.McpJson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -22,6 +23,8 @@ final class McpTestClient {
 
     /** 在别的线程上还没做完的接入:测试服每刻等它们做完({@link #busy}),接入总在发起的那一刻收尾落定。 */
     private static final java.util.concurrent.atomic.AtomicInteger CONNECTING = new java.util.concurrent.atomic.AtomicInteger();
+    /** 还在跑的外部大脑脚本({@link #drive}):每一条要么在算、要么停在一次等游戏的请求里。 */
+    private static final java.util.concurrent.atomic.AtomicInteger DRIVING = new java.util.concurrent.atomic.AtomicInteger();
 
     private final int port;
     private final String secret;
@@ -94,10 +97,50 @@ final class McpTestClient {
         handshake.start();
     }
 
-    /** 有没有还没做完的接入:有就是一句说明,没有是 {@code null}。登记进测试服每刻的等待。 */
+    /**
+     * 扮外部大脑(或渠道桥)的一段脚本,在它自己的线程上跑,和产品里一样一次次阻塞着等回执。测试服每刻等到每一段脚本都停在一次
+     * 等游戏的请求里(端点说它在等游戏、等的还没到,{@link McpMode#waitingOnGame})或跑完:脚本自己在算、请求在路上或端点在算,
+     * 这一刻都不往下走,请求总在同一刻发出、同一刻收到回执。脚本里出的错交给 {@code failed}。
+     */
+    static Thread drive(String name, ThrowingRunnable script, java.util.function.Consumer<Throwable> failed) {
+        DRIVING.incrementAndGet();
+        Thread thread = new Thread(() -> {
+            try {
+                script.run();
+            } catch (Throwable t) {
+                failed.accept(t);
+            } finally {
+                DRIVING.decrementAndGet();
+            }
+        }, name);
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
+    }
+
+    /** {@link #drive} 的脚本:可以抛出受检异常。 */
+    @FunctionalInterface
+    interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    /**
+     * 有没有还没落定的:接入没做完、有脚本没停在等游戏的请求里、端点弹给人的问题还没交回;有就是一句说明,没有是 {@code null}。
+     * 登记进测试服每刻的等待。端点整个服务器只有一份,用它的用例各自成批,所以脚本数与端点上等游戏的请求数可以直接比。
+     */
     static String busy() {
         int connecting = CONNECTING.get();
-        return connecting == 0 ? null : connecting + " gametest mcp client(s) still connecting";
+        if (connecting > 0) {
+            return connecting + " gametest mcp client(s) still connecting";
+        }
+        McpMode mcp = McpMode.instance();
+        int asking = mcp.asking();
+        if (asking > 0) {
+            return asking + " question(s) out at a gametest mcp client";
+        }
+        int driving = DRIVING.get();
+        int parked = mcp.waitingOnGame();
+        return driving > parked ? (driving - parked) + " gametest mcp script(s) not waiting on the game" : null;
     }
 
     /** 接入做完(或失败)后再过 {@code delay} 刻,在主线程上跑 {@code next}。 */
@@ -138,5 +181,13 @@ final class McpTestClient {
     /** 结束会话。 */
     void disconnect() {
         client.closeGracefully();
+    }
+
+    /** 用例收场:不等服务端,当场关掉;还在等回执的调用随之失败,扮外部大脑的脚本跟着跑完({@link #drive})。 */
+    void close() {
+        McpSyncClient opened = client;
+        if (opened != null) {
+            opened.close();
+        }
     }
 }

@@ -263,6 +263,7 @@ public final class McpMode {
             endpoint.stop();
             endpoint = null;
         }
+        GameWaits.clear();
         enabled = false;
         Constants.LOG.info("[numen-mcp] 远程端点已关闭");
     }
@@ -290,6 +291,20 @@ public final class McpMode {
     public String closing() {
         McpPresence p = presence;
         return p == null ? null : p.closing();
+    }
+
+    /**
+     * 有几次请求此刻停在等游戏上、等的东西还没到({@link GameWaits}:她的事件、程序收尾、渠道的回话):只读。别的在飞的请求在算,几毫秒就完。
+     * GameTest 服务器每刻据此区分"请求在算"(等它算完再往下走)与"请求在等游戏"(游戏得往前走它才等得到)。
+     */
+    public int waitingOnGame() {
+        return GameWaits.count();
+    }
+
+    /** 已经弹给外部大脑客户端上的人、答复还没交给征询台的问题有几条(端点没开是 0):只读。 */
+    public int asking() {
+        McpEndpoint e = endpoint;
+        return e == null ? 0 : e.asking();
     }
 
     /**

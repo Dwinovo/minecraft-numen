@@ -844,7 +844,7 @@ public class BrainGameTests {
         List<String> states = new java.util.concurrent.CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
-        Thread brain = new Thread(() -> {
+        McpTestClient.drive("gametest-external-brain", () -> {
             try {
                 client.connect();
                 heard.add(client.call("list_companions", new JsonObject()));
@@ -859,14 +859,10 @@ public class BrainGameTests {
                 JsonObject receipt = client.callResult(ScriptEngine.IN_USE.toolName(), program);
                 heard.add(textAt(receipt, 0));
                 states.add(textAt(receipt, -1));
-            } catch (Throwable t) {
-                failure.set(t);
             } finally {
                 done.set(true);
             }
-        }, "gametest-external-brain");
-        brain.setDaemon(true);
-        brain.start();
+        }, failure::set);
         helper.runAfterDelay(10, () -> her.loop.submitPrompt("你好"));
 
         succeedWhen(helper, () -> {

@@ -65,7 +65,7 @@ final class ExternalBrain {
         if (waitSeconds > 0) {
             ExternalWait.Parked parked = hands.awaitEvents(companion);
             try {
-                batch = parked.batch().get(waitSeconds, TimeUnit.SECONDS);
+                batch = GameWaits.await(parked.batch()::isDone, () -> parked.batch().get(waitSeconds, TimeUnit.SECONDS));
             } catch (TimeoutException deadline) {
                 // 到点,转清扫——叫醒只是提前,正确性由清扫兜底
             } finally {

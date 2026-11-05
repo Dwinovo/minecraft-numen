@@ -449,8 +449,10 @@ public final class ExternalHost implements McpHost {
             }
             JsonObject toolArgs = args.deepCopy();
             toolArgs.remove("companion");
-            String result = hands.invoke(companion, toolName, toolArgs.toString(), progress::report)
-                    .get(timeoutSeconds, TimeUnit.SECONDS);
+            java.util.concurrent.CompletableFuture<String> running = hands.invoke(companion, toolName, toolArgs.toString(),
+                    progress::report);
+            // 工具在游戏里跑(程序一步步等主线程执行):收尾才到
+            String result = GameWaits.await(running::isDone, () -> running.get(timeoutSeconds, TimeUnit.SECONDS));
             return body(ExternalBrain.afterProgram(hands, companion, result));
         }
 

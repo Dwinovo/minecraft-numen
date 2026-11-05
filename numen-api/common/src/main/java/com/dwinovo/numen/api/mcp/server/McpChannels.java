@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 渠道令牌的信箱:她的回话和要问主人的事({@link Visits.Channel})攒在这里,渠道用 {@code get_replies} 取走。
@@ -23,16 +24,21 @@ final class McpChannels {
 
     private static final int CAPACITY = 256;
 
-    private final Map<String, LinkedBlockingDeque<JsonObject>> boxes = new ConcurrentHashMap<>();
+    /** 一张令牌的信箱,和投进来过几条(等着取的那一方凭它认"等的到了",取走之后信箱又空也不会认错)。 */
+    private record Box(LinkedBlockingDeque<JsonObject> items, AtomicLong posts) {}
 
-    private LinkedBlockingDeque<JsonObject> box(String token) {
-        return boxes.computeIfAbsent(token, k -> new LinkedBlockingDeque<>(CAPACITY));
+    private final Map<String, Box> boxes = new ConcurrentHashMap<>();
+
+    private Box box(String token) {
+        return boxes.computeIfAbsent(token, k -> new Box(new LinkedBlockingDeque<>(CAPACITY), new AtomicLong()));
     }
 
     private void post(String token, JsonObject item) {
-        LinkedBlockingDeque<JsonObject> box = box(token);
-        while (!box.offerLast(item)) {
-            box.pollFirst();
+        Box box = box(token);
+        // 先记一笔再投:等着的那一方一看到这一笔就不再算在等,哪怕它醒来取得比这边投得还快
+        box.posts().incrementAndGet();
+        while (!box.items().offerLast(item)) {
+            box.items().pollFirst();
         }
     }
 
@@ -79,13 +85,18 @@ final class McpChannels {
     }
 
     /** 取走这张令牌信箱里攒的;空的就最多等 {@code waitMillis},有一条到就把当时攒的都交出。 */
-    List<JsonObject> take(String token, long waitMillis) throws InterruptedException {
-        LinkedBlockingDeque<JsonObject> box = box(token);
-        JsonObject first = waitMillis > 0 ? box.pollFirst(waitMillis, TimeUnit.MILLISECONDS) : box.pollFirst();
+    List<JsonObject> take(String token, long waitMillis) throws Exception {
+        Box box = box(token);
+        LinkedBlockingDeque<JsonObject> items = box.items();
+        long seen = box.posts().get();
+        // 空着等的是她的话或征询:游戏那一头投进来才到
+        JsonObject first = waitMillis > 0 && items.isEmpty()
+                ? GameWaits.await(() -> box.posts().get() != seen, () -> items.pollFirst(waitMillis, TimeUnit.MILLISECONDS))
+                : items.pollFirst();
         List<JsonObject> out = new ArrayList<>();
         if (first != null) {
             out.add(first);
-            box.drainTo(out);
+            items.drainTo(out);
         }
         return out;
     }
