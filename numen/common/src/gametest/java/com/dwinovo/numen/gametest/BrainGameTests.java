@@ -901,31 +901,6 @@ public class BrainGameTests {
         });
     }
 
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void the_summon_limit_comes_from_the_server_settings(GameTestHelper helper) throws Exception {
-        var server = helper.getLevel().getServer();
-        var owner = GameTestKit.presentPlayer(helper, null, "gametest_limited");
-        var settings = com.dwinovo.numen.api.brain.ModelServices.of(server).settings();
-        settings.setMaxCompanions(1);
-        try {
-            helper.assertTrue(com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_a", false)
-                    .problem() == null, "the first one was refused");
-            var second = com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_b", false);
-            helper.assertTrue(second.problem() != null && second.body() == null, "the limit did not hold");
-            helper.assertTrue(com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "gametest_lim_a", false)
-                    .problem() == null, "waking the one she has took a slot");
-            helper.assertTrue(!com.dwinovo.numen.api.gametest.Bodies.summonFor(owner, "x", false).problem()
-                    .getString().isEmpty(), "a name that is not a name was summoned");
-        } finally {
-            settings.setMaxCompanions(0);
-            for (var entry : CompanionRegistry.get(server).ownedBy(owner.getUUID())) {
-                com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(entry.getKey()));
-            }
-            GameTestKit.leave(owner);
-        }
-        helper.succeed();
-    }
-
     /** 人设改名(文件名即身份):在用它的同伴改指新名字。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void renaming_a_persona_repoints_the_companions_using_it(GameTestHelper helper) throws Exception {

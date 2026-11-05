@@ -89,6 +89,14 @@ public final class Companions {
     public record Summoned(NumenPlayer body, net.minecraft.network.chat.Component problem) {}
 
     /**
+     * 名额闸:服主定了每人至多几只({@code limit},0 是不限),主人已经有这么多只时再召一只新的不行;叫醒他已有的那只
+     * ({@code hers})不占新名额。
+     */
+    static boolean overLimit(int limit, boolean hers, int owned) {
+        return limit > 0 && !hers && owned >= limit;
+    }
+
+    /**
      * <b>玩家召唤的唯一入口</b>:召唤卡与 {@code /numen player summon} 都走这里,谁都能召唤,只要一个名字,不设任何前提。
      * 名字要合 Minecraft 的命名规则、不能撞上在线的别人;每人最多养几只是服主在 {@code server.json} 里设的(缺省不限)——
      * 再召唤自己已有的同名同伴是叫醒她,不占名额。召唤成了把新名册推给他。
@@ -124,8 +132,8 @@ public final class Companions {
             return false;
         }
         int limit = com.dwinovo.numen.api.brain.ModelServices.of(server).settings().maxCompanions();
-        if (limit > 0 && findByOwnerName(server, owner.getUUID(), name) == null
-                && CompanionRegistry.get(server).ownedBy(owner.getUUID()).size() >= limit) {
+        if (overLimit(limit, findByOwnerName(server, owner.getUUID(), name) != null,
+                CompanionRegistry.get(server).ownedBy(owner.getUUID()).size())) {
             then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit)));
             return false;
