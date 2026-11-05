@@ -55,7 +55,8 @@ class KnowledgeVerbsTest {
                     List.of(), Lore.class));
             NumenPlugins.register("gt_kv_gone", numen -> numen.knowledgeSource(KnowledgeKind.RECIPES, "fluids",
                     List.of(), Gone.class));
-        }
+            NumenPlugins.register("gt_kv_rival", numen -> numen.knowledgeSource(KnowledgeKind.RECIPES, "byproducts",
+                    List.of(), Rival.class));        }
     }
 
     public record Query(@Doc("The item.") Item item) {}
@@ -78,6 +79,19 @@ class KnowledgeVerbsTest {
         @Fn("A source that answers.")
         public static InfoPage read(ServerCall call, Query args) {
             return new InfoPage(Optional.empty(), List.of("Sticks feed the press."));
+        }
+    }
+
+    /** 同一条配方(同一个 id)也列着,只多知道副产物。 */
+    public static final class Rival {
+        private Rival() {}
+
+        @Fn("A source that lists the same recipe.")
+        public static RecipePage read(ServerCall call, Query args) {
+            return RecipePage.of(List.of(
+                    new Recipe(Optional.of("gt:press_sticks"), "gt:press", Optional.empty(), "minecraft:stick", 4,
+                            List.of("250mB water"), List.of(), List.of(), Optional.empty(), Optional.empty(),
+                            Optional.empty(), List.of())));
         }
     }
 
@@ -114,8 +128,13 @@ class KnowledgeVerbsTest {
         assertEquals(1, recipes.size(), result.toString());
         JsonObject made = recipes.get(0).getAsJsonObject();
         assertEquals("gt:press", made.get("category").getAsString());
-        assertEquals("[\"gt_kv_press\"]", made.getAsJsonArray("sources").toString());
+        assertEquals("Press", made.get("category_name").getAsString());
+        assertEquals("[\"gt_kv_press\",\"gt_kv_rival\"]", made.getAsJsonArray("sources").toString(),
+                "两个来源列着同一条配方:合成一条,注明两个来源");
+        assertEquals("[\"250mB water\"]", made.getAsJsonArray("also_makes").toString(), "前一个来源缺的,由后一个补上");
+        assertEquals("[\"gt_press\"]", made.getAsJsonArray("catalysts").toString());
         assertEquals("answered", source(result, "gt_kv_press").get("status").getAsString());
+        assertEquals("answered", source(result, "gt_kv_rival").get("status").getAsString());
         assertEquals("[\"chance\"]", source(result, "gt_kv_press").getAsJsonArray("not_provided").toString());
         JsonObject gone = source(result, "gt_kv_gone");
         assertEquals("missing", gone.get("status").getAsString());
