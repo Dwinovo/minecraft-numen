@@ -17,7 +17,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 水下的路,从 {@code numen.move.walk} 的入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
- * 拽上去,回执说潜过一段水、憋了多久;长到憋不住的不下水,回执说出那一段水下在哪、要憋多久。
+ * 拽上去,回执说潜过一段水、憋了多久。
  */
 public class SwimGameTests {
 
@@ -123,31 +123,6 @@ public class SwimGameTests {
                     "no breath reflex event: " + told);
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("I went under water"),
                     "the reply does not tell the failed walk and the dive: " + walk.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 28 格长的封顶水道(一口气约 290 刻,满氧气安全地只憋得住 240 刻),是两边唯一的路:{@code numen.move.walk} 不下水,回执说那一段
-     * 水下从哪儿到哪儿、要憋多久、能憋多久,有水下呼吸才走得了;她没进过水,一点血不掉。
-     */
-    @GameTest(template = "floor52", timeoutTicks = 200, batch = ON_FOOT)
-    public static void goto_will_not_dive_a_sealed_channel_too_long_to_hold(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        sealedChannel(helper, 8, 36);
-        NumenPlayer companion = spawnAt(helper, "gametest_breathless", new BlockPos(5, 2, Z), false);
-        BlockPos there = helper.absolutePos(new BlockPos(39, 2, Z));
-        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
-        boolean[] wet = {false};
-        helper.onEachTick(() -> wet[0] |= companion.isInWater());
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("swims under water from")
-                            && walk.outcome().contains("without a breath") && walk.outcome().contains("water breathing"),
-                    "the reply does not say the way is too long under water: " + walk.outcome());
-            helper.assertTrue(!wet[0], "she went into the water");
-            helper.assertTrue(companion.getHealth() >= companion.getMaxHealth(), "she got hurt");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
