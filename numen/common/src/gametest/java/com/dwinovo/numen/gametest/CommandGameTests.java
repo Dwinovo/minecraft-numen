@@ -175,6 +175,35 @@ public class CommandGameTests {
         }
     }
 
+    /** 玩家名的大小写不产生第二个 UUID、身体或背包;按名遣散也认同一套名字。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_command")
+    public static void name_case_reuses_the_body_and_dismisses_the_same_identity(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var owner = presentVanillaPlayer(helper, null, "gametest_case_owner", "en_us");
+        var position = net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8)));
+        var body = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "QaCaseBody", helper.getLevel(), position);
+        var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+        body.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 3));
+        try {
+            for (String name : java.util.List.of("qacasebody", "QACASEBODY", "qAcAsEbOdY")) {
+                var same = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), name, helper.getLevel(), position);
+                helper.assertTrue(same == body, "case variation created another body: " + name);
+                helper.assertTrue(registry.ownedBy(owner.getUUID()).size() == 1, "the roster contains a duplicate identity");
+                helper.assertTrue(same.getGameProfile().getName().equals("QaCaseBody"), "the original spelling changed");
+                helper.assertTrue(same.getInventory().getItem(0).is(net.minecraft.world.item.Items.DIAMOND)
+                        && same.getInventory().getItem(0).getCount() == 3, "the inventory changed");
+            }
+            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.dismissByName(server, owner.getUUID(), "qacasebody") == 1,
+                    "case-insensitive dismissal did not find the identity");
+            helper.assertTrue(NumenPlayer.findByUuid(server, body.getUUID()) == null && registry.find(body.getUUID()) == null,
+                    "the dismissed identity is still present");
+            helper.succeed();
+        } finally {
+            if (registry.find(body.getUUID()) != null) com.dwinovo.numen.api.entity.Companions.dismiss(server, body);
+            leave(owner);
+        }
+    }
+
     /**
      * 服主踢她({@code /kick} 对目标做的就是 {@code connection.disconnect}):身体被外面移除。身体不在、大脑停牌、她的收件箱里留下一条事实、主人收到消息、名册记着;
      * 主人再召唤她就回来,停牌解开。
