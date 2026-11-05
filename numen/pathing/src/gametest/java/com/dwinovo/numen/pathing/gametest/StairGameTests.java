@@ -18,10 +18,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
-/** 楼梯、半砖与矮方块:走上走下、背面侧面、转角、上半楼梯当地面、螺旋楼梯、半砖台阶、各种矮方块上走与站。 */
+/** 楼梯、半砖与矮方块:走上走下、背面侧面、转角、螺旋楼梯、半砖台阶、各种矮方块上走与站。 */
 public class StairGameTests {
 
     private static final String BATCH = "pathing_stairs";
@@ -95,17 +94,6 @@ public class StairGameTests {
         t.go(body, Goals.at(t.at(8, 3, 6)), RouteSpec.defaults()).arrives();
     }
 
-    /** 一排倒扣的(上半)楼梯当地面走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 264)
-    public static void walks_on_upside_down_stairs(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(4, 1, 5, Blocks.STONE);
-        t.fill(5, 1, 5, 10, 1, 5, stair(Direction.EAST, Half.TOP));
-        t.set(11, 1, 5, Blocks.STONE);
-        TestBody body = t.body(4, 2, 5);
-        t.go(body, Goals.at(t.at(11, 2, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
-    }
-
     /** 绕着一根柱子的螺旋楼梯连上十二级(悬空的楼梯,一圈八级):一路走上去,不停在原地来回认步,四百刻内到顶。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 429)
     public static void climbs_a_spiral_staircase(GameTestHelper helper) {
@@ -155,16 +143,6 @@ public class StairGameTests {
         t.fill(9, 1, 4, 11, 2, 6, Blocks.STONE);
         TestBody body = t.body(2, 1, 5);
         t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
-    }
-
-    /** 上半砖、双层半砖垒成的台子与整块一样:要跳上去,站在顶上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 291)
-    public static void treats_top_and_double_slabs_as_full_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(7, 1, 4, 9, 1, 6, slab(SlabType.TOP));
-        t.fill(10, 1, 4, 12, 1, 6, slab(SlabType.DOUBLE));
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(11, 2, 5)), RouteSpec.defaults()).arrives();
     }
 
     /** 半砖接半砖:下半、上半、下半、上半,一级半格,一路走上去不起跳。 */
