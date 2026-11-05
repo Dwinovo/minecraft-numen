@@ -686,11 +686,12 @@ public class MovementGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
-        ToolRun follow = lua(companion, "numen.move.follow(\"pig@999999\")");
+        String absent = "pig@" + absentCode(helper.getLevel().getServer());
+        ToolRun follow = lua(companion, "numen.move.follow(\"" + absent + "\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(follow.done(), "follow has not replied");
-            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("pig@999999 is not near you")
+            helper.assertTrue(!follow.succeeded() && follow.outcome().contains(absent + " is not near you")
                             && "numen.scan.entities()".equals(follow.hint()),
                     "the failure does not name the missing id and the scan: " + follow.outcome() + " / " + follow.hint());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

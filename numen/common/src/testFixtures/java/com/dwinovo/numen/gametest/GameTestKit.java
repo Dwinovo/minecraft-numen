@@ -167,6 +167,25 @@ public final class GameTestKit {
         });
     }
 
+    /**
+     * 一个服务器上此刻没有实体用着的短码(实体身份 {@code 种类@短码} 的后半):从 {@code 999999} 往下找第一个没人的。短码取自实体 UUID 的
+     * 前六位,UUID 是随机的,"这里没有的实体"不能拿一个写死的码,先确认没有才用。
+     */
+    static String absentCode(net.minecraft.server.MinecraftServer server) {
+        java.util.Set<String> used = new java.util.HashSet<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (net.minecraft.world.entity.Entity entity : level.getAllEntities()) {
+                used.add(entity.getUUID().toString().substring(0, com.dwinovo.numen.api.sdk.EntityLabel.CODE_LENGTH));
+            }
+        }
+        for (int code = 0x999999; ; code--) {
+            String hex = String.format("%06x", code);
+            if (!used.contains(hex)) {
+                return hex;
+            }
+        }
+    }
+
     /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
     static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
         BlockPos at = helper.absolutePos(rel);

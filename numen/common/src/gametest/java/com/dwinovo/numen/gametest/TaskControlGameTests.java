@@ -627,6 +627,7 @@ public class TaskControlGameTests {
         ToolRun walk = lua(companion, "numen.move.walk(" + xyz(far) + ")");
         AtomicReference<ToolRun> follow = new AtomicReference<>();
         AtomicReference<ToolRun> blocked = new AtomicReference<>();
+        String absent = absentCode(companion.getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.reply() != null, "the first walk has not replied"))
@@ -642,14 +643,14 @@ public class TaskControlGameTests {
                 .thenExecute(() -> follow.set(lua(companion, "numen.move.follow()")))
                 .thenWaitUntil(() -> helper.assertTrue(follow.get().accepted(),
                         "following was not accepted: " + follow.get().reply()))
-                .thenExecute(() -> blocked.set(lua(companion, "numen.move.walk(\"pig@999999\")")))
+                .thenExecute(() -> blocked.set(lua(companion, "numen.move.walk(\"pig@" + absent + "\")")))
                 .thenWaitUntil(() -> helper.assertTrue(blocked.get().done(), "the blocked walk has not replied"))
                 .thenExecute(() -> {
                     ToolRun refused = blocked.get();
                     helper.assertTrue(refused.refused(), "a walk to nothing was accepted: " + refused.reply());
                     String reply = refused.outcome();
                     Constants.LOG.info("[numen-task] numen.move.walk refused -> {}", reply);
-                    helper.assertTrue(reply.contains("pig@999999 is not near you") && !reply.contains("task_id"),
+                    helper.assertTrue(reply.contains("pig@" + absent + " is not near you") && !reply.contains("task_id"),
                             "the refusal does not say why, or carries a task id: " + reply);
                     TaskRecord<?> inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
                     helper.assertTrue(inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,

@@ -120,7 +120,7 @@ public class ScriptGameTests {
                 local walked, why = pcall(numen.move.walk, %s)
                 if not walked then error("could not get there: " .. why, 0) end
                 numen.build.place({{name = "air", pos = %s}})
-                """.formatted("\"pig@999999\"", xyz(kept)));
+                """.formatted("\"pig@" + absentCode(level.getServer()) + "\"", xyz(kept)));
         Round round = round(helper, her, script);
 
         succeedWhen(helper, () -> {
@@ -1060,17 +1060,19 @@ public class ScriptGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
     public static void a_failed_call_is_on_stderr_whether_or_not_the_program_caught_it(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_failing", new BlockPos(2, 2, 2), false);
+        String absent = absentCode(helper.getLevel().getServer());
         ToolRun caught = lua(her, """
-                local ok, err = pcall(numen.fight.attack, "pig@999999")
+                local ok, err = pcall(numen.fight.attack, "pig@%s")
                 print(ok, err.kind)
-                """);
+                """.formatted(absent));
         String msg = JsonParser.parseString(caught.receipt()).getAsJsonObject().get("message").getAsString();
         helper.assertTrue(caught.ranToTheEnd() && msg.startsWith("ok · 1 call · "), msg);
         helper.assertTrue(msg.contains("\nstderr:\nline 1 numen.fight.attack: not_found — ")
                 && msg.contains("\nstdout:\nfalse\tnot_found"), "the caught failure is not on stderr: " + msg);
         sample("a failure the program caught", caught);
 
-        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(\"zombie@999999\")\n");
+        ToolRun uncaught = lua(her, "local n = numen.inv.count(\"minecraft:coal\")\nnumen.fight.attack(\"zombie@" + absent
+                + "\")\n");
         String stopped = JsonParser.parseString(uncaught.receipt()).getAsJsonObject().get("message").getAsString();
         helper.assertTrue(!uncaught.ranToTheEnd() && stopped.startsWith("The script stopped at line 2 after 2 calls: "
                 + "numen.fight.attack: not_found — ") && stopped.contains("\nhint: ")
