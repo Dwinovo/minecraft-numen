@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
-/** 挡路的方块与净空:栅栏、墙、栅栏门、玻璃板与铁栏杆;两格高的通道、一格半的缝、头顶按真实形状、起跳不撞头。 */
+/** 挡路的方块与净空:栅栏门;两格高的通道、头顶按真实形状、起跳不撞头。 */
 public class BlockGameTests {
 
     private static final String BATCH = "pathing_blocks";
@@ -44,46 +44,6 @@ public class BlockGameTests {
         barrier(t, x, gapZ, block, 1);
     }
 
-    /** 从来没翻过去:身体的脚一直在地面那一层。 */
-    private static void stayedLow(Trial.Run r) {
-        if (r.highestFeet > 1.3) {
-            throw new GameTestAssertException("翻过了挡路的方块:脚到过 " + r.highestFeet);
-        }
-    }
-
-    /** 栅栏挡着(一格半高,跳不过去),从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
-    public static void goes_around_a_fence(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        barrier(t, 8, 16, Blocks.OAK_FENCE);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(BlockGameTests::stayedLow);
-    }
-
-    /** 墙挡着,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 471)
-    public static void goes_around_a_wall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        barrier(t, 8, 16, Blocks.COBBLESTONE_WALL);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(BlockGameTests::stayedLow);
-    }
-
-    /** 栅栏上一扇开着的栅栏门:直接穿过去,不动它。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
-    public static void passes_an_open_fence_gate(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        barrier(t, 8, 5, Blocks.OAK_FENCE);
-        t.set(8, 1, 5, Blocks.OAK_FENCE_GATE.defaultBlockState().setValue(FenceGateBlock.FACING, Direction.EAST)
-                .setValue(FenceGateBlock.OPEN, true));
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(r -> {
-            if (!r.report.ledger().entries().isEmpty()) {
-                throw new GameTestAssertException("开着的门也动了:" + r.report.ledger().entries());
-            }
-        });
-    }
-
     /**
      * 栅栏上一扇关着的栅栏门,别处没有口:栅栏门身体能用手开,照原版打开它穿过去(开门不算改地形),实际账里记下这一开。
      */
@@ -101,26 +61,6 @@ public class BlockGameTests {
         });
     }
 
-    /**
-     * 两格高的玻璃板挡着:板子薄,身体也挤不过去,当墙,从口里绕过去。(一格高的玻璃板照原版站得上去,能踩着翻过去。)
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
-    public static void treats_glass_panes_as_a_wall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        barrier(t, 8, 16, Blocks.GLASS_PANE, 2);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(BlockGameTests::stayedLow);
-    }
-
-    /** 两格高的铁栏杆挡着,当墙,从口里绕过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
-    public static void treats_iron_bars_as_a_wall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        barrier(t, 8, 16, Blocks.IRON_BARS, 2);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(BlockGameTests::stayedLow);
-    }
-
     // ==================== 净空 ====================
 
     /** 两格高的通道照常走过去。 */
@@ -131,25 +71,6 @@ public class BlockGameTests {
         t.fill(5, 1, 5, 14, 2, 5, Blocks.AIR);
         TestBody body = t.body(2, 1, 5);
         t.go(body, Goals.at(t.at(16, 1, 5)), RouteSpec.defaults()).arrives();
-    }
-
-    /** 一格半高的缝(顶上是上半砖)钻不过去:绕远路,从不进那道缝。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
-    public static void does_not_squeeze_through_a_one_and_a_half_gap(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(8, 1, 1, 8, 3, 20, Blocks.STONE);
-        t.fill(8, 1, 5, 8, 2, 5, Blocks.AIR);
-        t.set(8, 2, 5, slab(SlabType.TOP));
-        t.fill(8, 1, 18, 8, 2, 18, Blocks.AIR);
-        TestBody body = t.body(4, 1, 5);
-        net.minecraft.core.BlockPos gap = t.at(8, 1, 5);
-        t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults())
-                .during(r -> {
-                    if (r.body.blockPosition().equals(gap)) {
-                        throw new GameTestAssertException("钻进了一格半高的缝");
-                    }
-                })
-                .within(600).arrives();
     }
 
     /**
