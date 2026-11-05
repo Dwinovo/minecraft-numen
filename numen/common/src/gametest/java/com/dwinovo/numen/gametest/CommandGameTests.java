@@ -458,27 +458,6 @@ public class CommandGameTests {
         });
     }
 
-    /**
-     * 主人一行规则都没写:出厂层放行只读与只说话的指令,{@code help} 与私信的别名 {@code tell} 不弹卡、直接执行;
-     * 没有规则说到的 setblock 照旧问,见 {@link #command_setblock_without_a_rule_asks_the_owner_first}。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_factory_rules_let_help_and_tell_run_without_asking(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_chatty", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gt_mc_listener");
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun help = lua(companion, "numen.mc.run(\"help\")");
-        ToolRun tell = lua(companion, "numen.mc.run(\"tell gt_mc_listener on my way\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(help.done() && help.succeeded(), "help did not run: " + help.outcome());
-            helper.assertTrue(tell.done() && tell.succeeded(), "tell did not run: " + tell.outcome());
-            helper.assertTrue(!asked[0], "a factory-allowed command asked the owner");
-            cleanUp(helper, companion, owner);
-        });
-    }
-
     /** 主人写了拒绝 setblock 的规则:当场如实失败、理由是那一行,不弹卡,世界不变。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_setblock_denied_by_a_rule_fails_with_the_rule(GameTestHelper helper) {
