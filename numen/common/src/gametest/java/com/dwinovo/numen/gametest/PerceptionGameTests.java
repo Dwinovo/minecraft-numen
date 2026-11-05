@@ -64,23 +64,7 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 不开界面读箱子里有什么:五颗钻石,报出来就是五颗钻石。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
-        BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
-        NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
-                            && storage.reply().contains("5"),
-                    "the chest's diamonds are not in the reply: " + storage.reply());
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 一只箱子从每一面都露出同一份存储:只列一份,面写全,不按面重复。 */
+    /** 不开界面读箱子:五颗钻石报出来就是五颗钻石;一只箱子从每一面都露出同一份存储,只列一份,面写全,不按面重复。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void inspect_block_storage_lists_a_chest_once_with_all_its_sides(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
@@ -93,6 +77,9 @@ public class PerceptionGameTests {
             helper.assertTrue(reply.contains("(sides: all,down,up,north,south,west,east)"),
                     "the chest is not one storage exposed on every side: " + reply);
             helper.assertTrue(!reply.contains("items #"), "the chest is listed more than once: " + reply);
+            helper.assertTrue(reply.contains("diamond") && reply.contains("5"),
+                    "the chest's diamonds are not in the reply: " + reply);
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -282,11 +269,24 @@ public class PerceptionGameTests {
         return run.data().getAsJsonObject("returned");
     }
 
-    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和类别。 */
+    /**
+     * 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和类别。合成、烧炼都做不出来的
+     * 东西(末影珍珠)交回空表。查用途:下界合金锭既合成下界合金块、也是锻造下界合金装备的那一格料,两个类别都列出来。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_lists_every_category(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "return numen.inv.recipes(\"minecraft:iron_ingot\")");
+        ToolRun recipe = lua(companion, """
+                local pearl = numen.inv.recipes("minecraft:ender_pearl")
+                if #pearl.recipes ~= 0 then error("ender pearls are given a recipe") end
+                local block, pickaxe = false, false
+                for _, x in ipairs(numen.inv.uses("minecraft:netherite_ingot").recipes) do
+                  block = block or (x.category == "minecraft:crafting" and x.item == "minecraft:netherite_block")
+                  pickaxe = pickaxe or (x.category == "minecraft:smithing" and x.item == "minecraft:netherite_pickaxe")
+                end
+                if not (block and pickaxe) then error("the netherite ingot's uses are not both there") end
+                return numen.inv.recipes("minecraft:iron_ingot")
+                """);
 
         succeedWhen(helper, () -> {
             java.util.Set<String> categories = new java.util.HashSet<>();
@@ -437,40 +437,6 @@ public class PerceptionGameTests {
                     && level.getBlockState(helper.absolutePos(new BlockPos(8, 2, 3))).is(Blocks.STONE), "looking changed the world");
             CompanionFactory.despawn(level.getServer(), companion);
             cow.discard();
-        });
-    }
-
-    /** 查一样合成、烧炼都做不出来的东西(末影珍珠):交回空表,没有配方。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "return numen.inv.recipes(\"minecraft:ender_pearl\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(returned(helper, recipe).getAsJsonArray("recipes").isEmpty(),
-                    "ender pearls are given a recipe: " + recipe.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 查用途:下界合金锭既合成下界合金块、也是锻造下界合金装备的那一格料,两个类别都列出来,每条带着它做出什么。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_uses_lists_every_recipe_that_takes_the_item(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_user", new BlockPos(3, 2, 3), false);
-        ToolRun uses = lua(companion, "return numen.inv.uses(\"minecraft:netherite_ingot\")");
-
-        succeedWhen(helper, () -> {
-            java.util.Map<String, java.util.Set<String>> made = new java.util.HashMap<>();
-            for (var one : returned(helper, uses).getAsJsonArray("recipes")) {
-                var r = one.getAsJsonObject();
-                made.computeIfAbsent(r.get("category").getAsString(), k -> new java.util.HashSet<>())
-                        .add(r.get("item").getAsString());
-            }
-            helper.assertTrue(made.getOrDefault("minecraft:crafting", java.util.Set.of()).contains("minecraft:netherite_block")
-                            && made.getOrDefault("minecraft:smithing", java.util.Set.of())
-                                    .contains("minecraft:netherite_pickaxe"),
-                    "the netherite ingot's uses are not both there: " + made);
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 

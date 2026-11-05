@@ -240,7 +240,7 @@ public class ContainerGameTests {
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 
-    /** 村民交易:看交易表,选第一笔(原版自己从背包填付款),取成品——面包到手,这一笔的已用次数跟着涨。 */
+    /** 村民交易:右键村民交回交易界面,看交易表,选第一笔(原版自己从背包填付款),取成品——面包到手,这一笔的已用次数跟着涨。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_container")
     public static void gui_choose_a_trade_and_take_the_result(GameTestHelper helper) {
         var villager = net.minecraft.world.entity.EntityType.VILLAGER.create(helper.getLevel());
@@ -258,10 +258,16 @@ public class ContainerGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_buyer", new BlockPos(6, 2, 8), false);
         com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.EMERALD, 5));
+        AtomicReference<ToolRun> press = new AtomicReference<>();
         AtomicReference<ToolRun> view = new AtomicReference<>();
 
-        Steps steps = steps(helper);
-        steps = call(helper, steps, companion, "numen.use.entity(" + ref(villager) + ")");
+        // 右键村民和右键箱子一样交回打开的那个界面(#118:点实体的声明也要有"打开界面")
+        Steps steps = steps(helper)
+                .thenExecute(() -> press.set(lua(companion, "numen.use.entity(" + ref(villager) + ")")))
+                .thenWaitUntil(() -> helper.assertTrue(press.get().done() && press.get().succeeded()
+                                && companion.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu
+                                && press.get().reply().contains("\"menu\""),
+                        "use entity did not hand back the trade window: " + press.get().reply()));
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
                 .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded() && view.get().reply().contains("\"trades\"")
                                 && view.get().reply().contains("minecraft:bread") && view.get().reply().contains("\"max\":5"),
