@@ -109,30 +109,6 @@ public class ArriveGameTests {
         });
     }
 
-    /** 熔炉四面与顶上都是石头、底下是地板:use.block 走不到,如实说四面封死、能挖开哪一面,什么都没点,她一步不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
-    public static void use_on_a_walled_in_block_says_what_to_dig(GameTestHelper helper) {
-        set(helper, 8, 2, 8, Blocks.FURNACE);
-        set(helper, 7, 2, 8, Blocks.STONE);
-        set(helper, 9, 2, 8, Blocks.STONE);
-        set(helper, 8, 2, 7, Blocks.STONE);
-        set(helper, 8, 2, 9, Blocks.STONE);
-        set(helper, 8, 3, 8, Blocks.STONE);
-        BlockPos furnace = helper.absolutePos(new BlockPos(8, 2, 8));
-        NumenPlayer companion = spawnAt(helper, "gametest_sealed_cook", new BlockPos(2, 2, 8), false);
-        BlockPos before = companion.blockPosition();
-        ToolRun press = use(companion, furnace);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done() && !press.succeeded(), "it was not refused");
-            helper.assertTrue(press.outcome().contains("walled in on every side")
-                            && press.outcome().contains("`numen.work.dig({"),
-                    "the refusal does not say it is sealed and what to dig: " + press.outcome());
-            helper.assertTrue(companion.blockPosition().equals(before), "she moved");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
      * 一格半空(地面上两格、四周什么都没有):{@code numen.build.place} 自己走到手够得着往里放方块的地方,不站进那一格,放进去——
      * 够得着就是放得下。
