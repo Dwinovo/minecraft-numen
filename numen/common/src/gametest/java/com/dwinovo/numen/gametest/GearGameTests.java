@@ -332,11 +332,11 @@ public class GearGameTests {
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         companion.getInventory().add(new ItemStack(Items.DIAMOND));
-        net.minecraft.world.phys.AABB around = companion.getBoundingBox().inflate(4);
         dismiss.accept(owner, companion);
 
         succeedWhen(helper, () -> {
-            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, around);
+            // 原版扔出来的掉落物带随机的初速,落在哪不定;场地四周有屏障墙挡着,整块场地圈得住每一种落法
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, helper.getBounds());
             int shards = drops.stream().filter(e -> e.getItem().is(Items.AMETHYST_SHARD))
                     .mapToInt(e -> e.getItem().getCount()).sum();
             int helmets = drops.stream().filter(e -> e.getItem().is(Items.IRON_HELMET))

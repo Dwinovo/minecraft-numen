@@ -499,8 +499,9 @@ public class CombatGameTests {
         }
         for (int i = 0; i < 2; i++) {
             BlockPos at = helper.absolutePos(new BlockPos(12, 2, 3 + i));
+            // 不带原版给的随机初速(照主流:清零速度):两根挨着放的木棍漂到一起会并成一堆,"两件"就成了一件
             level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, at.getX() + 0.5, at.getY(),
-                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK)));
+                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK), 0, 0, 0));
         }
 
         succeedWhen(helper, () -> {
