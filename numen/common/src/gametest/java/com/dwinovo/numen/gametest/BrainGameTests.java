@@ -779,8 +779,10 @@ public class BrainGameTests {
 
         var told = new ArrayList<com.dwinovo.numen.api.network.payload.LibraryPayload>();
         succeedWhen(helper, () -> {
+            // 只收连通性检测这一类表:同批别的用例增删档案时,新的档案表会推给在线的每个人,和这里问的无关
             GameTestKit.received(player).forEach(p -> {
-                if (p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l) {
+                if (p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l
+                        && l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK)) {
                     told.add(l);
                 }
             });
@@ -1323,7 +1325,11 @@ public class BrainGameTests {
                             "the catalog was not answered whole: " + catalog);
                     helper.assertTrue(told.stream().anyMatch(l -> l.entries().contains("checking")),
                             "the test did not first say it was trying: " + told);
-                    helper.assertTrue(GameTestKit.received(other).isEmpty(),
+                    // 答复是目录与连通性检测这两类表;同批别的用例增删档案时推给每个人的档案表不算
+                    helper.assertTrue(GameTestKit.received(other).stream().noneMatch(p ->
+                                    p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l
+                                            && (l.kind().equals(com.dwinovo.numen.api.brain.Libraries.CATALOG)
+                                            || l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK))),
                             "the answer reached a player who did not ask");
                     server.getPlayerList().deop(admin.getGameProfile());
                     GameTestKit.leave(other);
