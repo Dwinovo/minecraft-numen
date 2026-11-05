@@ -118,6 +118,10 @@ public final class GameTestSuites {
             own.stream().filter(f -> admits(suite.pace(), f)).forEach(out::add);
         }
         BackgroundSettle.install(background);
+        // 每个维度的世界随机数(掉落物的初速、降水与天气的骰子)原版是不定种子的;开服时按世界种子与维度定下来,
+        // 每刻用掉多少又是确定的,同一次选择每次开服掷出同样的点数
+        com.dwinovo.numen.api.platform.ServerLifecycle.afterStarted(server -> server.getAllLevels().forEach(level ->
+                level.getRandom().setSeed(level.getSeed() ^ level.dimension().location().toString().hashCode())));
         GlobalTestReporter.replaceWith(new TestTicks(new LogTestReporter()));
         return spread(out);
     }
