@@ -148,6 +148,23 @@ public class BrainGameTests {
         }
     }
 
+    /** 札记的落点已经换成测试的了。 */
+    private static boolean testNotes;
+
+    /**
+     * 札记换到临时目录里,每只同伴一个子目录;整次开服只换一次。札记的落点是全服一份({@link NoteBook#init} 还会清掉开着的本子),
+     * 每个用例各换一次,同一批里先起的同伴就会读写到后起的那一处去。
+     */
+    static void useTestNotes() throws java.io.IOException {
+        if (testNotes) {
+            return;
+        }
+        Path root = Files.createTempDirectory("numen-gametest-notes-");
+        Io io = NumenIo.inline("numen-gametest");
+        NoteBook.init(uuid -> new Home(root.resolve(uuid.toString()), io), () -> 0);
+        testNotes = true;
+    }
+
     /** 一只带服务端大脑的同伴:家在临时目录里,写在调用线程上直接做(用例读日志不必等车道)。 */
     static final class Brain {
         final NumenPlayer companion;
@@ -185,7 +202,7 @@ public class BrainGameTests {
             CompanionRegistry.get(server).put(companion.getUUID(), new CompanionRegistry.Entry(name,
                     companion.getOwnerUuid(), Level.OVERWORLD, companion.blockPosition()));
             Io io = NumenIo.inline("numen-gametest");
-            NoteBook.init(uuid -> new Home(dir.resolve("memory"), io), () -> 0);
+            useTestNotes();
             this.rooms = Conversations.of(server, companion.getOwnerUuid());
             this.loop = CompanionBrains.create(server, companion.getUUID(), companion.getOwnerUuid(),
                     new Home(dir.resolve("her"), io), mind, link == null ? owner : link, () -> ownerOnline,
@@ -1162,9 +1179,7 @@ public class BrainGameTests {
                 new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         CompanionRegistry.get(server).put(body.getUUID(), new CompanionRegistry.Entry("gametest_ondemand",
                 body.getOwnerUuid(), Level.OVERWORLD, body.blockPosition()));
-        Io io = NumenIo.inline("numen-gametest");
-        Path notes = Files.createTempDirectory("numen-gametest-notes-");
-        NoteBook.init(uuid -> new Home(notes, io), () -> 0);
+        useTestNotes();
 
         CompanionLoop loop = com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID());
 
