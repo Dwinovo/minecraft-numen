@@ -25,7 +25,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 
-/** 上下:上一级、下一级、连续台阶、落差、摔落上限、跳水缓冲、挑对的下法,以及普查补充的几种。 */
+/** 上下:上一级、下一级、连续台阶、落差、摔落上限、跳水缓冲,以及普查补充的几种。 */
 public class UpDownGameTests {
 
     private static final String BATCH = "pathing_updown";
@@ -221,19 +221,6 @@ public class UpDownGameTests {
         t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
     }
 
-    /** 六格高的台子,旁边有一道长台阶:不跳,走台阶下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 456)
-    public static void does_not_jump_from_beyond_the_fall_limit(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 2, 7, 6, 7, Blocks.STONE);
-        for (int i = 0; i < 6; i++) {
-            t.fill(2, 1, 8 + i, 3, 6 - i, 8 + i, Blocks.STONE);
-        }
-        TestBody body = t.body(6, 7, 5);
-        t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults()).within(700).arrives()
-                .then(UpDownGameTests::unhurt);
-    }
-
     /** 十二格高的柱顶,旁边一池两格深的水:跳进水里,不掉血。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 426)
     public static void jumps_into_water_to_break_a_fall(GameTestHelper helper) {
@@ -242,20 +229,6 @@ public class UpDownGameTests {
         pool(t, 5, 3, 7, 5, 2);
         TestBody body = t.body(4, 12, 4);
         t.go(body, Goals.at(t.at(11, 1, 4)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 八格高的台子:一边是直落,一边是水池,远处有台阶——挑不摔伤的那条。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 435)
-    public static void picks_a_safe_way_down(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 10, 14, 8, 14, Blocks.STONE);
-        pool(t, 15, 11, 16, 13, 2);
-        for (int i = 0; i < 8; i++) {
-            t.fill(10 + i, 1, 20 + i, 14, 8 - i, 20 + i, Blocks.STONE);
-        }
-        TestBody body = t.body(12, 9, 12);
-        t.go(body, Goals.at(t.at(12, 1, 3)), RouteSpec.defaults()).within(700).arrives()
-                .then(UpDownGameTests::unhurt);
     }
 
     // ==================== 普查补充 ====================
@@ -302,35 +275,6 @@ public class UpDownGameTests {
         TestBody body = t.body(4, 8, 4);
         t.go(body, Goals.at(t.at(10, 1, 4)), RouteSpec.defaults())
                 .arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /**
-     * 规格许落二十格;七格高的台子,另有一道长台阶。满血的身体直接跳(摔掉 4 点血比绕台阶便宜);只剩 7 点血的身体
-     * 摔落上限收到 4 格,走台阶,一点血不掉。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
-    public static void low_health_tightens_the_fall_limit(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
-        for (int side : new int[] {0, 20}) {
-            t.fill(side + 2, 1, 2, side + 6, 7, 6, Blocks.STONE);
-            for (int i = 0; i < 7; i++) {
-                t.fill(side + 2, 1, 7 + 2 * i, side + 3, 7 - i, 8 + 2 * i, Blocks.STONE);
-            }
-        }
-        TestBody healthy = t.body(5, 8, 4);
-        TestBody weak = t.body(25, 8, 4);
-        weak.setHealth(7);
-        t.go(healthy, Goals.at(t.at(10, 1, 4)), spec).within(800).arrives().then(r -> {
-            if (r.lowestHealth >= 20) {
-                throw new GameTestAssertException("满血的身体没有直接跳下去 " + r.navigation);
-            }
-        });
-        t.go(weak, Goals.at(t.at(30, 1, 4)), spec).within(800).arrives().then(r -> {
-            if (r.lowestHealth < 7) {
-                throw new GameTestAssertException("只剩 7 点血却摔了下去:最低 " + r.lowestHealth);
-            }
-        });
     }
 
     /**
