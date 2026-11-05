@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
 /**
@@ -31,7 +30,6 @@ public final class BackgroundSettle {
     private static final Logger LOG = LogUtils.getLogger();
     /** 等多久算卡住:远大于任何正常的一刻。 */
     static final long LIMIT_SECONDS = 60;
-    private static final long POLL_NANOS = TimeUnit.MICROSECONDS.toNanos(200);
 
     private BackgroundSettle() {}
 
@@ -49,17 +47,23 @@ public final class BackgroundSettle {
         settle(server);
     }
 
+    /**
+     * 等的时候用原版"主线程等一件事"的写法({@code managedBlock}):排给主线程的任务不论这一刻还剩不剩时间都执行。直接调
+     * {@code pollTask} 不行——原版只在这一刻还没超时、或任务已经排了三刻以上时才执行它,这一刻一超时,后台等主线程、主线程等后台,
+     * 直到后台那一头自己的时限到了才散。
+     */
     private static void settle(MinecraftServer server) {
+        if (firstUnsettled() == null) {
+            return;
+        }
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(LIMIT_SECONDS);
-        for (String unsettled = firstUnsettled(); unsettled != null; unsettled = firstUnsettled()) {
-            if (System.nanoTime() > deadline) {
-                String why = "background work did not settle within " + LIMIT_SECONDS + " s: " + unsettled;
-                LOG.error("[numen-gametest] {}", why);
-                throw new IllegalStateException(why);
-            }
-            if (!server.pollTask()) {
-                LockSupport.parkNanos(POLL_NANOS);
-            }
+        // 停下来的判断与报错用同一次读数:读完之后后台又动了是下一次等的事,不是卡住
+        String[] unsettled = new String[1];
+        server.managedBlock(() -> (unsettled[0] = firstUnsettled()) == null || System.nanoTime() > deadline);
+        if (unsettled[0] != null) {
+            String why = "background work did not settle within " + LIMIT_SECONDS + " s: " + unsettled[0];
+            LOG.error("[numen-gametest] {}", why);
+            throw new IllegalStateException(why);
         }
     }
 
