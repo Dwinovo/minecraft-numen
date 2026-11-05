@@ -1973,6 +1973,8 @@ public class PermissionGameTests {
                 level.getBlockState(village)), level);
         var inShaft = gate.judgeLive(com.dwinovo.numen.api.permission.Action.breakBlock(shaft,
                 level.getBlockState(shaft)), level);
+        // 倒着还原:两处落在同一个区块时,后拍的"原状"里已经有先放的那一个,顺着还原会把它留下
+        java.util.Collections.reverse(placedStarts);
         placedStarts.forEach(Runnable::run);
         CompanionFactory.despawn(level.getServer(), companion);
 
