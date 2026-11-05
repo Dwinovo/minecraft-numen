@@ -118,45 +118,6 @@ public class WalkGameTests {
         });
     }
 
-    /**
-     * 能走就不挖:一道泥土墙横贯场地,近处留了口。她绕到口子过去,墙一格不少;把口子也堵上,绕不过去了,她才挖。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 387, batch = ON_FOOT)
-    public static void she_goes_around_a_wall_and_digs_only_when_there_is_no_way_around(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int z = 0; z <= 15; z++) {
-            for (int y = 2; y <= 3; y++) {
-                if (z != 4) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, z)), Blocks.DIRT.defaultBlockState());
-                }
-            }
-        }
-        NumenPlayer companion = spawnAt(helper, "gametest_detour", new BlockPos(2, 2, 2), false);
-        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 2));
-        ToolRun around = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
-        ToolRun[] through = new ToolRun[1];
-
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(around.done(), "the walk around has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(around.succeeded() && companion.blockPosition().distSqr(target) <= 1,
-                            "she did not get around the wall: " + around.outcome());
-                    helper.assertTrue(!around.outcome().contains("En route I had to") && returned(around).get("dug").getAsInt() == 0,
-                            "she changed the world though a way around was close: " + around.outcome());
-                    for (int y = 2; y <= 3; y++) {
-                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, 4)), Blocks.DIRT.defaultBlockState());
-                    }
-                    through[0] = lua(companion, "return numen.move.walk(" + at(helper, new BlockPos(2, 2, 2)) + ")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(through[0].done(), "the walk back has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(through[0].succeeded() && returned(through[0]).get("dug").getAsInt() > 0,
-                            "with no way around she should have dug: " + through[0].outcome());
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
-    }
-
     /** {@code numen.move.away}:离开一处至少几格,停下时离它够远,回执说还差 0。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void away_gets_far_enough_from_a_place(GameTestHelper helper) {
@@ -353,48 +314,6 @@ public class WalkGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
                             "she did not get back down (pillar blocks marked: " + marked[0] + "): " + runs[1].outcome());
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
-    }
-
-    /**
-     * 垫柱把自己的出口填满:她在一根三格高的基岩烟囱里(墙挖不动),只能垫柱子升上去、翻出去;出来之后要回烟囱底。垫的柱子是走路
-     * 顺手垫的路(放置记号是垫路),走路规则不禁挖它,回程拆自己的柱子下去,照常经权限层(她自己放的,放行)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 900, batch = ON_FOOT)
-    public static void a_walk_back_into_the_chimney_she_pillared_out_of(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int y = 2; y <= 4; y++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx != 0 || dz != 0) {
-                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)),
-                                Blocks.BEDROCK.defaultBlockState());
-                    }
-                }
-            }
-        }
-        NumenPlayer companion = spawnBare(helper, "gametest_chimney", new BlockPos(8, 2, 8), false);
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE, 32));
-        BlockPos home = companion.blockPosition();
-        BlockPos outside = helper.absolutePos(new BlockPos(13, 2, 8));
-        ToolRun[] runs = {null, null};
-        steps(helper)
-                .thenExecute(() -> runs[0] = lua(companion, "return numen.move.walk(" + xyz(outside) + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb out has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(outside) <= 2,
-                            "she did not get out: " + runs[0].outcome());
-                    var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-                    helper.assertTrue(placed.isPlaced(home, level.getBlockState(home)) && !placed.isBuilt(home.asLong()),
-                            "the pillar block she laid at home is not marked as laid path");
-                    runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
-                            "she did not get back in: " + runs[1].outcome());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();

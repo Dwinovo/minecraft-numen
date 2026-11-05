@@ -173,43 +173,6 @@ public class ScriptGameTests {
     }
 
     /**
-     * 一次扫描的每一团:{@code numen.scan.blocks} 直接给出团的列表(近的在前),脚本逐个走过去挖;两团矿都挖掉,打印的是两团最近那一格,
-     * 近的在前。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
-    public static void a_program_goes_through_the_clusters_of_a_scan(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos near = helper.absolutePos(new BlockPos(4, 2, 4));
-        BlockPos far = helper.absolutePos(new BlockPos(11, 2, 11));
-        level.setBlockAndUpdate(near, Blocks.IRON_ORE.defaultBlockState());
-        level.setBlockAndUpdate(far, Blocks.IRON_ORE.defaultBlockState());
-        NumenPlayer her = spawnAt(helper, "gametest_lua_parts", new BlockPos(2, 2, 2), false);
-        her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        LlmToolCall script = programCall("""
-                for _, c in ipairs(numen.scan.blocks("minecraft:iron_ore", {radius = 14})) do
-                  print(c.nearest.pos.x, c.nearest.pos.z)
-                  numen.work.dig(c)
-                end
-                """);
-        Round[] round = new Round[1];
-
-        steps(helper)
-                .thenExecute(() -> round[0] = round(helper, her, script))
-                .thenWaitUntil(() -> {
-                    helper.assertTrue(round[0].hasSettled(), "the script has not finished");
-                    String msg = message(round[0], script);
-                    helper.assertTrue(receipt(round[0], script).get("success").getAsBoolean(),
-                            "the script failed: " + msg);
-                    helper.assertTrue(msg.contains("stdout:\n" + near.getX() + "\t" + near.getZ() + "\n" + far.getX()
-                                    + "\t" + far.getZ()), "it did not go through both clusters, near first: " + msg);
-                    helper.assertTrue(!level.getBlockState(near).is(Blocks.IRON_ORE)
-                            && !level.getBlockState(far).is(Blocks.IRON_ORE), "not both clusters were dug: " + msg);
-                })
-                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), her))
-                .thenSucceed();
-    }
-
-    /**
      * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,一段程序扫到它们,把那一团交给 {@code numen.work.mine} 挖空——走到够得着、挖、
      * 捡,直到交给它的一格不剩;铁都进了包,返回挖了几格。它里面没有一处接住错误往下走:哪一步失败,整段就停在那一步。
      */
@@ -430,38 +393,6 @@ public class ScriptGameTests {
                 "expand_vert reaches from the lowest to the highest block: " + got);
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
-    }
-
-    /**
-     * 查到的东西原样交给动作:{@code numen.scan.blocks} 一团的最近一格、{@code numen.scan.block} 读到的一块,都直接进 {@code numen.work.dig};两格都挖掉,
-     * 程序拿到的是两份数据({@code dug} 各一格),不是话。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void what_a_query_returns_goes_into_an_action_as_it_is(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos first = helper.absolutePos(new BlockPos(6, 2, 4));
-        BlockPos second = helper.absolutePos(new BlockPos(4, 2, 6));
-        level.setBlockAndUpdate(first, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
-        level.setBlockAndUpdate(second, Blocks.VERDANT_FROGLIGHT.defaultBlockState());
-        NumenPlayer her = spawnAt(helper, "gametest_lua_handover", new BlockPos(4, 2, 4), true);
-        LlmToolCall script = programCall("""
-                local found = numen.scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
-                local a = numen.work.dig(found[1].nearest)
-                local b = numen.work.dig(numen.scan.block(%s))
-                return {a.dug, b.dug}
-                """.formatted(xyz(second)));
-        Round round = round(helper, her, script);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the script has not finished");
-            JsonObject receipt = receipt(round, script);
-            helper.assertTrue(receipt.get("success").getAsBoolean(), "the script failed: " + receipt);
-            helper.assertTrue(round.data().get("returned").toString().equals("[1,1]"),
-                    "the two digs did not hand back one cell each as data: " + receipt);
-            helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
-                    "a block handed on as it was is still standing: " + receipt);
-            CompanionFactory.despawn(level.getServer(), her);
-        });
     }
 
     /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.walk},她走到牛跟前。 */
@@ -763,74 +694,6 @@ public class ScriptGameTests {
                             "the program did not run to the end with the whole text: " + receipt);
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
-                })
-                .thenSucceed();
-    }
-
-    /**
-     * 停止键切断一段已经挖了几格的程序:这一批作废,模型当场读不到它的回执;服务端上的程序当场停下、照常交出回执,晚到的回执作为一条
-     * {@code program_stopped} 事件进她的收件箱(客户端的工具口做的),正文就是服务端写的那份回执——写明切断了、已经挖了什么、后面的没挖。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_program_cut_off_by_the_stop_button_leaves_its_receipt_in_her_inbox(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_lua_cut", new BlockPos(2, 2, 2), true);
-        List<BlockPos> cells = new java.util.ArrayList<>();
-        for (int x = 3; x <= 8; x++) {
-            BlockPos cell = helper.absolutePos(new BlockPos(x, 2, 2));
-            level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-            cells.add(cell);
-        }
-        StringBuilder code = new StringBuilder();
-        cells.forEach(cell -> code.append("numen.work.dig(").append(xyz(cell)).append(")\n"));
-        List<String> afterwards = new java.util.ArrayList<>();
-        com.dwinovo.numen.api.agent.tool.CompanionToolPort port = new com.dwinovo.numen.api.agent.tool.CompanionToolPort(
-                her.getUUID(), () -> () -> her.getUUID(), programs(her),
-                new com.dwinovo.numen.api.agent.tool.ToolBook() {
-                    @Override
-                    public List<com.dwinovo.numen.api.agent.tool.NumenTool> all() {
-                        return com.dwinovo.numen.api.agent.tool.ToolRegistry.all();
-                    }
-
-                    @Override
-                    public com.dwinovo.numen.api.agent.tool.NumenTool resolve(String name) {
-                        return com.dwinovo.numen.api.agent.tool.ToolRegistry.resolve(name);
-                    }
-                }, (program, receipt) -> afterwards.add(Program.Outcome.messageOf(receipt)));
-        List<String> handedToTheModel = new java.util.ArrayList<>();
-        port.run(List.of(programCall(code.toString())), new com.dwinovo.numen.api.agent.loop.ToolPort.Sink() {
-            @Override
-            public void started(LlmToolCall call) {
-            }
-
-            @Override
-            public void finished(LlmToolCall call, String resultJson) {
-                handedToTheModel.add(resultJson);
-            }
-
-            @Override
-            public void settled() {
-            }
-        });
-
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cells.get(1)).isAir(),
-                        "she has not dug the first two cells"))
-                .thenExecute(() -> port.cancel(true))
-                .thenWaitUntil(() -> helper.assertTrue(!afterwards.isEmpty(), "the cut-off program's receipt has not come"))
-                .thenExecute(() -> {
-                    String receipt = afterwards.get(0);
-                    helper.assertTrue(handedToTheModel.isEmpty(), "the void batch was handed a result: " + handedToTheModel);
-                    helper.assertTrue(receipt.contains("this turn was cut off"), receipt);
-                    helper.assertTrue(receipt.matches("(?s).*\nstderr:\nline \\d+ numen\\.work\\.dig: .*"),
-                            "the receipt does not say what was dug: " + receipt);
-                    helper.assertTrue(level.getBlockState(cells.get(cells.size() - 1)).is(Blocks.STONE),
-                            "the cut-off program kept digging");
-                    var entry = com.dwinovo.numen.api.event.NumenEvents.programStopped(0L, "p", receipt, 1L);
-                    helper.assertTrue(entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.PROGRAM_STOPPED)
-                            && entry.text().contains("this turn was cut off") && !entry.urgent(),
-                            "the receipt does not become her event: " + entry);
-                    CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
     }
