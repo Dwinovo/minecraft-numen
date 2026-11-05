@@ -311,16 +311,15 @@ public class DetourGameTests {
             if (current.waiting()) {
                 waiting++;
             }
-            Object navigation = field(current, "navigation");
-            Object driver = navigation == null ? null : field(navigation, "driver");
-            Object result = driver == null ? null : field(driver, "lastResult");
+            // 最近一次搜索的输入与结论、为什么派、总预算都记在这一趟({@link Trip})自己身上
+            Object result = field(current, "lastResult");
             if (result == null || result == seen) {
                 return;
             }
             seen = result;
             SearchResult r = (SearchResult) result;
-            Search search = (Search) field(driver, "lastSearch");
-            Object allowance = field(driver, "allowance");
+            Search search = (Search) field(current, "lastSearch");
+            Object allowance = field(current, "allowance");
             double h = r.startEstimate();
             if (searches == 0) {
                 first = h;
@@ -330,7 +329,7 @@ public class DetourGameTests {
             String blocking = b == null || r.arrived() ? "-"
                     : b.move() + " 从 " + rel(b.from()) + " 卡在 " + rel(b.fails().cell()) + " 前提=" + b.fails().reason();
             // 从脚下搜的,起点就是身体此刻的位置:之前装进去的路线没走完的部分不算数,只算走完的步
-            if (String.valueOf(field(driver, "purpose")).equals("FROM_BODY")) {
+            if (String.valueOf(field(current, "purpose")).equals("FROM_BODY")) {
                 committed = walked();
             }
             double bound = committed + h;
@@ -338,7 +337,7 @@ public class DetourGameTests {
             Constants.LOG.info(String.format(Locale.ROOT,
                     "[detour-probe] %s #%d 刻 %d 墙钟 %dms 起点 %s %s 停因 %s 展开 %d 起点估价 %.1f(直线估价的 %.2f 倍) 总价下界 %.1f(直线估价的 %.2f 倍) 路线 %s 总预算 %s/%s 离目标最近处被拒:%s",
                     label, ++searches, her.level().getGameTime() - startTick, (System.nanoTime() - startNanos) / 1_000_000,
-                    rel(search.start()), field(driver, "purpose"), r.stop(), r.expanded(), h, h / first, bound, bound / first,
+                    rel(search.start()), field(current, "purpose"), r.stop(), r.expanded(), h, h / first, bound, bound / first,
                     route == null ? "无" : String.format(Locale.ROOT, "%d步 代价%.1f 终点%s", route.legs().size(), route.cost(),
                             rel(route.end())),
                     field(allowance, "spent"), field(allowance, "total"), blocking));
