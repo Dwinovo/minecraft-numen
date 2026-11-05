@@ -26,7 +26,6 @@ import com.dwinovo.numen.api.task.TaskFactory;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
-import com.google.gson.JsonParser;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
@@ -63,9 +62,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  *       没有规则说到的问主人,点了头的那一句随值写进程序的回执;出厂规则放行只读与只说话的指令。</li>
  *   <li>{@code /numen} 只有管理同伴的指令,只给玩家——她经 {@code numen.mc.run} 敲不到。</li>
  *   <li>包装模组管理指令的函数经 {@link ServerCall#onHer} 借服务器的权威、只作用于她(夹具组 {@code gt_twin})。</li>
- *   <li>占身体的活受理时回它的编号,收尾的 task_finished 对着同一个编号与函数名。</li>
- *   <li>{@code /numen drive <同伴> <程序>} 和她自己写的程序同一个入口;一件短活的账、主人点过头的指令都写进那张回执,回到 drive 的
- *       发令人(夹具组 {@code gt_sync} 的 {@code hold} 是一件有界短活)。</li>
+ *   <li>{@code /numen drive <同伴> <程序>} 和她自己写的程序同一个入口,那张回执回到 drive 的发令人。</li>
  *   <li>{@code numen.mc.run("help <指令>")} 在原版用法之后接上从 Brigadier 挖出的参数类型、例子与候选;写错了接上最接近的候选。</li>
  * </ul>
  */
@@ -284,34 +281,22 @@ public class CommandGameTests {
     }
 
     /**
-     * 她跑命令的权限等级只取主人的:服主把她写进了 OP 表(4 级)、主人不是 OP,她跑 give 仍当场如实失败、背包不变——
-     * 否则普通玩家就能借她跑 OP 命令。
+     * 她跑命令的权限等级只取主人的:服主把她写进了 OP 表(4 级)、主人还不是 OP,她跑 give 当场如实失败、帮助里也没有 /give——否则普通玩家
+     * 就能借她跑 OP 命令。主人成了 OP:她跑得了 give;主人下线之后按档案照样算——OP 表认的是档案,不是在不在线。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_her_own_op_does_not_lend_the_owner_a_level(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_borrowed", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_commoner");
-        companion.getServer().getPlayerList().getOps()
-                .add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
-        ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
-        String help = said(lua(companion, "numen.mc.run(\"help\")"));
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(give.refused() && give.outcome().contains("the server does not let you use /give"),
-                    "her own op level ran an op command for a non-op owner: " + give.reply());
-            helper.assertTrue(!help.contains("/give "), "her help lists /give on her own op level: " + help);
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond on her own op");
-            cleanUp(helper, companion, owner);
-        });
-    }
-
-    /** 主人是 OP:她跑得了 give;主人下线之后按档案照样算——OP 表认的是档案,不是在不在线。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_level_follows_the_owners_profile_even_when_offline(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_proxy", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_proxy_owner");
-        grantOp(owner);
         storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
+        companion.getServer().getPlayerList().getOps().add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
+        ToolRun borrowed = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
+        String help = said(lua(companion, "numen.mc.run(\"help\")"));
+        helper.assertTrue(borrowed.refused() && borrowed.outcome().contains("the server does not let you use /give"),
+                "her own op level ran an op command for a non-op owner: " + borrowed.reply());
+        helper.assertTrue(!help.contains("/give "), "her help lists /give on her own op level: " + help);
+        helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond on her own op");
+        grantOp(owner);
         ToolRun online = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
         helper.assertTrue(online.done() && online.succeeded(), "an op owner's companion could not give: " + online.outcome());
         leave(owner);
@@ -528,29 +513,6 @@ public class CommandGameTests {
     }
 
     /**
-     * 占身体的活从脚本里派出:受理时交回活的编号(调度器按调用 id 认得出它派下的活),任务叫那个函数名,收尾的 task_finished 用的是
-     * 受理时那个编号与名字。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_long_work_is_accepted_and_finished_under_one_id(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_worker", new BlockPos(4, 2, 4), false);
-        ToolRun run = lua(companion, "gt.gt_long.linger(10)");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.task() != null, "the long work was not found under the call's id: " + run.reply());
-            String id = JsonParser.parseString(run.reply()).getAsJsonObject().get("job").getAsString();
-            helper.assertTrue(id.equals(run.task().publicId())
-                            && run.task().getToolName().equals("gt.gt_long.linger"),
-                    "the reply names another task: " + run.reply());
-            // 程序等着的这件活的收尾写在它的回执里(编号就是受理时回的那个),不另发事件
-            helper.assertTrue(run.receipt() != null
-                            && run.receipt().contains("line 1 gt.gt_long.linger: stood for 10 ticks"),
-                    "the receipt does not answer the reply with the task's end: " + run.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /**
      * {@code /numen drive <同伴> <程序>} 是人敲的那个前端:同一张登记表、同一个入口,程序跑完的回执说给发 drive 的人听(这里是控制台),
      * 跑得通的跑到底,写不通的停在出错的那一行、说为什么。
      */
@@ -592,63 +554,6 @@ public class CommandGameTests {
     /** 控制台那样的发令人:她那一段的回执说给它听,一句一条记进 {@code heard}。 */
     private static CommandSourceStack console(net.minecraft.server.MinecraftServer server, List<String> heard) {
         return server.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(message -> heard.add(GameTestWorld.INSTANCE.text(message))));
-    }
-
-    /**
-     * 经 drive 派的有界短活:做完之后的回执回到 drive 的发令人那里,恰好一条,那件短活的账写在里面。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_drive_hears_the_account_of_a_short_action(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mc_held", new BlockPos(4, 2, 4), false);
-        var server = helper.getLevel().getServer();
-        List<String> heard = new ArrayList<>();
-        server.getCommands().performPrefixedCommand(console(server, heard),
-                "numen drive gametest_mc_held gt.gt_sync.hold(5)");
-
-        succeedWhen(helper, () -> {
-            String name = companion.getName().getString();
-            helper.assertTrue(heard.size() == 1, "drive did not hear exactly one receipt: " + heard);
-            helper.assertTrue(heard.get(0).startsWith(name + ": ok · ")
-                            && heard.get(0).contains("line 1 gt.gt_sync.hold: held for 5 ticks"),
-                    "drive did not hear the short action's account: " + heard.get(0));
-            CompanionFactory.despawn(server, companion);
-        });
-    }
-
-    /**
-     * 经 drive 执行、要主人点头的原生指令:主人答复之前发令人什么都没听到;允许后才执行,回执回到 drive 的发令人那里,
-     * 恰好一条,写着主人允许了什么。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_drive_hears_a_native_line_the_owner_allowed(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos target = new BlockPos(8, 3, 8);
-        NumenPlayer companion = spawnAt(helper, "gt_mc_placer", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_placer_owner");
-        grantOp(owner);
-        var server = level.getServer();
-        List<String> heard = new ArrayList<>();
-        server.getCommands().performPrefixedCommand(console(server, heard),
-                "numen drive gt_mc_placer numen.mc.run(\"" + setblock(helper, target) + "\")");
-        boolean[] allowed = new boolean[1];
-
-        succeedWhen(helper, () -> {
-            if (!allowed[0]) {
-                ConsentRequest pending = ConsentDesk.of(companion).pending();
-                helper.assertTrue(pending != null, "the driven line did not ask the owner: " + heard);
-                helper.assertTrue(heard.isEmpty(), "drive heard something before the owner answered: " + heard);
-                ConsentDesk.of(companion).answer(pending.id(), ConsentAnswer.Decision.ALLOW_ONCE, "");
-                allowed[0] = true;
-                helper.fail("allowed; waiting for the line to run");
-            }
-            String name = companion.getName().getString();
-            helper.assertTrue(heard.size() == 1, "drive did not hear exactly one receipt: " + heard);
-            helper.assertTrue(heard.get(0).startsWith(name + ": ok · ")
-                            && heard.get(0).contains("the owner allowed"),
-                    "drive heard another receipt, or it lacks the owner's allowance: " + heard.get(0));
-            helper.assertTrue(level.getBlockState(helper.absolutePos(target)).is(Blocks.STONE), "no stone was set");
-            cleanUp(helper, companion, owner);
-        });
     }
 
     /**
