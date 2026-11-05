@@ -166,12 +166,17 @@ public class SurvivalGameTests {
         companion.setPortalCooldown();
         int cooldown = companion.getPortalCooldown();
         helper.assertTrue(cooldown > 0, "portal cooldown did not start");
+        // 落点的区块先阻塞着生成完(见 GameTestKit#generateChunks):冷却只在她走刻时减,她走不走刻要等落脚的区块起来,
+        // 区块按墙钟生成,只按刻数等的话负载一高剩下的时限就不够
+        generateChunks(nether, new BlockPos(0, 70, 0), 2);
 
         steps(helper)
                 .thenExecute(() -> companion.changeDimension(
                         new net.minecraft.world.level.portal.DimensionTransition(
                                 nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0f, 0.0f,
                                 net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING)))
+                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she arrived in is not entity-ticking yet"))
                 .thenIdle(25)
                 .thenWaitUntil(() -> {
                     helper.assertTrue(!companion.isChangingDimension(),
@@ -202,12 +207,12 @@ public class SurvivalGameTests {
         // 场地坐标取模再放大:各份的落点互相隔开三百格以上,又总在世界边界之内
         BlockPos floor = new BlockPos(20000 + Math.floorMod(arena.getX(), 8192) * 16, 100, 20000 + Math.floorMod(arena.getZ(), 8192) * 16);
         generateChunks(nether, floor, 2);
-        // 下界的地形在这一带是实心的:先掏出一间空房,再铺地板
+        // 落点的地形每份不同(岩浆、遗迹、空洞):先用石头把整间房连墙带顶封死,再掏出里面,房里只有用例摆的东西
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-7, 0, -7), floor.offset(7, 5, 7))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        }
         for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {
             nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-        }
-        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 0, -6), floor.offset(6, 0, 6))) {
-            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         }
         NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
         companion.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
