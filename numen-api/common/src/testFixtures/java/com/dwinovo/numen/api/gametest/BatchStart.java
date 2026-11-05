@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.gametest;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 
 /**
@@ -15,8 +16,11 @@ import net.minecraft.world.entity.Entity;
  *       ({@code CompanionLoops}),规则面板的推送每 10 刻一包({@code PermissionFeed});</li>
  *   <li>原版按实体编号错开的节拍:掉落物在地上每 {@code (tickCount + id) % 4} 刻才动一次,怪的部分 AI 也按编号错开。</li>
  * </ul>
- * 所以每一批都等到服务器刻数是 {@value #PERIOD} 的整数倍的那一刻开头才开始(上面几种周期的公倍数),开始前把实体编号推到
- * {@value #ID_STRIDE} 的整数倍:这一批里造的实体编号对这些余数而言与前面无关。模组加载器经 {@code GameTestBatchStartMixin} 接管
+ * 还有全服共用的世界随机数(掉落物的初速、战利品表):原版是不定种子的,前面几批用掉多少也跟着变。
+ *
+ * <p>所以每一批都等到服务器刻数是 {@value #PERIOD} 的整数倍的那一刻开头才开始(上面几种周期的公倍数),开始前把实体编号推到
+ * {@value #ID_STRIDE} 的整数倍、把每个维度的世界随机数按世界种子与维度重新定种子:这一批里造的实体编号对这些余数而言、
+ * 这一批掷出的点数,都与前面无关。模组加载器经 {@code GameTestBatchStartMixin} 接管
  * 原版的开批({@code GameTestRunner.runBatch});Paper 的测试服按墙钟走,不在此列。
  */
 public final class BatchStart {
@@ -37,6 +41,9 @@ public final class BatchStart {
                 Runnable start = pending;
                 pending = null;
                 alignEntityIds();
+                for (ServerLevel level : server.getAllLevels()) {
+                    level.getRandom().setSeed(level.getSeed() ^ level.dimension().location().toString().hashCode());
+                }
                 starting = true;
                 try {
                     start.run();
