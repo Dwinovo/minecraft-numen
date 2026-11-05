@@ -1,6 +1,7 @@
 package com.dwinovo.numen.paper.gametest;
 
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.api.gametest.GameTestOrigin;
 import com.dwinovo.numen.api.gametest.GameTestSuites;
 import com.google.gson.Gson;
@@ -122,6 +123,9 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onTickEnd(ServerTickEndEvent event) {
+        if (server != null) {
+            BackgroundSettle.afterTick(server);
+        }
         if (tracker == null) {
             if (warmingUp) {
                 guarded(this::warmUp);
