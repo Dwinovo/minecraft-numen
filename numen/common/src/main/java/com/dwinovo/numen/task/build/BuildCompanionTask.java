@@ -642,13 +642,20 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
             return conclude(null);
         }
-        // 最低一层里所有够不着的格一起交给寻路:它去离她最近、够得着其中任一格的站位,走得最少;到了那里先放远处够得着的,
-        // 再退回来(见 farthestPendingInLayer)——近处的格留到最后放,站在这边点远处邻格的视线才不被先放下的近格挡住
-        int lowest = far.get(0).getY();
-        walkingTo = far.stream().filter(p -> p.getY() == lowest).toList();
+        walkingTo = walkTargets(far);
         triedWhenWalking = tried.size();
         phase = Phase.WALK;
         return TaskState.RUNNING;
+    }
+
+    /**
+     * 走去下一站交给寻路的格:够不着的格({@code far} 按层从低到高排)里最低一层的全部。寻路去离她最近、够得着其中任一格的站位,
+     * 走得最少;到了那里先放远处够得着的,再退回来(见 farthestPendingInLayer)——近处的格留到最后放,站在这边点远处邻格的视线才不被
+     * 先放下的近格挡住。
+     */
+    static List<BlockPos> walkTargets(List<BlockPos> far) {
+        int lowest = far.get(0).getY();
+        return far.stream().filter(p -> p.getY() == lowest).toList();
     }
 
     // ------------------------------------------------------------------
