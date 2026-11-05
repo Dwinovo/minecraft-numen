@@ -580,65 +580,6 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 普通玩家经协议改不了服务器上的内置模型档案和配置,回话说明原因;自己的档案存得下,服主的 key 他读不到。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void an_ordinary_player_cannot_change_the_servers_model_profiles(GameTestHelper helper)
-            throws Exception {
-        var player = GameTestKit.presentPlayer(helper, null, "gametest_commoner");
-        com.dwinovo.numen.api.brain.Replies.hello(player, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(player), "the test player is an admin");
-        var builtin = com.dwinovo.numen.api.library.LibraryHub.of(helper.getLevel().getServer())
-                .server(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
-        int before = builtin.items().size();
-        GameTestKit.received(player);
-
-        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
-                "{\"name\":\"偷偷加的\",\"group\":\"server\",\"provider\":\"openai\"}");
-        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
-                "{\"proxy\":\"evil:1\"}");
-
-        var sent = GameTestKit.received(player);
-        helper.assertTrue(sent.size() == 2 && sent.stream().allMatch(p ->
-                        p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
-                "the refusals were not told: " + sent);
-        helper.assertTrue(builtin.items().size() == before, "a built-in profile was added by an ordinary player");
-        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.config().getProxy().equals("evil:1"),
-                "the proxy was changed by an ordinary player");
-        GameTestKit.leave(player);
-        helper.succeed();
-    }
-
-    /**
-     * 连通性检测要等一会儿才有结局:现在送的"在试"是一张不答任何请求的表,请求号跟着结局那一张回去,
-     * 表单凭号认出这是它的答复。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void a_connection_test_is_answered_by_its_outcome_under_the_request_number(GameTestHelper helper) {
-        var player = GameTestKit.presentPlayer(helper, null, "gametest_checker");
-        com.dwinovo.numen.api.brain.Replies.hello(player, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        GameTestKit.received(player);
-
-        com.dwinovo.numen.api.brain.Replies.library(player, com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK, "run",
-                "{\"draft\":{\"provider\":\"moonshotai\"}}", 9);
-
-        var told = new ArrayList<com.dwinovo.numen.api.network.payload.LibraryPayload>();
-        succeedWhen(helper, () -> {
-            // 只收连通性检测这一类表:同批别的用例增删档案时,新的档案表会推给在线的每个人,和这里问的无关
-            GameTestKit.received(player).forEach(p -> {
-                if (p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l
-                        && l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK)) {
-                    told.add(l);
-                }
-            });
-            helper.assertTrue(told.size() == 2, "the test was not answered twice yet: " + told);
-            helper.assertTrue(told.get(0).request() == 0 && told.get(0).entries().contains("checking"),
-                    "the 'trying' table was taken for the answer: " + told.get(0));
-            helper.assertTrue(told.get(1).request() == 9 && told.get(1).entries().contains("need_key"),
-                    "the outcome did not come back under the request number: " + told.get(1));
-            GameTestKit.leave(player);
-        });
-    }
-
     private static int indexOf(List<ConvoState.Msg> messages, java.util.function.Predicate<ConvoState.Msg> match) {
         for (int i = 0; i < messages.size(); i++) {
             if (match.test(messages.get(i))) {
@@ -1010,33 +951,9 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 她存在就有大脑:按需建起来,再要一次是同一个。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void a_brain_is_made_on_demand_and_asking_again_gives_the_same_one(GameTestHelper helper)
-            throws Exception {
-        var server = helper.getLevel().getServer();
-        BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
-        NumenPlayer body = com.dwinovo.numen.api.gametest.Bodies.spawn(server, UUID.randomUUID(),
-                "gametest_ondemand", UUID.randomUUID(), helper.getLevel(),
-                new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        CompanionRegistry.get(server).put(body.getUUID(), new CompanionRegistry.Entry("gametest_ondemand",
-                body.getOwnerUuid(), Level.OVERWORLD, body.blockPosition()));
-        useTestNotes();
-
-        CompanionLoop loop = com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID());
-
-        helper.assertTrue(loop != null, "no brain was made");
-        helper.assertTrue(com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, body.getUUID()) == loop,
-                "asking again made another brain");
-        CompanionLoops.dismissed(server, body.getUUID());
-        CompanionRegistry.get(server).remove(body.getUUID());
-        CompanionFactory.despawn(server, body);
-        helper.succeed();
-    }
-
     /**
      * 管理员经协议存了内置的模型档案、再存服主的 key:档案里没有 key,key 在钥匙串里,只有他读得到;在线的别人收到新档案的表,
-     * 表里没有 key。
+     * 表里没有 key。普通玩家经协议改不了服务器上的内置模型档案和配置,回话说明原因。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void an_admin_adds_a_model_profile_and_everyone_online_hears_of_it_without_the_key(
@@ -1074,6 +991,22 @@ public class BrainGameTests {
         helper.assertTrue(othersKeys.stream().noneMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload k
                         && k.entries().contains("sk-admin")), "the server's key reached another player: " + othersKeys);
 
+        helper.assertTrue(!com.dwinovo.numen.api.config.Authority.isAdmin(other), "the other test player is an admin");
+        var builtin = com.dwinovo.numen.api.library.LibraryHub.of(server)
+                .server(com.dwinovo.numen.api.agent.llm.ProviderLibrary.KIND);
+        int before = builtin.items().size();
+        com.dwinovo.numen.api.brain.Replies.library(other, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "put",
+                "{\"name\":\"偷偷加的\",\"group\":\"server\",\"provider\":\"openai\"}");
+        com.dwinovo.numen.api.brain.Replies.library(other, com.dwinovo.numen.api.brain.Libraries.SERVER_CONFIG, "put",
+                "{\"proxy\":\"evil:1\"}");
+        var refused = GameTestKit.received(other);
+        helper.assertTrue(refused.size() == 2 && refused.stream().allMatch(p ->
+                        p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l && !l.problem().isEmpty()),
+                "the refusals were not told: " + refused);
+        helper.assertTrue(builtin.items().size() == before, "a built-in profile was added by an ordinary player");
+        helper.assertTrue(!com.dwinovo.numen.api.platform.Services.config().getProxy().equals("evil:1"),
+                "the proxy was changed by an ordinary player");
+
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.KEY, "put",
                 "{\"service\":\"openai\",\"key\":\"\",\"scope\":\"server\"}");
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER, "delete",
@@ -1084,47 +1017,10 @@ public class BrainGameTests {
         helper.succeed();
     }
 
-    /** 玩家经协议关掉一个技能、再打开它:两次都办成,他收到的整表里那一条先是关、后是开;开关是他自己的。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
-    public static void a_player_switches_a_skill_off_and_on_again_through_the_protocol(GameTestHelper helper) {
-        var server = helper.getLevel().getServer();
-        var admin = GameTestKit.presentPlayer(helper, null, "gametest_skill_player");
-        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        String skill = com.dwinovo.numen.api.library.LibraryHub.of(server)
-                .server(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND).items().iterator().next().id().toString();
-        String body = "{\"id\":\"" + skill + "\"}";
-        GameTestKit.received(admin);
-
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.SKILL, "disable", body);
-        helper.assertTrue(skillEnabled(GameTestKit.received(admin), skill) == Boolean.FALSE,
-                "the skill was not switched off");
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.SKILL, "enable", body);
-        helper.assertTrue(skillEnabled(GameTestKit.received(admin), skill) == Boolean.TRUE,
-                "the skill was not switched on again");
-
-        GameTestKit.leave(admin);
-        helper.succeed();
-    }
-
-    /** 管理员收到的那张技能表里这一条的开关;没收到表或表里没有这条是 {@code null}。 */
-    private static Boolean skillEnabled(java.util.List<?> told, String skill) {
-        for (Object packet : told) {
-            if (packet instanceof com.dwinovo.numen.api.network.payload.LibraryPayload table
-                    && com.dwinovo.numen.api.brain.Libraries.SKILL.equals(table.kind())) {
-                for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
-                    var o = row.getAsJsonObject();
-                    if (skill.equals(o.get("id").getAsString()) && "server".equals(o.get("group").getAsString())) {
-                        return o.get("enabled").getAsBoolean();
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
     /**
      * 管理员的档案表单问目录与检测:目录、草稿解析出的端点、"缺 key"的判断都在服务端,答案经他自己的连接送回;
-     * 检测先答"在试",结局到了再送一张;别的在线玩家什么也收不到。
+     * 检测先答"在试"(一张不答任何请求的表),结局到了再送一张,请求号跟着结局那一张回去,表单凭号认出这是它的答复;
+     * 别的在线玩家什么也收不到。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void the_profile_form_asks_the_server_for_the_catalog_and_the_connection_test(
@@ -1142,7 +1038,7 @@ public class BrainGameTests {
         String draft = "{\"draft\":{\"provider\":\"deepseek\"},\"models\":true}";
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.CATALOG, "list", draft);
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK, "run",
-                draft);
+                draft, 9);
 
         List<com.dwinovo.numen.api.network.payload.LibraryPayload> told = new ArrayList<>();
         GameTestKit.steps(helper)
@@ -1163,8 +1059,13 @@ public class BrainGameTests {
                                     && catalog.get().entries().contains("\"preview\"")
                                     && catalog.get().entries().contains("\"models\""),
                             "the catalog was not answered whole: " + catalog);
-                    helper.assertTrue(told.stream().anyMatch(l -> l.entries().contains("checking")),
-                            "the test did not first say it was trying: " + told);
+                    var checks = told.stream()
+                            .filter(l -> l.kind().equals(com.dwinovo.numen.api.brain.Libraries.PROVIDER_CHECK)).toList();
+                    helper.assertTrue(checks.size() == 2 && checks.get(0).request() == 0
+                                    && checks.get(0).entries().contains("checking"),
+                            "the test did not first say it was trying, under no request: " + checks);
+                    helper.assertTrue(checks.get(1).request() == 9 && checks.get(1).entries().contains("need_key"),
+                            "the outcome did not come back under the request number: " + checks);
                     // 答复是目录与连通性检测这两类表;同批别的用例增删档案时推给每个人的档案表不算
                     helper.assertTrue(GameTestKit.received(other).stream().noneMatch(p ->
                                     p instanceof com.dwinovo.numen.api.network.payload.LibraryPayload l

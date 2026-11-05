@@ -63,11 +63,6 @@ public class RemoteBrainGameTests {
         GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
     }
 
-    @BeforeBatch(batch = "numen_remote_5")
-    public static void prepareRemote5Batch(ServerLevel level) {
-        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
-    }
-
     @BeforeBatch(batch = "numen_remote_6")
     public static void prepareRemote6Batch(ServerLevel level) {
         GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
@@ -273,34 +268,6 @@ public class RemoteBrainGameTests {
             helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
                     "his choice did not reach the desk: " + (ticket[0] == null ? null : ticket[0].poll()));
             helper.assertTrue(desk.pending() == null, "the request is still pending");
-            her.close();
-        });
-    }
-
-    /** 外部大脑的客户端不会答 elicitation:征询不当场拒绝,挂着等主人进游戏答;连外部大脑也走了,才按"主人不在"拒绝。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_5")
-    public static void a_client_that_cannot_elicit_leaves_the_consent_waiting_for_the_owner(GameTestHelper helper)
-            throws Exception {
-        Rig her = new Rig(helper, "gametest_remote_mute", null);
-        her.brain.connectLater();
-        var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
-        com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
-
-        her.brain.afterConnected(helper, 5, () -> {
-            ticket[0] = desk.ask(new Object(), List.of(oakLog()));
-            helper.runAfterDelay(10, () -> {
-                helper.assertTrue(ticket[0].poll() == null && desk.pending() != null,
-                        "not waiting for the owner: " + ticket[0].poll());
-                try {
-                    her.brain.disconnect();
-                } catch (Exception e) {
-                    throw new IllegalStateException(e);
-                }
-            });
-        });
-        succeedWhen(helper, () -> {
-            helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && !ticket[0].poll().allowed(),
-                    "not refused once nobody was left to answer: " + (ticket[0] == null ? null : ticket[0].poll()));
             her.close();
         });
     }

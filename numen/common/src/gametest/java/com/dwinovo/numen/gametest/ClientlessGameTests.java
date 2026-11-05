@@ -191,6 +191,7 @@ public class ClientlessGameTests {
 
     /**
      * 她的征询到了没装客户端的主人那里,是一条带三个可点按钮的聊天消息;点按钮就是他敲了 /numen consent,答复进同一个登记处。
+     * 请求没等到答复就撤了,他在聊天栏里读到为什么。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void a_consent_request_is_a_chat_message_with_buttons_for_an_owner_without_our_client(
@@ -214,26 +215,16 @@ public class ClientlessGameTests {
         helper.assertTrue(ticket.poll() != null && ticket.poll().decision() == ConsentAnswer.Decision.ALLOW_ONCE,
                 "pressing [allow] did not answer the request: " + ticket.poll());
 
-        CompanionFactory.despawn(owner.getServer(), companion);
-        GameTestKit.leave(owner);
-        helper.succeed();
-    }
-
-    /** 请求没等到答复就撤了,没装客户端的主人在聊天栏里读到为什么。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void a_withdrawn_request_says_why_to_an_owner_without_our_client(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_quitter", new BlockPos(3, 2, 3), false);
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, companion, "gametest_left_waiting", "en_us");
+        // 下一张没等到答复就撤了:他在聊天栏里读到是谁的请求、为什么撤
         Object scope = new Object();
         ConsentDesk.of(companion).ask(scope, List.of(oakLog(helper)));
         GameTestKit.said(owner);
-
         ConsentDesk.of(companion).release(scope, ConsentDesk.Withdrawal.TASK_ENDED);
+        List<OwnerLine.Said> withdrawn = GameTestKit.said(owner);
+        helper.assertTrue(withdrawn.size() == 1 && withdrawn.get(0).text().getString().contains("gametest_asker")
+                        && withdrawn.get(0).text().getString().contains("went away"),
+                "the withdrawal did not say whose request went away: " + withdrawn);
 
-        List<OwnerLine.Said> said = GameTestKit.said(owner);
-        helper.assertTrue(said.size() == 1 && said.get(0).text().getString().contains("gametest_quitter")
-                        && said.get(0).text().getString().contains("went away"),
-                "the withdrawal did not say whose request went away: " + said);
         CompanionFactory.despawn(owner.getServer(), companion);
         GameTestKit.leave(owner);
         helper.succeed();
