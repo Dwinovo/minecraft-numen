@@ -140,6 +140,7 @@ class KnowledgeVerbsTest {
         ApiTester.Run run = ApiTester.run(null, UUID.randomUUID(), "return numen.inv.recipes(\"minecraft:no_such_item\")");
 
         assertFalse(run.ok());
-        assertTrue(run.message().contains("bad_argument") && run.message().contains("no_such_item"), run.message());
+        assertTrue(run.message().contains("bad_argument") && run.message().contains("there is no item minecraft:no_such_item")
+                && run.message().contains("numen.inv.recipes("), run.message());
     }
 }

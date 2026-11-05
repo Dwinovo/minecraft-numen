@@ -498,21 +498,6 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查一个不存在的物品 id:按参数错误退回,说出是哪个 id。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:no_such_item\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.receipt() != null, "the program has not ended");
-            helper.assertTrue(!recipe.ranToTheEnd() && recipe.receipt().contains("there is no item minecraft:no_such_item")
-                            && recipe.receipt().contains("numen.inv.recipes("),
-                    "the unknown id was not rejected by name: " + recipe.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
      * 找方块的搜索按工作量收工,和每刻分到多少时间无关:每一刻都先让别的搜索把整刻的时间上限吃光,她这次
      * 查询照样在有限的刻数里回来,带着结论(看满节数上限而截断,或走完)——不会因为机器慢、别人忙而永远挂着。
