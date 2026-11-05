@@ -699,12 +699,23 @@ public final class AgentLoop {
         return stopped;
     }
 
+    /** 此刻在干哪一档;没在跑回合是 {@code null}。只要这一项的调用(每刻一次的路径)走这里,不必构造整份 {@link #status}。 */
+    public Phase phase() {
+        return run == null ? null : run.phase;
+    }
+
+    /** 此刻在干的那件事,同 {@link LoopStatus#activity}。 */
+    public LoopStatus.Doing activity() {
+        return host.activity();
+    }
+
+    /** 整份快照:含逐条渲染收件箱的聊天预览,只在有人要看的时候取。 */
     public LoopStatus status() {
-        Phase phase = run == null ? null : run.phase;
+        Phase phase = phase();
         double progress = phase == Phase.COMPACT ? 1.0 - Math.exp(-(compactChars / 4.0) / 1200.0) : 0.0;
         Hold hold = hold();
         return new LoopStatus(phase, hold, hold != null && hold == stopped ? stoppedReason : null,
-                host.bodyTaskRunning(), inbox.chatPreview(), progress, host.activity());
+                host.bodyTaskRunning(), inbox.chatPreview(), progress, activity());
     }
 
     // ---- 内部 ----

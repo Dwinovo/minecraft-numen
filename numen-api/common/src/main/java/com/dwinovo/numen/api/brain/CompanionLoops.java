@@ -113,7 +113,7 @@ public final class CompanionLoops {
             entry.loop.tick();
             entry.feed.flush();
             entry.bridge.flush();
-            Phase phase = entry.loop.status().phase();
+            Phase phase = entry.loop.phase();
             CompanionSpeech.setSpeaking(entry.loop.companion(),
                     phase == Phase.MODEL || phase == Phase.TOOLS || entry.voicePlaying);
         }
@@ -127,7 +127,7 @@ public final class CompanionLoops {
         Map<UUID, Map<UUID, LoopStatus.Doing>> byOwner = new LinkedHashMap<>();
         Map<UUID, Link> links = new LinkedHashMap<>();
         for (Entry entry : LOOPS.values()) {
-            LoopStatus.Doing doing = entry.link.hasClient() ? null : entry.loop.status().activity();
+            LoopStatus.Doing doing = entry.link.hasClient() ? null : entry.loop.activity();
             if (doing != null) {
                 byOwner.computeIfAbsent(entry.owner, owner -> new LinkedHashMap<>()).put(entry.loop.companion(), doing);
                 links.putIfAbsent(entry.owner, entry.link);

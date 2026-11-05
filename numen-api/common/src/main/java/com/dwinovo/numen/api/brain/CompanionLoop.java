@@ -267,6 +267,16 @@ public final class CompanionLoop {
         return loop.status();
     }
 
+    /** 内核此刻在干哪一档;每刻都要问的路径用它,不构造整份 {@link #status}。 */
+    public Phase phase() {
+        return loop.phase();
+    }
+
+    /** 她此刻在干的那件事,同 {@link LoopStatus#activity}。 */
+    public LoopStatus.Doing activity() {
+        return loop.activity();
+    }
+
     /**
      * 在她的写车道上读点东西:排在前面已交的写都落下去之后才读,所以刚写下的一定读得到。结果在车道的线程上算好。
      */
@@ -410,7 +420,7 @@ public final class CompanionLoop {
 
     private boolean deliver(EventQueue.Entry entry) {
         loop.push(List.of(entry));
-        return loop.status().phase() != Phase.MODEL;
+        return loop.phase() != Phase.MODEL;
     }
 
     /** 主人按停止。 */
@@ -608,7 +618,7 @@ public final class CompanionLoop {
         if (hold == Hold.DEAD) return Keys.LOOP_GONE;
         // 整理是对内脑说的:驾驶席在外接模型手里时内脑不开工,排上了也只会一直躺着。
         if (hold == Hold.EXTERNAL) return Keys.LOOP_EXTERNAL_COMPACT;
-        if (loop.status().phase() == Phase.COMPACT) return Keys.LOOP_COMPACTING;
+        if (loop.phase() == Phase.COMPACT) return Keys.LOOP_COMPACTING;
         if (queue.count(EventTypes.COMPACT) > 0) return Keys.LOOP_COMPACT_QUEUED;
         // 不看忙不忙:整理进队列排着,闲下来自己执行。也不看记录长短、不查端点:没绑模型时内核停在 BLOCKED 并说明原因,
         // 绑好了排着的整理自己接着走。
@@ -677,7 +687,7 @@ public final class CompanionLoop {
      */
     public String wipeMemory() {
         String problem = clearProblem();
-        if (problem == null && loop.status().phase() != null) {
+        if (problem == null && loop.phase() != null) {
             problem = Keys.LOOP_WIPE_BUSY;
         }
         if (problem != null) {
