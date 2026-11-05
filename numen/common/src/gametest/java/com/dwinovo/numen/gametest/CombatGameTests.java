@@ -143,9 +143,9 @@ public class CombatGameTests {
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
-        // 每刻在它那一格里挪一点,不出格
-        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(level.getGameTime() * 0.7),
-                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(level.getGameTime() * 0.7)));
+        // 每刻在它那一格里挪一点,不出格;按这条用例自己的刻数挪,不按全服的时间(那要看前面的用例跑了多久)
+        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(helper.getTick() * 0.7),
+                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(helper.getTick() * 0.7)));
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
