@@ -16,7 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 去一串格:{@code numen.move.walk} 给一串格(Cells)走进其中任意一格,给一串方块走到其中之一旁边,给距离停在离它们不远处;玩家放下的方块(放置记号)不用
+ * 去一串格:{@code numen.move.walk} 给一串方块走到其中之一旁边,给距离停在离它们不远处;玩家放下的方块(放置记号)不用
  * 点名也不挖。格子由程序写出来,和她拿扫描结果原样交过去一样;都从脚本入口进。
  */
 public class CellRouteGameTests {
@@ -42,24 +42,6 @@ public class CellRouteGameTests {
 
     private static double nearest(List<BlockPos> cells, BlockPos at) {
         return cells.stream().mapToDouble(c -> Math.sqrt(c.distSqr(at))).min().orElseThrow();
-    }
-
-    /** 走进几格之一:场地一角的一片空地(脚所在的那一层),她从另一角出发,停在其中某一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
-    public static void goto_several_cells_walks_into_any_of_them(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
-        List<BlockPos> pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(12, 2, 12));
-        ToolRun walk = lua(companion, "numen.move.walk(" + cells(pen) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(walk.succeeded() && walk.outcome().contains("reached"),
-                    "she did not walk into the cells: " + walk.outcome());
-            helper.assertTrue(pen.contains(companion.blockPosition()),
-                    "she stopped outside the cells at " + companion.blockPosition().toShortString());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
     }
 
     /**
