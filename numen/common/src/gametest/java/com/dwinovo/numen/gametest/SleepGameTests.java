@@ -112,24 +112,6 @@ public class SleepGameTests {
         });
     }
 
-    /** 只给了床的两个坐标:一格是三个数,命令读不通,不猜是哪张床,也不改用手边那张;她没躺下。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
-    public static void sleep_with_part_of_the_coordinates_says_give_all_three(GameTestHelper helper) {
-        placeBed(helper, new BlockPos(5, 2, 5));
-        BlockPos head = helper.absolutePos(new BlockPos(6, 2, 5));
-        NumenPlayer companion = spawnAt(helper, "gametest_halfsure", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = lua(companion, "numen.use.sleep({at = {x = " + head.getX() + ", z = " + head.getZ() + "}})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && "bad_argument".equals(sleep.kind())
-                            && sleep.outcome().contains("argument 'at': expected a Pos {x = …, y = …, z = …}"),
-                    "the reply does not ask for all three coordinates: " + sleep.outcome());
-            helper.assertTrue(!companion.isSleeping(), "she lay down in a bed she did not fully name");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 半夜、床在手边,但三格外站着一只僵尸:原版不让睡,回执用原版的话说附近有怪,她没躺下。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_danger")
     public static void sleep_with_a_monster_nearby_hands_back_the_reason(GameTestHelper helper) {

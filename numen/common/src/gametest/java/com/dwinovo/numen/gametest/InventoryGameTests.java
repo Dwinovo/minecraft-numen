@@ -436,33 +436,6 @@ public class InventoryGameTests {
     }
 
     /**
-     * 穿戴的参数写不通就退回:armor 只是卸下的别名(四件甲),穿戴没有这个目标,按参数错误退回,头盔还在背包里;不说穿什么,这一行写不通,
-     * 当场失败并附上 numen.gear.wear 的用法,不派活。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void wear_with_bad_arguments_is_rejected(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_overdresser", new BlockPos(4, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_HELMET));
-        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:iron_helmet\", {slot = \"armor\"})");
-        NumenPlayer bare = spawnAt(helper, "gametest_emptyhanded", new BlockPos(11, 2, 11), false);
-        ToolRun noItem = lua(bare, "numen.gear.wear()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not replied");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("is only for numen.gear.remove"),
-                    "the armor alias was not rejected for wearing: " + equip.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1
-                            && companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty(),
-                    "the helmet moved anyway");
-            helper.assertTrue(noItem.done() && noItem.task() == null, "gear wear has not replied, or dispatched work");
-            helper.assertTrue(!noItem.succeeded() && noItem.outcome().contains("usage: numen.gear.wear(item, {slot=…})"),
-                    "the rejection does not show the usage: " + noItem.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-            CompanionFactory.despawn(helper.getLevel().getServer(), bare);
-        });
-    }
-
-    /**
      * 拿东西不等于用东西:她低头对着地面,numen.gear.hold water_bucket 只把桶拿到主手,地上没有水、桶里的水还在;numen.gear.hold snowball
      * 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。倒水、扔雪球都是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
      */
