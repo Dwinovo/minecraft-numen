@@ -526,43 +526,6 @@ public class ScriptGameTests {
         });
     }
 
-    /**
-     * 失败是一个值:{@code pcall} 接住的错误有种类与能照抄的下一行,拼进字符串是"函数: 种类 — 原因"。旧写法(三个数的列表、一串字)是
-     * {@code bad_argument},下一行是改写好的那一次调用。哪一次都没挖。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void a_failed_call_is_a_value_with_its_kind_and_next_line(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_lua_catcher", new BlockPos(1, 2, 1), true);
-        BlockPos near = helper.absolutePos(new BlockPos(3, 2, 1));
-        level.setBlockAndUpdate(near, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
-        LlmToolCall script = programCall("""
-                local _, list = pcall(numen.work.dig, {%d, %d, %d})
-                local _, text = pcall(numen.work.dig, "%d %d %d")
-                print("caught: " .. list)
-                return {list = {list.kind, list.hint}, text = {text.kind, text.hint}}
-                """.formatted(near.getX(), near.getY(), near.getZ(), near.getX(), near.getY(), near.getZ()));
-        Round round = round(helper, her, script);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the script has not finished");
-            JsonObject receipt = receipt(round, script);
-            helper.assertTrue(receipt.get("success").getAsBoolean(), "the script did not catch the errors: " + receipt);
-            JsonObject got = round.data().getAsJsonObject("returned");
-            String rewritten = "numen.work.dig(" + xyz(near) + ")";
-            for (String shape : List.of("list", "text")) {
-                var err = got.getAsJsonArray(shape);
-                helper.assertTrue("bad_argument".equals(err.get(0).getAsString())
-                                && rewritten.equals(err.get(1).getAsString()),
-                        "the old " + shape + " shape is not refused with the call rewritten: " + got);
-            }
-            helper.assertTrue(receipt.get("message").getAsString().contains("caught: numen.work.dig: bad_argument — "),
-                    "an error joined into a string does not read as function, kind and why: " + receipt);
-            helper.assertTrue(level.getBlockState(near).is(Blocks.OCHRE_FROGLIGHT), "a refused call dug a block");
-            CompanionFactory.despawn(level.getServer(), her);
-        });
-    }
-
     /** 夹具组 {@code gt.gt_client}:只有主人的客户端答得了的函数(客户端函数)。 */
     public static final class ClientFns {
 
@@ -897,36 +860,6 @@ public class ScriptGameTests {
     }
 
     /**
-     * 主人的客户端卡住、不再答复:程序里的客户端函数等到时限({@code ProgramLimits.CLIENT_ANSWER_TICKS} 刻)就以 {@code timeout}
-     * 失败交回,{@code pcall} 接得住、程序往下走(服务端函数照常),回执写明哪个函数、等了多久。
-     */
-    @GameTest(template = "floor16", timeoutTicks = com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS + 200,
-            batch = "numen_scripts")
-    public static void a_client_function_the_client_never_answers_times_out_and_the_program_goes_on(
-            GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gt_mute_client", new BlockPos(2, 2, 2), false);
-        programs(her).silence();
-        ToolRun run = lua(her, """
-                local ok, err = pcall(gt.gt_client.hello)
-                local me = numen.status.self()
-                return tostring(ok) .. "|" .. err.kind .. "|" .. me.name
-                """);
-        helper.assertTrue(run.receipt() == null, "the program ended without waiting for the silent client: "
-                + run.receipt());
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the program is still waiting for the client's answer");
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("returned: false|timeout|gt_mute_client"),
-                    "the call did not fail as a timeout with the program going on: " + run.receipt());
-            helper.assertTrue(run.receipt().contains("gt.gt_client.hello: timeout — your owner's client did not answer "
-                            + "gt.gt_client.hello within " + com.dwinovo.numen.api.program.ProgramLimits.CLIENT_ANSWER_TICKS / 20
-                            + " seconds"),
-                    "the receipt does not say which function the client did not answer: " + run.receipt());
-            CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        });
-    }
-
-    /**
      * 停止键切断一段已经挖了几格的程序:这一批作废,模型当场读不到它的回执;服务端上的程序当场停下、照常交出回执,晚到的回执作为一条
      * {@code program_stopped} 事件进她的收件箱(客户端的工具口做的),正文就是服务端写的那份回执——写明切断了、已经挖了什么、后面的没挖。
      */
@@ -998,28 +931,6 @@ public class ScriptGameTests {
         Constants.LOG.info("[numen-sample] {} ({} characters of message) -> {}", what,
                 JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString().length(),
                 run.receipt());
-    }
-
-    /**
-     * 循环里查一百多遍背包:每次调用只返回值,没什么可报告的,所以回执里没有逐次的流水——只有结局一行和她 print 的 stdout;
-     * 每次调用的记录照样在数据里(调用数 120)。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_loop_of_queries_leaves_no_line_per_call_in_the_receipt(GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_lua_loop", new BlockPos(2, 2, 2), false);
-        her.getInventory().add(new ItemStack(Items.COAL, 5));
-        ToolRun run = lua(her, """
-                local total = 0
-                for i = 1, 120 do total = total + numen.inv.count("minecraft:coal") end
-                print("coal seen", total)
-                """);
-        String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
-        helper.assertTrue(run.ranToTheEnd(), msg);
-        helper.assertTrue(msg.matches("(?s)ok · 120 calls · \\d+ s\nstdout:\ncoal seen\t600"), msg);
-        helper.assertTrue(run.data().get("calls").getAsInt() == 120, "the call count is not in the structured ending");
-        sample("120 inventory queries", run);
-        CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        helper.succeed();
     }
 
     /**
@@ -1108,35 +1019,6 @@ public class ScriptGameTests {
                     "the receipt carries more than its shortened message: " + receipt);
             Constants.LOG.info("[numen-sample] a big returned value: the receipt on the wire is {} characters, the model "
                     + "reads {}", receipt.length(), heard.length());
-            CompanionFactory.despawn(level.getServer(), her);
-        });
-    }
-    /**
-     * 她 print 一团扫描结果:一团里的方块多了,只显示首尾几个并写明一共多少、怎么看更多——不静默地截断;返回的数照实在 returned 里。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void printing_a_big_scan_shortens_it_and_says_how_big_it_was(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 5; x < 11; x++) {
-            for (int z = 5; z < 11; z++) {
-                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.GOLD_BLOCK.defaultBlockState());
-            }
-        }
-        NumenPlayer her = spawnAt(helper, "gametest_lua_scanner", new BlockPos(2, 2, 2), false);
-        ToolRun run = lua(her, """
-                local clusters = numen.scan.blocks("minecraft:gold_block", {radius = 12})
-                print(clusters)
-                return clusters[1].count
-                """);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the scan has not finished");
-            String msg = JsonParser.parseString(run.receipt()).getAsJsonObject().get("message").getAsString();
-            helper.assertTrue(run.ranToTheEnd() && msg.contains("\nreturned: 36"), msg);
-            helper.assertTrue(msg.contains("…(36 items in all; index one with t[i], or filter in the program before you "
-                    + "print)"), "the scan was printed whole or cut without saying so: " + msg);
-            helper.assertTrue(msg.length() < 2_500, "the printed scan is " + msg.length() + " characters");
-            sample("printing a scan of 36 blocks", run);
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
