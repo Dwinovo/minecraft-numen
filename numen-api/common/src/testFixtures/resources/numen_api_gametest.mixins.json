@@ -10,6 +10,7 @@
     "GameTestServerOriginMixin",
     "GameTestServerTickMixin",
     "GameTestServerWorldMixin",
+    "GameTestTickOrderMixin",
     "StructureChunksMixin",
     "StructureClearMixin"
   ],
