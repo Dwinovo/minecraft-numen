@@ -925,4 +925,70 @@ class SearchTest {
         assertEquals(Optional.empty(), Origin.of(world, SURVIVAL, -3.5, Y, 0.5));
         assertInstanceOf(BlockPos.class, origin.orElseThrow());
     }
+
+    /**
+     * 两格高的泥土墙,口的绕路只多走两三格(挖一格的罚分约等于多走两格,两格高的墙要挖两格,挖的比绕的贵):许改地形也不挖,
+     * 从口里绕过去,一格不改。
+     */
+    @Test
+    void aShortDetourThroughAGapBeatsDiggingATwoHighWall() {
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1);
+        for (int z = 0; z <= 39; z++) {
+            if (z != 8) {
+                world.fill(8, Y, z, 8, Y + 1, z, Blocks.DIRT.defaultBlockState());
+            }
+        }
+        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(5, Y, 5), Goals.at(new BlockPos(11, Y, 5)));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertTrue(result.route().edits().isEmpty(), "该绕口过去,却改了:" + result.route().edits());
+    }
+
+    /**
+     * 问有代价就绕开:主人的一道两格高的木板墙横在半路(许可答"要问"),近处留着口;走路的规格许挖许放、要问的格算能走但加价。
+     * 要问的格比绕过去贵得多,路线从口里过去,不碰一块要问的板子。
+     */
+    @Test
+    void cellsThatNeedConsentCostSoMuchThatAGapNearbyIsTaken() {
+        TestWorld world = new TestWorld().floor(-2, -2, 15, 15, Y - 1);
+        for (int z = 0; z <= 15; z++) {
+            if (z != 4) {
+                world.fill(8, Y, z, 8, Y + 1, z, Blocks.OAK_PLANKS.defaultBlockState());
+            }
+        }
+        TerrainPolicy owners = (change, pos, state, view) -> state.is(Blocks.OAK_PLANKS) ? Permit.ask("the owner's wall") : Permit.ALLOW;
+        CostModel walking = CostModel.of(RouteSpec.defaults().edit().changes(true).build(), Fixtures.body(), owners, Fixtures.COBBLE,
+                Threats.NONE);
+        SearchResult result = search(world, walking, new BlockPos(2, Y, 2), Goals.at(new BlockPos(13, Y, 2)));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertTrue(result.route().edits().stream().noneMatch(Edit::alters), "该从口里绕过去,却改了:" + result.route().edits());
+    }
+
+    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去,一格不改。 */
+    @Test
+    void usingABlockOnAPillarTopIsDoneFromTheGroundWithoutPillaringBesideIt() {
+        BlockPos table = new BlockPos(10, Y + 2, 5);
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1).fill(10, Y, 5, 10, Y + 1, 5, STONE)
+                .set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(4, Y, 5), Goals.use(world, SURVIVAL, table));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertEquals(Y, result.route().end().getY(), "站在地上:" + result.route().end());
+        assertTrue(result.route().edits().isEmpty(), "垫了柱或挖了:" + result.route().edits());
+    }
+
+    /**
+     * 一座横贯场地的石山(二十格高,身上没有垫路料,翻不过去),铁矿藏在离山面六格深处,手上一把铁镐,许挖许放:出厂预算的一次
+     * 规划就搜到头,只从正面挖进去几格(一到八格)、够得着就停。
+     */
+    @Test
+    void anOreInsideAHillIsReachedByDiggingAFewBlocksInFromTheFront() {
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1).fill(10, Y, 0, 39, Y + 19, 39, STONE)
+                .set(16, Y + 1, 20, Blocks.IRON_ORE.defaultBlockState());
+        CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)), Fixtures.ALLOW_ALL,
+                Fixtures.NO_MATERIALS, Threats.NONE);
+        SearchResult result = search(world, model, new BlockPos(4, Y, 20),
+                Goals.dig(new BlockPos(16, Y + 1, 20), SURVIVAL, Goals.Clearing.ANY), NavRequest.DEFAULT_BUDGET);
+        assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
+        long digs = result.route().edits().stream().filter(e -> e instanceof Edit.Dig).count();
+        assertTrue(digs > 0 && digs <= 8, "该从正面挖进去几格,却挖 " + digs + " 格:" + result.route().edits());
+    }
 }

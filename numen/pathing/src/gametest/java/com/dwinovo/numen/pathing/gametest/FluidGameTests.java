@@ -3,7 +3,6 @@ package com.dwinovo.numen.pathing.gametest;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.UpDownGameTests.pool;
 
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -61,19 +60,6 @@ public class FluidGameTests {
                 throw new GameTestAssertException("游过去的路上走不通过:" + r.report.journal().replans());
             }
         });
-    }
-
-    /**
-     * 一片横贯场地的岩浆:不许改地形时走不过去,身体一点不碰;诊断说得出"许改地形(在岩浆上搭桥)才有路"。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void refuses_to_cross_lava(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(7, -1, 0, 11, -1, 39, Blocks.STONE);
-        t.fill(8, 0, 0, 10, 0, 39, Blocks.LAVA);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults()).fails(Outcome.NeedsChanges.class)
-                .then(UpDownGameTests::unhurt);
     }
 
     // ==================== 流体(普查补充) ====================

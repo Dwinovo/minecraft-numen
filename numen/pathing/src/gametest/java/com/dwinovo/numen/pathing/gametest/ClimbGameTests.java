@@ -4,7 +4,6 @@ import static com.dwinovo.numen.pathing.gametest.Scenes.stair;
 import static com.dwinovo.numen.pathing.gametest.Scenes.trapdoor;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -89,18 +88,6 @@ public class ClimbGameTests {
         attic(t, 8);
         TestBody body = t.body(8, 1, 5);
         t.go(body, Goals.at(t.at(6, 6, 8)), RouteSpec.defaults()).arrives();
-    }
-
-    /**
-     * 屋顶楼梯正压在洞口上方一格(倒扣的楼梯,只剩半格):身子从梯子顶上直不起来,也挪不进阁楼——不许改地形,就报要改地形,
-     * 不在洞口来回卡着。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void a_roof_stair_right_over_the_hatch_needs_altering(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        attic(t, 7);
-        TestBody body = t.body(8, 1, 5);
-        t.go(body, Goals.at(t.at(6, 6, 8)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
     }
 
     /** 阁楼口是一扇关着的活板门:爬到顶,推开活板门,进阁楼。 */

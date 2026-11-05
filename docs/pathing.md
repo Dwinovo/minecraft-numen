@@ -839,9 +839,9 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   `Semantics.Kind.HAZARD` 不收它。
 - **测试**:`FallDamageTest` 对照原版逐项钉住石头、锥尖(连同锥身与朝下的锥)、干草块与蜂蜜块(`5 × 0.2F` 按 float 正好是 1,不进位成 2)、
   床、黏液块、细雪、创造模式与属性;`MovesTest` 同一道崖落在石头、锥尖、干草块上摔不摔得起;`CostModelTest` 的摔落上限改按
-  `bearsFall` 钉同样的几个边界。GameTest 新开一批 `pathing_landing`(和平难度每秒回一点血,这一批关掉自然回血、批后还原):
-  `will_not_fall_onto_an_upward_stalagmite`(九格高的石柱,柱脚是石头就跳、掉 6 点;柱脚一圈锥尖就不跳,结局"要改地形",一点血不掉)、
-  `hay_takes_a_higher_fall_than_stone`(只剩 8 点血,八格落在石头上摔不起、不跳;落在干草块上跳,只掉 1 点)。
+  `bearsFall` 钉同样的几个边界;`DiagnosisTest.aPillarRingedWithUpwardDripstoneNeedsChangesWhereStoneGroundIsJumpedTo`(九格高的石柱,
+  柱脚是石头就跳、掉血;柱脚一圈锥尖就不跳,结局"要改地形")。GameTest 一批 `pathing_landing`(和平难度每秒回一点血,这一批关掉自然回血、
+  批后还原):`hay_takes_a_higher_fall_than_stone`(只剩 8 点血,八格落在石头上摔不起、不跳;落在干草块上跳,只掉 1 点)。
 - **没做的与已知的**:
   - 黏液块、床落地会把身体弹起来,执行层不等弹停就认下一步;这不是这一批引入的(出厂规格落差 3 格以内原本就会落上去),但现在身体按
     原版知道落在它们上面不疼,规格放宽落差时会挑更高的落点。要做就在坠落的控制器里等弹停、代价里算上弹的刻数。
@@ -1146,8 +1146,8 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - **测试**:单测 `BurialTest`(埋在石头里的一格从各处进去至少挖几格、按 `digFloor` 计;从缝里走得进去为零;不许改地形不算;沿搜出的
   路线估价加埋深不超过剩下的价钱)、`GoalsTest`(挖的估价分轴计价、深处的目标横着走开每格涨一格疾跑的价;挖的终点涵盖每一个
   够得着的节点)、`SearchTest.aBlockBuriedDeepBelowIsReachedWithinTheDefaultBudget`(无边的石头地面、六个区块的快照,出厂预算内
-  到达、直直往下挖;改前是预算用完)。模块 GameTest `DigGameTests.plans_into_a_hill_to_an_ore_inside`(石山里六格深的铁矿,只从正面
-  挖进去几格)。性能数字只在这里与汇报里,
+  到达、直直往下挖;改前是预算用完)、`SearchTest.anOreInsideAHillIsReachedByDiggingAFewBlocksInFromTheFront`(石山里六格深的铁矿,
+  只从正面挖进去几格)。性能数字只在这里与汇报里,
   不写成断言耗时的测试。
 
 ### 规格的三个开关与越界才问(10-03,`api2` 之上)

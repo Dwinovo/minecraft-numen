@@ -62,6 +62,20 @@ class StacksTest {
         assertEquals("minecraft:shulker_box[holds diamond x4]", StackLabel.of(kinds.get(3).sample()));
     }
 
+    /** 拿哪一叠:主手那一格是它就用它,否则按格号最靠前的那一叠;同一种的各叠都列上,件数合计。 */
+    @Test
+    void theStackTakenIsTheOneInHandElseTheEarliestSlot() {
+        net.minecraft.world.entity.player.Inventory inventory = new net.minecraft.world.entity.player.Inventory(null);
+        inventory.setItem(1, new ItemStack(Items.COBBLESTONE, 16));
+        inventory.setItem(4, new ItemStack(Items.COBBLESTONE, 16));
+        Stacks.Pick pick = Stacks.pick(inventory, Items.COBBLESTONE).orElseThrow();
+        assertEquals(1, pick.slot(), "主手空着:取靠前的第 1 格,不动第 4 格");
+        assertEquals(List.of(1, 4), pick.slots());
+        assertEquals(32, pick.count());
+        inventory.selected = 4;
+        assertEquals(4, Stacks.pick(inventory, Items.COBBLESTONE).orElseThrow().slot(), "主手那一格就是它");
+    }
+
     /** 区别落在描述没写出来的组件值上(custom_data 不同):仍是两种,清单里各有自己的写法。 */
     @Test
     void kindsThatRenderTheSameAreStillTwoKindsWithTheirOwnLabels() {

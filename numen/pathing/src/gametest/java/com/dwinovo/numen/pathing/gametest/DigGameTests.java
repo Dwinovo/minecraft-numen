@@ -43,7 +43,7 @@ import net.minecraft.world.phys.Vec3;
 /**
  * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
  * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;服务端退回挖掘时以
- * 拒绝收场;创造模式五格交互距离;藏在石山里的矿,出厂预算的一次规划就搜到头,照着挖过去。
+ * 拒绝收场;创造模式五格交互距离。
  */
 public class DigGameTests {
 
@@ -446,31 +446,5 @@ public class DigGameTests {
             }
         }
         helper.succeed();
-    }
-
-    /**
-     * 一座横贯场地的石山(二十格高,身上没有垫路料,翻不过去),铁矿藏在离山面六格深处,手上一把铁镐:出厂预算的一次规划就
-     * 搜到头,只从正面挖进去几格、够得着就停;照着走,够着它。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 525)
-    public static void plans_into_a_hill_to_an_ore_inside(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 0, 39, 20, 39, Blocks.STONE);
-        t.set(16, 2, 20, Blocks.IRON_ORE);
-        TestBody body = t.body(4, 1, 20);
-        body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
-        BlockPos ore = t.at(16, 2, 20);
-        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats(), Goals.Clearing.ANY), NATURAL);
-        t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
-            if (plan.route() == null) {
-                throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
-            }
-            Route route = plan.route();
-            long digs = route.edits().stream().filter(e -> e instanceof Edit.Dig).count();
-            if (digs == 0 || digs > 8) {
-                throw new GameTestAssertException("该从正面挖进去几格,却挖 " + digs + " 格:" + route);
-            }
-            t.go(body, request.following(route)).within(800).arrives();
-        });
     }
 }

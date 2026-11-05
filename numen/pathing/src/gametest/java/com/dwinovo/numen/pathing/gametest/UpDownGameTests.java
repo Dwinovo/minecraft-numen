@@ -278,29 +278,6 @@ public class UpDownGameTests {
     }
 
     /**
-     * 规格许落二十格,满血的身体站在九格高的石柱顶上。一边柱脚四周是石头地:落九格掉 6 点血,跳下去;另一边柱脚四周一圈
-     * 朝上的滴水石锥尖:落上去按原版掉 15 点,摔完不到 6 点血,不跳,不许改地形就没有路,一点血不掉。
-     */
-    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 300)
-    public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
-        t.fill(22, 1, 2, 26, 1, 6, Blocks.POINTED_DRIPSTONE);
-        for (int side : new int[] {0, 19}) {
-            t.fill(side + 4, 1, 3, side + 6, 9, 5, Blocks.STONE);
-        }
-        TestBody stone = t.body(5, 10, 4);
-        TestBody spikes = t.body(24, 10, 4);
-        t.go(stone, Goals.at(t.at(10, 1, 4)), spec).within(600).arrives().then(r -> {
-            if (r.lowestHealth >= 20) {
-                throw new GameTestAssertException("落在石头上摔得起,却没有跳下去 " + r.navigation);
-            }
-        });
-        t.go(spikes, Goals.at(t.at(29, 1, 4)), spec).within(600)
-                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(UpDownGameTests::unhurt);
-    }
-
-    /**
      * 只剩 8 点血的身体站在八格高的石柱顶上,规格许落二十格。落在石头上掉 5 点,摔完不到 6 点血,不跳;落在干草块上按原版
      * 只掉 1 点,跳下去。
      */

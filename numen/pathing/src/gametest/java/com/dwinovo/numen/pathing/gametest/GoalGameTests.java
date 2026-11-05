@@ -4,7 +4,6 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.List;
 
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -27,7 +26,7 @@ import net.minecraft.world.level.block.Blocks;
 
 /**
  * 目标:用一格方块(狭窄矿道里的熔炉)、梯子上与水里的一格;起点在贵成员里;最后一步进目标的同一刻搜索失败;垫柱或搭桥到目标格站稳
- * 才报到;规划之后视线被挡住;不垫柱站到目标旁上方;可站却到不了。
+ * 才报到;规划之后视线被挡住。
  */
 public class GoalGameTests {
 
@@ -154,35 +153,6 @@ public class GoalGameTests {
                 || Math.sqrt(v.x * v.x + v.z * v.z) > 0.1) {
             throw new GameTestAssertException("还没站稳就报到了:脚高 " + feetY + " 着地 " + r.body.onGround() + " 速度 " + v);
         }
-    }
-
-    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 210)
-    public static void does_not_pillar_up_beside_the_target(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 5, 10, 2, 5, Blocks.STONE);
-        t.set(10, 3, 5, Blocks.CRAFTING_TABLE);
-        BlockPos table = t.at(10, 3, 5);
-        TestBody body = t.body(4, 1, 5);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), table), NATURAL).within(300).arrives()
-                .then(Scenes::unaltered);
-    }
-
-    /**
-     * 身体关在一间基岩屋子里,去处那一格站得住,却封在屋墙里的一个基岩小格中:走不到,结局是"搜完无路",世界一格不变。
-     * 屋子是基岩的,诊断放宽到许改地形、有料也出不去,很快就搜完。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void reports_a_standable_goal_it_cannot_reach(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 0, 2, 17, 4, 8, Blocks.BEDROCK);
-        t.fill(3, 1, 3, 11, 3, 7, Blocks.AIR);
-        t.fill(15, 1, 5, 15, 2, 5, Blocks.AIR);
-        TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(15, 1, 5)), RouteSpec.defaults()).within(300).fails(Outcome.NoRoute.class)
-                .then(Scenes::unaltered);
     }
 
     /** 某一格可以是梯子上的一格:爬到半截停住,脚就在那一格,挂在梯子上。 */

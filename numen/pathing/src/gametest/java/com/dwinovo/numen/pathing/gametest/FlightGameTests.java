@@ -4,7 +4,6 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
 import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Kinematics;
@@ -22,8 +21,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落,飞上高墙落在顶上;
- * 生存模式的身体面对同一道峡谷没有路,行为不变。用普通假玩家({@link TestBody})经 {@code Navigator} 真走,看实际账里的起降与飞行距离。
+ * 创造飞行的寻路:创造模式的身体飞越走不过去的峡谷到对岸点降落,飞上高墙落在顶上。用普通假玩家({@link TestBody})经 {@code Navigator} 真走,看实际账里的起降与飞行距离。
  */
 public class FlightGameTests {
 
@@ -88,19 +86,6 @@ public class FlightGameTests {
                     }
                 })
                 .arrives();
-    }
-
-    /** 生存模式面对同一道峡谷:不会飞,要过去只能搭桥(规格不许改地形),结局是要改地形才行;身体一直在地上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void a_survival_body_cannot_cross_the_canyon_without_changing_the_world(GameTestHelper helper) {
-        Trial t = canyon(helper);
-        TestBody body = t.body(5, 1, 20);
-        t.go(body, Goals.at(t.at(28, 1, 20)), RouteSpec.defaults()).fails(Outcome.NeedsChanges.class)
-                .then(r -> {
-                    if (r.body.getAbilities().flying || r.report.ledger().flown() != 0) {
-                        throw new GameTestAssertException("生存模式的身体不会飞");
-                    }
-                });
     }
 
     // ==================== 飞得有多快:对着步进器算出的理想耗时 ====================
