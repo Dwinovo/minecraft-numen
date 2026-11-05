@@ -75,6 +75,18 @@ public final class ContainerOps {
         return state.hasBlockEntity() ? Action.take(block, state, taken.getItem()) : null;
     }
 
+    /** 这一步点名的格在不在眼前界面的 {@code slots} 格里:不在就是跳过这一步的那一行,在就是 {@code null}。 */
+    static String outOfRange(Move m, int slots) {
+        int max = slots - 1;
+        if (m.from() < 0 || m.from() > max) {
+            return "from slot " + m.from() + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
+        }
+        if (m.to() != null && (m.to() < 0 || m.to() > max)) {
+            return "to slot " + m.to() + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
+        }
+        return null;
+    }
+
     private static boolean mine(Slot slot, NumenPlayer self) {
         return slot.container == self.getInventory();
     }
@@ -82,15 +94,12 @@ public final class ContainerOps {
     /** 执行一步,回执这一步的一行(不带序号)。 */
     public String step(Move m, NumenPlayer self) {
         AbstractContainerMenu menu = self.containerMenu;
-        int max = menu.slots.size() - 1;
         int from = m.from();
         Integer to = m.to();
         Integer count = m.count();
-        if (from < 0 || from > max) {
-            return "from slot " + from + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
-        }
-        if (to != null && (to < 0 || to > max)) {
-            return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
+        String outOfRange = outOfRange(m, menu.slots.size());
+        if (outOfRange != null) {
+            return outOfRange;
         }
         try {
             return to == null ? route(menu, self, from) : place(menu, self, from, to, count);

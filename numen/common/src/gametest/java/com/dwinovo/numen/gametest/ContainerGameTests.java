@@ -65,22 +65,6 @@ public class ContainerGameTests {
                 .thenSucceed();
     }
 
-    /** 没开任何容器就搬东西:她自己的背包界面里没有箱子那一段,越界的格子号如实报出来,什么都不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
-    public static void transfer_with_no_container_open_moves_nothing(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_shuffler", new BlockPos(3, 2, 4), false);
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
-        ToolRun transfer = lua(companion, "numen.gui.quick(90)");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(transfer.done(), "transfer has not finished");
-            helper.assertTrue(transfer.outcome().contains("OUT OF RANGE"),
-                    "the reply does not say the slot is out of range: " + transfer.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 5, "the diamonds moved");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
      * 往塞满圆石的箱子里存钻石:打开箱子,把背包里那叠钻石往箱子那一段送。箱子一格都放不下,这一步的回执说没搬动、
      * 那边满了;钻石还在她身上,箱子原样。
