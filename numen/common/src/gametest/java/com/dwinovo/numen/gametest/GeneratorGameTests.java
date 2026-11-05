@@ -171,8 +171,10 @@ public class GeneratorGameTests {
         ServerLevel level = helper.getLevel();
         // a structure settles on the highest block of the column: the arena has no walls, but the test frame puts a lid
         // over it. Clear whatever stands above the floor and lay a stone floor of our own; the hut then sits on that floor
+        List<BlockPos> floor = new ArrayList<>();
         for (int x = 0; x < 64; x++) {
             for (int z = 0; z < 64; z++) {
+                floor.add(helper.absolutePos(new BlockPos(x, 1, z)));
                 level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.STONE.defaultBlockState(), 2);
                 for (int y = 2; y < 40; y++) {
                     BlockPos up = helper.absolutePos(new BlockPos(x, y, z));
@@ -190,6 +192,8 @@ public class GeneratorGameTests {
         BlockPos at = new BlockPos(cx * 16 + 8, origin.getY() + 2, cz * 16 + 8);
         BlockPos min = new BlockPos(cx * 16 - 1, origin.getY() - 3, cz * 16 - 1);
         BlockPos max = new BlockPos(cx * 16 + 33, origin.getY() + 20, cz * 16 + 33);
+        // 和同文件另外几条一样,铺地板排给光照线程的更新算完了再拍"前":不然更新落在两次快照之间,光照对不上
+        awaitLit(level, floor);
         Snapshot before = snapshot(level, min, max);
         ToolRun run = lua(her, "return numen.shape.structure(" + xyz(at) + ", \"minecraft:swamp_hut\")");
         helper.assertTrue(run.ranToTheEnd(), "structure failed: " + run.receipt());
