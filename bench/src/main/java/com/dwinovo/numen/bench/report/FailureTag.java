@@ -41,26 +41,60 @@ public enum FailureTag {
             "numen.fight.", "numen.creative.", "numen.gear.", "numen.inv.craft", "numen.inv.eat", "numen.inv.drop");
 
     /**
-     * 规则判得出的那几种:评测出错是 H;API 错、超上下文是 G;有一行命令写错了(命令树读不通、参数不合)是 D;
-     * 动了世界却一次都没看过世界是 B。通过的、判不出的给 null。
+     * 这几种结局是"照这次的规格想不出路来":搜遍了没有、预算用完、憋不住气、没料可垫、要改的格数超了规格。
+     * 执行期受阻({@code Blocked}、{@code Grounded}、{@code NoLineOfSight})与待不住({@code Stranded})不在里面——
+     * 那几种判不出是规划还是恢复,留给人工。
+     */
+    private static final Set<String> CANNOT_PLAN = Set.of("NoRoute", "OutOfBudget", "Breathless", "NoMaterials",
+            "OverAlterBudget", "NeedsChanges");
+
+    /** 场景把目标圈在她本来就不许进的地方:这是评测自己设错了,不是她的问题。 */
+    private static final Set<String> SCENARIO_FENCED = Set.of("EXCLUDED", "FORBIDDEN");
+
+    /**
+     * 规则判得出的那几种:评测出错、场景把路封死了是 H;API 错、超上下文是 G;有一行命令写错了(命令树读不通、参数不合)、
+     * 够不着是 D;照规格想不出路来是 C;真实模型动了世界却一次都没看过世界是 B。通过的、判不出的给 null。
      *
+     * @param live         这次是真实模型跑的({@link Run#live})
      * @param commandError 这次里有没有哪个工具结果是命令写错了
      * @param functions    她的程序用到的每个函数({@link Run#functions});{@code null} 当没有
+     * @param path         她最后一趟路怎么收的场;一趟都没走过是 {@code null}
      */
-    public static FailureTag auto(boolean passed, EndReason end, boolean commandError, List<FunctionUse> functions) {
+    public static FailureTag auto(boolean passed, EndReason end, boolean live, boolean commandError,
+                                  List<FunctionUse> functions, PathEnd path) {
         if (passed) {
             return null;
         }
         return switch (end) {
             case HARNESS_ERROR -> H;
             case API_ERROR, CONTEXT_OVERFLOW -> G;
-            default -> commandError ? D : blind(functions) ? B : null;
+            default -> fromEvidence(live, commandError, functions, path);
         };
     }
 
     /**
-     * 她挖了、放了、用了、打了,却整次运行一次都没看过世界——照着脑子里想当然的样子动手。看了却看错的这条规则判不出来,
-     * 那要读记录,留给人工。
+     * 按证据从具体到笼统地判:轨迹说的是这一趟自己的事,先按它;"一次都没看过"是整次运行的毛病,最后才轮到。
+     */
+    private static FailureTag fromEvidence(boolean live, boolean commandError, List<FunctionUse> functions,
+                                           PathEnd path) {
+        String reason = path == null ? null : path.reason();
+        String outcome = path == null ? null : path.outcome();
+        if (reason != null && SCENARIO_FENCED.contains(reason)) {
+            return H;
+        }
+        if (commandError || "OUT_OF_REACH".equals(reason)) {
+            return D;
+        }
+        if (outcome != null && CANNOT_PLAN.contains(outcome)) {
+            return C;
+        }
+        return live && blind(functions) ? B : null;
+    }
+
+    /**
+     * 她挖了、放了、用了、打了,却整次运行一次都没看过世界——照着脑子里想当然的样子动手。只对真实模型问这一句:
+     * 两种基线是写死的脚本,坐标在剧本里,本来就不必看,拿它们问"看没看过"是问错了对象。看了却看错的这条规则
+     * 判不出来,那要读记录,留给人工。
      */
     private static boolean blind(List<FunctionUse> functions) {
         if (functions == null) {

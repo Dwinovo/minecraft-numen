@@ -25,6 +25,7 @@ import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.bench.report.FailureTag;
+import com.dwinovo.numen.bench.report.PathEnd;
 import com.dwinovo.numen.bench.report.Pricing;
 import com.dwinovo.numen.bench.report.Run;
 import com.dwinovo.numen.bench.report.Variant;
@@ -40,6 +41,8 @@ import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
 import com.dwinovo.numen.api.program.ClientEndpoint;
 import com.dwinovo.numen.api.permission.ConsentDesk;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
@@ -74,6 +77,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -102,6 +106,9 @@ final class Attempt {
 
     /** 搭好场景之后等几刻再开口:让搭场景时发生的事先落进她的收件箱,她的那一轮先跑完。 */
     private static final int WARMUP_TICKS = 20;
+
+    /** 收场时等轨迹那条车道把攒下的写落完,最多等这么久。 */
+    private static final int TRACE_FLUSH_SECONDS = 10;
     /** 她闲下来保持这么久算收工。 */
     static final int SETTLE_TICKS = 60;
     /** 评测里她绑的人设的 id;正文是内置默认人设,与档案、服主的配置无关。 */
@@ -298,6 +305,7 @@ final class Attempt {
 
     /** 判断言、记一行、收拾场地。 */
     Run finish() {
+        Path trace = loop == null ? null : loop.trace().file().getParent();
         if (loop != null) {
             loop.dispose();
         }
@@ -317,8 +325,8 @@ final class Attempt {
         }
         boolean live = variant == Variant.LIVE;
         Pricing.Price price = live ? settings.pricing().of(settings.modelLabel()) : null;
-        FailureTag tag = FailureTag.auto(passed, end, meter != null && meter.commandError,
-                meter == null ? List.of() : meter.functions());
+        FailureTag tag = FailureTag.auto(passed, end, live, meter != null && meter.commandError,
+                meter == null ? List.of() : meter.functions(), lastPath(trace));
         Run run = new Run(suite, scenario.id(), variant.id(), number, settings.commit(), promptHash,
                 live ? settings.modelLabel() : variant.id(), passed, checks, subgoals, end.name(),
                 meter == null ? 0 : meter.turns, meter == null ? 0 : meter.toolCalls,
@@ -350,10 +358,82 @@ final class Attempt {
         }
     }
 
+    /**
+     * 她最后一趟路怎么收的场。轨迹的写走后台车道,所以先等那条车道把这次攒下的写落完再读——不等的话读到的是上一趟,
+     * 或者什么都没有。一趟都没走过、等不到、读不动都给 null:失败分类少一条证据而已,不该把这次评测拖垮。
+     */
+    private PathEnd lastPath(Path trace) {
+        if (trace == null) {
+            return null;
+        }
+        try {
+            if (!NumenIo.lanes().drain(TRACE_FLUSH_SECONDS, TimeUnit.SECONDS)) {
+                LOG.warn("[numen-bench] 等不到轨迹落盘,这次的失败分类少一条证据");
+                return null;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        if (!Files.isDirectory(trace)) {
+            return null;
+        }
+        PathEnd last = null;
+        try (Stream<Path> segments = Files.list(trace)) {
+            for (Path segment : segments.sorted().toList()) {
+                for (String line : Files.readAllLines(segment)) {
+                    PathEnd end = pathOf(line);
+                    if (end != null) {
+                        last = end;
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException unreadable) {
+            LOG.warn("[numen-bench] 读不了轨迹 {}:{}", trace, unreadable.toString());
+            return null;
+        }
+        return last;
+    }
+
+    /** 轨迹里的一行,是 {@code path} 那一种就取结局与原因;别的种类、头一行、空行都给 null。 */
+    private static PathEnd pathOf(String line) {
+        if (line.isBlank()) {
+            return null;
+        }
+        JsonObject o = JsonParser.parseString(line).getAsJsonObject();
+        if (!o.has("type") || !"path".equals(o.get("type").getAsString())) {
+            return null;
+        }
+        return new PathEnd(o.has("outcome") ? o.get("outcome").getAsString() : null,
+                o.has("reason") ? o.get("reason").getAsString() : null);
+    }
+
+    /**
+     * 把这次的轨迹搬到记录旁边。临时目录整个删掉,轨迹跟着删的话,报告里写着"规划失败"而凭据已经没了——
+     * 分类说得出是哪一类,人还要看得到那一趟到底发生了什么。搬不动不算评测失败,记一行接着走。
+     */
+    private void keepTrace(Path trace) {
+        if (trace == null || !Files.isDirectory(trace)) {
+            return;
+        }
+        Path kept = Results.get().transcript(suite, scenario.id(), variant.id(), number)
+                .resolveSibling(suite + "-" + scenario.id() + "-" + variant.id() + "-" + number + "-trace.jsonl");
+        try (Stream<Path> segments = Files.list(trace)) {
+            List<String> lines = new ArrayList<>();
+            for (Path segment : segments.sorted().toList()) {
+                lines.addAll(Files.readAllLines(segment));
+            }
+            Files.write(kept, lines, StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException broke) {
+            LOG.warn("[numen-bench] 留不下轨迹 {}:{}", kept, broke.toString());
+        }
+    }
+
     /** 她、主人、掉在地上的东西、场地本身,一样不留;临时目录删掉。 */
     private void cleanUp() {
         MinecraftServer server = level.getServer();
         if (her != null) {
+            keepTrace(loop == null ? null : loop.trace().file().getParent());
             CompanionLoops.dismissed(server, her.getUUID());
             CompanionRegistry.get(server).remove(her.getUUID());
             // 她死过的话 her 是死掉的那具,世界里站着的是原版重生换上来的新身体
