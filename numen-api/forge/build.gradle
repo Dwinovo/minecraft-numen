@@ -86,14 +86,16 @@ dependencies {
     compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
     annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
 
-    // 聊天气泡的 Markdown 解析库(ui 模块用它)与 mcp 模块的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……)是内嵌的库,
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)与 mcp 模块的其余第三方库(Reactor、Tomcat、Nimbus……)是内嵌的库,
     // 不是平铺进来的类。发行物是 Numen 的 -all,它把本模块与这些库并排嵌在 META-INF/jarjar/ 里(见 numen/forge/build.gradle);
-    // 开发运行不读 jarJar,这里让它们进运行类路径。清单从 mcp 的依赖解析出来。
+    // 开发运行不读 jarJar,这里让它们进运行类路径。清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson 是 mcp 产出的一份 jar,
+    // 发行 jar 平铺它的类(见 numen-api-loader.gradle);开发运行里它也只能以库的身份进运行类路径。
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
     minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
     Modules.nestedLibraries(project(':mcp')).each { coordinate ->
         minecraftLibrary(coordinate) { transitive = false }
     }
+    minecraftLibrary files(project(':mcp').relocatedSdk)
 
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }

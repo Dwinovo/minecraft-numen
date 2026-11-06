@@ -8,6 +8,9 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)' apply false
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
     id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT' apply false
+    // mcp 模块把官方 MCP SDK 用的几个库重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型。
+    // Shadow 9 要 Gradle 9;这一代的 ForgeGradle 6 与 Loom 1.6 只到 Gradle 8,用支持 Gradle 8 的 8.3 那一线
+    id 'com.gradleup.shadow' version '8.3.9' apply false
 }
 
 // mod_id 与 mod_name 因模组而异(numen=Numen,numen_api=Numen API),不能放全树共享的 gradle.properties,
