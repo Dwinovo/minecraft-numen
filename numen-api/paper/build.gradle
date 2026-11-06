@@ -27,7 +27,7 @@ dependencies {
     Modules.SERVER.each { compileOnly project(it) }
 }
 
-// mcp 的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……):Paper 没有嵌套 jar,和纯 JVM 模块一样把类平铺进插件 jar。
+// mcp 的其余第三方库(Reactor、Tomcat、Nimbus……):Paper 没有嵌套 jar,和纯 JVM 模块一样把类平铺进插件 jar。
 // 清单与加载器的嵌套库是同一份(Modules.nestedLibraries),Gson、slf4j 用 Paper 自带的。
 evaluationDependsOn(':mcp')
 def nestedLibraries = Modules.nestedLibraries(project(':mcp')) as Set
@@ -37,6 +37,11 @@ def nestedJars = project(':mcp').configurations.runtimeClasspath.resolvedConfigu
 
 tasks.named('jar', Jar) {
     Modules.SERVER.each { path -> from({ project(path).sourceSets.main.output }) }
+    // mcp 的官方 SDK 连同重定位过的 Jackson(见 mcp/build.gradle)
+    dependsOn(':mcp:relocatedSdk')
+    from({ zipTree(project(':mcp').relocatedSdk.get().archiveFile) }) {
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/LICENSE*', 'META-INF/NOTICE*'
+    }
     from(nestedJars.collect { zipTree(it) }) {
         // 各库自己的清单、签名、模块描述符与协议文本不平铺(同名的会互相盖掉);服务发现文件(META-INF/services)留着
         exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', '**/module-info.class',
