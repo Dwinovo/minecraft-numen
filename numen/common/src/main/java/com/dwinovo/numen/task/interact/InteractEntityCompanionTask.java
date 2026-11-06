@@ -1,4 +1,6 @@
 package com.dwinovo.numen.task.interact;
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.PlayerInv;
 
@@ -123,7 +125,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             // 按下去之前交给权限层:左键是打它(宠物、有名字的、村民),右键是右键它(有主人的)。
             // 要问就站着等主人,不许就带着理由收场
             boolean left = r.button == MouseButton.LEFT;
-            Permit permit = permit(player.mouse().intents(hit, left).get(0));
+            Permit permit = gate().permit(player.mouse().intents(hit, left).get(0));
             if (permit.state() == PermitState.WAITING) {
                 player.controls().stop();
                 return TaskState.RUNNING;

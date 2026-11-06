@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.script;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
+import com.dwinovo.numen.api.agent.scope.Scope;
 import com.dwinovo.numen.script.ScriptEngine;
 
 import java.io.IOException;
@@ -42,31 +44,41 @@ public final class BuiltinModules {
     /**
      * 登记一个 {@code modules/} 目录里的全部模块:每个 {@code <名字空间>/<组名><扩展名>} 是名字空间下的一个。
      *
+     * @return 撤回这一批的句柄
      * @throws IllegalArgumentException 见 {@link #register}
      */
-    public static synchronized void bundle(Path root) {
+    public static synchronized Handle bundle(Path root) {
         String ext = ScriptEngine.IN_USE.extension();
+        Scope registered = new Scope();
         try (Stream<Path> spaces = Files.list(root)) {
             for (Path space : spaces.filter(Files::isDirectory).sorted().toList()) {
                 try (Stream<Path> files = Files.list(space)) {
                     for (Path file : files.filter(p -> p.getFileName().toString().endsWith(ext)).sorted().toList()) {
                         String group = file.getFileName().toString();
                         group = group.substring(0, group.length() - ext.length());
-                        register(space.getFileName() + "." + group, Files.readString(file, StandardCharsets.UTF_8));
+                        registered.add(register(space.getFileName() + "." + group,
+                                Files.readString(file, StandardCharsets.UTF_8)));
                     }
                 }
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException("读不了目录 " + root, e);
+        } catch (IOException | RuntimeException e) {
+            // 一批里有一个登记不了:已经登记的这几个一起撤回,不留半批
+            registered.close();
+            if (e instanceof IOException io) {
+                throw new UncheckedIOException("读不了目录 " + root, io);
+            }
+            throw (RuntimeException) e;
         }
+        return registered;
     }
 
     /**
      * 登记一个。
      *
+     * @return 撤回它的句柄
      * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通
      */
-    public static synchronized void register(String name, String code) {
+    public static synchronized Handle register(String name, String code) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         String what = "内置模块 " + name;
         String badName = Modules.problem(name);
@@ -80,7 +92,15 @@ public final class BuiltinModules {
         if (problem != null) {
             throw new IllegalArgumentException(what + " 读不通: " + problem);
         }
-        MODULES.put(name, new Builtin(code, engine.summary(code)));
+        Builtin made = new Builtin(code, engine.summary(code));
+        MODULES.put(name, made);
+        return Handle.once(() -> {
+            synchronized (BuiltinModules.class) {
+                if (MODULES.get(name) == made) {
+                    MODULES.remove(name);
+                }
+            }
+        });
     }
 
     /** 叫这个名字的内置模块;没有是 null。 */

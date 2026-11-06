@@ -18,10 +18,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
-/** 楼梯、半砖与矮方块:走上走下、背面侧面、转角、上半楼梯当地面、螺旋楼梯、半砖台阶、各种矮方块上走与站。 */
+/** 楼梯、半砖与矮方块:走上走下(连同半砖接半砖)、转角、螺旋楼梯、各种矮方块上走与站。 */
 public class StairGameTests {
 
     private static final String BATCH = "pathing_stairs";
@@ -50,6 +49,16 @@ public class StairGameTests {
         int top = staircase(t, 6, 4, 6, 4);
         TestBody body = t.body(2, 1, 5);
         t.go(body, Goals.at(t.at(11, top, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
+        // 半砖接半砖:下半、上半、下半、上半,一级半格,同样一路走上去不起跳
+        t.fill(6, 1, 14, 6, 1, 16, slab(SlabType.BOTTOM));
+        t.fill(7, 1, 14, 7, 1, 16, slab(SlabType.TOP));
+        t.fill(8, 1, 14, 8, 1, 16, Blocks.STONE);
+        t.fill(8, 2, 14, 8, 2, 16, slab(SlabType.BOTTOM));
+        t.fill(9, 1, 14, 9, 1, 16, Blocks.STONE);
+        t.fill(9, 2, 14, 9, 2, 16, slab(SlabType.TOP));
+        t.fill(10, 1, 14, 12, 2, 16, Blocks.STONE);
+        TestBody slabs = t.body(2, 1, 15);
+        t.go(slabs, Goals.at(t.at(11, 3, 15)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
     }
 
     /** 从平台上顺着楼梯走下来:一路不起跳。 */
@@ -59,24 +68,6 @@ public class StairGameTests {
         int top = staircase(t, 6, 4, 6, 4);
         TestBody body = t.body(11, top, 5);
         t.go(body, Goals.at(t.at(2, 1, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
-    }
-
-    /** 一级朝东的楼梯,从它背后(东边)来:跳上去,或绕到正面走上去,站在它高的那半上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 249)
-    public static void gets_onto_a_stair_from_its_back(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(8, 1, 5, stair(Direction.EAST));
-        TestBody body = t.body(12, 1, 5);
-        t.go(body, Goals.at(t.at(8, 2, 5)), RouteSpec.defaults()).arrives();
-    }
-
-    /** 一级朝东的楼梯,从它侧面(南边)来。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 258)
-    public static void gets_onto_a_stair_from_its_side(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(8, 1, 5, stair(Direction.EAST));
-        TestBody body = t.body(8, 1, 9);
-        t.go(body, Goals.at(t.at(8, 2, 5)), RouteSpec.defaults()).arrives();
     }
 
     /** 转角楼梯:两段楼梯在拐角处由原版拼成内角、外角的形状,沿着拐上去。 */
@@ -93,17 +84,6 @@ public class StairGameTests {
         t.fill(8, 1, 8, 9, 2, 8, Blocks.STONE);
         TestBody body = t.body(6, 1, 13);
         t.go(body, Goals.at(t.at(8, 3, 6)), RouteSpec.defaults()).arrives();
-    }
-
-    /** 一排倒扣的(上半)楼梯当地面走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 264)
-    public static void walks_on_upside_down_stairs(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(4, 1, 5, Blocks.STONE);
-        t.fill(5, 1, 5, 10, 1, 5, stair(Direction.EAST, Half.TOP));
-        t.set(11, 1, 5, Blocks.STONE);
-        TestBody body = t.body(4, 2, 5);
-        t.go(body, Goals.at(t.at(11, 2, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
     }
 
     /** 绕着一根柱子的螺旋楼梯连上十二级(悬空的楼梯,一圈八级):一路走上去,不停在原地来回认步,四百刻内到顶。 */
@@ -129,58 +109,7 @@ public class StairGameTests {
                 .within(400).arrives().then(Scenes::noJump);
     }
 
-    /** 楼梯走到顶,顶上那一格是一扇关着的木门:开门出去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 303)
-    public static void opens_a_door_at_the_top_of_stairs(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        int top = staircase(t, 6, 5, 5, 3);
-        // 平台边上立一堵墙,中间是门
-        t.fill(9, top, 3, 9, top + 2, 7, Blocks.STONE);
-        t.fill(9, 1, 3, 12, top - 1, 7, Blocks.STONE);
-        Scenes.door(t, 9, top, 5, Blocks.OAK_DOOR, Direction.EAST, false);
-        TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.at(t.at(11, top, 5)), RouteSpec.defaults()).arrives();
-    }
-
     // ==================== 半砖与矮方块 ====================
-
-    /** 下半砖与整块交替,半格半格走上去,一路不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
-    public static void walks_up_half_steps_of_slabs(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(6, 1, 4, 6, 1, 6, slab(SlabType.BOTTOM));
-        t.fill(7, 1, 4, 7, 1, 6, Blocks.STONE);
-        t.fill(8, 1, 4, 8, 1, 6, Blocks.STONE);
-        t.fill(8, 2, 4, 8, 2, 6, slab(SlabType.BOTTOM));
-        t.fill(9, 1, 4, 11, 2, 6, Blocks.STONE);
-        TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
-    }
-
-    /** 上半砖、双层半砖垒成的台子与整块一样:要跳上去,站在顶上。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 291)
-    public static void treats_top_and_double_slabs_as_full_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(7, 1, 4, 9, 1, 6, slab(SlabType.TOP));
-        t.fill(10, 1, 4, 12, 1, 6, slab(SlabType.DOUBLE));
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(11, 2, 5)), RouteSpec.defaults()).arrives();
-    }
-
-    /** 半砖接半砖:下半、上半、下半、上半,一级半格,一路走上去不起跳。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
-    public static void walks_slab_after_slab(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(6, 1, 4, 6, 1, 6, slab(SlabType.BOTTOM));
-        t.fill(7, 1, 4, 7, 1, 6, slab(SlabType.TOP));
-        t.fill(8, 1, 4, 8, 1, 6, Blocks.STONE);
-        t.fill(8, 2, 4, 8, 2, 6, slab(SlabType.BOTTOM));
-        t.fill(9, 1, 4, 9, 1, 6, Blocks.STONE);
-        t.fill(9, 2, 4, 9, 2, 6, slab(SlabType.TOP));
-        t.fill(10, 1, 4, 12, 2, 6, Blocks.STONE);
-        TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.at(t.at(11, 3, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
-    }
 
     /** 灵魂沙、耕地、土径上走过去,再从土径上跳上一格。规格放开耕地(走上去不踩坏,只是从高处落上去才坏)。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 369)

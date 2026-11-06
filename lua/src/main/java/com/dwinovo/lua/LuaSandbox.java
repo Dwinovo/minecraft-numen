@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
  * <h2>模块</h2>
  * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,名字也是一条路径({@code numen.work}、
  * {@code my.lumber}),脚本里就按这条路径用({@code my.lumber.chop(…)})。第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以
- * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.to} 就是
+ * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.walk} 就是
  * 这样进 {@code numen.move} 的)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、
  * 或一个既不是全局也不是模块的名字就是错({@link Builder#missing}、{@link Builder#unknown} 给那句话,写错的名字当场说有哪些)。
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
@@ -935,11 +935,28 @@ public final class LuaSandbox {
         /** 只读不跑时各模块另装的那一份:模块名 → 它返回的表。 */
         private final Map<String, LuaValue> classModules = new java.util.HashMap<>();
 
+        /** 各个类的元表,查过一次就记下(没有的记 {@link LuaValue#NIL}):一次答复里成千上万个带方法的值只查一遍。键是 {@code 模块|类}。 */
+        private final Map<String, LuaValue> classMetas = new java.util.HashMap<>();
+
         /**
          * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code numen.shape.Pos} 是同一张,
          * 比较、运算对得上);只读不跑时从 {@link Builder#classes} 另装一份。模块不在、或模块里没有这张表,是 null。
+         * 向来源要模块、装模块、沿路径找表都只在第一次做:来源每问一次都要过库,一份答复有多少个值就问多少次。实测(她真实的模块库,
+         * 一次读 5844 格再读 16384 格,共约 4.4 万个带方法的值)不记下要 10.6 秒,记下 1.1 秒。
          */
         private LuaValue classMeta(String home, String type) {
+            LuaValue known = classMetas.get(home + '|' + type);
+            if (known != null) {
+                return known.istable() ? known : null;
+            }
+            LuaValue meta = findClassMeta(home, type);
+            if (meta != null || !loading.contains(home)) {
+                classMetas.put(home + '|' + type, meta == null ? LuaValue.NIL : meta);
+            }
+            return meta;
+        }
+
+        private LuaValue findClassMeta(String home, String type) {
             LuaValue module;
             if (modules != null) {
                 if (modules.code(home) == null || loading.contains(home)) {

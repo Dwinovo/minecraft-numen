@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.agent.inbox;
 
+import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.store.AppendLog;
 
 import java.util.ArrayList;
@@ -268,6 +269,11 @@ public final class EventQueue {
      */
     public static String query(String words, long dayTime) {
         return "<query" + EventClock.stamp(dayTime) + ">" + words + "</query>";
+    }
+
+    /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link ConvoLog#SCHEDULED_ATTR},面板据此标"定时"。 */
+    public static String scheduledQuery(String words, long dayTime) {
+        return "<query" + EventClock.stamp(dayTime) + ConvoLog.SCHEDULED_ATTR + ">" + words + "</query>";
     }
 
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */

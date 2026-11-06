@@ -52,8 +52,9 @@ public final class Footing {
 
     private static double measureHeight(BlockGetter level, BodyStats body, int x, int y, int z) {
         double best = Double.NaN;
+        BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos();
         for (int cy = y - 1; cy <= y; cy++) {
-            double top = highestTop(level, body, x, cy, z, y);
+            double top = highestTop(level, body, cell, x, cy, z, y);
             if (!Double.isNaN(top) && (Double.isNaN(best) || top > best)) {
                 best = top;
             }
@@ -81,8 +82,9 @@ public final class Footing {
      * 踩坏耕地、触发机关、起跳系数都看它。托不住时返回 {@link Integer#MIN_VALUE}。
      */
     public static int supportY(BlockGetter level, BodyStats body, int x, int y, int z) {
-        double below = highestTop(level, body, x, y - 1, z, y);
-        double here = highestTop(level, body, x, y, z, y);
+        BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos();
+        double below = highestTop(level, body, cell, x, y - 1, z, y);
+        double here = highestTop(level, body, cell, x, y, z, y);
         if (Double.isNaN(below) && Double.isNaN(here)) {
             return NO_SUPPORT;
         }
@@ -166,8 +168,8 @@ public final class Footing {
      * 第 {@code cy} 格里与脚底交叠、顶面归在节点 {@code node} 的碰撞箱中,顶面最高的那个的绝对高度;没有则 NaN。
      * 碰撞箱随身体变化的方块按"脚正好在节点底面"回答——脚手架此时托得住,细雪托不住。
      */
-    private static double highestTop(BlockGetter level, BodyStats body, int x, int cy, int z, int node) {
-        AABB[] boxes = Boxes.at(level, body, x, cy, z, level.getBlockState(new BlockPos(x, cy, z)), node);
+    private static double highestTop(BlockGetter level, BodyStats body, BlockPos.MutableBlockPos cell, int x, int cy, int z, int node) {
+        AABB[] boxes = Boxes.at(level, body, x, cy, z, level.getBlockState(cell.set(x, cy, z)), node);
         double half = body.width() / 2 - Clearance.DEFLATE;
         double best = Double.NaN;
         for (AABB box : boxes) {

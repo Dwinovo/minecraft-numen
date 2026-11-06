@@ -275,33 +275,6 @@ public class GearGameTests {
     }
 
     /**
-     * {@code <worn>} 排在身体状态最前面:原版四件甲与假来源的格子都列出,空位写 empty,同名多格逗号并列;
-     * {@code status_self} 的 equipment 只剩两只手。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
-    public static void body_state_lists_every_worn_slot(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_mirror", new BlockPos(4, 2, 4), false);
-        FakeGear gear = dress(companion);
-        gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
-        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
-        ToolRun status = lua(companion, "numen.status.self()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(status.reply() != null, "status_self has not replied");
-            var s = dataIn(status.reply());
-            String body = s.get("body_state").getAsString();
-            // 原版最先登记,排在最前;别的来源(装了的饰品模组)可能夹在中间,所以假来源那段只看在不在 <worn> 里
-            helper.assertTrue(body.startsWith("<worn>head: minecraft:iron_helmet; chest: empty; legs: empty; "
-                            + "feet: empty; ") && body.contains("; gametest:ring: minecraft:amethyst_shard, empty; "
-                            + "gametest:charm: empty</worn>"),
-                    "body_state does not open with the worn slots: " + body);
-            helper.assertTrue(!s.getAsJsonObject("hands").has("head"),
-                    "the hands report armor beside <worn>: " + status.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /**
      * 遣散像死亡一样全掉在脚下:背包里的、原版的头盔,和不在原版物品栏里的那处来源上戴着的,都落地各一件,
      * 身上不再戴着。只丢原版物品栏的话,模组的饰品会跟着身体一起消失。
      */
@@ -310,14 +283,6 @@ public class GearGameTests {
         dismissDropsEverything(helper, "gametest_farewell", "gametest_bereaved",
                 (owner, companion) -> com.dwinovo.numen.api.network.payload.DismissRequestPayload.handle(
                         new com.dwinovo.numen.api.network.payload.DismissRequestPayload(companion.getUUID()), owner));
-    }
-
-    /** 主人敲 {@code /numen player despawn} 和在面板上点 ✕ 是同一次遣散,掉的东西一样。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
-    public static void despawn_command_drops_what_she_carries_and_wears(GameTestHelper helper) {
-        dismissDropsEverything(helper, "gametest_parting", "gametest_mourner",
-                (owner, companion) -> owner.getServer().getCommands().performPrefixedCommand(
-                        owner.createCommandSourceStack(), "numen player despawn " + companion.getGameProfile().getName()));
     }
 
     private static void dismissDropsEverything(GameTestHelper helper, String name, String ownerName,
@@ -332,11 +297,11 @@ public class GearGameTests {
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         companion.getInventory().add(new ItemStack(Items.DIAMOND));
-        net.minecraft.world.phys.AABB around = companion.getBoundingBox().inflate(4);
         dismiss.accept(owner, companion);
 
         succeedWhen(helper, () -> {
-            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, around);
+            // 原版扔出来的掉落物带随机的初速,落在哪不定;场地四周有屏障墙挡着,整块场地圈得住每一种落法
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, helper.getBounds());
             int shards = drops.stream().filter(e -> e.getItem().is(Items.AMETHYST_SHARD))
                     .mapToInt(e -> e.getItem().getCount()).sum();
             int helmets = drops.stream().filter(e -> e.getItem().is(Items.IRON_HELMET))

@@ -42,6 +42,7 @@ abstract class Control {
         this.work = new Work(rig, m.kind());
     }
 
+    /** 飞行({@link MoveKind#flight})不走单步控制器:连着的几步飞行当一整段跟({@link AirControl})。 */
     static Control of(Rig rig, Maneuver m, Gait.Stride stride) {
         return switch (m.kind()) {
             case WALK, DIAGONAL, ASCEND -> new StrideControl(rig, m, stride);
@@ -51,6 +52,7 @@ abstract class Control {
             case DOWNWARD -> new DownwardControl(rig, m, stride);
             case CLIMB -> new ClimbControl(rig, m, stride);
             case SWIM -> new SwimControl(rig, m, stride);
+            case TAKEOFF, FLY, LAND -> throw new IllegalArgumentException("飞行的步由 AirControl 跟整段,不进单步控制器:" + m.kind());
         };
     }
 

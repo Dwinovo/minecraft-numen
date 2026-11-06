@@ -113,15 +113,13 @@ public final class WorldSnapshot implements SearchView {
         }
     }
 
-    /** 派发一次搜索时拷贝的半径(区块数):以起点所在区块为中心,边长 13 个区块,约两百格见方。 */
-    public static final int SEARCH_RADIUS = 6;
+    /**
+     * 派发一次搜索时拷贝的半径(区块数):以起点所在区块为中心,边长 19 个区块,水平一百五十格以内的去处都在里面——一百二十八格以内的
+     * 路一次搜索就能搜到终点,不碰快照的边。拷贝是调色板拷贝加按层懒解,靶场上主线程这一刻拷贝耗时中位 2.3 毫秒、最多 8.6 毫秒。
+     */
+    public static final int SEARCH_RADIUS = 9;
 
-    /** 为从 {@code start} 出发的一次搜索拷贝快照:以它所在的区块为中心、{@link #SEARCH_RADIUS} 为半径。必须在世界所在的线程上调用。 */
-    public static WorldSnapshot around(Level level, BlockPos start) {
-        return around(level, start, SEARCH_RADIUS);
-    }
-
-    /** 同上,半径是 {@code radius} 个区块:一段一段走时一段只看这一段那么远。 */
+    /** 为从 {@code start} 出发的一次搜索拷贝快照:以它所在的区块为中心、半径 {@code radius} 个区块。必须在世界所在的线程上调用。 */
     public static WorldSnapshot around(Level level, BlockPos start, int radius) {
         return capture(level, SectionPos.blockToSectionCoord(start.getX()), SectionPos.blockToSectionCoord(start.getZ()),
                 radius);
@@ -176,7 +174,14 @@ public final class WorldSnapshot implements SearchView {
     @Override
     public void forEachBlock(int fromY, int toY, Predicate<BlockState> wanted, ObjIntConsumer<BlockState> visitor) {
         List<BlockState> hits = new ArrayList<>(4);
-        BlockState[] scratch = new BlockState[256];
+        // 调色板里要的状态逐个记下来(谓词一律答否,调色板就把每一种都问一遍);一次扫描共用这一个回调,不为每个方块段建一个
+        Predicate<BlockState> collect = state -> {
+            if (wanted.test(state)) {
+                hits.add(state);
+            }
+            return false;
+        };
+        BlockState[] scratch = null;
         int firstSection = Math.max(0, (fromY >> 4) - minSection);
         for (int c = 0; c < chunks.length; c++) {
             PalettedContainer<BlockState>[] states = chunks[c];
@@ -189,15 +194,9 @@ public final class WorldSnapshot implements SearchView {
                 if (section == null) {
                     continue;
                 }
-                // 调色板里要的状态逐个记下来(谓词一律答否,调色板就把每一种都问一遍);用上全局调色板时它不问、直接答"也许有",
-                // 就逐格问谓词
+                // 用上全局调色板时调色板不问、直接答"也许有",就逐格问谓词
                 hits.clear();
-                boolean everything = section.maybeHas(state -> {
-                    if (wanted.test(state)) {
-                        hits.add(state);
-                    }
-                    return false;
-                });
+                boolean everything = section.maybeHas(collect);
                 if (!everything && hits.isEmpty()) {
                     continue;
                 }
@@ -205,6 +204,9 @@ public final class WorldSnapshot implements SearchView {
                 for (int y = Math.max(0, fromY - bottom); y < Math.min(16, toY - bottom); y++) {
                     // 搜索读过的层现成的就用;没读过的解到一块共用的缓冲里,扫完就丢(估价扫的段大多搜索一辈子也不会读)
                     BlockState[] known = (BlockState[]) LAYER.getAcquire(layers[c], s << 4 | y);
+                    if (known == null && scratch == null) {
+                        scratch = new BlockState[256];
+                    }
                     for (BlockState state : known != null ? known : decode(section, y, scratch)) {
                         if (everything ? wanted.test(state) : hits.contains(state)) {
                             visitor.accept(state, bottom + y);

@@ -19,11 +19,19 @@ public final class Origin {
 
     private Origin() {}
 
-    /** 身体脚底中心在 {@code (x, feetY, z)} 时搜索的起点;身体脚底压着的每一列都待不住时为空。 */
+    /** 身体脚底中心在 {@code (x, feetY, z)} 时搜索的起点;身体脚底压着的每一列都待不住时为空。身体没在飞。 */
     public static Optional<BlockPos> of(BlockGetter level, BodyStats body, double x, double feetY, double z) {
+        return of(level, body, x, feetY, z, false);
+    }
+
+    /**
+     * 同上;飞着({@code flying})的身体在空中也待得住:脚所在的那一格世界里待不住、放得下身体,它就是起点({@link Stance#afloat})。
+     * 飞着的身体不是站在边沿,不找旁边的列。
+     */
+    public static Optional<BlockPos> of(BlockGetter level, BodyStats body, double x, double feetY, double z, boolean flying) {
         int y = Footing.cellOf(feetY);
         BlockPos own = BlockPos.containing(x, y, z);
-        if (Stance.at(level, body, own) != null) {
+        if (Stance.at(level, body, own, flying) != null) {
             return Optional.of(own);
         }
         double half = body.width() / 2;
@@ -45,5 +53,19 @@ public final class Origin {
             }
         }
         return Optional.ofNullable(best);
+    }
+
+    /**
+     * 飞着的身体要走路:先垂直降下去({@code Alight}),降下去会落在的那一格是只走的搜索的起点——脚下往下第一个站得住的格;下面没有地面为空。
+     */
+    public static Optional<BlockPos> alighting(BlockGetter level, BodyStats body, double x, double feetY, double z) {
+        for (int y = Footing.cellOf(feetY); y >= level.getMinBuildHeight(); y--) {
+            BlockPos cell = BlockPos.containing(x, y, z);
+            Stance stance = Stance.at(level, body, cell);
+            if (stance != null && stance.grounded()) {
+                return Optional.of(cell);
+            }
+        }
+        return Optional.empty();
     }
 }

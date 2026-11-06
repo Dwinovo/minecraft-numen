@@ -66,9 +66,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(() -> findRodSlot() >= 0 ? null
-                : new Precondition.Failure("fish needs a fishing rod in inventory",
-                        FailureType.WRONG_TOOL));
+        return List.of(() -> noRod(player.getInventory()));
     }
 
     @Override
@@ -77,7 +75,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
         player.controls().stop();
 
-        int rodSlot = findRodSlot();
+        int rodSlot = findRodSlot(player.getInventory());
         if (rodSlot < 0) {
             discardHook();
             fail("fishing stopped because there is no fishing rod left", FailureType.WRONG_TOOL);
@@ -115,12 +113,12 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     /** 站的地方不干时说的那句话。 */
     private static final String NOT_DRY = "I do not stand on dry ground here, and fishing does not move me: stand on "
             + "the shore with open water " + (int) MIN_CAST_DISTANCE + "-" + CAST_SEARCH_RADIUS + " blocks away "
-            + "(numen.scan.blocks finds water; numen.move.to takes you there), then numen.work.fish again";
+            + "(numen.scan.blocks finds water; numen.move.walk takes you there), then numen.work.fish again";
 
     /** 从这儿抛不进水面时说的那句话。 */
     private static final String NO_WATER = "no open water to cast into " + (int) MIN_CAST_DISTANCE + "-"
             + CAST_SEARCH_RADIUS + " blocks from where I stand, and fishing does not move me: stand on the shore "
-            + "facing open water (numen.scan.blocks finds water; numen.move.to takes you there), then numen.work.fish again";
+            + "facing open water (numen.scan.blocks finds water; numen.move.walk takes you there), then numen.work.fish again";
 
     private TaskState prepare() {
         if (player.fishing != null) {
@@ -227,8 +225,14 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         }
     }
 
-    private int findRodSlot() {
-        var inventory = player.getInventory();
+    /** 背包里没有鱼竿时,开钓之前就办不成的理由;有就是 {@code null}。 */
+    static Precondition.Failure noRod(net.minecraft.world.Container inventory) {
+        return findRodSlot(inventory) >= 0 ? null
+                : new Precondition.Failure("fish needs a fishing rod in inventory", FailureType.WRONG_TOOL);
+    }
+
+    /** 背包里第一根鱼竿在哪一格;没有是 -1。 */
+    static int findRodSlot(net.minecraft.world.Container inventory) {
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);
             if (stack.is(Items.FISHING_ROD)) return i;

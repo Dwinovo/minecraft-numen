@@ -1,4 +1,4 @@
--- Going places: head out in a direction until something turns up. (numen.move.to, away and follow are API functions.)
+-- Going places: head out in a direction until something turns up. (numen.move.walk, fly, away and follow are API functions.)
 local M = {}
 
 local COMPASS = {north = {0, -1}, south = {0, 1}, east = {1, 0}, west = {-1, 0}}
@@ -7,7 +7,7 @@ local COMPASS = {north = {0, -1}, south = {0, 1}, east = {1, 0}, west = {-1, 0}}
 local SPEED = 5
 
 ---Head out a hop at a time, calling until_ after each hop, until it returns something or about seconds of walking are
----used up (counted as the distance covered at about 5 blocks per second). Each hop is a numen.move.to to within 4 blocks
+---used up (counted as the distance covered at about 5 blocks per second). Each hop is a numen.move.walk to within 4 blocks
 ---of the column hop blocks further on; a hop that can't be made raises its error as it is, and so does a hop that gets
 ---nowhere (no_path).
 ---@param dir string|Pos "north", "south", "east", "west", or a Pos to head toward.
@@ -40,7 +40,7 @@ function M.explore(dir, opts)
   local walked = 0
   while walked < seconds do
     local here = numen.status.self().pos
-    numen.move.to({x = math.floor(here.x + dx * hop), z = math.floor(here.z + dz * hop)}, 4)
+    numen.move.walk({x = math.floor(here.x + dx * hop), z = math.floor(here.z + dz * hop)}, 4)
     local there = numen.status.self().pos
     local moved = math.sqrt((there.x - here.x) ^ 2 + (there.z - here.z) ^ 2)
     if moved < 1 then

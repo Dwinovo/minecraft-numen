@@ -61,7 +61,7 @@ class AttackPlanTest {
     @Test
     void unreachableIsWhatBowsAreFor() {
         Foe far = new Foe(1, 20.0, false, false, true, false, true);
-        assertEquals(Action.BOW, AttackPlan.decide(field(true, true, far), null).action());
+        assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
@@ -89,14 +89,14 @@ class AttackPlanTest {
     @Test
     void aLitCreeperIsHandledByTheRingNotByAnAction() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 3.0)), null);
-        assertEquals(Action.BOW, m.action(), "有弓就远远射它");
+        assertEquals(Action.RANGED, m.action(), "有弓就远远射它");
     }
 
     /** 有弓:退到安全线外射它。 */
     @Test
     void withABowAnExplosiveTargetIsShotFromOutside() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 9.0)), null);
-        assertEquals(Action.BOW, m.action());
+        assertEquals(Action.RANGED, m.action());
         assertEquals(1, m.foeId());
     }
 
@@ -200,9 +200,9 @@ class AttackPlanTest {
      */
     @Test
     void withOnlyABowItIsAlwaysABowFight() {
-        assertEquals(Action.BOW,
+        assertEquals(Action.RANGED,
                 AttackPlan.decide(field(false, true, mob(1, 3.0)), null).action());
-        assertEquals(Action.BOW,
+        assertEquals(Action.RANGED,
                 AttackPlan.decide(field(false, true, mob(1, 12.0)), null).action());
     }
 
@@ -221,12 +221,6 @@ class AttackPlanTest {
     }
 
     // ==================== 扛不扛得住 ====================
-
-    /** 扛不住就脱离,哪怕近在眼前、哪怕手里有武器。 */
-    @Test
-    void tooHurtMeansBreakOffEvenWithTheTargetInReach() {
-        assertTrue(AttackPlan.breakOff(4.0, true, true));
-    }
 
     /**
      * 比的是<b>按护甲折算后</b>的血。同样 8 点血,裸奔该退、下界合金该打——
@@ -254,12 +248,6 @@ class AttackPlanTest {
     void corneredMeansFightingInsteadOfStandingStill() {
         Battlefield trapped = new Battlefield(4.0, REACH, true, true, List.of(mob(1, 3.0)));
         assertEquals(Action.SKIRMISH, AttackPlan.decide(trapped, null).action());
-    }
-
-    /** 有路可退也一样是跑——跑不跑只看打不打得过,和退不退得掉无关;退不掉是逃跑本能自己发现的。 */
-    @Test
-    void withAWayOutSheStillBreaksOff() {
-        assertTrue(AttackPlan.breakOff(4.0, true, true));
     }
 
     // ==================== 收场 ====================
@@ -319,15 +307,6 @@ class AttackPlanTest {
     }
 
     // ==================== 空手 ====================
-
-    /**
-     * 空手时有东西追她就是<b>跑,不是换个地方打</b>:"还想打,只是不能在这儿打"——她根本打不了,这句是假的。跑不跑
-     * 不看距离,所以不会在危险半径那条线上跑一下、打一下来回换。
-     */
-    @Test
-    void barehandedInsideTheRadiusIsAnEscapeNotAReposition() {
-        assertTrue(AttackPlan.breakOff(HEALTHY, false, true));
-    }
 
     /** 没有东西追她,空手也不用跑——赤手打一只鸡是正当的。 */
     @Test

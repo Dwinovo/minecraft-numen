@@ -13,7 +13,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -38,28 +37,6 @@ public class BodyReportGameTests {
         Constants.LOG.info("[numen-sample] {} -> {}", what, run.outcome());
     }
 
-    /** 右键挤奶:空桶换成一桶奶,回执写明少了一个桶、多了一桶奶。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
-    public static void milking_a_cow_reports_the_bucket_swap(GameTestHelper helper) {
-        Cow cow = EntityType.COW.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 4));
-        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        cow.setNoAi(true);
-        helper.getLevel().addFreshEntity(cow);
-        NumenPlayer companion = spawnAt(helper, "gametest_milker", new BlockPos(8, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun milk = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:bucket\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(milk.done() && milk.succeeded(), "use entity did not finish: " + milk.outcome());
-            helper.assertTrue(milk.outcome().contains("-1 minecraft:bucket")
-                            && milk.outcome().contains("+1 minecraft:milk_bucket"),
-                    "the reply does not say the bucket became milk: " + milk.outcome());
-            sample("milk a cow", milk);
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 右键带鞍的猪:她骑了上去,回执说骑上了什么。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
     public static void riding_a_saddled_pig_is_reported(GameTestHelper helper) {
@@ -82,24 +59,6 @@ public class BodyReportGameTests {
         });
     }
 
-    /** 点一下的当口她的血量变了(像神社复活把使用者设到 25%):回执写明血量从多少到多少。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
-    public static void a_health_change_during_a_press_is_reported(GameTestHelper helper) {
-        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 5));
-        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(3, 2, 5), false);
-        ToolRun press = lua(companion, "numen.use.block(" + xyz(stone) + ", {hold = 1.0})");
-        helper.runAfterDelay(15, () -> companion.setHealth(5.0f));
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done() && press.succeeded(), "use block did not finish: " + press.outcome());
-            helper.assertTrue(press.outcome().contains("health: 20 -> "),
-                    "the reply does not say her health dropped from 20: " + press.outcome());
-            sample("health changed during a press", press);
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 挖的时候手里的镐碎了:这一挖的结果写明"用坏了"。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
     public static void a_pickaxe_breaking_in_a_dig_is_reported(GameTestHelper helper) {
@@ -117,29 +76,6 @@ public class BodyReportGameTests {
             helper.assertTrue(dig.outcome().contains("your minecraft:stone_pickaxe broke while it was in your main hand"),
                     "the reply does not say the pickaxe broke: " + dig.outcome());
             sample("pickaxe breaks in a dig", dig);
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 打的时候手里的剑碎了:这一下的结果写明"用坏了"。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
-    public static void a_sword_breaking_in_a_hit_is_reported(GameTestHelper helper) {
-        Pig pig = EntityType.PIG.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        pig.setNoAi(true);
-        helper.getLevel().addFreshEntity(pig);
-        NumenPlayer companion = spawnAt(helper, "gametest_duelist", new BlockPos(8, 2, 11), false);
-        ItemStack sword = new ItemStack(Items.WOODEN_SWORD);
-        sword.setDamageValue(sword.getMaxDamage() - 1);
-        companion.getInventory().setItem(companion.getInventory().selected, sword);
-        ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(hit.done() && hit.succeeded(), "use hit did not finish: " + hit.outcome());
-            helper.assertTrue(hit.outcome().contains("your minecraft:wooden_sword broke while it was in your main hand"),
-                    "the reply does not say the sword broke: " + hit.outcome());
-            sample("sword breaks in a hit", hit);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

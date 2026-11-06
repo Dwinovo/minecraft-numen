@@ -142,7 +142,7 @@ class ConvoLogRecordsTest {
     private static LlmEndpoint endpoint(String provider, String model, ThinkingLevel level) {
         return new LlmEndpoint(provider, "http://x", Map.of(), "k", "",
                 new ModelSpec(model, ThinkingTable.AUTO_ONLY, true), 0,
-                LlmEndpoint.unresolved("").compat(), new RequestOptions(null, 0, level));
+                LlmEndpoint.unresolved("").compat(), new RequestOptions(null, 0, level), 16_384, 20_000);
     }
 
     @Test

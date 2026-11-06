@@ -53,7 +53,7 @@ public final class WorkApi {
     @Note("A cluster from `numen.scan.blocks` or a Block from `numen.scan.block` goes in as it is.")
     @Note("Digs what your hand reaches from where you stand; what is out of reach it walks to, standing where the hand "
             + "reaches the most of what is left, and digs on, until all of it is dug or it can't get to the rest. The "
-            + "walk goes its own way like `numen.move.to`, digging and building when going around costs more, and is "
+            + "walk goes its own way like `numen.move.walk`, digging and building when going around costs more, and is "
             + "told in the result. It never picks up: `local r = numen.work.dig({x = 120, y = 12, z = -35}); "
             + "numen.work.collect({items = r.drops})`; `numen.work.mine(cluster)` does both.")
     @Note("Before it returns it waits up to " + Drops.SETTLE_TICKS / 20 + " seconds for what this dig dropped to "
@@ -70,7 +70,7 @@ public final class WorkApi {
     @Note("Takes the best tool for each block; only digs what your tools actually harvest, and says so when nothing "
             + "qualifies. Asks your owner before breaking a named block their rules want asked about; a refusal stops "
             + "the job with the reason.")
-    @SeeAlso({"numen.move.to", "numen.work.collect", "numen.scan.blocks", "numen.task.stop"})
+    @SeeAlso({"numen.move.walk", "numen.work.collect", "numen.scan.blocks", "numen.task.stop"})
     public static Job<DigCompanionTask.Dug> dig(ServerCall call, Dig args) {
         return Job.of(BlockActionOps.dig(call, args.blocks(), args.count().orElse(null)));
     }

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.scan;
 
+import java.util.function.LongSupplier;
 import net.minecraft.server.MinecraftServer;
 
 /**
@@ -36,6 +37,11 @@ import net.minecraft.server.MinecraftServer;
  * however slow the machine or busy the other searches — the guarantee callers lean
  * on when they wait for a search before concluding anything. The cost is one step
  * per consumer per tick beyond the lid.
+ *
+ * <h2>The clock</h2>
+ * The lid reads one clock ({@link #use}): wall time in a real server. The GameTest server swaps in a clock
+ * that counts work, the same seam as the pathing search clock, so where a tick's work stops depends only on
+ * how much work was done, never on how fast the machine is.
  *
  * <h2>Threading</h2>
  * Server main thread only, like everything in the task layer. The tick stamp
@@ -89,8 +95,15 @@ public final class SearchBudget {
     private static long sliceStart = CLOSED;
 
     private static final Slice SLICE = new Slice();
+    /** The clock the lid is measured on: {@link System#nanoTime} unless {@link #use} swapped it. */
+    private static LongSupplier clock = System::nanoTime;
 
     private SearchBudget() {}
+
+    /** Measure the lid on {@code nanos} from now on: the GameTest server's seam (a clock that counts work). */
+    public static void use(LongSupplier nanos) {
+        clock = nanos;
+    }
 
     /**
      * Open this consumer's slice of the tick's pool (resetting the pool when the
@@ -109,7 +122,7 @@ public final class SearchBudget {
         if (sliceStart != CLOSED) {
             throw new IllegalStateException("a search slice is already open");
         }
-        sliceStart = System.nanoTime();
+        sliceStart = clock.getAsLong();
         return SLICE;
     }
 
@@ -139,7 +152,7 @@ public final class SearchBudget {
         if (sliceStart == CLOSED) {
             throw new IllegalStateException("search work outside a slice");
         }
-        long own = System.nanoTime() - sliceStart;
+        long own = clock.getAsLong() - sliceStart;
         return own < MIN_SLICE_NANOS || spentNanos + own < MAX_NANOS_PER_TICK;
     }
 
@@ -164,7 +177,7 @@ public final class SearchBudget {
 
         @Override
         public void close() {
-            spentNanos += System.nanoTime() - sliceStart;
+            spentNanos += clock.getAsLong() - sliceStart;
             sliceStart = CLOSED;
         }
     }

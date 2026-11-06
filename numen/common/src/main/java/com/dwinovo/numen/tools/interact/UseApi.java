@@ -78,6 +78,9 @@ public final class UseApi {
     @Example("local w = numen.use.block({x = 120, y = 64, z = -35})")
     @Example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
     @Example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
+    @Note("With item, the stack taken in hand is the one already in your main hand, else the first slot holding that item "
+            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which. To use "
+            + "another one, numen.gui.move it into your main hand's slot first.")
     @Note("When the click opens a window, it returns the Window, the same as numen.gui.view(): its methods put, take, "
             + "move, quick and close work on it (see the numen.gui group).")
     @Note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like a real "
@@ -85,7 +88,7 @@ public final class UseApi {
     @Note("With sneak = true and something in hand, a right click skips what the aimed block itself does: a block "
             + "goes onto a chest instead of opening it.")
     @Note("Out of working reach (~4.5 blocks) of the aim point, it first walks to where one of its faces is in sight and in "
-            + "reach, then clicks; the walk digs and builds its own way like `numen.move.to` and is told in the result. "
+            + "reach, then clicks; the walk digs and builds its own way like `numen.move.walk` and is told in the result. "
             + "A walk that can't get there fails with its reason and nothing is clicked.")
     @Note("It is a bare key press: whatever you hold is what is used, and the block the crosshair lands on is the one "
             + "clicked — if something else is in the way (tall grass in front of a chest, a leaf), that is what gets "
@@ -136,7 +139,7 @@ public final class UseApi {
     @Example("numen.use.entity(\"armor_stand@3f9a1c\", {item = \"minecraft:iron_helmet\", at = \"head\"})")
     @Note("An entity farther than your reach, or behind a wall, is walked up to first, then clicked; the walk is told in "
             + "the result and a walk that can't get there fails with its reason.")
-    @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.to` sails a boat "
+    @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.walk` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
     @Note("An armor stand takes its gear by where you click (`at`), like a real client's click on that spot: the click on the "
             + "spot goes first, a plain click after it. Minecraft decides what fits where; the result lists what changed on the "
@@ -196,9 +199,9 @@ public final class UseApi {
     @Example("numen.use.sleep()")
     @Example("numen.use.sleep({at = {x = 120, y = 64, z = -35}})")
     @Note("It does NOT travel: find a bed with `numen.scan.blocks(\"#minecraft:beds\")` (that one tag covers every "
-            + "colour), `numen.move.to({x = 120, y = 64, z = -35}, 2)` with its coordinates, then call this.")
+            + "colour), `numen.move.walk({x = 120, y = 64, z = -35}, 2)` with its coordinates, then call this.")
     @Note("Succeeds only when the server confirms you are sleeping; otherwise it hands back Minecraft's own reason. "
-            + "\"Only at night\" means wait (`numen.task.timer`), not retry; \"too far away\" means numen.move.to.")
+            + "\"Only at night\" means wait (`numen.task.timer`), not retry; \"too far away\" means numen.move.walk.")
     @Note("Returns the moment you lie down; night passes on its own.")
     @SeeAlso("numen.task.timer")
     public static SleepOps.Slept sleep(ServerCall call, Sleep args) {
@@ -254,21 +257,25 @@ public final class UseApi {
     @Doc("Where you took off.")
     public record Glided(@Doc("Where you are.") Vec3 pos) {}
 
-    /** 鞘翅起飞:发的是空中按跳跃键发的那个包,条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
-    @Fn("Start gliding with the elytra you wear.")
+    /** 鞘翅起飞:走键盘展开鞘翅的那一条({@link com.dwinovo.numen.api.entity.Controls#unfurl}),条件(在空中、不在水里、穿着没坏的鞘翅、没有漂浮效果)全由原版判。 */
+    @Fn("Open the elytra you wear in mid-air and start gliding, by hand.")
     @Example("numen.use.glide()")
     @Note("Instant. Only works in the air (jump or fall off a height first) with an unbroken elytra worn "
             + "(`numen.gear.wear(\"minecraft:elytra\")`); otherwise it fails and says which is missing.")
-    @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you forward in the air.")
-    @SeeAlso({"numen.gear.wear", "numen.use.item"})
+    @Note("Once gliding, `numen.use.item({item = \"minecraft:firework_rocket\"})` boosts you the way you look.")
+    @Note("To cross a long way on the elytra, `numen.move.glide` does the whole trip: it takes off, steers, fires the "
+            + "rockets and lands. This opens the wings and leaves the rest to you.")
+    @SeeAlso({"numen.move.glide", "numen.gear.wear", "numen.use.item"})
     public static Glided glide(ServerCall call) {
         NumenPlayer her = call.her();
-        her.packets().command(ServerboundPlayerCommandPacket.Action.START_FALL_FLYING);
-        if (!her.isFallFlying()) {
+        if (!her.controls().unfurl(her)) {
             java.util.List<String> why = new java.util.ArrayList<>();
             ItemStack chest = her.getItemBySlot(EquipmentSlot.CHEST);
             if (her.onGround()) {
                 why.add("you are on the ground (gliding starts in the air)");
+            }
+            if (her.getAbilities().flying) {
+                why.add("you are flying (creative flight)");
             }
             if (her.isInWater()) {
                 why.add("you are in water");

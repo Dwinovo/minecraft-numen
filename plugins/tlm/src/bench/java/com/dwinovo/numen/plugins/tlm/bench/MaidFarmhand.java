@@ -112,7 +112,7 @@ public final class MaidFarmhand implements Scenario {
     public String solution(Scene scene) {
         // numen.use.entity 不走动:先走到她两格内;驯服之后开她的界面,把种子放进去,再切工作、开家模式(家就是她站的地方)
         String id = "\"" + com.dwinovo.numen.api.sdk.EntityLabel.of(maid) + "\"";
-        return "numen.move.to(" + Positions.literal(maid.blockPosition()) + ", 2)\n"
+        return "numen.move.walk(" + Positions.literal(maid.blockPosition()) + ", 2)\n"
                 + "numen.use.entity(" + id + ", {item = \"minecraft:cake\"})\n"
                 + "tlm.maid.open(" + id + ")\n"
                 + "numen.gui.put(\"minecraft:wheat_seeds\")\n"

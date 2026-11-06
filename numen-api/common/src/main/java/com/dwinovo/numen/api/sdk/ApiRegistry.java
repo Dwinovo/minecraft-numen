@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.sdk;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.script.ScriptCatalog;
 import com.dwinovo.numen.script.ScriptEngine;
 
@@ -23,8 +24,9 @@ public final class ApiRegistry {
      * 一个组。
      *
      * @param functions 按名字排好
+     * @param hidden    脚本里调得到,但不进索引、帮助与存根:给 API 自己的机制调用的函数(知识来源),不是给模型挑着用的
      */
-    public record Group(String namespace, String name, String summary, List<ApiFunction> functions) {
+    public record Group(String namespace, String name, String summary, List<ApiFunction> functions, boolean hidden) {
 
         /** 组的全名:{@code numen.work}。 */
         public String fullName() {
@@ -62,11 +64,37 @@ public final class ApiRegistry {
     }
 
     /**
-     * 登记一组:{@code functions} 里每个 {@link Fn} 方法是这一组的一个函数。
+     * 登记一组:{@code functions} 里每个 {@link Fn} 方法是这一组的一个函数(反射读出函数的描述,见 {@link Binder})。
      *
+     * @return 撤回这一组的句柄:撤掉后这个全名又没有主了
      * @throws IllegalArgumentException 名字写不出来、这一组已经有主、有函数绑定不了
      */
-    public static synchronized void register(String namespace, String group, String summary, Class<?> functions) {
+    public static Handle register(String namespace, String group, String summary, Class<?> functions) {
+        return register(namespace, group, summary, Binder.bind(namespace, group, functions));
+    }
+
+    /** 同 {@link #register(String, String, String, Class)},只是这一组不进索引、帮助与存根({@link Group#hidden})。 */
+    public static Handle registerHidden(String namespace, String group, String summary, Class<?> functions) {
+        return register(namespace, group, summary, Binder.bind(namespace, group, functions), true);
+    }
+
+    /** 同 {@link #register(String, String, String, List)},只是这一组不进索引、帮助与存根({@link Group#hidden})。 */
+    public static Handle registerHidden(String namespace, String group, String summary, List<ApiFunction> functions) {
+        return register(namespace, group, summary, functions, true);
+    }
+
+    /**
+     * 登记一组:{@code functions} 是这一组各个函数的描述(反射读的或代码写的,来路一样)。
+     *
+     * @return 撤回这一组的句柄:撤掉后这个全名又没有主了
+     * @throws IllegalArgumentException 名字写不出来、这一组已经有主、没有函数、函数重名
+     */
+    public static Handle register(String namespace, String group, String summary, List<ApiFunction> functions) {
+        return register(namespace, group, summary, functions, false);
+    }
+
+    private static synchronized Handle register(String namespace, String group, String summary,
+                                                List<ApiFunction> functions, boolean hidden) {
         checkNamespace(namespace);
         String bad = Binder.badName(group);
         if (bad != null) {
@@ -77,8 +105,25 @@ public final class ApiRegistry {
             throw new IllegalArgumentException("the group " + full + " already has an owner: each namespace adds "
                     + "functions only to its own groups");
         }
-        GROUPS.put(full, new Group(namespace, group, summary == null ? "" : summary,
-                Binder.bind(namespace, group, functions)));
+        if (functions.isEmpty()) {
+            throw new IllegalArgumentException("the group " + full + " has no function");
+        }
+        List<ApiFunction> owned = new ArrayList<>();
+        for (ApiFunction fn : functions.stream().sorted(java.util.Comparator.comparing(ApiFunction::name)).toList()) {
+            if (!owned.isEmpty() && owned.getLast().name().equals(fn.name())) {
+                throw new IllegalArgumentException("the group " + full + " has the function " + fn.name() + " twice");
+            }
+            owned.add(fn.in(namespace, group));
+        }
+        Group made = new Group(namespace, group, summary == null ? "" : summary, List.copyOf(owned), hidden);
+        GROUPS.put(full, made);
+        return Handle.once(() -> {
+            synchronized (ApiRegistry.class) {
+                if (GROUPS.get(full) == made) {
+                    GROUPS.remove(full);
+                }
+            }
+        });
     }
 
     /** 登记了的各组,按全名排序。 */

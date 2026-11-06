@@ -102,7 +102,7 @@ public final class CraftStonePickaxe implements Scenario {
                 numen.inv.make("stick", 4)
                 numen.build.place({{name = "crafting_table", pos = %1$s}})
                 numen.inv.make("wooden_pickaxe")
-                numen.move.to(%2$s)
+                numen.move.walk(%2$s)
                 numen.work.dig({%3$s, %4$s, %5$s})
                 numen.work.collect()
                 numen.inv.make("stone_pickaxe")""".formatted(Positions.literal(table), Positions.literal(stand),

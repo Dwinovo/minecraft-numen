@@ -120,6 +120,33 @@ class SightTest {
         assertNull(Sight.use(world, high, 6, TARGET, Direction.UP));
     }
 
+    /** 整块目标自己算碰没碰上、碰哪一面,与原版 {@code VoxelShape.clip} 对同一条射线一致(远近、从格里射出、贴着面都有)。 */
+    @Test
+    void aWholeBlockTargetIsHitWhereVanillaClipHitsIt() {
+        FakeWorld world = new FakeWorld().set(TARGET, Blocks.STONE.defaultBlockState());
+        java.util.Random random = new java.util.Random(20261101);
+        int hits = 0;
+        for (int i = 0; i < 20000; i++) {
+            Vec3 eye = new Vec3(TARGET.getX() + random.nextDouble() * 8 - 4, TARGET.getY() + random.nextDouble() * 8 - 4,
+                    TARGET.getZ() + random.nextDouble() * 8 - 4);
+            Vec3 point = i % 4 == 0
+                    ? new Vec3(TARGET.getX() + 0.5 + Math.round(random.nextDouble() * 2 - 1) * 0.48, TARGET.getY() + 0.5, TARGET.getZ() + random.nextDouble())
+                    : new Vec3(TARGET.getX() + random.nextDouble(), TARGET.getY() + random.nextDouble(), TARGET.getZ() + random.nextDouble());
+            // 射线打到瞄点再往前伸 0.1
+            double dx = point.x - eye.x;
+            double dy = point.y - eye.y;
+            double dz = point.z - eye.z;
+            double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            Vec3 through = new Vec3(point.x + dx / length * 0.1, point.y + dy / length * 0.1, point.z + dz / length * 0.1);
+            net.minecraft.world.phys.BlockHitResult vanilla = net.minecraft.world.phys.shapes.Shapes.block().clip(eye, through, TARGET);
+            Sight.Trace trace = Sight.trace(world, eye, point, TARGET);
+            assertEquals(vanilla != null, trace.reached(), eye + " -> " + point);
+            assertEquals(vanilla == null ? null : vanilla.getDirection(), trace.face(), eye + " -> " + point);
+            hits += trace.reached() ? 1 : 0;
+        }
+        assertTrue(hits > 5000, "射线大多真射中目标,不是只比了没碰上:" + hits);
+    }
+
     @Test
     void clickableMeansAnOutline() {
         FakeWorld world = withTarget().set(0, Y, 3, Blocks.WATER.defaultBlockState());

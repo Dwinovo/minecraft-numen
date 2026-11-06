@@ -38,7 +38,7 @@ class ArrivalTest {
     @Test
     void standingInTheGoalIsArrivingWithNothingToLookAt() {
         BlockPos goalCell = new BlockPos(5, Y, 0);
-        Arrival.Verdict verdict = Arrival.judge(Goals.at(goalCell), flat(), SURVIVAL, goalCell, eye(goalCell), 4.5);
+        Arrival.Verdict verdict = Arrival.judge(Goals.at(goalCell), flat(), SURVIVAL, goalCell, false, eye(goalCell), 4.5);
         assertEquals(new Arrival.Verdict.Arrived(null), verdict);
     }
 
@@ -46,7 +46,7 @@ class ArrivalTest {
     void standingOutsideTheGoalReplans() {
         BlockPos goalCell = new BlockPos(5, Y, 0);
         BlockPos here = new BlockPos(4, Y, 0);
-        Arrival.Verdict verdict = Arrival.judge(Goals.at(goalCell), flat(), SURVIVAL, here, eye(here), 4.5);
+        Arrival.Verdict verdict = Arrival.judge(Goals.at(goalCell), flat(), SURVIVAL, here, false, eye(here), 4.5);
         assertInstanceOf(Arrival.Verdict.Replan.class, verdict);
     }
 
@@ -62,7 +62,7 @@ class ArrivalTest {
         Goal use = Goals.use(world, SURVIVAL, furnace);
         BlockPos here = new BlockPos(1, Y, 0);
         Arrival.Verdict.Arrived arrived = assertInstanceOf(Arrival.Verdict.Arrived.class,
-                Arrival.judge(use, world, SURVIVAL, here, eye(here), SURVIVAL.blockReach()));
+                Arrival.judge(use, world, SURVIVAL, here, false, eye(here), SURVIVAL.blockReach()));
         assertNotNull(arrived.aim(), "要看着那一格");
     }
 
@@ -75,13 +75,33 @@ class ArrivalTest {
         // 站位在东面,可眼睛此刻已经离得够不着(身子被推走了):复核按眼睛此刻的位置,看不见就不算到
         Vec3 elsewhere = new Vec3(30.5, Y + 1.62, 0.5);
         assertEquals(new Arrival.Verdict.Blind(furnace),
-                Arrival.judge(use, world, SURVIVAL, here, elsewhere, SURVIVAL.blockReach()));
+                Arrival.judge(use, world, SURVIVAL, here, false, elsewhere, SURVIVAL.blockReach()));
+    }
+
+    /**
+     * 工作台摆在一块石头上,只有西面敞开;列好站位之后,正对西面的那一格(半空,不是站位)被放上一块玻璃:走到了搜索挑的站位,在世界上复核时
+     * 看不见它,不报到达,是"看不见"。
+     */
+    @Test
+    void sightBlockedAfterPlanningIsNotArrival() {
+        TestWorld world = new TestWorld().floor(-4, -4, 20, 8, Y - 1);
+        BlockPos table = new BlockPos(10, Y + 1, 5);
+        world.set(new BlockPos(10, Y, 5), Blocks.STONE.defaultBlockState()).set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        for (BlockPos glass : new BlockPos[] {new BlockPos(10, Y + 1, 4), new BlockPos(10, Y + 1, 6), new BlockPos(11, Y + 1, 5),
+                new BlockPos(10, Y + 2, 5)}) {
+            world.set(glass, Blocks.GLASS.defaultBlockState());
+        }
+        Goal use = Goals.use(world, SURVIVAL, table);
+        BlockPos here = new BlockPos(8, Y, 5);
+        assertInstanceOf(Arrival.Verdict.Arrived.class, Arrival.judge(use, world, SURVIVAL, here, false, eye(here), SURVIVAL.blockReach()));
+        world.set(new BlockPos(9, Y + 1, 5), Blocks.GLASS.defaultBlockState());
+        assertEquals(new Arrival.Verdict.Blind(table), Arrival.judge(use, world, SURVIVAL, here, false, eye(here), SURVIVAL.blockReach()));
     }
 
     @Test
     void passingThroughIsJustBeingInsideTheGoal() {
         BlockPos goalCell = new BlockPos(5, Y, 0);
-        assertTrue(Arrival.passes(Goals.at(goalCell), flat(), SURVIVAL, goalCell));
-        assertFalse(Arrival.passes(Goals.at(goalCell), flat(), SURVIVAL, new BlockPos(4, Y, 0)));
+        assertTrue(Arrival.passes(Goals.at(goalCell), flat(), SURVIVAL, goalCell, false));
+        assertFalse(Arrival.passes(Goals.at(goalCell), flat(), SURVIVAL, new BlockPos(4, Y, 0), false));
     }
 }

@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 原版 GameTest 服务器建世界只用超平坦预设自带的三个维度,数据包里定义的维度被丢掉,种子也写死为 0。这里补上这两件,
  * 主世界仍是超平坦(测试场地放在里面),数据包定义的维度(如 {@code numen_test:terrain} 的真实地形)并进来,
  * 用例拿绝对坐标在那个维度里跑。种子由系统属性 {@code numen.gametest.seed} 指定,没给就是原来的 0。
- * 世界目录每次从干净开始,固定存档放进真实地形维度(见 {@link TerrainWorld}),原版 GameTest 服务器复用上一次的世界目录。
+ * 世界目录每次从干净开始(见 {@link TerrainWorld}),原版 GameTest 服务器复用上一次的世界目录。
  */
 @Mixin(GameTestServer.class)
 public abstract class GameTestServerWorldMixin {
@@ -40,7 +40,7 @@ public abstract class GameTestServerWorldMixin {
             "(Lnet/minecraft/world/level/LevelSettings;Lnet/minecraft/server/WorldLoader$DataLoadContext;)"
                     + "Lnet/minecraft/server/WorldLoader$DataLoadOutput;";
 
-    /** 建世界之前:清世界目录、放固定存档。 */
+    /** 建世界之前:清世界目录。 */
     @Inject(method = "create", at = @At("HEAD"))
     private static void numen$freshWorld(Thread thread, LevelStorageSource.LevelStorageAccess access, PackRepository packs,
             Collection<TestFunction> tests, BlockPos spawn, CallbackInfoReturnable<GameTestServer> cir) {

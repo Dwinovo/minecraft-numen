@@ -175,7 +175,7 @@ final class Generators {
         int top = Math.min(maxY, w.maxY());
         int bottom = Math.max(minY, w.minY());
         for (BlockPos column : columns) {
-            if (java.util.concurrent.ThreadLocalRandom.current().nextDouble() > density) {
+            if (level.random().nextDouble() > density) {
                 continue;
             }
             if (top + 1 <= w.maxY() && !level.at(new BlockPos(column.getX(), top + 1, column.getZ())).isAir()) {

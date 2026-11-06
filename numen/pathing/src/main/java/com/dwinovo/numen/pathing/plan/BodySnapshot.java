@@ -36,10 +36,11 @@ import net.minecraft.world.level.block.state.properties.DripstoneThickness;
  * @param inventory               主背包 36 格的副本,下标就是槽位;挑工具看全背包
  * @param mining                  挖掘速度相关的属性与效果
  * @param breath                  氧气、水下呼吸附魔与效果、海龟壳:能憋多久
+ * @param mobility                身上已有的移动方式:许不许飞、在不在飞、滑翔物、烟花
  */
 public record BodySnapshot(BodyStats stats, GameType gameMode, float health, double safeFallDistance,
                            double fallDamageMultiplier, int foodLevel, double waterMovementEfficiency,
-                           List<ItemStack> inventory, DigTime.Mining mining, Breath breath) {
+                           List<ItemStack> inventory, DigTime.Mining mining, Breath breath, Mobility mobility) {
 
     /** 摔完至少要留下的血量(三颗心):按血量推摔落上限时不把她摔到只剩一口气。 */
     static final float HEALTH_RESERVE = 6.0F;
@@ -49,7 +50,14 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
         Objects.requireNonNull(gameMode, "gameMode");
         Objects.requireNonNull(mining, "mining");
         Objects.requireNonNull(breath, "breath");
+        Objects.requireNonNull(mobility, "mobility");
         inventory = inventory.stream().map(ItemStack::copy).toList();
+    }
+
+    /** 同一份快照,这一趟只走({@link Mobility#afoot}):走法集与起点都按没有飞行能力的身体算。 */
+    public BodySnapshot afoot() {
+        return new BodySnapshot(stats, gameMode, health, safeFallDistance, fallDamageMultiplier, foodLevel,
+                waterMovementEfficiency, inventory, mining, breath, mobility.afoot());
     }
 
     public boolean creative() {
@@ -118,9 +126,22 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
 
     /**
      * 摔掉 {@code damage} 点血受不受得起:不疼的都行,疼的只到摔完还留 {@link #HEALTH_RESERVE} 点血为止。
-     * 这是全模块唯一的摔落上限;路线规格的无水落差只能比它更紧({@link CostModel#bearsFall})。
+     * 这是全模块唯一的摔落上限;路线规格愿意承受的摔伤只能比它更紧({@link CostModel#bearsFall})。
      */
     public boolean bears(int damage) {
         return damage <= 0 || health - damage >= HEALTH_RESERVE;
+    }
+
+    /**
+     * 落在硬地(倍率 1 的方块)上,摔伤不超过 {@code accepted} 点、又受得起({@link #bears})的最大落差,由 {@link #fallDamage}
+     * 的公式反推;不会摔伤的身体(创造模式、{@code fall_damage_multiplier} 为 0)不限,为正无穷。落点方块减轻摔伤的,落差还能更高,
+     * 这里不管(估价把这样的落点另算)。
+     */
+    public double maxDrop(int accepted) {
+        if (creative() || fallDamageMultiplier <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        int damage = Math.max(0, Math.min(accepted, (int) Math.floor(health - HEALTH_RESERVE)));
+        return safeFallDistance + damage / fallDamageMultiplier;
     }
 }

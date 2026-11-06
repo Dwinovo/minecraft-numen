@@ -58,7 +58,7 @@
 | `r:trim(mask)` | `//trim` | 过蒙版的格的外包盒,交回长方体选区;一格都不过就报错 |
 | `r:deform(fn)` | `//deform` | WE 的表达式换成 Lua 函数:`fn(x, y, z)` 返回源格的 x, y, z;源格一次读完。不做 `-l`(剪贴板作源) |
 
-读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片(附 `numen.move.to` 的提示)。
+读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片(附 `numen.move.walk` 的提示)。
 
 世界里一格是什么、挡不挡移动、一列多高,各只有一个读法:Java 的 `LoadedBlocks`(只经 `BlockScanner.loadedChunk` 读已加载区块)。WE 的材质判据对到原版:`#solid` 与"挡移动"是 `blocksMotion()`,`#fullcube` 是整格碰撞形状,空气是 `isAir()`,液体是 `LiquidBlock`;不手写方块名单。
 

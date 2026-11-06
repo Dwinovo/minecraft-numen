@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.client.screen.settings;
 import com.dwinovo.numen.api.agent.catalog.Api;
 import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
+import com.dwinovo.numen.api.agent.llm.EndpointResolver;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
 import com.dwinovo.numen.api.brain.Libraries;
@@ -69,6 +70,10 @@ public final class ProfileFormPanel {
         public String temperature = "";
         /** 输出上限(tokens);空 = 不发。 */
         public String maxTokens = "";
+        /** 整理记忆的预留(tokens);空 = 缺省。 */
+        public String reserveTokens = "";
+        /** 整理时原文保留的近段预算(tokens);空 = 缺省。 */
+        public String keepRecentTokens = "";
         private String protocol = "";
         private com.google.gson.JsonObject compat;
 
@@ -86,12 +91,15 @@ public final class ProfileFormPanel {
             d.temperature = p.temperature() == null ? "" : String.valueOf(p.temperature());
             d.maxTokens = p.maxTokens() > 0 ? String.valueOf(p.maxTokens()) : "";
             d.compat = p.compat();
+            d.reserveTokens = p.reserveTokens() > 0 ? String.valueOf(p.reserveTokens()) : "";
+            d.keepRecentTokens = p.keepRecentTokens() > 0 ? String.valueOf(p.keepRecentTokens()) : "";
             return d;
         }
 
         public ConnectionProfile toProfile() {
             return new ConnectionProfile(provider, protocol, model, apiKey, baseUrl, proxy, reasoningEffort,
-                    parseCount(ctx), parseTemperature(temperature), parseCount(maxTokens), compat);
+                    parseCount(ctx), parseTemperature(temperature), parseCount(maxTokens), compat,
+                    parseCount(reserveTokens), parseCount(keepRecentTokens));
         }
 
         /** 个数输入:空/非数字/非正数一律 0(= 没填)。 */
@@ -313,6 +321,18 @@ public final class ProfileFormPanel {
         TextField maxOut = ui.add(new TextField(draft.maxTokens, v -> draft.maxTokens = v).numeric()
                 .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_DEFAULT_HINT)));
         maxOut.setBounds(x + half + 8, ry, half, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
+
+        // 整理记忆的两个数:上下文超过 窗口 − 预留 就整理,整理时近段保留多少原文;不填用缺省
+        labelWidgetAt(x, ry, half, ModLanguageData.Keys.GUI_PROVIDERS_RESERVE);
+        labelWidgetAt(x + half + 8, ry, half, ModLanguageData.Keys.GUI_PROVIDERS_KEEP_RECENT);
+        ry += NumenStyle.LABEL_PITCH;
+        TextField reserve = ui.add(new TextField(draft.reserveTokens, v -> draft.reserveTokens = v).numeric()
+                .placeholder(String.valueOf(EndpointResolver.DEFAULT_RESERVE_TOKENS)));
+        reserve.setBounds(x, ry, half, NumenStyle.CONTROL_H);
+        TextField keep = ui.add(new TextField(draft.keepRecentTokens, v -> draft.keepRecentTokens = v).numeric()
+                .placeholder(String.valueOf(EndpointResolver.DEFAULT_KEEP_RECENT_TOKENS)));
+        keep.setBounds(x + half + 8, ry, half, NumenStyle.CONTROL_H);
         fullH = ry + NumenStyle.CONTROL_H - y;
 
         // ---- 滚动记账:视口到收尾行上方为止,内容高随高级一节的开合在 baseH 与 fullH 之间走 ----

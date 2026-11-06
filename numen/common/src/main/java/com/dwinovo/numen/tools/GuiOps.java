@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Methods;
@@ -34,6 +35,9 @@ public final class GuiOps {
                              Side side,
                              @Doc("Empty slots have none.") Optional<String> item,
                              Optional<Integer> count,
+                             @Doc("What tells this stack apart from the same item without it (a shulker box's contents, "
+                                     + "a custom name, enchantments); absent for a plain stack.")
+                             Optional<String> detail,
                              @Doc("A slot you only take from.") Optional<Boolean> output) {}
 
     /** 打开的界面:脚本拿到的那张表,带着 {@code numen.gui} 里的方法。 */
@@ -91,14 +95,16 @@ public final class GuiOps {
     }
 
     private static WindowSlot slot(int index, Side side, ItemStack it, boolean output) {
+        String detail = it.isEmpty() ? "" : StackLabel.detail(it);
         return new WindowSlot(index, side,
                 it.isEmpty() ? Optional.empty() : Optional.of(BuiltInRegistries.ITEM.getKey(it.getItem()).toString()),
                 it.isEmpty() ? Optional.empty() : Optional.of(it.getCount()),
+                detail.isEmpty() ? Optional.empty() : Optional.of(detail),
                 output ? Optional.of(true) : Optional.empty());
     }
 
     private static String describe(ItemStack stack) {
-        return BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath() + " x" + stack.getCount();
+        return StackLabel.brief(stack) + " x" + stack.getCount();
     }
 
     /** 关掉开着的界面,关了一个是 true;她自己的背包界面总开着,没有别的开着时什么都不做,是 false。 */

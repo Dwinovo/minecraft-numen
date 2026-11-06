@@ -66,6 +66,8 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_PROXY_HINT         = "numen.gui.providers.proxy.hint";
         public static final String GUI_PROVIDERS_CTX                = "numen.gui.providers.ctx";
         public static final String GUI_PROVIDERS_CTX_HINT           = "numen.gui.providers.ctx.hint";
+        public static final String GUI_PROVIDERS_RESERVE            = "numen.gui.providers.reserve";
+        public static final String GUI_PROVIDERS_KEEP_RECENT        = "numen.gui.providers.keep_recent";
         public static final String GUI_PROVIDERS_THINKING           = "numen.gui.providers.thinking";
         public static final String GUI_PROVIDERS_THINKING_AUTO      = "numen.gui.providers.thinking.auto";
         public static final String GUI_PROVIDERS_THINKING_OFF       = "numen.gui.providers.thinking.off";
@@ -131,6 +133,8 @@ public final class ModLanguageData {
         public static final String CONSENT_WITHDRAWN      = "numen.consent.withdrawn";
         /** 第四个按钮与点了它之后输入框上方那条提示栏的抬头。 */
         public static final String CONSENT_DENY_NOTE      = "numen.consent.deny_note";
+        /** 问话下面那行淡字:选"以后都允许"会记下哪几条规则({@code %s} 是规则行,多条用分号连)。 */
+        public static final String CONSENT_REMEMBER_SCOPE = "numen.consent.remember_scope";
         /** 答完以后消息下面那条结果:点了哪个键、拒绝时说的那句、在别处(命令)答的。 */
         public static final String CONSENT_CHOSE          = "numen.consent.chose";
         public static final String CONSENT_DENIED_SAYING  = "numen.consent.denied_saying";
@@ -262,6 +266,34 @@ public final class ModLanguageData {
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
         public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
+        // Notes: the owner adds, edits and deletes her notes from the profile page's memory section.
+        public static final String NOTE_ADD = "numen.note.add";
+        public static final String NOTE_TITLE_NEW = "numen.note.title_new";
+        public static final String NOTE_TITLE_EDIT = "numen.note.title_edit";
+        public static final String NOTE_DESCRIPTION = "numen.note.description";
+        public static final String NOTE_TYPE = "numen.note.type";
+        public static final String NOTE_CONTENT = "numen.note.content";
+        public static final String NOTE_DELETE = "numen.note.delete";
+        public static final String NOTE_DELETE_TITLE = "numen.note.delete_title";
+        public static final String NOTE_DELETE_WARNING = "numen.note.delete_warning";
+        public static final String SCHEDULE_SECTION = "numen.schedule.section";
+        public static final String SCHEDULE_NONE = "numen.schedule.none";
+        public static final String SCHEDULE_ADD = "numen.schedule.add";
+        public static final String SCHEDULE_EVERY_HOURS = "numen.schedule.every_hours";
+        public static final String SCHEDULE_EVERY_DAYS = "numen.schedule.every_days";
+        public static final String SCHEDULE_TITLE_NEW = "numen.schedule.title_new";
+        public static final String SCHEDULE_TITLE_EDIT = "numen.schedule.title_edit";
+        public static final String SCHEDULE_TEXT = "numen.schedule.text";
+        public static final String SCHEDULE_EVERY = "numen.schedule.every";
+        public static final String SCHEDULE_UNIT = "numen.schedule.unit";
+        public static final String SCHEDULE_UNIT_HOUR = "numen.schedule.unit_hour";
+        public static final String SCHEDULE_UNIT_DAY = "numen.schedule.unit_day";
+        public static final String SCHEDULE_DELETE = "numen.schedule.delete";
+        public static final String SCHEDULE_DELETE_TITLE = "numen.schedule.delete_title";
+        public static final String SCHEDULE_DELETE_WARNING = "numen.schedule.delete_warning";
+        public static final String CHAT_SCHEDULED = "numen.chat.scheduled";
+        /** 整理过记忆重试之后服务商仍说上下文超长:回合失败的话。 */
+        public static final String CAUSE_CONTEXT_OVERFLOW = "numen.cause.context_overflow";
 
         // Libraries: the server-provided / mine groups every content library shows, and what is said about a bundled entry.
         public static final String LIBRARY_SERVER   = "numen.library.server";
@@ -445,6 +477,7 @@ public final class ModLanguageData {
         public static final String PLUGIN_NAV               = "numen.settings.nav.plugins";
         public static final String PLUGIN_BUNDLED           = "numen.plugin.bundled";
         public static final String PLUGIN_JAR               = "numen.plugin.jar";
+        public static final String PLUGIN_SCRIPT            = "numen.plugin.script";
         public static final String PLUGIN_ABOUT             = "numen.plugin.about";
         public static final String PLUGIN_RESTART           = "numen.plugin.restart";
         public static final String PLUGIN_LOADED            = "numen.plugin.loaded";
@@ -520,6 +553,8 @@ public final class ModLanguageData {
         public static final String CMD_UNKNOWN = "numen.cmd.unknown";
         public static final String CMD_CRASHED = "numen.cmd.crashed";
         public static final String CMD_CLEAR = "numen.cmd.clear";
+        public static final String CMD_MEMORY = "numen.cmd.memory";
+        public static final String CMD_COMPACT_ARGS = "numen.cmd.compact_args";
         public static final String CMD_COMPACT_STARTED = "numen.cmd.compact_started";
         public static final String CMD_COMPACT_QUEUED = "numen.cmd.compact_queued";
         public static final String CMD_GOAL = "numen.cmd.goal";
@@ -835,7 +870,6 @@ public final class ModLanguageData {
         adder.add("numen.profile.bio", "Bio");
         adder.add("numen.profile.memories", "Memory");
         adder.add("numen.profile.memories_none", "Nothing remembered yet");
-        adder.add("numen.profile.memories_more", "%s more");
         adder.add("numen.profile.note_meta", "Day %s · %s");
         adder.add("numen.profile.groups", "Groups in common");
         adder.add("numen.profile.backpack", "Backpack · %s items");
@@ -877,6 +911,7 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_UNLIMITED,  "none");
         adder.add(Keys.USAGE_NOBODY,     "Nobody has used the server's keys today.");
         adder.add(Keys.USAGE_LINE,       "%s: %s"); 
+        adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "The context is still too long for the model even after compacting — reduce the context or switch to a model with a larger window");
         adder.add(Keys.ENDPOINT_QUOTA,   "The server's shared key has hit today's token limit for you — put your own key in Settings → Model Configs, or try again tomorrow");
 
         // Voice (TTS) section
@@ -948,6 +983,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port, blank = global");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "Context length (optional)");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens; blank = auto by model");
+        adder.add(Keys.GUI_PROVIDERS_RESERVE,           "Compact reserve (optional)");
+        adder.add(Keys.GUI_PROVIDERS_KEEP_RECENT,       "Keep recent (optional)");
         adder.add("numen.gui.list.bound",               "Now using: %s");
         adder.add("numen.gui.list.bind_cleared",        "Unbound — back to default");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "Thinking");
@@ -1020,6 +1057,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "she left the world");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "she died");
         adder.add(Keys.CONSENT_DENY_NOTE,      "Deny with a note");
+        adder.add(Keys.CONSENT_REMEMBER_SCOPE, "“Always allow” remembers: %s");
         adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "You said no: %s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "Answered elsewhere");
@@ -1167,7 +1205,8 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_NAV,             "Plugins");
         adder.add(Keys.PLUGIN_BUNDLED,         "Bundled with Numen");
         adder.add(Keys.PLUGIN_JAR,             "Installed separately");
-        adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect when the server restarts. Only a server admin or the host can switch them.");
+        adder.add(Keys.PLUGIN_SCRIPT,          "Written in scripts");
+        adder.add(Keys.PLUGIN_ABOUT,           "Switching a plugin takes effect at once; one that changes things outside Numen's door says it needs a restart. Only a server admin or the host can switch them.");
         adder.add(Keys.PLUGIN_RESTART,         "takes effect after restart");
         adder.add(Keys.PLUGIN_LOADED,          "loaded");
         adder.add(Keys.PLUGIN_DISABLED,        "off");
@@ -1184,6 +1223,8 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_TYPE),     "%s event type(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s gear source(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s body-state fragment(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s ranged weapon(s)");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s recipe/item knowledge source(s)");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
@@ -1247,6 +1288,36 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_UNKNOWN, "There is no %s command. Type %s to see the ones there are.");
         adder.add(Keys.CMD_CRASHED, "%s went wrong: %s");
         adder.add(Keys.CMD_CLEAR, "Clear the context and start over (the chat log stays)");
+        adder.add(Keys.CMD_MEMORY, "Open her notes: add, edit or delete them");
+        adder.add(Keys.CMD_COMPACT_ARGS, "[what the summary should keep in focus]");
+        adder.add(Keys.NOTE_ADD, "Add a note");
+        adder.add(Keys.NOTE_TITLE_NEW, "New note");
+        adder.add(Keys.NOTE_TITLE_EDIT, "Edit note");
+        adder.add(Keys.NOTE_DESCRIPTION, "The line she sees in her memory index");
+        adder.add(Keys.NOTE_TYPE, "Type");
+        adder.add(Keys.NOTE_CONTENT, "Body (optional)");
+        adder.add("numen.note.type.owner", "Owner");
+        adder.add("numen.note.type.world", "World");
+        adder.add("numen.note.type.lesson", "Lesson");
+        adder.add(Keys.NOTE_DELETE, "Delete");
+        adder.add(Keys.NOTE_DELETE_TITLE, "Delete this note?");
+        adder.add(Keys.NOTE_DELETE_WARNING, "She is told you deleted it and will not write it back.");
+        adder.add(Keys.SCHEDULE_SECTION, "Schedules");
+        adder.add(Keys.SCHEDULE_NONE, "On a schedule, she hears your words at the set time, as if you had said them");
+        adder.add(Keys.SCHEDULE_ADD, "Add a schedule");
+        adder.add(Keys.SCHEDULE_EVERY_HOURS, "Every %s game hours");
+        adder.add(Keys.SCHEDULE_EVERY_DAYS, "Every %s game days");
+        adder.add(Keys.SCHEDULE_TITLE_NEW, "New schedule");
+        adder.add(Keys.SCHEDULE_TITLE_EDIT, "Edit schedule");
+        adder.add(Keys.SCHEDULE_TEXT, "What she hears");
+        adder.add(Keys.SCHEDULE_EVERY, "Repeat every");
+        adder.add(Keys.SCHEDULE_UNIT, "Unit");
+        adder.add(Keys.SCHEDULE_UNIT_HOUR, "game hours (about 50 s)");
+        adder.add(Keys.SCHEDULE_UNIT_DAY, "game days (20 min)");
+        adder.add(Keys.SCHEDULE_DELETE, "Delete");
+        adder.add(Keys.SCHEDULE_DELETE_TITLE, "Delete this schedule?");
+        adder.add(Keys.SCHEDULE_DELETE_WARNING, "She stops hearing it; what she already heard stays in the chat.");
+        adder.add(Keys.CHAT_SCHEDULED, "Scheduled");
         adder.add(Keys.CMD_COMPACT_STARTED, "Compacting memory…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "Compacting is queued; it starts when she finishes this turn");
         adder.add(Keys.CMD_GOAL, "Long-term goal: she keeps at it turn after turn");
@@ -1561,7 +1632,6 @@ public final class ModLanguageData {
         adder.add("numen.profile.bio", "简介");
         adder.add("numen.profile.memories", "记忆");
         adder.add("numen.profile.memories_none", "还没记下什么");
-        adder.add("numen.profile.memories_more", "还有 %s 条");
         adder.add("numen.profile.note_meta", "第 %s 天 · %s");
         adder.add("numen.profile.groups", "共同群聊");
         adder.add("numen.profile.backpack", "背包 · %s 件");
@@ -1603,6 +1673,7 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_UNLIMITED,  "不限");
         adder.add(Keys.USAGE_NOBODY,     "今天还没有人用过服主的 key。");
         adder.add(Keys.USAGE_LINE,       "%s:%s");
+        adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "整理过记忆之后上下文对这个模型还是太长了——减少上下文,或换一个窗口更大的模型");
         adder.add(Keys.ENDPOINT_QUOTA,   "服主提供的 key 今天给你的 token 额度用完了——到 设置 → 模型配置 填上你自己的 key,或明天再来");
 
         // Voice (TTS) section
@@ -1675,6 +1746,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port，留空跟随全局");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "上下文长度（可选）");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens；留空按模型表自动");
+        adder.add(Keys.GUI_PROVIDERS_RESERVE,           "整理记忆的预留（可选）");
+        adder.add(Keys.GUI_PROVIDERS_KEEP_RECENT,       "整理时保留近段原文（可选）");
         adder.add("numen.gui.list.bound",               "已换用：%s");
         adder.add("numen.gui.list.bind_cleared",        "已解绑，回到默认");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "思考");
@@ -1747,6 +1820,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "她离开了世界");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "她死了");
         adder.add(Keys.CONSENT_DENY_NOTE,      "说一句再拒绝");
+        adder.add(Keys.CONSENT_REMEMBER_SCOPE, "「以后都允许」会记下:%s");
         adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "你拒绝了:%s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "已在别处答复");
@@ -1894,7 +1968,8 @@ public final class ModLanguageData {
         adder.add(Keys.PLUGIN_NAV,             "插件");
         adder.add(Keys.PLUGIN_BUNDLED,         "随 Numen 内嵌");
         adder.add(Keys.PLUGIN_JAR,             "单独安装");
-        adder.add(Keys.PLUGIN_ABOUT,           "开关在服务器重启后生效,只有管理员和房主能改。");
+        adder.add(Keys.PLUGIN_SCRIPT,          "脚本里写的");
+        adder.add(Keys.PLUGIN_ABOUT,           "开关当场生效;在 Numen 的门外动了东西的插件会标明要重启。只有管理员和房主能改。");
         adder.add(Keys.PLUGIN_RESTART,         "重启后生效");
         adder.add(Keys.PLUGIN_LOADED,          "已加载");
         adder.add(Keys.PLUGIN_DISABLED,        "已关闭");
@@ -1911,6 +1986,8 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.EVENT_TYPE),     "%s 种事件");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s 处穿戴来源");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s 段身体状态");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s 种远程武器");
+        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s 个配方与物品知识来源");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");
@@ -1972,6 +2049,36 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_UNKNOWN, "没有 %s 这条命令。输入 %s 看看有哪些。");
         adder.add(Keys.CMD_CRASHED, "%s 出错了:%s");
         adder.add(Keys.CMD_CLEAR, "清空上下文重新开始(聊天记录保留)");
+        adder.add(Keys.CMD_MEMORY, "打开她的札记:新增、修改、删除");
+        adder.add(Keys.CMD_COMPACT_ARGS, "[摘要要特别留意的]");
+        adder.add(Keys.NOTE_ADD, "新增札记");
+        adder.add(Keys.NOTE_TITLE_NEW, "新建札记");
+        adder.add(Keys.NOTE_TITLE_EDIT, "编辑札记");
+        adder.add(Keys.NOTE_DESCRIPTION, "她在记忆索引里看到的那一句");
+        adder.add(Keys.NOTE_TYPE, "类型");
+        adder.add(Keys.NOTE_CONTENT, "正文(可选)");
+        adder.add("numen.note.type.owner", "主人");
+        adder.add("numen.note.type.world", "世界");
+        adder.add("numen.note.type.lesson", "教训");
+        adder.add(Keys.NOTE_DELETE, "删除");
+        adder.add(Keys.NOTE_DELETE_TITLE, "删除这条札记?");
+        adder.add(Keys.NOTE_DELETE_WARNING, "她会被告知你删掉了它,也不会再把它写回去。");
+        adder.add(Keys.SCHEDULE_SECTION, "定时");
+        adder.add(Keys.SCHEDULE_NONE, "定好时间,到点她就听到你说的这句话,和你亲口说的一样");
+        adder.add(Keys.SCHEDULE_ADD, "新增定时");
+        adder.add(Keys.SCHEDULE_EVERY_HOURS, "每 %s 个游戏小时");
+        adder.add(Keys.SCHEDULE_EVERY_DAYS, "每 %s 个游戏日");
+        adder.add(Keys.SCHEDULE_TITLE_NEW, "新定时");
+        adder.add(Keys.SCHEDULE_TITLE_EDIT, "编辑定时");
+        adder.add(Keys.SCHEDULE_TEXT, "她听到的话");
+        adder.add(Keys.SCHEDULE_EVERY, "每隔");
+        adder.add(Keys.SCHEDULE_UNIT, "单位");
+        adder.add(Keys.SCHEDULE_UNIT_HOUR, "游戏小时(约 50 秒)");
+        adder.add(Keys.SCHEDULE_UNIT_DAY, "游戏日(20 分钟)");
+        adder.add(Keys.SCHEDULE_DELETE, "删除");
+        adder.add(Keys.SCHEDULE_DELETE_TITLE, "删掉这条定时?");
+        adder.add(Keys.SCHEDULE_DELETE_WARNING, "她不会再听到它;已经听到的还留在聊天里。");
+        adder.add(Keys.CHAT_SCHEDULED, "定时");
         adder.add(Keys.CMD_COMPACT_STARTED, "开始整理记忆…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "整理记忆已排上,她手上这轮完就走");
         adder.add(Keys.CMD_GOAL, "长期目标:她会一轮接一轮做下去");

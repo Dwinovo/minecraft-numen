@@ -63,10 +63,20 @@ public final class ConsentMessage {
 
     // ---- 正文 ----
 
-    /** 正文有几行:一件事是问话加为什么;几件事是一句总问加每件一行(最多 {@link #MAX_ROWS},其余计数)。 */
+    /**
+     * 正文有几行:一件事是问话加为什么;几件事是一句总问加每件一行(最多 {@link #MAX_ROWS},其余计数);
+     * 选"以后都允许"会记下规则的({@link ConsentRequestPayload#remember})末尾再加一行,写清记下的范围。
+     */
     private static int rows(ConsentCards.Card card) {
         int n = card.request().lines().size();
-        return n <= 1 ? 2 : 1 + Math.min(MAX_ROWS, n) + (n > MAX_ROWS ? 1 : 0);
+        int asked = n <= 1 ? 2 : 1 + Math.min(MAX_ROWS, n) + (n > MAX_ROWS ? 1 : 0);
+        return asked + (scope(card).isEmpty() ? 0 : 1);
+    }
+
+    /** "以后都允许"会记下的规则那一行字;不会记下任何规则(撤不回的事)为空。内容就是服务端 {@code rememberedRows} 算的那一份。 */
+    private static String scope(ConsentCards.Card card) {
+        List<String> rows = card.request().remember();
+        return rows.isEmpty() ? "" : I18n.get(ModLanguageData.Keys.CONSENT_REMEMBER_SCOPE, String.join("; ", rows));
     }
 
     public static int listHeight(ConsentCards.Card card) {
@@ -102,6 +112,7 @@ public final class ConsentMessage {
                     w - font.width(askBefore()) - font.width(askAfter()));
             Nb.text(g, font, Nb.clip(font, askAfter(), x + w - x1), x1, ty, main(th, line));
             Nb.text(g, font, Nb.clip(font, line.cause().getString(), w), x, ty + ROW_H, soft(th, line));
+            drawScope(g, font, card, th, x, y + 2 * ROW_H + textDy, w);
             return;
         }
         Nb.text(g, font, Nb.clip(font, I18n.get(ModLanguageData.Keys.CONSENT_ASK_MANY), w), x, y + textDy,
@@ -116,10 +127,22 @@ public final class ConsentMessage {
             Nb.text(g, font, "+" + (lines.size() - MAX_ROWS), x, y + (MAX_ROWS + 1) * ROW_H + textDy,
                     th.textDim());
         }
+        drawScope(g, font, card, th, x, y + (rows(card) - 1) * ROW_H + textDy, w);
+    }
+
+    /** 末行淡字:"以后都允许"会记下什么;没有这一行({@link #scope} 为空)什么也不画。 */
+    private static void drawScope(GuiGraphics g, Font font, ConsentCards.Card card, UiTheme th, int x, int ty, int w) {
+        String scope = scope(card);
+        if (!scope.isEmpty()) {
+            Nb.text(g, font, Nb.clip(font, scope, w), x, ty, th.textDim());
+        }
     }
 
     private static int rowWidth(Font font, ConsentCards.Card card, int r) {
         List<ConsentRequestPayload.Line> lines = card.request().lines();
+        if (!scope(card).isEmpty() && r == rows(card) - 1) {
+            return font.width(scope(card));
+        }
         if (lines.size() <= 1) {
             ConsentRequestPayload.Line line = lines.get(0);
             return r == 0 ? font.width(askBefore()) + thingWidth(font, line) + font.width(askAfter())

@@ -20,7 +20,7 @@ import net.minecraft.core.SectionPos;
  *       就落不下去;</li>
  *   <li>迈出去不用起跳,走完落到的脚高与落点一致(第 0 层 {@link Stepping#walkOff});身体在起步的脚高上走进那一列
  *       途中挡着的格,门开关、其余挖开;</li>
- *   <li>站着落地时摔得起({@link CostModel#bearsFall}:摔掉几点血按落差与落点脚下那一格算,朝上的滴水石锥尖加重,干草块、
+ *   <li>站着落地时摔得起({@link CostModel#bearsFall}:摔掉几点血按落差、落点脚下那一格与身体算,朝上的滴水石锥尖加重,干草块、
  *       床这些减轻);落进水里、抓住梯子不摔伤,不受这个上限;摔不起而身上有水桶时,在落点倒一桶水接住(落定后收回,
  *       {@link Edit.Catch})。</li>
  * </ul>
@@ -118,7 +118,7 @@ final class Drop implements Move {
         double drop = f0 - landing.feetY();
         BlockPos support = landing.support(tx, tz);
         int damage = model.fallDamage(draft, landing, support, drop, wading);
-        if (!model.bearsLanding(landing, wading, drop, damage)) {
+        if (!model.bearsLanding(landing, wading, damage)) {
             // 摔不起:身上有水桶就在落点倒一桶水接住,落进水里
             if (!draft.catchFall(to)) {
                 return draft.failure();
@@ -151,39 +151,51 @@ final class Drop implements Move {
     /**
      * 平地上站着的节点,落点那一列在起步脚高上身体占的格全是空的、脚下那一格也是空的,顺着那一列往下找第一块整块:它上面那一格
      * 就是落点。下一级只收低一个节点处,下落只收低两个节点以上;落点脚下是实的,走出去脚还踩在原来的高度上,那是平走,
-     * 不是往下落。落点摔不起,身上有水桶才有倒水接住的可能(要放,交给精确判断)。
+     * 不是往下落。起步脚高上身体占的格里有整块,要挖掉每一块(不许挖、挖不动的过不去);落点摔不起,身上有水桶才有倒水接住的可能。
+     * 要挖、要接的,与标志字说不清的格,答"可能":落点按标志字找(说不清时取最浅的那个),代价按同一个公式在最省的情形下算。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.stance().grounded()) {
             return Quick.REJECT;
         }
-        if (!q.plain()) {
-            return Quick.EXACT;
-        }
         int dx = heading.dx();
         int dz = heading.dz();
+        int shallowest = kind == MoveKind.DESCEND ? 1 : 2;
+        double floor = kind == MoveKind.DESCEND ? q.descendFloor() : q.fallFloor();
+        if (!q.plain()) {
+            // 落点那一列脚下一格是整块:往下落不过去(同下面平地上的判断,只是现读)
+            return Quick.whole(q.flagsAt(dx, -1, dz)) && q.loadedAround(dx, dz) ? Quick.REJECT
+                    : around(q, dx, -shallowest, dz, floor);
+        }
         boolean blocked = false;
         for (int dy = 0; dy <= q.top(); dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return Quick.EXACT;
+                return around(q, dx, -shallowest, dz, floor);
             }
             blocked |= Quick.whole(flags);
         }
         int under = q.cell(dx, -1, dz);
         if (!Quick.simple(under)) {
-            return Quick.EXACT;
+            return around(q, dx, -shallowest, dz, floor);
         }
         if (Quick.whole(under)) {
             return Quick.REJECT;
         }
+        double digs = 0;
         if (blocked) {
-            return q.mayDig() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayDig()) {
+                return Quick.REJECT;
+            }
+            digs = q.digFloor(dx, 0, q.top(), dz);
+            if (Double.isInfinite(digs)) {
+                return Quick.REJECT;
+            }
         }
         int support = q.cell(dx, -2, dz);
         if (!Quick.simple(support)) {
-            return Quick.EXACT;
+            return around(q, dx, -shallowest, dz, floor + digs);
         }
         int depth = 1;
         if (Quick.whole(support)) {
@@ -200,11 +212,11 @@ final class Drop implements Move {
                     return Quick.REJECT;
                 }
                 if (-below > q.scan()) {
-                    return Quick.EXACT;
+                    return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }
-                support = q.cellBelow(dx, below, dz);
+                support = q.flagsAt(dx, below, dz);
                 if (!Quick.simple(support)) {
-                    return Quick.EXACT;
+                    return q.likelyNear(dx, below + 1, dz, floor + digs);
                 }
                 if (Quick.whole(support)) {
                     break;
@@ -214,12 +226,14 @@ final class Drop implements Move {
             depth = -below - 1;
         }
         CostModel model = q.model();
+        double move = movement(q.walkOff(), 1.0, q.landing(depth));
         int damage = model.fallDamage(depth, q.state(dx, -depth - 1, dz));
-        if (!model.bearsLanding(q.ground(q.y() - depth), false, depth, damage)) {
-            return model.mayCatch(q.view()) ? Quick.EXACT : Quick.REJECT;
+        if (!model.bearsLanding(q.ground(q.y() - depth), false, damage)) {
+            // 倒一桶水接住:落进水里不摔,只有走与落的工夫
+            return model.mayCatch(q.view()) ? q.likely(dx, -depth, dz, move + digs) : Quick.REJECT;
         }
-        if (!q.calm() || !q.calmBelow(dx, dz, -depth - 1, -3)) {
-            return Quick.EXACT;
+        if (blocked || !q.calm() || !q.calmBelow(dx, dz, -depth - 1, -3)) {
+            return q.likely(dx, -depth, dz, move + Strides.bruise(damage) + digs);
         }
         q.entering();
         for (int dy = -depth; dy <= q.top(); dy++) {
@@ -228,8 +242,18 @@ final class Drop implements Move {
         if (q.forbidsPassing() || !q.standsOn(dx, -depth - 1, dz, support)) {
             return Quick.REJECT;
         }
-        double move = movement(q.walkOff(), 1.0, q.landing(depth));
         return q.holds(q.x() + dx, q.y() - depth, q.z() + dz, move + Strides.bruise(damage) + q.overhead(dx, -depth - 1, dz), move);
+    }
+
+    /**
+     * 标志字定不下落点时答"可能":下一级的落点只有低一个节点那一处,下落的落点是猜的最浅的那个。精确判断往下找落点,第一个待得住的
+     * 节点就是落点:低一个节点处待得住,下落就落不到更深;待不住,下一级就没有落点——这两样当场不成立。
+     */
+    private int around(Quick q, int dx, int dy, int dz, double cost) {
+        if (q.loadedColumn(dx, dz) && q.holdsAt(dx, -1, dz) == (kind == MoveKind.FALL)) {
+            return Quick.REJECT;
+        }
+        return kind == MoveKind.DESCEND ? q.likely(dx, dy, dz, cost) : q.likelyNear(dx, dy, dz, cost);
     }
 
     @Override

@@ -10,7 +10,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 /**
  * 把东西拿到手上,照原版玩家的几个按键:数字键切换快捷栏选中的格({@code handleSetCarriedItem}),中键把背包深处的
@@ -39,10 +38,10 @@ public final class Hotbar {
     public Optional<BodyAction> hold(int slot) {
         Inventory inventory = body.getInventory();
         if (slot == OFFHAND) {
-            Item item = body.getOffhandItem().getItem();
+            ItemStack offhand = body.getOffhandItem().copyWithCount(1);
             packets.playerAction(ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO,
                     Direction.DOWN, 0);
-            return Optional.of(new BodyAction.Held(item, OFFHAND, inventory.selected));
+            return Optional.of(new BodyAction.Held(offhand, OFFHAND, inventory.selected));
         }
         if (slot < 0) {
             int empty = emptyHand(inventory);
@@ -50,23 +49,23 @@ public final class Hotbar {
                 return Optional.empty();
             }
             boolean wasEmpty = inventory.getSelected().isEmpty();
-            BodyAction action = select(empty, Items.AIR);
+            BodyAction action = select(empty, ItemStack.EMPTY);
             return wasEmpty ? Optional.empty() : Optional.of(action);
         }
         if (slot == inventory.selected) {
             return Optional.empty();
         }
-        Item item = inventory.getItem(slot).getItem();
+        ItemStack stack = inventory.getItem(slot).copyWithCount(1);
         if (Inventory.isHotbarSlot(slot)) {
-            return Optional.of(select(slot, item));
+            return Optional.of(select(slot, stack));
         }
         packets.pickItem(slot);
-        return Optional.of(new BodyAction.Held(item, slot, inventory.selected));
+        return Optional.of(new BodyAction.Held(stack, slot, inventory.selected));
     }
 
     /**
      * 让一只手拿着 {@code item},右键就能用上它:主手已经是它,或主手空着而副手是它(原版右键主手用不了就试副手),
-     * 什么也不做;背包里有就拿到主手(快捷栏先);只在副手、主手又占着,就交换主副手;创造模式背包里没有就凭空取一叠。
+     * 什么也不做;背包里有就拿到主手(拿哪一叠由 {@link Stacks#pick} 定);只在副手、主手又占着,就交换主副手;创造模式背包里没有就凭空取一叠。
      *
      * @return 拿到了没有、拿在哪只手上,连同做了什么(没做为 null)
      */
@@ -79,9 +78,9 @@ public final class Hotbar {
         if (main.isEmpty() && body.getOffhandItem().is(item)) {
             return new Grip(InteractionHand.OFF_HAND, null);
         }
-        int slot = slotOf(inventory, item);
-        if (slot >= 0) {
-            return new Grip(InteractionHand.MAIN_HAND, hold(slot).orElse(null));
+        Optional<Stacks.Pick> pick = Stacks.pick(inventory, item);
+        if (pick.isPresent()) {
+            return new Grip(InteractionHand.MAIN_HAND, hold(pick.get().slot()).orElse(null));
         }
         if (body.getOffhandItem().is(item)) {
             return new Grip(InteractionHand.MAIN_HAND, hold(OFFHAND).orElse(null));
@@ -124,18 +123,8 @@ public final class Hotbar {
         return first >= 0 && Inventory.isHotbarSlot(first) ? first : -1;
     }
 
-    /** 主背包里第一格装着 {@code item} 的,快捷栏在前;没有为 -1。 */
-    private static int slotOf(Inventory inventory, Item item) {
-        for (int i = 0; i < inventory.items.size(); i++) {
-            if (inventory.items.get(i).is(item)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private BodyAction select(int slot, Item item) {
+    private BodyAction select(int slot, ItemStack stack) {
         packets.setCarriedItem(slot);
-        return new BodyAction.Held(item, slot, slot);
+        return new BodyAction.Held(stack, slot, slot);
     }
 }

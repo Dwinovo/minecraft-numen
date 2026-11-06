@@ -41,6 +41,8 @@ class RouteSpecTest {
         assertTrue(excludedByDefault(Blocks.TURTLE_EGG.defaultBlockState()), "海龟蛋");
         assertTrue(excludedByDefault(Blocks.STONE_PRESSURE_PLATE.defaultBlockState()), "压力板");
         assertTrue(excludedByDefault(Blocks.TRIPWIRE.defaultBlockState()), "绊线");
+        RouteSpec triggers = RouteSpec.defaults().edit().allow(com.dwinovo.numen.pathing.world.Semantics.Kind.TRIGGER).build();
+        assertFalse(triggers.excludes(new TestWorld().set(AT, Blocks.TRIPWIRE.defaultBlockState()), AT), "放开机关就直接跨过绊线");
     }
 
     @Test
@@ -48,6 +50,8 @@ class RouteSpecTest {
         assertTrue(excludedByDefault(Blocks.LAVA.defaultBlockState()));
         assertTrue(excludedByDefault(Blocks.CACTUS.defaultBlockState()));
         assertTrue(excludedByDefault(Blocks.FIRE.defaultBlockState()));
+        assertTrue(excludedByDefault(Blocks.POWDER_SNOW.defaultBlockState()), "细雪");
+        assertTrue(excludedByDefault(Blocks.COBWEB.defaultBlockState()), "蜘蛛网");
         assertFalse(excludedByDefault(Blocks.WATER.defaultBlockState()));
         assertFalse(excludedByDefault(Blocks.OAK_DOOR.defaultBlockState()));
         assertFalse(excludedByDefault(Blocks.LADDER.defaultBlockState()));
@@ -95,6 +99,7 @@ class RouteSpecTest {
         assertFalse(edited.consent());
         assertTrue(edited.budgeted());
         assertEquals(RouteSpec.defaults().jumpPenalty(), edited.jumpPenalty());
+        assertEquals(RouteSpec.defaults().exposurePenalty(), edited.exposurePenalty());
         assertEquals(RouteSpec.defaults().excluded(), edited.excluded());
         assertEquals(RouteSpec.defaults(), RouteSpec.defaults().edit().build(), "什么都不改就等于原来那份");
     }
@@ -102,10 +107,11 @@ class RouteSpecTest {
     @Test
     void nonsenseValuesAreRefused() {
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().jumpPenalty(-1).build());
+        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().exposurePenalty(-1).build());
         assertThrows(IllegalArgumentException.class,
                 () -> RouteSpec.defaults().edit().placeCost(Double.POSITIVE_INFINITY).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().alterBudget(-1).build());
-        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().maxFallHeightNoWater(-1).build());
+        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().maxFallDamage(-1).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().consentMultiplier(0.5).build());
         assertThrows(IllegalArgumentException.class,
                 () -> RouteSpec.defaults().edit().consentMultiplier(Double.POSITIVE_INFINITY).build());

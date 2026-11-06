@@ -65,6 +65,12 @@ public final class NumenContent {
         return handle;
     }
 
+    /**
+     * Numen 的内容在门外也登记了东西(工具与任务执行器、本能链、网络包、每刻钩子),卸下它要重启:登记时声明,花名册据此不在运行中撤它。
+     */
+    private static final com.dwinovo.numen.api.plugin.PluginRoster.Unloading NEEDS_RESTART =
+            com.dwinovo.numen.api.plugin.PluginRoster.Unloading.NEEDS_RESTART;
+
     private NumenContent() {}
 
     /**
@@ -82,12 +88,12 @@ public final class NumenContent {
         registerTools();
         registerTaskRunners();
         // 原版四件甲是第一处穿戴来源,和模组的饰品栏走同一扇门;内嵌联动在这之后才开闸,所以原版排在最前
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen ->
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, NEEDS_RESTART, numen ->
                 numen.registerGear(new com.dwinovo.numen.gear.VanillaArmor()));
         registerReflexes();
         enlistReflexRoster();
         // 寻路调试开关挂在 /numen 下
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen ->
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, NEEDS_RESTART, numen ->
                 numen.command(com.dwinovo.numen.debug.PathCommands.verb()));
         Constants.LOG.info("[numen-content] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), TaskFactory.size());
@@ -137,7 +143,7 @@ public final class NumenContent {
      * Numen 自己的 API 组,和插件走同一扇门({@code NumenPlugins.register})。
      */
     private static void registerTools() {
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> {
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, NEEDS_RESTART, numen -> {
             api = numen;
             com.dwinovo.numen.tools.perception.StatusApi.install(numen);
             com.dwinovo.numen.tools.perception.ScanApi.install(numen);
@@ -153,6 +159,9 @@ public final class NumenContent {
             com.dwinovo.numen.tools.inventory.GearApi.install(numen);
             com.dwinovo.numen.tools.inventory.CreativeApi.install(numen);
             com.dwinovo.numen.tools.time.TimeApi.install(numen);
+            // 原版的弓与弩是远程武器的两个提供者,和模组的枪走同一张表(弓先登记,同档里排在弩前)
+            numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.BOW);
+            numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
         });
     }
 

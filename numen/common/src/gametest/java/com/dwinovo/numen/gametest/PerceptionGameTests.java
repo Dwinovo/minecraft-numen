@@ -27,6 +27,12 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  */
 public class PerceptionGameTests {
 
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_scan_budget")
+    public static void prepareScanBudgetBatch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
     /** 感知批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_perception")
     public static void preparePerceptionBatch(ServerLevel level) {
@@ -58,23 +64,7 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 不开界面读箱子里有什么:五颗钻石,报出来就是五颗钻石。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
-        BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
-        NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
-                            && storage.reply().contains("5"),
-                    "the chest's diamonds are not in the reply: " + storage.reply());
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 一只箱子从每一面都露出同一份存储:只列一份,面写全,不按面重复。 */
+    /** 不开界面读箱子:五颗钻石报出来就是五颗钻石;一只箱子从每一面都露出同一份存储,只列一份,面写全,不按面重复。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void inspect_block_storage_lists_a_chest_once_with_all_its_sides(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
@@ -87,6 +77,9 @@ public class PerceptionGameTests {
             helper.assertTrue(reply.contains("(sides: all,down,up,north,south,west,east)"),
                     "the chest is not one storage exposed on every side: " + reply);
             helper.assertTrue(!reply.contains("items #"), "the chest is listed more than once: " + reply);
+            helper.assertTrue(reply.contains("diamond") && reply.contains("5"),
+                    "the chest's diamonds are not in the reply: " + reply);
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -201,7 +194,10 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。 */
+    /**
+     * 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),两只手那一栏
+     * 只有手。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_self_status_reports_what_she_carries(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
@@ -217,6 +213,10 @@ public class PerceptionGameTests {
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            helper.assertTrue(s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
+                    "body_state does not open with the worn slots: " + status.reply());
+            helper.assertTrue(!s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
+                    + status.reply());
             helper.assertTrue(status.reply().equals(viaCommand.reply()),
                     "status_self and status self read differently: " + status.reply() + " / "
                             + viaCommand.reply());
@@ -266,24 +266,46 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和工位。 */
+    /**
+     * 一段程序(知识动词是 Lua 模块函数,里面逐个问来源)跑到最后交回的那张表。{@code ToolRun#reply} 是程序<b>最后一次 API 调用</b>的回执,
+     * 不是程序交回的值,所以动词的结果要读结局里的 {@code returned}。
+     */
+    private static JsonObject returned(GameTestHelper helper, ToolRun run) {
+        helper.assertTrue(run.receipt() != null, "the program has not ended");
+        helper.assertTrue(run.ranToTheEnd(), "the program did not run to the end: " + run.receipt());
+        return run.data().getAsJsonObject("returned");
+    }
+
+    /**
+     * 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和类别。合成、烧炼都做不出来的
+     * 东西(末影珍珠)交回空表。查用途:下界合金锭既合成下界合金块、也是锻造下界合金装备的那一格料,两个类别都列出来。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_lists_every_station(GameTestHelper helper) {
+    public static void lookup_recipe_lists_every_category(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:iron_ingot\")");
+        ToolRun recipe = lua(companion, """
+                local pearl = numen.inv.recipes("minecraft:ender_pearl")
+                if #pearl.recipes ~= 0 then error("ender pearls are given a recipe") end
+                local block, pickaxe = false, false
+                for _, x in ipairs(numen.inv.uses("minecraft:netherite_ingot").recipes) do
+                  block = block or (x.category == "minecraft:crafting" and x.item == "minecraft:netherite_block")
+                  pickaxe = pickaxe or (x.category == "minecraft:smithing" and x.item == "minecraft:netherite_pickaxe")
+                end
+                if not (block and pickaxe) then error("the netherite ingot's uses are not both there") end
+                return numen.inv.recipes("minecraft:iron_ingot")
+                """);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded(), "the recipes were not read: " + recipe.reply());
-            java.util.Set<String> stations = new java.util.HashSet<>();
-            for (var one : valueIn(recipe.reply()).getAsJsonArray()) {
+            java.util.Set<String> categories = new java.util.HashSet<>();
+            for (var one : returned(helper, recipe).getAsJsonArray("recipes")) {
                 var r = one.getAsJsonObject();
                 helper.assertTrue(r.get("id").getAsString().contains(":")
                                 && r.get("item").getAsString().equals("minecraft:iron_ingot"),
                         "a recipe has no id or names another item: " + r);
-                stations.add(r.get("station").getAsString());
+                categories.add(r.get("category").getAsString());
             }
-            helper.assertTrue(stations.contains("smelting") && stations.contains("crafting"),
-                    "the recipes' stations are not both there: " + stations);
+            helper.assertTrue(categories.contains("minecraft:smelting") && categories.contains("minecraft:crafting"),
+                    "the recipes' categories are not both there: " + categories);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -299,6 +321,8 @@ public class PerceptionGameTests {
         BlockPos log = helper.absolutePos(new BlockPos(3, 2, 7));
         level.setBlockAndUpdate(gold, Blocks.GOLD_BLOCK.defaultBlockState());
         level.setBlockAndUpdate(log, Blocks.OAK_LOG.defaultBlockState());
+        // 扫描球伸出场地、到了缝里的区块;那几块先阻塞着生成完,两次扫描读到的"有几列没加载"才不看区块按墙钟什么时候到
+        generateChunks(level, helper.absolutePos(new BlockPos(3, 2, 3)), 1);
         NumenPlayer companion = spawnAt(helper, "gametest_twin_eyes", new BlockPos(3, 2, 3), false);
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaTool = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
@@ -423,29 +447,26 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查一样合成、烧炼都做不出来的东西(末影珍珠):交回空表,没有配方。 */
+    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品;来源表里有原版这一个、答了。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:ender_pearl\")");
+    public static void lookup_item_info_reports_what_the_game_knows(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
+        ToolRun info = lua(companion, "return numen.inv.info(\"minecraft:golden_apple\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded() && List.of().equals(recipe.value()),
-                    "ender pearls are given a recipe: " + recipe.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 查一个不存在的物品 id:按参数错误退回,说出是哪个 id。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:no_such_item\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("there is no item minecraft:no_such_item")
-                            && recipe.outcome().contains("\nusage: numen.inv.recipes("),
-                    "the unknown id was not rejected by name: " + recipe.outcome());
+            JsonObject whole = returned(helper, info);
+            JsonObject facts = whole.getAsJsonObject("facts");
+            helper.assertTrue(facts.get("item").getAsString().equals("minecraft:golden_apple")
+                            && facts.get("max_stack").getAsInt() == 64
+                            && facts.getAsJsonObject("food").get("nutrition").getAsInt() == 4
+                            && !facts.has("places"),
+                    "the facts are not the golden apple's: " + whole);
+            boolean answered = false;
+            for (var source : whole.getAsJsonArray("sources")) {
+                answered |= source.getAsJsonObject().get("source").getAsString().equals("numen")
+                        && source.getAsJsonObject().get("status").getAsString().equals("answered");
+            }
+            helper.assertTrue(answered, "the vanilla source is not named as answering: " + whole);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -534,25 +555,6 @@ public class PerceptionGameTests {
             com.dwinovo.numen.scan.BlockSearch.release(level, targets);
             level.removeBlock(kept, false);
             CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /** scan.block 读告示牌:正反两面的字和有没有涂蜡都在回执里。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void scan_block_reads_both_sides_of_a_sign(GameTestHelper helper) {
-        BlockPos at = helper.absolutePos(new BlockPos(5, 2, 4));
-        helper.getLevel().setBlockAndUpdate(at, Blocks.OAK_SIGN.defaultBlockState());
-        var sign = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(at);
-        sign.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal("front words")), true);
-        sign.updateText(t -> t.setMessage(1, net.minecraft.network.chat.Component.literal("back words")), false);
-        NumenPlayer companion = spawnAt(helper, "gametest_reader_of_signs", new BlockPos(3, 2, 4), false);
-        ToolRun look = lua(companion, "numen.scan.block(" + xyz(at) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(look.done() && look.succeeded() && look.reply().contains("front words")
-                            && look.reply().contains("back words") && look.reply().contains("\"waxed\":false"),
-                    "scan block does not read the sign: " + look.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 }

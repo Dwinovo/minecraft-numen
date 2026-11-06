@@ -123,6 +123,14 @@ class CostModelTest {
         BlockPos pond = new BlockPos(0, 60, 0);
         world.set(pond, Blocks.WATER.defaultBlockState()).set(pond.below(), STONE);
         assertEquals(Reason.FORBIDDEN, model.admitPlace(world, pond, Blocks.WATER.defaultBlockState()).refused());
+
+        // 按种类禁挖:禁的那一种不准入,别的种类照常
+        CostModel noDirt = CostModel.of(RouteSpec.defaults().edit().changes(true).consent(false)
+                .bans(new BlockBans(Set.of(Blocks.DIRT), Set.of(), Set.of())).build(), Fixtures.body(), Fixtures.ALLOW_ALL,
+                Fixtures.COBBLE, Threats.NONE);
+        BlockState dirt = Blocks.DIRT.defaultBlockState();
+        assertEquals(Reason.FORBIDDEN, noDirt.admitDig(world.set(ASK, dirt), ASK, dirt).refused());
+        assertNull(noDirt.admitDig(world, DENY, STONE).refused());
     }
 
     /** 规格按位置禁放的一格,往里放垫路料不准入,原因是"规格禁止";同一格不禁时放得进去。 */
@@ -180,8 +188,18 @@ class CostModelTest {
     }
 
     @Test
+    void walkingBesideHarmfulBlocksCostsWhatTheSpecSays() {
+        double walk = com.dwinovo.numen.pathing.world.Kinematics.walkTicksPerBlock(Fixtures.body().stats());
+        RouteSpec spec = RouteSpec.defaults();
+        CostModel priced = CostModel.of(spec, Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        assertEquals(3 * spec.exposurePenalty() * walk, priced.passing(0, new long[0], 0, 3, false, 0, false), 1e-9);
+        CostModel free = CostModel.of(spec.edit().exposurePenalty(0).build(), Fixtures.body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        assertEquals(0, free.passing(0, new long[0], 0, 3, false, 0, false), "罚分设为 0 就只剩物理耗时");
+    }
+
+    @Test
     void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
-        RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(100).build();
+        RouteSpec loose = RouteSpec.defaults().edit().maxFallDamage(100).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
         assertTrue(bears(healthy, 17), "20 点血摔完留 6 点:能摔 17 格");
         assertFalse(bears(healthy, 18));
@@ -190,12 +208,12 @@ class CostModelTest {
         assertFalse(bears(weak, 4));
         CostModel factory = CostModel.of(RouteSpec.defaults(), Fixtures.body(20), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS,
                 Threats.NONE);
-        assertTrue(bears(factory, 3), "出厂规格收紧到 3");
+        assertTrue(bears(factory, 3), "出厂规格不愿受伤:满血的身体就是摔不疼的 3 格");
         assertFalse(bears(factory, 4));
     }
 
     /** 从 {@code height} 格高处落到石头上摔不摔得起。 */
     private static boolean bears(CostModel model, int height) {
-        return model.bearsFall(height, model.body().fallDamage(height, Blocks.STONE.defaultBlockState()));
+        return model.bearsFall(model.body().fallDamage(height, Blocks.STONE.defaultBlockState()));
     }
 }

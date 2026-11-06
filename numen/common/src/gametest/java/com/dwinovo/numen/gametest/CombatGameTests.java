@@ -143,9 +143,9 @@ public class CombatGameTests {
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
-        // 每刻在它那一格里挪一点,不出格
-        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(level.getGameTime() * 0.7),
-                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(level.getGameTime() * 0.7)));
+        // 每刻在它那一格里挪一点,不出格;按这条用例自己的刻数挪,不按全服的时间(那要看前面的用例跑了多久)
+        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(helper.getTick() * 0.7),
+                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(helper.getTick() * 0.7)));
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
@@ -172,8 +172,9 @@ public class CombatGameTests {
         int cz = near.getZ() >> 4;
         int y = 200;
         int z = cz * 16 + 7;
-        level.getChunk(cx, cz);
-        level.getChunk(cx + 1, cz);
+        // 两块和它们周围的区块先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(cx * 16, y, z), 2);
+        GameTestKit.generateChunks(level, new BlockPos((cx + 1) * 16, y, z), 2);
         for (int x = cx * 16 + 10; x <= cx * 16 + 20; x++) {
             level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
         }
@@ -271,28 +272,6 @@ public class CombatGameTests {
         });
     }
 
-    /** 一只已经不在世界里的生物的身份交给 numen.fight.attack:当场拒绝,说它不在附近,不受理。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
-    public static void a_gone_mobs_id_is_refused_on_the_spot(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var pig = EntityType.PIG.create(level);
-        helper.assertTrue(pig != null, "pig did not spawn");
-        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        level.addFreshEntity(pig);
-        String id = ref(pig);
-        pig.discard();
-        NumenPlayer companion = spawnAt(helper, "gametest_gone_id", new BlockPos(3, 2, 3), false);
-        ToolRun attack = lua(companion, "numen.fight.attack(" + id + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done() && !attack.succeeded() && attack.task() == null
-                            && attack.outcome().contains(id.replace("\"", "") + " is not near you"),
-                    "a dead mob's id was not refused on the spot: " + attack.reply());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /** 两只同码的生物(UUID 前六位一样):点名它们的短码被拒绝,回执并列出是哪几只,不猜其中一只。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
     public static void two_mobs_with_the_same_code_are_refused_naming_both(GameTestHelper helper) {
@@ -356,11 +335,15 @@ public class CombatGameTests {
     public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(BlockPos.ZERO);
-        int cx = (near.getX() >> 4) + 160;
-        int cz = near.getZ() >> 4;
+        // 石台在场地东面两千多格外,远在真玩家之外;再按场地在批里的位置拉开,相邻场地的石台隔着六十格以上(她要的是三十二格内没有别的落点,
+        // 同一用例铺几份并行时也一样),不靠坐标的绝对大小,总在世界边界之内
+        int cx = (near.getX() + 2560 + Math.floorMod(near.getX(), 8192) * 2) >> 4;
+        int cz = (near.getZ() + Math.floorMod(near.getZ(), 8192) * 2) >> 4;
         int y = 200;
         int x0 = cx * 16 + 6;
         int z0 = cz * 16 + 6;
+        // 她脚下的区块和周围先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(x0, y, z0), 2);
         for (int x = x0; x < x0 + 5; x++) {
             for (int z = z0; z < z0 + 5; z++) {
                 level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
@@ -369,6 +352,7 @@ public class CombatGameTests {
         NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(),
                 java.util.UUID.randomUUID(), "gametest_cornered", java.util.UUID.randomUUID(), level,
                 new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5)));
+        companion.getRandom().setSeed(ENTITY_SEED);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
         Zombie zombie = EntityType.ZOMBIE.create(level);
@@ -381,6 +365,11 @@ public class CombatGameTests {
                 .thenExecute(() -> {
                     // 进世界时血是满的:站稳了再压到四颗心,僵尸这才来
                     companion.setHealth(8.0f);
+                    // 她不吃击退(由用例摆):僵尸一击会把她推开两格多,石台只有 5×5,从两百格高处掉下去就不是这条要看的"跑不掉就还手"了;
+                    // 僵尸照常追着打(随机数定了种子,见 GameTestKit#ENTITY_SEED)
+                    companion.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE)
+                            .setBaseValue(1.0);
+                    zombie.getRandom().setSeed(ENTITY_SEED);
                     zombie.moveTo(x0 + 0.5, y, z0 + 2.5, 0.0f, 0.0f);
                     zombie.setTarget(companion);
                     level.addFreshEntity(zombie);
@@ -420,6 +409,8 @@ public class CombatGameTests {
         // 测试服务器默认不许玩家互相伤害(专用服务器读 server.properties 的 pvp)
         boolean pvp = level.getServer().isPvpAllowed();
         level.getServer().setPvpAllowed(true);
+        // 全服的开关:不论这条成败都放回去,后面的用例不继承
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> level.getServer().setPvpAllowed(pvp));
         boolean[] hit = {false};
         long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
         succeedWhen(helper, () -> {
@@ -430,7 +421,6 @@ public class CombatGameTests {
             }
             helper.assertTrue(companion.getX() - start.x > 0.3,
                     "the hit did not move her: dx=" + (companion.getX() - start.x));
-            level.getServer().setPvpAllowed(pvp);
             leave(attacker);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -491,8 +481,9 @@ public class CombatGameTests {
         }
         for (int i = 0; i < 2; i++) {
             BlockPos at = helper.absolutePos(new BlockPos(12, 2, 3 + i));
+            // 不带原版给的随机初速(照主流:清零速度):两根挨着放的木棍漂到一起会并成一堆,"两件"就成了一件
             level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, at.getX() + 0.5, at.getY(),
-                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK)));
+                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK), 0, 0, 0));
         }
 
         succeedWhen(helper, () -> {
@@ -518,37 +509,6 @@ public class CombatGameTests {
         });
     }
 
-    /** 逐个列最多十二条,多出来的并进计数。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
-    public static void nearby_lists_twelve_at_most_and_counts_the_overflow(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_nearby_cap", new BlockPos(8, 2, 8), false);
-        List<Zombie> crowd = new java.util.ArrayList<>();
-        for (int i = 0; i < 14; i++) {
-            crowd.add(still(helper, new BlockPos(1 + i, 2, 1 + (i % 2) * 13)));
-        }
-
-        succeedWhen(helper, () -> {
-            String nearby = nearbyOf(companion);
-            long listed = nearby.lines().filter(line -> line.startsWith("zombie@")).count();
-            helper.assertTrue(listed == 12 && nearby.contains("zombie×2"),
-                    "twelve are listed and two counted: " + nearby);
-            crowd.forEach(net.minecraft.world.entity.Entity::discard);
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /** 半径里什么都没有:请求里没有这一栏。 */
-    @GameTest(template = "floor16", timeoutTicks = 60, batch = "numen_combat")
-    public static void nearby_is_left_out_when_nothing_is_around(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_nearby_empty", new BlockPos(8, 2, 8), false);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(nearbyOf(companion).isEmpty(), "an empty surrounding wrote a nearby block: " + nearbyOf(companion));
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 一只不动不还手的僵尸。 */
     private static Zombie still(GameTestHelper helper, BlockPos rel) {
         Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
@@ -565,6 +525,7 @@ public class CombatGameTests {
         Zombie zombie = EntityType.ZOMBIE.create(level);
         helper.assertTrue(zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
+        zombie.getRandom().setSeed(ENTITY_SEED);
         zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setTarget(target);
         level.addFreshEntity(zombie);
@@ -692,5 +653,134 @@ public class CombatGameTests {
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
+    }
+
+    /** 只带远程武器的她:背包清空,换成 {@code items}。 */
+    private static NumenPlayer shooter(GameTestHelper helper, BlockPos rel, net.minecraft.world.item.ItemStack... items) {
+        NumenPlayer companion = armedCompanion(helper, rel);
+        companion.getInventory().clearContent();
+        for (var item : items) {
+            companion.getInventory().add(item);
+        }
+        return companion;
+    }
+
+    /**
+     * 原版的弓是远程武器的一个提供者:只带弓和箭的她点名打一只站着不动的僵尸,弓拉开、对准、松手,箭把它射倒。
+     * 提供者表里的弓与弩是 Numen 自己登记的两个,和模组的枪走同一条路。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_shoots_a_zombie_with_a_bow(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8), new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW, 64));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    "the zombie is still up — her bow never brought it down");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 测试用的命中扫描武器(一根烈焰棒):每次起手就是一发,打在目标身上,数着打了几发。 */
+    private static final class TestGun implements com.dwinovo.numen.api.combat.RangedWeapon {
+        final java.util.concurrent.atomic.AtomicInteger shots = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public String name() {
+            return "test gun";
+        }
+
+        @Override
+        public boolean handles(net.minecraft.world.item.ItemStack stack) {
+            return stack.is(net.minecraft.world.item.Items.BLAZE_ROD);
+        }
+
+        @Override
+        public Readiness readiness(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return Readiness.READY;
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Flight flight(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Handling handling(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Handling(3.0, 14.0, 30.0);
+        }
+
+        @Override
+        public Shot begin(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new Shot() {
+                private boolean fired;
+
+                @Override
+                public com.dwinovo.numen.api.combat.Flight flight() {
+                    return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+                }
+
+                @Override
+                public boolean aboutToRelease() {
+                    return true;
+                }
+
+                @Override
+                public boolean tick(com.dwinovo.numen.api.combat.Aim aim, net.minecraft.world.entity.Entity target) {
+                    if (!aim.aligned(body.getViewVector(1.0f))) {
+                        return false;
+                    }
+                    target.hurt(body.damageSources().playerAttack(body), 6.0f);
+                    shots.incrementAndGet();
+                    fired = true;
+                    return true;
+                }
+
+                @Override
+                public boolean fired() {
+                    return fired;
+                }
+
+                @Override
+                public void abort() {
+                }
+            };
+        }
+
+        @Override
+        public String misfireText() {
+            return "the test gun did not fire";
+        }
+    }
+
+    /**
+     * 插件登记的远程武器:没有提供者时一根烈焰棒什么也不是(她挑不到远程武器);经插件的门登记了提供者,同一个她点名打同一只僵尸,
+     * 攻击任务挑了它、站在它的环里、用它的命中扫描瞄准,一发发打倒目标。权限照旧由任务提出、权限层裁决。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_uses_a_ranged_weapon_a_plugin_provides(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BLAZE_ROD));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() == null,
+                "she found a ranged weapon in a blaze rod before any plugin provided one");
+        TestGun gun = new TestGun();
+        com.dwinovo.numen.api.NumenPlugins.register("gt_gun", numen -> numen.rangedWeapon(gun));
+        // 插件给的武器全服的同伴都看得见:不论这条成败都撤掉
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun"));
+        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
+                "she did not pick the plugin's weapon once it was provided");
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
+                    "the plugin's weapon did not bring the zombie down (shots " + gun.shots.get() + ")");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 }

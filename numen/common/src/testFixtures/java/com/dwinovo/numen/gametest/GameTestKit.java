@@ -51,14 +51,14 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>场地之间隔多远</h2>
  * 服务器把全部用例的场地按一行八块铺开,批次之间接着往下铺、不清场;原版只在两块结构之间留 5 格(行间 6 格)。
- * 而她的感知是按半径的:collect_items 默认捡 16 格内的掉落物,钓鱼收战果看 18 格,战斗看 12 格内的怪。
+ * 而她的感知是按半径的:{@code numen.work.collect} 不点名时捡 8 格内的掉落物,附近栏与自卫看 16 格内的实体,抛竿找水看 10 格。
  * 5 格的缝挡不住这些半径,她就会去捡隔壁场地的东西——结论取决于隔壁那条用例跑到了哪一步、后台寻路多快。
  *
  * <p>所以每块地板模板在 +x、+z 两侧多出 16 格垫场(结构尺寸大 16,原版铺场地时就按大的尺寸隔开),垫场与
  * 可走的地板之间立一圈到顶的屏障,站在原来包围墙的位置——可走的地板、墙、rel 坐标都和原来一样。任意两块
  * 场地可走部分之间因此至少隔 21 格,比上面这些半径都大。改模板或加新模板时守住这一条。
  *
- * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code numen.scan.blocks} 按用例给的半径、numen.work.collect 在工作区里捡掉落物、逃跑看 32~40 格)
+ * <p>更远的感知({@code numen.scan.blocks} 按用例给的半径、{@code numen.work.collect} 点名物品时捡 64 格内的、逃跑找落点看 40 格内的怪)
  * 隔不开:这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
  * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
@@ -76,8 +76,18 @@ public final class GameTestKit {
     static final long NOON = 6000;
     /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
     static final long MIDNIGHT = 18000;
+    /**
+     * 走路、挖掘、游泳、到达的用例共用的一批:都是和平难度 + 正午,各占自己的场地;一批里长短不一,慢的几条在同一批里叠着跑,
+     * 批与批之间清场地的固定开销也只付一次。一批最多 50 条({@code GameTestBatchFactory}),超出的原版自动续一批。
+     */
+    static final String ON_FOOT = "numen_on_foot";
     /** 批次开场定下的晴天维持多久(刻):一整天,够一批跑完。 */
     private static final int CLEAR_WEATHER_TICKS = 24000;
+    /**
+     * 用例造的同伴与怪的随机数种子({@code getRandom().setSeed}):原版给每个实体一个不定种子的随机数,她的逃跑落点、怪的出手间隔都从它取;
+     * 定下种子,同样的场景每次走出同样的结果。
+     */
+    static final long ENTITY_SEED = 0;
     /** 测试服的模拟距离(区块):端到端与 Paper 测试服也是这个值。 */
     private static final int SIMULATION_DISTANCE = 4;
 
@@ -125,6 +135,57 @@ public final class GameTestKit {
                         code + " did not succeed: " + run.get().outcome()));
     }
 
+    /**
+     * 造形掷骰子换成从 {@code seed} 开始的随机数跑 {@code call}(一段经 {@link #lua} 当场跑完的程序),跑完换回测试服默认的
+     * ({@link CompanionGameTestSuite#SHAPE_SEED})。用例的主线程上一次只跑一条用例的这一步,别的用例碰不到这个种子。
+     */
+    static <T> T shapeSeed(long seed, java.util.function.Supplier<T> call) {
+        com.dwinovo.numen.tools.shape.ShapeRandom.use(() -> net.minecraft.util.RandomSource.create(seed));
+        try {
+            return call.get();
+        } finally {
+            com.dwinovo.numen.tools.shape.ShapeRandom.use(CompanionGameTestSuite.SHAPE_RANDOM);
+        }
+    }
+
+    /**
+     * 场地里新出现的掉落物不带原版给的随机初速,摆回它出生那一格的正中、竖直往下落(照主流:清零速度,由用例摆)。原版掉落物的初速与
+     * 出生点的偏移取自世界的随机数,挖开树冠时它可能斜着落到没挖的树叶顶上停住,她就捡不到;砍下的东西落回原木所在那一列,结论才不看骰子。
+     */
+    static void dropsFallStraight(GameTestHelper helper) {
+        java.util.Set<net.minecraft.world.entity.Entity> placed =
+                java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+        helper.onEachTick(() -> {
+            for (var drop : helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    helper.getBounds())) {
+                if (placed.add(drop)) {
+                    BlockPos cell = drop.blockPosition();
+                    drop.setPos(cell.getX() + 0.5, drop.getY(), cell.getZ() + 0.5);
+                    drop.setDeltaMovement(0, Math.min(0, drop.getDeltaMovement().y), 0);
+                }
+            }
+        });
+    }
+
+    /**
+     * 一个服务器上此刻没有实体用着的短码(实体身份 {@code 种类@短码} 的后半):从 {@code 999999} 往下找第一个没人的。短码取自实体 UUID 的
+     * 前六位,UUID 是随机的,"这里没有的实体"不能拿一个写死的码,先确认没有才用。
+     */
+    static String absentCode(net.minecraft.server.MinecraftServer server) {
+        java.util.Set<String> used = new java.util.HashSet<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (net.minecraft.world.entity.Entity entity : level.getAllEntities()) {
+                used.add(entity.getUUID().toString().substring(0, com.dwinovo.numen.api.sdk.EntityLabel.CODE_LENGTH));
+            }
+        }
+        for (int code = 0x999999; ; code--) {
+            String hex = String.format("%06x", code);
+            if (!used.contains(hex)) {
+                return hex;
+            }
+        }
+    }
+
     /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
     static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
         BlockPos at = helper.absolutePos(rel);
@@ -153,9 +214,41 @@ public final class GameTestKit {
         NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_fighter", UUID.randomUUID(), level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        companion.getRandom().setSeed(ENTITY_SEED);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
         return companion;
+    }
+
+    /**
+     * 阻塞着把 center 所在区块周围 radius 圈的区块都生成到完整。一个区块要进实体刻,周围两圈区块得先是完整的,它们由工作线程
+     * 异步生成;GameTest 服务器的刻不跟着墙钟走,只按刻数等,生成慢一点就超时。这里阻塞到生成完,等多久都不占刻数,
+     * 结果就和机器快慢、负载无关。要搭在没人钉的远处的用例(区块由她这个玩家自己带起来)在拉起她之前先调它。
+     */
+    static void generateChunks(ServerLevel level, BlockPos center, int radius) {
+        int cx = center.getX() >> 4;
+        int cz = center.getZ() >> 4;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                level.getChunk(cx + dx, cz + dz);
+            }
+        }
+    }
+
+    /**
+     * 阻塞到 {@code lit} 为真。光照由独立的线程算,放方块只把更新排给它,什么时候算完看墙钟;按刻数等的话负载一高就先超时。
+     * 这里一边催光照线程开工(平时由每刻的区块更新催)一边等,等多久都不占刻数。
+     */
+    static void awaitLight(ServerLevel level, java.util.function.BooleanSupplier lit) {
+        var engine = level.getChunkSource().getLightEngine();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(60);
+        while (!lit.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new net.minecraft.gametest.framework.GameTestAssertException("the light engine did not settle within 60 s");
+            }
+            engine.tryScheduleUpdate();
+            java.util.concurrent.locks.LockSupport.parkNanos(200_000);
+        }
     }
 
     /** rel 起点 + 尺寸圈出的长方体格集;hollow = 只留外壳。 */
@@ -180,6 +273,16 @@ public final class GameTestKit {
      * (装模组前盖的东西),要问主人;这些用例测的是挖、搬、走的机制,主人又不在场,所以把场景里的方块记成她自己放的
      * (她的东西她可以拆)。权限用例要的正是没有记录的场景,用 {@link #spawnBare}。
      */
+    /**
+     * 自然长出的树叶:不持久(玩家放的才带持久标记),距离 1(贴着树干,生成的树就是这样)。直接 {@code setBlockAndUpdate} 放一块不持久的
+     * 树叶,距离是默认的 7,没有谁去更新它,它就是会随机凋落的树叶——野树的"邻着不持久树叶"在用例中途可能无端消失。
+     */
+    static net.minecraft.world.level.block.state.BlockState naturalLeaves() {
+        return Blocks.OAK_LEAVES.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT, false)
+                .setValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE, 1);
+    }
+
     static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         NumenPlayer companion = spawnBare(helper, name, rel, creative);
         ServerLevel level = helper.getLevel();
@@ -202,6 +305,7 @@ public final class GameTestKit {
         NumenPlayer companion = withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5)));
+        companion.getRandom().setSeed(ENTITY_SEED);
         if (creative) {
             companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         }
@@ -645,6 +749,12 @@ public final class GameTestKit {
         if (companion != null) {
             companion.setOwnerUuid(player.getUUID());
         }
+        // 用例失败也让他走:扮主人的玩家不在场地里,收场清场地时清不到他
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> {
+            if (server.getPlayerList().getPlayer(player.getUUID()) == player) {
+                leave(player);
+            }
+        });
         return player;
     }
 
@@ -791,13 +901,14 @@ public final class GameTestKit {
     }
 
     /**
-     * 用例所在的线程就是服务端主线程:替服务端推进程序排着的调用,直到 {@code run} 的程序跑完、或停稳在等外面的事上(她派的活收尾、
-     * 主人点头)。先看程序闲不闲、再推:闲着又没有调用可执行,才没有谁还会放新的调用进来。
+     * 用例所在的线程就是服务端主线程:替服务端推进这一段程序排着的调用,直到 {@code run} 的程序跑完、或停稳在等外面的事上(她派的活收尾、
+     * 主人点头)。先看程序闲不闲、再推:闲着又没有调用可执行,才没有谁还会放新的调用进来。只推她自己的车道,同一批里别的用例的程序
+     * 照常等服务器刻,它们走到哪不随这条用例什么时候推而变。
      */
     private static void settle(NumenPlayer body, ToolRun run) {
         while (run.receipt.get() == null) {
             boolean idle = com.dwinovo.numen.api.program.ServerPrograms.idle(body.getUUID());
-            int ran = com.dwinovo.numen.api.program.ServerPrograms.pump();
+            int ran = com.dwinovo.numen.api.program.ServerPrograms.pump(body.getUUID());
             if (idle && ran == 0) {
                 return;
             }
@@ -1210,7 +1321,7 @@ public final class GameTestKit {
         }
 
         /**
-         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 numen.move.to 是两次)头一次回了执,
+         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 numen.move.walk 是两次)头一次回了执,
          * 后面的还没派。
          */
         boolean done() {

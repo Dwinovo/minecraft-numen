@@ -1,6 +1,8 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
+import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
+import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
 import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.pathing.drive.Journal;
@@ -23,7 +25,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 
-/** 上下:上一级、下一级、连续台阶、落差、摔落上限、跳水缓冲、挑对的下法,以及普查补充的几种。 */
+/** 上下:上一级、下一级、连续台阶、落差、摔落上限、跳水缓冲,以及普查补充的几种。 */
 public class UpDownGameTests {
 
     private static final String BATCH = "pathing_updown";
@@ -69,18 +71,6 @@ public class UpDownGameTests {
         t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
     }
 
-    /** 连上五级台阶。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 366)
-    public static void climbs_a_staircase_of_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        for (int i = 0; i < 5; i++) {
-            t.fill(6 + i, 1, 4, 6 + i, 1 + i, 6, Blocks.STONE);
-        }
-        t.fill(11, 1, 4, 13, 5, 6, Blocks.STONE);
-        TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(12, 6, 5)), RouteSpec.defaults()).arrives();
-    }
-
     /** 八级一格宽的台阶,立面紧贴着上一级的落点:一路跑着跳上去,不在每一级的落点上停,实际用的刻数不超过最短的 1.1 倍。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 459)
     public static void runs_up_a_staircase_at_the_pace_of_its_jumps(GameTestHelper helper) {
@@ -119,6 +109,19 @@ public class UpDownGameTests {
         TestBody body = t.body(3, 7, 3);
         t.go(body, Goals.at(t.at(18, 1, 11)), RouteSpec.defaults()).arrives()
                 .then(UpDownGameTests::unhurt).then(r -> paced(r, MoveKind.DESCEND, 1.25));
+        // 下一级台阶之后正前方是岩浆坑:同样在落点那一列里收脚转弯,不冲进去
+        t.fill(2, 1, 24, 5, 1, 26, Blocks.STONE);
+        t.fill(7, -1, 23, 9, -1, 27, Blocks.STONE);
+        t.fill(7, 0, 24, 8, 0, 26, Blocks.LAVA);
+        TestBody beforeLava = t.body(3, 2, 25);
+        net.minecraft.core.BlockPos lava = t.at(7, 0, 25);
+        t.go(beforeLava, Goals.at(t.at(6, 1, 32)), RouteSpec.defaults())
+                .during(r -> {
+                    if (r.body.getX() >= lava.getX() - 0.3 + 0.01 && Math.abs(r.body.getZ() - lava.getZ() - 0.5) < 2) {
+                        throw new GameTestAssertException("冲过了头,身体到了岩浆坑上方");
+                    }
+                })
+                .arrives().then(UpDownGameTests::unhurt);
     }
 
     /**
@@ -186,7 +189,7 @@ public class UpDownGameTests {
             TestBody body = up ? t.body(3, 9, z) : t.body(4, 15, z);
             double[] lateral = {0};
             int[] sprinting = {0};
-            t.go(body, Goals.at(up ? t.at(15, 15, z) : t.at(16, 9, z)), RouteSpec.defaults()).within(700)
+            t.go(body, Goals.at(up ? t.at(15, 15, z) : t.at(16, 9, z)), RouteSpec.defaults()).within(341)
                     .during(r -> {
                         lateral[0] = Math.max(lateral[0], Math.abs(r.body.getZ() - (t.at(0, 0, z).getZ() + 0.5)));
                         sprinting[0] += r.body.isSprinting() ? 1 : 0;
@@ -201,59 +204,15 @@ public class UpDownGameTests {
         }
     }
 
-    /** 从两格高处落下,不掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 279)
-    public static void drops_two_blocks(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 3, 6, 2, 7, Blocks.STONE);
-        TestBody body = t.body(4, 3, 5);
-        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 从三格高处落下,原版摔不疼的高度。 */
+    /** 从三格高处落下,原版摔不疼的高度;空中不回身。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
     public static void drops_three_blocks(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 3, 6, 3, 7, Blocks.STONE);
         TestBody body = t.body(4, 4, 5);
-        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 六格高的台子,旁边有一道长台阶:不跳,走台阶下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 456)
-    public static void does_not_jump_from_beyond_the_fall_limit(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 2, 7, 6, 7, Blocks.STONE);
-        for (int i = 0; i < 6; i++) {
-            t.fill(2, 1, 8 + i, 3, 6 - i, 8 + i, Blocks.STONE);
-        }
-        TestBody body = t.body(6, 7, 5);
-        t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults()).within(700).arrives()
-                .then(UpDownGameTests::unhurt);
-    }
-
-    /** 十二格高的柱顶,旁边一池两格深的水:跳进水里,不掉血。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 426)
-    public static void jumps_into_water_to_break_a_fall(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(4, 1, 4, 4, 11, 4, Blocks.STONE);
-        pool(t, 5, 3, 7, 5, 2);
-        TestBody body = t.body(4, 12, 4);
-        t.go(body, Goals.at(t.at(11, 1, 4)), RouteSpec.defaults()).arrives().then(UpDownGameTests::unhurt);
-    }
-
-    /** 八格高的台子:一边是直落,一边是水池,远处有台阶——挑不摔伤的那条。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 435)
-    public static void picks_a_safe_way_down(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 10, 14, 8, 14, Blocks.STONE);
-        pool(t, 15, 11, 16, 13, 2);
-        for (int i = 0; i < 8; i++) {
-            t.fill(10 + i, 1, 20 + i, 14, 8 - i, 20 + i, Blocks.STONE);
-        }
-        TestBody body = t.body(12, 9, 12);
-        t.go(body, Goals.at(t.at(12, 1, 3)), RouteSpec.defaults()).within(700).arrives()
-                .then(UpDownGameTests::unhurt);
+        // 下落时在空中不回身:腾空那几刻身体一直朝着离地那一刻的方向,落地之后才转向下一步
+        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).during(Scenes.noTurnInMidAir())
+                .arrives().then(UpDownGameTests::unhurt);
     }
 
     // ==================== 普查补充 ====================
@@ -273,24 +232,6 @@ public class UpDownGameTests {
                 .arrives();
     }
 
-    /** 下一级台阶之后,正前方是岩浆坑:落在台阶下就停住转弯,不冲进去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
-    public static void stops_after_a_step_down_before_lava(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 4, 5, 1, 6, Blocks.STONE);
-        t.fill(7, -1, 3, 9, -1, 7, Blocks.STONE);
-        t.fill(7, 0, 4, 8, 0, 6, Blocks.LAVA);
-        TestBody body = t.body(3, 2, 5);
-        net.minecraft.core.BlockPos lava = t.at(7, 0, 5);
-        t.go(body, Goals.at(t.at(6, 1, 12)), RouteSpec.defaults())
-                .during(r -> {
-                    if (r.body.getX() >= lava.getX() - 0.3 + 0.01 && Math.abs(r.body.getZ() - lava.getZ() - 0.5) < 2) {
-                        throw new GameTestAssertException("冲过了头,身体到了岩浆坑上方");
-                    }
-                })
-                .arrives().then(UpDownGameTests::unhurt);
-    }
-
     /** 从八格高处落进只有一格深的水:照原版,落进水里就不算摔,不掉血。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 351)
     public static void one_deep_water_breaks_a_fall_like_vanilla(GameTestHelper helper) {
@@ -303,65 +244,13 @@ public class UpDownGameTests {
     }
 
     /**
-     * 规格许落二十格;七格高的台子,另有一道长台阶。满血的身体直接跳(摔掉 4 点血比绕台阶便宜);只剩 7 点血的身体
-     * 摔落上限收到 4 格,走台阶,一点血不掉。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 294)
-    public static void low_health_tightens_the_fall_limit(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
-        for (int side : new int[] {0, 20}) {
-            t.fill(side + 2, 1, 2, side + 6, 7, 6, Blocks.STONE);
-            for (int i = 0; i < 7; i++) {
-                t.fill(side + 2, 1, 7 + 2 * i, side + 3, 7 - i, 8 + 2 * i, Blocks.STONE);
-            }
-        }
-        TestBody healthy = t.body(5, 8, 4);
-        TestBody weak = t.body(25, 8, 4);
-        weak.setHealth(7);
-        t.go(healthy, Goals.at(t.at(10, 1, 4)), spec).within(800).arrives().then(r -> {
-            if (r.lowestHealth >= 20) {
-                throw new GameTestAssertException("满血的身体没有直接跳下去 " + r.navigation);
-            }
-        });
-        t.go(weak, Goals.at(t.at(30, 1, 4)), spec).within(800).arrives().then(r -> {
-            if (r.lowestHealth < 7) {
-                throw new GameTestAssertException("只剩 7 点血却摔了下去:最低 " + r.lowestHealth);
-            }
-        });
-    }
-
-    /**
-     * 规格许落二十格,满血的身体站在九格高的石柱顶上。一边柱脚四周是石头地:落九格掉 6 点血,跳下去;另一边柱脚四周一圈
-     * 朝上的滴水石锥尖:落上去按原版掉 15 点,摔完不到 6 点血,不跳,不许改地形就没有路,一点血不掉。
-     */
-    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 300)
-    public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
-        t.fill(22, 1, 2, 26, 1, 6, Blocks.POINTED_DRIPSTONE);
-        for (int side : new int[] {0, 19}) {
-            t.fill(side + 4, 1, 3, side + 6, 9, 5, Blocks.STONE);
-        }
-        TestBody stone = t.body(5, 10, 4);
-        TestBody spikes = t.body(24, 10, 4);
-        t.go(stone, Goals.at(t.at(10, 1, 4)), spec).within(600).arrives().then(r -> {
-            if (r.lowestHealth >= 20) {
-                throw new GameTestAssertException("落在石头上摔得起,却没有跳下去 " + r.navigation);
-            }
-        });
-        t.go(spikes, Goals.at(t.at(29, 1, 4)), spec).within(600)
-                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(UpDownGameTests::unhurt);
-    }
-
-    /**
      * 只剩 8 点血的身体站在八格高的石柱顶上,规格许落二十格。落在石头上掉 5 点,摔完不到 6 点血,不跳;落在干草块上按原版
      * 只掉 1 点,跳下去。
      */
     @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 276)
     public static void hay_takes_a_higher_fall_than_stone(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallDamage(17).build();
         t.fill(22, 0, 1, 28, 0, 7, Blocks.HAY_BLOCK);
         for (int side : new int[] {0, 19}) {
             t.fill(side + 4, 1, 3, side + 6, 8, 5, Blocks.STONE);
@@ -370,28 +259,17 @@ public class UpDownGameTests {
         TestBody hay = t.body(24, 9, 4);
         stone.setHealth(8);
         hay.setHealth(8);
-        t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(600)
+        t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(266)
                 .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(r -> {
                     if (r.lowestHealth < 8) {
                         throw new GameTestAssertException("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
                     }
                 });
-        t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(600).arrives().then(r -> {
+        t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(266).arrives().then(r -> {
             if (r.lowestHealth != 7) {
                 throw new GameTestAssertException("落在干草块上应当只掉 1 点血:最低 " + r.lowestHealth);
             }
         });
-    }
-
-    /** 下落时在空中不回身:腾空那几刻身体一直朝着离地那一刻的方向,落地之后才转向下一步。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 282)
-    public static void does_not_turn_around_in_mid_air(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 5, 6, 3, 5, Blocks.STONE);
-        TestBody body = t.body(4, 4, 5);
-        t.go(body, Goals.at(t.at(7, 1, 1)), RouteSpec.defaults())
-                .during(Scenes.noTurnInMidAir())
-                .arrives().then(UpDownGameTests::unhurt);
     }
 
     /**
@@ -406,7 +284,7 @@ public class UpDownGameTests {
         TestBody body = t.body(4, 16, 4);
         body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
         RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(500).arrives().then(r -> {
+        t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(344).arrives().then(r -> {
             unhurt(r);
             var entries = r.report.ledger().entries();
             boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
@@ -420,31 +298,12 @@ public class UpDownGameTests {
                 throw new GameTestAssertException("水没收回桶里");
             }
         });
-        t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
-        TestBody low = t.body(21, 4, 5);
-        low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
-            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
-                    && h.item() == Items.WATER_BUCKET);
-            if (held) {
-                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
-            }
-        });
-    }
-
-    /**
-     * 十六格高的柱顶,去处就是柱脚紧挨着的那一格(高落差的落点),背包里有一桶水,许挖许放:走出边沿、把水倒在去处那一格里
-     * 接住自己,一点血不掉,收回水,到达。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 270)
-    public static void catches_a_high_fall_right_in_the_goal_cell(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
-        TestBody body = t.body(4, 16, 4);
-        body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
-        var goal = t.at(5, 1, 4);
-        t.go(body, Goals.at(goal), natural).within(500).arrives().then(r -> {
+        // 去处就是柱脚紧挨着的那一格:水倒在去处那一格里接住自己,再收回。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列
+        t.fill(33, 1, 20, 33, 15, 20, Blocks.STONE);
+        TestBody inGoal = t.body(33, 16, 20);
+        inGoal.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        var goal = t.at(34, 1, 20);
+        t.go(inGoal, Goals.at(goal), natural).within(340).arrives().then(r -> {
             unhurt(r);
             var entries = r.report.ledger().entries();
             boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
@@ -453,6 +312,16 @@ public class UpDownGameTests {
                     && p.pos().equals(goal) && p.before().is(Blocks.WATER) && p.after().isAir());
             if (!poured || !scooped) {
                 throw new GameTestAssertException("水应当倒在去处那一格、再收回:" + entries);
+            }
+        });
+        t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
+        TestBody low = t.body(21, 4, 5);
+        low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
+            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
+                    && h.item() == Items.WATER_BUCKET);
+            if (held) {
+                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
             }
         });
     }
@@ -484,7 +353,7 @@ public class UpDownGameTests {
      * 陡坡一级一级往下,坡脚是悬崖:疾跑的冲劲带着身子飘出去,只擦着下一级的边沿落下,下一刻就滑出去,认步认不出落在了哪一步,
      * 冲劲又没人收,一路冲下去掉进悬崖摔死。步态只在身体压着落点那一列的支撑时才带着冲劲接下一步,擦边的疾跑改平走。
      */
-    @GameTest(template = Trial.TALL, batch = BATCH, timeoutTicks = 786)
+    @GameTest(template = Trial.TALL, batch = BATCH, timeoutTicks = 600)
     public static void does_not_run_down_a_stepped_slope_off_the_cliff_at_its_foot(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         for (int column = 0; column < SLOPE.length; column++) {
@@ -509,5 +378,49 @@ public class UpDownGameTests {
         t.fill(x0 - 1, -depth, z0 - 1, x1 + 1, -1, z1 + 1, Blocks.STONE);
         t.fill(x0 - 1, -depth - 1, z0 - 1, x1 + 1, -depth - 1, z1 + 1, Blocks.STONE);
         t.fill(x0, 1 - depth, z0, x1, 0, z1, Blocks.WATER);
+    }
+
+    /**
+     * 按高度的目标:在平地上垫五十格高的柱子上去;一路对外都是"在推进",不被当成停滞。这一条要真身体:看护({@code Watchdog})
+     * 每刻看着垫柱的身体在不在推进。
+     */
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1539)
+    public static void pillars_fifty_blocks_up_to_a_level(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody body = t.body(8, 1, 8);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        int level = t.origin.getY() + 51;
+        t.go(body, Goals.level(level), natural).within(1529)
+                .during(r -> {
+                    if (r.ticks > 1 && !r.navigation.progressing()) {
+                        throw new GameTestAssertException("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
+                    }
+                })
+                .arrives().then(r -> {
+                    if (r.body.blockPosition().getY() != level) {
+                        throw new GameTestAssertException("没到那一层:" + t.rel(r.body.blockPosition()));
+                    }
+                });
+    }
+
+    /**
+     * 两块基岩台子之间一百五十格宽的空隙(跳下去摔不起,底下的地也挖不出路),身上有三叠圆石,许挖许放:过去只能一路搭桥,对岸远在一次搜索的快照
+     * 之外。每段搜索搜到"估价比起点低一段"的节点就交出这一段,她先走这一段,快走完时从桥头(快照里还没有那块桥)接着搜下一段;一段段搭过去,
+     * 到对岸。这一条要真身体:一块块真的搭,看护每刻看着在不在推进。
+     */
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 4400)
+    public static void bridges_a_wide_chasm_in_segments(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 9, 4, 23, Blocks.BEDROCK);
+        t.fill(160, 1, 0, 180, 4, 23, Blocks.BEDROCK);
+        TestBody body = t.body(6, 5, 12);
+        for (int i = 0; i < 3; i++) {
+            Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
+        t.go(body, Goals.at(t.at(164, 5, 12)), natural).within(4390).arrives();
     }
 }

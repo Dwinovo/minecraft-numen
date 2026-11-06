@@ -40,6 +40,19 @@ public final class Builtin {
         gate.open("ftbquests", "ftbquests",
                 content -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(content));
         gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnNeoForge.install(content));
+        gate.openClientMod("jei", "jei", () -> JeiOnNeoForge::install);
+    }
+
+    /** JEI 联动要加载器答的一件事:流体成分在 NeoForge 上是 {@code FluidStack},数量直接是毫桶。 */
+    private static final class JeiOnNeoForge implements com.dwinovo.numen.plugins.jei.JeiHost {
+        static void install() {
+            com.dwinovo.numen.plugins.jei.NumenJei.install(new JeiOnNeoForge());
+        }
+
+        @Override
+        public long milliBuckets(Object fluid) {
+            return ((net.neoforged.neoforge.fluids.FluidStack) fluid).getAmount();
+        }
     }
 
     /** Litematica(NeoForge 上是 Forgematica)联动不需要加载器替它做什么事:函数都在主人的客户端上跑。 */

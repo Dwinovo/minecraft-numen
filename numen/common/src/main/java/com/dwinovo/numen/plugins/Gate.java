@@ -85,6 +85,19 @@ public final class Gate {
     }
 
     /**
+     * 目标模组只在客户端、又不带内容(技能、Lua 模块)的联动(JEI 这一类):判据同 {@link #openClientMod(String, String, Function)},
+     * 只是不去找内容目录,也就不会为"没有内容"报警。
+     *
+     * @param modId  目标模组的 id,只用来在花名册里写它联动谁
+     * @param plugin 联动的模块名(也是它登记时的名字空间)
+     * @param body   登记时才求值,理由同 {@link #open(String, String, Function)}
+     */
+    public void openClientMod(String modId, String plugin, Supplier<Runnable> body) {
+        if (!NumenPlugins.admit(PluginRoster.Source.BUNDLED, plugin, modId)) return;
+        install(plugin, () -> body.get().run());
+    }
+
+    /**
      * 能不能装:目标模组在场,并且服主没在停用名单里关掉它。目标不在场的联动不算这台服务器上的插件,不进花名册;
      * 在场的先在花名册里报到,名单上的判断由花名册给。
      */

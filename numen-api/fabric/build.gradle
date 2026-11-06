@@ -31,7 +31,8 @@ evaluationDependsOn(':numen-api:common')
  */
 sourceSets {
     gametest {
-        compileClasspath += sourceSets.main.compileClasspath
+        // 模拟主人连接的实现(FabricMockConnection)要摸 Numen API 的内部类:它们在本模块的主输出里(common 的源码并进本模块一起编)
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
     }
 }
 dependencies {

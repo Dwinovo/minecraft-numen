@@ -3,8 +3,6 @@ package com.dwinovo.numen.api.permission;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
@@ -38,10 +36,14 @@ import java.util.function.Predicate;
  * 于是主人名下别的同伴放的也算主人这一边,她被遣散以后也不变。双格方块连它带出来的另一半一起记。
  * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
  * 由对象组对着要动手的同伴判。
- * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
+ * 查:视图里是空气的格子视为无记号,查本身不改记录(搜索的视图可以是过时的快照或计划里的假想);读的是活世界、而那一格已是空气时才清掉({@link #placerIn})——不另挂方块变化钩子,谁挖的都一样。
  *
- * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
- * {@link ConcurrentHashMap#compute}),寻路工作线程无锁读。
+ * <p>线程:按区块各存一张并发表"格子 → 放的人"({@code ConcurrentHashMap<Long, ConcurrentHashMap<Long, Placer>>})。
+ * 写({@link #record}、{@link #forget})只在服务端主线程;读方是寻路工作线程({@link #isBuilt}、{@link #placerAt}、
+ * {@link #anyPlacedWithin},逐格 {@code get}/{@code containsKey})和主线程的 {@link #save}(遍历)。
+ * 每个读都只落在单个键上,{@code ConcurrentHashMap} 保证读到某次写完整落下的值(要么旧要么新,不会半个),无锁;
+ * 改一格是 O(1),不复制区块表。遍历(落盘、{@link #size})是弱一致的,而它们与写同在主线程,看到的就是确切的当前内容。
+ * 空了的区块表经 {@link ConcurrentHashMap#computeIfPresent} 原子摘掉,读到手里的那张表最多是空表,照样安全。
  */
 public final class PlacedBlocks extends SavedData {
 
@@ -112,8 +114,8 @@ public final class PlacedBlocks extends SavedData {
     private static final SavedData.Factory<PlacedBlocks> FACTORY = new SavedData.Factory<>(
             PlacedBlocks::new, PlacedBlocks::load, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
-    /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong})与放的人;值发布后不改。 */
-    private final ConcurrentHashMap<Long, Long2ObjectMap<Placer>> byChunk = new ConcurrentHashMap<>();
+    /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong})与放的人。 */
+    private final ConcurrentHashMap<Long, ConcurrentHashMap<Long, Placer>> byChunk = new ConcurrentHashMap<>();
 
     public PlacedBlocks() {
     }
@@ -194,24 +196,14 @@ public final class PlacedBlocks extends SavedData {
     /** 抹掉一格的记号。 */
     public void forget(BlockPos pos) {
         long cell = pos.asLong();
-        byChunk.computeIfPresent(chunkKey(pos), (k, old) -> {
-            if (!old.containsKey(cell)) {
-                return old;
-            }
-            if (old.size() == 1) {
-                return null;
-            }
-            Long2ObjectOpenHashMap<Placer> next = new Long2ObjectOpenHashMap<>(old);
-            next.remove(cell);
-            return next;
+        byChunk.computeIfPresent(chunkKey(pos), (k, cells) -> {
+            cells.remove(cell);
+            return cells.isEmpty() ? null : cells;
         });
         setDirty();
     }
 
-    /**
-     * 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号,
-     * 并顺手把记号清掉。任何线程可调。
-     */
+    /** 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号。任何线程可调。 */
     public boolean isPlaced(BlockPos pos, BlockState now) {
         return placerAt(pos, now) != null;
     }
@@ -221,24 +213,34 @@ public final class PlacedBlocks extends SavedData {
      * 都可以调。垫路的记号({@link Way#PATH})不算。要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
      */
     public boolean isBuilt(long cell) {
-        Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
+        ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
         Placer placer = cells == null ? null : cells.get(cell);
         return placer != null && placer.way() == Way.BUILT;
     }
 
     /**
-     * 放这一格的人;不是玩家放的是 null(已是空气同 {@link #isPlaced},顺手清掉)。不知道是谁放的是
-     * {@link Placer#UNKNOWN}。任何线程可调。
+     * 放这一格的人;没有记录、或 {@code now} 是空气是 null。不知道是谁放的是 {@link Placer#UNKNOWN}。纯读取,任何线程可调:
+     * 寻路搜索拿来问的视图可以是过时的快照,或套着"计划里已经挖掉"的假想,那里的空气不是世界的话,所以这里不抹记录。
      */
     public Placer placerAt(BlockPos pos, BlockState now) {
-        Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
+        ConcurrentHashMap<Long, Placer> cells = byChunk.get(chunkKey(pos));
         Placer placer = cells == null ? null : cells.get(pos.asLong());
-        if (placer == null) {
-            return null;
-        }
-        if (now.isAir()) {
-            forget(pos);
-            return null;
+        return placer == null || now.isAir() ? null : placer;
+    }
+
+    /**
+     * 同 {@link #placerAt(BlockPos, BlockState)},读的是 {@code view} 里这一格此刻的方块。{@code view} 是活世界({@link ServerLevel},
+     * 主线程)而这一格已是空气,就把记录一并抹掉:之后落进这一格的东西(沙砾落下、树叶长出)不算那个人放的。别的视图(搜索快照、
+     * 计划里的假想)不抹——记录清不清只看世界本身,这是唯一清记录的地方。
+     */
+    public Placer placerIn(BlockGetter view, BlockPos pos) {
+        BlockState now = view.getBlockState(pos);
+        Placer placer = placerAt(pos, now);
+        if (placer == null && now.isAir() && view instanceof ServerLevel) {
+            ConcurrentHashMap<Long, Placer> cells = byChunk.get(chunkKey(pos));
+            if (cells != null && cells.containsKey(pos.asLong())) {
+                forget(pos);
+            }
         }
         return placer;
     }
@@ -254,11 +256,11 @@ public final class PlacedBlocks extends SavedData {
             for (int dy = -radius; dy <= radius; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
+                    ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
                     if (cells == null || !cells.containsKey(cursor.asLong())) {
                         continue;
                     }
-                    Placer placer = placerAt(cursor.immutable(), view.getBlockState(cursor));
+                    Placer placer = placerIn(view, cursor.immutable());
                     if (placer != null && counts.test(placer)) {
                         return true;
                     }
@@ -271,27 +273,22 @@ public final class PlacedBlocks extends SavedData {
     /** 记着的格子总数(测试与调试用)。 */
     public int size() {
         int n = 0;
-        for (Long2ObjectMap<Placer> s : byChunk.values()) {
+        for (ConcurrentHashMap<Long, Placer> s : byChunk.values()) {
             n += s.size();
         }
         return n;
     }
 
     private void put(long cell, Placer placer) {
-        byChunk.compute(ChunkPos.asLong(BlockPos.of(cell)), (k, old) -> {
-            Long2ObjectOpenHashMap<Placer> next = old == null ? new Long2ObjectOpenHashMap<>()
-                    : new Long2ObjectOpenHashMap<>(old);
-            next.put(cell, placer);
-            return next;
-        });
+        byChunk.computeIfAbsent(ChunkPos.asLong(BlockPos.of(cell)), k -> new ConcurrentHashMap<>()).put(cell, placer);
     }
 
     private List<Long> unknownCells() {
         List<Long> out = new ArrayList<>();
-        for (Long2ObjectMap<Placer> cells : byChunk.values()) {
-            for (Long2ObjectMap.Entry<Placer> e : cells.long2ObjectEntrySet()) {
+        for (ConcurrentHashMap<Long, Placer> cells : byChunk.values()) {
+            for (Map.Entry<Long, Placer> e : cells.entrySet()) {
                 if (e.getValue().equals(Placer.UNKNOWN)) {
-                    out.add(e.getLongKey());
+                    out.add(e.getKey());
                 }
             }
         }
@@ -300,10 +297,10 @@ public final class PlacedBlocks extends SavedData {
 
     private List<PlacerCells> placerCells() {
         Map<Placer, List<Long>> groups = new LinkedHashMap<>();
-        for (Long2ObjectMap<Placer> cells : byChunk.values()) {
-            for (Long2ObjectMap.Entry<Placer> e : cells.long2ObjectEntrySet()) {
+        for (ConcurrentHashMap<Long, Placer> cells : byChunk.values()) {
+            for (Map.Entry<Long, Placer> e : cells.entrySet()) {
                 if (!e.getValue().equals(Placer.UNKNOWN)) {
-                    groups.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getLongKey());
+                    groups.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
                 }
             }
         }

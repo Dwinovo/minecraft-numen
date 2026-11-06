@@ -74,6 +74,32 @@ public interface NumenApi {
     void api(String group, String summary, Class<?> functions);
 
     /**
+     * 登记一组 API 函数,函数的描述用代码写({@link com.dwinovo.numen.api.sdk.ApiFunction#builder}),不读 Java 类:脚本里写的插件走这条。
+     * 和 {@link #api(String, String, Class)} 同一张登记表、同一套规矩,描述出自哪个生产者,登记、帮助、体检、派发都分不出来。
+     *
+     * @param group     组名,小写英文
+     * @param summary   一句话说明
+     * @param functions 这一组各个函数的描述(还没有主人的,登记时盖上你的名字空间与这个组)
+     * @throws IllegalArgumentException 组名已被占、名字写不出来、没有函数、函数重名
+     */
+    void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions);
+
+    /**
+     * 登记一种活的执行器:你的函数返回 {@code Job.of(记录)} 派下的活({@link com.dwinovo.numen.api.task.TaskRecord} 的某个具体类),
+     * 由 {@code runner} 在她的身体上按刻执行。在门里登记,所以插件撤回时它一起撤掉(门外直接调
+     * {@link com.dwinovo.numen.api.task.TaskFactory#register} 撤不回,那样的插件得声明卸下要重启)。
+     */
+    <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+            com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner);
+
+    /**
+     * 登记一种远程武器的提供者:攻击任务打远处的东西时问它"这件认不认得、此刻能不能射、弹道什么样、怎么起一发"
+     * ({@link com.dwinovo.numen.api.combat.RangedWeapon})。弓和弩是 Numen 自己的两个提供者,模组的枪、魔杖这样的新名词加在这里;
+     * 该不该打由权限层裁决,提供者只管怎么射。在门里登记,插件撤回时一起撤。
+     */
+    void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon);
+
+    /**
      * 给你的一种类型登记它与脚本的值怎么互转,连同它在签名里写成什么。record、枚举、列表与 {@code Map<String, T>} 不用登记。
      *
      * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名被占了
@@ -98,6 +124,34 @@ public interface NumenApi {
      * @throws IllegalArgumentException 同一个文件另一个来源也带了、模块名不合规矩或撞名、模块正文读不通
      */
     void bundleContent(Path root);
+
+    /**
+     * 登记一个<b>知识来源</b>:{@code numen.inv.recipes}(怎么做)、{@code numen.inv.uses}(能拿来做什么)、{@code numen.inv.info}
+     * (物品说明)各是一个动词,动词把各来源的结果合在一起交给模型,每条注明出自哪个来源。原版的配方表是第一个来源;
+     * 装了 JEI 的主人的客户端、整合包写的说明是另外的来源。
+     *
+     * <p>来源是一个隐藏的函数(不进模型的 API 索引):{@code function} 里恰有一个 {@code @Fn} 静态方法,收一个物品,交回
+     * {@link com.dwinovo.numen.api.knowledge.KnowledgeKind#returns} 那种页。它在哪一端执行由函数自己的描述说:在主人客户端上的({@code ClientCall})经现有的客户端调用通道问,
+     * 主人不在线、没装对应的模组、超时,动词的结果里都会明写这个来源缺了、为什么、缺的是哪一类信息({@code provides})。
+     * 读不到的字段({@code notProvided}:概率、耗时、热量、能量……)如实声明,来源不猜、不从提示文字里抠。
+     *
+     * <p>一个名字空间每种动词至多一个来源。两侧都登记,在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
+     *
+     * @param kind        来源服务哪个动词
+     * @param provides    这个来源多给的是哪一类信息(一句话,来源缺席时拿它对模型说缺了什么)
+     * @param notProvided 它读不到的字段
+     * @param function    恰有一个 {@code @Fn} 的类
+     * @throws IllegalArgumentException 这个名字空间这种来源已经有了,或函数写得不对
+     */
+    void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                         java.util.List<String> notProvided, Class<?> function);
+
+    /**
+     * 登记一个知识来源,函数的描述用代码写({@link com.dwinovo.numen.api.sdk.ApiFunction#builder}),不读 Java 类:脚本里写的插件走这条。
+     * 其余同 {@link #knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind, String, java.util.List, Class)}。
+     */
+    void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                         java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function);
 
     /**
      * 服务端:往 {@code /numen} 下挂一格给<b>玩家</b>用的指令(如 {@code /numen mynav debug})。

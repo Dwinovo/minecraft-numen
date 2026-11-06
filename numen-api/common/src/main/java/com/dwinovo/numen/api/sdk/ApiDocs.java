@@ -23,7 +23,7 @@ import java.util.Set;
  * <ul>
  *   <li>索引({@link #index}):系统提示里的 {@code <api>}——共用的几种值的类声明,每组一行说明与它的函数名,再是模块一个一行;</li>
  *   <li>帮助({@link #help}):{@code numen.api.help("numen.move")} 是一组或一个模块(每个函数一行签名),
- *       {@code numen.api.help("numen.move.to")} 是一个函数的全部(逐个参数、返回值的字段、例子、注意、相关);</li>
+ *       {@code numen.api.help("numen.move.walk")} 是一个函数的全部(逐个参数、返回值的字段、例子、注意、相关);</li>
  *   <li>写错时附上的用法({@link #usage});</li>
  *   <li>整份 LuaLS 存根({@link #stubs})与机器可读的元数据({@link #metadata}):编辑器、评测与工具读。</li>
  * </ul>
@@ -57,7 +57,7 @@ public final class ApiDocs {
         List<String> lines = new ArrayList<>();
         lines.add("Call these from the " + engine.toolName() + " tool, always written in full: "
                 + "namespace.group.function. `" + Call.of("numen.api.help", "numen.move") + "` lists a group's or a "
-                + "module's functions with their types; `" + Call.of("numen.api.help", "numen.move.to")
+                + "module's functions with their types; `" + Call.of("numen.api.help", "numen.move.walk")
                 + "` explains one in full (every argument, what it returns, examples).");
         lines.add("Values the groups share:");
         for (String shared : LuaCodecs.SHARED) {
@@ -92,11 +92,12 @@ public final class ApiDocs {
 
     /**
      * 这位主人的客户端提供的组:目标模组只在客户端的联动({@code ClientMods}),主人的客户端没报它就不列、不给帮助;别的组都在。
-     * 判据在 {@code ClientMods#offered},这里只是按它筛。
+     * 判据在 {@code ClientMods#offered},这里只是按它筛;隐藏的组({@link ApiRegistry.Group#hidden})不列。
      */
     private static List<ApiRegistry.Group> offered(Modules modules) {
         return ApiRegistry.groups().stream()
-                .filter(g -> com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace())).toList();
+                .filter(g -> !g.hidden() && com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace()))
+                .toList();
     }
 
     /** 索引里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
@@ -110,7 +111,7 @@ public final class ApiDocs {
     // ---- 帮助 ----
 
     /**
-     * 一个名字({@code numen}、{@code numen.move}、{@code numen.move.follow}、{@code numen.move.to}、{@code my.lumber}、
+     * 一个名字({@code numen}、{@code numen.move}、{@code numen.move.follow}、{@code numen.move.walk}、{@code my.lumber}、
      * {@code my.lumber.chop})指的名字空间、组、模块或函数的帮助;不认得是 null。和组同名的模块的函数在那一组的帮助里。
      */
     public static String help(String name, Modules modules) {

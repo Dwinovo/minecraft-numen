@@ -33,15 +33,14 @@ public final class AttackPlan {
          */
         SKIRMISH,
         /**
-         * 弓战斗。和 {@link #SKIRMISH} <b>同一个形状,只是环换了一副</b>:内沿是"拉得开弓的
-         * 距离",外沿是射程。带内导航自然到达、她停下来,攻击层就把弓拉满 —— "什么时候该
-         * 站定"不用另写。
+         * 远程战斗(弓、弩、模组的枪……手上那件远程武器)。和 {@link #SKIRMISH} <b>同一个形状,只是环换了一副</b>:内沿是"这件武器
+         * 起手需要的距离"(弓:拉得开弓),外沿是射程。带内导航自然到达、她停下来,攻击层就起一发 —— "什么时候该站定"不用另写。
          *
          * <p>剑的环是 {@code [它够得着我 2.02, 我够得着它 3.30]},拿它给弓用的时候两者
          * 打架:环把她往 3.3 拉,而弓要求五格开外,于是她永远到不了射击距离,只会跟着怪
          * 一点点蹭 —— 那就是只给弓和箭时"边缘抖动"的来历。
          */
-        BOW,
+        RANGED,
         /** 没什么可打的了。 */
         DONE
     }
@@ -165,7 +164,7 @@ public final class AttackPlan {
             return Action.SKIRMISH;   // 没弓:走得到走不到都只能凑近了打
         }
         if (foe.armed() || !foe.reachable() || !b.hasMelee()) {
-            return Action.BOW;
+            return Action.RANGED;
         }
         return Action.SKIRMISH;
     }

@@ -49,7 +49,7 @@ final class Diagnosis {
     static Outcome of(SearchResult.Stop stop, boolean breathless, Search failed, SearchResult.Blocking blocking,
                       BooleanSupplier cancelled) {
         return switch (stop) {
-            case BUDGET -> new Outcome.OutOfBudget(cause(failed, blocking));
+            case BUDGET, TIME -> new Outcome.OutOfBudget(cause(failed, blocking));
             case UNLOADED -> new Outcome.Unloaded();
             case STRANDED -> new Outcome.Stranded(failed.start(), failed.view().getBlockState(failed.start()));
             case EXHAUSTED, CANCELLED, ARRIVED, SEGMENT -> {
@@ -91,7 +91,7 @@ final class Diagnosis {
     private static Outcome exhausted(Search failed, Blockage cause, BooleanSupplier cancelled) {
         CostModel model = failed.model();
         RouteSpec spec = model.spec();
-        boolean hadMaterials = model.placing().isPresent();
+        boolean hadMaterials = model.placing() != null;
         if (!spec.dig() || !spec.place()) {
             RouteSpec changing = spec.edit().changes(true).build();
             Route route = find(failed, withMaterials(model).withSpec(changing), cancelled);
@@ -143,12 +143,12 @@ final class Diagnosis {
     }
 
     private static CostModel withMaterials(CostModel model) {
-        return model.placing().isPresent() ? model : model.withPlacing(ANY_BLOCK);
+        return model.placing() != null ? model : model.withPlacing(ANY_BLOCK);
     }
 
-    /** 同一份快照、同一个起点(连同接在哪一步后面、那时憋气的样子)、目标与预算,按这份成本模型搜;到了这次要去的地方就交出路。 */
+    /** 同一份快照、同一个起点(连同接在哪一步后面、那时憋气的样子)、目标与节点上限,按这份成本模型不限时地搜;到了目标就交出路。 */
     private static Route find(Search failed, CostModel model, BooleanSupplier cancelled) {
         SearchResult result = AStar.run(failed.under(model), cancelled);
-        return result.reached() ? result.route() : null;
+        return result.arrived() ? result.route() : null;
     }
 }

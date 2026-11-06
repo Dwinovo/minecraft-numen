@@ -21,9 +21,8 @@ public class CommonClass {
 
         registerTools();
         registerApi();
-        // 管理员查服主的 key 今天每个人用了多少
-        com.dwinovo.numen.api.entity.NumenCommands.plug(com.dwinovo.numen.api.brain.UsageCommand.node());
         wireTaskMachine();
+        wireRegistrationChanges();
         com.dwinovo.numen.api.brain.ServerBrains.register();
     }
 
@@ -34,21 +33,35 @@ public class CommonClass {
      * {@link com.dwinovo.numen.api.task.TaskFactory})。
      */
     private static void wireTaskMachine() {
-        // Numen API 自己也走同一条总线,和插件用的是同一套事件——没有"内部另有一条捷径"。
-        com.dwinovo.numen.api.entity.CompanionEvents.subscribe(
-                com.dwinovo.numen.api.CompanionEvent.DEATH,
-                com.dwinovo.numen.api.task.CompanionTickDispatcher::clearActiveTask);
-        com.dwinovo.numen.api.entity.CompanionEvents.subscribe(
-                com.dwinovo.numen.api.CompanionEvent.SPAWN,
-                com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionSpawned);
-        com.dwinovo.numen.api.entity.CompanionEvents.subscribe(
-                com.dwinovo.numen.api.CompanionEvent.REMOVE,
-                com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionRemoved);
+        // Numen API 自己也走同一扇门(宿主的作用域),和插件用的是同一套事件与指令登记——没有"内部另有一条捷径"。
+        com.dwinovo.numen.api.NumenPlugins.registerHost(numen -> {
+            numen.on(com.dwinovo.numen.api.CompanionEvent.DEATH,
+                    com.dwinovo.numen.api.task.CompanionTickDispatcher::clearActiveTask);
+            numen.on(com.dwinovo.numen.api.CompanionEvent.SPAWN,
+                    com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionSpawned);
+            numen.on(com.dwinovo.numen.api.CompanionEvent.REMOVE,
+                    com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionRemoved);
+            // 管理员查服主的 key 今天每个人用了多少
+            numen.command(com.dwinovo.numen.api.brain.UsageCommand.node());
+        });
         // Numen API 自带姿态链的名册文书:提示词总览里的一行。
         com.dwinovo.numen.api.task.reflex.ReflexRegistry.register(
                 new com.dwinovo.numen.api.task.chain.SpeakingLookChain());
         com.dwinovo.numen.api.task.reflex.ReflexRegistry.register(
                 new com.dwinovo.numen.api.task.chain.FloatChain());
+    }
+
+    /**
+     * 登记变了(花名册装上或撤回了一个插件)之后:已经发给玩家的 {@code /numen} 指令树是服务器发的一份拷贝,在服务器线程上重发。
+     * 系统提示、帮助与脚本目录每次都从当前的表现算,不用跟着动。
+     */
+    private static void wireRegistrationChanges() {
+        com.dwinovo.numen.api.plugin.Registrations.onChanged(() -> {
+            net.minecraft.server.MinecraftServer server = com.dwinovo.numen.api.platform.ServerLifecycle.running();
+            if (server != null) {
+                server.execute(() -> com.dwinovo.numen.api.entity.NumenCommands.resend(server));
+            }
+        });
     }
 
     /**

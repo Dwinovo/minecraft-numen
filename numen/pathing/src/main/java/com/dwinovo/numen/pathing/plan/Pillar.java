@@ -73,14 +73,17 @@ final class Pillar implements Move {
 
     /**
      * 垫柱要站着、脚所在的格不泡在流体里;还要放一块:这一趟一块也放不了就不成立。头顶挡着的格精确判断会先去挖(挖之前要瞄,
-     * 瞄的射线读四周的格),所以放不了的只在四周读全了的节点上断定;能放的,放得下放不下、垫上去站不站得住,精确判断。
+     * 瞄的射线读四周的格),所以放不了的只在四周读全了的节点上断定;其余答"可能",代价至少是起跳上一格、起跳的罚分与放一块。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (!q.stance().grounded() || (q.own() & CellFlags.FLUID) != 0) {
             return Quick.REJECT;
         }
-        return !q.mayPlace() && q.plain() ? Quick.REJECT : Quick.EXACT;
+        if (!q.mayPlace() && q.loadedAround(0, 0)) {
+            return Quick.REJECT;
+        }
+        return q.likely(0, 1, 0, q.stepJump() + q.jumpPenalty() + q.placeFloor());
     }
 
     @Override

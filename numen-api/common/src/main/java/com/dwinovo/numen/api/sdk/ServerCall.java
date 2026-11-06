@@ -5,9 +5,7 @@ import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;
-import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.GatedAct;
 import com.dwinovo.numen.api.task.TaskDispatch;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -44,10 +42,10 @@ public final class ServerCall {
     private final NumenPlayer her;
     private final UUID companion;
     private final ApiFunction function;
-    private final Record args;
+    private final FnArgs args;
     private final String callId;
 
-    ServerCall(NumenPlayer her, UUID companion, ApiFunction function, Record args, String callId) {
+    ServerCall(NumenPlayer her, UUID companion, ApiFunction function, FnArgs args, String callId) {
         this.her = her;
         this.companion = companion;
         this.function = function;
@@ -87,13 +85,12 @@ public final class ServerCall {
      * @param action 要做的事,如 {@code Action.useEntity(maid)}、{@code Action.command(…)}
      */
     public Pending<Void> authorize(Action action) {
-        Gate gate = Permission.gateFor(her);
-        Verdict verdict = gate.judgeLive(action, her.serverLevel());
-        return switch (verdict.kind()) {
-            case ALLOW -> Pending.of(null);
-            case DENY -> Pending.failed(refused(lua(), verdict.reason()));
-            case ASK -> Consents.of(her).await(lua(),
-                    List.of(gate.consentItemLive(action, verdict, her.serverLevel())));
+        GatedAct.Judgement judged = GatedAct.judge(her, List.of(action));
+        GatedAct.Permit permit = judged.permits().get(0);
+        return switch (permit.state()) {
+            case ALLOWED -> Pending.of(null);
+            case REFUSED -> Pending.failed(refused(lua(), permit.refusal()));
+            case WAITING -> Consents.of(her).await(lua(), judged.asks());
         };
     }
 
@@ -119,11 +116,15 @@ public final class ServerCall {
     public Entity entity(EntityRef ref) {
         Entity e = ref.in(her.serverLevel());
         if (e == null || e == her) {
-            throw new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
-                    + "chunk or another dimension",
-                    Call.of("numen.scan.entities"));
+            throw notNear(ref);
         }
         return e;
+    }
+
+    /** 点名的实体此刻不在这一层世界里:当场失败,说它可能怎么了,下一步是重新看一眼附近。 */
+    static ApiError notNear(EntityRef ref) {
+        return new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
+                + "chunk or another dimension", Call.of("numen.scan.entities"));
     }
 
     /**
@@ -135,7 +136,7 @@ public final class ServerCall {
             throw new ApiError(ErrorKind.OUT_OF_REACH, target.getName().getString() + " is "
                     + String.format(java.util.Locale.ROOT, "%.1f", her.distanceTo(target))
                     + " blocks away — out of reach from where you stand; walk to it first, then call this again",
-                    Call.of("numen.move.to", target.blockPosition(), 2),
+                    Call.of("numen.move.walk", target.blockPosition(), 2),
                     Map.of("pos", target.blockPosition()));
         }
     }

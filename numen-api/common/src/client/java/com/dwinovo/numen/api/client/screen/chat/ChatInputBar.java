@@ -78,6 +78,12 @@ public final class ChatInputBar {
         /** 斜杠命令跑完回给主人的话;null = 这条命令不吭声(或已在原位开了面板)。画在哪、留多久是宿主的事。 */
         void onCommandReply(String reply);
 
+        /**
+         * 斜杠命令要把主人带去她资料页的某一节({@code /memory}):宿主翻过去并滚到那一节,返回 {@code true};
+         * 没有资料页的宿主返回 {@code false},命令回一句"得在聊天面板里用"。
+         */
+        default boolean openPage(com.dwinovo.numen.api.client.command.PageCommand.Page page) { return false; }
+
         /** 她等的那条征询收起了(主人答了、超时、任务结束)。在 {@link #tick} 里调。 */
         default void onConsentSettled() {}
 
@@ -620,6 +626,12 @@ public final class ChatInputBar {
             var page = com.dwinovo.numen.api.client.command.ChatCommands.popupFor(loop, text);
             if (page != null) {
                 openPopup(page);
+                host.onCommandReply(null);
+                return;
+            }
+            var section = com.dwinovo.numen.api.client.command.ChatCommands.pageFor(loop, text);
+            if (section != null && host.openPage(section)) {
+                setText("");
                 host.onCommandReply(null);
                 return;
             }

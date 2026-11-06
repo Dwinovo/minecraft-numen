@@ -16,7 +16,7 @@ import java.util.UUID;
  * 身体让给别人,目标一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一
  * 个道理——休眠不是失败。
  *
- * <p>跟着走和 {@code numen.move.to} 是同一套走法:可挖可搭,只看价钱,权限层说不许的格是墙。真跟不上时任务以失败收场,说清原因,
+ * <p>跟着走和 {@code numen.move.walk} 是同一套走法:可挖可搭,只看价钱,权限层说不许的格是墙。真跟不上时任务以失败收场,说清原因,
  * 回执里是这一路做到了哪。
  */
 public final class FollowTaskRecord extends TaskRecord<Walked> {

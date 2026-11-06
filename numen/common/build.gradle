@@ -28,8 +28,9 @@ dependencies {
     // 单元测试可以看完整的 Numen API(夹具要登记处、排程机器),编译与运行类路径补上同一模块。
     testImplementation project(':numen-api:common')
     testImplementation project(':numen:pathing')
-    // 目标族的终点格核对表要原版世界夹具(TestWorld、Vanilla),与寻路模块的单测共用同一份
+    // 目标族的终点格核对表要原版世界夹具:TestWorld 与寻路模块的单测共用同一份,原版引导 Vanilla 在寻路模块的 fixtures 源码集里(单测与规划评测共用)
     testImplementation project(':numen:pathing').sourceSets.test.output
+    testImplementation project(':numen:pathing').sourceSets.fixtures.output
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
@@ -177,6 +178,10 @@ sourceSets {
 test {
     useJUnitPlatform()
 }
+
+// API 体检报告任务(定义见 buildSrc 的 numen-api-lint):入口是本模块单测源码集里的 ApiLintReport,插件各自一个
+pluginManager.apply('numen-api-lint')
+tasks.named('apiLintReport') { mainClass = 'com.dwinovo.numen.ApiLintReport' }
 
 // 服务端安全门:Numen 的 common 主源码集全部是服务端代码(工具/任务/寻路/
 // 建造),客户端半边在 src/client/java。common 编译用的是合并的客户端 MC jar,

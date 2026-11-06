@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 
 /**
- * {@code /compact} —— 整理记忆。
+ * {@code /compact [关注点]} —— 整理记忆;带了关注点,摘要就特别留意它。
  *
  * <p>可用性问 {@link RemoteCompanion#compactProblem()},那是唯一的判据。补全行会把
  * 理由原样显示出来——从前那颗按钮只会灰着,不说为什么。
@@ -23,6 +23,11 @@ final class CompactCommand implements ChatCommand {
     }
 
     @Override
+    public String argHint() {
+        return I18n.get(Keys.CMD_COMPACT_ARGS);
+    }
+
+    @Override
     public boolean touchesContext() {
         return true;
     }
@@ -34,7 +39,7 @@ final class CompactCommand implements ChatCommand {
 
     @Override
     public String run(RemoteCompanion loop, String args) {
-        String refused = loop.requestCompact();
+        String refused = loop.requestCompact(args);
         if (refused != null) {
             return I18n.get(refused);
         }

@@ -4,6 +4,7 @@ import com.dwinovo.numen.build.BuildStates;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderSet;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -12,7 +13,6 @@ import net.minecraft.world.level.block.state.properties.Property;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 蒙版(mask)的文字读成数据,蒙版的判定只在这里:写法照 WorldEdit,一格测的是世界里此刻的方块({@link LoadedBlocks}),所以只出现在读世界的
@@ -107,7 +107,8 @@ final class ShapeMasks {
             if (density < 0 || density > 1) {
                 throw new IllegalArgumentException("'" + c + "' is no chance: it is between %0 and %100");
             }
-            return (w, x, y, z) -> ThreadLocalRandom.current().nextDouble() <= density;
+            RandomSource random = ShapeRandom.next();
+            return (w, x, y, z) -> random.nextDouble() <= density;
         }
         if (first == '=') {
             throw new IllegalArgumentException("'" + c + "': an expression is not a mask here; pick the cells with "

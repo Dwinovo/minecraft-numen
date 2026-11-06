@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
@@ -30,6 +32,9 @@ public final class Faces {
     /** 放方块时点的那一下:点 {@code clicked} 这一格的 {@code side} 面上的 {@code point}。 */
     public record Face(BlockPos clicked, Direction side, Vec3 point) {}
 
+    /** 六个方向,固定一份:{@link Direction#values} 每次调用都复制整个数组。 */
+    private static final Direction[] DIRECTIONS = Direction.values();
+
     /** 按节点中心算站位时给交互距离留的余量:身体停在节点里不一定正在中心。 */
     private static final double STANDING_SLACK = 0.4;
 
@@ -37,17 +42,14 @@ public final class Faces {
     private static final double[] QUARTERS = {0.25, 0.75};
 
     /**
-     * 眼睛在 {@code eye}、交互距离 {@code range} 时,往 {@code target} 放 {@code placing} 点得中的那个面:第一个看得见、够得着、
-     * 放下去落在 {@code target} 的({@link #inSightAll}),先试下面那一格的顶面;一个都点不中为 null。规划判"站在这里放得下"
-     * 与执行时瞄哪一点问的都是它。
+     * 眼睛在 {@code eye}、交互距离 {@code range} 时,往 {@code target} 放 {@code placing} 点得中的那个面:按 {@link #first} 的先后
+     * (先下面那一格的顶面),第一个看得见、够得着、放下去落在 {@code target} 的;一个都点不中为 null。规划判"站在这里放得下"
+     * 与执行时瞄哪一点问的都是它。候选边造边试,点中一个就停:搜索里每一步搭桥、垫台阶都要问一次,不为后面用不上的候选造点、发射线。
      */
     public static Face inSight(BlockGetter level, Vec3 eye, double range, BlockPos target, Block placing) {
-        for (Face face : inSightAll(level, eye, range, target, placing)) {
-            if (target.equals(Replaceable.landing(level, face.clicked(), face.side(), placing))) {
-                return face;
-            }
-        }
-        return null;
+        return first(level, target, placing, eye,
+                face -> inSight(level, eye, range, face)
+                        && target.equals(Replaceable.landing(level, face.clicked(), face.side(), placing)));
     }
 
     /**
@@ -55,34 +57,57 @@ public final class Faces {
      * 格内本身是可顶替的方块时再加上这一格自己的六个面(原地点,与原版一样)。每个面取轮廓里最大那块的中心、面上离眼睛最近的一点
      * (够得着一格量的是眼睛到这一格最近的一点,面中心可能已经远出一截)、再四个象限点(台阶上下半、门的合页左右由点在面上的位置定)。
      * 点是瞄点,往面里收了一点({@link Sight#inset});不管看不看得见、够不够得着。{@code placing} 为 null 是"随便一块方块"。
+     * 按这个先后一个个交给 {@code accept},它头一个答是的就是结论;一个都不答是为 null。
      */
-    public static List<Face> candidates(BlockGetter level, BlockPos target, Block placing, Vec3 eye) {
-        List<Face> out = new ArrayList<>();
-        List<Direction> around = new ArrayList<>(against(level, target, placing));
-        around.sort((a, b) -> Boolean.compare(b == Direction.DOWN, a == Direction.DOWN));
+    private static Face first(BlockGetter level, BlockPos target, Block placing, Vec3 eye, Predicate<Face> accept) {
+        Set<Direction> around = against(level, target, placing);
+        // 先下面那一格的顶面,其余照方向的先后
+        if (around.contains(Direction.DOWN)) {
+            Face hit = firstOn(level, target.below(), Direction.UP, eye, accept);
+            if (hit != null) {
+                return hit;
+            }
+        }
         for (Direction dir : around) {
-            addFace(out, level, target.relative(dir), dir.getOpposite(), eye);
+            if (dir == Direction.DOWN) {
+                continue;
+            }
+            Face hit = firstOn(level, target.relative(dir), dir.getOpposite(), eye, accept);
+            if (hit != null) {
+                return hit;
+            }
         }
         if (Sight.clickable(level, target) && Replaceable.replaceableBy(level.getBlockState(target), placing)) {
             for (Direction side : Direction.values()) {
-                addFace(out, level, target, side, eye);
+                Face hit = firstOn(level, target, side, eye, accept);
+                if (hit != null) {
+                    return hit;
+                }
             }
         }
-        return out;
+        return null;
     }
 
     /**
-     * {@link #candidates} 里从 {@code eye} 看得见、够得着的那些,先后不变:眼睛在面朝外的一侧,面上的点在交互距离 {@code range}
-     * 以内,射线({@link Sight})第一下碰上的就是这一面。
+     * 从 {@code eye} 看得见、够得着的全部候选,先后同 {@link #first}:眼睛在面朝外的一侧,面上的点在交互距离 {@code range} 以内,
+     * 射线({@link Sight})第一下碰上的就是这一面。只有要在几个点击之间挑的地方(手放挑与目标状态一字不差的那一下)用它;
+     * 只要第一个的问 {@link #inSight}。
      */
     public static List<Face> inSightAll(BlockGetter level, Vec3 eye, double range, BlockPos target, Block placing) {
         List<Face> out = new ArrayList<>();
-        for (Face face : candidates(level, target, placing, eye)) {
+        first(level, target, placing, eye, face -> {
             if (inSight(level, eye, range, face)) {
                 out.add(face);
             }
-        }
+            return false;
+        });
         return out;
+    }
+
+    /** 往 {@code target} 放方块时有没有能点的地方(不管看不看得见、够不够得着):{@link #first} 会不会交出任何候选。 */
+    private static boolean anyCandidate(BlockGetter level, BlockPos target, Block placing) {
+        return anyAgainst(level, target, placing)
+                || Sight.clickable(level, target) && Replaceable.replaceableBy(level.getBlockState(target), placing);
     }
 
     /**
@@ -94,18 +119,12 @@ public final class Faces {
      */
     public static boolean handReachable(BlockGetter level, Vec3 eye, double range, BlockPos target) {
         BlockGetter cleared = new Cleared(level, target);
-        List<Face> all = candidates(cleared, target, null, eye);
-        if (all.isEmpty()) {
+        if (!anyCandidate(cleared, target, null)) {
             return true;
         }
         // 站位是节点中心站直的眼睛,真停下来离中心差一点:留一点余量,停下之后手放仍点得着
         double standing = range - STANDING_SLACK;
-        for (Face face : all) {
-            if (inSight(cleared, eye, standing, face)) {
-                return true;
-            }
-        }
-        return false;
+        return first(cleared, target, null, eye, face -> inSight(cleared, eye, standing, face)) != null;
     }
 
     private static boolean inSight(BlockGetter level, Vec3 eye, double range, Face face) {
@@ -119,17 +138,28 @@ public final class Faces {
                 point.z + side.getStepZ() * Sight.INSET);
     }
 
-    private static void addFace(List<Face> out, BlockGetter level, BlockPos clicked, Direction side, Vec3 eye) {
+    /** {@code clicked} 这一格 {@code side} 面上的点,按中心、离眼睛最近的一点、四个象限点的先后交给 {@code accept}。 */
+    private static Face firstOn(BlockGetter level, BlockPos clicked, Direction side, Vec3 eye, Predicate<Face> accept) {
         Vec3 centre = point(level, clicked, side);
-        out.add(new Face(clicked, side, Sight.inset(centre, side)));
+        Face face = new Face(clicked, side, Sight.inset(centre, side));
+        if (accept.test(face)) {
+            return face;
+        }
         Direction.Axis plane = side.getAxis();
-        out.add(new Face(clicked, side, Sight.inset(across(centre, clicked, plane,
-                nearestAlong(eye, clicked, plane, true), nearestAlong(eye, clicked, plane, false)), side)));
+        face = new Face(clicked, side, Sight.inset(across(centre, clicked, plane,
+                nearestAlong(eye, clicked, plane, true), nearestAlong(eye, clicked, plane, false)), side));
+        if (accept.test(face)) {
+            return face;
+        }
         for (double u : QUARTERS) {
             for (double v : QUARTERS) {
-                out.add(new Face(clicked, side, Sight.inset(across(centre, clicked, plane, u, v), side)));
+                face = new Face(clicked, side, Sight.inset(across(centre, clicked, plane, u, v), side));
+                if (accept.test(face)) {
+                    return face;
+                }
             }
         }
+        return null;
     }
 
     /** 面所在的平面不变,面内两个方向上落在这一格的 {@code u}、{@code v} 处。 */
@@ -197,14 +227,31 @@ public final class Faces {
      */
     public static Set<Direction> against(BlockGetter level, BlockPos target, Block placing) {
         EnumSet<Direction> out = EnumSet.noneOf(Direction.class);
-        for (Direction dir : Direction.values()) {
-            BlockPos neighbor = target.relative(dir);
-            BlockState state = level.getBlockState(neighbor);
-            if (!state.getShape(level, neighbor).isEmpty() && !Replaceable.replaceableBy(state, placing)) {
+        // 搜索里每个节点都问好几次:一个可变坐标走完六个邻格,不为每个邻格建 BlockPos、不每次复制一份方向数组
+        BlockPos.MutableBlockPos neighbor = new BlockPos.MutableBlockPos();
+        for (Direction dir : DIRECTIONS) {
+            if (clickableNeighbor(level, neighbor.setWithOffset(target, dir), placing)) {
                 out.add(dir);
             }
         }
         return out;
+    }
+
+    /** {@link #against} 是不是非空:找到第一个能点的邻格就停,不建集合。只问"有没有面可贴"的地方用它。 */
+    public static boolean anyAgainst(BlockGetter level, BlockPos target, Block placing) {
+        BlockPos.MutableBlockPos neighbor = new BlockPos.MutableBlockPos();
+        for (Direction dir : DIRECTIONS) {
+            if (clickableNeighbor(level, neighbor.setWithOffset(target, dir), placing)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** {@code neighbor} 这一格有轮廓可点、又不会被 {@code placing} 顶替。 */
+    private static boolean clickableNeighbor(BlockGetter level, BlockPos neighbor, Block placing) {
+        BlockState state = level.getBlockState(neighbor);
+        return !state.getShape(level, neighbor).isEmpty() && !Replaceable.replaceableBy(state, placing);
     }
 
     /**
@@ -220,6 +267,15 @@ public final class Faces {
         }
         Direction.Axis axis = face.getAxis();
         boolean positive = face.getAxisDirection() == Direction.AxisDirection.POSITIVE;
+        if (shape == Shapes.block()) {
+            // 整块的轮廓就是单位方块,面心在 (面所在的一格边界, 0.5, 0.5);不为它列盒子(搜索里每个垫、挖的候选都问)
+            double flat = positive ? 1.0 : 0.0;
+            return switch (axis) {
+                case X -> new Vec3(flat + block.getX(), 0.5 + block.getY(), 0.5 + block.getZ());
+                case Y -> new Vec3(0.5 + block.getX(), flat + block.getY(), 0.5 + block.getZ());
+                case Z -> new Vec3(0.5 + block.getX(), 0.5 + block.getY(), flat + block.getZ());
+            };
+        }
         double plane = positive ? shape.max(axis) : shape.min(axis);
         AABB best = null;
         double bestArea = -1;

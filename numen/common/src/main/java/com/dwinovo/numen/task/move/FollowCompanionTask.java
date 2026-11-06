@@ -37,7 +37,7 @@ import java.util.List;
  * 不腾槽、不惊动模型。到没到只看目标,这里不另拿距离判"差不多到了";离主人多远只决定要不要起步。
  *
  * <h2>够不着就报出去</h2>
- * 跟着走和 {@code numen.move.to} 是同一套走法({@link Walking#spec}):可挖可搭,只看价钱,权限层说不许的格是墙。真没有路
+ * 跟着走和 {@code numen.move.walk} 是同一套走法({@link Walking#spec}):可挖可搭,只看价钱,权限层说不许的格是墙。真没有路
  * (隔着权限层不许动的地方、主人拒了又绕不开)就不是暂时的——退避多少次都一样。那就以失败收场,把原因交给模型,它决定换个办法、
  * 或者告诉主人。一个明确的失败原因不能攥在手里站着空算。主人飞在半空时跟的是他脚下能站的地方({@link #anchor}),一般够得着;
  * 真够不着也照样报。派下来那一刻就够不着的,受理之前就判({@link #preparation}),当场回、不受理。
@@ -142,7 +142,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     }
 
     /** 这次规划没搜完:预算用完、路伸进了没加载的区块,没有证据说走不到。 */
-    private static boolean unfinished(Outcome outcome) {
+    static boolean unfinished(Outcome outcome) {
         return outcome instanceof Outcome.OutOfBudget || outcome instanceof Outcome.Unloaded;
     }
 

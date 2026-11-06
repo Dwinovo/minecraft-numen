@@ -50,9 +50,9 @@ public final class CreativeApi {
         NumenPlayer companion = call.her();
         Item item = args.item();
         String id = BuiltInRegistries.ITEM.getKey(item).toString();
-        if (!WorkProfile.of(companion).freeMaterials()) {
-            throw new ApiError(ErrorKind.DENIED, "survival mode can't conjure items — mine, craft, loot or trade for "
-                    + id + " instead (numen.creative.give works only in creative mode)", null);
+        ApiError refused = refusal(WorkProfile.of(companion).freeMaterials(), id);
+        if (refused != null) {
+            throw refused;
         }
         int want = Math.clamp(args.count().orElse(1), 1, GIVE_MAX);
         // 按满栈分批塞;背包塞不下的原版 add 会留在栈里,掉在脚下
@@ -66,5 +66,11 @@ public final class CreativeApi {
             remaining -= n;
         }
         return new Took(want, companion.getInventory().countItem(item));
+    }
+
+    /** 凭空取物只在免耗材(创造)下成立:不成立时是当场拒绝的那条错误,成立是 {@code null}。 */
+    static ApiError refusal(boolean freeMaterials, String id) {
+        return freeMaterials ? null : new ApiError(ErrorKind.DENIED, "survival mode can't conjure items — mine, craft, "
+                + "loot or trade for " + id + " instead (numen.creative.give works only in creative mode)", null);
     }
 }

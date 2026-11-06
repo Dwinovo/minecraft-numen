@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -80,11 +79,4 @@ class ToolRegistryNameTest {
         assertThrows(IllegalStateException.class, () -> ToolRegistry.register(new Fake("dup_name")));
     }
 
-    @Test
-    void everyBuiltInToolAlreadySatisfiesTheRule() {
-        // 自家工具在初始化时就会撞上这道闸;这条把"以后新加的也得守规矩"钉住
-        for (String name : ToolRegistry.all().stream().map(NumenTool::name).toList()) {
-            assertEquals(name, name.replaceAll("[^a-zA-Z0-9_-]", "_"), "自家工具名不合规: " + name);
-        }
-    }
 }

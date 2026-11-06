@@ -13,6 +13,11 @@ import java.util.function.LongSupplier;
  *
  * <p>预算在任务之间查:全部车道一共用了 {@code allNanos} 就停这一刻;一条车道用了 {@code eachNanos} 就轮到下一条。起点每刻往后轮一条,
  * 排在后面的程序不会总是吃不到。一个任务开始了就跑完。
+ *
+ * <p>一刻只执行这一刻取任务开始时已经排着的:执行当中程序又放进来的(上一个调用的结果把它叫醒了),留到下一刻。程序在自己的线程上,
+ * 它赶不赶得上这一刻全看线程调度,这样一个调用落在哪一刻只由调用的先后决定。
+ *
+ * <p>一个任务花了多少预算由量法({@link Meter})答:正式运行是墙钟;GameTest 服务器换成按调用次数计的,一刻做到哪与机器快慢无关。
  */
 public final class MainQueue {
 
@@ -35,17 +40,32 @@ public final class MainQueue {
         }
     }
 
+    /** 量一个任务花了多少预算:执行它,答记多少纳秒。 */
+    @FunctionalInterface
+    public interface Meter {
+        long run(Runnable task);
+    }
+
     private final List<Lane> lanes = new CopyOnWriteArrayList<>();
-    private final LongSupplier nanos;
+    private volatile Meter meter;
     private int turn;
 
     public MainQueue() {
         this(System::nanoTime);
     }
 
-    /** @param nanos 单调的纳秒钟;预算按它量 */
+    /** @param nanos 单调的纳秒钟;预算按它量执行花了多久 */
     MainQueue(LongSupplier nanos) {
-        this.nanos = nanos;
+        this.meter = task -> {
+            long began = nanos.getAsLong();
+            task.run();
+            return nanos.getAsLong() - began;
+        };
+    }
+
+    /** 从此按 {@code meter} 量任务花的预算:GameTest 服务器的接缝。 */
+    public void meter(Meter meter) {
+        this.meter = meter;
     }
 
     /** 给一段程序开一条车道。 */
@@ -66,24 +86,48 @@ public final class MainQueue {
         if (snapshot.isEmpty()) {
             return;
         }
+        // 这一刻每条车道能取几个:此刻排着的。执行当中放进来的留到下一刻
+        int[] queued = new int[snapshot.size()];
+        for (int i = 0; i < queued.length; i++) {
+            queued[i] = snapshot.get(i).tasks.size();
+        }
         int first = turn++ % snapshot.size();
         long spentAll = 0;
         for (int i = 0; i < snapshot.size(); i++) {
-            Lane lane = snapshot.get((first + i) % snapshot.size());
+            int at = (first + i) % snapshot.size();
+            Lane lane = snapshot.get(at);
             long spent = 0;
-            while (spentAll < allNanos && spent < eachNanos) {
+            for (int left = queued[at]; left > 0 && spentAll < allNanos && spent < eachNanos; left--) {
                 Runnable task = lane.tasks.poll();
                 if (task == null) {
                     break;
                 }
-                long began = nanos.getAsLong();
-                task.run();
-                long took = nanos.getAsLong() - began;
+                long took = meter.run(task);
                 spent += took;
                 spentAll += took;
             }
             retire(lane);
         }
+    }
+
+    /**
+     * 不看预算,执行这一条车道此刻排着的任务(执行当中放进来的不算)。没有服务器刻的地方替一段程序推进用:只碰这一段的车道,
+     * 别的程序排着的调用照常等服务器刻。
+     *
+     * @return 执行了几个任务
+     */
+    public int drain(Lane lane) {
+        int ran = 0;
+        for (int left = lane.tasks.size(); left > 0; left--) {
+            Runnable task = lane.tasks.poll();
+            if (task == null) {
+                break;
+            }
+            task.run();
+            ran++;
+        }
+        retire(lane);
+        return ran;
     }
 
     /**

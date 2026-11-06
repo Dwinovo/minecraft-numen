@@ -18,6 +18,7 @@ import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import com.dwinovo.numen.api.knowledge.Recipe;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -68,6 +69,11 @@ public final class CraftOps {
     public static Crafted craft(ResourceLocation id, int want, NumenPlayer self) {
         ServerLevel level = self.serverLevel();
         RecipeHolder<?> found = level.getRecipeManager().byKey(id).orElse(null);
+        if (found != null && !RecipeBook.isCrafting(found.value())) {
+            throw new ApiError(ErrorKind.FAILED, "recipe " + id + " is not made in a crafting grid: its category is "
+                    + RecipeBook.categoryOf(found.value()),
+                    "numen.inv.recipes(item) shows how it is made and at which station");
+        }
         if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
                 || ingredientsOf(recipe).isEmpty()) {
             throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
@@ -94,10 +100,9 @@ public final class CraftOps {
             throw new ApiError(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
                     + String.join(", ", missingFor(ings, pool)), null, Map.of("missing", missingFor(ings, pool)));
         }
-        if (!fits(recipe, grid.w(), grid.h())) {
-            throw new ApiError(ErrorKind.FAILED, name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; "
-                    + "the open one is " + grid.w() + "x" + grid.h() + " — numen.use.block a crafting table, then "
-                    + "craft again (numen.inv.make finds one and opens it)", null);
+        String tooSmall = gridTooSmall(recipe, name, grid.w(), grid.h());
+        if (tooSmall != null) {
+            throw new ApiError(ErrorKind.FAILED, tooSmall, null);
         }
         if (!settleCarried(menu, self)) {
             throw new ApiError(ErrorKind.FAILED, "the cursor is holding items and no inventory slot is free to put "
@@ -186,11 +191,21 @@ public final class CraftOps {
     static Recipe recipe(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result, NumenPlayer self) {
         List<Ingredient> ings = ingredientsOf(recipe);
         Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
-        return new Recipe(holder.id().toString(), Recipe.Station.CRAFTING,
-                BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
-                ings.stream().map(RecipeBook::describeIngredient).toList(), java.util.Optional.of(gridOf(recipe)),
+        return new Recipe(java.util.Optional.of(holder.id().toString()), RecipeBook.categoryOf(recipe),
+                java.util.Optional.empty(), BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
+                List.of(), ings.stream().map(RecipeBook::describeIngredient).toList(), List.of(),
+                java.util.Optional.of(gridOf(recipe)),
                 feasibleBatch(ings, pool, 1) == 0 ? java.util.Optional.of(missingFor(ings, pool))
-                        : java.util.Optional.empty(), java.util.Optional.empty());
+                        : java.util.Optional.empty(), java.util.Optional.empty(), List.of());
+    }
+
+    /** 开着的 {@code w}×{@code h} 格装不下这条配方时说要开工作台的那句话;装得下是 {@code null}。 */
+    static String gridTooSmall(CraftingRecipe recipe, String name, int w, int h) {
+        if (fits(recipe, w, h)) {
+            return null;
+        }
+        return name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; the open one is " + w + "x" + h
+                + " — numen.use.block a crafting table, then craft again (numen.inv.make finds one and opens it)";
     }
 
     /** 这条合成配方装得下的最小的格:2(她自己的)、3(工作台);更大的(模组工位)是 0。 */

@@ -66,7 +66,7 @@ public final class GotoReminders {
     /** 一堆格子,没有一格有可点的轮廓。 */
     public static String cellsNothingToUse(int cells) {
         return "none of the " + cells + " cell(s) holds a block to click — they are air or fluid. To get close, give "
-                + "`numen.move.to` a distance.";
+                + "`numen.move.walk` a distance.";
     }
 
     /**
@@ -80,7 +80,7 @@ public final class GotoReminders {
     /** 一堆格子,没有一格有可挖的方块。 */
     public static String cellsNothingToDig(int cells) {
         return "none of the " + cells + " cell(s) holds a block to dig — they are air or fluid. To get close, give "
-                + "`numen.move.to` a distance.";
+                + "`numen.move.walk` a distance.";
     }
 
     /**
@@ -90,7 +90,7 @@ public final class GotoReminders {
     public static String cellsNoneUsable(int tried, BlockPos first) {
         return "none of the " + tried + " block(s) nearest me can be used: each is walled in on every side or has "
                 + "nowhere within reach to stand and see it. `numen.use.block(" + LuaCodecs.literal(first)
-                + ")` says what is in the way of the nearest one; to get as close as I can: `numen.move.to` with a "
+                + ")` says what is in the way of the nearest one; to get as close as I can: `numen.move.walk` with a "
                 + "distance.";
     }
 }

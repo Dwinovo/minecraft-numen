@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.gametest;
 
-import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
@@ -27,7 +26,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 门面:叫停时松开潜行、交出实际账;先规划再按挑中的候选走,走的就是那条;只搜不走时身体不动、世界不变。
+ * 门面:叫停时松开潜行、交出实际账;先规划再按挑中的候选走,走的就是那条,规划期间身体不动、手上不变、世界不变。
  */
 public class FacadeGameTests {
 
@@ -52,7 +51,7 @@ public class FacadeGameTests {
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         Report[] handed = {null};
-        t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(700)
+        t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(275)
                 .during(r -> {
                     if (handed[0] == null && r.body.isShiftKeyDown()
                             && r.navigation.report().ledger().entries().size() >= 2) {
@@ -81,15 +80,26 @@ public class FacadeGameTests {
         t.fill(10, 1, 8, 10, 2, 8, Blocks.AIR);
         t.fill(10, 1, 22, 10, 2, 22, Blocks.AIR);
         TestBody body = t.body(5, 1, 12);
+        body.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
+        body.getInventory().setItem(20, new ItemStack(Items.IRON_SHOVEL));
+        Vec3 start = body.position();
         BlockPos far = t.at(10, 1, 22);
         NavRequest request = NavRequest.to(Goals.at(t.at(15, 1, 12)), RouteSpec.defaults());
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), direct -> {
             if (direct.route() == null || direct.route().nodes().contains(far)) {
                 throw new GameTestAssertException("直接去处的路就穿远处的口,场景没起作用:" + direct.outcome());
             }
+            // 只搜不走:身体一动不动,手上还是那把剑,背包没变,世界一格不变
+            if (!body.position().equals(start)) {
+                throw new GameTestAssertException("只搜不走,身体却从 " + start + " 挪到了 " + body.position());
+            }
+            if (!body.getMainHandItem().is(Items.IRON_SWORD) || !body.getInventory().getItem(20).is(Items.IRON_SHOVEL)) {
+                throw new GameTestAssertException("只搜不走,手上或背包却变了");
+            }
+            t.untouched();
             t.plan(body, PlanQuery.of(Goals.at(far), request.spec()), toGap -> {
                 int[] crossedAt = {Integer.MIN_VALUE};
-                t.go(body, request.following(toGap.route())).within(700)
+                t.go(body, request.following(toGap.route())).within(461)
                         .during(r -> {
                             BlockPos at = r.body.blockPosition();
                             if (at.getX() == far.getX() && crossedAt[0] == Integer.MIN_VALUE) {
@@ -102,34 +112,6 @@ public class FacadeGameTests {
                             }
                         });
             });
-        });
-    }
-
-    /**
-     * 一道泥土墙横贯场地,许挖许放,手上拿着剑、背包里有锹:只搜不走——规划出挖墙的候选,这期间身体一动不动,手上还是
-     * 那把剑,世界一格不变。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
-    public static void planning_moves_nothing(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(10, 1, 0, 10, 3, 39, Blocks.DIRT);
-        TestBody body = t.body(5, 1, 12);
-        body.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
-        body.getInventory().setItem(20, new ItemStack(Items.IRON_SHOVEL));
-        Vec3 at = body.position();
-        t.plan(body, PlanQuery.of(Goals.at(t.at(15, 1, 12)), NATURAL), plan -> {
-            if (plan.route() == null || plan.route().edits().stream().noneMatch(e -> e instanceof Edit.Dig)) {
-                throw new GameTestAssertException("应当规划出挖墙的路:" + plan.outcome());
-            }
-            if (!body.position().equals(at)) {
-                throw new GameTestAssertException("只搜不走,身体却从 " + at + " 挪到了 " + body.position());
-            }
-            if (!body.getMainHandItem().is(Items.IRON_SWORD) || !body.getInventory().getItem(20).is(Items.IRON_SHOVEL)) {
-                throw new GameTestAssertException("只搜不走,手上或背包却变了");
-            }
-            t.untouched();
-            body.leave();
-            helper.succeed();
         });
     }
 }

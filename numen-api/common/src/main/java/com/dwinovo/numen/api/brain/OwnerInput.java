@@ -19,7 +19,8 @@ public sealed interface OwnerInput {
     /** 停止:会话里每个成员都停。 */
     record Stop(String conversation) implements OwnerInput {}
 
-    record Compact(UUID companion) implements OwnerInput {}
+    /** 整理记忆;{@code focus} 是主人说摘要要特别留意的({@code /compact} 后面的话),没有是 {@code null}。 */
+    record Compact(UUID companion, String focus) implements OwnerInput {}
 
     record Clear(UUID companion) implements OwnerInput {}
 
@@ -64,7 +65,7 @@ public sealed interface OwnerInput {
             case Say s -> put(o, "say", "conversation", s.conversation(), "text", s.text());
             case Command c -> put(o, "command", "companion", c.companion().toString(), "echo", c.echo());
             case Stop s -> put(o, "stop", "conversation", s.conversation());
-            case Compact c -> put(o, "compact", "companion", c.companion().toString());
+            case Compact c -> put(o, "compact", "companion", c.companion().toString(), "focus", c.focus());
             case Clear c -> put(o, "clear", "companion", c.companion().toString());
             case SetGoal g -> put(o, "set_goal", "companion", g.companion().toString(), "objective", g.objective(),
                     "echo", g.echo());
@@ -99,7 +100,7 @@ public sealed interface OwnerInput {
                 case "say" -> new Say(text(o, "conversation"), text(o, "text"));
                 case "command" -> new Command(uuid(o, "companion"), text(o, "echo"));
                 case "stop" -> new Stop(text(o, "conversation"));
-                case "compact" -> new Compact(uuid(o, "companion"));
+                case "compact" -> new Compact(uuid(o, "companion"), text(o, "focus"));
                 case "clear" -> new Clear(uuid(o, "companion"));
                 case "set_goal" -> new SetGoal(uuid(o, "companion"), text(o, "objective"), text(o, "echo"));
                 case "clear_goal" -> new ClearGoal(uuid(o, "companion"));

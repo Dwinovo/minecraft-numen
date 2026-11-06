@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.Recall;
@@ -46,22 +47,58 @@ public class EditedView implements WorldView, Recall.Source {
 
     /** {@code base} 做完 {@code edits} 之后的样子;没有改动就是 {@code base} 本身。 */
     public static WorldView after(WorldView base, List<Edit> edits) {
-        if (edits.isEmpty()) {
-            return base;
-        }
+        return edits.isEmpty() ? base : over(base, edits);
+    }
+
+    /** 同 {@link #after},总交出一份叠着改动的视图(改动可以是空的):要问"哪些格改过"({@link #changed(int, int, int, int)})的用它。 */
+    public static EditedView over(WorldView base, List<Edit> edits) {
         EditedView view = new EditedView(base);
         view.changed = new Changes(view.changed, edits.size());
+        view.apply(edits);
+        return view;
+    }
+
+    private void apply(List<Edit> edits) {
         for (Edit edit : edits) {
             switch (edit) {
-                case Edit.Dig dig -> view.dig(dig.pos());
-                case Edit.Place place -> view.place(place.pos(), place.block());
-                case Edit.Door door -> view.toggle(door.pos());
+                case Edit.Dig dig -> dig(dig.pos());
+                case Edit.Place place -> place(place.pos(), place.block());
+                case Edit.Door door -> toggle(door.pos(), door.state());
                 // 倒下的水在这一步里就收回了
                 case Edit.Catch caught -> {
                 }
             }
         }
-        return view;
+    }
+
+    /**
+     * 反复换改动用的一份叠加视图:搜索每展开一个节点、每精确判一步都要把"走到那里的最近几步改动"叠在快照上,用这一份重新装填
+     * ({@link #load}),不为每次新建一份视图与改动表。装填一次,上一次交出的视图和叠在它上面起草的草稿就作废了,
+     * 调用方只在一次展开或判断里用,不留着。
+     */
+    public static final class Reusable extends EditedView {
+
+        /** @param base 快照一类的底层视图,不能再是叠加视图:改动表是这一份自己的,装填时整张清掉 */
+        public Reusable(WorldView base) {
+            super(base);
+            if (super.changed != null) {
+                throw new IllegalArgumentException("底下不能再是叠加视图:" + base);
+            }
+        }
+
+        /** {@code base} 做完 {@code edits} 之后的样子;没有改动就是 {@code base} 本身。 */
+        public WorldView load(List<Edit> edits) {
+            if (edits.isEmpty()) {
+                return super.base;
+            }
+            if (super.changed == null) {
+                super.changed = new Changes(null, edits.size());
+            } else {
+                super.changed.reset(edits.size());
+            }
+            super.apply(edits);
+            return this;
+        }
     }
 
     // ==================== 改动 ====================
@@ -81,15 +118,18 @@ public class EditedView implements WorldView, Recall.Source {
         set(pos, Blocks.WATER.defaultBlockState());
     }
 
-    /** 开关一扇门;门的另一半照原版一起翻转。 */
-    void toggle(BlockPos pos) {
-        BlockState state = getBlockState(pos);
-        set(pos, Semantics.toggled(state));
-        if (state.getBlock() instanceof DoorBlock) {
-            BlockPos other = state.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER ? pos.above() : pos.below();
+    /**
+     * 开关一扇门:开关之前它是 {@code before},开关之后是它翻过来的样子;门的另一半照原版跟着同一开合。按开关之前的样子翻,
+     * 不按这份视图此刻读到的翻:同一步的改动叠两遍(活世界里那一步已经做了,接着搜时又叠一遍)结果一样。
+     */
+    void toggle(BlockPos pos, BlockState before) {
+        BlockState after = Semantics.toggled(before);
+        set(pos, after);
+        if (before.getBlock() instanceof DoorBlock) {
+            BlockPos other = before.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER ? pos.above() : pos.below();
             BlockState half = getBlockState(other);
-            if (half.is(state.getBlock())) {
-                set(other, Semantics.toggled(half));
+            if (half.is(before.getBlock())) {
+                set(other, half.setValue(DoorBlock.OPEN, after.getValue(DoorBlock.OPEN)));
             }
         }
     }
@@ -110,6 +150,13 @@ public class EditedView implements WorldView, Recall.Source {
     @Override
     public boolean changed(int x, int yMin, int yMax, int z) {
         return changed != null && changed.within(x, yMin, yMax, z);
+    }
+
+    /** 改过的每一格改成了什么,按格各报一次。 */
+    public void forEachChanged(java.util.function.BiConsumer<BlockPos, BlockState> visitor) {
+        if (changed != null) {
+            changed.forEach(visitor);
+        }
     }
 
     /** 这一格改过。 */
@@ -201,12 +248,39 @@ public class EditedView implements WorldView, Recall.Source {
             frozen = true;
         }
 
+        /** 清空重来(底下没有别的层):要记 {@code expected} 格,够大就沿用现成的数组。 */
+        void reset(int expected) {
+            int capacity = 4;
+            while (capacity < 2 * expected) {
+                capacity <<= 1;
+            }
+            if (capacity > cells.length) {
+                cells = new long[capacity];
+                states = new BlockState[capacity];
+            } else {
+                Arrays.fill(states, null);
+            }
+            size = 0;
+            frozen = false;
+        }
+
         boolean frozen() {
             return frozen;
         }
 
         private static int slot(long cell, int mask) {
             return (int) ((cell * GOLDEN) >>> 32) & mask;
+        }
+
+        /** 改过的每一格改成了什么(同一格只报最上面一层的)。 */
+        void forEach(java.util.function.BiConsumer<BlockPos, BlockState> visitor) {
+            for (Changes layer = this; layer != null; layer = layer.parent) {
+                for (int i = 0; i < layer.cells.length; i++) {
+                    if (layer.states[i] != null && get(layer.cells[i]) == layer.states[i]) {
+                        visitor.accept(BlockPos.of(layer.cells[i]), layer.states[i]);
+                    }
+                }
+            }
         }
 
         /** 这一格改成了什么,自己这层没有就问底下;没改过为 null。 */

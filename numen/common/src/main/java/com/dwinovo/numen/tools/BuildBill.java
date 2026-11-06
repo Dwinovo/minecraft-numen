@@ -2,9 +2,9 @@ package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.task.build.BuildTaskRecord;
-import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 
 import java.util.ArrayList;
@@ -54,10 +54,10 @@ final class BuildBill {
      * 她手上还缺多少:和逐格闸门、实扣同源的 36 格口径({@link PlayerInv#buildableCount})。用 41 格的那个会让报价说"料够了"
      * 而施工每格都判缺料——副手上那叠木板正是这么骗过报价的。
      */
-    static Map<Item, Integer> shortOf(NumenPlayer companion, Map<Item, Integer> need) {
+    static Map<Item, Integer> shortOf(Inventory carried, Map<Item, Integer> need) {
         Map<Item, Integer> shortOf = new LinkedHashMap<>();
         for (var e : need.entrySet()) {
-            int have = PlayerInv.buildableCount(companion.getInventory(), e.getKey());
+            int have = PlayerInv.buildableCount(carried, e.getKey());
             if (have < e.getValue()) {
                 shortOf.put(e.getKey(), e.getValue() - have);
             }

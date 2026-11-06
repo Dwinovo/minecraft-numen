@@ -121,39 +121,52 @@ final class Walk implements Move {
 
     /**
      * 平地上站着的节点,落点那一列全是空的、脚下是整块,就是平走过去(身体在两列之间每个取样点脚下都是同一个高度);落点那一列身体
-     * 占的格里有整块,是挡着(精确判断会去挖,不许挖的走法过不去);脚下没东西托,要搭桥(要放,没料或不许放就过不去)。四周有半砖、
-     * 水、梯子这类格,几何要碰撞箱说了算,交给精确判断。
+     * 占的格里有整块,是挡着,要挖掉每一块(不许挖、挖不动的过不去);脚下没东西托,要搭一块桥(没料或不许放就过不去)。要挖要放的,
+     * 与四周有半砖、水、梯子这类几何要碰撞箱说了算的格,答"可能",代价按最快的步速加上要挖要放的那几格的最低价。
      */
     @Override
     public int quick(Quick q, Heading heading) {
         if (q.stance().kind() == Stance.Kind.SWIMMING) {
             return Quick.REJECT;
         }
-        if (!q.plain()) {
-            return Quick.EXACT;
-        }
         int dx = heading.dx();
         int dz = heading.dz();
+        if (!q.plain()) {
+            return q.likely(dx, 0, dz, q.fastest());
+        }
         boolean blocked = false;
         for (int dy = 0; dy <= q.top(); dy++) {
             int flags = q.cell(dx, dy, dz);
             if (!Quick.simple(flags)) {
-                return Quick.EXACT;
+                return q.likely(dx, 0, dz, q.fastest());
             }
             blocked |= Quick.whole(flags);
         }
         int floor = q.cell(dx, -1, dz);
         if (!Quick.simple(floor)) {
-            return Quick.EXACT;
+            return q.likely(dx, 0, dz, q.fastest());
         }
+        double edits = 0;
         if (Quick.pass(floor)) {
-            return q.mayPlace() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayPlace()) {
+                return Quick.REJECT;
+            }
+            edits += q.placeFloor();
         }
         if (blocked) {
-            return q.mayDig() ? Quick.EXACT : Quick.REJECT;
+            if (!q.mayDig()) {
+                return Quick.REJECT;
+            }
+            edits += q.digFloor(dx, 0, q.top(), dz);
+            if (Double.isInfinite(edits)) {
+                return Quick.REJECT;
+            }
+        }
+        if (Quick.pass(floor) || blocked) {
+            return q.likely(dx, 0, dz, q.working() + edits);
         }
         if (!q.calm()) {
-            return Quick.EXACT;
+            return q.likely(dx, 0, dz, q.pace());
         }
         q.entering();
         for (int dy = 0; dy <= q.top(); dy++) {

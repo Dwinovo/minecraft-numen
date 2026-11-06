@@ -104,17 +104,19 @@ public final class CompanionLoop {
      * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
      * @param tools       她看得到的工具
      * @param dayTime     游戏内时刻,给事件盖时间戳
+     * @param gameTime    主世界的游戏刻(世界不跑它就不走,{@code /time set} 改不了它),主人的定时按它算到期
      */
     public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
                         Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
-                        Function<String, String> persona, LongSupplier dayTime, Rooms rooms) {}
+                        Function<String, String> persona, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
     private static final String STATS = "stats.json";
     private static final String GOAL = "goal.json";
     private static final String BINDING = "binding.json";
+    private static final String SCHEDULES = "schedules.json";
     /** 绑定文件里穿的皮肤那一项。 */
     private static final String SKIN = "skin";
 
@@ -133,6 +135,7 @@ public final class CompanionLoop {
     private final TraceRecorder trace;
     private final JsonDoc goalDoc;
     private final JsonDoc bindingDoc;
+    private final OwnerSchedules schedules;
 
     /**
      * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。{@code null} = 就他俩(她的单成员会话)。
@@ -170,11 +173,13 @@ public final class CompanionLoop {
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(BINDING), JsonDoc.Format.of(1), home.io());
+        JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
+        this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
         ToolAnchor anchor = () -> companion;
         this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), parts.tools(),
                 this::receiptAfterCut);
         this.tokens = new TokenLedger(companion, new JsonDoc(home.file(STATS), JsonDoc.Format.of(1), home.io()));
-        this.compactor = new Compactor(companion.toString(), convo, log, this::modelWindow);
+        this.compactor = new Compactor(companion.toString(), convo, log, () -> parts.mind().endpoint(providerId));
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
         this.goals = new GoalSteward(companion.toString(), loop, convo, queue, runtime::xml,
                 runtime::bodyOnFiniteTask, this::persistGoal, readGoal());
@@ -268,6 +273,16 @@ public final class CompanionLoop {
     /** 内核此刻的只读快照:忙不忙、为什么不动、排着什么。 */
     public LoopStatus status() {
         return loop.status();
+    }
+
+    /** 内核此刻在干哪一档;每刻都要问的路径用它,不构造整份 {@link #status}。 */
+    public Phase phase() {
+        return loop.phase();
+    }
+
+    /** 她此刻在干的那件事,同 {@link LoopStatus#activity}。 */
+    public LoopStatus.Doing activity() {
+        return loop.activity();
     }
 
     /**
@@ -389,6 +404,16 @@ public final class CompanionLoop {
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded));
     }
 
+    /**
+     * 主人给她定的定时到点了,说那句话:和主人的话同一条路进收件箱(同样走停牌、停止、外接大脑),开标签上带来源,面板据此标"定时"。
+     * 是私聊里说的,所以不属于任何群会话,回话回到面板。
+     */
+    private boolean submitScheduled(String text) {
+        this.venue = Venue.PANEL;
+        this.conversation = null;
+        return enqueueOwnerWords(EventQueue.scheduledQuery(text, parts.dayTime().getAsLong()));
+    }
+
     private boolean enqueueOwnerWords(String wire) {
         String audience = parts.rooms().audienceLine(companion, conversation);
         return deliver(new EventQueue.Entry(EventTypes.QUERY,
@@ -408,7 +433,7 @@ public final class CompanionLoop {
 
     private boolean deliver(EventQueue.Entry entry) {
         loop.push(List.of(entry));
-        return loop.status().phase() != Phase.MODEL;
+        return loop.phase() != Phase.MODEL;
     }
 
     /** 主人按停止。 */
@@ -440,10 +465,37 @@ public final class CompanionLoop {
             loop.halt(HaltReason.EXTERNAL);
         }
         wasDriving = driving;
+        // 主人在场才问定时:不在场时到期刻留在过去,他回来后的第一次问到就送一次(错过几个间隔都合成一次)
+        if (parts.ownerOnline().getAsBoolean()) {
+            for (String words : schedules.due(parts.gameTime().getAsLong())) {
+                submitScheduled(words);
+            }
+        }
         loop.tick();
         // 每刻都问一次,写不写由 recorder 定:与上一条相同时不写(站着不动的那些刻不该各占一条),
         // 但心跳仍然每隔 STILL_TICKS 刻留一条——"她还在"与"记录断了"得能分开
         trace.body(bodyRecord());
+    }
+
+    // ---- 主人的定时 ----
+
+    /** 主人给她定的几条定时。 */
+    public List<OwnerSchedules.Schedule> schedules() {
+        return schedules.list();
+    }
+
+    /**
+     * 新增({@code id} 为 {@code null})或修改一条定时。
+     *
+     * @throws IllegalArgumentException 见 {@link OwnerSchedules#put}
+     */
+    public OwnerSchedules.Schedule putSchedule(String id, String text, long every) {
+        return schedules.put(id, text, every, parts.gameTime().getAsLong());
+    }
+
+    /** 删一条定时;没有这一条返回 {@code false}。 */
+    public boolean deleteSchedule(String id) {
+        return schedules.delete(id);
     }
 
     // ---- 外接大脑 ----
@@ -582,7 +634,7 @@ public final class CompanionLoop {
         if (hold == Hold.DEAD) return Keys.LOOP_GONE;
         // 整理是对内脑说的:驾驶席在外接模型手里时内脑不开工,排上了也只会一直躺着。
         if (hold == Hold.EXTERNAL) return Keys.LOOP_EXTERNAL_COMPACT;
-        if (loop.status().phase() == Phase.COMPACT) return Keys.LOOP_COMPACTING;
+        if (loop.phase() == Phase.COMPACT) return Keys.LOOP_COMPACTING;
         if (queue.count(EventTypes.COMPACT) > 0) return Keys.LOOP_COMPACT_QUEUED;
         // 不看忙不忙:整理进队列排着,闲下来自己执行。也不看记录长短、不查端点:没绑模型时内核停在 BLOCKED 并说明原因,
         // 绑好了排着的整理自己接着走。
@@ -599,18 +651,20 @@ public final class CompanionLoop {
     }
 
     /**
-     * 主人要求整理记忆:进队列排着,闲下来自己走。条目的字是语言键,界面按主人的语言翻译(控制条目不进模型)。
+     * 主人要求整理记忆:进队列排着,闲下来自己走。条目的字是语言键加主人附的关注点({@link EventTypes#controlText}),
+     * 界面按主人的语言翻语言键(控制条目不进模型)。
      *
+     * @param focus 摘要要特别留意的;没有是 {@code null} 或空串
      * @return 拒绝的理由(语言键);{@code null} = 已排上
      */
-    public String requestCompact() {
+    public String requestCompact(String focus) {
         String problem = compactProblem();
         if (problem != null) {
             Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", companion, problem);
             return problem;
         }
-        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, Keys.LOOP_COMPACT, System.currentTimeMillis(),
-                false)));
+        loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, EventTypes.controlText(Keys.LOOP_COMPACT, focus),
+                System.currentTimeMillis(), false)));
         return null;
     }
 
@@ -649,7 +703,7 @@ public final class CompanionLoop {
      */
     public String wipeMemory() {
         String problem = clearProblem();
-        if (problem == null && loop.status().phase() != null) {
+        if (problem == null && loop.phase() != null) {
             problem = Keys.LOOP_WIPE_BUSY;
         }
         if (problem != null) {
@@ -663,10 +717,28 @@ public final class CompanionLoop {
         }
         log.wipe();
         requestClearContext();   // 内存里的上下文走清空的控制条目;日志已经是空的
-        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.SERVER_MESSAGE, null, WIPED_NOTICE,
-                System.currentTimeMillis(), false)));
+        tell(WIPED_NOTICE);
         Constants.LOG.info("[numen-entity#{}] 记忆被主人清空", companion);
         return null;
+    }
+
+    /** 往她的收件箱放一条不叫醒她的知会(服务器消息);她下一次开口前读到。 */
+    private void tell(String text) {
+        loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.SERVER_MESSAGE, null, text,
+                System.currentTimeMillis(), false)));
+    }
+
+    /** 主人在札记里新增或改了一条:如实告诉她,免得她按旧的印象再写一遍。 */
+    public void ownerWroteNote(NoteBook.Note note, boolean replaced) {
+        tell("主人" + (replaced ? "改了你的札记 " : "在你的札记里加了一条 ") + note.name() + ":" + note.description()
+                + "。这是他的决定,以札记现在的样子为准。");
+        Constants.LOG.info("[numen-entity#{}] 主人{}了札记 {}", companion, replaced ? "改" : "加", note.name());
+    }
+
+    /** 主人删了她一条札记:告诉她,她不该再把它写回去。 */
+    public void ownerForgotNote(NoteBook.Note note) {
+        tell("主人删掉了你的札记 " + note.name() + "(" + note.description() + ")。这是他的决定,别再把它记回去。");
+        Constants.LOG.info("[numen-entity#{}] 主人删了札记 {}", companion, note.name());
     }
 
     /** 清空之后她读到的第一件事。 */

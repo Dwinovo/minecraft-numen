@@ -10,9 +10,12 @@ import com.dwinovo.numen.api.sdk.Place;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Edit;
@@ -57,6 +60,15 @@ public final class NavText {
             case Outcome.Denied denied -> FailureType.REFUSED;
             case Outcome.NoLineOfSight sight -> FailureType.OCCLUDED;
             case Outcome.Breathless breathless -> FailureType.HAZARD;
+            case Outcome.Grounded grounded -> type(grounded.lack());
+        };
+    }
+
+    /** 缺的是身上的东西(鞘翅、烟花、耐久),模型能补;别的是这一趟飞不起来。 */
+    public static FailureType type(Lack lack) {
+        return switch (lack.why()) {
+            case NO_WINGS, WORN, TOO_FEW_ROCKETS -> FailureType.NO_MATERIAL;
+            case NO_FLIGHT, NO_PLACE, TOO_NEAR, SHORT, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
         };
     }
 
@@ -99,6 +111,7 @@ public final class NavText {
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
                     + " went out of sight after the walk was planned (something now stands in between): dig what is in"
                     + " the way with `numen.work.dig`, or use it from another side";
+            case Outcome.Grounded grounded -> "stopped gliding " + where + ": " + lack(grounded.lack());
             case Outcome.Breathless b -> "found no path to target (" + where + "; the way there swims under water"
                     + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
                     + " about " + seconds(b.held()) + " without a breath, longer than I can safely hold mine now (about "
@@ -108,14 +121,39 @@ public final class NavText {
     }
 
     /**
-     * 这一趟不改地形走不到,改了才有路:那条路要改什么。不改地形的只有少数几件活(逃跑、追打),模型自己走的 {@code numen.move.to}
+     * 这一趟不改地形走不到,改了才有路:那条路要改什么。不改地形的只有少数几件活(逃跑、追打),模型自己走的 {@code numen.move.walk}
      * 可挖可搭;要问主人的格走到跟前才问。
      */
     private static String needsChanges(Outcome.NeedsChanges needs, String where) {
         return "found no path to target without changing terrain (" + where + "; a way exists that changes "
                 + needs.alterations() + " block(s) — " + planned(needs.changes()) + "): this job walks without "
-                + "changing terrain, `numen.move.to` takes such a way" + (needs.asks()
+                + "changing terrain, `numen.move.walk` takes such a way" + (needs.asks()
                 ? " and asks your owner when I get to each of the cells that need consent" : "");
+    }
+
+    /**
+     * 飞不起来(受理时当场拒绝)或飞到一半不能再飞了的缘由:缺什么、怎么补。受理时说的和飞到一半收工说的是同一句,都是"此刻从这里飞不起来"的事实。
+     * 创造飞行的缺是 {@code NO_FLIGHT},别的都是鞘翅滑翔的。
+     */
+    public static String lack(Lack lack) {
+        return switch (lack.why()) {
+            case NO_FLIGHT -> "I am not allowed to fly (creative flight is not available to me): `numen.move.walk` goes on foot"
+                    + (lack.have() > 0 ? ", and `numen.move.glide` crosses a long way on the elytra I wear" : "");
+            case NO_WINGS -> "I am not wearing a usable elytra. With an elytra on my chest (`numen.gear.wear`) and"
+                    + " firework rockets in my pack I can glide; `numen.move.walk` goes on foot";
+            case WORN -> "my elytra has " + lack.have() + " durability left and gliding needs at least " + lack.need()
+                    + ": wear another elytra (`numen.gear.wear`), or go on foot with `numen.move.walk`";
+            case TOO_FEW_ROCKETS -> "I have " + lack.have() + (lack.have() == 1 ? " firework rocket" : " firework rockets") + " and taking off needs at least " + lack.need()
+                    + ", and there is no ledge near me to glide down from: bring more rockets, stand on a ledge, or go on foot with `numen.move.walk`";
+            case NO_PLACE -> "gliding goes to a column: give `numen.move.glide` a column {x = …, z = …}, a Pos, a Block or an Entity";
+            case TOO_NEAR -> "it is only " + lack.have() + " blocks away, already inside the " + lack.need() + " blocks where a glide starts to come down: `numen.move.walk` goes there";
+            case SHORT -> "I had to come down early, " + lack.have() + " blocks short of there (horizontally); I take off again only when it is more than "
+                    + lack.need() + " blocks away: `numen.move.walk` goes the rest, or `numen.move.glide` again from here";
+            case NO_TAKEOFF -> "there is no spot with open sky within " + lack.need() + " blocks of me to take off from: `numen.move.walk` to an open"
+                    + " place, then `numen.move.glide`";
+            case NO_ROUTE -> "no flight line from the spots around me got past the terrain on the way there";
+            case NO_LANDING -> "I found no dry standable ground within " + lack.need() + " blocks of there to land on: pick a place on or near the ground";
+        };
     }
 
     /** 刻数说成秒:{@code 14 s},不足一秒说 {@code under 1 s}。憋气的几处(回执、结局、计划)都这么说。 */
@@ -153,13 +191,17 @@ public final class NavText {
      * 一趟路走到期限还没到:走了多久、离目标多远、停在哪,搜索里离目标最近处朝目标的一步被什么挡住了(有的话,与"没搜到路"
      * 同一种说法),接下来能做什么。{@code checkIn} 是这一趟一直在推进、只是超过了一趟能走的最长时间;否则是租约到期前没有进展。
      */
-    public static String timedOut(int workTicks, double distance, String here, Blockage nearest, boolean checkIn) {
-        return "timed out after " + seconds(workTicks) + " of walking, " + String.format("%.1f", distance)
+    public static String timedOut(Travel travel, String tool, int workTicks, double distance, String here, Blockage nearest, boolean checkIn) {
+        return "timed out after " + seconds(workTicks) + " of " + (switch (travel) {
+            case WALK -> "walking";
+            case FLY -> "flying";
+            case GLIDE -> "gliding";
+        }) + ", " + String.format("%.1f", distance)
                 + " blocks from target (now at " + here + ")" + heldUp(nearest) + "; "
                 + (checkIn
-                        ? "the walk was still going and reached the longest a single walk runs; call `numen.move.to` again to"
+                        ? "the trip was still going and reached the longest a single trip runs; call `" + tool + "` again to"
                         + " go on from here, or pick a destination closer to the way it was taking."
-                        : "it made no progress for the last stretch; `numen.move.to` again plans from here, or go to a point"
+                        : "it made no progress for the last stretch; `" + tool + "` again plans from here, or go to a point"
                         + " on the way first.");
     }
 
@@ -187,6 +229,9 @@ public final class NavText {
             case DOWNWARD -> "digging down";
             case CLIMB -> "climbing";
             case SWIM -> "swimming";
+            case TAKEOFF -> "taking off";
+            case FLY -> "flying";
+            case LAND -> "landing";
         };
     }
 
@@ -235,22 +280,25 @@ public final class NavText {
             case DIVERTED -> "the ground changed and the step would land somewhere else";
             case FELL_BACK -> "I kept ending up back where the step before it started";
             case LOST -> "I kept ending up beside the route instead of where the step lands";
+            case BOXED -> "in the air every way I could fly led into a block";
+            case PINNED -> "I was gliding and a block held me: for a second I did not get away from the spot, so I let go of the controls (`numen.work.dig` clears it)";
         };
     }
 
     // ==================== 实际账与身体动作 ====================
 
     /**
-     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水;什么都没有是空串。
+     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水,飞了多远;什么都没有是空串。
      * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
      * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
-     * 60/300.}
+     * 60/300. I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).}
      */
     public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions, List<DiveLog.Dive> dives,
-                                 List<Ruling> rulings) {
+                                 List<Ruling> rulings, Flights flights) {
         String edits = edits(entries);
         String done = actions(actions);
         String under = dives(dives);
+        String flight = flight(flights);
         String refused = refusals(rulings);
         StringBuilder sb = new StringBuilder();
         if (!edits.isEmpty()) {
@@ -262,10 +310,94 @@ public final class NavText {
         if (!under.isEmpty()) {
             sb.append(sb.length() > 0 ? " " : "").append(under);
         }
+        if (!flight.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(flight);
+        }
         if (!refused.isEmpty()) {
             sb.append(sb.length() > 0 ? " " : "").append(refused);
         }
         return sb.toString();
+    }
+
+    /**
+     * 路上飞过的(创造飞行):飞了多远、从哪儿起飞、在哪儿降落,收场时还在空中就说还在飞;走路开始时身体在飞,说先落了地。没飞过且没在飞是空串。例如
+     * {@code I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).} 或
+     * {@code I flew 12 blocks (took off at 1,64,5). I am still flying, hovering in the air.}
+     */
+    static String flight(Flights flights) {
+        StringBuilder sb = new StringBuilder();
+        if (!flights.alighted().isEmpty()) {
+            sb.append("I was flying when the walk began, so I came down to the ground first (at ").append(coordsList(flights.alighted())).append(").");
+        }
+        if (flights.blocks() >= 0.5) {
+            long flown = Math.round(flights.blocks());
+            sb.append(sb.length() > 0 ? " " : "").append("I flew ").append(flown).append(flown == 1 ? " block" : " blocks");
+            List<String> where = new ArrayList<>();
+            if (!flights.launches().isEmpty()) {
+                where.add("took off at " + coordsList(flights.launches()));
+            }
+            if (!flights.landings().isEmpty()) {
+                where.add("landed at " + coordsList(flights.landings()));
+            }
+            if (!where.isEmpty()) {
+                sb.append(" (").append(String.join("; ", where)).append(')');
+            }
+            sb.append('.');
+        }
+        for (EditLedger.Glided glide : flights.glides()) {
+            sb.append(sb.length() > 0 ? " " : "").append(glide(glide));
+        }
+        if (flights.flying()) {
+            sb.append(sb.length() > 0 ? " " : "").append("I am still flying, hovering in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 一段鞘翅滑翔的细账:用了几支烟花、鞘翅耐久前后、落地掉了几点血、是不是迫降、是不是被方块顶住、收场时是不是还在空中。例如
+     * {@code Gliding used 2 firework rockets and wore the elytra from 0 to 3 damage; I lost no health.}
+     */
+    static String glide(EditLedger.Glided glide) {
+        StringBuilder sb = new StringBuilder("Gliding used ").append(glide.rockets()).append(glide.rockets() == 1 ? " firework rocket" : " firework rockets")
+                .append(" and wore the elytra from ").append(glide.wearBefore())
+                .append(" to ").append(glide.wearAfter()).append(" damage; ");
+        sb.append(glide.damage() < 0.5F ? "I lost no health" : "I lost " + Math.round(glide.damage()) + " health");
+        if (glide.emergency()) {
+            sb.append(" and had to land early where the ground was within reach");
+        }
+        sb.append('.');
+        if (glide.fellOut() > 0) {
+            sb.append(" I dropped below the ground of ").append(glide.fellOut() == 1 ? "a landing spot" : glide.fellOut() + " landing spots")
+                    .append(" before touching down and picked another.");
+        }
+        if (glide.trapped()) {
+            sb.append(" I got stuck against blocks in the air and let go of the controls there.");
+        }
+        if (glide.airborne()) {
+            sb.append(" I am still in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞;其中鞘翅滑翔的每一段另有细账({@code glides})。
+     */
+    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides,
+                          List<BlockPos> alighted) {
+
+        /** 没飞过、也没在飞。 */
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of(), List.of());
+
+        public Flights {
+            launches = List.copyOf(launches);
+            landings = List.copyOf(landings);
+            glides = List.copyOf(glides);
+            alighted = List.copyOf(alighted);
+        }
+    }
+
+    private static String coordsList(List<BlockPos> cells) {
+        return String.join(", ", cells.stream().map(Listing::coords).toList());
     }
 
     /**
@@ -316,8 +448,22 @@ public final class NavText {
             return count(placed);
         }
 
+        /** 挖掉的每一格,按账上的先后。 */
+        List<BlockPos> dugCells() {
+            return cells(broke);
+        }
+
+        /** 放下的每一格(倒下又收回的水不算),按账上的先后。 */
+        List<BlockPos> placedCells() {
+            return cells(placed);
+        }
+
         private static int count(Map<Block, List<BlockPos>> heaps) {
             return heaps.values().stream().mapToInt(List::size).sum();
+        }
+
+        private static List<BlockPos> cells(Map<Block, List<BlockPos>> heaps) {
+            return heaps.values().stream().flatMap(List::stream).toList();
         }
     }
 
@@ -374,10 +520,11 @@ public final class NavText {
     private static String action(BodyAction action) {
         return switch (action) {
             case BodyAction.Held h when h.item() == Items.AIR -> "put away what was in my hand";
-            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + item(h.item())
+            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + StackLabel.brief(h.stack())
                     + " from my offhand into my hand";
-            case BodyAction.Held h when h.from() == h.to() -> "switched to " + item(h.item()) + " in my hotbar";
-            case BodyAction.Held h -> "took " + item(h.item()) + " from my inventory into my hand";
+            case BodyAction.Held h when h.from() == h.to() -> "switched to " + StackLabel.brief(h.stack())
+                    + " in my hotbar";
+            case BodyAction.Held h -> "took " + StackLabel.brief(h.stack()) + " from my inventory into my hand";
             case BodyAction.Conjured c -> "took a stack of " + item(c.item()) + " from the creative inventory";
         };
     }
@@ -474,14 +621,14 @@ public final class NavText {
         return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
     }
 
-    /** 一句能照抄的去一处,带反引号:{@code `numen.move.to({x = 1, y = 2, z = 3})`}。 */
+    /** 一句能照抄的去一处,带反引号:{@code `numen.move.walk({x = 1, y = 2, z = 3})`}。 */
     public static String gotoCall(Place to) {
-        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.to", to) + "`";
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to) + "`";
     }
 
-    /** 一句能照抄的走到离一处不超过 {@code distance} 格:{@code `numen.move.to({x = 1, y = 2, z = 3}, 2)`}。 */
+    /** 一句能照抄的走到离一处不超过 {@code distance} 格:{@code `numen.move.walk({x = 1, y = 2, z = 3}, 2)`}。 */
     public static String gotoCall(Place to, int distance) {
-        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.to", to, distance) + "`";
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to, distance) + "`";
     }
 
     public static String name(BlockState state) {

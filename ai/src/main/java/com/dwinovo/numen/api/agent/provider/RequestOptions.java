@@ -14,6 +14,11 @@ public record RequestOptions(Double temperature, int maxTokens, ThinkingLevel th
 
     public static final RequestOptions NONE = new RequestOptions(null, 0, ThinkingLevel.AUTO);
 
+    /** 换掉输出上限的副本。 */
+    public RequestOptions withMaxTokens(int maxTokens) {
+        return new RequestOptions(temperature, maxTokens, thinking);
+    }
+
     /** 这个型号上真正要发的温度;型号不收温度就是 null。 */
     public Double temperatureFor(ModelSpec model) {
         return model.temperature() ? temperature : null;

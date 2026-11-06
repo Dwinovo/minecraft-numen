@@ -25,6 +25,9 @@ public sealed interface Halt {
     /** 到了,但目标要求看得见的那一格看不见。 */
     record NoSight(BlockPos target) implements Halt {}
 
+    /** 飞不下去了:收场时离目标还远,而此刻从这里飞不起来({@link Lack})。 */
+    record Grounded(Lack lack) implements Halt {}
+
     /** 身体待不住:卡在方块里、悬在半空,一直没落定到任何一个节点上。 */
     record Stranded(BlockPos cell, BlockState block) implements Halt {}
 }

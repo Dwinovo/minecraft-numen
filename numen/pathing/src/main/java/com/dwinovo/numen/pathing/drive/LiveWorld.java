@@ -1,7 +1,5 @@
 package com.dwinovo.numen.pathing.drive;
 
-import com.dwinovo.numen.pathing.plan.WorldView;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
@@ -10,6 +8,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FluidState;
 
 /**
@@ -18,7 +17,7 @@ import net.minecraft.world.level.material.FluidState;
  *
  * <p>只在世界所在的线程上用。
  */
-public final class LiveWorld implements WorldView {
+public final class LiveWorld implements Terrain {
 
     private static final BlockState VOID = Blocks.VOID_AIR.defaultBlockState();
 
@@ -32,9 +31,15 @@ public final class LiveWorld implements WorldView {
         return level;
     }
 
-    /** {@code (x, z)} 这一列所在的区块已经加载。 */
+    @Override
     public boolean isLoaded(int x, int z) {
         return chunk(x, z) != null;
+    }
+
+    /** 高度图 {@code MOTION_BLOCKING}。 */
+    @Override
+    public int top(int x, int z) {
+        return isLoaded(x, z) ? level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z) : getMinBuildHeight();
     }
 
     private LevelChunk chunk(int x, int z) {

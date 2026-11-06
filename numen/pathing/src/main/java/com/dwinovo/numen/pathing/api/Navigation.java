@@ -1,10 +1,14 @@
 package com.dwinovo.numen.pathing.api;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.dwinovo.numen.pathing.drive.Blockage;
-import com.dwinovo.numen.pathing.drive.Driver;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.Halt;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.drive.PathLog;
+import com.dwinovo.numen.pathing.drive.Voyage;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Searches;
@@ -21,8 +25,9 @@ import net.minecraft.server.level.ServerPlayer;
  */
 public final class Navigation {
 
-    private final Driver driver;
+    private final Voyage driver;
     private final ServerPlayer entity;
+    private final Trace trace;
     private final String who;
     /** 出发时的游戏刻与墙钟:结局里对比用了几刻、几秒,看得出刻速。 */
     private final long startTick;
@@ -32,9 +37,10 @@ public final class Navigation {
     /** 收场那一刻的游戏刻;没收场为 -1。 */
     private long endTick = -1;
 
-    Navigation(Driver driver, ServerPlayer entity) {
+    Navigation(Voyage driver, ServerPlayer entity, Trace trace) {
         this.driver = driver;
         this.entity = entity;
+        this.trace = trace;
         this.who = PathLog.who(entity);
         this.startTick = entity.level().getGameTime();
         this.startNanos = System.nanoTime();
@@ -59,7 +65,6 @@ public final class Navigation {
                 diagnosis = null;
                 status = NavStatus.failed(outcome);
                 log("结局", " 诊断 " + PathLog.ms(spent));
-                traceGiveUp(outcome);
             }
             return;
         }
@@ -70,29 +75,8 @@ public final class Navigation {
                 status = NavStatus.ARRIVED;
                 log("结局", "");
             }
-            case HALTED -> {
-                conclude(driver.halt());
-                if (!status.running()) {
-                    traceGiveUp(status.outcome());
-                }
-            }
+            case HALTED -> conclude(driver.halt());
         }
-    }
-
-    /**
-     * 这一趟怎么收的场,报一条给宿主的轨迹。收场只在这里报:全流程里唯一拿到
-     * {@link Outcome} 的就是门面,驱动那一侧只有"搜不出来了",说不出诊断出的是哪一类。
-     */
-    private void traceGiveUp(Outcome outcome) {
-        Blockage cause = switch (outcome) {
-            case Outcome.Blocked blocked -> blocked.blockage();
-            case Outcome.NoRoute noRoute -> noRoute.cause();
-            default -> null;
-        };
-        driver.trace(Trace.PathEvent.giveUp(entity.position(), null,
-                cause == null ? null : cause.cell(),
-                cause == null || cause.reason() == null ? null : cause.reason().name(),
-                outcome.getClass().getSimpleName()));
     }
 
     private void conclude(Halt halt) {
@@ -106,6 +90,7 @@ public final class Navigation {
             case Halt.Blocked blocked -> status = NavStatus.failed(new Outcome.Blocked(blocked.blockage()));
             case Halt.Denied denied -> status = NavStatus.failed(new Outcome.Denied(denied.cell(), denied.reason()));
             case Halt.NoSight sight -> status = NavStatus.failed(new Outcome.NoLineOfSight(sight.target()));
+            case Halt.Grounded grounded -> status = NavStatus.failed(new Outcome.Grounded(grounded.lack()));
             case Halt.Stranded stranded -> status = NavStatus.failed(
                     new Outcome.Stranded(stranded.cell(), stranded.block()));
         }
@@ -113,7 +98,7 @@ public final class Navigation {
     }
 
     /**
-     * 记一行收场:结局、走了几步、实际改了几格、身体动作几个、用了几刻与几秒墙钟、此刻的刻速、身体在哪。刻数与墙钟对不上
+     * 记一行收场:结局、走了几步、实际改了几格、身体动作几个、按原因分的重规划次数、用了几刻与几秒墙钟、此刻的刻速、身体在哪。刻数与墙钟对不上
      * (刻速调高了、服务器跟不上)一眼看得出。
      */
     private void log(String event, String extra) {
@@ -128,11 +113,34 @@ public final class Navigation {
                 case EditLedger.Toggled t -> toggled++;
             }
         }
-        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
+        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 重规划 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
                 status.running() ? driver : describe(status.outcome()), ledger.steps(), dug, placed, toggled,
-                driver.actions().size(), ticks(),
+                driver.actions().size(), PathLog.replans(driver.journal()), ticks(),
                 PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
                 extra, PathLog.body(entity));
+        trace();
+    }
+
+    /**
+     * 收场的一条轨迹,与上面那行日志同源。收场只在这里报:全流程里唯一既拿得到 {@link Outcome}、又拿得到整趟行程账
+     * ({@link Journal})的就是门面,段状态机那一侧只有"搜不出来了",说不出诊断成了哪一类。
+     */
+    private void trace() {
+        Blockage cause = switch (status.outcome()) {
+            case Outcome.Blocked blocked -> blocked.blockage();
+            case Outcome.NoRoute noRoute -> noRoute.cause();
+            case Outcome.OutOfBudget budget -> budget.cause();
+            case null, default -> null;
+        };
+        Map<String, Integer> replans = new LinkedHashMap<>();
+        driver.journal().replans().forEach((why, n) -> replans.put(why.name(), n));
+        trace.path(new Trace.PathEvent(
+                // 被叫停时状态还是 RUNNING(叫停的人在这一行之后才改它),没有结局
+                status.running() ? "Stopped" : status.outcome().getClass().getSimpleName(),
+                entity.position(),
+                cause == null ? null : cause.cell(),
+                cause == null || cause.reason() == null ? null : cause.reason().name(),
+                ticks(), driver.ledger().steps(), replans));
     }
 
     /** 日志里的结局:几种带格子与方块的写齐坐标与方块 id,其余照它自己的样子。 */

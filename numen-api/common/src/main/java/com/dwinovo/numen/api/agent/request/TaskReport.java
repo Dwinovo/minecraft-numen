@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.Activity;
  * <p>活不都是大脑派起来的:服务器重启后的重放、死亡复活后的重放都不经过它的工具口,所以不能靠"我派出去过什么"自己记账。
  *
  * @param taskId    公开任务 id;<b>空串 = 她现在闲着</b>
- * @param tool      任务名:函数全名(numen.move.to / numen.work.dig / numen.move.follow …)
+ * @param tool      任务名:函数全名(numen.move.walk / numen.work.dig / numen.move.follow …)
  * @param describe  给模型看的一句描述,由任务记录自己给出
  * @param activity  给主人看的一句({@link Activity}:语言键 + 现场的词),界面按当前语言翻
  * @param standing  常驻(没有终点,不会发 task_finished)

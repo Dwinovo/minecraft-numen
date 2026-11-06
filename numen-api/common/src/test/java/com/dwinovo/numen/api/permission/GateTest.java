@@ -159,6 +159,8 @@ class GateTest {
                 .asks(), "贴着主人的东西放岩浆要问");
         assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
                 .allowed(), "远处放岩浆随便");
+        assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.TNT), world)
+                .allowed(), "远处放 TNT 也随便");
         assertTrue(gate.judge(Action.place(cobble.above(), Blocks.AIR.defaultBlockState(), null), world).allowed(),
                 "规划期还不知道放什么:不危险那一行放行");
     }
@@ -260,6 +262,9 @@ class GateTest {
         PlacedBlocks placed = new PlacedBlocks();
         world.set(POS, Blocks.OAK_PLANKS.defaultBlockState());
         assertTrue(gate(placed).judge(dig(world, POS), world).asks());
+        // 没有谁放过的活板门(门、床、栅栏门同理)也说不清是谁的
+        world.set(POS.north(), Blocks.OAK_TRAPDOOR.defaultBlockState());
+        assertEquals("break(unknown)", gate(placed).judge(dig(world, POS.north()), world).rule().toString());
         Gate dedicated = gate(Mode.ASK, RuleSet.EMPTY, FactoryRules.layer(), placed, Structures.NONE, true);
         Verdict v = dedicated.judge(dig(world, POS), world);
         assertEquals(Verdict.Kind.DENY, v.kind(), "专用服上说不清的按别人的算");
@@ -276,7 +281,8 @@ class GateTest {
     @Test
     void theWildAndTheCabinAreToldApartByTheirLeaves() {
         FakeWorld world = new FakeWorld();
-        Gate gate = gate(new PlacedBlocks());
+        PlacedBlocks placed = new PlacedBlocks();
+        Gate gate = gate(placed);
 
         // 野树:原木贴着不持久的树叶
         world.set(POS, Blocks.OAK_LOG.defaultBlockState());
@@ -298,6 +304,12 @@ class GateTest {
         BlockPos bare = POS.offset(0, 0, 8);
         world.set(bare, Blocks.OAK_LOG.defaultBlockState());
         assertTrue(gate.judge(dig(world, bare), world).asks());
+
+        // 主人放下的树叶是主人的
+        BlockPos hedge = POS.offset(8, 0, 8);
+        world.set(hedge, Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.PERSISTENT, true));
+        placed.record(hedge, OWNERS);
+        assertEquals("break(owner)", gate.judge(dig(world, hedge), world).rule().toString());
     }
 
     @Test
@@ -370,6 +382,20 @@ class GateTest {
         Gate allowed = gate(Mode.ASK, rules(List.of(), List.of(), List.of("break(owner)")),
                 FactoryRules.layer(), placed, Structures.NONE, false);
         assertTrue(allowed.judge(dig(world, POS), world).allowed(), "主人的 allow 行压过出厂 ask 行");
+    }
+
+    @Test
+    void aRowThatNamesOneCompanionHoldsHerAndLeavesHerSistersAlone() {
+        FakeWorld world = new FakeWorld();
+        world.set(POS, Blocks.STONE.defaultBlockState());
+        var policy = Layers.policy(Mode.ASK, FactoryRules.hard(), rules(List.of("break(nature) @Aria"), List.of(), List.of()),
+                FactoryRules.layer());
+        Verdict aria = new Gate(HER, policy, new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE)
+                .judge(dig(world, POS), world);
+        assertEquals(Verdict.Kind.DENY, aria.kind());
+        assertTrue(aria.reason().contains("denied by rule break(nature) @Aria"), aria.reason());
+        assertTrue(new Gate(new Actor(SISTER_ID, "Bea", OWNER_ID), policy, new PlacedBlocks(), Structures.NONE, false, List.of(),
+                Hits.NONE).judge(dig(world, POS), world).allowed(), "点名 Aria 的行管不到 Bea");
     }
 
     @Test

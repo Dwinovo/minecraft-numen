@@ -43,7 +43,7 @@ public final class LocateApi {
     @Note("Searches YOUR CURRENT dimension only: fortresses and bastions are in the Nether, end cities in the End. "
             + "You stand still until it answers; nothing is loaded or changed.")
     @Note("For the stronghold this replaces throwing eyes of ender: save the eyes for the portal frames.")
-    @Note("Travel to the column with numen.move.to, then `numen.scan.blocks` finds its actual blocks.")
+    @Note("Travel to the column with numen.move.walk, then `numen.scan.blocks` finds its actual blocks.")
     @SeeAlso({"numen.locate.biome", "numen.scan.blocks"})
     public static Pending<Located> structure(ServerCall call, Structure args) {
         return call.sync(new LocateStructureTaskRecord(call, deadline(call), args.structure()));

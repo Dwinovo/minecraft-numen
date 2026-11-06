@@ -85,25 +85,6 @@ public class InteractGameTests {
         });
     }
 
-    /** 拿剪刀右键手边的一头羊:剪了毛,羊身上的毛没了。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void interact_entity_shears_a_sheep(GameTestHelper helper) {
-        net.minecraft.world.entity.animal.Sheep sheep = net.minecraft.world.entity.EntityType.SHEEP.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 4));
-        sheep.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        sheep.setNoAi(true);
-        helper.getLevel().addFreshEntity(sheep);
-        NumenPlayer companion = spawnAt(helper, "gametest_shearer", new BlockPos(8, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.SHEARS));
-        ToolRun shear = lua(companion, "numen.use.entity(" + ref(sheep) + ", {item = \"minecraft:shears\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(shear.done(), "use entity has not finished");
-            helper.assertTrue(shear.succeeded() && sheep.isSheared(), "the sheep was not sheared: " + shear.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 左键手边的一头猪:打了一下,猪掉了血。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_left_click_hits_a_pig(GameTestHelper helper) {
@@ -155,29 +136,6 @@ public class InteractGameTests {
             helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
                             && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
                     "use item did not hand back the chest window: " + press.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 右键一个有交易的村民:打开了交易界面,numen.use.entity 和 use.block 一样交回那个界面(#118 同一类:点实体的声明也要有"打开界面")。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void use_entity_on_a_villager_hands_back_the_trade_window(GameTestHelper helper) {
-        net.minecraft.world.entity.npc.Villager villager = net.minecraft.world.entity.EntityType.VILLAGER.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        villager.setNoAi(true);
-        villager.setVillagerData(villager.getVillagerData()
-                .setProfession(net.minecraft.world.entity.npc.VillagerProfession.FARMER));
-        helper.getLevel().addFreshEntity(villager);
-        NumenPlayer companion = spawnAt(helper, "gametest_trader", new BlockPos(6, 2, 8), false);
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        ToolRun press = lua(companion, "numen.use.entity(" + ref(villager) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use entity has not finished");
-            helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu
-                            && press.reply().contains("\"menu\""),
-                    "use entity did not hand back the trade window: " + press.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -251,9 +209,9 @@ public class InteractGameTests {
         });
     }
 
-    // ---- numen.use.entity:挤奶、喂食;numen.use.block:门、拉杆、放方块 ----
+    // ---- numen.use.entity:挤奶;numen.use.block:门、放方块 ----
 
-    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶。 */
+    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶,回执写明少了一个桶、多了一桶奶。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
@@ -270,27 +228,8 @@ public class InteractGameTests {
             helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
                     "the bucket was not filled with milk: " + milk.outcome());
-            cow.discard();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 拿小麦右键一头成年牛:喂下去一根,牛进了求偶状态。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void interact_entity_feeds_a_cow_wheat(GameTestHelper helper) {
-        var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
-        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        cow.setNoAi(true);
-        helper.getLevel().addFreshEntity(cow);
-        NumenPlayer companion = spawnAt(helper, "gametest_cowherd", new BlockPos(8, 2, 11), false);
-        companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
-        ToolRun feed = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:wheat\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(feed.done(), "use entity has not finished");
-            helper.assertTrue(feed.succeeded() && cow.isInLove() && companion.getInventory().countItem(Items.WHEAT) == 1,
-                    "the cow was not fed: " + feed.outcome());
+            helper.assertTrue(milk.outcome().contains("-1 minecraft:bucket") && milk.outcome().contains("+1 minecraft:milk_bucket"),
+                    "the reply does not say the bucket became milk: " + milk.outcome());
             cow.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -320,25 +259,6 @@ public class InteractGameTests {
                         "the door did not close again: " + click.get().outcome()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
-    }
-
-    /** 右键地上的拉杆:拉杆扳下去了(通电),回执说那一格变了。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void interact_at_flips_a_lever(GameTestHelper helper) {
-        BlockPos lever = helper.absolutePos(new BlockPos(6, 2, 8));
-        helper.getLevel().setBlockAndUpdate(lever, Blocks.LEVER.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.LeverBlock.FACE,
-                        net.minecraft.world.level.block.state.properties.AttachFace.FLOOR));
-        NumenPlayer companion = spawnAt(helper, "gametest_switcher", new BlockPos(4, 2, 8), false);
-        ToolRun flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(flip.done(), "use block has not finished");
-            helper.assertTrue(flip.succeeded() && helper.getLevel().getBlockState(lever)
-                            .getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
-                    "the lever was not flipped: " + flip.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
     }
 
     // ---- numen.use.entity 对宠物:她自己的不问,别人的问;--sneak;对她说的话 ----

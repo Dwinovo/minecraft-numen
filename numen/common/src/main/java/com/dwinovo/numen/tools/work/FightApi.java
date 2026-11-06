@@ -45,8 +45,8 @@ public final class FightApi {
             + "end`; `numen.fight.clear()` (library) does that until none is left.")
     @Note("Background work: it keeps chasing, turning, swinging, shooting and dodging until that one is dead, gone or "
             + "out of reach, and returns then.")
-    @Note("The body picks how: it closes in and swings when it can reach, shoots with a bow or crossbow when it "
-            + "cannot, keeps its distance from things that explode, and picks the weapon you own that is strongest "
+    @Note("The body picks how: it closes in and swings when it can reach, shoots with a ranged weapon (a bow, a crossbow, "
+            + "or whatever a plugin or script provides) when it cannot, keeps its distance from things that explode, and picks the weapon you own that is strongest "
             + "against that target.")
     @Note("It does not pick up what the target drops: `numen.work.collect()` does. Things that split (slimes, magma "
             + "cubes) come back as new entities with new ids: scan again, or `numen.fight.clear()`.")

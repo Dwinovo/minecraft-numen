@@ -306,6 +306,17 @@ class EventQueueTest {
     }
 
     @Test
+    void aScheduledQueryIsTheOwnersWordsWithItsSourceOnTheOpeningTag() {
+        String scheduled = EventQueue.scheduledQuery("看看炉子", 3 * 24000L + 15250L);
+
+        assertEquals(List.of("看看炉子"), com.dwinovo.numen.api.agent.llm.ConvoLog.queries(scheduled));
+        assertTrue(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(scheduled));
+        assertFalse(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(EventQueue.query("看看炉子", 0L)));
+        assertFalse(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(scheduled + "\n" + EventQueue.query("过来", 0L)),
+                "a message with the owner's own words in it is not shown as scheduled");
+    }
+
+    @Test
     void theNoteForDroppedEntriesCarriesTheTimeItWasWritten() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE, 1);
         q.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);

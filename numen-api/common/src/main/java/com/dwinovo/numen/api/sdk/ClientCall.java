@@ -24,9 +24,9 @@ public final class ClientCall {
 
     private final UUID companion;
     private final ApiFunction function;
-    private final Record args;
+    private final FnArgs args;
 
-    ClientCall(UUID companion, ApiFunction function, Record args) {
+    ClientCall(UUID companion, ApiFunction function, FnArgs args) {
         this.companion = companion;
         this.function = function;
         this.args = args;

@@ -65,7 +65,7 @@ public final class NumenPrompts {
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
-            - Body jobs — numen.move.to, numen.work.dig, numen.fight.attack, numen.work.fish, numen.build.place,
+            - Body jobs — numen.move.walk, numen.work.dig, numen.fight.attack, numen.work.fish, numen.build.place,
               numen.move.follow, … — first check the world and plan the way; one that
               can't start (no path, nothing to dig, no rod) fails right there with
               the reason, and whatever the body was doing goes on. A program waits
@@ -85,7 +85,7 @@ public final class NumenPrompts {
               what the last one returned — every cluster a scan found, again until
               nothing is left, stop at the first failure — write the steps as one
               program instead of one call per turn. A module may already do it
-              (numen.move.to, numen.work.collect, numen.work.mine; <api> lists the
+              (numen.move.walk, numen.work.collect, numen.work.mine; <api> lists the
               modules, built-in ones first). When functions you wrote work,
               `numen.module.save` keeps them as a module of yours under my that later
               programs use by name (my.lumber.chop(t)); `numen.module.list()` shows
@@ -111,7 +111,7 @@ public final class NumenPrompts {
             <choosing_actions>
             One routing hint the API index can't give you (which function to START
             with): to craft or smelt, begin with `numen.inv.recipes` — it returns every
-            recipe with its id and station (`numen.inv.make` crafts one for you, table
+            recipe with its id and category (`numen.inv.make` crafts one for you, table
             and all; `numen.inv.smelt` runs a furnace). Don't reach for `numen.use.block`
             to "make" something. Everything else: pick the function whose summary matches
             the intent; `numen.api.help("numen.work.dig")` gives one function's full help.

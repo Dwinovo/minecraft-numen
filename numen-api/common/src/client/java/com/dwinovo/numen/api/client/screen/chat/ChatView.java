@@ -949,6 +949,10 @@ public final class ChatView {
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
+                    if (ConvoLog.scheduled(u.content())) {
+                        notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_SCHEDULED), bubbleMaxW);   // 主人定的定时到点说的,不是他此刻开的口
+                        f.last = null;
+                    }
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
                     out.add(bubble(true, null, rich(q.body(), true), TXT,
                             OWN_FILL, innerW, null,
@@ -1026,10 +1030,10 @@ public final class ChatView {
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
             var status = lp.status();
             for (var preview : status.queuedPreview()) {
-                // 整理、清空排着时,条目的字是语言键:按主人的语言翻;主人的话取 <query> 里的原话
+                // 整理、清空排着时,条目的字是语言键(整理后面可跟主人附的关注点):键按主人的语言翻;主人的话取 <query> 里的原话
                 String shown = com.dwinovo.numen.api.agent.inbox.EventTypes.COMPACT.equals(preview.type())
                         || com.dwinovo.numen.api.agent.inbox.EventTypes.CLEAR.equals(preview.type())
-                        ? net.minecraft.client.resources.language.I18n.get(preview.text()) : ownerText(preview.text());
+                        ? controlShown(preview.text()) : ownerText(preview.text());
                 if (!shown.isEmpty()) queued.add(shown);
             }
             compacting |= status.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;
@@ -1630,6 +1634,14 @@ public final class ChatView {
 
     private static String ownerText(String s) {
         return ChatDisplayModes.current().userText(s);
+    }
+
+    /** 排着的整理或清空:条目的语言键翻成主人的语言,整理附的关注点接在后面。 */
+    private static String controlShown(String text) {
+        String label = net.minecraft.client.resources.language.I18n.get(
+                com.dwinovo.numen.api.agent.inbox.EventTypes.controlLabel(text));
+        String arg = com.dwinovo.numen.api.agent.inbox.EventTypes.controlArg(text);
+        return arg.isEmpty() ? label : label + ": " + arg;
     }
 
     /**

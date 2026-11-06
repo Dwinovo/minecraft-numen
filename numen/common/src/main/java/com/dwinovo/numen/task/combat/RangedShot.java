@@ -2,12 +2,13 @@ package com.dwinovo.numen.task.combat;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.act.Ballistics;
-import com.dwinovo.numen.combat.Loadout;
+import com.dwinovo.numen.api.combat.Aim;
+import com.dwinovo.numen.api.combat.Flight;
+import com.dwinovo.numen.api.combat.RangedWeapon;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 
@@ -23,7 +24,7 @@ import net.minecraft.world.item.ItemStack;
  * 松了手不等于箭飞出去了。{@link State#SETTLING} 是给原版几刻时间去真正生成弹射物;
  * 过了还没动静就记一次哑火。不认这一态的话,一把没箭的弩会让她原地拉一整天。
  */
-final class RangedShot {
+final class RangedShot implements RangedWeapon.Shot {
 
     /** 弓拉到这个刻数就够满力了(再拉不会更强)。 */
     private static final int BOW_RELEASE_TICKS = 15;
@@ -34,7 +35,7 @@ final class RangedShot {
     /** 松手之后等几刻确认弹射物真的生成了。 */
     private static final int SETTLE_TICKS = 4;
     /** 视线与弹道夹角小于它才算对准。 */
-    static final double AIM_THRESHOLD_DEGREES = 1.5;
+    static final double AIM_THRESHOLD_DEGREES = Aim.THRESHOLD_DEGREES;
 
     private enum State { USING, READY_TO_FIRE, SETTLING, DONE, MISFIRE }
 
@@ -51,11 +52,6 @@ final class RangedShot {
         player.gameMode.useItem(player, player.level(), player.getMainHandItem(), InteractionHand.MAIN_HAND);
     }
 
-    /** 这一发的武器还是不是手上这把——换了就得作废重来。 */
-    static boolean stillHolding(boolean crossbow, ItemStack stack) {
-        return crossbow ? stack.getItem() instanceof CrossbowItem : stack.getItem() instanceof BowItem;
-    }
-
     /** 拉弓的刻数换算成箭速倍率(原版公式)。 */
     static double bowPowerForTicks(int ticks) {
         double draw = ticks / 20.0;
@@ -68,6 +64,12 @@ final class RangedShot {
         return angleDegrees <= AIM_THRESHOLD_DEGREES && heldTicks >= releaseTicks;
     }
 
+    /** 这一发正在用的弹道:箭速按已拉的刻数(弩恒定)。 */
+    @Override
+    public Flight flight() {
+        return VanillaRanged.arc(projectileVelocity(VanillaRanged.BOW_FULL_SPEED, VanillaRanged.CROSSBOW_SPEED), crossbow);
+    }
+
     /** 这一发用的箭速——弓按已拉的刻数算,弩恒定。 */
     double projectileVelocity(double bowFullSpeed, double crossbowSpeed) {
         if (crossbow) {
@@ -77,7 +79,8 @@ final class RangedShot {
     }
 
     /** @return true 表示这一发已经结束(射出去了或哑了) */
-    boolean tick(Ballistics.Aim aim, Entity target) {
+    @Override
+    public boolean tick(Aim aim, Entity target) {
         switch (state) {
             case USING -> tickUsing(aim, target);
             case READY_TO_FIRE -> tickReadyToFire(aim, target);
@@ -87,7 +90,8 @@ final class RangedShot {
         return state == State.DONE || state == State.MISFIRE;
     }
 
-    boolean fired() {
+    @Override
+    public boolean fired() {
         return fired;
     }
 
@@ -98,17 +102,19 @@ final class RangedShot {
      * 会把脚也带偏(移动是按朝向投影的),于是她一路走进目标脸上。只在快松手时转过去,
      * 中间十几刻的走位就干净了 —— 挥刀早就是这么做的。
      */
-    boolean aboutToRelease() {
+    @Override
+    public boolean aboutToRelease() {
         return crossbow ? state == State.READY_TO_FIRE : held >= BOW_RELEASE_TICKS - 1;
     }
 
-    void abort() {
+    @Override
+    public void abort() {
         if (player.isUsingItem()) {
             player.stopUsingItem();
         }
     }
 
-    private void tickUsing(Ballistics.Aim aim, Entity target) {
+    private void tickUsing(Aim aim, Entity target) {
         ItemStack weapon = player.getMainHandItem();
         if (crossbow) {
             if (CrossbowItem.isCharged(weapon)) {
@@ -138,7 +144,7 @@ final class RangedShot {
         }
     }
 
-    private void tickReadyToFire(Ballistics.Aim aim, Entity target) {
+    private void tickReadyToFire(Aim aim, Entity target) {
         ItemStack weapon = player.getMainHandItem();
         if (!CrossbowItem.isCharged(weapon)) {
             if (++settle >= SETTLE_TICKS) {
@@ -158,7 +164,7 @@ final class RangedShot {
         }
     }
 
-    private void markFired(Ballistics.Aim aim, Entity target) {
+    private void markFired(Aim aim, Entity target) {
         fired = true;
         if (target != null) {
             Constants.LOG.info("[numen-attack] 射出 target={} weapon={} held={} dist={} eta={}",
@@ -166,10 +172,5 @@ final class RangedShot {
                     String.format("%.1f", player.distanceTo(target)), Math.ceil(aim.travelTicks()));
         }
         state = State.DONE;
-    }
-
-    /** 这一发用的是不是弩(决定箭速与哑火判定)。 */
-    static boolean isCrossbow(Loadout.Pick pick) {
-        return pick.stack().getItem() instanceof CrossbowItem;
     }
 }

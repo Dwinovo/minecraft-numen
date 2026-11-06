@@ -4,7 +4,7 @@ import com.dwinovo.numen.pathing.search.JvmLoad;
 
 /**
  * 一刻里主线程上寻路做的活用了多久:段状态机每刻开头 {@link #begin}、结尾 {@link #end},中间把拷快照、组成本模型、
- * 复核前提、经宿主的手动手各记一笔。整刻超过 {@link PathLog#MAIN_THREAD_WARN_NANOS} 就记一行 WARN,说清这一刻做了哪几件、
+ * 往前核的前提判断、经宿主的手动手各记一笔。整刻超过 {@link PathLog#MAIN_THREAD_WARN_NANOS} 就记一行 WARN,说清这一刻做了哪几件、
  * 各用了多久;余下的是认步、按键、转头、准星与拿东西到手上,以及垃圾回收停下整个 JVM 的那几毫秒:余下的里有多少是回收停的,
  * 同一行里写出(次数与毫秒),分得清是寻路自己慢还是被回收拖住。
  */
@@ -39,10 +39,10 @@ final class TickTally {
         searches++;
     }
 
-    /** 复核了一步的前提(连同为它组的成本模型),用了多久。 */
-    void rechecked(long nanos) {
+    /** 往前核判了 {@code count} 步的前提(连同为它们组的成本模型),用了多久。 */
+    void rechecked(int count, long nanos) {
         recheck += nanos;
-        rechecks++;
+        rechecks += count;
     }
 
     /** 经宿主的手动了一下(挖、放、开门、倒水),用了多久。 */

@@ -16,6 +16,9 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.server.McpToken;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -38,6 +41,37 @@ import static com.dwinovo.numen.gametest.GameTestKit.succeedWhen;
  * (不是用例手填的"主人在不在"),所以驾驶席与待命都是产品里真实算出来的。
  */
 public class RemoteBrainGameTests {
+
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
+    @BeforeBatch(batch = "numen_remote_1")
+    public static void prepareRemote1Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_2")
+    public static void prepareRemote2Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_3")
+    public static void prepareRemote3Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_4")
+    public static void prepareRemote4Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_6")
+    public static void prepareRemote6Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
+
+    @BeforeBatch(batch = "numen_remote_7")
+    public static void prepareRemote7Batch(ServerLevel level) {
+        GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
+    }
 
     /** 一只带产品线路大脑的同伴,和一个扮外部大脑的客户端。 */
     private static final class Rig {
@@ -89,6 +123,8 @@ public class RemoteBrainGameTests {
             }
             this.brain = new McpTestClient(port, mcp.tokens().issue(owner, role,
                     McpToken.Scope.ALL, "gametest", 0).secret());
+            // 端点整个服务器只有一份:不论这条成败都关掉,她的大脑与名册一起收
+            com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, this::close);
         }
 
         Hold hold() {
@@ -100,6 +136,7 @@ public class RemoteBrainGameTests {
         }
 
         void close() {
+            brain.close();
             McpMode.instance().setEnabled(false);
             CompanionLoops.dismissed(server, companion.getUUID());
             CompanionRegistry.get(server).remove(companion.getUUID());
@@ -209,14 +246,14 @@ public class RemoteBrainGameTests {
         com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
         her.brain.afterConnected(helper, 0, () -> {
             // 外部大脑空闲时停在 get_events 的长等待里:端点借这次进行中的调用把问题弹给人
-            Thread waiting = new Thread(() -> {
+            McpTestClient.drive("gametest-external-waiting", () -> {
                 com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
                 wait.addProperty("companion", "gt_remote_asks");
                 wait.addProperty("wait_seconds", 30);
                 her.brain.call("get_events", wait);
-            }, "gametest-external-waiting");
-            waiting.setDaemon(true);
-            waiting.start();
+            }, failed -> {
+                // 用例收场关掉端点时这次长等待随之断开;问没问到人由下面的断言说
+            });
             helper.runAfterDelay(20, () -> {   // 长等待已经在飞
                 ticket[0] = desk.ask(scope, List.of(oakLog()));
                 helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
@@ -231,34 +268,6 @@ public class RemoteBrainGameTests {
             helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
                     "his choice did not reach the desk: " + (ticket[0] == null ? null : ticket[0].poll()));
             helper.assertTrue(desk.pending() == null, "the request is still pending");
-            her.close();
-        });
-    }
-
-    /** 外部大脑的客户端不会答 elicitation:征询不当场拒绝,挂着等主人进游戏答;连外部大脑也走了,才按"主人不在"拒绝。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_5")
-    public static void a_client_that_cannot_elicit_leaves_the_consent_waiting_for_the_owner(GameTestHelper helper)
-            throws Exception {
-        Rig her = new Rig(helper, "gametest_remote_mute", null);
-        her.brain.connectLater();
-        var desk = com.dwinovo.numen.api.permission.ConsentDesk.of(her.companion);
-        com.dwinovo.numen.api.permission.ConsentDesk.Ticket[] ticket = new com.dwinovo.numen.api.permission.ConsentDesk.Ticket[1];
-
-        her.brain.afterConnected(helper, 5, () -> {
-            ticket[0] = desk.ask(new Object(), List.of(oakLog()));
-            helper.runAfterDelay(10, () -> {
-                helper.assertTrue(ticket[0].poll() == null && desk.pending() != null,
-                        "not waiting for the owner: " + ticket[0].poll());
-                try {
-                    her.brain.disconnect();
-                } catch (Exception e) {
-                    throw new IllegalStateException(e);
-                }
-            });
-        });
-        succeedWhen(helper, () -> {
-            helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && !ticket[0].poll().allowed(),
-                    "not refused once nobody was left to answer: " + (ticket[0] == null ? null : ticket[0].poll()));
             her.close();
         });
     }
@@ -278,22 +287,16 @@ public class RemoteBrainGameTests {
         java.util.concurrent.atomic.AtomicReference<String> replies = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
         // 工具调用要等服务端主线程办事,所以另起一条线程扮渠道桥
-        Thread bridge = new Thread(() -> {
-            try {
-                her.brain.connect();
-                com.google.gson.JsonObject words = new com.google.gson.JsonObject();
-                words.addProperty("companion", "gametest_remote_chat");
-                words.addProperty("text", "在吗");
-                sent.set(her.brain.call("send", words));
-                com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
-                wait.addProperty("wait_seconds", 20);
-                replies.set(her.brain.call("get_replies", wait));
-            } catch (Throwable t) {
-                failure.set(t);
-            }
-        }, "gametest-channel-bridge");
-        bridge.setDaemon(true);
-        bridge.start();
+        McpTestClient.drive("gametest-channel-bridge", () -> {
+            her.brain.connect();
+            com.google.gson.JsonObject words = new com.google.gson.JsonObject();
+            words.addProperty("companion", "gametest_remote_chat");
+            words.addProperty("text", "在吗");
+            sent.set(her.brain.call("send", words));
+            com.google.gson.JsonObject wait = new com.google.gson.JsonObject();
+            wait.addProperty("wait_seconds", 20);
+            replies.set(her.brain.call("get_replies", wait));
+        }, failure::set);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(failure.get() == null, "the bridge failed: " + failure.get());

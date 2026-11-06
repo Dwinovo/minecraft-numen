@@ -4,12 +4,15 @@ import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
+import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -27,12 +30,15 @@ import net.minecraft.world.level.block.state.BlockState;
  *       付了,只剩起跳罚分;</li>
  *   <li><b>往下 {@code n} 个节点</b>:一次落脚(下一级、下落)是走出边沿再落到地上,至少付走出边沿的工夫加落下去的工夫
  *       ({@link Kinematics#fallLandingTicks})减去水平底价;规格许挖时,向下挖只付落下去的工夫。落差至少是节点数减去落脚那一层
- *       落脚高度的小数部分,最高是规格的无水落差;落脚那一层出现过液体、可攀爬的方块(活板门也可能接在梯子上),或身上带着水桶
- *       (倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
+ *       落脚高度的小数部分,最高是身体在规格愿意承受的摔伤下换算出的落差({@link CostModel#maxFallDrop});落脚那一层出现过液体、
+ *       可攀爬的方块(活板门也可能接在梯子上)、落上去比石头摔得轻的方块(干草、床、黏液……),或身上带着水桶(倒水接住),落脚不受这个上限。落 {@code n} 个节点最少付多少,是把 {@code n} 拆成若干次落脚、每次付的和最小。
  *       斜走不升降节点,它的升降落差由跳与落带过。</li>
  * </ul>
+ * <p>身体许飞时多一条路:飞着升或降一层,每层至少 {@code 竖直每格的耗时 − 水平疾飞每格的耗时} 刻(水平上同时挪一格的话,水平底价已经付了疾飞一格;
+ * 只升降不挪的更贵)。它与上面的走法按层取便宜的,所以对哪种混着走的路线都仍是下界。
+ *
  * 目标交出到了时脚所在的高度范围({@link Goal#heights()}):节点比它低就要升,比它高就要降,在范围里不用。没有范围的目标不加。
- * 表是问到哪一层才填到哪一层:快照里有这些方块的层(只扫调色板里有它们的方块段)按区段高度一带一带读,没问到的层一格不读;
+ * 表是问到哪一层才填到哪一层:快照里有这些方块的层(只扫调色板里有它们的方块段)一层一层读,没问到的层一格不读;
  * 填出来的数与一开始把整张表填满逐位相同。
  */
 final class Vertical {
@@ -52,6 +58,10 @@ final class Vertical {
     private final double jump;
     private final double sprint;
     private final boolean bucket;
+    /** 飞着升或降一层至少比水平底价多付多少;不许飞为无穷。 */
+    private final double flight;
+    /** 落在硬地上最高能落多少:身体与规格合起来的摔落上限。 */
+    private final double fallLimit;
     /** {@code up[y - base]}:节点在第 {@code y} 层(低于 {@code lo})走到 {@code lo} 层至少多花的刻数;只填到 {@code upFrom}。 */
     private final double[] up;
     private int upFrom;
@@ -78,12 +88,16 @@ final class Vertical {
             this.jump = 0;
             this.sprint = 0;
             this.bucket = false;
+            this.flight = Double.POSITIVE_INFINITY;
+            this.fallLimit = 0;
         } else {
             double penalty = model.spec().jumpPenalty();
             double jumping = Math.max(0, Kinematics.jumpCycleTicks(body, 1.0, body.stepHeight()) + penalty - Kinematics.sprintTicksPerBlock(body));
-            this.jump = model.spec().parkour() ? Math.min(jumping, penalty) : jumping;
+            this.flight = flightExtra(model);
+            this.jump = Math.min(model.spec().parkour() ? Math.min(jumping, penalty) : jumping, flight);
             this.sprint = Kinematics.sprintTicksPerBlock(body);
             this.bucket = model.body().carriesWaterBucket();
+            this.fallLimit = model.maxFallDrop();
         }
         this.up = new double[Math.max(0, top - base)];
         this.upFrom = Math.min(lo, top);
@@ -112,7 +126,7 @@ final class Vertical {
         }
         BodyStats body = model.body().stats();
         int base = view.getMinBuildHeight();
-        return new Vertical(model, body, new Levels(view, body), base, base + view.getHeight(), heights.lo(), heights.hi());
+        return new Vertical(model, body, new Levels(view, model.body()), base, base + view.getHeight(), heights.lo(), heights.hi());
     }
 
     /** 往上:从目标那一层往下一层层累加,累加的先后与逐层填满整张表时一样。 */
@@ -140,13 +154,23 @@ final class Vertical {
         return down[y - base];
     }
 
+    /** 飞着升或降一层至少比水平底价多付的刻数;不许飞为无穷。 */
+    private static double flightExtra(CostModel model) {
+        Mobility mobility = model.body().mobility();
+        if (!mobility.mayFly()) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return Math.max(0, Kinematics.flyClimbTicksPerBlock(mobility.flyingSpeed()) - Kinematics.flyTicksPerBlock(mobility.flyingSpeed()));
+    }
+
     private double cheapestFall(int y) {
-        double best = Double.POSITIVE_INFINITY;
+        // 飞着往下一层(落点在 hi 层之上还要接着往下)
+        double best = y - 1 >= hi ? flight + (y - 1 > hi ? down[y - 1 - base] : 0) : Double.POSITIVE_INFINITY;
         for (int k = 1; y - k >= hi; k++) {
             int land = y - k;
             double fraction = levels.fraction(land);
             if (!bucket && !levels.bypass(land)
-                    && k > Math.max(1, (int) Math.floor(model.spec().maxFallHeightNoWater() + fraction + Footing.EPSILON))) {
+                    && k > Math.max(1, Math.floor(fallLimit + fraction + Footing.EPSILON))) {
                 continue;
             }
             double once = fraction == 0 ? fresh(k) : landing(k, fraction);
@@ -173,29 +197,36 @@ final class Vertical {
     }
 
     /**
-     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层:按区段高度(16 层)一带一带读,
-     * 一带里的调色板只问一遍。第 {@code y} 层的落脚来自这一层的矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看
-     * 这两层),所以问第 {@code y} 层读它所在的一带,它是这一带最低的一层时再读下面那一带。
+     * 快照里每一层有什么落脚:顶面的小数部分、落进去不摔的液体与可攀爬的方块。问到哪一层才读哪一层;第 {@code y} 层的落脚来自这一层的
+     * 矮方块和下面一层顶面超过一格的栅栏、墙({@link Footing} 找脚下的托也只看这两层),所以问第 {@code y} 层读它和它下面那一层。
+     *
+     * <p>读一次要把快照里每个方块段的调色板问一遍,与读几层关系不大;所以一个区段高度(16 层)那一带里读过的层是连续的一段,
+     * 再问到它外面的层时,这一段向那个方向长一倍(至少到那一层),一带最多读四五次、多读的不超过要的一倍。
      */
     private static final class Levels {
+        private static final int BAND = 16;
+
         private final SearchView view;
-        private final BodyStats body;
+        private final BodySnapshot body;
         private final int base;
         /** 节点在这一层、脚踩在矮方块上,脚在格里最高的小数部分。 */
         private final double[] fraction;
         /** 这一层有液体或可攀爬的方块。 */
         private final boolean[] bypass;
-        /** 这一带读过了。 */
-        private final boolean[] bandRead;
+        /** 每一带读过的层是 {@code [readFrom, readTo)}(从最低的一层数起);没读过两头相等。 */
+        private final int[] readFrom;
+        private final int[] readTo;
         private final Map<BlockState, Info> known = new IdentityHashMap<>();
 
-        private Levels(SearchView view, BodyStats body) {
+        private Levels(SearchView view, BodySnapshot body) {
             this.view = view;
             this.body = body;
             this.base = view.getMinBuildHeight();
             this.fraction = new double[view.getHeight()];
             this.bypass = new boolean[view.getHeight()];
-            this.bandRead = new boolean[(view.getHeight() + 15) >> 4];
+            int bands = (view.getHeight() + BAND - 1) / BAND;
+            this.readFrom = new int[bands];
+            this.readTo = new int[bands];
         }
 
         double fraction(int y) {
@@ -218,48 +249,75 @@ final class Vertical {
 
         /** 从第 {@code y} 层的节点升到上一层不用跳:这一层有顶面离下一格底不到迈步高度的落脚。 */
         boolean smoothRise(int y) {
-            return 1 - fraction(y) <= body.stepHeight() + Footing.EPSILON;
+            return 1 - fraction(y) <= body.stats().stepHeight() + Footing.EPSILON;
         }
 
-        /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了。 */
+        /** 第 {@code i} 层(从最低的一层数起)的落脚都读进来了:它自己的方块,和下面一层顶面够高、伸进它的方块。 */
         private void read(int i) {
-            readBand(i >> 4);
-            if ((i & 15) == 0 && i > 0) {
-                readBand((i >> 4) - 1);
+            ensure(i);
+            if (i > 0) {
+                ensure(i - 1);
             }
         }
 
-        private void readBand(int band) {
-            if (bandRead[band]) {
+        /** 第 {@code i} 层的方块读过了:没读过就把它所在一带读过的那一段向它长一倍(至少到它)。 */
+        private void ensure(int i) {
+            int band = i / BAND;
+            int from = readFrom[band];
+            int to = readTo[band];
+            if (i >= from && i < to) {
                 return;
             }
-            bandRead[band] = true;
-            int from = base + (band << 4);
-            view.forEachBlock(from, from + 16, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
+            int bottom = band * BAND;
+            int top = Math.min(bottom + BAND, fraction.length);
+            if (from == to) {
+                scan(i, i + 1);
+                readFrom[band] = i;
+                readTo[band] = i + 1;
+            } else if (i >= to) {
+                int upTo = Math.min(top, Math.max(i + 1, to + (to - from)));
+                scan(to, upTo);
+                readTo[band] = upTo;
+            } else {
+                int downTo = Math.max(bottom, Math.min(i, from - (to - from)));
+                scan(downTo, from);
+                readFrom[band] = downTo;
+            }
+        }
+
+        /** 读第 {@code [from, to)} 层(从最低的一层数起)的方块。 */
+        private void scan(int from, int to) {
+            view.forEachBlock(base + from, base + to, state -> known.computeIfAbsent(state, s -> Info.of(body, s)).interesting(), (state, y) -> {
                 Info info = known.get(state);
-                int i = y - base;
-                if (info.bypass() && i >= 0 && i < bypass.length) {
-                    bypass[i] = true;
+                int at = y - base;
+                if (info.bypass() && at >= 0 && at < bypass.length) {
+                    bypass[at] = true;
                 }
                 for (double top : info.tops()) {
-                    int at = y + (int) Math.floor(top + Footing.EPSILON) - base;
-                    if (at >= 0 && at < fraction.length) {
-                        fraction[at] = Math.max(fraction[at], top - Math.floor(top + Footing.EPSILON));
+                    int reaches = y + (int) Math.floor(top + Footing.EPSILON) - base;
+                    if (reaches >= 0 && reaches < fraction.length) {
+                        fraction[reaches] = Math.max(fraction[reaches], top - Math.floor(top + Footing.EPSILON));
                     }
                 }
             });
         }
     }
 
+    /** 比较"落上去摔多重"用的落差:大到任何减轻摔伤的方块都与石头分得出。 */
+    private static final double SOFT_PROBE = 1000;
+
     /**
      * 一种方块状态:碰撞箱顶面的高度、能不能落进去不摔;以及值得逐格找出来的({@code interesting}):顶面有小数(不是整格也不是空),
-     * 或落进去不摔。调色板里每种状态每个方块段都问一遍,所以开搜时算定。
+     * 或落进去不摔(含落上去比石头摔得轻)。调色板里每种状态每个方块段都问一遍,所以开搜时算定。
      */
     private record Info(double[] tops, boolean bypass, boolean interesting) {
 
-        static Info of(BodyStats body, BlockState state) {
-            boolean bypass = !state.getFluidState().isEmpty() || state.is(BlockTags.CLIMBABLE) || state.getBlock() instanceof TrapDoorBlock;
-            double[] tops = Footing.tops(body, state);
+        static Info of(BodySnapshot body, BlockState state) {
+            // 落上去比石头摔得轻的方块(摔伤的公式只在 BodySnapshot.fallDamage 一处):落差不受硬地上限约束
+            boolean softens = body.fallDamage(SOFT_PROBE, state) < body.fallDamage(SOFT_PROBE, Blocks.STONE.defaultBlockState());
+            boolean bypass = !state.getFluidState().isEmpty() || state.is(BlockTags.CLIMBABLE) || state.getBlock() instanceof TrapDoorBlock
+                    || softens;
+            double[] tops = Footing.tops(body.stats(), state);
             boolean interesting = bypass;
             for (double top : tops) {
                 interesting |= top - Math.floor(top + Footing.EPSILON) > Footing.EPSILON;

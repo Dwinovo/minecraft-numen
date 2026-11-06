@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 之内才现算。这里在一批随机的世界与随机的改动上证明两条路的结论一模一样:
  * <ul>
  *   <li>每种按格的结论(站姿、落脚高度)——记事本先在没叠改动的快照上记满,再在叠了改动的视图上问,对着不带记事本的同一份视图现算的;</li>
- *   <li>每种走法每个方向的前提——整个 {@link Moves#ALL},挖放都许,对着不带记事本的同一份视图判的。</li>
+ *   <li>每种走法每个方向的前提——整个 {@link Moves#forBody} 的走法集,挖放都许,对着不带记事本的同一份视图判的。</li>
  * </ul>
  * 一种结论说少了它读的格子,就会在这里出现不一样。
  */
@@ -170,6 +170,25 @@ class RecallOverlayTest {
         }
     }
 
+    /** 表从小起步、顶掉的次数多了才翻倍:问过的格比起手的槽数多得多,答出来的仍是现算的数。 */
+    @Test
+    void aTableThatOutgrowsItsFirstSlotsStillAnswersWhatTheMeasureSays() {
+        Cached world = new Cached(new TestWorld());
+        int[] measured = {0};
+        Recall.HeightFact fact = new Recall.HeightFact((level, stats, x, y, z) -> {
+            measured[0]++;
+            return x * 31.0 + y * 7.0 + z;
+        }, new Recall.Reach(0, 0));
+        for (int round = 0; round < 3; round++) {
+            for (int x = 0; x < 64; x++) {
+                for (int z = 0; z < 64; z++) {
+                    assertEquals(x * 31.0 + Y * 7.0 + z, fact.at(world, body, x, Y, z));
+                }
+            }
+        }
+        assertTrue(measured[0] < 3 * 64 * 64, "问过的格有一部分取回了记下的结论,不是次次现算:" + measured[0]);
+    }
+
     private static TestWorld randomWorld(Random random) {
         TestWorld world = new TestWorld().floor(-RADIUS - 2, -RADIUS - 2, RADIUS + 2, RADIUS + 2, Y - 1);
         for (int x = -RADIUS; x <= RADIUS; x++) {
@@ -279,7 +298,7 @@ class RecallOverlayTest {
                                 if (stance == null) {
                                     continue;
                                 }
-                                for (Move move : Moves.ALL) {
+                                for (Move move : Moves.forBody(model.body())) {
                                     for (Heading heading : move.headings()) {
                                         String expected = describe(move.premise(model, fresh, from, stance, heading));
                                         String actual = describe(move.premise(model, view, from, stance, heading));

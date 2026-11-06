@@ -1,6 +1,6 @@
 # 0012 规划是执行的子集
 
-- 状态:被 [0020](0020-segments-learning-closed-loop.md) 修订(规划保守 + 执行闭环)
+- 状态:被 [0023](0023-reliability-performance-route.md) 取代
 - 日期:2026-10-10(用户定)
 - 提交:`f019dec28`、`983bd5fd9`
 

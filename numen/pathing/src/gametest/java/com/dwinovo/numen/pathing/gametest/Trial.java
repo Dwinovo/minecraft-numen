@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.NavStatus;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
+import com.dwinovo.numen.pathing.api.Travel;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.api.PlanResult;
@@ -24,6 +25,7 @@ import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -61,6 +63,9 @@ final class Trial {
     static final Materials NO_MATERIALS = Optional::empty;
     /** 什么都放行。 */
     static final TerrainPolicy ALLOW_ALL = (change, pos, state, view) -> Permit.ALLOW;
+
+    /** 又长又高的空场地模板(滑翔:爬到巡航高度再飞一百多格)。 */
+    static final String SKY = "pathing_sky";
 
     /** 高场地模板(按高度爬高)。 */
     static final String TALL = "pathing_tall";
@@ -176,6 +181,16 @@ final class Trial {
         return go(body, NavRequest.to(goal, spec));
     }
 
+    /** 开飞:创造飞行(受理在开出去时问)。 */
+    Run fly(TestBody body, Goal goal, RouteSpec spec) {
+        return go(body, NavRequest.to(goal, spec).travelling(Travel.FLY, null));
+    }
+
+    /** 开滑翔:穿着鞘翅滑翔(受理在开出去时问)。 */
+    Run glide(TestBody body, Goal goal, RouteSpec spec) {
+        return go(body, NavRequest.to(goal, spec).travelling(Travel.GLIDE, null));
+    }
+
     Run go(TestBody body, NavRequest request) {
         Navigator navigator = navigator(body);
         Run run = new Run(this, body, navigator, navigator.drive(request), request.spec());
@@ -228,14 +243,9 @@ final class Trial {
         });
     }
 
-    /** 同一个请求,这一趟总共最多展开 {@code budget} 个节点(用例要用小预算逼出"预算用完")。 */
-    static NavRequest budgeted(NavRequest request, int budget) {
-        return new NavRequest(request.goal(), request.spec(), budget, request.route(), request.through());
-    }
-
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(body, new Ports(terrain, materials, threats, trace));
+        return Navigator.of(body, new Ports(terrain, materials, threats, SearchClock.STEADY, trace));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */
@@ -337,8 +347,6 @@ final class Trial {
         private boolean passed;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
-        /** 搜索按墙钟自己跑、刻不等它;默认每刻在等搜索的结论时等它回来。 */
-        private boolean realTime;
         /**
          * 拉起身体之后等这么多刻才开走:原版玩家进世界后有 60 刻的出生无敌,这期间摔落不掉血,掉没掉血就看不出来。
          */
@@ -416,38 +424,14 @@ final class Trial {
         }
 
         /**
-         * 搜索按墙钟自己跑,刻不等它:用例要看的正是搜索与刻的快慢比(搜索迟到、提前搜下一段来不来得及、接着走时有没有去搜)
-         * 时用,要等搜索回来的那一刻自己调 {@link #awaitSearch}。不调它,一刻里导航在等搜索的结论,这一刻就等它回来再往下:
-         * 测试服务器的刻不等墙钟(一刻做完就接着下一刻),一次要几百毫秒的搜索在这里会占去上千刻,按刻写的时限就被机器忙不忙
-         * 吃掉了。
+         * 导航此刻在等搜索的结论的话,等它回来、接着推到不再等为止:测试服务器的刻不等墙钟(一刻做完就接着下一刻),一次要几百毫秒的
+         * 搜索在这里会占去上千刻,按刻写的时限就被机器忙不忙吃掉了。
          */
-        Run realTime() {
-            realTime = true;
-            return this;
-        }
-
-        /** 导航此刻在等搜索的结论的话,等它回来、接着推到不再等为止。 */
-        void awaitSearch() {
+        private void awaitSearch() {
             while (navigation.waiting()) {
                 nap();
                 status = navigation.tick();
             }
-        }
-
-        /**
-         * 每刻至少占 {@code millis} 毫秒墙钟,搜索按墙钟自己跑({@link #realTime}):让刻与搜索的快慢比接近真实服务器
-         * (真实服务器一刻五十毫秒),"提前搜下一段来得及"才有意义。
-         */
-        Run paced(long millis) {
-            realTime = true;
-            everyTick.add(r -> {
-                try {
-                    Thread.sleep(millis);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            return this;
         }
 
         /** 每刻在推导航之前做(用例中途改世界、推身体)。 */
@@ -471,9 +455,7 @@ final class Trial {
                 }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 status = navigation.tick();
-                if (!realTime) {
-                    awaitSearch();
-                }
+                awaitSearch();
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 highestRise = Math.max(highestRise, body.getDeltaMovement().y);
                 highestFeet = Math.max(highestFeet, body.getY() - trial.origin.getY());

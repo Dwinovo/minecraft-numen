@@ -23,13 +23,40 @@ import net.minecraft.world.level.material.FluidState;
  */
 public final class TestWorld implements SearchView {
 
-    private final Map<BlockPos, BlockState> blocks = new HashMap<>();
+    private final Map<BlockPos, BlockState> blocks;
     /** 摆过非空气方块的区段;摆回空气也不划掉,只会让 {@link #airSection} 少答一次是。 */
-    private final Set<Long> occupied = new HashSet<>();
+    private final Set<Long> occupied;
     private final WorldBorder border = new WorldBorder();
     private int loadedRadius = Integer.MAX_VALUE;
+    /** 加载的那块正方形的中心区块。 */
+    private int loadedX;
+    private int loadedZ;
     private BlockState ground = Blocks.AIR.defaultBlockState();
     private int groundTop = Integer.MIN_VALUE;
+
+    public TestWorld() {
+        this.blocks = new HashMap<>();
+        this.occupied = new HashSet<>();
+    }
+
+    /** 同一份方块表的另一个视窗:加载的区块换一块。 */
+    private TestWorld(TestWorld shared, int centerX, int centerZ, int radius) {
+        this.blocks = shared.blocks;
+        this.occupied = shared.occupied;
+        this.ground = shared.ground;
+        this.groundTop = shared.groundTop;
+        this.loadedX = centerX;
+        this.loadedZ = centerZ;
+        this.loadedRadius = radius;
+    }
+
+    /**
+     * 为从 {@code from} 出发的一次搜索拷的快照那样的视窗:同一份方块,只有以 {@code from} 所在区块为中心、半径 {@code chunks} 个区块的区块算加载了
+     * (真实运行里搜索的快照就是这样,{@code WorldSnapshot.around})。
+     */
+    public TestWorld window(BlockPos from, int chunks) {
+        return new TestWorld(this, SectionPos.blockToSectionCoord(from.getX()), SectionPos.blockToSectionCoord(from.getZ()), chunks);
+    }
 
     public TestWorld set(int x, int y, int z, BlockState state) {
         return set(new BlockPos(x, y, z), state);
@@ -89,8 +116,8 @@ public final class TestWorld implements SearchView {
 
     @Override
     public boolean isLoaded(int x, int z) {
-        return Math.abs(SectionPos.blockToSectionCoord(x)) <= loadedRadius
-                && Math.abs(SectionPos.blockToSectionCoord(z)) <= loadedRadius;
+        return Math.abs(SectionPos.blockToSectionCoord(x) - loadedX) <= loadedRadius
+                && Math.abs(SectionPos.blockToSectionCoord(z) - loadedZ) <= loadedRadius;
     }
 
     @Override

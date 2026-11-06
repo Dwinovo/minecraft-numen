@@ -10,8 +10,20 @@ import java.util.List;
  */
 public interface GameTestSuite {
 
+    /**
+     * 套件收哪一档用例。时限(刻数)是唯一的判据:不超过 {@link GameTestSuites#FAST_TICKS} 的是快用例(日常批),超过的是慢用例(慢批),
+     * 不另做标记。模块想把慢的单列出去,就用同一份 {@link #classes()} 登记两个套件,一个 {@link #pace()} 是 {@link Pace#FAST}、
+     * 一个是 {@link Pace#SLOW},慢的登记成 {@code 套件名_slow}({@link GameTestSuites#SLOW_SUFFIX}),用例名与结构模板仍用日常批的套件名。
+     */
+    enum Pace { ANY, FAST, SLOW }
+
     /** 这个模块的用例类:类里的 {@code @GameTest}、{@code @BeforeBatch}、{@code @AfterBatch}、{@code @GameTestGenerator} 方法都是静态的。 */
     List<Class<?>> classes();
+
+    /** 收哪一档用例,默认全收。 */
+    default Pace pace() {
+        return Pace.ANY;
+    }
 
     /**
      * 这个模块的用例会用到的、跑在服务器主线程之外的后台工作(Numen API 自己的程序已经算在内):每一项答"此刻还没停下的是什么",

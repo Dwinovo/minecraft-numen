@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.agent.loop;
 
+import com.dwinovo.numen.api.agent.http.ContextOverflow;
 import com.dwinovo.numen.api.agent.http.LlmHttpException;
 import com.dwinovo.numen.api.agent.http.LlmStreamException;
 
@@ -37,6 +38,8 @@ public record Cause(String code, List<String> args) {
     public static final String NETWORK = "llm.network";
     /** 连接成功、回应开始了,流里却带着错误或没有收尾({@link LlmStreamException}):原话是厂家在流里说的。 */
     public static final String STREAM_FAILED = "llm.stream_failed";
+    /** 服务商说上下文超长({@link com.dwinovo.numen.api.agent.http.ContextOverflow}):原话同其余 {@code llm.*}。 */
+    public static final String CONTEXT_OVERFLOW = "llm.context_overflow";
     /** 服务端回了,但回应是空的(没有话也没有工具调用)。 */
     public static final String EMPTY_REPLY = "llm.empty_reply";
 
@@ -61,6 +64,9 @@ public record Cause(String code, List<String> args) {
             return of(STREAM_FAILED, stream.getMessage());
         }
         if (cause instanceof LlmHttpException http) {
+            if (ContextOverflow.is(http)) {
+                return llm(CONTEXT_OVERFLOW, http.statusCode(), http.host(), http.providerMessage());
+            }
             String code = http.isUnauthorized() ? UNAUTHORIZED
                     : http.statusCode() == 404 ? NOT_FOUND
                     : http.isRateLimited() ? RATE_LIMITED
@@ -104,6 +110,7 @@ public record Cause(String code, List<String> args) {
             case BAD_REQUEST -> "请求被拒绝(HTTP " + arg(0) + ")";
             case NETWORK -> "连不上";
             case STREAM_FAILED -> "回应中途出错:" + arg(0);
+            case CONTEXT_OVERFLOW -> "上下文超出了模型的窗口";
             case EMPTY_REPLY -> "服务端返回了空回应";
             case UNBOUND -> "没绑模型配置";
             case NO_KEY -> "模型配置没填密钥";

@@ -9,8 +9,10 @@ import com.dwinovo.numen.api.client.ui.widget.ChoiceRow;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.client.ui.widget.Label;
+import com.dwinovo.numen.api.client.ui.widget.MultilineTextField;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
+import com.dwinovo.numen.api.client.ui.widget.Widget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -58,8 +60,8 @@ abstract class ModalCard {
     /** 卡的外框(build 时由屏幕给)。 */
     protected int x, y, w, h;
     private String title;
-    /** Tab 走的输入框,按排版的先后。 */
-    private final List<TextField> fields = new ArrayList<>();
+    /** Tab 走的输入框(单行与多行),按排版的先后。 */
+    private final List<Widget> fields = new ArrayList<>();
     /** 回车按的主按钮与它的动作、Esc 走的取消(都由 {@link #buttons} 登记)。 */
     private Button primary;
     private Runnable primaryAction;
@@ -134,6 +136,16 @@ abstract class ModalCard {
         field.setBounds(fx, fy + FIELD_LABEL_H, fw, FIELD_H - FIELD_LABEL_H);
         fields.add(field);
         return field;
+    }
+
+    /** 多行输入框:淡色标签在 {@code (fx, fy)},框在它下面、高 {@code fh};和单行字段一起参与 Tab。 */
+    protected MultilineTextField multiline(int fx, int fy, int fw, int fh, String label, MultilineTextField area) {
+        Label l = ui.add(new Label(label, Label.Role.SECONDARY));
+        l.setBounds(fx, fy, fw, 9);
+        ui.add(area.withLabel(l));
+        area.setBounds(fx, fy + FIELD_LABEL_H, fw, fh);
+        fields.add(area);
+        return area;
     }
 
     /** 选择行:整卡宽,从 {@code ry} 起一行。 */
@@ -235,6 +247,8 @@ abstract class ModalCard {
                 return true;   // 不给屏幕:原版的 Tab 会把焦点挪到底下的真输入框上,两边的焦点就对不上了
             }
             case KeyCodes.ENTER -> {
+                // 多行框里回车是换行,不是"保存"
+                if (ui.focusedWidget() instanceof MultilineTextField) return ui.keyPressed(keyCode, modifiers);
                 if (!ui.hasOverlay() && primary.enabled()) primaryAction.run();
                 return true;
             }

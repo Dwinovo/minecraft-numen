@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * 她在世界里做事的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
  * ({@code numen.work.dig(b)})是登记处的一个函数,读法与执行见 {@code com.dwinovo.numen.api.sdk.Dispatcher};模块里的函数
- * ({@code numen.move.to})用同一种语言写成,程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
+ * ({@code numen.move.walk})用同一种语言写成,程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *
  * <p>程序由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐个派调用、等身体收尾、在调用之间停下),
  * 不经 {@link #invoke}。外接大脑经 {@code ServerActuator} 跑它,交给的是同伴自己的那一个派发器(内脑闲着时借用)。

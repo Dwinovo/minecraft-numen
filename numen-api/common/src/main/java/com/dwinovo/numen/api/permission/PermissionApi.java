@@ -59,7 +59,11 @@ public final class PermissionApi {
     @SeeAlso({"numen.permission.deny", "numen.permission.ask", "numen.permission.allow", "numen.permission.remove"})
     public static Rules rules(ServerCall call) {
         NumenPlayer her = call.her();
-        RuleBook book = RuleBook.of(storeOf(her), PermissionConfig.of(her.getServer()).hardRules());
+        return rules(RuleBook.of(storeOf(her), PermissionConfig.of(her.getServer()).hardRules()));
+    }
+
+    /** 一本规则书写成她读的三张表:硬规则、主人的(带谁写的、命中几次)、出厂的。 */
+    static Rules rules(RuleBook book) {
         List<String> hard = new ArrayList<>();
         book.hard().forEach(row -> hard.add(line(row.table(), row.rule())));
         List<String> yours = new ArrayList<>();

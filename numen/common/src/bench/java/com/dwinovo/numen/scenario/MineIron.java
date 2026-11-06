@@ -93,7 +93,7 @@ public final class MineIron implements Scenario {
         // 粗铁落在挖空的矿洞里,有的洞只有一格高、走不进去:站进芯的正中(挖开头顶那格)
         // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
-        program.append("numen.move.to(").append(com.dwinovo.numen.api.sdk.Positions.literal(core))
+        program.append("numen.move.walk(").append(com.dwinovo.numen.api.sdk.Positions.literal(core))
                 .append(")\n");
         program.append("numen.work.collect()\n");
         return program.toString();

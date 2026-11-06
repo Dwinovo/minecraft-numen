@@ -43,9 +43,11 @@
 | 函数 | 只管 | 不管 |
 |---|---|---|
 | `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.container`、`scan.sight` | 不存任何东西 |
-| `move.to` | 去一处:Pos、方块、实体、团、Cells、一列、一个高度;可选一个距离。默认可挖可搭、只看价钱,能不能动哪一格由权限层在动手那一刻定(§十一) | 不捡、不用 |
-| `move.away` | 离某物至少几格,走法同 `move.to` | — |
-| `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾;走法同 `move.to` | 不打、不捡 |
+| `move.walk` | 去一处:Pos、方块、实体、团、Cells、一列、一个高度;可选一个距离。只走(游、挖、搭),从不飞;身体在飞先落地。默认可挖可搭、只看价钱,能不能动哪一格由权限层在动手那一刻定(§十一) | 不捡、不用 |
+| `move.fly` | 同样的去处与距离(可以是半空的一格),只用创造飞行:到点悬停;不许飞当场拒绝,下一步是 `move.walk`,穿着鞘翅的再给 `move.glide` | 不碰鞘翅 |
+| `move.glide` | 去一列 `{x, z}`(给格、方块、实体取它所在的那一列,y 不参与;只有高度没有列,拒绝),只用鞘翅:走到起飞点、起飞、巡航,水平进入目标 16 格就降落,落在最近的安全落点(天然实心方块、头顶是空柱、不在边沿、不在液体里),落地就是这一趟的结束;回执说落在哪一格、离目标水平多远、烟花与耐久;缺鞘翅、烟花(少于 5 支)、耐久(少于 5 点)、起飞的地方当场拒绝,目标已在 16 格内也拒绝 | 不走最后一截;没进 16 格就落了地:离目标超过 96 格且烟花耐久够就再起飞,否则收工并说离目标多远,不改成走路 |
+| `move.away` | 离某物至少几格,走法同 `move.walk`(只走) | — |
+| `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾;走法同 `move.walk`(只走) | 不打、不捡 |
 | `use.dismount` | 从坐着的东西上下来 | — |
 | `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
 | `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
@@ -64,11 +66,11 @@
 
 | 模块函数 | 由哪几个原子函数组成 |
 |---|---|
-| `move.explore(dir, opts)` | 一跳一跳 `move.to` 到前面一列的 4 格内,每跳之后问 `until_`,返回真就停 |
-| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.to` 走上去(原版玩家走过去就捡起) |
+| `move.explore(dir, opts)` | 一跳一跳 `move.walk` 到前面一列的 4 格内,每跳之后问 `until_`,返回真就停 |
+| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.walk` 走上去(原版玩家走过去就捡起) |
 | `work.mine(cluster)` | `work.dig(cluster)` 自己走到够得着、挖 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
+| `inv.make(item, count)` | `inv.make` 读原版来源挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
 | `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
@@ -209,13 +211,13 @@ line 3 work.dig: bad_argument — argument 'place': a position is one table with
 ```
 ok · 3 calls · 12 s
 stderr:
-line 2 numen.move.to: reached 120,64,-35 … En route I had to break 2 stone
+line 2 numen.move.walk: reached 120,64,-35 … En route I had to break 2 stone
 line 3 numen.work.dig: dug 4 minecraft:iron_ore …
 returned: 4
 ```
 
 ```
-The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps running. Nothing after that ran.
+The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
 (停在第 1 行时那件活还没收尾,回执里没有它的 stderr 条目。)
@@ -292,7 +294,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 | 借的 | 出处 | 我们的落点 |
 |---|---|---|
 | 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`LuaCodecs.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`Positions.cell`、`Place` 的读法) |
-| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.to`;`route.plan(...)` 的计划 → `move.go` |
+| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.walk`;`route.plan(...)` 的计划 → `move.go` |
 | 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
 | 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
 | 失败是一个值,带能拿来改正的信息,程序自己接住再改 | CodeAct(报错回给代码自纠)、Voyager 技能库抛 `Error` 再由技能接住 | 错误值 `{kind, message, hint, fn, data}`,`pcall` 接住按 `err.kind` 分支;库函数 `raise(kind, …)` |
@@ -319,7 +321,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 
 - 错误值是一张表:`kind`(`bad_argument`、`no_function`、`not_found`、`out_of_reach`、`no_path`、`no_material`、
   `needs_consent`、`denied`、`interrupted`、`timeout`、`failed`;只在回执里的 `syntax`、`runtime`、`limit`)、`message`、
-  `hint`(能照抄的下一行程序,如 `move.to({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
+  `hint`(能照抄的下一行程序,如 `move.walk({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
 - `tostring(err)` 与 `"…" .. err` 都是 `work.dig: out_of_reach — 原因` 加一行 `hint: …`(元表的 `__tostring`、`__concat`)。
 - 参数错说是哪个参数、要什么样子、给了什么(`argument 'at': expected a Pos {x = …, y = …, z = …} …; got {x = 1, z = 3},
   which has no y`)。
@@ -414,7 +416,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
   `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
-- **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
+- **Recipe**(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.craftable`):编号、类别(配方类型的 id,模组机器也有)、合出几件、每格的料;合成配方带最小的格和还缺什么;`recipes`、`uses` 外包一层 `{recipes, omitted, sources}`:合并各知识来源(原版配方表、JEI、脚本)的答复,条数按来源封顶,超出的数如实说,没答上的来源写明原因(control 0016)。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
 - 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
@@ -453,7 +455,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 
 | 函数 | 说什么 |
 |---|---|
-| `numen.move.to(目标, 距离?)` | 去一处。目标:Pos、Block、Entity(它此刻在哪)、一团(Cluster)或一串格(Cells)、一列 `{x, z}`、一个高度 `{y}`。不写距离:Pos/列/高度站进去(Pos 在岩石里就挖进去),Block/实体/一团站不进去,走到旁边(2 格内);写了距离:不超过那么远 |
+| `numen.move.walk(目标, 距离?)` | 去一处。目标:Pos、Block、Entity(它此刻在哪)、一团(Cluster)或一串格(Cells)、一列 `{x, z}`、一个高度 `{y}`。不写距离:Pos/列/高度站进去(Pos 在岩石里就挖进去),Block/实体/一团站不进去,走到旁边(2 格内);写了距离:不超过那么远 |
 | `numen.move.away(某物, 距离)` | 离它至少多远 |
 | `numen.move.follow(谁?, {distance, seconds})` | 跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒;走法同 `to` |
 
@@ -468,7 +470,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   答复、规则当场不许的格);回执末尾那一句另说挖了什么、放了什么、被拒了什么、潜了几段水。
 - 动手的工具自己走过去:`use.block/entity/hit` 够不着先走到能按的地方;`work.dig` 走到够得着剩下最多格的地方再挖;`build.place` 走到够得着
   最低一层剩下的格的地方再放;`build.diff` 只读。判据只在动作那一处(`Arrival.use/dig/place`)。
-- 库:`numen.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.to` 到前面一列的 4 格内。
+- 库:`numen.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.walk` 到前面一列的 4 格内。
 - 登记:`numen.codec(Where.class, …)`;读法在 `task/move/Where`,怎样算到在 `Arrival`,编成目标在 `Destination`,任务是 `MoveToCompanionTask`。
 
 ### 删掉的
@@ -481,7 +483,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
 §十(全名、值带方法、删名词)与 §十一(路线描述、计划、越界才问)合到同一条线上:命名空间、各组的形状、模块目录、删区域与设计
 按 §十;路线、移动、垫路料、寻路、征询卡片、计划与描述按 §十一。两边都碰到的几处:
 
-- **一团与一串格进目标**:`numen.move.to`、`away` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells。
+- **一团与一串格进目标**:`numen.move.walk`、`away` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells。
 - **`numen.work.mine(cluster)`**:`numen.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,`numen.work.collect({items = r.drops})` 捡
   这一挖还落在地上的,一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。
   GameTest 的挖矿辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
@@ -493,7 +495,7 @@ The script stopped at line 1 (move.to) after 1 call: your owner spoke; t12 keeps
   掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
   burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
   `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
-- `numen.work.collect` 等模块里的走路一律是 `numen.move.to`;`numen.inv.*` 开箱子、`numen.build.place` 放方块的走路由 `use.block`、
+- `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子、`numen.build.place` 放方块的走路由 `use.block`、
   `build.place` 自己做;垫路料只有标签 `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
@@ -540,7 +542,7 @@ public final class LocateApi {                         // 一组:一个公开类
   `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
   权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,进她的收件箱),不走反向请求;
   ④ 一次收一批键、在客户端就地过滤只回小结果,别在循环里逐条问(N+1)。`ClientCall` 的 Javadoc 是这条的全文。
-- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.to", pos,
+- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.walk", pos,
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
   同一种 `bad_argument`(附用法与帮助的写法)。
 - **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
@@ -569,15 +571,17 @@ public final class LocateApi {                         // 一组:一个公开类
 
 写法上的问题不拦,交给 `ApiTester.lint()` 的报告:没写说明、参数没写 `@Doc`、没写例子、例子读不通或没调到自己或参数读不成、
 `@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。Numen 与
-各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
+各插件的 Gradle 任务 `apiLintReport` 各写一份报告到 `build/reports/api-lint.txt`(不是测试,不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
 与机器可读的元数据 `numen-api.json`。好写法好不好用,由评测的分数说话(见下)。
 
 ### 组成
 
 | 部件 | 做什么 |
 |---|---|
-| `Binder` | 从签名推出 `ApiFunction`(参数、种类、返回的值转换、例子、注意、相关),只抛上面那几条硬错误 |
-| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`) |
+| `ApiFunction` | 一个函数的描述:名字、参数(类型、说明、位置还是选项)、返回、在哪执行、怎么交回、例子,以及执行它的 `Handler`。登记、派发、帮助、体检只认它 |
+| `Binder` | 描述的反射生产者:从 `@Fn` 签名推出 `ApiFunction`,只抛上面那几条硬错误 |
+| `FunctionBuilder` | 描述的代码生产者(`ApiFunction.builder(名字)…server(体)`),出来的描述和反射读的分不出来;脚本插件的函数这样写 |
+| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`);登记交回撤回它的句柄 |
 | `LuaCodecs` / `Codec` | 值转换,连同签名里写成什么;record、枚举、列表、表现造,别的登记 |
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
 | `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
@@ -586,6 +590,29 @@ public final class LocateApi {                         // 一组:一个公开类
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
 `{"ok": false, "error": {kind, message, hint, data}}`,等到的值另带 `stderr`(API 报告的话)。
+
+### 登记归在插件名下:句柄、作用域、重登(control 0014)
+
+照主流的"登记即句柄、按作用域撤销"(VS Code 的 `Disposable`、Guava 的 `Closer`、IntelliJ 的动态插件;撤回之后旧的上下文再用就报错,照
+pi-mono 扩展运行时重载的做法)。每张登记表——函数组(`ApiRegistry`)、值转换(`LuaCodecs`)、同伴事件订阅(`CompanionEvents`)、事件类型
+(`EventTypes`)、身体状态片段与穿戴来源、随附的内容目录与 Lua 模块(`Shipped`、`BuiltinModules`)、`/numen` 下的指令(`NumenCommands`)、
+还没跑的客户端块——登记时交回一个 `Handle`,`close()` 只撤这一条;一个插件的门把拿到的全部句柄收进一个 `Scope`。
+
+- **撤回 = 关掉作用域,重登 = 撤回后再跑一遍 setup**(`PluginRoster.reload`);服主的开关、脚本重载、单测都是这同一对操作。
+  同一个插件 id 登记几次是一个插件,setup 都留着。
+- **撤回之后旧门作废**:拿着上一次登记的门再登记、订阅、发事件,抛 `IllegalStateException` 点名是哪个插件。
+- **门外的东西撤不回**(Mixin、直接挂在加载器上的监听、已经跑过的客户端块):登记时声明 `Unloading.NEEDS_RESTART`
+  (`NumenPlugins.register(id, Unloading.NEEDS_RESTART, setup)`),开关对它仍是"重启后生效"。内嵌的 Numen、车万女仆、YSM、FTB Quests
+  声明了;森罗厨房、Curios、Litematica 与脚本插件是动态的。
+- **"登记变了"只一个信号**(`Registrations`):花名册装上或撤回一个插件后发一次。系统提示、帮助、脚本目录每次从当前的表现算,不缓存,
+  不听它;已经发给玩家的 `/numen` 指令树是拷贝,听它在服务器线程上重发(`/numen` 根每次被读按当前挂的几格现算,撤回即时生效)。
+  MCP 端点只有四个固定工具,函数清单在 `guide` 的文本里、每次现取,所以没有 `tools/list_changed` 可发。
+
+### 受权的动作是一块积木
+
+"提出这几个动作 → 权限层判 允许/拒绝/要问 → 要问就发问并等答复 → 结论与主人的准许交回"是 `permission.GatedAct`:按刻推进的活**持有**它
+(`gate().permit(action)`、`gate().permitAll(actions)`、`gate().consult(items)`,收场时接上 `allowanceNote()`),不继承。Numen 的任务基类、
+森罗厨房的 `PotActTask` 用的是同一块。一次函数调用里(`Pending`)的对应原语是 `ServerCall.authorize`。
 
 ### 三个例子
 
@@ -637,7 +664,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 ```
 
 脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = "maid@3f9a1c", task = "touhou_little_maid:farm"}`;离得远是
-`out_of_reach`,`err.hint` 是 `numen.move.to({x = …}, 2)`。
+`out_of_reach`,`err.hint` 是 `numen.move.walk({x = …}, 2)`。
 
 ### 重启后接着做、`/numen drive`
 

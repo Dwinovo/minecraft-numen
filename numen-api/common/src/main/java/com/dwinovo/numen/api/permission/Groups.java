@@ -8,17 +8,21 @@ import com.dwinovo.numen.permission.Vocabulary;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.npc.AbstractVillager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -167,7 +171,7 @@ public enum Groups {
             if (a.pos() == null || f.placed() == null) {
                 return false;
             }
-            Whose group = Whose.valueOf(arg.toUpperCase(java.util.Locale.ROOT));
+            Whose group = NEAR_GROUPS.get(arg);
             return f.placed().anyPlacedWithin(a.pos(), NEAR_RADIUS, f.view(),
                     placer -> Whose.ofPlacer(placer, f.actor()) == group);
         }
@@ -181,6 +185,13 @@ public enum Groups {
 
     /** {@code near} 的邻域:放置点周围这么多格(切比雪夫距离)内有玩家放的方块就算。 */
     public static final int NEAR_RADIUS = 3;
+
+    /** {@code near(<组>)} 认的三个归属;判断时直接查,不每次拼名字再解析枚举。 */
+    private static final Map<String, Whose> NEAR_GROUPS =
+            Map.of("self", Whose.SELF, "owner", Whose.OWNER, "other", Whose.OTHER);
+
+    /** 按规则名查组的表;判断路径上每问一项都查,不能每次走 {@link #values()}(它每次新建一份数组)。 */
+    private static final Map<String, Groups> BY_NAME = indexByName();
 
     /** 放下去会烧、会炸、会淹的东西。 */
     private static final Set<Item> HAZARD_ITEMS = Set.of(
@@ -217,19 +228,31 @@ public enum Groups {
     /**
      * 实体的主人是谁:原版 {@link OwnableEntity} 记的主人 UUID(狼、猫、鹦鹉,以及继承原版驯服的模组宠物,比如车万女仆);
      * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读——对象组与扫描实体都问它。
+     *
+     * <p>只有玩家做主人才算有主:主人是世界里一只活着的非玩家(唤魔者的恼鬼、召唤者的随从)时,它没有人的主人,按没主算。
+     * 找不到这个主人(离线的玩家、没加载的区块)按人算——不知道是谁的就当是人的。
      */
     public static UUID ownerOf(Entity entity) {
-        return entity instanceof OwnableEntity o ? o.getOwnerUUID() : null;
+        if (!(entity instanceof OwnableEntity o) || o.getOwnerUUID() == null) {
+            return null;
+        }
+        UUID owner = o.getOwnerUUID();
+        boolean mobOwner = entity.level() instanceof ServerLevel level
+                && level.getEntity(owner) instanceof Entity found && !(found instanceof Player);
+        return mobOwner ? null : owner;
     }
 
     /** 按规则文本里的名字取;没有这个名字返回 null。 */
     public static Groups byName(String name) {
-        for (Groups s : values()) {
-            if (s.ruleName.equals(name)) {
-                return s;
-            }
+        return BY_NAME.get(name);
+    }
+
+    private static Map<String, Groups> indexByName() {
+        Map<String, Groups> out = new HashMap<>();
+        for (Groups g : values()) {
+            out.put(g.ruleName, g);
         }
-        return null;
+        return Map.copyOf(out);
     }
 
     /** 用原版的名字表解析一行规则;写错了抛 {@link Rule.Mistake}。全仓解析规则文本都走这里。 */
@@ -244,7 +267,7 @@ public enum Groups {
                 case STRUCTURE -> builder.namedWithOptionalArgument(g.ruleName, g.description, "#minecraft:village",
                         Groups::isTag);
                 case NEAR -> builder.namedWithArgument(g.ruleName, g.description, "owner",
-                        arg -> Set.of("self", "owner", "other").contains(arg));
+                        NEAR_GROUPS::containsKey);
                 default -> {
                     if (g.irreversibleOn.isEmpty()) {
                         builder.name(g.ruleName, g.description);

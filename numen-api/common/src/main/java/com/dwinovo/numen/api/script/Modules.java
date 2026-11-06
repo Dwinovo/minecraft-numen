@@ -167,20 +167,15 @@ public final class Modules implements ScriptCatalog.ModuleSource {
 
     /** 叫这个名字的那一份;没有或被她关掉了是 null。只有随模组发布的那一套时读发布的正文。 */
     public Module get(String name) {
-        EntryId id = idOf(name);
-        if (id == null) {
+        String code = textOf(name);
+        if (code == null) {
             return null;
         }
         if (library == null) {
-            BuiltinModules.Builtin builtin = BuiltinModules.get(name);
-            return builtin == null ? null : new Module(name, builtin.code(), builtin.summary(), Origin.FACTORY, false,
-                    null);
+            return new Module(name, code, BuiltinModules.get(name).summary(), Origin.FACTORY, false, null);
         }
+        EntryId id = idOf(name);
         Library.Entry entry = library.find(id);
-        if (entry == null) {
-            return null;
-        }
-        String code = entry.text();
         Origin origin = entry.group() == Library.Group.SERVER ? Origin.FACTORY
                 : entry.paired() ? Origin.CHANGED : Origin.HERS;
         boolean newer = false;
@@ -230,8 +225,21 @@ public final class Modules implements ScriptCatalog.ModuleSource {
      */
     @Override
     public String code(String name) {
-        Module module = get(name);
-        return module == null ? null : module.code();
+        return textOf(name);
+    }
+
+    /** 这个名字的正文在哪、是什么:只返回文字,不编译不算来源;没有或被她关掉了是 null。{@link #get} 与 {@link #code} 共用。 */
+    private String textOf(String name) {
+        EntryId id = idOf(name);
+        if (id == null) {
+            return null;
+        }
+        if (library == null) {
+            BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+            return builtin == null ? null : builtin.code();
+        }
+        Library.Entry entry = library.find(id);
+        return entry == null ? null : entry.text();
     }
 
     @Override

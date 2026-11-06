@@ -44,6 +44,11 @@ public final class ServerLifecycle {
 
     private ServerLifecycle() {}
 
+    /** 起好了、还没停的那台服务器;还没起好或已经停了是 null。 */
+    public static MinecraftServer running() {
+        return running;
+    }
+
     /**
      * 报到:{@code drop} 会在每次服务器停止时被调用,把这份世界作用域的状态清空。
      *

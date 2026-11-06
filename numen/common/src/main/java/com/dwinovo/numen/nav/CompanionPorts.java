@@ -22,7 +22,7 @@ import net.minecraft.world.item.Item;
 
 /**
  * 同伴接入寻路的端口,只在这里组:她的身体(键盘、视角、鼠标、快捷栏都在它上面)、此刻的权限快照({@link GateTerrain})、这一趟愿意
- * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
+ * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers}),搜索看这台服务器定的表({@link NavClock})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
  * 用的都是这一套。在世界所在的线程上调:权限快照与垫路料在这一刻取。
  */
 public final class CompanionPorts {
@@ -40,33 +40,35 @@ public final class CompanionPorts {
     /** 她的寻路门面,避开 {@code threats},垫路从 {@code materials} 里挑。 */
     public static Navigator navigator(NumenPlayer player, Threats threats, List<Item> materials) {
         return Navigator.of(new CompanionBody(player), new Ports(terrain(player), materials(player, materials),
-                threats, pathTrail(player)));
+                threats, NavClock.of(player.server), pathTrail(player)));
     }
 
     /**
-     * 她的旁路轨迹,接成寻路的 {@link Trace}:走不下去的格子、重搜的理由、收场的诊断,与她每一轮看到的、
-     * 每一刻在哪写在同一个文件里。门面那一侧只给数据,落盘的形状在这里定。
+     * 她的旁路轨迹,接成寻路的 {@link Trace}:一趟怎么收的场、卡在哪一格、按原因分的重搜次数,与她每一轮看到的、
+     * 每一刻在哪写在同一个文件里。门面那一侧只给值,落盘的形状在这里定。
      */
     private static Trace pathTrail(NumenPlayer player) {
         return event -> com.dwinovo.numen.api.agent.trace.TraceRecorders.of(player.getUUID())
                 .ifPresent(trace -> trace.event("path", pathBody(event)));
     }
 
-    /** 一条寻路的事写成轨迹里的一行:坐标写成数组,原因与诊断照它们给的类别名。 */
+    /** 一趟收场写成轨迹里的一行:坐标写成数组,结局与原因照它们给的类别名,重搜次数按原因各记一项。 */
     private static JsonObject pathBody(Trace.PathEvent event) {
         JsonObject o = new JsonObject();
-        o.addProperty("kind", event.kind());
-        put(o, "from", event.from());
-        put(o, "to", event.to());
+        o.addProperty("outcome", event.outcome());
         put(o, "at", event.at());
+        if (event.cell() != null) {
+            put(o, "cell", net.minecraft.world.phys.Vec3.atCenterOf(event.cell()));
+        }
         if (event.reason() != null) {
             o.addProperty("reason", event.reason());
         }
-        if (event.diagnosis() != null) {
-            o.addProperty("diagnosis", event.diagnosis());
-        }
-        if (event.detail() != null) {
-            o.addProperty("detail", event.detail());
+        o.addProperty("ticks", event.ticks());
+        o.addProperty("steps", event.steps());
+        if (!event.replans().isEmpty()) {
+            JsonObject replans = new JsonObject();
+            event.replans().forEach(replans::addProperty);
+            o.add("replans", replans);
         }
         return o;
     }

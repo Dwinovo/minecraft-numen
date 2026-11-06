@@ -80,6 +80,6 @@ record Settings(List<String> scenarios, int repeats, String provider, String mod
     /** 真实模型的端点,按随包的型号目录解析,和产品走同一个解析器。代理不走:评测直连。 */
     LlmEndpoint endpoint() {
         return EndpointResolver.resolve(new ConnectionProfile(provider, null, model, System.getenv(KEY_ENV),
-                baseUrl, null, reasoning, 0, null, 0, null), Catalog.bundled(), "");
+                baseUrl, null, reasoning, 0, null, 0, null, 0, 0), Catalog.bundled(), "");
     }
 }

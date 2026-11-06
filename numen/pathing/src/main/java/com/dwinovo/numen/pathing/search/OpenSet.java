@@ -26,35 +26,25 @@ final class OpenSet {
         return size == 0;
     }
 
-    /** 堆里所有节点的 g + h 里最小的:开放集里"总价加估价"的下界,最优路线上总有一个节点在里面,它至多是最优价。堆空时无穷大。 */
-    double lowerBound() {
-        double lowest = Double.POSITIVE_INFINITY;
-        for (int i = 0; i < size; i++) {
-            int n = items[i];
-            lowest = Math.min(lowest, nodes.g[n] + nodes.h[n]);
-        }
-        return lowest;
-    }
-
-    /** 放进来(不在堆里的节点)。 */
-    void push(int id) {
+    /** 放进来(不在堆里的节点),总价为 {@code f}。 */
+    void push(int id, double f) {
         if (size == items.length) {
             items = Arrays.copyOf(items, size * 2);
         }
         items[size] = id;
         nodes.heapIndex[id] = size;
-        nodes.key[id] = key(nodes.f[id]);
+        nodes.key[id] = key(f);
         size++;
         up(nodes.heapIndex[id]);
     }
 
-    /** 在堆里的降键,不在堆里的(没进过、或已出过堆)放进来。 */
-    void pushOrUpdate(int id) {
+    /** 在堆里的降键到总价 {@code f},不在堆里的(没进过、或已出过堆)放进来。 */
+    void pushOrUpdate(int id, double f) {
         if (nodes.heapIndex[id] >= 0) {
-            nodes.key[id] = key(nodes.f[id]);
+            nodes.key[id] = key(f);
             up(nodes.heapIndex[id]);
         } else {
-            push(id);
+            push(id, f);
         }
     }
 
@@ -67,7 +57,7 @@ final class OpenSet {
         if (key[a] != key[b]) {
             return key[a] < key[b];
         }
-        // 同总价先展开离目标近的;贪心那一遍总价就是估价,估价也平手时先展开已走得远的(沿着走下去,不在整片平台上铺开)
+        // 同总价先展开离目标近的;估价也平手时先展开已走得远的(沿着走下去,不在整片平台上铺开)
         double[] h = nodes.h;
         return h[a] != h[b] ? h[a] < h[b] : nodes.g[a] > nodes.g[b];
     }

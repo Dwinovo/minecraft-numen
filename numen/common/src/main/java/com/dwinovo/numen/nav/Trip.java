@@ -10,6 +10,8 @@ import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.NavStatus;
+import com.dwinovo.numen.pathing.api.Travel;
+import com.dwinovo.numen.pathing.drive.Admission;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
@@ -74,6 +76,10 @@ public final class Trip {
     private List<Item> materials = ThrowawayBlocks.factory();
     /** 从目标里路过,不停稳。 */
     private boolean passing;
+    /** 走、创造飞行还是滑翔:没说就是走({@link #travelling})。 */
+    private Travel travel = Travel.WALK;
+    /** 飞的一趟受理时问过的结论({@link #admit}),开出去时用掉;之后(问完主人接着走)按当时的身体再问。 */
+    private Admission admission;
     /** 先照这条走(规划好交进来的,或停下问主人时没走完的那截);没有为 null。 */
     private Route seed;
 
@@ -139,6 +145,21 @@ public final class Trip {
         return this;
     }
 
+    /**
+     * 受理一次飞({@link Travel#FLY} 或 {@link Travel#GLIDE}):身体此刻飞得起来吗。缺什么({@link com.dwinovo.numen.pathing.drive.Lack})放在交回的结论里,
+     * 宿主据此当场拒绝;飞得起来的,{@link #travelling} 把结论带进开出去的导航。
+     */
+    public static Admission admit(NumenPlayer player, Travel travel, Goal goal) {
+        return CompanionPorts.navigator(player, CompanionPorts.dangers(player), ThrowawayBlocks.factory()).admit(travel, goal);
+    }
+
+    /** 这一趟按 {@code how}({@link Travel#FLY} 或 {@link Travel#GLIDE})去,不是走;{@code admitted} 是受理时问过的结论。开走之前设。 */
+    public Trip travelling(Travel how, Admission admitted) {
+        this.travel = how;
+        this.admission = admitted;
+        return this;
+    }
+
     /** 这一趟从目标里路过,走进去就算到了,不停稳。开走之前设。 */
     public Trip passing() {
         this.passing = true;
@@ -179,6 +200,10 @@ public final class Trip {
     /** 从身体脚下开一次导航(先照 {@link #seed} 走,没有就搜);端口按此刻取,权限快照里已经有主人刚答应的。 */
     private void drive() {
         NavRequest request = NavRequest.to(goal, spec);
+        if (travel != Travel.WALK) {
+            request = request.travelling(travel, admission);
+            admission = null;
+        }
         if (seed != null) {
             request = request.following(seed);
             seed = null;

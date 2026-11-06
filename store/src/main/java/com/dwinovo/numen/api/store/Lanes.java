@@ -48,6 +48,12 @@ public final class Lanes {
         return all;
     }
 
+    /** 此刻还有写没落下去的车道:有就是一句说明,没有是 {@code null}。只读;GameTest 服务器每刻据此等写盘落定。 */
+    public String busy() {
+        long writing = lanes.values().stream().filter(lane -> !lane.idle()).count();
+        return writing == 0 ? null : writing + " disk lane(s) still writing";
+    }
+
     /** 这个键不会再有写了(同伴被遣散):车道不用留。 */
     public void forget(String key) {
         lanes.remove(key);

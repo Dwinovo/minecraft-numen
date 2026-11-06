@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -14,6 +15,9 @@ import com.dwinovo.numen.nav.NavText;
 import com.dwinovo.numen.nav.Trip;
 import com.dwinovo.numen.nav.Walked;
 import com.dwinovo.numen.nav.Walking;
+import com.dwinovo.numen.pathing.api.Travel;
+import com.dwinovo.numen.pathing.drive.Admission;
+import com.dwinovo.numen.pathing.drive.Lack;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 
@@ -23,7 +27,8 @@ import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * {@code numen.move.to} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走到一个到达目标({@link Arrival})。
+ * {@code numen.move.walk}、{@code numen.move.fly}、{@code numen.move.glide} 与 {@code numen.move.away} 在同伴身体上:从她站的地方走(或飞、滑翔)到一个到达目标({@link Arrival})。
+ * 走从不飞;{@code fly} 只用创造飞行,{@code glide} 只用鞘翅({@link MoveToTaskRecord#travel});受理时缺什么当场拒绝({@link Trip#admit})。
  *
  * <p><b>一趟就是一次导航</b>——目标编成寻路的目标({@link Destination}),规格是走路的出厂规格({@link Walking#spec}:可挖可搭,只看
  * 价钱),交给 {@link Trip}。一截一截规划、走、从当时位置按同一份规格接着规划,都在寻路里;这里不留"计划",也不比对路上动了哪些格:
@@ -38,6 +43,12 @@ import net.minecraft.world.phys.Vec3;
 public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskRecord, Walked> {
 
     private static final long TICKS_PER_BLOCK = 20;
+    /** 朝掉落物走的最后一段最多几刻:走到碰上、或被挡住只要几刻,这是兜住物品被挪走时不一直往前走的上限。 */
+    private static final int LEAN_MAX_TICKS = 40;
+    /** 连着这么多刻身体没往前挪,就是被挡住了。 */
+    private static final int LEAN_STILL_TICKS = 3;
+    /** 一刻挪不到这么远算没挪动。 */
+    private static final double LEAN_STILL = 0.005;
     private static final long MAX_EXTRA_TICKS = 5 * 60 * 20;
     /** Progress lease: while the journey is making progress, the deadline is kept this far ahead — a healthy
      *  multi-minute dig route never times out mid-stride, and a stalled one still returns the body within one lease. */
@@ -52,10 +63,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     /** 编好的去处:受理之前编过就用那一份,动手的活派下来的子活开工时现编。 */
     private Destination destination;
+    /** 飞的一趟受理时问过的结论(带着排好的滑翔计划);走的一趟为 null。 */
+    private Admission admission;
     /** 这一趟驾船:航线的船腿;走路的一趟为 null。 */
     private BoatNav boat;
     /** 驾船画出的航线到不了目标所在的水域(目标在岸上):开到岸边就算这一趟走完。 */
     private boolean shore;
+    /** 到了掉落物旁边之后朝它走的最后一段:还在走为 true。 */
+    private boolean leaning;
+    /** 最后一段走了几刻、上一刻身体在哪、连着几刻没挪动。 */
+    private int leanTicks;
+    private Vec3 leanFrom;
+    private int leanStill;
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
@@ -69,8 +88,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected List<Precondition> preconditions() {
         return List.of(() -> {
             Entity vehicle = player.getVehicle();
-            if (vehicle == null || vehicle instanceof Boat && r.sailing && sails()) {
+            if (vehicle == null || vehicle instanceof Boat && r.sailing && r.travel == Travel.WALK && sails()) {
                 return null;
+            }
+            if (r.travel != Travel.WALK) {
+                return Precondition.sitting(player, "and a flight starts from the ground");
             }
             return Precondition.sitting(player, vehicle instanceof Boat && r.sailing
                     ? "which can only be sailed to a place (a Pos or a column {x = …, z = …}), not " + r.arrival.words()
@@ -95,6 +117,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         } catch (IllegalArgumentException refused) {
             return Preparation.refused(TaskResult.fail(ErrorKind.NO_PATH, refused.getMessage(), null, value()));
         }
+        if (r.travel != Travel.WALK) {
+            admission = Trip.admit(player, r.travel, destination.goal());
+            Lack lack = admission.lack();
+            if (lack != null) {
+                boolean onFoot = lack.why() == Lack.Why.TOO_NEAR || lack.why() == Lack.Why.NO_FLIGHT;
+                return Preparation.refused(TaskResult.fail(NavText.type(lack) == FailureType.NO_MATERIAL ? ErrorKind.NO_MATERIAL : ErrorKind.NO_PATH,
+                        "can't " + (r.travel == Travel.FLY ? "fly" : "glide") + " there: " + NavText.lack(lack),
+                        onFoot ? com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", destination.toward()) : null, value()));
+            }
+        }
         return Preparation.READY;
     }
 
@@ -114,6 +146,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return;
         }
         nav = Trip.to(player, destination.goal(), Walking.spec(player.serverLevel()), destination.toward());
+        if (r.travel != Travel.WALK) {
+            nav.travelling(r.travel, admission);
+        }
         com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 去 {}", r.getToolName(), r.arrival.words());
     }
 
@@ -147,21 +182,55 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // Progress lease: while the walk is making progress, keep the deadline PROGRESS_LEASE ahead — never past the
         // check-in cap. Progress, NOT goal distance, is the liveness signal: healthy routes routinely move away from
         // the goal (skirting a lake, spiraling down), and the flat budget above can't price terrain.
+        if (leaning) {
+            return lean();
+        }
         if (nav.progressing()) {
             renewLease();
         }
         return switch (nav.tick()) {
             case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> TaskState.SUCCESS;
+            case ARRIVED -> destination.goal() instanceof ItemReach ? lean() : TaskState.SUCCESS;
             case FAILED -> {
                 String why = nav.failReason();
                 FailureType type = nav.failType();
                 stopNav();
-                fail("blocked: got within " + String.format("%.1f", distance()) + " blocks of " + r.arrival.to().words()
-                        + " (now on the ground at y=" + player.blockPosition().getY() + "). " + why + ".", type);
+                fail((r.travel != Travel.WALK ? "stopped: got within " : "blocked: got within ") + String.format("%.1f", distance())
+                        + " blocks of " + r.arrival.to().words() + " (now on the ground at y=" + player.blockPosition().getY() + "). " + why + ".",
+                        type);
                 yield TaskState.FAILED;
             }
         };
+    }
+
+    /**
+     * 到了掉落物旁边的格:朝物品走,碰上它(原版每刻的捡取判据)、被碰撞挡住、或到了上限就收场。被挡住时身体半宽贴墙,位置是几何定的,
+     * 所以不靠停点的精度({@link ItemReach#contains} 认的就是这一点)。刚掉下来的东西还捡不了,身体碰上它就停手,等多久是调用方的事。
+     */
+    private TaskState lean() {
+        ItemReach reach = (ItemReach) destination.goal();
+        Vec3 here = player.position();
+        if (!leaning) {
+            leaning = true;
+            leanTicks = 0;
+            leanStill = 0;
+        } else {
+            leanStill = here.distanceToSqr(leanFrom) < LEAN_STILL * LEAN_STILL ? leanStill + 1 : 0;
+        }
+        leanFrom = here;
+        if (reach.reaches(player.getBoundingBox()) || leanStill >= LEAN_STILL_TICKS || ++leanTicks > LEAN_MAX_TICKS) {
+            stopLean();
+            return TaskState.SUCCESS;
+        }
+        player.look().faceToward(reach.center().x, reach.center().z);
+        player.controls().press(Controls.Key.FORWARD);
+        player.controls().release(Controls.Key.SPRINT);
+        return TaskState.RUNNING;
+    }
+
+    private void stopLean() {
+        leaning = false;
+        player.controls().release(Controls.Key.FORWARD);
     }
 
     /** 驾船的一刻:到了就是这一趟走完;搁浅、下了船照实收场。船留在原地,那是她的船,不是垃圾。 */
@@ -236,6 +305,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + " blocks from " + where + ", still sitting in the boat; `numen.use.dismount()` steps off to go on "
                     + "on foot.";
         }
+        if (r.travel == Travel.GLIDE) {
+            // 滑翔落在哪一层、离那一列多远由地面定:如实交代,走完剩下的由她决定
+            return "glided and landed at " + here(gy) + ", " + String.format("%.1f", distance()) + " blocks (horizontally) from " + where
+                    + "; `numen.move.walk` goes the rest.";
+        }
         String reached = switch (a.how()) {
             case AT -> switch (a.to()) {
                 case Where.Height h -> "reached elevation y=" + gy;
@@ -256,7 +330,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected String timeoutMessage() {
         // 到期是一趟最长的时间到了(一直在推进),还是租约到期前没有进展:看干活的刻数有没有用满,不看到期那一刻的瞬时信号
         boolean checkIn = workTicks() >= leaseCapWork;
-        return NavText.timedOut((int) workTicks(), distance(), here(player.blockPosition().getY()),
+        return NavText.timedOut(r.travel, r.getToolName(), (int) workTicks(), distance(), here(player.blockPosition().getY()),
                 nav == null ? null : nav.nearestRefusal(), checkIn);
     }
 
@@ -273,6 +347,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     @Override
     protected void cleanup() {
         super.cleanup();
+        if (leaning) {
+            stopLean();
+        }
         if (boat != null) {
             boat.stop();   // 中途被取消/让位:收桨,别让船带着按下的前进键漂走
             boat = null;

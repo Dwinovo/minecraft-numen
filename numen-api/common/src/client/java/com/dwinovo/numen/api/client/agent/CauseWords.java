@@ -25,6 +25,7 @@ public final class CauseWords {
             case Cause.BAD_REQUEST -> withReply(cause,
                     I18n.get(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST) + " (HTTP " + cause.arg(0) + ")");
             case Cause.NETWORK -> I18n.get(Keys.GUI_PROVIDERS_CHECK_NETWORK);
+            case Cause.CONTEXT_OVERFLOW -> withReply(cause, I18n.get(Keys.CAUSE_CONTEXT_OVERFLOW));
             case Cause.UNBOUND -> I18n.get(Keys.ENDPOINT_UNBOUND);
             case Cause.NO_KEY -> I18n.get(Keys.ENDPOINT_NO_KEY, cause.arg(0));
             case Cause.NO_URL -> I18n.get(Keys.ENDPOINT_NO_URL, cause.arg(0));

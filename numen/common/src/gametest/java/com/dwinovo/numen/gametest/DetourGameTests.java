@@ -30,8 +30,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 绕路的代价,从入口量(套件 {@code numen_detour},只用 {@code -Pgametest=numen_detour} 手动选跑,不在日常批里):{@code numen.move.to}
- * 走一趟,每一段搜索交出的结论(停因、展开数、证到的界、离目标最近处被拒的原因)一段一段记进日志({@code [detour-probe]} 开头的行),
+ * 绕路的代价,从入口量(套件 {@code numen_detour},只用 {@code -Pgametest=numen_detour} 手动选跑,不在日常批里):{@code numen.move.walk}
+ * 走一趟,每一次搜索交出的结论(停因、展开数、离目标最近处被拒的原因)一段一段记进日志({@code [detour-probe]} 开头的行),
  * 收场时再记一行总账和模型读到的回执。每段两个比值,分母都是第一段起点的估价(还没抬高过,就是直线估价):
  * <ul>
  *   <li>起点估价:搜索对"从这一段起点到目标至少多少刻"的下界,含这一趟记忆里抬高的增量;</li>
@@ -136,7 +136,7 @@ public class DetourGameTests {
         }
     }
 
-    /** 她:钻石镐(挖一路不坏)、一百二十八块圆石(垫路料),dig 和 place 都许(出厂的 {@code numen.move.to} 就是),在 rel 那一格。 */
+    /** 她:钻石镐(挖一路不坏)、一百二十八块圆石(垫路料),dig 和 place 都许(出厂的 {@code numen.move.walk} 就是),在 rel 那一格。 */
     private static NumenPlayer miner(GameTestHelper helper, String name, BlockPos rel, boolean stocked, int efficiency) {
         NumenPlayer her = spawnAt(helper, name, rel, false);
         if (stocked) {
@@ -243,11 +243,11 @@ public class DetourGameTests {
 
     // ==================== 量 ====================
 
-    /** 从入口 {@code numen.move.to} 开走,每刻看一眼段状态机,收场时记总账。 */
+    /** 从入口 {@code numen.move.walk} 开走,每刻看一眼段状态机,收场时记总账。 */
     private static void probe(GameTestHelper helper, String label, NumenPlayer her, BlockPos target, boolean mustArrive) {
         BlockPos origin = helper.absolutePos(BlockPos.ZERO);
         Probe probe = new Probe(label, her, origin);
-        ToolRun walk = lua(her, "return numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(her, "return numen.move.walk(" + xyz(target) + ")");
         probe.walk = walk;
         helper.onEachTick(probe::sample);
         succeedWhen(helper, () -> {
@@ -311,35 +311,33 @@ public class DetourGameTests {
             if (current.waiting()) {
                 waiting++;
             }
-            Object navigation = field(current, "navigation");
-            Object driver = navigation == null ? null : field(navigation, "driver");
-            Object result = driver == null ? null : field(driver, "lastResult");
+            // 最近一次搜索的输入与结论、为什么派、总预算都记在这一趟({@link Trip})自己身上
+            Object result = field(current, "lastResult");
             if (result == null || result == seen) {
                 return;
             }
             seen = result;
             SearchResult r = (SearchResult) result;
-            Search search = (Search) field(driver, "lastSearch");
-            Object allowance = field(driver, "allowance");
+            Search search = (Search) field(current, "lastSearch");
+            Object allowance = field(current, "allowance");
             double h = r.startEstimate();
             if (searches == 0) {
                 first = h;
             }
             Route route = r.route();
             SearchResult.Blocking b = r.blocking();
-            String blocking = b == null || r.reached() ? "-"
+            String blocking = b == null || r.arrived() ? "-"
                     : b.move() + " 从 " + rel(b.from()) + " 卡在 " + rel(b.fails().cell()) + " 前提=" + b.fails().reason();
             // 从脚下搜的,起点就是身体此刻的位置:之前装进去的路线没走完的部分不算数,只算走完的步
-            if (String.valueOf(field(driver, "purpose")).equals("FROM_BODY")) {
+            if (String.valueOf(field(current, "purpose")).equals("FROM_BODY")) {
                 committed = walked();
             }
             double bound = committed + h;
             committed += route == null ? 0 : route.cost();
             Constants.LOG.info(String.format(Locale.ROOT,
-                    "[detour-probe] %s #%d 刻 %d 墙钟 %dms 起点 %s %s 停因 %s 展开 %d 界 %s 起点估价 %.1f(直线估价的 %.2f 倍) 总价下界 %.1f(直线估价的 %.2f 倍) 路线 %s 总预算 %s/%s 离目标最近处被拒:%s",
+                    "[detour-probe] %s #%d 刻 %d 墙钟 %dms 起点 %s %s 停因 %s 展开 %d 起点估价 %.1f(直线估价的 %.2f 倍) 总价下界 %.1f(直线估价的 %.2f 倍) 路线 %s 总预算 %s/%s 离目标最近处被拒:%s",
                     label, ++searches, her.level().getGameTime() - startTick, (System.nanoTime() - startNanos) / 1_000_000,
-                    rel(search.start()), field(driver, "purpose"), r.stop(), r.expanded(),
-                    Double.isNaN(r.gap()) ? "-" : String.format(Locale.ROOT, "%.2f", r.gap()), h, h / first, bound, bound / first,
+                    rel(search.start()), field(current, "purpose"), r.stop(), r.expanded(), h, h / first, bound, bound / first,
                     route == null ? "无" : String.format(Locale.ROOT, "%d步 代价%.1f 终点%s", route.legs().size(), route.cost(),
                             rel(route.end())),
                     field(allowance, "spent"), field(allowance, "total"), blocking));
@@ -373,12 +371,12 @@ public class DetourGameTests {
                     }
                 }
                 cost += report.journal().routeCost();
-                replans += report.journal().replans();
+                replans += report.journal().replans().values().stream().mapToInt(Integer::intValue).sum();
                 blockages += report.journal().blockages();
             }
             JsonElement returned = run.data().get("returned");
             Constants.LOG.info(String.format(Locale.ROOT,
-                    "[detour-probe] %s 收场 共 %d 段搜索 游戏刻 %d(其中干等搜索 %d) 墙钟 %.1fs 挖 %d 放 %d 走完的步按规划算 %.1f 刻(直线估价 %.1f,%.2f 倍) 重搜 %d 走不下去 %d 身体 %s 结局 %s 回执 %s 回值 %s",
+                    "[detour-probe] %s 收场 共 %d 段搜索 游戏刻 %d(其中干等搜索 %d) 墙钟 %.1fs 挖 %d 放 %d 走完的步按规划算 %.1f 刻(直线估价 %.1f,%.2f 倍) 重规划 %d 走不下去 %d 身体 %s 结局 %s 回执 %s 回值 %s",
                     label, searches, her.level().getGameTime() - startTick, waiting, (System.nanoTime() - startNanos) / 1e9,
                     dug, placed, cost, first, cost / first, replans, blockages, rel(her.blockPosition()),
                     run.succeeded() ? "到达" : "失败", run.outcome(), returned));

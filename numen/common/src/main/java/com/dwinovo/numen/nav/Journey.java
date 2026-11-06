@@ -24,12 +24,22 @@ public final class Journey {
     private final List<BodyAction> actions = new ArrayList<>();
     private final List<DiveLog.Dive> dives = new ArrayList<>();
     private final List<Ruling> rulings = new ArrayList<>();
+    private final List<BlockPos> launches = new ArrayList<>();
+    private final List<BlockPos> landings = new ArrayList<>();
+    private final List<EditLedger.Glided> glides = new ArrayList<>();
+    private final List<BlockPos> alighted = new ArrayList<>();
+    private double flown;
 
     /** 并进一趟路的实际账。 */
     public void add(Report report) {
         entries.addAll(report.ledger().entries());
         actions.addAll(report.actions());
         dives.addAll(report.dives());
+        launches.addAll(report.ledger().launches());
+        landings.addAll(report.ledger().landings());
+        glides.addAll(report.ledger().glides());
+        alighted.addAll(report.ledger().alighted());
+        flown += report.ledger().flown();
     }
 
     /** 并进另一本账:一件活派下的子活收场时,它的账归这件活。 */
@@ -38,6 +48,11 @@ public final class Journey {
         actions.addAll(other.actions);
         dives.addAll(other.dives);
         rulings.addAll(other.rulings);
+        launches.addAll(other.launches);
+        landings.addAll(other.landings);
+        glides.addAll(other.glides);
+        alighted.addAll(other.alighted);
+        flown += other.flown;
     }
 
     /** 并进路上权限层与主人的裁定。 */
@@ -84,14 +99,20 @@ public final class Journey {
         return Collections.unmodifiableList(actions);
     }
 
-    /** 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、也没被拒过时是空串。 */
-    public String describe() {
-        return NavText.journey(entries, actions, dives, rulings);
+    /**
+     * 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、没飞过、也没被拒过时是空串。{@code flying}:此刻身体还在飞。
+     */
+    public String describe(boolean flying) {
+        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides, alighted));
     }
 
-    /** 路程回执:停在 {@code pos}、离要去的地方还差 {@code distanceLeft} 格,加上这本账里挖了几格、放了几格、裁定了什么。 */
-    public Walked walked(Vec3 pos, double distanceLeft) {
+    /**
+     * 路程回执:停在 {@code pos}、离要去的地方还差 {@code distanceLeft} 格,加上这本账里挖了几格、放了几格、飞了多远、从哪儿起飞在哪儿降落、
+     * 裁定了什么;{@code flying}:停下时身体还在飞(悬在空中)。
+     */
+    public Walked walked(Vec3 pos, double distanceLeft, boolean flying) {
         NavText.Tally edits = NavText.tally(entries);
-        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), rulings);
+        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), edits.dugCells(), edits.placedCells(),
+                rulings, flown, launches, landings, flying, glides.stream().map(Gliding::of).toList());
     }
 }

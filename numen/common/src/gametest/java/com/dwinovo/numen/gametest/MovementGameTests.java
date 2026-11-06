@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskRecord;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -19,11 +21,12 @@ import net.minecraft.world.phys.Vec3;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * 移动:{@code numen.move.to}、开门、垫脚上高台、水与岩浆、{@code numen.move.follow}、
+ * 移动:{@code numen.move.walk}、开门、垫脚上高台、水与岩浆、{@code numen.move.follow}、
  * 载具,以及任务与编号跨重建的延续。走路本身(默认可挖可搭、回执、坐着载具)见 {@link WalkGameTests}。
  */
 public class MovementGameTests {
 
+    // 每个批次都自己定下世界(难度、时刻、天气、模拟距离、权限设置),不继承上一批留下的:批次的先后说不准
     /** 冒烟批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_smoke")
     public static void prepareSmokeBatch(ServerLevel level) {
@@ -56,42 +59,11 @@ public class MovementGameTests {
                 "gametest_scout", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
-        TaskRecord<?> record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the goto target");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与停止键
-     * 同一个入口),收尾的消息以"the owner pressed Stop"开头——模型不用猜是谁、为什么停的。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_smoke")
-    public static void an_owner_stop_says_the_owner_stopped_it(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
-        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
-                "gametest_stopped", UUID.randomUUID(), level,
-                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        ToolRun walk = lua(companion, "numen.move.to({x = " + target.getX() + ", z = " + target.getZ() + "})");
-        boolean[] stopped = {false};
-
-        succeedWhen(helper, () -> {
-            TaskRecord<?> record = walk.task();
-            if (!stopped[0]) {
-                helper.assertTrue(record != null && record.getState() == com.dwinovo.numen.api.task.TaskState.RUNNING,
-                        "goto is not running yet");
-                com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion);
-                stopped[0] = true;
-            }
-            String message = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(message != null, "the stopped goto has not settled");
-            helper.assertTrue(message.startsWith("the owner pressed Stop"),
-                    "the result does not say the owner stopped it: " + message);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -128,7 +100,7 @@ public class MovementGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord<?> record = lua(companion, "numen.move.to(" + xyz(target) + ")").task();
+        TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
@@ -161,7 +133,7 @@ public class MovementGameTests {
         double boatStartDist = boat.position().distanceTo(Vec3.atCenterOf(target));
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            lua(companion, "numen.move.to(" + xyz(target) + ")\nnumen.use.dismount()\nnumen.move.to(" + xyz(target)
+            lua(companion, "numen.move.walk(" + xyz(target) + ")\nnumen.use.dismount()\nnumen.move.walk(" + xyz(target)
                     + ")");
         });
 
@@ -229,24 +201,6 @@ public class MovementGameTests {
         return stand;
     }
 
-    /**
-     * 跟得上就垫着去跟:目标在够不着的柱顶,follow 和 move.to 同一套走法——身上有泥土就垫起来,跟到它身边(3 格内),垫了几块泥土。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void follow_builds_up_to_keep_up(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var stand = standOnPillar(helper, Blocks.STONE);
-        NumenPlayer companion = spawnBare(helper, "gametest_tail", new BlockPos(3, 2, 8), false);
-        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
-        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3, seconds = 60})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(companion.distanceTo(stand) <= 4.5, "she did not get up beside it: " + companion.distanceTo(stand));
-            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) < 16, "no dirt was spent keeping up");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /** 跟不上也说清:目标在够不着的基岩柱顶,她一块能垫的方块也没有——受理当场回,说每条路都要垫方块、她没带料。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_without_blocks_to_build_with_is_refused_at_once(GameTestHelper helper) {
@@ -262,52 +216,6 @@ public class MovementGameTests {
                     "the reason must say she has no blocks to build with: " + follow.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
-    }
-
-    /**
-     * 跟的人封在一间基岩小屋里,小屋嵌在一大块实心的石头中间(挖得动,足够大):受理前的试搜在石头里一格一格往里挖,搜到预算用完也
-     * 没搜完——这只是没搜完,不能证明到不了。受理,开始走;不当场回一句"跟不上"。石头铺得比场地大,伸进邻居的场地里,所以自成一批,
-     * 收场时还成空气。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_follow_budget")
-    public static void follow_is_accepted_when_the_probe_search_runs_out_of_budget(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos low = helper.absolutePos(new BlockPos(16, 1, -12));
-        BlockPos high = helper.absolutePos(new BlockPos(55, 40, 27));
-        for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
-            level.setBlock(cell, Blocks.STONE.defaultBlockState(), 2);
-        }
-        BlockPos room = helper.absolutePos(new BlockPos(36, 20, 8));
-        for (BlockPos cell : BlockPos.betweenClosed(room.offset(-4, -4, -4), room.offset(4, 4, 4))) {
-            level.setBlock(cell, Blocks.BEDROCK.defaultBlockState(), 2);
-        }
-        level.setBlock(room, Blocks.AIR.defaultBlockState(), 2);
-        var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, room.getX() + 0.5, room.getY(), room.getZ() + 0.5);
-        level.addFreshEntity(stand);
-        NumenPlayer companion = spawnBare(helper, "gametest_tailing", new BlockPos(3, 2, 8), false);
-        ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
-
-        steps(helper)
-                .thenWaitUntil(() -> {
-                    // 试搜在工作线程上按墙钟跑,测试服务器的刻不等它:每刻让出一点墙钟
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    helper.assertTrue(follow.reply() != null, "follow has not replied");
-                    helper.assertTrue(!follow.refused(),
-                            "follow was refused although the search only ran out of budget: " + follow.reply());
-                    helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
-                })
-                .thenExecute(() -> {
-                    CompanionFactory.despawn(level.getServer(), companion);
-                    stand.discard();
-                    for (BlockPos cell : BlockPos.betweenClosed(low, high)) {
-                        level.setBlock(cell, Blocks.AIR.defaultBlockState(), 2);
-                    }
-                })
-                .thenSucceed();
     }
 
     /**
@@ -361,38 +269,29 @@ public class MovementGameTests {
         return helper.absolutePos(new BlockPos(11, 5, 7));
     }
 
-    /** 身上带着泥土:垫着爬上高台,泥土用掉了几块。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_up_a_tower_pillars_up(GameTestHelper helper) {
-        BlockPos top = bedrockTower(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 7), false);
-        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(top) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(top) <= 2,
-                    "she did not get onto the tower: " + walk.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) < 16, "no dirt was spent climbing");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
-     * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的泥土记在她名下;主人在场,{@code numen.work.dig} 拆掉其中一格,
-     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。
+     * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的每一块泥土都记在她名下;寻路搜索拿来问权限的视图可以是过时的快照、
+     * 套着计划里已经挖掉的假想(那里这些格是空气),问过之后记录还在;主人在场,{@code numen.work.dig} 拆掉其中一格,
+     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。创造模式放下的同样记在她名下:原版创造模式的
+     * {@code useItemOn} 只是放完把物品数量还原,落位照样经 {@code BlockItem.place},记号挂在那一处。
      */
     @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_terrain")
     public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
+        herPillarIsHers(helper, "gametest_stacker", false);
+    }
+
+    private static void herPillarIsHers(GameTestHelper helper, String name, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos top = bedrockTower(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_stacker", new BlockPos(3, 2, 7), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_watcher");
+        NumenPlayer companion = spawnAt(helper, name, new BlockPos(3, 2, 7), creative);
+        // 这条量的是她垫的柱子归她拆,不是飞上去:创造模式的身体许飞,飞比垫柱便宜,所以关掉飞行的能力
+        companion.getAbilities().mayfly = false;
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, name + "_watcher");
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.api.permission.ConsentDesk.of(companion).pending() != null);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(top) + ")");
-        BlockPos[] pillar = new BlockPos[1];
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(top) + ")");
+        List<BlockPos> pillar = new ArrayList<>();
         ToolRun[] clear = new ToolRun[1];
 
         steps(helper)
@@ -400,20 +299,25 @@ public class MovementGameTests {
                         "she did not get onto the tower: " + walk.outcome()))
                 .thenExecute(() -> {
                     var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-                    pillar[0] = BlockPos.betweenClosedStream(helper.absolutePos(new BlockPos(0, 2, 0)),
+                    BlockPos.betweenClosedStream(helper.absolutePos(new BlockPos(0, 2, 0)),
                                     helper.absolutePos(new BlockPos(15, 6, 15)))
                             .filter(p -> level.getBlockState(p).is(Blocks.DIRT))
-                            .map(BlockPos::immutable)
-                            .findFirst().orElse(null);
-                    helper.assertTrue(pillar[0] != null, "no dirt of hers stands anywhere");
-                    var placer = placed.placerAt(pillar[0], level.getBlockState(pillar[0]));
-                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
-                            "the dirt she pillared with is not recorded as hers: " + placer);
-                    clear[0] = lua(companion, "numen.work.dig(" + xyz(pillar[0]) + ")");
+                            .forEach(p -> pillar.add(p.immutable()));
+                    helper.assertTrue(!pillar.isEmpty(), "no dirt of hers stands anywhere");
+                    var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+                    for (BlockPos cell : pillar) {
+                        // 搜索视图里这一格是空气:问一句裁决,不该把记录问没了
+                        gate.judge(com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState()),
+                                net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
+                        var placer = placed.placerAt(cell, level.getBlockState(cell));
+                        helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                                "the dirt she pillared with at " + cell.toShortString() + " is not recorded as hers: " + placer);
+                    }
+                    clear[0] = lua(companion, "numen.work.dig(" + xyz(pillar.get(0)) + ")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(clear[0].done(), "taking the pillar down has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(clear[0].ranToTheEnd() && level.getBlockState(pillar[0]).isAir(),
+                    helper.assertTrue(clear[0].ranToTheEnd() && level.getBlockState(pillar.get(0)).isAir(),
                             "her pillar block is still there: " + clear[0].receipt());
                     helper.assertTrue(!asked[0], "she asked the owner about her own pillar");
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -422,12 +326,33 @@ public class MovementGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 放置记录只被活世界清:一格记着她放的、世界里已被别人挖空,拿搜索快照(这里全是空气)问权限,记录还在;拿活世界问,
+     * 世界里没了的记录就清掉,之后落进这一格的东西不算她放的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 20, batch = "numen_terrain")
+    public static void a_placement_record_is_cleared_only_by_reading_the_live_world(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_recorder", new BlockPos(3, 2, 7), false);
+        BlockPos cell = helper.absolutePos(new BlockPos(8, 2, 8));
+        var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
+        placed.record(cell, new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(companion.getUUID(), "gametest_recorder"));
+        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
+        var action = com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState());
+        gate.judge(action, net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
+        helper.assertTrue(placed.isBuilt(cell.asLong()), "a snapshot's air cleared the record");
+        gate.judge(action, level);
+        helper.assertTrue(!placed.isBuilt(cell.asLong()), "the live world's air left the record standing");
+        CompanionFactory.despawn(level.getServer(), companion);
+        helper.succeed();
+    }
+
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_up_a_tower_without_materials_says_so(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_grounded", new BlockPos(3, 2, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(top) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(top) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "the walk has not finished");
@@ -437,86 +362,7 @@ public class MovementGameTests {
         });
     }
 
-    /** 场地垫高两层,正中一道两格宽、两格深的水沟横着切开:她游过去,爬上对岸,到达目标。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_swims_across_a_water_channel(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                boolean channel = x == 8 || x == 9;
-                for (int y = 2; y <= 3; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            channel ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        BlockPos target = helper.absolutePos(new BlockPos(13, 4, 7));
-        NumenPlayer companion = spawnAt(helper, "gametest_swimmer", new BlockPos(3, 4, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
-                    "she did not get across the channel: " + walk.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    // ---- y 给得不对:地里;水底、岩浆 ----
-
-    /**
-     * 目标是石头里的一格:一个 Pos 站得进去就站进去——一块 3×3×3 的实心石头,正中那一格是目标,她挖进去,站在里面。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 2007, batch = "numen_terrain")
-    public static void goto_a_position_inside_rock_digs_into_it(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (BlockPos rel : BlockPos.betweenClosed(new BlockPos(10, 2, 6), new BlockPos(12, 4, 8))) {
-            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STONE.defaultBlockState());
-        }
-        BlockPos target = helper.absolutePos(new BlockPos(11, 3, 7));
-        NumenPlayer companion = spawnBare(helper, "gametest_borer", new BlockPos(3, 2, 7), false);
-        ToolRun walk = lua(companion, "return numen.move.to(" + xyz(target) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(target),
-                    "she did not get into the rock: " + walk.outcome() + " at " + companion.blockPosition().toShortString());
-            helper.assertTrue(level.getBlockState(target).isAir(), "the cell she stands in is still stone");
-            helper.assertTrue(returned(walk).get("dug").getAsInt() >= 2, "the account does not count what she dug: " + returned(walk));
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    private static com.google.gson.JsonObject returned(ToolRun run) {
-        var value = run.data().get("returned");
-        return value != null && value.isJsonObject() ? value.getAsJsonObject() : new com.google.gson.JsonObject();
-    }
-
-    /** 场地垫高三层,中间一个 3×3、三格深的水池;目标是池底正中那一格:她下水沉到池底,就站在那一格。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void goto_to_the_bottom_of_a_pool(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                boolean pool = x >= 9 && x <= 11 && z >= 6 && z <= 8;
-                for (int y = 2; y <= 4; y++) {
-                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            pool ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
-                }
-            }
-        }
-        BlockPos target = helper.absolutePos(new BlockPos(10, 2, 7));
-        NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(3, 5, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 1,
-                    "she did not reach the bottom of the pool: " + walk.outcome()
-                            + " at " + companion.blockPosition().toShortString());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
+    // ---- y 给得不对:水底、岩浆 ----
 
     /**
      * 场地垫高一层,中间一道一格宽的岩浆沟横着拦住大半边,只在一头留出通路:她绕过去到达目标,
@@ -534,7 +380,7 @@ public class MovementGameTests {
         }
         BlockPos target = helper.absolutePos(new BlockPos(13, 3, 7));
         NumenPlayer companion = spawnAt(helper, "gametest_firewalker", new BlockPos(3, 3, 7), false);
-        ToolRun walk = lua(companion, "numen.move.to(" + xyz(target) + ")");
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
         boolean[] burned = new boolean[1];
         helper.onEachTick(() -> burned[0] |= companion.isOnFire() || companion.getHealth() < companion.getMaxHealth());
 
@@ -547,7 +393,7 @@ public class MovementGameTests {
         });
     }
 
-    // ---- follow:跟主人、跟的东西没了、编号不对、叫停 ----
+    // ---- follow:跟主人、跟的东西没了 ----
 
     /** 跟着主人:主人挪到场地另一头,她跟过去停在身边;跟上了也不收场,跟到时长到了才收。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
@@ -639,41 +485,6 @@ public class MovementGameTests {
                 .thenExecute(() -> {
                     com.dwinovo.numen.api.entity.Companions.dismiss(server, second[0]);
                     pig.discard();
-                })
-                .thenSucceed();
-    }
-
-    /** 给了一个这里没有的实体身份:当场失败,叫她先扫一眼附近的实体。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
-        ToolRun follow = lua(companion, "numen.move.follow(\"pig@999999\")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(follow.done(), "follow has not replied");
-            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("pig@999999 is not near you")
-                            && "numen.scan.entities()".equals(follow.hint()),
-                    "the failure does not name the missing id and the scan: " + follow.outcome() + " / " + follow.hint());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 跟着主人的时候主人按停止:跟随按主人停止收场。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
-    public static void owner_stop_while_following_ends_it(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_dismissed", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_releaser");
-        ToolRun follow = lua(companion, "numen.move.follow()");
-
-        steps(helper)
-                .thenIdle(20)
-                .thenExecute(() -> com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion))
-                .thenWaitUntil(() -> helper.assertTrue(follow.ended() && follow.outcome().startsWith("the owner pressed Stop"),
-                        "following did not end as stopped by the owner: " + follow.outcome()))
-                .thenExecute(() -> {
-                    CompanionFactory.despawn(level.getServer(), companion);
-                    leave(owner);
                 })
                 .thenSucceed();
     }

@@ -28,7 +28,7 @@ public final class Call {
     }
 
     /** 一个函数的一次调用,按它的参数表写:位置参数依次(收下余下全部的逐个写出),写了值的选项合成最后一张选项表。 */
-    public static String of(ApiFunction fn, Record args) {
+    public static String of(ApiFunction fn, FnArgs args) {
         Map<String, Object> named = fn.encode(args);
         List<Object> objects = new ArrayList<>();
         Map<String, Object> options = new java.util.LinkedHashMap<>();

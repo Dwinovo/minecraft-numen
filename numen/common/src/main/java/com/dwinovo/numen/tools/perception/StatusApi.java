@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.pathing.api.Snapshots;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -28,7 +29,7 @@ import java.util.Optional;
 
 /**
  * {@code numen.status}:她此刻的身体、主人、世界。三个函数都在服务端当场读、当场回,不占身体、不动世界;位置是 Pos,原样就能交给要一格的
- * 参数({@code numen.move.to(numen.status.owner().pos)})。
+ * 参数({@code numen.move.walk(numen.status.owner().pos)})。
  */
 public final class StatusApi {
 
@@ -67,13 +68,15 @@ public final class StatusApi {
                        @Doc("Breath left, in ticks.") int air,
                        int maxAir,
                        boolean inLava,
+                       @Doc("Creative flight is on: you are up in the air on purpose, flying or hovering.") boolean flying,
+                       @Doc("You are gliding on an elytra.") boolean gliding,
                        @Doc("What you wear and what mods report about your body.") Optional<String> bodyState) {}
 
     @Fn("Your body: health, hunger, position, biome, what is in your hands and on you, movement state.")
     @Example("local me = numen.status.self()\nprint(me.pos.x, me.pos.y, me.pos.z, me.hp)")
     @Note("Instant and read-only: name, game mode, health, hunger and saturation, position, dimension, biome, the "
             + "structures you stand in, what is in your hands, what you wear and what mods report about your body, "
-            + "movement state.")
+            + "movement state (on the ground, in water or lava, flying, gliding).")
     @Note("It does not list your backpack: what you carry is in front of you every turn; `numen.gui.view()` shows "
             + "exact slots.")
     @SeeAlso({"numen.status.owner", "numen.status.world"})
@@ -108,8 +111,8 @@ public final class StatusApi {
                 structures, new Hands(held(self.getMainHandItem()), held(self.getOffhandItem())),
                 new Slots(used, inv.getContainerSize()), self.onGround(), self.isInWater(),
                 // 剩下的气:少了它,身体曾在冰海里淹死而脑子还在从容地规划一趟 870 格的路(2026-07-15)
-                self.getAirSupply(), self.getMaxAirSupply(), self.isInLava(),
-                bodyState.isEmpty() ? Optional.empty() : Optional.of(bodyState));
+                self.getAirSupply(), self.getMaxAirSupply(), self.isInLava(), Snapshots.flying(self),
+                self.isFallFlying(), bodyState.isEmpty() ? Optional.empty() : Optional.of(bodyState));
     }
 
     private static Optional<Held> held(ItemStack stack) {

@@ -103,6 +103,15 @@ class DiggingTest {
                 tools.ticks(stone, false, true));
         assertEquals(ToolChoice.Pick.BARE_HAND, tools.best(Blocks.DIRT.defaultBlockState()).slot(),
                 "挖泥土镐子不比空手快,不为它磨损镐子");
+
+        // 手上一把剑,快捷栏里木镐、木锹:石头用镐,泥土用锹
+        inventory.set(31, ItemStack.EMPTY);
+        inventory.set(0, new ItemStack(Items.IRON_SWORD));
+        inventory.set(1, new ItemStack(Items.WOODEN_PICKAXE));
+        inventory.set(2, new ItemStack(Items.WOODEN_SHOVEL));
+        ToolChoice kit = new ToolChoice(Fixtures.body(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, inventory));
+        assertEquals(1, kit.best(stone).slot());
+        assertEquals(2, kit.best(Blocks.DIRT.defaultBlockState()).slot());
     }
 
     /**

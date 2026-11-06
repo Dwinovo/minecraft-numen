@@ -53,7 +53,7 @@ class LlmMindTest {
         ProviderLibrary providers = new ProviderLibrary(LibraryHub.headless(dir).library(ProviderLibrary.KIND, OWNER),
                 new Keys(ownerKeys, serverKeys), new ModelCatalog(dir.resolve("cache.json"), () -> ""));
         profile = providers.create("档案", new ConnectionProfile("deepseek", null, "deepseek-chat", null, null, null,
-                null, 0, null, 0, null)).id();
+                null, 0, null, 0, null, 0, 0)).id();
         mind = new LlmMind(providers, OWNER, quota);
     }
 
@@ -73,7 +73,7 @@ class LlmMindTest {
         ProviderLibrary custom = new ProviderLibrary(LibraryHub.headless(dir).library(ProviderLibrary.KIND, OWNER),
                 new Keys(ownerKeys, serverKeys), new ModelCatalog(dir.resolve("cache.json"), () -> ""));
         String noUrl = custom.create("自定义", new ConnectionProfile("custom", "chat", "m", null, null, null, null, 0,
-                null, 0, null)).id();
+                null, 0, null, 0, 0)).id();
         ownerKeys.put("custom", "sk");
         assertEquals(Cause.NO_URL, new LlmMind(custom, OWNER, quota).unavailable(noUrl).code());
     }

@@ -4,63 +4,60 @@ import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.search.SearchClock;
 import org.junit.jupiter.api.Test;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 寻路报给宿主的那一条：为什么放弃、走到哪一格断的。它只是数据，格式化与落盘都在宿主那一侧。 */
+/** 寻路报给宿主的那一条：一趟怎么收的场、卡在哪、重搜了几次。它只是值，格式化与落盘都在宿主那一侧。 */
 class TraceTest {
 
-    @Test
-    void aGiveUpCarriesTheReasonAndWhereItBroke() {
-        Trace.PathEvent e = Trace.PathEvent.giveUp(new Vec3(1, 64, 2), new Vec3(9, 64, 2),
-                BlockPos.containing(5, 64, 2), "NO_CLEARANCE", "NoRoute");
+    private static final Map<String, Integer> ONE_OFF_ROUTE = Map.of("OFF_ROUTE", 1);
 
-        assertEquals("giveup", e.kind());
+    @Test
+    void aGiveUpCarriesTheOutcomeTheCellAndTheReason() {
+        Trace.PathEvent e = new Trace.PathEvent("NoRoute", new Vec3(1, 64, 2),
+                BlockPos.containing(5, 64, 2), "NO_CLEARANCE", 120, 7, ONE_OFF_ROUTE);
+
+        assertEquals("NoRoute", e.outcome(), "结局记的是 Outcome 那一类的名字");
         assertEquals("NO_CLEARANCE", e.reason(), "reason 是枚举的 name()，不是 toString()");
-        assertEquals("NoRoute", e.diagnosis());
-        assertEquals(5.5, e.at().x, "格子记的是它的中心");
-        assertNull(e.detail());
+        assertEquals(5, e.cell().getX());
+        assertEquals(120, e.ticks());
+        assertEquals(7, e.steps());
     }
 
     @Test
-    void aReplanHasAFreeTextDetailAndNoReason() {
-        Trace.PathEvent e = Trace.PathEvent.replan(new Vec3(1, 64, 2), null, null, "离开路线");
+    void theReplanTallyCannotBeChangedAfterTheEventIsMade() {
+        Map<String, Integer> live = new HashMap<>(Map.of("TIMEOUT", 2));
+        Trace.PathEvent e = new Trace.PathEvent("Arrived", Vec3.ZERO, null, null, 40, 12, live);
 
-        assertEquals("replan", e.kind());
-        assertNull(e.reason());
-        assertEquals("离开路线", e.detail());
-    }
+        live.put("TIMEOUT", 99);
 
-    @Test
-    void aBlockedStepSaysWhichCellAndWhy() {
-        Trace.PathEvent e = Trace.PathEvent.blocked(new Vec3(1, 64, 2), new Vec3(2, 64, 2),
-                BlockPos.containing(2, 64, 2), "OUT_OF_REACH", null, "WALK");
-
-        assertEquals("blocked", e.kind());
-        assertEquals("OUT_OF_REACH", e.reason());
-        assertEquals("WALK", e.detail(), "走法记在 detail 里，不另开一栏");
+        assertEquals(2, e.replans().get("TIMEOUT"), "记下的是报的那一刻的账");
+        assertThrows(UnsupportedOperationException.class, () -> e.replans().put("FAILED", 1));
     }
 
     @Test
     void nobodyListeningIsNotAnError() {
-        Trace.NONE.path(Trace.PathEvent.replan(new Vec3(0, 0, 0), null, null, "x"));
+        Trace.NONE.path(new Trace.PathEvent("Stopped", Vec3.ZERO, null, null, 1, 0, Map.of()));
     }
 
     @Test
-    void portsKeepTheirThreeStrategiesAlongsideTheTrace() {
+    void portsWithoutATraceDoNotListen() {
         TerrainPolicy allow = (change, pos, state, view) -> Permit.ALLOW;
         Materials none = Optional::empty;
-        Ports ports = new Ports(allow, none, Threats.NONE, Trace.NONE);
+        Ports ports = new Ports(allow, none, Threats.NONE, SearchClock.STEADY);
 
         assertTrue(ports.trace() == Trace.NONE);
-        assertTrue(ports.terrain() == allow, "三个策略照旧在原来的位置上");
+        assertTrue(ports.terrain() == allow, "四项照旧在原来的位置上");
     }
 }

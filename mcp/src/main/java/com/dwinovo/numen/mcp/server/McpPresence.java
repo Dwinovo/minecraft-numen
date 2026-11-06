@@ -149,6 +149,22 @@ public final class McpPresence {
         return brains(owner).stream().anyMatch(t -> t.scope().covers(subject));
     }
 
+    /**
+     * 客户端结束了会话、还有请求没收场的令牌(结束会话之后那条流要过一会儿才在别的线程上收掉):有就是一句说明,没有是 {@code null}。
+     * 只读;GameTest 服务器每刻据此等断开落定,"她的外部大脑走了"总落在同一刻。
+     */
+    public String closing() {
+        List<String> closing = new ArrayList<>();
+        for (Entry entry : entries.values()) {
+            synchronized (entry) {
+                if (entry.closed && entry.inFlight > 0) {
+                    closing.add(entry.token.id());
+                }
+            }
+        }
+        return closing.isEmpty() ? null : "mcp session(s) still closing for token(s) " + closing;
+    }
+
     /** 所有记录(界面显示最近接入的客户端、最近出声的时刻)。 */
     public List<Entry> all() {
         return List.copyOf(entries.values());

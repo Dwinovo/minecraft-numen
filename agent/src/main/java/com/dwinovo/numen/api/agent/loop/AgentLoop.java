@@ -57,7 +57,7 @@ public final class AgentLoop {
     private final EventQueue inbox;
     private final MemoryPort memory;
     private final HostPort host;
-    private final List<Consumer<? super LoopEvent>> listeners = new ArrayList<>();
+    private final List<Subscriber> listeners = new ArrayList<>();
 
     private Run run;
     private long lastRunId;
@@ -98,9 +98,12 @@ public final class AgentLoop {
     /**
      * 订阅事件。事件在内核的线程上按发生顺序同步送达。内核发事件时正走在一步的中间,
      * 订阅者只做自己那一份(画、记账、落盘),不在回调里同步推进内核。
+     *
+     * <p>订阅者逐个隔离:一个抛了(运行时异常)只记日志,事件接着送给排在后面的订阅者,内核的这一步照常走完。
+     * 同一个订阅者连续出错只在第一次记日志,它再成功处理一次事件之后重新计。
      */
     public void subscribe(Consumer<? super LoopEvent> listener) {
-        listeners.add(listener);
+        listeners.add(new Subscriber(listener));
     }
 
     // ---- 输入 ----
@@ -331,7 +334,7 @@ public final class AgentLoop {
      */
     private void callModel(boolean answerDue) {
         if (memory.compactionDue()) {
-            compact(true, () -> callModel(answerDue));
+            compact(true, "", () -> callModel(answerDue));
             return;
         }
         inject(inbox.takeForCall(answerDue, host.now(), host.dayTime()));
@@ -378,7 +381,18 @@ public final class AgentLoop {
             return;
         }
         switch (outcome) {
-            case ModelOutcome.Failed failed -> end(new RunEnd.Failed(failed.cause(), true));
+            case ModelOutcome.Failed failed -> {
+                boolean overflow = Cause.CONTEXT_OVERFLOW.equals(failed.cause().code());
+                if (overflow && !run.overflowRecovered) {
+                    // 服务商说上下文超长:整理一次再原样重试一次(照 pi 的 overflow recovery)
+                    run.overflowRecovered = true;
+                    AiLog.LOG.info("[numen-entity#{}] context overflow reported by the provider: compacting and retrying once", name);
+                    compact(true, "", () -> callModel(true));
+                } else {
+                    // 整理过重试了仍然超长就停下告诉主人,不再循环——也不让失败重试再开一轮去重蹈覆辙
+                    end(new RunEnd.Failed(failed.cause(), !overflow));
+                }
+            }
             case ModelOutcome.Answered answered -> {
                 emit(new LoopEvent.ModelUsed(answered.usage(), LoopEvent.Purpose.TURN));
                 AssistantTurn reply = answered.turn();
@@ -388,6 +402,7 @@ public final class AgentLoop {
                     return;
                 }
                 run.retried = false;
+                run.overflowRecovered = false;
                 run.ownerSpoke = false;
                 transcript.addAssistant(reply);
                 emit(new LoopEvent.AssistantMessage(id, reply));
@@ -493,7 +508,7 @@ public final class AgentLoop {
                 return false;
             }
         }
-        inbox.takeControls();
+        List<EventQueue.Entry> controls = inbox.takeControls();
         if (clears) {
             // 排在清空前面、没叫醒她的旁听是她在清空之前听见的,属于被清掉的那段上下文,一并清掉;要她回应的条目
             // 留着,清完进新的上下文。整理不丢:它只把历史换成摘要,排着的条目还没进历史,照旧跟下一次调用走。
@@ -505,7 +520,11 @@ public final class AgentLoop {
         }
         AiLog.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", name);
         run = new Run(++lastRunId, true, false, false);
-        compact(false, () -> {
+        // 连着按的几次整理算一次,各次附的关注点都留着
+        String focus = controls.stream().filter(e -> EventTypes.COMPACT.equals(e.type()))
+                .map(e -> EventTypes.controlArg(e.text())).filter(arg -> !arg.isEmpty())
+                .collect(java.util.stream.Collectors.joining("\n"));
+        compact(false, focus, () -> {
             run = null;
             announceHold();
             pump();
@@ -515,14 +534,32 @@ public final class AgentLoop {
 
     /**
      * 发一次整理记忆,落地后接着 {@code then}(调用失败或摘要为空也接着——历史不动,照原样往下走)。
-     * 被切断的话结果作废,{@code then} 不再执行。
+     * 被切断的话结果作废,{@code then} 不再执行。没有可压的就不发请求,直接接着 {@code then}。
      */
-    private void compact(boolean auto, Runnable then) {
-        MemoryPort.Compaction compaction = memory.compaction(auto);
+    private void compact(boolean auto, String focus, Runnable then) {
+        MemoryPort.Compaction compaction = memory.compaction(auto, focus).orElse(null);
+        if (compaction == null) {
+            then.run();
+            return;
+        }
         run.phase = Phase.COMPACT;
         compactChars = 0;
-        long id = run.id;
-        model.call(compaction.request(), run.cancel,
+        summarize(compaction, compaction.requests(), 0, new ArrayList<>(), run.id, then);
+    }
+
+    /** 摘要请求一份份发:答完一份发下一份,都答完才落地。任何一份失败这次整理就算没压成,历史不动。 */
+    private void summarize(MemoryPort.Compaction compaction, List<ModelRequest> requests, int next,
+                           List<ModelOutcome.Answered> answers, long id, Runnable then) {
+        if (next == requests.size()) {
+            if (compaction.apply(answers)) {
+                emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.COMPACT));
+            } else {
+                compaction.failed("摘要是空的");
+            }
+            then.run();
+            return;
+        }
+        model.call(requests.get(next), run.cancel,
                 delta -> {
                     if (current(id)) {
                         compactChars += delta.content().length();
@@ -533,17 +570,16 @@ public final class AgentLoop {
                         return;
                     }
                     switch (outcome) {
-                        case ModelOutcome.Failed failed -> compaction.failed(failed.cause().forModel());
+                        case ModelOutcome.Failed failed -> {
+                            compaction.failed(failed.cause().forModel());
+                            then.run();
+                        }
                         case ModelOutcome.Answered answered -> {
                             emit(new LoopEvent.ModelUsed(answered.usage(), LoopEvent.Purpose.COMPACT));
-                            if (compaction.apply(answered.turn(), answered.usage())) {
-                                emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.COMPACT));
-                            } else {
-                                compaction.failed("摘要是空的");
-                            }
+                            answers.add(answered);
+                            summarize(compaction, requests, next + 1, answers, id, then);
                         }
                     }
-                    then.run();
                 });
     }
 
@@ -663,12 +699,23 @@ public final class AgentLoop {
         return stopped;
     }
 
+    /** 此刻在干哪一档;没在跑回合是 {@code null}。只要这一项的调用(每刻一次的路径)走这里,不必构造整份 {@link #status}。 */
+    public Phase phase() {
+        return run == null ? null : run.phase;
+    }
+
+    /** 此刻在干的那件事,同 {@link LoopStatus#activity}。 */
+    public LoopStatus.Doing activity() {
+        return host.activity();
+    }
+
+    /** 整份快照:含逐条渲染收件箱的聊天预览,只在有人要看的时候取。 */
     public LoopStatus status() {
-        Phase phase = run == null ? null : run.phase;
+        Phase phase = phase();
         double progress = phase == Phase.COMPACT ? 1.0 - Math.exp(-(compactChars / 4.0) / 1200.0) : 0.0;
         Hold hold = hold();
         return new LoopStatus(phase, hold, hold != null && hold == stopped ? stoppedReason : null,
-                host.bodyTaskRunning(), inbox.chatPreview(), progress, host.activity());
+                host.bodyTaskRunning(), inbox.chatPreview(), progress, activity());
     }
 
     // ---- 内部 ----
@@ -709,8 +756,31 @@ public final class AgentLoop {
     }
 
     private void emit(LoopEvent event) {
-        for (Consumer<? super LoopEvent> listener : List.copyOf(listeners)) {
-            listener.accept(event);
+        for (Subscriber subscriber : List.copyOf(listeners)) {
+            subscriber.deliver(event);
+        }
+    }
+
+    /** 一个订阅者,带着"上一次是不是出错了"——连续出错只记一次日志。 */
+    private final class Subscriber {
+        private final Consumer<? super LoopEvent> listener;
+        private boolean failing;
+
+        Subscriber(Consumer<? super LoopEvent> listener) {
+            this.listener = listener;
+        }
+
+        void deliver(LoopEvent event) {
+            try {
+                listener.accept(event);
+                failing = false;
+            } catch (RuntimeException e) {
+                if (!failing) {
+                    AiLog.LOG.error("[numen-entity#{}] 事件订阅者处理 {} 时出错,其余订阅者照常收(它连续出错不再重复记)", name,
+                            event.getClass().getSimpleName(), e);
+                }
+                failing = true;
+            }
         }
     }
 

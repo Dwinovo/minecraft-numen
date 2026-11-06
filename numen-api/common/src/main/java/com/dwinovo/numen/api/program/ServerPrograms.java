@@ -81,6 +81,8 @@ public final class ServerPrograms {
     private static final MainQueue QUEUE = new MainQueue();
     /** 在跑的程序,按同伴:一只同伴同一时刻至多一段。 */
     private static final Map<UUID, Running> RUNNING = new ConcurrentHashMap<>();
+    /** 每只同伴最近一段程序的车道:程序摘了登记之后,它的回执还在车道里排着,{@link #pump(UUID)} 从这里找到它。 */
+    private static final Map<UUID, MainQueue.Lane> LANES = new ConcurrentHashMap<>();
     /** 每段程序的执行体各用虚拟线程:停在等结果上不占平台线程。 */
     private static final Executor THREADS = Executors.newVirtualThreadPerTaskExecutor();
     /** 服务器刻数,{@link #tick} 每刻加一:反向请求的期限({@link ProgramLimits#CLIENT_ANSWER_TICKS})按它量。 */
@@ -113,6 +115,7 @@ public final class ServerPrograms {
             refused = admit(her, companion, owner);
             if (refused == null) {
                 RUNNING.put(companion, running);
+                LANES.put(companion, lane);
             }
         }
         if (refused != null) {
@@ -208,12 +211,27 @@ public final class ServerPrograms {
     }
 
     /**
-     * 没有服务器刻的地方(单测、GameTest 的用例)推进:不看预算,把排着的调用都执行掉。
+     * 没有服务器刻的地方(单测)推进:不看预算,把排着的调用都执行掉。
      *
      * @return 执行了几个调用
      */
     public static int pump() {
         return QUEUE.drainAll();
+    }
+
+    /**
+     * 替这一只同伴的程序推进(GameTest 的用例在主线程上要当场读到回执):不看预算,执行它的车道此刻排着的调用,别的程序的不碰。
+     *
+     * @return 执行了几个调用
+     */
+    public static int pump(UUID companion) {
+        MainQueue.Lane lane = LANES.get(companion);
+        return lane == null ? 0 : QUEUE.drain(lane);
+    }
+
+    /** 从此按 {@code meter} 量服务端调用花的预算:GameTest 服务器换成按调用次数计的({@link MainQueue#meter})。 */
+    public static void meter(MainQueue.Meter meter) {
+        QUEUE.meter(meter);
     }
 
     /**
@@ -284,6 +302,7 @@ public final class ServerPrograms {
     private static void dropAll() {
         RUNNING.values().forEach(r -> r.program.cancel(false));
         RUNNING.clear();
+        LANES.clear();
         QUEUE.clear();
         NetworkTransport.INSTANCE.clear();
     }

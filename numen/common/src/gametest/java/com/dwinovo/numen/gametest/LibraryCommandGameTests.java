@@ -1,7 +1,6 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.brain.CompanionLoops;
-import com.dwinovo.numen.api.brain.ModelServices;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.brain.ServerSkins;
 import com.dwinovo.numen.api.brain.Slot;
@@ -29,8 +28,7 @@ import static com.dwinovo.numen.gametest.ClientlessGameTests.isKey;
 import static com.dwinovo.numen.gametest.ClientlessGameTests.run;
 
 /**
- * 没装客户端的主人用命令管她的绑定、她的皮肤、他自己的 key:{@code /numen companion …}、{@code /numen companion … skin …}、
- * {@code /numen key …}。主人是 {@link GameTestKit#presentVanillaPlayer}(原版客户端的样子)。
+ * 没装客户端的主人用命令管她的绑定、她的皮肤:{@code /numen companion …}、{@code /numen companion … skin …}。主人是 {@link GameTestKit#presentVanillaPlayer}(原版客户端的样子)。
  */
 public class LibraryCommandGameTests {
 
@@ -70,34 +68,6 @@ public class LibraryCommandGameTests {
         hub.library(PersonaLibrary.KIND, owner.getUUID()).mine().delete(persona);
         hub.library(VoiceProfile.KIND, owner.getUUID()).mine().delete(voice);
         her.close();
-        GameTestKit.leave(owner);
-        helper.succeed();
-    }
-
-    /** 自己的 key 存进他自己的钥匙串;回执只露前后几位、不带全文;多人服第一次存提醒一次。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void key_command_stores_the_key_and_only_shows_its_ends(GameTestHelper helper) {
-        var server = helper.getLevel().getServer();
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_keeper", "en_us");
-        String key = "sk-abcdefghijklmnop";
-        List<Component> heard = new ArrayList<>();
-
-        run(owner, "numen key deepseek " + key, heard);
-
-        helper.assertTrue(key.equals(ModelServices.of(server).ownerKeychain(owner.getUUID()).get("deepseek")),
-                "the key was not stored: " + heard);
-        helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_KEY_SAVED)), "not told: " + heard);
-        helper.assertTrue(heard.stream().noneMatch(m -> m.getString().contains(key) || contents(m).contains(key)),
-                "the whole key was echoed: " + heard);
-        helper.assertTrue(heard.stream().anyMatch(m -> contents(m).contains("sk-…op")), "the ends were not shown: " + heard);
-        helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.KEY_OWNER_SEES)),
-                "the first save on a multiplayer server was not reminded: " + heard);
-
-        heard.clear();
-        run(owner, "numen key deepseek " + key + "2", heard);
-        helper.assertTrue(heard.stream().noneMatch(m -> isKey(m, Keys.KEY_OWNER_SEES)), "reminded twice: " + heard);
-
-        ModelServices.of(server).ownerKeychain(owner.getUUID()).put("deepseek", "");
         GameTestKit.leave(owner);
         helper.succeed();
     }
@@ -184,6 +154,15 @@ public class LibraryCommandGameTests {
         java.nio.file.Path file = SkinFolder.here().dir().resolve("gametest_dress.png");
         Files.createDirectories(file.getParent());
         Files.write(file, skinPng(true));
+        // 签名队与皮肤文件夹整个服务器只有一份:不论这条成败都换回联网的签名、删掉放进去的图
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () -> {
+            try {
+                Files.deleteIfExists(file);
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            ServerSkins.start(server, SkinSigning.Backend.NETWORK);
+        });
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
         UUID id = her.companion.getUUID();
         List<Component> heard = new ArrayList<>();
@@ -222,12 +201,6 @@ public class LibraryCommandGameTests {
                     run(owner, "numen companion gametest_dressed skin server no_such_skin", heard);
                     helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),
                             "a missing file was not said: " + heard);
-                    try {
-                        Files.deleteIfExists(file);
-                    } catch (java.io.IOException e) {
-                        throw new IllegalStateException(e);
-                    }
-                    ServerSkins.start(server, SkinSigning.Backend.NETWORK);
                     CompanionLoops.dismissed(server, id);
                     var live = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(server, id);
                     if (live != null) {

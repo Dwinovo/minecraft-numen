@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.api.entity.DigTime;
 import java.util.ArrayList;
@@ -77,12 +78,23 @@ public final class Fixtures {
 
     public static BodySnapshot body(BodyStats stats, GameType mode, float health, List<ItemStack> inventory) {
         return new BodySnapshot(stats, mode, health, 3, 1, 20, 0, inventory, Fixtures.MINING,
-                Fixtures.BREATH);
+                Fixtures.BREATH, Mobility.WALKER);
+    }
+
+    /** 满血、吃饱、背包空着、许飞的创造模式身体;{@code flying} 是此刻在不在飞。 */
+    public static BodySnapshot flier(boolean flying) {
+        return new BodySnapshot(Vanilla.SURVIVAL, GameType.CREATIVE, 20, 3, 1, 20, 0, List.of(), Fixtures.MINING, Fixtures.BREATH,
+                new Mobility(true, flying, Mobility.VANILLA_FLYING_SPEED, 0, 0, 0));
     }
 
     /** 这份规格,原版身体,什么都放行,身上没料,没有生物。 */
     public static CostModel model(RouteSpec spec) {
-        return CostModel.of(spec, body(), Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
+        return model(spec, body());
+    }
+
+    /** 这份规格,这具身体,什么都放行,身上没料,没有生物。 */
+    public static CostModel model(RouteSpec spec, BodySnapshot body) {
+        return CostModel.of(spec, body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 
     /** 这份规格,原版身体,什么都放行,身上带着圆石。 */

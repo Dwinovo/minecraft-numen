@@ -28,7 +28,7 @@ class EndpointResolverTest {
             """));
 
     private static ConnectionProfile profile(String provider, String model) {
-        return new ConnectionProfile(provider, null, model, "sk-1", null, null, null, 0, null, 0, null);
+        return new ConnectionProfile(provider, null, model, "sk-1", null, null, null, 0, null, 0, null, 0, 0);
     }
 
     private static LlmEndpoint resolve(ConnectionProfile p) {
@@ -48,9 +48,39 @@ class EndpointResolverTest {
     }
 
     @Test
+    void theCompactionNumbersDefaultToPiAndTheProfileCanOverrideThem() {
+        LlmEndpoint byDefault = resolve(profile("deepseek", "deepseek-v4-flash"));
+        assertEquals(16_384, byDefault.reserveTokens());
+        assertEquals(20_000, byDefault.keepRecentTokens());
+        assertEquals(1_000_000 - 16_384, byDefault.compactionThreshold());
+
+        LlmEndpoint overridden = resolve(new ConnectionProfile("deepseek", null, "deepseek-v4-flash", "k", null, null,
+                null, 0, null, 0, null, 30_000, 5_000));
+        assertEquals(30_000, overridden.reserveTokens());
+        assertEquals(5_000, overridden.keepRecentTokens());
+        assertEquals(1_000_000 - 30_000, overridden.compactionThreshold());
+    }
+
+    /** 输出上限:玩家设的,没设就是型号的输出上限,再收到窗口里剩下的;两者都不知道就不发。普通一轮与摘要请求共用。 */
+    @Test
+    void theOutputLimitIsSizedFromWhatIsLeftOfTheWindow() {
+        LlmEndpoint e = resolve(profile("deepseek", "deepseek-v4-flash"));
+        assertEquals(393_216, e.optionsFor(100_000).maxTokens(), "窗口够:型号自己的输出上限");
+        assertEquals(1_000_000 - 800_000 - 4_096, e.optionsFor(800_000).maxTokens(), "窗口剩得少:收到剩下的量");
+        assertEquals(1, e.optionsFor(2_000_000).maxTokens(), "再大也至少 1");
+
+        LlmEndpoint capped = resolve(new ConnectionProfile("deepseek", null, "deepseek-v4-flash", "k", null, null,
+                null, 0, null, 2048, null, 0, 0));
+        assertEquals(2048, capped.optionsFor(100_000).maxTokens(), "玩家设的更小就照玩家的");
+
+        LlmEndpoint unknown = resolve(profile("anthropic", "claude-opus-5"));
+        assertEquals(0, unknown.optionsFor(100_000).maxTokens(), "型号的输出上限不知道也没设:不发");
+    }
+
+    @Test
     void whatThePlayerFilledInBeatsTheCatalog() {
         LlmEndpoint e = resolve(new ConnectionProfile("deepseek", "anthropic", "deepseek-v4-flash", "k",
-                "https://proxy.example/v1", "127.0.0.1:1", "high", 32_000, 0.3, 2048, null));
+                "https://proxy.example/v1", "127.0.0.1:1", "high", 32_000, 0.3, 2048, null, 0, 0));
         assertEquals("https://proxy.example/v1", e.baseUrl());
         assertEquals(Api.ANTHROPIC, e.api());
         assertEquals(32_000, e.contextWindow());
@@ -71,7 +101,7 @@ class EndpointResolverTest {
     @Test
     void aCustomVendorTakesAddressAndProtocolFromTheProfile() {
         LlmEndpoint e = resolve(new ConnectionProfile(ConnectionProfile.CUSTOM, "chat", "qwen3", "",
-                "http://localhost:11434/v1", null, null, 0, null, 0, null));
+                "http://localhost:11434/v1", null, null, 0, null, 0, null, 0, 0));
         assertEquals("http://localhost:11434/v1", e.baseUrl());
         assertEquals(Api.CHAT, e.api());
         assertEquals("10.0.0.1:7890", e.proxy(), "没填代理就跟随全局");
@@ -102,7 +132,7 @@ class EndpointResolverTest {
     @Test
     void compatOverridesFromTheProfileReachTheEndpoint() {
         LlmEndpoint e = resolve(new ConnectionProfile("deepseek", null, "deepseek-v4-flash", "k", null, null,
-                null, 0, null, 0, JsonParser.parseString("{\"thinking_format\":\"none\"}").getAsJsonObject()));
+                null, 0, null, 0, JsonParser.parseString("{\"thinking_format\":\"none\"}").getAsJsonObject(), 0, 0));
         assertEquals(ChatCompat.ThinkingFormat.NONE, ((ChatCompat) e.compat()).thinkingFormat());
     }
 
@@ -110,11 +140,11 @@ class EndpointResolverTest {
     void theApiKeyIsStrippedOnceAtTheEndpoint() {
         // 复制来的 key 常带空格或换行,发出去就是一个错的 key
         assertEquals("sk-or-abc", resolve(new ConnectionProfile("openrouter", null, "x/y", " sk-or-abc \r\n",
-                null, null, null, 0, null, 0, null)).apiKey());
+                null, null, null, 0, null, 0, null, 0, 0)).apiKey());
         assertFalse(resolve(new ConnectionProfile("openrouter", null, "x/y", "  \n", null, null, null, 0, null, 0,
-                null)).hasApiKey());
+                null, 0, 0)).hasApiKey());
         assertEquals("", resolve(new ConnectionProfile("openrouter", null, "x/y", null, null, null, null, 0, null, 0,
-                null)).apiKey());
+                null, 0, 0)).apiKey());
     }
 
     @Test

@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.LadderBlock;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/** 接续:何时提前搜下一段、末尾几步何时能开始走、怎么拼;不经 {@link Driver}。 */
+/** 接续:何时接着搜、末尾几步何时能开始走、怎么拼;不经 {@link Driver}。 */
 class ContinuationTest {
 
     private static final int Y = 64;
@@ -72,19 +72,19 @@ class ContinuationTest {
     }
 
     @Test
-    void theNextSegmentIsSearchedWhenTheMinimumTicksLeftDropBelowTheLookahead() {
-        // 十二步,每步最短 10 刻:剩 120 刻时还早,剩 90 刻(走了三步)就该搜
+    void aRouteShortOfTheGoalIsContinuedAsSoonAsItIsHandedOver() {
+        // 十二步,每步最短 10 刻:一步还没走,剩 120 刻,也马上接着搜
         Course course = TrackerTest.straightCourse(false, 10);
-        Continuation continuation = new Continuation();
-        assertFalse(continuation.due(course), "剩 120 刻 ≥ " + Continuation.LOOKAHEAD_TICKS);
-        course.advanceTo(3);
-        assertTrue(continuation.due(course), "剩 90 刻 < " + Continuation.LOOKAHEAD_TICKS);
+        assertTrue(new Continuation().due(course), "半程一交出就接着搜");
     }
 
+    /** 接续想多久按身体不停下来还能走多久定:走到末尾那几步之前;已经走到那里就是 0,不按整条路线剩下的算。 */
     @Test
-    void theTimingFollowsTheMinimumTicksNotTheStepCount() {
-        Course quick = TrackerTest.straightCourse(false, 2);
-        assertTrue(new Continuation().due(quick), "十二步每步 2 刻,剩 24 刻,一开始就该搜");
+    void theTimeAheadEndsWhereTheBodyWouldWait() {
+        Course course = TrackerTest.straightCourse(false, 10);
+        assertEquals((course.size() - Continuation.TAIL) * 10, Continuation.aheadTicks(course), 1e-9);
+        course.advanceTo(course.size() - Continuation.TAIL);
+        assertEquals(0, Continuation.aheadTicks(course), 1e-9);
     }
 
     @Test

@@ -248,8 +248,8 @@ public final class CompanionTickDispatcher {
     }
 
     /**
-     * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路(含 MAINHAND
-     * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
+     * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路,
+     * 原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
      * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。
      */
     public static TaskRecord<?> stopActive(NumenPlayer player, TaskRecord.StopCause cause) {
@@ -258,13 +258,25 @@ public final class CompanionTickDispatcher {
         TaskRecord<?> target = brain.current.record();
         if (target == null) return null;
         brain.current.cancel(cause);
-        TaskSessionHooks.fireSessionEnd(player);
         return target;
     }
 
-    /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick).
-     *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
-     *  the explicit-hold session dies with the task it served (constitution §5). */
+    /**
+     * 一种活的执行器撤回了(它的插件关了或重载了):正在跑的这种活全部叫停,原因是 {@link TaskRecord.StopCause#PLUGIN_WITHDRAWN}。
+     * 执行器撤了、跑着的活还接着跑,它留在门外的东西(发事件用的门)就会在下一刻抛出来;所以一个插件的活不会比它的作用域活得久。
+     * 服务端主线程。
+     */
+    static void cancelOfType(Class<? extends TaskRecord<?>> type) {
+        for (CompanionBrain brain : BRAINS.values()) {
+            for (TaskSlot slot : new TaskSlot[] {brain.current, brain.sync}) {
+                if (type.isInstance(slot.record())) {
+                    slot.cancel(TaskRecord.StopCause.PLUGIN_WITHDRAWN);
+                }
+            }
+        }
+    }
+
+    /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick). */
     public static void cancelFor(NumenPlayer player) {
         // 等主人点头的指令不在槽里,同一下叫停(撤掉征询,回执说被主人叫停)。
         com.dwinovo.numen.api.sdk.Consents.stop(player, TaskRecord.StopCause.OWNER);
@@ -274,7 +286,6 @@ public final class CompanionTickDispatcher {
         brain.preparing.withdraw(TaskRecord.StopCause.OWNER.words());
         brain.sync.cancel(TaskRecord.StopCause.OWNER);
         brain.current.cancel(TaskRecord.StopCause.OWNER);
-        TaskSessionHooks.fireSessionEnd(player);
     }
 
     /**

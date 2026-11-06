@@ -306,6 +306,97 @@ public final class ServerLibraries {
         return out;
     }
 
+    /** 一条札记的全文(主人打开编辑时才问服务端要)。 */
+    public record NoteText(String name, String description, String type, String content) {}
+
+    /** 最近一次读到的这条札记的全文;没读到(没问过、服务端说没有)是 {@code null}。 */
+    public static NoteText noteText(java.util.UUID companion, String name) {
+        for (JsonElement e : entries(Libraries.NOTE)) {
+            JsonObject o = e.getAsJsonObject();
+            if (companion.toString().equals(text(o, "companion")) && name.equals(text(o, "name"))) {
+                return new NoteText(name, text(o, "description"), text(o, "type"), text(o, "content"));
+            }
+        }
+        return null;
+    }
+
+    /** 向服务端要这条札记的全文;答复到了({@code onReply})之后用 {@link #noteText} 读。 */
+    public static void askNote(java.util.UUID companion, String name,
+                               java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.NOTE, Libraries.LIST, noteBody(companion, name), onReply);
+    }
+
+    /**
+     * 新增或改一条札记({@code name} 为 {@code null} = 新增,服务端自动起名)。能不能办由服务端判(是不是她的主人),
+     * 答复到了({@code onReply})带回办不成的原因。
+     */
+    public static void saveNote(java.util.UUID companion, String name, String description, String type, String content,
+                                java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        JsonObject body = noteBody(companion, name);
+        body.addProperty("description", description);
+        body.addProperty("type", type);
+        body.addProperty("content", content);
+        RemoteCompanions.library().request(Libraries.NOTES, Libraries.PUT, body, onReply);
+    }
+
+    /** 删一条札记。 */
+    public static void deleteNote(java.util.UUID companion, String name,
+                                  java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.NOTES, Libraries.DELETE, noteBody(companion, name), onReply);
+    }
+
+    private static JsonObject noteBody(java.util.UUID companion, String name) {
+        JsonObject body = new JsonObject();
+        body.addProperty("companion", companion.toString());
+        if (name != null) {
+            body.addProperty("name", name);
+        }
+        return body;
+    }
+
+    // ---- 主人的定时 ----
+
+    /** 一条定时:{@code every} 是间隔,游戏刻。 */
+    public record Schedule(String id, String text, long every) {}
+
+    /** 这只同伴的定时,按服务端给的顺序。 */
+    public static List<Schedule> schedules(java.util.UUID companion) {
+        List<Schedule> out = new ArrayList<>();
+        for (JsonElement e : entries(Libraries.SCHEDULES)) {
+            JsonObject o = e.getAsJsonObject();
+            if (companion.toString().equals(text(o, "companion"))) {
+                out.add(new Schedule(text(o, "id"), text(o, "text"), o.get("every").getAsLong()));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 新增({@code id} 为 {@code null})或改一条定时。能不能办、条数与间隔够不够格都由服务端判,答复到了({@code onReply})带回办不成的原因。
+     */
+    public static void saveSchedule(java.util.UUID companion, String id, String text, long every,
+                                    java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        JsonObject body = scheduleBody(companion, id);
+        body.addProperty("text", text);
+        body.addProperty("every", every);
+        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.PUT, body, onReply);
+    }
+
+    /** 删一条定时。 */
+    public static void deleteSchedule(java.util.UUID companion, String id,
+                                      java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.DELETE, scheduleBody(companion, id), onReply);
+    }
+
+    private static JsonObject scheduleBody(java.util.UUID companion, String id) {
+        JsonObject body = new JsonObject();
+        body.addProperty("companion", companion.toString());
+        if (id != null) {
+            body.addProperty("id", id);
+        }
+        return body;
+    }
+
     // ---- 技能 ----
 
     public record Skill(Base base, String skill, String description) {
@@ -338,12 +429,12 @@ public final class ServerLibraries {
     // ---- 插件 ----
 
     /**
-     * 花名册里的一行(服务端编码的这一份:{@code Libraries#pluginRows})。{@code status} 是这一次运行的样子,{@code disabledNext}
-     * 是下次启动的设定,{@code pending} 说两者不一样;{@code toggle} 是这位玩家改不改得了它的开关;{@code clientMod} 说它的目标模组只在客户端(这一行装没装看这台客户端自己,见
+     * 花名册里的一行(服务端编码的这一份:{@code Libraries#pluginRows})。{@code status} 是此刻的样子,{@code disabled}
+     * 是服主的设定,{@code pending} 说两者要重启才对得上;{@code toggle} 是这位玩家改不改得了它的开关;{@code clientMod} 说它的目标模组只在客户端(这一行装没装看这台客户端自己,见
      * {@code ClientMods})。
      */
     public record Plugin(String id, String name, String version, List<String> authors, String target,
-                         PluginRoster.Source source, PluginRoster.Status status, String reason, boolean disabledNext,
+                         PluginRoster.Source source, PluginRoster.Status status, String reason, boolean disabled,
                          boolean pending, boolean toggle, boolean clientMod, java.util.Map<PluginRoster.Kind, Integer> adds) {}
 
     /** 登记顺序。 */
@@ -360,7 +451,7 @@ public final class ServerLibraries {
             out.add(new Plugin(text(o, "id"), text(o, "name"), text(o, "version"), List.copyOf(authors),
                     text(o, "target"), PluginRoster.Source.valueOf(text(o, "source").toUpperCase(java.util.Locale.ROOT)),
                     PluginRoster.Status.valueOf(text(o, "status").toUpperCase(java.util.Locale.ROOT)),
-                    text(o, "reason"), flag(o, "disabledNext"), flag(o, "pending"), flag(o, "toggle"), flag(o, "clientMod"),
+                    text(o, "reason"), flag(o, "disabled"), flag(o, "pending"), flag(o, "toggle"), flag(o, "clientMod"),
                     java.util.Collections.unmodifiableMap(adds)));
         }
         return out;

@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.gametest;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -14,11 +15,15 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Shulker;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /**
  * 规划与执行一直对不上时,一趟在有限时间内照实收场,不无限重试。规划只读方块,看不见实体:闭着壳的潜影贝是一堵规划看不见、
  * 身体撞得上的墙(原版里玩家撞着它走不过去,既没有碰撞报错,也没有任何一步报"做不到")。
+ *
+ * <p>另有一种硬挡住的路线:沟比身上的垫路料能搭的宽,路真的不通,一趟照实收场、说对原因。
  *
  * <p>走法是:执行里一步迟迟做不完,看护({@code Watchdog})按期限判它卡住,这一步在这一趟的记忆里记为不通、只重搜当前这一段、不再走它,
  * 整趟的总预算用完照实收场。
@@ -54,15 +59,15 @@ public class TerminationGameTests {
         t.fill(0, 4, 4, 20, 4, 6, Blocks.STONE);
         shulker(t, 10, 1, 5);
         TestBody body = t.body(3, 1, 5);
-        t.go(body, Goals.at(t.at(17, 1, 5)), RouteSpec.defaults()).within(600)
+        t.go(body, Goals.at(t.at(17, 1, 5)), RouteSpec.defaults()).within(437)
                 .fails(Outcome.Blocked.class, blocked -> {
                     if (blocked.blockage().hitch() == null) {
                         throw new GameTestAssertException("该是执行里卡住,却是前提不成立:" + blocked.blockage());
                     }
                 })
                 .then(r -> {
-                    if (r.report.journal().stuck() < 1) {
-                        throw new GameTestAssertException("没有被看护判成卡住:" + r.report.journal().stuck());
+                    if (r.report.journal().replans(Journal.Replan.TIMEOUT) < 1) {
+                        throw new GameTestAssertException("没有被看护判成卡住:" + r.report.journal().replans());
                     }
                     if (r.report.journal().blockages() < 1) {
                         throw new GameTestAssertException("卡住的这一步没有记为不通:" + r.report.journal().blockages());
@@ -93,9 +98,31 @@ public class TerminationGameTests {
                     }
                 })
                 .then(r -> {
-                    int stuck = r.report.journal().stuck();
+                    int stuck = r.report.journal().replans(Journal.Replan.TIMEOUT);
                     if (stuck < 1 || stuck > 12 + 2) {
                         throw new GameTestAssertException("卡住的次数 " + stuck + ",墙上只有十二格");
+                    }
+                });
+    }
+
+    private static final RouteSpec CHANGES = RouteSpec.defaults().edit().changes(true).build();
+
+    /**
+     * 方块不够过沟:六格宽的沟(两边是四格高的基岩台子,沟里落下去摔不起),身上只有三块圆石——搭了三块用完,结局是"缺料",
+     * 说出这条路还要放几块。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 350)
+    public static void a_gap_wider_than_the_blocks_carried_ends_without_materials(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 13, 4, 39, Blocks.BEDROCK);
+        t.fill(20, 1, 0, 39, 4, 39, Blocks.BEDROCK);
+        TestBody body = t.body(10, 5, 5);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 3));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        t.go(body, Goals.at(t.at(24, 5, 5)), CHANGES).within(340)
+                .fails(Outcome.NoMaterials.class, n -> {
+                    if (n.needed() <= 0) {
+                        throw new GameTestAssertException("该说还缺几块,却是 " + n.needed());
                     }
                 });
     }

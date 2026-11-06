@@ -21,6 +21,10 @@ public final class EndpointResolver {
 
     /** 目录和档案都没给窗口时的上下文长度。 */
     public static final int DEFAULT_CTX = 64_000;
+    /** 整理记忆的预留:档案没填时用这个(照 pi 的 reserveTokens)。 */
+    public static final int DEFAULT_RESERVE_TOKENS = 16_384;
+    /** 整理时原文保留的近段预算:档案没填时用这个(照 pi 的 keepRecentTokens)。 */
+    public static final int DEFAULT_KEEP_RECENT_TOKENS = 20_000;
 
     private EndpointResolver() {}
 
@@ -50,7 +54,9 @@ public final class EndpointResolver {
                 new ModelSpec(modelId, thinking, info == null || info.temperature()),
                 ctx,
                 Compats.resolve(api, providerId, modelId, baseUrl, thinking, p.compat()),
-                new RequestOptions(p.temperature(), p.maxTokens(), ThinkingLevel.byId(p.reasoningEffort())));
+                new RequestOptions(p.temperature(), p.maxTokens(), ThinkingLevel.byId(p.reasoningEffort())),
+                p.reserveTokens() > 0 ? p.reserveTokens() : DEFAULT_RESERVE_TOKENS,
+                p.keepRecentTokens() > 0 ? p.keepRecentTokens() : DEFAULT_KEEP_RECENT_TOKENS);
     }
 
     private static String nz(String s) {

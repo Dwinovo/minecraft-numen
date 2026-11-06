@@ -89,10 +89,24 @@ final class Swim implements Move {
                 support, Strides.reversible(draft, body, from, stance, to, landing)));
     }
 
-    /** 脚所在的格没有水,游不成立。 */
+    /**
+     * 精确判断的头几条:脚所在的格没有水,游不成立;往上游进的那一格没有水,是出水,不是这一步;落点那一格是整块,身体放不进去,
+     * 水里又不挖(整块没有门)。三条只读脚所在与落点这两格,落点是整块的那一列必然加载着。其余答"可能",代价至少是水里游一格加
+     * 涉水的罚分(游的每一步都泡在水里)。
+     */
     @Override
     public int quick(Quick q, Heading heading) {
-        return (q.own() & CellFlags.WET) == 0 ? Quick.REJECT : Quick.EXACT;
+        if ((q.own() & CellFlags.WET) == 0) {
+            return Quick.REJECT;
+        }
+        int to = q.flagsAt(heading.dx(), heading.dy(), heading.dz());
+        if (heading.dy() > 0 && (to & CellFlags.WET) == 0 && (to & CellFlags.UNLOADED) == 0) {
+            return Quick.REJECT;
+        }
+        if (Quick.whole(to)) {
+            return Quick.REJECT;
+        }
+        return q.likely(heading.dx(), heading.dy(), heading.dz(), q.model().waterStep() + q.model().spec().wadePenalty());
     }
 
     @Override

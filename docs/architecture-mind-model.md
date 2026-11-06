@@ -115,7 +115,8 @@ LLM 不在 tick 循环里。每只同伴有一个循环内核(`AgentLoop`,纯 Ja
   (叫不叫停身体、清不清队列、进哪种停牌、目标收不收工)。
 - **内核不碰界面**:它只发 `LoopEvent`,打字机与语音与气泡(`TurnPresenter`)、token 台账、整理记忆
   (`Compactor`)、长期目标(`GoalSteward`)、工作站坐标、当前任务镜像各自订阅。"她忙不忙、为什么不动、
-  排着什么"只从 `LoopStatus` 一处读。
+  排着什么"只从 `LoopStatus` 一处读。订阅者逐个隔离(一个抛了只记日志,其余照收)。插件经门只读地听大脑:`BrainEventBridge` 把 run 的开收
+  攒下,在 `CompanionLoops.tick` 里于内核两步之间派成 `CompanionEvent.RUN_STARTED`/`RUN_ENDED`;`TASK_FINISHED` 从 `NumenEvents.taskFinished` 那一处发。
 
 ## 三、模型输入全景
 
@@ -175,6 +176,8 @@ CONTROL   否      不插进 run,等闲下来执行            开不了 run 时
   每个给模型看的条目都带发生那一刻的游戏日期与钟点——事件是 `<event day="3" t="21:15">`,主人的话是 `<query day="3" t="21:15">`,
   系统条目同样(写法只在 `EventClock` 一处);请求里的 `<now day="3" t="21:15"/>` 是现在。多久以前的事,模型自己对着两个时刻读。
 - **进行中的请求永不因输入掐断**;主人的停止键是 `halt(OWNER_STOP)`,不是一条输入。
+- **主人的定时**(`OwnerSchedules`,存她家目录的 `schedules.json`)到点等于主人说了这句话:`CompanionLoop.tick` 在主人在场时问一次到期的,经 `submitScheduled` 进收件箱
+  (和主人的话同一条路,`<query … source="schedule">`,面板据此标"定时");先落盘下次到期刻再送,错过不补,主人不在时留着、回来合成一次。
 - **事件的种类就是类型表的一行**:`task_finished`、`death`、`respawned`(她按原版规则重生了:落在哪、重生点还是世界出生点、主人在哪个方向多远;恒为急件,不传送、回不回主人身边由她定)、`removed`(身体被外面的人或插件请出了服务器,恒为急件;停牌压着,主人再召唤她时交出)、`hungry`、`inventory_full`(背包一格空的都没有、碰到的东西放不下
   留在了地上;一轮满只发一次,又有空格才复位,判据只在身体上一处,挖、捡这些活不各自判)、`owner_hurt`、`companion_hurt`(她挨打,带攻击者与方位,恒为急件)、`targeted`(半径内一只怪的攻击目标变成她,恒为急件;盯着期间只发一次)、
   `gone`(她留意的对象——最近打她、盯上她的,以及她正在打、用、骑的——被移出世界,附原版的移除原因与击杀者;走出半径不发;捎带投递不叫醒她)、`timer`、`woke`、

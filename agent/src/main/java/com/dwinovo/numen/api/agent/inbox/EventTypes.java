@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.agent.inbox;
 
+import com.dwinovo.numen.api.agent.scope.Handle;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -39,6 +41,8 @@ public final class EventTypes {
      *
      * <p>进队列而不是当场执行,是因为她忙的时候也该按得下:按了就一定会发生,
      * 主人不必盯着什么时候能按。
+     *
+     * <p>条目的字由 {@link #controlText} 组成:语言键,和主人 {@code /compact} 后面附的关注点(没有就没有)。
      */
     public static final String COMPACT = "compact";
     /**
@@ -297,6 +301,26 @@ public final class EventTypes {
     }
 
     /**
+     * 控制条目的字:第一行是界面按语言翻的标签(语言键),之后是主人附的参数({@code /compact} 的关注点);
+     * 没有参数就只有标签。条目的字不能为空(队列不收),所以标签总在。
+     */
+    public static String controlText(String label, String arg) {
+        return arg == null || arg.isBlank() ? label : label + "\n" + arg.strip();
+    }
+
+    /** {@link #controlText} 里的标签。 */
+    public static String controlLabel(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? text : text.substring(0, cut);
+    }
+
+    /** {@link #controlText} 里主人附的参数;没有是空串。 */
+    public static String controlArg(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? "" : text.substring(cut + 1);
+    }
+
+    /**
      * 这一侧没登记过的类型怎么处理:当作一件世界上发生的事,急不急听条目上的标记。
      *
      * <p>类型表是每个 JVM 各一份,条目却会跨过去:服务端的插件登记了、主人客户端没装的类型随包
@@ -349,9 +373,10 @@ public final class EventTypes {
      * 登记一种类型(mod init 期调用)。一个 id 只能登记一次:内置的行是 Numen API 语义的一部分(主人的话恒为急件、
      * 控制命令由循环自己执行),插件拿同一个 id 再登记一行就会悄悄改掉它们,所以直接拒绝。
      *
+     * @return 撤回这一行的句柄:撤掉后这个 id 又没有主了
      * @throws IllegalArgumentException id 为空,或者这个 id 已经登记过
      */
-    public static synchronized void register(Type type) {
+    public static synchronized Handle register(Type type) {
         if (type == null || type.id() == null || type.id().isBlank()) {
             throw new IllegalArgumentException("类型没有 id");
         }
@@ -359,6 +384,13 @@ public final class EventTypes {
             throw new IllegalArgumentException("事件类型 " + type.id() + " 已经登记过,换一个 id");
         }
         TYPES.put(type.id(), type);
+        return Handle.once(() -> {
+            synchronized (EventTypes.class) {
+                if (TYPES.get(type.id()) == type) {
+                    TYPES.remove(type.id());
+                }
+            }
+        });
     }
 
     /** 查表;没登记过返回 {@link #UNKNOWN}。 */

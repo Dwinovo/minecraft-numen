@@ -57,7 +57,7 @@ public record Arrival(Where to, How how, int range) {
     }
 
     /**
-     * {@code numen.move.to}:没说距离,能站进去的格就站进去,方块与实体站不进去,走到旁边({@link #BESIDE});说了距离,走到离它不超过
+     * {@code numen.move.walk}:没说距离,能站进去的格就站进去,方块与实体站不进去,走到旁边({@link #BESIDE});说了距离,走到离它不超过
      * 这么远。
      *
      * @param distance 没说为 null

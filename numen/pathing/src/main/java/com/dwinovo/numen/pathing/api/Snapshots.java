@@ -5,10 +5,12 @@ import java.util.List;
 import com.dwinovo.numen.api.entity.DigTime;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
+import com.dwinovo.numen.pathing.plan.Mobility;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffect;
@@ -17,7 +19,10 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Abilities;
+import net.minecraft.world.item.ElytraItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.Fireworks;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -43,7 +48,7 @@ public final class Snapshots {
         return new BodySnapshot(stats, body.gameMode.getGameModeForPlayer(), body.getHealth(),
                 body.getAttributeValue(Attributes.SAFE_FALL_DISTANCE),
                 body.getAttributeValue(Attributes.FALL_DAMAGE_MULTIPLIER), body.getFoodData().getFoodLevel(),
-                body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY), inventory, mining, breath(body));
+                body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY), inventory, mining, breath(body), mobility(body));
     }
 
     /**
@@ -56,6 +61,53 @@ public final class Snapshots {
                 : Math.max(remaining(body, MobEffects.WATER_BREATHING), remaining(body, MobEffects.CONDUIT_POWER));
         return new Breath(body.getAirSupply(), body.getMaxAirSupply(), body.getAttributeValue(Attributes.OXYGEN_BONUS),
                 shield, body.getItemBySlot(EquipmentSlot.HEAD).is(Items.TURTLE_HELMET));
+    }
+
+    /**
+     * 身上已有的移动方式:许不许飞、在不在飞、飞行速度照能力({@link Abilities});滑翔物看胸甲位——1.21.1 是没坏的鞘翅
+     * ({@code ElytraItem.isFlyEnabled}),还能用多少点耐久是离坏掉前剩的;烟花数是背包与副手里的火箭总数。谁能飞、谁能滑翔只在这里判。
+     */
+    public static Mobility mobility(ServerPlayer body) {
+        Abilities abilities = body.getAbilities();
+        ItemStack chest = body.getItemBySlot(EquipmentSlot.CHEST);
+        int gliderLife = chest.is(Items.ELYTRA) && ElytraItem.isFlyEnabled(chest)
+                ? chest.getMaxDamage() - chest.getDamageValue() - 1 : 0;
+        int fireworks = 0;
+        int burn = Integer.MAX_VALUE;
+        for (ItemStack stack : rockets(body)) {
+            fireworks += stack.getCount();
+            burn = Math.min(burn, ROCKET_BURN * flightDuration(stack));
+        }
+        return new Mobility(abilities.mayfly, flying(body), abilities.getFlyingSpeed(), gliderLife, fireworks,
+                fireworks == 0 ? 0 : burn);
+    }
+
+    /** 背包与副手里的烟花火箭,各一叠。 */
+    private static List<ItemStack> rockets(ServerPlayer body) {
+        List<ItemStack> out = new java.util.ArrayList<>();
+        for (ItemStack stack : body.getInventory().items) {
+            if (stack.is(Items.FIREWORK_ROCKET)) {
+                out.add(stack);
+            }
+        }
+        if (body.getOffhandItem().is(Items.FIREWORK_ROCKET)) {
+            out.add(body.getOffhandItem());
+        }
+        return out;
+    }
+
+    /** 烟花飞行时长({@code Fireworks.flightDuration}):每多一级多推十刻。 */
+    private static int flightDuration(ItemStack stack) {
+        Fireworks fireworks = stack.get(DataComponents.FIREWORKS);
+        return fireworks == null ? 1 : Math.max(1, fireworks.flightDuration());
+    }
+
+    /** 一级飞行时长的烟花保底推多少刻({@code FireworkRocketEntity} 的寿命:{@code 10 × 时长 + 最多 11 的随机})。 */
+    private static final int ROCKET_BURN = 10;
+
+    /** 身体此刻在不在飞(创造飞行):快照里的 {@link Mobility#flying} 与执行时每刻问的是这一处。 */
+    public static boolean flying(ServerPlayer body) {
+        return body.getAbilities().flying;
     }
 
     /** 在水里游一格要几刻:规划给水里一步定价用的同一个数({@link Kinematics#wadeTicksPerBlock})。 */

@@ -9,6 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -89,6 +90,15 @@ class ChatCommandsTest {
     }
 
     @Test
+    void memoryTakesTheOwnerToTheMemorySectionAndOtherCommandsDoNot() {
+        assertEquals(PageCommand.Page.MEMORY, ChatCommands.pageFor(null, "/memory"));
+        assertEquals(PageCommand.Page.MEMORY, ChatCommands.pageFor(null, "/memory 随便什么参数"), "多余的参数不理会");
+        assertNull(ChatCommands.pageFor(null, "/skills"));
+        assertNull(ChatCommands.pageFor(null, "/nosuchthing"));
+        assertNull(ChatCommands.pageFor(null, "memory"));
+    }
+
+    @Test
     void nonCommandTextHasNoCompletions() {
         assertTrue(ChatCommands.complete(null, "你好").isEmpty());
         assertTrue(ChatCommands.complete(null, "").isEmpty());
@@ -100,8 +110,8 @@ class ChatCommandsTest {
         // 而不是碰巧排在前面的那条 —— 否则手滑就执行了别的命令。
         ChatCommands.remember("skills");
         assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
-        ChatCommands.remember("compact");
-        assertEquals("/compact", ChatCommands.complete(null, "/").get(0).label());
+        ChatCommands.remember("usage");
+        assertEquals("/usage", ChatCommands.complete(null, "/").get(0).label());
         ChatCommands.remember("skills");
         assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
     }

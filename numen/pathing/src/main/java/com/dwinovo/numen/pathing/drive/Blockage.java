@@ -38,6 +38,10 @@ public record Blockage(BlockPos cell, BlockState block, MoveKind move, Reason re
         /** 走着这一步,身体落回了路线上前面一步的起点:这一步没走成。 */
         FELL_BACK,
         /** 走着这一步,身体落在了路线之外的节点上(撞着规划看不见的东西滑到了旁边一行):这一步没把身体带到它的落点。 */
-        LOST
+        LOST,
+        /** 空中被围住:从身体此刻的位置往哪个方向推演都撞方块。 */
+        BOXED,
+        /** 滑翔着被方块顶住:身体一秒没离开原地,{@link Watchdog} 判卡住,那一格是顶着身体的方块。 */
+        PINNED
     }
 }

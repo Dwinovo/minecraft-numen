@@ -56,7 +56,7 @@ final class ActView implements Act {
     /** 这一格上放置记号记的那一位;没有记号为 null。 */
     PlacedBlocks.Placer placer() {
         return action.pos() == null || facts.placed() == null ? null
-                : facts.placed().placerAt(action.pos(), facts.view().getBlockState(action.pos()));
+                : facts.placed().placerIn(facts.view(), action.pos());
     }
 
     @Override

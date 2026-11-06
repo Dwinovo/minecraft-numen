@@ -66,10 +66,7 @@ final class BuildShowmanship {
             swingCooldown = SWING_PERIOD_TICKS;
         }
         if (sample != null) {
-            int slot = inv.findSlot(sample.getBlock().asItem());
-            if (slot >= 0) {
-                player.hotbar().hold(slot);
-            }
+            inv.pick(sample.getBlock().asItem()).ifPresent(pick -> player.hotbar().hold(pick.slot()));
         }
         if (!(player.level() instanceof ServerLevel level) || sample == null) {
             return;

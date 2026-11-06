@@ -128,7 +128,8 @@ public final class OwnerInputs {
                 rooms.abort(conv);
                 yield Applied.done();
             }
-            case OwnerInput.Compact compact -> loop(server, owner, compact.companion(), CompanionLoop::requestCompact);
+            case OwnerInput.Compact compact -> loop(server, owner, compact.companion(),
+                    brain -> brain.requestCompact(compact.focus()));
             case OwnerInput.Clear clear -> loop(server, owner, clear.companion(), CompanionLoop::requestClearContext);
             case OwnerInput.SetGoal goal -> loop(server, owner, goal.companion(), brain ->
                     brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo()));

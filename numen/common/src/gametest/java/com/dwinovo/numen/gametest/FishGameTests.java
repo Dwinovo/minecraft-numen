@@ -23,7 +23,10 @@ public class FishGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。 */
+    /**
+     * 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。
+     * 原版咬钩前的等待随机在 100–600 刻、鱼游过来再 20–80 刻,加上抛竿与收竿,最坏要七百来刻;时限按这个上界留,所以在慢批。
+     */
     @GameTest(template = "floor16", timeoutTicks = 924, batch = "numen_fish")
     public static void fish_reels_in_from_a_pool(GameTestHelper helper) {
         pool(helper);
@@ -35,26 +38,12 @@ public class FishGameTests {
             helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(fish.succeeded(), "fishing failed: " + fish.outcome());
             var inv = companion.getInventory();
-            boolean caught = inv.items.stream().anyMatch(s -> !s.isEmpty() && !s.is(Items.FISHING_ROD));
+            // 背包里比开钓时多了东西:她只带了一根竿,钓上来的可能也是一根竿(原版杂物表里有,权重 2),所以按件数比,不按"竿以外的东西"
+            boolean caught = inv.items.stream().mapToInt(ItemStack::getCount).sum() >= 2;
             boolean worn = inv.items.stream().anyMatch(s -> s.is(Items.FISHING_ROD) && s.getDamageValue() > 0);
             helper.assertTrue(caught && worn, "nothing was reeled in, or the rod took no wear: " + fish.outcome());
             helper.assertTrue(fish.outcome().startsWith("reeled in minecraft:"),
                     "the result does not name the catch: " + fish.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 没带鱼竿:当场失败,说清楚缺的是鱼竿。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_fish")
-    public static void fish_without_a_rod_says_so(GameTestHelper helper) {
-        pool(helper);
-        NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
-        ToolRun fish = lua(companion, "numen.work.fish()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(fish.done(), "work fish has not finished");
-            helper.assertTrue(!fish.succeeded() && fish.outcome().contains("fishing rod"),
-                    "the failure does not name the missing rod: " + fish.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

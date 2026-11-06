@@ -67,16 +67,6 @@ public final class PlayerInv {
         return n;
     }
 
-    /** First slot holding {@code item}, or -1. */
-    public static int findSlot(Inventory inv, Item item) {
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (!s.isEmpty() && s.is(item)) return i;
-        }
-        return -1;
-    }
-
-
     /**
      * Add {@code stack} to the inventory; returns whatever didn't fit (empty if
      * all fit). Mirrors {@code SimpleContainer.addItem}'s leftover contract over

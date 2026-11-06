@@ -51,6 +51,11 @@ public final class SerialExecutor implements Executor {
         }
     }
 
+    /** 此刻没有任务在跑或排着。只读。 */
+    public synchronized boolean idle() {
+        return !running;
+    }
+
     private void drain() {
         while (true) {
             Runnable task;

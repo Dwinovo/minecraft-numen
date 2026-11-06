@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.library;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.store.Atomic;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.JsonDoc;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
@@ -53,17 +55,17 @@ public final class Shipped {
      * 同一个来源重复交同一个目录是一回事,什么也不做。
      *
      * @param source 来源的名字空间(Numen 是 {@code numen},插件是它自己的 id)
-     * @return 这一次新登记了;这个来源的这个目录早就登记过是 {@code false}
+     * @return 撤回这一次登记的句柄;这个来源的这个目录早就登记过(这一次什么也没做)是空
      * @throws IllegalArgumentException 同一条路径被两个来源带
      */
-    public static synchronized boolean bundle(String source, Path root) {
+    public static synchronized Optional<Handle> bundle(String source, Path root) {
         Bundle candidate = new Bundle(source, root);
         if (BUNDLES.contains(candidate)) {
-            return false;
+            return Optional.empty();
         }
         requireDistinct(candidate, BUNDLES);
         BUNDLES.add(candidate);
-        return true;
+        return Optional.of(Handle.once(() -> BUNDLES.removeIf(bundle -> bundle == candidate)));
     }
 
     /** 同一条路径只许一个来源带:{@code candidate} 带的文件里有已登记的来源也带了的,抛出。 */

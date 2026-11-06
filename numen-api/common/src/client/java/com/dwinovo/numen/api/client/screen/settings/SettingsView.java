@@ -1144,12 +1144,12 @@ public final class SettingsView {
         }
     }
 
-    // ---- 插件列表:LibraryListPanel 的纯开关形态。开关改的是服务器下次启动的设定,不是这一次的运行 ----
+    // ---- 插件列表:LibraryListPanel 的纯开关形态。开关当场装上或撤回插件的登记,声明了卸下要重启的除外 ----
     private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel;
 
     /**
-     * 插件:随 Numen 内嵌的与单独安装的两节,人人看得到;开关只有管理员与房主有(服务端按每行的 {@code toggle} 说了算)。
-     * 开关翻的是下次启动的设定,翻过之后那一行写明"重启后生效",状态仍是这一次运行的样子。
+     * 插件:随 Numen 内嵌的、单独安装的与脚本里写的三节,人人看得到;开关只有管理员与房主有(服务端按每行的 {@code toggle} 说了算)。
+     * 开关当场生效;只有登记时声明了卸下要重启的插件,翻过之后那一行写明"重启后生效",状态仍是此刻的样子。
      */
     private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel() {
         if (pluginsListPanel == null) {
@@ -1164,19 +1164,22 @@ public final class SettingsView {
                                     I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false),
                             new LibraryListPanel.Section(PluginRoster.Source.JAR.name(),
                                     I18n.get(ModLanguageData.Keys.PLUGIN_JAR),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false),
+                            new LibraryListPanel.Section(PluginRoster.Source.SCRIPT.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_SCRIPT),
                                     I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false)))
-                    .withRowToggle(p -> !p.disabledNext(), p -> {
+                    .withRowToggle(p -> !p.disabled(), p -> {
                         JsonObject body = new JsonObject();
                         body.addProperty("id", p.id());
                         RemoteCompanions.library().request(Libraries.PLUGIN,
-                                p.disabledNext() ? Libraries.ENABLE : Libraries.DISABLE, body);
+                                p.disabled() ? Libraries.ENABLE : Libraries.DISABLE, body);
                     })
                     .following(Libraries.PLUGIN);
         }
         return pluginsListPanel;
     }
 
-    /** 说明行:下次启动的设定和这一次不同时先说"重启后生效"(行窄会被截,要紧的放前面),再是这一次运行的状态与版本。 */
+    /** 说明行:开关要重启才对得上时先说"重启后生效"(行窄会被截,要紧的放前面),再是此刻的状态与版本。 */
     private static String pluginMeta(ServerLibraries.Plugin p) {
         List<String> parts = new ArrayList<>();
         if (p.pending()) parts.add(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART));

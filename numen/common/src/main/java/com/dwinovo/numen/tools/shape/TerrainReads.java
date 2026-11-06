@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
 /**
@@ -835,7 +834,7 @@ final class TerrainReads {
         int side = 2 * n + 1;
         w.require(at.getX() - n, at.getZ() - n, at.getX() + n, at.getZ() + n);
         // 一次调用只抽一个数:各列的小数部分按同一个门槛进位
-        double chance = randomize ? ThreadLocalRandom.current().nextDouble() : 0;
+        double chance = randomize ? ShapeRandom.next().nextDouble() : 0;
         List<BlockAt> out = new ArrayList<>();
         for (int ox = -n; ox <= n; ox++) {
             for (int oz = -n; oz <= n; oz++) {

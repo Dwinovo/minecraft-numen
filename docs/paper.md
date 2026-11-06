@@ -206,7 +206,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   (难度、游戏规则、扮发令人的 `CommandSource`、等异步接纳),原版那份在 `vanilla` 包(Paper 不编),Paper 那份在测试插件里;
   `MockConnection` 多两个默认方法(`installed`:Paper 要替装着客户端的主人登记频道;`received`:Paper 发的是字节,解回原来的载荷)。
 - **`GameTestServerWorldMixin` 在 Paper 上不需要**:它为原版 `GameTestServer` 做三件事——每次从空世界目录开始(起服层清运行目录)、种子(`server.properties` 的 `level-seed`,
-  `-PgametestSeed`)、把数据包定义的维度并进测试世界(给真实地形套件 `numen_pathing_terrain*`)。最后一件 Paper 没有等价做法(起服后加不了维度),这两个套件不在 Paper 上跑。
+  `-PgametestSeed`)、把数据包定义的维度并进测试世界(给制作固定存档的套件 `numen_pathing_terrain_bake`)。最后一件 Paper 没有等价做法(起服后加不了维度),这个套件不在 Paper 上跑。
 - **结构模板**:原版只在 IDE 旗标下读 SNBT 目录,插件把每个用例要的模板读进结构管理器的缓存(`getOrCreate(id).load(...)`)。
 - **按 20 刻每秒跑,不加速**:`GameTestServer` 一刻接一刻、不等墙钟;Paper 的挖掘进度按墙钟算(`ServerLevel.getLagCompensationTick`),
   把刻速率调高,服务端就认为她挖得太快、把 STOP 退回去,所有生存模式的挖都做不成。所以整套要跑很久(没做成的用例要等满自己写的时限)。

@@ -276,7 +276,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState tickConsent() {
         player.controls().stop();
-        var answer = consult(consentItems);
+        var answer = gate().consult(consentItems);
         if (answer == null) {
             return TaskState.RUNNING;
         }
@@ -364,8 +364,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         while (budget > 0) {
             BuildTaskRecord.Target target = farthestPendingInLayer();
             if (target == null) {
-                // 这一层还有没轮到的格(站在里面的、够不着的):先收站、走去放了再往上走,不然她在坑里,墙一层层盖过头顶
-                if (layerHasUntried() || !advanceLayer()) {
+                // 这一层、或翻到下一层要跨过去的那几层还有没轮到的格(站在里面的、够不着的):先收站、走去放了再往上走,不然她在坑里,
+                // 墙一层层盖过头顶;上面悬空的格(哪儿都算够得着,直接写)也会先把下面够不着的格封死
+                if (untriedBeforeNextLayer() || !advanceLayer()) {
                     passOver = true;
                     break;
                 }
@@ -425,14 +426,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return best;
     }
 
-    /** 当前层所在的那一层高度上,有没有还没轮到过、也没对上、也不是主动不去动的格。 */
-    private boolean layerHasUntried() {
+    /**
+     * 从当前层到本遍排着的下一层之间(含当前层,不含下一层)的高度上,有没有还没轮到过、也没对上、也不是主动不去动的格。本遍只排
+     * 站在这里够得着的格,中间一整层都够不着时下一层会比当前层高出不止一格,跨过去的那几层也要算上。
+     */
+    private boolean untriedBeforeNextLayer() {
         if (layerStart >= order.size()) {
             return false;
         }
-        int y = order.get(layerStart).pos().getY();
+        int from = order.get(layerStart).pos().getY();
+        int next = layerEnd < order.size() ? order.get(layerEnd).pos().getY() : from + 1;
         for (BuildTaskRecord.Target t : r.targets) {
-            if (t.pos().getY() == y && !tried.contains(t.pos().asLong()) && !unwalkable.contains(t.pos().asLong())
+            int y = t.pos().getY();
+            if (y >= from && y < next && !tried.contains(t.pos().asLong()) && !unwalkable.contains(t.pos().asLong())
                     && !t.matches(rules.peek(t.pos())) && !rules.refused(t) && !rules.hopeless(t)) {
                 return true;
             }
@@ -527,15 +533,16 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         // 落没落成由 BuildPlacer 看世界判:手放被拒(保护、事件被取消)与直接写不进去(超出建造高度)都是世界没变,不记账。
-        BuildPlacer.Way way = placer.place(target, cost);
-        if (way == null) {
+        BuildPlacer.Placement placement = placer.place(target, cost);
+        if (placement == null) {
             return missed(pos, BuildOutstanding.Cause.REFUSED, null);
         }
         BlockState now = player.level().getBlockState(pos);
-        if (way == BuildPlacer.Way.SET_DIRECTLY) {
+        boolean directly = placement.way() == BuildPlacer.Way.SET_DIRECTLY;
+        if (directly) {
             written.add(pos);
         }
-        r.placedOne(occupied, way == BuildPlacer.Way.SET_DIRECTLY);
+        r.placedOne(occupied, directly, placement.spent());
         if (!target.matches(now)) {
             // 放下去了,原版随即弹掉或改了样子:以世界为准,不算完成、不记账,这一次也不重放。动过手,算这一刻的预算
             missed.put(pos.asLong(), new Miss(BuildOutstanding.Cause.DID_NOT_STAY, whyNotStay(target, now)));
@@ -606,7 +613,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 这一站放完了:整份都对上了就收工;还有够不着的,走到够得着最低一层里最远那一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
+     * 这一站放完了:整份都对上了就收工;还有够不着的,走到离她最近、够得着最低一层里任一格的地方,在那里再放一站(轮过的格不再轮);没有就收场,
      * 没放好的照实进回执。
      */
     private TaskState endPass() {
@@ -635,16 +642,20 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
             return conclude(null);
         }
-        // 最低一层里离她最远的那一格:站到够得着它的地方,在那里先放远处够得着的,再退回来——近处的格留到最后放,
-        // 站在这边点远处邻格的视线才不被先放下的近格挡住
-        int lowest = far.get(0).getY();
-        Vec3 here = player.position();
-        BlockPos farthest = far.stream().filter(p -> p.getY() == lowest)
-                .max(java.util.Comparator.comparingDouble(p -> p.distToCenterSqr(here.x, here.y, here.z))).orElseThrow();
-        walkingTo = List.of(farthest);
+        walkingTo = walkTargets(far);
         triedWhenWalking = tried.size();
         phase = Phase.WALK;
         return TaskState.RUNNING;
+    }
+
+    /**
+     * 走去下一站交给寻路的格:够不着的格({@code far} 按层从低到高排)里最低一层的全部。寻路去离她最近、够得着其中任一格的站位,
+     * 走得最少;到了那里先放远处够得着的,再退回来(见 farthestPendingInLayer)——近处的格留到最后放,站在这边点远处邻格的视线才不被
+     * 先放下的近格挡住。
+     */
+    static List<BlockPos> walkTargets(List<BlockPos> far) {
+        int lowest = far.get(0).getY();
+        return far.stream().filter(p -> p.getY() == lowest).toList();
     }
 
     // ------------------------------------------------------------------
@@ -916,12 +927,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected Placed value() {
         Map<Item, Integer> shortfall = r.consumeMaterials
                 ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
+        com.dwinovo.numen.nav.Walked walk = walked(player.position(), 0);
         return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
-                r.setDirectly(), outstanding(), r.replaced(), r.broken(),
+                r.setDirectly(), outstanding(), r.replaced(), r.broken(), walk.dugAt(), walk.placedAt(),
                 siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
                 // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
                 damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
-                shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)));
+                shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)),
+                r.spentWithData().isEmpty() ? Optional.empty() : Optional.of(r.spentWithData()));
     }
 
     /** {@code numen.build.place} 交回的值。 */
@@ -939,14 +952,23 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                          @com.dwinovo.numen.api.sdk.Doc("Blocks that stood there and were swapped for the right one.")
                          int replaced,
                          @com.dwinovo.numen.api.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell broken while walking up to the site, in order; the "
+                                 + "receipt text lists only the first few of each kind.") List<BlockPos> walkDugAt,
+                         @com.dwinovo.numen.api.sdk.Doc("Every cell placed while walking up to the site (bridge, pillar "
+                                 + "and step blocks, not the design), in order; the receipt text lists only the first few "
+                                 + "of each kind.") List<BlockPos> walkPlacedAt,
                          @com.dwinovo.numen.api.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
                          @com.dwinovo.numen.api.sdk.Doc("Cells something else broke while you built, put back.")
                          Optional<Integer> destroyedWhileBuilding,
-                         @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort) {
+                         @com.dwinovo.numen.api.sdk.Doc("What you are short of.") Optional<String> stillShort,
+                         @com.dwinovo.numen.api.sdk.Doc("The stacks with data that were spent, as the inventory "
+                                 + "lists them (a shulker box with its contents, an enchanted item) and how many; "
+                                 + "absent when only plain items were used. Naming only an item spends the stack in "
+                                 + "your main hand, else the first slot.") Optional<String> spent) {
 
         /** 要的样子已经立着,什么都没放。 */
-        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, Optional.empty(), Optional.empty(),
-                Optional.empty());
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, List.of(), 0, 0, List.of(), List.of(), Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty());
     }
 
     /**
@@ -1012,6 +1034,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             sb.append(" (").append(r.replaced()).append(" replacing what stood there)");
         }
         sb.append(", cleared ").append(r.broken());
+        if (!r.spentWithData().isEmpty()) {
+            sb.append(", spent ").append(r.spentWithData());
+        }
         return sb.toString();
     }
 

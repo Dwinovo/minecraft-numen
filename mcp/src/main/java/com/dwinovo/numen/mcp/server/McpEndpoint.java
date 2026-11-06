@@ -194,6 +194,8 @@ public final class McpEndpoint {
     private record Waiting(UUID owner, UUID subject, McpQuestion question, Consumer<McpQuestion.Answer> answered) {}
 
     private final Map<Long, Waiting> waiting = new ConcurrentHashMap<>();
+    /** 已经弹给人、答复还没交给 {@code answered} 的问题有几条。 */
+    private final java.util.concurrent.atomic.AtomicInteger asking = new java.util.concurrent.atomic.AtomicInteger();
 
     /**
      * 问这位主人坐在客户端前的人。借这位主人某张作用域管着 {@code subject} 的大脑令牌、声明了会答表单式 elicitation 的客户端
@@ -204,6 +206,11 @@ public final class McpEndpoint {
     public void ask(long id, UUID owner, UUID subject, McpQuestion question, Consumer<McpQuestion.Answer> answered) {
         waiting.put(id, new Waiting(owner, subject, question, answered));
         deliver(id);
+    }
+
+    /** 已经弹给人、答复还没交出去的问题有几条:只读。 */
+    public int asking() {
+        return asking.get();
     }
 
     /** 这一条不用问了(主人在别处答了、到期):还没问出去的撤掉。已经弹给人的收不回——SDK 没有取消 elicitation 的口。 */
@@ -232,6 +239,7 @@ public final class McpEndpoint {
             if (exchange == null || waiting.remove(id, w) == false) {
                 continue;
             }
+            asking.incrementAndGet();
             Thread.ofVirtual().name("numen-mcp-ask").start(() -> {
                 try {
                     w.answered().accept(answerOf(exchange.createElicitation(McpSchema.ElicitFormRequest
@@ -240,6 +248,8 @@ public final class McpEndpoint {
                     // 借来的那次调用在人答之前收场了(流关了):这条问题放回去,下一次调用再问
                     LOG.debug("[numen-mcp] 征询没问成,等下一次调用再问: {}", unreachable.toString());
                     waiting.putIfAbsent(id, w);
+                } finally {
+                    asking.decrementAndGet();
                 }
             });
             return;

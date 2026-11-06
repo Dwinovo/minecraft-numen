@@ -166,18 +166,18 @@ public final class NumenLlmClient {
         for (ConvoState.Msg m : sendable) {
             switch (m) {
                 case ConvoState.Msg.User u -> wire.add(provider.buildUserMessage(u.content()));
-                // 上一家的私货(思考签名、reasoning_content)只有产它的那家认:换过模型就脱掉再发。
-                // 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
-                case ConvoState.Msg.Assistant a -> wire.addAll(provider.assistantToRequestItems(
-                        a.turn().sameOrigin(endpoint.origin()) ? a.turn() : a.turn().withoutProviderPrivateFields()));
+                case ConvoState.Msg.Assistant a -> wire.addAll(endpoint.assistantWireItems(a.turn()));
                 case ConvoState.Msg.Tool t -> wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
                 case ConvoState.Msg.Halt h -> throw new IllegalStateException(
                         "ProtocolView.forWire never emits Halt: " + h.reason());
             }
         }
         JsonArray toolList = provider.buildToolList(tools);
+        // 输出上限按这次请求剩下的窗口定(普通一轮与整理的摘要都这样,见 LlmEndpoint#optionsFor)
+        int inputTokens = CompactSplit.estimateTokens(sendable, endpoint) + CompactSplit.estimateText(systemPrompt)
+                + CompactSplit.estimateText(toolList.toString());
         JsonObject body = provider.buildRequestBody(endpoint.model(), systemPrompt, wire, toolList,
-                endpoint.options(), sessionId);
+                endpoint.optionsFor(inputTokens), sessionId);
 
         if (AiLog.LOG.isDebugEnabled()) {
             AiLog.LOG.debug("[numen-llm] chat start: provider={}, model={}, msgs={}, tools={}, system_prompt_chars={}",

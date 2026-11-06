@@ -1,5 +1,7 @@
 package com.dwinovo.numen.task.inventory;
 
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.tools.ContainerOps;
@@ -65,7 +67,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         }
         Action take = ContainerOps.taking(move, player);
         if (take != null) {
-            Permit permit = permit(take);
+            Permit permit = gate().permit(take);
             if (permit.state() == PermitState.WAITING) {
                 player.controls().stop();
                 return TaskState.RUNNING;

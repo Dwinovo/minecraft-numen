@@ -55,6 +55,24 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions) {
+        door.api(group, summary, functions);
+        one(PluginRoster.Kind.API_GROUP);
+    }
+
+    @Override
+    public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+            com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
+        door.taskRunner(record, runner);
+    }
+
+    @Override
+    public void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon) {
+        door.rangedWeapon(weapon);
+        one(PluginRoster.Kind.RANGED_WEAPON);
+    }
+
+    @Override
     public <T> void codec(Class<T> type, Codec<T> codec) {
         door.codec(type, codec);
     }
@@ -66,6 +84,20 @@ final class CountingApi implements NumenApi {
             ledger.accept(PluginRoster.Kind.SKILL, entries(root, SkillRegistry.KIND));
             ledger.accept(PluginRoster.Kind.MODULE, entries(root, Modules.KIND));
         }
+    }
+
+    @Override
+    public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                java.util.List<String> notProvided, Class<?> function) {
+        door.knowledgeSource(kind, provides, notProvided, function);
+        one(PluginRoster.Kind.KNOWLEDGE_SOURCE);
+    }
+
+    @Override
+    public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function) {
+        door.knowledgeSource(kind, provides, notProvided, function);
+        one(PluginRoster.Kind.KNOWLEDGE_SOURCE);
     }
 
     @Override

@@ -35,6 +35,9 @@ public final class SdkFixture {
 
     private SdkFixture() {}
 
+    /** 只为让上面的初始化跑一遍(名字空间是编译期常量,单读它不触发类初始化)。 */
+    public static void ready() {}
+
     /** 登记一组测试函数(名字空间 {@link #NAMESPACE})。 */
     public static void register(String group, Class<?> functions) {
         ApiRegistry.register(NAMESPACE, group, "Test fixture.", functions);

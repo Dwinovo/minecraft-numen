@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
+import com.dwinovo.numen.pathing.plan.Mobility;
 import java.util.List;
 import java.util.Optional;
 
@@ -85,6 +86,12 @@ class SearchTest {
         SearchResult result = search(field(), defaults(), START, Goals.at(goal));
         assertTrue(result.arrived());
         assertEquals(goal, result.route().end());
+
+        // 中间横着一堵墙、两头留着路:不许改地形,绕过去,一格不改
+        SearchResult around = search(field().fill(6, Y, -4, 6, Y + 1, 6, STONE), defaults(), START, Goals.at(goal));
+        assertTrue(around.arrived());
+        assertEquals(goal, around.route().end());
+        assertTrue(around.route().edits().isEmpty(), around.route().edits().toString());
     }
 
     /**
@@ -147,17 +154,16 @@ class SearchTest {
     }
 
     /**
-     * 整片石头里只空着身体站的那两格,空手挖:每挖一格的价钱比估价里走一格贵几十倍。贪心那一遍朝终点直挖,几十个节点就拿到解——
-     * 不用逐个展开最便宜的节点,把石头里每一格的挖法都翻一遍。
+     * 整片石头里只空着身体站的那两格,空手挖:每挖一格的价钱比估价里走一格贵几十倍。埋深把绕不开的挖掘算进估价,加权搜索朝终点
+     * 挖过去,几千个节点就到——不把石头里每一格的挖法都翻一遍;挖的格数不多于一条两格高的直隧道。
      */
     @Test
-    void aLongTunnelInSolidRockIsFoundByPushingStraightAtTheGoal() {
+    void aLongTunnelInSolidRockIsFoundWithoutFloodingTheRock() {
         TestWorld rock = new TestWorld().fill(-4, Y - 6, -8, 40, Y + 8, 8, STONE)
                 .fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
-        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 100);
+        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 5_000);
         assertTrue(result.arrived(), result.stop().toString());
-        assertEquals(100, result.expanded(), "贪心那一遍几十个节点拿到解,剩下的预算花在加权那一遍找更便宜的");
-        assertEquals(60, result.route().alterations(), "一条两格高的隧道,每列挖两格");
+        assertTrue(result.route().alterations() <= 60, "不多于一条两格高的直隧道:" + result.route().alterations());
     }
 
     /**
@@ -222,36 +228,29 @@ class SearchTest {
 
     private static final BlockPos ACROSS = new BlockPos(36, Y, 0);
 
-    /** 一段的长度:十二格疾跑的耗时。 */
-    private static final double SEGMENT = 12 * Fixtures.PACE.sprint();
+    /** 测试的表:每展开一个节点记十微秒,与 GameTest 宿主同一个折算。 */
+    private static final SearchClock CLOCK = SearchClock.counting(10_000, 0);
 
-    /**
-     * 许放块时要搭一长段桥:一段只要走到估价比起点低一段的节点,不必搜到目标——交出整条通到那里的路线,停因是"到了这一段的终点",
-     * 终点朝目标推进了一段那么远。
-     */
-    @Test
-    void aSegmentEndsAtANodeWhoseEstimateIsOneSegmentLower() {
-        CostModel model = Fixtures.withCobble(natural());
-        Search search = new Search(chasm(), model, START, Goals.at(ACROSS), 50_000, Favoring.NONE).advancing(SEGMENT);
-        SearchResult result = AStar.run(search, () -> false);
-        assertEquals(SearchResult.Stop.SEGMENT, result.stop(), "没到目标,到了这一段的终点");
-        assertTrue(result.reached());
-        assertFalse(result.arrived());
-        BlockPos end = result.route().end();
-        assertEquals(12, end.getX(), "朝目标推进了一段:" + end);
+    /** 搜索那一段只想得了 {@code nodes} 个节点那么久的时限(整个周期的时限还含留给学习的份额)。 */
+    private static Deadline thinking(int nodes) {
+        long share = Deadline.LEARNING_SHARE_DENOMINATOR;
+        return new Deadline(CLOCK, nodes * 10_000L * share / (share - 1));
     }
 
-    /** 目标就在这一段里:走到目标,路线与不分段时一样。 */
+    /**
+     * 许放块时要搭一长段桥,时限只够想几百个节点:时间到了交出半程,停因是"时间到";不限时就一次搜到目标。想多久只改搜多深,
+     * 表按展开的节点数折算时,同样的时限两次搜出一模一样的路线。
+     */
     @Test
-    void aGoalInsideTheSegmentIsArrivedAtThroughTheSameRoute() {
-        TestWorld world = field().fill(6, Y, -6, 6, Y + 1, 6, STONE);
-        Goal goal = Goals.at(new BlockPos(15, Y, 3));
-        Search whole = new Search(world, Fixtures.withCobble(natural()), START, goal, Fixtures.BUDGET, Favoring.NONE);
-        SearchResult plain = AStar.run(whole, () -> false);
-        SearchResult segmented = AStar.run(whole.advancing(40 * Fixtures.PACE.sprint()), () -> false);
-        assertTrue(plain.arrived());
-        assertTrue(segmented.arrived());
-        assertEquals(legs(plain.route()), legs(segmented.route()));
+    void aSearchOutOfTimeHandsOverPartOfTheWay() {
+        CostModel model = Fixtures.withCobble(natural());
+        Search search = new Search(chasm(), model, START, Goals.at(ACROSS), 50_000, Favoring.NONE);
+        SearchResult hurried = AStar.run(search.within(thinking(300)), () -> false);
+        assertEquals(SearchResult.Stop.TIME, hurried.stop(), "没到目标,时间到了");
+        assertEquals(300, hurried.expanded(), "想多久按展开的节点数折算");
+        assertNotNull(hurried.route(), "交出半程");
+        assertEquals(legs(hurried.route()), legs(AStar.run(search.within(thinking(300)), () -> false).route()), "可复现");
+        assertTrue(AStar.run(search, () -> false).arrived(), "不限时一次搜到目标");
     }
 
     private static List<String> legs(Route route) {
@@ -259,8 +258,20 @@ class SearchTest {
                 + leg.maneuver().to() + " " + leg.cost() + " " + leg.maneuver().edits()).toList();
     }
 
+    /** 搭到空隙上方的一截路线:过空隙的整条路线截到第一块悬在空隙上方的桥为止。 */
+    private static Route halfway(TestWorld world, CostModel model, Goal goal) {
+        Route whole = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE), () -> false).route();
+        assertNotNull(whole);
+        for (int i = 0; i < whole.legs().size(); i++) {
+            if (whole.legs().get(i).maneuver().to().getX() > 4) {
+                return new Route(whole.start(), whole.startStance(), whole.legs().subList(0, i + 1));
+            }
+        }
+        throw new AssertionError("过空隙的路线没走到空隙上方");
+    }
+
     /**
-     * 接着一段搭到半空的路线往下搜:起点是那段路线的终点,脚下那块桥还没放、快照里是空的。只给起点,身体在那里待不住;
+     * 接着一截搭到半空的路线往下搜:起点是那截路线的终点,脚下那块桥还没放、快照里是空的。只给起点,身体在那里待不住;
      * 给出走到那里的那一步,就照它的落点与它垫下的块接着搜下去。
      */
     @Test
@@ -268,17 +279,30 @@ class SearchTest {
         TestWorld world = chasm();
         CostModel model = Fixtures.withCobble(natural());
         Goal goal = Goals.at(ACROSS);
-        Route route = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).advancing(SEGMENT),
-                () -> false).route();
-        assertNotNull(route);
+        Route route = halfway(world, model, goal);
         BlockPos end = route.end();
-        assertTrue(end.getX() > 2, "第一段搭到了空隙上方:" + end);
-        Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE).advancing(SEGMENT);
+        Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE);
         assertEquals(SearchResult.Stop.STRANDED, AStar.run(fromEnd, () -> false).stop(), "快照里桥还没搭,起点待不住");
-        SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1)), () -> false);
+        SearchResult next = AStar.run(fromEnd.after(route, 0), () -> false);
         assertNotNull(next.route(), "照最后一步的落点与它垫的块接着搜:" + next.stop());
         assertEquals(end, next.route().start());
         assertTrue(next.route().end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
+    }
+
+    /**
+     * 接着一截搭到半空的路线往下搜,读到的世界叠着这一截前面每一步搭下的桥(身体走到那里时世界就是这样),不只是最后一块:
+     * 回到出发的台子上,走的是自己搭的桥,一块也不再垫。
+     */
+    @Test
+    void aSearchContinuingARouteSeesEveryBridgeTheRouteLaysBeforeItsEnd() {
+        TestWorld world = chasm();
+        CostModel model = Fixtures.withCobble(natural());
+        Route route = halfway(world, model, Goals.at(ACROSS));
+        assertTrue(route.edits().stream().filter(e -> e instanceof Edit.Place).count() >= 2, "这一截搭了不止一块桥");
+        SearchResult back = AStar.run(new Search(world, model, route.end(), Goals.at(START), 50_000, Favoring.NONE)
+                .after(route, 0), () -> false);
+        assertTrue(back.arrived(), back.stop().toString());
+        assertEquals(0, back.route().edits().stream().filter(e -> e instanceof Edit.Place).count(), "回去走在搭好的桥上");
     }
 
     @Test
@@ -449,35 +473,6 @@ class SearchTest {
     }
 
     /**
-     * 挖几格里的任意一格({@link Goals#dig(java.util.List, com.dwinovo.numen.pathing.world.BodyStats, Goals.Clearing)}):她站在一条南北向、一格宽的
-     * 石头走廊正中,走廊两头各嵌着矿——一头一格,另一头并排两格(多出来的那格在走廊外侧,不比正对走廊的那格近)。两头最先够得着矿的站位离她一样远、
-     * 估价一样,够着的格数不同:同样划算,
-     * 挑一次够得着最多格的那一头。两个朝向各试一次,不靠搜索先往哪边铺。
-     */
-    @Test
-    void diggingSeveralCellsStopsWhereTheHandReachesTheMost() {
-        for (int side : new int[]{-1, 1}) {
-            TestWorld world = field().fill(-3, Y, -8, 3, Y + 2, 8, STONE).fill(0, Y, -5, 0, Y + 1, 5,
-                    Blocks.AIR.defaultBlockState());
-            BlockPos single = new BlockPos(0, Y, -6 * side);
-            List<BlockPos> pair = List.of(new BlockPos(0, Y, 6 * side), new BlockPos(1, Y, 6 * side));
-            world.set(single, Blocks.IRON_ORE.defaultBlockState());
-            pair.forEach(ore -> world.set(ore, Blocks.IRON_ORE.defaultBlockState()));
-            List<BlockPos> targets = new java.util.ArrayList<>(List.of(single));
-            targets.addAll(pair);
-            SearchResult result = search(world, defaults(), START, Goals.dig(targets.stream().map(t -> new Goals.DigTarget(t, 0)).toList(), SURVIVAL,
-                    Goals.Clearing.ANY));
-            assertTrue(result.arrived(), result.stop().toString());
-            BlockPos end = result.route().end();
-            Stance stance = result.route().endStance();
-            long reached = pair.stream().filter(t -> Goals.dig(t, SURVIVAL, Goals.Clearing.ANY).contains(end.getX(), end.getY(),
-                    end.getZ(), stance)).count();
-            assertTrue(Integer.signum(end.getZ()) == side && reached == 2,
-                    "停在嵌着两格的那一头:" + end + " 够得着 " + reached);
-        }
-    }
-
-    /**
      * 要挖的矿在一堵三格高的羊毛墙后面,墙向两边各伸出六格。站在墙前最近,手也够得着,但挖的一方清不掉羊毛:那里停下办不成,
      * 搜索绕过墙头,停在看得见它、不隔着羊毛的地方。谁挖都行的同一个目标,停在墙前(隔一格遮挡比绕路便宜)。
      */
@@ -560,7 +555,7 @@ class SearchTest {
         assertEquals(3, column.getZ());
         BlockPos center = new BlockPos(12, Y, 0);
         BlockPos near = search(field(), defaults(), START, Goals.within(Goals.at(center), 0, 2)).route().end();
-        assertTrue(near.distSqr(center) <= 4);
+        assertTrue(near.distSqr(center) <= 4 && near.distSqr(center) > 1, "一进范围就停,不走到跟前:" + near);
         BlockPos ring = search(field(), defaults(), START, Goals.within(Goals.column(12, 0), 3, 4)).route().end();
         double d = Math.sqrt(Math.pow(ring.getX() - center.getX(), 2) + Math.pow(ring.getZ() - center.getZ(), 2));
         assertTrue(d >= 3 && d <= 4, "停在环带上,不走到中心:" + d);
@@ -636,6 +631,11 @@ class SearchTest {
             @Override
             public it.unimi.dsi.fastutil.longs.LongSet endCells() {
                 return goal.endCells();
+            }
+
+            @Override
+            public Anchor anchor(net.minecraft.world.phys.Vec3 from) {
+                return goal.anchor(from);
             }
 
             @Override
@@ -735,14 +735,11 @@ class SearchTest {
         TestWorld world = chasm();
         CostModel model = Fixtures.withCobble(natural());
         Goal goal = Goals.at(ACROSS);
-        Route first = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).advancing(SEGMENT),
-                () -> false).route();
-        assertNotNull(first);
+        Route first = halfway(world, model, goal);
         BlockPos end = first.end();
-        Route.Leg last = first.legs().get(first.legs().size() - 1);
         SearchResult bare = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE), () -> false);
         assertEquals(SearchResult.Stop.STRANDED, bare.stop(), "快照里桥还没搭,起点待不住");
-        SearchResult next = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE).after(last), () -> false);
+        SearchResult next = AStar.run(new Search(world, model, end, goal, 50_000, Favoring.NONE).after(first, 0), () -> false);
         Route continued = next.route();
         assertNotNull(continued, "接着规划出了路:" + next.stop());
         assertEquals(end, continued.start());
@@ -801,7 +798,7 @@ class SearchTest {
     /** 原版身体,憋气的本钱是 {@code breath}。 */
     private static CostModel breathing(Breath breath) {
         BodySnapshot body = new BodySnapshot(SURVIVAL, net.minecraft.world.level.GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(), Fixtures.MINING, breath);
+                List.of(), Fixtures.MINING, breath, Mobility.WALKER);
         return CostModel.of(RouteSpec.defaults(), body, Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
     }
 
@@ -815,15 +812,18 @@ class SearchTest {
     }
 
     /**
-     * 浮沉几下就是憋气更紧的一档、总价更高的同一格:它们走得到的地方,宽裕的那一个都走得到,不展开。不去重的话,宽阔的干地边上那条封顶水道里,
-     * 搜索在浮沉的各档上铺满一段的预算(四千个节点),搜不完能走到的干地,收场说成"预算用完"、往边界推进,身体下水去试;去重之后搜完能走到的地方,
-     * 说"到不了、是憋气丢下了步子"。
+     * 浮沉几下就是憋气更紧的一档、总价更高的同一格:它们走得到的地方,宽裕的那一个都走得到,不展开。场景是一池封死的水(十六乘十六、三格深,
+     * 地、四壁与顶都是基岩),西边一间干屋是起点,目标在池子另一头的墙外,走不到:池里每一格都有几档憋气的节点,不去重的话搜索在这些
+     * 浮沉的各档上铺开——去重后搜完能走到的地方要 575 个节点,关掉去重要 3095 个(五倍多);预算 1800 取在两数中间。去重之后搜完说
+     * "到不了、是憋气丢下了步子",不去重就用完预算、说成"预算用完"、往边界推进,身体下水去试。
+     * 搜索的节点数是确定的(不看时钟),估价或权重一变这两个数跟着变,但差着五倍,预算不必跟着调。
      */
     @Test
-    void bobbingInTheWaterDoesNotFillTheSegmentBudgetWithDominatedStates() {
-        TestWorld world = sealedChannel(28).fill(-5, Y, 0, -4, Y + 1, 0, Blocks.AIR.defaultBlockState())
-                .floor(-50, -28, -5, 28, Y - 1);
-        SearchResult result = Fixtures.search(world, defaults(), new BlockPos(-30, Y, 0), Goals.at(new BlockPos(30, Y, 0)), 4000);
+    void bobbingInTheWaterDoesNotFillTheBudgetWithDominatedStates() {
+        TestWorld world = new TestWorld().fill(-4, Y - 1, -2, 20, Y + 3, 18, Blocks.BEDROCK.defaultBlockState());
+        world.fill(0, Y, 0, 16, Y + 2, 16, Blocks.WATER.defaultBlockState());
+        world.fill(-3, Y, 0, -1, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        SearchResult result = Fixtures.search(world, defaults(), WEST_ROOM, Goals.at(new BlockPos(24, Y, 0)), 1800);
         assertEquals(SearchResult.Stop.EXHAUSTED, result.stop(), "expanded " + result.expanded());
         assertNull(result.route());
         assertTrue(result.breathless());
@@ -907,7 +907,7 @@ class SearchTest {
         assertNotNull(first);
         Goal far = Goals.at(new BlockPos(32, Y, 0));
         Search fromMiddle = new Search(world, defaults(), middle, far, Fixtures.BUDGET, Favoring.NONE);
-        SearchResult carried = AStar.run(fromMiddle.after(first.legs().get(first.legs().size() - 1)), () -> false);
+        SearchResult carried = AStar.run(fromMiddle.after(first, 0), () -> false);
         assertEquals(SearchResult.Stop.EXHAUSTED, carried.stop());
         assertTrue(carried.breathless());
         assertTrue(AStar.run(fromMiddle, () -> false).arrived(), "满氧气从正中出发游得完");
@@ -924,5 +924,71 @@ class SearchTest {
         assertEquals(Optional.of(new BlockPos(3, Y, 0)), Origin.of(world, SURVIVAL, 3.5, Y, 0.5));
         assertEquals(Optional.empty(), Origin.of(world, SURVIVAL, -3.5, Y, 0.5));
         assertInstanceOf(BlockPos.class, origin.orElseThrow());
+    }
+
+    /**
+     * 两格高的泥土墙,口的绕路只多走两三格(挖一格的罚分约等于多走两格,两格高的墙要挖两格,挖的比绕的贵):许改地形也不挖,
+     * 从口里绕过去,一格不改。
+     */
+    @Test
+    void aShortDetourThroughAGapBeatsDiggingATwoHighWall() {
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1);
+        for (int z = 0; z <= 39; z++) {
+            if (z != 8) {
+                world.fill(8, Y, z, 8, Y + 1, z, Blocks.DIRT.defaultBlockState());
+            }
+        }
+        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(5, Y, 5), Goals.at(new BlockPos(11, Y, 5)));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertTrue(result.route().edits().isEmpty(), "该绕口过去,却改了:" + result.route().edits());
+    }
+
+    /**
+     * 问有代价就绕开:主人的一道两格高的木板墙横在半路(许可答"要问"),近处留着口;走路的规格许挖许放、要问的格算能走但加价。
+     * 要问的格比绕过去贵得多,路线从口里过去,不碰一块要问的板子。
+     */
+    @Test
+    void cellsThatNeedConsentCostSoMuchThatAGapNearbyIsTaken() {
+        TestWorld world = new TestWorld().floor(-2, -2, 15, 15, Y - 1);
+        for (int z = 0; z <= 15; z++) {
+            if (z != 4) {
+                world.fill(8, Y, z, 8, Y + 1, z, Blocks.OAK_PLANKS.defaultBlockState());
+            }
+        }
+        TerrainPolicy owners = (change, pos, state, view) -> state.is(Blocks.OAK_PLANKS) ? Permit.ask("the owner's wall") : Permit.ALLOW;
+        CostModel walking = CostModel.of(RouteSpec.defaults().edit().changes(true).build(), Fixtures.body(), owners, Fixtures.COBBLE,
+                Threats.NONE);
+        SearchResult result = search(world, walking, new BlockPos(2, Y, 2), Goals.at(new BlockPos(13, Y, 2)));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertTrue(result.route().edits().stream().noneMatch(Edit::alters), "该从口里绕过去,却改了:" + result.route().edits());
+    }
+
+    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去,一格不改。 */
+    @Test
+    void usingABlockOnAPillarTopIsDoneFromTheGroundWithoutPillaringBesideIt() {
+        BlockPos table = new BlockPos(10, Y + 2, 5);
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1).fill(10, Y, 5, 10, Y + 1, 5, STONE)
+                .set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(4, Y, 5), Goals.use(world, SURVIVAL, table));
+        assertTrue(result.arrived(), result.stop().toString());
+        assertEquals(Y, result.route().end().getY(), "站在地上:" + result.route().end());
+        assertTrue(result.route().edits().isEmpty(), "垫了柱或挖了:" + result.route().edits());
+    }
+
+    /**
+     * 一座横贯场地的石山(二十格高,身上没有垫路料,翻不过去),铁矿藏在离山面六格深处,手上一把铁镐,许挖许放:出厂预算的一次
+     * 规划就搜到头,只从正面挖进去几格(一到八格)、够得着就停。
+     */
+    @Test
+    void anOreInsideAHillIsReachedByDiggingAFewBlocksInFromTheFront() {
+        TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1).fill(10, Y, 0, 39, Y + 19, 39, STONE)
+                .set(16, Y + 1, 20, Blocks.IRON_ORE.defaultBlockState());
+        CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)), Fixtures.ALLOW_ALL,
+                Fixtures.NO_MATERIALS, Threats.NONE);
+        SearchResult result = search(world, model, new BlockPos(4, Y, 20),
+                Goals.dig(new BlockPos(16, Y + 1, 20), SURVIVAL, Goals.Clearing.ANY), NavRequest.DEFAULT_BUDGET);
+        assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
+        long digs = result.route().edits().stream().filter(e -> e instanceof Edit.Dig).count();
+        assertTrue(digs > 0 && digs <= 8, "该从正面挖进去几格,却挖 " + digs + " 格:" + result.route().edits());
     }
 }

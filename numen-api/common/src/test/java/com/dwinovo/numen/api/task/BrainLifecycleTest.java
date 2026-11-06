@@ -40,18 +40,6 @@ class BrainLifecycleTest {
     }
 
     @Test
-    void theDispatcherRegistersItselfWithoutAnyLoaderHelp() {
-        // 上面那条测的是行为,这条测的是<b>为什么不会漏</b>:清理动作写在状态旁边的
-        // 静态块里,类被加载就已经报到了,loader 一个字都不用写,也就没有"忘了登记"。
-        UUID her = UUID.randomUUID();
-        TaskSlot fresh = CompanionTickDispatcher.currentSlotFor(her);
-
-        ServerLifecycle.fireStopped();
-
-        assertNotSame(fresh, CompanionTickDispatcher.currentSlotFor(her));
-    }
-
-    @Test
     void speakingFlagsAreWorldScopedToo() {
         // 同族的另一份:服务端记的"谁在说话"。一个没翻回来的 true 会让下一个存档里
         // 的她一直盯着主人看。

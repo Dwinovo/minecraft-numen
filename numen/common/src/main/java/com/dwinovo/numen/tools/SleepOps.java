@@ -22,7 +22,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
  *
  * <h2>为什么它这么薄</h2>
  * 找床归 {@code scan_blocks}(现在能写 {@code #minecraft:beds},一句话覆盖全部颜色),
- * 走过去归 {@code numen.move.to}——那两件事今天已经各有一个统一的实现,再包一份进来就是第三个入口。
+ * 走过去归 {@code numen.move.walk}——那两件事今天已经各有一个统一的实现,再包一份进来就是第三个入口。
  * 这里只做别处做不了的那一件:<b>把原版的睡眠判定翻译成模型能接住的回执</b>。
  *
  * <h2>三态,不是两态</h2>
@@ -50,7 +50,7 @@ public final class SleepOps {
         boolean given = at != null;
         BlockPos bedHead = given ? headOf(self.level(), at) : nearestBedHeadInReach(self);
         if (bedHead == null) {
-            throw noBed(self, given);
+            throw noBed(self.getInventory(), given);
         }
 
         Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
@@ -125,22 +125,21 @@ public final class SleepOps {
                 : pos.relative(state.getValue(BedBlock.FACING)).immutable();
     }
 
-    /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"。 */
-    private static ApiError noBed(NumenPlayer self, boolean coordsGiven) {
-        String carried = carriedBed(self);
+    /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"({@code inventory} 是她的背包)。 */
+    static ApiError noBed(net.minecraft.world.Container inventory, boolean coordsGiven) {
+        String carried = carriedBed(inventory);
         String base = coordsGiven
                 ? "there is no bed at those coordinates"
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " `numen.scan.blocks(\"#minecraft:beds\")` finds one; `numen.move.to(bed.pos, 2)`, "
+                : " `numen.scan.blocks(\"#minecraft:beds\")` finds one; `numen.move.walk(bed.pos, 2)`, "
                         + "then `numen.use.sleep()` again.";
         return new ApiError(ErrorKind.NOT_FOUND, base + "." + next, null);
     }
 
     /** 背包里的第一张床;没有则 null。 */
-    private static String carriedBed(NumenPlayer self) {
-        var inv = self.getInventory();
+    private static String carriedBed(net.minecraft.world.Container inv) {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && stack.getItem() instanceof BlockItem block

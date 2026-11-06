@@ -41,7 +41,7 @@ public final class BuildApi {
             + "to, standing where the hand reaches the lowest layer left, and places the cells within reach there, and "
             + "so on until every cell has had its turn or it can't get any further. Then it returns what it placed and "
             + "what is left, with the reason for each cell that did not go in. The walk goes its own way like "
-            + "`numen.move.to`, digging and building when going around costs more, and is told in the result. "
+            + "`numen.move.walk`, digging and building when going around costs more, and is told in the result. "
             + "`numen.build.diff` says what is still to do and where without moving; whether to go over what is left "
             + "again is yours to decide.")
     @Note("Each cell is placed by hand, the way a player does: standing where you are, it looks at a face of a block next to "

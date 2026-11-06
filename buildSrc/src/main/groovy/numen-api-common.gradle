@@ -154,8 +154,11 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
     include 'com/dwinovo/numen/api/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/api/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
+    include 'com/dwinovo/numen/api/combat/**'          // 远程武器的提供者:攻击任务问它们怎么射,插件经 NumenApi.rangedWeapon 登记
+    include 'com/dwinovo/numen/api/agent/scope/**'     // Handle:登记交回的句柄(TaskFactory 等公开登记点的返回类型)
     include 'com/dwinovo/numen/api/area/**'            // 一块地方(格、团、区域)——API 函数的值类型,Lua 值转换也认它
     include 'com/dwinovo/numen/api/task/**'            // task contract + the registration points a pack drives
+    include 'com/dwinovo/numen/api/knowledge/**'       // 配方与物品知识的来源(NumenApi.knowledgeSource)交回的页与配方的值类型
     include 'com/dwinovo/numen/api/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
     include 'com/dwinovo/numen/api/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
     include 'com/dwinovo/numen/api/entity/NumenPlayer*.class'   // the body a tool acts on
@@ -164,11 +167,14 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
     include 'com/dwinovo/numen/api/entity/Controls*.class'      // 她缺的那半个客户端:键盘、
     include 'com/dwinovo/numen/api/entity/Look*.class'          // 视角、
+    include 'com/dwinovo/numen/api/entity/Neck*.class'          // ...转头的颈部模型(控制器往前推演时复制它)、
     include 'com/dwinovo/numen/api/entity/Mouse*.class'         // 鼠标(准星、左键挖、右键用,动手之前过权限层)、
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),
     include 'com/dwinovo/numen/api/entity/ClientPackets*.class' // 客户端会发的那些包(界面里的钮、写字、交易、起床),
     include 'com/dwinovo/numen/api/entity/BodyAction*.class'    // 以及换手留下的记录——自己写寻路的插件按它们让她走
+    include 'com/dwinovo/numen/api/entity/Stacks*.class'        // 背包里"哪一叠":把物品 id 落到具体一叠的唯一一处(换手、放、丢、穿都问它),
+    include 'com/dwinovo/numen/api/entity/StackLabel*.class'    // 以及模型眼里区分同名几叠的那一句描述——清单、回执同一个写法
     include 'com/dwinovo/numen/api/entity/DigTime*.class'       // 原版的挖掘时间与缓手,
     include 'com/dwinovo/numen/api/entity/Reach*.class'         // 够得着、
     include 'com/dwinovo/numen/api/entity/Sight*.class'         // 看得见、
@@ -202,8 +208,6 @@ tasks.register('apiJar', Jar) {
     exclude 'com/dwinovo/numen/api/task/CompanionBrain*.class'
     exclude 'com/dwinovo/numen/api/task/ChainScheduler*.class'
     exclude 'com/dwinovo/numen/api/task/LlmTaskChain*.class'
-    exclude 'com/dwinovo/numen/api/task/TaskSessionHooks*.class'
-    exclude 'com/dwinovo/numen/api/task/HandPinRelease*.class'
     exclude 'com/dwinovo/numen/api/task/chain/**'
 }
 
