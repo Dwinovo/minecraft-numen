@@ -195,14 +195,17 @@ public class PerceptionGameTests {
     }
 
     /**
-     * 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),两只手那一栏
-     * 只有手。
+     * 她自己的状态:手里的剑、背包用了几格、血与饥饿、朝着哪边都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),
+     * 两只手那一栏只有手。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_self_status_reports_what_she_carries(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+        // 朝西、略微低头:朝向这两个值她以前读不到,只能绕道 /data get entity @s Rotation,而那条路被权限层拦下
+        companion.setYRot(90.0f);
+        companion.setXRot(30.0f);
         ToolRun status = lua(companion, "numen.status.self()");
         ToolRun viaCommand = lua(companion, "numen.status.self()");
 
@@ -213,6 +216,10 @@ public class PerceptionGameTests {
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            helper.assertTrue(s.getAsJsonObject("facing").get("yaw").getAsFloat() == companion.getYRot(),
+                    "she cannot read which way she faces: " + status.reply());
+            helper.assertTrue(s.getAsJsonObject("facing").get("pitch").getAsFloat() == companion.getXRot(),
+                    "she cannot read how far up or down she looks: " + status.reply());
             helper.assertTrue(s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
                     "body_state does not open with the worn slots: " + status.reply());
             helper.assertTrue(!s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
