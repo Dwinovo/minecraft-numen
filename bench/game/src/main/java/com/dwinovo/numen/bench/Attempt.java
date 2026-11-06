@@ -317,7 +317,8 @@ final class Attempt {
         }
         boolean live = variant == Variant.LIVE;
         Pricing.Price price = live ? settings.pricing().of(settings.modelLabel()) : null;
-        FailureTag tag = FailureTag.auto(passed, end, meter != null && meter.commandError);
+        FailureTag tag = FailureTag.auto(passed, end, meter != null && meter.commandError,
+                meter == null ? List.of() : meter.functions());
         Run run = new Run(suite, scenario.id(), variant.id(), number, settings.commit(), promptHash,
                 live ? settings.modelLabel() : variant.id(), passed, checks, subgoals, end.name(),
                 meter == null ? 0 : meter.turns, meter == null ? 0 : meter.toolCalls,

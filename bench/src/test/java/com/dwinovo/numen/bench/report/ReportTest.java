@@ -112,12 +112,29 @@ class ReportTest {
 
     @Test
     void failureTagRulesOnlyNameWhatARuleCanTell() {
-        assertNull(FailureTag.auto(true, EndReason.HARNESS_ERROR, true));
-        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.HARNESS_ERROR, false));
-        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.API_ERROR, true));
-        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.CONTEXT_OVERFLOW, false));
-        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true));
-        assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, false), "判不出的留给人工");
+        assertNull(FailureTag.auto(true, EndReason.HARNESS_ERROR, true, List.of()));
+        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.HARNESS_ERROR, false, List.of()));
+        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.API_ERROR, true, List.of()));
+        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.CONTEXT_OVERFLOW, false, List.of()));
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, List.of()));
+        assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, false, List.of()), "判不出的留给人工");
+    }
+
+    @Test
+    void actingOnAWorldSheNeverLookedAtIsAPerceptionFailure() {
+        assertEquals(FailureTag.B, FailureTag.auto(false, EndReason.DONE, false, List.of(used("numen.work.dig"))),
+                "挖了却一次都没看过");
+        assertNull(FailureTag.auto(false, EndReason.DONE, false,
+                        List.of(used("numen.scan.block"), used("numen.work.dig"))),
+                "看过了就判不出是不是感知的问题,留给人工");
+        assertNull(FailureTag.auto(false, EndReason.DONE, false, List.of(used("numen.move.walk"))),
+                "只走路不算动世界:主人给了坐标本就不必先看一眼");
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, List.of(used("numen.work.dig"))),
+                "命令写错了是更具体的证据,先按它判");
+    }
+
+    private static FunctionUse used(String function) {
+        return new FunctionUse(function, 1, Map.of(), 0, 0);
     }
 
     @Test
