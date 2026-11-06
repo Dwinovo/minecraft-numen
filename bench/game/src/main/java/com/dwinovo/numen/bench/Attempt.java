@@ -15,6 +15,8 @@ import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
@@ -176,6 +178,9 @@ final class Attempt {
         owner = new ServerPlayer(server, level, ownerProfile, ClientInformation.createDefault());
         ownerLine = new OwnerLine(true);
         server.getPlayerList().placeNewPlayer(ownerLine, owner, CommonListenerCookie.createInitial(ownerProfile, false));
+        // 替他的客户端走完报到:不经网络跑来征询时,登记处先问这位主人有没有可用的客户端({@code Presence.hasClient}),
+        // 没报到的会当成"没装客户端"发聊天按钮,而这里没有人点得了——那一条就只能等到 120 秒超时按拒绝收尾
+        Replies.hello(owner, Presence.PROTOCOL);
         Vec3 ownerAt = standOn(scenario.ownerAt());
         owner.teleportTo(level, ownerAt.x, ownerAt.y, ownerAt.z, 0, 0);
         // 考场只在平台当场接纳她的环境里跑(NeoForge):回调在调用里就跑完了
