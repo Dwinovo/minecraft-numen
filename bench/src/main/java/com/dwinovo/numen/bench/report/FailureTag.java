@@ -52,41 +52,52 @@ public enum FailureTag {
     private static final Set<String> SCENARIO_FENCED = Set.of("EXCLUDED", "FORBIDDEN");
 
     /**
-     * 规则判得出的那几种:评测出错、场景把路封死了是 H;API 错、超上下文是 G;有一行命令写错了(命令树读不通、参数不合)、
-     * 够不着是 D;照规格想不出路来是 C;真实模型动了世界却一次都没看过世界是 B。通过的、判不出的给 null。
+     * 规则判得出的那几种:评测出错、场景把路封死了是 H;API 错、超上下文是 G;够不着是 D;照规格想不出路来是 C;
+     * 她说做完了却没通过是 E;整次运行里有一次调用写错、或者真实模型动了世界却一次都没看过世界,是 D 与 B。
+     * 通过的、判不出的给 null。
      *
      * @param live         这次是真实模型跑的({@link Run#live})
      * @param commandError 这次里有没有哪个工具结果是命令写错了
+     * @param claimedDone  她自己收了工、断言却没过——嘴上说完成了
      * @param functions    她的程序用到的每个函数({@link Run#functions});{@code null} 当没有
      * @param path         她最后一趟路怎么收的场;一趟都没走过是 {@code null}
      */
     public static FailureTag auto(boolean passed, EndReason end, boolean live, boolean commandError,
-                                  List<FunctionUse> functions, PathEnd path) {
+                                  boolean claimedDone, List<FunctionUse> functions, PathEnd path) {
         if (passed) {
             return null;
         }
         return switch (end) {
             case HARNESS_ERROR -> H;
             case API_ERROR, CONTEXT_OVERFLOW -> G;
-            default -> fromEvidence(live, commandError, functions, path);
+            default -> fromEvidence(live, end, commandError, claimedDone, functions, path);
         };
     }
 
     /**
-     * 按证据从具体到笼统地判:轨迹说的是这一趟自己的事,先按它;"一次都没看过"是整次运行的毛病,最后才轮到。
+     * 按证据从具体到笼统地判。轨迹说的是这一趟自己的事,排在最前;她说做完了却没通过,是她的自我评价出了错;
+     * "整次运行里出过一次调用写错""整次一次都没看过世界"是整次运行的毛病,垫在最后——它们只说明哪里出过事,
+     * 不说明败在哪。
      */
-    private static FailureTag fromEvidence(boolean live, boolean commandError, List<FunctionUse> functions,
-                                           PathEnd path) {
+    private static FailureTag fromEvidence(boolean live, EndReason end, boolean commandError, boolean claimedDone,
+                                           List<FunctionUse> functions, PathEnd path) {
         String reason = path == null ? null : path.reason();
         String outcome = path == null ? null : path.outcome();
         if (reason != null && SCENARIO_FENCED.contains(reason)) {
             return H;
         }
-        if (commandError || "OUT_OF_REACH".equals(reason)) {
+        if ("OUT_OF_REACH".equals(reason)) {
             return D;
         }
         if (outcome != null && CANNOT_PLAN.contains(outcome)) {
             return C;
+        }
+        // 只有她自己收的工才算"说做完了";轮数、刻数用完时她说的话不算数,那几种的毛病在别处
+        if (claimedDone && end == EndReason.DONE) {
+            return E;
+        }
+        if (commandError) {
+            return D;
         }
         return live && blind(functions) ? B : null;
     }
