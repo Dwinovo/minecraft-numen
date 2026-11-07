@@ -42,7 +42,8 @@ final class RangedShot implements RangedWeapon.Shot {
     private final NumenPlayer player;
     private final boolean crossbow;
     private State state = State.USING;
-    private int held;
+    /** 弓松手那一刻拉了几刻(原版的计数),记进日志。 */
+    private int drawn;
     private int settle;
     private boolean fired;
 
@@ -75,7 +76,7 @@ final class RangedShot implements RangedWeapon.Shot {
         if (crossbow) {
             return crossbowSpeed;
         }
-        return bowFullSpeed * bowPowerForTicks(Math.max(BOW_RELEASE_TICKS, held + 1));
+        return bowFullSpeed * bowPowerForTicks(Math.max(BOW_RELEASE_TICKS, player.getTicksUsingItem()));
     }
 
     /** @return true 表示这一发已经结束(射出去了或哑了) */
@@ -104,7 +105,7 @@ final class RangedShot implements RangedWeapon.Shot {
      */
     @Override
     public boolean aboutToRelease() {
-        return crossbow ? state == State.READY_TO_FIRE : held >= BOW_RELEASE_TICKS - 1;
+        return crossbow ? state == State.READY_TO_FIRE : player.getTicksUsingItem() >= BOW_RELEASE_TICKS - 1;
     }
 
     @Override
@@ -122,11 +123,11 @@ final class RangedShot implements RangedWeapon.Shot {
                 tickReadyToFire(aim, target);
             } else if (!player.isUsingItem()) {
                 state = State.SETTLING;
-            } else if (++held >= CrossbowItem.getChargeDuration(weapon)) {   // 1.20.1:时长只看弩(快速装填在里面)
+            } else if (player.getTicksUsingItem() >= CrossbowItem.getChargeDuration(weapon)) {   // 1.20.1:时长只看弩(快速装填在里面)
                 player.releaseUsingItem();
                 state = State.READY_TO_FIRE;
                 settle = 0;
-            } else if (held >= CROSSBOW_LOAD_TIMEOUT) {
+            } else if (player.getTicksUsingItem() >= CROSSBOW_LOAD_TIMEOUT) {
                 player.stopUsingItem();
                 state = State.SETTLING;
             }
@@ -136,9 +137,10 @@ final class RangedShot implements RangedWeapon.Shot {
             state = State.SETTLING;
             return;
         }
-        held++;
+        // 拉了几刻按原版自己的计数(松手时弓按它算力道),不另数一份
+        drawn = player.getTicksUsingItem();
         double angle = Ballistics.angleDegrees(player.getViewVector(1.0f), aim.direction());
-        if (canRelease(angle, held, BOW_RELEASE_TICKS) || held >= BOW_MAX_DRAW_TICKS) {
+        if (canRelease(angle, drawn, BOW_RELEASE_TICKS) || drawn >= BOW_MAX_DRAW_TICKS) {
             player.releaseUsingItem();
             markFired(aim, target);
         }
@@ -167,8 +169,8 @@ final class RangedShot implements RangedWeapon.Shot {
     private void markFired(Aim aim, Entity target) {
         fired = true;
         if (target != null) {
-            Constants.LOG.info("[numen-attack] 射出 target={} weapon={} held={} dist={} eta={}",
-                    target.getId(), crossbow ? "crossbow" : "bow", held,
+            Constants.LOG.info("[numen-attack] 射出 target={} weapon={} drawn={} dist={} eta={}",
+                    target.getId(), crossbow ? "crossbow" : "bow", drawn,
                     String.format("%.1f", player.distanceTo(target)), Math.ceil(aim.travelTicks()));
         }
         state = State.DONE;
