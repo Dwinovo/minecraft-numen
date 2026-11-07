@@ -4,8 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.nimbusds.oauth2.sdk.as.AuthorizationServerMetadata;
-import com.nimbusds.oauth2.sdk.id.Issuer;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.as.AuthorizationServerMetadata;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.id.Issuer;
 
 import java.net.URI;
 import java.net.http.HttpClient;

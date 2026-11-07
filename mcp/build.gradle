@@ -51,12 +51,9 @@ dependencies {
     api project(':store')
     api 'org.slf4j:slf4j-api:2.0.9'
     api 'com.google.code.gson:gson:2.10.1'
-    // 官方 MCP Java SDK(规范 2025-11-25,旧版客户端它自己协商)经下面的 relocatedSdk 交给编译与运行,不直接依赖。
+    // 官方 MCP Java SDK(规范 2025-11-25,旧版客户端它自己协商)与 OAuth 用的 Nimbus 经下面的 relocatedSdk 交给编译与运行,不直接依赖。
     // 服务端的 HTTP:SDK 的 Streamable HTTP 传输是个 Servlet,挂在内嵌 Tomcat 上(SDK 自己的测试也这样用)。
     implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcat_version}"
-    // OAuth 通用部分(PKCE、令牌端点、元数据、动态注册、JWT/issuer 校验)。
-    // asm(json-smart 的传递依赖)也是游戏自带的,带进来会和加载器的 asm 在模块层里撞名。
-    implementation("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j'; exclude group: 'org.ow2.asm' }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -68,37 +65,48 @@ test {
 }
 
 /*
- * 官方 MCP Java SDK 的 JSON 走 Jackson 3(tools.jackson.*),Jackson 3 的注解仍是 2.x 的 com.fasterxml.jackson.annotation(要 2.20 以上)。
- * 这两个包和别人带的 Jackson 2 是同一套名字:Minecraft 1.21.2 起客户端自带 Jackson 2.13.4(而且钉死版本),整合包里别的模组
- * 嵌套带 jackson-annotations 2.x、Paper 上别的插件带 Jackson 都很常见。同名的包只会有一份赢,输的一方缺类缺方法。
+ * 有几个库和游戏或别人带的同一套包名,同名的包只会有一份赢,输的一方缺类缺方法:
+ * - 官方 MCP Java SDK 的 JSON 走 Jackson 3(tools.jackson.*),Jackson 3 的注解仍是 2.x 的 com.fasterxml.jackson.annotation(要 2.20 以上)。
+ *   Minecraft 1.21.4 到 1.21.10 的客户端与服务端自带 Jackson 2.13.4(客户端依赖里钉死版本),整合包里别的模组嵌套带 jackson-annotations、
+ *   Paper 上别的插件带 Jackson 都很常见。
+ * - OAuth 的通用部分(PKCE、令牌端点、元数据、动态注册、JWT/issuer 校验)用 Nimbus:oauth2-oidc-sdk 与它带的 nimbus-jose-jwt、
+ *   content-type、lang-tag、json-smart、accessors-smart、jcip-annotations。同一段版本里游戏也自带这一族(oauth2-oidc-sdk 11.18、
+ *   nimbus-jose-jwt 9.40、json-smart 2.5.1,客户端钉死),比我们要的旧。
+ * (逐版核对过 1.20.1 到 26.3 的客户端 json 与服务端 libraries.list、NeoForge/Forge/Fabric 加载器与 Paper 的库,撞的只有这两族。)
  *
- * 所以 SDK 与它用 Jackson 的那几件(Jackson 3、注解、YAML 数据格式、JSON Schema 校验)打成一份 jar,Jackson 3 与注解两个包
- * 重定位到 com.dwinovo.numen.mcp.shaded 下,SDK 等的类里对它们的引用一起改写。编译与运行都用这一份(下面的 api files),
- * 三个平台把它的类平铺进 Numen API 的发行 jar(见 numen-api-loader.gradle 与 numen-api/paper/build.gradle)。
- * SDK 剩下的依赖(Reactor、时间格式、snakeyaml-engine)不碰 Jackson,照常按坐标传递,由各平台嵌套或平铺(Modules.nestedLibraries)。
- * slf4j 由游戏(Minecraft 钉死在 2.0.9)与服务端(Paper)提供:SDK 子树里声明的更新版本不带进来,免得和游戏钉的版本打架。
+ * 所以这两族连同用到 Jackson 的 SDK 与 JSON Schema 校验打成一份 jar(下面的 relocatedSdk),tools.jackson、com.fasterxml.jackson.annotation、
+ * com.nimbusds、net.minidev、net.jcip 重定位到 com.dwinovo.numen.mcp.shaded 下,jar 里对它们的引用一起改写。编译与运行都用这一份
+ * (下面的 api files),三个平台把它的类平铺进 Numen API 的发行 jar(见 numen-api-loader.gradle 与 numen-api/paper/build.gradle)。
+ * 本模块自己的 OAuth 代码直接 import 重定位后的 Nimbus 包名:被重写的只有那份 jar 一处,本模块的类、加载器的开发期运行、
+ * 发行 jar 的平铺都不用再过一遍重写。
+ * 剩下的依赖(Reactor、时间格式、snakeyaml-engine)和谁都不撞,照常按坐标传递,由各平台嵌套或平铺(Modules.nestedLibraries)。
+ * slf4j 由游戏(Minecraft 钉死在 2.0.9)与服务端(Paper)提供:SDK 子树里声明的更新版本不带进来,免得和游戏钉的版本打架;
+ * asm(json-smart 的传递依赖)也是游戏自带的,带进来会和加载器的 asm 在模块层里撞名。
  */
 configurations {
-    mcpSdk {
+    relocatedLibraries {
         canBeConsumed = false
         canBeResolved = true
     }
 }
 dependencies {
-    mcpSdk("io.modelcontextprotocol.sdk:mcp:${mcp_sdk_version}") { exclude group: 'org.slf4j' }
+    relocatedLibraries("io.modelcontextprotocol.sdk:mcp:${mcp_sdk_version}") { exclude group: 'org.slf4j' }
+    relocatedLibraries("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j'; exclude group: 'org.ow2.asm' }
 }
-// 进重定位那份 jar 的模块:SDK 自己,和引用 Jackson 的
+// 进重定位那份 jar 的模块:SDK 自己、引用 Jackson 的、Nimbus 一族
 def relocatedModule = { String group ->
-    group in ['io.modelcontextprotocol.sdk', 'tools.jackson.core', 'tools.jackson.dataformat', 'com.fasterxml.jackson.core', 'com.networknt']
+    group in ['io.modelcontextprotocol.sdk', 'tools.jackson.core', 'tools.jackson.dataformat', 'com.fasterxml.jackson.core', 'com.networknt',
+              'com.nimbusds', 'net.minidev', 'com.github.stephenc.jcip']
 }
 def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
     archiveClassifier = 'sdk'
-    configurations = [project.configurations.mcpSdk]
+    configurations = [project.configurations.relocatedLibraries]
     dependencies {
         exclude { !relocatedModule(it.moduleGroup) }
     }
-    relocate 'tools.jackson', 'com.dwinovo.numen.mcp.shaded.tools.jackson'
-    relocate 'com.fasterxml.jackson.annotation', 'com.dwinovo.numen.mcp.shaded.com.fasterxml.jackson.annotation'
+    ['tools.jackson', 'com.fasterxml.jackson.annotation', 'com.nimbusds', 'net.minidev', 'net.jcip'].each { pkg ->
+        relocate pkg, "com.dwinovo.numen.mcp.shaded.${pkg}"
+    }
     mergeServiceFiles()
     // 各库自己的模块描述符、清单与签名不进来:合成的这份不是它们中的任何一个
     exclude 'module-info.class', 'META-INF/versions/*/module-info.class', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA',
@@ -106,7 +114,7 @@ def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
 }
 dependencies {
     api files(relocatedSdk)
-    configurations.mcpSdk.resolvedConfiguration.resolvedArtifacts
+    configurations.relocatedLibraries.resolvedConfiguration.resolvedArtifacts
             .findAll { !relocatedModule(it.moduleVersion.id.group) }
             .each { a -> api("${a.moduleVersion.id.group}:${a.name}:${a.moduleVersion.id.version}") { transitive = false } }
 }
