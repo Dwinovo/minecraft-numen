@@ -1,17 +1,17 @@
 package com.dwinovo.numen.mcp.client.auth;
 
 import com.dwinovo.numen.mcp.client.McpServerSpec;
-import com.nimbusds.oauth2.sdk.GrantType;
-import com.nimbusds.oauth2.sdk.ResponseType;
-import com.nimbusds.oauth2.sdk.as.AuthorizationServerMetadata;
-import com.nimbusds.oauth2.sdk.auth.ClientAuthenticationMethod;
-import com.nimbusds.oauth2.sdk.client.ClientInformation;
-import com.nimbusds.oauth2.sdk.client.ClientMetadata;
-import com.nimbusds.oauth2.sdk.client.ClientRegistrationErrorResponse;
-import com.nimbusds.oauth2.sdk.client.ClientRegistrationRequest;
-import com.nimbusds.oauth2.sdk.client.ClientRegistrationResponse;
-import com.nimbusds.oauth2.sdk.http.HTTPResponse;
-import com.nimbusds.oauth2.sdk.id.ClientID;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.GrantType;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.ResponseType;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.as.AuthorizationServerMetadata;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.auth.ClientAuthenticationMethod;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.client.ClientInformation;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.client.ClientMetadata;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.client.ClientRegistrationErrorResponse;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.client.ClientRegistrationRequest;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.client.ClientRegistrationResponse;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.http.HTTPResponse;
+import com.dwinovo.numen.mcp.shaded.com.nimbusds.oauth2.sdk.id.ClientID;
 
 import java.net.URI;
 import java.util.Set;
