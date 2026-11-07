@@ -626,18 +626,9 @@ artifactId 要逐个核对,不是只核对版本号。
 - `EntityCollisionContext` 构造器多了 `placement` 布尔。
 - 玩家 `serverLevel()` → `level()`;`MobEffects.DIG_SLOWDOWN` → `MINING_FATIGUE`;`registryOrThrow` → `lookupOrThrow`。
 
-**GameTest(整套重做,见 `:gametest` 模块)**
-- 1.21.5 删了注解入口。新增不发布的模块 `:gametest`:`@NumenGameTestHolder/@NumenTest/@NumenBeforeBatch/@NumenAfterBatch/@NumenGameTestGenerator`
-  与登记处 `NumenGameTests`(`@EventBusSubscriber` 自动挂在模组 numen 上,发行 jar 里没有它——用例类上的注解在那里是读不到的名字,不起作用)。
-  登记处从 `ModList.get().getAllScanData()` 里按 `@NumenGameTestHolder` 找类(core、寻路模块、评测三处的源码集都在同一个 numen 模组里),
-  按 `neoforge.enabledGameTestNamespaces` 过滤命名空间(NeoForge 1.21.5 起不再认它,运行配置照旧给,这里按原口径过滤),先初始化类(静态块里登记夹具)再读方法。
-  用例编号 `<命名空间>:<类名>.<方法名>`(小写);批次 = 测试环境 `NumenTestEnvironment(batch)`,`setup/teardown` 回到名册里的 `@NumenBeforeBatch/@NumenAfterBatch`。
-- 不能用原版 `FunctionGameTestInstance`(`TEST_FUNCTION` 注册表在 BuiltInRegistries 引导时就冻结);`TEST_INSTANCE`、`TEST_ENVIRONMENT` 会同步给客户端,
-  所以自带的实例类型/环境类型要经 `RegisterEvent` 登记进 `TEST_INSTANCE_TYPE`/`TEST_ENVIRONMENT_DEFINITION_TYPE`。
-- `GameTestHelper` 断言/失败改 `Component`:`GameTestKit` 里三个薄包装(`assertTrue/assertFalse/fail(helper, …, String)`);
-  `GameTestAssertException` 构造要 `(Component, tick)`;`StructureUtils.testStructuresDir` 是 `Path`。
-- 结构模板:内容原点基准变了(1.21.4 那条),三块地板模板(floor16/20/52)按"底部垫一层"重做(size y+1、data 整体 y+1、原 y0 层复刻成新底层);
-  寻路模块的三块模板是空的,不用垫。
+**GameTest**(登记与夹具的现状见下面"0.1.5 对齐"一节,这里只留仍成立的差异)
+- `GameTestHelper` 断言/失败改 `Component`,`GameTestAssertException` 构造要 `(Component, tick)`;`StructureUtils.testStructuresDir` 是 `Path`。
+- 结构模板:内容原点基准变了(1.21.4 那条)。现在不改模板,改坐标基准(见下面"0.1.5 对齐"一节的 `GameTestHelperOriginMixin`)。
 - NeoForge 21.8 的 `ConfigSync.syncPendingConfigs` 每刻遍历玩家列表,**精确是 `ServerPlayer` 类**、有配置频道、又不是内存连接、又没走过配置阶段的会抛
   `configsToSync should contain an entry…`:扮演主人的夹具连接(GameTestKit.OwnerLine、评测的 OwnerConnection)覆写 `isMemoryConnection()` 为真。
 - 玩家继承了 `WaypointTransmitter.Connection` 这个成员接口,会盖过 `import net.minecraft.network.Connection`:`TestBody` 里嵌套的 `extends Connection` 要写全名。
@@ -646,15 +637,83 @@ artifactId 要逐个核对,不是只核对版本号。
   狼的主人 `setOwnerUUID` → `setOwnerReference(new EntityReference<>(uuid))`;`ServerPlayer.teleportTo(level, x, y, z, yaw, pitch)` → 带 `Set<Relative>` 与 `boolean` 的八参版。
 - 单测夹具:冻结后的注册表拒绝直写标签,标签一律 `prepareTagReload(new TagLoader.LoadResult<>(key, tags)).apply()`(五处夹具);
   `Inventory(player, equipment)` 要把同一个 `EntityEquipment` 种进 `LivingEntity.equipment`。
-- 环境规则:1.21.5 之前 `GameTestServer` 自带一套规则(不刷怪、不换天气、随机刻 0、火不 tick);数据驱动之后原版的默认环境是空的。
-  `NumenTestEnvironment.setup` 在批次方法之前补两条会在判据背后改世界的:随机刻停摆(耕地湿度、屋顶下的草退化)、`doFireTick` 关
-  (`fluidgametests.passes_cactus_fire_berries_and_magma_unhurt` 里下界岩上的火每三十来刻老化一次,红在"实际账与世界不符")。
-  规则只在这一处定,`settleWorld`/`Worlds.settle` 里不再写随机刻。没把"不换天气"补进环境:各批次的 `settleWorld` 已按用例需要重定天气与刷怪。
+- 环境规则:1.21.5 之前 `GameTestServer` 自带一套规则(不刷怪、不换天气、随机刻 0、火不 tick、晴天);数据驱动之后原版的默认环境是空的。
+  现在由每一批的测试环境 `NumenTestEnvironment.setup` 在批前方法之前把这五样一并定下(见下面"0.1.5 对齐"一节)。
 
 **联动(plugins/)**
 - 本代只移植 Curios(NeoForge,`curios-neoforge:12.0.0+1.21.8`,maven.theillusivec4.top,公开 API 与 1.21.1 的 9.5.1 同形,代码零改动)。
   不移植的:TLM(Modrinth 上只有 1.21/1.21.1 的 NeoForge 版)、YSM(Modrinth 只有 1.21/1.21.1 与 26.1.2)、
   森罗物语厨房(CurseForge 上只有 1.21.1 的 NeoForge 版)、FTB Quests(maven.ftb.dev 只有 2101.x、2111.x 与 26.1.2.x,没有 1.21.8 的构建)。
+
+### 2026-11 对齐 1.21.1 @ 352c6fec8(0.1.5:19c8710b0 加对齐期间的十二个通用修复)❗
+
+方法同上一轮:1.21.1 整树替换,目标分支独有文件逐个清点删除(1396 个旧路径文件 + 101 个不带的联动文件),再把上一轮的平台适配
+按文件三方合并进新树(`7a3d3e251 → bd3b7036c` 的 diff,107 个文件自动合入、其余逐个手工),然后编译驱动补齐。目录与包名在两轮之间整体改过
+(`api/` → `numen-api/`、`core/` → `numen/`、包移到 `com.dwinovo.numen.api.*`),三方合并按文件名找新家。下面只记这一轮**新**碰到的。
+
+**批量替换的陷阱(又踩了一次)**:按目录名排除 `build` 会漏掉 `numen/build/`、`task/build/` 两个源码包;Git Bash 里以 `/` 开头的参数会被改写成
+Windows 路径,拿来当路径过滤条件时一个文件都匹配不上。
+
+**GameTest:套件机制在数据驱动框架里等价落地**
+- 1.21.1 的用例只挂原版注解,经 `GameTestSuites` 一个 `@GameTestGenerator` 交给原版。1.21.5 起没有注解入口,也没有生成器:
+  Numen API 的夹具里照原样立了同名注解 `GameTest`/`BeforeBatch`/`AfterBatch`/`GameTestGenerator` 与记录 `TestFunction`(包
+  `com.dwinovo.numen.api.gametest`),用例类只换 import。断言的 String 口径经 `Checks`(`assertTrue/assertFalse/fail(helper, …)`、
+  `failure(String)`),全树一处。
+- 登记:`GameTestRegistrationMixin` 挂在 `RegistryDataLoader.loadContentsFromManager` 末尾,原版读完测试环境、测试实例两个数据注册表
+  (还没冻结)时交给 `GameTestRegistration`:每个批次一个环境(`numen_api_gametest:batch/<批次>`)、每条用例一个实例(`<套件>:<类>.<方法>`,
+  铺份写成 `/份号`)。两个加载器同一条路,加载器只登记两个类型(NeoForge 经 `RegisterEvent`,Fabric 在 `ModInitializer` 里直接 `Registry.register`)。
+  Fabric 的 `fabric-gametest` 入口不再用(它要 Fabric 自己的注解)。
+- 批次:原版按测试环境分组用的是以环境 Holder 为键的散列表(身份散列,每次开服先后不同),`GameTestBatchOrderMixin` 改成按登记先后分组。
+  测试服只跑我们的用例(`GameTestSelectionMixin`):原版数据包自带的 `minecraft:always_pass` 不跑、不计数。
+- 世界规则:`NumenTestEnvironment.setup` 在批前方法之前定下原 `GameTestServer` 的五样(不刷怪、不换天气、随机刻 0、火不 tick、晴天),
+  布尔与数值规则都经 `GameTestWorld`(Paper 的签名不同,`setRule(level, IntegerValue, int)` 是这一轮加的)。
+- 可复现那一套的落点:起点 `startTests` 的局部变量照旧;开批对齐照旧挂 `GameTestRunner.runBatch`(环境的 setup 在里面,一并推迟到整拍);
+  同刻回调顺序照旧挂 `GameTestInfo.runAtTickTimeMap/tickInternal`;区块刻洗牌在 `ServerChunkCache.tickChunks(ProfilerFiller, long)`;
+  场地强制加载搬到了 `TestInstanceBlockEntity.forceLoadChunks`(`StructureChunksMixin` 跟过去);`GameTestServer.create` 的参数变成
+  `(Thread, LevelStorageAccess, PackRepository, Optional<String>, boolean)`。收场汇报仍是 `GlobalTestReporter`,用例全名经 `NumenTestInstance.name(info)`。
+- 加载器自己的用例(NeoForge 联网协商那一条)经 `GameTestSuites.loaderTests` 交进来,和 1.21.1 一样不属于任何套件、每次都跑。
+- 场地坐标:1.21.1 的 `GameTestHelper.absolutePos` 以结构方块那一格(内容原点正下方)为基准,1.21.4 起以内容原点为基准。上一轮把三块地板模板
+  底部垫了一层复刻的地板,坐标对上了,世界却不一样:地板下面原本是一层空气再往下才是石头,垫了之后是两层地板(权限用例里"挖地板绕过墙"
+  会多问一张卡)。现在模板与 1.21.1 一字不差,`GameTestHelperOriginMixin` 把 `absolutePos/relativePos/absoluteVec/relativeVec` 的基准点
+  放回内容原点的正下方,摆出来的场地与 1.21.1 逐格相同(空模板的寻路场地同理,不再多出一层空气)。
+- 场地四周:1.21.5 起原版铺场地不再清地(`clearSpaceForStructure` 只在下一批开始时清上一批),围栏还在内容底下垫一整层屏障。
+  `StructureSiteClearMixin` 在放测试方块之前照 1.21.1 清一遍地(内容下一层空气、再往下石头、往上全空,清地范围盖住测试方块那一格);
+  `StructureBoundaryMixin` 罩着 `TestInstanceBlockEntity.processStructureBoundary`,只围四面墙(从内容最低一层起)和没有天空时的顶,
+  不垫底,围上与拆掉走同一圈。没有这两处,"挖地板钻到墙下"的权限用例与"飞过峡谷"的寻路用例都会在屏障板上走过去。
+- 用例计时:原版用例计时器从不启动(`getRunTime` 总是 0),`TestTicks` 在函数体前自记墙钟,`[numen-gametest-ticks]` 的毫秒才是实数。
+- 区块落定(1.21.1 `352c6fec8`):`Util.ioPool()/backgroundExecutor()` 交出的是 `TracingExecutor`,池在 `service()` 里,先取再强转。
+- Paper 的测试插件没有 Mixin:插件起来时读出用例,开跑前把两个已冻结的注册表解冻、经同一个 `GameTestRegistration.register` 登记、再冻上
+  (原版放场地按测试实例的注册名回表取结构,用例必须在表里)。
+
+**依赖撞包**:MC 1.21.6+ 客户端依赖把 jackson-annotations、Nimbus 一族钉成 strictly 的旧版;mcp 模块的官方 MCP SDK 要新版。由 mcp 产物重定位解决
+(1.21.1 的 `2ca1f9d5f`、`972587017` 两个提交,cherry-pick 进本分支)。对齐期间落到 1.21.1 的十二个通用修复按原顺序逐个 cherry-pick,各自一个提交。
+
+**其余新碰到的 API 差异**
+- `ElytraItem` 没了:滑翔物看 `LivingEntity.canGlideUsing(stack, EquipmentSlot.CHEST)`(带滑翔组件、没坏),"没穿"看 `DataComponents.GLIDER`。
+- 中键取物:1.21.2 起客户端的中键包不再指名背包的格。`ClientPackets.pickItem/pickNew` 照原版找到格以后做的那几步写(选合适的快捷栏格、
+  对换或放一叠、回报选中格、广播背包),不调 `Inventory.pickSlot/addAndPickItem`:Paper 给它们加了参数,两边签名不同。与 1.21.4/1.21.5 同一写法。
+- 客户端加载回执(1.21.2 起 `hasClientLoaded` 为假时服务端不收动作包、玩家不受伤):`FakeClient` 收到 `LEVEL_CHUNKS_LOAD_START` 记下,
+  加入与重生流程一走完当场报(重生等连接换上新身体),换维度这类流程中途的晚一刻回;寻路夹具 `TestBody` 建好连接当场报。
+- 载具与自身移动的权威:服务端只看 `isClientAuthoritative()`,`NumenPlayer` 只覆写它(返回 false,同原版 GameTest 的模拟玩家)。
+- 寻路的运动学 `Kinematics.settle`:1.21.6 起玩家的水平速度按整体归零(`horizontalDistanceSqr() < 9.0E-6`),竖直单独比。
+- 弓:松手与箭速按原版自己的拉弓计数 `getTicksUsingItem()`,不另数一份(1.21.8 上自数的比原版多一刻,射出的箭速度对不上)。
+- `ServerPlayer.server` 私有:一律 `level().getServer()`;`getRespawnPosition()` → `getRespawnConfig()`;`getPermissionLevel()` 是 public。
+- `DirectionProperty` → `EnumProperty<Direction>`;`registry.getTag` → `get(TagKey)`;`Registry.get(id)` 返回 `Optional<Reference>`,取值用 `getValue(id)`;
+  `Structure.generate` 首参要 `Holder<Structure>` 与维度键。
+- 配方:输入清单在 `placementInfo().ingredients()`;熔炼/切石 `input()`、`cookingTime()`;锻造的模板与附加料是 `Optional<Ingredient>`;
+  任意类型(含模组机器)配方给配方书的产出取 `display()` 里的产出格(`RecipeProbe.displayedResult`);切石机菜单 `getVisibleRecipes().entries()`。
+- `ClickEvent`/`HoverEvent` 是按动作的记录(`RunCommand`、`CopyToClipboard`、`OpenUrl(URI)`、`ShowText`);`Component.Serializer` 没了,
+  语言文件里写成组件的译文用 `ComponentSerialization.CODEC` 解(`ServerLang`)。
+- 存档:`PermissionStore` 读档前的旧行改写搬进存档编解码 `STORED`(读之前改写、改写过就标脏),`NavClock` 用 `Codec.unit`(不写盘)。
+- NeoForge:`AddReloadListenerEvent` → `AddServerReloadListenersEvent`(登记要带键);`RenderLevelStageEvent` 按阶段分子事件;
+  数据生成的 run 类型是 `clientData`,订阅 `GatherDataEvent.Client`。
+- Paper 1.21.8:`setDifficulty` 多一个指令源参数;`CraftScheduler.mainThreadHeartbeat()` 无参;实体不再是 `CommandSource`(Bukkit 发令者取
+  `getBukkitEntity()`);`DiscardedPayload` 带 `byte[]`。paperweight-userdev 升到 2.0.0-beta.22(1.7.x 读不了 1.21.8 的开发包),链接检查与 javadoc 认开发包里的
+  `mappedServerJar.jar`(1.21.5 的 `2f0ca3da6`)。
+- 面板快捷键默认 N(1.21.6 起 G 被原版 Quick Actions 占了)。
+
+**联动**:带 Curios(`12.0.0+1.21.8`)、JEI(`24.2.0.6`,接口改名 `IRecipeType`)、Litematica(`0.23.7`/MaLiLib `0.25.7`,坐标按 MC 版本,
+文件接口从 `File` 换成 `Path`)。不带 YSM、车万女仆、森罗物语厨房(都没有 1.21.8 构建)、FTB Quests(只有 2101/2111/26.x)、KubeJS(只有 2101 与 26.x)。
 
 
 ## 1.21.8 → 1.21.10
