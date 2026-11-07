@@ -1432,7 +1432,8 @@ Fabric 是原生 Loom(`net.fabricmc.fabric-loom`,不重映射,没有 `mappings`�
 - `BlockTags.DIRT` 拆了:现在只剩三种泥土,原来的整族(草方块、灰化土、菌丝、泥巴、苔藓块)是 `#minecraft:substrate_overworld`。
   滑翔落点的"天然方块"(`Landings.natural`)与 `numen:natural` 标签都改认它。
 - `SavedDataType` 的名字是 `Identifier`:存档文件落在 `data/numen/<名>.dat`(`numen:companions`、`numen:placed`、`numen:permissions_<uuid>`、
-  `numen:nav_clock`、计时器)。从 1.21.x 的世界升上来时,旧名字(`numen_xxx.dat`)的文件不会被读到。
+  `numen:nav_clock`、计时器),与本分支 0.1.4.x 的名字一样。从 1.21.x 的世界跨大版本升上来时,旧名字(`numen_xxx.dat`)的文件不会被读到(遗留)。
+  旧版服务端出箱的一次性迁移(`ServerBrains.legacyOutbox`)照同一条规则找 `numen:event_outbox` → `data/numen/event_outbox.dat`。
 - 界面:`GuiGraphics` → `GuiGraphicsExtractor`(`drawString` → `text`、`renderFakeItem` → `fakeItem`、`PlayerFaceRenderer.draw` →
   `PlayerFaceExtractor.extractRenderState`);整块界面淡入淡出仍是 `GuiAlpha` + `MixinGuiGraphics`,三个提交口换成 `innerFill`、
   `text(Font, FormattedCharSequence, …)`、`innerBlit(RenderPipeline, GpuTextureView, GpuSampler, …)`。`CameraRenderState` 在 `renderer.state.level`。

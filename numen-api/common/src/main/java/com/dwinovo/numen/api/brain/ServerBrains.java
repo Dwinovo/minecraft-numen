@@ -21,6 +21,7 @@ import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.skin.SkinCache;
 import com.dwinovo.numen.api.skin.SkinRef;
 import com.dwinovo.numen.api.store.Trees;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -78,9 +79,16 @@ public final class ServerBrains {
             }
         }
         // 旧版为主人离线攒下的事件:一次性倒进她们的收件箱
-        Path outbox = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve("numen_event_outbox.dat");
-        LegacyMigration.outbox(outbox).forEach((companion, entries) ->
+        LegacyMigration.outbox(legacyOutbox(server.getWorldPath(LevelResource.DATA))).forEach((companion, entries) ->
                 CompanionLoops.get(companion).ifPresent(loop -> loop.push(entries)));
+    }
+
+    /**
+     * 旧版服务端出箱的存档文件。这一代的 SavedData 按 id 落盘,旧版出箱的 id 是 {@code numen:event_outbox},落点照原版的规则
+     * (id 加 {@code .dat},按命名空间分目录放进世界的 data/):{@code data/numen/event_outbox.dat}。
+     */
+    static Path legacyOutbox(Path dataFolder) {
+        return Identifier.fromNamespaceAndPath("numen", "event_outbox").withSuffix(".dat").resolveAgainst(dataFolder);
     }
 
     /**
