@@ -54,8 +54,14 @@ public final class Lanes {
         return writing == 0 ? null : writing + " disk lane(s) still writing";
     }
 
-    /** 这个键不会再有写了(同伴被遣散):车道不用留。 */
+    /**
+     * 这个键不会再有写了(同伴被遣散):车道里已交的活(删她的家)都落下去之后不再留。落下去之前它照样算在 {@link #busy} 与
+     * {@link #drain} 里:当场拿走的话,停机排空与 GameTest 每刻的等待都看不见这条车道上还在跑的活。
+     */
     public void forget(String key) {
-        lanes.remove(key);
+        SerialExecutor lane = lanes.get(key);
+        if (lane != null) {
+            lane.execute(() -> lanes.remove(key, lane));
+        }
     }
 }
