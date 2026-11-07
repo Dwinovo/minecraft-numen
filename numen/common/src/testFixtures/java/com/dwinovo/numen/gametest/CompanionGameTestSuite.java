@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.api.gametest.GameTestSuite;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.nav.NavClock;
@@ -19,7 +20,8 @@ import net.minecraft.util.RandomSource;
  *   <li>同伴的寻路按做了多少活折算想多久({@link NavClock} 换成 {@link SearchClock#STEADY}),与寻路模块自己的用例、靶场同一块表;</li>
  *   <li>扫描与定位每刻做到哪按活量算({@link SearchBudget#use}):每查一次额度记 {@link #SCAN_NANOS_PER_CHECK} 纳秒;</li>
  *   <li>造形掷骰子用定了种子的随机数({@link ShapeRandom#use}):每次调用都从 {@link #SHAPE_SEED} 开始,用例要别的种子见 {@code GameTestKit.shapeSeed};</li>
- *   <li>每刻开头等寻路的搜索全收场({@link Searches#busy})。Numen API 自己的后台(程序等)由 {@code GameTestSuites} 登记。</li>
+ *   <li>每刻开头等寻路的搜索全收场({@link Searches#busy}),一刻当中问到没跑完的搜索时等它回来({@link Searches#onUnfinishedPoll})。
+ *       Numen API 自己的后台(程序等)由 {@code GameTestSuites} 登记。</li>
  * </ul>
  * 前几样只换"多久"的量法,不改结论:正式运行是墙钟,测试服里与机器快慢、负载无关;随机数定了种子,同一次调用每次结果相同。
  */
@@ -43,6 +45,7 @@ public abstract class CompanionGameTestSuite implements GameTestSuite {
         ServerLifecycle.afterStarted(server -> NavClock.use(server, SearchClock.STEADY));
         SearchBudget.use(() -> SCAN_WORK.addAndGet(SCAN_NANOS_PER_CHECK));
         ShapeRandom.use(SHAPE_RANDOM);
+        Searches.onUnfinishedPoll(BackgroundSettle::await);
     }
 
     @Override
