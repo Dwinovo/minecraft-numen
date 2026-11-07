@@ -216,12 +216,21 @@ public final class ServerLang {
             }
             try (Reader in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
                 for (Map.Entry<String, JsonElement> e : JsonParser.parseReader(in).getAsJsonObject().entrySet()) {
-                    out.put(e.getKey(), e.getValue().getAsString());
+                    out.put(e.getKey(), text(e.getValue()));
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException(modId + " 的 " + locale + " 语言文件读不出来", e);
             }
         }
         return out;
+    }
+
+    /**
+     * 一条译文的文字。有的模组把语言文件的值写成文本组件(数组或对象,NeoForge 认这种写法,它的语言表里存的是组件的字面文字),
+     * 整合包里会和别的模组同在;这里取同一份字面文字,样式不带。
+     */
+    private static String text(JsonElement value) {
+        return value.isJsonPrimitive() ? value.getAsString()
+                : Component.Serializer.fromJson(value).getString();
     }
 }
