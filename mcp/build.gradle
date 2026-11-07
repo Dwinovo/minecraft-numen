@@ -108,8 +108,9 @@ def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
         relocate pkg, "com.dwinovo.numen.mcp.shaded.${pkg}"
     }
     mergeServiceFiles()
-    // 各库自己的模块描述符、清单与签名不进来:合成的这份不是它们中的任何一个
-    exclude 'module-info.class', 'META-INF/versions/*/module-info.class', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA',
+    // 各库自己的模块描述符、清单与签名不进来:合成的这份不是它们中的任何一个。多版本目录也不进来:平铺进的发行 jar 不是
+    // 多版本 jar,那些类永远不会被加载,而 NeoForge 21.0 扫模组文件时读不了比 Java 21 新的类文件,每次起服报错
+    exclude 'module-info.class', 'META-INF/versions/**', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA',
             'META-INF/maven/**'
 }
 dependencies {
