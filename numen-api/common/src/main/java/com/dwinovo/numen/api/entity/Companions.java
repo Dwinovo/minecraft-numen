@@ -1,0 +1,674 @@
+package com.dwinovo.numen.api.entity;
+
+import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.gear.GearSlot;
+import com.dwinovo.numen.api.network.payload.CompanionListPayload;
+import com.dwinovo.numen.api.network.NumenNetwork;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
+
+/**
+ * Coordinates companion lifecycle on top of {@link CompanionFactory} (body
+ * spawn/despawn) and {@link CompanionRegistry} (the persistent index). The body
+ * persists as a player {@code .dat}; the registry remembers it exists so it can
+ * be recreated when its owner returns or a tool call arrives.
+ */
+@com.dwinovo.numen.api.Internal
+public final class Companions {
+
+    private Companions() {}
+
+    /**
+     * Summon the owner's companion called {@code name}. IDEMPOTENT per (owner, name): if one already
+     * exists it is reused — already live → returned as-is; dormant → brought back. Only a name with no
+     * existing companion mints a fresh one. (The old "fresh random UUID every summon" minted same-name
+     * duplicates that all respawned on login — that's the duplicate-companion bug.)
+     *
+     * <p>她是什么样子(档案、人设、声线、皮肤)不在这里定:召唤之后再绑({@code CompanionBinding})。玩家的召唤走
+     * {@link #summonFor},这里是它和 GameTest 共用的那一步。
+     */
+    public static void summon(MinecraftServer server, UUID ownerUuid, String name, ServerLevel level, Vec3 pos,
+                              Consumer<Arrivals.Arrival<NumenPlayer>> then) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        UUID existing = findByOwnerName(server, ownerUuid, name);
+        if (existing != null) {
+            // 被外面请出去的她只有主人再召唤才回来:召唤就是主人的决定,清掉"被请出去"的状态,身体回来后解开停牌
+            boolean returning = reg.find(existing).removed();
+            reg.markReturned(existing);
+            if (respawn(server, existing, arrival -> {
+                if (arrival.body() != null) {
+                    com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
+                    if (returning) {
+                        com.dwinovo.numen.api.brain.CompanionLoops.get(existing)
+                                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
+                    }
+                } else if (arrival.refusal() != null) {
+                    reg.markRemoved(existing, arrival.refusal().getString());   // 服务器说不:停在外面,下回主人再召唤才再试
+                }
+                then.accept(arrival);
+            })) {
+                return;
+            }
+            reg.remove(existing);   // stale entry — replace it
+        }
+        UUID companionUuid = UUID.randomUUID();
+        Vec3 safe = SafeSpawn.findNear(level, pos);
+        if (safe != null) pos = safe;   // no safe spot around → keep the summoner's own position
+        // 先入册再造体:CompanionFactory.spawn 从注册表读皮肤,所有出生路径共用一个注入点。
+        CompanionRegistry.Entry fresh = new CompanionRegistry.Entry(
+                name, ownerUuid, level.dimension(), net.minecraft.core.BlockPos.containing(pos));
+        reg.put(companionUuid, fresh);
+        CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos,
+                () -> reg.find(companionUuid) != null, arrival -> {
+            NumenPlayer body = arrival.body();
+            if (body == null) {
+                if (arrival.kind() == Arrivals.Kind.REFUSED) {
+                    reg.remove(companionUuid);   // 服务器说不:这只同伴不存在
+                }
+                then.accept(arrival);
+                return;
+            }
+            reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
+            com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
+            then.accept(arrival);
+        });
+    }
+
+    /** 召唤的结果:成了是她的身体;没成是要说给玩家听的话。 */
+    public record Summoned(NumenPlayer body, net.minecraft.network.chat.Component problem) {}
+
+    /**
+     * 名额闸:服主定了每人至多几只({@code limit},0 是不限),主人已经有这么多只时再召一只新的不行;叫醒他已有的那只
+     * ({@code hers})不占新名额。
+     */
+    static boolean overLimit(int limit, boolean hers, int owned) {
+        return limit > 0 && !hers && owned >= limit;
+    }
+
+    /**
+     * <b>玩家召唤的唯一入口</b>:召唤卡与 {@code /numen player summon} 都走这里,谁都能召唤,只要一个名字,不设任何前提。
+     * 名字要合 Minecraft 的命名规则、不能撞上在线的别人;每人最多养几只是服主在 {@code server.json} 里设的(缺省不限)——
+     * 再召唤自己已有的同名同伴是叫醒她,不占名额。召唤成了把新名册推给他。
+     *
+     * <p>受理即能开始、能当场判断的当场拒绝:不合规矩的(名字、重名、名额)返回 {@code false},{@code then} 当场带着原因跑完;
+     * 受理了返回 {@code true},结果经 {@code then} 交回——平台的接纳可以是异步的(Paper 要给登录插件发事件),
+     * {@code then} 在那时的主线程上跑;被平台拒了,{@code then} 里是平台给的原因。名字被在路上的别的身体占着、或她自己正在路上,
+     * 也是当场拒绝,不另起一趟。
+     *
+     * @param creative 玩家在召唤卡上选的模式;{@code null} = 不动她的模式(命令没有这一项)
+     */
+    public static boolean summonFor(ServerPlayer owner, String name, Boolean creative, Consumer<Summoned> then) {
+        MinecraftServer server = owner.server;
+        if (!MojangSkins.validName(name)) {
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_INVALID)));
+            return false;
+        }
+        // 重名闸:同名玩家已在线(真人/别的主人的同伴)、或同名的身体正在路上(平台还在接纳)一律拒绝——
+        // 例外是自己的同名同伴(那是叫醒她;她若正在路上,下面的召唤会得到"在路上",不另起一趟)。
+        var online = server.getPlayerList().getPlayerByName(name);
+        boolean ownSameName = online instanceof NumenPlayer np && np.isOwnedByPlayer(owner.getUUID());
+        UUID own = findByOwnerName(server, owner.getUUID(), name);
+        boolean arrivingElsewhere = CompanionFactory.arrivingNamed(name).filter(id -> !id.equals(own)).isPresent();
+        if (own != null && CompanionFactory.isArriving(own)) {
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_ARRIVING, name)));
+            return false;
+        }
+        if ((online != null && !ownSameName) || arrivingElsewhere) {
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name)));
+            return false;
+        }
+        int limit = com.dwinovo.numen.api.brain.ModelServices.of(server).settings().maxCompanions();
+        if (overLimit(limit, findByOwnerName(server, owner.getUUID(), name) != null,
+                CompanionRegistry.get(server).ownedBy(owner.getUUID()).size())) {
+            then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit)));
+            return false;
+        }
+        ServerLevel level = (ServerLevel) owner.level();
+        summon(server, owner.getUUID(), name, level, owner.position(), arrival -> {
+            NumenPlayer body = arrival.body();
+            if (body == null) {
+                then.accept(new Summoned(null, arrival.refusal() == null ? null : refusedMessage(name, arrival.refusal())));
+                return;
+            }
+            if (creative != null) {
+                applyGameMode(owner, body, creative);
+            }
+            syncRosterToOwner(server, owner);
+            then.accept(new Summoned(body, null));
+        });
+        return true;
+    }
+
+    /** 平台不接纳她:说是谁、为什么。 */
+    private static net.minecraft.network.chat.Component refusedMessage(String name, net.minecraft.network.chat.Component reason) {
+        return net.minecraft.network.chat.Component.translatable(
+                com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_ADMISSION_REFUSED, name, reason);
+    }
+
+    /**
+     * 给一只同伴换上这副皮肤(Mojang 签名的 textures);{@code null} = 回到默认皮肤。名册记下新皮肤(下次建身体时用);活体<b>原地换</b>,
+     * 不重建身体、不发入服离服的消息、她手上的活与背包都不动——照 SkinsRestorer、FabricTailor 的做法:改她 GameProfile 的 textures,
+     * 给所有在线玩家发玩家信息的移除与重新加入,再让追踪她的客户端重新生成她的实体,别人看到的皮肤就刷新了。
+     * 穿的本来就是这一副就什么也不做。
+     */
+    public static void applySkin(MinecraftServer server, UUID companion, MojangSkins.Skin skin) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(companion);
+        String value = skin == null ? "" : skin.value();
+        if (entry == null || entry.skinValue().equals(value)) {
+            return;
+        }
+        String signature = skin == null ? "" : skin.signature();
+        reg.put(companion, entry.withSkin(value, signature));
+        NumenPlayer body = NumenPlayer.findByUuid(server, companion);
+        if (body != null) {
+            refreshSkin(server, body, value, signature);
+        }
+    }
+
+    /** 改活体档案里的 textures,并让所有人的客户端重新认她:玩家信息先移除再加入,追踪她的客户端重新生成她的实体。 */
+    private static void refreshSkin(MinecraftServer server, NumenPlayer body, String value, String signature) {
+        var properties = body.getGameProfile().getProperties();
+        properties.removeAll("textures");
+        if (!value.isEmpty()) {
+            properties.put("textures", new com.mojang.authlib.properties.Property("textures", value,
+                    signature.isEmpty() ? null : signature));
+        }
+        var players = server.getPlayerList();
+        players.broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket(
+                java.util.List.of(body.getUUID())));
+        players.broadcastAll(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+                .createPlayerInitializing(java.util.List.of(body)));
+        var chunks = body.serverLevel().getChunkSource();
+        chunks.removeEntity(body);
+        chunks.addEntity(body);
+    }
+
+    /** 主人名下叫这个名字的同伴,没有则 null。判断规则在 {@link CompanionRoster#findByName}
+     *  (纯 JVM,可单测);这里只负责把注册表摊平成它认得的形状。 */
+    private static UUID findByOwnerName(MinecraftServer server, UUID ownerUuid, String name) {
+        return CompanionRoster.findByName(rowsOf(server, ownerUuid), name);
+    }
+
+    /** 注册表 → 决策层认得的纯数据行。 */
+    private static List<CompanionRoster.Row> rowsOf(MinecraftServer server, UUID ownerUuid) {
+        List<CompanionRoster.Row> rows = new ArrayList<>();
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
+            rows.add(new CompanionRoster.Row(e.getKey(), e.getValue().name()));
+        }
+        return rows;
+    }
+
+    /**
+     * Bring a dormant companion back from its catalog entry + {@code .dat}
+     * (position/inventory restored from disk). Already live → {@code then} gets her as-is. Returns {@code false}
+     * (and never calls {@code then}) when she is unknown to the registry. 平台的接纳可以是异步的,见
+     * {@link CompanionFactory#spawn}。
+     */
+    public static boolean respawn(MinecraftServer server, UUID companionUuid, Consumer<Arrivals.Arrival<NumenPlayer>> then) {
+        NumenPlayer live = NumenPlayer.findByUuid(server, companionUuid);
+        if (live != null) {
+            then.accept(Arrivals.Arrival.arrived(live));
+            return true;
+        }
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(companionUuid);
+        if (entry == null) return false;
+        ServerLevel level = server.getLevel(entry.dimension());
+        if (level == null) level = server.overworld();
+        // pos=null: keep the position restored from the .dat.
+        CompanionFactory.spawn(server, companionUuid, entry.name(), entry.owner(), level, null,
+                () -> reg.find(companionUuid) != null, then);
+        return true;
+    }
+
+    /**
+     * 把休眠的她叫回世界,没有人在等结果:成了她就在世界里(平台当场接纳的话,这个调用返回时已经在),服务器说不就按
+     * {@link #afterwards} 收尾。注册表不认得她返回 {@code false}。
+     */
+    public static boolean bringBack(MinecraftServer server, UUID companionUuid) {
+        return respawn(server, companionUuid, afterwards(server, companionUuid));
+    }
+
+    /**
+     * 没有人在等结果的重建(换皮肤、主人上线时的恢复)结束时做的事:服务器说不(登录插件、封禁、白名单)就停在外面——
+     * 记下原因、如实告诉主人,不替它轮询;主人再召唤她才再试。
+     */
+    private static Consumer<Arrivals.Arrival<NumenPlayer>> afterwards(MinecraftServer server, UUID companionUuid) {
+        return arrival -> {
+            if (arrival.refusal() != null) {
+                refusedByPlatform(server, companionUuid, arrival.refusal());
+            }
+        };
+    }
+
+    /**
+     * 服务器明确不接纳她:和"被外面请出去"同理,名册记下原因、大脑停牌,告诉主人;在主人再召唤({@link #summon})之前不重建。
+     */
+    private static void refusedByPlatform(MinecraftServer server, UUID companionUuid,
+                                          net.minecraft.network.chat.Component reason) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(companionUuid);
+        if (entry == null) {
+            return;
+        }
+        String why = reason.getString();
+        com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", entry.name(), why);
+        reg.markRemoved(companionUuid, why);
+        com.dwinovo.numen.api.brain.CompanionLoops.get(companionUuid).ifPresent(brain -> brain.onRemoved(why));
+        ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
+        if (owner != null) {
+            owner.sendSystemMessage(refusedMessage(entry.name(), reason));
+            syncRosterToOwner(server, owner);
+        }
+    }
+
+    /**
+     * 主人登录了,记一笔:他的同伴该回世界了。<b>真正的恢复不在这里做。</b>
+     *
+     * <h2>为什么必须推迟</h2>
+     * 登录事件是在原版 {@code PlayerList.placeNewPlayer()} <b>内部</b>触发的——那句还没返回。
+     * 在这里恢复同伴,等于把恢复期间的任何异常接到主人的入场流程上:一只同伴的 {@code .dat}
+     * 有毛病、或者别的模组在同伴的入场事件里抛了,冒泡上去打断的是<b>主人的登录</b>,客户端
+     * 看到的是"无效的玩家数据"——他会以为自己的存档毁了。
+     *
+     * <p>第二类堵不完:同伴入场会触发它自己的登录事件,装在这个世界里的任何模组都收得到,
+     * 而它们没想过"玩家"可能是假的。我们挡不住别人抛异常,只能不让那异常落在主人头上。
+     *
+     * <p>推迟到下一个服务端 tick({@link #restorePending})就彻底解耦了:那时 placeNewPlayer
+     * 早已返回,主人已经在世界里,同伴出什么事都只是同伴的事。
+     */
+    public static void scheduleRestoreFor(UUID ownerUuid) {
+        PENDING_RESTORE.add(ownerUuid);
+    }
+
+    /** 排队等恢复的主人。世界作废时一并清掉——排的是上一个存档的账。 */
+    private static final java.util.Set<UUID> PENDING_RESTORE =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    static {
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(PENDING_RESTORE::clear);
+    }
+
+    /**
+     * 每个服务端 tick 调一次:把记下的主人挨个恢复。
+     *
+     * <p>一个主人恢复失败不牵连下一个——他们之间毫无关系,没有理由一起倒。
+     */
+    public static void restorePending(MinecraftServer server) {
+        drainPending(ownerUuid -> respawnAllOwnedBy(server, ownerUuid));
+    }
+
+    /**
+     * 排空队列,逐个交给 {@code restore}。
+     *
+     * <p>两条不变式:<b>每个主人只恢复一次</b>(先摘牌再执行,否则失败的那个会每 tick 重试到
+     * 天荒地老),以及<b>一个失败不牵连下一个</b>(主人之间毫无关系,没有理由一起倒)。
+     *
+     * <p>纯逻辑,不碰 Minecraft——留这个缝是为了这两条能被单测钉住。
+     */
+    static void drainPending(java.util.function.Consumer<UUID> restore) {
+        if (PENDING_RESTORE.isEmpty()) {
+            return;
+        }
+        List<UUID> due = new ArrayList<>(PENDING_RESTORE);
+        PENDING_RESTORE.removeAll(due);
+        for (UUID ownerUuid : due) {
+            try {
+                restore.accept(ownerUuid);
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 恢复 {} 的同伴时出错", ownerUuid, ex);
+            }
+        }
+    }
+
+    /** When an owner logs in, bring back every companion of theirs, restored from its {@code .dat}.
+     *
+     *  <p>逐只隔离:一只回不来是少一只同伴,不该把同一个主人的其余同伴也一起拖掉。 */
+    public static void respawnAllOwnedBy(MinecraftServer server, UUID ownerUuid) {
+        ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
+            try {
+                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
+                if (e.getValue().removed()) {
+                    // 她是被外面请出去的,不替主人重建;他上线了就把这件事告诉他
+                    if (owner != null) tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
+                } else {
+                    bringBack(server, e.getKey());
+                }
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
+            }
+        }
+    }
+
+    /**
+     * <b>她的身体被外面的人或插件移除了的唯一入口</b>:服主的 {@code /kick}、别的插件踢人、登录插件超时踢人。
+     * Numen 自己造成的移除(遣散、休眠、主人下线、关服)各有各的路,不要调这里。
+     *
+     * <p>平台挂点契约:模组上由 {@code MixinServerCommonPacketListener} 在断开落到她的假连接上那一步调(关服时不调);
+     * Paper 上由 {@code PlayerKickEvent}/{@code PlayerQuitEvent} 调(踢人会连着触发两个,第二次被忽略)。调用时她的身体还在世界里;
+     * <b>身体本身由平台移除</b>,这里只管之后的一切:
+     * <ul>
+     *   <li>大脑停牌、收件箱留下一条事实({@link com.dwinovo.numen.api.brain.CompanionLoop#onRemoved}),她手上的活和程序经
+     *       {@link com.dwinovo.numen.api.CompanionEvent#REMOVE} 收掉——和主人下线、遣散走同一条收拾的路;</li>
+     *   <li>名册记下她被请出去了和理由,在主人再召唤({@link #summon})之前不重建;</li>
+     *   <li>主人在线就告诉他,不在线就等他下次上线({@link #respawnAllOwnedBy})。</li>
+     * </ul>
+     *
+     * @param reason 踢人时说的理由
+     */
+    public static void removedFromOutside(NumenPlayer body, net.minecraft.network.chat.Component reason) {
+        MinecraftServer server = body.level().getServer();
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(body.getUUID());
+        if (entry != null && entry.removed()) {
+            return;
+        }
+        String why = reason.getString();
+        com.dwinovo.numen.api.brain.CompanionLoops.get(body.getUUID()).ifPresent(brain -> brain.onRemoved(why));
+        if (entry != null) {
+            reg.markRemoved(body.getUUID(), why);
+        }
+        CompanionEvents.fire(CompanionEvent.REMOVE, body);
+        ServerPlayer owner = body.resolveOwnerPlayer();
+        if (owner != null) {
+            tellRemoved(owner, body.getName().getString(), why);
+            syncRosterToOwner(server, owner);
+        }
+    }
+
+    private static void tellRemoved(ServerPlayer owner, String name, String why) {
+        owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_COMPANION_REMOVED, name, why));
+    }
+
+    /** 死了、等着代她点"重生"的身体(主线程)。世界作废时一并清掉——排的是上一个存档的账。 */
+    private static final java.util.Set<NumenPlayer> AWAITING_RESPAWN = new java.util.LinkedHashSet<>();
+
+    static {
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(AWAITING_RESPAWN::clear);
+    }
+
+    /**
+     * 一只同伴刚死了({@link NumenPlayer#die} 里,原版的死亡流程已经走完:掉落、经验、广播、{@code keepInventory} 都是原版的)。
+     * 这里只做三件事:大脑停牌并把死亡告诉她,生命周期钩子发 {@code DEATH},把这具尸体排进待重生。重生在下一个服务端刻开头
+     * ({@link #respawnDead}),不在实体刻里当场做——和真玩家一样,重生是网络阶段处理一个点击,不是死亡那一刻的事。
+     */
+    public static void onDeath(NumenPlayer body) {
+        MinecraftServer server = body.level().getServer();
+        if (server == null) return;
+        UUID uuid = body.getUUID();
+        // 死因取 die() 里抄下的那一句:此刻再问战斗记录已经被 vanilla 清空了,
+        // 只会拿到"她死了"这种没有凶手的兜底文案(见 NumenPlayer#deathMessage)。
+        String cause = body.deathMessage();
+        if (cause == null || cause.isBlank()) {
+            cause = body.getCombatTracker().getDeathMessage().getString();
+        }
+        if (cause == null || cause.isBlank()) cause = "未知原因";
+        // 先让大脑停牌,再触发生命周期钩子——<b>顺序要紧</b>:大脑一停牌 DEAD,
+        // 此后钩子里产生的收尾事件(异步任务的 task_finished status="interrupted")
+        // 照样进队列,但不开 run,安静躺到重生。
+        //
+        // 反过来的话,那条 urgent 收尾事件会在停牌之前到达、当场开一轮,而紧接着的
+        // 停牌又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
+        String where = "你死在 " + body.level().dimension().location() + " "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。"
+                + (body.level().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY)
+                ? "这个世界开着 keepInventory,背包里的东西还在你身上。"
+                : "背包里的东西按原版规则掉在了死亡地点。");
+        String diedOf = cause;
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf, where));
+        CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
+        AWAITING_RESPAWN.add(body);
+    }
+
+    /**
+     * 每个服务端刻开头调一次:替排着的死者点"重生"({@link FakeClient#respawn}),由原版的 {@code PlayerList.respawn} 把她放回世界。
+     * 一只重生出错不牵连下一只。
+     */
+    public static void respawnDead(MinecraftServer server) {
+        if (AWAITING_RESPAWN.isEmpty()) {
+            return;
+        }
+        List<NumenPlayer> dead = new ArrayList<>(AWAITING_RESPAWN);
+        AWAITING_RESPAWN.clear();
+        for (NumenPlayer body : dead) {
+            try {
+                respawnBody(server, body);
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 重生时出错", body.getUUID(), ex);
+            }
+        }
+    }
+
+    /**
+     * 原版重生一具死着的身体,再把换上来的新身体接回 Numen 这一侧。原版决定一切:落在她自己的重生点(睡过的床、充能的重生锚),
+     * 没有或失效就是世界出生点,不经 {@code placeNewPlayer}(没有"加入了游戏"的广播),也不传送到主人身边。
+     *
+     * <p>模组上原版换一个新的身体对象:手上的活、任务槽、各种看护都绑着旧身体,所以按"一具身体离场、一具身体入场"走,
+     * 和休眠再唤醒同一套生命周期钩子({@code REMOVE}、{@code SPAWN});大脑按 UUID 认身体,不用换。
+     */
+    private static void respawnBody(MinecraftServer server, NumenPlayer dead) {
+        if (server.getPlayerList().getPlayer(dead.getUUID()) != dead) {
+            return;   // 排队期间她被移出了世界(遣散、被请出去):没有身体可重生
+        }
+        boolean hadRespawnPoint = dead.getRespawnPosition() != null;
+        CompanionEvents.fire(CompanionEvent.REMOVE, dead);   // 这一条命的身体到头了:手上的活收尾,键盘松开
+        NumenPlayer body = dead.fakeClient().respawn();
+        UUID uuid = body.getUUID();
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(uuid);
+        if (entry != null) {
+            reg.put(uuid, entry.movedTo(body.serverLevel().dimension(), body.blockPosition()));
+        }
+        CompanionEvents.fire(CompanionEvent.SPAWN, body);
+        // 身体动了就得让她知道;事件先于解冻进收件箱,解冻后死亡与重生两条一起交给她
+        com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RESPAWNED,
+                java.util.Map.of("spawn", body.getRespawnPosition() != null ? "respawn_point" : "world_spawn"),
+                respawnedText(body, hadRespawnPoint), true);
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
+                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onRespawned);
+    }
+
+    /** 重生那条事件的话:落在哪、凭什么落在这儿、离主人多远。 */
+    private static String respawnedText(NumenPlayer body, boolean hadRespawnPoint) {
+        String how = body.getRespawnPosition() != null ? "落在你的重生点(睡过的床或充能的重生锚)旁"
+                : hadRespawnPoint ? "你的重生点(床或重生锚)没了或被挡住,落在了世界出生点"
+                : "你没有重生点,落在了世界出生点";
+        ServerPlayer owner = body.resolveOwnerPlayer();
+        String ownerPart = owner == null ? "主人不在线。"
+                : owner.level() != body.level() ? "主人在 " + owner.level().dimension().location() + ",和你不在同一个维度。"
+                : "主人在你" + com.dwinovo.numen.api.sdk.CompassUtil.compass(body, owner) + "方向,约 "
+                        + Math.round(body.distanceTo(owner)) + " 格处。";
+        return "你重生了:" + how + ",位置 " + body.level().dimension().location() + " "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。" + ownerPart
+                + "没有人替你挪动过位置;要不要回主人身边、怎么回,由你定。";
+    }
+
+    /**
+     * 把主人名下<b>存在的</b>同伴推给他的客户端。
+     *
+     * <p>取自持久的 {@link CompanionRegistry},不是玩家列表——休眠的同伴还存在,只是此刻不在世界里。客户端拿这份名册对账并<b>删除已遣散同伴的
+     * 本地数据</b>,所以名册的语义必须是"存在";用"此刻活着"做过一版,结果是同伴一休眠
+     * 就被当成遣散,数据整个删掉。判断规则在 {@link CompanionRoster}(纯 JVM,可单测)。
+     *
+     * <p>任何"存在状态"的变化之后都要调:登录、召唤、遣散、被请出服务器。
+     */
+    public static void syncRosterToOwner(MinecraftServer server, ServerPlayer owner) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        List<CompanionListPayload.Entry> list = new ArrayList<>();
+        for (CompanionRoster.Row row : CompanionRoster.build(rowsOf(server, owner.getUUID()))) {
+            NumenPlayer body = NumenPlayer.findByUuid(server, row.uuid());
+            list.add(new CompanionListPayload.Entry(row.uuid(), row.name(),
+                    body != null && body.isCreative(), reg.find(row.uuid()).removedFor()));
+        }
+        NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
+    }
+
+    /**
+     * 游戏模式落地,召唤表单和编辑卡同一道门。创造档过权限门:主人有 /gamemode
+     * 权限(等级 2)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
+     * 都不满足(伪造/竞态)按生存并说明——同伴的模式上限 = 主人的上限。
+     */
+    public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
+        if (body == null) return;
+        if (creative && !com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(owner.createCommandSourceStack()) && !owner.isCreative()) {
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_CREATIVE_NEEDS_OP));
+            creative = false;
+        }
+        body.setGameMode(creative ? net.minecraft.world.level.GameType.CREATIVE
+                : net.minecraft.world.level.GameType.SURVIVAL);
+    }
+
+    /**
+     * The companion crossed into a new dimension — on its OWN (it travels where it likes, not tied to
+     * the owner). Tell its brain, ambient: it rides along on the next owner-driven turn rather than
+     * spending a fresh LLM call just to note the move. Called from each loader's dimension-change hook.
+     */
+    public static void onDimensionChanged(NumenPlayer body) {
+        String dim = body.level().dimension().location().toString();
+        com.dwinovo.numen.api.event.NumenEvents.emit(body,
+                com.dwinovo.numen.api.agent.inbox.EventTypes.DIMENSION_CHANGE,
+                java.util.Map.of("to", dim),
+                "你进入了 " + dim + "。留意这个维度的环境和危险。", false);
+    }
+
+    /**
+     * 她从床上醒了。<b>急件</b>——{@code sleep} 到躺下那一刻就返回了,不发这条的话她会一直
+     * 以为自己还睡着,躺在原地等一个不会来的结果。
+     *
+     * <p>成因取自原版自己的叫醒路径:{@code Player.tick} 里唯一的条件判定就是天亮
+     * ({@code ServerLevel} 跳过夜也归到这条,它先把时间拨过去再叫醒);此外
+     * {@code LivingEntity.hurt} 一挨打立刻醒。剩下的(床没了、被传送)没有共同标记,统称外力。
+     */
+    public static void onWoke(NumenPlayer body) {
+        // 睡着时一挨打就醒,所以"上一刻还在睡"配上"这一刻还在受伤硬直"只可能是这一下打的——
+        // 不是就近猜一个凶手:更早的伤根本不可能与"她还睡着"并存。
+        String attacker = null;
+        if (body.hurtTime > 0) {
+            var source = body.getLastDamageSource();
+            attacker = source == null ? "什么东西"
+                    : source.getEntity() != null ? source.getEntity().getName().getString()
+                    : source.type().msgId();
+        }
+        boolean day = body.level().isDay();
+        com.dwinovo.numen.api.event.NumenEvents.emit(body,
+                com.dwinovo.numen.api.agent.inbox.EventTypes.WOKE,
+                java.util.Map.of("cause", attacker != null ? "hurt" : day ? "daybreak" : "other"),
+                wokeText(day, attacker), true);
+    }
+
+    /**
+     * 醒来那句话。挨打排在天亮前面:两件都真时,挨她的那一下才是她该先处理的。
+     *
+     * @param attacker 打醒她的那个东西的名字;没挨打则 null
+     */
+    static String wokeText(boolean day, String attacker) {
+        if (attacker != null) {
+            return "你被" + attacker + "打醒了,已经不在床上。先看清楚周围再决定是打是躲"
+                    + (day ? ",天已经亮了。" : ",天还没亮。");
+        }
+        return day
+                ? "天亮了,你自己从床上醒来,夜过去了。接着做你原本要做的事。"
+                : "你从床上醒来了,可是天还没亮——是外力把你弄醒的(床没了、被传送都算)。先看看周围。";
+    }
+
+    /** Save the companion to its {@code .dat} and remove it from the world (dormancy). */
+    public static void dormant(MinecraftServer server, NumenPlayer body) {
+        // Refresh the respawn hint before the body leaves.
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry prev = reg.find(body.getUUID());
+        if (prev != null) {
+            reg.put(body.getUUID(),
+                    prev.movedTo(((ServerLevel) body.level()).dimension(), body.blockPosition()));
+        }
+        CompanionFactory.despawn(server, body);
+    }
+
+    /** 遣散这一只活体,见 {@link #dismiss(MinecraftServer, UUID, Collection)}。 */
+    public static void dismiss(MinecraftServer server, NumenPlayer body) {
+        dismiss(server, body.getOwnerUuid(), List.of(body.getUUID()));
+    }
+
+    /**
+     * <b>遣散的唯一入口</b>:面板 ✕ 与 {@code /numen player despawn} 都走这里,调用方只管验归属、挑出是哪几只。
+     * 活着的身体像死亡一样把身上的一切掉在脚下再离场;休眠的没有身体可掉,{@code .dat} 留着东西但再没人重建它。
+     * 最后一次除名、一次推送。
+     */
+    public static void dismiss(MinecraftServer server, UUID ownerUuid, Collection<UUID> uuids) {
+        for (UUID uuid : uuids) {
+            NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
+            if (live == null) continue;
+            dropEverything(live);
+            CompanionFactory.despawn(server, live);
+        }
+        forget(server, ownerUuid, uuids);
+    }
+
+    /** 穿戴的经各穿戴来源摘下再掉:模组的饰品栏不在原版物品栏里,只 dropAll 的话它们会跟着身体一起消失。 */
+    private static void dropEverything(NumenPlayer body) {
+        for (GearSlot slot : NumenPlugins.gearSlots(body)) {
+            ItemStack worn = slot.swap(ItemStack.EMPTY);
+            if (!worn.isEmpty()) body.drop(worn, true, false);
+        }
+        body.getInventory().dropAll();
+    }
+
+    /**
+     * 永久除名:删注册表条目 = 这只同伴不再存在,再把新名册推给主人——客户端据此把她的家目录一并删掉。
+     * 除名和通知是同一件事的两半,放在一处才不会出现"删了条目却忘了通知"或者"通知了却没删干净"的半截状态。
+     * 主人不在线就只删条目——他下次登录收到的名册照样是对的,对账是<b>状态同步</b>不是事件通知,漏不掉。
+     */
+    private static void forget(MinecraftServer server, UUID ownerUuid, Collection<UUID> uuids) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        for (UUID uuid : uuids) {
+            CompanionRegistry.Entry gone = reg.find(uuid);
+            reg.remove(uuid);
+            if (gone != null) {
+                // 和她同过会话的告诉一声她走了;名册上已经没有她,成员表按名册过滤
+                com.dwinovo.numen.api.brain.Conversations.of(server, gone.owner()).left(uuid, gone.name());
+                com.dwinovo.numen.api.brain.ChatRoutes.refresh(server, gone.owner());   // 他聊天栏切进的会话少了她
+            }
+            CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
+            com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉
+        }
+        ServerPlayer owner = ownerUuid == null ? null : server.getPlayerList().getPlayer(ownerUuid);
+        if (owner != null) {
+            syncRosterToOwner(server, owner);
+        }
+    }
+
+    /**
+     * Permanently dismiss every registry entry of {@code ownerUuid} named {@code name} — gone for good, it
+     * will NOT come back on login — through {@link #dismiss(MinecraftServer, UUID, Collection)}, which
+     * also pushes the roster. Returns how many it dismissed. The registry is the whole answer: every body
+     * is spawned from an entry and its entry is removed only after the body leaves ({@link #forget}), so a
+     * live body always has one. (The {@code .dat} files orphan harmlessly — with no registry entry nothing
+     * respawns them.)
+     */
+    public static int dismissByName(MinecraftServer server, UUID ownerUuid, String name) {
+        List<UUID> ids = new ArrayList<>();
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
+            if (e.getValue().name().equals(name)) ids.add(e.getKey());
+        }
+        dismiss(server, ownerUuid, ids);
+        return ids.size();
+    }
+}

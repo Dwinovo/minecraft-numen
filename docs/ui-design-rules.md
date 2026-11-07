@@ -36,7 +36,7 @@
 - 实体、没有图标的东西照写名字;理由缩成短词。
 - **行内动作用图标 + 悬停一句话**（GHOST `Button` + `icon()` + `tooltip()`，如复制、重新生成）；**页面级的落地动作写字**（保存、保存并重启、复制接入提示词）。有后果的动作不靠“写成字”挡，靠确认卡挡。
 - **图标是 12×12 的纯白贴图**（`assets/.../sprites/icon_*.png`），白色乘任何颜色就是那个颜色，所以常态/悬停/置灰/危险各是一次着色，不为每种状态存一张。
-  形状不自己发明：从 pixelarticons（MIT，本就按 12×12 像素格画）用 `api/tools/ui-textures/pixelarticons.py` 转过来，不重采样；出处与授权写在 `licenses/ASSETS.txt`。
+  形状不自己发明：从 pixelarticons（MIT，本就按 12×12 像素格画）用 `tools/pixelarticons.py` 转过来，不重采样；出处与授权写在 `licenses/ASSETS.txt`。
 - **贴图在 MC 层，几何与状态色在 ui 层**：控件只拿到一个 `IconDrawer`（见 `Button.icon`），怎么把那块颜色画出来是 `client.ui.mc.Sprites` 的事。
 
 ## 入口
@@ -65,5 +65,5 @@
 ## 分层
 
 - **ui 模块(纯 JVM)**:控件、样式令牌(`NumenStyle`、`NumenTheme`)、画布契约 `IDrawSurface`——只有矩形填充、文字、测量、裁剪。
-- **MC 层**(`api` 的 client 源码集):`McDrawSurface` 适配器、真输入框宿主 `McTextInput`、各个屏幕。
+- **MC 层**(Numen API 的 client 源码集):`McDrawSurface` 适配器、真输入框宿主 `McTextInput`、各个屏幕。
   屏幕画框也经 `McDrawSurface` 调 `NumenStyle.box`,不自己拼样式;只有 MC 独有的东西(物品图标、皮肤脸、世界里的轮廓)在 MC 层直接画。

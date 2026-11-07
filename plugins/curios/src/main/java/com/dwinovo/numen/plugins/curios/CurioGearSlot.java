@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.curios;
 
 import com.dwinovo.numen.api.gear.GearSlot;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;

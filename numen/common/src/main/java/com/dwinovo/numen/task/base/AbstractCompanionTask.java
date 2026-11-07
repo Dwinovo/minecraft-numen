@@ -1,0 +1,586 @@
+package com.dwinovo.numen.task.base;
+
+
+import com.dwinovo.numen.nav.Journey;
+import com.dwinovo.numen.nav.Trip;
+import com.dwinovo.numen.nav.Walked;
+import com.dwinovo.numen.task.move.Arrival;
+import com.dwinovo.numen.task.move.MoveToCompanionTask;
+import com.dwinovo.numen.task.move.MoveToTaskRecord;
+import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.api.Snapshots;
+import com.dwinovo.numen.api.task.Preparation;
+import com.dwinovo.numen.api.task.Task;
+import com.dwinovo.numen.FailureType;
+import com.dwinovo.numen.api.task.TaskRecord;
+import com.dwinovo.numen.api.task.TaskState;
+import com.dwinovo.numen.api.entity.BodyDelta;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
+import com.dwinovo.numen.api.permission.GatedAct;
+import com.dwinovo.numen.api.permission.ConsentItem;
+import com.dwinovo.numen.api.task.TaskResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The shared skeleton every reactive companion task grows on — the single place
+ * the lifecycle ({@code start → tick* → buildResult}), the failure plumbing
+ * ({@link FailureType} + a model-facing reason), the result envelope, and
+ * 被抢占时的让位 all live, so a concrete task only writes the
+ * behaviour that is actually specific to it.
+ *
+ * <h2>Why a base class (the recovery boundary)</h2>
+ * The reactive layer's governing rule is that a task is a <em>recovery
+ * boundary</em>: it owns the execution of ONE bounded goal and everything that
+ * happens inside it — retries, alternative approaches, sub-steps — recovers that
+ * same goal without ever expanding its scope or auto-acquiring a prerequisite. A
+ * prerequisite gap (no material, wrong tool, target lost) is not recovered here;
+ * it is reported via {@link #fail(String, FailureType)} and kicked back to the
+ * LLM. This class makes that boundary concrete: the two composition primitives it
+ * exposes — {@link #runChild(Task)} (delegate a bounded SUB-goal) and a
+ * {@link RecoveryLadder} driven through it (try alternative EXECUTIONS of the same
+ * goal) — can only ever compose bounded goals, never widen one.
+ *
+ * <h2>Lifecycle (all {@code final}, so subclasses can't break the contract)</h2>
+ * <ul>
+ *   <li>{@link #prepare} (before the work is accepted, see {@link Preparation}) runs the {@link #preconditions()} in
+ *       order; the first that reports a {@link Precondition.Failure} refuses the call with its message, no task id,
+ *       no task_finished. Then {@link #preparation()} judges the rest (world facts, a plan).</li>
+ *   <li>{@link #start} runs the {@link #preconditions()} itself when nothing prepared the task (a synchronous action,
+ *       a child sub-goal); the first failure terminates the task immediately (via {@link #fail}); otherwise
+ *       {@link #onStart()} runs.</li>
+ *   <li>{@link #tick} short-circuits to the terminal state a {@code fail(...)}
+ *       (or a start-time precondition) parked in {@code pendingTerminal};
+ *       otherwise it delegates to {@link #onTick()}.</li>
+ *   <li>{@link #result(TaskState)} templates the {@link TaskResult} from the
+ *       terminal state and the overridable message / data hooks, and only then runs
+ *       {@link #cleanup()}: no hook ever reads state cleanup has released.</li>
+ * </ul>
+ *
+ * <h2>The onTick fail idiom</h2>
+ * A concrete {@link #onTick()} reports a failure with
+ * {@snippet : fail(reason, FailureType.SOMETHING); return TaskState.FAILED; }
+ * — {@link #fail} records the reason + type (so {@link #buildResult} and any
+ * parent ladder can read them) and {@code return FAILED} ends the tick. The two
+ * are kept separate (rather than {@code fail} returning {@code FAILED}) so a
+ * caller can also stash a failure for the NEXT tick to observe.
+ *
+ * @param <R> the concrete {@link TaskRecord} subtype carrying this task's typed
+ *            input fields.
+ * @param <V> 成功时交给程序的值的类型,就是 {@code R} 这个记录声明的类型参数;{@link #value()} 按它写。
+ */
+public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
+        implements Task {
+
+    /** The body this task drives. */
+    protected final NumenPlayer player;
+    /** The typed input record for this task. */
+    protected final R r;
+    /** 正在走的那一趟路;没有为 null。挂在这里,{@link #stopNav()} / {@link #cleanup()} 才收得了它。 */
+    protected Trip nav;
+    /**
+     * 本任务历次导航的实际账与身体动作(每一趟停下时并入)。回执末尾如实相告——不论成败、不论任务,"路上挖了什么、放了什么、
+     * 身体做了什么"只在这一处说一次。
+     */
+    private final Journey journey = new Journey();
+
+    /** Model-facing reason for a terminal FAILED; also the fallback result message. */
+    private String doneReason = "done";
+    /** Structured cause of the last failure, for a parent ladder to branch on. */
+    private FailureType failType = FailureType.UNKNOWN;
+    /** 最近一次 {@link #fail} 给的下一步;没给是 null。 */
+    private String failHint;
+    /**
+     * A terminal state decided out-of-band (a start-time precondition, or a
+     * {@link #fail} called from anywhere): {@link #tick} returns it verbatim
+     * instead of running {@link #onTick()}.
+     */
+    private TaskState pendingTerminal;
+
+    /** 动手前过权限层、要问就问主人的那一块;主人点过的头回执末尾交代。 */
+    private final GatedAct gate;
+
+    /** 开工那一刻的身体;收场时据此说这件活里有没有装备用坏。没开过工是 null。 */
+    private BodyDelta bodyAtStart;
+
+    /** 受理之前准备过,见 {@link #prepare}。 */
+    private boolean prepared;
+
+    /** 身体真在干活的刻数,见 {@link #workTicks()}。 */
+    private long workTicks;
+    /** 这一刻任务说它在等一次后台搜索({@link #awaitSearch});每刻开头清掉。 */
+    private boolean awaitingSearch;
+
+    // ---- sub-task composition state (see runChild) ----
+    /** The child sub-goal currently being delegated to, or {@code null}. */
+    private Task child;
+    /** Whether {@link #child}'s {@code start()} has been called yet. */
+    private boolean childStarted;
+    /**
+     * 征询记在谁名下:自己的任务记录;作为子活跑时是派它的那件活的(它收尾时一并清掉,主人答应过的对整件活都算)。
+     */
+    private Object consentScope;
+
+    protected AbstractCompanionTask(NumenPlayer player, R record) {
+        this.player = player;
+        this.r = record;
+        this.gate = new GatedAct(player, this::scope);
+    }
+
+    // ---------------------------------------------------------------------
+    // Lifecycle (final — the frozen contract)
+    // ---------------------------------------------------------------------
+
+    /**
+     * 受理之前的准备:前置条件按顺序判,第一条不过就是这次调用的错误结果;都过了再交给 {@link #preparation()}。准备过的任务
+     * 开工时不再判前置条件。
+     */
+    @Override
+    public final Preparation prepare(NumenPlayer companion) {
+        Precondition.Failure f = firstFailure();
+        if (f != null) {
+            // 前提不成立时这件活还没开始,没有进度可交:只有种类、那句话与下一步
+            return Preparation.refused(TaskResult.fail(f.type().kind(), f.message(), f.hint()));
+        }
+        prepared = true;
+        return preparation();
+    }
+
+    @Override
+    public final void start(NumenPlayer companion) {
+        Precondition.Failure f = prepared ? null : firstFailure();
+        if (f != null) {
+            fail(f.message(), f.type(), f.hint());
+            r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
+            return;
+        }
+        bodyAtStart = BodyDelta.open(player);
+        try {
+            onStart();
+        } catch (RuntimeException e) {
+            crashed("start", e);
+            r.setState(TaskState.FAILED);
+            return;
+        }
+        // A terminal parked DURING start (a fail(...) or succeed() from onStart — the
+        // one-shot tasks do their whole job there) is stamped on the record NOW, so
+        // the dispatcher finalizes it in the same tick it started. Without this, the
+        // record sits RUNNING for one tick with the work already done, and an owner
+        // Stop in that window would ship "interrupted" for work that actually
+        // happened — diverging the model's world-view from the inventory.
+        if (pendingTerminal != null) {
+            r.setState(pendingTerminal);
+        }
+    }
+
+    @Override
+    public final TaskState tick(NumenPlayer companion) {
+        if (pendingTerminal != null) return pendingTerminal;
+        awaitingSearch = false;
+        TaskState state;
+        try {
+            TaskState routeConsent = awaitRouteConsent();
+            state = routeConsent != null ? routeConsent : onTick();
+        } catch (RuntimeException e) {
+            crashed("tick", e);
+            return TaskState.FAILED;
+        }
+        // 这一刻身体在等就不算干活:期限往后推一刻(与调度层被生存链抢占时的 freeze 同一原则),
+        // 干活的刻数不走。子活在跑时它按自己的期限走,这件活的期限同样冻住
+        if (waiting() || child != null) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+        } else {
+            workTicks++;
+        }
+        return state;
+    }
+
+    /**
+     * 身体真在干活的刻数——任务里一切"干了多久"的量尺:超时、卡死判定、重算间隔都拿它量,不自己数刻。
+     *
+     * <p>等的刻不算:导航在等规划、在等主人答复、任务说它在等一次后台搜索。这些刻有多少取决于机器快慢
+     * (搜索在后台线程上、按每刻的时间上限分摊,花的是真实时间)和主人,而刻数跑得比真实时间快多少并不
+     * 固定——tick 远快于真实时间时(/tick rate、不限速的测试服),拿游戏刻去量等待,预算会在第一次搜索
+     * 返回前就烧光。拿这把尺子量,结论只看身体干了多少活。任务期限也是这样冻结的。
+     */
+    protected final long workTicks() {
+        return workTicks;
+    }
+
+    /** 这一刻身体站着等一次后台搜索(找方块、定位)出结论:不算干活,期限不走。每刻要等就每刻调。 */
+    protected final void awaitSearch() {
+        awaitingSearch = true;
+    }
+
+    /** 身体这一刻在等,不在干活。见 {@link #workTicks()}。 */
+    private boolean waiting() {
+        return (nav != null && nav.waiting()) || gate.waiting() || awaitingSearch;
+    }
+
+    /** 征询记在谁名下,见 {@link #consentScope}。 */
+    private Object scope() {
+        return consentScope != null ? consentScope : r;
+    }
+
+    /**
+     * 导航走到一格要问主人的地方停下时,这一刻归征询:身体站住、问主人;答应了那一格放行、接着跑 {@link #onTick},拒绝了那一格在
+     * 这一趟里当墙、重新规划绕开({@link Trip#consentRefused}),绕不开才由导航以被拒收场。任何带导航的任务都一样,不各写各的。
+     *
+     * @return 这一刻的终态或 RUNNING;不用等(没有扣着的路,或刚放行)时为 null
+     */
+    private TaskState awaitRouteConsent() {
+        if (nav == null) {
+            return null;
+        }
+        List<ConsentItem> needed = nav.consentNeeded();
+        if (needed.isEmpty()) {
+            return null;
+        }
+        player.controls().stop();
+        ConsentAnswer answer = gate.consult(needed);
+        if (answer == null) {
+            return TaskState.RUNNING;
+        }
+        if (answer.allowed()) {
+            nav.consentGranted();
+        } else {
+            nav.consentRefused(answer.words());
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Permission — the task proposes actions; the permission layer decides
+    // ---------------------------------------------------------------------
+
+    /**
+     * 动手前过权限层的那一块({@link GatedAct}):任务持有它、不继承它。提出动作、等主人答复、记下主人点过的头都在里面;任务自己不判
+     * 能不能,只提出动作。
+     */
+    protected final GatedAct gate() {
+        return gate;
+    }
+
+    /**
+     * 任务自己抛异常时的收场:<b>这一个任务失败,而不是整个服务端崩掉</b>。
+     *
+     * <p>任务每刻跑在服务端主循环里,上面那层是 {@code record.setState(task.tick())}
+     * ——没有保护。而任务干的事天然是碰运气的:建造每刻要对最多八格<b>任意</b>方块调用
+     * 原版回调,矿工要碰任意方块实体,图纸来自玩家目录里可以任意编辑的文件。任何一处
+     * 抛出去都会变成一次"Ticking entity"崩服,玩家丢的是整个存档的这一次游玩,而起因
+     * 只是一格方块。
+     *
+     * <p>所以在框架这一层收口,不在每个任务里各写各的:一个任务失败是可交代的
+     * (模型收到失败原因、玩家看到已经砌好的部分),崩服不是。异常连同任务名一起进
+     * 日志——吞掉症状而不留证据,是比崩溃更难查的病。
+     */
+    private void crashed(String phase, RuntimeException e) {
+        com.dwinovo.numen.Constants.LOG.error(
+                "[numen-task] {} 在 {} 阶段抛出异常,本任务判失败(服务端不受影响)",
+                getClass().getSimpleName(), phase, e);
+        fail("the task hit an internal error and stopped: " + e.getClass().getSimpleName()
+                + (e.getMessage() == null ? "" : " — " + e.getMessage())
+                + ". Anything already built stays; this is a bug worth reporting.",
+                FailureType.INTERNAL);
+    }
+
+    @Override
+    public final TaskResult result(TaskState finalState) {
+        if (child != null) {
+            endChild(TaskState.CANCELLED);
+        }
+        // 回执先于放手拼好:钩子(successMessage、timeoutMessage、value……)读到的都是这件活收场那一刻的样子,
+        // 不会读到 cleanup 放掉的导航、手势和跟踪。收场时要先结账的(回执要报它)放在 closeBooks 里
+        closeBooks();
+        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
+        String travelled = soFar().describe(Snapshots.flying(player));
+        String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
+        String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
+                + gate.allowanceNote()
+                + (broken.isEmpty() ? "" : " " + broken);
+        TaskResult result = outcome(finalState, enRoute);
+        cleanup();
+        return result;
+    }
+
+    /** 收场的回执:按终态取那一句,后面接上 {@code tail}。 */
+    private TaskResult outcome(TaskState finalState, String tail) {
+        return switch (finalState) {
+            case SUCCESS   -> TaskResult.ok(successMessage() + tail, value());
+            case TIMEOUT   -> TaskResult.timeout(timeoutMessage() + tail, value());
+            case CANCELLED -> TaskResult.cancelled(cancelledMessage() + tail, value());
+            default        -> TaskResult.fail(failType.kind(), doneReason + tail, failHint, value());
+        };
+    }
+
+    // ---------------------------------------------------------------------
+    // Hooks (override the ones a concrete task needs)
+    // ---------------------------------------------------------------------
+
+    /** Ordered gates checked before the work begins; the first {@link Precondition.Failure} wins. Default: none. */
+    protected List<Precondition> preconditions() {
+        return List.of();
+    }
+
+    /** 第一条不过的前置条件;都过了为 null。 */
+    private Precondition.Failure firstFailure() {
+        for (Precondition p : preconditions()) {
+            Precondition.Failure f = p.check();
+            if (f != null) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 前置条件之后、受理之前还要判的:世界事实、一次只搜不走的规划(见 {@link Preparation})。结论就绪时查到的东西存在
+     * 任务上,开工({@link #onStart()})接着用;准备得出的错误结果与开工后才冒出来时说的是同一句话。默认当场就绪。
+     */
+    protected Preparation preparation() {
+        return Preparation.READY;
+    }
+
+    /** 这件活受理之前准备过({@link #prepare}):开工时准备查到的东西已经在任务上了。 */
+    protected final boolean prepared() {
+        return prepared;
+    }
+
+    /** First-tick setup (build the nav, snapshot baselines, …). Default: no-op. */
+    protected void onStart() {}
+
+    /** Advance one tick; return {@link TaskState#RUNNING} or a terminal state. */
+    protected abstract TaskState onTick();
+
+    /**
+     * 收场、拼回执之前结账:回执要报告的、需要在这一刻收口的记录(例如还在飘的掉落物记成"还在动")。默认什么都不做。只结账,不放手
+     * ——放手(导航、按键、手势)是 {@link #cleanup()} 的事,它在回执拼好之后才跑。
+     */
+    protected void closeBooks() {}
+
+    /** Release physical resources on termination, after the result is composed: stop nav + clear the path overlay. */
+    protected void cleanup() {
+        stopNav();
+    }
+
+    /**
+     * 交给程序的值:类型是派它的 API 函数声明的返回类型({@code Job<R>} 的 {@code R});失败时它是错误值的 {@code data}(做到了哪)。
+     * 不交回值是 null(默认)。
+     */
+    protected V value() {
+        return null;
+    }
+
+    /** Message for a SUCCESS result. */
+    protected abstract String successMessage();
+
+    /** Message for a TIMEOUT result. Default: {@code "timed out"}. */
+    protected String timeoutMessage() {
+        return "timed out";
+    }
+
+    /** Message for a CANCELLED result. Default: {@code "interrupted"}. */
+    protected String cancelledMessage() {
+        return "interrupted";
+    }
+
+    // ---------------------------------------------------------------------
+    // Failure plumbing
+    // ---------------------------------------------------------------------
+
+    /**
+     * Record a failure: stash the model-facing reason and structured cause, and
+     * park a terminal FAILED for {@link #tick} to surface. Callers in
+     * {@link #onTick()} pair this with {@code return TaskState.FAILED;}.
+     */
+    protected void fail(String why, FailureType t) {
+        fail(why, t, null);
+    }
+
+    /** 同上,另给脚本一个能照抄的下一步({@link TaskResult#hint}),比如走过去的那一行。 */
+    protected void fail(String why, FailureType t, String hint) {
+        // 终局必须留声:任务凭什么收场是排障的第一现场,不能只活在返回值里
+        com.dwinovo.numen.Constants.LOG.info("[numen-task] {} FAILED({}) {}",
+                getClass().getSimpleName(), t, why);
+        this.doneReason = why;
+        this.failType = t;
+        this.failHint = hint;
+        this.pendingTerminal = TaskState.FAILED;
+    }
+
+    /**
+     * Park a terminal SUCCESS — the mirror of {@link #fail} for one-shot tasks whose
+     * whole job happens in {@link #onStart()} (drop, equip): {@link #tick} surfaces
+     * it, and {@link #start} stamps it on the record for same-tick finalization.
+     */
+    protected void succeed() {
+        this.pendingTerminal = TaskState.SUCCESS;
+    }
+
+    /** The structured cause of the most recent failure (or {@link FailureType#UNKNOWN}). */
+    protected FailureType lastFailure() {
+        return failType;
+    }
+
+    /** The model-facing reason recorded by the most recent {@link #fail}. */
+    protected String doneReason() {
+        return doneReason;
+    }
+
+    // ---------------------------------------------------------------------
+    // Nav ownership
+    // ---------------------------------------------------------------------
+
+    /**
+     * 这件活替目标之外挖掉的一格记进旅程账(比如为了拉出射线挖掉的遮挡物)。回执末尾和导航挖的一起交代,
+     * {@link #brokeOnTheWay} 也认它。
+     */
+    protected final void recordAction(com.dwinovo.numen.api.entity.BodyAction action) {
+        journey.did(action);
+    }
+
+    protected final void recordBreak(com.dwinovo.numen.act.BlockDigger.Broken broken) {
+        journey.dug(broken.pos(), broken.was());
+    }
+
+    /**
+     * 这一格是她这件活里顺路挖掉的吗:历次导航与 {@link #recordBreak} 记下的旅程账,加上还在跑的这条导航的账。
+     * 账本是"她挖了什么"的唯一出处,任务要分清"她挖的"和"别人动的"时问这里。
+     */
+    protected final boolean brokeOnTheWay(BlockPos pos) {
+        return soFar().broke(pos);
+    }
+
+    /** 旅程账加上还在走的这一趟。 */
+    private Journey soFar() {
+        return nav == null ? journey : journey.plus(nav.reports(), nav.rulings());
+    }
+
+    /** 叫停并放下在走的这一趟(可重复调);它的实际账并进旅程账。 */
+    protected void stopNav() {
+        if (nav != null) {
+            for (Report report : nav.stop()) {
+                journey.add(report);
+            }
+            journey.ruled(nav.rulings());
+            nav = null;
+        }
+    }
+
+    /** 路程回执:停在 {@code pos}、离要去的地方还差 {@code distanceLeft} 格,加上这件活到此刻为止路上的账。 */
+    protected final Walked walked(Vec3 pos, double distanceLeft) {
+        return soFar().walked(pos, distanceLeft, Snapshots.flying(player));
+    }
+
+    /** 动手的活替自己走路的那个子活;没在走是 null。 */
+    private MoveToCompanionTask walker;
+
+    /**
+     * 动手的活够不着时先走过去:走路是子活({@link MoveToCompanionTask}),判据是 {@code to} 这个到达目标。还在走返回 null,下一刻
+     * 接着调;走完(到了、走不到、超时)返回那一趟的回执,走不到时失败原因与类型已抄在这件活上({@link #lastFailure()})。
+     * 走路的账(挖了什么、放了什么、问过主人什么)归这件活,回执末尾说一次。
+     */
+    protected final TaskResult walkTo(Arrival to) {
+        if (walker == null) {
+            walker = new MoveToCompanionTask(player, MoveToTaskRecord.errand(r, player.level().getGameTime(), to));
+        }
+        TaskResult done = runChild(walker);
+        if (done != null) {
+            walker = null;
+        }
+        return done;
+    }
+
+    // ---------------------------------------------------------------------
+    // Sub-task composition — one of the two recovery-boundary primitives
+    // ---------------------------------------------------------------------
+
+    /**
+     * Delegate this tick to a child {@link Task} representing a bounded
+     * SUB-goal, driving its {@code start → tick} lifecycle for the parent.
+     *
+     * <p>Re-invoking with the SAME child instance continues it; passing a
+     * different instance switches to (and starts) the new child. The child's
+     * {@code start()} is called lazily on its first tick here, so if the child is
+     * itself an {@link AbstractCompanionTask} a start-time terminal (a failed
+     * precondition) is observed on the very first {@link #tick} — no special
+     * "state after start" path is needed.
+     *
+     * <p>子活是这件活的一部分:它问主人的记在这件活名下;它跑的时候这件活的期限冻住,它按自己记录上的期限走,到了就按超时
+     * 收场;它收场时它的实际账(路上挖的放的、身体做的)与主人点过的头并进这件活,由这件活收场时说一次——所以交回的那句话
+     * 不带它自己的路上那一段。
+     *
+     * @return 子活收场的那一刻交回它的回执(它的失败类型抄上来,{@link #lastFailure()} 说的就是它的原因);还在跑是 null
+     */
+    protected TaskResult runChild(Task c) {
+        if (child != c) {
+            child = c;
+            childStarted = false;
+            if (c instanceof AbstractCompanionTask<?, ?> a) {
+                a.consentScope = scope();
+            }
+        }
+        if (!childStarted) {
+            child.start(player);
+            childStarted = true;
+        }
+        TaskState st = child.tick(player);
+        if (!st.isTerminal() && child instanceof AbstractCompanionTask<?, ?> a
+                && player.level().getGameTime() >= a.r.getDeadlineGameTime()) {
+            st = TaskState.TIMEOUT;
+        }
+        return st.isTerminal() ? endChild(st) : null;
+    }
+
+    /** 子活收场:它自己收尾,账并进这件活,交回它不带路上那一段的回执。 */
+    private TaskResult endChild(TaskState st) {
+        Task ended = child;
+        child = null;
+        childStarted = false;
+        if (!(ended instanceof AbstractCompanionTask<?, ?> a)) {
+            return ended.result(st);
+        }
+        // 同 result:子活的回执先拼好,再让它放手(放手时它的导航账才并进它的旅程账)
+        a.closeBooks();
+        TaskResult result = a.outcome(st, "");
+        a.cleanup();
+        this.failType = a.lastFailure();
+        journey.add(a.journey);
+        gate.absorb(a.gate);
+        return result;
+    }
+
+    // ---------------------------------------------------------------------
+    // Suspendable (scheduler preemption)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Preempted by a higher-priority survival chain: keep every logical field — including the
+     * nav PLAN — intact. Deliberately does NOT call {@code nav.stop()}: the plan
+     * is what lets the task pick straight back up on the next tick.
+     */
+    @Override
+    public void stop(NumenPlayer companion, StopReason why) {
+        // 被抢占:<b>逻辑字段一个不动</b>——尤其是寻路计划,它正是下次拿回身体时能接着走的原因。不调 nav.stop()。
+        // 身体的键由大脑(CompanionBrain)换驱动者时统一松开;被换掉/身体没了不需要额外收尾:
+        // buildResult 里的 cleanup() 会跑。
+    }
+
+    @Override
+    public String name() {
+        return getClass().getSimpleName();
+    }
+
+    /**
+     * 身体稳没稳——动作前置里"站得住"那一半的唯一判据。不等于"站在地上":
+     * 游在水面(舀水、放船正是这个姿势)和坐在载具里都没有 onGround,原版对
+     * 交互也从不要求脚踏实地;这道门挡的只是坠落中途的按键。
+     */
+    protected final boolean bodySettled() {
+        return player.onGround() || player.isInWater() || player.isPassenger();
+    }
+}

@@ -1,0 +1,109 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-loader'
+    id 'net.neoforged.moddev'
+}
+
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
+
+/*
+ * GameTest 与评测在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):把套件入口 GameTestSuites
+ * 登记给原版的 GameTest 框架,和给模拟主人的连接配频道表。用 Numen API 的都用得上(Numen、联动、评测、第三方插件),所以归 Numen API;
+ * 各运行配置把它和 Numen API 的测试夹具声明成模组 numen_api_gametest。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+dependencies {
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)是内嵌的库,不是平铺进来的类:jarJar 随发行 jar 带上,玩家不用另装。
+    jarJar("org.commonmark:commonmark:${commonmark_version}") {
+        version { strictly "[${commonmark_version},0.31)"; prefer commonmark_version }
+    }
+    jarJar("org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}") {
+        version { strictly "[${commonmark_version},0.31)"; prefer commonmark_version }
+    }
+    // mcp 模块的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……)同理嵌套带上;清单从 mcp 的依赖解析出来。
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        def libVersion = coordinate.split(':')[2]
+        jarJar(coordinate) {
+            transitive = false
+            version { strictly "[${libVersion},)"; prefer libVersion }
+        }
+    }
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+processGametestResources {
+    var expandProps = ['neoforge_loader_version_range': neoforge_loader_version_range]
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand expandProps
+    }
+    inputs.properties(expandProps)
+}
+
+neoForge {
+    version = neoforge_version
+    addModdingDependenciesTo(sourceSets.gametest)
+    // Automatically enable neoforge AccessTransformers if the file exists
+    def at = project(':numen-api:common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+    runs {
+        configureEach {
+            ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
+        }
+        client {
+            client()
+            gameDirectory = this.mkdir(this.file("runs/client"))
+        }
+        data {
+            data() // NeoForge 21.1 (1.21.1) has no clientData() run type — the combined data() run + --all covers it
+            gameDirectory = this.mkdir(this.file("runs/data"))
+            // DataGen can be run by - "./gradlew :neoforge:runData" in Terminal.
+            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
+            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+        server {
+            server()
+            this.file("runs/server").createParentDirectories()
+            gameDirectory = this.mkdir(this.file("runs/server"))
+        }
+    }
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+            // 发行 jar 把 store / ai / script / agent / permission / ui / lua 的类平铺进来(见 numen-api-loader.gradle 的 jar 块),运行时它们
+            // 就是本模组的一部分。开发期的 run 不走那个 jar,所以要在这里同样声明——否则
+            // 模组构造时找不到 IToolSpec,runData 直接起不来。
+            Modules.ALL.each { path -> sourceSet project(path).sourceSets.main }
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'neoforge')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName, it.getTaskName(null, 'jarJar')].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'neoforge')
+            }
+        }
+    }
+}

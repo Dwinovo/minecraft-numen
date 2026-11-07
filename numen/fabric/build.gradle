@@ -1,0 +1,184 @@
+plugins {
+    id 'numen-loader'
+    id 'net.fabricmc.fabric-loom-remap'
+}
+
+// 要读 Numen API 的开发期 gametest 源码集,它得先配置好
+evaluationDependsOn(':numen-api:fabric')
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // Numen API 同在本构建里(Loom 项目)。编译期看不见它的内部类(见 numen-loader.gradle),开发运行与数据生成要它在
+    // 类路径上,所以是 runtimeOnly:POM 里落成运行期依赖。namedElements 直接给开发期(Mojang 名)的 jar,不经 maven 往返。
+    runtimeOnly project(path: ':numen-api:fabric', configuration: 'namedElements')
+    // Bundle it into Numen's jar (Jar-in-Jar) so players install one file and get
+    // both mods — exactly like including a library mod such as GeckoLib.
+    include project(':numen-api:fabric')
+
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里。
+    // 只有 Litematica:车万女仆等没有 Fabric 版,YSM 没有本 MC 版本的构建,JEI 本代的接口缺联动要用的那一件。
+    // Loom 项目的默认变体是重映射成 intermediary 的 jar;要的是 Mojang 名的那份,与本模块同命名
+    compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
+    localRuntime project(':numen:pathing')
+}
+
+/*
+ * GameTest:同一批用例(套件 numen、numen_pathing)在 Fabric 上跑,`./gradlew :numen:fabric:runGameTestServer`,
+ * `-Pgametest=numen_pathing` 选跑谁(默认是根 build.gradle 的 numenGameTestModules 带的全部套件)。
+ *
+ * 用例只用原版注解,在 numen/common 与 numen/pathing 的 gametest 里。加载器这一层的支持(把套件入口 GameTestSuites 登记成
+ * `fabric-gametest` 入口、模拟主人连接的 MockConnection 实现)属于 Numen API,在 numen-api/fabric 的开发期小模组
+ * numen_api_gametest 里。用例、夹具与小模组的输出以普通类路径进开发运行(localRuntime),编译时对着 Numen 本体的类,运行时解析到
+ * 本模块 main 的那一份。
+ */
+// 结构模板:原版只在 IDE 里才从磁盘目录加载,Fabric 的 GameTest API 改从数据包的 data/<命名空间>/gametest/structures/ 加载(本代是复数)。
+// 把各模块的模板按它的套件名(也是它的结构命名空间)放到那里,当作小模组 numen_api_gametest 的资源(下面的 loom.mods 把它们并进同一个模组)
+sourceSets {
+    gametestData {}
+}
+def fabricStructures = layout.buildDirectory.dir('gametest-structures')
+def syncFabricStructures = tasks.register('syncFabricGameTestStructures', Sync) {
+    into fabricStructures
+    rootProject.ext.numenGameTestModules.each { path ->
+        from(project(path).file('src/gametest/structures')) {
+            include '*.snbt'
+            into "data/${rootProject.ext.numenSuites[path].gametest}/gametest/structures"
+        }
+    }
+}
+sourceSets.gametestData.resources.srcDir(fabricStructures)
+tasks.named('processGametestDataResources') { dependsOn syncFabricStructures }
+
+dependencies {
+    // Fabric 的 GameTest API(fabric-api 的合集 jar 里没有它)
+    modLocalRuntime fabricApi.module('fabric-gametest-api-v1', fabric_version)
+    localRuntime project(':numen-api:fabric').sourceSets.gametest.output
+    localRuntime sourceSets.gametestData.output
+    localRuntime project(':numen-api:common').sourceSets.testFixtures.output
+    localRuntime project(':numen:common').sourceSets.testFixtures.output
+    rootProject.ext.numenGameTestModules.each { localRuntime project(it).sourceSets.gametest.output }
+}
+
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+def gameTestSeed = providers.gradleProperty('gametestSeed')
+// 排查与证明稳定(见 GameTestSuites):-PgametestOnly=<全名正则> 只跑匹配的用例,-PgametestCopies=N 每条铺 N 份并行
+def gameTestOnly = providers.gradleProperty('gametestOnly')
+def gameTestCopies = providers.gradleProperty('gametestCopies')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是固定的默认一处(见 GameTestOrigin),失败日志里写着这次用的哪一处
+def gameTestOrigin = providers.gradleProperty('gametestOrigin')
+def gameTestSelection = providers.gradleProperty('gametest')
+        .orElse(rootProject.ext.numenGameTestModules.collect { rootProject.ext.numenSuites[it].gametest }.join(','))
+
+loom {
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+        numen_api_gametest {
+            sourceSet project(':numen-api:fabric').sourceSets.gametest
+            sourceSet sourceSets.gametestData
+            // 夹具里的 mixin 配置与数据包维度(numen_test:terrain)要在这个模组的根上才被加载器认到
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
+        }
+    }
+    def aw = project(':numen:common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+        gameTestServer {
+            inherit server
+            setConfigName('Fabric GameTest Server')
+            ideConfigGenerated(false)
+            runDir('runs/gametestserver')
+            vmArg('-Dfabric-api.gametest')
+            // 结构模板目录(只有 GameTestKit 要读磁盘上的图纸夹具)与跑哪些套件:同 NeoForge 的运行配置(模板见 numen/common 的 syncGameTestStructures)
+            vmArg("-Dnumen.gametest.structures=${gameTestStructures.get().asFile}")
+            vmArg("-Dnumen.gametest.suites=${gameTestSelection.get()}")
+            // 真实地形维度的种子(-PgametestSeed=…):没给就是原版 GameTest 服务器写死的 0
+            if (gameTestSeed.present) {
+                vmArg("-Dnumen.gametest.seed=${gameTestSeed.get()}")
+            }
+            if (gameTestOnly.present) {
+                vmArg("-Dnumen.gametest.only=${gameTestOnly.get()}")
+            }
+            if (gameTestCopies.present) {
+                vmArg("-Dnumen.gametest.copies=${gameTestCopies.get()}")
+            }
+            if (gameTestOrigin.present) {
+                vmArg("-Dnumen.gametest.origin=${gameTestOrigin.get()}")
+            }
+            rootProject.ext.numenTerrainProperties().each { key, value -> vmArg("-D${key}=${value}") }
+        }
+        datagen {
+            inherit client
+            setConfigName('Fabric Data Generation')
+            ideConfigGenerated(true)
+            runDir('runs/datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('src/generated/resources')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    dependsOn ':numen:common:syncGameTestStructures', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses', ':numen-api:fabric:gametestClasses', 'gametestDataClasses'
+    rootProject.ext.numenGameTestModules.each { dependsOn "${it}:gametestClasses" }
+    // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
+    // 发过的令牌、存下的档案不带进这一次
+    doFirst {
+        delete project.file('runs/gametestserver/config')
+    }
+}
+
+// 联动模组的类与资源平铺进发行 jar——它本质是独立模组,只是跟车一起发。
+// 平铺在 jar 这一步,随后 remapJar 把它连同本模块的类一起换成 intermediary 名:
+// 联动对着原版的 Mojang 名编译,与本模块的 named 命名空间是同一套,所以能一起重映射。
+// 目标模组不在时它一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:litematica').sourceSets.main.output })
+}
+
+// 跟车发的联动,它的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:litematica:test')
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}

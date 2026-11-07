@@ -1,6 +1,6 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.server.level.ServerLevel;

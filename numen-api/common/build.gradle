@@ -1,0 +1,145 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-common'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    neoFormVersion = neo_form_version
+    // Automatically enable AccessTransformers if the file exists
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+}
+
+// 客户端专属源码集(issue #9):src/client/java 只被客户端消费,主源码集
+// 的 classpath 上物理上没有这些类——服务端代码引用客户端类从"运行时才炸"
+// 变成"import 就编译不过"。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.client)
+
+// 测试夹具(src/testFixtures):各模块的 GameTest 共用的套件机制,只对着原版写,见 com.dwinovo.numen.api.gametest。
+// 只是一份源码集,不是发布的变体(java-test-fixtures 会把主源码的 jar 连同夹具塞进单测的类路径,资源按目录找的单测会找到 jar 里去);
+// 各模块的 GameTest 运行把它的输出声明进模组。
+sourceSets {
+    testFixtures {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
+
+dependencies {
+    // 纯 JVM 模块(清单在 buildSrc 的 Modules):落盘的基础件、LLM 连接层、她写的程序、大脑、权限规则、沙箱 Lua、界面组件库。
+    // api 配置让本模块里的消费方、下游 loader 与插件都透视得到公开签名里的类型(IToolSpec、动词、判决、widget 与令牌……)。
+    Modules.ALL.each { api project(it) }
+
+    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
+    clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+
+    // 夹具里的 mixin(GameTest 世界并入数据包维度、可指定种子)编译时,注解要在场
+    testFixturesCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    testFixturesCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'common')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+        // 声线库/分句器等客户端类的 headless 测试要看得见 client 源码集
+        compileClasspath += sourceSets.client.output
+        runtimeClasspath += sourceSets.client.output
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// 服务端安全门:主源码集不得引用 Minecraft 客户端类。源码集隔离挡得住
+// "引用我们自己的客户端类"(classpath 上没有,import 即编译错),但挡不住
+// 直接 import 原版客户端类——common 编译用的是合并的客户端 MC jar,
+// net.minecraft.client 永远在场。这道检查把缺口补上:出现即 fail,
+// 该代码应移入 src/client/java。
+tasks.register('checkServerSafe') {
+    group = 'verification'
+    description = 'Fail if src/main references Minecraft client-only classes.'
+    def srcDir = file('src/main/java')
+    inputs.dir(srcDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def offenders = []
+        srcDir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            if (!f.name.endsWith('.java')) return
+            int no = 0
+            f.eachLine('UTF-8') { line ->
+                no++
+                if (line.contains('net.minecraft.client') || line.contains('com.mojang.blaze3d')) {
+                    offenders << "${f}:${no}: ${line.trim()}"
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
+                    + "把这些代码移进 src/client/java:\n  " + offenders.join('\n  '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkServerSafe' }

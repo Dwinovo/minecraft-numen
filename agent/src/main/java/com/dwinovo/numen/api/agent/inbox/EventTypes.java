@@ -1,0 +1,406 @@
+package com.dwinovo.numen.api.agent.inbox;
+
+import com.dwinovo.numen.api.agent.scope.Handle;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+/**
+ * 队列条目的类型表——{@link EventQueue} 里"某一类东西该怎么处理"的全部答案。
+ *
+ * <h2>为什么是表而不是 if</h2>
+ * 队列本身不认识 {@code query} 和 {@code task_finished},更不该认识第三方内容包将来登记的
+ * 类型。拼给模型的字符串、给聊天流的字符串、主人打断时清不清、是不是恒为急件——
+ * 全都<b>查表</b>;持有队列的循环要知道"这条什么时候交给大脑""是不是主人说的",
+ * 也查表。于是"主人打断清指令、留事实"这条规矩从代码里的判断变成了
+ * 表里的一行,加一种新类型也不用回来改队列和循环。
+ *
+ * <h2>事件的种类就是一行</h2>
+ * 主人的话、目标续跑、整理与清空是一行一种;世界上发生的事同样一种一行({@code task_finished}、
+ * {@code death}、{@code reflex}……),条目的 {@code type} 就是它的种类,拼给模型的
+ * {@code <event kind="…">} 里的 kind 取自同一个 id。世界的事的行都由 {@link #event} 造:
+ * 它们只在"恒不恒急"上有分别。
+ *
+ * <h2>注册时机</h2>
+ * 内置的在本类静态块里自注册(保证永远在);第三方在自己的 mod init 注册,
+ * 与 {@code ToolRegistry} / {@code BrainChains} 同一约定 —— 注册在 init,
+ * 读在运行时,没有并发窗口。
+ *
+ * <p>纯 JVM,不碰 Minecraft。
+ */
+public final class EventTypes {
+
+    /** 主人(或替主人说话的桥接)说的话。恒为急件:人说话了就该有回应。 */
+    public static final String QUERY = "query";
+    /**
+     * 主人要求整理记忆。
+     *
+     * <p>它<b>不是拼给模型的文本</b>——{@code toModel} 返回 null,{@link EventQueue#render}
+     * 因此跳过它。队列只负责把它攒着、到点交出来;真去整理是循环内核在闲时做的事。
+     *
+     * <p>进队列而不是当场执行,是因为她忙的时候也该按得下:按了就一定会发生,
+     * 主人不必盯着什么时候能按。
+     *
+     * <p>条目的字由 {@link #controlText} 组成:语言键,和主人 {@code /compact} 后面附的关注点(没有就没有)。
+     */
+    public static final String COMPACT = "compact";
+    /**
+     * 主人要求清空上下文。
+     *
+     * <p>与 {@link #COMPACT} 同一形状:不拼给模型({@code toModel} 回 null),进队列等安全点,
+     * 真去清是取件那一方的事。区别只在取到之后干什么——整理发一次摘要请求,清空同步完事。
+     */
+    public static final String CLEAR = "clear";
+    /**
+     * 长期目标的续跑块。
+     *
+     * <p>是文本(要拼给模型),但不进聊天流——那一大块 steering 给主人看没有意义,目标本身
+     * 在界面上另有一行。主人按停止就作废:那正是"我不要她接着跑了"。
+     */
+    public static final String GOAL = "goal";
+
+    // ---- 世界上发生的事,一种一行 ----
+
+    /** 异步任务收尾(status: done / failed / timeout / stopped / interrupted)。急不急由发送方按 status 定。 */
+    public static final String TASK_FINISHED = "task_finished";
+    /** 她死了(死因、死在哪、身上的东西怎么处置了)。恒为急件:她对自己处境的认知几乎全作废了。死着期间停牌压着,重生以后随 {@link #RESPAWNED} 一起交给她。 */
+    public static final String DEATH = "death";
+    /**
+     * 她按原版的重生规则重生了:落在哪、是重生点还是世界出生点、离主人多远。不传送、不替她回到主人身边——回不回、怎么回由她自己定。
+     * 恒为急件:位置从矿洞变成了别处,她正在做的事的前提全变了。
+     */
+    public static final String RESPAWNED = "respawned";
+    /**
+     * 她的身体被外面的人或插件请出了服务器(踢人),不是主人遣散、也不是关服。恒为急件:她在世界里的一切都停了,醒来第一件事是知道这个。
+     * 她不在世界里时停牌压着(见 {@code Hold.DEAD}),主人再召唤她,这条随停牌解开一起交给她。
+     */
+    public static final String REMOVED = "removed";
+    /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。恒为急件。 */
+    public static final String HUNGRY = "hungry";
+    /**
+     * 背包一格空的都没有了,碰到的东西放不下、留在了地上。恒为急件:她不知道的话,接着挖、接着捡,东西都落在地上。
+     * 一轮满只发一次,背包又有空格才复位。
+     */
+    public static final String INVENTORY_FULL = "inventory_full";
+    /**
+     * 她达成了一个进度,奖励的物品或经验进了她的背包。不是她哪次调用要的结果,所以发事件。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:东西已经在她身上,不知道也不会做错事,随下一次调模型捎上就够。不进聊天流。
+     */
+    public static final String ADVANCEMENT_REWARD = "advancement_reward";
+    /** 主人挨打了(只报实体攻击)。急不急由发送方按主人血线分档。 */
+    public static final String OWNER_HURT = "owner_hurt";
+    /**
+     * 她挨打了(只报实体攻击)。恒为急件:远处的弓箭手她看不见,不叫醒她就会一直挨着——
+     * 反击、退开、找掩体,都由她当场定。连击去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。
+     */
+    public static final String COMPANION_HURT = "companion_hurt";
+    /**
+     * 半径内有一只怪盯上了她(它的攻击目标变成她)。恒为急件:它还没动手,她不知道就是等着挨打——打还是躲、先下手还是拉开,她当场定。
+     * 它盯着期间不再发,放弃又盯上的抖动和她挨打共用一把去抖窗口,见 {@code Vigil}。
+     */
+    public static final String TARGETED = "targeted";
+    /**
+     * 她留意的一个对象(最近打她、盯上她的,以及她正在打、用、骑的)被移出世界了,附原版的移除原因:死了(能查到击杀者就带上)、
+     * 消失、换了维度、所在区块卸载。走出半径不算。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:它没了不会让她正在做的事变错,那是她下次开口时顺带知道的事。
+     */
+    public static final String GONE = "gone";
+    /** 她自己定的表到点了。恒为急件:提醒而已,不代表那件事完成了。 */
+    public static final String TIMER = "timer";
+    /** 她从床上醒了。恒为急件:{@code sleep} 到躺下就返回,醒来这一刻只有这条事件说得出。 */
+    public static final String WOKE = "woke";
+    /** 同伴自己跨了维度。急不急由发送方定。 */
+    public static final String DIMENSION_CHANGE = "dimension_change";
+    /**
+     * 某个本能替身体做了一件事(溺水自救、下落放水、防御……),条目里带着是哪个本能。走 {@link Delivery#NOTICE}:常态随下一次调模型捎带,
+     * 不为它叫醒她;本能碰上要她当场决定的险情(被封死在水下找不到出口)由发送方标成急件。
+     */
+    public static final String REFLEX = "reflex";
+    /**
+     * 服务端对她说的一句话:原版与模组发给她的系统聊天与动作栏("只能在夜间睡觉"、模组的提示与警告)。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:这些话多半是她刚做的事的回音,她按了床、回执回来之后的那次调模型
+     * 自然捎上;闲着时躺在队里,等别的事叫醒她时一起交。走插话档的话,非急件也会凑够条数、等够时长自己开一轮,
+     * 回合里本来要停时还会为它多调一次模型——一句"只能夜里睡"就多花一轮。
+     *
+     * <p>不进聊天流。
+     * 她自己执行的指令说的话在那条指令的回执里,玩家聊天另走群聊,都不是这一种。
+     */
+    public static final String SERVER_MESSAGE = "server_message";
+    /**
+     * 她的一段程序被切断(主人按停止、外接接管、遣散……)、这一批已经作废之后,服务端为它交出的那份回执:程序切断前做了什么、停在哪。
+     * 正文就是服务端写的那份有界回执本身。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——她没要求这份回执,但身体做了的事必须让她知道:随下一次调模型捎带。不叫醒她:切断本来就是主人
+     * 的决定(停止键之后停牌要等主人再开口),为一份"你刚才被打断时做了什么"多开一轮没有意义。不进聊天流:对话里主人已经看见自己按了停止。
+     */
+    public static final String PROGRAM_STOPPED = "program_stopped";
+    /** 队列满了丢掉了几条——丢弃可以,无声消失不行。 */
+    public static final String DROPPED = "dropped";
+    /**
+     * 场面上别人说的话:群聊里主人对别人说的那句,以及别的同伴说出口的那句。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——她听得见,但不会为此醒来。<b>唤醒只能由主人点名产生</b>,
+     * 这是群聊的不变量(见 {@code docs/group-chat.md} §二):同伴的话若能唤醒同伴,两个模型就能
+     * 自己聊下去,而每一轮都是两份账单。
+     *
+     * <p>不进聊天流:面板画群聊时归并的是各人的对话日志,这里再画一遍就是同一句话的第二个出处。
+     */
+    public static final String TALK = "talk";
+
+    /**
+     * 同一个会话里的某只同伴被主人遣散了。她的日志跟着家目录一起没了,别人日志里旁听到的她的话还在——
+     * 这条事件给那个缺口一个解释。和 {@link #TALK} 一样是捎带投递:知道就行,不为此醒来。
+     */
+    public static final String LEFT = "left";
+
+    /**
+     * 一类条目怎么交给大脑。每一档自己声明两件事——{@link #wakes} 与 {@link #joins}——队列与循环只读这两件,
+     * 不按档名判断,所以加一档只改这里。
+     *
+     * <pre>
+     * 档         wakes  joins     闲着                              回合里
+     * STEER      是     ANY_CALL  参与熟度                          下一次调模型带上;本来要停时让 run 接着走
+     * FOLLOW_UP  是     OWN_CALL  参与熟度                          只在本来要停时接上
+     * CONTROL    否     NONE      循环自己执行(整理记忆、清空上下文) 不进回合;排在它后面的等它执行完
+     * AMBIENT    否     ANY_CALL  不参与熟度,等别的事叫醒她          随下一次调模型捎带,自己不引起调用
+     * NOTICE     否*    ANY_CALL  同 AMBIENT;发送方标了急件的那一条按 STEER 办
+     * </pre>
+     */
+    public enum Delivery {
+        /** 插话:主人的话、世界上发生的事。 */
+        STEER(true, Joins.ANY_CALL),
+        /** 接续:目标续跑。她自己接着干,不挤进别的事已经引起的那次调用。 */
+        FOLLOW_UP(true, Joins.OWN_CALL),
+        /** 控制命令:不是给模型的文本,闲时由循环自己执行(整理记忆、清空上下文)。 */
+        CONTROL(false, Joins.NONE),
+        /**
+         * 捎带:"她该听见,但不值得为它把她叫醒"——躺在队里等下次别的事叫醒她,跟着那次调用一起走。
+         * 因此它是<b>免费</b>的:不额外唤醒就不额外花钱。群聊里旁听到的话走这一档(唤醒只能由人产生)。
+         */
+        AMBIENT(false, Joins.ANY_CALL),
+        /**
+         * 知会:平时同捎带,不为它把她叫醒;发送方把某一条标成急件,那一条就按插话办,立刻叫醒她。同一种事的常态与险情走一个类型
+         * (本能替身体做了一件事:常态只是让她知情,被封死在水下找不到出口才是要她当场决定的),急不急由发送方按事情本身定。
+         */
+        NOTICE(false, Joins.ANY_CALL, true);
+
+        /** 一条条目随哪一次模型调用交给模型。 */
+        public enum Joins {
+            /** 随下一次调模型一起走,不管这次调用是谁引起的。 */
+            ANY_CALL,
+            /** 只随自己引起的那次走:别的条目或待回应的工具结果本来就要调模型时它等着,等本来要停的时候。 */
+            OWN_CALL,
+            /** 不随任何调用走:不是给模型的文本,循环闲时自己执行;排在它后面的等它执行完。 */
+            NONE
+        }
+
+        private final boolean wakes;
+        private final Joins joins;
+        private final boolean escalates;
+
+        Delivery(boolean wakes, Joins joins) {
+            this(wakes, joins, false);
+        }
+
+        Delivery(boolean wakes, Joins joins, boolean escalates) {
+            // 会叫醒她的条目必须随它引起的那次调用交出去;只随自己那次走的条目必须叫得醒她——两样违背一样,
+            // 就会开出一次取不到东西的调用,或者有一类条目永远取不出来。
+            if (wakes ? joins == Joins.NONE : joins == Joins.OWN_CALL) {
+                throw new IllegalStateException("投递档 " + name() + " 的声明自相矛盾");
+            }
+            if (escalates && (wakes || joins != Joins.ANY_CALL)) {
+                throw new IllegalStateException("投递档 " + name() + " 升格后按插话办,本身得是随任何调用走、不叫醒她的档");
+            }
+            this.wakes = wakes;
+            this.joins = joins;
+            this.escalates = escalates;
+        }
+
+        /** 发送方标了急件的条目按插话办(本身不叫醒她、但可以升格的档,如 {@link #NOTICE});别的档标了急件也不改投递。 */
+        public boolean escalates() {
+            return escalates;
+        }
+
+        /** 一条急件实际按哪一档投递:可升格的档是 {@link #STEER},其余就是自己。 */
+        public Delivery whenUrgent() {
+            return escalates ? STEER : this;
+        }
+
+        /**
+         * 本身是不是叫醒她的理由:闲时参与熟度、只有这种条目可能是急件;回合本来要停时,有它就再调一次模型。
+         */
+        public boolean wakes() {
+            return wakes;
+        }
+
+        /** 随哪一次模型调用交给模型。 */
+        public Joins joins() {
+            return joins;
+        }
+
+        /** 控制命令:循环自己执行,不是给模型的文本。 */
+        public boolean control() {
+            return joins == Joins.NONE;
+        }
+    }
+
+    /**
+     * 一种条目的处理方式。
+     *
+     * @param id                 类型 id,落盘时写在条目里
+     * @param toModel            拼进 user 消息的字符串
+     * @param chatPreview        进聊天流的样子;{@code null} = 这类东西不进聊天流
+     * @param clearedByInterrupt 主人按停止时清不清 —— 清的是被取代的<em>指令</em>,
+     *                           不清<em>事实</em>
+     * @param fromOwner          是主人说的话,还是世界发生的事。决定排版:世界的事
+     *                           归进 {@code <events>} 按时间排,主人的话一律垫底 ——
+     *                           模型读到的顺序是"先看清发生了什么,再看主人要什么"
+     * @param delivery           什么时候交给大脑,见 {@link Delivery}
+     * @param alwaysUrgent       {@code true} = 这类恒为急件,发送方怎么标都一样;{@code false} =
+     *                           急不急由发送方在 push 时定。生效规则只在 {@link EventQueue} 一处。
+     *                           急件的意思是"立刻叫醒她",所以只有 {@link Delivery#wakes} 的档能恒急
+     * @throws IllegalArgumentException 声明恒急、投递档却不会叫醒她
+     */
+    public record Type(String id,
+                       Function<String, String> toModel,
+                       Function<String, String> chatPreview,
+                       boolean clearedByInterrupt,
+                       boolean fromOwner,
+                       Delivery delivery,
+                       boolean alwaysUrgent) {
+
+        public Type {
+            if (alwaysUrgent && !delivery.wakes()) {
+                throw new IllegalArgumentException("类型 " + id + " 的投递档 " + delivery + " 不叫醒她,不能恒为急件");
+            }
+        }
+
+        /**
+         * 主人开口:来自主人、本身要她回应、而且随下一次调模型就交出去的条目。目标续跑只在本来要停时接上,
+         * 是她自己接着干;整理与清空是按钮,不是话——两者都不算。解开停牌、语音硬停都认这一处。
+         */
+        public boolean ownerWords() {
+            return fromOwner && delivery.wakes() && delivery.joins() == Delivery.Joins.ANY_CALL;
+        }
+    }
+
+    private static final Map<String, Type> TYPES = new HashMap<>();
+
+    /**
+     * 世界上发生的一种事的那一行:插话投递、原文拼给模型、不进聊天流、打断不清(那是事实)、
+     * 不是主人说的。几种事之间只差"恒不恒急"。
+     *
+     * @param alwaysUrgent {@code true} = 这种事恒为急件;{@code false} = 发送方定
+     */
+    public static Type event(String id, boolean alwaysUrgent) {
+        return new Type(id, s -> s, s -> null, false, false, Delivery.STEER, alwaysUrgent);
+    }
+
+    /**
+     * 控制条目的字:第一行是界面按语言翻的标签(语言键),之后是主人附的参数({@code /compact} 的关注点);
+     * 没有参数就只有标签。条目的字不能为空(队列不收),所以标签总在。
+     */
+    public static String controlText(String label, String arg) {
+        return arg == null || arg.isBlank() ? label : label + "\n" + arg.strip();
+    }
+
+    /** {@link #controlText} 里的标签。 */
+    public static String controlLabel(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? text : text.substring(0, cut);
+    }
+
+    /** {@link #controlText} 里主人附的参数;没有是空串。 */
+    public static String controlArg(String text) {
+        int cut = text.indexOf('\n');
+        return cut < 0 ? "" : text.substring(cut + 1);
+    }
+
+    /**
+     * 这一侧没登记过的类型怎么处理:当作一件世界上发生的事,急不急听条目上的标记。
+     *
+     * <p>类型表是每个 JVM 各一份,条目却会跨过去:服务端的插件登记了、主人客户端没装的类型随包
+     * 送来,或者读回来的旧条目的类型已经不在表里。这类条目都是别处发来的事实,所以按
+     * {@link #event} 的那一行处理——原样交给模型,不因为不认识就消失。
+     */
+    static final Type UNKNOWN = event("?", false);
+
+    static {
+        // chatPreview 只回答"这类进不进聊天流",长什么样归渲染那一层——沙漏是 ChatView 加的。
+        // 主人的话恒为急件:人说话了就该有回应。
+        register(new Type(QUERY, s -> s, s -> s, true, true, Delivery.STEER, true));
+        // 不进模型文本(toModel 回 null),但进聊天流——主人得看见自己按的整理排着。
+        // 控制命令不叫醒她,也就谈不上急:它由循环闲时自己执行,不等熟度。
+        register(new Type(COMPACT, s -> null, s -> s, true, true, Delivery.CONTROL, false));
+        register(new Type(CLEAR, s -> null, s -> s, true, true, Delivery.CONTROL, false));
+        // 续跑是评估器判过"还没做完"之后推的,这一推本身就是要她接着干。
+        register(new Type(GOAL, s -> s, s -> null, true, true, Delivery.FOLLOW_UP, true));
+        // 世界的事:恒急的几种是"她不知道,正在做的事就是错的",与她当时在干什么无关;
+        // 其余由发的那一方按事情本身定(任务按 status、主人挨打按血线)。
+        register(event(TASK_FINISHED, false));
+        register(event(DEATH, true));
+        register(event(RESPAWNED, true));
+        register(event(REMOVED, true));
+        register(event(HUNGRY, true));
+        register(event(INVENTORY_FULL, true));
+        register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        register(event(OWNER_HURT, false));
+        register(event(COMPANION_HURT, true));
+        register(event(TARGETED, true));
+        register(new Type(GONE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        register(event(TIMER, true));
+        register(event(WOKE, true));
+        register(event(DIMENSION_CHANGE, false));
+        // 本能做了事:常态只让她知情(知会),险情由发送方标急件
+        register(new Type(REFLEX, s -> s, s -> null, false, false, Delivery.NOTICE, false));
+        register(event(DROPPED, false));
+        // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
+        register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        register(new Type(LEFT, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        // 服务端对她说的话:同一行,捎带投递,随下一次调模型交出去,自己不开一轮。
+        register(new Type(SERVER_MESSAGE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        // 被切断的程序交出的回执:同一行,捎带投递
+        register(new Type(PROGRAM_STOPPED, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+    }
+
+    private EventTypes() {}
+
+    /**
+     * 登记一种类型(mod init 期调用)。一个 id 只能登记一次:内置的行是 Numen API 语义的一部分(主人的话恒为急件、
+     * 控制命令由循环自己执行),插件拿同一个 id 再登记一行就会悄悄改掉它们,所以直接拒绝。
+     *
+     * @return 撤回这一行的句柄:撤掉后这个 id 又没有主了
+     * @throws IllegalArgumentException id 为空,或者这个 id 已经登记过
+     */
+    public static synchronized Handle register(Type type) {
+        if (type == null || type.id() == null || type.id().isBlank()) {
+            throw new IllegalArgumentException("类型没有 id");
+        }
+        if (TYPES.containsKey(type.id())) {
+            throw new IllegalArgumentException("事件类型 " + type.id() + " 已经登记过,换一个 id");
+        }
+        TYPES.put(type.id(), type);
+        return Handle.once(() -> {
+            synchronized (EventTypes.class) {
+                if (TYPES.get(type.id()) == type) {
+                    TYPES.remove(type.id());
+                }
+            }
+        });
+    }
+
+    /** 查表;没登记过返回 {@link #UNKNOWN}。 */
+    public static synchronized Type get(String id) {
+        Type t = TYPES.get(id);
+        return t == null ? UNKNOWN : t;
+    }
+
+    /** 这一侧登记过这种类型没有。发出一条事件的那一方用它挡住没登记的类型。 */
+    public static synchronized boolean isRegistered(String id) {
+        return TYPES.containsKey(id);
+    }
+}

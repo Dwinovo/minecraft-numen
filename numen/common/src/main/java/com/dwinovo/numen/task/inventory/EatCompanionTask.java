@@ -1,0 +1,142 @@
+package com.dwinovo.numen.task.inventory;
+import com.dwinovo.numen.WorkProfile;
+import com.dwinovo.numen.PlayerInv;
+import com.dwinovo.numen.FailureType;
+
+import com.dwinovo.numen.api.task.TaskState;
+
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.act.Interaction;
+import com.dwinovo.numen.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.task.base.Precondition;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.ItemStack;
+
+import java.util.List;
+
+/**
+ * {@code inv eat} on the player body — a thin wrapper over the native held use. Hold the food and
+ * run {@link Interaction#useInAir} on a {@code hold()} timing: that fires {@code gameMode.useItem},
+ * and the body's own {@code aiStep} (ticked via {@code doTick}) drives the real eat to completion —
+ * chewing animation/particles/sound, hunger + saturation + consume-effects on finish, modded foods,
+ * and any mod events. No hand-rolled chew loop or fake direct heal: the companion is a ServerPlayer
+ * with a live {@code FoodData}, so eating works exactly as it does for a real player (full hunger →
+ * it simply won't eat, which we detect and report).
+ */
+public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRecord, EatCompanionTask.Ate> {
+
+    private Interaction eat;
+    private int beforeCount;
+    private float beforeHp;
+    private int beforeFood;
+    private String doneMessage = "done";
+
+    public EatCompanionTask(NumenPlayer player, EatItemTaskRecord record) {
+        super(player, record);
+    }
+
+    @Override
+    protected List<Precondition> preconditions() {
+        return List.of(() -> refusal(WorkProfile.of(player).hasHunger(), PlayerInv.count(player.getInventory(), r.item),
+                r.item, r.label));
+    }
+
+    /**
+     * 吃之前就办不成的理由,按次序第一条;都不成立为 {@code null}。
+     *
+     * @param hasHunger 她有没有饥饿(创造模式没有)
+     * @param carried   背包里这种东西有几件
+     */
+    static Precondition.Failure refusal(boolean hasHunger, int carried, net.minecraft.world.item.Item item, String label) {
+        // 无饥饿画像(创造)下:吃的动作会执行但食物不扣、饥饿不涨,
+        // 事后一切判定都失真——直接如实拒绝,别让模型收到"already full"的假诊断。
+        if (!hasHunger) {
+            return new Precondition.Failure("creative mode has no hunger — eating is unnecessary; kept the " + label,
+                    FailureType.UNKNOWN);
+        }
+        if (carried <= 0) {
+            return new Precondition.Failure("no " + label + " in inventory to eat", FailureType.NO_MATERIAL);
+        }
+        // Native "is this consumable?" — covers food, potions, milk, and modded consumables alike.
+        if (new ItemStack(item).get(DataComponents.FOOD) == null) {
+            return new Precondition.Failure(label + " can't be eaten or drunk", FailureType.UNKNOWN);
+        }
+        return null;
+    }
+
+    @Override
+    protected void onStart() {
+        beforeCount = PlayerInv.count(player.getInventory(), r.item);
+        beforeHp = player.getHealth();
+        beforeFood = player.getFoodData().getFoodLevel();
+        // Take the food in hand (the precondition guarantees she carries it), then start a native held use with
+        // that hand. The use() call decides whether eating begins (e.g. full hunger on non-always-eat food won't
+        // start) — we read the outcome on completion.
+        player.hotbar().grip(r.item);
+        eat = Interaction.useInAir(player, Interaction.Timing.hold());
+    }
+
+    @Override
+    protected TaskState onTick() {
+        return switch (eat.tick()) {
+            case DONE -> finish();
+            case FAILED -> {
+                fail("couldn't eat " + r.label + ": " + eat.failReason(), FailureType.UNKNOWN);
+                yield TaskState.FAILED;
+            }
+            case RUNNING -> TaskState.RUNNING;
+        };
+    }
+
+    /** The held use finished. If an item was actually consumed, report the hunger/HP it restored;
+     *  otherwise the body declined to eat (typically already full) — say so rather than claim success. */
+    private TaskState finish() {
+        int now = PlayerInv.count(player.getInventory(), r.item);
+        if (now >= beforeCount) {
+            fail("didn't eat " + r.label + " — already full (hunger " + beforeFood + "/20). Kept it.",
+                    FailureType.UNKNOWN);
+            return TaskState.FAILED;
+        }
+        int foodGain = player.getFoodData().getFoodLevel() - beforeFood;
+        float healed = player.getHealth() - beforeHp;
+        doneMessage = "ate " + r.label + " — hunger " + player.getFoodData().getFoodLevel() + "/20"
+                + (foodGain > 0 ? " (+" + foodGain + ")" : "")
+                + (healed > 0.0f ? ", HP " + fmt(player.getHealth()) + " (+" + fmt(healed) + ")" : "");
+        return TaskState.SUCCESS;
+    }
+
+    private static String fmt(float v) {
+        return v == Math.floor(v) ? String.valueOf((int) v) : String.format("%.1f", v);
+    }
+
+    /** Release the held use; no nav / overlay to clear. */
+    @Override
+    protected void cleanup() {
+        if (eat != null) {
+            eat.stop();
+        }
+    }
+
+    /** 吃了什么、吃完血量与饥饿:{@code numen.inv.eat} 交回的值。 */
+    public record Ate(String item, double hp, int hunger) {}
+
+    @Override
+    protected Ate value() {
+        return new Ate(r.label, player.getHealth(), player.getFoodData().getFoodLevel());
+    }
+
+    @Override
+    protected String successMessage() {
+        return doneMessage;
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "couldn't finish eating " + r.label;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "eating " + r.label + " interrupted — no effect";
+    }
+}

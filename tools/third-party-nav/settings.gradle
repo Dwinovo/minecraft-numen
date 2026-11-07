@@ -1,0 +1,10 @@
+// 独立于主构建:不 include 进仓库根的 settings,只从一个 maven 目录拉**已发布的坐标**。
+// 它是"第三方只依赖 Numen API,能不能写出一套自己的寻路"的验收,CI 里在 publishAll 之后编译它(见 .github/workflows/build.yml)。
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'third-party-nav'

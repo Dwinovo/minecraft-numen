@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.curios;
 
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.world.item.ItemStack;
 import top.theillusivec4.curios.api.CuriosApi;

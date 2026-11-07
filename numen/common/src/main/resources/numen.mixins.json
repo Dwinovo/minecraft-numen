@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.mixin.inject",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "FishingHookAccessor",
+    "BlockItemAccessor",
+    "ItemEntityAccessor",
+    "CraftingMenuAccessor",
+    "MenuDataSlotsAccessor",
+    "ServerLevelBlockChangeMixin",
+    "ServerPlayerGameModeDropsMixin",
+    "ServerLevelDropsMixin",
+    "ItemEntityDropsMixin",
+    "LivingEntityTakeMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
