@@ -52,6 +52,8 @@ public final class Kinematics {
     public static final int JUMP_DELAY = 10;
     /** 速度小于它原版就归零。 */
     public static final double REST = 0.003;
+    /** 玩家的水平速度,平方小于它原版就把水平两个分量一起归零({@code LivingEntity.aiStep};即水平速度小于 {@link #REST})。 */
+    private static final double HORIZONTAL_REST_SQR = 9.0E-6;
 
     private Kinematics() {}
 
@@ -288,8 +290,8 @@ public final class Kinematics {
     }
 
     /**
-     * 创造飞行走一刻(原版:{@code LocalPlayer.aiStep} 先往竖直速度里加按键的 ±3 × 飞行速度,{@code LivingEntity.aiStep} 把小于 {@link #REST} 的速度分量归零,
-     * {@code Player.travel} 的飞行分支再走一遍
+     * 创造飞行走一刻(原版:{@code LocalPlayer.aiStep} 先往竖直速度里加按键的 ±3 × 飞行速度,
+     * {@code LivingEntity.aiStep} 把太小的速度归零(见 {@link #settle}),{@code Player.travel} 的飞行分支再走一遍
      * 空中的 {@code LivingEntity.travel}——水平先把输入加速度加进速度、按这个速度挪,再乘 {@code 0.91F};竖直挪的是加过按键的速度,
      * 之后速度只剩六成)。不含碰撞。
      *
@@ -358,9 +360,13 @@ public final class Kinematics {
                 look.z * 0.1 + (look.z * 1.5 - velocity.z) * 0.5);
     }
 
-    /** 原版每刻开头把小于 {@link #REST} 的速度分量归零({@code LivingEntity.aiStep})。 */
+    /**
+     * 原版每刻开头把太小的速度归零({@code LivingEntity.aiStep}):玩家的水平速度按整体看,平方小于 {@link #HORIZONTAL_REST_SQR}
+     * 两个分量一起归零(各自小于 {@link #REST} 而合起来不小的,照样留着);竖直分量小于 {@link #REST} 归零。
+     */
     private static Vec3 settle(Vec3 v) {
-        return new Vec3(Math.abs(v.x) < REST ? 0.0 : v.x, Math.abs(v.y) < REST ? 0.0 : v.y, Math.abs(v.z) < REST ? 0.0 : v.z);
+        boolean still = v.horizontalDistanceSqr() < HORIZONTAL_REST_SQR;
+        return new Vec3(still ? 0.0 : v.x, Math.abs(v.y) < REST ? 0.0 : v.y, still ? 0.0 : v.z);
     }
 
     /** 把前后左右的输入按飞行速度与偏航转成世界里的加速度({@code Entity.getInputVector}):输入向量长过 1 的先归一。 */
