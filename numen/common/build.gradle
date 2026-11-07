@@ -80,14 +80,18 @@ sourceSets {
 }
 
 repositories {
-    // MCProtocolLib 不发到 Maven Central。这里用 1.21.4 线上最后一个构建(固定到时间戳,不随快照漂移)
+    // MCProtocolLib 不发到 Maven Central。这里用 1.21.5 线上的正式构建
     maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
     // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
     maven { url = 'https://repo.opencollab.dev/maven-releases' }
 }
 
 dependencies {
-    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21.4-20250612.174129-27'
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21.5-1'
+    // 它带的 Adventure 是 4.17,不认 1.21.5 的组件形状(click_event、run_command 的 command):点击事件被当未知字段丢掉,
+    // 可点的消息读成不可点的。Adventure 4.21 起两种形状都认,读组件的这两个库提到这一版。
+    e2eImplementation 'net.kyori:adventure-text-serializer-gson:4.21.0'
+    e2eImplementation 'net.kyori:adventure-text-serializer-json-legacy-impl:4.21.0'
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'

@@ -205,12 +205,15 @@ final class Bot implements AutoCloseable {
 
     // ---- 玩家做的事 ----
 
+    /** 已读消息表的校验值:这个客户端不确认任何签名消息,原版客户端对空的已读表算出来的就是 1。 */
+    private static final byte NOTHING_SEEN = 1;
+
     /** 敲一条指令(不带斜杠,和聊天栏里输入 {@code /…} 发出去的一样)。 */
     void command(String command) {
         String verb = command.split(" ", 2)[0];
         if (SIGNED_COMMANDS.contains(verb)) {
             session.send(new ServerboundChatCommandSignedPacket(command, System.currentTimeMillis(), 0L, List.of(),
-                    0, new BitSet(20)));
+                    0, new BitSet(20), NOTHING_SEEN));
         } else {
             session.send(new ServerboundChatCommandPacket(command));
         }
@@ -218,7 +221,7 @@ final class Bot implements AutoCloseable {
 
     /** 在聊天栏打一句话发出去。 */
     void say(String message) {
-        session.send(new ServerboundChatPacket(message, System.currentTimeMillis(), 0L, null, 0, new BitSet(20)));
+        session.send(new ServerboundChatPacket(message, System.currentTimeMillis(), 0L, null, 0, new BitSet(20), NOTHING_SEEN));
     }
 
     /** 点聊天里的按钮:原版客户端对 {@code run_command} 的点击,就是把那条命令当成自己敲的发出去。 */
