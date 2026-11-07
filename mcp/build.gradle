@@ -73,13 +73,16 @@ test {
  *   content-type、lang-tag、json-smart、accessors-smart、jcip-annotations。同一段版本里游戏也自带这一族(oauth2-oidc-sdk 11.18、
  *   nimbus-jose-jwt 9.40、json-smart 2.5.1,客户端钉死),比我们要的旧。
  * (逐版核对过 1.20.1 到 26.3 的客户端 json 与服务端 libraries.list、NeoForge/Forge/Fabric 加载器的库,撞的只有这两族。)
+ * - YAML 数据格式用的 snakeyaml-engine:别的模组也常嵌套带它,两份同名包在模组层里是两个模块导出同一个包;它的清单还写着
+ *   Multi-Release 却没有多版本目录,Forge 47 到 49 读这种 jar 直接起不来。
  *
- * 所以这两族连同用到 Jackson 的 SDK 与 JSON Schema 校验打成一份 jar(下面的 relocatedSdk),tools.jackson、com.fasterxml.jackson.annotation、
- * com.nimbusds、net.minidev、net.jcip 重定位到 com.dwinovo.numen.mcp.shaded 下,jar 里对它们的引用一起改写。编译与运行都用这一份
+ * 所以这几样连同用到 Jackson 的 SDK 与 JSON Schema 校验打成一份 jar(下面的 relocatedSdk),tools.jackson、com.fasterxml.jackson.annotation、
+ * com.nimbusds、net.minidev、net.jcip、org.snakeyaml.engine 重定位到 com.dwinovo.numen.mcp.shaded 下,jar 里对它们的引用一起改写,
+ * 合成的 jar 用自己的清单。编译与运行都用这一份
  * (下面的 api files),两个加载器把它的类平铺进 Numen API 的发行 jar(见 numen-api-loader.gradle)。
  * 本模块自己的 OAuth 代码直接 import 重定位后的 Nimbus 包名:被重写的只有那份 jar 一处,本模块的类、加载器的开发期运行、
  * 发行 jar 的平铺都不用再过一遍重写。
- * 剩下的依赖(Reactor、时间格式、snakeyaml-engine)和谁都不撞,照常按坐标传递,由各平台嵌套或平铺(Modules.nestedLibraries)。
+ * 剩下的依赖(Reactor、时间格式)和谁都不撞,照常按坐标传递,由各平台嵌套或平铺(Modules.nestedLibraries)。
  * slf4j 由游戏(Minecraft 钉死在 2.0.9)提供:SDK 子树里声明的更新版本不带进来,免得和游戏钉的版本打架;
  * asm(json-smart 的传递依赖)也是游戏自带的,带进来会和加载器的 asm 在模块层里撞名。
  */
@@ -93,10 +96,10 @@ dependencies {
     relocatedLibraries("io.modelcontextprotocol.sdk:mcp:${mcp_sdk_version}") { exclude group: 'org.slf4j' }
     relocatedLibraries("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j'; exclude group: 'org.ow2.asm' }
 }
-// 进重定位那份 jar 的模块:SDK 自己、引用 Jackson 的、Nimbus 一族
+// 进重定位那份 jar 的模块:SDK 自己、引用 Jackson 的、Nimbus 一族、snakeyaml-engine
 def relocatedModule = { String group ->
     group in ['io.modelcontextprotocol.sdk', 'tools.jackson.core', 'tools.jackson.dataformat', 'com.fasterxml.jackson.core', 'com.networknt',
-              'com.nimbusds', 'net.minidev', 'com.github.stephenc.jcip']
+              'com.nimbusds', 'net.minidev', 'com.github.stephenc.jcip', 'org.snakeyaml']
 }
 def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
     archiveClassifier = 'sdk'
@@ -104,7 +107,7 @@ def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
     dependencies {
         exclude { !relocatedModule(it.moduleGroup) }
     }
-    ['tools.jackson', 'com.fasterxml.jackson.annotation', 'com.nimbusds', 'net.minidev', 'net.jcip'].each { pkg ->
+    ['tools.jackson', 'com.fasterxml.jackson.annotation', 'com.nimbusds', 'net.minidev', 'net.jcip', 'org.snakeyaml.engine'].each { pkg ->
         relocate pkg, "com.dwinovo.numen.mcp.shaded.${pkg}"
     }
     // 好几个库带着同名的服务文件(jackson-core 与 YAML 数据格式都登记 TokenStreamFactory,jackson-databind 与 YAML 都登记 ObjectMapper):
@@ -115,6 +118,9 @@ def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
     // 多版本 jar,那些类永远不会被加载,而 NeoForge 21.0 扫模组文件时读不了比 Java 21 新的类文件,每次起服报错
     exclude 'module-info.class', 'META-INF/versions/**', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA',
             'META-INF/maven/**'
+    // 多版本目录都去掉了,清单也就不声明 Multi-Release(ShadowJar 默认见到多版本的输入就加上;Forge 47 到 49 读声明了却没有
+    // 多版本目录的 jar 直接起不来)
+    addMultiReleaseAttribute = false
 }
 dependencies {
     api files(relocatedSdk)
