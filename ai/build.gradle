@@ -45,10 +45,10 @@ repositories {
 }
 
 dependencies {
-    // 与 MC 26.1.2 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
-    // 2.13.2 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
+    // 与 MC 26.2 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    // 2.14.0 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
     // 两份同名模块进了模块层就起不来,所以不传递
-    api('com.google.code.gson:gson:2.13.2') { exclude group: 'com.google.errorprone' }
+    api('com.google.code.gson:gson:2.14.0') { exclude group: 'com.google.errorprone' }
     api 'org.slf4j:slf4j-api:2.0.17'
     // 落盘的基础件(日志、小文档):会话日志与目录缓存只保留各自的记录格式。api 配置让 agent 与 Numen API 透视得到。
     api project(':store')

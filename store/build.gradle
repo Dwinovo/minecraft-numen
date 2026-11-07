@@ -46,10 +46,10 @@ repositories {
 }
 
 dependencies {
-    // 与 MC 26.1.2 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
-    // 2.13.2 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
+    // 与 MC 26.2 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    // 2.14.0 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
     // 两份同名模块进了模块层就起不来,所以不传递
-    api('com.google.code.gson:gson:2.13.2') { exclude group: 'com.google.errorprone' }
+    api('com.google.code.gson:gson:2.14.0') { exclude group: 'com.google.errorprone' }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
