@@ -216,6 +216,43 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
 
 **插件**:1.21.4 NeoForge 上只有 Curios(Maven `10.0.x+1.21.4`)。车万女仆、YSM、森罗物语在 Modrinth 上只有 1.21/1.21.1 版;FTB Quests 的 maven 里只有 2004/2100/2101/2111/26.1.2 五档(没有 1.21.4)。故 `plugins/` 只留 curios,Builtin 只列它,Fabric 侧没有联动(Curios 只有 NeoForge 版),不建 `core/fabric` 的 Builtin。
 
+### 1.21.4 三次对齐(0.1.4.1 → 1.21.1@19c8710b0 + 对齐期通用修复)
+
+整树换成 1.21.1(目录已是 `numen-api/`、`numen/`、`numen/pathing`,另有 `mcp`、`permission`、`script`、`store`、Paper 端),再逐处重放。上面两节已记的不再重复,只记这一轮新碰到的与做法变了的。
+
+**构建**
+- paperweight-userdev 1.7.2 认不得 1.21.4 的开发包(新格式,`paperweightDevelopmentBundle` 解析出多个文件就报错),换 `2.0.0-beta.22`(最后一个只要 Gradle 插件 API 9.0 的;beta.24 要 9.7)。`reobfArtifactConfiguration`、`paperDevBundle` 写法不变。
+- slf4j 声明跟游戏走到 2.0.16;Gson 仍编译对着 2.10.1:游戏带的是 2.11.0(向后兼容),而 2.11.0 的 POM 依赖 `error_prone_annotations`,它进了开发期运行的类路径以后和游戏那份在模块层撞名(`Module org.reactivestreams reads more than one module named com.google.errorprone.annotations`),NeoForge 的 runData 与 GameTest 服务器起不来。
+- `@EventBusSubscriber` 在 FML 6 不按事件类型挑总线,`GatherDataEvent.Client` 的订阅要写明 `bus = MOD`(否则 "IModBusEvent events are not allowed on the common NeoForge bus")。
+- Litematica/MaLiLib 的 masa maven 坐标按 MC 版本分(`litematica-fabric-1.21.4`),build.gradle 里的坐标后缀改用 `${minecraft_version}`。
+
+**注册表、高度、方向**:同上两节(`getValue`、`lookupOrThrow`、`getOrThrow`;`getMinY`/`getMaxY`,要"不含端"的写成 `getMaxY() + 1`,比较直接改 `<= getMaxY()`;`getApproximateNearest`、`getNearest(..., NORTH)`)。新增:`Registry.getTag(TagKey)` → `get(TagKey)`;`registry.get(id)` 返回 `Optional<Holder.Reference>`,要值用 `getValue`;`Structure.generate` 首参要 `Holder<Structure>` 与维度键;`RegistryDataLoader.load` 吃 `List<RegistryLookup<?>>`(`fromRegistryOfRegistries(...).listRegistries().toList()`);`DirectionProperty` 没了,朝向属性是取值为 `Direction` 的 `EnumProperty`。
+
+**配方(配方书 RecipeBook、CraftOps、RecipeProbe 按 Recipe 接口泛读)**
+- 产物没有 `getResultItem` 了,改读配方的展示:`recipe.display()` 里产出那格 `result().resolveForFirstStack(ContextMap{REGISTRIES})`,原版配方书也读它,模组配方同样走这条;不用空输入 `assemble`(那是出合同的问法)。
+- 配料表一律 `placementInfo().ingredients()`;摆不进格(`isImpossibleToPlace`)的合成配方当产出依赖输入的那种跳过;锻造三个槽是 `Optional<Ingredient>`,认不认一样东西用 `Ingredient.testOptionalIngredient`;切石机界面列的是可选项(`getVisibleRecipes().entries()`),每项的产物读 `optionDisplay()`。
+- 服务端按类型取配方没有公开口:`recipeAccess().getRecipes()` 全表走一遍,用 `RecipeBook.isCrafting` 筛。
+
+**玩家与服务端**
+- ❗ `hasClientLoaded`:假时服务端不收动作包与玩家指令(展开鞘翅、起床、开坐骑物品栏都走玩家指令),玩家也不受伤(`kill` 无效)。FakeClient 收到 `LEVEL_CHUNKS_LOAD_START` 记下;加入与重生两条原版流程一走完就报"加载好了"(`arrived`、`respawn`,重生时要等连接换上新身体再报,当场报会落在旧身体上),换维度这类中途发来的照传送编号晚一刻回。她一到就能动手、也能挨打,和 1.21.1 一样。寻路的 GameTest 夹具 `TestBody` 不经 `placeNewPlayer`,建连接后当场报。
+- 中键取物没有"指名背包第几格"的包了(1.21.2 起中键包只说对着哪个方块或实体,服务端自己找格)。`ClientPackets.pickItem` 照原版找到格以后的三步写:选中合适的快捷栏格并对换、发 `ClientboundSetHeldSlotPacket`、`inventoryMenu.broadcastChanges()`;创造模式凭空取一叠是 `pickNew`(原版 `addAndPickItem` 那几行)。两处都不调 `Inventory.pickSlot`/`addAndPickItem`:Paper 给它们加了目标格参数,签名两边不同。
+- `ServerPlayer.getPermissionLevel` 变 public;`shouldInformAdmins` 不再对外,她自己的指令来源问 `commandSource().shouldInformAdmins()`;`MinecraftServer.tell` → `schedule`;`Level.getGameRules` 只在 `ServerLevel` 上;`Item.getDescription` → `getName`;`ItemCooldowns.isOnCooldown(ItemStack)`;`LocalPlayer.sendSystemMessage` → `displayClientMessage(c, false)`。
+- 鞘翅"没坏"是 `!stack.nextDamageWillBreak()`(`ElytraItem` 没了);展开、寻路的滑翔物判断、`numen.use.glide` 的拒绝原因三处同此。
+- 右键后挥不挥手照原版服务端:`result instanceof Success s && s.swingSource() == SERVER`(Mouse 里一处小方法)。
+- 用例里:`EntityType.X.create(level, EntitySpawnReason.STRUCTURE)`(照原版 `GameTestHelper.spawn`)、木船 `EntityType.OAK_BOAT` + `moveTo`、`kill(level)`、`doHurtTarget(level, target)`、`teleportTo(level, x, y, z, Set.of(), yaw, pitch, true)`、`TeleportTransition`/`teleport`、`ClientInformation` 多一个 `particleStatus`。
+
+**NeoForge**:服务端重载监听 `AddReloadListenerEvent` → `AddServerReloadListenersEvent.addListener(键, 监听)`。
+
+**客户端**:同上两节(`GuiAlpha`、`blitSprite(RenderType::guiTextured, …)`、`Sprites` 着色走顶点色、`ToastManager`、`MixinLivingEntityRenderer`、`ClientInput.keyPresses`、`ShapeRenderer.renderLineBox`)。新增:`PlayerFaceRenderer.draw` 的 ResourceLocation 版补 `(hat=true, upsideDown=false, tint=-1)`。
+
+**Paper(本轮新带)**:`Entity.getBukkitSender` 没了,指令来源有实体时取 `getBukkitEntity()`(本身就是 CommandSender);`DiscardedPayload` 装 `byte[]`;`CraftScheduler.mainThreadHeartbeat()` 无参;CraftingMenu 重算结果的反射签名里关卡参数是 `ServerLevel`。
+
+**JEI 20(1.21.4)**:类别的类型是 `IRecipeType`(`RecipeType` 标了待删);配方的工作台查 `createCraftingStationLookup`(`createRecipeCatalystLookup` 待删)。
+
+**GameTest 坐标**:1.21.2 起 `GameTestHelper.absolutePos` 从内容原点起算(1.21.1 从内容下面那一格的结构方块起算),场地本身的摆法(内容从网格点起、结构方块在它下面一格、`clearSpaceForStructure` 在内容底下一格以下填石头)没变。上两节的做法是给模板垫一层(复刻原 y0 层),坐标对上了,场地却多了一层实心:地板变两层、地板下面的空格没了。这一轮实测两种垫法都和 1.21.1 不等价——复刻垫层让 `a_walk_refused_at_the_owners_wall_stops_there` 里她踩着多出来的实心从墙底下爬过去、又问了一遍地板;垫空层则让地板下面空出两格(1.21.1 是一格空、再往下是石头),`interact_own_vehicle_ends_immediately` 的水漏下去、`look_around_draws_walls_steps_and_water` 的图变了。所以模板一律不动,改由 GameTest 夹具的 `GameTestHelperOriginMixin` 把 `GameTestHelper` 换算坐标的四处(`absolutePos`、`relativePos`、`absoluteVec`、`relativeVec`)起点换回结构方块,场地与坐标都与 1.21.1 一模一样。Paper 上没有 Mixin,Paper 的 GameTest 在这一版上坐标差一格(见遗留)。
+
+**插件**:Curios(NeoForge,`10.0.1+1.21.4`)、Litematica(Fabric `0.21.7`/MaLiLib `0.23.5`;NeoForge 上是 Forgematica)、JEI(`20.0.0.4`,只有 NeoForge 构建,所以只接 NeoForge,Fabric 的 Builtin 与依赖去掉)。车万女仆、YSM、森罗物语没有 1.21.4 版;FTB Quests 的 maven 没有 2104;KubeJS 的 maven 从 2101 直接到 26.1:都不带。
+
 ---
 
 ## 1.21.4 → 1.21.5 ✓（已验证，双 loader 编译 + 出包通过）
@@ -468,6 +505,38 @@ controlBoat/dataSlots/allMessages+refreshTrimmedMessages/nibble)目标逐一对�
 **插件**:1.21.5 NeoForge 上只有 Curios(`11.0.1+1.21.5`,`gradle.properties` 的 `curios_version`)。车万女仆、YSM、森罗物语只有 1.21/1.21.1 版,FTB Quests 的 maven 没有 1.21.5 档(同 1.21.4 一节查的那几份清单),故 `plugins/` 只留 curios,Fabric 侧没有联动。
 
 **真机要看的**(无头测不到):`GuiAlpha` 淡入淡出与 `Sprites` 着色、`MixinLivingEntityRenderer` 的气泡、`ToastComponentAccessor`、聊天里的链接点击(`ClickEvent.OpenUrl`)、`FakeClient` 的 `hasClientLoaded` 握手(真连接上)。
+
+### 1.21.5 三次对齐(align-1.21.4 三次对齐 → 1.21.5)
+
+底是 1.21.4 三次对齐的整树(1.21.1@b131af74e 加对齐期通用修复),上面各节的 1.21.5 差异按新树重放一遍。上面已记的不重复(`SavedDataType`、`CompoundTag` 的 Optional 读法、背包私有化、`snapTo`、`updatePOIOnBlockStateChange`、`isBrightOutside`、宠物主人 `EntityReference`、点击事件的 JSON 形状、`ConfigSync` 要求 mock 连接报内存连接、批次环境补回随机刻与火刻),只记这一轮新碰到的与做法变了的。
+
+**构建**:NeoForge `21.5.97`(FML 7)、Fabric API `0.119.6+1.21.5`、NeoForm `1.21.5-20250325.162830`、Paper 开发包 `1.21.5-R0.1-SNAPSHOT`(paperweight 仍是 `2.0.0-beta.22`)。端到端的协议客户端换 MCProtocolLib `1.21.5-1`(这一版线上的正式构建)。FML 7 的 `@EventBusSubscriber(bus = …)` 标了待删,按事件类型挑总线,两个 `DataGenerators` 不再写 `bus`。
+- paperweight 2 的开发包服务端在编译类路径上叫 `mappedServerJar.jar`(1.x 是 `paper-server-*.jar`),Paper 的链接检查按这个名字认;这个 jar 里连着 Paper 的源码,javadoc 不给 `-sourcepath` 就顺着类路径去解析它们,而 Paper 的源码有 javac 21 解析不了的写法(记录模式里写 `final`),Paper 两个子项目的 javadoc 只给自己的源码目录。1.21.4 用的也是 paperweight 2,同样要这两处。
+
+**存档**:这一树的 `SavedData` 是 `CompanionRegistry`、`PlacedBlocks`、`PermissionStore`、`TimerRegistry` 与寻路的 `NavClock`(不落盘,编解码器是 `Codec.unit`)。`PermissionStore` 读档时要先把旧名字的规则行改写成新名字(`RuleMigration`),改过的那份标脏好重新落盘:这一步挪进交给 `SavedDataType` 的编解码器里(`STORED`:编码同 `CODEC`,解码先改写再交 `CODEC`)。单测对着包内可见的编解码器往返;"读不懂退回空的"由原版存储层兜(`resultOrPartial` 记错误,`computeIfAbsent` 落回构造器),单测判据改成解码报错。`NumenPlayer` 的主人 UUID 用 `store/read(键, UUIDUtil.CODEC)`,和 `putUUID` 写的是同一种整数数组。
+
+**玩家与实体**
+- ❗ 载具权威:服务端问"由不由客户端说了算"是 `isClientAuthoritative()`(`isLocalInstanceAuthoritative` 在服务端就是它取反),玩家一律答是;`isLocalPlayer()` 在 1.21.5 的服务端已经没人读。`NumenPlayer` 改为覆写 `isClientAuthoritative()` 返回 false(原版 GameTest 的模拟玩家同此),原来的 `isLocalPlayer` 覆写去掉。她驾驶的船与马、她自己的落地与摔伤结算都在服务端跑。
+- ❗ 每刻开头的小速度归零:玩家的水平速度按整体看(`horizontalDistanceSqr() < 9.0E-6` 两个分量一起归零),不再逐分量比 0.003;竖直照旧。寻路的 `Kinematics.settle`(创造飞行与滑翔的逐刻步进)跟着改,否则 `gliding_follows_the_stepper_tick_by_tick` 在侧向残速刚小于 0.003 的那一刻对不上。
+- `getRespawnPosition` → `getRespawnConfig`(重生事件判有没有重生点);`VillagerData.level()`;`Bees` 是记录,蜂数读 `bees().size()`;锻造的基底槽是必有的 `Ingredient`(模板、附加槽仍是 Optional),配方的产物是 `TransmuteResult`;`EntityCollisionContext` 构造多一个 `placement` 布尔(寻路问的是走动,给 false)。
+- `Inventory` 的构造要一份 `EntityEquipment`(单测里 `new Inventory(null, new EntityEquipment())`)。
+
+**客户端**:`ClickEvent`/`HoverEvent` 是接口,用 `CopyToClipboard`、`RunCommand`、`ShowText`、`OpenUrl(URI)`;聊天面板点链接先过原版对不可信网址的校验(`Util.parseAndValidateUntrustedUri`,只认 http/https),过不了的和原版一样记一条错误、不打开。`DynamicTexture` 带调试名(皮肤预览用它的资源名)。`ClientInput` 的移动意图是受保护的 `moveVector`:转盘算出(左右、前后各 ±1/0 再 `normalized()`),`MixinKeyboardInput` 写回。
+
+**GameTest 登记层**:和 1.21.8 用同一套(都是 1.21.5 起的数据驱动框架),放在 numen-api 的 GameTest 夹具里,不另起模块。用例照旧挂注解,注解换成夹具自己的 `com.dwinovo.numen.api.gametest.GameTest`、`BeforeBatch`、`AfterBatch`、`GameTestGenerator`,读成 `TestFunction`;原版从数据包读完测试环境、测试实例两个注册表还没冻结时(`GameTestRegistrationMixin` 挂在 `RegistryDataLoader.loadContentsFromManager` 尾),`GameTestRegistration` 每批登记一个 `NumenTestEnvironment`、每条用例一个 `NumenTestInstance`(直接持有用例体;原版的 `FunctionGameTestInstance` 按冻结了的 `TEST_FUNCTION` 注册表取,模组轮不上)。加载器只登记这两个类型(NeoForge 的 `RegisterEvent`、Fabric 的 `Registry.register`)。另几处:
+- 测试环境的 `setup` 先定原版测试服原来自带的世界规则(不刷怪、不换天气、随机刻 0、火不蔓延、晴天),再跑这一批的批前方法;`teardown` 跑批后方法。
+- 原版按测试环境分批用的散列表以环境对象身份为键,每次开服批次先后不同:`GameTestBatchOrderMixin` 改成按登记先后。`GameTestSelectionMixin` 只跑我们登记的(原版数据包自带的 `minecraft:always_pass` 不跑、不计数)。
+- 场地:摆结构前照 1.21.5 以前清地(`StructureSiteClearMixin`:内容最低一层下面一层空气、再往下石头);围栏只围四面和顶、不在内容底下铺屏障(`StructureBoundaryMixin`);强制加载区块后就地生成周围两圈的钩子改挂 `TestInstanceBlockEntity.forceLoadChunks`。相对坐标的基准是内容原点的正下方(`GameTestHelperOriginMixin` 换成 `getTestOrigin().below()`;1.21.4 那一版换的是结构方块,1.21.5 没有结构方块了),模板不动。
+- 断言消息要 `Component`、`GameTestAssertException` 要刻数:用例与夹具一律经 `Checks`(`assertTrue/assertFalse/fail(helper, 文字)`、没有 helper 处抛 `Checks.failure(文字)`)。
+- 原版的用例计时器从不启动(`GameTestInfo.getRunTime` 总是 0):`[numen-gametest-ticks]` 那一行的墙钟毫秒由 `TestTicks` 在用例开始时自己记。
+- 寻路夹具 `TestBody` 建连接时 `SERVERBOUND_TEMPLATE.bind(decorator, listener)`(1.21.5 起绑协议要带上下文)。
+
+**端到端**:聊天与签名指令包多一个"已读消息表"的校验字节;协议客户端不确认任何签名消息,照原版客户端对空表算出的值发 1。MCProtocolLib 的 1.21.5 构建(正式版与快照)带的还是 Adventure 4.17,读不懂 1.21.5 的组件形状,点击事件被当未知字段丢掉(征询消息读成不可点):e2e 里把 `adventure-text-serializer-gson`、`adventure-text-serializer-json-legacy-impl` 提到 4.21.0(两种形状都认)。
+
+**MixinExtras**:专用服实测 NeoForge 21.5.97 自带 0.5.3,Fabric loader 0.18.1 自带 0.5.0,`@WrapMethod`(要 ≥ 0.4)两边都有,不内嵌。
+
+**插件**:Curios(NeoForge,`11.0.1+1.21.5`)、Litematica(Fabric `0.22.5`/MaLiLib `0.24.3`;NeoForge 上是 Forgematica)、JEI(`21.4.0.27`,只有 NeoForge 构建,只接 NeoForge)。Litematica 0.22 的文件参数与返回值都换成 `Path`(`Preview`、`Projections`)。车万女仆、YSM、森罗物语、FTB Quests、KubeJS 没有 1.21.5 的构建,都不带。
+
 
 ---
 
