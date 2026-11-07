@@ -107,6 +107,9 @@ def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
     ['tools.jackson', 'com.fasterxml.jackson.annotation', 'com.nimbusds', 'net.minidev', 'net.jcip'].each { pkg ->
         relocate pkg, "com.dwinovo.numen.mcp.shaded.${pkg}"
     }
+    // 好几个库带着同名的服务文件(jackson-core 与 YAML 数据格式都登记 TokenStreamFactory,jackson-databind 与 YAML 都登记 ObjectMapper):
+    // 合并要看到每一份,不能在合并之前按重名去掉(ShadowJar 默认的重名策略是丢弃后来的)
+    filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
     mergeServiceFiles()
     // 各库自己的模块描述符、清单与签名不进来:合成的这份不是它们中的任何一个。多版本目录也不进来:平铺进的发行 jar 不是
     // 多版本 jar,那些类永远不会被加载,而 NeoForge 21.0 扫模组文件时读不了比 Java 21 新的类文件,每次起服报错
