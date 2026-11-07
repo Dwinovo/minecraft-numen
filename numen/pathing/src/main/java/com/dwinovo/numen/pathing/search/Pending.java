@@ -23,8 +23,9 @@ public final class Pending<T> {
         this.dequeue = dequeue;
     }
 
-    /** 跑完了就交出结论,没跑完为 null。搜索里抛出的错原样抛给发起方。 */
+    /** 跑完了就交出结论,没跑完为 null。搜索里抛出的错原样抛给发起方。没跑完时先经 {@link Searches#onUnfinishedPoll} 那一处。 */
     public T poll() {
+        Searches.beforePoll(future);
         return future.isDone() ? future.join() : null;
     }
 

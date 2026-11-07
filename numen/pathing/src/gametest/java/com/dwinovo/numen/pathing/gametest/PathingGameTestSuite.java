@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.api.gametest.GameTestSuite;
 import com.dwinovo.numen.api.gametest.GameTestSuites;
 import java.util.List;
@@ -17,6 +18,11 @@ public class PathingGameTestSuite implements GameTestSuite {
         public Pace pace() {
             return Pace.SLOW;
         }
+    }
+
+    /** 一刻当中问到没跑完的搜索时等它回来,与同伴套件同一处({@link com.dwinovo.numen.pathing.search.Searches#onUnfinishedPoll})。 */
+    public PathingGameTestSuite() {
+        com.dwinovo.numen.pathing.search.Searches.onUnfinishedPoll(BackgroundSettle::await);
     }
 
     @Override

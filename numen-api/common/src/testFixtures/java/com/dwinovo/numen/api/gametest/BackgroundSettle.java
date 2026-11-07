@@ -6,8 +6,12 @@ import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
@@ -20,6 +24,7 @@ import java.util.function.Supplier;
  * <p>等两处:每刻开头({@link CompanionTickDispatcher#beforeTick},三个平台的测试服务器都走那一处),和每刻收尾、服务端执行别的线程
  * 排给它的任务之前({@link #afterTick}:模组加载器经 {@code GameTestServerTickMixin},Paper 经测试插件的刻尾事件)。这一刻里起的
  * 后台活,做完之后排给主线程的回调(签好的皮肤、MCP 请求要主线程做的那一步)就总在这一刻的收尾执行,不看后台线程赶没赶上。
+ * 主线程自己在一刻当中去取结论的(寻路的搜索),取的那一下等它做完({@link #await})。
  *
  * <p>等的时候主线程照常执行排给它的任务:后台那一头可能正等着主线程替它做一步(MCP 的请求列工具、读背包),不执行就互相等死。
  *
@@ -45,6 +50,28 @@ public final class BackgroundSettle {
     /** 每刻收尾、服务端执行排给它的任务之前调:等这一刻里起的后台活做完。 */
     public static void afterTick(MinecraftServer server) {
         settle(server);
+    }
+
+    /**
+     * 主线程在一刻当中问到一件还没做完的后台活:等它做完再往下,上限同样是 {@link #LIMIT_SECONDS}。每刻开头与收尾的等待管刻与刻之间,
+     * 这件活要是在这一刻里起的、又在这一刻里被问到,问到时做没做完本来看后台线程赶没赶上;等它做完,结论就总落在问的这一刻。
+     *
+     * <p>不执行排给主线程的任务:这样等的活(寻路的搜索)不靠主线程,而在一刻当中执行它们,会把它们挪到一个看线程快慢的位置上。
+     * 活自己抛出的错不在这里报,问的一方取结论时原样拿到。
+     */
+    public static void await(Future<?> work) {
+        try {
+            work.get(LIMIT_SECONDS, TimeUnit.SECONDS);
+        } catch (ExecutionException | CancellationException e) {
+            // 做完了,只是失败或被叫停:结论交给问的一方去取
+        } catch (TimeoutException e) {
+            String why = "background work asked for on the main thread did not finish within " + LIMIT_SECONDS + " s: " + work;
+            LOG.error("[numen-gametest] {}", why);
+            throw new IllegalStateException(why);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while the main thread waited for background work", e);
+        }
     }
 
     /**
