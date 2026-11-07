@@ -1,0 +1,221 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-common'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    neoFormVersion = neo_form_version
+    // Automatically enable AccessTransformers if the file exists
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+}
+
+// 要读 Numen API 的 apiJar 任务,它得先配置好
+evaluationDependsOn(':numen-api:common')
+evaluationDependsOn(':numen:pathing')
+
+dependencies {
+    // Numen 是 Numen API 的第一个插件,和别的插件走同一扇门:编译期只看得见瘦 api jar 里公开的那部分,
+    // 由编译器把关;完整的类运行时由 Numen API 这个模组提供,不随 Numen 发。ai / agent / permission / ui 是插件经 POM 传递依赖拿到的模块。
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    Modules.PLUGIN_VISIBLE.each { compileOnly project(it) }
+    // 寻路模块(只依赖原版):Numen 的内容,发行 jar 里平铺进 Numen 的加载器 jar,见 numen-loader.gradle
+    compileOnly project(':numen:pathing')
+    // 单元测试可以看完整的 Numen API(夹具要登记处、排程机器),编译与运行类路径补上同一模块。
+    testImplementation project(':numen-api:common')
+    testImplementation project(':numen:pathing')
+    // 目标族的终点格核对表要原版世界夹具:TestWorld 与寻路模块的单测共用同一份,原版引导 Vanilla 在寻路模块的 fixtures 源码集里(单测与规划评测共用)
+    testImplementation project(':numen:pathing').sourceSets.test.output
+    testImplementation project(':numen:pathing').sourceSets.fixtures.output
+
+    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 客户端专属源码集(寻路调试的覆盖层):src/client/java 只被客户端消费,主源码集的 classpath 上物理上没有这些类,
+// 服务端代码引用客户端类在编译期就过不去。照 numen-api/common 的做法。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.client)
+
+/*
+ * Numen 的 GameTest:用例在 src/gametest(套件 numen,见 NumenGameTestSuite),共用件(GameTestKit、Steps)在 src/testFixtures,
+ * Numen 自己的用例与联动的用例都用它。它们拉起同伴、直接摸 Numen API 的内部类(CompanionFactory、程序的回环客户端),所以看得见完整的
+ * Numen API,不是瘦 api jar。用例与夹具不进发行 jar,只是源码集(理由同 numen-api/common 的夹具);加载器的开发期运行把它们的输出声明进
+ * 模组 numen(见 numen/neoforge/build.gradle),联动的 GameTest 只带夹具、不带用例。模板在 src/gametest/structures。
+ */
+sourceSets {
+    testFixtures {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath + sourceSets.testFixtures.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath + sourceSets.testFixtures.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
+
+/*
+ * 端到端测试(src/e2e):一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家
+ * 能做的事从头走一遍。场景只认一份规格(地址、RCON 口、种子),不碰 Minecraft 与 Numen 的任何类,所以只是个独立编的源码集,
+ * 不进发行 jar;跑在两个平台项目上:`:numen:neoforge:e2eTest`、`:numen:paper:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
+ */
+sourceSets {
+    e2e
+}
+
+repositories {
+    // MCProtocolLib 不发到 Maven Central。这里用 26.1 线上的正式构建(26.1 与 26.1.2 同一个协议号)
+    maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
+    // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
+    maven { url = 'https://repo.opencollab.dev/maven-releases' }
+}
+
+dependencies {
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:26.1-1'
+    e2eImplementation 'com.google.code.gson:gson:2.10.1'
+    e2eImplementation platform('org.junit:junit-bom:5.11.4')
+    e2eImplementation 'org.junit.jupiter:junit-jupiter'
+    e2eRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把 Numen 本体跑批带的各模块的同步进
+// 构建目录里的一处,各加载器的 GameTest 运行配置与联动、评测的运行配置都指向它。26.x 的模板目录是资源包的布局,每个模块的模板放在
+// 它的套件名(也是结构模板的命名空间)下:data/<套件名>/structure/<模板>.snbt。
+tasks.register('syncGameTestStructures', Sync) {
+    rootProject.ext.numenGameTestModules.each { path ->
+        from(project(path).file('src/gametest/structures')) {
+            into "data/${rootProject.ext.numenSuites[path].gametest}/structure"
+        }
+    }
+    into layout.buildDirectory.dir('gameteststructures')
+}
+
+/*
+ * Numen 的评测考题(套件 vanilla):src/bench,考题跟着被测的模块走。只对着评测的考场(:bench:game,模组 numen_bench)与 Numen API 写;
+ * 考场不认识 Numen,考题依赖考场。:numen:neoforge:runBench 把它的输出声明进模组 numen_bench(见 buildSrc 的 numen-bench.gradle)。
+ */
+sourceSets {
+    bench {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.bench)
+dependencies {
+    benchCompileOnly project(':bench')
+    // 考场是对着 NeoForge 编的(它的模组入口),这里只要它的评测接口,不要它传递进来的加载器
+    benchCompileOnly(project(':bench:game')) { transitive = false }
+    benchCompileOnly project(':numen-api:common')
+    benchCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
+dependencies {
+    testFixturesImplementation project(':numen-api:common')
+    testFixturesImplementation project(':numen:pathing')
+    testFixturesCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestImplementation project(':numen-api:common')
+    gametestImplementation project(':numen:pathing')
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'common')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// API 体检报告任务(定义见 buildSrc 的 numen-api-lint):入口是本模块单测源码集里的 ApiLintReport,插件各自一个
+pluginManager.apply('numen-api-lint')
+tasks.named('apiLintReport') { mainClass = 'com.dwinovo.numen.ApiLintReport' }
+
+// 服务端安全门:Numen 的 common 主源码集全部是服务端代码(工具/任务/寻路/
+// 建造),客户端半边在 src/client/java。common 编译用的是合并的客户端 MC jar,
+// 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上
+// ClassNotFound——这道检查让它在构建期就 fail。
+tasks.register('checkServerSafe') {
+    group = 'verification'
+    description = 'Fail if src/main references Minecraft client-only classes.'
+    def srcDir = file('src/main/java')
+    inputs.dir(srcDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def offenders = []
+        srcDir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            if (!f.name.endsWith('.java')) return
+            int no = 0
+            f.eachLine('UTF-8') { line ->
+                no++
+                if (line.contains('net.minecraft.client') || line.contains('com.mojang.blaze3d')) {
+                    offenders << "${f}:${no}: ${line.trim()}"
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
+                    + "Numen 的 common 应保持纯服务端;客户端功能归 Numen API:\n  "
+                    + offenders.join('\n  '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkServerSafe' }

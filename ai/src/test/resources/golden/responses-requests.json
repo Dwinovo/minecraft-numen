@@ -1,0 +1,48 @@
+{
+  "reasoning-high": {
+    "model": "gpt-6",
+    "input": [
+      {"role": "developer", "content": "你是同伴"},
+      {"role": "user", "content": [{"type": "input_text", "text": "你好"}]}
+    ],
+    "tools": [{"type": "function", "name": "look", "description": "look", "parameters": {"type": "object"}}],
+    "temperature": 0.7,
+    "max_output_tokens": 2048,
+    "reasoning": {"effort": "high", "summary": "auto"},
+    "store": false,
+    "include": ["reasoning.encrypted_content"],
+    "stream": true
+  },
+  "off-as-none": {
+    "model": "gpt-6",
+    "input": [
+      {"role": "developer", "content": "你是同伴"},
+      {"role": "user", "content": [{"type": "input_text", "text": "你好"}]}
+    ],
+    "tools": [{"type": "function", "name": "look", "description": "look", "parameters": {"type": "object"}}],
+    "reasoning": {"effort": "none"},
+    "store": false,
+    "stream": true
+  },
+  "auto-on-a-thinking-model": {
+    "model": "gpt-6",
+    "input": [
+      {"role": "system", "content": "你是同伴"},
+      {"role": "user", "content": [{"type": "input_text", "text": "你好"}]}
+    ],
+    "tools": [{"type": "function", "name": "look", "description": "look", "parameters": {"type": "object"}}],
+    "store": false,
+    "include": ["reasoning.encrypted_content"],
+    "stream": true
+  },
+  "plain-model": {
+    "model": "gpt-4.1",
+    "input": [
+      {"role": "system", "content": "你是同伴"},
+      {"role": "user", "content": [{"type": "input_text", "text": "你好"}]}
+    ],
+    "tools": [{"type": "function", "name": "look", "description": "look", "parameters": {"type": "object"}}],
+    "store": false,
+    "stream": true
+  }
+}

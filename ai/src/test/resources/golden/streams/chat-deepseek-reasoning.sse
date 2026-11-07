@@ -1,0 +1,11 @@
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":""},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{"reasoning_content":"先想"},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{"reasoning_content":"想"},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{"content":"好。"},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":200,"completion_tokens":40,"total_tokens":240,"prompt_cache_hit_tokens":150,"prompt_cache_miss_tokens":50}}
+
+data: [DONE]

@@ -22,27 +22,47 @@ plugins {
 
 // This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
-// 三兄弟布局:core/(模组本体)、api/(引擎,曾是独立仓)、ai/(LLM 连接层,纯 JVM)。
-// 单一构建:core 直接以 project 依赖消费 api,api 消费 agent,agent 消费 ai,不经 maven 中转。
-include('core:common')
-include('core:fabric')
-include('core:neoforge')
-include('api:common')
-include('api:fabric')
-include('api:neoforge')
+// 目录与项目路径从模组 id 推出:numen/(模组 numen)、numen-api/(模组 numen_api)、ai/(LLM 连接层,纯 JVM)。
+// 单一构建:numen 直接以 project 依赖消费 numen-api,numen-api 消费 agent,agent 消费 script 与 ai,不经 maven 中转。
+include('numen:common')
+include('numen:fabric')
+include('numen:neoforge')
+// Paper 端(docs/paper.md):第三个"加载器",common 的源码对着 Paper 开发包重新编译,不用 Mixin。
+include('numen:paper')
+include('numen-api:common')
+include('numen-api:fabric')
+include('numen-api:neoforge')
+include('numen-api:paper')
+// numen-store:落盘的两种基础件(只追加日志、小文档),纯 JVM、只依赖 Gson,被 ai 依赖(详见 store/build.gradle 头注)。
+include('store')
 // numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
 include('ai')
-// numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 api 依赖(详见 agent/build.gradle 头注)。
+// numen-script:她写的一段程序(语言接口、回执、API 答复与错误、Lua 适配),纯 JVM,依赖 lua 与 ai、被 agent 与 Numen API 依赖(详见 script/build.gradle 头注)。
+include('script')
+// numen-agent:大脑本身(队列、目标、循环),纯 JVM,依赖 ai 与 script、被 Numen API 依赖(详见 agent/build.gradle 头注)。
 include('agent')
+// numen-mcp:MCP 的服务端与客户端,纯 JVM,协议用官方 Java SDK、OAuth 用 Nimbus,不认识同伴与游戏(详见 mcp/build.gradle 头注)。
+include('mcp')
+// numen-permission:权限层的规则核心(规则语法、判决、判定顺序),纯 JVM,被 Numen API 依赖(详见 permission/build.gradle 头注)。
+include('permission')
 include('ui')
 // numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
 include('lua')
-// numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 pathing/build.gradle 头注)。
-include('pathing')
+// numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 numen/pathing/build.gradle 头注)。
+include('numen:pathing')
 
 // numen-bench:真模型评测(docs/bench.md)。:bench 是纯 JVM 的记录与统计,:bench:game 是游戏里那一半;都不发布、不进发行 jar。
 include('bench')
 include('bench:game')
 
-// 联动模块:一个联动一个,各自独立,内嵌发布不单独发坐标。见 buildSrc 的 numen-plugin.gradle
+// 联动模块:一个联动一个,各自独立,内嵌发布不单独发坐标。见 buildSrc 的 numen-plugin-base.gradle(NeoForge 与原版编译的再加 numen-plugin.gradle)
+include('plugins:ysm')
+// YSM 在场时的 GameTest:挂真模组跑,所以单独一个模块(联动本身对着原版编译,装不了加载器与目标模组)
+include('plugins:ysm:gametest')
 include('plugins:curios')
+// KubeJS 联动:脚本里写的插件走同一扇门(只 NeoForge,见 plugins/kubejs/build.gradle)
+include('plugins:kubejs')
+// Litematica 联动:只 Fabric,纯客户端模组,用 Loom 编译(见 plugins/litematica/build.gradle)
+include('plugins:litematica')
+// JEI 联动:纯客户端模组,NeoForge 与 Fabric 共用一份,编译对着原版与 JEI 的公共 API(见 plugins/jei/build.gradle)
+include('plugins:jei')

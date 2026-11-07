@@ -1,7 +1,7 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.network.payload.ConsentRequestPayload;
-import com.dwinovo.numen.permission.ConsentAnswer;
+import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
+import com.dwinovo.numen.api.permission.ConsentAnswer;
 
 /**
  * 模拟主人的剧本:她征询时按哪个键,她说完话要不要回一句。答复走真实入口({@code ConsentDesk.reply}),和主人在答复框上

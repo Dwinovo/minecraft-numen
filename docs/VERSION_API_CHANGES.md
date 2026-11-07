@@ -15,7 +15,7 @@ Fabric + NeoForge 同源。向上移植（把低版本分支的代码搬到高�
 
 ## 版本阶梯
 
-`1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2 → 26.2`
+`1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
 新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
 
@@ -564,7 +564,166 @@ artifactId 要逐个核对,不是只核对版本号。
   gametest 日志的 3 条 `BlockAttachedEntity … invalid position: null` ERROR 与 1.21.5
   分支逐条相同，非回归。运行时 gson 2.11.0 / slf4j-api 2.0.16 与 1.21.5 同。
 
-## 1.21.8 → 1.21.10 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3；跳过 1.21.9）
+### 2026-10 对齐 1.21.1 @ 7a3d3e251(0.1.3 之后约 900 个提交)追加 ❗
+
+方法:不逐提交搬,**最终态整树替换 + 平台适配重放**。树级三方合并(`merge-tree --merge-base=<上次对齐的 1.21.1 提交> <新 1.21.1 尖>
+<本分支尖>`)把上一次对齐留下的平台适配自动重放到新树上,冲突的手工收;但"新代码里新踩到的 API 差异"合并是不知道的,
+得靠编译 + datagen(mixin 的运行期校验)+ GameTest 逐个找。下面只记**新**碰到的。
+
+**批量替换的陷阱**(这次踩过两次):
+- `\binv\.items\b` 这类正则会咬到 Lua 函数名 `numen.inv.items`(模型能看见的 API 名、@Example、测试里的 Lua 串)。
+  替换完必须 grep 一遍字符串里有没有被改坏的 API 名。
+- 排除构建目录别按名字 `build` 过滤——`core/task/build/`、`core/build/` 是源码包。
+
+**客户端 GUI(新代码的绘制面比旧树大得多)**
+- `GuiGraphics.setColor` / `RenderSystem.getShaderColor` 没了,而 1.21.1 的界面把它当成"整块淡入淡出"的全局透明度
+  (卡片、菜单、通知、对话流新消息飞入都靠它,字、填充、脸一起淡)。1.21.6+ 绘制攒成渲染状态,没有全局着色。
+  补法:`GuiAlpha`(客户端渲染线程上的一个透明度)+ `MixinGuiGraphics`,在 `submitColoredRectangle`(填充)、
+  `drawString(Font, FormattedCharSequence, …, boolean)`(文字)、`submitBlit`(所有贴图与精灵,玩家脸也走它)三个提交口把
+  颜色的 alpha 乘上它。调用点只把 `g.setColor(1,1,1,a)` 换成 `GuiAlpha.set(a)`,`getShaderColor()[3]` 换成 `GuiAlpha.get()`。
+  `Sprites.draw` 的着色改成 `blitSprite(RenderPipelines.GUI_TEXTURED, …, argb)`。
+- `drawString` 的颜色 alpha 为 0 就不画(1.21.1 会补满 alpha):字色一律要带 `0xFF……`。
+- `pose()` 是 `Matrix3x2fStack`:`pushPose/popPose` → `pushMatrix/popMatrix`,`translate(x,y,0)/scale(a,b,1)` 去掉 z。
+  原来靠 z 抬高的层(通知卡 z=300,让给 400 的悬停提示)改 `g.nextStratum()`:提示是帧末另起一层画的。
+- `renderTooltip/renderComponentTooltip` → `setTooltipForNextFrame/setComponentTooltipForNextFrame`;
+  `blitSprite(ResourceLocation,…)` → `blitSprite(RenderPipelines.GUI_TEXTURED, …)`。
+- `ClickEvent` 拆成按动作的记录:`new ClickEvent(OPEN_URL, String)` → `new ClickEvent.OpenUrl(URI)`,`getAction()` → `action()`。
+  URI 解析会抛(`|`、`^` 这类字符),所以 `ChatLinks.find` 只认 `URI.create` 过得去的网址——画与点的地方不再担心抛错。
+- `ToastComponent` → `ToastManager`(`mc.getToasts()` → `mc.getToastManager()`,`occupiedSlots` 还在)。
+- 世界渲染:`LevelRenderer.renderLineBox` → `ShapeRenderer.renderLineBox`,`camera.getPosition()` → `camera.position()`。
+- 新 1.21.1 树里没有 `RoundRect`,所以 AT/AW(`guiRenderState`/`scissorStack`)与自定义 shader 一并不需要:上面"AW 放 api/fabric"那条在这棵树上不适用。
+- 头顶气泡 mixin 挂在 `LivingEntityRenderer.render(S,PoseStack,MultiBufferSource,I)` 的 **HEAD**(与 1.21.1 的 `PlayerRenderer.render` HEAD 同理:
+  插件取消渲染事件时 TAIL 不会跑)。
+
+**存档**
+- 新增的三个 SavedData(`PlacedBlocks`、`PermissionStore`、`Built`)按同一套转成 `SavedDataType`:`CODEC` 包内可见(单测直接对它往返)。
+  `PermissionStore` 每主人一个文件,`SavedDataType` 的相等只看 id,所以每次 `of()` 现造一个带 id 的类型即可,存储层按 id 缓存。
+  `Built.CODEC` 是 public:GameTest 用它做"重启读回"的往返(`save/load` 重写没了)。
+- `CompoundTag/ListTag` 读取 Optional 化:`Cells.load`、`BlueprintStore` 的实体坐标(`getDoubleOr`)。
+
+**同伴身体 / 引擎**
+- **客户端加载门**:`Player.hasClientLoaded()` 为假时服务端不收挖/放/用的动作包(`ServerGamePacketListenerImpl.handle*` 都挂着它),
+  受击也免疫(`isInvulnerableTo`);60 刻后才自己放宽。真客户端在收到 `LEVEL_CHUNKS_LOAD_START` 之后加载完才发
+  `ServerboundPlayerLoadedPacket`。同伴没有客户端:`FakeClient` 看见 `LEVEL_CHUNKS_LOAD_START`(进服、换维度、重生都发)就在下一刻
+  `handleAcceptPlayerLoad` 回执。不补这一条,新召唤出来 3 秒内的挖/放/用都被静默拒掉(GameTest 里是"服务器没让挖掉这一格")。
+- mixin 靶点变化(都是运行期才炸,datagen 一跑就现形;**客户端 mixin 的靶点 datagen 不加载,要对 javap**):
+  `ServerCommonPacketListenerImpl.send(Packet, PacketSendListener)` → `send(Packet, ChannelFutureListener)`;
+  `ItemEntity.hurt` → `hurtServer(ServerLevel, DamageSource, float)`;
+  `CraftingMenu.slotChangedCraftingGrid` 的 `Level` 参数 → `ServerLevel`。
+- `Boat` → `AbstractBoat`;木船按 `EntityType.OAK_BOAT` 等各自成型,测试里 `new Boat(...)` → `create(level, STRUCTURE)` + `setInitialPos`。
+- `RecipeHolder.id()` 现在是 `ResourceKey<Recipe<?>>`:要字符串用 `id().location().toString()`(**能编译但串变成 `ResourceKey[…]`**);
+  `byKey(ResourceLocation)` → `byKey(ResourceKey.create(Registries.RECIPE, id))`;按类型取配方 → `recipeAccess().getRecipes()` 全量 + instanceof。
+- 指令回显:`ServerPlayer` 不再是 `CommandSource`,`shouldInformAdmins()` 没处问(它的指令源恒为 true),`Echo` 直接给 true。
+- `MinecraftServer.tell(TickTask)` → `schedule`;`Item.getDescription()` → `getName()`;`OwnableEntity.getOwnerUUID()` → `getOwnerReference().getUUID()`;
+  `BuiltInRegistries.X.get(ResourceLocation)` → `getValue`;`registry.asLookup()` 删掉(Registry 本身就是 RegistryLookup);
+  `Level.isDay/isNight` → `isBrightOutside/isDarkOutside`(语义同);`Direction.getNearest(float…)` → `getApproximateNearest`。
+
+**寻路模块(只依赖原版)**
+- `getMinBuildHeight/getMaxBuildHeight` → `getMinY/getMaxY`(**getMaxY 含端**,`y < max` 改 `y <= getMaxY()`,"开区间上界"要 `getMaxY()+1`);
+  实现 `LevelHeightAccessor` 的自家视图覆写 `getMinY`。
+- `Hotbar`:按格取物的包(`ServerboundPickItemPacket`)没了,服务端处理就是 `Inventory.pickSlot(slot)` + 回报选中格 + 广播背包;
+  创造凭空取一叠 `setPickedItem` → `addAndPickItem`。`InteractionResult.shouldSwing` → `Success.swingSource() == SERVER`。
+- `EntityCollisionContext` 构造器多了 `placement` 布尔。
+- 玩家 `serverLevel()` → `level()`;`MobEffects.DIG_SLOWDOWN` → `MINING_FATIGUE`;`registryOrThrow` → `lookupOrThrow`。
+
+**GameTest(整套重做,见 `:gametest` 模块)**
+- 1.21.5 删了注解入口。新增不发布的模块 `:gametest`:`@NumenGameTestHolder/@NumenTest/@NumenBeforeBatch/@NumenAfterBatch/@NumenGameTestGenerator`
+  与登记处 `NumenGameTests`(`@EventBusSubscriber` 自动挂在模组 numen 上,发行 jar 里没有它——用例类上的注解在那里是读不到的名字,不起作用)。
+  登记处从 `ModList.get().getAllScanData()` 里按 `@NumenGameTestHolder` 找类(core、寻路模块、评测三处的源码集都在同一个 numen 模组里),
+  按 `neoforge.enabledGameTestNamespaces` 过滤命名空间(NeoForge 1.21.5 起不再认它,运行配置照旧给,这里按原口径过滤),先初始化类(静态块里登记夹具)再读方法。
+  用例编号 `<命名空间>:<类名>.<方法名>`(小写);批次 = 测试环境 `NumenTestEnvironment(batch)`,`setup/teardown` 回到名册里的 `@NumenBeforeBatch/@NumenAfterBatch`。
+- 不能用原版 `FunctionGameTestInstance`(`TEST_FUNCTION` 注册表在 BuiltInRegistries 引导时就冻结);`TEST_INSTANCE`、`TEST_ENVIRONMENT` 会同步给客户端,
+  所以自带的实例类型/环境类型要经 `RegisterEvent` 登记进 `TEST_INSTANCE_TYPE`/`TEST_ENVIRONMENT_DEFINITION_TYPE`。
+- `GameTestHelper` 断言/失败改 `Component`:`GameTestKit` 里三个薄包装(`assertTrue/assertFalse/fail(helper, …, String)`);
+  `GameTestAssertException` 构造要 `(Component, tick)`;`StructureUtils.testStructuresDir` 是 `Path`。
+- 结构模板:内容原点基准变了(1.21.4 那条),三块地板模板(floor16/20/52)按"底部垫一层"重做(size y+1、data 整体 y+1、原 y0 层复刻成新底层);
+  寻路模块的三块模板是空的,不用垫。
+- NeoForge 21.8 的 `ConfigSync.syncPendingConfigs` 每刻遍历玩家列表,**精确是 `ServerPlayer` 类**、有配置频道、又不是内存连接、又没走过配置阶段的会抛
+  `configsToSync should contain an entry…`:扮演主人的夹具连接(GameTestKit.OwnerLine、评测的 OwnerConnection)覆写 `isMemoryConnection()` 为真。
+- 玩家继承了 `WaypointTransmitter.Connection` 这个成员接口,会盖过 `import net.minecraft.network.Connection`:`TestBody` 里嵌套的 `extends Connection` 要写全名。
+- 实体迁包:`Sheep` → `animal.sheep`,`Wolf` → `animal.wolf`(1.21.5 就搬了,不是 1.21.11);猪的鞍 `equipSaddle` → `setItemSlot(EquipmentSlot.SADDLE, …)`;
+  `changeDimension(DimensionTransition)` → `teleport(TeleportTransition)`;`isInvulnerableTo(source)` → `isInvulnerableTo(level, source)`;
+  狼的主人 `setOwnerUUID` → `setOwnerReference(new EntityReference<>(uuid))`;`ServerPlayer.teleportTo(level, x, y, z, yaw, pitch)` → 带 `Set<Relative>` 与 `boolean` 的八参版。
+- 单测夹具:冻结后的注册表拒绝直写标签,标签一律 `prepareTagReload(new TagLoader.LoadResult<>(key, tags)).apply()`(五处夹具);
+  `Inventory(player, equipment)` 要把同一个 `EntityEquipment` 种进 `LivingEntity.equipment`。
+- 环境规则:见下文 1.21.10 档的"GameTest 环境规则"——随机刻停摆、火不 tick 由 `NumenTestEnvironment.setup` 统一定,不在批次方法里各写。
+
+**联动(plugins/)**
+- 本代只移植 Curios(NeoForge,`curios-neoforge:12.0.0+1.21.8`,maven.theillusivec4.top,公开 API 与 1.21.1 的 9.5.1 同形,代码零改动)。
+  不移植的:TLM(Modrinth 上只有 1.21/1.21.1 的 NeoForge 版)、YSM(Modrinth 只有 1.21/1.21.1 与 26.1.2)、
+  森罗物语厨房(CurseForge 上只有 1.21.1 的 NeoForge 版)、FTB Quests(maven.ftb.dev 只有 2101.x、2111.x 与 26.1.2.x,没有 1.21.8 的构建)。
+
+### 2026-11 对齐 1.21.1 @ 352c6fec8(0.1.5:19c8710b0 加对齐期间的十二个通用修复)❗
+
+方法同上一轮:1.21.1 整树替换,目标分支独有文件逐个清点删除(1396 个旧路径文件 + 101 个不带的联动文件),再把上一轮的平台适配
+按文件三方合并进新树(`7a3d3e251 → bd3b7036c` 的 diff,107 个文件自动合入、其余逐个手工),然后编译驱动补齐。目录与包名在两轮之间整体改过
+(`api/` → `numen-api/`、`core/` → `numen/`、包移到 `com.dwinovo.numen.api.*`),三方合并按文件名找新家。下面只记这一轮**新**碰到的。
+
+**批量替换的陷阱(又踩了一次)**:按目录名排除 `build` 会漏掉 `numen/build/`、`task/build/` 两个源码包;Git Bash 里以 `/` 开头的参数会被改写成
+Windows 路径,拿来当路径过滤条件时一个文件都匹配不上。
+
+**GameTest:套件机制在数据驱动框架里等价落地**
+- 1.21.1 的用例只挂原版注解,经 `GameTestSuites` 一个 `@GameTestGenerator` 交给原版。1.21.5 起没有注解入口,也没有生成器:
+  Numen API 的夹具里照原样立了同名注解 `GameTest`/`BeforeBatch`/`AfterBatch`/`GameTestGenerator` 与记录 `TestFunction`(包
+  `com.dwinovo.numen.api.gametest`),用例类只换 import。断言的 String 口径经 `Checks`(`assertTrue/assertFalse/fail(helper, …)`、
+  `failure(String)`),全树一处。
+- 登记:`GameTestRegistrationMixin` 挂在 `RegistryDataLoader.loadContentsFromManager` 末尾,原版读完测试环境、测试实例两个数据注册表
+  (还没冻结)时交给 `GameTestRegistration`:每个批次一个环境(`numen_api_gametest:batch/<批次>`)、每条用例一个实例(`<套件>:<类>.<方法>`,
+  铺份写成 `/份号`)。两个加载器同一条路,加载器只登记两个类型(NeoForge 经 `RegisterEvent`,Fabric 在 `ModInitializer` 里直接 `Registry.register`)。
+  Fabric 的 `fabric-gametest` 入口不再用(它要 Fabric 自己的注解)。
+- 批次:原版按测试环境分组用的是以环境 Holder 为键的散列表(身份散列,每次开服先后不同),`GameTestBatchOrderMixin` 改成按登记先后分组。
+  测试服只跑我们的用例(`GameTestSelectionMixin`):原版数据包自带的 `minecraft:always_pass` 不跑、不计数。
+- 世界规则:`NumenTestEnvironment.setup` 在批前方法之前定下原 `GameTestServer` 的五样(不刷怪、不换天气、随机刻 0、火不 tick、晴天),
+  布尔与数值规则都经 `GameTestWorld`(Paper 的签名不同,`setRule(level, IntegerValue, int)` 是这一轮加的)。
+- 可复现那一套的落点:起点 `startTests` 的局部变量照旧;开批对齐照旧挂 `GameTestRunner.runBatch`(环境的 setup 在里面,一并推迟到整拍);
+  同刻回调顺序照旧挂 `GameTestInfo.runAtTickTimeMap/tickInternal`;区块刻洗牌在 `ServerChunkCache.tickChunks(ProfilerFiller, long)`;
+  场地强制加载搬到了 `TestInstanceBlockEntity.forceLoadChunks`(`StructureChunksMixin` 跟过去);`GameTestServer.create` 的参数变成
+  `(Thread, LevelStorageAccess, PackRepository, Optional<String>, boolean)`。收场汇报仍是 `GlobalTestReporter`,用例全名经 `NumenTestInstance.name(info)`。
+- 加载器自己的用例(NeoForge 联网协商那一条)经 `GameTestSuites.loaderTests` 交进来,和 1.21.1 一样不属于任何套件、每次都跑。
+- 场地坐标:1.21.1 的 `GameTestHelper.absolutePos` 以结构方块那一格(内容原点正下方)为基准,1.21.4 起以内容原点为基准。上一轮把三块地板模板
+  底部垫了一层复刻的地板,坐标对上了,世界却不一样:地板下面原本是一层空气再往下才是石头,垫了之后是两层地板(权限用例里"挖地板绕过墙"
+  会多问一张卡)。现在模板与 1.21.1 一字不差,`GameTestHelperOriginMixin` 把 `absolutePos/relativePos/absoluteVec/relativeVec` 的基准点
+  放回内容原点的正下方,摆出来的场地与 1.21.1 逐格相同(空模板的寻路场地同理,不再多出一层空气)。
+- 场地四周:1.21.5 起原版铺场地不再清地(`clearSpaceForStructure` 只在下一批开始时清上一批),围栏还在内容底下垫一整层屏障。
+  `StructureSiteClearMixin` 在放测试方块之前照 1.21.1 清一遍地(内容下一层空气、再往下石头、往上全空,清地范围盖住测试方块那一格);
+  `StructureBoundaryMixin` 罩着 `TestInstanceBlockEntity.processStructureBoundary`,只围四面墙(从内容最低一层起)和没有天空时的顶,
+  不垫底,围上与拆掉走同一圈。没有这两处,"挖地板钻到墙下"的权限用例与"飞过峡谷"的寻路用例都会在屏障板上走过去。
+- 用例计时:原版用例计时器从不启动(`getRunTime` 总是 0),`TestTicks` 在函数体前自记墙钟,`[numen-gametest-ticks]` 的毫秒才是实数。
+- 区块落定(1.21.1 `352c6fec8`):`Util.ioPool()/backgroundExecutor()` 交出的是 `TracingExecutor`,池在 `service()` 里,先取再强转。
+- Paper 的测试插件没有 Mixin:插件起来时读出用例,开跑前把两个已冻结的注册表解冻、经同一个 `GameTestRegistration.register` 登记、再冻上
+  (原版放场地按测试实例的注册名回表取结构,用例必须在表里)。
+
+**依赖撞包**:MC 1.21.6+ 客户端依赖把 jackson-annotations、Nimbus 一族钉成 strictly 的旧版;mcp 模块的官方 MCP SDK 要新版。由 mcp 产物重定位解决
+(1.21.1 的 `2ca1f9d5f`、`972587017` 两个提交,cherry-pick 进本分支)。对齐期间落到 1.21.1 的十二个通用修复按原顺序逐个 cherry-pick,各自一个提交。
+
+**其余新碰到的 API 差异**
+- `ElytraItem` 没了:滑翔物看 `LivingEntity.canGlideUsing(stack, EquipmentSlot.CHEST)`(带滑翔组件、没坏),"没穿"看 `DataComponents.GLIDER`。
+- 中键取物:1.21.2 起客户端的中键包不再指名背包的格。`ClientPackets.pickItem/pickNew` 照原版找到格以后做的那几步写(选合适的快捷栏格、
+  对换或放一叠、回报选中格、广播背包),不调 `Inventory.pickSlot/addAndPickItem`:Paper 给它们加了参数,两边签名不同。与 1.21.4/1.21.5 同一写法。
+- 客户端加载回执(1.21.2 起 `hasClientLoaded` 为假时服务端不收动作包、玩家不受伤):`FakeClient` 收到 `LEVEL_CHUNKS_LOAD_START` 记下,
+  加入与重生流程一走完当场报(重生等连接换上新身体),换维度这类流程中途的晚一刻回;寻路夹具 `TestBody` 建好连接当场报。
+- 载具与自身移动的权威:服务端只看 `isClientAuthoritative()`,`NumenPlayer` 只覆写它(返回 false,同原版 GameTest 的模拟玩家)。
+- 寻路的运动学 `Kinematics.settle`:1.21.6 起玩家的水平速度按整体归零(`horizontalDistanceSqr() < 9.0E-6`),竖直单独比。
+- 弓:松手与箭速按原版自己的拉弓计数 `getTicksUsingItem()`,不另数一份(1.21.8 上自数的比原版多一刻,射出的箭速度对不上)。
+- `ServerPlayer.server` 私有:一律 `level().getServer()`;`getRespawnPosition()` → `getRespawnConfig()`;`getPermissionLevel()` 是 public。
+- `DirectionProperty` → `EnumProperty<Direction>`;`registry.getTag` → `get(TagKey)`;`Registry.get(id)` 返回 `Optional<Reference>`,取值用 `getValue(id)`;
+  `Structure.generate` 首参要 `Holder<Structure>` 与维度键。
+- 配方:输入清单在 `placementInfo().ingredients()`;熔炼/切石 `input()`、`cookingTime()`;锻造的模板与附加料是 `Optional<Ingredient>`;
+  任意类型(含模组机器)配方给配方书的产出取 `display()` 里的产出格(`RecipeProbe.displayedResult`);切石机菜单 `getVisibleRecipes().entries()`。
+- `ClickEvent`/`HoverEvent` 是按动作的记录(`RunCommand`、`CopyToClipboard`、`OpenUrl(URI)`、`ShowText`);`Component.Serializer` 没了,
+  语言文件里写成组件的译文用 `ComponentSerialization.CODEC` 解(`ServerLang`)。
+- 存档:`PermissionStore` 读档前的旧行改写搬进存档编解码 `STORED`(读之前改写、改写过就标脏),`NavClock` 用 `Codec.unit`(不写盘)。
+- NeoForge:`AddReloadListenerEvent` → `AddServerReloadListenersEvent`(登记要带键);`RenderLevelStageEvent` 按阶段分子事件;
+  数据生成的 run 类型是 `clientData`,订阅 `GatherDataEvent.Client`。
+- Paper 1.21.8:`setDifficulty` 多一个指令源参数;`CraftScheduler.mainThreadHeartbeat()` 无参;实体不再是 `CommandSource`(Bukkit 发令者取
+  `getBukkitEntity()`);`DiscardedPayload` 带 `byte[]`。paperweight-userdev 升到 2.0.0-beta.22(1.7.x 读不了 1.21.8 的开发包),链接检查与 javadoc 认开发包里的
+  `mappedServerJar.jar`(1.21.5 的 `2f0ca3da6`)。
+- 面板快捷键默认 N(1.21.6 起 G 被原版 Quick Actions 占了)。
+
+**联动**:带 Curios(`12.0.0+1.21.8`)、JEI(`24.2.0.6`,接口改名 `IRecipeType`)、Litematica(`0.23.7`/MaLiLib `0.25.7`,坐标按 MC 版本,
+文件接口从 `File` 换成 `Path`)。不带 YSM、车万女仆、森罗物语厨房(都没有 1.21.8 构建)、FTB Quests(只有 2101/2111/26.x)、KubeJS(只有 2101 与 26.x)。
+
+## 1.21.8 → 1.21.10 ✓（已验证:对齐 1.21.1@7a3d3e251 后的并仓树双 loader 编译 + 出包 + datagen + 1799 单测 + 567 条游戏内用例 ×3 + 评测自检;跳过 1.21.9）
 
 含 1.21.9 的**输入 API 重构 + NeoForge Transfer 重写 + authlib 9**。构建旋钮：MC `1.21.10` /
 range `[1.21.10, 1.21.11)` / NeoForm `1.21.10-20251010.172816` / Fabric `0.138.4+1.21.10` / NeoForge `21.10.64`。
@@ -726,7 +885,108 @@ Transfer 重写、提交式管线形态整搬/照抄成立。本档并仓树**�
 负结果与陷阱清单。语言键 key.category.numen_api.companions 由 datagen 语言源与
 Category 注册两头同改,生成物核对含新键。
 
-## 1.21.10 → 1.21.11 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3）
+
+### 2026-10 对齐 1.21.1 @ 7a3d3e251(0.1.3 之后约 900 个提交)追加 ❗
+
+方法同 1.21.8 那一档:树级三方合并(基 = `origin/1.21.8`,ours = `align-1.21.8`,theirs = `origin/1.21.10`),把旧 1.21.10 分支
+相对 1.21.8 的平台适配(输入事件化、authlib 9、提交式管线、Transfer 重写、召唤 mixin 退役)重放到对齐后的树上,冲突手工收,
+新代码里新踩到的 API 差异靠编译 + datagen + GameTest 找。下面只记**新**碰到的。
+
+**合并陷阱**
+- 对齐把旧单体 `CompanionGameTests` 拆成按领域的十几份。合并算法把它当成 `BuildGameTests` 的改名对象,吐出一份夹着两边内容的怪文件。
+  处理:整份丢掉,取 `align-1.21.8` 的原样,再把 origin 1.21.8→1.21.10 对旧单体的四处改动(`startRiding` 三参、`GameProfile.properties()`)
+  重放到拆分后的文件上。合并完用 `git diff <基> <theirs> --stat` 的清单逐文件对账,别只信没冲突的那部分。
+
+**客户端输入(新代码里的界面)**
+- `NumenScreen` 的 `keyPressed/charTyped/mouseClicked/mouseDragged/mouseReleased` 全套换成 `KeyEvent/CharacterEvent/MouseButtonEvent`(`mouseScrolled` 不变);
+  `mouseClickedInner` 等内部分发跟着收事件。`CompanionChatScreen` 的共识卡点击同理。
+- Fabric `ScreenMouseEvents.allowMouseClick` 的回调从 `(screen, x, y, button)` 变成 `(screen, MouseButtonEvent)`。
+- 世界渲染事件不再带相机:`PathDebugRenderer` 与 `ConsentOutlines` 一律走 `gameRenderer.getMainCamera()`;`ShapeRenderer.renderLineBox` 收 `PoseStack.Pose`。
+- 头顶气泡挂 `LivingEntityRenderer.submit(S, PoseStack, SubmitNodeCollector, CameraRenderState)` 的 **HEAD**(原因同 1.21.8:插件取消渲染事件时尾部不跑);
+  玩家状态类是 `AvatarRenderState`;几何经 `submitCustomGeometry` 交出,回调延后执行,所以参与计算的局部量全是 final,动画状态的推进放在提交之前。
+- `MixinGuiGraphics` 的三个提交口(`submitColoredRectangle`/`drawString(…FormattedCharSequence…boolean)`/`submitBlit`)签名在 1.21.8→1.21.10 逐字不变,
+  ordinal 照旧;客户端 mixin 的靶点(`KeyboardInput.tick`/`ClientInput.moveVector`、`ChatComponent.allMessages/refreshTrimmedMessages`、
+  `ToastManager.occupiedSlots`)对 1.21.10 反编译源核过,都在。
+
+**同伴身体 / 引擎**
+- authlib 9:`GameProfile` 是 record,`getName()/getId()/getProperties()` → `name()/id()/properties()`;带皮肤属性的档案只能在构造时给全。
+- `Entity.getServer()` 没了:实体一律 `level().getServer()`(`CommandSourceStack`/`ServerLevel`/事件上的 `getServer()` 还在,别误改)。
+- `MinecraftServer.getProfileCache()` → `services().nameToIdCache()`(`UserNameToIdResolver.get(UUID)` 给 `NameAndId`);
+  `ServerOpListEntry`、`ops.remove` 都要 `NameAndId`(`new NameAndId(gameProfile)`)。
+- `EntityReference` 构造私有:`new EntityReference<>(uuid)` → `EntityReference.of(uuid)`。
+- 召唤 join:`placeNewPlayer` 不再阻塞等区块、不挪出生点、不碰 `.dat`(整段搬去配置期的 `PrepareSpawnTask`,只有真实登录走)。
+  所以 1.21.8 的 `intendedSpawnPos` 与 `MixinPlayerListCompanionSpawn` 整个退役;`CompanionFactory` 里那次显式读档是唯一一次;
+  读档 `PlayerList.load(player, reporter)` → `loadPlayerData(NameAndId)` 拿 `CompoundTag` 自己包 `TagValueInput`。
+- `NumenPlayer.startRiding` 多了 `emitEvents` 第三参(覆写与全部调用点);`TicketType(timeout, flags)`(`FLAG_LOADING | FLAG_SIMULATION`)。
+- `EntityCollisionContext` 构造器第五参从 `Predicate<FluidState>` 变成 `boolean alwaysCollideWithFluid`(寻路的 `Boxes.bodyAt`)。
+- 单测夹具:`LevelChunkSection` 的方块容器 `new PalettedContainer<>(默认态, Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY))`。
+
+**NeoForge**
+- Transfer 重写:`IItemHandler/IFluidHandler/IEnergyStorage` → `ResourceHandler<ItemResource/FluidResource>` + `EnergyHandler`;
+  能力键 `Capabilities.Item/Fluid/Energy.BLOCK`;能量没有 `canReceive/canExtract`,在永不提交的 `Transaction` 里模拟灌入/抽出探方向。
+- FML 10 的 `IModFile` 没有 `findResource`:`ModJar.find` 改走 `getContents().getContentRoots()`,逐个根找这条路径(开发运行时类与资源分在几个根)。
+- 键位分类:`KeyMapping.Category.register(id)`,语言键 `key.category.numen_api.companions` 由 datagen 语言源与注册两头同改。
+
+**联动(plugins/)**
+- 本代只移植 Curios(NeoForge,`curios-neoforge:13.0.0+1.21.10`,maven.theillusivec4.top,代码零改动)。
+  TLM、YSM、森罗物语厨房、FTB Quests 在 1.21.10 上都没有可取的构建(查法与 1.21.8 档相同)。
+
+**GameTest 环境规则**
+- 1.21.5 之前 `GameTestServer` 自带一套规则(不刷怪、不换天气、随机刻 0、火不 tick);数据驱动之后原版的默认环境是空的。
+  `NumenTestEnvironment.setup` 在批次方法之前补两条会在判据背后改世界的:随机刻停摆(耕地湿度、屋顶下的草退化)、`doFireTick` 关
+  (`fluidgametests.passes_cactus_fire_berries_and_magma_unhurt` 里下界岩上的火每三十来刻老化一次,红在"实际账与世界不符")。
+  规则只在这一处定,`settleWorld`/`Worlds.settle` 里不再写随机刻。
+- 没把"不换天气"补进环境:各批次的 `settleWorld` 已按用例需要重定天气与刷怪。
+
+
+### 2026-11 对齐 1.21.1 @ 352c6fec8(0.1.5)❗
+
+方法:以 `align-1.21.8`(已对齐 352c6fec8、带 1.21.8 平台适配)整棵树为底,旧路径的残留文件逐个删,再把 origin 1.21.8→1.21.10 的平台适配
+按文件三方合并进来(基 = `origin/1.21.8`,theirs = `origin/1.21.10`;16 个文件自动合入,18 个冲突的取本树原样后照旧差异手工重放),
+其余靠编译、单测、GameTest 找。1.21.8 那一节的 GameTest 夹具、可复现机制、统一写法在本档原样成立,下面只记 1.21.10 新碰到的。
+
+**客户端**
+- 输入事件化:`NumenScreen`、`CompanionChatScreen` 的 `keyPressed/charTyped/mouseClicked/mouseDragged/mouseReleased` 收 `KeyEvent/CharacterEvent/MouseButtonEvent`,
+  方法开头取局部量,方法体与内部分发(`mouseClickedInner`)不动,`super` 透传事件;`CompanionWheelScreen` 的物理按键采样收 `Window`。
+  Fabric `ScreenMouseEvents.allowMouseClick` 的回调是 `(screen, click)`。
+- 键位分类 `KeyMapping.Category.register(numen_api:companions)`,语言键 `key.category.numen_api.companions`(datagen 语言源同改)。`PlayerSkin` 迁到 `world.entity.player`。
+- 世界渲染事件不带相机:同意卡描边与寻路调试线的四个挂点(两个加载器各两处)传 `gameRenderer.getMainCamera()`;Fabric 的事件搬到
+  `rendering.v1.world.WorldRenderEvents`,挂 `BEFORE_DEBUG_RENDER`(原版调试线的绘制点),`matrices()`;`ShapeRenderer.renderLineBox` 收 `PoseStack.Pose`。
+- 头顶气泡走提交式管线:`MixinLivingEntityRenderer` 挂 `submit(状态, PoseStack, SubmitNodeCollector, CameraRenderState)` 的 HEAD,
+  玩家状态类 `AvatarRenderState`;`SpeechBubbleRenderer` 经 `submitCustomGeometry`/`submitText` 交出,朝向取 `CameraRenderState.orientation`。
+
+**同伴身体 / 引擎**
+- authlib 9:`GameProfile` 是 record(`name()/id()/properties()`),属性在构造时给全(`PropertyMap`)。原地换皮肤
+  (`Companions.refreshSkin`)照原档案抄一份、换掉 textures,整份换到身体上——新服务 `IPlayerProfiles`:模组经 `PlayerProfileAccessor`
+  (`@Mutable @Accessor` 写 `Player.gameProfile`),Paper 按 Mojang 名反射同一个字段。
+- 身份 `NameAndId`:op 名单、`deop`、`isSingleplayerOwner`、`getProfilePermissions` 都收它;`NumenPlayer.profileOf` 返回 `NameAndId`
+  (在线的取档案,离线的取 `services().nameToIdCache()`)。`Entity.getServer()` 没了,实体一律 `level().getServer()`。
+- 召唤:`placeNewPlayer` 不再阻塞等区块、不挪出生点、不碰 `.dat`(都在只有真实登录走的 `PrepareSpawnTask` 里),
+  1.21.8 的 `MixinPlayerListCompanionSpawn` 与 `NumenPlayer.intendedSpawnPos` 退役;读档 `loadPlayerData(NameAndId)` 拿 `CompoundTag` 自己包 `TagValueInput`。
+  给新玩家定朝向的那一步也在 `PrepareSpawnTask` 里,原版构造生物时掷的是随机朝向(`Math.random`):没有存档的新身体朝向取世界出生点的朝向
+  (`getRespawnData()` 的 yaw/pitch),有存档的照存档。不定的话她起飞前转头的刻数每次开服不同,两次开服比对刻数时鞘翅用例差一刻。
+- `startRiding(载具, force, emitEvents)`;`EntityReference.of(uuid)`;击退包 `ClientboundSetEntityMotionPacket.getMovement()`;
+  `EntityCollisionContext` 第五参是 `boolean`(寻路 `Boxes.bodyAt`);重生点 `RespawnConfig(RespawnData(GlobalPos, yaw, pitch), forced)`、
+  世界出生点 `getRespawnData()/setRespawnData`;PvP 是游戏规则 `pvp`;`Blocks.CHAIN` 改名 `IRON_CHAIN`;寻路评测的方块段用 `Strategy.createForBlockStates/createForBiomes`。
+
+**NeoForge**
+- Transfer 重写:`NeoForgeBlockCapabilityReader` 读 `ResourceHandler<ItemResource/FluidResource>`、`EnergyHandler`(`Capabilities.Item/Fluid/Energy.BLOCK`),
+  能量方向在永不提交的 `Transaction` 里模拟灌入、抽出来探。`FMLLoader.getCurrent().isProduction()`。
+- FML 10 的 `IModFile` 没有 `findResource`:内容根取 `getContents().getContentRoots()`,成品里内容根是 jar 文件本身,挂成 zip 文件系统再 resolve。
+  这件事只在 Numen API 的平台口 `NeoForgePlatformHelper.modResource` 做一次,Numen 的 NeoForge `ModJar.find` 直接问它。成品放进真专用服核实过。
+
+**GameTest**
+- 原版 1.21.10 的 `clearSpaceForStructure` 只清给它的盒子、不再外扩,放结构前也自己清一遍内容盒。`StructureSiteClearMixin` 照 1.21.1 自己清外扩的那一圈
+  (左右 2 到 3 格、下 3 格、上 20 格,内容下一层空气、再往下石头),每一格经原版私有的 `clearBlock`(`StructureUtilsInvoker`)。
+  没有这一圈,地板底下是平坦世界的地层:看周围(`look_around`)的图把墙画成坑,船上的同伴沉到地板下面。
+
+**依赖**:Gson 2.11.0、slf4j 2.0.16(本版游戏自带的版本,编译与单测都对着它)。端到端的协议客户端用 MCProtocolLib 1.21.9 的快照(固定到时间戳,
+与 1.21.10 同一个协议号),它带的 Adventure 4.25 认得 1.21.5 起的组件形状,不再另提版本。
+
+**联动**:带 Curios(`13.0.0+1.21.10`)、JEI(`26.3.0.31`)、Litematica(`0.24.9`/MaLiLib `0.26.7`),代码不用改。不带 YSM、车万女仆、森罗物语厨房、
+FTB Quests、KubeJS(1.21.10 都没有可用构建)。Paper 开发包 `1.21.10-R0.1-SNAPSHOT`。
+
+## 1.21.10 → 1.21.11 ✓（已验证:对齐 1.21.1@7a3d3e251 后的并仓树双 loader 编译 + 出包 + datagen + 1799 单测 + 567 条游戏内用例 ×3 + 评测自检）
 
 构建旋钮:MC `1.21.11` / range `[1.21.11, 1.22)` / NeoForm `1.21.11-20251209.172050` /
 Fabric `0.139.5+1.21.11` / NeoForge `21.11.42`。运行时库跟着跳了一档:
@@ -772,13 +1032,17 @@ player.hasPermissions(2)
 // 客户端 LocalPlayer 同一写法(原版已同步);判据语义不变:创造档仍是「有 gamemode 权限 或 主人在创造」放行。
 ```
 
-### 游戏规则迁包 + 规则对象化 ❗（core:NumenTestEnvironment）
+### 游戏规则迁包 + 规则对象化 ❗（gametest:NumenTestEnvironment、core/pathing/bench 的 GameTest 夹具）
 ```java
 net.minecraft.world.level.GameRules → net.minecraft.world.level.gamerules.GameRules
 level.getGameRules().getRule(RULE_RANDOMTICKING).set(0, server)
     → level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, server)   // 取值侧 getInt(RULE) → get(RULE)
+RULE_DOMOBSPAWNING → SPAWN_MOBS      RULE_DAYLIGHT → ADVANCE_TIME      RULE_WEATHER_CYCLE → ADVANCE_WEATHER
+RULE_NATURAL_REGENERATION → NATURAL_HEALTH_REGENERATION
+RULE_DOFIRETICK(布尔) → FIRE_SPREAD_RADIUS_AROUND_PLAYER(整数,-1 处处蔓延,0 谁身边都不蔓延)
 ```
-不停摆就重演 1.21.8 的坑:图纸草方块被随机刻退化,「所有格同时就位」永远不到来。
+随机刻不停摆就重演 1.21.8 的坑(草方块被随机刻退化);火不关,`passes_cactus_fire_berries_and_magma_unhurt` 里的火会老化而红。
+两条都由 `NumenTestEnvironment.setup` 统一定(见上文 1.21.10 档的"GameTest 环境规则")。
 
 ### 1.21.1 功能面首次趟到的两处（路书没列——旧 0.1.1 树无此代码,以反编译源为准）
 - **`DimensionType.ultraWarm()` 删除**(core:MLGChain)→ 环境属性表:
@@ -794,8 +1058,8 @@ level.getGameRules().getRule(RULE_RANDOMTICKING).set(0, server)
 - **假玩家伤害免疫**:根因是 1.21.x 的客户端加载门——`ServerPlayer.isInvulnerableTo`
   含 `!connection.hasClientLoaded()`,新建连接自带 60 tick 宽限倒计时(在
   `ServerPlayer.tick()` 里递减)。本树 NumenPlayer.tick 走 super.tick,计时会走完,
-  故只剩**每次出生 3 秒无敌窗口**;已在 CompanionFactory 出生时替客户端补
-  `handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket())` 上报,窗口归零。
+  故只剩**每次出生 3 秒无敌窗口**;本树由 `FakeClient` 在看见 `LEVEL_CHUNKS_LOAD_START` 时替客户端补
+  `handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket())` 上报(进服、换维度、重生都走它,见 1.21.8 档),窗口归零。
   `fall_damage_reaches_the_body` ×3 过。注意 vanilla 的 `markClientLoaded()` 是
   **private**——NeoForge 补丁源里 public,又一例"反编译源是补丁后的"陷阱
   (common 对 vanilla NeoForm 编译,得走 handleAcceptPlayerLoad 公开门)。
@@ -809,22 +1073,91 @@ level.getGameRules().getRule(RULE_RANDOMTICKING).set(0, server)
 - vanilla `SoundInstance` 仍无 `getStream` 钩子(官方 mappings 证实),fabric
   MixinSoundEngine 靶点原样;`Sound.getLocation()/getPath()` 未改名(SoundInstance
   的 `getLocation()` 改成了 `getIdentifier()`,本树零触点)。
-- AT/AW 三条(guiRenderState/scissorStack/ScissorStack)原样;mixin 全家靶点在
-  (气泡 submit 四参、载具 isLocalInstanceAuthoritative 双分支与 1.21.10 一字不差)。
-- FMLLoader.getCurrent() 中转在 21.11.42 仍在;GuiRenderState/RoundRect 接口面零变化。
+- 本树没有 AT/AW;mixin 全家靶点在(气泡 submit 四参、载具 isLocalInstanceAuthoritative 双分支、`MixinGuiGraphics` 三个提交口——
+  `submitBlit` 多了一个 `GpuSampler` 形参但 int 的序号不变——与 1.21.10 一致)。
+- FMLLoader.getCurrent() 中转在 21.11.42 仍在。
 - 夹具 .snbt 仍 DataVersion 3955,DFU 正向升到本代,不硬盖。
 - HitResult.getLocation()(Vec3)与大改名无关,别误替换。
 
-### 1.21.11 落地实录（并仓迁移,0.1.1 功能面 = 1.21.1 b550494c）
+### 2026-10 对齐 1.21.1 @ 7a3d3e251(0.1.3 之后约 900 个提交)追加 ❗
 
-树落底 1.21.10 尖(20afd821)后单跳本档。提交序列:树落底 → build 旋钮 → api →
-core → test(SleepOpsTest record 化) → fix(#56 加载上报) → build(ai 库对表)。
-双 loader 出包 + datagen 四路(生成物零漂移)+ 867 单测零跳过 + gametest
-"All 66 required tests passed" ×3 再 +1(修复后复验)。上一档整套适配原样成立,
-一处未动;api 构件坐标模板自动带版本。本档新趟出的都在上文:实体迁包比路书多
-两条(AbstractBoat/Zombie)、1.21.1 功能面首碰两处(ultraWarm/BedSleepingProblem)、
-#56 根因(hasClientLoaded 门)顺手修掉。
+方法同 1.21.8、1.21.10 两档:树落底在上一档对齐完的 `align-1.21.10`,把旧 1.21.11 分支相对 1.21.10 的适配重放上去。
+这一档 83 个文件里绝大多数是机械改名,**不走三方合并**(被对齐删掉、搬走的文件会在合并里复活,冲突解到"取我方"再逐处补改名也一样麻烦),
+改成"取上一档整树 + 全局机械替换 + 编译驱动补漏"。机械替换的陷阱:
+- 全局把 `.location()` 换成 `.identifier()` 会咬到别的类的同名访问器(`SkillInfo.location()`、`TagKey.location()` 都还叫 location,编译才发现);
+  替换完逐个看 diff,别信"能编译就对"。
+- 实体类包重组按 1.21.11 反编译源逐个类名找新位置,不手写:`animal.Pig/Cow/Chicken` → `animal.pig/cow/chicken.*`、
+  `npc.AbstractVillager` → `npc.villager.*`、`projectile.Snowball` → `projectile.throwableitemprojectile.*`、`vehicle.Boat/AbstractBoat` → `vehicle.boat.*`、
+  `monster.Zombie/ZombifiedPiglin` → `monster.zombie.*`、`monster.Spider` → `monster.spider.*`。
 
+**新 1.21.1 功能面新踩到的**
+- 世界线框:`ShapeRenderer.renderLineBox` 没了。新增 `client/debug/LineBox`(12 条棱各走一条线段,法线取线段方向),寻路调试覆盖层与征询轮廓共用;
+  `RenderType` → `rendertype.RenderTypes`(`lines()`/`text(...)`)。
+- 聊天里的链接:`Screen.handleComponentClicked(Style)` 与 `StringSplitter.componentStyleAtWidth` 都没了。找指针下的样式改交给原版的
+  `ActiveTextCollector.ClickableStyleFinder`(把这一行文字按它画的位置喂进去);点开按原版 `Screen.clickUrlAction` 的规则自己做(它是 protected static):
+  看 `chatLinks` 选项,开了 `chatLinksPrompt` 就走 `ConfirmLinkScreen.confirmLinkNow(原屏, uri)`(确认完回到这个面板),否则直接 `openUri`。
+- 命令源权限:`.requires(source -> source.hasPermission(2))` → `.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))`;
+  `new CommandSourceStack(..., int level, ...)` → 权限集 `LevelBasedPermissionSet.OWNER/GAMEMASTER/forLevel(PermissionLevel.byId(n))`;
+  `ServerOpListEntry(…, int, bool)`、`withPermission(int)` 同理。
+- 方块倒水蒸发:除 MLGChain 外,**寻路模块也用**——`WorldView.ultraWarm()` 改名 `waterEvaporates(BlockPos)`。`WATER_EVAPORATES` 是**按位置**的环境属性,
+  `getDimensionValue` 会抛 `Position must always be provided for positional attribute`(第一次跑 GameTest 时 `numen.route.plan` 整条红才发现)。
+  活世界逐点问;搜索用的快照在**主线程**捕获时按快照中心采一次、整片共用(工作线程取不了环境属性;原版只有维度类型会把它设成真)。
+- `Player.canInteractWithBlock/Entity` → `isWithinBlockInteractionRange/isWithinEntityInteractionRange`(寻路的 `PlayerHands`)。
+- `ServerOpListEntry`/`MinecraftServer.getProfileCache` 在 1.21.10 档已处理;本档 `Curios` 14.0.0+1.21.11 照编(API 有几处标了 `[removal]`:
+  `IItemHandler.isItemValid/extractItem`、`CuriosApi.MODID/getSlots/getItemStackSlots`,下一档要换新接口)。
+- 引擎里 `FakeClient` 已有加载回执,**不要**再采纳旧 1.21.11 分支在 `CompanionFactory` 里加的那一句(单一出处)。
+
+**联动(plugins/)**
+- 本代只移植 Curios(`curios-neoforge:14.0.0+1.21.11`)。TLM、YSM、森罗物语厨房、FTB Quests 在 1.21.11 上没有可取的构建
+  (Modrinth/maven.ftb.dev 查法同前两档;FTB Quests 的 maven 只有 2101.x、2111.x 与 26.1.2.x)。
+
+**MixinExtras**:NeoForge 日志 `MixinExtrasServiceImpl(version=0.5.3)`;Fabric 的 datagen 运行日志 `MixinExtras|Service … version=0.5.0`
+(加载器 0.18.1 自带 `mixinextras-fabric-0.5.0`),均 ≥0.4,不需要自带。
+
+### 2026-11 对齐 1.21.1 @ 352c6fec8(0.1.5)❗
+
+方法:以 `align-1.21.10`(已对齐 352c6fec8、带 1.21.10 平台适配)整棵树为底,旧路径的残留文件逐个删,再把 1.21.10→1.21.11 的适配重放上去:
+机械改名用脚本(大小写敏感、只改认得的写法),其余靠编译、单测、GameTest 找。1.21.8、1.21.10 两档的 GameTest 夹具、可复现机制、统一写法
+在本档原样成立,下面只记 1.21.11 新碰到的。
+
+**改名与迁包**(机械替换,上一节的陷阱照旧)
+- `ResourceLocation` → `Identifier`、`ResourceKey.location()` → `identifier()`、`net.minecraft.Util` → `net.minecraft.util.Util`、
+  `RenderType` → `rendertype.RenderTypes`、`GameRules` → `gamerules.GameRules`、`ResourceLocationArgument` → `IdentifierArgument`、
+  `Codec.unit` → `MapCodec.unitCodec`(寻路的 `NavClock`)。
+- 实体类包:`animal.pig/cow/chicken`、`npc.villager`(`AbstractVillager`、`VillagerProfession`、`VillagerDataHolder`)、
+  `projectile.throwableitemprojectile.Snowball`、`vehicle.boat`、`vehicle.minecart`、`monster.zombie`、`monster.spider`。
+
+**世界线框**:`ShapeRenderer` 只剩 `renderShape(PoseStack, VertexConsumer, VoxelShape, x, y, z, argb, lineWidth)`,lines 管线的顶点格式
+逐顶点带线宽。征询轮廓(Numen API)与寻路调试覆盖层(Numen)的方框都交给它(方块是一个小方块形状加偏移,实体是 `Shapes.create(包围盒)`),
+寻路调试的折线与竖线是自己的线段、逐顶点写 `setLineWidth`;线宽都取 `Window.getAppropriateLineWidth()`,与原版方块选中框相同。
+两处分属两个模块(Numen 编译期只看得见瘦 api jar),所以不另做共用的画线助手。
+
+**权限集**:`NumenPlayer.permissions()` 返回 `Authority.commandPermissions`(`PermissionSet`);`IPermissions.commandPermissions` 没主人时是
+`NO_PERMISSIONS`,有主人取 `getProfilePermissions`;`ModPermissions.levels` 问 `permissions().hasPermission(new Permission.HasCommandLevel(...))`;
+客户端面板判 `Permissions.COMMANDS_GAMEMASTER`。命令源、op 名单条目、`withPermission`、`.requires` 的写法见上一节。
+
+**游戏规则**:规则是 `GameRule<T>`,`get(rule)` / `set(rule, value, server)`。用例夹具改规则只经 `GameTestWorld.setRule(level, rule, value)`:
+原版实现传 `MinecraftServer`,Paper 的 `GameRules.set` 第三参是 `ServerLevel`(规则按世界存),只在 Paper 的实现里不同。
+
+**倒水蒸发**:上一节的 `WorldView.waterEvaporates(BlockPos)` 照做;`CostModel.mayCatch(view, pos)` 按落点问,`Drop` 把落点传进去;
+地形烘焙的 `ultra_warm` 键名不变(数据集的键),值取 `WATER_EVAPORATES`。
+
+**其它**:`BedSleepingProblem` 是 record,`SleepOps.explain` 取 `message()`,只有 `OTHER_PROBLEM` 没文案;聊天面板的链接点开走自己的
+`openLink`(看 `chatLinks`/`chatLinksPrompt`,`ConfirmLinkScreen.confirmLinkNow` 或 `openUri`)。
+
+**依赖**:Gson 2.13.2、slf4j 2.0.17(本版游戏自带的版本,编译与单测都对着它)。端到端的协议客户端用 MCProtocolLib `1.21.11-1`,
+它带的 Adventure 4.25 不再另提版本。
+
+**联动**:带 Curios(`14.0.0+1.21.11`)、JEI(`27.54.0.116`)、FTB Quests(`2111.1.5`,与它构建时声明的 FTB Library `2111.1.1`、
+FTB Teams `2111.1.1`、Architectury `19.0.1` 一组;2111 这一线的 `neoforge.mods.toml` 声明 `minecraft [1.21.11,)`)。FTB Quests 这一版的改动:
+任务文件单例改走 `ServerQuestFile.getInstance()`/`ClientQuestFile.getInstance()`,`FTBQuestsClient.getClientPlayer()` 没了(取原版的
+`Minecraft.getInstance().player`),`Tristate` 迁到 `ftblibrary.client.config`,删章节用 `deleteObject(id)`,`Component.Serializer` 没了
+(JSON 标题走 `ComponentSerialization.CODEC` 加任务书的注册表上下文,和 FTB 自己的 `TextUtils.parseRawText` 同一条路);
+它的 GameTest 换成 Numen API 夹具的 `@GameTest`/`@BeforeBatch` 与 `Checks.assertTrue`。
+不带 YSM、车万女仆、森罗物语厨房、KubeJS(1.21.11 都没有可用构建;KubeJS 的 maven 只有 2004–2101 与 26.x)。
+不带 Litematica:1.21.11 的 Litematica/MaLiLib 构建全出自 Loom 1.16.3 与 1.17.20(清单的 `Fabric-Loom-Version`),本仓库的 Loom 1.14.10
+拒收更新的 Loom 打的模组(`Mod was built with a newer version of Loom`),Loom 1.17 又要更新的 Gradle。
+Paper 开发包 `1.21.11-R0.1-SNAPSHOT`。
 ## 1.21.11 → 26.1.2 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×5；跨版本纪元:渲染第四震 + Java 25 + Fabric 原生 loom）
 
 构建旋钮:MC `26.1.2` / range `[26.1.2, 26.2)` / NeoForm `26.1.2-1` / Fabric `0.148.2+26.1.2` /
@@ -1069,152 +1402,47 @@ RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样�
 1.21.1 有四处 mixin 用 `@WrapMethod`(要 MixinExtras ≥ 0.4,版本过旧时静默不生效)。26.1.2 上:NeoForge 的 GameTest 日志
 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.2 的 jar 内嵌 `mixinextras-fabric-0.5.4.jar`。两边都够,不用内嵌。
 
----
 
-## 26.1.2 → 26.2 ✓（已验证：双 loader 编译 + 出包 + datagen 四路零漂移 + 867 单测零跳过 + 65 条游戏内用例 ×3;渲染第五震:Vulkan 化管线 + 屏幕/HUD 拆家 + 立即模式终结）
+## 26.1.2 对齐 1.21.1 @352c6fec8（0.1.5）
+方法:不再从 1.21.1 直接移,而是以 1.21.11 的对齐结果(`align-1.21.11`@76a05df2c,已含 352c6fec8 及之前的通用修复、1.21.2+ 的各项适配)为底,
+把 26.1.2 相对 1.21.x 的那一段差异三方合并进去(差异取自上一轮 26.1.2 的落地,基准是 1.21.1@19c8710b0),冲突一律先取 1.21.11 那边的写法,
+再由编译器与 GameTest 点名补 26.1 的差异。同一处 API 差异在 1.21.x 线上已经适配过的,这里不再另写一份。下面只记 1.21.11 → 26.1.2 这一段。
 
-构建旋钮:MC `26.2` / range `[26.2, 26.3)` / NeoForm `26.2-2` / Fabric `0.158.0+26.2` /
-Fabric loader `0.19.3` / NeoForge **`26.2.0.67`(正式版,出了 beta 期)**。26.2 无补丁版
-(NeoForm 只有 26.2-1/-2,MC id 就是裸 `26.2`)。运行时库 **gson `2.13.2 → 2.14.0`**
-(MC 26.2 manifest 升版,ai/build.gradle 跟着提)、slf4j-api `2.0.17` 不变。
-插件线零动:loom `1.14.10` / moddev `2.0.141` 原版本直吃 26.2。Java 25 不变,CI 只改门。
-26.1+ 客户端 jar 原生 Mojang 名不再发 mappings txt——**勘探直接 javap 两版 client jar**,
-比对 mappings 文本更快也更真(NeoForge 补丁不污染)。
+**构建旋钮**:NeoForge 换成正式版 `26.1.2.126`(`26.1.2.50-beta` 太旧,KubeJS `26.1.2-8.0.8` 要求 `26.1.2.110` 以上);其余同上一节。
+Fabric 是原生 Loom(`net.fabricmc.fabric-loom`,不重映射,没有 `mappings`、`mod*` 配置);paperweight-userdev `2.0.0-beta.22` 认得
+`26.1.2.build.74-stable` 开发包。e2e 的 MCProtocolLib 用 `26.1-1`(与 26.1.2 同一个协议号)。
 
-### 渲染第五震:屏幕/HUD 拆家(api/client,全量机械替换)
-```java
-Minecraft.screen 字段与 setScreen 删除 → mc.gui.screen() / mc.gui.setScreen(…)
-  (Gui 是 Minecraft 的 public final 字段;setScreenAndShow 两版都在,不混淆)
-新类 net.minecraft.client.gui.Hud(Gui.hud,public final):HUD 从 Gui 整体拆出
-Gui.getChat() → mc.gui.hud.getChat()(ChatComponent.addClientSystemMessage 原位,
-  加行链路与"取 0 位句柄"前提继续成立)
-Options.hideGui 字段删除 → mc.gui.hud.isHidden()(F1 翻转走 Hud.toggle(),
-  vanilla 的名牌/toast/debug 判定全换成了这个)
-I18n.exists(String) 删除(类只剩 get) → Language.getInstance().has(key)
-```
+**GameTest 夹具(1.21.11 的数据驱动框架之上)**
+- 测试环境带存档类型:`TestEnvironmentDefinition<SaveData>`,`setup` 返回存档、`teardown(level, 存档)`;`NumenTestEnvironment` 是 `<Unit>`。
+  测试实例的数据是 `TestData<Holder<TestEnvironmentDefinition<?>>>`,构造多一个 `padding`(给 0)。
+- 登记点:26.1 每个数据注册表一个装载任务,`GameTestRegistrationMixin` 挂 `RegistryLoadTask.freezeRegistry` 开头(读完、冻结前)。
+- `GameTestServer.create` 多一个 `int repeatCount`;`StructureUtils.testStructuresDir` 拆成 `testStructuresSourceDir`/`testStructuresTargetDir`。
+- 结构模板目录是资源包的布局:`syncGameTestStructures` 把各模块的模板放进 `data/<套件名>/structure/`,命名空间参与查找。借 Numen 地板的
+  联动用例与评测写全名 `numen:floor16`(YSM、KubeJS 的用例,`Bench.ANCHOR`)。Fabric 不再另做一份 `gametest/structure` 资源,两边读同一个目录。
+- 天气归服务器:原版是 `MinecraftServer.setWeatherParameters(4 参)`,Paper 是 `(ServerLevel, 4 参)`,经 `GameTestWorld.setWeather` 一处分开;
+  时刻是世界时钟(`GameTestWorld.setDayTime`:维度类型的默认时钟拨总刻数)。
+- 区块刻洗牌的 `tickChunks` 有两个重载,`ChunkTickShuffleMixin` 写全描述符 `(ProfilerFiller, long)`;`Util` 在 `net.minecraft.util`。
+- `ChunkPos` 是记录(`x()`/`z()`)。
 
-### 渲染第五震:管线 API Vulkan 化(RoundRect + 自定义 shader)
-26.2 引入 Vulkan 后端(`com.mojang.blaze3d.vulkan`),RenderPipeline 声明面改成
-WebGPU 风格的 bind group:
-```java
-Builder.withUniform(String, UniformType) 删除 → withBindGroupLayout(BindGroupLayout)
-  // vanilla GUI 家族 = GLOBALS + MATRICES_PROJECTION 两层;MATRICES_PROJECTION 即原
-  // DynamicTransforms + Projection 两个 UBO 打包(BindGroupLayouts 静态表)。GLSL 只
-  // 声明自己用到的块即可(vanilla core/gui 同样不声明 Globals,照抄不慌)
-Builder.withVertexFormat(format, VertexFormat.Mode) → withVertexBinding(0, format)
-  + withPrimitiveTopology(PrimitiveTopology.QUADS)
-  // VertexFormat.Mode 枚举删除,拓扑迁 com.mojang.blaze3d.PrimitiveTopology
-GUI 家族一律无深度:builder 默认 Optional.empty(),GUI_SNIPPET 不设,
-  GUI_TEXT_SNIPPET 还显式清掉——RoundRect 跟着删 DepthStencilState(出画序即提交序)
-```
-shader 文本两处:`#version 150 → 330`;DynamicTransforms UBO 块**删 LineWidth 字段**
-(std140 布局须与 vanilla dynamictransforms 逐字对齐,多一个字段绑定即错位)。
-GuiElementRenderState 方法面 / TextureSetup.noTexture / VertexConsumer 顶点属性面 /
-DefaultVertexFormat.ENTITY / precompilePipeline / GuiGraphicsExtractor 的
-guiRenderState/scissorStack 字段全部原位——**AT/AW 零改动**。
+**单测**
+- 物品的数据组件在数据包加载期才绑:单测会话开头经 JUnit 的 `LauncherSessionListener` 引导一次(Numen API 的 `McTestComponents`、寻路夹具的
+  `VanillaSession`,后者也绑原版方块/流体标签)。因为原版标签在会话开头就绑好了,改绑标签的测试(`GateTerrainTest`)收场时原样绑回,不清空。
 
-### 渲染第五震:立即模式终结,世界空间调试线迁 Gizmos
-`MultiBufferSource` / `ShapeRenderer` / `OutlineBufferSource` 整类删除,
-`Minecraft.renderBuffers()` 没了(RenderBuffers 只剩 StagedVertexBuffer)——
-"拿 BufferSource 逐帧画线"的通道从此不存在。官方替代是 `net.minecraft.gizmos.Gizmos`
-静态收集器(26.1 的 fabric 事件名 BEFORE_GIZMOS 预告的就是它):
-```java
-Gizmos.line(Vec3, Vec3, argb[, width])       // 默认宽 3,ARGB 带 alpha
-Gizmos.cuboid(BlockPos, padding, GizmoStyle.stroke(argb))  // padding=-0.02 即旧内缩框
-// 另有 arrow/point/circle/rect/billboardText;GizmoProperties 可 setAlwaysOnTop()/
-// persistForMillis()/fadeOut();默认深度测试(线被地形遮挡),与旧 lines 管线一致
-```
-机制:ThreadLocal 收集器,**无收集器时 addGizmo 直接抛 IllegalStateException**。
-Minecraft 把整个渲染帧包在 renderThreadGizmos 作用域里(提取期另有 mainThreadGizmos,
-逻辑期有 perTickGizmos),LevelRenderer.finalizeGizmoCollection() 每帧收账。挂点:
-- fabric:`LevelRenderEvents.BEFORE_GIZMOS` 注入在 finalizeGizmoCollection() 前,
-  收集器在位,回调里直接 Gizmos.* 当帧出画(fabric 的 DebugRendererRegistry 绑死
-  服务端 DebugSubscription 订阅制,不适合自有 payload 驱动的开关,不走它);
-- neoforge:新事件 `RegisterDebugRenderersEvent`(mod bus)注册
-  `DebugRenderer.SimpleDebugRenderer`(emitGizmos 六参签名两版同形),NeoForge 注册的
-  **不受 F3 调试项门控**,每帧提取期在收集器作用域内被调——原 RenderLevelStageEvent
-  挂法废弃(那些 stage 在 finalize 之后,提交会迟一帧)。
-PathDebugRenderer 因此不再收 PoseStack/Camera(相机换算由 gizmo 渲染器做),
-buffers/endBatch 整段消失,函数面缩成 `emit()`。
+**代码侧**
+- `BlockTags.DIRT` 拆了:现在只剩三种泥土,原来的整族(草方块、灰化土、菌丝、泥巴、苔藓块)是 `#minecraft:substrate_overworld`。
+  滑翔落点的"天然方块"(`Landings.natural`)与 `numen:natural` 标签都改认它。
+- `SavedDataType` 的名字是 `Identifier`:存档文件落在 `data/numen/<名>.dat`(`numen:companions`、`numen:placed`、`numen:permissions_<uuid>`、
+  `numen:nav_clock`、计时器),与本分支 0.1.4.x 的名字一样。从 1.21.x 的世界跨大版本升上来时,旧名字(`numen_xxx.dat`)的文件不会被读到(遗留)。
+  旧版服务端出箱的一次性迁移(`ServerBrains.legacyOutbox`)照同一条规则找 `numen:event_outbox` → `data/numen/event_outbox.dat`。
+- 界面:`GuiGraphics` → `GuiGraphicsExtractor`(`drawString` → `text`、`renderFakeItem` → `fakeItem`、`PlayerFaceRenderer.draw` →
+  `PlayerFaceExtractor.extractRenderState`);整块界面淡入淡出仍是 `GuiAlpha` + `MixinGuiGraphics`,三个提交口换成 `innerFill`、
+  `text(Font, FormattedCharSequence, …)`、`innerBlit(RenderPipeline, GpuTextureView, GpuSampler, …)`。`CameraRenderState` 在 `renderer.state.level`。
+- 世界里的线(寻路调试线、征询轮廓)走原版 gizmo:Fabric `LevelRenderEvents.BEFORE_GIZMOS`,NeoForge `RegisterDebugRenderersEvent`。
+- `Item.getName()` 要 `ItemStack`(取默认那一叠的 `getItemName()`);`Recipe.assemble` 不再要注册表;`Recipe.group()`/`showNotification()` 变抽象。
+- 本地玩家 `displayClientMessage(…, false)` → `sendSystemMessage`。
 
-### 实体侧:生成请求化 + id 发放推迟 + 常量迁居
-```java
-EntityType.create(Level, EntitySpawnReason) 仍在,但改为委托
-  create(Level, new EntitySpawnRequest(reason, /*ignoreChecks*/ false))——
-  ⚠ 从此带生成检查:canSpawn = featureflag 启用 && (allowedInPeaceful || 非和平)。
-  和平难度下怪物 create 直接回 null!必出怪的夹具按刷怪笼同款 (reason, true);
-  蓝图放实体与 StructureTemplate 同款 (STRUCTURE, false),和平跳怪是 vanilla 一致行为
-Entity 的 id 改由 Level.getNextEntityId() 在构造器里发放(原全局静态计数器),
-  getId() 对未发放(0)抛 IllegalStateException,而 hashCode() 走 getId()——
-  Unsafe 裸分配的测试空壳玩家要手补非零 id,否则按实体做键(WeakHashMap)当场炸
-EntityType 上的实体类型常量全部迁新宿主 EntityTypes(与 BlockEntityTypes 同法):
-  EntityType.PIG → EntityTypes.PIG(ZOMBIE/ITEM_FRAME/ARMOR_STAND/OAK_BOAT/MINECART 同)
-染色方块/物品常量收进 ColorCollection(16 色 record,per-color 访问器):
-  Blocks.RED_BED → Blocks.BED.red();WHITE_BANNER → BANNER.white();
-  WHITE_WALL_BANNER → WALL_BANNER.white();RED_CARPET → CARPET.red();Items 同名集合
-BlockPos.getCenter() 删除 → Vec3.atCenterOf(pos)
-```
-
-### datagen:标签 appender 全面键基化
-vanilla `IntrinsicHolderTagsProvider`(值基 add(T) 的唯一来源)整类删除,
-`TagsProvider.tag(key)` 返回 ResourceKey 基 `TagAppender<T>`:
-```java
-neoforge:BlockTagsProvider/ItemTagsProvider 降级纯 TagsProvider —— b.add(v) 不复存在
-fabric:valueLookupBuilder(key) 删除 → builder(key)(返回 BlockItemTagAppender;
-  fabric 的 forceAddTag/setReplace 接口注入仍在,归属校验的绕行不变)
-适配:值→键在 loader 包装层查注册表(BuiltInRegistries.X.getResourceKey(v).orElseThrow()),
-  common 的值基 Appender 契约与全部标签清单一字不动;四路 datagen 生成物零漂移
-```
-
-### 内容侧:26.2 新增 sulfur_caves
-两版 client jar 的 data/ diff:结构 34 条零变化、矿物 placed_feature 零变化
-(tier_progression 的 1.21+/26.x 口径仍真),生物群系 65 → 66:新增
-`minecraft:sulfur_caves`(硫磺洞穴,硫磺块/尖刺/泉池,新怪 sulfur_cube 可桶装)。
-world_atlas 补条目并把总数与版本口径改到 26.2——它自claim穷尽,少一条就是假的。
-⚠ 做这个 diff 用 client jar:26.x 的 server jar 是 bundler 壳(165 个表项全是
-META-INF),grep 出"零差异"是空对空。
-
-### 未发生的预警项
-- **12 只 mixin 靶点全部原位**(气泡 submit 四参描述符、载具 isLocalInstanceAuthoritative、
-  skipPlayer/applyChunkTrackingView、send 单参+connection、SoundBufferLibrary.getStream、
-  ChatComponent.allMessages/refreshTrimmedMessages、KeyboardInput.tick、dataSlots、
-  nibble、updatePOIOnBlockStateChange 逐字健在),AT/AW 零改动;
-- SavedDataType / payload 面 / StreamCodec.composite 上限(仍 12 字段)/ 世界时钟读写侧 /
-  gametest 泛型化与资源包布局 / 结构模板 DataVersion 4189 / 单测组件绑定夹具——
-  26.1.2 整套适配原样成立,一处未动;
-- 26.1 的同步加载票据雪崩未复发(身体休眠门 + despawn 配对在位,三轮全绿);
-- ContainerInput/ChunkPos/Recipe.assemble/authlib 面零触点。
-
-### 版本口径与不迁项
-- MixinSoundEngine / IVoiceSoundFactory 的"vanilla 仍无 SoundInstance.getStream 钩子"
-  对 26.2 重验仍真,只改口径数字;McDrawSurface 实现口径、composite 上限口径同;
-- "26.1 起/26.1 拆成"一类历史陈述仍真,保留;
-- README/MCMOD 的"11 个版本"是对已发布支持面的陈述,26.2 发版时统一改。
-
-### 只在真机客户端才能目视验证的部分
-沿用上一档清单,本档另加三项因为换了通道才需要重看:寻路调试覆盖层换 Gizmos 后的
-观感与深度关系(双翼挂点都换了);GUI 圆角 SDF 在 BindGroup 化管线 + 330 shader 下的
-渲染结果;Hud.isHidden 替换 hideGui 后 F1 对快捷对话提醒/toast 的隐藏行为。
-
-### 26.2 落地实录(开荒)
-首个无路书档:官方元数据勘旋钮(NeoForm/NeoForge maven-metadata + fabric meta +
-modrinth)→ 配置期一次通过 → 编译错误驱动。提交序列:build(旋钮/CI 门/gson)→
-api(屏幕 HUD/Gizmos/管线/shader)→ core(EntitySpawnRequest/键基标签/常量迁居/
-atlas)→ test(夹具补 id)→ test(gametest 出怪 ignoreChecks)→ docs。全程三次红:
-api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、gametest 1 红
-(和平难度拒刷僵尸——26.1.2 同一调用无检查,行为差异藏在委托参数里,编译不报)。
-勘探主武器从 mappings diff 换成 **javap 两版 client jar + comm 类表 diff**(26.1+
-原生 Mojang 名,jar 即真相);一次工具假阴性(jar tf 管道偶发空输出,gizmo 包被误判
-不存在)靠先落盘 tf 全表再 grep 排掉——类表 diff 一律以落盘文件为准。
-
-## 26.2 对齐 1.21.1 @7a3d3e251（接在 origin/26.2 之上）
-做法:整树落成 1.21.1 的树,26.1.2 对齐里的平台适配(上一节)原样带过来,再把 origin/26.2 相对 origin/26.1.2 的差异重放一遍。
-- **渲染**:26.2 原有的适配(Gizmos 取代立即模式调试线、`gui.setScreen/screen()/hud.isHidden()/toastManager()`、`Language.has`、圆角 shader 退役)
-  照 origin/26.2。新代码里的 `ConsentOutlines` 改成与 `PathDebugRenderer` 同一条 gizmo 通道(`emit()`,两个加载器的挂点各加一行);
-  `ToastManagerAccessor` 还在、`toastManager()` 挪到 `Gui`。
-- **按颜色分的方块与物品**:`Blocks.RED_BED` → `Blocks.BED.red()` 一类(`ColorCollection`),`EntityType.PIG` → `EntityTypes.PIG`,`getCenter()` → `Vec3.atCenterOf`。
-- **其它**:`DripstoneThickness` → `SpeleothemThickness`,`CriteriaTriggers` 搬进 `advancements.triggers`,`I18n.setLanguage` 没了(单测的语言夹具改成只 `Language.inject`,
-  挪出 `net.minecraft` 包)。
-- **联动**:YSM 联动没有这个版本,不建;Curios `16.0.0+26.2`;FTB Quests 没做(同上节)。
-- **和平难度拒刷怪**:`EntityTypes.X.create(level, reason)` 带生成检查;本档的战斗用例批次定的是非和平难度,实测通过,没有另加 `EntitySpawnRequest`。
-- **MixinExtras**:GameTest 日志 `MixinExtrasServiceImpl(version=0.5.4)`;Fabric loader 0.19.3 内嵌 `mixinextras-fabric-0.5.4.jar`。够用,不内嵌。
+**联动**:Curios `15.0.0+26.1.2`、YSM `2.6.5`(26.1)、KubeJS `26.1.2-8.0.8`(Rhino `2101.2.8-build.91`;运行期还要 Better Advanced Tooltips
+`2601.1.0-build.11`,`2601.1.1-build.12` 的 mods.toml 写的是 NeoForge 26.3 以上)、Litematica `0.27.14`/MaLiLib `0.28.12`(26.1 的发布物就是
+Mojang 名,普通 `compileOnly`)、JEI `29.53.0.115`。KubeJS 用例脚本里杀目标是 `target.kill(target.level)`(`Entity.kill` 要 `ServerLevel`)。
+不带:车万女仆、森罗物语厨房(没有 26.1 构建);FTB Quests `26.1.2.10` 有构建,但去掉了 Architectury:事件换成它自己的
+`api/event/*Event`,"是不是假玩家"挪进 FTB Library(`NeoMiscImpl.isFakePlayer`,判据同 Architectury),联动要按新接口重写,这一档没带。

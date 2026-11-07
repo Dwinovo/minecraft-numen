@@ -1,0 +1,412 @@
+package com.dwinovo.numen.api.event;
+
+import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.inbox.EventClock;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.script.ScriptCall;
+import com.dwinovo.numen.api.entity.CompanionEvents;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.brain.CompanionLoops;
+import com.dwinovo.numen.api.sdk.CompassUtil;
+import com.dwinovo.numen.api.sdk.EntityLabel;
+import com.dwinovo.numen.api.task.TaskResult;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * <b>世界事件的唯一发出口。</b>常驻任务链、任务收尾、维度穿越、以及第三方内容包,
+ * 全都往这里写——一个类,一个方法。
+ *
+ * <h2>为什么收成一个口</h2>
+ * 多开一条发事件的路,就多一套"带不带时间戳""主人离线怎么办""攒不攒",而它们
+ * 必然分叉:同样是"主人下线时任务做完了",一条路直接丢、另一条能留六条。
+ * 一个问题只能有一个答案,所以只有这一个入口,也只有一个去处:她的收件箱。
+ *
+ * <h2>种类查表</h2>
+ * 发的是哪一种事由类型表({@link EventTypes})说了算:条目的 {@code type} 就是种类,
+ * {@code <event kind="…">} 里的 kind 由这里用同一个 id 拼上。表里没登记的种类、以及登记了却不是
+ * 世界的事的类型(主人的话、目标续跑、整理与清空),在这里当场拒绝——那是发送方写错了。
+ *
+ * <h2>两件事这里一定做</h2>
+ * <ol>
+ *   <li><b>盖时间戳</b>——每条事件都带游戏内日期与时刻。模型能自己判断哪些信息
+ *       过期了(死前捡的铁矿在死亡地点掉了),我们就不必替它清箱;</li>
+ *   <li><b>主人离线不丢</b>——她的大脑在服务端,事件直接进她的收件箱,收件箱跟着她的家落盘,主人在不在线都一样
+ *       (离线只是攒着,他回来再处理)。每一种事件都享受这条,没有例外。</li>
+ * </ol>
+ *
+ * <h2>urgent</h2>
+ * {@code true} = <em>她不知道这件事,正在做的事就是错的</em>。到了她的收件箱,
+ * urgent 会立刻带走队列里攒的一切并开一轮;非 urgent 攒着,等够数、够久、
+ * 或者主人说话时搭车。类型表说某种事恒为急件的,发送方怎么标都是急件;其余由
+ * 发事件的人判断——判断错了主人会觉得同伴很吵,那是内容包自己的名声。
+ *
+ * <p>服务端专用。
+ */
+public final class NumenEvents {
+
+    private NumenEvents() {}
+
+    /**
+     * 她饿了。<b>急</b> —— 她不会自己吃,主人不知道就没人管,饱食归零会开始掉血。
+     * 去抖在 {@code NumenPlayer.pollGotHungry}:一轮饥饿只发一条。
+     */
+    public static void gotHungry(NumenPlayer companion, int foodLevel) {
+        emit(companion, EventTypes.HUNGRY, null,
+                "you are hungry (" + foodLevel + "/20) and you do not eat on your own — "
+                        + "numen.inv.eat something from your inventory, or go get food",
+                true);
+    }
+
+    /**
+     * 她的背包一格空的都没有了,碰到的一件东西放不下、留在了地上。<b>急</b>——她不知道就会接着挖、接着捡,东西都落在地上。
+     * 判据与去抖在 {@code NumenPlayer.touchedItem} 与 {@code pollInventoryFull}:一轮满只发一条,背包又有空格才复位。
+     */
+    public static void inventoryFull(NumenPlayer companion, NumenPlayer.LeftBehind left) {
+        String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(left.stack().getItem()).toString();
+        emit(companion, EventTypes.INVENTORY_FULL, Map.of("item", item),
+                "your backpack is full: " + item + " x" + left.stack().getCount() + " at "
+                        + com.dwinovo.numen.api.sdk.Positions.literal(left.pos()) + " did not fit and stayed on the ground, "
+                        + "and anything else that does not stack onto what you carry stays on the ground too. Make room "
+                        + "with numen.inv.drop (what you can spare) or by putting things into a chest (numen.use.block "
+                        + "opens it, w:put fills it); then numen.work.collect picks up what is still on the ground.",
+                true);
+    }
+
+    /**
+     * 她达成了一个进度,奖励进了她的身上。不急:东西已经在她背包里,她下次开口自然带上。{@code change} 是同一刻里她背包与经验实际的变化
+     * ({@code Belongings}),不是从进度配置推算的——战利品表每次抽的不一样。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code PlayerAdvancementsRewardMixin} 包住 {@code PlayerAdvancements.award} 调;Paper 上由
+     * {@code PlayerAdvancementDoneEvent} 调(它在发奖励之前触发,所以平台要在事件里拍背包与经验的快照,下一刻再比)。
+     * 调用方保证:主线程,奖励已经发到她身上,{@code change} 非空(没变的不调),{@code title} 是进度的显示名(没有就用 id)。
+     */
+    public static void advancementReward(NumenPlayer companion, String id, String title, String change) {
+        emit(companion, EventTypes.ADVANCEMENT_REWARD, Map.of("id", id),
+                "you completed the advancement \"" + title + "\" and its reward reached you: " + change, false);
+    }
+
+    /**
+     * 主人挨打了。急不急按血线分档:安全区只是消息(攒着搭车,她下次开口自然带一句);
+     * 跌进危险区(与饥饿同一条"原版跑不动"的线)才是急件。这条事件<b>不碰身体</b>——
+     * 去不去救永远是她的决定。检测与去抖在 {@code OwnerHurtWatch}。
+     */
+    public static void ownerHurt(NumenPlayer companion, String attacker,
+                                 float hp, float maxHp, double distance, boolean urgent) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("by", attacker);
+        attrs.put("owner_hp", Math.round(hp) + "/" + Math.round(maxHp));
+        attrs.put("distance", String.valueOf(Math.round(distance)));
+        String text = urgent
+                ? "your owner is in DANGER: " + attacker + " has them down to " + Math.round(hp)
+                        + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                        + " blocks from you — decide now whether to go help"
+                : "your owner just took a hit from " + attacker + " (" + Math.round(hp) + "/"
+                        + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                        + " blocks from you) — they can likely handle it; your call";
+        emit(companion, EventTypes.OWNER_HURT, attrs, text, urgent);
+    }
+
+    /**
+     * 她自己挨打了。<b>恒为急件</b>——远处的弓箭手她看不见,不叫醒她就会一直挨着;反击、退开、
+     * 找掩体都由她当场定。检测与去抖在 {@code CompanionHurtWatch}:一场连击每 5 秒至多叫醒一次。{@code bearing} 是攻击者在她的哪个方向。
+     */
+    public static void companionHurt(NumenPlayer companion, String attacker, float amount,
+                                     float hp, float maxHp, double distance, String bearing) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("by", attacker);
+        attrs.put("damage", number(amount));
+        attrs.put("hp", Math.round(hp) + "/" + Math.round(maxHp));
+        attrs.put("distance", String.valueOf(Math.round(distance)));
+        attrs.put("bearing", bearing);
+        String text = attacker + " hit you for " + number(amount) + " — you are at " + Math.round(hp)
+                + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                + " blocks away to the " + bearing + "; decide now whether to fight back, fall back, or break line of sight";
+        emit(companion, EventTypes.COMPANION_HURT, attrs, text, true);
+    }
+
+    /**
+     * 半径内一只怪盯上了她。<b>恒为急件</b>——它还没动手,不叫醒她就是等着挨打。检测与去抖在 {@code Vigil}:盯着期间只发一次。
+     */
+    public static void targeted(NumenPlayer companion, Mob mob) {
+        String id = EntityLabel.shown(mob);
+        long distance = Math.round(companion.distanceTo(mob));
+        String bearing = CompassUtil.compass(companion, mob);
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("mob", id);
+        attrs.put("distance", String.valueOf(distance));
+        attrs.put("bearing", bearing);
+        emit(companion, EventTypes.TARGETED, attrs, id + " is now targeting you, about " + distance
+                + " blocks away to the " + bearing + " — decide whether to fight it, fall back, or break line of sight",
+                true);
+    }
+
+    /**
+     * 她留意的一个对象被移出世界了,{@code reason} 取自原版的移除原因。<b>不急</b>——它没了不会让她正在做的事变错。
+     * 检测在 {@code Vigil}:走出半径不发,只发被移出世界。
+     *
+     * @param killer 打倒它的(原版的击杀归属);没有或不是被打倒的是 null
+     */
+    public static void gone(NumenPlayer companion, Entity entity, LivingEntity killer) {
+        String id = EntityLabel.shown(entity);
+        Entity.RemovalReason removal = entity.getRemovalReason();
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("mob", id);
+        String text;
+        switch (removal) {
+            case KILLED -> {
+                attrs.put("reason", "killed");
+                String by = killer == null ? null : killer == companion ? "you" : EntityLabel.shown(killer);
+                if (by != null) {
+                    attrs.put("by", by);
+                }
+                text = id + " died" + (by == null ? "" : ", killed by " + by);
+            }
+            case DISCARDED -> {
+                attrs.put("reason", "vanished");
+                text = id + " vanished (despawned, picked up or otherwise removed)";
+            }
+            case CHANGED_DIMENSION -> {
+                attrs.put("reason", "dimension");
+                text = id + " left through a portal to another dimension";
+            }
+            default -> {   // UNLOADED_TO_CHUNK、UNLOADED_WITH_PLAYER
+                attrs.put("reason", "unloaded");
+                text = id + " went away with its chunk unloading";
+            }
+        }
+        emit(companion, EventTypes.GONE, attrs, text, false);
+    }
+
+    /** 伤害量的写法:整数不带小数点,小数原样。 */
+    private static String number(float amount) {
+        return amount == Math.floor(amount) ? String.valueOf((int) amount) : String.valueOf(amount);
+    }
+
+    /**
+     * 服务端对她说了一句话(系统聊天或动作栏),原文照交。{@code repeats} 是这一句在上一次交出去之后又说了几遍——
+     * 同一句刷屏只在每个折叠窗口里交一次,收拢与窗口在 {@code ServerMessages}。不急,也不叫醒她:捎带投递,见类型表。
+     *
+     * @param overlay  显示在动作栏(屏幕中下方那一行)而不是聊天栏
+     * @param repeats  上次交出之后又说的遍数;0 = 头一回说
+     * @param window   折叠窗口有多长,秒;{@code repeats} 为 0 时不用
+     */
+    public static void serverMessage(NumenPlayer companion, String text, boolean overlay, int repeats, int window) {
+        emit(companion, EventTypes.SERVER_MESSAGE, Map.of("where", overlay ? "action_bar" : "chat"),
+                repeats == 0 ? text
+                        : text + " (said " + repeats + " more time" + (repeats == 1 ? "" : "s") + " in the last "
+                                + window + "s)",
+                false);
+    }
+
+    /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped / interrupted。
+     *  <p>done/failed/timeout 是急的:她派出去的活有了结果,该当场决定下一步。
+     *  stopped 是主人自己按的停止,他知道,不必吵他。
+     *  <p>她读到的是它的实际账;整份结果(值、失败的种类与下一步)随条目一起到,给等这件活的程序。
+     *
+     *  @param fn 派它的 API 函数,值按它的返回类型写;不出自 API 函数的是 null */
+    public static void taskFinished(NumenPlayer companion, String taskId, String tool,
+                                    String status, TaskResult result, com.dwinovo.numen.api.sdk.ApiFunction fn) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put(TASK_ID, taskId);
+        attrs.put("task", tool);
+        attrs.put(STATUS, status);
+        emit(companion, EventTypes.TASK_FINISHED, attrs, result.message(), !"stopped".equals(status),
+                com.dwinovo.numen.api.sdk.Dispatcher.ended(result, fn));
+        // 收尾归了程序还是进了收件箱,插件都在这一处听见一次
+        CompanionEvents.fire(CompanionEvent.TASK_FINISHED,
+                new CompanionEvent.TaskFinished(companion, taskId, tool, status, result.message()));
+    }
+
+    /**
+     * 一段被切断的程序在服务端交出的回执,作为一条事件交给她:事件正文就是那份回执的文字,不另写一份。主人客户端在收到一份已经作废的
+     * 那一批的程序结果时造它。
+     *
+     * @param program 程序的编号
+     * @param receipt 回执的文字(服务端写的那一份)
+     */
+    public static EventQueue.Entry programStopped(long dayTime, String program, String receipt, long now) {
+        return entry(dayTime, EventTypes.PROGRAM_STOPPED, Map.of("program", program), receipt, now, false);
+    }
+
+    /** 服务端发出的每一条事件先交给它们:在服务端跑的程序等它派的活的收尾、也据此判断要不要停({@code ServerPrograms})。 */
+    private static final List<Watcher> WATCHERS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** 看着服务端发出的每一条事件,按同伴。 */
+    @FunctionalInterface
+    public interface Watcher {
+
+        /**
+         * 一条事件发出了。
+         *
+         * @return 这条事件归了看着它的一方(程序等着的那件活的收尾,账写进了程序的回执):不再送给主人的大脑,一件活的收尾只说一次
+         */
+        boolean takes(UUID companion, EventQueue.Entry entry);
+    }
+
+    /** 看着服务端发出的每一条事件。 */
+    public static void watch(Watcher watcher) {
+        WATCHERS.add(watcher);
+    }
+
+    /** task_finished 里写着是哪件活、收尾成什么样的属性:{@link #taskFinished} 按它写,{@link #finishOf} 按它读。 */
+    private static final String TASK_ID = "id";
+    private static final String STATUS = "status";
+    /** 事件开头那一截里的一个属性;属性值经 {@link #escape} 转义过,里面不会有引号和尖括号。 */
+    private static final Pattern HEAD = Pattern.compile("^<event [^>]*>");
+    /** 事件正文:开头之后到收尾标记之前。 */
+    private static final Pattern BODY = Pattern.compile("^<event [^>]*>(.*)</event>$", Pattern.DOTALL);
+
+    /**
+     * 这条输入是哪件后台活的收尾:一条 task_finished 事件就是它的编号、收尾状态与交代的话,别的输入是 null。事件的样子只在
+     * 这里拼({@link #compose}),也在这里读回;内脑的派发器据此知道它在等的那件活做完了、做成了没有。
+     */
+    public static ScriptCall.Finish finishOf(EventQueue.Entry entry) {
+        if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
+            return null;
+        }
+        Matcher head = HEAD.matcher(entry.text());
+        if (!head.find()) {
+            return null;
+        }
+        String id = attribute(head.group(), TASK_ID);
+        if (id == null) {
+            return null;
+        }
+        Matcher body = BODY.matcher(entry.text());
+        String status = attribute(head.group(), STATUS);
+        return new ScriptCall.Finish(id, status == null ? "" : status, body.find() ? unescape(body.group(1)) : "",
+                entry.result());
+    }
+
+    /** 开头那一截里一个属性的值;没有是 null。 */
+    private static String attribute(String head, String name) {
+        Matcher m = Pattern.compile(" " + name + "=\"([^\"]*)\"").matcher(head);
+        return m.find() ? unescape(m.group(1)) : null;
+    }
+
+    /**
+     * 发一条世界事件,送进她的收件箱。
+     *
+     * @param type   事件种类,类型表里登记过的世界的事
+     * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null
+     * @param urgent 她不知道就会做错事 → 立刻开一轮;否则攒着搭车。类型表说恒为急件的种类不看它
+     * @throws IllegalArgumentException 种类没登记,或者登记的不是世界的事
+     */
+    public static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
+                            String text, boolean urgent) {
+        emit(companion, type, attrs, text, urgent, null);
+    }
+
+    /** 同上,条目另带一件身体活的结果({@link EventQueue.Entry#result})。 */
+    private static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
+                             String text, boolean urgent, com.google.gson.JsonObject result) {
+        MinecraftServer server = companion.level().getServer();
+        EventQueue.Entry plain = entry(server.overworld().getOverworldClockTime(), type, attrs, text,
+                System.currentTimeMillis(), urgent);
+        EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
+        UUID uuid = companion.getUUID();
+        boolean taken = false;
+        for (Watcher watcher : WATCHERS) {
+            taken |= watcher.takes(uuid, entry);
+        }
+        if (!taken) {
+            deliver(companion, entry);
+        }
+    }
+
+    /**
+     * 一条造好的事件送进她的收件箱:她的大脑在服务端,主人在不在线都一样(离线只是攒着)。归了在跑的程序、之后程序却没能用上的
+     * 收尾也经这里。没有大脑的身体(还没配上大脑、已经遣散)没有收件箱,留一行日志。
+     */
+    public static void deliver(NumenPlayer companion, EventQueue.Entry entry) {
+        UUID uuid = companion.getUUID();
+        var brain = CompanionLoops.get(uuid);
+        if (brain.isEmpty()) {
+            Constants.LOG.warn("[numen-event] {} kind={} 没有大脑,这条事件没人收", uuid, entry.type());
+            return;
+        }
+        brain.get().push(List.of(entry));
+        Constants.LOG.info("[numen-event] {} kind={}{} → 大脑", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
+    }
+
+    /**
+     * 造一条事件条目——<b>唯一的构造口</b>。条目的类型与 {@code <event kind="…">} 取自同一个
+     * {@code type},{@code day} / {@code t} 由它统一盖上。
+     *
+     * <p>收 {@code dayTime} 而不是 {@code MinecraftServer},所以客户端也能用同一条路
+     * (死亡事件在客户端合成:那会儿身体已经不在了)。两侧共用这一个构造口,
+     * 才不会出现"最该有时间的那条事件恰好没盖上时间"。
+     *
+     * @throws IllegalArgumentException 种类没登记,或者登记的不是世界的事
+     */
+    public static EventQueue.Entry entry(long dayTime, String type, Map<String, String> attrs,
+                                         String text, long now, boolean urgent) {
+        requireWorldEvent(type);
+        return new EventQueue.Entry(type, compose(dayTime, type, attrs, text), now, urgent);
+    }
+
+    /**
+     * 这个种类能不能当一件世界上发生的事发出去:登记过,且不是主人那几行(主人的话、目标续跑、清空、整理)。
+     * 发事件的每个入口都问这一处——服务端的发出口、主人客户端的门。
+     *
+     * @throws IllegalArgumentException 种类没登记,或者登记的不是世界的事
+     */
+    public static void requireWorldEvent(String type) {
+        if (!EventTypes.isRegistered(type)) {
+            throw new IllegalArgumentException("事件种类没登记过:" + type);
+        }
+        if (EventTypes.get(type).fromOwner()) {
+            throw new IllegalArgumentException(type + " 不是世界上发生的事,不能当事件发");
+        }
+    }
+
+    /**
+     * 主人客户端那扇门收不收这个种类:主人的话({@code query}),或者一件登记过的世界事件。
+     * 插件的门和客户端的入口都问这一处,有没有主人客户端都一样地拒。
+     *
+     * @throws IllegalArgumentException 两样都不是
+     */
+    public static void requireClientInput(String type) {
+        if (!EventTypes.QUERY.equals(type)) {
+            requireWorldEvent(type);
+        }
+    }
+
+    /** 拼 {@code <event>}:kind 就是条目的类型,盖上游戏内时间戳。 */
+    private static String compose(long dayTime, String type, Map<String, String> attrs, String text) {
+        StringBuilder sb = new StringBuilder("<event kind=\"").append(type).append('"');
+        sb.append(EventClock.stamp(dayTime));
+        if (attrs != null) {
+            for (Map.Entry<String, String> e : attrs.entrySet()) {
+                sb.append(' ').append(e.getKey()).append("=\"").append(escape(e.getValue())).append('"');
+            }
+        }
+        return sb.append('>').append(escape(text)).append("</event>").toString();
+    }
+
+    /** {@link #escape} 的反方向。 */
+    private static String unescape(String s) {
+        return s.replace("&quot;", "\"").replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&");
+    }
+
+    /** XML 属性/正文转义——事件正文里可能有实体名、物品名,是玩家能控制的输入。 */
+    public static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+}

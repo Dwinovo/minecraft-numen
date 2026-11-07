@@ -1,4 +1,4 @@
-// numen-ui:游戏内 UI 组件库,纯 JVM——零 Minecraft 依赖、零 numen-api 回引。
+// numen-ui:游戏内 UI 组件库,纯 JVM——零 Minecraft 依赖、零 Numen API 回引。
 // 三层架构的中间层:上面是每版本 ~60 行的画布适配器(IDrawSurface 实现,住在
 // 各版本分支里),下面是屏幕组装层(允许 import MC)。本模块与 Minecraft 版本
 // 无关:十一个版本分支共用同一份 numen-ui,改一处全家族生效。
@@ -52,6 +52,10 @@ repositories {
 }
 
 dependencies {
+    // 聊天气泡里的 Markdown:只有 markdown 包的适配器用得到它,富文本模型与排版不认识它。
+    // 发行 jar 里它是内嵌的库(NeoForge jarJar / Fabric include,见两个 numen-api 加载器的构建脚本)。
+    implementation "org.commonmark:commonmark:${commonmark_version}"
+    implementation "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

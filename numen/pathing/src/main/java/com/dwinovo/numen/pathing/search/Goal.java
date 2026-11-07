@@ -1,0 +1,158 @@
+package com.dwinovo.numen.pathing.search;
+
+import java.util.Set;
+
+import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.plan.WorldView;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.api.entity.Sight;
+
+import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import com.dwinovo.numen.pathing.world.Kinematics;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * 搜索要去哪:哪些节点算到了、从一个节点估计还要多少刻、停在那儿还要付多少、为了到得了别动哪几格、到了还要看得见什么。
+ * 模块里只有这一族目标(由 {@link Goals} 编出),到没到只看 {@link #contains},没有"差不多到了"。
+ */
+public interface Goal {
+
+    /** 身体以 {@code stance} 待在节点 {@code (x, y, z)} 上,算不算到了。 */
+    boolean contains(int x, int y, int z, Stance stance);
+
+    /**
+     * 从节点 {@code (x, y, z)} 到目标的直线水平底价(刻):水平距离乘疾跑一格的耗时({@link Kinematics#pace},搜索每次搜索算一份传进来)。
+     * 必须是下界:水平上不高过任何一条路线走到目标至少要付的。它不看地形,就是估价的水平项。
+     * 挖开、升降的额外代价也不在这里,搜索按世界另算({@link Burial}、{@link Vertical}),与水平项相加才是估价。
+     */
+    double estimate(int x, int y, int z, Kinematics.Pace pace);
+
+    /**
+     * 停在这个已到达的节点之后还要付的价钱(刻),默认 0。多个成员各带各的价时,搜索按"走过去加到了再付"挑终点。
+     * 无穷大是停在这儿也办不成(挖一格时看得见它的每一面都隔着挖的一方清不掉的格):搜索不在这里停,换目标也不认这个停点。
+     * {@code level} 是身体停在那儿时面对的世界:搜索时是快照(叠着走到那儿那一步的改动),换目标时是活世界。
+     */
+    default double arrival(WorldView level, int x, int y, int z, Stance stance) {
+        return 0;
+    }
+
+    /**
+     * 到了时脚可能在哪些节点({@link BlockPos#asLong}):一个有限的超集,可以多、不能少。搜索拿它从目标往外算"至少还要挖开
+     * 多少"({@link Burial})。每个目标都要明确交代:没有固定终点(某一列、某一高度、离某处多远且范围无边、远离这些)交 null。
+     * 不给默认值:忘了交代,编译就过不去,估价不会悄悄少算埋深。
+     */
+    LongSet endCells();
+
+    /**
+     * 到了时脚所在节点的高度范围,含两端;没有范围(只到某一列、离某处多远且范围无边、远离这些)为 null。搜索靠它算竖直方向至少要
+     * 升降几个节点({@link Vertical})。同样不给默认值;范围就是终点格最低与最高的一层的,用 {@link #heightsOf} 取。
+     */
+    Heights heights();
+
+    /**
+     * 水平上要去的地方:到点范围里离 {@code from} 最近的一处。远途滑翔({@link com.dwinovo.numen.pathing.drive.Glide})朝它飞,
+     * 不需要终点格的枚举(一整列、范围无边的目标也有)。没有水平位置(只给高度、远离这些)为 null。同样不给默认值。
+     */
+    Anchor anchor(Vec3 from);
+
+    /** 水平位置 {@code (x, z)}(格心的坐标)。 */
+    record Anchor(double x, double z) {
+
+        /** 离 {@code from} 的水平距离。 */
+        public double distance(Vec3 from) {
+            return Math.hypot(x - from.x, z - from.z);
+        }
+    }
+
+    /** 一组终点格({@link #endCells})所在的高度范围:最低与最高的一层;没有终点格(null 或空)为 null。 */
+    static Heights heightsOf(LongSet cells) {
+        if (cells == null || cells.isEmpty()) {
+            return null;
+        }
+        int lo = Integer.MAX_VALUE;
+        int hi = Integer.MIN_VALUE;
+        for (long cell : cells) {
+            int y = BlockPos.getY(cell);
+            lo = Math.min(lo, y);
+            hi = Math.max(hi, y);
+        }
+        return new Heights(lo, hi);
+    }
+
+    /** 到了时脚所在节点的高度范围 {@code [lo, hi]}。 */
+    record Heights(int lo, int hi) {}
+
+    /**
+     * 为了到得了这个目标,搜索不能动的格:别挖自己要站、要够的那一格,也别拿方块把它埋了。这是规划的正确性约束,
+     * 不是权限;搜索把它并进路线规格的按位置禁令。
+     */
+    default PositionCosts protection() {
+        return PositionCosts.EMPTY;
+    }
+
+    /**
+     * 停在这个已到达的节点上,还要看得见什么才算数(用一格方块:它的哪几面);不要求视线为 null。搜索按快照挑出看得见的站位,
+     * 执行层到了之后在活世界上用同一个视线函数复核。
+     */
+    default Sighting sight(int x, int y, int z, Stance stance) {
+        return null;
+    }
+
+    /**
+     * 到了还要看得见的:{@code target} 的 {@code faces} 里任何一面。
+     */
+    record Sighting(BlockPos target, Set<Direction> faces) {
+
+        public Sighting {
+            faces = Set.copyOf(faces);
+        }
+
+        /**
+         * 从 {@code eye} 用得上它的哪一面(第 0 层 {@link Sight#use}):交出第一面的视线,可能还隔着软遮挡;一面都用不上为 null。
+         */
+        public Sight.Trace seen(BlockGetter level, Vec3 eye, double reach) {
+            for (Direction face : Direction.values()) {
+                if (faces.contains(face)) {
+                    Sight.Trace trace = Sight.use(level, eye, reach, target, face);
+                    if (trace != null) {
+                        return trace;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 为这个目标搜索与执行复核用的成本模型:把目标格保护({@link #protection()})并进路线规格的按位置禁令。搜索展开与
+     * 执行时在活世界上复核前提,读的都是它,只此一处。
+     */
+    static CostModel guarded(Goal goal, CostModel model) {
+        PositionCosts protection = goal.protection();
+        if (protection.isEmpty()) {
+            return model;
+        }
+        RouteSpec spec = model.spec();
+        return model.withSpec(spec.edit().positions(spec.positions().plus(protection)).build());
+    }
+
+    /**
+     * 按 {@code before} 定下的"停在 {@code stop}",换成 {@code after} 之后还算不算数:还在新目标里、停在那儿办得成,而且没有
+     * 变贵。目标换了(或跟着的东西挪了)之后,在走的路要不要重新搜,只问这一条。{@code level} 是此刻的世界。
+     */
+    static boolean keepsStop(WorldView level, Goal before, Goal after, BlockPos stop, Stance stance) {
+        int x = stop.getX();
+        int y = stop.getY();
+        int z = stop.getZ();
+        if (!after.contains(x, y, z, stance)) {
+            return false;
+        }
+        double now = after.arrival(level, x, y, z, stance);
+        return Double.isFinite(now) && now <= before.arrival(level, x, y, z, stance);
+    }
+}

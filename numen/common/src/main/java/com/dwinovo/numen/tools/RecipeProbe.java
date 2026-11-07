@@ -1,0 +1,82 @@
+package com.dwinovo.numen.tools;
+
+import net.minecraft.core.HolderLookup;
+import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.PlacementInfo;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.SingleRecipeInput;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
+import net.minecraft.util.context.ContextMap;
+
+import java.util.List;
+import java.util.function.Supplier;
+
+/**
+ * 读配方表的安全口。整合包里的配方什么都干得出来:空输入 {@code assemble} 返回
+ * null 而不是抛异常、{@code placementInfo} 或其 ingredient 的 {@code items()} 返回
+ * null(实测 ATM10 里的 gear 类配方)。1.21.2+ 删掉了展示产出口(getResultItem),
+ * 枚举期改用空输入 {@code assemble} 问产出——shaped/shapeless/熔炼/切石都无视输入;
+ * 产出的 null 与异常一律折成 EMPTY,坏一条丢一条——一条坏配方杀掉整个遍历才是事故。
+ */
+public final class RecipeProbe {
+
+    private RecipeProbe() {}
+
+    /** 枚举合成配方的产出——空输入 assemble(shaped/shapeless 不看输入)。 */
+    public static ItemStack resultOf(CraftingRecipe recipe) {
+        return probe(() -> recipe.assemble(CraftingInput.EMPTY));
+    }
+
+    /** 枚举单输入配方(熔炼/切石)的产出——空输入 assemble(它们同样不看输入)。 */
+    public static ItemStack resultOf(Recipe<SingleRecipeInput> recipe) {
+        return probe(() -> recipe.assemble(new SingleRecipeInput(ItemStack.EMPTY)));
+    }
+
+    /**
+     * 任意类型配方(含模组机器的)展示给配方书的产出:第一个解得出东西的展示里的产出格。配方书按类型列配方时问它,
+     * 模组配方的输入各不相同,空输入 assemble 问不了。
+     */
+    public static ItemStack displayedResult(Recipe<?> recipe, HolderLookup.Provider registries) {
+        ContextMap context = new ContextMap.Builder().withParameter(SlotDisplayContext.REGISTRIES, registries)
+                .create(SlotDisplayContext.CONTEXT);
+        return probe(() -> recipe.display().stream().map(display -> display.result().resolveForFirstStack(context))
+                .filter(stack -> !stack.isEmpty()).findFirst().orElse(ItemStack.EMPTY));
+    }
+
+    /** 探一次产出:null 与异常一律折成 EMPTY,调用方只看 {@code isEmpty()}。 */
+    public static ItemStack probe(Supplier<ItemStack> supplier) {
+        try {
+            ItemStack result = supplier.get();
+            return result == null ? ItemStack.EMPTY : result;
+        } catch (RuntimeException broken) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    /**
+     * 这条配方的输入表能不能安全交给下游:{@code placementInfo} 本身、它的清单与
+     * 每个 ingredient 的 {@code items()} 都不为 null。craft 的摆料、盘点、缺料描述
+     * 都在这道门之后,过了门就不必层层判空。
+     */
+    public static boolean usableIngredients(Recipe<?> recipe) {
+        try {
+            PlacementInfo info = recipe.placementInfo();
+            List<Ingredient> ings = info == null ? null : info.ingredients();
+            if (ings == null) {
+                return false;
+            }
+            for (Ingredient ing : ings) {
+                if (ing == null || ing.items() == null) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException broken) {
+            return false;
+        }
+    }
+}

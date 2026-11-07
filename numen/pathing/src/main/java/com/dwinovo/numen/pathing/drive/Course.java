@@ -1,0 +1,176 @@
+package com.dwinovo.numen.pathing.drive;
+
+import java.util.ArrayList;
+import java.util.List;
+import com.dwinovo.numen.pathing.plan.Maneuver;
+import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.search.Route;
+
+import net.minecraft.core.BlockPos;
+
+/**
+ * 正在走的路线:一串步子、走到了第几步、是不是已经到目标,和每一步几何上最短要几刻(运动学算的,装进来的时候算一次)。
+ * 认步({@link Tracker})、接续({@link Continuation})、段状态机({@link Driver})都读写这一份,路线上的事实只在这里。
+ */
+public final class Course {
+
+    private final List<Route.Leg> legs = new ArrayList<>();
+    private final List<Double> minimum = new ArrayList<>();
+    private int cur;
+    private boolean complete;
+    private BlockPos start;
+    private Stance startStance;
+
+    /** 换成一条新路线,从第一步起;{@code arrived}:这条路线的终点在目标里。 */
+    void install(Route route, boolean arrived) {
+        legs.clear();
+        minimum.clear();
+        cur = 0;
+        start = route.start();
+        startStance = route.startStance();
+        complete = arrived;
+        append(route);
+    }
+
+    /** 接在末尾的一段;{@code arrived}:接上之后终点在目标里。 */
+    void extend(Route next, boolean arrived) {
+        append(next);
+        complete = arrived;
+    }
+
+    private void append(Route route) {
+        for (Route.Leg leg : route.legs()) {
+            legs.add(leg);
+            minimum.add(leg.ticks());
+        }
+    }
+
+    /** 没有路了:起点、步子、进度都清掉。 */
+    void clear() {
+        legs.clear();
+        minimum.clear();
+        cur = 0;
+        complete = false;
+        start = null;
+        startStance = null;
+    }
+
+    /** 身体落在了第 {@code to} 步之前(含)的节点上:从第 {@code to} 步起接着走。 */
+    void advanceTo(int to) {
+        cur = to;
+    }
+
+    public int size() {
+        return legs.size();
+    }
+
+    public boolean isEmpty() {
+        return legs.isEmpty();
+    }
+
+    /** 正在走的那一步的下标;等于 {@link #size} 是路线走完了。 */
+    public int cur() {
+        return cur;
+    }
+
+    /** 路线走完了(不含"终点在不在目标里")。 */
+    public boolean finished() {
+        return cur >= legs.size();
+    }
+
+    /** 路线的终点在目标里。 */
+    public boolean complete() {
+        return complete;
+    }
+
+    Maneuver at(int index) {
+        return legs.get(index).maneuver();
+    }
+
+    /** 正在走的那一步。 */
+    Maneuver current() {
+        return at(cur);
+    }
+
+    /**
+     * 从正在走的这一步起,连着飞的这一段最后一步的下标:起飞、飞、降落连着的步子,降落到地上就收在降落那一步,不过第 {@code limit} 步
+     * (不含;之后的步还要等接续段,{@link Continuation#runnableEnd})。正在走的这一步不在飞为 -1。
+     */
+    int flightLast(int limit) {
+        int last = -1;
+        for (int i = cur; i < Math.min(limit, legs.size()) && at(i).kind().flight(); i++) {
+            last = i;
+            if (at(i).kind() == MoveKind.LAND) {
+                break;
+            }
+        }
+        return last;
+    }
+
+    /** 紧接着正在走的那一步往后的 {@code count} 步(不够就是剩下的),按先后。 */
+    List<Maneuver> ahead(int count) {
+        List<Maneuver> out = new ArrayList<>();
+        for (int i = cur + 1; i < legs.size() && out.size() < count; i++) {
+            out.add(at(i));
+        }
+        return out;
+    }
+
+    Route.Leg lastLeg() {
+        return legs.get(legs.size() - 1);
+    }
+
+    /** 路线的起点。 */
+    BlockPos start() {
+        return start;
+    }
+
+    Stance startStance() {
+        return startStance;
+    }
+
+    /** 终点节点;空路线是起点。 */
+    public BlockPos end() {
+        return legs.isEmpty() ? start : at(legs.size() - 1).to();
+    }
+
+    /** 身体在终点上怎么待着。 */
+    Stance endStance() {
+        return legs.isEmpty() ? startStance : at(legs.size() - 1).landing();
+    }
+
+    /** 从正在走的那一步起,到第 {@code end} 步之前(不含),这些步几何上最短要多少刻。 */
+    double ticksBefore(int end) {
+        double left = 0;
+        for (int i = cur; i < end; i++) {
+            left += minimum.get(i);
+        }
+        return left;
+    }
+
+    /** 第 {@code index} 步:走法、代价、几何最短刻数。 */
+    public Route.Leg leg(int index) {
+        return legs.get(index);
+    }
+
+    /** 第 {@code index} 步按成本模型算出的代价(含罚分)。 */
+    public double costAt(int index) {
+        return legs.get(index).cost();
+    }
+
+    /** 第 {@code index} 步几何上最短要几刻。 */
+    public double minimumAt(int index) {
+        return minimum.get(index);
+    }
+
+    /** 还没走完的步子,按先后。 */
+    List<Route.Leg> remaining() {
+        return legs.isEmpty() ? List.of() : List.copyOf(legs.subList(Math.min(cur, legs.size()), legs.size()));
+    }
+
+    /** 整条路线(含已经走过的),重搜时拿它给新搜索当偏好。 */
+    Route route() {
+        return new Route(start, startStance, legs);
+    }
+}

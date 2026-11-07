@@ -1,0 +1,61 @@
+{
+  "chat-openai-toolcall": {
+    "content": "我去看看。",
+    "reasoning": "",
+    "toolCalls": [{"id": "call_1", "name": "look", "arguments": "{\"x\":1}"}],
+    "extras": {},
+    "finish": "tool_calls",
+    "usage": {"input": 20, "output": 30, "cacheRead": 100, "cacheWrite": 0}
+  },
+  "chat-deepseek-reasoning": {
+    "content": "好。",
+    "reasoning": "先想想",
+    "toolCalls": [],
+    "extras": {"reasoning_content": "先想想"},
+    "finish": "stop",
+    "usage": {"input": 50, "output": 40, "cacheRead": 150, "cacheWrite": 0}
+  },
+  "chat-openrouter-reasoning": {
+    "content": "行。",
+    "reasoning": "嗯",
+    "toolCalls": [],
+    "extras": {"reasoning": "嗯"},
+    "finish": "stop",
+    "usage": {"input": 60, "output": 20, "cacheRead": 200, "cacheWrite": 40}
+  },
+  "chat-moonshot-cached": {
+    "content": "嗯",
+    "reasoning": "",
+    "toolCalls": [],
+    "extras": {},
+    "finish": "stop",
+    "usage": {"input": 16, "output": 5, "cacheRead": 64, "cacheWrite": 0}
+  },
+  "responses-reasoning-toolcall": {
+    "content": "这就去",
+    "reasoning": "先看背包\n\n再选工具",
+    "toolCalls": [{"id": "call_1", "name": "look", "arguments": "{\"x\":1}"}],
+    "extras": {
+      "numen_reasoning_items": [{"id": "rs_1", "type": "reasoning", "summary": [{"type": "summary_text", "text": "先看背包"}, {"type": "summary_text", "text": "再选工具"}], "encrypted_content": "ENC"}],
+      "numen_item_ids": [{"type": "message", "id": "msg_1"}, {"type": "function_call", "id": "fc_1", "call_id": "call_1"}]
+    },
+    "finish": "completed",
+    "usage": {"input": 100, "output": 60, "cacheRead": 400, "cacheWrite": 0}
+  },
+  "responses-text": {
+    "content": "挖到了八块铁。",
+    "reasoning": "",
+    "toolCalls": [],
+    "extras": {"numen_item_ids": [{"type": "message", "id": "msg_2", "phase": "final_answer"}]},
+    "finish": "completed",
+    "usage": {"input": 112, "output": 9, "cacheRead": 1024, "cacheWrite": 64}
+  },
+  "anthropic-thinking-toolcall": {
+    "content": "答",
+    "reasoning": "想",
+    "toolCalls": [{"id": "tu_1", "name": "look", "arguments": "{\"x\":1}"}],
+    "extras": {"anthropic_thinking_signature": "sigX"},
+    "finish": "tool_calls",
+    "usage": {"input": 50, "output": 30, "cacheRead": 200, "cacheWrite": 10}
+  }
+}
