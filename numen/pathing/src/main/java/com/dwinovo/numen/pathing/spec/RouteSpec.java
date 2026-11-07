@@ -1,0 +1,251 @@
+package com.dwinovo.numen.pathing.spec;
+
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+
+import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Semantics.Kind;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.BlockGetter;
+
+/**
+ * 一次导航的路线规格:每次搜索和每次执行各带一份,成本模型只认它。按次传值、不可变,搜索线程只读。四组旋钮,每组一个出处:
+ * <ol>
+ *   <li><b>能力开关与上限</b>——挖不挖、放不放、要问主人的格算不算能走(连同它贵几倍)、跑酷;无水时的最大落差、一条路最多改几格;</li>
+ *   <li><b>排除的格子种类</b>——{@link #excluded()}:这条路线不站上、不穿过这些语义种类的格子。每类格子只有"排除"这一种
+ *       处置,不按种类另外计价;</li>
+ *   <li><b>按位置与按种类</b>——{@link PositionCosts}(看坐标)与 {@link BlockBans}(看方块种类);</li>
+ *   <li><b>动作代价</b>——放置、挖掘、起跳、涉水四项罚分,外加挨着伤身格走的加价({@code exposurePenalty})。</li>
+ * </ol>
+ *
+ * <p>服主总开关是上限,规格只能在其内收紧;规格里的每一项都要能在规划结果里看出它起了什么作用。{@link #defaults()} 是
+ * "只走不改"的出厂值,改动走 {@link #edit()}。
+ *
+ * @param dig                  这一趟可以挖:挖开挡路的格、向下挖;罚分是 {@code breakPenalty}
+ * @param place                这一趟可以放方块:垫柱、搭桥、倒水接坠落;罚分是 {@code placeCost}
+ * @param consent              许可答"要问"的格算能走:进路线,执行到那一格时由宿主问主人;不算就是墙
+ * @param consentMultiplier    要问的格挖或放的价钱乘几倍:有限,这样的路才搜得到;要贵到长度相当的不用问的路线都胜出
+ * @param parkour              可以跑酷:越过一到三格的空隙
+ * @param maxFallDamage        愿意承受的摔伤点数,默认 0:不受伤。能跳多高不在这里定——身体按它的安全落差、血量、游戏模式、护甲类属性与落点
+ *                             方块把这点数换算成落差({@code BodySnapshot.fallDamage}),落进水里、抓住梯子不摔伤,不受这个限制
+ * @param alterBudget          整条路挖加放最多几格,{@link #UNLIMITED} 即不限;搜索展开每一步时就按它剪枝
+ * @param excluded             排除的格子种类
+ * @param positions            按坐标的代价与禁令
+ * @param bans                 按方块种类的禁令
+ * @param placeCost            放一块的罚分(省方块,不鼓励乱放)
+ * @param breakPenalty         挖一块在挖掘耗时之外另加的罚分
+ * @param jumpPenalty          每次起跳的罚分
+ * @param wadePenalty          水里走一格的罚分
+ * @param exposurePenalty      身体走进的格(或脚下那一格)水平方向上每紧挨着一格伤身的方块(岩浆、火、仙人掌……),加这么多格平走的耗时:没碰上,
+ *                             可身子歪一点、被推一下就碰上了;有稍远一点的路时走远一点,没有也照样走
+ */
+public record RouteSpec(boolean dig, boolean place, boolean consent, double consentMultiplier, boolean parkour,
+                        int maxFallDamage, int alterBudget, Set<Kind> excluded,
+                        PositionCosts positions, BlockBans bans, double placeCost, double breakPenalty,
+                        double jumpPenalty, double wadePenalty, double exposurePenalty) {
+
+    /**
+     * 出厂的要问的格的倍率:乘在这一格的挖或放的价钱上。要有限,这样的路才搜得到;要贵到长度相当的不用问的路线都胜出。
+     */
+    public static final double CONSENT_MULTIPLIER = 10.0;
+
+    /** 改动预算的"不限"值。 */
+    public static final int UNLIMITED = Integer.MAX_VALUE;
+
+    /**
+     * 出厂规格:只走不改(不挖、不放;要问主人的格算能走,价钱乘 {@link #CONSENT_MULTIPLIER},许挖或许放时才用得上),
+     * 不跑酷平跳;不愿受摔伤(满血的生存身体就是原版摔不疼的 3 格,创造模式不摔伤、不限);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
+     * 会触发,都默认不进,规格可以放开;放置 20、挖掘另加 10(约等于多走 2 格:破坏是绕不开时的下策;Baritone 另加 2、mineflayer-pathfinder 另加 1,取 10 的依据见 ADR 0037)、起跳 2、涉水 3、紧挨一格伤身的方块走加 2 格平走的耗时。
+     */
+    private static final RouteSpec DEFAULTS = new RouteSpec(
+            false, false, true, CONSENT_MULTIPLIER, false,
+            0, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
+            PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 10.0, 2.0, 3.0, 2.0);
+
+    public RouteSpec {
+        Objects.requireNonNull(positions, "positions");
+        Objects.requireNonNull(bans, "bans");
+        excluded = Collections.unmodifiableSet(excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(excluded));
+        if (maxFallDamage < 0) {
+            throw new IllegalArgumentException("愿意承受的摔伤不能为负:" + maxFallDamage);
+        }
+        if (alterBudget < 0) {
+            throw new IllegalArgumentException("改动预算不能为负:" + alterBudget);
+        }
+        requirePenalty("placeCost", placeCost);
+        requirePenalty("breakPenalty", breakPenalty);
+        requirePenalty("jumpPenalty", jumpPenalty);
+        requirePenalty("wadePenalty", wadePenalty);
+        requirePenalty("exposurePenalty", exposurePenalty);
+        if (!(consentMultiplier >= 1) || Double.isInfinite(consentMultiplier)) {
+            throw new IllegalArgumentException("consentMultiplier 要是不小于 1 的有限数:" + consentMultiplier);
+        }
+    }
+
+    private static void requirePenalty(String name, double value) {
+        if (!(value >= 0) || Double.isInfinite(value)) {
+            throw new IllegalArgumentException(name + " 要是非负的有限数:" + value);
+        }
+    }
+
+    public static RouteSpec defaults() {
+        return DEFAULTS;
+    }
+
+    /**
+     * 这一格是不是这份规格排除的种类(任何一种,整格就排除):只问"这一格"的地方——在哪儿站着干活、画周围哪儿能站——问它。
+     * 规划里一步要问几十格,成本模型({@code CostModel#excludes})按同一个集合把掩码预先算好再按位与,判据是同一个。
+     */
+    public boolean excludes(BlockGetter level, BlockPos pos) {
+        return Semantics.isAny(level, pos, excluded);
+    }
+
+    /** 这一趟能改地形:挖或放至少许一样。 */
+    public boolean changes() {
+        return dig || place;
+    }
+
+    /** 是否设了有限的改动预算。 */
+    public boolean budgeted() {
+        return alterBudget != UNLIMITED;
+    }
+
+    /** 以这份规格为底改几项。 */
+    public Builder edit() {
+        return new Builder(this);
+    }
+
+    /** 在一份规格上改几项;{@link #build()} 出一份新的,原来那份不变。 */
+    public static final class Builder {
+        private boolean dig;
+        private boolean place;
+        private boolean consent;
+        private double consentMultiplier;
+        private boolean parkour;
+        private int maxFallDamage;
+        private int alterBudget;
+        private final EnumSet<Kind> excluded;
+        private PositionCosts positions;
+        private BlockBans bans;
+        private double placeCost;
+        private double breakPenalty;
+        private double jumpPenalty;
+        private double wadePenalty;
+        private double exposurePenalty;
+
+        private Builder(RouteSpec from) {
+            dig = from.dig;
+            place = from.place;
+            consent = from.consent;
+            consentMultiplier = from.consentMultiplier;
+            parkour = from.parkour;
+            maxFallDamage = from.maxFallDamage;
+            alterBudget = from.alterBudget;
+            excluded = from.excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(from.excluded);
+            positions = from.positions;
+            bans = from.bans;
+            placeCost = from.placeCost;
+            breakPenalty = from.breakPenalty;
+            jumpPenalty = from.jumpPenalty;
+            wadePenalty = from.wadePenalty;
+            exposurePenalty = from.exposurePenalty;
+        }
+
+        public Builder dig(boolean dig) {
+            this.dig = dig;
+            return this;
+        }
+
+        public Builder place(boolean place) {
+            this.place = place;
+            return this;
+        }
+
+        /** 挖与放一起开或关。 */
+        public Builder changes(boolean changes) {
+            this.dig = changes;
+            this.place = changes;
+            return this;
+        }
+
+        public Builder consent(boolean consent) {
+            this.consent = consent;
+            return this;
+        }
+
+        public Builder consentMultiplier(double consentMultiplier) {
+            this.consentMultiplier = consentMultiplier;
+            return this;
+        }
+
+        public Builder parkour(boolean parkour) {
+            this.parkour = parkour;
+            return this;
+        }
+
+        public Builder maxFallDamage(int maxFallDamage) {
+            this.maxFallDamage = maxFallDamage;
+            return this;
+        }
+
+        public Builder alterBudget(int alterBudget) {
+            this.alterBudget = alterBudget;
+            return this;
+        }
+
+        /** 排除这一种格子。 */
+        public Builder exclude(Kind kind) {
+            excluded.add(kind);
+            return this;
+        }
+
+        /** 不再排除这一种格子(例如放开默认不踩的耕地)。 */
+        public Builder allow(Kind kind) {
+            excluded.remove(kind);
+            return this;
+        }
+
+        public Builder positions(PositionCosts positions) {
+            this.positions = positions;
+            return this;
+        }
+
+        public Builder bans(BlockBans bans) {
+            this.bans = bans;
+            return this;
+        }
+
+        public Builder placeCost(double placeCost) {
+            this.placeCost = placeCost;
+            return this;
+        }
+
+        public Builder breakPenalty(double breakPenalty) {
+            this.breakPenalty = breakPenalty;
+            return this;
+        }
+
+        public Builder jumpPenalty(double jumpPenalty) {
+            this.jumpPenalty = jumpPenalty;
+            return this;
+        }
+
+        public Builder wadePenalty(double wadePenalty) {
+            this.wadePenalty = wadePenalty;
+            return this;
+        }
+
+        public Builder exposurePenalty(double exposurePenalty) {
+            this.exposurePenalty = exposurePenalty;
+            return this;
+        }
+
+        public RouteSpec build() {
+            return new RouteSpec(dig, place, consent, consentMultiplier, parkour, maxFallDamage, alterBudget,
+                    excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty, exposurePenalty);
+        }
+    }
+}

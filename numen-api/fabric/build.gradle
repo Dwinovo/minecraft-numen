@@ -1,0 +1,92 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-loader'
+    id 'net.fabricmc.fabric-loom-remap'
+}
+
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Obfuscated MC (1.21.11) → loom remaps to Mojang names to match the common source set.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)是内嵌的库,不是平铺进来的类:include 随发行 jar 带上,玩家不用另装。
+    include "org.commonmark:commonmark:${commonmark_version}"
+    include "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    // mcp 模块的其余第三方库(Reactor、Tomcat……)同理嵌套带上;清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson、Nimbus
+    // 不在其中,它们的类平铺进发行 jar(见 numen-api-loader.gradle)。
+    Modules.nestedLibraries(project(':mcp')).each { include(it) { transitive = false } }
+}
+
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
+/*
+ * GameTest 在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):用它的 fabric.mod.json 把套件入口
+ * GameTestSuites 登记成 `fabric-gametest` 入口,和给模拟主人连接用的 MockConnection 实现。用 Numen API 的都用得上(Numen、
+ * 第三方插件),所以归 Numen API;各运行配置把它的输出放进开发运行的类路径(见 numen/fabric/build.gradle)。
+ */
+sourceSets {
+    gametest {
+        // 模拟主人连接的实现(FabricMockConnection)要摸 Numen API 的内部类:它们在本模块的主输出里(common 的源码并进本模块一起编)
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+    }
+}
+dependencies {
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
+loom {
+    def aw = project(':numen-api:common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+        datagen {
+            inherit client
+            setConfigName('Fabric Data Generation')
+            ideConfigGenerated(true)
+            runDir('runs/datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('src/generated/resources')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}
