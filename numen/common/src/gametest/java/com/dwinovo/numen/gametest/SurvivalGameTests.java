@@ -1,0 +1,231 @@
+package com.dwinovo.numen.gametest;
+
+import com.dwinovo.numen.api.gametest.Bodies;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import java.util.List;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.Vec3;
+
+import static com.dwinovo.numen.gametest.GameTestKit.*;
+
+/** 身体的生存反射:摔落伤害、落地水桶、本能告诉她是哪一条出的手。 */
+public class SurvivalGameTests {
+
+    /** 生存反射批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_survival")
+    public static void prepareSurvivalBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /**
+     * 出生无敌的刻数。原版 {@code ServerPlayer.spawnInvulnerableTime = 60} 会把这段时间里
+     * 的一切伤害挡掉(摔落只在<b>专用服</b>且开着 PVP 时才豁免,gametest 两条都不占),
+     * 所以摔落用例必须等它走完再把人提上去 —— 不等的话看到的是"补丁没生效"。
+     */
+    private static final int SPAWN_INVULNERABLE_TICKS = 70;
+
+    /** 起跳高度(相对模板);模板只有 6 格高,落差得从模板上方取。 */
+    private static final int DROP_HEIGHT = 18;
+
+    /**
+     * 摔落<b>真的会掉血</b>。
+     *
+     * <p>玩家的摔落结算在原版里是客户端权威的:{@code ServerPlayer.checkFallDamage} 是个
+     * 空实现,真正结算的是收到移动包时的 {@code doCheckFallDamage}。空壳玩家的连接是空的,
+     * 那个包永远不来 —— 她从任意高度跳下去毫发无伤,而 {@code fallDistance} 恒为 0,
+     * 靠它触发的东西一律是死的。这条守 {@code NumenPlayer.tick()} 里补回来的那一趟。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 261, batch = "numen_survival")
+    public static void fall_damage_reaches_the_body(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(4, 2, 4));
+        float full = companion.getMaxHealth();
+        steps(helper)
+                .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
+                        () -> drop(helper, companion, new BlockPos(4, DROP_HEIGHT, 4)))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(companion.onGround(), "companion is still in the air");
+                    helper.assertTrue(companion.getHealth() < full,
+                            "the fall did no damage (health " + companion.getHealth() + ")");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /**
+     * 闲着不是卡住:四面贴着墙站着、手上没活,脱困反射只读在走的那一趟"在不在推进",没在走就不醒——她一步不挪。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 360, batch = "numen_survival")
+    public static void an_idle_body_boxed_in_is_not_stuck(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (BlockPos side : List.of(new BlockPos(5, 2, 4), new BlockPos(3, 2, 4), new BlockPos(4, 2, 5),
+                new BlockPos(4, 2, 3))) {
+            level.setBlockAndUpdate(helper.absolutePos(side), net.minecraft.world.level.block.Blocks.STONE
+                    .defaultBlockState());
+        }
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(4, 2, 4));
+        Vec3 start = companion.position();
+        steps(helper)
+                .thenIdle(120)
+                .thenExecute(() -> helper.assertTrue(companion.position().distanceToSqr(start) < 1.0E-4,
+                        "an idle companion wandered: " + start + " -> " + companion.position()))
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /**
+     * 摔落自救:铺水接住自己,<b>而且把水收回来</b>。
+     *
+     * <p>收水是这条的重点 —— 桶是消耗品,放完不收就只能救一次,第二次直接摔死。
+     *
+     * <p>本能替身体做了事,她要听到的是一条 {@code reflex} 事件,带着是哪个本能:这件事以 {@code reflex} 类型进她的收件箱,
+     * 文本里写着本能名册里的登记名 {@code mlg}。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 210, batch = "numen_survival")
+    public static void mlg_breaks_the_fall_and_takes_the_water_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
+        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        float full = companion.getMaxHealth();
+        steps(helper)
+                .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
+                        () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(companion.onGround(), "companion is still in the air");
+                    helper.assertTrue(companion.getHealth() == full,
+                            "the water bucket did not break the fall (health "
+                                    + companion.getHealth() + ")");
+                    helper.assertTrue(carries(companion, Items.WATER_BUCKET),
+                            "the water was placed but never picked back up");
+                })
+                .thenWaitUntil(() -> {
+                    var reflexes = GameTestKit.events(companion).stream()
+                            .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
+                            .toList();
+                    helper.assertTrue(!reflexes.isEmpty(), "no reflex event was kept for the offline owner: "
+                            + GameTestKit.events(companion));
+                    helper.assertTrue(reflexes.get(0).text().startsWith("<event kind=\"reflex\"")
+                                    && reflexes.get(0).text().contains("reflex=\"mlg\""),
+                            "the reflex event does not name its instinct: " + reflexes.get(0).text());
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 空背包的同伴,落在 rel 那一格。 */
+    private static NumenPlayer plainCompanion(GameTestHelper helper, BlockPos rel) {
+        ServerLevel level = helper.getLevel();
+        BlockPos at = helper.absolutePos(rel);
+        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_faller", UUID.randomUUID(), level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5)));
+        companion.getFoodData().setFoodLevel(20);
+        return companion;
+    }
+
+    /**
+     * 换了一次维度之后,身体要<b>认下这次传送</b>。
+     *
+     * <p>换维度时服务端发一个带编号的传送包等客户端报数,而清"正在换维度"这个标记的<b>唯一</b>
+     * 一处就是收到回执时({@code ServerGamePacketListenerImpl.handleAcceptTeleportPacket}),
+     * 没有超时兜底。她没有客户端,回执不来,标记就恒为真,而它卡着两件事——
+     * {@code ServerPlayer.processPortalCooldown} 只在标记为假时才递减冷却(过一次传送门
+     * 冷却卡在 10,她再也进不去第二次),{@code ServerPlayer.isInvulnerableTo} 在标记为真时
+     * 恒真(她从此无敌)。回执由 {@code FakeClient} 代答。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_survival")
+    public static void a_dimension_change_is_acknowledged(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerLevel nether = level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);
+        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
+        companion.setPortalCooldown();
+        int cooldown = companion.getPortalCooldown();
+        helper.assertTrue(cooldown > 0, "portal cooldown did not start");
+        // 落点的区块先阻塞着生成完(见 GameTestKit#generateChunks):冷却只在她走刻时减,她走不走刻要等落脚的区块起来,
+        // 区块按墙钟生成,只按刻数等的话负载一高剩下的时限就不够
+        generateChunks(nether, new BlockPos(0, 70, 0), 2);
+
+        steps(helper)
+                .thenExecute(() -> companion.changeDimension(
+                        new net.minecraft.world.level.portal.DimensionTransition(
+                                nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0f, 0.0f,
+                                net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING)))
+                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she arrived in is not entity-ticking yet"))
+                .thenIdle(25)
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(!companion.isChangingDimension(),
+                            "she is still 'changing dimension' long after arriving — the portal cooldown "
+                                    + "will never tick down and she cannot be hurt");
+                    helper.assertTrue(companion.getPortalCooldown() < cooldown,
+                            "the portal cooldown is stuck at " + companion.getPortalCooldown()
+                                    + "; she can never use a portal again");
+                    helper.assertTrue(!companion.isInvulnerableTo(level.damageSources().generic()),
+                            "she is still invulnerable after the dimension change");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /**
+     * 一维里只有她:没有真玩家、没有任何区块被钉住,她照样一直在 tick、自己的驱动照样能动身子。
+     * 区块加载照真玩家走(她经 placeNewPlayer 进玩家名单,原版给她的票据就是玩家的那一套,包括让整个维度保持活动的那一条);
+     * 她的 tickCount 只在她所在维度还在走刻时推进,所以它持续推进就是"这个维度没被停"的直接证据。落点在两万格外,
+     * 邻居场地与别的用例的区块都碰不到。落点跟着自己的场地走,同一用例铺几份并行时各占各的一块下界。
+     * 周围的区块先阻塞着生成完(见 {@link GameTestKit#generateChunks}):下界的地形生成慢,只按刻数等的话负载一高就先超时。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_survival")
+    public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
+        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        BlockPos arena = helper.absolutePos(BlockPos.ZERO);
+        // 场地坐标取模再放大:各份的落点互相隔开三百格以上,又总在世界边界之内
+        BlockPos floor = new BlockPos(20000 + Math.floorMod(arena.getX(), 8192) * 16, 100, 20000 + Math.floorMod(arena.getZ(), 8192) * 16);
+        generateChunks(nether, floor, 2);
+        // 落点的地形每份不同(岩浆、遗迹、空洞):先用石头把整间房连墙带顶封死,再掏出里面,房里只有用例摆的东西
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-7, 0, -7), floor.offset(7, 5, 7))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        }
+        for (BlockPos cell : BlockPos.betweenClosed(floor.offset(-6, 1, -6), floor.offset(6, 4, 6))) {
+            nether.setBlockAndUpdate(cell, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
+        companion.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
+                nether, new Vec3(floor.getX() + 0.5, floor.getY() + 1, floor.getZ() + 0.5), Vec3.ZERO, 0.0f, 0.0f,
+                net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+        int[] ticksAtStart = new int[1];
+        Vec3[] start = new Vec3[1];
+        ToolRun[] walk = new ToolRun[1];
+        steps(helper)
+                // 落脚的区块是新生成的,要等它们起来她才开始走刻;起来之后的 300 刻不许再停
+                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she stands in is not entity-ticking yet"))
+                .thenExecute(() -> {
+                    ticksAtStart[0] = companion.tickCount;
+                    start[0] = companion.position();
+                })
+                .thenIdle(300)
+                .thenExecute(() -> helper.assertTrue(companion.tickCount - ticksAtStart[0] >= 295,
+                        "alone in her dimension she stopped ticking: " + (companion.tickCount - ticksAtStart[0])
+                                + " ticks in 300"))
+                .thenExecute(() -> walk[0] = lua(companion, "return numen.move.walk(" + xyz(
+                        new BlockPos(floor.getX() + 5, floor.getY() + 1, floor.getZ())) + ")"))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(walk[0].done() && walk[0].succeeded(), "her own walk did not finish: " + walk[0].outcome());
+                    helper.assertTrue(companion.position().distanceToSqr(start[0]) > 9.0,
+                            "she did not move: " + start[0] + " -> " + companion.position());
+                })
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+}

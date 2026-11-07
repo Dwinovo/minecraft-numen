@@ -1,0 +1,7 @@
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"嗯"},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":80,"completion_tokens":5,"total_tokens":85,"cached_tokens":64}}
+
+data: [DONE]

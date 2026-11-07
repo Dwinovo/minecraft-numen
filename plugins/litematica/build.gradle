@@ -1,0 +1,30 @@
+plugins {
+    id 'numen-plugin-base'
+    id 'net.fabricmc.fabric-loom-remap'
+}
+
+// 只接 Fabric:Litematica 与 MaLiLib 的发布物是 Yarn 名(运行在 intermediary 上),moddev 编译不了它们。
+// 本联动用 Loom 加官方 Mojang 映射,与 Numen 的 Fabric 端同一套:modCompileOnly 的 jar 由 Loom 重映射成 Mojang 名,
+// 编译出来的类与 Numen 本体同命名,随后由 numen:fabric 的 remapJar 一起换成 intermediary。
+// 1.21.1 的 NeoForge 只有非官方移植 Forgematica,这个联动不接(调研见任务报告)。
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    // 瘦 api jar 取跨加载器那份(Mojang 名),与 plugins/ysm 一样;Fabric 的 intermediary 成品另有重映射,编译期用不着
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+}
+
+repositories {
+    // Litematica 与 MaLiLib 只从 masa 的 maven(sakura-ryoko 维护 1.21 这条线)取
+    exclusiveContent {
+        forRepository { maven { name = 'Masa'; url = 'https://masa.dy.fi/maven/sakura-ryoko' } }
+        filter { includeGroupAndSubgroups 'fi.dy.masa' }
+    }
+}
+
+// Litematica 是 LGPL-3.0:只在编译期引用,运行时由玩家自己装的那份提供,本模块不携带它们一个字节。
+// 不要传递依赖:它们的 pom 把 fabric-loader 与 MaLiLib 写成运行期依赖,编译不需要。
+dependencies {
+    modCompileOnly("fi.dy.masa.malilib:malilib-fabric-1.21:${malilib_version}") { transitive = false }
+    modCompileOnly("fi.dy.masa.litematica:litematica-fabric-1.21:${litematica_version}") { transitive = false }
+}

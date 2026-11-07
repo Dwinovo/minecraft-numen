@@ -1,0 +1,1725 @@
+package com.dwinovo.numen.api.client.screen.settings;
+
+
+import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
+import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.client.ClientKeys;
+import com.dwinovo.numen.api.client.data.ClientPrefs;
+import com.dwinovo.numen.api.voice.VoiceProfile;
+import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.screen.Nb;
+import com.dwinovo.numen.api.client.screen.PopupMenu;
+import com.dwinovo.numen.api.client.ui.mc.Sprites;
+import com.dwinovo.numen.api.client.screen.UiTheme;
+import com.dwinovo.numen.api.client.ui.widget.UiRoot;
+import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.plugin.PluginRoster;
+import com.google.gson.JsonObject;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.resources.language.I18n;
+import net.minecraft.network.chat.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * The Settings tab of {@link com.dwinovo.numen.api.client.screen.NumenScreen}, extracted whole: a
+ * config hub with a left sub-nav picking one of nine sections (model configs / proxy / MCP /
+ * skills / persona / voice / STT / theme), each with its list + form + delete-confirm
+ * states. All section state, widget building, rendering, hit-testing and wheel handling live
+ * here; the screen supplies geometry, widget registration and shared transient signals through
+ * {@link Host}. Behaviour is a 1:1 move from the screen (offsets, ordering, colours unchanged).
+ *
+ * <p>The legacy 模型接入 section (buildLlmWidgets / onSaveSettings and their dropdown click
+ * blocks) was unreachable since 2026-07-14 (the 提供商 library replaced it in the nav) and was
+ * dropped during this extraction instead of being carried over dead.
+ */
+public final class SettingsView {
+
+    /** What the extracted code needs back from the owning screen. */
+    public interface Host {
+        <T extends AbstractWidget> T add(T w);
+        void rebuild();
+        void focus(AbstractWidget w);
+
+        Font font();
+        int left();
+        int top();
+        int panelW();
+        int panelH();
+        /** Left edge of the companion rail — the delete-confirm scrim covers rail + panel. */
+        int railX();
+        UUID uuid();
+        /** Collect a hovered-row tooltip; the screen draws it last, above everything. */
+        void tip(List<Component> lines, int x, int y);
+        /** Re-read the screen's palette statics after a theme switch. */
+        void repaintPalette();
+    }
+
+    /**
+     * The config hub's sections, in nav order. MCP 出现两次是刻意的——方向相反的两件事:
+     * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
+     * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
+     */
+    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, STT, THEME, PERMISSION, PLUGINS }
+
+    // ---- layout constants (mirror the screen's) ----
+    private static final int PAD = 8;
+    private static final int HEADER_H = 22;
+    /** 试听用的固定测试句(按当前表单参数就地合成)。 */
+
+    private final Host host;
+
+    // ---- palette: re-read from the CURRENT theme on every public entry (theme switch = live) ----
+    private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
+
+    /** 在哪个分区;null = 设置首页(分区列表)。 */
+    private Section section;
+    /** 退回首页的途中:分区页正往右滑出去,滑完才把 {@link #section} 置空。 */
+    private boolean leaving;
+    /** 分区页推进来多少像素(0 = 在首页,panelW = 整页进来);按趋近走。 */
+    private float pushPx;
+    private long lastPushMs;
+
+    /**
+     * 设置首页的分组(Telegram 设置那一列一组一组的):她本身(模型、人设、声线、语音输入)、
+     * 她能用的(技能、工具扩展、外接大脑)、界面(主题)。
+     */
+    private static final Section[][] GROUPS = {
+            {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT},
+            {Section.SKILLS, Section.MCP, Section.BRAIN, Section.PERMISSION, Section.PLUGINS},
+            {Section.THEME}};
+    private static final int ITEM_H = 20;
+    private static final int GROUP_GAP = 7;
+
+    // ---- 内容库(模型档案、人设、技能、MCP 工具)共有的几样:分组、说明里的标记、给管理员的新版处理 ----
+
+    /** 条目在列表里属于哪一节:服务器提供的归"服务器提供",其余归"我的"。 */
+    private static String groupOf(ServerLibraries.Base b) {
+        return b.server() ? LibraryListPanel.SERVER : LibraryListPanel.MINE;
+    }
+
+    /** 说明行:关着、自带、改过、有新版、来源卸载了、盖着/被盖着,这些标记在前,各库自己的说明在后。 */
+    private static String meta(ServerLibraries.Base b, String detail) {
+        List<String> tags = new ArrayList<>();
+        if (!b.enabled()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_OFF));
+        if (b.shipped()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_SHIPPED));
+        if (b.modified()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_MODIFIED));
+        if (b.update()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_UPDATE));
+        if (b.gone()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_GONE));
+        if (b.paired()) tags.add(I18n.get(b.server() ? ModLanguageData.Keys.LIBRARY_COVERED
+                : ModLanguageData.Keys.LIBRARY_COVERS));
+        return tags.isEmpty() ? detail : String.join(" · ", tags) + " · " + detail;
+    }
+
+    /** 这一条当前这位玩家能不能改、删:自己的人人能,服务器提供的只有管理员(玩家对服务器提供的只读,想改先复制到我的)。 */
+    private static boolean editable(ServerLibraries.Base b) {
+        return !b.server() || RemoteCompanions.admin();
+    }
+
+    /** 请求体:库里的名字,和它在哪一组。 */
+    private static JsonObject target(ServerLibraries.Base b) {
+        JsonObject body = new JsonObject();
+        body.addProperty("id", b.id());
+        if (b.server()) {
+            body.addProperty("group", "server");
+        }
+        return body;
+    }
+
+    private static void request(String kind, String op, ServerLibraries.Base b) {
+        RemoteCompanions.library().request(kind, op, target(b));
+    }
+
+    /** 玩家自己的开关:关掉的条目他的同伴看不到(开关记在他自己的偏好里)。 */
+    private static void flip(String kind, ServerLibraries.Base b) {
+        request(kind, b.enabled() ? Libraries.DISABLE : Libraries.ENABLE, b);
+    }
+
+    /**
+     * 管理员对 jar 自带条目的右键菜单(房主的"我的"里自带的也是):jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
+     * 自己的改动、取回 jar 里的这一版。
+     */
+    private static List<PopupMenu.Item> updateMenu(String kind, ServerLibraries.Base b) {
+        if (!RemoteCompanions.admin()) {
+            return List.of();   // 有新版、改过这两样只有服务器目录里 jar 自带的条目才会有,房主的"我的"里也一样
+        }
+        List<PopupMenu.Item> items = new ArrayList<>();
+        if (b.update()) {
+            items.add(new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_ACCEPT), false,
+                    () -> request(kind, Libraries.ACCEPT, b)));
+            items.add(new PopupMenu.Item(Sprites.EDIT, I18n.get(ModLanguageData.Keys.LIBRARY_DISMISS), false,
+                    () -> request(kind, Libraries.DISMISS, b)));
+        }
+        if (b.modified() && !b.gone()) {
+            items.add(new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_RESTORE), false,
+                    () -> request(kind, Libraries.RESTORE, b)));
+        }
+        return items;
+    }
+
+    // ---- 模型配置表单:NumenUI ProfileFormPanel(检测/思考/强度/toast/分类报错) ----
+    private ProfileFormPanel providerForm;
+    private ProfileFormPanel.Draft providerDraft = new ProfileFormPanel.Draft();
+
+    private ProfileFormPanel providerForm() {
+        if (providerForm == null) {
+            providerForm = new ProfileFormPanel(
+                    this::onProfileSave,
+                    () -> { addingProvider = false; providerEditId = null; host.rebuild(); },
+                    this::storedKey);
+        }
+        return providerForm;
+    }
+
+    // ---- 模型配置列表:通用 LibraryListPanel(ListView 行 + ConfirmDialog 删除闸) ----
+    private LibraryListPanel<ServerLibraries.Provider> profileList;
+
+    /**
+     * 模型档案:服务器提供的(服务器目录里,管理员能改)和我的两组。玩家对服务器提供的只读,想改先复制到我的;每一条可以由玩家自己关掉。
+     * key 不在档案里:表单上输入的 key 按厂家存进钥匙串(见 {@link ServerLibraries#saveKey})。
+     */
+    private LibraryListPanel<ServerLibraries.Provider> profileList() {
+        if (profileList == null) {
+            profileList = new LibraryListPanel<ServerLibraries.Provider>(
+                    ServerLibraries::providers,
+                    e -> {
+                        String detail = (nb(e.provider()) ? e.provider() : "?") + " · "
+                                + (nb(e.model()) ? e.model() : "?")
+                                + (e.hasKey() ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
+                        // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
+                        Boolean marked = host.uuid() == null ? null : e.id().equals(
+                                RemoteCompanions.getOrCreate(host.uuid()).providerEntryId());
+                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta(e.base(), detail),
+                                !e.hasKey(), marked, !editable(e.base()), e.base().server());
+                    },
+                    e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
+                            e.name() == null ? "" : e.name()).getString(),
+                    e -> RemoteCompanions.library().delete(Libraries.PROVIDER, e.id(), e.base().server()),
+                    this::beginEditProvider)
+                    .withSections(e -> groupOf(e.base()),
+                            LibraryListPanel.shelves(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
+                                    () -> beginNewProvider(false), () -> beginNewProvider(true)))
+                    .withMenu(e -> updateMenu(Libraries.PROVIDER, e.base()))
+                    .withClone(e -> request(Libraries.PROVIDER, Libraries.COPY, e.base()))
+                    .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.PROVIDER, e.base()))
+                    // 换绑走她的绑定(下一次请求即生效);不许解绑——同伴必须有端点
+                    .withBind(e -> {
+                        if (host.uuid() != null) {
+                            RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PROVIDER, e.id());
+                        }
+                    }, null)
+                    .following(Libraries.PROVIDER);
+        }
+        return profileList;
+    }
+
+    // ---- 声线列表:同一底盘,服务器提供/我的两组,加标题行全局开关与绑定 ----
+    private LibraryListPanel<ServerLibraries.Voice> voiceListPanel;
+
+    /**
+     * 声线:服务端的一种库(服务器提供的管理员配,我的本人配),她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
+     * 没填的那行标红提醒。全局开关是这台电脑自己的设置。
+     */
+    private LibraryListPanel<ServerLibraries.Voice> voiceListPanel() {
+        if (voiceListPanel == null) {
+            voiceListPanel = new LibraryListPanel<ServerLibraries.Voice>(
+                    ServerLibraries::voices,
+                    e -> {
+                        var voice = e.profile();
+                        if (voice == null) {
+                            return new LibraryListPanel.Row(e.name(), meta(e.base(), "?"), true, null);
+                        }
+                        String detail;
+                        if (VoiceProfile.BACKEND_SOVITS.equals(voice.backend())) detail = nb(voice.refAudio()) ? voice.refAudio() : "?";
+                        else if (VoiceProfile.BACKEND_MINIMAX.equals(voice.backend())
+                                || VoiceProfile.BACKEND_FISH.equals(voice.backend())) detail = nb(voice.voice()) ? voice.voice() : "?";
+                        else detail = nb(voice.model()) ? voice.model() : "?";
+                        String line = I18n.get(ModLanguageData.Keys.VOICE_LIST_META, voice.backend(), detail,
+                                Math.round(voice.volume() * 5.0f));
+                        boolean noKey = !VoiceProfile.BACKEND_SOVITS.equals(voice.backend())
+                                && ClientKeys.keychain().get(voice.keyService()) == null;
+                        if (noKey) line += " · " + I18n.get(ModLanguageData.Keys.VOICE_NO_KEY, voice.keyService());
+                        // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
+                        Boolean marked = host.uuid() == null ? null : e.id().equals(
+                                RemoteCompanions.getOrCreate(host.uuid()).voiceId());
+                        return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked,
+                                !editable(e.base()), e.base().server());
+                    },
+                    e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
+                            e.name() == null ? "" : e.name()).getString(),
+                    e -> RemoteCompanions.library().delete(Libraries.VOICE, e.id(), e.base().server()),
+                    this::beginEditVoice)
+                    .withSections(e -> groupOf(e.base()),
+                            LibraryListPanel.shelves(ModLanguageData.Keys.VOICE_ADD, ModLanguageData.Keys.VOICE_EMPTY,
+                                    () -> beginNewVoice(false), () -> beginNewVoice(true)))
+                    .withMenu(e -> updateMenu(Libraries.VOICE, e.base()))
+                    .withClone(e -> request(Libraries.VOICE, Libraries.COPY, e.base()))
+                    .withRowToggle(e -> e.base().enabled(), e -> flip(Libraries.VOICE, e.base()))
+                    // 换绑/解绑走她的绑定,下一句话就用新声线
+                    .withBind(
+                            e -> {
+                                if (host.uuid() != null) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.VOICE, e.id());
+                                }
+                            },
+                            e -> {
+                                if (host.uuid() != null) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.VOICE, null);
+                                }
+                            })
+                    .withToggle(ModLanguageData.Keys.VOICE_ENABLED, ClientPrefs::voiceEnabled,
+                            ClientPrefs::setVoiceEnabled)
+                    .following(Libraries.VOICE);
+        }
+        return voiceListPanel;
+    }
+
+    private void onProfileSave(ProfileFormPanel.Draft d) {
+        JsonObject body = ProviderLibrary.profileToJson(d.toProfile());
+        body.addProperty("name", d.name.trim());
+        if (providerEditId != null) {
+            body.addProperty("id", providerEditId);
+        }
+        if (providerEditServer) {
+            body.addProperty("group", "server");
+        }
+        RemoteCompanions.library().put(Libraries.PROVIDER, body);
+        ServerLibraries.saveKey(d.provider, d.apiKey, providerEditServer);
+        addingProvider = false;
+        providerEditId = null;
+        host.rebuild();
+    }
+
+
+    /** 表单里这个厂家已存的 key:改服务器提供的档案是服主的,别的是玩家自己的;没存过是空串。 */
+    private String storedKey(String service) {
+        return providerEditServer ? ServerLibraries.serverKey(service) : ServerLibraries.mineKey(service);
+    }
+
+    // ---- model-config section state (mirrors the persona section) ----
+    private boolean addingProvider;
+    private String providerEditId;
+    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
+    private boolean providerEditServer;
+
+    // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
+    private boolean addingVoice;
+    private String voiceEditId;
+    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
+    private boolean voiceEditServer;
+    // ---- 声线表单:NumenUI VoiceFormPanel(后端切行/滚动/试听/胶囊) ----
+    private VoiceFormPanel voiceForm;
+    private VoiceFormPanel.Draft voiceDraft = VoiceFormPanel.freshDraft();
+
+    // ---- proxy section state (IP + port) ----
+
+    // Persona library form state (mirrors the MCP add/edit/delete flow).
+    private boolean addingPersona;
+    private String personaEditId;          // non-null = editing this persona; null = creating
+    private boolean personaEditServer;    // the one being edited is a built-in persona (admin only)
+    // ---- 人格表单:NumenUI PersonaFormPanel(名称 + 多行正文编辑器) ----
+    private PersonaFormPanel personaForm;
+    private PersonaFormPanel.Draft personaDraft = new PersonaFormPanel.Draft();
+
+    // ---- MCP 分区:NumenUI McpFormPanel + LibraryListPanel(行内启停/状态点/tooltip) ----
+    private boolean addingMcp;
+    /** 正在编辑的那台 MCP 服务器在库里的名字和它在哪一组;新建是 null。 */
+    private String mcpEditId;
+    private boolean mcpEditServer;
+    private McpFormPanel mcpForm;
+    /** 把授权完成后的回调网址贴回来的那张小卡。 */
+    private boolean pastingAuth;
+    private McpAuthFormPanel mcpAuthForm;
+
+    // ---- 权限分区:PermissionPanel(模式 + 规则列表),加规则走表单卡 RuleFormPanel ----
+    private boolean addingRule;
+    private PermissionPanel permissionPanel;
+    private RuleFormPanel ruleForm;
+    private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
+
+    /** 分区名:与 Section 声明顺序严格对应。 */
+    private static List<String> navLabels() {
+        return List.of(
+                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
+                I18n.get("numen.settings.nav.mcp"),
+                I18n.get("numen.settings.nav.brain"),
+                I18n.get("numen.settings.nav.skills"),
+                I18n.get("numen.settings.nav.persona"),
+                I18n.get(ModLanguageData.Keys.VOICE_TITLE),
+                I18n.get(ModLanguageData.Keys.STT_NAV),
+                I18n.get("numen.settings.nav.theme"),
+                I18n.get("numen.settings.nav.permission"),
+                I18n.get(ModLanguageData.Keys.PLUGIN_NAV));
+    }
+
+    // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
+    private SttPanel sttPanel;
+
+    private SttPanel sttPanel() {
+        if (sttPanel == null) sttPanel = new SttPanel();
+        return sttPanel;
+    }
+
+    public SettingsView(Host host) {
+        this.host = host;
+    }
+
+    private void loadPalette() {
+        UiTheme t = UiTheme.current();
+        BORDER = t.border();
+        ACCENT = t.cta();
+        TXT = t.text();
+        TXT_MUTED = t.textDim();
+        TXT_FAINT = t.faint();
+        CTA = t.cta();
+        FIELD = t.field();
+        OK = t.ok();
+        RUN = t.run();
+        FAIL = t.fail();
+    }
+
+    // ---- geometry (all off the host so window resizes keep working) ----
+
+    private int left() { return host.left(); }
+    private int top() { return host.top(); }
+    private int panelW() { return host.panelW(); }
+    private int panelH() { return host.panelH(); }
+    private Font font() { return host.font(); }
+
+    /*
+     * 设置页的格子:首页与分区页都占满整页宽,直接铺在页面底色上,没有外框。
+     * 首页的行、分区的抬头标题与按钮、列表的边沿都落在同一圈内边距 INNER 上,不各算各的。
+     */
+    /** 内容区离面板左右与底边内缩这么多,顶边在抬头下方。 */
+    private static final int SURFACE_INSET = 5;
+    /** 内容区边缘到里面东西的距离。 */
+    private static final int INNER = com.dwinovo.numen.api.client.ui.NumenStyle.PAD;
+    private int surfaceY() { return top() + HEADER_H + 2; }
+    private int innerLeft() { return left() + SURFACE_INSET + 1; }
+    private int innerRight() { return left() + panelW() - SURFACE_INSET - 1; }
+    private int innerTop() { return surfaceY() + 1; }
+    private int innerBottom() { return top() + panelH() - SURFACE_INSET - 1; }
+    /** Left x of the section content area(分区页整页宽)。 */
+    private int secX() { return innerLeft() + INNER; }
+    /** Width of the section content area. */
+    private int secW() { return innerRight() - INNER - secX(); }
+    /** Top y of section content;首页第一行与分区抬头行同一条顶边。 */
+    private int secY0() { return innerTop() + INNER; }
+    /** Bottom y a list row may reach. */
+    private int secBottom() { return innerBottom() - INNER; }
+    private int secH() { return secBottom() - secY0(); }
+
+    /**
+     * 下拉与选择框能用的区域,窗口比面板小时以窗口为界(缩小游戏窗口后弹层仍整块可见):
+     * 表单卡盖住整个面板,所以是整个面板;分区页画在自己的裁剪框里,弹层出了内容区就被切掉,所以是内容区。
+     */
+    private UiRoot.Viewport formWindow() {
+        var win = Minecraft.getInstance().getWindow();
+        return UiRoot.Viewport.clip(left(), top(), panelW(), panelH(), win.getGuiScaledWidth(), win.getGuiScaledHeight());
+    }
+
+    private UiRoot.Viewport pageWindow() {
+        var win = Minecraft.getInstance().getWindow();
+        return UiRoot.Viewport.clip(innerLeft(), secY0(), innerRight() - innerLeft(), innerBottom() - secY0(),
+                win.getGuiScaledWidth(), win.getGuiScaledHeight());
+    }
+
+    // ---- form modal (add/edit forms float on a card over the dimmed list) ----
+
+    /** 任一新建/编辑表单在场(表单模态)——屏幕据此屏蔽背景交互。 */
+    public boolean formActive() {
+        return addingProvider || addingVoice || addingPersona || addingMcp || pastingAuth || addingRule;
+    }
+
+    /** 在场的那张表单里有下拉或选择框开着。人设、MCP 表单没有弹层。 */
+    private boolean formOverlayOpen() {
+        return addingProvider && providerForm().hasOverlay()
+                || addingVoice && voiceForm().hasOverlay();
+    }
+
+    /** Esc while a form modal is up: close it back to the list (same as the card's 取消). */
+    public boolean cancelForm() {
+        if (!formActive()) return false;
+        // 表单里的选择框、下拉开着时 Esc 只收它们(由表单自己的浮层通道处理),不收整张表单
+        if (formOverlayOpen()) return false;
+        addingProvider = false; providerEditId = null;
+        addingVoice = false; voiceEditId = null;
+        if (voiceForm != null) voiceForm.cancelPendingTest();
+        addingPersona = false; personaEditId = null;
+        addingMcp = false;
+        pastingAuth = false;
+        addingRule = false;
+        host.rebuild();
+        return true;
+    }
+
+    // 表单卡:面板区域内缩 10px 的近全幅卡——小面板下可用面积本就紧张,弹层感
+    // 靠四周暗边 + 描边传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
+    private int cardX0() { return left() + 10; }
+    private int cardY0() { return top() + 10; }
+    private int cardX1() { return left() + panelW() - 10; }
+    private int cardY1() { return top() + panelH() - 10; }
+    /** Left x of form content inside the card. */
+    private int fx() { return cardX0() + 10; }
+    /** Width of form content inside the card. */
+    private int fw() { return cardX1() - cardX0() - 20; }
+    /** 卡顶标题的顶边(Telegram 对话框:左上角一行加粗标题)。 */
+    private int cardTitleY() { return cardY0() + 8; }
+    /** Top y of form content (below the card's title row). */
+    private int fy0() { return cardTitleY() + 16; }
+    /** Bottom edge the form's button row sits on:纯字钮贴近卡底,和 Telegram 对话框底部那排一样。 */
+    private int fBottom() { return cardY1() - 6; }
+
+    /** 表单卡的出入场照 Telegram 对话框:开卡淡入,收卡淡出。 */
+    private static final int CARD_SHOW_MS = 200;
+    private static final int CARD_HIDE_MS = 150;
+    /** 上一帧表单卡在不在场;在场与否一变,就记下开卡或收卡的时刻。 */
+    private boolean cardUp;
+    private long cardShownAt, cardHiddenAt;
+    /** 最近画过的那张卡:收卡后淡出的那几帧还要照它画(表单面板的控件在下次开卡前原样留着)。 */
+    private Component cardTitle;
+    private CardBody cardBody;
+
+    /** 卡里的表单:五个表单面板的 render 签名都是这个。 */
+    private interface CardBody {
+        void render(com.dwinovo.numen.api.client.ui.IDrawSurface s, com.dwinovo.numen.api.client.ui.NumenTheme.Colors c,
+                    int mouseX, int mouseY, long nowMs);
+    }
+
+    /** 表单卡在场时,分区页每帧登记这一张(画在 {@link #renderCard})。 */
+    private void formCard(Component title, CardBody body) {
+        cardTitle = title;
+        cardBody = body;
+    }
+
+    /**
+     * 画表单卡:开卡后淡入,收卡后照最后那一帧淡出(卡已不接指针)。卡盖住整个面板(连左栏),
+     * 不能画在分区页里——页会滑动、带裁剪框,卡的顶边与标题行会被抬头切掉;所以分区页画完、
+     * 屏幕撤掉页的裁剪框之后才调这里。
+     */
+    public void renderCard(GuiGraphics g, int mouseX, int mouseY) {
+        if (cardBody == null) return;
+        long now = System.currentTimeMillis();
+        if (cardUp) {
+            float p = Math.min(1f, (now - cardShownAt) / (float) CARD_SHOW_MS);
+            drawCard(g, com.dwinovo.numen.api.client.ui.Anim.easeOutCubic(p), mouseX, mouseY);
+        } else if (now - cardHiddenAt < CARD_HIDE_MS) {
+            drawCard(g, 1f - (now - cardHiddenAt) / (float) CARD_HIDE_MS, -10000, -10000);
+        }
+    }
+
+    /** 暗幕 + 近全幅的卡 + 卡里的表单,整体乘上 {@code alpha}。 */
+    private void drawCard(GuiGraphics g, float alpha, int mouseX, int mouseY) {
+        g.setColor(1f, 1f, 1f, Math.max(0.05f, alpha));
+        formModal(g, cardTitle);
+        cardBody.render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        g.setColor(1f, 1f, 1f, 1f);
+    }
+
+    /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。卡底是窗口底色(Telegram 对话框的 boxBg = windowBg)。 */
+    private void formModal(GuiGraphics g, Component title) {
+        UiTheme t = UiTheme.current();
+        g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
+                (t.border() & 0xFFFFFF) | 0x99000000);
+        com.dwinovo.numen.api.client.ui.NumenStyle.box(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), cardX0(), cardY0(),
+                cardX1() - cardX0(), cardY1() - cardY0(), t.band(), t.aiBorder());
+        txt(g, title.copy().withStyle(net.minecraft.ChatFormatting.BOLD), fx(), cardTitleY(), TXT);
+    }
+
+    // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
+
+    private void txt(GuiGraphics g, Component c, int x, int y, int color) {
+        Nb.text(g, font(), c, x, y, color);
+    }
+
+    private static boolean nb(String s) {
+        return s != null && !s.isBlank();
+    }
+
+    private static String nv(String s) {
+        return s == null ? "" : s;
+    }
+
+    // ---- public surface (called by NumenScreen) ----
+
+    /** Null every widget reference (the screen just cleared the actual widget lists). */
+    public void clearWidgets() {
+    }
+
+    /** 首页点了一个分区:它从右边推进来。 */
+    private void selectSection(Section s) {
+        section = s;
+        leaving = false;
+        pushPx = 0f;
+        if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
+        // 列表面板按进页时的身份(管理员还是普通玩家)搭,每次进页重搭;服务器上的表要最新的
+        profileList = null;
+        personaListPanel = null;
+        mcpListPanel = null;
+        skillsListPanel = null;
+        pluginsListPanel = null;
+        permissionPanel = null;
+        switch (s) {
+            case PROVIDER -> {
+                RemoteCompanions.library().ask(Libraries.PROVIDER);
+                // 档案表单要的厂家名单:管理员才编辑档案,目录与端点解析在服务端
+                if (RemoteCompanions.admin()) {
+                    RemoteCompanions.library().ask(Libraries.CATALOG);
+                }
+            }
+            // 人设是服务器上他目录里的 .md 文件:进页先让服务端重扫,外部编辑器的修改即时可见。
+            case PERSONA -> RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
+            case MCP -> RemoteCompanions.library().ask(Libraries.MCP_CLIENT);
+            case SKILLS -> RemoteCompanions.library().ask(Libraries.SKILL);
+            case BRAIN -> RemoteCompanions.library().ask(Libraries.MCP_SERVER);
+            case PERMISSION -> RemoteCompanions.library().ask(Libraries.PERMISSION);
+            case PLUGINS -> RemoteCompanions.library().ask(Libraries.PLUGIN);
+            default -> { }
+        }
+        resetSectionState();
+        host.rebuild();
+    }
+
+    /** 面板抬头写什么:在分区里是分区名(Telegram 子页),在首页是"设置"。 */
+    public String title() {
+        return inSection() ? navLabels().get(section.ordinal()) : I18n.get("numen.tab.settings");
+    }
+
+    /** 在某个分区里(不算正在退出去的)——← 和 Esc 先退回首页。 */
+    public boolean inSection() {
+        return section != null && !leaving;
+    }
+
+    /** 退回首页:分区页往右滑出去,滑完才换。表单开着时先由 {@link #cancelForm} 收。 */
+    public void leaveSection() {
+        if (inSection()) leaving = true;
+    }
+
+    /** 开设置页时从首页开始,不带动画。 */
+    public void showList() {
+        if (section == null) return;
+        section = null;
+        leaving = false;
+        pushPx = 0f;
+        resetSectionState();
+    }
+
+    /** 各分区的表单与在途回调:换分区、退回首页都清掉。 */
+    private void resetSectionState() {
+        cardBody = null;   // 表单卡随分区一起离开,不在别的分区上淡出
+        addingMcp = false;
+        mcpEditId = null;
+        pastingAuth = false;
+        addingRule = false;
+        addingPersona = false;
+        personaEditId = null;
+        addingProvider = false;
+        providerEditId = null;
+        addingVoice = false;
+        voiceEditId = null;
+        if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
+    }
+
+    // ---- delete-confirm modal (shared by the five sections that can delete) ----
+
+    /** Dispatch widget building by the active section (skill/MCP lists render manually). */
+    public void buildWidgets() {
+        loadPalette();
+        if (section == null) return;   // 首页是手画的一列,没有控件
+        switch (section) {
+            case SKILLS -> skillsListPanel().build(secX(), secY0(), secW(), secH(),
+                    left(), top(), panelW(), panelH());
+            case PLUGINS -> pluginsListPanel().build(secX(), secY0(), secW(), secH(),
+                    left(), top(), panelW(), panelH());
+            case MCP -> {
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                mcpListPanel().build(secX(), secY0(), secW(), secH(),
+                        left(), top(), panelW(), panelH());
+                if (addingMcp) buildMcpForm();
+                if (pastingAuth) buildMcpAuthForm();
+            }
+            case PERSONA -> {
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                personaListPanel().build(secX(), secY0(), secW(), secH(),
+                        left(), top(), panelW(), panelH());
+                if (addingPersona) buildPersonaForm();
+            }
+            case PROVIDER -> {
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                profileList().build(secX(), secY0(), secW(), secH(),
+                        left(), top(), panelW(), panelH());
+                if (addingProvider) buildProviderFormNew();
+            }
+            case VOICE -> {
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                voiceListPanel().build(secX(), secY0(), secW(), secH(),
+                        left(), top(), panelW(), panelH());
+                if (addingVoice) buildVoiceForm();
+            }
+            case BRAIN -> brainPanel().build(secX(), secY0(), secW(), secH());
+            case STT -> sttPanel().build(secX(), secY0(), secW(), secH(), pageWindow());
+            case THEME -> themePanel().build(secX(), secY0(), secW(), secH());
+            case PERMISSION -> {
+                // 规则列表始终在场(表单模态时作背景);清空的确认卡是面板自己的浮层。
+                permissionPanel().build(secX(), secY0(), secW(), secH(), left(), top(), panelW(), panelH());
+                if (addingRule) buildRuleForm();
+            }
+        }
+    }
+
+    // ---- Proxy section: the global network proxy, its own tab (IP + port) ----
+
+    // ---- Voice input (STT) section: provider dropdown → prefilled base/model, mic dropdown ----
+
+    // ---- External-brain section: 我们自己当 MCP 服务器,把同伴交给外面的 AI 驱动 ----
+
+    /** 本节的纵向锚点(相对 secY0):build 与 render 共读一份,按钮和标签才不会跑偏。 */
+
+    // ---- Provider section: the library of named LLM provider configs companions select from ----
+
+    /** 表单卡里的 NumenUI 表单(检测/思考/强度/toast 齐备);卡壳照旧 formModal。 */
+    private void buildProviderFormNew() {
+        providerForm().open(providerDraft);
+        providerForm().setWindow(formWindow());
+        providerForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+
+    // ---- Voice section: the library of named TTS voices companions bind to (mirrors the provider section) ----
+
+
+    /** 表单卡里的 NumenUI 声线表单(后端切行/滚动/试听/胶囊);卡壳照旧 formModal。 */
+    private void buildVoiceForm() {
+        voiceForm().open(voiceDraft);
+        voiceForm().build(fx(), fy0(), fw(), fBottom() - fy0(), formWindow());
+    }
+
+    private VoiceFormPanel voiceForm() {
+        if (voiceForm == null) {
+            voiceForm = new VoiceFormPanel(this::onVoiceSave,
+                    () -> {
+                        addingVoice = false;
+                        voiceEditId = null;
+                        voiceForm.cancelPendingTest();
+                        host.rebuild();
+                    });
+        }
+        return voiceForm;
+    }
+
+    /**
+     * 存一条声线:服务商、音色、参数交给服务端的库(不含 key),表单上的 key 存进这台电脑的钥匙串——合成在这台电脑上,
+     * key 不离开它。
+     */
+    private void onVoiceSave(VoiceFormPanel.Draft d) {
+        JsonObject body = VoiceFormPanel.profileOf(d).toJson();
+        body.addProperty("name", d.name.trim());
+        if (voiceEditId != null) {
+            body.addProperty("id", voiceEditId);
+        }
+        if (voiceEditServer) {
+            body.addProperty("group", "server");
+        }
+        if (voiceEditId == null && host.uuid() != null) {
+            // 从某个同伴的设置页新建声线 = 给这只配音:新条目的 id 随答复回来,直接绑给发请求时的那只同伴
+            UUID companion = host.uuid();
+            RemoteCompanions.library().put(Libraries.VOICE, body, reply -> {
+                if (reply.created() != null) {
+                    RemoteCompanions.getOrCreate(companion).bind(Slot.VOICE, reply.created());
+                }
+            });
+        } else {
+            RemoteCompanions.library().put(Libraries.VOICE, body);
+        }
+        String service = VoiceFormPanel.profileOf(d).keyService();
+        String typed = d.apiKey.strip();
+        if (!typed.equals(nv(ClientKeys.keychain().get(service)))) {
+            ClientKeys.keychain().put(service, typed);
+        }
+        addingVoice = false;
+        voiceEditId = null;
+        voiceDraft = VoiceFormPanel.freshDraft();
+        host.rebuild();
+    }
+
+    private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
+        voiceListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingVoice) formCard(Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
+    }
+
+    private void beginNewVoice(boolean server) {
+        addingVoice = true;
+        voiceEditId = null;
+        voiceEditServer = server;
+        voiceDraft = VoiceFormPanel.freshDraft();
+        host.rebuild();
+    }
+
+    private void beginEditVoice(ServerLibraries.Voice e) {
+        if (e.profile() == null) {
+            return;   // 读不通的条目没有可改的
+        }
+        var voice = e.profile();
+        addingVoice = true;
+        voiceEditId = e.id();
+        voiceEditServer = e.base().server();
+        var d = new VoiceFormPanel.Draft();
+        d.backend = voice.backend();
+        d.name = nv(e.name());
+        d.service = voice.service();
+        d.url = voice.url();
+        d.apiKey = nv(ClientKeys.keychain().get(voice.keyService()));
+        d.groupId = voice.groupId();
+        d.model = voice.model();
+        d.voice = voice.voice();
+        d.refAudio = voice.refAudio();
+        d.promptText = voice.promptText();
+        d.textLang = voice.textLang();
+        // 存储的是增益(0.2~2.0),表单显示 1~10 档。
+        d.volume = Math.round(Math.clamp(voice.volume(), 0.2f, 2.0f) * 5.0f);
+        voiceDraft = d;
+        host.rebuild();
+    }
+
+    // ---- Persona section: a library of reusable personas; apply one to the active companion ----
+
+    // ---- 人格列表:通用 LibraryListPanel + 服务器提供/我的两组 + 复制到我的 + 标题行 ↻ 重扫 ----
+    private LibraryListPanel<ServerLibraries.Persona> personaListPanel;
+
+    private LibraryListPanel<ServerLibraries.Persona> personaListPanel() {
+        if (personaListPanel == null) {
+            personaListPanel = new LibraryListPanel<>(
+                    ServerLibraries::personas,
+                    p -> {
+                        // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
+                        String detail = p.text().replace('\n', ' ');
+                        // 行尾勾 = 本同伴的人设
+                        Boolean marked = host.uuid() == null ? null : p.id().equals(
+                                RemoteCompanions.getOrCreate(host.uuid()).personaId());
+                        return new LibraryListPanel.Row(p.name(), meta(p.base(), detail), false, marked,
+                                !editable(p.base()), p.base().server());
+                    },
+                    p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
+                    p -> RemoteCompanions.library().delete(Libraries.PERSONA, p.id(), p.base().server()),
+                    this::beginEditPersona)
+                    .withSections(p -> groupOf(p.base()),
+                            LibraryListPanel.shelves("numen.persona.add", "numen.persona.empty",
+                                    () -> beginNewPersona(false), () -> beginNewPersona(true)))
+                    .withMenu(p -> updateMenu(Libraries.PERSONA, p.base()))
+                    .withClone(p -> request(Libraries.PERSONA, Libraries.COPY, p.base()))
+                    .withRowToggle(p -> p.base().enabled(), p -> flip(Libraries.PERSONA, p.base()))
+                    // 换绑 = 她的人设绑定(活切,聊天流插分隔记号);解绑回默认人设
+                    .withBind(
+                            p -> {
+                                if (host.uuid() != null) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PERSONA, p.id());
+                                }
+                            },
+                            p -> {
+                                if (host.uuid() != null) {
+                                    RemoteCompanions.getOrCreate(host.uuid()).bind(Slot.PERSONA, null);
+                                }
+                            })
+                    // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
+                    .withHeaderAction(Sprites.REFRESH, I18n.get(ModLanguageData.Keys.LIBRARY_RELOAD),
+                            () -> RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject()))
+                    .following(Libraries.PERSONA);
+        }
+        return personaListPanel;
+    }
+
+    private void beginNewPersona(boolean server) {
+        addingPersona = true;
+        personaEditId = null;
+        personaEditServer = server;
+        personaDraft = new PersonaFormPanel.Draft();
+        host.rebuild();
+    }
+
+    /** 存一条人设:{@code id} 为 null 是新建。服务端存,改名时它把在用的同伴一起改指。 */
+    private static void savePersona(String id, String name, String text, boolean server) {
+        JsonObject body = new JsonObject();
+        if (id != null) {
+            body.addProperty("id", id);
+        }
+        if (server) {
+            body.addProperty("group", "server");
+        }
+        body.addProperty("name", name);
+        body.addProperty("text", text);
+        RemoteCompanions.library().put(Libraries.PERSONA, body);
+    }
+
+    /** 表单卡里的 NumenUI 人格表单(名称 + 多行正文编辑器);卡壳照旧 formModal。 */
+    private void buildPersonaForm() {
+        personaForm().open(personaDraft);
+        personaForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private PersonaFormPanel personaForm() {
+        if (personaForm == null) {
+            personaForm = new PersonaFormPanel(this::onPersonaSave,
+                    () -> {
+                        addingPersona = false;
+                        personaEditId = null;
+                        host.rebuild();
+                    });
+        }
+        return personaForm;
+    }
+
+    private void onPersonaSave(PersonaFormPanel.Draft d) {
+        savePersona(personaEditId, d.name.trim(), d.text.trim(), personaEditServer);
+        addingPersona = false;
+        personaEditId = null;
+        personaDraft = new PersonaFormPanel.Draft();
+        host.rebuild();
+    }
+
+    // ---- MCP section ----
+
+    // ---- 大脑/主题分区:NumenUI 面板 ----
+    private BrainPanel brainPanel;
+    private ThemePanel themePanel;
+
+    private BrainPanel brainPanel() {
+        if (brainPanel == null) brainPanel = new BrainPanel();
+        return brainPanel;
+    }
+
+    private ThemePanel themePanel() {
+        if (themePanel == null) themePanel = new ThemePanel(host::repaintPalette);
+        return themePanel;
+    }
+
+    private PermissionPanel permissionPanel() {
+        if (permissionPanel == null) {
+            permissionPanel = new PermissionPanel(() -> {
+                ruleForm().open();
+                addingRule = true;
+                host.rebuild();
+            });
+        }
+        return permissionPanel;
+    }
+
+    /** 表单卡里的加规则表单;卡壳照旧 formModal。 */
+    private void buildRuleForm() {
+        ruleForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private RuleFormPanel ruleForm() {
+        if (ruleForm == null) {
+            ruleForm = new RuleFormPanel(
+                    () -> {
+                        addingRule = false;
+                        host.rebuild();
+                    },
+                    () -> {
+                        addingRule = false;
+                        host.rebuild();
+                    });
+        }
+        return ruleForm;
+    }
+
+    private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel;
+
+    private void beginNewMcp(boolean server) {
+        addingMcp = true;
+        mcpEditId = null;
+        mcpEditServer = server;
+        mcpDraft = new McpFormPanel.Draft();
+        host.rebuild();
+    }
+
+    /** 这一台的配置(地址、令牌、命令行)当前这位玩家能不能看、改:自己的人人能,服务器提供的只有管理员。 */
+    private static boolean mcpOwned(ServerLibraries.McpClientRow h) {
+        return editable(h.base());
+    }
+
+    /**
+     * 接进来的 MCP 服务器:服务器提供的(管理员配的)和我的两组。自己能改的那几台,行尾开关是"连不连";别人的(服务器提供的、对玩家)是自己的开关,
+     * 只管他的同伴看不看得到它的工具。玩家只能加 http 类的,stdio 起的是服务器机器上的进程,只有管理员能加。
+     */
+    private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel() {
+        if (mcpListPanel == null) {
+            mcpListPanel = new LibraryListPanel<ServerLibraries.McpClientRow>(
+                    ServerLibraries::mcpClients,
+                    h -> new LibraryListPanel.Row(h.name(), meta(h.base(), mcpMeta(h)),
+                            h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED, null,
+                            !mcpOwned(h), h.base().server()),
+                    h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
+                    h -> RemoteCompanions.library().delete(Libraries.MCP_CLIENT, h.id(), h.base().server()),
+                    this::beginEditMcp)
+                    .withSections(h -> groupOf(h.base()),
+                            LibraryListPanel.shelves("numen.mcp.add", "numen.mcp.empty",
+                                    () -> beginNewMcp(false), () -> beginNewMcp(true)))
+                    .withMenu(h -> updateMenu(Libraries.MCP_CLIENT, h.base()))
+                    .withClone(h -> request(Libraries.MCP_CLIENT, Libraries.COPY, h.base()))
+                    .withTitleAction(I18n.get("numen.mcp.paste_auth"), () -> {
+                        pastingAuth = true;
+                        host.rebuild();
+                    })
+                    .withRowIcon(8, (surface, h, ix, iy, size) ->
+                            surface.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h)))
+                    .withRowToggle(
+                            h -> mcpOwned(h) ? h.status() != com.dwinovo.numen.mcp.client.McpConnections.Status.DISABLED
+                                    : h.base().enabled(),
+                            h -> {
+                                if (!mcpOwned(h)) {
+                                    flip(Libraries.MCP_CLIENT, h.base());
+                                    return;
+                                }
+                                var st = h.status();
+                                // 连接中/等授权/已连接 → 断开;禁用/失败 → (重)连(失败的点一下即重试)
+                                boolean on = st == com.dwinovo.numen.mcp.client.McpConnections.Status.CONNECTED
+                                        || st == com.dwinovo.numen.mcp.client.McpConnections.Status.CONNECTING
+                                        || st == com.dwinovo.numen.mcp.client.McpConnections.Status.AUTHORIZING;
+                                request(Libraries.MCP_CLIENT, on ? Libraries.DISCONNECT : Libraries.CONNECT, h.base());
+                                if (!on) {
+                                    McpAuthPrompt.expect(h.name());
+                                }
+                            })
+                    .following(Libraries.MCP_CLIENT);
+        }
+        return mcpListPanel;
+    }
+
+    /** 表单卡里的 NumenUI MCP 表单(类型切行/内联校验);卡壳照旧 formModal。 */
+    private void buildMcpForm() {
+        mcpForm().open(mcpDraft);
+        mcpForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private void buildMcpAuthForm() {
+        mcpAuthForm().open();
+        mcpAuthForm().build(fx(), fy0(), fw(), fBottom() - fy0());
+    }
+
+    private McpAuthFormPanel mcpAuthForm() {
+        if (mcpAuthForm == null) {
+            mcpAuthForm = new McpAuthFormPanel(
+                    url -> {
+                        JsonObject body = new JsonObject();
+                        body.addProperty("url", url);
+                        RemoteCompanions.library().request(Libraries.MCP_CLIENT, Libraries.AUTH, body);
+                        pastingAuth = false;
+                        host.rebuild();
+                    },
+                    () -> {
+                        pastingAuth = false;
+                        host.rebuild();
+                    });
+        }
+        return mcpAuthForm;
+    }
+
+    private McpFormPanel mcpForm() {
+        if (mcpForm == null) {
+            mcpForm = new McpFormPanel(this::onMcpSave,
+                    () -> {
+                        addingMcp = false;
+                        host.rebuild();
+                    }, RemoteCompanions.admin());
+        }
+        return mcpForm;
+    }
+
+    private void onMcpSave(McpFormPanel.Draft d) {
+        String name = d.name.trim();
+        String target = d.target.trim();
+        String service = d.service.trim();
+        // 改的时候保留这台原来的"连不连"与手写在文件里的客户端 ID:改一下配置不该顺手翻开关、丢设置
+        boolean connect = true;
+        String clientId = "";
+        if (mcpEditId != null) {
+            var original = ServerLibraries.mcpClients().stream()
+                    .filter(h -> h.id().equals(mcpEditId) && h.base().server() == mcpEditServer && h.full())
+                    .findFirst();
+            connect = original.map(ServerLibraries.McpClientRow::connect).orElse(true);
+            clientId = original.map(h -> h.spec().clientId()).orElse("");
+        }
+        com.dwinovo.numen.mcp.client.McpServerSpec spec;
+        if (d.stdio) {
+            String[] parts = target.split("\\s+");
+            String command = parts[0];
+            List<String> args = new ArrayList<>();
+            for (int i = 1; i < parts.length; i++) args.add(parts[i]);
+            spec = new com.dwinovo.numen.mcp.client.McpServerSpec(name, "stdio", "", java.util.Map.of(),
+                    command, List.copyOf(args), parseEnv(d.extra), service, clientId, connect, 20, 120);
+        } else {
+            spec = new com.dwinovo.numen.mcp.client.McpServerSpec(name, "http", target, parseHeader(d.extra),
+                    "", List.of(), java.util.Map.of(), service, clientId, connect, 20, 120);
+        }
+        JsonObject body = spec.toJson();
+        // 改了名:服务端存新名字的同时把旧的摘掉
+        if (mcpEditId != null) {
+            body.addProperty("id", mcpEditId);
+        }
+        if (mcpEditServer) {
+            body.addProperty("group", "server");
+        }
+        RemoteCompanions.library().put(Libraries.MCP_CLIENT, body);
+        McpAuthPrompt.expect(name);
+        addingMcp = false;
+        mcpDraft = new McpFormPanel.Draft();
+        host.rebuild();
+    }
+
+    /** Parse "Name: Value" header lines (multiple separated by ';' or newline) into a map. */
+    private static java.util.Map<String, String> parseHeader(String line) {
+        return parsePairs(line, ':');
+    }
+
+    /** Parse "KEY=value" env lines (multiple separated by ';' or newline) into a map. */
+    private static java.util.Map<String, String> parseEnv(String line) {
+        return parsePairs(line, '=');
+    }
+
+    private static java.util.Map<String, String> parsePairs(String line, char sep) {
+        String s = line == null ? "" : line.trim();
+        if (s.isEmpty()) return java.util.Map.of();
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (String part : s.split("[;\\n]")) {
+            String p = part.trim();
+            int i = p.indexOf(sep);
+            if (i <= 0) continue;
+            String k = p.substring(0, i).trim();
+            String v = p.substring(i + 1).trim();
+            if (!k.isEmpty() && !v.isEmpty()) out.put(k, v);
+        }
+        return java.util.Map.copyOf(out);
+    }
+
+    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除,一行一个技能,整行点了就翻开关) ----
+    private LibraryListPanel<ServerLibraries.Skill> skillsListPanel;
+
+    /**
+     * 技能:服务器提供的(Numen 与各插件随包带来的,同步在服务器目录里)和我的两组。人人能开关(记在自己的偏好里)、能复制到我的、
+     * 能让服务器重扫;技能是目录,改它拿编辑器改文件。
+     */
+    private LibraryListPanel<ServerLibraries.Skill> skillsListPanel() {
+        if (skillsListPanel == null) {
+            skillsListPanel = new LibraryListPanel<ServerLibraries.Skill>(
+                    ServerLibraries::skills,
+                    sk -> {
+                        String desc = sk.description() == null || sk.description().isBlank()
+                                ? I18n.get("numen.skill.no_desc") : sk.description();
+                        return new LibraryListPanel.Row(sk.name(), meta(sk.base(), desc), false, null, false,
+                                sk.base().server());
+                    },
+                    null, null, null)
+                    .withSections(sk -> groupOf(sk.base()),
+                            LibraryListPanel.shelves(null, "numen.skill.empty", null, null))
+                    .withMenu(sk -> updateMenu(Libraries.SKILL, sk.base()))
+                    .withClone(sk -> request(Libraries.SKILL, Libraries.COPY, sk.base()))
+                    .withRowToggle(ServerLibraries.Skill::enabled, sk -> flip(Libraries.SKILL, sk.base()))
+                    // 技能目录在服务器上:往里放了新的,↻ 让服务器重扫
+                    .withHeaderAction(Sprites.REFRESH, I18n.get(ModLanguageData.Keys.LIBRARY_RELOAD),
+                            () -> RemoteCompanions.library().request(Libraries.SKILL, Libraries.RELOAD, new JsonObject()))
+                    .following(Libraries.SKILL);
+        }
+        return skillsListPanel;
+    }
+
+    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
+        skillsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+        // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
+        ServerLibraries.Skill sk = skillsListPanel().entryAtBody(mouseX, mouseY);
+        if (sk != null && sk.description() != null) {
+            host.tip(List.of(Component.literal(sk.name()), Nb.colored(sk.description(), TXT_MUTED)),
+                    mouseX, mouseY);
+        }
+    }
+
+    // ---- 插件列表:LibraryListPanel 的纯开关形态。开关当场装上或撤回插件的登记,声明了卸下要重启的除外 ----
+    private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel;
+
+    /**
+     * 插件:随 Numen 内嵌的、单独安装的与脚本里写的三节,人人看得到;开关只有管理员与房主有(服务端按每行的 {@code toggle} 说了算)。
+     * 开关当场生效;只有登记时声明了卸下要重启的插件,翻过之后那一行写明"重启后生效",状态仍是此刻的样子。
+     */
+    private LibraryListPanel<ServerLibraries.Plugin> pluginsListPanel() {
+        if (pluginsListPanel == null) {
+            pluginsListPanel = new LibraryListPanel<ServerLibraries.Plugin>(
+                    ServerLibraries::plugins,
+                    p -> new LibraryListPanel.Row(p.name(), pluginMeta(p),
+                            p.status() == PluginRoster.Status.FAILED, null, false, false, p.toggle()),
+                    null, null, null)
+                    .withSections(p -> p.source().name(), () -> List.of(
+                            new LibraryListPanel.Section(PluginRoster.Source.BUNDLED.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_BUNDLED),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false),
+                            new LibraryListPanel.Section(PluginRoster.Source.JAR.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_JAR),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false),
+                            new LibraryListPanel.Section(PluginRoster.Source.SCRIPT.name(),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_SCRIPT),
+                                    I18n.get(ModLanguageData.Keys.PLUGIN_ABOUT), null, null, false)))
+                    .withRowToggle(p -> !p.disabled(), p -> {
+                        JsonObject body = new JsonObject();
+                        body.addProperty("id", p.id());
+                        RemoteCompanions.library().request(Libraries.PLUGIN,
+                                p.disabled() ? Libraries.ENABLE : Libraries.DISABLE, body);
+                    })
+                    .following(Libraries.PLUGIN);
+        }
+        return pluginsListPanel;
+    }
+
+    /** 说明行:开关要重启才对得上时先说"重启后生效"(行窄会被截,要紧的放前面),再是此刻的状态与版本。 */
+    private static String pluginMeta(ServerLibraries.Plugin p) {
+        List<String> parts = new ArrayList<>();
+        if (p.pending()) parts.add(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART));
+        parts.add(pluginStatus(p));
+        if (nb(p.version())) parts.add(p.version());
+        return String.join(" · ", parts);
+    }
+
+    private static String pluginStatus(ServerLibraries.Plugin p) {
+        return switch (p.status()) {
+            // 目标模组只在客户端的联动:服务端把它装好了,这台电脑上有没有目标模组由这台客户端自己答
+            case LOADED -> p.clientMod() && !com.dwinovo.numen.api.plugin.ClientMods.provided().contains(p.id())
+                    ? I18n.get(ModLanguageData.Keys.PLUGIN_CLIENT_ABSENT, p.target())
+                    : I18n.get(ModLanguageData.Keys.PLUGIN_LOADED);
+            case DISABLED -> I18n.get(ModLanguageData.Keys.PLUGIN_DISABLED);
+            case FAILED -> I18n.get(ModLanguageData.Keys.PLUGIN_FAILED);
+        };
+    }
+
+    /** 悬停一行说全:谁做的、联动谁、这一次的状态与原因、它加了什么。 */
+    private List<Component> pluginTooltip(ServerLibraries.Plugin p) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(p.name()));
+        if (nb(p.version())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_VERSION, p.version()), TXT_MUTED));
+        if (!p.authors().isEmpty()) {
+            lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_AUTHORS, String.join(", ", p.authors())), TXT_MUTED));
+        }
+        if (nb(p.target())) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_TARGET, p.target()), TXT_MUTED));
+        lines.add(Nb.colored(pluginStatus(p), p.status() == PluginRoster.Status.FAILED ? FAIL : TXT_MUTED));
+        if (nb(p.reason())) lines.add(Nb.colored(p.reason(), FAIL));
+        if (p.pending()) lines.add(Nb.colored(I18n.get(ModLanguageData.Keys.PLUGIN_RESTART), TXT_MUTED));
+        List<String> adds = new ArrayList<>();
+        p.adds().forEach((kind, n) -> adds.add(I18n.get(ModLanguageData.Keys.pluginAdds(kind), n)));
+        if (!adds.isEmpty()) lines.add(Nb.colored(String.join(" · ", adds), TXT_MUTED));
+        return lines;
+    }
+
+    private void renderPluginsSection(GuiGraphics g, int mouseX, int mouseY) {
+        pluginsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+        ServerLibraries.Plugin p = pluginsListPanel().entryAtBody(mouseX, mouseY);
+        if (p != null) {
+            host.tip(pluginTooltip(p), mouseX, mouseY);
+        }
+    }
+
+    /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
+
+    // ---- render (nav + active section) ----
+
+    public void render(GuiGraphics g, int mouseX, int mouseY) {
+        loadPalette();
+        long now = System.currentTimeMillis();
+        float dt = lastPushMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPushMs) / 1000f);
+        lastPushMs = now;
+        int w = panelW();
+        boolean up = formActive();
+        if (up != cardUp) {
+            cardUp = up;
+            if (up) cardShownAt = now; else cardHiddenAt = now;
+        }
+        pushPx = com.dwinovo.numen.api.client.ui.Anim.approach(pushPx, inSection() ? w : 0f, 16f, dt);
+        if (leaving && pushPx <= 0f) {
+            section = null;
+            leaving = false;
+            resetSectionState();
+            host.rebuild();
+        }
+        int bodyTop = surfaceY(), bodyBottom = top() + panelH() - 3;
+        if (pushPx < w) {
+            // 首页:分区页推进来时它往左让出四分之一、压暗(Telegram 一层盖一层的样子)
+            int dx = -Math.round(pushPx * 0.25f);
+            g.pose().pushPose();
+            g.pose().translate(dx, 0, 0);
+            renderList(g, section == null ? mouseX - dx : -10000, mouseY);
+            g.pose().popPose();
+            int a = Math.round(0x70 * pushPx / w);
+            if (a > 0) g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, a << 24);
+        }
+        if (section != null) {
+            int dx = Math.round(w - pushPx);
+            g.pose().pushPose();
+            g.pose().translate(dx, 0, 0);
+            g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, UiTheme.current().band());
+            renderSection(g, leaving ? -10000 : mouseX - dx, mouseY);
+            g.pose().popPose();
+        }
+    }
+
+    /** 设置首页:一行一个分区,图标 + 名字,组与组之间一道线。 */
+    private void renderList(GuiGraphics g, int mouseX, int mouseY) {
+        UiTheme t = UiTheme.current();
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        List<String> labels = navLabels();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) {
+                g.fill(x, y + GROUP_GAP / 2, right, y + GROUP_GAP / 2 + 1, t.surfaceBorder());
+                y += GROUP_GAP;
+            }
+            for (Section s : GROUPS[gi]) {
+                boolean hot = mouseX >= x && mouseX < right && mouseY >= y && mouseY < y + ITEM_H;
+                if (hot) g.fill(x, y, right, y + ITEM_H, t.over());
+                int size = com.dwinovo.numen.api.client.ui.mc.Sprites.SIZE;
+                com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g, iconOf(s), x + INNER, y + (ITEM_H - size) / 2, size,
+                        hot ? TXT : TXT_MUTED);
+                txt(g, Component.literal(labels.get(s.ordinal())), x + INNER + size + 10,
+                        y + (ITEM_H - font().lineHeight) / 2 + 1, TXT);
+                y += ITEM_H;
+            }
+        }
+    }
+
+    /** 首页指针下那一行是哪个分区;不在行上是 null。 */
+    private Section listAt(double mx, double my) {
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) y += GROUP_GAP;
+            for (Section s : GROUPS[gi]) {
+                if (mx >= x && mx < right && my >= y && my < y + ITEM_H) return s;
+                y += ITEM_H;
+            }
+        }
+        return null;
+    }
+
+    private static net.minecraft.resources.ResourceLocation iconOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> com.dwinovo.numen.api.client.ui.mc.Sprites.CPU;
+            case MCP -> com.dwinovo.numen.api.client.ui.mc.Sprites.PLUG;
+            case BRAIN -> com.dwinovo.numen.api.client.ui.mc.Sprites.ROBOT;
+            case SKILLS -> com.dwinovo.numen.api.client.ui.mc.Sprites.BOOK;
+            case PERSONA -> com.dwinovo.numen.api.client.ui.mc.Sprites.PERSONA;
+            case VOICE -> com.dwinovo.numen.api.client.ui.mc.Sprites.VOLUME;
+            case STT -> com.dwinovo.numen.api.client.ui.mc.Sprites.MIC;
+            case THEME -> com.dwinovo.numen.api.client.ui.mc.Sprites.BRUSH;
+            case PERMISSION -> com.dwinovo.numen.api.client.ui.mc.Sprites.FLAG;
+            case PLUGINS -> com.dwinovo.numen.api.client.ui.mc.Sprites.PLUG;
+        };
+    }
+
+    /** 分区页本身。 */
+    private void renderSection(GuiGraphics g, int mouseX, int mouseY) {
+        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行
+        // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
+        // 表单卡自己是活的,拿的是屏幕给 renderCard 的真实坐标。
+        if (formActive()) {
+            mouseX = -10000;
+            mouseY = -10000;
+        }
+        switch (section) {
+            case MCP -> renderMcpSection(g, mouseX, mouseY);
+            case SKILLS -> {
+                renderSkillsSection(g, mouseX, mouseY);
+            }
+            case PLUGINS -> renderPluginsSection(g, mouseX, mouseY);
+            case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
+            case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
+            case VOICE -> renderVoiceSection(g, mouseX, mouseY);
+            case BRAIN -> {
+                brainPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                        HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                // 图标按钮悬停说的那句:tooltip 要画在最上面,所以交给屏幕,不在这儿画。
+                String tip = brainPanel().tooltipAt(mouseX, mouseY);
+                if (tip != null) {
+                    host.tip(List.of(Component.literal(tip)), mouseX, mouseY);
+                }
+            }
+            case STT -> sttPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+            case THEME -> themePanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+            case PERMISSION -> {
+                permissionPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
+                        HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                if (addingRule) formCard(Component.translatable(ModLanguageData.Keys.PERMISSION_ADD), ruleForm()::render);
+            }
+        }
+    }
+
+    private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
+        profileList().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingProvider) formCard(Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), providerForm()::render);
+    }
+
+    /** 新建模型配置:打开空白表单卡。召唤卡上"没有——去设置里新建"也走这里(设置页先由屏幕切到模型配置)。新建的在我的。 */
+    private void beginNewProvider(boolean server) {
+        addingProvider = true;
+        providerEditId = null;
+        providerEditServer = server;
+        providerDraft = new ProfileFormPanel.Draft();
+        host.rebuild();
+    }
+
+    private void beginEditProvider(ServerLibraries.Provider e) {
+        addingProvider = true;
+        providerEditId = e.id();
+        providerEditServer = e.base().server();
+        providerDraft = ProfileFormPanel.Draft.of(e.name(), e.full().profile());
+        providerDraft.apiKey = storedKey(providerDraft.provider);
+        host.rebuild();
+    }
+
+    // ---- MCP section: external server list with a live on/off switch per row ----
+
+    private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+        mcpListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingMcp) {
+            formCard(Component.translatable("numen.mcp.title"), mcpForm()::render);
+            return;
+        }
+        if (pastingAuth) {
+            formCard(Component.translatable("numen.mcp.auth_title"), mcpAuthForm()::render);
+            return;
+        }
+        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾开关上不弹)。
+        var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
+        if (hovered != null) {
+            host.tip(mcpTooltip(hovered), mouseX, mouseY);
+        }
+    }
+
+    private int mcpDotColor(ServerLibraries.McpClientRow h) {
+        return switch (h.status()) {
+            case CONNECTED -> OK;
+            case CONNECTING, AUTHORIZING -> RUN;
+            case FAILED -> FAIL;
+            case DISABLED -> TXT_FAINT;
+        };
+    }
+
+    private String mcpMeta(ServerLibraries.McpClientRow h) {
+        if (!h.full()) {
+            return I18n.get(h.connected() ? "numen.mcp.connected" : "numen.mcp.disabled", "mcp", h.toolCount());
+        }
+        String type = h.spec().isStdio() ? "stdio" : "http";
+        return switch (h.status()) {
+            case CONNECTED -> I18n.get("numen.mcp.connected", type, h.toolCount());
+            case CONNECTING -> I18n.get("numen.mcp.connecting", type);
+            case AUTHORIZING -> I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.MCP_WAITING_BROWSER);
+            case FAILED -> I18n.get("numen.mcp.failed", type);
+            case DISABLED -> I18n.get("numen.mcp.disabled", type);
+        };
+    }
+
+    private List<Component> mcpTooltip(ServerLibraries.McpClientRow h) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(h.name()));
+        if (h.full()) {
+            var spec = h.spec();
+            lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_MUTED));
+            if (h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED && !h.error().isBlank()) {
+                lines.add(Nb.colored(h.error(), FAIL));
+            } else if (!h.tools().isEmpty()) {
+                lines.add(Nb.colored(String.join(", ", h.tools()), TXT_MUTED));
+            }
+        }
+        return lines;
+    }
+
+    // ---- Skills section: skill list with a live on/off switch per row ----
+
+    // ---- shared toggle switch (no vanilla widget for this) ----
+
+    // ---- Persona section render + hit-test ----
+
+    private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+        personaListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingPersona) formCard(Component.translatable("numen.persona.title"), personaForm()::render);
+    }
+
+    private void beginEditPersona(ServerLibraries.Persona p) {
+        addingPersona = true;
+        personaEditId = p.id();
+        personaEditServer = p.base().server();
+        var d = new PersonaFormPanel.Draft();
+        d.name = p.name();
+        d.text = p.text();
+        personaDraft = d;
+        host.rebuild();
+    }
+
+    // ---- input (called from the screen's mouseClicked / mouseScrolled) ----
+
+    /** The Settings tab's whole click chain — dropdown routing first (open lists overlay
+     *  the fields), then theme rows / per-row toggles; on the home page, the section rows. Returns true = consumed. */
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        loadPalette();
+        if (button != 0) {
+            // 右键只有条目库的行认(弹出编辑/克隆/删除菜单);首页、退出途中、表单开着时都不接
+            LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
+            return lib != null && lib.mouseClicked(mouseX, mouseY, button);
+        }
+        if (section == null) {   // 首页:点一行进那个分区
+            Section s = listAt(mouseX, mouseY);
+            if (s != null) selectSection(s);
+            return s != null;
+        }
+        if (leaving) return true;   // 正在退出去的那页不接点击
+        // 模型配置表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
+        if (section == Section.PROVIDER && addingProvider
+                && providerForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // NumenUI 列表面板:删除确认卡开着时面板吃掉一切(模态);
+        // 平时接行/开关/新建,没命中就往下放行。
+        if (section == Section.PROVIDER && !addingProvider
+                && profileList().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.VOICE && !addingVoice
+                && voiceListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // STT 分区(NumenUI):下拉浮层/双态切换/保存全在面板里。
+        if (section == Section.STT && sttPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 声线表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
+        if (section == Section.VOICE && addingVoice
+                && voiceForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 人格表单(NumenUI):名称/正文编辑器/保存。
+        if (section == Section.PERSONA && addingPersona
+                && personaForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.PERSONA && !addingPersona
+                && personaListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 皮肤表单/列表(NumenUI)。
+        // MCP 表单/列表(NumenUI)。
+        if (section == Section.MCP && addingMcp
+                && mcpForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.MCP && pastingAuth
+                && mcpAuthForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.MCP && !addingMcp && !pastingAuth
+                && mcpListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 技能列表(NumenUI 纯开关形态)。
+        if (section == Section.SKILLS && skillsListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.PLUGINS && pluginsListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 大脑/主题分区(NumenUI)。
+        if (section == Section.BRAIN && brainPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.PERMISSION && addingRule && ruleForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.PERMISSION && !addingRule && permissionPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** 这个分区是不是条目库(列表页);不是的给 null。 */
+    /** 当前库页要放在页面抬头右端的图标钮;不在库页、在退出途中或表单开着都是 null。 */
+    public LibraryListPanel.HeaderAction headerAction() {
+        LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
+        return lib == null ? null : lib.headerAction();
+    }
+
+    private LibraryListPanel<?> libraryOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> profileList();
+            case VOICE -> voiceListPanel();
+            case PERSONA -> personaListPanel();
+            case MCP -> mcpListPanel();
+            case SKILLS -> skillsListPanel();
+            case PLUGINS -> pluginsListPanel();
+            case PERMISSION -> permissionPanel().list();
+            case BRAIN, STT, THEME -> null;
+        };
+    }
+
+    /** Open the add-form PRE-FILLED with {@code name}'s current spec — saving REPLACES the entry. */
+    private void beginEditMcp(ServerLibraries.McpClientRow row) {
+        var spec = row.spec();
+        addingMcp = true;
+        mcpEditId = row.id();
+        mcpEditServer = row.base().server();
+        var d = new McpFormPanel.Draft();
+        d.stdio = spec.isStdio();
+        d.name = spec.name();
+        d.service = spec.service();
+        if (d.stdio) {
+            StringBuilder cmd = new StringBuilder(spec.command() == null ? "" : spec.command());
+            for (String a : spec.args()) cmd.append(' ').append(a);
+            d.target = cmd.toString().trim();
+            d.extra = joinPairs(spec.env(), '=');       // stdio → env "KEY=value"
+        } else {
+            d.target = spec.url() == null ? "" : spec.url();
+            d.extra = joinPairs(spec.headers(), ':');    // http → header "Name: Value"
+        }
+        mcpDraft = d;
+        host.rebuild();
+    }
+
+    /** Reconstruct the header/env editor line from a spec map ("K: V; K2: V2" or "K=V; K2=V2"). */
+    private static String joinPairs(java.util.Map<String, String> m, char sep) {
+        if (m == null || m.isEmpty()) return "";
+        StringBuilder b = new StringBuilder();
+        for (var e : m.entrySet()) {
+            if (b.length() > 0) b.append("; ");
+            b.append(e.getKey()).append(sep == ':' ? ": " : "=").append(e.getValue());
+        }
+        return b.toString();
+    }
+
+    /** Wheel pass 1 (before the rail/chat checks, mirroring the old order): open dropdown
+     *  lists first, then the voice form's own scroll. */
+    public boolean mouseScrolledEarly(double mx, double my, double sy) {
+        if (section == Section.PROVIDER && addingProvider
+                && providerForm().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PROVIDER && !addingProvider
+                && profileList().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.VOICE && !addingVoice
+                && voiceListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.VOICE && addingVoice
+                && voiceForm().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PERSONA && addingPersona
+                && personaForm().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PERSONA && !addingPersona
+                && personaListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.BRAIN && brainPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.MCP && !addingMcp && !pastingAuth
+                && mcpListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.SKILLS && skillsListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PLUGINS && pluginsListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.THEME && themePanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PERMISSION && !addingRule && permissionPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** 拖动/松开:声线表单的音量滑条与人格正文的拖选需要。 */
+    public boolean mouseDragged(double mx, double my, double dx, double dy) {
+        if (section == Section.VOICE && addingVoice) {
+            return voiceForm().mouseDragged(mx, my, dx, dy);
+        }
+        if (section == Section.PERSONA && addingPersona) {
+            return personaForm().mouseDragged(mx, my, dx, dy);
+        }
+        return false;
+    }
+
+    public boolean mouseReleased(double mx, double my, int button) {
+        if (section == Section.VOICE && addingVoice) {
+            return voiceForm().mouseReleased(mx, my, button);
+        }
+        if (section == Section.PERSONA && addingPersona) {
+            return personaForm().mouseReleased(mx, my, button);
+        }
+        return false;
+    }
+
+    public boolean keyPressed(int keyCode, int modifiers) {
+        if (section == Section.PROVIDER) {
+            if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);
+            return profileList().keyPressed(keyCode, modifiers);   // ESC 关删除确认(= 取消)
+        }
+        if (section == Section.VOICE) {
+            if (addingVoice) return voiceForm().keyPressed(keyCode, modifiers);
+            return voiceListPanel().keyPressed(keyCode, modifiers);
+        }
+        if (section == Section.PERSONA) {
+            if (addingPersona) return personaForm().keyPressed(keyCode, modifiers);
+            return personaListPanel().keyPressed(keyCode, modifiers);
+        }
+        if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
+        if (section == Section.BRAIN) return brainPanel().keyPressed(keyCode, modifiers);
+        if (section == Section.PERMISSION) {
+            if (addingRule) return ruleForm().keyPressed(keyCode, modifiers);
+            return permissionPanel().keyPressed(keyCode, modifiers);
+        }
+        if (section == Section.MCP) {
+            if (addingMcp) return mcpForm().keyPressed(keyCode, modifiers);
+            if (pastingAuth) return mcpAuthForm().keyPressed(keyCode, modifiers);
+            return mcpListPanel().keyPressed(keyCode, modifiers);
+        }
+        return false;
+    }
+
+    public boolean charTyped(char ch) {
+        if (section == Section.PROVIDER && addingProvider) return providerForm().charTyped(ch);
+        if (section == Section.VOICE && addingVoice) return voiceForm().charTyped(ch);
+        if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
+        if (section == Section.STT) return sttPanel().charTyped(ch);
+        if (section == Section.BRAIN) return brainPanel().charTyped(ch);
+        if (section == Section.PERMISSION && addingRule) return ruleForm().charTyped(ch);
+        if (section == Section.MCP && addingMcp) return mcpForm().charTyped(ch);
+        if (section == Section.MCP && pastingAuth) return mcpAuthForm().charTyped(ch);
+        return false;
+    }
+
+    public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
+        loadPalette();
+    }
+}

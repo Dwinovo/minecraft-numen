@@ -1,6 +1,9 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.agent.llm.LlmEndpoint;
+import com.dwinovo.numen.api.agent.catalog.Catalog;
+import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
+import com.dwinovo.numen.api.agent.llm.EndpointResolver;
+import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.bench.report.Pricing;
 
 import java.nio.file.Path;
@@ -11,7 +14,7 @@ import java.util.List;
  * 这一次评测的设置,全部来自运行配置传进来的系统属性(见 {@code docs/bench.md}),API key 例外:只从环境变量
  * {@value #KEY_ENV} 读,不经任何属性、文件或日志。
  *
- * @param scenarios 要跑的场景({@code bench.scenarios},逗号隔开:{@code all}、组名、场景名);空 = 什么都不跑
+ * @param scenarios 要跑的场景({@code bench.scenarios},逗号隔开:场景名,或 {@code 组名/场景名});空 = 选中的套件里的全部
  * @param repeats   真实模型每个场景跑几次({@code bench.repeats});0 = 只跑两种基线
  * @param commit    跑的是哪个提交({@code bench.commit},由构建脚本算好)
  * @param shard     并行跑时这个服务器是第几份({@code bench.shard} 写成 {@code 第几份/共几份},从 0 数);一个服务器跑全部是 0
@@ -74,8 +77,9 @@ record Settings(List<String> scenarios, int repeats, String provider, String mod
         return key != null && !key.isBlank();
     }
 
-    /** 真实模型的端点。代理不走:评测直连。 */
+    /** 真实模型的端点,按随包的型号目录解析,和产品走同一个解析器。代理不走:评测直连。 */
     LlmEndpoint endpoint() {
-        return new LlmEndpoint(provider, model, System.getenv(KEY_ENV), baseUrl, "", reasoning);
+        return EndpointResolver.resolve(new ConnectionProfile(provider, null, model, System.getenv(KEY_ENV),
+                baseUrl, null, reasoning, 0, null, 0, null, 0, 0), Catalog.bundled(), "");
     }
 }
