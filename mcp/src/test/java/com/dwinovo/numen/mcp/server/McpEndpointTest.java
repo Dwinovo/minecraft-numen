@@ -585,6 +585,28 @@ class McpEndpointTest {
     }
 
     @Test
+    void aRequestOnAnEndedOrUnknownSessionIsAnswered404AndDoesNotBringTheBrainBack() throws Exception {
+        String secret = brain(McpToken.Scope.ALL).secret();
+        HttpResponse<String> init = post(secret, INIT);
+        String session = init.headers().firstValue("Mcp-Session-Id").orElseThrow();
+        assertTrue(presence.brainConnected(OWNER));
+
+        HttpRequest delete = HttpRequest.newBuilder(URI.create(url() + "/mcp")).header("Authorization", "Bearer " + secret)
+                .header("Mcp-Session-Id", session).DELETE().build();
+        assertEquals(200, http.send(delete, HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertFalse(presence.brainConnected(OWNER));
+
+        String list = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}";
+        assertEquals(404, post(secret, list, "Mcp-Session-Id", session).statusCode(), "结束了的会话照规范答 404");
+        assertFalse(presence.brainConnected(OWNER), "结束会话之后才到的请求不把驾驶席占回去");
+        assertEquals(404, post(secret, list, "Mcp-Session-Id", "no-such-session").statusCode());
+        assertFalse(presence.brainConnected(OWNER), "不存在的会话也不算");
+
+        post(secret, INIT);
+        assertTrue(presence.brainConnected(OWNER), "重新 initialize 又算连着");
+    }
+
+    @Test
     void aSilentBrainStopsCountingAsConnectedAndARevokedTokenEndsAtOnce() {
         McpTokens.Issued issued = brain(McpToken.Scope.ALL);
         connect(issued.secret());
