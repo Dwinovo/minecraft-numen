@@ -32,8 +32,8 @@ public final class Modules {
     private Modules() {}
 
     /**
-     * mcp 模块带进来的第三方库(Reactor、内嵌 Tomcat、Nimbus……)的坐标 {@code 组:名:版本},按解析结果,
-     * 去掉游戏自带的。官方 MCP SDK 与它重定位过的 Jackson 是 mcp 自己产出的一份 jar(见 mcp/build.gradle),不是坐标,不在这里。它们不是平铺进来的类:Fabric 用 include、Forge 用 jarJar 嵌套带上。
+     * mcp 模块带进来的第三方库(Reactor、内嵌 Tomcat……)的坐标 {@code 组:名:版本},按解析结果,
+     * 去掉游戏自带的。官方 MCP SDK 与重定位过的 Jackson、Nimbus 是 mcp 自己产出的一份 jar(见 mcp/build.gradle),不是坐标,不在这里。它们不是平铺进来的类:Fabric 用 include、Forge 用 jarJar 嵌套带上。
      * 清单从 mcp 的依赖解析出来,不另抄一份。
      */
     public static List<String> nestedLibraries(Project mcp) {
