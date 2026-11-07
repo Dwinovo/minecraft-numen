@@ -80,14 +80,14 @@ sourceSets {
 }
 
 repositories {
-    // MCProtocolLib 不发到 Maven Central。1.21.1 与 1.21 同一个协议号,用的是 1.21 线上最后一个构建(固定到时间戳,不随快照漂移)
+    // MCProtocolLib 不发到 Maven Central。这里用 1.21.4 线上最后一个构建(固定到时间戳,不随快照漂移)
     maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
     // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
     maven { url = 'https://repo.opencollab.dev/maven-releases' }
 }
 
 dependencies {
-    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21-20241010.155958-24'
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21.4-20250612.174129-27'
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'

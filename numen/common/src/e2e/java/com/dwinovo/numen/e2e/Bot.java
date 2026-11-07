@@ -1,11 +1,13 @@
 package com.dwinovo.numen.e2e;
 
+import org.geysermc.mcprotocollib.protocol.data.game.setting.ParticleStatus;
+import org.geysermc.mcprotocollib.network.session.ClientNetworkSession;
+import org.geysermc.mcprotocollib.network.factory.ClientNetworkSessionFactory;
 import net.kyori.adventure.text.Component;
 import org.geysermc.mcprotocollib.network.Session;
 import org.geysermc.mcprotocollib.network.event.session.DisconnectedEvent;
 import org.geysermc.mcprotocollib.network.event.session.SessionAdapter;
 import org.geysermc.mcprotocollib.network.packet.Packet;
-import org.geysermc.mcprotocollib.network.tcp.TcpClientSession;
 import org.geysermc.mcprotocollib.protocol.MinecraftProtocol;
 import org.geysermc.mcprotocollib.protocol.data.game.chat.ChatCompletionAction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.HandPreference;
@@ -76,7 +78,7 @@ final class Bot implements AutoCloseable {
     private static final boolean TRACE = System.getenv("E2E_TRACE") != null;
 
     private final String name;
-    private final Session session;
+    private final ClientNetworkSession session;
     private final Object lock = new Object();
     private final List<Message> messages = new ArrayList<>();
     private final List<List<String>> completionHistory = new ArrayList<>();
@@ -91,7 +93,8 @@ final class Bot implements AutoCloseable {
 
     private Bot(String name, String locale, Spec server) {
         this.name = name;
-        this.session = new TcpClientSession(server.host(), server.port(), new MinecraftProtocol(name));
+        this.session = ClientNetworkSessionFactory.factory().setAddress(server.host(), server.port())
+                .setProtocol(new MinecraftProtocol(name)).create();
         session.addListener(new SessionAdapter() {
             @Override
             public void packetReceived(Session from, Packet packet) {
@@ -149,7 +152,7 @@ final class Bot implements AutoCloseable {
             // 配置阶段的第一个包(服务端品牌)到了:原版客户端在这个阶段把自己的语言报上去
             informed = true;
             session.send(new ServerboundClientInformationPacket(locale, 8, ChatVisibility.FULL, true,
-                    List.of(SkinPart.values()), HandPreference.RIGHT_HAND, false, true));
+                    List.of(SkinPart.values()), HandPreference.RIGHT_HAND, false, true, ParticleStatus.ALL));
         } else if (packet instanceof ClientboundPingPacket ping) {
             // 配置阶段服务端用 ping 探客户端处理到哪了;原版客户端立刻原样回 pong
             session.send(new ServerboundPongPacket(ping.getId()));
