@@ -29,7 +29,8 @@ import java.util.function.Consumer;
  * 与玩家 NBT 里的 {@code model_id}(NeoForge 上是名为 {@code yes_steve_model:model_id} 的数据附件)。联动经 {@link NumenYsm#install}
  * 装上,和真装了 YSM 时走同一个入口。为什么不挂真 YSM 见本模块的 build.gradle。
  */
-@EventBusSubscriber(modid = "numen")
+// 登记附件是模组总线的事件;NeoForge 21.0 的 EventBusSubscriber 默认挂游戏总线,要写明
+@EventBusSubscriber(modid = "numen", bus = EventBusSubscriber.Bus.MOD)
 final class YsmStub {
 
     /** 收到的命令,{@code play <名字> <动作>} 或 {@code model <名字> <模型> <贴图>},按到达顺序。 */
