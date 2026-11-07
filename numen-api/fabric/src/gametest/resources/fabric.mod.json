@@ -1,0 +1,21 @@
+{
+    "schemaVersion": 1,
+    "id": "numen_api_gametest",
+    "version": "0",
+    "name": "Numen API GameTest",
+    "description": "Development-only: registers the types of the Numen GameTest instances and batches, and the mock connection. Never part of the release jar.",
+    "environment": "*",
+    "mixins": [
+        "numen_api_gametest.mixins.json"
+    ],
+    "entrypoints": {
+        "main": [
+            "com.dwinovo.numen.api.gametest.FabricMockConnection",
+            "com.dwinovo.numen.api.gametest.FabricGameTestMod"
+        ]
+    },
+    "depends": {
+        "numen_api": "*",
+        "fabric-gametest-api-v1": "*"
+    }
+}

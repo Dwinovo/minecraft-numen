@@ -1,0 +1,133 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${mod_id}-${project.name}-${minecraft_version}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+// Javadoc comments here are written for source readers; strict doclint
+// (HTML-escaping every & and <, mandatory @param) fights that without
+// adding value to a mod jar. Standard practice: turn it off.
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+// Source files contain UTF-8 (CJK comments/strings). Pin the compiler charset so the build
+// doesn't depend on the JDK/OS default — without this, a non-UTF-8 platform default (e.g. GBK on
+// Chinese Windows) misreads sources as "illegal character" errors.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Retain parameter names in bytecode so the @NumenAction tool layer can
+    // derive an argument's name from the method signature (reflection on
+    // Parameter.getName()), instead of forcing every @Arg to repeat the name.
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+    // Numen API 已并入本仓 numen-api/ 子树,以 project 依赖直连——本地 maven 中转与
+    // SNAPSHOT 缓存补丁均已随之退役。
+    // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Sponge'
+                url = 'https://repo.spongepowered.org/repository/maven-public'
+            }
+        }
+        filter { includeGroupAndSubgroups('org.spongepowered') }
+    }
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+    }
+}
+
+// 协议文本随 jar 发出:根目录的 LICENSE(LGPL-3.0),licenses/ 下 LGPL 所依托的 GPL 全文与美术资源的授权;
+// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀是所属模组的 id
+def licenseTexts = copySpec {
+    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_id}" } }
+    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_id}" } }
+    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_id}" } }
+}
+
+sourcesJar {
+    with licenseTexts
+}
+
+jar {
+    with licenseTexts
+
+    manifest {
+        attributes([
+                'Specification-Title'   : mod_name,
+                'Specification-Vendor'  : mod_author,
+                'Specification-Version' : project.jar.archiveVersion,
+                'Implementation-Title'  : project.name,
+                'Implementation-Version': project.jar.archiveVersion,
+                'Implementation-Vendor' : mod_author,
+                'Built-On-Minecraft'    : minecraft_version
+        ])
+    }
+}
+
+processResources {
+    var expandProps = [
+            'version'                      : version,
+            'group'                        : project.group, //Else we target the task's group.
+            'minecraft_version'            : minecraft_version,
+            'minecraft_version_range'      : minecraft_version_range,
+            'fabric_version'               : fabric_version,
+            'fabric_loader_version'        : fabric_loader_version,
+            'mod_name'                     : mod_name,
+            'mod_author'                   : mod_author,
+            'mod_id'                       : mod_id,
+            'license'                      : license,
+            'description'                  : project.description,
+            'neoforge_version'             : neoforge_version,
+            'neoforge_loader_version_range': neoforge_loader_version_range,
+            'credits'                      : credits,
+            'java_version'                 : java_version
+    ]
+
+    var jsonExpandProps = expandProps.collectEntries {
+        key, value -> [(key): value instanceof String ? value.replace("\n", "\\\\n") : value]
+    }
+
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+        expand expandProps
+    }
+
+    filesMatching(['pack.mcmeta', 'fabric.mod.json', '*.mixins.json']) {
+        expand jsonExpandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId base.archivesName.get()
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;
+            // CI 用 -Plocal_maven_url= 指到 checkout 出来的 numen-maven。
+            // 这里不写兜底默认值:属性缺了就当场报错,好过静默发到别处。
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

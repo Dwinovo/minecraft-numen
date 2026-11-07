@@ -1,0 +1,788 @@
+package com.dwinovo.numen.gametest;
+
+import com.dwinovo.numen.api.gametest.Checks;
+import com.dwinovo.numen.api.gametest.Bodies;
+import com.dwinovo.numen.combat.Menace;
+import com.dwinovo.numen.combat.Swing;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.task.TaskRecord;
+import java.util.List;
+import net.minecraft.core.BlockPos;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.phys.Vec3;
+
+import static com.dwinovo.numen.gametest.GameTestKit.*;
+
+/** 战斗:走位带与点名攻击({@code attack});她四周的怪:附近栏、被锁定、没了。 */
+public class CombatGameTests {
+
+    /** 战斗批次前置:普通难度(和平会把僵尸当场收走)+ 半夜(白天僵尸会被晒死)。 */
+    @BeforeBatch(batch = "numen_combat")
+    public static void prepareCombatBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, MIDNIGHT);
+    }
+
+    /**
+     * 走位带:她该稳在「它够不着我」与「我够得着它」之间,而且真的能砍到。
+     *
+     * <p>盯的是两个反复出错的地方:外沿一旦超过她的够到距离,她会停在打不到的位置站着挨打
+     * (实测在 4.0~4.8 之间摆、有效血量 8 掉到 5);内沿一旦叠上格量化补偿,带宽从 1.28 压到
+     * 0.57,格分辨率装不下,寻路一路失败,她停在边缘不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 405, batch = "numen_combat")
+    public static void combat_holds_the_skirmish_band(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(3, 2, 3));
+        Zombie zombie = spawnZombie(helper, new BlockPos(11, 2, 11), companion);
+
+        double inner = Menace.rawDangerRadius(zombie, companion);
+        double outer = Swing.reachTo(
+                companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE),
+                zombie.getBbWidth());
+        float startHealth = zombie.getHealth();
+
+        int[] insideBand = {0};
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, companion.isAlive(), "companion died to a single zombie");
+            double d = companion.distanceTo(zombie);
+            if (d >= inner && d <= outer) {
+                insideBand[0]++;
+            }
+            // 砍掉血就说明外沿确实在够得着的范围内 —— 站在打不到的地方是这条最先抓的病。
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth || !zombie.isAlive()
+                            || insideBand[0] < 200,
+                    "companion never landed a hit: distance " + String.format("%.2f", d)
+                            + " band [" + String.format("%.2f", inner) + ", "
+                            + String.format("%.2f", outer) + "]");
+            // 倒下、而且最后伤它的是她:被收走或被别的东西弄死的僵尸也"不在了",那不算她打赢
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    "zombie still up, or it did not fall to her");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 够得比她还远的怪(原版里是十四号往上的史莱姆:它的击打范围随身宽按对角放大,她的够到距离只加半个身宽):打得着
+     * 又挨不着的那条带不存在,走位环的内沿归零,她照样走进够得着的地方砍它,而不是在编走位目标时出错收场。史莱姆不动
+     * 不还手,测的只是她走不走过去打。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_walks_in_on_a_creature_that_outreaches_her(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
+        var slime = EntityType.SLIME.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, slime != null, "slime did not spawn");
+        slime.setSize(14, true);
+        BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
+        slime.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        slime.setNoAi(true);
+        level.addFreshEntity(slime);
+        Checks.assertTrue(helper, Menace.rawDangerRadius(slime, companion) >= Swing.reachTo(
+                        companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
+                "this slime does not outreach her, the scene tests nothing");
+        float startHealth = slime.getHealth();
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(slime) + ")").task();
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, record.getResult() == null || !record.getResult().message().contains("internal error"),
+                    "the attack broke down: " + record.getResult());
+            Checks.assertTrue(helper, slime.getHealth() < startHealth && slime.getLastHurtByMob() == companion,
+                    "she never walked in to hit the slime");
+            slime.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 目标站在它那一格的远边上:她那一格离它那一格三格整,可她眼睛到它碰撞箱有三格多,手够不着。走位说到了、出手说够不着,
+     * 她就站在原地一刀不挥,直到任务超时;走位与出手问的是同一个"够得着",她就会再往前走一格去打。僵尸不动不还手,测的只是
+     * 她走不走进够得着的地方。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_steps_in_on_a_target_at_the_far_edge_of_its_cell(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(5, 2, 8));
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        zombie.snapTo(at.getX() + 0.95, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        level.addFreshEntity(zombie);
+        float startHealth = zombie.getHealth();
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+                    "she stood " + String.format("%.2f", companion.distanceTo(zombie))
+                            + " away and never hit the zombie: " + attack.task().getResult());
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 要打的那只一刻不停地在原地晃(真的怪围着主人打时就是这样):走位的目标跟着它每刻都变,从她脚下派出去的那次搜索得搜完,
+     * 不能每变一次就作废重派——那样一次也搜不完,她站在远处一步不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_closes_in_on_a_target_that_never_stands_still(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 8));
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(12, 2, 8));
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        level.addFreshEntity(zombie);
+        float startHealth = zombie.getHealth();
+        // 每刻在它那一格里挪一点,不出格;按这条用例自己的刻数挪,不按全服的时间(那要看前面的用例跑了多久)
+        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(helper.getTick() * 0.7),
+                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(helper.getTick() * 0.7)));
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+                    "she is still " + String.format("%.2f", companion.distanceTo(zombie))
+                            + " away and never hit the jittering zombie: " + attack.task().getResult());
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 离真玩家很远时,要打的那只站在隔壁区块里:邻区块得和她脚下这块一样在跑实体刻,否则那只是冻住的——挨了
+     * 第一下之后受击无敌帧永远不退,她一直等着出第二刀,它也打不死。GameTest 的场地区块是钉住的,这里搬到两千格外、高处
+     * 一块没人钉的地方现搭一条石台,让她作为玩家带起来的区块成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 480, batch = "numen_combat")
+    public static void attack_finishes_a_target_across_a_chunk_border_far_from_players(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        // 她站在区块 cx 的东边沿上,僵尸站在隔壁区块 cx + 1 的西边沿上
+        BlockPos near = helper.absolutePos(BlockPos.ZERO);
+        int cx = (near.getX() >> 4) + 128;
+        int cz = near.getZ() >> 4;
+        int y = 200;
+        int z = cz * 16 + 7;
+        // 两块和它们周围的区块先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(cx * 16, y, z), 2);
+        GameTestKit.generateChunks(level, new BlockPos((cx + 1) * 16, y, z), 2);
+        for (int x = cx * 16 + 10; x <= cx * 16 + 20; x++) {
+            level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        }
+        NumenPlayer companion = Bodies.spawn(level.getServer(), java.util.UUID.randomUUID(),
+                "gametest_far_fighter", java.util.UUID.randomUUID(), level,
+                new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+        ToolRun[] attack = new ToolRun[1];
+
+        // 等她带起来的区块把两块都立起来、跑上实体刻,放下僵尸;世界里找得到它了再下命令
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    Checks.assertTrue(helper, level.isPositionEntityTicking(companion.blockPosition()),
+                            "her own chunk is not entity-ticking yet");
+                    Checks.assertTrue(helper, level.isPositionEntityTicking(new BlockPos(cx * 16 + 16, y, z)),
+                            "the chunk across the border is not entity-ticking yet");
+                })
+                .thenExecute(() -> {
+                    zombie.snapTo(cx * 16 + 16.5, y, z + 0.5, 0.0f, 0.0f);
+                    zombie.setNoAi(true);
+                    level.addFreshEntity(zombie);
+                })
+                .thenWaitUntil(() -> Checks.assertTrue(helper, level.getEntity(zombie.getId()) == zombie,
+                        "the zombie never showed up in the world; she is at " + companion.blockPosition()
+                                + " in chunk " + companion.chunkPosition()))
+                .thenExecute(() -> attack[0] = lua(companion, "numen.fight.attack(" + ref(zombie) + ")"))
+                .thenWaitUntil(() -> {
+                    Checks.assertTrue(helper, attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
+                    Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                            "the zombie across the chunk border is still up (health " + zombie.getHealth()
+                                    + ", hurt time " + zombie.hurtTime + "): " + attack[0].task().getResult());
+                })
+                .thenExecute(() -> {
+                    zombie.discard();
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
+     * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
+        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
+        level.addFreshEntity(pig);
+        TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(pig) + ")").task();
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
+                    "the pig is still alive — she never walked over to hit it");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 点名攻击落盘重放的那一行写的是目标的身份(种类@UUID 前六位):重启后认的还是同一只。
+     * 受理时找不到的身份不写进去;一只都找不到就当场失败,不留一行会变成不点名清场的重放。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_is_replayed_by_the_targets_id(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        level.addFreshEntity(pig);
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer companion = com.dwinovo.numen.api.gametest.Bodies.summon(server, java.util.UUID.randomUUID(),
+                "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
+                        spawn.getZ() + 0.5));
+        ToolRun nobody = lua(companion, "numen.fight.attack(\"pig@999998\")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(pig) + ")");
+        String recorded = com.dwinovo.numen.api.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskLua();
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
+                    "naming only missing entities did not fail on the spot: " + nobody.reply());
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, recorded.equals("numen.fight.attack(" + ref(pig) + ")"),
+                    "the replay recipe does not name exactly the pig by its id: " + recorded);
+            com.dwinovo.numen.api.entity.Companions.dismiss(server, companion);
+            pig.discard();
+        });
+    }
+
+    /** 两只同码的生物(UUID 前六位一样):点名它们的短码被拒绝,回执并列出是哪几只,不猜其中一只。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void two_mobs_with_the_same_code_are_refused_naming_both(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var first = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var second = EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, first != null && second != null, "the mobs did not spawn");
+        second.setUUID(new java.util.UUID(first.getUUID().getMostSignificantBits() ^ 1L,
+                first.getUUID().getLeastSignificantBits()));
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        first.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        second.snapTo(at.getX() - 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        level.addFreshEntity(first);
+        level.addFreshEntity(second);
+        NumenPlayer companion = spawnAt(helper, "gametest_same_code", new BlockPos(3, 2, 3), false);
+        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(first) + ")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, attack.done() && !attack.succeeded() && attack.task() == null
+                            && attack.outcome().contains("names 2 entities")
+                            && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(first))
+                            && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(second)),
+                    "a shared code was not refused with both candidates: " + attack.reply());
+            first.discard();
+            second.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 库里的 {@code numen.fight.clear}:四周两只僵尸,一次 {@code numen.fight.attack} 打一只,打到范围里一只不剩,返回打了几场。两只都倒在
+     * 她手下,一场一个 numen.fight.attack。半径给小,不扫到隔壁场地。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 315, batch = "numen_combat")
+    public static void fight_clear_fights_every_hostile_around_her_one_at_a_time(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(8, 2, 8));
+        List<Zombie> zombies = List.of(still(helper, new BlockPos(4, 2, 8)), still(helper, new BlockPos(12, 2, 9)));
+        ToolRun clear = lua(companion, "return numen.fight.clear(7)");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, clear.receipt() != null, "numen.fight.clear has not finished");
+            Checks.assertTrue(helper, clear.ranToTheEnd() && clear.receipt().contains("\\nreturned: 2"),
+                    "numen.fight.clear did not end after two fights: " + clear.receipt());
+            Checks.assertTrue(helper, clear.tasks("numen.fight.attack").size() == 2,
+                    "not one numen.fight.attack per zombie: " + clear.receipt());
+            for (Zombie zombie : zombies) {
+                Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                        "a zombie is still up, or it did not fall to her");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 打不过就跑归逃跑本能,跑不掉就就地还手:她只剩四颗心、手里有剑,一只僵尸追着她,脚下是悬在半空的一块 5×5 石台——四下
+     * 三十二格内没有能站的落点。逃跑本能先接过身体,找不到落点就让出来,留下一条说"没有退路"的本能事件;自卫接着打,僵尸挨了她的剑。
+     * 石台搬到两千格外、高处一块没人钉的地方,和隔壁场地不沾边,所以四下确实无处可去;她周围的区块由她这个玩家自己带起来,等她脚下进了实体刻再开始。本能事件进她的收件箱,读得到。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 396, batch = "numen_combat")
+    public static void an_outmatched_body_with_no_way_out_fights_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = helper.absolutePos(BlockPos.ZERO);
+        // 石台在场地东面两千多格外,远在真玩家之外;再按场地在批里的位置拉开,相邻场地的石台隔着六十格以上(她要的是三十二格内没有别的落点,
+        // 同一用例铺几份并行时也一样),不靠坐标的绝对大小,总在世界边界之内
+        int cx = (near.getX() + 2560 + Math.floorMod(near.getX(), 8192) * 2) >> 4;
+        int cz = (near.getZ() + Math.floorMod(near.getZ(), 8192) * 2) >> 4;
+        int y = 200;
+        int x0 = cx * 16 + 6;
+        int z0 = cz * 16 + 6;
+        // 她脚下的区块和周围先阻塞着生成完:要等的"进实体刻"只看刻数,生成慢一点就超时(见 GameTestKit.generateChunks)
+        GameTestKit.generateChunks(level, new BlockPos(x0, y, z0), 2);
+        for (int x = x0; x < x0 + 5; x++) {
+            for (int z = z0; z < z0 + 5; z++) {
+                level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            }
+        }
+        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(),
+                java.util.UUID.randomUUID(), "gametest_cornered", java.util.UUID.randomUUID(), level,
+                new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5)));
+        companion.getRandom().setSeed(ENTITY_SEED);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
+        companion.getFoodData().setFoodLevel(20);
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+
+        steps(helper)
+                .thenWaitUntil(() -> Checks.assertTrue(helper, level.isPositionEntityTicking(companion.blockPosition()),
+                        "the chunk she stands in is not entity-ticking yet"))
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    // 进世界时血是满的:站稳了再压到四颗心,僵尸这才来
+                    companion.setHealth(8.0f);
+                    // 她不吃击退(由用例摆):僵尸一击会把她推开两格多,石台只有 5×5,从两百格高处掉下去就不是这条要看的"跑不掉就还手"了;
+                    // 僵尸照常追着打(随机数定了种子,见 GameTestKit#ENTITY_SEED)
+                    companion.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE)
+                            .setBaseValue(1.0);
+                    zombie.getRandom().setSeed(ENTITY_SEED);
+                    zombie.snapTo(x0 + 0.5, y, z0 + 2.5, 0.0f, 0.0f);
+                    zombie.setTarget(companion);
+                    level.addFreshEntity(zombie);
+                })
+                .thenWaitUntil(() -> {
+                    var flee = GameTestKit.events(companion).stream()
+                            .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX)
+                                    && e.text().contains("reflex=\"flee\""))
+                            .toList();
+                    Checks.assertTrue(helper, !flee.isEmpty() && flee.get(0).text().contains("no way out"),
+                            "the flee instinct did not report that there was nowhere to run: "
+                                    + GameTestKit.events(companion));
+                    Checks.assertTrue(helper, zombie.getLastHurtByMob() == companion,
+                            "cornered, she did not fight back (zombie health " + zombie.getHealth() + ")");
+                })
+                .thenExecute(() -> {
+                    zombie.discard();
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 原版玩家刚进世界的 60 刻里不受伤害,打她要等这段过去。 */
+    private static final long SPAWN_PROTECTION_TICKS = 70;
+
+    /**
+     * 玩家打她一下,她被击退。原版玩家攻击后发完速度包就把服务端速度清零,击退本该由目标的客户端应用;她没有客户端,
+     * 靠 {@code FakeClient} 接住这个包。攻击者站在她西边,她该被推向东。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_players_hit_knocks_her_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnBare(helper, "knocked_by_player", new BlockPos(8, 2, 8), false);
+        var attacker = presentPlayer(helper, null, "gametest_puncher");
+        Vec3 start = companion.position();
+        attacker.teleportTo(level, start.x - 1.0, start.y, start.z, java.util.Set.of(), 270.0f, 0.0f, false);
+        // 玩家互相伤害由游戏规则 pvp 管,这里明说要开
+        boolean pvp = level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_PVP);
+        com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), true);
+        // 世界的规则:不论这条成败都放回去,后面的用例不继承
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () ->
+                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), pvp));
+        boolean[] hit = {false};
+        long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, level.getGameTime() >= ready, "she is still under spawn protection");
+            if (!hit[0]) {
+                hit[0] = true;
+                attacker.attack(companion);
+            }
+            Checks.assertTrue(helper, companion.getX() - start.x > 0.3,
+                    "the hit did not move her: dx=" + (companion.getX() - start.x));
+            leave(attacker);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 怪打她,击退照旧(服务端上的速度本来就是对的,不经 {@code FakeClient})。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_zombies_hit_knocks_her_back(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnBare(helper, "knocked_by_zombie", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(7, 2, 8));
+        Vec3 start = companion.position();
+        boolean[] hit = {false};
+        long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, level.getGameTime() >= ready, "she is still under spawn protection");
+            if (!hit[0]) {
+                hit[0] = true;
+                zombie.doHurtTarget(helper.getLevel(), companion);
+            }
+            Checks.assertTrue(helper, companion.getX() - start.x > 0.3,
+                    "the hit did not move her: dx=" + (companion.getX() - start.x));
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 她此刻请求里的 {@code <nearby>} 一栏;半径里什么都没有是空串。 */
+    private static String nearbyOf(NumenPlayer companion) {
+        String state = com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().runtimeState();
+        int from = state.indexOf("<nearby");
+        return from < 0 ? "" : state.substring(from, state.indexOf("</nearby>") + "</nearby>".length());
+    }
+
+    /**
+     * 附近栏逐个列出和她有关系的(盯着她的、她名下的)、敌对的,先后是有关系的在前、敌对的在后;锁定了她的注明;其余按种类计数,
+     * 不逐个列。请求里每次现取,她四周什么样它就什么样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
+    public static void nearby_lists_what_matters_and_counts_the_rest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_nearby_list", new BlockPos(8, 2, 8), false);
+        Zombie hunter = still(helper, new BlockPos(11, 2, 8));
+        hunter.setTarget(companion);
+        Zombie idle = still(helper, new BlockPos(8, 2, 13));
+        var wolf = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 8));
+        wolf.snapTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.setNoAi(true);
+        wolf.tame(companion);
+        level.addFreshEntity(wolf);
+        for (int i = 0; i < 5; i++) {
+            var cow = EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+            BlockPos at = helper.absolutePos(new BlockPos(2 + i, 2, 2));
+            cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+            cow.setNoAi(true);
+            level.addFreshEntity(cow);
+        }
+        for (int i = 0; i < 2; i++) {
+            BlockPos at = helper.absolutePos(new BlockPos(12, 2, 3 + i));
+            // 不带原版给的随机初速(照主流:清零速度):两根挨着放的木棍漂到一起会并成一堆,"两件"就成了一件
+            level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, at.getX() + 0.5, at.getY(),
+                    at.getZ() + 0.5, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STICK), 0, 0, 0));
+        }
+
+        succeedWhen(helper, () -> {
+            String nearby = nearbyOf(companion);
+            String wolfId = com.dwinovo.numen.api.sdk.EntityLabel.of(wolf);
+            String hunterId = com.dwinovo.numen.api.sdk.EntityLabel.of(hunter);
+            String idleId = com.dwinovo.numen.api.sdk.EntityLabel.of(idle);
+            Checks.assertTrue(helper, nearby.startsWith("<nearby radius=\"16\">"), "no nearby block: " + nearby);
+            Checks.assertTrue(helper, nearby.contains(hunterId + " 20/20 HP, 3 blocks east, targeting you"),
+                    "the mob after her is not listed as such: " + nearby);
+            String wolfLine = nearby.lines().filter(line -> line.startsWith(wolfId)).findFirst().orElse("");
+            Checks.assertTrue(helper, wolfLine.endsWith(" HP, 2 blocks west"), "her wolf is not listed plain: " + nearby);
+            Checks.assertTrue(helper, nearby.contains(idleId + " 20/20 HP, 5 blocks south\n"),
+                    "the idle hostile is not listed plain: " + nearby);
+            Checks.assertTrue(helper, nearby.indexOf(wolfId) < nearby.indexOf(hunterId) && nearby.indexOf(hunterId) < nearby.indexOf(idleId),
+                    "related first, then hostile, each nearest first: " + nearby);
+            Checks.assertTrue(helper, nearby.contains("cow×5") && nearby.contains("item×2") && !nearby.contains("cow@"),
+                    "the rest is not counted by kind: " + nearby);
+            hunter.discard();
+            idle.discard();
+            wolf.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 一只不动不还手的僵尸。 */
+    private static Zombie still(GameTestHelper helper, BlockPos rel) {
+        Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(rel);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        helper.getLevel().addFreshEntity(zombie);
+        return zombie;
+    }
+
+    private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
+        ServerLevel level = helper.getLevel();
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(rel);
+        zombie.getRandom().setSeed(ENTITY_SEED);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setTarget(target);
+        level.addFreshEntity(zombie);
+        return zombie;
+    }
+
+    /** 她收件箱里此刻某种类型的事件。 */
+    private static List<com.dwinovo.numen.api.agent.inbox.EventQueue.Entry> eventsOf(NumenPlayer companion, String type) {
+        return events(companion).stream().filter(e -> e.type().equals(type)).toList();
+    }
+
+    /**
+     * 一只怪的攻击目标变成她:发一次急件,带短码、种类、距离、方位;它一直盯着不再发,放弃又盯上的抖动在去抖窗口里也不再发。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_mob_that_targets_her_is_announced_once(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_targeted", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED)
+                        .isEmpty(), "announced before anything targeted her"))
+                .thenExecute(() -> zombie.setTarget(companion))
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    var told = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED);
+                    Checks.assertTrue(helper, told.size() == 1 && told.get(0).urgent()
+                                    && told.get(0).text().contains("mob=\"" + id + "\"")
+                                    && told.get(0).text().contains("distance=\"3\"")
+                                    && told.get(0).text().contains("bearing=\"east\"")
+                                    && told.get(0).text().contains(id + " is now targeting you"),
+                            "no urgent targeted event naming it: " + told);
+                    zombie.setTarget(null);
+                })
+                .thenIdle(5)
+                .thenExecute(() -> zombie.setTarget(companion))
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED).size() == 1,
+                            "it was announced again for the jitter: " + events(companion));
+                    zombie.discard();
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 打她的怪倒下:关注集里的对象被移出世界,发一次不急的 gone,附原因(死了)和打倒它的是谁;她自己打倒的写 you。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_mob_in_her_focus_that_dies_is_reported_gone_with_who_killed_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gone_killed", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        zombie.setTarget(companion);
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> zombie.hurt(companion.damageSources().playerAttack(companion), 100.0f))
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
+                    Checks.assertTrue(helper, gone.size() == 1 && !gone.get(0).urgent()
+                                    && gone.get(0).text().contains("mob=\"" + id + "\"")
+                                    && gone.get(0).text().contains("reason=\"killed\"")
+                                    && gone.get(0).text().contains("by=\"you\""),
+                            "no gone event with the cause and the killer: " + gone);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 走出半径不发 gone:关注集里的怪走远了(还在世界里)什么都不说;它之后被移出世界(消失)才发一次,原因写消失。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void leaving_the_radius_is_not_gone_but_vanishing_is(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gone_vanished", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        zombie.setTarget(companion);
+
+        steps(helper)
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    zombie.setNoGravity(true);
+                    zombie.teleportTo(companion.getX() + 20.0, zombie.getY(), companion.getZ());
+                })
+                .thenIdle(10)
+                .thenExecute(() -> {
+                    Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE).isEmpty(),
+                            "walking out of the radius was announced as gone: " + events(companion));
+                    zombie.discard();
+                })
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
+                    Checks.assertTrue(helper, gone.size() == 1 && gone.get(0).text().contains("reason=\"vanished\""),
+                            "no vanished event: " + gone);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 她挨打的事件里,攻击者是短码、带方位。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void being_hit_names_the_attacker_by_its_id_and_says_which_way(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_hurt_label", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(8, 2, 3));
+        String id = com.dwinovo.numen.api.sdk.EntityLabel.of(zombie);
+
+        steps(helper)
+                .thenIdle(70)   // 刚进世界的玩家有一小段出生保护
+                .thenExecute(() -> companion.hurt(zombie.damageSources().mobAttack(zombie), 3.0f))
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    var hurt = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.COMPANION_HURT);
+                    Checks.assertTrue(helper, hurt.size() == 1 && hurt.get(0).urgent()
+                                    && hurt.get(0).text().contains("by=\"" + id + "\"")
+                                    && hurt.get(0).text().contains("bearing=\"north\"")
+                                    && hurt.get(0).text().contains(id + " hit you for 3"),
+                            "the hurt event does not name the attacker and the way: " + hurt);
+                    zombie.discard();
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 只带远程武器的她:背包清空,换成 {@code items}。 */
+    private static NumenPlayer shooter(GameTestHelper helper, BlockPos rel, net.minecraft.world.item.ItemStack... items) {
+        NumenPlayer companion = armedCompanion(helper, rel);
+        companion.getInventory().clearContent();
+        for (var item : items) {
+            companion.getInventory().add(item);
+        }
+        return companion;
+    }
+
+    /**
+     * 原版的弓是远程武器的一个提供者:只带弓和箭的她点名打一只站着不动的僵尸,弓拉开、对准、松手,箭把它射倒。
+     * 提供者表里的弓与弩是 Numen 自己登记的两个,和模组的枪走同一条路。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_shoots_a_zombie_with_a_bow(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8), new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW, 64));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    "the zombie is still up — her bow never brought it down");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 测试用的命中扫描武器(一根烈焰棒):每次起手就是一发,打在目标身上,数着打了几发。 */
+    private static final class TestGun implements com.dwinovo.numen.api.combat.RangedWeapon {
+        final java.util.concurrent.atomic.AtomicInteger shots = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public String name() {
+            return "test gun";
+        }
+
+        @Override
+        public boolean handles(net.minecraft.world.item.ItemStack stack) {
+            return stack.is(net.minecraft.world.item.Items.BLAZE_ROD);
+        }
+
+        @Override
+        public Readiness readiness(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return Readiness.READY;
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Flight flight(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+        }
+
+        @Override
+        public com.dwinovo.numen.api.combat.Handling handling(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new com.dwinovo.numen.api.combat.Handling(3.0, 14.0, 30.0);
+        }
+
+        @Override
+        public Shot begin(NumenPlayer body, net.minecraft.world.item.ItemStack stack) {
+            return new Shot() {
+                private boolean fired;
+
+                @Override
+                public com.dwinovo.numen.api.combat.Flight flight() {
+                    return new com.dwinovo.numen.api.combat.Flight.Hitscan();
+                }
+
+                @Override
+                public boolean aboutToRelease() {
+                    return true;
+                }
+
+                @Override
+                public boolean tick(com.dwinovo.numen.api.combat.Aim aim, net.minecraft.world.entity.Entity target) {
+                    if (!aim.aligned(body.getViewVector(1.0f))) {
+                        return false;
+                    }
+                    target.hurt(body.damageSources().playerAttack(body), 6.0f);
+                    shots.incrementAndGet();
+                    fired = true;
+                    return true;
+                }
+
+                @Override
+                public boolean fired() {
+                    return fired;
+                }
+
+                @Override
+                public void abort() {
+                }
+            };
+        }
+
+        @Override
+        public String misfireText() {
+            return "the test gun did not fire";
+        }
+    }
+
+    /**
+     * 插件登记的远程武器:没有提供者时一根烈焰棒什么也不是(她挑不到远程武器);经插件的门登记了提供者,同一个她点名打同一只僵尸,
+     * 攻击任务挑了它、站在它的环里、用它的命中扫描瞄准,一发发打倒目标。权限照旧由任务提出、权限层裁决。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_combat")
+    public static void attack_uses_a_ranged_weapon_a_plugin_provides(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8),
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BLAZE_ROD));
+        Zombie zombie = still(helper, new BlockPos(11, 2, 8));
+        Checks.assertTrue(helper, com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() == null,
+                "she found a ranged weapon in a blaze rod before any plugin provided one");
+        TestGun gun = new TestGun();
+        com.dwinovo.numen.api.NumenPlugins.register("gt_gun", numen -> numen.rangedWeapon(gun));
+        // 插件给的武器全服的同伴都看得见:不论这条成败都撤掉
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun"));
+        Checks.assertTrue(helper, com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
+                "she did not pick the plugin's weapon once it was provided");
+        lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
+                    "the plugin's weapon did not bring the zombie down (shots " + gun.shots.get() + ")");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+}

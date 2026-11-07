@@ -1,10 +1,10 @@
 // numen-ai:大脑与 LLM 服务商之间的连接层,纯 JVM 库——零 Minecraft 依赖、
-// 零 numen-api 回引。代码本身与 Minecraft 版本无关,但各版本分支上的这份源码
+// 零 Numen API 回引。代码本身与 Minecraft 版本无关,但各版本分支上的这份源码
 // 目前并不相同(功能先落 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
 //
 // 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、
-// agent.provider(线格式适配 + IToolSpec 工具描述面 + 站点注册表 ProviderRegistry,
-// 用户文件落点由宿主引导期注入)、agent.llm(客户端/会话状态/会话日志)。
+// agent.provider(线格式适配 + 兼容项 + IToolSpec 工具描述面)、agent.catalog(型号目录:models.dev 快照/缓存,
+// 缓存文件落点与代理由宿主传入)、agent.llm(客户端/端点解析/会话状态/会话日志)。
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -46,8 +46,12 @@ repositories {
 
 dependencies {
     // 与 MC 1.21.10 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
-    api 'com.google.code.gson:gson:2.11.0'
+    // 2.11.0 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
+    // 两份同名模块进了模块层就起不来,所以不传递
+    api('com.google.code.gson:gson:2.11.0') { exclude group: 'com.google.errorprone' }
     api 'org.slf4j:slf4j-api:2.0.16'
+    // 落盘的基础件(日志、小文档):会话日志与目录缓存只保留各自的记录格式。api 配置让 agent 与 Numen API 透视得到。
+    api project(':store')
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -56,6 +60,17 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+// 手动更新随包的 models.dev 快照:联网拉 api.json、裁剪、写回资源文件,更新后自己提交。
+// 普通构建不联网。需要代理时 -PmodelsProxy=127.0.0.1:7890。
+tasks.register('updateModelsSnapshot', JavaExec) {
+    group = 'numen'
+    description = 'Fetch models.dev and rewrite src/main/resources/numen_models_snapshot.json'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.api.agent.catalog.SnapshotUpdate'
+    args = [file('src/main/resources/numen_models_snapshot.json').absolutePath,
+            providers.gradleProperty('modelsProxy').getOrElse('')]
 }
 
 publishing {
