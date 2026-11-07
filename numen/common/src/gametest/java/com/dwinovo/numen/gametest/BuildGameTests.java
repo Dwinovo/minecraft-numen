@@ -494,7 +494,7 @@ public class BuildGameTests {
             if (stoneAt[0] < 0 && level.getBlockState(support).is(Blocks.STONE)) {
                 stoneAt[0] = level.getGameTime();
             }
-            if (carpetAt[0] < 0 && level.getBlockState(support.above()).is(Blocks.RED_CARPET)) {
+            if (carpetAt[0] < 0 && level.getBlockState(support.above()).is(Blocks.CARPET.red())) {
                 carpetAt[0] = level.getGameTime();
             }
         });
@@ -849,11 +849,11 @@ public class BuildGameTests {
         Checks.assertTrue(helper, hanging.canSurvive(level, lantern), "a hanging lantern does not hang from the block above");
 
         BlockPos foot = helper.absolutePos(new BlockPos(2, 2, 10));
-        BlockState bed = Blocks.RED_BED.defaultBlockState()
+        BlockState bed = Blocks.BED.red().defaultBlockState()
                 .setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
         level.setBlockAndUpdate(foot, bed);
-        bed.getBlock().setPlacedBy(level, foot, bed, null, new ItemStack(Items.RED_BED));
-        Checks.assertTrue(helper, level.getBlockState(foot.east()).is(Blocks.RED_BED) && level.getBlockState(foot.east())
+        bed.getBlock().setPlacedBy(level, foot, bed, null, new ItemStack(Items.BED.red()));
+        Checks.assertTrue(helper, level.getBlockState(foot.east()).is(Blocks.BED.red()) && level.getBlockState(foot.east())
                         .getValue(net.minecraft.world.level.block.BedBlock.PART)
                         == net.minecraft.world.level.block.state.properties.BedPart.HEAD,
                 "the head of red_bed[facing=east] is not one cell east of its foot");

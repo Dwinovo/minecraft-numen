@@ -148,7 +148,7 @@ class FootingTest {
 
     @Test
     void aCarpetRaisesTheFeetBySixteenth() {
-        standsInsideOwnCell(Blocks.WHITE_CARPET.defaultBlockState(), 1 / 16.0);
+        standsInsideOwnCell(Blocks.CARPET.white().defaultBlockState(), 1 / 16.0);
     }
 
     @Test
@@ -161,7 +161,7 @@ class FootingTest {
     void lowFurnitureCanBeStoodOn() {
         standsInsideOwnCell(Blocks.CHEST.defaultBlockState(), 14 / 16.0);
         standsInsideOwnCell(Blocks.ENCHANTING_TABLE.defaultBlockState(), 12 / 16.0);
-        standsInsideOwnCell(Blocks.RED_BED.defaultBlockState(), 9 / 16.0);
+        standsInsideOwnCell(Blocks.BED.red().defaultBlockState(), 9 / 16.0);
         standsInsideOwnCell(Blocks.LANTERN.defaultBlockState(), 9 / 16.0);
         standsInsideOwnCell(Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true), 10 / 16.0);
         standsInsideOwnCell(Blocks.HONEY_BLOCK.defaultBlockState(), 15 / 16.0);

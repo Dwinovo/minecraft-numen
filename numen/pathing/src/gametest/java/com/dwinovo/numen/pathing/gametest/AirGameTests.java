@@ -254,9 +254,10 @@ public class AirGameTests {
         Rehearsal[] rehearsal = {null};
         helper.onEachTick(() -> {
             int i = age[0]++;
-            if (i == 0) {
+            // 刚穿上的鞘翅要等身体走过一刻,装备的属性(NeoForge 的滑翔属性,服务端判能不能展开看它)才挂上:和真玩家一样穿上以后再按跳
+            if (i == 1) {
                 body.controls().press(Key.JUMP);
-            } else if (i == 1) {
+            } else if (i == 2) {
                 body.controls().release(Key.JUMP);
             } else if (i == 3) {
                 if (!body.isFallFlying()) {
@@ -285,9 +286,10 @@ public class AirGameTests {
         Rehearsal[] rehearsal = {null};
         helper.onEachTick(() -> {
             int i = age[0]++;
-            if (i == 0) {
+            // 刚穿上的鞘翅要等身体走过一刻,装备的属性(NeoForge 的滑翔属性,服务端判能不能展开看它)才挂上:和真玩家一样穿上以后再按跳
+            if (i == 1) {
                 body.controls().press(Key.JUMP);
-            } else if (i == 1) {
+            } else if (i == 2) {
                 body.controls().release(Key.JUMP);
             } else if (i == 3) {
                 if (!body.isFallFlying()) {

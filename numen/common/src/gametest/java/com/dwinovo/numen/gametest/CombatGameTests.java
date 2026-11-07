@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.phys.Vec3;
@@ -78,7 +79,7 @@ public class CombatGameTests {
     public static void attack_walks_in_on_a_creature_that_outreaches_her(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
-        var slime = EntityType.SLIME.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var slime = EntityTypes.SLIME.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, slime != null, "slime did not spawn");
         slime.setSize(14, true);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
@@ -110,7 +111,7 @@ public class CombatGameTests {
     public static void attack_steps_in_on_a_target_at_the_far_edge_of_its_cell(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(5, 2, 8));
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
         zombie.snapTo(at.getX() + 0.95, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -137,7 +138,7 @@ public class CombatGameTests {
     public static void attack_closes_in_on_a_target_that_never_stands_still(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 8));
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(12, 2, 8));
         zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -183,7 +184,7 @@ public class CombatGameTests {
                 "gametest_far_fighter", java.util.UUID.randomUUID(), level,
                 new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         ToolRun[] attack = new ToolRun[1];
 
@@ -225,7 +226,7 @@ public class CombatGameTests {
     public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
-        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -248,7 +249,7 @@ public class CombatGameTests {
     public static void attack_is_replayed_by_the_targets_id(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
-        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -277,8 +278,8 @@ public class CombatGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_combat")
     public static void two_mobs_with_the_same_code_are_refused_naming_both(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var first = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
-        var second = EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var first = EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var second = EntityTypes.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, first != null && second != null, "the mobs did not spawn");
         second.setUUID(new java.util.UUID(first.getUUID().getMostSignificantBits() ^ 1L,
                 first.getUUID().getLeastSignificantBits()));
@@ -356,7 +357,7 @@ public class CombatGameTests {
         companion.getRandom().setSeed(ENTITY_SEED);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
 
         steps(helper)
@@ -468,14 +469,14 @@ public class CombatGameTests {
         Zombie hunter = still(helper, new BlockPos(11, 2, 8));
         hunter.setTarget(companion);
         Zombie idle = still(helper, new BlockPos(8, 2, 13));
-        var wolf = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var wolf = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 8));
         wolf.snapTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setNoAi(true);
         wolf.tame(companion);
         level.addFreshEntity(wolf);
         for (int i = 0; i < 5; i++) {
-            var cow = EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+            var cow = EntityTypes.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
             BlockPos at = helper.absolutePos(new BlockPos(2 + i, 2, 2));
             cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
             cow.setNoAi(true);
@@ -513,7 +514,7 @@ public class CombatGameTests {
 
     /** 一只不动不还手的僵尸。 */
     private static Zombie still(GameTestHelper helper, BlockPos rel) {
-        Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -524,7 +525,7 @@ public class CombatGameTests {
 
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.getRandom().setSeed(ENTITY_SEED);

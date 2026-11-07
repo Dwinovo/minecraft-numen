@@ -78,8 +78,8 @@ public class InteractGameTests {
         succeedWhen(helper, () -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.boat.AbstractBoat.class,
                     new net.minecraft.world.phys.AABB(
-                            helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
-                            helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));
+                            net.minecraft.world.phys.Vec3.atCenterOf(helper.absolutePos(new BlockPos(6, 1, 6))),
+                            net.minecraft.world.phys.Vec3.atCenterOf(helper.absolutePos(new BlockPos(10, 4, 10)))));
             Checks.assertTrue(helper, !boats.isEmpty(),
                     "no boat appeared on the aimed water — tool reply: " + place.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -89,7 +89,7 @@ public class InteractGameTests {
     /** 左键手边的一头猪:打了一下,猪掉了血。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_left_click_hits_a_pig(GameTestHelper helper) {
-        net.minecraft.world.entity.animal.pig.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        net.minecraft.world.entity.animal.pig.Pig pig = net.minecraft.world.entity.EntityTypes.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
@@ -144,7 +144,7 @@ public class InteractGameTests {
     /** 鼠标左键打实体先过权限层,谁驱动她都绕不开:只许看的模式下直接 mouse().attack() 被拒、牛一滴血没掉;放行了才打下去。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_interact")
     public static void the_mouse_asks_the_permission_layer_before_hitting_an_entity(GameTestHelper helper) {
-        net.minecraft.world.entity.animal.cow.Cow cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        net.minecraft.world.entity.animal.cow.Cow cow = net.minecraft.world.entity.EntityTypes.COW.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
         cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
@@ -192,7 +192,7 @@ public class InteractGameTests {
     /** 有名字的猪要问主人才能打;主人不在,问不到就不打,猪一滴血没掉。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_on_a_named_animal_needs_the_owner(GameTestHelper helper) {
-        net.minecraft.world.entity.animal.pig.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        net.minecraft.world.entity.animal.pig.Pig pig = net.minecraft.world.entity.EntityTypes.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
@@ -215,7 +215,7 @@ public class InteractGameTests {
     /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶,回执写明少了一个桶、多了一桶奶。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
-        var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var cow = net.minecraft.world.entity.EntityTypes.COW.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 7));
         cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
@@ -266,7 +266,7 @@ public class InteractGameTests {
 
     /** 一只不动的狼,放在 {@code rel} 那一格。 */
     static net.minecraft.world.entity.animal.wolf.Wolf wolfAt(GameTestHelper helper, BlockPos rel) {
-        var wolf = net.minecraft.world.entity.EntityType.WOLF.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var wolf = net.minecraft.world.entity.EntityTypes.WOLF.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(rel);
         wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setNoAi(true);
@@ -361,7 +361,7 @@ public class InteractGameTests {
     public static void a_bed_at_noon_tells_her_why_as_an_event(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos foot = helper.absolutePos(new BlockPos(6, 2, 2));
-        var bed = Blocks.RED_BED.defaultBlockState()
+        var bed = Blocks.BED.red().defaultBlockState()
                 .setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
         level.setBlock(foot, bed.setValue(net.minecraft.world.level.block.BedBlock.PART,
                 net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
@@ -513,7 +513,7 @@ public class InteractGameTests {
     /** 盔甲架:点头部放上头盔,点腿部放上护腿,空手点腿部取下护腿——头盔还在架子上,护腿回到她手里。 */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
     public static void use_entity_at_a_part_dresses_and_undresses_an_armor_stand(GameTestHelper helper) {
-        var stand = net.minecraft.world.entity.EntityType.ARMOR_STAND.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var stand = net.minecraft.world.entity.EntityTypes.ARMOR_STAND.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 4));
         stand.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         helper.getLevel().addFreshEntity(stand);
@@ -544,8 +544,10 @@ public class InteractGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
         drop(helper, companion, new BlockPos(8, 60, 8));
 
+        // 等她真在往下掉(身体走过了刻):刚穿上的鞘翅,装备的属性在身体的下一刻才挂上(NeoForge 的滑翔属性,服务端判能不能展开看它)
         Steps steps = steps(helper)
-                .thenWaitUntil(() -> Checks.assertTrue(helper, !companion.onGround(), "she has not left the ground"));
+                .thenWaitUntil(() -> Checks.assertTrue(helper, !companion.onGround() && companion.getDeltaMovement().y < 0,
+                        "she has not left the ground"));
         steps = call(helper, steps, companion, "numen.use.glide()");
         steps.thenWaitUntil(() -> Checks.assertTrue(helper, companion.isFallFlying(), "she is not gliding"))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();

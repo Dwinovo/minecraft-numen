@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -41,7 +42,7 @@ public class BodyReportGameTests {
     /** 右键带鞍的猪:她骑了上去,回执说骑上了什么。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
     public static void riding_a_saddled_pig_is_reported(GameTestHelper helper) {
-        Pig pig = EntityType.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Pig pig = EntityTypes.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 8));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);

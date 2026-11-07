@@ -80,7 +80,7 @@ class PlacedBlocksTest {
         assertEquals(null, PlacedBlocks.otherHalfOf(a, door.setValue(
                 net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
                 net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)));
-        var bed = Blocks.RED_BED.defaultBlockState().setValue(
+        var bed = Blocks.BED.red().defaultBlockState().setValue(
                 net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING,
                 net.minecraft.core.Direction.EAST);
         assertEquals(a.east(), PlacedBlocks.otherHalfOf(a, bed));

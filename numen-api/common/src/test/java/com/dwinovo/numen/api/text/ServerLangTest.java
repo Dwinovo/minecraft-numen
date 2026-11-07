@@ -82,7 +82,7 @@ class ServerLangTest {
                 .append(Component.literal(" ")).append(Component.translatable("numen.one", 1));
         Component translated = LANG.translate(clickable);
         assertEquals("要等一下 拿 1 个", translated.getString());
-        assertEquals(ChatFormatting.GREEN.getColor().intValue(), translated.getStyle().getColor().getValue());
+        assertEquals(net.minecraft.network.chat.TextColor.fromLegacyFormat(ChatFormatting.GREEN).getValue(), translated.getStyle().getColor().getValue());
     }
 
     @Test

@@ -96,7 +96,7 @@ public class RespawnGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos bed = helper.absolutePos(new BlockPos(3, 2, 3));
-        BlockState foot = Blocks.RED_BED.defaultBlockState()
+        BlockState foot = Blocks.BED.red().defaultBlockState()
                 .setValue(BedBlock.FACING, Direction.EAST).setValue(BedBlock.PART, BedPart.FOOT);
         level.setBlock(bed, foot, 3);
         level.setBlock(bed.east(), foot.setValue(BedBlock.PART, BedPart.HEAD), 3);

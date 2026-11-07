@@ -479,9 +479,9 @@ class SearchTest {
     @Test
     void diggingWalksAroundWhatTheDiggerMayNotClear() {
         BlockPos ore = new BlockPos(7, Y, 0);
-        TestWorld world = field().fill(4, Y, -6, 4, Y + 2, 6, Blocks.WHITE_WOOL.defaultBlockState())
+        TestWorld world = field().fill(4, Y, -6, 4, Y + 2, 6, Blocks.WOOL.white().defaultBlockState())
                 .set(ore, Blocks.IRON_ORE.defaultBlockState());
-        Goals.Clearing sparesWool = (view, pos) -> !view.getBlockState(pos).is(Blocks.WHITE_WOOL);
+        Goals.Clearing sparesWool = (view, pos) -> !view.getBlockState(pos).is(Blocks.WOOL.white());
         Goal around = Goals.dig(ore, SURVIVAL, sparesWool);
 
         SearchResult result = search(world, defaults(), START, around);

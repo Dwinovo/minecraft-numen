@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.level.block.Blocks;
 
@@ -146,7 +147,7 @@ public class WalkGameTests {
     public static void dismount_steps_off_the_boat(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_rower", new BlockPos(7, 2, 7), false);
-        Boat boat = EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Boat boat = EntityTypes.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
         boat.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         level.addFreshEntity(boat);
@@ -184,7 +185,7 @@ public class WalkGameTests {
     public static void a_walk_while_riding_a_minecart_is_refused_and_never_steps_off(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_passenger", new BlockPos(7, 2, 7), false);
-        net.minecraft.world.entity.vehicle.minecart.Minecart cart = EntityType.MINECART.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        net.minecraft.world.entity.vehicle.minecart.Minecart cart = EntityTypes.MINECART.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
         cart.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         level.addFreshEntity(cart);

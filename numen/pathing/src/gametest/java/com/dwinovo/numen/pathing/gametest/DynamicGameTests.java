@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.animal.pig.Pig;
 
 /**
@@ -62,7 +63,7 @@ public class DynamicGameTests {
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 576)
     public static void follows_a_moving_target(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        Pig pig = EntityType.PIG.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Pig pig = EntityTypes.PIG.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         pig.setNoAi(true);
         BlockPos from = t.at(12, 1, 20);
         pig.snapTo(from.getX() + 0.5, from.getY(), from.getZ() + 0.5, 0, 0);

@@ -1,4 +1,4 @@
-package net.minecraft.client.resources.language;
+package com.dwinovo.numen.api.testutil;
 
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.locale.Language;
@@ -9,9 +9,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 单测里的语言:原版的英文加上 Numen 自己的英文({@link ModLanguageData},语言键的唯一来源),装到 {@link I18n} 与
- * {@link Language} 上——和游戏里 {@code LanguageManager} 加载完语言时做的是同一件事(它也是经 {@code I18n.setLanguage}
- * 与 {@code Language.inject} 换上)。放在这个包里,只为够得着那个包内可见的 {@code setLanguage}。
+ * 单测里的语言:原版的英文加上 Numen 自己的英文({@link ModLanguageData},语言键的唯一来源),装到 {@link Language} 上——
+ * 和游戏里 {@code LanguageManager} 加载完语言时做的是同一件事({@code Language.inject};{@code I18n} 直接读它)。
  *
  * <p>没有它,单测里的 {@code I18n.get} 只会回语言键本身、参数全丢,给主人看的话说没说出该说的东西就测不到。
  */
@@ -51,7 +50,6 @@ public final class NumenTestLanguage {
                 return vanilla.getVisualOrder(text);
             }
         };
-        I18n.setLanguage(english);
         Language.inject(english);
         installed = true;
     }

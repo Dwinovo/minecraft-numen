@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.command;
 
-import net.minecraft.client.resources.language.NumenTestLanguage;
+import com.dwinovo.numen.api.testutil.NumenTestLanguage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 

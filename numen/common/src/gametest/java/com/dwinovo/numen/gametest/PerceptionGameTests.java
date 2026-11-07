@@ -121,7 +121,7 @@ public class PerceptionGameTests {
     /** 周围的实体:一头猪列在里面,带着能交给 attack 的 id;只看敌对的时候它不在。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void scan_nearby_entities_lists_a_pig_and_filters_by_kind(GameTestHelper helper) {
-        Pig pig = EntityType.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Pig pig = net.minecraft.world.entity.EntityTypes.PIG.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 3));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
@@ -417,7 +417,7 @@ public class PerceptionGameTests {
                 level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, z)), Blocks.STONE.defaultBlockState());
             }
         }
-        var cow = net.minecraft.world.entity.EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var cow = net.minecraft.world.entity.EntityTypes.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, cow != null, "the cow did not spawn");
         BlockPos pen = helper.absolutePos(new BlockPos(11, 2, 6));
         cow.snapTo(pen.getX() + 0.5, pen.getY(), pen.getZ() + 0.5, 0.0f, 0.0f);

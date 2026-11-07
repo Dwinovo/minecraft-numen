@@ -401,7 +401,7 @@ public class ScriptGameTests {
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_herder", new BlockPos(2, 2, 2), false);
-        var cow = net.minecraft.world.entity.EntityType.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var cow = net.minecraft.world.entity.EntityTypes.COW.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, cow != null, "the cow did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(12, 2, 12));
         cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);

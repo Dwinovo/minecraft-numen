@@ -58,9 +58,9 @@ final class Text {
     }
 
     private static void collect(Component component, List<String> out) {
-        ClickEvent click = component.clickEvent();
-        if (click != null && click.action() == ClickEvent.Action.RUN_COMMAND) {
-            out.add(click.value());
+        ClickEvent<?> click = component.clickEvent();
+        if (click != null && click.action() == ClickEvent.Action.RUN_COMMAND && click.payload() instanceof ClickEvent.Payload.Text text) {
+            out.add(text.value());
         }
         component.children().forEach(child -> collect(child, out));
     }

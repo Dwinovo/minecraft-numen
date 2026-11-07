@@ -28,6 +28,7 @@ import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.animal.chicken.Chicken;
 import net.minecraft.world.item.ItemStack;
@@ -327,7 +328,7 @@ public class DigGameTests {
                     if (mob[0] == null && watch.digging()) {
                         Vec3 eye = r.body.getEyePosition();
                         Vec3 on = eye.add(Vec3.atCenterOf(watch.current()).subtract(eye).normalize().scale(0.25));
-                        mob[0] = EntityType.CHICKEN.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+                        mob[0] = EntityTypes.CHICKEN.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
                         mob[0].setNoAi(true);
                         mob[0].setNoGravity(true);
                         mob[0].snapTo(on.x, on.y - mob[0].getBbHeight() / 2, on.z, 0, 0);

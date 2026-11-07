@@ -125,7 +125,7 @@ public class MovementGameTests {
         }
         // 船放在水面高度(rel y1 的水,面在 +0.9),别沉进水里被浮力弹上天
         BlockPos boatAt = helper.absolutePos(new BlockPos(6, 2, 8));
-        var boat = net.minecraft.world.entity.EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var boat = net.minecraft.world.entity.EntityTypes.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
 
@@ -166,7 +166,7 @@ public class MovementGameTests {
             }
         }
         BlockPos boatAt = helper.absolutePos(new BlockPos(7, 2, 7));
-        var boat = net.minecraft.world.entity.EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var boat = net.minecraft.world.entity.EntityTypes.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
         BlockPos stone = helper.absolutePos(new BlockPos(7, 2, 5));
@@ -423,7 +423,7 @@ public class MovementGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_an_entity_ends_when_it_is_gone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var pig = net.minecraft.world.entity.EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = net.minecraft.world.entity.EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
@@ -450,7 +450,7 @@ public class MovementGameTests {
     public static void a_restored_follow_finds_the_same_entity_by_its_id(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
-        var pig = net.minecraft.world.entity.EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = net.minecraft.world.entity.EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);

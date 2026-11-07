@@ -115,7 +115,7 @@ class ClearanceTest {
     @Test
     void aBodyStandsOnACarpetButNotSunkIntoIt() {
         TestWorld carpet = new TestWorld().set(0, Y - 1, 0, Blocks.STONE.defaultBlockState())
-                .set(0, Y, 0, Blocks.WHITE_CARPET.defaultBlockState());
+                .set(0, Y, 0, Blocks.CARPET.white().defaultBlockState());
         assertTrue(Clearance.fits(carpet, SURVIVAL, 0, Y + 1 / 16.0, 0));
         assertFalse(Clearance.fits(carpet, SURVIVAL, 0, Y, 0), "脚不能陷进地毯里");
     }

@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 
 /**
  * 每一批从同一种状态开始,不看前面几批跑了多久。
@@ -73,7 +72,8 @@ public final class BatchStart {
 
     private static void alignEntityIds() {
         try {
-            Field field = Entity.class.getDeclaredField("ENTITY_COUNTER");
+            // 实体编号由服务端世界发放(ServerLevel.getNextEntityId),计数是它的静态字段
+            Field field = ServerLevel.class.getDeclaredField("ENTITY_COUNTER");
             field.setAccessible(true);
             AtomicInteger counter = (AtomicInteger) field.get(null);
             counter.updateAndGet(id -> (id / ID_STRIDE + 1) * ID_STRIDE);

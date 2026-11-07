@@ -248,7 +248,7 @@ class BuildTaskRecordTest {
         List<BuildTaskRecord.Target> mixed = new java.util.ArrayList<>(List.of(
                 new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
                         new BlockPos(1, 1, 0), "torch"),
-                new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
+                new BuildTaskRecord.Target(Blocks.CARPET.red().defaultBlockState(), Items.CARPET.red(),
                         new BlockPos(2, 1, 0), "carpet"),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(0, 9, 0), "stone")));
         mixed.sort(BuildOrder.BUILD_ORDER);

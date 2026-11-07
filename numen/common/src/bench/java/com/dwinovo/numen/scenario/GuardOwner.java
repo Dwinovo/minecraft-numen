@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
@@ -61,7 +62,7 @@ public final class GuardOwner implements Scenario {
         owner.setHealth(OWNER_HEALTH);
         for (BlockPos rel : ZOMBIES) {
             BlockPos at = scene.pos(rel);
-            Zombie zombie = EntityType.ZOMBIE.create(scene.level(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+            Zombie zombie = EntityTypes.ZOMBIE.create(scene.level(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
             zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
             zombie.setPersistenceRequired();
             scene.level().addFreshEntity(zombie);

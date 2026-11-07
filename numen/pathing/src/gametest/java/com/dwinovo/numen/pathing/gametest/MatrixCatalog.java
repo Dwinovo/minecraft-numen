@@ -158,7 +158,7 @@ final class MatrixCatalog {
 
     static List<Variant> thin() {
         List<Variant> out = new ArrayList<>();
-        out.add(one("thin", "carpet", Blocks.WHITE_CARPET));
+        out.add(one("thin", "carpet", Blocks.CARPET.white()));
         for (int layers = 1; layers <= 8; layers++) {
             out.add(one("thin", "snow_" + layers,
                     Blocks.SNOW.defaultBlockState().setValue(net.minecraft.world.level.block.SnowLayerBlock.LAYERS, layers)));
@@ -191,9 +191,9 @@ final class MatrixCatalog {
     static List<Variant> low() {
         List<Variant> out = new ArrayList<>();
         out.add(new Variant("low", "bed", List.of(
-                new Part(0, 0, 0, Blocks.RED_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, Direction.EAST)
+                new Part(0, 0, 0, Blocks.BED.red().defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, Direction.EAST)
                         .setValue(net.minecraft.world.level.block.BedBlock.PART, BedPart.FOOT)),
-                new Part(1, 0, 0, Blocks.RED_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, Direction.EAST)
+                new Part(1, 0, 0, Blocks.BED.red().defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, Direction.EAST)
                         .setValue(net.minecraft.world.level.block.BedBlock.PART, BedPart.HEAD))), false));
         out.add(one("low", "chest", Blocks.CHEST));
         out.add(one("low", "enchanting_table", Blocks.ENCHANTING_TABLE));

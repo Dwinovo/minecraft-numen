@@ -52,7 +52,7 @@ public class SleepGameTests {
 
     /** 一张朝东的红床:床脚在 rel,床头在它东边一格。 */
     private static void placeBed(GameTestHelper helper, BlockPos footRel) {
-        BlockState foot = Blocks.RED_BED.defaultBlockState()
+        BlockState foot = Blocks.BED.red().defaultBlockState()
                 .setValue(BedBlock.FACING, Direction.EAST).setValue(BedBlock.PART, BedPart.FOOT);
         helper.getLevel().setBlock(helper.absolutePos(footRel), foot, 3);
         helper.getLevel().setBlock(helper.absolutePos(footRel.east()), foot.setValue(BedBlock.PART, BedPart.HEAD), 3);
@@ -62,7 +62,7 @@ public class SleepGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_danger")
     public static void sleep_with_a_monster_nearby_hands_back_the_reason(GameTestHelper helper) {
         placeBed(helper, new BlockPos(5, 2, 5));
-        var zombie = net.minecraft.world.entity.EntityType.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var zombie = net.minecraft.world.entity.EntityTypes.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(9, 2, 5));
         zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setNoAi(true);

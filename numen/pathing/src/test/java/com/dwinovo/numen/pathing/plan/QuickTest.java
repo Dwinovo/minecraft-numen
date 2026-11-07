@@ -80,7 +80,7 @@ class QuickTest {
                 Blocks.OAK_DOOR.defaultBlockState(), Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 3),
                 Blocks.COBWEB.defaultBlockState(), Blocks.MAGMA_BLOCK.defaultBlockState(), Blocks.CAMPFIRE.defaultBlockState(),
                 Blocks.SWEET_BERRY_BUSH.defaultBlockState(), Blocks.POWDER_SNOW.defaultBlockState(), Blocks.SCAFFOLDING.defaultBlockState(),
-                Blocks.WHITE_CARPET.defaultBlockState(), Blocks.OAK_PRESSURE_PLATE.defaultBlockState(), Blocks.TRIPWIRE.defaultBlockState(),
+                Blocks.CARPET.white().defaultBlockState(), Blocks.OAK_PRESSURE_PLATE.defaultBlockState(), Blocks.TRIPWIRE.defaultBlockState(),
                 Blocks.SHORT_GRASS.defaultBlockState(), Blocks.SHORT_GRASS.defaultBlockState(), Blocks.DANDELION.defaultBlockState(),
                 Blocks.TORCH.defaultBlockState(), Blocks.LILY_PAD.defaultBlockState(), Blocks.OAK_FENCE_GATE.defaultBlockState(),
                 Blocks.COBBLESTONE_WALL.defaultBlockState(), Blocks.GLASS_PANE.defaultBlockState(), Blocks.CAULDRON.defaultBlockState(),

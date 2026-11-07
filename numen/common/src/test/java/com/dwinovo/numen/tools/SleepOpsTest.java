@@ -80,7 +80,7 @@ class SleepOpsTest {
     void noBedWhileCarryingOneSaysPlaceIt() {
         assumeTrue(booted);
         net.minecraft.world.entity.player.Inventory pack = new net.minecraft.world.entity.player.Inventory(null, new net.minecraft.world.entity.EntityEquipment());
-        pack.setItem(3, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.RED_BED));
+        pack.setItem(3, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BED.red()));
         String said = SleepOps.noBed(pack, false).getMessage();
         assertTrue(said.startsWith("there is no bed within reach") && said.contains("You are carrying minecraft:red_bed x1")
                 && said.contains("place it on flat ground"), said);

@@ -186,7 +186,7 @@ public class GeneratorGameTests {
     }
 
     /**
-     * structure:一个原版小结构(沼泽小屋)在这一块的区块里生成。交回的是方块;它生成的女巫和猫不生成、方块实体的数据不进格,都在 lost 里;
+     * structure:一个原版小结构(沼泽小屋)在这一块的区块里生成。交回的是方块;它生成的生物(和平难度下只有猫)不生成、方块实体的数据不进格,都在 lost 里;
      * 真实世界一格没动;放下去之后一致。
      */
     @GameTest(template = "open64", timeoutTicks = 2200, batch = BATCH)
@@ -238,9 +238,10 @@ public class GeneratorGameTests {
         Checks.assertTrue(helper, noLiquid(cells), "the hut holds no liquid");
         Checks.assertTrue(helper, snapshot(level, min, max).equals(before), "the real world changed under the recorded one");
         JsonArray lost = returned(run).getAsJsonArray("lost");
-        boolean witch = lost.asList().stream().anyMatch(l -> l.getAsJsonObject().get("kind").getAsString().equals("entity")
-                && l.getAsJsonObject().get("name").getAsString().equals("minecraft:witch"));
-        Checks.assertTrue(helper, witch, "the witch it spawned is reported, not spawned: " + lost);
+        // 这一批是和平难度:26.2 起小屋生成女巫走带刷怪检查的 create,和平下原版不生女巫;猫照常生成,看它进没进 lost
+        boolean cat = lost.asList().stream().anyMatch(l -> l.getAsJsonObject().get("kind").getAsString().equals("entity")
+                && l.getAsJsonObject().get("name").getAsString().equals("minecraft:cat"));
+        Checks.assertTrue(helper, cat, "the cat it spawned is reported, not spawned: " + lost);
         ToolRun build = lua(her, "numen.build.place(" + literal(cells) + ")");
         succeedWhen(helper, () -> {
             Checks.assertTrue(helper, build.done() && build.succeeded(), "place failed: " + build.outcome());

@@ -140,7 +140,7 @@ public class StairGameTests {
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 276)
     public static void walks_over_carpets(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        t.fill(5, 1, 4, 12, 1, 6, Blocks.WHITE_CARPET);
+        t.fill(5, 1, 4, 12, 1, 6, Blocks.CARPET.white());
         TestBody body = t.body(2, 1, 5);
         t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives().then(Scenes::noJump);
     }
@@ -159,9 +159,9 @@ public class StairGameTests {
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 282)
     public static void stands_on_beds_tables_cauldrons_lanterns_fences_and_snow(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        t.set(4, 1, 4, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT)
+        t.set(4, 1, 4, Blocks.BED.red().defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT)
                 .setValue(BedBlock.FACING, Direction.NORTH));
-        t.set(4, 1, 3, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.HEAD)
+        t.set(4, 1, 3, Blocks.BED.red().defaultBlockState().setValue(BedBlock.PART, BedPart.HEAD)
                 .setValue(BedBlock.FACING, Direction.NORTH));
         t.set(10, 1, 4, Blocks.ENCHANTING_TABLE);
         t.set(16, 1, 4, Blocks.CAULDRON);

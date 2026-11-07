@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -424,7 +425,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
-        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 4));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -611,7 +612,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos chest = helper.absolutePos(new BlockPos(6, 2, 5));
         level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
-        var wolf = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var wolf = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, wolf != null, "wolf did not spawn");
         BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 9));
         wolf.snapTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
@@ -655,9 +656,11 @@ public class PermissionGameTests {
     public static void only_a_player_owner_makes_an_entity_someones(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 9));
-        var evoker = EntityType.EVOKER.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
-        var minion = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
-        var pet = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        // 场地按结构摆实体,不看刷怪检查:26.2 起双参的 create 带检查,和平难度下怪物直接回 null
+        var evoker = EntityTypes.EVOKER.create(level,
+                new net.minecraft.world.entity.EntitySpawnRequest(net.minecraft.world.entity.EntitySpawnReason.STRUCTURE, true));
+        var minion = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pet = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         Checks.assertTrue(helper, evoker != null && minion != null && pet != null, "entities did not spawn");
         evoker.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         evoker.setNoAi(true);
@@ -820,7 +823,7 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_a_villager_asks_then_hits_after_yes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var villager = EntityType.VILLAGER.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var villager = EntityTypes.VILLAGER.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
         villager.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         villager.setNoAi(true);
@@ -856,7 +859,7 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_the_owners_tamed_wolf_is_refused_without_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var wolf = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var wolf = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
         wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setTame(true, false);
@@ -881,7 +884,7 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void attack_someone_elses_tamed_wolf_is_forbidden_outright(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var wolf = EntityType.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var wolf = EntityTypes.WOLF.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
         wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setTame(true, false);
@@ -1052,7 +1055,7 @@ public class PermissionGameTests {
         List<BlockPos> wool = new ArrayList<>();
         for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
             BlockPos cell = pumpkin.relative(side);
-            level.setBlockAndUpdate(cell, Blocks.WHITE_WOOL.defaultBlockState());
+            level.setBlockAndUpdate(cell, Blocks.WOOL.white().defaultBlockState());
             wool.add(cell);
         }
         NumenPlayer companion = spawnAt(helper, "gametest_walled_out", new BlockPos(2, 2, 5), false);
@@ -1076,7 +1079,7 @@ public class PermissionGameTests {
                     "the reply does not name the denied blocks walling the pumpkin in and the row: " + said);
             Checks.assertTrue(helper, level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
             for (BlockPos cell : wool) {
-                Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.WHITE_WOOL),
+                Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.WOOL.white()),
                         "the denied wool was broken at " + cell.toShortString());
             }
             Checks.assertTrue(helper, !asked[0], "a denied block raised a consent card");

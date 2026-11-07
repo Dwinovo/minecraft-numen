@@ -14,6 +14,7 @@ import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -39,7 +40,7 @@ public class TerminationGameTests {
 
     /** 在 {@code (x, y, z)} 这一格里放一只不动的潜影贝:一格见方的实心挡板。 */
     private static void shulker(Trial t, int x, int y, int z) {
-        Shulker shulker = EntityType.SHULKER.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Shulker shulker = EntityTypes.SHULKER.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = t.at(x, y, z);
         shulker.setNoAi(true);
         shulker.setInvulnerable(true);

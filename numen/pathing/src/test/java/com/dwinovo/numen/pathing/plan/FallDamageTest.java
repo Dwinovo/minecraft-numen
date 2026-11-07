@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.PointedDripstoneBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.DripstoneThickness;
+import net.minecraft.world.level.block.state.properties.SpeleothemThickness;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class FallDamageTest {
     private static BlockState stalagmite() {
         return Blocks.POINTED_DRIPSTONE.defaultBlockState()
                 .setValue(PointedDripstoneBlock.TIP_DIRECTION, Direction.UP)
-                .setValue(PointedDripstoneBlock.THICKNESS, DripstoneThickness.TIP);
+                .setValue(PointedDripstoneBlock.THICKNESS, SpeleothemThickness.TIP);
     }
 
     @Test
@@ -64,7 +64,7 @@ class FallDamageTest {
 
     @Test
     void onlyAnUpwardTipIsSharp() {
-        BlockState frustum = stalagmite().setValue(PointedDripstoneBlock.THICKNESS, DripstoneThickness.FRUSTUM);
+        BlockState frustum = stalagmite().setValue(PointedDripstoneBlock.THICKNESS, SpeleothemThickness.FRUSTUM);
         BlockState downward = stalagmite().setValue(PointedDripstoneBlock.TIP_DIRECTION, Direction.DOWN);
         assertEquals(1, body.fallDamage(4, frustum), "锥身按硬地");
         assertEquals(1, body.fallDamage(4, downward), "朝下的锥尖按硬地");
@@ -86,7 +86,7 @@ class FallDamageTest {
     @Test
     void aBedHalvesTheDrop() {
         // BedBlock.fallOn:按落差的一半交给默认的 fallOn
-        BlockState bed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT);
+        BlockState bed = Blocks.BED.red().defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT);
         assertEquals(0, body.fallDamage(6, bed));
         assertEquals(1, body.fallDamage(7, bed), "ceil(3.5 - 3)");
         assertEquals(7, body.fallDamage(20, bed));

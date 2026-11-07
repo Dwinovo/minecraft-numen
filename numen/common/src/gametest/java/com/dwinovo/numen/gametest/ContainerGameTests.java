@@ -207,8 +207,8 @@ public class ContainerGameTests {
     public static void gui_choose_a_loom_pattern_and_take_the_banner(GameTestHelper helper) {
         BlockPos loom = place(helper, new BlockPos(5, 2, 4), net.minecraft.world.level.block.Blocks.LOOM);
         NumenPlayer companion = spawnAt(helper, "gametest_weaver", new BlockPos(3, 2, 4), false);
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER));
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.RED_DYE));
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.BANNER.white()));
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DYE.red()));
 
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.use.block(" + xyz(loom) + ")");
@@ -217,7 +217,7 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.gui.choose(1)");
         steps = call(helper, steps, companion, "numen.gui.quick(3)");
         steps.thenWaitUntil(() -> {
-            var banner = companion.getInventory().getNonEquipmentItems().stream().filter(it -> it.is(Items.WHITE_BANNER)).findFirst();
+            var banner = companion.getInventory().getNonEquipmentItems().stream().filter(it -> it.is(Items.BANNER.white())).findFirst();
             Checks.assertTrue(helper, banner.isPresent() && banner.get().getOrDefault(
                             net.minecraft.core.component.DataComponents.BANNER_PATTERNS,
                             net.minecraft.world.level.block.entity.BannerPatternLayers.EMPTY).layers().size() == 1,
@@ -228,7 +228,7 @@ public class ContainerGameTests {
     /** 村民交易:右键村民交回交易界面,看交易表,选第一笔(原版自己从背包填付款),取成品——面包到手,这一笔的已用次数跟着涨。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_container")
     public static void gui_choose_a_trade_and_take_the_result(GameTestHelper helper) {
-        var villager = net.minecraft.world.entity.EntityType.VILLAGER.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var villager = net.minecraft.world.entity.EntityTypes.VILLAGER.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
         villager.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         villager.setNoAi(true);
@@ -375,7 +375,7 @@ public class ContainerGameTests {
     /** 骑着驯服的马按 E:打开的是马的物品栏。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void gui_open_on_a_horse_opens_the_horse_inventory(GameTestHelper helper) {
-        var horse = net.minecraft.world.entity.EntityType.HORSE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var horse = net.minecraft.world.entity.EntityTypes.HORSE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 6));
         horse.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         horse.setNoAi(true);

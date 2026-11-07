@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.level.block.Blocks;
 

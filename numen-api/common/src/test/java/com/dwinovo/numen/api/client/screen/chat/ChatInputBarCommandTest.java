@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.command.ChatCommands;
 import com.dwinovo.numen.api.client.ui.KeyCodes;
-import net.minecraft.client.resources.language.NumenTestLanguage;
+import com.dwinovo.numen.api.testutil.NumenTestLanguage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
