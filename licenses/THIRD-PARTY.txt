@@ -5,11 +5,11 @@ The `mcp` module (MCP server and client, OAuth) is built on the libraries below.
 They are shipped as nested jars in the Fabric and NeoForge jars of Numen API (each
 nested jar keeps its own META-INF), and merged into the Numen API plugin jar on Paper.
 One change is made: the MCP Java SDK, the libraries that use Jackson (Jackson 3,
-jackson-annotations, jackson-dataformat-yaml, json-schema-validator) and the Nimbus
+jackson-annotations, jackson-dataformat-yaml, json-schema-validator), the Nimbus
 OAuth libraries (oauth2-oidc-sdk, nimbus-jose-jwt, content-type, lang-tag, json-smart,
-accessors-smart, jcip-annotations) are merged into the Numen API jars on every
-platform, with the packages `tools.jackson`, `com.fasterxml.jackson.annotation`,
-`com.nimbusds`, `net.minidev` and `net.jcip` relocated under
+accessors-smart, jcip-annotations) and snakeyaml-engine are merged into the Numen API
+jars on every platform, with the packages `tools.jackson`, `com.fasterxml.jackson.annotation`,
+`com.nimbusds`, `net.minidev`, `net.jcip` and `org.snakeyaml.engine` relocated under
 `com.dwinovo.numen.mcp.shaded`, so that they cannot clash with other copies of these
 libraries in the game or other mods. The code is otherwise unchanged. The texts below travel in every Numen API jar under
 `META-INF/third-party/` (this file and the `third-party/` folder of `licenses/`).
