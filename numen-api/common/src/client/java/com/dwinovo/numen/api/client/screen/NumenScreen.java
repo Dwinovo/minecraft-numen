@@ -24,14 +24,17 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.network.NumenNetwork;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -40,13 +43,9 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -202,7 +201,7 @@ public final class NumenScreen extends Screen {
         return ".".repeat(1 + (int) ((now / 350) % 3));
     }
 
-    private void renderStatusText(GuiGraphics g, UUID her, int x, int limit) {
+    private void renderStatusText(GuiGraphicsExtractor g, UUID her, int x, int limit) {
         long now = System.currentTimeMillis();
         HeaderStatus st = headerStatus(her, now);
         String key = st == null ? null : st.key();
@@ -590,7 +589,7 @@ public final class NumenScreen extends Screen {
     }
 
     /** 搜索栏:从抬头下面滑下来,一枚放大镜、输入框、"第几个/共几个"、↑ ↓ ×。 */
-    private void renderFind(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderFind(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         long now = System.currentTimeMillis();
         float dt = lastFindFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFindFrameMs) / 1000f);
         lastFindFrameMs = now;
@@ -669,7 +668,7 @@ public final class NumenScreen extends Screen {
         blurSearch();
     }
 
-    private void renderSearch(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderSearch(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (searchField == null || narrow() && !searchPopup) return;
         int bx = searchBoxX(), by = searchBoxY(), bw = searchBoxW();
         boolean focused = searchField.isFocused();
@@ -753,7 +752,7 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public boolean canChooseMode() {
-            // 有 gamemode 权限(等级 2,原版已同步到客户端)才给下拉自选。
+            // 有 gamemode 权限(COMMANDS_GAMEMASTER,原版已同步到客户端)才给下拉自选。
             return minecraft != null && minecraft.player != null
                     && minecraft.player.permissions().hasPermission(
                             net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
@@ -1103,7 +1102,7 @@ public final class NumenScreen extends Screen {
      * 这样整页滑),滑的过程裁在正文区里。滑到位之前不接鼠标——mouseClickedInner 按 tab 路由,
      * 半路的点击落在还没到位的页上也只是这一帧的事。
      */
-    private void renderOverlayPage(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderOverlayPage(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         long now = System.currentTimeMillis();
         float dt = lastOverlayFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastOverlayFrameMs) / 1000f);
         lastOverlayFrameMs = now;
@@ -1180,12 +1179,12 @@ public final class NumenScreen extends Screen {
     // Shadowless text — BlockFrame is flat, and a drop shadow on DARK text over a LIGHT ground makes
     // the glyph merge with its own shadow ("smudged"). This build's shadowless path ignores the colour
     // PARAM, so we bake the colour into the text's Style instead.
-    private void txt(GuiGraphics g, Component c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, Component c, int x, int y, int color) {
         Nb.text(g, font, c, x, y, color);
     }
 
     /** The FormattedCharSequence must already carry its colour in its Style. */
-    private void txt(GuiGraphics g, FormattedCharSequence c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, FormattedCharSequence c, int x, int y, int color) {
         Nb.text(g, font, c, x, y);
     }
 
@@ -1387,7 +1386,7 @@ public final class NumenScreen extends Screen {
     /** 资料页(Telegram 资料页那样一整页可滚)。 */
     private ProfilePage profilePage;
 
-    private void renderProfile(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderProfile(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (profilePage == null) profilePage = new ProfilePage(font);
         boolean live = tab == Tab.ITEMS && !modalOpen() && !overlayOpen() && Math.abs(overlayT - panelW) < 1f;
         long now = System.currentTimeMillis();
@@ -1427,7 +1426,7 @@ public final class NumenScreen extends Screen {
     }
 
     /** 群资料页:成员一行一个。垫在底下时也画,只是不亮悬停、不接点击。 */
-    private void renderMembers(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderMembers(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (conv == null) return;
         if (membersPage == null) membersPage = new MembersPage(font);
         int bodyTop = top + HEADER_H;
@@ -1590,7 +1589,7 @@ public final class NumenScreen extends Screen {
     /** BlockFrame workspace chrome, drawn procedurally from the CURRENT theme — border frame,
      *  rail column, header band + underline, panel ground with the 16px dot grid. Replaces the
      *  old WARM-baked workspace sprite so a theme switch recolours the whole frame. */
-    private void drawWorkspace(GuiGraphics g) {
+    private void drawWorkspace(GuiGraphicsExtractor g) {
         UiTheme t = UiTheme.current();
         int x0 = railX, y0 = top, x1 = railX + railW + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
@@ -2054,7 +2053,7 @@ public final class NumenScreen extends Screen {
     }
 
     /** 拖着的那张脸跟着指针;残影按 easeOut 飞向落点,动完清掉。 */
-    private void renderRailDrag(GuiGraphics g) {
+    private void renderRailDrag(GuiGraphicsExtractor g) {
         if (railDragging && railPressed >= 0 && railPressed < rail().size()) {
             com.dwinovo.numen.api.client.skin.ConversationFaces.draw(g, rail().get(railPressed),
                     (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV);
@@ -2112,20 +2111,20 @@ public final class NumenScreen extends Screen {
     // ---- render ----
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
         // 崩溃护栏:面板渲染的任何异常都不许带走游戏——降级成一行红字
         g.pose().pushMatrix();   // renderInner 里有平移,画完把干净的位姿还给后画的(通知卡、别的模组)
         boolean drawn = com.dwinovo.numen.api.client.ui.SafeUi.run("panel-render",
                 () -> renderInner(g, mouseX, mouseY, partial));
         g.pose().popMatrix();
         if (!drawn) {
-            g.drawString(font, I18n.get(ModLanguageData.Keys.SCREEN_RENDER_FAILED),
+            g.text(font, I18n.get(ModLanguageData.Keys.SCREEN_RENDER_FAILED),
                     left + 10, top + 10, 0xFFFF6B6B, true);
         }
     }
 
-    private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        super.render(g, mouseX, mouseY, partial);
+    private void renderInner(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
+        super.extractRenderState(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
@@ -2236,7 +2235,7 @@ public final class NumenScreen extends Screen {
             g.pose().translate(overlayDx, 0);
         }
         for (AbstractWidget w : overlay) {
-            w.render(g, mouseX, mouseY, partial);
+            w.extractRenderState(g, mouseX, mouseY, partial);
         }
         if (sliding) {
             g.pose().popMatrix();
@@ -2282,7 +2281,7 @@ public final class NumenScreen extends Screen {
     /** 选中底的纵坐标:切换时从上一行滑到这一行(Telegram),不是瞬移。 */
     private float selY = Float.NaN;
 
-    private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderRail(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         List<Conversation> items = rail();
         UiTheme t = UiTheme.current();
         int rowX = railX + 3, rowW = railW - 3;
@@ -2337,7 +2336,7 @@ public final class NumenScreen extends Screen {
      * {@code live} = 这是此刻的列表:悬停、拖拽、选中底的滑动、"在干什么"的进度都只跟着它走;
      * 滑出去的那份只照原样画,不接这些。
      */
-    private void renderRows(GuiGraphics g, List<Conversation> items, String folder, int first, int x0, float a,
+    private void renderRows(GuiGraphicsExtractor g, List<Conversation> items, String folder, int first, int x0, float a,
                             boolean live, int mouseX, int mouseY, float dt, long now) {
         UiTheme t = UiTheme.current();
         int rowW = railW - 3;
@@ -2710,7 +2709,7 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
-    private void renderFolderStrip(GuiGraphics g, int mouseX, int mouseY, float dt) {
+    private void renderFolderStrip(GuiGraphicsExtractor g, int mouseX, int mouseY, float dt) {
         int shown = folderStripH();
         if (shown <= 0) return;
         UiTheme t = UiTheme.current();
@@ -2799,7 +2798,7 @@ public final class NumenScreen extends Screen {
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
-    private void chevron(GuiGraphics g, int cx, int y, boolean up, int color) {
+    private void chevron(GuiGraphicsExtractor g, int cx, int y, boolean up, int color) {
         com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g,
                 up ? com.dwinovo.numen.api.client.ui.mc.Sprites.CHEVRON_UP : com.dwinovo.numen.api.client.ui.mc.Sprites.CHEVRON_DOWN,
                 cx - 5, y, com.dwinovo.numen.api.client.ui.mc.Sprites.CHEVRON_W,
@@ -2859,7 +2858,7 @@ public final class NumenScreen extends Screen {
      * 空面板(一只同伴都没有):正中一句话,下面一颗强调色的召唤钮——Telegram 空列表那颗"新消息"。
      * 有了同伴以后召唤只留在 ☰ 菜单里,不常驻占地方。
      */
-    private void emptyHint(GuiGraphics g, int mouseX, int mouseY) {
+    private void emptyHint(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         Component msg = Component.translatable("numen.empty.no_companions");
         int cx = left + panelW / 2;
         txt(g, msg, cx - font.width(msg) / 2, emptyButtonY() - 16, TXT_MUTED);
@@ -2896,7 +2895,7 @@ public final class NumenScreen extends Screen {
      * 右端一个 ×,点了本局收起。点条本身往下展开目标详情。
      * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
      */
-    private void renderPin(GuiGraphics g, com.dwinovo.numen.api.agent.goal.GoalState goal, int y, int mouseX, int mouseY) {
+    private void renderPin(GuiGraphicsExtractor g, com.dwinovo.numen.api.agent.goal.GoalState goal, int y, int mouseX, int mouseY) {
         UiTheme t = UiTheme.current();
         int x = left + 3, w = panelW - 6;
         int shown = Math.round(pinShown);
@@ -2935,7 +2934,7 @@ public final class NumenScreen extends Screen {
         return inputBar == null ? INPUT_H : inputBar.height();
     }
 
-    private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderChat(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         renderFind(g, mouseX, mouseY);
         RemoteCompanion lp = loop();
         long now = System.currentTimeMillis();
@@ -3023,6 +3022,11 @@ public final class NumenScreen extends Screen {
                 pendingTipY = mouseY;
             }
         }
+    }
+
+    /** 对话流里点中链接:走原版聊天链接那一套(「聊天链接」选项、按需先弹确认框,确认完回到这个面板)。 */
+    public void openLink(java.net.URI uri) {
+        clickUrlAction(minecraft, this, uri);
     }
 
     @Override

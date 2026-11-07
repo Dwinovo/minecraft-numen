@@ -242,7 +242,7 @@ public final class Replies {
                     }
                 }
                 if (!bar.getSiblings().isEmpty()) {
-                    player.displayClientMessage(bar, true);
+                    player.sendOverlayMessage(bar);
                 }
             }
         };

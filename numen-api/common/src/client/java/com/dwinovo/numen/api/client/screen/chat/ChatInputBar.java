@@ -13,7 +13,7 @@ import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -330,7 +330,7 @@ public final class ChatInputBar {
 
     // ---- 宿主转发面 ----
 
-    public void render(GuiGraphics g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
+    public void render(GuiGraphicsExtractor g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
         refreshEnablement();
         long now = System.currentTimeMillis();
         float dt = frameMs == 0 ? 0.016f : Math.min(0.1f, (now - frameMs) / 1000f);
@@ -651,7 +651,7 @@ public final class ChatInputBar {
      * 输入行上面那条栏:从输入行上面长出来(和回到最新钮一样被裁着滑),一枚图标、一道竖线、抬头、那句,右端 × 收起。
      * 引用时是回复图标、"回复 谁"、被引的那句;"说一句再拒绝"时是拒绝图标、这个键的名字、她问的是什么。
      */
-    private void renderBar(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c, float dt) {
+    private void renderBar(GuiGraphicsExtractor g, int mouseX, int mouseY, NumenTheme.Colors c, float dt) {
         boolean open = barOpen();
         barShown = com.dwinovo.numen.api.client.ui.Anim.approach(barShown, open ? BAR_H : 0f, 18f, dt);
         if (barShown < 0.5f) return;
@@ -713,7 +713,7 @@ public final class ChatInputBar {
     }
 
     /** 那一格:换状态时旧的缩小淡出、新的放大淡入(Telegram 发送键和麦克风互换的样子)。 */
-    private void renderAct(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
+    private void renderAct(GuiGraphicsExtractor g, int mouseX, int mouseY, NumenTheme.Colors c) {
         long now = System.currentTimeMillis();
         Act a = currentAct();
         if (a != act) {
@@ -726,7 +726,7 @@ public final class ChatInputBar {
         drawAct(g, act, p, overAct(mouseX, mouseY), c);
     }
 
-    private void drawAct(GuiGraphics g, Act a, float k, boolean hover, NumenTheme.Colors c) {
+    private void drawAct(GuiGraphicsExtractor g, Act a, float k, boolean hover, NumenTheme.Colors c) {
         if (k <= 0.02f) return;
         boolean on = actEnabled(a);
         Identifier icon = switch (a) {

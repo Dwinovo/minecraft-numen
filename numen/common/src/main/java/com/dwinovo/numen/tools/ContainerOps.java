@@ -10,7 +10,7 @@ import com.dwinovo.numen.tools.menu.MenuKinds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -124,7 +124,7 @@ public final class ContainerOps {
         }
         // 有的界面里东西不是 Shift 点出来的(讲台的书靠一个钮取下),先问界面自己的拿法
         if (!MenuKinds.takeOut(entity, from)) {
-            menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
+            menu.clicked(from, 0, ContainerInput.QUICK_MOVE, entity);
         }
         ItemStack after = menu.slots.get(from).getItem();
         int moved = before.getCount() - (sameItem(before, after) ? after.getCount() : 0);
@@ -160,10 +160,10 @@ public final class ContainerOps {
             int want = Math.min(count, fromBefore.getCount());
             MenuOps.dripInto(menu, entity, from, to, want);
         } else {
-            menu.clicked(from, 0, ClickType.PICKUP, entity);          // grab the stack
-            menu.clicked(to, 0, ClickType.PICKUP, entity);            // place / merge / swap
+            menu.clicked(from, 0, ContainerInput.PICKUP, entity);          // grab the stack
+            menu.clicked(to, 0, ContainerInput.PICKUP, entity);            // place / merge / swap
             if (!menu.getCarried().isEmpty()) {
-                menu.clicked(from, 0, ClickType.PICKUP, entity);      // settle leftover / swapped item back
+                menu.clicked(from, 0, ContainerInput.PICKUP, entity);      // settle leftover / swapped item back
             }
         }
 

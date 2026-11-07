@@ -16,10 +16,12 @@ import com.dwinovo.numen.api.client.ui.Anim;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.agent.memory.NoteBook;
+import com.dwinovo.numen.api.persona.PersonaLibrary;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.language.I18n;
@@ -166,7 +168,7 @@ final class ProfilePage {
     }
 
     /** {@code live} = 整页在场、没有模态压着:这时才亮悬停。{@code status} 是抬头第二行那句(在线、正在输入…)。 */
-    void render(GuiGraphics g, UUID who, int x, int y, int w, int h, int mouseX, int mouseY,
+    void render(GuiGraphicsExtractor g, UUID who, int x, int y, int w, int h, int mouseX, int mouseY,
                 boolean live, Function<UUID, String> status) {
         UiTheme t = UiTheme.current();
         long now = System.currentTimeMillis();
@@ -280,7 +282,7 @@ final class ProfilePage {
                 timed.isEmpty() ? "" : String.valueOf(timed.size()), x + PAD, cy, iw);
         if (timed.isEmpty()) {
             for (var line : font.split(Component.translatable(ModLanguageData.Keys.SCHEDULE_NONE), iw)) {
-                g.drawString(font, line, x + PAD, cy, t.textDim(), false);
+                g.text(font, line, x + PAD, cy, t.textDim(), false);
                 cy += font.lineHeight + 1;
             }
             cy += 3;
@@ -378,7 +380,7 @@ final class ProfilePage {
         cy = gap(g, t, x, w, cy);
         cy = sectionHead(g, t, I18n.get(ModLanguageData.Keys.PROFILE_MEMORY), "", x + PAD, cy, iw);
         for (var line : font.split(Component.translatable(ModLanguageData.Keys.PROFILE_MEMORY_HERE), iw)) {
-            g.drawString(font, line, x + PAD, cy, t.textDim(), false);
+            g.text(font, line, x + PAD, cy, t.textDim(), false);
             cy += font.lineHeight + 1;
         }
         cy += 3;
@@ -405,7 +407,7 @@ final class ProfilePage {
     }
 
     /** 背包格子:左盔甲 2×2 + 副手,右合成 2×2 → 结果;下面 3×9 背包与快捷栏。 */
-    private void drawItems(GuiGraphics g, UiTheme t, com.dwinovo.numen.api.agent.request.BodySnapshot snap, AbstractClientPlayer e,
+    private void drawItems(GuiGraphicsExtractor g, UiTheme t, com.dwinovo.numen.api.agent.request.BodySnapshot snap, AbstractClientPlayer e,
                            int cx, int cy, int mouseX, int mouseY, ItemStack[] hover) {
         int gx = cx - 9 * SLOT / 2;
         for (int i = 0; i < ARMOR.length; i++) {
@@ -494,14 +496,14 @@ final class ProfilePage {
     }
 
     /** 节头:强调色小字,右端可带一个淡色的数。返回下面内容的顶边。 */
-    private int sectionHead(GuiGraphics g, UiTheme t, String title, String count, int x, int y, int w) {
+    private int sectionHead(GuiGraphicsExtractor g, UiTheme t, String title, String count, int x, int y, int w) {
         Nb.text(g, font, title, x, y, t.accent());
         if (!count.isEmpty()) Nb.text(g, font, count, x + w - font.width(count), y, t.textDim());
         return y + 14;
     }
 
     /** 一行设置:左边名字,右边值(淡字);整行点了开编辑卡。返回下一行的顶边。 */
-    private int settingRow(GuiGraphics g, UiTheme t, String label, String value, int x, int y, int w,
+    private int settingRow(GuiGraphicsExtractor g, UiTheme t, String label, String value, int x, int y, int w,
                            int mouseX, int mouseY) {
         boolean hot = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + LINE_ROW_H;
         if (hot) g.fill(x, y, x + w, y + LINE_ROW_H, t.over());
@@ -514,7 +516,7 @@ final class ProfilePage {
     }
 
     /** 页里一行可点的操作:图标加字,悬停浅底;返回下一行的顶边。 */
-    private int actionRow(GuiGraphics g, UiTheme t, Hit hit, Identifier icon, String label, int color,
+    private int actionRow(GuiGraphicsExtractor g, UiTheme t, Hit hit, Identifier icon, String label, int color,
                           int x, int y, int w, int mouseX, int mouseY) {
         boolean hot = mouseX >= x && mouseX < x + w && mouseY >= y - 2 && mouseY < y + LINE_ROW_H + 2;
         if (hot) g.fill(x, y - 2, x + w, y + LINE_ROW_H + 2, t.over());
@@ -525,7 +527,7 @@ final class ProfilePage {
     }
 
     /** 操作块(Telegram 名字下面那排):上图标、下字,浅底,悬停深一档。 */
-    private void tile(GuiGraphics g, UiTheme t, Hit hit, Identifier icon, String label,
+    private void tile(GuiGraphicsExtractor g, UiTheme t, Hit hit, Identifier icon, String label,
                       int x, int y, int w, int mouseX, int mouseY) {
         boolean hot = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + TILE_H;
         g.fill(x, y, x + w, y + TILE_H, hot ? UiTheme.mix(t.over(), t.text(), 0.06f) : t.over());
@@ -535,13 +537,13 @@ final class ProfilePage {
     }
 
     /** 节与节之间的深色宽缝;返回下一节的顶边。 */
-    private int gap(GuiGraphics g, UiTheme t, int x, int w, int y) {
+    private int gap(GuiGraphicsExtractor g, UiTheme t, int x, int w, int y) {
         g.fill(x, y, x + w, y + GAP_H, UiTheme.mix(t.band(), t.border(), 0.35f));
         return y + GAP_H + 6;
     }
 
     /** 一行资料:左一枚图标,值在上、它是什么在下;放不下就截短。 */
-    private void infoRow(GuiGraphics g, UiTheme t, Identifier icon, String value, String caption,
+    private void infoRow(GuiGraphicsExtractor g, UiTheme t, Identifier icon, String value, String caption,
                          int x, int y, int w) {
         Sprites.draw(g, icon, x, y + (ROW_H - Sprites.SIZE) / 2 - 1, Sprites.SIZE, t.textDim());
         int tx = x + TEXT_DX, room = w - TEXT_DX;
@@ -550,13 +552,13 @@ final class ProfilePage {
     }
 
     /** 统一凹槽:从窗口底色向边框色压暗两档(边更深、内浅一档),跟着主题换。 */
-    private static void slot(GuiGraphics g, UiTheme th, int x, int y) {
+    private static void slot(GuiGraphicsExtractor g, UiTheme th, int x, int y) {
         g.fill(x, y, x + SLOT, y + SLOT, UiTheme.mix(th.band(), th.border(), 0.62f));
         g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.band(), th.border(), 0.34f));
     }
 
     /** 一排 0..max 的体征图标(一格两点),原版 HUD 贴图。 */
-    private static void statRow(GuiGraphics g, int x, int y, float value, float max,
+    private static void statRow(GuiGraphicsExtractor g, int x, int y, float value, float max,
                                 Identifier full, Identifier half, Identifier empty) {
         int units = Math.max(1, (int) Math.ceil(max / 2f));
         for (int i = 0; i < units; i++) {
@@ -569,10 +571,10 @@ final class ProfilePage {
     }
 
     /** 画物品并记下悬停的那件(提示整页画完再画,免得被后画的格子盖住)。 */
-    private void collect(GuiGraphics g, ItemStack st, int x, int y, int mouseX, int mouseY, ItemStack[] hover) {
+    private void collect(GuiGraphicsExtractor g, ItemStack st, int x, int y, int mouseX, int mouseY, ItemStack[] hover) {
         if (st == null || st.isEmpty()) return;
-        g.renderItem(st, x, y);
-        g.renderItemDecorations(font, st, x, y);
+        g.item(st, x, y);
+        g.itemDecorations(font, st, x, y);
         if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) hover[0] = st;
     }
 

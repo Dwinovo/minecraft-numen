@@ -12,6 +12,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.Map;
 import java.util.UUID;
+import net.minecraft.server.players.NameAndId;
 
 /**
  * {@code /numen usage}:管理员查服主的 key 今天每个人用了多少 token(以及每人每天的限额,{@code server.json} 里设)。

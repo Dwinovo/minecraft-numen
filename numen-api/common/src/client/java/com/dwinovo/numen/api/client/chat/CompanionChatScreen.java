@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.chat;
 
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
@@ -18,7 +19,7 @@ import com.dwinovo.numen.api.client.screen.settings.HostThemeColors;
 import com.dwinovo.numen.api.client.skin.ConversationFaces;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -182,13 +183,13 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
-        // 刻意留空:super.render 默认会画菜单模糊+压暗遮罩,面对面说话
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
+        // 刻意留空:super.extractRenderState 默认会画菜单模糊+压暗遮罩,面对面说话
         // 不该把世界糊掉——她就站在你面前
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
         UiTheme th = UiTheme.current();
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
@@ -219,13 +220,13 @@ public class CompanionChatScreen extends Screen {
         if (tip != null) {
             g.setTooltipForNextFrame(this.font, Component.literal(tip), mouseX, mouseY);
         }
-        super.render(g, mouseX, mouseY, partialTicks);
+        super.extractRenderState(g, mouseX, mouseY, partialTicks);
     }
 
     /**
      * 她挂着的征询浮在输入卡上面:同一套框,里面是清单与内联按钮;顶边一道缩短的线是剩下的时间(撤不回时是警示色)。
      */
-    private void renderConsent(GuiGraphics g, com.dwinovo.numen.api.client.ui.mc.McDrawSurface surface, UiTheme th,
+    private void renderConsent(GuiGraphicsExtractor g, com.dwinovo.numen.api.client.ui.mc.McDrawSurface surface, UiTheme th,
                                int cardX, int cardTop, int mouseX, int mouseY) {
         ConsentCards.Card card = ConsentCards.pending(Conversations.instance().soloOf(conv));
         keysW = 0;

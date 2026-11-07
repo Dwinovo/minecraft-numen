@@ -93,12 +93,12 @@ public final class StackLabel {
             parts.add("stores " + enchantments(stored.entrySet()));
         }
         ItemContainerContents container = stack.get(DataComponents.CONTAINER);
-        if (container != null && container.nonEmptyStream().findAny().isPresent()) {
-            parts.add("holds " + contents(container.nonEmptyItems()));
+        if (container != null && container.nonEmptyItemCopyStream().findAny().isPresent()) {
+            parts.add("holds " + contents(container.nonEmptyItemCopyStream().toList()));
         }
         var bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null && !bundle.isEmpty()) {
-            parts.add("holds " + contents(bundle.items()));
+            parts.add("holds " + contents(bundle.itemCopyStream().toList()));
         }
         String brew = brew(stack);
         if (!brew.isEmpty()) {

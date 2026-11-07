@@ -228,7 +228,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
             }
             if (action.item() != null) {
                 return new Subject(BuiltInRegistries.ITEM.getKey(action.item()).getPath(), action.item(),
-                        action.item().getName());
+                        action.item().getDefaultInstance().getItemName());
             }
             return new Subject("block", null, Component.translatable(ModLanguageData.Keys.PERMISSION_A_BLOCK));
         }

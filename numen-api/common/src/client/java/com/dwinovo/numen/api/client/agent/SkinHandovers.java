@@ -36,7 +36,7 @@ final class SkinHandovers {
             INCOMING.remove(segment.name());
             String saved = SkinMigration.place(NumenPaths.skins(), segment.name(), parts.bytes());
             if (Minecraft.getInstance().player != null) {
-                Minecraft.getInstance().player.displayClientMessage(Component.translatable(Keys.SKIN_HANDOVER, saved), false);
+                Minecraft.getInstance().player.sendSystemMessage(Component.translatable(Keys.SKIN_HANDOVER, saved));
             }
         }
     }

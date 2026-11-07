@@ -5,6 +5,9 @@ import net.minecraft.resources.Identifier;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 
@@ -41,20 +44,20 @@ public class NumenNeoForgeClient {
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
-        // Game bus — per-tick / world-render / disconnect.
+        modBus.addListener(NumenNeoForgeClient::registerDebugRenderers);
+        // Game bus — per-tick / disconnect / screen.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
-        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenRendered);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenMousePressed);
     }
 
-    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks event) {
-        // 世界空间的覆盖层(半透明方块阶段之后)。阶段子事件不带相机,相机取 gameRenderer 的主相机。
-        // 头顶气泡不在这里——它走生物实体渲染的提交入口(MixinLivingEntityRenderer),
-        // 与名牌同管线,光影下才正常。
-        com.dwinovo.numen.api.client.consent.ConsentOutlines.render(event.getPoseStack(),
-                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
+    static void registerDebugRenderers(net.neoforged.neoforge.client.event.RegisterDebugRenderersEvent event) {
+        // 世界空间的覆盖层走原版 gizmo 通道:注册进 DebugRenderer 的渲染器列表(NeoForge 注册的不受 F3 调试项门控,常驻),
+        // 每帧提取期在 gizmo 收集器作用域内被调用。
+        // 头顶气泡不在这里——它走实体渲染尾部(MixinLivingEntityRenderer),与名牌同管线,光影下才正常。
+        event.register((camX, camY, camZ, debugValues, frustum, partialTick) ->
+                com.dwinovo.numen.api.client.consent.ConsentOutlines.emit());
     }
 
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {

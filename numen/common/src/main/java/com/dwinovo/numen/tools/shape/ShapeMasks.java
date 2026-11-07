@@ -118,7 +118,7 @@ final class ShapeMasks {
             HolderSet.Named<Block> tag = BlockPatterns.tag(c.substring(2));
             return (w, x, y, z) -> {
                 BlockState s = w.at(x, y, z);
-                return tag.contains(s.getBlockHolder());
+                return tag.contains(s.typeHolder());
             };
         }
         if (c.startsWith("^[") || c.startsWith("^=[")) {

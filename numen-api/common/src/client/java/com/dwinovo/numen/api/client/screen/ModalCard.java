@@ -16,7 +16,7 @@ import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.client.ui.widget.Widget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -180,7 +180,7 @@ abstract class ModalCard {
         bold(s.graphics(), name, coverRight(), top + (COVER_H - 8) / 2, coverRightW(), c.textPrimary());
     }
 
-    private static void bold(GuiGraphics g, String text, int tx, int ty, int maxW, int color) {
+    private static void bold(GuiGraphicsExtractor g, String text, int tx, int ty, int maxW, int color) {
         var font = Minecraft.getInstance().font;
         // 加粗的字更宽:按加粗后的宽截
         String fit = com.dwinovo.numen.api.client.ui.TextClip.fit(
@@ -195,7 +195,7 @@ abstract class ModalCard {
      * 字、脸、控件一起淡。
      */
     final void render(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
-        GuiGraphics g = s.graphics();
+        GuiGraphicsExtractor g = s.graphics();
         GuiAlpha.set(alpha);
         if (title != null) {
             bold(g, title, x + DialogBox.PAD_X, y + DialogBox.TITLE_TOP, w - DialogBox.PAD_X * 2, c.textPrimary());
@@ -209,7 +209,7 @@ abstract class ModalCard {
     protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {}
 
     /** 贴一枚图标:颜色自带卡此刻的不透明度。 */
-    protected static void icon(GuiGraphics g, Identifier sprite, int ix, int iy, int size, int argb, float alpha) {
+    protected static void icon(GuiGraphicsExtractor g, Identifier sprite, int ix, int iy, int size, int argb, float alpha) {
         Sprites.draw(g, sprite, ix, iy, size, DialogBox.fade(argb, alpha));
     }
 

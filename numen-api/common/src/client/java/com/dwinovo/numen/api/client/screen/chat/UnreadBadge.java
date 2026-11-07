@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.screen.chat;
 
 import com.dwinovo.numen.api.client.screen.Nb;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** 未读计数角标(Telegram):强调色小块、反色数字;左栏会话行的右端和"回到最新"钮顶上是同一枚。 */
 public final class UnreadBadge {
@@ -20,7 +20,7 @@ public final class UnreadBadge {
         return font.width(label) + 6;
     }
 
-    public static void draw(GuiGraphics g, Font font, String label, int x, int y, int fill, int ink) {
+    public static void draw(GuiGraphicsExtractor g, Font font, String label, int x, int y, int fill, int ink) {
         g.fill(x, y, x + width(font, label), y + H, fill);
         Nb.text(g, font, label, x + 3, y + 2, ink);
     }

@@ -17,7 +17,7 @@ public final class ModJar {
     private ModJar() {}
 
     /**
-     * @param inJar jar 内路径,如 {@code numen} 或 {@code plugins/litematica/numen}
+     * @param inJar jar 内路径,如 {@code numen} 或 {@code plugins/ysm/numen}
      * @return 对应的 Path;jar 里没有这条路径就 null
      */
     public static Path find(String inJar) {

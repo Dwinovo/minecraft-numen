@@ -121,7 +121,7 @@ public final class Gate {
      * 和独立发布的插件 jar 里的 {@code numen/} 一个样;jar 里没有就 null,联动照装、只是不带内容——留一条 warn,
      * 说好要带的不能悄悄少了。
      *
-     * <p>必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,源码树里 {@code plugins/litematica/} 那层前缀打包时就没了。
+     * <p>必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。
      * 直接放 {@code numen/} 的话会和 Numen 自己那份合并,而 Numen 的内容是无条件同步的:没装 YSM 的服务器上也会出现
      * "怎么换 YSM 模型",纯噪音,而且照做也没用。
      *

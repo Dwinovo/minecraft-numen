@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
@@ -134,7 +135,7 @@ final class Generators {
         RecordedLevel recorded = new RecordedLevel(w);
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         WorldGenLevel view = recorded.level();
-        ChunkPos chunkPos = new ChunkPos(at);
+        ChunkPos chunkPos = ChunkPos.containing(at);
         boolean placed;
         try {
             placed = recorded.attempt(() -> {
@@ -156,8 +157,8 @@ final class Generators {
             throw failed("the structure " + id, e);
         }
         if (!placed) {
-            throw new ApiError(ErrorKind.FAILED, "the structure " + id + " has no valid layout at chunk " + chunkPos.x + ", "
-                    + chunkPos.z + " (the game's own generator said no)", null);
+            throw new ApiError(ErrorKind.FAILED, "the structure " + id + " has no valid layout at chunk " + chunkPos.x() + ", "
+                    + chunkPos.z() + " (the game's own generator said no)", null);
         }
         return Grown.of(recorded);
     }

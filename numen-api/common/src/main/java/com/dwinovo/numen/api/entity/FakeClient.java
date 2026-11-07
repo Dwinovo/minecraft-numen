@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.phys.Vec3;
 
@@ -151,8 +152,8 @@ public final class FakeClient {
                 && event.getEvent() == ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START) {
             awaitingLoaded = true;
         } else if (packet instanceof ClientboundSetEntityMotionPacket motion
-                && motion.getId() == player.getId() && player.hurtMarked) {
-            knockback = motion.getMovement();
+                && motion.id() == player.getId() && player.hurtMarked) {
+            knockback = motion.movement();
         } else if (packet instanceof ClientboundSystemChatPacket said) {
             heard(said.content(), said.overlay());
         } else if (arrived && packet instanceof ClientboundPlayerChatPacket chat

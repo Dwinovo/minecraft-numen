@@ -7,6 +7,7 @@ import com.dwinovo.numen.mixin.inject.ItemEntityAccessor;
 import com.dwinovo.numen.mixin.inject.MenuDataSlotsAccessor;
 import com.dwinovo.numen.platform.IVanillaAccess;
 
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;

@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
  * 同伴语音的取数重定向——<b>Fabric 专属</b>。Fabric 运行 vanilla 字节码,
  * {@code SoundEngine.play} 对流式声音固定调用
  * {@code SoundBufferLibrary.getStream(sound.getPath(), loop)} 去开 ogg
- * (vanilla 1.21.11 的 {@link SoundInstance} 还没有后续版本那个可覆写的
+ * (vanilla 26.1.2 的 {@link SoundInstance} 仍没有可覆写的
  * {@code getStream} default 钩子),所以在这里把带内存 PCM 的实例
  * ({@link VoicePcmSource}:同伴 3D 语音与设置界面 2D 试听)的取数换成
  * 它自带的流,其余声音原样放行。
@@ -27,8 +27,8 @@ import java.util.concurrent.CompletableFuture;
  * 0 目标掀桌——这正是分家的原因)。
  *
  * <p><b>require = 0 且 priority = 900</b>:fabric-sound-api-v1 也 @Redirect
- * 同一个调用点。同为默认优先级 1000 时谁先安装靠注册顺序——顺序翻转时
- * sound-api 后到被跳过,而它 require=1,注入失败直接崩游戏(26.1.2 实证)。
+ * 同一个调用点。同为默认优先级 1000 时谁先安装靠注册顺序——本代 loader
+ * 让我们先装,sound-api 后到被跳过,而它 require=1,注入失败直接崩游戏。
  * 降到 900 让顺序确定:我们先装,sound-api 以更高优先级合法<b>覆盖</b>本重定向
  * (两边注入都算成功),那条路上由 {@link MixinVoicePcmFabricSound} 给声音实例补
  * {@code FabricSoundInstance} 接口走它的官方扩展点;sound-api 不在场的精简

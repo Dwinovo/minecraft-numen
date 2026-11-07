@@ -521,7 +521,7 @@ public class Mouse {
                 if (onBlock.consumesAction() || onBlock == InteractionResult.FAIL) {
                     break;
                 }
-            } else if (entity != null && useOnEntity(entity, hand, at)) {
+            } else if (entity != null && useOnEntity(entity, hand, at != null ? at : hit.getLocation().subtract(entity.position()))) {
                 break;
             }
             if ((itemFallthrough || (block == null && entity == null)) && !stack.isEmpty() && useItem(level, stack, hand)) {
@@ -566,15 +566,11 @@ public class Mouse {
     }
 
     /**
-     * 右键一只实体(动物、村民、物品展示框、拴绳):它吃掉了这一下为 true。带了点({@code at})就先发 {@code INTERACT_AT}
-     * ({@link ClientPackets#interactAt}),起了作用就是它吃掉了,不再按下面的。
+     * 右键一只实体(动物、村民、盔甲架、物品展示框、拴绳):它吃掉了这一下为 true。{@code at} 是点中的那一点(相对实体的位置):
+     * 原版客户端只发一个带着这一点的交互,服务端的 {@code interactOn} 先问实体自己(盔甲架按点中的高度取放装备),没吃掉再问手里的东西。
      */
     private boolean useOnEntity(Entity entity, InteractionHand hand, Vec3 at) {
-        if (at != null && packets.interactAt(entity, hand, at)) {
-            return true;
-        }
-        return entity.interact(body, hand).consumesAction()           // 动物、村民
-                || body.interactOn(entity, hand).consumesAction();    // 物品展示框、拴绳
+        return body.interactOn(entity, hand, at).consumesAction();
     }
 
     /** 用手里的东西({@code useItem});它吃掉了这一下为 true。 */
@@ -585,6 +581,14 @@ public class Mouse {
             body.swing(hand);
         }
         return result.consumesAction();
+    }
+
+    /**
+     * 这一下要不要挥手。原版按结果说该由哪一头挥:客户端挥的({@code CLIENT})由客户端挥了再告诉服务端,服务端挥的({@code SERVER})
+     * 服务端直接挥;她两头都是自己,哪一头该挥都挥,广播给看着她的人。
+     */
+    private static boolean swings(InteractionResult result) {
+        return result instanceof InteractionResult.Success success && success.swingSource() != InteractionResult.SwingSource.NONE;
     }
 
     /** 右键可能改到的几格:点中的那一格、它面前那一格,各连同上下一格。 */

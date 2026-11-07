@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.resources.Identifier;
 
 import java.util.List;
@@ -93,7 +93,7 @@ public final class PopupMenu implements UiRoot.Overlay {
         draw(((McDrawSurface) s).graphics(), mouseX, mouseY, System.currentTimeMillis(), true);
     }
 
-    private void draw(GuiGraphics g, int mouseX, int mouseY, long now, boolean live) {
+    private void draw(GuiGraphicsExtractor g, int mouseX, int mouseY, long now, boolean live) {
         float alpha;
         int cw = w, ch = h;
         if (live) {

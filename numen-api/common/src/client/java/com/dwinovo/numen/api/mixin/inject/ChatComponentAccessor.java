@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.mixin.inject;
 
-import net.minecraft.client.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.gui.components.ChatComponent;
 
 import org.spongepowered.asm.mixin.Mixin;

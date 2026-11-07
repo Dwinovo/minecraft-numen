@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.inventory.ResultSlot;
@@ -82,7 +82,7 @@ public final class CraftOps {
         }
         @SuppressWarnings("unchecked")
         RecipeHolder<CraftingRecipe> holder = (RecipeHolder<CraftingRecipe>) found;
-        ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
+        ItemStack result = RecipeProbe.resultOf(recipe);
         Item target = result.getItem();
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
@@ -135,7 +135,7 @@ public final class CraftOps {
                     + "this grid?)", null);
         }
         int have0 = PlayerInv.count(self.getInventory(), target);
-        menu.clicked(grid.result(), 0, ClickType.QUICK_MOVE, self);   // vanilla mass-craft + onTake
+        menu.clicked(grid.result(), 0, ContainerInput.QUICK_MOVE, self);   // vanilla mass-craft + onTake
         self.swing(InteractionHand.MAIN_HAND);
         sweepGrid(menu, self, grid);
         int crafted = PlayerInv.count(self.getInventory(), target) - have0;
@@ -172,7 +172,7 @@ public final class CraftOps {
                 if (!(holder.value() instanceof CraftingRecipe recipe)) {
                     continue;
                 }
-                ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
+                ItemStack result = RecipeProbe.resultOf(recipe);
                 if (recipe.isSpecial() || result.isEmpty() || !RecipeProbe.usableIngredients(recipe)
                         || ingredientsOf(recipe).isEmpty() || gridOf(recipe) == 0
                         || feasibleBatch(ingredientsOf(recipe), pool, 1) == 0) {
@@ -436,7 +436,7 @@ public final class CraftOps {
         }
         for (int idx : grid.cells()) {
             if (idx >= 0 && idx < menu.slots.size() && !menu.slots.get(idx).getItem().isEmpty()) {
-                menu.clicked(idx, 0, ClickType.QUICK_MOVE, self);
+                menu.clicked(idx, 0, ContainerInput.QUICK_MOVE, self);
             }
         }
     }
@@ -451,7 +451,7 @@ public final class CraftOps {
                 continue;
             }
             if (slot.getItem().isEmpty()) {
-                menu.clicked(slot.index, 0, ClickType.PICKUP, self);
+                menu.clicked(slot.index, 0, ContainerInput.PICKUP, self);
                 return menu.getCarried().isEmpty();
             }
         }

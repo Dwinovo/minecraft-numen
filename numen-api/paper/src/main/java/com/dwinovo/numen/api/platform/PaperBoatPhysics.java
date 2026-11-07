@@ -29,7 +29,7 @@ public final class PaperBoatPhysics implements IBoatPhysics {
         try {
             CONTROL_BOAT.invokeExact(boat);
         } catch (Throwable t) {
-            throw new IllegalStateException("Boat.controlBoat 抛了异常", t);
+            throw new IllegalStateException("AbstractBoat.controlBoat 抛了异常", t);
         }
     }
 }

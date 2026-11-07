@@ -27,12 +27,16 @@ import com.dwinovo.numen.api.client.ui.markdown.Markdown;
 import com.dwinovo.numen.api.client.ui.richtext.Doc;
 import com.dwinovo.numen.api.client.ui.richtext.RichLayout;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
+import com.dwinovo.numen.api.client.screen.NumenScreen;
+import com.dwinovo.numen.api.mcp.server.McpMode;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.time.Instant;
@@ -367,7 +371,7 @@ public final class ChatView {
 
     // ---- render ----
 
-    public void render(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY) {
+    public void render(GuiGraphicsExtractor g, int x, int y, int w, int h, int mouseX, int mouseY) {
         loadPalette();
         group = solo() == null;
         hoverX = mouseX;
@@ -415,7 +419,7 @@ public final class ChatView {
     }
 
     /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来,顶上压一枚未读数。 */
-    private void renderJump(GuiGraphics g, int x, int y, int h, float dt, int unread) {
+    private void renderJump(GuiGraphicsExtractor g, int x, int y, int h, float dt, int unread) {
         boolean want = lastMaxScroll - scrollTarget > h / 2 || unread > 0;
         jumpShown = Anim.approach(jumpShown, want ? 1f : 0f, 16f, dt);
         if (jumpShown <= 0.02f) return;
@@ -436,7 +440,7 @@ public final class ChatView {
     }
 
     /** 滚动 + 裁剪 + 逐块绘制——对话视图与外脑现场视图共用的那台机器。 */
-    private void renderBlocks(GuiGraphics g, int x, int y, int w, int h, List<Block> blocks, float dt) {
+    private void renderBlocks(GuiGraphicsExtractor g, int x, int y, int w, int h, List<Block> blocks, float dt) {
         gx = x; gy = y; gw = w; gh = h;
         hits.clear();
         int content = totalHeight(blocks);
@@ -1218,7 +1222,7 @@ public final class ChatView {
     }
 
     /** 把排好的正文画在 {@code (x, y)}:链接与 @ 的名字用强调色(链接再加下划线),代码铺一层字色的淡底。 */
-    private void drawRich(GuiGraphics g, RichLayout.Laid text, int x, int y, int ink) {
+    private void drawRich(GuiGraphicsExtractor g, RichLayout.Laid text, int x, int y, int ink) {
         text.paint(new RichLayout.Canvas() {
             @Override
             public void backdrop(int bx, int by, int w, int h) {
@@ -1233,6 +1237,15 @@ public final class ChatView {
                 draw(g, c.getVisualOrderText(), fx, fy);
             }
         }, x, y, LINE_H);
+    }
+
+    /** 这段文字能当链接点开的话给出地址;原版收不下的地址(不合法、非 http/https)不画成链接。 */
+    private static java.net.URI openable(String url) {
+        try {
+            return net.minecraft.util.Util.parseAndValidateUntrustedUri(url);
+        } catch (java.net.URISyntaxException notALink) {
+            return null;
+        }
     }
 
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
@@ -1351,7 +1364,7 @@ public final class ChatView {
 
     // ---- drawing ----
 
-    private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
+    private void drawBlock(GuiGraphicsExtractor g, Block b, int x, int y, int w) {
         // 新来的块飞入:从下面 8px 升上来、同时淡入。整块一起动——框、脸、字用同一个透明度
         int entry = switch (b) {
             case Bubble bb -> bb.entry();
@@ -1379,7 +1392,7 @@ public final class ChatView {
         }
     }
 
-    private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
+    private void drawBlockBody(GuiGraphicsExtractor g, Block b, int x, int y, int w) {
         switch (b) {
             case Divider d -> drawDayChip(g, d.text(), x, y, w);
             case Notice n -> drawService(g, n.lines(), x, y, w);
@@ -1395,7 +1408,7 @@ public final class ChatView {
      * 征询那条:和话、清单同一份气泡外形(名字、脸、底色、尾巴),里面是问话与右下角的秒数,挂着时底边一道缩短的线;
      * 气泡下面贴着内联按钮(Telegram 的键盘挂在气泡外面、与气泡同宽),收起后再下面一条服务消息写结果。
      */
-    private void drawConsent(GuiGraphics g, Consent c, int x, int y, int w) {
+    private void drawConsent(GuiGraphicsExtractor g, Consent c, int x, int y, int w) {
         ConsentCards.Card card = c.card();
         int bx = x + EDGE + faceCol();
         int bh = consentBubbleH(c);
@@ -1430,7 +1443,7 @@ public final class ChatView {
     }
 
     /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */
-    private void drawDayChip(GuiGraphics g, String text, int x, int y, int w) {
+    private void drawDayChip(GuiGraphicsExtractor g, String text, int x, int y, int w) {
         drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x, y, w);
     }
 
@@ -1438,7 +1451,7 @@ public final class ChatView {
      * 服务消息(Telegram 的 service message):在对话流里居中的一块半透明底、白字,不是谁说的话。
      * 几行各自居中;底贴最宽那行,四周留 {@code SERVICE_PAD_*}。方角,不画圆角。
      */
-    private void drawService(GuiGraphics g, List<FormattedCharSequence> lines, int x, int y, int w) {
+    private void drawService(GuiGraphicsExtractor g, List<FormattedCharSequence> lines, int x, int y, int w) {
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
         int mid = x + (w - SB_W) / 2;
@@ -1451,7 +1464,7 @@ public final class ChatView {
         }
     }
 
-    private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
+    private void drawBubble(GuiGraphicsExtractor g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
         boolean timeLine = b.time() != null && !b.timeInline();
         int qh = b.quote() != null ? QUOTE_H : 0;
@@ -1488,7 +1501,7 @@ public final class ChatView {
      * (和气泡齐底)、底色、连发最后一块靠脸那侧的尾巴。气泡只有底色、没有描边(Telegram):和地面分开靠色块,
      * 不靠框线。{@code bh} 是气泡本身的高,不含名字那一行。
      */
-    private void bubbleFrame(GuiGraphics g, boolean own, String label, UUID who, boolean runEnd,
+    private void bubbleFrame(GuiGraphicsExtractor g, boolean own, String label, UUID who, boolean runEnd,
                              int x, int y, int bx, int bw, int bh, int fill) {
         int bubTop = y + (label != null ? LABEL_H : 0);
         if (label != null) {
@@ -1504,7 +1517,7 @@ public final class ChatView {
     }
 
     /** 清单消息:她的气泡,抬头强调色"计划 2/5",下面一项一行,方格在每项第一行前面。 */
-    private void drawChecklist(GuiGraphics g, Checklist c, int x, int y) {
+    private void drawChecklist(GuiGraphicsExtractor g, Checklist c, int x, int y) {
         int bw = c.maxLineW() + PAD_H * 2;
         int bh = checklistH(c);
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
@@ -1533,7 +1546,7 @@ public final class ChatView {
      * 做完实心成功色、里面一枚白勾——刚勾上的({@code tickedAt} 非 0)先从中间往外填满,满了才出勾;
      * 划掉的空心,字已经划了线。
      */
-    private void checkBox(GuiGraphics g, com.dwinovo.numen.api.agent.tool.TodoTool.Status state, long tickedAt, int x, int y) {
+    private void checkBox(GuiGraphicsExtractor g, com.dwinovo.numen.api.agent.tool.TodoTool.Status state, long tickedAt, int x, int y) {
         switch (state) {
             case COMPLETED -> {
                 float e = tickedAt == 0L ? 1f : Anim.easeOutCubic((frameNow - tickedAt) / (float) TICK_MS);
@@ -1562,7 +1575,7 @@ public final class ChatView {
      * 极淡底,没有气泡的实底、描边与头像。过程与话分得开,读者才不会把旁白
      * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
      */
-    private void drawChip(GuiGraphics g, Chip c, int x, int y) {
+    private void drawChip(GuiGraphicsExtractor g, Chip c, int x, int y) {
         int maxW = 0;
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
         int cx = x + EDGE + faceCol();
@@ -1597,7 +1610,7 @@ public final class ChatView {
      * 气泡的小尾巴(Telegram 连发只有最后一条有):贴在靠脸那一侧的底角往外伸,自底向上一级比一级短,
      * 方角像素台阶,不画弧。{@code right} = 主人的,伸向右下;{@code edgeX} 是气泡那一侧的边。
      */
-    private static void tail(GuiGraphics g, boolean right, int edgeX, int bottom, int fill) {
+    private static void tail(GuiGraphicsExtractor g, boolean right, int edgeX, int bottom, int fill) {
         for (int k = 0; k < TAIL_STEPS.length; k++) {
             int y = bottom - 1 - k;
             int len = TAIL_STEPS[k];
@@ -1607,7 +1620,7 @@ public final class ChatView {
     }
 
     /** 记下这张脸能点;指针在它上面时贴着脸描一圈强调色边,像个能点的东西。 */
-    private void face(GuiGraphics g, UUID who, int x, int y) {
+    private void face(GuiGraphicsExtractor g, UUID who, int x, int y) {
         faces.add(new Face(who, x, y));
         if (hoverX >= x - 2 && hoverX < x + AV + 2 && hoverY >= y - 2 && hoverY < y + AV + 2) {
             Nb.border(g, x - 1, y - 1, AV + 2, AV + 2, 1, MENTION);   // 只描边,脸照样看得见
@@ -1624,7 +1637,7 @@ public final class ChatView {
     }
 
     /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */
-    private void draw(GuiGraphics g, FormattedCharSequence seq, int x, int y) {
+    private void draw(GuiGraphicsExtractor g, FormattedCharSequence seq, int x, int y) {
         Nb.text(g, font, seq, x, y);
     }
 

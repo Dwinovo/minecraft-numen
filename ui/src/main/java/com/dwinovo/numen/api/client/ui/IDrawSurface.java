@@ -4,7 +4,7 @@ package com.dwinovo.numen.api.client.ui;
  * NumenUI 的画布契约——组件库与 Minecraft 渲染 API 之间的全部接口。
  *
  * <h2>为什么存在</h2>
- * MC 的 GUI API 逐代变动(GuiGraphics 签名、scissor、渲染管线),而我们有
+ * MC 的 GUI API 逐代变动(GuiGraphicsExtractor 签名、scissor、渲染管线),而我们有
  * 十一个版本分支。组件库(布局/状态/主题/动画)只面向本接口编程、零 MC
  * import;折入一个版本分支 = 重写一个百行级的适配器实现,组件库与屏幕层
  * 原样拷贝。这是 platform.Services 的隔离哲学在 UI 上的同款。

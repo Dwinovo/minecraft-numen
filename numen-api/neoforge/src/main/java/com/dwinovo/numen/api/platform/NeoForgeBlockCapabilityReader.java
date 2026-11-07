@@ -38,6 +38,12 @@ import java.util.List;
  * expose per-face handlers. There is no documented contract that null-side is a
  * combined view, so we probe {@code null} + all six {@link Direction}s
  * ({@link Exposures}, which also decides what counts as the same storage).
+ *
+ * <h2>Transfer API</h2>
+ * Items and fluids are both {@link ResourceHandler} (slot-indexed {@code size()} / {@code getResource} /
+ * {@code getAmountAsLong}), energy is {@link EnergyHandler}. The energy handler has no
+ * {@code canReceive()}/{@code canExtract()} flags, so its direction is probed by simulating an insert and
+ * an extract inside a transaction that is never committed: the block's state is untouched.
  */
 public final class NeoForgeBlockCapabilityReader implements IBlockCapabilityReader {
 

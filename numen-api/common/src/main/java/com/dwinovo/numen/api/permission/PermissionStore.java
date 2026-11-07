@@ -18,6 +18,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.util.datafix.DataFixTypes;
@@ -174,7 +175,7 @@ public final class PermissionStore extends SavedData {
     public static PermissionStore of(MinecraftServer server, UUID owner) {
         // 每主人一个文件,类型的 id 就是文件名;存储层按 id 缓存,每次现造一个同 id 的类型即可
         PermissionStore store = server.overworld().getDataStorage().computeIfAbsent(new SavedDataType<>(
-                "numen_permissions_" + owner, PermissionStore::new, STORED, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES));
+                net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "permissions_" + owner), PermissionStore::new, STORED, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES));
         store.onChange = () -> PermissionFeed.changed(owner);
         return store;
     }

@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.ui.mc;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.widget.Button;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
@@ -106,12 +106,12 @@ public final class Sprites {
     }
 
     /** 直接贴一枚(不在控件里的那些,比如头部名字旁的改与删)。 */
-    public static void draw(GuiGraphics g, Identifier sprite, int x, int y, int size, int argb) {
+    public static void draw(GuiGraphicsExtractor g, Identifier sprite, int x, int y, int size, int argb) {
         draw(g, sprite, x, y, size, size, argb);
     }
 
     /** 不是方的那几枚(滚动三角)。 */
-    public static void draw(GuiGraphics g, Identifier sprite, int x, int y, int w, int h, int argb) {
+    public static void draw(GuiGraphicsExtractor g, Identifier sprite, int x, int y, int w, int h, int argb) {
         g.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, y, w, h, argb);
     }
 }

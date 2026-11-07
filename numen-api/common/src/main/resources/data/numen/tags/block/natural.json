@@ -3,7 +3,7 @@
   "values": [
     "#minecraft:base_stone_overworld",
     "#minecraft:base_stone_nether",
-    "#minecraft:dirt",
+    "#minecraft:substrate_overworld",
     "#minecraft:sand",
     "#minecraft:snow",
     "#minecraft:ice",

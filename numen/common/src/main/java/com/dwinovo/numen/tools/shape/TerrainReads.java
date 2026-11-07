@@ -66,7 +66,7 @@ final class TerrainReads {
         for (BlockPos p : cells) {
             for (int cx = (p.getX() - margin) >> 4; cx <= (p.getX() + margin) >> 4; cx++) {
                 for (int cz = (p.getZ() - margin) >> 4; cz <= (p.getZ() + margin) >> 4; cz++) {
-                    chunks.add(ChunkPos.asLong(cx, cz));
+                    chunks.add(ChunkPos.pack(cx, cz));
                 }
             }
         }

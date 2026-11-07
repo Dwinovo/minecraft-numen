@@ -19,9 +19,10 @@ import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.google.gson.JsonObject;
+import com.dwinovo.numen.api.persona.PersonaLibrary;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -506,7 +507,7 @@ public final class SettingsView {
      * 不能画在分区页里——页会滑动、带裁剪框,卡的顶边与标题行会被抬头切掉;所以分区页画完、
      * 屏幕撤掉页的裁剪框之后才调这里。
      */
-    public void renderCard(GuiGraphics g, int mouseX, int mouseY) {
+    public void renderCard(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (cardBody == null) return;
         long now = System.currentTimeMillis();
         if (cardUp) {
@@ -518,7 +519,7 @@ public final class SettingsView {
     }
 
     /** 暗幕 + 近全幅的卡 + 卡里的表单,整体乘上 {@code alpha}。 */
-    private void drawCard(GuiGraphics g, float alpha, int mouseX, int mouseY) {
+    private void drawCard(GuiGraphicsExtractor g, float alpha, int mouseX, int mouseY) {
         GuiAlpha.set(Math.max(0.05f, alpha));
         formModal(g, cardTitle);
         cardBody.render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
@@ -527,7 +528,7 @@ public final class SettingsView {
     }
 
     /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。卡底是窗口底色(Telegram 对话框的 boxBg = windowBg)。 */
-    private void formModal(GuiGraphics g, Component title) {
+    private void formModal(GuiGraphicsExtractor g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
                 (t.border() & 0xFFFFFF) | 0x99000000);
@@ -538,7 +539,7 @@ public final class SettingsView {
 
     // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
 
-    private void txt(GuiGraphics g, Component c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, Component c, int x, int y, int color) {
         Nb.text(g, font(), c, x, y, color);
     }
 
@@ -752,7 +753,7 @@ public final class SettingsView {
         host.rebuild();
     }
 
-    private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderVoiceSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         voiceListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.util.Util.getMillis());
         if (addingVoice) formCard(Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
@@ -1134,7 +1135,7 @@ public final class SettingsView {
         return skillsListPanel;
     }
 
-    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderSkillsSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         skillsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
@@ -1218,7 +1219,7 @@ public final class SettingsView {
         return lines;
     }
 
-    private void renderPluginsSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderPluginsSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         pluginsListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         ServerLibraries.Plugin p = pluginsListPanel().entryAtBody(mouseX, mouseY);
@@ -1231,7 +1232,7 @@ public final class SettingsView {
 
     // ---- render (nav + active section) ----
 
-    public void render(GuiGraphics g, int mouseX, int mouseY) {
+    public void render(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         loadPalette();
         long now = System.currentTimeMillis();
         float dt = lastPushMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPushMs) / 1000f);
@@ -1271,7 +1272,7 @@ public final class SettingsView {
     }
 
     /** 设置首页:一行一个分区,图标 + 名字,组与组之间一道线。 */
-    private void renderList(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderList(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         UiTheme t = UiTheme.current();
         int x = innerLeft(), right = innerRight();
         int y = secY0();
@@ -1324,7 +1325,7 @@ public final class SettingsView {
     }
 
     /** 分区页本身。 */
-    private void renderSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行
         // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
         // 表单卡自己是活的,拿的是屏幕给 renderCard 的真实坐标。
@@ -1362,7 +1363,7 @@ public final class SettingsView {
         }
     }
 
-    private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderProviderSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         profileList().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.util.Util.getMillis());
         if (addingProvider) formCard(Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), providerForm()::render);
@@ -1388,7 +1389,7 @@ public final class SettingsView {
 
     // ---- MCP section: external server list with a live on/off switch per row ----
 
-    private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderMcpSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         mcpListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.util.Util.getMillis());
         if (addingMcp) {
@@ -1450,7 +1451,7 @@ public final class SettingsView {
 
     // ---- Persona section render + hit-test ----
 
-    private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderPersonaSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         personaListPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.util.Util.getMillis());
         if (addingPersona) formCard(Component.translatable("numen.persona.title"), personaForm()::render);
@@ -1720,7 +1721,7 @@ public final class SettingsView {
         return false;
     }
 
-    public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
+    public void renderOverlays(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         loadPalette();
     }
 }

@@ -5,6 +5,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.function.IntPredicate;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.server.players.NameAndId;
 
 /** {@link IPermissions} 的模组实现(Fabric、NeoForge 共用):房主,或 op 等级。 */
 public final class ModPermissions implements IPermissions {

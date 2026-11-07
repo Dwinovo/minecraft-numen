@@ -4,8 +4,9 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.mixin.inject.ChatComponentAccessor;
 
-import net.minecraft.client.GuiMessage;
-import net.minecraft.client.GuiMessageTag;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessageSource;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
@@ -85,11 +86,11 @@ public final class ChatLines {
             MutableComponent line = name(companionName)
                     .append(Component.literal(partial).withColor(TEXT))
                     .append(Component.literal("▌").withColor(OWN));
-            // 同原版 addMessage(Component) 的标签与入栏顺序,只是不记日志:
+            // 同原版 addClientSystemMessage 的来源、标签与入栏顺序,只是不记日志:
             // 日志里只留定格行,不留打字机的每一帧
             Minecraft mc = Minecraft.getInstance();
-            GuiMessage message = new GuiMessage(mc.gui.getGuiTicks(), line, null,
-                    mc.isSingleplayer() ? GuiMessageTag.systemSinglePlayer() : GuiMessageTag.system());
+            GuiMessage message = new GuiMessage(mc.gui.getGuiTicks(), line, null, GuiMessageSource.SYSTEM_CLIENT,
+                    GuiMessageTag.systemSinglePlayer());
             acc.numen$addMessageToDisplayQueue(message);
             acc.numen$addMessageToQueue(message);
             LIVE.put(companion, message);
@@ -124,6 +125,6 @@ public final class ChatLines {
     }
 
     private static void add(Component line) {
-        Minecraft.getInstance().gui.getChat().addMessage(line);
+        Minecraft.getInstance().gui.getChat().addClientSystemMessage(line);
     }
 }

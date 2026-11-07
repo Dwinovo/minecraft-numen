@@ -59,7 +59,7 @@ public final class ServerBrains {
         NoteBook.init(uuid -> {
             Home home = homes.companion(uuid);
             return new Home(home.dir().resolve("memory"), home.io());
-        }, () -> (int) (server.overworld().getDayTime() / 24000L));
+        }, () -> (int) (server.overworld().getOverworldClockTime() / 24000L));
         Modules.init(companion -> hub.library(Modules.KIND, ownerOf(registry, companion)));
         SkillRegistry.init(companion -> hub.library(SkillRegistry.KIND, ownerOf(registry, companion)));
         // 目标模组只在客户端的联动,按主人的客户端提供什么显示给她的名字空间:同伴到主人的对应在这里接上

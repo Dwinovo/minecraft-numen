@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -50,7 +50,7 @@ public final class PinnedGoal {
      * @param shownH 这一帧露出多高(展开/收起的过渡由宿主按帧推进);超出内容高按内容高算
      * @return 内容的完整高度——宿主拿它当过渡的目标
      */
-    public static int renderOpen(GuiGraphics g, Font font, GoalState goal, int x, int w, int top, int bottom,
+    public static int renderOpen(GuiGraphicsExtractor g, Font font, GoalState goal, int x, int w, int top, int bottom,
                                  int shownH, long nowMs) {
         UiTheme th = UiTheme.current();
         int ix = x + PAD + 12;

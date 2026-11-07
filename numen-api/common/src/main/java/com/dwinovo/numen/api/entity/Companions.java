@@ -530,7 +530,7 @@ public final class Companions {
 
     /**
      * 游戏模式落地,召唤表单和编辑卡同一道门。创造档过权限门:主人有 /gamemode
-     * 权限(等级 2)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
+     * 权限(COMMANDS_GAMEMASTER)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
      * 都不满足(伪造/竞态)按生存并说明——同伴的模式上限 = 主人的上限。
      */
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {

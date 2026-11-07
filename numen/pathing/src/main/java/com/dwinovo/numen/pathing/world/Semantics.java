@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FallingBlock;
-import net.minecraft.world.level.block.FarmBlock;
+import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
@@ -35,6 +35,15 @@ import net.minecraft.world.level.pathfinder.NodeEvaluator;
  * <p>碰撞箱随世界或身体变化的方块也在这里点明({@link #dynamicCollision}),几何那几个类据此对它们不走缓存。
  */
 public final class Semantics {
+
+    /**
+     * 这个维度倒出的水当场蒸发(下界)。原版倒桶读的是环境属性 {@code water_evaporates},按位置读;它在原版里只由维度类型
+     * 给定(生物群系不改它),所以这里直接读维度类型自带的那一份,搜索线程拿着快照里的这个布尔就够了,不必按格去问世界。
+     */
+    public static boolean waterEvaporates(net.minecraft.world.level.Level level) {
+        var attribute = net.minecraft.world.attribute.EnvironmentAttributes.WATER_EVAPORATES;
+        return level.dimensionType().attributes().applyModifier(attribute, attribute.defaultValue());
+    }
 
     /** 一格的语义种类。路线规格按种类排除格子,用的就是这张表。 */
     public enum Kind {
@@ -155,7 +164,7 @@ public final class Semantics {
         if (block instanceof BasePressurePlateBlock || block instanceof TripWireBlock) {
             bits |= bit(Kind.TRIGGER);
         }
-        if (block instanceof FarmBlock || block instanceof TurtleEggBlock) {
+        if (block instanceof FarmlandBlock || block instanceof TurtleEggBlock) {
             bits |= bit(Kind.FRAGILE);
         }
         return bits;

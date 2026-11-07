@@ -314,7 +314,7 @@ public final class NumenEvents {
     private static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
                              String text, boolean urgent, com.google.gson.JsonObject result) {
         MinecraftServer server = companion.level().getServer();
-        EventQueue.Entry plain = entry(server.overworld().getDayTime(), type, attrs, text,
+        EventQueue.Entry plain = entry(server.overworld().getOverworldClockTime(), type, attrs, text,
                 System.currentTimeMillis(), urgent);
         EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
         UUID uuid = companion.getUUID();

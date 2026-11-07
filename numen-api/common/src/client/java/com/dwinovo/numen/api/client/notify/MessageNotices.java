@@ -20,7 +20,7 @@ import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.UUID;
 
@@ -79,7 +79,7 @@ public final class MessageNotices {
     // ---- 画 ----
 
     /** HUD 层:没开界面的时候。开着界面时 HUD 在界面底下,改由 {@link #renderOver} 画在上面。 */
-    public static void renderHud(GuiGraphics g) {
+    public static void renderHud(GuiGraphicsExtractor g) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null) return;
         com.dwinovo.numen.api.client.ui.SafeUi.run("message-notices",
@@ -87,11 +87,11 @@ public final class MessageNotices {
     }
 
     /** 任何界面画完之后:卡片压在界面上面,指针停上去就不淡。 */
-    public static void renderOver(GuiGraphics g, int mouseX, int mouseY) {
+    public static void renderOver(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         com.dwinovo.numen.api.client.ui.SafeUi.run("message-notices", () -> render(g, mouseX, mouseY, true));
     }
 
-    private static void render(GuiGraphics g, int mouseX, int mouseY, boolean visible) {
+    private static void render(GuiGraphicsExtractor g, int mouseX, int mouseY, boolean visible) {
         if (STACK.isIdle()) return;
         long now = Util.getMillis();
         for (var p : STACK.placed(now)) {
@@ -111,7 +111,7 @@ public final class MessageNotices {
     }
 
     /** 一张卡:和左栏一行同一个摆法——脸、名字一行、最后一句一行,未读数的角标贴右端。 */
-    private static void drawCard(GuiGraphics g, Font font, Said s, int x, int y, float opacity, boolean hot) {
+    private static void drawCard(GuiGraphicsExtractor g, Font font, Said s, int x, int y, float opacity, boolean hot) {
         UiTheme t = UiTheme.current();
         var surface = new McDrawSurface(g, font);
         GuiAlpha.set(Math.max(0.05f, opacity));

@@ -47,9 +47,10 @@ final class Landings {
 
     /**
      * 天然实心方块:土、石、沙、陶瓦、砾石、黏土、雪块、末地石。判据只在这里,不认树叶、玻璃、半砖之类。
+     * 土认 {@code #minecraft:substrate_overworld}:泥土、草方块、灰化土、菌丝、泥巴、苔藓块都在里面({@code #minecraft:dirt} 只剩三种泥土)。
      */
     static boolean natural(BlockState state) {
-        return state.is(BlockTags.DIRT) || state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(BlockTags.BASE_STONE_NETHER)
+        return state.is(BlockTags.SUBSTRATE_OVERWORLD) || state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(BlockTags.BASE_STONE_NETHER)
                 || state.is(BlockTags.SAND) || state.is(BlockTags.TERRACOTTA) || state.is(Blocks.GRAVEL) || state.is(Blocks.CLAY)
                 || state.is(Blocks.SNOW_BLOCK) || state.is(Blocks.END_STONE);
     }

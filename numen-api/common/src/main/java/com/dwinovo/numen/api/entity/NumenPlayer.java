@@ -460,6 +460,10 @@ public final class NumenPlayer extends ServerPlayer {
     /**
      * 挨打。原样交给父类结算,只在真的掉了血之后广播一条 {@code HURT}。
      *
+     * <p>1.21.2 起原版把带返回值的那个口挪到了 {@code hurtServer}——{@code hurt} 变成
+     * 返回 void,判断不了这一下有没有真的落上。挂在这里反而更贴切:同伴的身体本来
+     * 就活在服务端。
+     *
      * <p>发在这里而不是 tick 里扫 {@code hurtTime}:扫的话拿不到来源和伤害量
      * (下一次伤害会盖掉 {@code getLastDamageSource}),而监听者要靠这两样分情况。
      * 返回 false 表示这次伤害被挡下/免疫了,那不是"受伤",不发。
@@ -557,6 +561,13 @@ public final class NumenPlayer extends ServerPlayer {
 
     @Override
     public void tick() {
+        // 脚下的区块还没加载好就整刻不动,等玩家票据把它载进来(她进世界、跨区块时票据已经跟着她挪了,见 Physics)。
+        // 26.x 原版 tick 里读方块(isInWall 等)碰到未加载的区块会同步加载,那张票不等区块载完就过期:站在未加载区块里每刻
+        // tick 的身体会"同步加载、票过期、卸载、再加载"地每刻抽一轮,任务队列只涨不落,直到内存耗尽。
+        if (level() instanceof ServerLevel serverLevel
+                && serverLevel.getChunkSource().getChunkNow(chunkPosition().x(), chunkPosition().z()) == null) {
+            return;
+        }
         // 死了的身体不再走物理、不再收拾背包:它在等 Companions.respawnDead 代她点"重生",重生以后是原版换上来的新身体
         if (isDeadOrDying()) {
             return;

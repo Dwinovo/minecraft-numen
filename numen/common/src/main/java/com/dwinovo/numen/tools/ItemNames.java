@@ -37,7 +37,7 @@ public final class ItemNames {
     public static Matches find(String query) {
         return find(query, BuiltInRegistries.ITEM.stream().filter(item -> item != Items.AIR)
                 .map(item -> new Match(BuiltInRegistries.ITEM.getKey(item).toString(),
-                        item.getName().getString())));
+                        item.getDefaultInstance().getItemName().getString())));
     }
 
     /**

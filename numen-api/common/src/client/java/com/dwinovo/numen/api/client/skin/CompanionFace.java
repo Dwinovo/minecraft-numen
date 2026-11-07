@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.CompanionPortrait;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.world.entity.player.PlayerSkin;
 
 import java.util.List;
@@ -36,14 +36,14 @@ public final class CompanionFace {
      *
      * @param skin 回退用的皮肤(Numen API 一直拿得到,所以回退永远可用)
      */
-    public static void draw(GuiGraphics g, UUID companion, PlayerSkin skin,
+    public static void draw(GuiGraphicsExtractor g, UUID companion, PlayerSkin skin,
                             int x, int y, int size) {
         if (drawnByPlugin(g, companion, x, y, size)) return;
-        PlayerFaceRenderer.draw(g, skin, x, y, size);
+        PlayerFaceExtractor.extractRenderState(g, skin, x, y, size, -1);
     }
 
     /** 按注册顺序问,第一个认领的胜出。 */
-    private static boolean drawnByPlugin(GuiGraphics g, UUID companion, int x, int y, int size) {
+    private static boolean drawnByPlugin(GuiGraphicsExtractor g, UUID companion, int x, int y, int size) {
         for (CompanionPortrait p : PROVIDERS) {
             try {
                 if (p.draw(g, companion, x, y, size)) return true;

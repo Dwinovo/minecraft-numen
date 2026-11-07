@@ -111,6 +111,10 @@ public final class CompanionFactory {
         if (player.getOwnerUuid() == null) {
             player.setOwnerUuid(ownerUuid);
         }
+        // 1.21.9+ 把「等区块 + 挪出生点 + 内部读档」整段搬去了配置期的
+        // PrepareSpawnTask(只有真实登录走),placeNewPlayer 不再阻塞、不再挪位、
+        // 也不再碰 .dat——手工构造的身体直接 join,位置由上面的显式恢复与下面的
+        // 显式落点全权负责。
         server.getPlayerList().placeNewPlayer(connection, player,
                 CommonListenerCookie.createInitial(profile, false));
         // 加入之后平台要做的事(Paper:权限委托给主人)

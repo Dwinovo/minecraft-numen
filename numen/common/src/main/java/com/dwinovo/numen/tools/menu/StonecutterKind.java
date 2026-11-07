@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.inventory.InvApi.Stack;
+import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.SelectableRecipe;
@@ -14,6 +15,7 @@ import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 
 /**
  * 切石机:放进输入格的东西能切出的配方(产物与每次的数量),选一个就是按钮 = 配方序号(编号减一);选好之后结果格才出东西,拿走它是

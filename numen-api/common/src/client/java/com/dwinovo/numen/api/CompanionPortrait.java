@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.UUID;
 
@@ -43,5 +43,5 @@ public interface CompanionPortrait {
      * @param size      边长(像素)
      * @return {@code true} = 我画了;{@code false} = 我不画,交给 Numen API
      */
-    boolean draw(GuiGraphics g, UUID companion, int x, int y, int size);
+    boolean draw(GuiGraphicsExtractor g, UUID companion, int x, int y, int size);
 }

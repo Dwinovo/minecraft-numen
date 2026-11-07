@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools;
 
 import net.minecraft.core.HolderLookup;
+import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
@@ -26,13 +27,13 @@ public final class RecipeProbe {
     private RecipeProbe() {}
 
     /** 枚举合成配方的产出——空输入 assemble(shaped/shapeless 不看输入)。 */
-    public static ItemStack resultOf(CraftingRecipe recipe, HolderLookup.Provider registries) {
-        return probe(() -> recipe.assemble(CraftingInput.EMPTY, registries));
+    public static ItemStack resultOf(CraftingRecipe recipe) {
+        return probe(() -> recipe.assemble(CraftingInput.EMPTY));
     }
 
     /** 枚举单输入配方(熔炼/切石)的产出——空输入 assemble(它们同样不看输入)。 */
-    public static ItemStack resultOf(Recipe<SingleRecipeInput> recipe, HolderLookup.Provider registries) {
-        return probe(() -> recipe.assemble(new SingleRecipeInput(ItemStack.EMPTY), registries));
+    public static ItemStack resultOf(Recipe<SingleRecipeInput> recipe) {
+        return probe(() -> recipe.assemble(new SingleRecipeInput(ItemStack.EMPTY)));
     }
 
     /**

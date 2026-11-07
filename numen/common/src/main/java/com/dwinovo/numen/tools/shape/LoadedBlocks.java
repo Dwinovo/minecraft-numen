@@ -99,7 +99,7 @@ class LoadedBlocks {
         Set<Long> chunks = new LinkedHashSet<>();
         for (int cx = minX >> 4; cx <= maxX >> 4; cx++) {
             for (int cz = minZ >> 4; cz <= maxZ >> 4; cz++) {
-                chunks.add(ChunkPos.asLong(cx, cz));
+                chunks.add(ChunkPos.pack(cx, cz));
             }
         }
         requireChunks(chunks);

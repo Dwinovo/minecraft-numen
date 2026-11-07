@@ -17,7 +17,7 @@ import net.minecraft.world.level.saveddata.SavedDataType;
  */
 public final class NavClock extends SavedData {
 
-    private static final String NAME = "numen_nav_clock";
+    private static final net.minecraft.resources.Identifier NAME = net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "nav_clock");
     private static final SavedDataType<NavClock> TYPE = new SavedDataType<>(NAME, NavClock::new,
             MapCodec.unitCodec(NavClock::new), DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 

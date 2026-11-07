@@ -32,7 +32,7 @@ public class NumenMod implements ModInitializer {
                 (message, sender, params) -> !com.dwinovo.numen.api.brain.ChatRoutes.take(sender,
                         message.signedContent()));
 
-        net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
+        net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register(
                 (player, origin, destination) -> PlayerSessions.changedDimension(player));
 
         // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。

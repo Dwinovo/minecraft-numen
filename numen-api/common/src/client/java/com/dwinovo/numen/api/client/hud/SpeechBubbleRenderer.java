@@ -27,7 +27,7 @@ import java.util.UUID;
  *
  * <p>从玩家实体渲染的提交入口进入(mixin,与名牌同一条管线):实体通道是
  * 光影/着色器正确处理的路径,世界渲染阶段的裸几何在 Iris 下会被管线
- * 吃掉只剩残影。几何一律挂在名牌同款的 {@code RenderType.text} 上
+ * 吃掉只剩残影。几何一律挂在名牌同款的 {@code RenderTypes.text} 上
  * (白色底图 + 顶点着色),文字全亮度——夜里也得看得清她在说什么。
  *
  * <p>配色与层次照 Telegram 她那一侧的气泡,形状是 MC 的方角:底色是她的气泡色({@code aiFill}),
@@ -81,7 +81,7 @@ public final class SpeechBubbleRenderer {
      */
     public static void render(AbstractClientPlayer body, PoseStack poseStack,
                               SubmitNodeCollector collector,
-                              net.minecraft.client.renderer.state.CameraRenderState camera) {
+                              net.minecraft.client.renderer.state.level.CameraRenderState camera) {
         // 崩溃护栏:实体渲染通道里的异常会带走整个渲染线程——这里绝不外抛
         com.dwinovo.numen.api.client.ui.SafeUi.run("speech-bubble",
                 () -> renderInner(body, poseStack, collector, camera));
@@ -89,7 +89,7 @@ public final class SpeechBubbleRenderer {
 
     private static void renderInner(AbstractClientPlayer body, PoseStack poseStack,
                                     SubmitNodeCollector collector,
-                                    net.minecraft.client.renderer.state.CameraRenderState camera) {
+                                    net.minecraft.client.renderer.state.level.CameraRenderState camera) {
         UUID uuid = body.getUUID();
         SpeechBubbles.View view = SpeechBubbles.view(uuid);
         Minecraft mc = Minecraft.getInstance();

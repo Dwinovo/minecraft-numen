@@ -6,7 +6,7 @@ import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 import java.util.UUID;
@@ -23,7 +23,7 @@ public final class ConversationFaces {
 
     private ConversationFaces() {}
 
-    public static void draw(GuiGraphics g, Conversation c, int x, int y, int size) {
+    public static void draw(GuiGraphicsExtractor g, Conversation c, int x, int y, int size) {
         UUID her = Conversations.instance().soloOf(c);
         if (her != null) {
             CompanionFace.draw(g, her, KnownSkins.of(her), x, y, size);
@@ -39,7 +39,7 @@ public final class ConversationFaces {
         g.pose().pushMatrix();
         g.pose().translate(x + (size - tw) / 2f, y + (size - th) / 2f + scale * 0.5f);
         g.pose().scale(scale, scale);
-        g.drawString(font, letters, 0, 0, 0xFFFFFFFF, false);
+        g.text(font, letters, 0, 0, 0xFFFFFFFF, false);
         g.pose().popMatrix();
     }
 

@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -13,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * 把东西拿到手上,照原版玩家的几个按键:数字键切换快捷栏选中的格({@code handleSetCarriedItem}),中键把背包深处的
- * 东西换进快捷栏({@code handlePickItem},换进的是原版挑的那一格——先空格,再不是附魔过的,原来那件换回背包,不丢),
+ * 东西换进快捷栏(服务端挑东西的那一步 {@code tryPickItem},换进的是原版挑的那一格——先空格,再不是附魔过的,原来那件换回背包,不丢),
  * F 键交换主副手,创造模式中键凭空取一叠。每一次真的换了都交回一个 {@link BodyAction},由调用方记进结局。同伴的是
  * {@link NumenPlayer#hotbar}。
  */

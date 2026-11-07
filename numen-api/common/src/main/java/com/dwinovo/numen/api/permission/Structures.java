@@ -39,11 +39,11 @@ public record Structures(List<Piece> pieces) {
     /** {@code center} 周围 {@code chunkRadius} 个区块内、已加载区块里的结构件。主线程。 */
     public static Structures capture(ServerLevel level, BlockPos center, int chunkRadius) {
         Registry<Structure> registry = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
-        ChunkPos at = new ChunkPos(center);
+        ChunkPos at = ChunkPos.containing(center);
         List<Piece> pieces = new ArrayList<>();
         for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
             for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
-                ChunkAccess chunk = level.getChunkSource().getChunkNow(at.x + dx, at.z + dz);
+                ChunkAccess chunk = level.getChunkSource().getChunkNow(at.x() + dx, at.z() + dz);
                 if (chunk == null) {
                     continue;
                 }

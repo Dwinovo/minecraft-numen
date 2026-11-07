@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.config;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.platform.Services;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 
 /**
  * 谁能改服务器上的配置(模型档案与 key、外部大脑、代理、默认人设)。配置的读写入口、界面都问这里,工具和界面里不另写;

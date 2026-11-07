@@ -9,11 +9,10 @@ import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.locale.Language;
 import net.minecraft.world.item.ItemStack;
@@ -101,7 +100,7 @@ public final class ConsentMessage {
         return y + (rows(card) - 1) * ROW_H + (ROW_H - font.lineHeight) / 2 + 1;
     }
 
-    public static void drawList(GuiGraphics g, Font font, ConsentCards.Card card, int x, int y, int w) {
+    public static void drawList(GuiGraphicsExtractor g, Font font, ConsentCards.Card card, int x, int y, int w) {
         UiTheme th = UiTheme.current();
         List<ConsentRequestPayload.Line> lines = card.request().lines();
         int textDy = (ROW_H - font.lineHeight) / 2 + 1;
@@ -132,7 +131,7 @@ public final class ConsentMessage {
     }
 
     /** 末行淡字:"以后都允许"会记下什么;没有这一行({@link #scope} 为空)什么也不画。 */
-    private static void drawScope(GuiGraphics g, Font font, ConsentCards.Card card, UiTheme th, int x, int ty, int w) {
+    private static void drawScope(GuiGraphicsExtractor g, Font font, ConsentCards.Card card, UiTheme th, int x, int ty, int w) {
         String scope = scope(card);
         if (!scope.isEmpty()) {
             Nb.text(g, font, Nb.clip(font, scope, w), x, ty, th.textDim());
@@ -159,7 +158,7 @@ public final class ConsentMessage {
      * 一件事本身:动词、图标(没有图标写名字)、数量。名字在 {@code room} 里放不下就截短——一条指令可以很长,
      * 不能冲出气泡。返回画完的右缘。
      */
-    private static int drawThing(GuiGraphics g, Font font, UiTheme th, ConsentRequestPayload.Line line,
+    private static int drawThing(GuiGraphicsExtractor g, Font font, UiTheme th, ConsentRequestPayload.Line line,
                                  int lx, int textY, int room) {
         int main = main(th, line);
         String verb = verb(line);
@@ -171,7 +170,7 @@ public final class ConsentMessage {
             pose.pushMatrix();
             pose.translate(lx, textY - 2);
             pose.scale(ICON_SCALE, ICON_SCALE);
-            g.renderFakeItem(new ItemStack(line.icon()), 0, 0);
+            g.fakeItem(new ItemStack(line.icon()), 0, 0);
             pose.popMatrix();
             lx += ICON + 1;
         } else {
@@ -279,7 +278,7 @@ public final class ConsentMessage {
         return InlineKeyboard.height(keys(font, w));
     }
 
-    public static void drawKeyboard(GuiGraphics g, Font font, ConsentCards.Card card, int x, int y, int w,
+    public static void drawKeyboard(GuiGraphicsExtractor g, Font font, ConsentCards.Card card, int x, int y, int w,
                                     int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
         long now = System.currentTimeMillis();
@@ -309,12 +308,12 @@ public final class ConsentMessage {
             String label = Nb.clip(font, ConsentCards.Card.label(i), k.w() - KEY_PAD * 2);
             int ty = ky + (k.h() - font.lineHeight) / 2 + 1;
             Nb.text(g, font, label, kx + (k.w() - font.width(label)) / 2, ty,
-                    withAlpha(th.serviceFg(), base * alpha));
+                    withAlpha(th.serviceFg(), alpha));
         }
     }
 
     /** 按下去的那一圈(Telegram 的按钮波纹,方角版):从按下的那一点往外漾开,边走边淡,裁在键里。 */
-    private static void drawRipple(GuiGraphics g, ConsentCards.Card card, InlineKeyboard.Key k, int kx, int ky,
+    private static void drawRipple(GuiGraphicsExtractor g, ConsentCards.Card card, InlineKeyboard.Key k, int kx, int ky,
                                    long now, UiTheme th) {
         float t = (now - card.pressedAt) / (float) RIPPLE_MS;
         if (t >= 1f) {

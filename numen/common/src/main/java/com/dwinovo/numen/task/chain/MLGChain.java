@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;

@@ -20,7 +20,7 @@ import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.skin.SkinRef;
 import com.google.gson.JsonObject;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.Identifier;
@@ -413,7 +413,7 @@ public final class SkinPickerPanel extends ModalCard {
             }
             case Row.Default ignored -> {
                 paintBase(s, c, index, at, h, hot);
-                PlayerFaceRenderer.draw(s.graphics(), DefaultPlayerSkin.get(host.uuid()), tx, at + (h - FACE) / 2, FACE);
+                PlayerFaceExtractor.extractRenderState(s.graphics(), DefaultPlayerSkin.get(host.uuid()), tx, at + (h - FACE) / 2, FACE);
                 s.drawText(t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT), tx + FACE + 6, at + 6,
                         c.textPrimary(), false);
                 if (worn == null) {
@@ -426,7 +426,7 @@ public final class SkinPickerPanel extends ModalCard {
                 Identifier face = choice.usable() ? SkinTextures.faceOf(choice.where() + ":" + choice.name(), choice.png())
                         : null;
                 if (face != null) {
-                    PlayerFaceRenderer.draw(s.graphics(), face, tx, at + (h - FACE) / 2, FACE, true, false, -1);
+                    PlayerFaceExtractor.extractRenderState(s.graphics(), face, tx, at + (h - FACE) / 2, FACE, true, false, -1);
                 }
                 int right = listX + listW - 6;
                 String tag = choice.usable() ? t(SkinProfile.VARIANT_SLIM.equals(choice.variant())

@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
  * 每维度一份:玩家放过方块的格子,和是谁放的。对象组 {@code self}、{@code owner}、{@code other} 的来源,也是"这东西是谁的"这个概念在
@@ -113,7 +114,7 @@ public final class PlacedBlocks extends SavedData {
     // 1.21.5 codec 化的 SavedDataType:存储层自己驱动(反)序列化,save()/load() 重写不复存在;
     // 读不出来时落回构造器。
     private static final SavedDataType<PlacedBlocks> TYPE = new SavedDataType<>(
-            "numen_placed", PlacedBlocks::new, CODEC, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "placed"), PlacedBlocks::new, CODEC, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong})与放的人。 */
     private final ConcurrentHashMap<Long, ConcurrentHashMap<Long, Placer>> byChunk = new ConcurrentHashMap<>();
@@ -203,7 +204,7 @@ public final class PlacedBlocks extends SavedData {
      * 都可以调。垫路的记号({@link Way#PATH})不算。要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
      */
     public boolean isBuilt(long cell) {
-        ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
+        ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.pack(BlockPos.of(cell)));
         Placer placer = cells == null ? null : cells.get(cell);
         return placer != null && placer.way() == Way.BUILT;
     }
@@ -246,7 +247,7 @@ public final class PlacedBlocks extends SavedData {
             for (int dy = -radius; dy <= radius; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
+                    ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.pack(cursor));
                     if (cells == null || !cells.containsKey(cursor.asLong())) {
                         continue;
                     }
@@ -270,7 +271,7 @@ public final class PlacedBlocks extends SavedData {
     }
 
     private void put(long cell, Placer placer) {
-        byChunk.computeIfAbsent(ChunkPos.asLong(BlockPos.of(cell)), k -> new ConcurrentHashMap<>()).put(cell, placer);
+        byChunk.computeIfAbsent(ChunkPos.pack(BlockPos.of(cell)), k -> new ConcurrentHashMap<>()).put(cell, placer);
     }
 
     private List<Long> unknownCells() {
@@ -302,6 +303,6 @@ public final class PlacedBlocks extends SavedData {
     }
 
     private static long chunkKey(BlockPos pos) {
-        return ChunkPos.asLong(pos);
+        return ChunkPos.pack(pos);
     }
 }

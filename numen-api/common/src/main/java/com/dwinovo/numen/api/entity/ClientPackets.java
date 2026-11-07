@@ -24,6 +24,7 @@ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSetBeaconPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.Entity;
@@ -176,20 +177,6 @@ public final class ClientPackets {
     /** 玩家指令:起床、鞘翅起飞、骑着时开坐骑的物品栏……。 */
     public void command(ServerboundPlayerCommandPacket.Action action) {
         body.connection.handlePlayerCommand(new ServerboundPlayerCommandPacket(body, action));
-    }
-
-    /**
-     * 右键实体上的某一点({@code INTERACT_AT},盔甲架摆装备取装备走这条):{@code at} 是相对实体位置的点,和真客户端发的一样。
-     * 真客户端接着看自己预测的结果,没被吃掉才再发一个 {@code INTERACT};这里没有预测,用"手里的东西、对方身上的装备有没有变"代它回答。
-     *
-     * @return 这一下起了作用(手里的东西或对方身上的装备变了):调用方不必再按 {@code INTERACT}
-     */
-    public boolean interactAt(Entity target, InteractionHand hand, Vec3 at) {
-        ItemStack held = body.getItemInHand(hand).copy();
-        List<ItemStack> worn = equipment(target);
-        body.connection.handleInteract(ServerboundInteractPacket.createInteractionPacket(target,
-                body.isShiftKeyDown(), hand, at));
-        return !ItemStack.matches(held, body.getItemInHand(hand)) || !same(worn, equipment(target));
     }
 
     /**

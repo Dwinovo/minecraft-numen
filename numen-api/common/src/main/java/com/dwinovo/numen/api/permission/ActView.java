@@ -89,7 +89,7 @@ final class ActView implements Act {
             return BuiltInRegistries.BLOCK.wrapAsHolder(block).is(TagKey.create(Registries.BLOCK, id));
         }
         if (action.entity() != null) {
-            return action.entity().getType().is(TagKey.create(Registries.ENTITY_TYPE, id));
+            return action.entity().is(TagKey.create(Registries.ENTITY_TYPE, id));
         }
         return action.item() != null
                 && BuiltInRegistries.ITEM.wrapAsHolder(action.item()).is(TagKey.create(Registries.ITEM, id));

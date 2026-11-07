@@ -8,7 +8,7 @@ import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 
 import java.util.List;
@@ -42,7 +42,7 @@ final class MembersPage {
     }
 
     /** {@code live} = 这一页整页在场、没有模态压着:只有这时才亮悬停。{@code status} 给每只一行"在干什么"。 */
-    void render(GuiGraphics g, Conversation conv, int x, int y, int w, int mouseX, int mouseY,
+    void render(GuiGraphicsExtractor g, Conversation conv, int x, int y, int w, int mouseX, int mouseY,
                 boolean live, Function<UUID, String> status) {
         this.x = x;
         this.y = y;

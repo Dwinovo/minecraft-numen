@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * 皮肤库条目的预览纹理缓存:把条目的原图(服务端推来的 png 字节)注册成动态纹理,供列表行画头像
- * (PlayerFaceRenderer)。按条目的 key 缓存,同一个 key 来了不同的图(重签换了图)就换掉旧纹理。仅客户端渲染线程使用。
+ * (PlayerFaceExtractor)。按条目的 key 缓存,同一个 key 来了不同的图(重签换了图)就换掉旧纹理。仅客户端渲染线程使用。
  */
 public final class SkinTextures {
 

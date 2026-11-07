@@ -13,7 +13,7 @@ import java.util.UUID;
  * <ul>
  *   <li><b>NeoForge</b> — NeoForge 自 1.21.4 代补丁起提前引入了后续 MC 版本的
  *       {@code SoundInstance.getStream(SoundBufferLibrary, Sound, boolean)}
- *       官方钩子(vanilla 1.21.11 仍没有),其 {@code SoundEngine.play} 直接调它。
+ *       官方钩子(vanilla 26.1.2 仍没有),其 {@code SoundEngine.play} 直接调它。
  *       该侧返回覆写了这个钩子的子类
  *       ({@code NeoEntityVoiceSound} / {@code NeoVoicePreviewSound}),零 mixin;</li>
  *   <li><b>Fabric</b> — 运行 vanilla 字节码,取数仍是
