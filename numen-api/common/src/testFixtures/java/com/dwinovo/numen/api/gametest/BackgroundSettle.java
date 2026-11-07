@@ -1,5 +1,10 @@
 package com.dwinovo.numen.api.gametest;
 
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ForkJoinPool;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.Util;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
@@ -27,6 +32,16 @@ import java.util.function.Supplier;
  * 主线程自己在一刻当中去取结论的(寻路的搜索),取的那一下等它做完({@link #await})。
  *
  * <p>等的时候主线程照常执行排给它的任务:后台那一头可能正等着主线程替它做一步(MCP 的请求列工具、读背包),不执行就互相等死。
+ *
+ * <p>除了套件登记的来源,原版的区块系统也是一个来源({@code chunksUnsettled}),每次都等。区块升格(加载好、方块刻、实体刻)走一串
+ * 跨线程的交接:玩家票据先经 {@code DistanceManager} 的节流排序器(在 {@code Util.backgroundExecutor()} 上跑)再排回区块的主线程
+ * 执行器才加上,加上之后要等区块主线程执行器的 {@code runDistanceManagerUpdates} 才排出升格;{@code ChunkMap.prepareAccessibleChunk}/
+ * {@code prepareTickingChunk} 的一步经 {@code ChunkMap} 的排序器转一道工作线程,{@code prepareEntityTickingChunk} 与确认升格的
+ * {@code onFullChunkStatusChange} 排在区块的主线程执行器上;生成与光照在工作线程,读档在存储 I/O 线程。区块的主线程执行器只在
+ * {@code MinecraftServer.pollTaskInternal} 里、且这一刻还有剩余墙钟时间({@code haveTime})时才执行——{@code managedBlock} 也一样,
+ * 它只让服务端自己的任务不看时间——而测试服两刻之间的 {@code GameTestServer.waitUntilNextTick} 只是 {@code runAllTasks},不睡:
+ * 一个区块哪一刻进实体刻({@code ServerLevel.isPositionEntityTicking}),要看工作线程赶没赶上、这一刻剩没剩时间,机器一忙就晚一两刻。
+ * 所以每次等的时候都亲手把各维的区块主线程执行器做空({@code runChunkTasks}),再等这些线程都停下,反复到全都落定,哪一刻升格就只看刻数。
  *
  * <p>等待有上限({@link #LIMIT_SECONDS}):到了还有没停下的,说明那一头卡住了,不是慢,抛出并点名是谁,服务器带着这句话停。
  */
@@ -80,13 +95,17 @@ public final class BackgroundSettle {
      * 直到后台那一头自己的时限到了才散。
      */
     private static void settle(MinecraftServer server) {
-        if (firstUnsettled() == null) {
+        runChunkTasks(server);
+        if (firstUnsettled(server) == null) {
             return;
         }
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(LIMIT_SECONDS);
         // 停下来的判断与报错用同一次读数:读完之后后台又动了是下一次等的事,不是卡住
         String[] unsettled = new String[1];
-        server.managedBlock(() -> (unsettled[0] = firstUnsettled()) == null || System.nanoTime() > deadline);
+        server.managedBlock(() -> {
+            runChunkTasks(server);
+            return (unsettled[0] = firstUnsettled(server)) == null || System.nanoTime() > deadline;
+        });
         if (unsettled[0] != null) {
             String why = "background work did not settle within " + LIMIT_SECONDS + " s: " + unsettled[0];
             LOG.error("[numen-gametest] {}", why);
@@ -94,11 +113,53 @@ public final class BackgroundSettle {
         }
     }
 
-    private static String firstUnsettled() {
+    private static String firstUnsettled(MinecraftServer server) {
         for (Supplier<String> source : SOURCES) {
             String unsettled = source.get();
             if (unsettled != null) {
                 return unsettled;
+            }
+        }
+        return chunksUnsettled(server);
+    }
+
+    /**
+     * 把各维的区块主线程执行器做空:排着的任务,和它每次取任务前先跑的票据与区块等级更新({@code runDistanceManagerUpdates})。
+     * 原版只在这一刻还有剩余墙钟时间时才做这些,这里不看时间。
+     */
+    private static void runChunkTasks(MinecraftServer server) {
+        for (ServerLevel level : server.getAllLevels()) {
+            while (level.getChunkSource().pollTask()) {
+                // 一次一件,做到没有为止
+            }
+        }
+    }
+
+    /**
+     * 原版的区块系统还有没落定的活:存储 I/O 线程、工作线程({@code Util.backgroundExecutor()}:生成、光照、两个排序器)在忙,
+     * 或者哪一维的区块主线程执行器里还排着任务。
+     *
+     * <p>判断在主线程上做,判的时候主线程自己不产生新活;各处按交接的方向查(存储 I/O 交给工作线程与主线程,工作线程交给主线程),
+     * 交出去的那一方在交完之前算忙,所以先查上游、后查下游,一件活不会在两次读数之间从没查的地方溜到查过的地方。排给区块主线程执行器的
+     * 任务由 {@code runChunkTasks} 做完。
+     *
+     * <p>两个池按这一版原版的具体类型取:{@code Util} 交出的是包着池的 {@code TracingExecutor},池在它的 {@code service()} 里,存储 I/O
+     * 是 {@code Executors.newCachedThreadPool} 出的 {@link ThreadPoolExecutor},工作线程是 {@link ForkJoinPool}。原版换了池的类型就在
+     * 第一刻的强转上抛出,不会悄悄当成已经落定。
+     */
+    private static String chunksUnsettled(MinecraftServer server) {
+        ThreadPoolExecutor io = (ThreadPoolExecutor) Util.ioPool().service();
+        if (io.getActiveCount() > 0 || !io.getQueue().isEmpty()) {
+            return "chunk storage I/O: " + io;
+        }
+        ForkJoinPool workers = (ForkJoinPool) Util.backgroundExecutor().service();
+        if (!workers.isQuiescent()) {
+            return "chunk workers (generation, lighting, task sorting): " + workers;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            ServerChunkCache chunks = level.getChunkSource();
+            if (chunks.getPendingTasksCount() > 0) {
+                return chunks.getPendingTasksCount() + " chunk tasks queued for the main thread in " + level.dimension().location();
             }
         }
         return null;
