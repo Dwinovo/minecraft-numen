@@ -145,6 +145,8 @@ class ReportTest {
                 "真做成了就不是失败");
         assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, true, false, true, List.of(), null),
                 "轮数用完不算她自己收的工");
+        assertNull(FailureTag.auto(false, EndReason.DONE, false, false, true, List.of(), null),
+                "基线的收场话是剧本写死的,不是她的自我评价");
     }
 
     /** 证据从具体到笼统:轨迹说的是这一趟自己的事,压过"整次运行里出过一次调用写错"。 */

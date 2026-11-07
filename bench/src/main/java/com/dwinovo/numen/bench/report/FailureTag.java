@@ -92,8 +92,9 @@ public enum FailureTag {
         if (outcome != null && CANNOT_PLAN.contains(outcome)) {
             return C;
         }
-        // 只有她自己收的工才算"说做完了";轮数、刻数用完时她说的话不算数,那几种的毛病在别处
-        if (claimedDone && end == EndReason.DONE) {
+        // 只有她自己收的工才算"说做完了";轮数、刻数用完时她说的话不算数,那几种的毛病在别处。
+        // 也只对真实模型问:基线的收场话是剧本写死的,不是她的自我评价
+        if (live && claimedDone && end == EndReason.DONE) {
             return E;
         }
         if (commandError) {
