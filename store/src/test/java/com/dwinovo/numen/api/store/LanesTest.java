@@ -56,6 +56,31 @@ class LanesTest {
     }
 
     @Test
+    void aForgottenLaneStaysBusyUntilItsSubmittedWritesAreDown() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Lanes lanes = new Lanes(pool, errors::add);
+            CountDownLatch release = new CountDownLatch(1);
+            lanes.io("a").executor().execute(() -> {
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            lanes.forget("a");
+
+            assertEquals("1 disk lane(s) still writing", lanes.busy(), "忘掉的车道还在写,照样算在里面");
+            assertFalse(lanes.drain(50, TimeUnit.MILLISECONDS), "停机排空也要等它");
+            release.countDown();
+            assertTrue(lanes.drain(5, TimeUnit.SECONDS));
+            assertEquals(null, lanes.busy());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void drainWaitsForTheWritesAlreadySubmittedAndGivesUpAtTheDeadline(@TempDir Path dir) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
