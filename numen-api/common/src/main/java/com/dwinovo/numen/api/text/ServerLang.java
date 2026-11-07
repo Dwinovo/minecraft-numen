@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.text;
 import com.dwinovo.numen.api.platform.Services;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.network.chat.MutableComponent;
@@ -211,12 +212,21 @@ public final class ServerLang {
             }
             try (Reader in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
                 for (Map.Entry<String, JsonElement> e : JsonParser.parseReader(in).getAsJsonObject().entrySet()) {
-                    out.put(e.getKey(), e.getValue().getAsString());
+                    out.put(e.getKey(), text(e.getValue()));
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException(modId + " 的 " + locale + " 语言文件读不出来", e);
             }
         }
         return out;
+    }
+
+    /**
+     * 一条译文的文字。NeoForge 许语言文件的值写成文本组件(数组或对象,NeoForge 21.0 自己的语言文件就有),它的语言表里存的是
+     * 组件的字面文字;这里取同一份字面文字,样式不带。
+     */
+    private static String text(JsonElement value) {
+        return value.isJsonPrimitive() ? value.getAsString()
+                : Component.Serializer.fromJson(value, RegistryAccess.EMPTY).getString();
     }
 }
