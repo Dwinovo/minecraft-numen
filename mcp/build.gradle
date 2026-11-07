@@ -1,0 +1,152 @@
+// numen-mcp:MCP 的服务端与客户端,纯 JVM 库——零 Minecraft 依赖、零 Numen API 回引,不认识同伴、大脑、游戏。
+// 协议这一层全用官方的实现:服务端是官方 Java SDK 的 Streamable HTTP 传输挂在内嵌的 Tomcat 上,客户端是官方 SDK 的客户端;
+// OAuth(只在客户端一侧,接入要登录的 MCP 服务器时用)的通用部分用 Nimbus,MCP 特有的几步(资源元数据发现、客户端注册的
+// 优先顺序、按 issuer 分开存凭据)自己写在这里。为什么这样选见 docs/adr。
+//
+// 它只认抽象接口:服务端问宿主"有哪些工具、调一次给什么正文、要问人时交给谁"(见 server 包),客户端把对方的工具交给宿主、
+// 把令牌存进宿主给的口。Numen API 实现这些接口。
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
+group = 'com.dwinovo.numen'
+
+// 可复现构建:同一份源码重复构建应得到同样的字节,这样重新发布是空提交,
+// 不会在制品仓里堆出一串"只有时间戳不同"的版本。去掉时间戳、固定条目顺序即可。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+base {
+    archivesName = 'numen-mcp'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 落盘的基础件(令牌库、审计日志):api 让消费方透视得到 Io 等类型。
+    api project(':store')
+    api 'org.slf4j:slf4j-api:2.0.16'
+    api 'com.google.code.gson:gson:2.10.1'
+    // 官方 MCP Java SDK(规范 2025-11-25,旧版客户端它自己协商)与 OAuth 用的 Nimbus 经下面的 relocatedSdk 交给编译与运行,不直接依赖。
+    // 服务端的 HTTP:SDK 的 Streamable HTTP 传输是个 Servlet,挂在内嵌 Tomcat 上(SDK 自己的测试也这样用)。
+    implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcat_version}"
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+/*
+ * 有几个库和游戏或别人带的同一套包名,同名的包只会有一份赢,输的一方缺类缺方法:
+ * - 官方 MCP Java SDK 的 JSON 走 Jackson 3(tools.jackson.*),Jackson 3 的注解仍是 2.x 的 com.fasterxml.jackson.annotation(要 2.20 以上)。
+ *   Minecraft 1.21.4 到 1.21.10 的客户端与服务端自带 Jackson 2.13.4(客户端依赖里钉死版本),整合包里别的模组嵌套带 jackson-annotations、
+ *   Paper 上别的插件带 Jackson 都很常见。
+ * - OAuth 的通用部分(PKCE、令牌端点、元数据、动态注册、JWT/issuer 校验)用 Nimbus:oauth2-oidc-sdk 与它带的 nimbus-jose-jwt、
+ *   content-type、lang-tag、json-smart、accessors-smart、jcip-annotations。同一段版本里游戏也自带这一族(oauth2-oidc-sdk 11.18、
+ *   nimbus-jose-jwt 9.40、json-smart 2.5.1,客户端钉死),比我们要的旧。
+ * (逐版核对过 1.20.1 到 26.3 的客户端 json 与服务端 libraries.list、NeoForge/Forge/Fabric 加载器与 Paper 的库,撞的只有这两族。)
+ * - YAML 数据格式用的 snakeyaml-engine:别的模组也常嵌套带它,两份同名包在模组层里是两个模块导出同一个包;它的清单还写着
+ *   Multi-Release 却没有多版本目录,Forge 47 到 49 读这种 jar 直接起不来。
+ *
+ * 所以这几样连同用到 Jackson 的 SDK 与 JSON Schema 校验打成一份 jar(下面的 relocatedSdk),tools.jackson、com.fasterxml.jackson.annotation、
+ * com.nimbusds、net.minidev、net.jcip、org.snakeyaml.engine 重定位到 com.dwinovo.numen.mcp.shaded 下,jar 里对它们的引用一起改写,
+ * 合成的 jar 用自己的清单。编译与运行都用这一份
+ * (下面的 api files),三个平台把它的类平铺进 Numen API 的发行 jar(见 numen-api-loader.gradle 与 numen-api/paper/build.gradle)。
+ * 本模块自己的 OAuth 代码直接 import 重定位后的 Nimbus 包名:被重写的只有那份 jar 一处,本模块的类、加载器的开发期运行、
+ * 发行 jar 的平铺都不用再过一遍重写。
+ * 剩下的依赖(Reactor、时间格式)和谁都不撞,照常按坐标传递,由各平台嵌套或平铺(Modules.nestedLibraries)。
+ * slf4j 由游戏(Minecraft 钉死在 2.0.16)与服务端(Paper)提供:SDK 子树里声明的更新版本不带进来,免得和游戏钉的版本打架;
+ * asm(json-smart 的传递依赖)也是游戏自带的,带进来会和加载器的 asm 在模块层里撞名。
+ */
+configurations {
+    relocatedLibraries {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+dependencies {
+    relocatedLibraries("io.modelcontextprotocol.sdk:mcp:${mcp_sdk_version}") { exclude group: 'org.slf4j' }
+    relocatedLibraries("com.nimbusds:oauth2-oidc-sdk:${nimbus_oauth_version}") { exclude group: 'org.slf4j'; exclude group: 'org.ow2.asm' }
+}
+// 进重定位那份 jar 的模块:SDK 自己、引用 Jackson 的、Nimbus 一族、snakeyaml-engine
+def relocatedModule = { String group ->
+    group in ['io.modelcontextprotocol.sdk', 'tools.jackson.core', 'tools.jackson.dataformat', 'com.fasterxml.jackson.core', 'com.networknt',
+              'com.nimbusds', 'net.minidev', 'com.github.stephenc.jcip', 'org.snakeyaml']
+}
+def relocatedSdk = tasks.register('relocatedSdk', ShadowJar) {
+    archiveClassifier = 'sdk'
+    configurations = [project.configurations.relocatedLibraries]
+    dependencies {
+        exclude { !relocatedModule(it.moduleGroup) }
+    }
+    ['tools.jackson', 'com.fasterxml.jackson.annotation', 'com.nimbusds', 'net.minidev', 'net.jcip', 'org.snakeyaml.engine'].each { pkg ->
+        relocate pkg, "com.dwinovo.numen.mcp.shaded.${pkg}"
+    }
+    // 好几个库带着同名的服务文件(jackson-core 与 YAML 数据格式都登记 TokenStreamFactory,jackson-databind 与 YAML 都登记 ObjectMapper):
+    // 合并要看到每一份,不能在合并之前按重名去掉(ShadowJar 默认的重名策略是丢弃后来的)
+    filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    mergeServiceFiles()
+    // 各库自己的模块描述符、清单与签名不进来:合成的这份不是它们中的任何一个。多版本目录也不进来:平铺进的发行 jar 不是
+    // 多版本 jar,那些类永远不会被加载,而 NeoForge 21.0 扫模组文件时读不了比 Java 21 新的类文件,每次起服报错
+    exclude 'module-info.class', 'META-INF/versions/**', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA',
+            'META-INF/maven/**'
+    // 多版本目录都去掉了,清单也就不声明 Multi-Release(ShadowJar 默认见到多版本的输入就加上;Forge 47 到 49 读声明了却没有
+    // 多版本目录的 jar 直接起不来)
+    addMultiReleaseAttribute = false
+}
+dependencies {
+    api files(relocatedSdk)
+    configurations.relocatedLibraries.resolvedConfiguration.resolvedArtifacts
+            .findAll { !relocatedModule(it.moduleVersion.id.group) }
+            .each { a -> api("${a.moduleVersion.id.group}:${a.name}:${a.moduleVersion.id.version}") { transitive = false } }
+}
+// 平台把这份 jar 的类平铺进发行 jar,从这里取
+ext.relocatedSdk = relocatedSdk
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 带 MC 版本后缀,理由同 ai/build.gradle:本模块零 MC 依赖,但各版本分支上的
+            // 这份源码并不相同,不带后缀就是十三条分支抢同一个坐标、谁最后发谁赢。
+            artifactId = "numen-mcp-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;
+            // CI 用 -Plocal_maven_url= 指到 checkout 出来的 numen-maven。
+            // 这里不写兜底默认值:属性缺了就当场报错,好过静默发到别处。
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

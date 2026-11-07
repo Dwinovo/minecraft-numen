@@ -1,0 +1,20 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_2","object":"response","status":"in_progress","output":[]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_2","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":2,"item_id":"msg_2","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":3,"item_id":"msg_2","output_index":0,"content_index":0,"delta":"挖到了"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":4,"item_id":"msg_2","output_index":0,"content_index":0,"delta":"八块铁。"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":5,"output_index":0,"item":{"id":"msg_2","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"text":"挖到了八块铁。"}],"phase":"final_answer","role":"assistant"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":6,"response":{"id":"resp_2","status":"completed","usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1024,"cache_write_tokens":64},"output_tokens":9,"total_tokens":1209}}}

@@ -1,0 +1,174 @@
+plugins {
+    id 'numen-loader'
+    id 'net.neoforged.moddev'
+}
+
+// 要读 Numen 的 gametest 与 testFixtures 源码集、Numen API 的开发期 gametest 源码集,它们得先配置好
+evaluationDependsOn(':numen:common')
+evaluationDependsOn(':numen-api:neoforge')
+
+dependencies {
+    // Numen API 同在本构建里。编译期看不见它的内部类(见 numen-loader.gradle),运行与数据生成要它在类路径上,
+    // 所以是 runtimeOnly:POM 里落成运行期依赖,玩家装 Numen 就带上它。
+    runtimeOnly project(':numen-api:neoforge')
+
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
+    // (它们不发布——没人需要依赖我们的联动代码)。
+    compileOnly project(':plugins:curios')
+    compileOnly project(':plugins:jei')
+    // Litematica 联动用 Loom 编译(Mojang 名),NeoForge 运行时也是 Mojang 名,同一份类原样可用;Loom 项目的默认变体是重映射成
+    // intermediary 的 jar,要的是 Mojang 名的那份。目标模组在 NeoForge 上是 Forgematica(它登记的模组 id 也叫 litematica)。
+    compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
+    // Bundle it into Numen's jar (Jar-in-Jar) so players install one file and get both mods.
+    jarJar(project(':numen-api:neoforge'))
+}
+
+/*
+ * GameTest:用例在 numen/common 与 numen/pathing 的 gametest 里,只用原版,经套件报到;这里只把它们的输出声明进模组 numen(见下面的
+ * mods)。加载器这一层的支持(登记套件入口、模拟主人连接的频道配法)属于 Numen API,在 numen-api/neoforge 的开发期小模组
+ * numen_api_gametest 里,这里把它声明进运行配置。用例与夹具不进发行 jar:jar 只收 main 的输出。
+ */
+
+// 这一次 GameTest 跑批带的有用例的模块,和它们的套件名(模块与套件名的对应在根 build.gradle 的 numenSuites 表里)。联动的 GameTest
+// 另开一次(它们的构建脚本里),不带这两个模块的用例。
+def gameTestModules = rootProject.ext.numenGameTestModules.collect { project(it) }
+def gameTestSuites = gameTestModules.collect { rootProject.ext.numenSuites[it.path].gametest }
+// 跑哪些套件:默认是这一次带的全部;-Pgametest=numen_pathing(逗号分隔)只跑指定的。没给 numen.gametest.suites 就一个套件都不登记
+// (评测的运行配置就不给,见 numen-bench.gradle)
+def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.join(','))
+
+def gameTestSeed = providers.gradleProperty('gametestSeed')
+// 排查与证明稳定(见 GameTestSuites):-PgametestOnly=<全名正则> 只跑匹配的用例,-PgametestCopies=N 每条铺 N 份并行
+def gameTestOnly = providers.gradleProperty('gametestOnly')
+def gameTestCopies = providers.gradleProperty('gametestCopies')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是固定的默认一处(见 GameTestOrigin),失败日志里写着这次用的哪一处
+def gameTestOrigin = providers.gradleProperty('gametestOrigin')
+
+// GameTest 的结构模板:同步进 numen/common 的构建目录里的一处(见那边的 syncGameTestStructures),运行配置指向它。
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+
+neoForge {
+    version = neoforge_version
+    // Automatically enable neoforge AccessTransformers if the file exists
+    def at = project(':numen:common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+    runs {
+        configureEach {
+            // 所有运行配置都指向同步好的 SNBT 模板目录(见 numen/common 的 syncGameTestStructures):无头跑批用,开发客户端里
+            // /test run <用例> 现场围观也用(见 GameTestSuites)。
+            systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
+            ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
+        }
+        client {
+            client()
+            systemProperties.put('numen.gametest.suites', gameTestSelection)
+            gameDirectory = this.mkdir(this.file("runs/client"))
+        }
+        data {
+            clientData() // MDG on NeoForge 1.21.4+ split the data run; clientData + --all still emits our providers
+            gameDirectory = this.mkdir(this.file("runs/data"))
+            // DataGen can be run by - "./gradlew :neoforge:runData" in Terminal.
+            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
+            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+        server {
+            server()
+            this.file("runs/server").createParentDirectories()
+            gameDirectory = this.mkdir(this.file("runs/server"))
+        }
+        gameTestServer {
+            type = "gameTestServer"
+            systemProperties.put('numen.gametest.suites', gameTestSelection)
+            // 真实地形维度的种子(-PgametestSeed=…):没给就是原版 GameTest 服务器写死的 0
+            if (gameTestSeed.present) {
+                systemProperties.put('numen.gametest.seed', gameTestSeed.get())
+            }
+            if (gameTestOnly.present) {
+                systemProperties.put('numen.gametest.only', gameTestOnly.get())
+            }
+            if (gameTestCopies.present) {
+                systemProperties.put('numen.gametest.copies', gameTestCopies.get())
+            }
+            if (gameTestOrigin.present) {
+                systemProperties.put('numen.gametest.origin', gameTestOrigin.get())
+            }
+            rootProject.ext.numenTerrainProperties().each { key, value -> systemProperties.put(key, value) }
+            gameDirectory = this.mkdir(this.file("runs/gametestserver"))
+        }
+    }
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+            // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明
+            sourceSet project(':numen:pathing').sourceSets.main
+            // Numen 的夹具:只含原版类;是联动的 GameTest 也用的那一份
+            sourceSet project(':numen:common').sourceSets.testFixtures
+            // 各模块的用例
+            gameTestModules.each { sourceSet it.sourceSets.gametest }
+        }
+        // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现(都不属于 Numen,别的运行配置也这样声明)
+        numen_api_gametest {
+            sourceSet project(':numen-api:neoforge').sourceSets.gametest
+            sourceSet project(':numen-api:common').sourceSets.testFixtures
+        }
+    }
+}
+
+tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
+    dependsOn ':numen:common:syncGameTestStructures'
+    dependsOn ':numen-api:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses', ':numen:common:testFixturesClasses'
+    gameTestModules.each { dependsOn "${it.path}:gametestClasses" }
+}
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
+    // 发过的令牌、存下的档案不带进这一次。Paper 的 GameTest 每次整个运行目录都是新的
+    doFirst {
+        delete project.file('runs/gametestserver/config')
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'neoforge')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName, it.getTaskName(null, 'jarJar')].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'neoforge')
+            }
+        }
+    }
+}
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:curios').sourceSets.main.output })
+    from({ project(':plugins:litematica').sourceSets.main.output })
+    from({ project(':plugins:jei').sourceSets.main.output })
+}
+
+// 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:litematica:test', ':plugins:jei:test')
+}
+
+// 真模型评测:Numen 的考题在 numen/common 的 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 放在末尾:它要用到上面定义好的模组 numen。
+ext.benchModules = [project(':numen:common')]
+apply plugin: 'numen-bench'
+
+// 端到端测试(numen/common 的 e2e 源码集,任务 e2eTest):用原版客户端协议连一台真的专用服。这一层只管把 NeoForge 专用服起起来。
+apply plugin: 'numen-e2e-neoforge'

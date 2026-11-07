@@ -1,8 +1,8 @@
 package com.dwinovo.numen.bench;
 
-import com.dwinovo.numen.gametest.TestFailure;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -70,7 +70,7 @@ public final class Scene {
     /** 断言,写法同 GameTest:不成立就抛出,{@code message} 说看到了什么。 */
     public void assertTrue(boolean condition, String message) {
         if (!condition) {
-            throw new TestFailure(message);
+            throw new GameTestAssertException(message);
         }
     }
 }

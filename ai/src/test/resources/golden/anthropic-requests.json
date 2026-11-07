@@ -1,0 +1,30 @@
+{
+  "budget-high": {
+    "model": "claude-opus-4-5",
+    "system": [{"type": "text", "text": "你是同伴", "cache_control": {"type": "ephemeral"}}],
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "你好", "cache_control": {"type": "ephemeral"}}]}],
+    "tools": [{"name": "look", "description": "look", "input_schema": {"type": "object"}, "cache_control": {"type": "ephemeral"}}],
+    "thinking": {"type": "enabled", "budget_tokens": 16384},
+    "max_tokens": 24576,
+    "stream": true
+  },
+  "adaptive-max": {
+    "model": "claude-opus-5",
+    "system": [{"type": "text", "text": "你是同伴", "cache_control": {"type": "ephemeral"}}],
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "你好", "cache_control": {"type": "ephemeral"}}]}],
+    "tools": [{"name": "look", "description": "look", "input_schema": {"type": "object"}, "cache_control": {"type": "ephemeral"}}],
+    "thinking": {"type": "adaptive"},
+    "output_config": {"effort": "max"},
+    "max_tokens": 8192,
+    "stream": true
+  },
+  "auto": {
+    "model": "claude-opus-4-5",
+    "system": [{"type": "text", "text": "你是同伴", "cache_control": {"type": "ephemeral"}}],
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "你好", "cache_control": {"type": "ephemeral"}}]}],
+    "tools": [{"name": "look", "description": "look", "input_schema": {"type": "object"}, "cache_control": {"type": "ephemeral"}}],
+    "temperature": 0.4,
+    "max_tokens": 8192,
+    "stream": true
+  }
+}
