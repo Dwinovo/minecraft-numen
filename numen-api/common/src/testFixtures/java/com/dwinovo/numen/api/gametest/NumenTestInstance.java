@@ -31,7 +31,7 @@ public final class NumenTestInstance extends GameTestInstance {
 
     private final TestFunction function;
 
-    NumenTestInstance(TestFunction function, TestData<Holder<TestEnvironmentDefinition>> info) {
+    NumenTestInstance(TestFunction function, TestData<Holder<TestEnvironmentDefinition<?>>> info) {
         super(info);
         this.function = function;
     }

@@ -177,7 +177,7 @@ final class MatrixCatalog {
         out.add(one("floor", "mud", Blocks.MUD));
         out.add(one("floor", "honey_block", Blocks.HONEY_BLOCK));
         out.add(one("floor", "slime_block", Blocks.SLIME_BLOCK));
-        out.add(one("floor", "farmland", Blocks.FARMLAND.defaultBlockState().setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7)));
+        out.add(one("floor", "farmland", Blocks.FARMLAND.defaultBlockState().setValue(net.minecraft.world.level.block.FarmlandBlock.MOISTURE, 7)));
         out.add(one("floor", "dirt_path", Blocks.DIRT_PATH));
         out.add(one("floor", "ice", Blocks.ICE));
         out.add(one("floor", "hay_block", Blocks.HAY_BLOCK));

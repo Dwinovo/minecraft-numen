@@ -63,14 +63,21 @@ class GateTerrainTest {
         net.minecraft.server.Bootstrap.bootStrap();
     }
 
+    /** 绑之前方块注册表上的标签(会话开头已从原版数据包绑上),收场时原样绑回,后面的测试类看到的还是原版标签。 */
+    private Map<TagKey<Block>, List<Holder<Block>>> saved;
+
     @BeforeEach
     void bindNaturalBlocks() {
-        bindBlockTags(Map.of(NATURAL, List.of(BuiltInRegistries.BLOCK.wrapAsHolder(Blocks.DIRT))));
+        saved = new HashMap<>();
+        BuiltInRegistries.BLOCK.getTags().forEach(tag -> saved.put(tag.key(), tag.stream().toList()));
+        Map<TagKey<Block>, List<Holder<Block>>> tags = new HashMap<>(saved);
+        tags.put(NATURAL, List.of(BuiltInRegistries.BLOCK.wrapAsHolder(Blocks.DIRT)));
+        bindBlockTags(tags);
     }
 
     @AfterEach
     void unbind() {
-        bindBlockTags(Map.of());
+        bindBlockTags(saved);
     }
 
     private static Gate gate(PlacedBlocks placed) {

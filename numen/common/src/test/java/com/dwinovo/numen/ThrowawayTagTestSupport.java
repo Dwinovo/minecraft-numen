@@ -16,7 +16,7 @@ import java.util.List;
  * 不加载数据包。不绑的话标签是空的,于是"她一件 throwaway 方块都没有"——寻路里所有垫柱/搭桥判成
  * {@code COST_INF},成本测试和选料测试会以一个看不出原因的方式全挂。
  *
- * <p>用的是原版自己的 {@link MappedRegistry#bindTag}(数据包加载走的也是这条路),所以生产
+ * <p>用的是原版自己的 {@link MappedRegistry#prepareTagReload}(数据包加载走的也是这条路),所以生产
  * 代码不必为测试开任何口子。绑的内容是<b>测试自己声明的</b>一小撮,不去读 datagen 产物——
  * 那些文件不进版本库,测试不该依赖"你跑过 datagen"。
  */

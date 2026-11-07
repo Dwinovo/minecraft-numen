@@ -36,7 +36,7 @@ public class ItemComponentsGameTests {
         int n = 0;
         for (ItemStack stack : companion.getInventory().getNonEquipmentItems()) {
             if (stack.is(Items.SHULKER_BOX)) {
-                n += stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream()
+                n += stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItemCopyStream()
                         .filter(s -> s.is(Items.DIAMOND)).mapToInt(ItemStack::getCount).sum();
             }
         }

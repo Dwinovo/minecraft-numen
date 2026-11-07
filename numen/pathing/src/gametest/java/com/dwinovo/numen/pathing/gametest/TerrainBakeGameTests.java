@@ -74,8 +74,8 @@ public class TerrainBakeGameTests {
 
     private static boolean generated(ServerLevel level, ChunkPos center) {
         int r = TICKET_DISTANCE - 1;
-        for (int cx = center.x - r; cx <= center.x + r; cx++) {
-            for (int cz = center.z - r; cz <= center.z + r; cz++) {
+        for (int cx = center.x() - r; cx <= center.x() + r; cx++) {
+            for (int cz = center.z() - r; cz <= center.z() + r; cz++) {
                 if (level.getChunkSource().getChunkNow(cx, cz) == null) {
                     return false;
                 }

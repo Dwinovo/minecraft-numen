@@ -210,4 +210,14 @@ class CompanionRegistryTest {
         assertEquals("kaleidoscope.pot.stir", reg.find(A).taskName());
         assertEquals("cheating at cards", reg.find(A).removedFor());
     }
+
+    /** 写档同存储层:存储层把编解码器编出的那一段写进存档。 */
+    private static CompoundTag save(CompanionRegistry data) {
+        return (CompoundTag) CompanionRegistry.CODEC.encodeStart(NbtOps.INSTANCE, data).getOrThrow();
+    }
+
+    /** 读档同存储层:读不懂的部分略过、其余照读;整段读不出时存储层另造一份空的。 */
+    private static CompanionRegistry load(CompoundTag tag) {
+        return CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, tag).resultOrPartial(error -> { }).orElseGet(CompanionRegistry::new);
+    }
 }

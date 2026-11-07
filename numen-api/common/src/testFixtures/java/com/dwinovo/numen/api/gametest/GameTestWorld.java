@@ -28,6 +28,18 @@ public interface GameTestWorld {
     /** 把 {@code level} 的一条游戏规则定成 {@code value}。 */
     <T> void setRule(ServerLevel level, GameRule<T> rule, T value);
 
+    /** 定下 {@code level} 的天气:晴多少刻、雨多少刻、此刻下不下雨、打不打雷。原版的天气归服务器,Paper 的天气按世界给。 */
+    void setWeather(ServerLevel level, int clearTime, int rainTime, boolean raining, boolean thundering);
+
+    /**
+     * 把 {@code level} 的时刻拨到 {@code dayTime}。"现在几点"是世界时钟的事:维度类型自带一口默认时钟,拨的是这口钟的总刻数
+     * (没有默认时钟的维度没有时刻可拨)。平台都是原版这一套,所以写在这里。
+     */
+    default void setDayTime(ServerLevel level, long dayTime) {
+        level.dimensionTypeRegistration().value().defaultClock()
+                .ifPresent(clock -> level.clockManager().setTotalTicks(clock, dayTime));
+    }
+
     /**
      * 在主线程上等 {@code done} 成立,等的时候排给主线程的任务照做。她进世界的接纳在异步的平台上(Paper 的登录事件)要晚一点才有答复,
      * 答复也是排给主线程的任务,所以用例不能睡等、要在这里推着做;模组上答复当场就有,这里一步不用等。

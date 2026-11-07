@@ -56,7 +56,7 @@ public final class FabricMockConnection implements MockConnection, ModInitialize
         var addon = ServerNetworkingImpl.getAddon(player.connection);
         addon.onCommonVersionPacket(COMMON_PACKET_VERSION);
         addon.onCommonRegisterPacket(
-                new CommonRegisterPayload(COMMON_PACKET_VERSION, CommonRegisterPayload.PLAY_PHASE, downlink()));
+                new CommonRegisterPayload(COMMON_PACKET_VERSION, CommonRegisterPayload.PLAY_PROTOCOL, downlink()));
     }
 
     /** 监听器背后的连接:原版把它写成了受保护字段,开发期按名字取。 */

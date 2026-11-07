@@ -103,9 +103,9 @@ public final class GameTestKit {
             each.getChunkSource().setSimulationDistance(SIMULATION_DISTANCE);
         }
         GameTestWorld.INSTANCE.setDifficulty(level, difficulty);
-        level.setDayTime(dayTime);
+        GameTestWorld.INSTANCE.setDayTime(level, dayTime);
         GameTestWorld.INSTANCE.setRule(level, GameRules.SPAWN_MOBS, false);
-        level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
+        GameTestWorld.INSTANCE.setWeather(level, CLEAR_WEATHER_TICKS, 0, false, false);
         // 无头测试服是专用服,说不清是谁的方块默认按别人的算(服务器设置)。多数用例要的是"问主人"那一半,所以写明不按。
         com.dwinovo.numen.api.brain.ModelServices.of(level.getServer()).settings().setPermission(true, false);
     }

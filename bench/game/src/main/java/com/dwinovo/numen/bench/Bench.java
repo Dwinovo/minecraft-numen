@@ -33,9 +33,9 @@ public final class Bench {
 
     /**
      * 用例的结构模板。场地由代码现搭({@link Arena}),模板只是 GameTest 要的一个落脚点,借用运行配置经
-     * {@code numen.gametest.structures} 指过来的模板目录里的一块地板。
+     * {@code numen.gametest.structures} 指过来的模板目录里的一块地板。目录是资源包的布局,那块地板在 Numen 的命名空间下。
      */
-    private static final String ANCHOR = NumenBench.MOD_ID + ":floor16";
+    private static final String ANCHOR = "numen:floor16";
 
     private Bench() {}
 

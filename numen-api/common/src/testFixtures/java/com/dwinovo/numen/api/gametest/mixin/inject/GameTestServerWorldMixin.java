@@ -31,8 +31,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class GameTestServerWorldMixin {
 
     /**
-     * 建世界的那个 lambda(只有它收 LevelSettings 与 DataLoadContext)。合成方法的名字各加载器的开发环境不同(NeoForge 是
-     * lambda$create$1,Fabric 的映射下是 method_40377),所以只按描述符选。
+     * 建世界的那个 lambda(只有它收 LevelSettings 与 DataLoadContext)。合成方法的名字取决于编译它的那一次(NeoForge 的开发环境
+     * 是从源码重编的原版),所以只按描述符选。
      */
     private static final String LOAD =
             "(Lnet/minecraft/world/level/LevelSettings;Lnet/minecraft/server/WorldLoader$DataLoadContext;)"
@@ -41,7 +41,7 @@ public abstract class GameTestServerWorldMixin {
     /** 建世界之前:清世界目录。 */
     @Inject(method = "create", at = @At("HEAD"))
     private static void numen$freshWorld(Thread thread, LevelStorageSource.LevelStorageAccess access, PackRepository packs,
-            Optional<String> testSelection, boolean verify, CallbackInfoReturnable<GameTestServer> cir) {
+            Optional<String> testSelection, boolean verify, int repeatCount, CallbackInfoReturnable<GameTestServer> cir) {
         TerrainWorld.prepare(access.getLevelPath(LevelResource.ROOT));
     }
 

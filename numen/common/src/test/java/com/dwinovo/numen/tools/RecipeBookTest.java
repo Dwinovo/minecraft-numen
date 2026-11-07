@@ -1,7 +1,6 @@
 package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.api.knowledge.RecipePage;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
@@ -9,7 +8,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.crafting.PlacementInfo;
 import net.minecraft.world.item.crafting.RecipeBookCategories;
 import net.minecraft.world.item.crafting.RecipeBookCategory;
-import net.minecraft.world.item.crafting.TransmuteResult;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.item.crafting.display.StonecutterRecipeDisplay;
@@ -60,14 +59,16 @@ class RecipeBookTest {
     /** 没人为合成格造过的配方:一个类别、几样料、一件产物。 */
     private record Machine(List<Ingredient> ings, ItemStack result) implements Recipe<SingleRecipeInput> {
         @Override public boolean matches(SingleRecipeInput input, Level level) { return false; }
-        @Override public ItemStack assemble(SingleRecipeInput input, HolderLookup.Provider registries) { return result; }
+        @Override public ItemStack assemble(SingleRecipeInput input) { return result; }
+        @Override public boolean showNotification() { return true; }
+        @Override public String group() { return ""; }
         @Override public RecipeSerializer<? extends Recipe<SingleRecipeInput>> getSerializer() { return null; }
         @Override public RecipeType<? extends Recipe<SingleRecipeInput>> getType() { return RecipeType.STONECUTTING; }
         @Override public PlacementInfo placementInfo() { return ings == null ? null : PlacementInfo.create(ings); }
         @Override public RecipeBookCategory recipeBookCategory() { return RecipeBookCategories.STONECUTTER; }
         @Override public List<RecipeDisplay> display() {
             return result == null ? List.of() : List.of(new StonecutterRecipeDisplay(SlotDisplay.Empty.INSTANCE,
-                    new SlotDisplay.ItemStackSlotDisplay(result), SlotDisplay.Empty.INSTANCE));
+                    new SlotDisplay.ItemStackSlotDisplay(ItemStackTemplate.fromNonEmptyStack(result)), SlotDisplay.Empty.INSTANCE));
         }
     }
 
@@ -165,9 +166,9 @@ class RecipeBookTest {
     @Test
     void aSmithingRecipeIsFoundByItsInputSlotsAndByItsProduct() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过配方书钉桩");
-        List<RecipeHolder<?>> all = List.of(holder("upgrade", new SmithingTransformRecipe(
+        List<RecipeHolder<?>> all = List.of(holder("upgrade", new SmithingTransformRecipe(new Recipe.CommonInfo(true),
                 Optional.of(Ingredient.of(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE)), Ingredient.of(Items.DIAMOND_PICKAXE),
-                Optional.of(Ingredient.of(Items.NETHERITE_INGOT)), new TransmuteResult(Items.NETHERITE_PICKAXE))));
+                Optional.of(Ingredient.of(Items.NETHERITE_INGOT)), new ItemStackTemplate(Items.NETHERITE_PICKAXE))));
         ItemStack ingot = new ItemStack(Items.NETHERITE_INGOT);
 
         RecipePage byInput = collect(all, (r, result) -> RecipeBook.takes(r, ingot));

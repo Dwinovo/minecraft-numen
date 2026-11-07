@@ -62,7 +62,7 @@ public final class GameTestSuites {
     public static final String ONLY = "numen.gametest.only";
     /** 每条用例铺几份并行跑(默认 1)。 */
     public static final String COPIES = "numen.gametest.copies";
-    /** 结构模板目录的系统属性:各模块的 SNBT 模板拷进同一个目录,运行配置经它指给原版。 */
+    /** 结构模板目录的系统属性:资源包的布局({@code data/<套件名>/structure/<模板>.snbt}),运行配置经它指给原版。 */
     public static final String STRUCTURES = "numen.gametest.structures";
 
     /** 套件登记的资源路径前缀,后面接套件名。 */
@@ -111,7 +111,8 @@ public final class GameTestSuites {
         // 模板在登记之后才加载,目录赶在这之前指好
         String structures = System.getProperty(STRUCTURES);
         if (structures != null) {
-            StructureUtils.testStructuresDir = Path.of(structures);
+            StructureUtils.testStructuresSourceDir = Path.of(structures);
+            StructureUtils.testStructuresTargetDir = Path.of(structures);
         }
         List<TestFunction> out = new ArrayList<>();
         List<Supplier<String>> background = new ArrayList<>();

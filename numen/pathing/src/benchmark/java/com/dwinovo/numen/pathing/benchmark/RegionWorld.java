@@ -16,7 +16,6 @@ import com.mojang.serialization.Codec;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -43,7 +42,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
-import net.minecraft.world.level.chunk.Strategy;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
 import net.minecraft.world.level.chunk.storage.RegionFile;
 import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
@@ -65,13 +64,11 @@ final class RegionWorld implements WorldSnapshot.Sections {
     /** 整块区域一次拷下的半径:以区域中心的区块为中心,罩住整个区域。 */
     private static final int WHOLE_RADIUS = REGION / 2;
 
-    private static final Codec<PalettedContainer<BlockState>> BLOCK_STATES = PalettedContainer.codecRW(
-            BlockState.CODEC, Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY), Blocks.AIR.defaultBlockState());
-
-    /** 生物群系注册表:从原版数据包的世界生成数据读出(与服务器启动时读的同一份),方块段构造要它。 */
-    private static final Registry<Biome> BIOMES = loadBiomes();
-    private static final Codec<PalettedContainerRO<Holder<Biome>>> BIOME_CODEC = PalettedContainer.codecRO(
-            BIOMES.holderByNameCodec(), Strategy.createForBiomes(BIOMES.asHolderIdMap()), BIOMES.getOrThrow(Biomes.PLAINS));
+    /**
+     * 方块段的读法(方块状态与生物群系两种调色板容器),与服务器读区块用的同一份:生物群系注册表从原版数据包的世界生成数据读出
+     * (与服务器启动时读的同一份)。
+     */
+    private static final PalettedContainerFactory CONTAINERS = PalettedContainerFactory.create(loadWorldgen());
 
     final String name;
     final String dimension;
@@ -131,23 +128,24 @@ final class RegionWorld implements WorldSnapshot.Sections {
         if (chunk == null) {
             return null;
         }
-        if (chunk.getIntOr("DataVersion", 0) != SharedConstants.getCurrentVersion().dataVersion().version()) {
-            throw new IllegalStateException("存档的数据版本 " + chunk.getIntOr("DataVersion", 0) + " 不是当前原版的,先升级再用");
+        int dataVersion = chunk.getIntOr("DataVersion", 0);
+        if (dataVersion != SharedConstants.getCurrentVersion().dataVersion().version()) {
+            throw new IllegalStateException("存档的数据版本 " + dataVersion + " 不是当前原版的,先升级再用");
         }
         LevelChunkSection[] sections = new LevelChunkSection[heights.getSectionsCount()];
         ListTag list = chunk.getListOrEmpty("sections");
         for (int i = 0; i < list.size(); i++) {
             CompoundTag tag = list.getCompoundOrEmpty(i);
-            int index = tag.getByte("Y").orElse((byte) 0) - heights.getMinSectionY();
+            int index = tag.getByteOr("Y", (byte) 0) - heights.getMinSectionY();
             if (index < 0 || index >= sections.length) {
                 continue;
             }
-            PalettedContainer<BlockState> states = tag.getCompound("block_states").isPresent()
-                    ? BLOCK_STATES.parse(NbtOps.INSTANCE, tag.getCompound("block_states").get()).getOrThrow(IllegalStateException::new)
-                    : new PalettedContainer<>(Blocks.AIR.defaultBlockState(), Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY));
-            PalettedContainerRO<Holder<Biome>> biomes = tag.getCompound("biomes").isPresent()
-                    ? BIOME_CODEC.parse(NbtOps.INSTANCE, tag.getCompound("biomes").get()).getOrThrow(IllegalStateException::new)
-                    : new PalettedContainer<>(BIOMES.getOrThrow(Biomes.PLAINS), Strategy.createForBiomes(BIOMES.asHolderIdMap()));
+            PalettedContainer<BlockState> states = tag.getCompound("block_states")
+                    .map(c -> CONTAINERS.blockStatesContainerCodec().parse(NbtOps.INSTANCE, c).getOrThrow(IllegalStateException::new))
+                    .orElseGet(CONTAINERS::createForBlockStates);
+            PalettedContainerRO<Holder<Biome>> biomes = tag.getCompound("biomes")
+                    .map(c -> CONTAINERS.biomeContainerCodec().parse(NbtOps.INSTANCE, c).getOrThrow(IllegalStateException::new))
+                    .orElseGet(CONTAINERS::createForBiomes);
             sections[index] = new LevelChunkSection(states, biomes);
         }
         return sections;
@@ -208,12 +206,11 @@ final class RegionWorld implements WorldSnapshot.Sections {
                 WHOLE_RADIUS);
     }
 
-    private static Registry<Biome> loadBiomes() {
+    private static RegistryAccess loadWorldgen() {
         try (MultiPackResourceManager data = new MultiPackResourceManager(PackType.SERVER_DATA,
                 List.of(ServerPacksSource.createVanillaPackSource()))) {
-            RegistryAccess.Frozen loaded = RegistryDataLoader.load(data, BuiltInRegistries.REGISTRY.stream().<HolderLookup.RegistryLookup<?>>map(registry -> registry).toList(),
-                    RegistryDataLoader.WORLDGEN_REGISTRIES);
-            return loaded.lookupOrThrow(Registries.BIOME);
+            return RegistryDataLoader.load(data, RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY).listRegistries().toList(),
+                    RegistryDataLoader.WORLDGEN_REGISTRIES, Runnable::run).join();
         }
     }
 }

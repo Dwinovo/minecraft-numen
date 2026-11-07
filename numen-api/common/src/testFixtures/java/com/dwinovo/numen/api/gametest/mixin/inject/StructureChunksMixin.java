@@ -30,7 +30,7 @@ public abstract class StructureChunksMixin {
         test.getStructureBoundingBox().intersectingChunks().forEach(chunk -> {
             for (int dx = -ENTITY_TICKING_RING; dx <= ENTITY_TICKING_RING; dx++) {
                 for (int dz = -ENTITY_TICKING_RING; dz <= ENTITY_TICKING_RING; dz++) {
-                    level.getChunk(chunk.x + dx, chunk.z + dz);
+                    level.getChunk(chunk.x() + dx, chunk.z() + dz);
                 }
             }
         });

@@ -19,6 +19,11 @@ public final class VanillaGameTestWorld implements GameTestWorld {
     }
 
     @Override
+    public void setWeather(ServerLevel level, int clearTime, int rainTime, boolean raining, boolean thundering) {
+        level.getServer().setWeatherParameters(clearTime, rainTime, raining, thundering);
+    }
+
+    @Override
     public <T> void setRule(ServerLevel level, GameRule<T> rule, T value) {
         level.getGameRules().set(rule, value, level.getServer());
     }

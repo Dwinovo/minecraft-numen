@@ -28,7 +28,7 @@ public final class GameTestRegistration {
     static final String LOADER_NAMESPACE = "numen_api_gametest";
 
     /** 这一次读注册表时登记好的环境:批次名 → 环境。测试实例在环境之后读,拿这里的环境。 */
-    private static final Map<String, Holder<TestEnvironmentDefinition>> ENVIRONMENTS = new HashMap<>();
+    private static final Map<String, Holder<TestEnvironmentDefinition<?>>> ENVIRONMENTS = new HashMap<>();
 
     private GameTestRegistration() {}
 
@@ -36,7 +36,7 @@ public final class GameTestRegistration {
     @SuppressWarnings("unchecked")
     public static void loaded(WritableRegistry<?> registry) {
         if (registry.key() == Registries.TEST_ENVIRONMENT) {
-            environments((WritableRegistry<TestEnvironmentDefinition>) registry, GameTestSuites.functions());
+            environments((WritableRegistry<TestEnvironmentDefinition<?>>) registry, GameTestSuites.functions());
         } else if (registry.key() == Registries.TEST_INSTANCE) {
             instances((WritableRegistry<GameTestInstance>) registry, GameTestSuites.functions());
         }
@@ -48,7 +48,7 @@ public final class GameTestRegistration {
                 .orElseThrow(() -> new IllegalStateException("没有这条用例:" + name));
     }
 
-    private static void environments(WritableRegistry<TestEnvironmentDefinition> registry, List<TestFunction> functions) {
+    private static void environments(WritableRegistry<TestEnvironmentDefinition<?>> registry, List<TestFunction> functions) {
         ENVIRONMENTS.clear();
         for (TestFunction function : functions) {
             ENVIRONMENTS.computeIfAbsent(function.batchName(), batch -> registry.register(
@@ -61,9 +61,9 @@ public final class GameTestRegistration {
     private static List<Holder.Reference<GameTestInstance>> instances(WritableRegistry<GameTestInstance> registry, List<TestFunction> functions) {
         List<Holder.Reference<GameTestInstance>> out = new java.util.ArrayList<>();
         for (TestFunction function : functions) {
-            TestData<Holder<TestEnvironmentDefinition>> data = new TestData<>(ENVIRONMENTS.get(function.batchName()),
+            TestData<Holder<TestEnvironmentDefinition<?>>> data = new TestData<>(ENVIRONMENTS.get(function.batchName()),
                     Identifier.parse(function.structureName()), function.maxTicks(), (int) function.setupTicks(),
-                    function.required(), function.rotation(), false, 1, 1, function.skyAccess());
+                    function.required(), function.rotation(), false, 1, 1, function.skyAccess(), 0);
             out.add(registry.register(ResourceKey.create(Registries.TEST_INSTANCE, id(function.testName())),
                     new NumenTestInstance(function, data), RegistrationInfo.BUILT_IN));
         }
@@ -76,7 +76,7 @@ public final class GameTestRegistration {
      *
      * @return 登记好的测试实例,按 {@code functions} 的先后
      */
-    public static List<Holder.Reference<GameTestInstance>> register(WritableRegistry<TestEnvironmentDefinition> environments,
+    public static List<Holder.Reference<GameTestInstance>> register(WritableRegistry<TestEnvironmentDefinition<?>> environments,
             WritableRegistry<GameTestInstance> instances, List<TestFunction> functions) {
         environments(environments, functions);
         return instances(instances, functions);

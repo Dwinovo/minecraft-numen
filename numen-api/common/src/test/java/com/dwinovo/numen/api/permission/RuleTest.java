@@ -157,6 +157,7 @@ class RuleTest {
     @SuppressWarnings("unchecked")
     private static void bindBlockTags(Map<net.minecraft.tags.TagKey<net.minecraft.world.level.block.Block>,
             List<net.minecraft.core.Holder<net.minecraft.world.level.block.Block>>> tags) {
+        // 1.21.2+ 冻结后的注册表拒绝直写标签;原版数据包加载对冻结注册表走 prepareTagReload → apply,同一条路。
         ((net.minecraft.core.MappedRegistry<net.minecraft.world.level.block.Block>) BuiltInRegistries.BLOCK)
                 .prepareTagReload(new net.minecraft.tags.TagLoader.LoadResult<>(
                         net.minecraft.core.registries.Registries.BLOCK, tags))

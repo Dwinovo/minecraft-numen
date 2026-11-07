@@ -198,8 +198,8 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
      * 这里解冻、经同一个 {@link GameTestRegistration} 登记、再冻上。
      */
     private List<Holder.Reference<GameTestInstance>> register(ServerLevel level, List<TestFunction> functions) {
-        MappedRegistry<TestEnvironmentDefinition> environments =
-                (MappedRegistry<TestEnvironmentDefinition>) level.registryAccess().lookupOrThrow(Registries.TEST_ENVIRONMENT);
+        MappedRegistry<TestEnvironmentDefinition<?>> environments =
+                (MappedRegistry<TestEnvironmentDefinition<?>>) level.registryAccess().lookupOrThrow(Registries.TEST_ENVIRONMENT);
         MappedRegistry<GameTestInstance> instances =
                 (MappedRegistry<GameTestInstance>) level.registryAccess().lookupOrThrow(Registries.TEST_INSTANCE);
         unfreeze(environments);

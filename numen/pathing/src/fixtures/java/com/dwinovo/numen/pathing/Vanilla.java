@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,9 +7,11 @@ import java.util.Map;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.component.DataComponentInitializers;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
@@ -48,6 +49,7 @@ public final class Vanilla {
             bindTags(BuiltInRegistries.BLOCK, data);
             bindTags(BuiltInRegistries.FLUID, data);
         }
+        bindComponents();
         EntityDimensions standing = EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F);
         SURVIVAL = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 0.3, 4.5, false, false);
         CREATIVE = new BodyStats(standing, 0.6, 0.42F, 0.08, 0.1, 0.3, 5.0, false, false);
@@ -60,6 +62,19 @@ public final class Vanilla {
     /** 触发引导。各测试类在 {@code @BeforeAll} 里调;引导只在第一次发生。 */
     public static void boot() {
         // 类初始化即引导
+    }
+
+    /**
+     * 26.1 起物品的 DataComponentMap 不再存在 Item 上,由数据包加载期的 DataComponentInitializers 绑定;只做 Bootstrap
+     * 的引导里没有这一步,构造 ItemStack 会抛 "Components not bound yet"。用原版自己的管线(与服务器加载数据包同源)在静态
+     * 注册表上补绑一遍;上下文取 {@link VanillaRegistries#createLookup()}——静态加全部数据包注册表的引导内容,标签一律空集。
+     */
+    private static void bindComponents() {
+        var provider = VanillaRegistries.createLookup();
+        for (DataComponentInitializers.PendingComponents<?> pending
+                : BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(provider)) {
+            pending.apply();
+        }
     }
 
     @SuppressWarnings("unchecked")

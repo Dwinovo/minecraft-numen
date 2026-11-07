@@ -27,9 +27,10 @@ class CraftOpsTest {
 
     /** 箱子那样的 3×3 有形配方。 */
     private static ShapedRecipe chest() {
-        return new ShapedRecipe("", CraftingBookCategory.MISC,
+        return new ShapedRecipe(new net.minecraft.world.item.crafting.Recipe.CommonInfo(true),
+                new net.minecraft.world.item.crafting.CraftingRecipe.CraftingBookInfo(CraftingBookCategory.MISC, ""),
                 ShapedRecipePattern.of(Map.of('#', Ingredient.of(Items.OAK_PLANKS)), "###", "# #", "###"),
-                new ItemStack(Items.CHEST));
+                new net.minecraft.world.item.ItemStackTemplate(Items.CHEST));
     }
 
     /** 什么都没开时开着的是她自己的 2×2:箱子要 3×3,说去开一张工作台再合。 */

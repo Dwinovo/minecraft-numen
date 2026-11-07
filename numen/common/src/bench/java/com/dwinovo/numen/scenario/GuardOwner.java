@@ -1,5 +1,6 @@
 package com.dwinovo.numen.scenario;
 
+import com.dwinovo.numen.api.gametest.GameTestWorld;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
@@ -53,7 +54,7 @@ public final class GuardOwner implements Scenario {
     @Override
     public void setup(Scene scene) {
         scene.level().getServer().setDifficulty(Difficulty.EASY, true);
-        scene.level().setDayTime(18000);
+        GameTestWorld.INSTANCE.setDayTime(scene.level(), 18000);
         ServerPlayer owner = scene.owner();
         owner.setGameMode(GameType.SURVIVAL);
         owner.getAttribute(Attributes.MAX_HEALTH).setBaseValue(OWNER_HEALTH);
