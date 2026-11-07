@@ -30,7 +30,7 @@ public final class CauseWords {
             case Cause.NO_KEY -> I18n.get(Keys.ENDPOINT_NO_KEY, cause.arg(0));
             case Cause.NO_URL -> I18n.get(Keys.ENDPOINT_NO_URL, cause.arg(0));
             case Cause.QUOTA -> I18n.get(Keys.ENDPOINT_QUOTA);
-            default -> cause.arg(0).isEmpty() || !I18n.exists(key(cause) + "_by")
+            default -> cause.arg(0).isEmpty() || !net.minecraft.locale.Language.getInstance().has(key(cause) + "_by")
                     ? I18n.get(key(cause)) : I18n.get(key(cause) + "_by", cause.arg(0));
         };
     }

@@ -71,7 +71,7 @@ public final class MessageNotices {
      */
     private static boolean wanted(Conversation c) {
         if (!ClientPrefs.messageNotices()) return false;
-        if (!(Minecraft.getInstance().screen instanceof NumenScreen)) return true;
+        if (!(Minecraft.getInstance().gui.screen() instanceof NumenScreen)) return true;
         Conversation open = Conversations.instance().selected();
         return open == null || !open.id().equals(c.id());
     }
@@ -81,9 +81,9 @@ public final class MessageNotices {
     /** HUD 层:没开界面的时候。开着界面时 HUD 在界面底下,改由 {@link #renderOver} 画在上面。 */
     public static void renderHud(GuiGraphicsExtractor g) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen != null) return;
+        if (mc.gui.screen() != null) return;
         com.dwinovo.numen.api.client.ui.SafeUi.run("message-notices",
-                () -> render(g, Integer.MIN_VALUE, Integer.MIN_VALUE, !mc.options.hideGui));
+                () -> render(g, Integer.MIN_VALUE, Integer.MIN_VALUE, !mc.gui.hud.isHidden()));
     }
 
     /** 任何界面画完之后:卡片压在界面上面,指针停上去就不淡。 */
@@ -192,7 +192,7 @@ public final class MessageNotices {
         if (left < screenW / 2 + HOTBAR_HALF_W && right > screenW / 2 - HOTBAR_HALF_W) {
             floor = Math.min(floor, screenH - HOTBAR_H - NumenStyle.PAD);
         }
-        if (Minecraft.getInstance().screen instanceof CompanionChatScreen quick) {
+        if (Minecraft.getInstance().gui.screen() instanceof CompanionChatScreen quick) {
             int[] box = quick.occupied();
             if (left < box[2] && right > box[0]) {
                 floor = Math.min(floor, box[1] - NumenStyle.PAD);

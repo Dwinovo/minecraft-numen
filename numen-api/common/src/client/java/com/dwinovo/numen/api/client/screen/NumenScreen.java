@@ -377,7 +377,7 @@ public final class NumenScreen extends Screen {
 
     /** Open the panel focused on a specific companion. */
     public static void open(UUID uuid) {
-        Minecraft.getInstance().setScreen(new NumenScreen(Conversations.instance().of(uuid)));
+        Minecraft.getInstance().gui.setScreen(new NumenScreen(Conversations.instance().of(uuid)));
     }
 
     /** {@code /numen settings} 入口:直接落在设置页(全局配置与同伴无关,空面板也能用)。 */
@@ -387,7 +387,7 @@ public final class NumenScreen extends Screen {
                 entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid()));
         screen.tab = Tab.SETTINGS;
         screen.overlayKind = Tab.SETTINGS;   // 从命令开的:直接开在设置页,init 里把它摆到位
-        Minecraft.getInstance().setScreen(screen);
+        Minecraft.getInstance().gui.setScreen(screen);
     }
 
     /**
@@ -398,7 +398,7 @@ public final class NumenScreen extends Screen {
     public static void openWorkspace() {
         var asking = com.dwinovo.numen.api.client.consent.ConsentCards.first();
         if (asking != null) {
-            Minecraft.getInstance().setScreen(
+            Minecraft.getInstance().gui.setScreen(
                     new NumenScreen(Conversations.instance().of(asking.companion())));
             return;
         }
@@ -409,7 +409,7 @@ public final class NumenScreen extends Screen {
             var entries = NumenRoster.instance().entries();
             target = entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid());
         }
-        Minecraft.getInstance().setScreen(new NumenScreen(target));
+        Minecraft.getInstance().gui.setScreen(new NumenScreen(target));
     }
 
     /** Switch the panel to another conversation in place (left-rail click) — no reopen. */

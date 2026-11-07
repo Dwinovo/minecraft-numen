@@ -30,6 +30,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
@@ -1758,7 +1759,7 @@ public final class ChatView {
             return;
         }
         if (mc.options.chatLinksPrompt().get()) {
-            net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(mc.screen, uri, false);
+            net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(mc.gui.screen(), uri, false);
         } else {
             net.minecraft.util.Util.getPlatform().openUri(uri);
         }

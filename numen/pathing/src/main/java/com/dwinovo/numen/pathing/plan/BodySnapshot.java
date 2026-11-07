@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.PointedDripstoneBlock;
 import net.minecraft.world.level.block.PowderSnowBlock;
 import net.minecraft.world.level.block.SlimeBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.DripstoneThickness;
+import net.minecraft.world.level.block.state.properties.SpeleothemThickness;
 
 /**
  * 身体快照:规划要知道的身体的一切,由宿主在派发那一刻从真实的身体上抄下来。规划与执行复核读同一份形状,搜索线程只读。
@@ -109,7 +109,7 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
         float multiplier = 1.0F;
         switch (onto.getBlock()) {
             case PointedDripstoneBlock dripstone when onto.getValue(PointedDripstoneBlock.TIP_DIRECTION) == Direction.UP
-                    && onto.getValue(PointedDripstoneBlock.THICKNESS) == DripstoneThickness.TIP -> {
+                    && onto.getValue(PointedDripstoneBlock.THICKNESS) == SpeleothemThickness.TIP -> {
                 distance += 2.0F;
                 multiplier = 2.0F;
             }

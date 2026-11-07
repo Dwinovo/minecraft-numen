@@ -68,28 +68,28 @@ public final class NumenKeys {
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
         while (OPEN_ROSTER.consumeClick()) {
-            if (mc.player != null && mc.screen == null) {
+            if (mc.player != null && mc.gui.screen() == null) {
                 NumenScreen.openWorkspace();
             }
         }
         while (COMPANION_WHEEL.consumeClick()) {
-            if (mc.player == null || mc.screen != null) {
+            if (mc.player == null || mc.gui.screen() != null) {
                 continue;
             }
             if (NumenRoster.instance().entries().isEmpty()) {
                 com.dwinovo.numen.api.client.hud.TalkHint.flash(I18n.get(Keys.KEYS_NO_COMPANION), 3000);
                 continue;
             }
-            mc.setScreen(new CompanionWheelScreen());
+            mc.gui.setScreen(new CompanionWheelScreen());
         }
         while (TALK_COMPANION.consumeClick()) {
-            if (mc.player == null || mc.screen != null) {
+            if (mc.player == null || mc.gui.screen() != null) {
                 continue;
             }
             // 有征询挂着先答征询:对象是最早在等的那位,不看准星——右上角弹出来说按这个键答的就是她
             var asking = com.dwinovo.numen.api.client.consent.ConsentCards.first();
             if (asking != null) {
-                mc.setScreen(new CompanionChatScreen(Conversations.instance().of(asking.companion())));
+                mc.gui.setScreen(new CompanionChatScreen(Conversations.instance().of(asking.companion())));
                 continue;
             }
             Conversation target = SelectedCompanion.resolveTarget();
@@ -98,10 +98,10 @@ public final class NumenKeys {
                         COMPANION_WHEEL.getTranslatedKeyMessage().getString()), 3000);
                 continue;
             }
-            mc.setScreen(new CompanionChatScreen(target));
+            mc.gui.setScreen(new CompanionChatScreen(target));
         }
         // 快捷语音:按下沿开录,抬起沿(或任何界面弹开)收音发送
-        boolean voiceDown = QUICK_VOICE.isDown() && mc.player != null && mc.screen == null;
+        boolean voiceDown = QUICK_VOICE.isDown() && mc.player != null && mc.gui.screen() == null;
         if (voiceDown && !voiceWasDown) {
             QuickVoice.press();
         } else if (!voiceDown && voiceWasDown) {

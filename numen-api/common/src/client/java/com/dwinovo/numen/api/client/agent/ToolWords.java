@@ -12,6 +12,6 @@ public final class ToolWords {
 
     public static String label(String name) {
         String key = "numen.tool." + name;
-        return I18n.exists(key) ? I18n.get(key) : name;
+        return net.minecraft.locale.Language.getInstance().has(key) ? I18n.get(key) : name;
     }
 }

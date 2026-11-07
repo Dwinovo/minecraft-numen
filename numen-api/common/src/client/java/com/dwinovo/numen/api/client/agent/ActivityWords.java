@@ -13,6 +13,6 @@ public final class ActivityWords {
     private ActivityWords() {}
 
     public static String text(LoopStatus.Doing doing) {
-        return DoingText.of(doing, I18n::exists).getString();
+        return DoingText.of(doing, net.minecraft.locale.Language.getInstance()::has).getString();
     }
 }

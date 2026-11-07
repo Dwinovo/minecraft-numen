@@ -19,10 +19,14 @@ public final class FabricModItemTagsProvider extends FabricTagsProvider.ItemTags
     @Override
     protected void addTags(HolderLookup.Provider provider) {
         ModItemTagData.addItemTags(key -> {
-            // 1.21.8:getOrCreateTagBuilder → valueLookupBuilder。
-            var b = valueLookupBuilder(key);
+            // 26.2:值基 appender 删除,builder(key) 只收 ResourceKey——值→键在
+            // 这层查注册表,common 的值基清单不动。
+            var b = builder(key);
             // 与方块那侧同理:引用外部标签要跳过 Fabric 的 provider 归属校验
-            return ModItemTagData.appender(v -> b.add(v), t -> b.forceAddTag(t));
+            return ModItemTagData.appender(
+                    v -> b.add(net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .getResourceKey(v).orElseThrow()),
+                    t -> b.forceAddTag(t));
         });
     }
 }

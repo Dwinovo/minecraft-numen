@@ -13,7 +13,7 @@ import com.dwinovo.numen.api.permission.Permission;
 import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.permission.Verdict;
 
-import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;

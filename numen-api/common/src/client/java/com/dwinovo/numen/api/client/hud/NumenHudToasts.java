@@ -29,9 +29,9 @@ public final class NumenHudToasts {
     public static void render(GuiGraphicsExtractor g) {
         if (TOASTS.isIdle()) return;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.options.hideGui) return;
+        if (mc.gui.hud.isHidden()) return;
         // 原版的 toast(成就、配方……)也在右上角,一格一格往下占:排到它们占着的最后一格下面
-        int vanillaBottom = ((com.dwinovo.numen.api.mixin.inject.ToastManagerAccessor) mc.getToastManager()).numen$occupiedSlots()
+        int vanillaBottom = ((com.dwinovo.numen.api.mixin.inject.ToastManagerAccessor) mc.gui.toastManager()).numen$occupiedSlots()
                 .length() * net.minecraft.client.gui.components.toasts.Toast.SLOT_HEIGHT;
         TOASTS.render(new McDrawSurface(g, mc.font),
                 mc.getWindow().getGuiScaledWidth(), vanillaBottom,

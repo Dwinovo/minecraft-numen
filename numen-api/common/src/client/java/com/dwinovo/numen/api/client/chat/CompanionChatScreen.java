@@ -144,7 +144,7 @@ public class CompanionChatScreen extends Screen {
         @Override public void onConsentSettled() {
             var next = com.dwinovo.numen.api.client.consent.ConsentCards.first();
             if (next != null) {
-                minecraft.setScreen(new CompanionChatScreen(Conversations.instance().of(next.companion())));
+                minecraft.gui.setScreen(new CompanionChatScreen(Conversations.instance().of(next.companion())));
             } else if (inputBar.text().isEmpty()) {
                 onClose();
             }

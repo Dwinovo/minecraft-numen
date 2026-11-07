@@ -8,6 +8,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -27,7 +28,7 @@ final class ItemReach implements Goal {
     static final double GROW_XZ = 1.0;
     static final double GROW_Y = 0.5;
     /** 站在一格里朝一侧走到被挡住,身体偏出格中心的量:半格减半个身宽。 */
-    static final double LEAN = 0.5 - EntityType.PLAYER.getWidth() / 2;
+    static final double LEAN = 0.5 - EntityTypes.PLAYER.getWidth() / 2;
 
     private final AABB item;
 
@@ -47,7 +48,7 @@ final class ItemReach implements Goal {
      */
     private boolean touches(int x, int z, double feetLo, double feetHi) {
         return gap(x, item.getCenter().x) <= reachX() && gap(z, item.getCenter().z) <= reachZ()
-                && feetLo - GROW_Y <= item.maxY && feetHi + EntityType.PLAYER.getHeight() + GROW_Y >= item.minY;
+                && feetLo - GROW_Y <= item.maxY && feetHi + EntityTypes.PLAYER.getHeight() + GROW_Y >= item.minY;
     }
 
     /** 这一列的格(坐标 {@code cell})里,朝物品走到头,身体中心离物品中心还剩多远。 */
@@ -76,7 +77,7 @@ final class ItemReach implements Goal {
         LongSet cells = new LongOpenHashSet();
         for (int x = (int) Math.floor(item.getCenter().x - reachX() - LEAN); x <= Math.ceil(item.getCenter().x + reachX() + LEAN); x++) {
             for (int z = (int) Math.floor(item.getCenter().z - reachZ() - LEAN); z <= Math.ceil(item.getCenter().z + reachZ() + LEAN); z++) {
-                for (int y = (int) Math.floor(item.minY - EntityType.PLAYER.getHeight() - GROW_Y) - 1; y <= Math.ceil(item.maxY + GROW_Y); y++) {
+                for (int y = (int) Math.floor(item.minY - EntityTypes.PLAYER.getHeight() - GROW_Y) - 1; y <= Math.ceil(item.maxY + GROW_Y); y++) {
                     if (touches(x, z, y, y + 1)) {
                         cells.add(BlockPos.asLong(x, y, z));
                     }
@@ -101,11 +102,11 @@ final class ItemReach implements Goal {
 
     /** 水平上物品盒的中心到身体中心多远以内碰得上:身体半宽加向外放的量加物品半宽。 */
     private double reachX() {
-        return EntityType.PLAYER.getWidth() / 2 + GROW_XZ + item.getXsize() / 2;
+        return EntityTypes.PLAYER.getWidth() / 2 + GROW_XZ + item.getXsize() / 2;
     }
 
     private double reachZ() {
-        return EntityType.PLAYER.getWidth() / 2 + GROW_XZ + item.getZsize() / 2;
+        return EntityTypes.PLAYER.getWidth() / 2 + GROW_XZ + item.getZsize() / 2;
     }
 
     @Override

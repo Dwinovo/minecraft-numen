@@ -67,7 +67,7 @@ public final class SttProviders {
         }
 
         private static String shown(String nameOrKey) {
-            return I18n.exists(nameOrKey) ? I18n.get(nameOrKey) : nameOrKey;
+            return net.minecraft.locale.Language.getInstance().has(nameOrKey) ? I18n.get(nameOrKey) : nameOrKey;
         }
     }
 
