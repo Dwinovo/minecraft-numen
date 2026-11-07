@@ -79,6 +79,7 @@ public final class McpEndpoint {
     /** 没有会话的闲置会话 SDK 多久清一次。 */
     private static final Duration SESSION_SWEEP = Duration.ofMinutes(1);
     private static final String TOKEN_ATTRIBUTE = "numen.mcp.token";
+    private static final String SESSION_HEADER = io.modelcontextprotocol.spec.HttpHeaders.MCP_SESSION_ID;
 
     private final McpConfig config;
     private final McpTokens tokens;
@@ -497,18 +498,33 @@ public final class McpEndpoint {
                 return;
             }
             req.setAttribute(TOKEN_ATTRIBUTE, token);
-            presence.begin(token);
+            String method = req.getMethod().toUpperCase(Locale.ROOT);
+            if (method.equals("POST")) {
+                post(req, resp, chain, token);
+                return;
+            }
+            String session = req.getHeader(SESSION_HEADER);
+            serve(token, presence.begin(token, session), session, resp, () -> chain.doFilter(req, resp));
+            if (method.equals("DELETE") && session != null && resp.getStatus() == HttpServletResponse.SC_OK) {
+                presence.ended(token, session);
+            }
+        }
+
+        /**
+         * 交给 SDK 处理这个请求。{@code live}:它算这张令牌在场(开新会话的 initialize,或带着活会话的会话号,见 {@link McpPresence}),
+         * 处理期间记作在飞。会话活不活由 SDK 定:它对这个会话号答 404(已结束、不存在,或闲置太久被它清掉),这个会话号就从在场记录里划掉。
+         */
+        private void serve(McpToken token, boolean live, String session, HttpServletResponse resp, Handling handling)
+                throws IOException, ServletException {
             try {
-                switch (req.getMethod().toUpperCase(Locale.ROOT)) {
-                    case "POST" -> post(req, resp, chain, token);
-                    case "DELETE" -> {
-                        chain.doFilter(req, resp);
-                        presence.ended(token);
-                    }
-                    default -> chain.doFilter(req, resp);
-                }
+                handling.run();
             } finally {
-                presence.end(token);
+                if (live) {
+                    presence.end(token);
+                }
+            }
+            if (session != null && resp.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
+                presence.ended(token, session);
             }
         }
 
@@ -522,9 +538,16 @@ public final class McpEndpoint {
             Replay replay = new Replay(req, body);
             McpSchema.JSONRPCMessage message = parse(body);
             String method = message instanceof McpSchema.JSONRPCRequest r ? r.method() : "";
-            switch (method) {
-                case "initialize" -> initialize(replay, resp, chain, token, (McpSchema.JSONRPCRequest) message);
-                case "tools/list" -> {
+            if (method.equals("initialize")) {
+                presence.opening(token);
+                serve(token, true, null, resp, () -> initialize(replay, resp, chain, token, (McpSchema.JSONRPCRequest) message));
+                return;
+            }
+            String session = req.getHeader(SESSION_HEADER);
+            boolean live = presence.begin(token, session);
+            serve(token, live, session, resp, () -> {
+                // 不属于活会话的 tools/list 由 SDK 答 404,不为它去现算工具表
+                if (live && method.equals("tools/list")) {
                     try {
                         hostedFor(token).refresh();
                     } catch (Exception failed) {
@@ -533,10 +556,9 @@ public final class McpEndpoint {
                         listFailed(resp, (McpSchema.JSONRPCRequest) message, failed);
                         return;
                     }
-                    chain.doFilter(replay, resp);
                 }
-                default -> chain.doFilter(replay, resp);
-            }
+                chain.doFilter(replay, resp);
+            });
         }
 
         private void listFailed(HttpServletResponse resp, McpSchema.JSONRPCRequest request, Exception failed)
@@ -563,7 +585,7 @@ public final class McpEndpoint {
                 }
                 String client = clientLabel(message.params());
                 presence.named(token, client);
-                SessionCapture capture = new SessionCapture(resp);
+                SessionCapture capture = new SessionCapture(resp, session -> presence.opened(token, session));
                 chain.doFilter(req, capture);
                 audit.connected(capture.sessionId == null ? "-" : capture.sessionId, token, client);
             } finally {
@@ -634,6 +656,12 @@ public final class McpEndpoint {
         return "unknown client";
     }
 
+    /** 过滤器交给 SDK 的那一步。 */
+    @FunctionalInterface
+    private interface Handling {
+        void run() throws IOException, ServletException;
+    }
+
     /** 请求体已经被过滤器读走看过,原样重放给 SDK。 */
     private static final class Replay extends HttpServletRequestWrapper {
         private final byte[] body;
@@ -680,12 +708,17 @@ public final class McpEndpoint {
         }
     }
 
-    /** 记下 initialize 的答复里 SDK 开的会话号,审计要。 */
+    /**
+     * 记下 initialize 的答复里 SDK 开的会话号,审计要;会话号一写进答复头就交给 {@code opened}(在场记录):SDK 此刻已经开好会话、
+     * 答复体还没发出,客户端拿着会话号发来的下一个请求总在它之后到。
+     */
     private static final class SessionCapture extends HttpServletResponseWrapper {
+        private final Consumer<String> opened;
         String sessionId;
 
-        SessionCapture(HttpServletResponse response) {
+        SessionCapture(HttpServletResponse response, Consumer<String> opened) {
             super(response);
+            this.opened = opened;
         }
 
         @Override
@@ -701,8 +734,9 @@ public final class McpEndpoint {
         }
 
         private void capture(String name, String value) {
-            if ("Mcp-Session-Id".equalsIgnoreCase(name)) {
+            if (SESSION_HEADER.equalsIgnoreCase(name)) {
                 sessionId = value;
+                opened.accept(value);
             }
         }
     }
