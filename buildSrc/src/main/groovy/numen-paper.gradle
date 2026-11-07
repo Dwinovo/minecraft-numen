@@ -39,6 +39,12 @@ tasks.named('compileJava', JavaCompile) {
     options.release = java_version as int
 }
 
+// 开发包的服务端 jar 里连着 Paper 的源码;javadoc 没给 -sourcepath 时顺着类路径去读源码,而 Paper 的源码有 javac 21
+// 解析不了的写法(记录模式里写 final)。源码路径只给这个模块自己的源码目录,类路径上的类照常读字节码。
+tasks.named('javadoc', Javadoc) {
+    options.addPathOption('sourcepath').value = sourceSets.main.java.srcDirs.toList()
+}
+
 // Mixin 的配置是模组加载器的东西,Paper 不读;贴图、音效表和语音识别的服务商表只有客户端读。
 tasks.named('processResources', ProcessResources) {
     dependsOn(configurations.commonResources)
@@ -60,13 +66,15 @@ tasks.named('processResources', ProcessResources) {
 // 默认对着编译用的开发包里那一份服务端;换一版 Paper 以后要核对,-PlinkCheckPaperServer=<服务端 jar>,
 // 起过一次 runServer 的话,服务器真正跑的那个在运行目录的 versions/<mc 版本>/paper-<mc 版本>.jar。
 // 原版 jar 是"本来是覆写"的依据,取 common 编译用的那一份(Mojang 名)。
-def paperServerJar = { configurations.compileClasspath.files.find { it.name.startsWith('paper-server-') } }
+// 开发包里的服务端在编译类路径上是 paperweight 2 任务缓存里的 mappedServerJar.jar。
+def isPaperServer = { File file -> file.name == 'mappedServerJar.jar' }
+def paperServerJar = { configurations.compileClasspath.files.find(isPaperServer) }
 def linkCheck = tasks.register('linkCheck', LinkCheckTask) {
     group = 'verification'
     description = '成品里对 Paper 服务端类的引用与覆写,在 Paper 服务端 jar 里解析得到吗'
     dependsOn(configurations.compileClasspath)
     product.from(tasks.named('jar'))
-    libraries.from(configurations.compileClasspath.filter { !it.name.startsWith('paper-server-') })
+    libraries.from(configurations.compileClasspath.filter { !isPaperServer(it) })
     vanillaServer.from(common.sourceSets.main.compileClasspath.filter { it.name.startsWith('vanilla-') })
     paperServer.set(providers.gradleProperty('linkCheckPaperServer')
             .map { layout.projectDirectory.file(it) }
